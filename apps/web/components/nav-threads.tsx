@@ -1,52 +1,62 @@
 "use client";
 
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuAction,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+  useSidebar,
+} from "@/components/ui/sidebar";
+import {
+  ChevronRightIcon,
+  PlusIcon,
+  MoreHorizontalIcon,
+  StarOffIcon,
+  LinkIcon,
+  ArrowUpRightIcon,
+  Trash2Icon,
+  MessageCircle,
+} from "lucide-react";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  SidebarGroup,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuAction,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  useSidebar,
-} from "@/components/ui/sidebar";
-import {
-  MoreHorizontalIcon,
-  StarOffIcon,
-  LinkIcon,
-  ArrowUpRightIcon,
-  Trash2Icon,
-  PlusIcon,
-} from "lucide-react";
+} from "./ui/dropdown-menu";
 
-export function NavJournal({
-  journals,
+export function NavThreads({
+  threads,
 }: {
-  journals: {
+  threads: {
     name: string;
     url: string;
-    emoji: string;
   }[];
 }) {
   const { isMobile } = useSidebar();
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
       <SidebarGroupLabel className="text-primary font-semibold">
-        <span>Journal</span>
+        <span>Threads</span>
         <PlusIcon className="ml-auto size-4" />
       </SidebarGroupLabel>
       <SidebarMenu>
-        {journals.map((item) => (
+        {threads.map((item) => (
           <SidebarMenuItem key={item.name}>
             <SidebarMenuButton render={<a href={item.url} title={item.name} />}>
-              <span>{item.emoji}</span>
+              <MessageCircle />
               <span>{item.name}</span>
             </SidebarMenuButton>
             <DropdownMenu>
@@ -69,7 +79,7 @@ export function NavJournal({
                 <DropdownMenuGroup>
                   <DropdownMenuItem>
                     <StarOffIcon className="text-muted-foreground" />
-                    <span>Remove from Journal</span>
+                    <span>Remove from Thread</span>
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />

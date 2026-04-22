@@ -5,7 +5,7 @@ import * as React from "react";
 import { NavJournal } from "@/components/nav-journal";
 import { NavMain } from "@/components/nav-main";
 import { NavSecondary } from "@/components/nav-secondary";
-import { NavThread } from "@/components/nav-thread";
+import { NavThreads } from "@/components/nav-threads";
 import { TeamSwitcher } from "@/components/team-switcher";
 import {
   Sidebar,
@@ -88,40 +88,36 @@ const data = {
   journal: [
     {
       name: "Project Management & Task Tracking",
-      url: "#",
+      url: "/demo/journal/1",
       emoji: "📊",
     },
     {
       name: "Family Recipe Collection & Meal Planning",
-      url: "#",
+      url: "/demo/journal/2",
       emoji: "🍳",
     },
     {
       name: "Fitness Tracker & Workout Routines",
-      url: "#",
+      url: "/demo/journal/3",
       emoji: "💪",
     },
   ],
-  thread: [
+  threads: [
     {
       name: "Personal Life Management",
-      emoji: "🏠",
-      url: "#",
+      url: "/demo/threads/1",
     },
     {
       name: "Professional Development",
-      emoji: "💼",
-      url: "#",
+      url: "/demo/threads/2",
     },
     {
       name: "Creative Projects",
-      emoji: "🎨",
-      url: "#",
+      url: "/demo/threads/3",
     },
     {
       name: "Home Management",
-      emoji: "🏡",
-      url: "#",
+      url: "/demo/threads/4",
     },
   ],
 };
@@ -140,7 +136,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavJournal journals={data.journal} />
-        <NavThread threads={data.thread} />
+        <NavThreads threads={data.threads} />
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarRail />
