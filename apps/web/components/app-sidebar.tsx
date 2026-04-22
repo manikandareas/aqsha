@@ -128,7 +128,12 @@ const data = {
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
-    <Sidebar variant="floating" className="border-r-0" {...props}>
+    <Sidebar
+      variant="floating"
+      collapsible="icon"
+      className="border-r-0"
+      {...props}
+    >
       <SidebarHeader>
         <TeamSwitcher teams={data.teams} />
         <NavMain items={data.navMain} />
