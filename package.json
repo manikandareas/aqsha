@@ -1,0 +1,25 @@
+{
+  "name": "aqsha",
+  "private": true,
+  "packageManager": "bun@1.3.10",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun run --parallel --filter '@aqsha/web' --filter '@aqsha/api' dev",
+    "dev:web": "bun run --filter '@aqsha/web' dev",
+    "dev:api": "bun run --filter '@aqsha/api' dev",
+    "build": "bun run --filter '@aqsha/web' --filter '@aqsha/api' build",
+    "lint": "bun run --parallel --filter '@aqsha/web' --filter '@aqsha/api' --filter '@aqsha/shared' lint",
+    "typecheck": "bun run --parallel --filter '@aqsha/web' --filter '@aqsha/api' --filter '@aqsha/shared' typecheck"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "bun-types": "^1.3.13",
+    "eslint": "^9.39.1",
+    "globals": "^17.5.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.59.0"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "@aqsha/api",
+  "private": true,
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aqsha/shared": "workspace:*",
+    "elysia": "^1.4.28"
+  }
+}
