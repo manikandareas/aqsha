@@ -1,11 +1,11 @@
 import type { UserRecord } from "@aqsha/db";
 import type { ClerkProfileInput } from "./model";
-import { userRepository } from "./repository";
+import type { UserRepository } from "./repository";
 
 export type { ClerkProfileInput } from "./model";
 
 export class UserService {
-  constructor(private readonly repository = userRepository) {}
+  constructor(private readonly repository: UserRepository) {}
 
   getByIdentity(
     authTokenIdentifier: string,
@@ -18,5 +18,3 @@ export class UserService {
     return this.repository.ensureProfile(input);
   }
 }
-
-export const userService = new UserService();

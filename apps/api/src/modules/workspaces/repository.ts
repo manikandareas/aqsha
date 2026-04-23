@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne } from "drizzle-orm";
 import {
   subscriptions,
   workspaceMembers,
@@ -7,11 +7,11 @@ import {
   type UserRecord,
   type WorkspaceRecord,
 } from "@aqsha/db";
-import { database } from "../../database/client";
+import type { DatabaseClient } from "../../database/client";
 import { getDefaultWorkspaceName } from "./model";
 
 export class WorkspaceRepository {
-  constructor(private readonly db: typeof database = database) {}
+  constructor(private readonly db: DatabaseClient) {}
 
   async getOwnedWorkspace(userId: string): Promise<WorkspaceRecord | null> {
     const [workspace] = await this.db
@@ -95,7 +95,23 @@ export class WorkspaceRepository {
         userId,
         role: "owner",
       })
-      .onConflictDoNothing();
+      .onConflictDoUpdate({
+        target: [workspaceMembers.workspaceId, workspaceMembers.userId],
+        set: {
+          role: "owner",
+          updatedAt: new Date(),
+        },
+      });
+
+    await this.db
+      .delete(workspaceMembers)
+      .where(
+        and(
+          eq(workspaceMembers.workspaceId, workspaceId),
+          eq(workspaceMembers.role, "owner"),
+          ne(workspaceMembers.userId, userId),
+        ),
+      );
   }
 
   private async ensureInternalFreeSubscription(
@@ -121,5 +137,3 @@ export class WorkspaceRepository {
       .onConflictDoNothing();
   }
 }
-
-export const workspaceRepository = new WorkspaceRepository(database);

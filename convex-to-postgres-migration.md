@@ -10,7 +10,7 @@
 
 ## Ringkasan
 
-Dokumen ini mendefinisikan target migrasi domain bisnis utama dari `Convex` ke `PostgreSQL` dengan `REST API` sebagai access layer utama. Fokus migrasi adalah workflow workspace writing yang saat ini memakai tabel `profiles`, `workspaces`, `documents`, `document_versions`, `document_proposals`, `sources`, `source_chunks`, dan `exports`.
+Dokumen ini mendefinisikan target migrasi domain bisnis utama dari `Convex` ke `PostgreSQL` dengan `REST API` sebagai access layer utama. Fokus migrasi adalah workflow workspace writing yang saat ini memakai tabel `profiles`, `workspaces`, `documents`, `document_versions`, dan `exports`.
 
 Untuk target arsitektur baru, istilah domain `documents` diubah menjadi `journals`. Perubahan ini berlaku konsisten pada module, nama tabel, dan REST path. `Clerk` tetap menjadi authentication provider. Frontend akan memanggil backend REST langsung dengan `Bearer Clerk JWT`.
 
@@ -27,7 +27,7 @@ Yang tidak masuk ke ruang lingkup V1:
 - Mempertahankan behavior penting yang sudah ada:
   - provisioning user + workspace dari `Clerk`
   - optimistic locking berbasis `baseUpdatedAt`
-  - idempotency untuk proposal, source registration, dan export request
+  - idempotency untuk export request
   - quota tracking per workspace
   - audit/version history untuk journal
 - Menyiapkan schema yang lebih idiomatis untuk PostgreSQL tanpa mengubah product behavior secara drastis.
@@ -41,8 +41,6 @@ Rancangan di dokumen ini diturunkan dari area berikut:
 - `packages/backend/convex/lib/session.ts`
 - `packages/backend/convex/lib/auth.ts`
 - `packages/backend/convex/documents.ts`
-- `packages/backend/convex/proposals.ts`
-- `packages/backend/convex/sources.ts`
 - `packages/backend/convex/exports.ts`
 - `packages/academic/src/schema/000_academic.sql`
 - `packages/academic/src/schema/001_research.sql`
@@ -76,7 +74,7 @@ Rancangan di dokumen ini diturunkan dari area berikut:
 
 ### Boundary
 
-- `PostgreSQL` menyimpan semua state utama untuk `users`, `workspaces`, `journals`, `journal_versions`, `journal_proposals`, `sources`, `source_chunks`, dan `exports`.
+- `PostgreSQL` menyimpan semua state utama untuk `users`, `workspaces`, `journals`, `journal_versions`, dan `exports`.
 - File binary dan artifact hasil proses tetap diasumsikan berada di object storage. Di schema baru dipakai field `storage_key`, bukan storage id internal Convex.
 - `Qdrant` dan `Turso` tetap eksis untuk academic/research subsystem yang terpisah dari journal workspace domain.
 
@@ -99,9 +97,6 @@ Module backend V1 yang harus dimiliki:
 - `workspace_members`
 - `journals`
 - `journal_versions`
-- `journal_proposals`
-- `sources`
-- `source_chunks`
 - `exports`
 
 Mapping dari Convex ke PostgreSQL:
@@ -113,20 +108,17 @@ Mapping dari Convex ke PostgreSQL:
 | n/a | `workspace_members` | tambahan normalisasi PostgreSQL |
 | `documents` | `journals` | rename domain |
 | `document_versions` | `journal_versions` | rename domain |
-| `document_proposals` | `journal_proposals` | rename domain |
-| `sources` | `sources` | tetap |
-| `source_chunks` | `source_chunks` | tetap |
 | `exports` | `exports` | tetap |
 
 ## PostgreSQL Design Principles
 
 - Gunakan `uuid` sebagai primary key.
 - Gunakan `timestamptz` untuk seluruh field waktu.
-- Gunakan `jsonb` untuk payload kompleks seperti `content_json`, `outline_json`, `proposal_json`, `warnings_snapshot`, dan `citation_metadata`.
+- Gunakan `jsonb` untuk payload kompleks seperti `content_json`, `outline_json`, dan `warnings_snapshot`.
 - Gunakan `text` + `CHECK` untuk status/type yang sebelumnya berbasis literal union.
 - Semua tabel utama memiliki `created_at` dan `updated_at`, kecuali tabel historis append-only yang cukup `created_at`.
 - Hindari PostgreSQL enum di V1 agar rollout perubahan status/type tetap ringan.
-- Pertahankan soft delete hanya bila behavior existing memang bergantung padanya. Untuk V1, soft delete hanya dipertahankan pada `sources.deleted_at`.
+- Pertahankan soft delete hanya bila behavior existing memang bergantung padanya.
 
 ## PostgreSQL Schema
 
@@ -142,7 +134,6 @@ Columns:
 - `email text not null`
 - `name text null`
 - `avatar_url text null`
-- `plan_code text not null check (plan_code in ('free', 'pro'))`
 - `onboarding_completed_at timestamptz null`
 - `created_at timestamptz not null`
 - `updated_at timestamptz not null`
@@ -162,13 +153,11 @@ Columns:
 - `owner_user_id uuid not null references users(id)`
 - `name text not null`
 - `slug text null`
-- `plan_code text not null check (plan_code in ('free', 'pro'))`
 - `active_journal_count integer not null default 0`
 - `archived_journal_count integer not null default 0`
 - `ai_actions_used integer not null default 0`
 - `ai_actions_reserved integer not null default 0`
 - `exports_used integer not null default 0`
-- `source_uploads_used integer not null default 0`
 - `created_at timestamptz not null`
 - `updated_at timestamptz not null`
 
@@ -209,7 +198,7 @@ Columns:
 - `workspace_id uuid not null references workspaces(id) on delete cascade`
 - `owner_user_id uuid not null references users(id)`
 - `title text not null`
-- `type text not null check (type in ('general_paper', 'proposal', 'skripsi'))`
+- `type text not null check (type in ('general', 'proposal', 'thesis'))`
 - `status text not null check (status in ('active', 'archived'))`
 - `content_json jsonb not null`
 - `outline_json jsonb null`
@@ -239,7 +228,7 @@ Columns:
 - `version_number integer not null`
 - `content_json jsonb not null`
 - `plain_text text null`
-- `trigger text not null check (trigger in ('journal_create', 'outline_apply', 'ai_proposal_apply', 'manual_save'))`
+- `trigger text not null check (trigger in ('journal_create', 'outline_apply', 'manual_save'))`
 - `snapshot_label text null`
 - `created_at timestamptz not null`
 
@@ -251,97 +240,6 @@ Indexes and constraints:
 Note:
 
 - walau trigger existing masih `document_create`, di dokumen migrasi gunakan istilah baru `journal_create`
-
-### `journal_proposals`
-
-Purpose: menampung AI-generated writing proposal dan lifecycle-nya.
-
-Columns:
-
-- `id uuid primary key`
-- `journal_id uuid not null references journals(id) on delete cascade`
-- `workspace_id uuid not null references workspaces(id) on delete cascade`
-- `owner_user_id uuid not null references users(id)`
-- `proposal_json jsonb not null`
-- `action_type text not null check (action_type in ('replace', 'insert_below'))`
-- `status text not null check (status in ('pending', 'applied', 'dismissed', 'invalidated', 'failed'))`
-- `base_updated_at timestamptz not null`
-- `target_block_ids jsonb not null`
-- `applied_at timestamptz null`
-- `dismissed_at timestamptz null`
-- `invalidated_at timestamptz null`
-- `error_message text null`
-- `idempotency_key text null`
-- `created_at timestamptz not null`
-- `updated_at timestamptz not null`
-
-Indexes and constraints:
-
-- index `(journal_id, status)`
-- unique index on `(journal_id, idempotency_key)` where `idempotency_key is not null`
-
-### `sources`
-
-Purpose: menampung source file PDF yang terlampir ke journal.
-
-Columns:
-
-- `id uuid primary key`
-- `journal_id uuid not null references journals(id) on delete cascade`
-- `workspace_id uuid not null references workspaces(id) on delete cascade`
-- `owner_user_id uuid not null references users(id)`
-- `storage_key text not null`
-- `file_name text not null`
-- `mime_type text not null`
-- `checksum text not null`
-- `status text not null check (status in ('queued', 'processing', 'ready', 'failed'))`
-- `retry_count integer not null default 0`
-- `page_count integer null`
-- `ocr_status text null`
-- `extracted_text_summary text null`
-- `error_message text null`
-- `error_code text null`
-- `deleted_at timestamptz null`
-- `processing_started_at timestamptz null`
-- `ready_at timestamptz null`
-- `parsed_text_storage_key text null`
-- `parsed_text_size_bytes integer null`
-- `idempotency_key text null`
-- `created_at timestamptz not null`
-- `updated_at timestamptz not null`
-
-Indexes and constraints:
-
-- index `(journal_id)`
-- index `(workspace_id, checksum)`
-- index `(checksum)`
-
-Notes:
-
-- V1 tetap hanya mendukung `application/pdf`
-- dedupe behavior by `checksum` dan `idempotency_key` harus dipertahankan
-
-### `source_chunks`
-
-Purpose: hasil chunking text dari source PDF.
-
-Columns:
-
-- `id uuid primary key`
-- `source_id uuid not null references sources(id) on delete cascade`
-- `journal_id uuid not null references journals(id) on delete cascade`
-- `workspace_id uuid not null references workspaces(id) on delete cascade`
-- `chunk_index integer not null`
-- `text text not null`
-- `citation_metadata jsonb not null`
-- `embedding_status text not null check (embedding_status in ('pending', 'ready', 'skipped'))`
-- `created_at timestamptz not null`
-- `updated_at timestamptz not null`
-
-Indexes and constraints:
-
-- unique `(source_id, chunk_index)`
-- index `(journal_id)`
 
 ### `exports`
 
@@ -377,12 +275,12 @@ Indexes and constraints:
 
 - Semua protected endpoint harus menerima `Authorization: Bearer <Clerk JWT>`.
 - Backend wajib memverifikasi token ke `Clerk`.
-- Jika token invalid atau tidak ada, return `401 Unauthorized`.
+- Jika token invalid atau tidak ada, return `401` dengan error model `unauthorized`.
 
 ### Authorization
 
 - User hanya boleh mengakses workspace miliknya sendiri pada V1.
-- Semua akses ke `journals`, `journal_proposals`, `sources`, dan `exports` harus diverifikasi terhadap `workspace_id` user aktif.
+- Semua akses ke `journals` dan `exports` harus diverifikasi terhadap `workspace_id` user aktif.
 
 ### Provisioning
 
@@ -433,8 +331,7 @@ Response `200`:
     "aiActionsUsed": 0,
     "aiActionsReserved": 0,
     "aiActionsRemaining": 10,
-    "exportsRemaining": 3,
-    "sourceUploadsRemaining": 3
+    "exportsRemaining": 3
   },
   "journalStats": {
     "activeCount": 0,
@@ -495,7 +392,7 @@ Response `200`:
     "workspaceId": "uuid",
     "ownerUserId": "uuid",
     "title": "Untitled",
-    "type": "general_paper",
+    "type": "general",
     "status": "active",
     "contentJson": [],
     "outlineJson": null,
@@ -524,7 +421,7 @@ Request:
 ```json
 {
   "title": "Untitled",
-  "type": "general_paper"
+  "type": "general"
 }
 ```
 
@@ -615,7 +512,7 @@ Response `200`: `JournalRecord`
 Behavior:
 
 - hard delete `journals`
-- hard delete dependent `journal_versions`, `journal_proposals`, `source_chunks`, `sources`, `exports`
+- hard delete dependent `journal_versions` dan `exports`
 - delete linked stored artifacts
 - update workspace counters
 
@@ -650,226 +547,6 @@ Response `200`:
     "createdAt": "2026-04-23T00:00:00Z"
   }
 ]
-```
-
-### Journal Proposals
-
-#### `GET /journals/:id/proposals`
-
-Query params:
-
-- `limit` optional
-
-Response `200`: `JournalProposalRecord[]`
-
-#### `POST /journals/:id/outline/generate`
-
-Request:
-
-```json
-{
-  "topic": "Pengaruh X terhadap Y",
-  "idempotencyKey": "client-generated-key"
-}
-```
-
-Response `200`:
-
-```json
-{
-  "outline": {
-    "title": "Pengaruh X terhadap Y",
-    "nodes": []
-  }
-}
-```
-
-Behavior:
-
-- generate outline via AI provider
-- store outline draft ke `journals.outline_json`
-- increment `ai_actions_used`
-
-#### `POST /journals/:id/proposals`
-
-Request:
-
-```json
-{
-  "action": "rewrite",
-  "idempotencyKey": "client-generated-key",
-  "targetBlockIds": ["block-1"],
-  "sectionPrompt": null
-}
-```
-
-Response `200`:
-
-```json
-{
-  "allowedApplyModes": ["replace", "insert_below"],
-  "proposal": {
-    "id": "uuid",
-    "journalId": "uuid",
-    "workspaceId": "uuid",
-    "ownerUserId": "uuid",
-    "proposalJson": {},
-    "actionType": "replace",
-    "status": "pending",
-    "baseUpdatedAt": "2026-04-23T00:00:00Z",
-    "targetBlockIds": ["block-1"],
-    "appliedAt": null,
-    "dismissedAt": null,
-    "invalidatedAt": null,
-    "errorMessage": null,
-    "createdAt": "2026-04-23T00:00:00Z",
-    "updatedAt": "2026-04-23T00:00:00Z"
-  }
-}
-```
-
-Behavior:
-
-- gunakan `idempotencyKey` untuk replay-safe generation
-- enforce target validation
-- increment `ai_actions_used`
-
-#### `POST /proposals/:id/apply`
-
-Request:
-
-```json
-{
-  "baseUpdatedAt": "2026-04-23T00:00:00Z",
-  "mode": "replace"
-}
-```
-
-Behavior:
-
-- proposal hanya boleh `pending`
-- `baseUpdatedAt` harus cocok dengan row proposal
-- bila stale, tandai `invalidated`
-- bila sukses, update `journals.content_json`
-- create `journal_versions` row dengan trigger `ai_proposal_apply`
-
-Response `200`:
-
-```json
-{
-  "journal": {},
-  "proposal": {}
-}
-```
-
-Status codes:
-
-- `200 OK`
-- `404 Not Found`
-- `409 Conflict`
-
-#### `POST /proposals/:id/dismiss`
-
-Behavior:
-
-- tandai proposal `dismissed`
-
-Response `200`: `JournalProposalRecord`
-
-### Sources
-
-#### `POST /journals/:id/sources/upload-url`
-
-Response `200`:
-
-```json
-{
-  "method": "POST",
-  "uploadUrl": "https://upload.example.com/..."
-}
-```
-
-#### `POST /journals/:id/sources`
-
-Request:
-
-```json
-{
-  "storageKey": "object-key",
-  "mimeType": "application/pdf",
-  "fileName": "paper.pdf",
-  "idempotencyKey": "client-generated-key",
-  "checksum": "optional-sha256"
-}
-```
-
-Response `200`:
-
-```json
-{
-  "isReplay": false,
-  "relinked": false,
-  "source": {}
-}
-```
-
-Behavior:
-
-- only support `application/pdf`
-- dedupe by `idempotencyKey`, `storageKey`, dan `checksum`
-- enforce workspace source upload quota
-- lakukan parse PDF, OCR fallback, chunking, dan simpan parsed text artifact
-
-Possible status codes:
-
-- `200 OK`
-- `400 Bad Request`
-- `403 Forbidden`
-- `404 Not Found`
-- `409 Conflict`
-- `422 Unprocessable Entity`
-
-#### `GET /journals/:id/sources`
-
-Response `200`: `SourceRecord[]`
-
-#### `GET /sources/:id`
-
-Response `200`: `SourceRecord`
-
-#### `POST /sources/:id/retry`
-
-Request:
-
-```json
-{
-  "forceOcr": true
-}
-```
-
-Response `200`:
-
-```json
-{
-  "isReplay": false,
-  "source": {}
-}
-```
-
-#### `DELETE /sources/:id`
-
-Behavior:
-
-- soft delete row via `deleted_at`
-- delete `source_chunks`
-- delete source artifact dan parsed text artifact
-
-Response `200`:
-
-```json
-{
-  "ok": true
-}
 ```
 
 ### Exports
@@ -963,7 +640,6 @@ Dokumen implementasi harus memakai naming berikut:
 - `ProfileRecord` -> `UserRecord`
 - `DocumentRecord` -> `JournalRecord`
 - `DocumentVersionRecord` -> `JournalVersionRecord`
-- `DocumentProposalRecord` -> `JournalProposalRecord`
 - `CreateDocumentInput` -> `CreateJournalInput`
 - `UpdateDocumentInput` -> `UpdateJournalInput`
 - `SaveDocumentContentInput` -> `SaveJournalContentInput`
@@ -986,20 +662,16 @@ Code yang perlu dipertahankan secara semantik:
 - `unauthorized`
 - `workspace_not_found`
 - `journal_not_found`
-- `proposal_not_found`
-- `source_not_found`
 - `export_not_found`
 - `quota_exceeded`
 - `stale_journal_save`
-- `stale_ai_proposal`
-- `source_processing_failed`
 - `export_blocked`
 - `export_generation_failed`
 
 ## Migration Notes
 
 - Current Convex counters `activeDocumentCount` dan `archivedDocumentCount` harus di-rename menjadi `active_journal_count` dan `archived_journal_count`.
-- Existing `planCode`, `aiActionsUsed`, `aiActionsReserved`, `exportsUsed`, dan `sourceUploadsUsed` tetap dipertahankan secara semantik.
+- Existing `planCode` dipertahankan pada subscription/session layer. `aiActionsUsed`, `aiActionsReserved`, dan `exportsUsed` tetap dipertahankan secara semantik pada workspace usage.
 - Semua referensi `ownerProfileId` diubah menjadi `ownerUserId`.
 - Semua referensi `documentId` pada domain utama diubah menjadi `journalId`.
 - Storage identifier lama dari Convex tidak perlu dipertahankan secara naming; gunakan `storage_key` untuk layer baru.
@@ -1134,7 +806,7 @@ Jika collaborative editing tetap wajib setelah Convex dilepas, maka Phase 2 haru
 - Semua tabel Convex non-`mastra` pada domain workspace writing telah terpetakan ke schema PostgreSQL baru.
 - Rename `documents` -> `journals` konsisten di seluruh module, tabel, dan endpoint.
 - `Clerk` tertulis eksplisit sebagai auth source yang dipertahankan.
-- Semua endpoint REST utama untuk `session`, `journals`, `journal_proposals`, `sources`, dan `exports` terdefinisi.
+- Semua endpoint REST utama untuk `session`, `journals`, dan `exports` terdefinisi.
 - Quota, idempotency, optimistic locking, dan version history tertulis eksplisit.
 - Appendix `Qdrant` dan `Turso` sesuai dengan state repo saat ini.
 - `prosemirror` collaborative sync tertulis eksplisit sebagai `Phase 2`.

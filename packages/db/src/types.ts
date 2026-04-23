@@ -1,7 +1,6 @@
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import {
   exports,
-  journalProposals,
   journalVersions,
   journals,
   subscriptions,
@@ -17,7 +16,6 @@ export type SubscriptionRecord = InferSelectModel<typeof subscriptions>;
 export type WorkspaceMemberRecord = InferSelectModel<typeof workspaceMembers>;
 export type JournalRecord = InferSelectModel<typeof journals>;
 export type JournalVersionRecord = InferSelectModel<typeof journalVersions>;
-export type JournalProposalRecord = InferSelectModel<typeof journalProposals>;
 export type ExportRecord = InferSelectModel<typeof exports>;
 
 export type NewUser = InferInsertModel<typeof users>;
@@ -26,7 +24,6 @@ export type NewSubscription = InferInsertModel<typeof subscriptions>;
 export type NewWorkspaceMember = InferInsertModel<typeof workspaceMembers>;
 export type NewJournal = InferInsertModel<typeof journals>;
 export type NewJournalVersion = InferInsertModel<typeof journalVersions>;
-export type NewJournalProposal = InferInsertModel<typeof journalProposals>;
 export type NewExport = InferInsertModel<typeof exports>;
 
 export type CreateJournalInput = Pick<

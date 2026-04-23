@@ -3,10 +3,10 @@ import type {
   UserRecord,
   WorkspaceRecord,
 } from "@aqsha/db";
-import { workspaceRepository } from "./repository";
+import type { WorkspaceRepository } from "./repository";
 
 export class WorkspaceService {
-  constructor(private readonly repository = workspaceRepository) {}
+  constructor(private readonly repository: WorkspaceRepository) {}
 
   getOwnedWorkspace(userId: string): Promise<WorkspaceRecord | null> {
     return this.repository.getOwnedWorkspace(userId);
@@ -22,5 +22,3 @@ export class WorkspaceService {
     return this.repository.ensureDefaultWorkspace(user);
   }
 }
-
-export const workspaceService = new WorkspaceService();

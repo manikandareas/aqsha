@@ -6,7 +6,8 @@
     ".": "./src/index.ts",
     "./schema": "./src/schema.ts",
     "./types": "./src/types.ts",
-    "./model": "./src/model.ts"
+    "./model": "./src/model.ts",
+    "./utils": "./src/utils.ts"
   },
   "types": "./src/index.ts",
   "scripts": {

@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, or } from "drizzle-orm";
 import {
   subscriptions,
   users,
@@ -6,12 +6,12 @@ import {
   workspaces,
   type UserRecord,
 } from "@aqsha/db";
-import { database } from "../../database/client";
+import type { DatabaseClient } from "../../database/client";
 import { getDefaultWorkspaceName } from "../workspaces/model";
 import type { ClerkProfileInput } from "./model";
 
 export class UserRepository {
-  constructor(private readonly db: typeof database = database) {}
+  constructor(private readonly db: DatabaseClient) {}
 
   async getByIdentity(
     authTokenIdentifier: string,
@@ -110,7 +110,23 @@ export class UserRepository {
           userId: user.id,
           role: "owner",
         })
-        .onConflictDoNothing();
+        .onConflictDoUpdate({
+          target: [workspaceMembers.workspaceId, workspaceMembers.userId],
+          set: {
+            role: "owner",
+            updatedAt: new Date(),
+          },
+        });
+
+      await tx
+        .delete(workspaceMembers)
+        .where(
+          and(
+            eq(workspaceMembers.workspaceId, workspace.id),
+            eq(workspaceMembers.role, "owner"),
+            ne(workspaceMembers.userId, user.id),
+          ),
+        );
 
       const [existingSubscription] = await tx
         .select()
@@ -142,5 +158,3 @@ export class UserRepository {
     });
   }
 }
-
-export const userRepository = new UserRepository(database);

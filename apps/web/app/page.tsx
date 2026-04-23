@@ -1,5 +1,5 @@
 import { formatServiceLabel } from "@aqsha/shared";
-import { api, getApiBaseUrl } from "@/lib/eden";
+import { api } from "@/lib/eden";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 function getErrorMessage(error: unknown) {
@@ -49,16 +49,10 @@ function formatTimestamp(timestamp: unknown) {
 }
 
 export default async function Home() {
-  const [exampleResponse, healthResponse] = await Promise.all([
-    api.example.get(),
-    api.health.get(),
-  ]);
+  const healthResponse = await api.health.get();
 
-  const apiError =
-    getErrorMessage(exampleResponse.error) ??
-    getErrorMessage(healthResponse.error);
+  const apiError = getErrorMessage(healthResponse.error);
   const serviceLabel =
-    exampleResponse.data?.serviceLabel ??
     formatServiceLabel(healthResponse.data?.service ?? "API offline");
 
   return (
@@ -99,9 +93,7 @@ export default async function Home() {
                   apiError ? "text-red-700" : "text-slate-950"
                 }`}
               >
-                {apiError ??
-                  exampleResponse.data?.message ??
-                  "Waiting for API response"}
+                {apiError ?? "Health endpoint returned successfully"}
               </div>
             </article>
           </div>

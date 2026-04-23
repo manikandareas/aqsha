@@ -3,8 +3,8 @@ import type {
   UserRecord,
   WorkspaceRecord,
 } from "@aqsha/db";
-import { userService, type ClerkProfileInput } from "../users/service";
-import { workspaceService } from "../workspaces/service";
+import { UserService, type ClerkProfileInput } from "../users/service";
+import { WorkspaceService } from "../workspaces/service";
 
 export const PLAN_LIMITS = {
   free: {
@@ -28,8 +28,12 @@ interface ProvisionedSession {
 }
 
 export class SessionService {
+  constructor(
+    private readonly userService: UserService,
+    private readonly workspaceService: WorkspaceService,
+  ) {}
   async ensureProfile(input: ClerkProfileInput): Promise<void> {
-    await userService.ensureProfile(input);
+    await this.userService.ensureProfile(input);
   }
 
   async getBootstrap(authTokenIdentifier: string, clerkUserId: string) {
@@ -108,7 +112,7 @@ export class SessionService {
     authTokenIdentifier: string,
     clerkUserId: string,
   ): Promise<ProvisionedSession | null> {
-    const user = await userService.getByIdentity(
+    const user = await this.userService.getByIdentity(
       authTokenIdentifier,
       clerkUserId,
     );
@@ -117,13 +121,13 @@ export class SessionService {
       return null;
     }
 
-    const workspace = await workspaceService.getOwnedWorkspace(user.id);
+    const workspace = await this.workspaceService.getOwnedWorkspace(user.id);
 
     if (!workspace) {
       return null;
     }
 
-    const subscription = await workspaceService.getCurrentSubscription(
+    const subscription = await this.workspaceService.getCurrentSubscription(
       workspace.id,
     );
 
@@ -159,5 +163,3 @@ export class SessionService {
     return Math.max(limit - used - reserved, 0);
   }
 }
-
-export const sessionService = new SessionService();

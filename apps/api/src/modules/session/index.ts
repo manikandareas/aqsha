@@ -1,24 +1,18 @@
 import { Elysia, t } from "elysia";
-import { clerkPlugin } from "elysia-clerk";
 import { sessionModel } from "./model";
-import { sessionService } from "./service";
-import { getAuthenticatedIdentity } from "../../utils";
+import { authIdentityPlugin } from "../../plugins/auth-identity";
+import { servicesPlugin } from "../../plugins/services";
 
 export const sessionModule = new Elysia({
   prefix: "/session",
   name: "module.session",
   tags: ["session"],
 })
-  .use(clerkPlugin())
+  .use(servicesPlugin)
+  .use(authIdentityPlugin)
   .post(
     "/ensure-profile",
-    async ({ auth, clerk, status }) => {
-      const identity = getAuthenticatedIdentity(auth());
-
-      if (!identity) {
-        return status(401, "Unauthorized");
-      }
-
+    async ({ clerk, identity, sessionService, status }) => {
       const user = await clerk.users.getUser(identity.clerkUserId);
 
       const fullName = [user.firstName, user.lastName]
@@ -48,19 +42,13 @@ export const sessionModule = new Elysia({
       },
       response: {
         204: t.Void(),
-        401: t.Literal("Unauthorized"),
+        401: sessionModel.unauthorizedError,
       },
     },
   )
   .get(
     "/bootstrap",
-    async ({ auth, status }) => {
-      const identity = getAuthenticatedIdentity(auth());
-
-      if (!identity) {
-        return status(401, "Unauthorized");
-      }
-
+    async ({ identity, sessionService }) => {
       return sessionService.getBootstrap(
         identity.authTokenIdentifier,
         identity.clerkUserId,
@@ -74,19 +62,13 @@ export const sessionModule = new Elysia({
       },
       response: {
         200: sessionModel.bootstrapResponse,
-        401: t.Literal("Unauthorized"),
+        401: sessionModel.unauthorizedError,
       },
     },
   )
   .get(
     "/onboarding",
-    async ({ auth, status }) => {
-      const identity = getAuthenticatedIdentity(auth());
-
-      if (!identity) {
-        return status(401, "Unauthorized");
-      }
-
+    async ({ identity, sessionService }) => {
       return sessionService.getOnboarding(
         identity.authTokenIdentifier,
         identity.clerkUserId,
@@ -100,7 +82,7 @@ export const sessionModule = new Elysia({
       },
       response: {
         200: sessionModel.onboardingResponse,
-        401: t.Literal("Unauthorized"),
+        401: sessionModel.unauthorizedError,
       },
     },
   );

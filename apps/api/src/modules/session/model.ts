@@ -7,8 +7,16 @@ const onboarding = t.Object({
   reason: t.Union([t.Literal("missing_first_journal"), t.Null()]),
 });
 
+const unauthorizedError = t.Object({
+  error: t.Object({
+    code: t.Literal("unauthorized"),
+    message: t.String(),
+  }),
+});
+
 export const sessionModel = {
   onboarding,
+  unauthorizedError,
   bootstrapResponse: t.Union([
     t.Object({
       user: t.Object({

@@ -70,22 +70,19 @@ const createdAtColumn = () =>
 const updatedAtColumn = () =>
   timestamp("updated_at", { withTimezone: true }).defaultNow().notNull();
 
-export const users = pgTable(
-  "users",
-  {
-    id: idColumn("id"),
-    clerkUserId: text("clerk_user_id").notNull().unique(),
-    authTokenIdentifier: text("auth_token_identifier").notNull().unique(),
-    email: text("email").notNull(),
-    name: text("name"),
-    avatarUrl: text("avatar_url"),
-    onboardingCompletedAt: timestamp("onboarding_completed_at", {
-      withTimezone: true,
-    }),
-    createdAt: createdAtColumn(),
-    updatedAt: updatedAtColumn(),
-  },
-);
+export const users = pgTable("users", {
+  id: idColumn("id"),
+  clerkUserId: text("clerk_user_id").notNull().unique(),
+  authTokenIdentifier: text("auth_token_identifier").notNull().unique(),
+  email: text("email").notNull(),
+  name: text("name"),
+  avatarUrl: text("avatar_url"),
+  onboardingCompletedAt: timestamp("onboarding_completed_at", {
+    withTimezone: true,
+  }),
+  createdAt: createdAtColumn(),
+  updatedAt: updatedAtColumn(),
+});
 
 export const workspaces = pgTable(
   "workspaces",
@@ -135,9 +132,7 @@ export const subscriptions = pgTable(
     currentPeriodEndAt: timestamp("current_period_end_at", {
       withTimezone: true,
     }),
-    cancelAtPeriodEnd: boolean("cancel_at_period_end")
-      .default(false)
-      .notNull(),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false).notNull(),
     canceledAt: timestamp("canceled_at", { withTimezone: true }),
     endedAt: timestamp("ended_at", { withTimezone: true }),
     providerMetadata: jsonb("provider_metadata").$type<JsonValue>(),
@@ -275,54 +270,6 @@ export const journalVersions = pgTable(
   ],
 );
 
-export const journalProposals = pgTable(
-  "journal_proposals",
-  {
-    id: idColumn("id"),
-    journalId: uuid("journal_id")
-      .notNull()
-      .references(() => journals.id, { onDelete: "cascade" }),
-    workspaceId: uuid("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
-    ownerUserId: uuid("owner_user_id")
-      .notNull()
-      .references(() => users.id),
-    proposalJson: jsonb("proposal_json").$type<JsonValue>().notNull(),
-    actionType: text("action_type", {
-      enum: journalProposalActionTypes,
-    }).notNull(),
-    status: text("status", { enum: journalProposalStatuses }).notNull(),
-    baseUpdatedAt: timestamp("base_updated_at", {
-      withTimezone: true,
-    }).notNull(),
-    targetBlockIds: jsonb("target_block_ids").$type<string[]>().notNull(),
-    appliedAt: timestamp("applied_at", { withTimezone: true }),
-    dismissedAt: timestamp("dismissed_at", { withTimezone: true }),
-    invalidatedAt: timestamp("invalidated_at", { withTimezone: true }),
-    errorMessage: text("error_message"),
-    idempotencyKey: text("idempotency_key"),
-    createdAt: createdAtColumn(),
-    updatedAt: updatedAtColumn(),
-  },
-  (table) => [
-    check(
-      "journal_proposals_action_type_check",
-      sql`${table.actionType} in ('replace', 'insert_below')`,
-    ),
-    check(
-      "journal_proposals_status_check",
-      sql`${table.status} in ('pending', 'applied', 'dismissed', 'invalidated', 'failed')`,
-    ),
-    index("journal_proposals_journal_status_idx").on(
-      table.journalId,
-      table.status,
-    ),
-    uniqueIndex("journal_proposals_journal_idempotency_unique_idx")
-      .on(table.journalId, table.idempotencyKey)
-      .where(sql`${table.idempotencyKey} is not null`),
-  ],
-);
 // !
 // export const sources = pgTable(
 //   "sources",
@@ -455,7 +402,6 @@ export const table = {
   workspaceMembers,
   journals,
   journalVersions,
-  journalProposals,
   // sources,
   // sourceChunks,
   exports,
