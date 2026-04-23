@@ -1,6 +1,8 @@
 import { app } from "./app";
-import { apiPort } from "./config";
+import { env } from "./config";
 
-app.listen(apiPort);
+app.listen(env.API_PORT);
 
-console.log(`API running at http://${app.server?.hostname ?? "localhost"}:${apiPort}`);
+console.log(
+  `API running at http://${app.server?.hostname ?? "localhost"}:${env.API_PORT}`,
+);

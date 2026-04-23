@@ -1,0 +1,464 @@
+import { sql } from "drizzle-orm";
+import {
+  boolean,
+  check,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
+
+export const planCodes = ["free", "pro"] as const;
+export const subscriptionStatuses = [
+  "trialing",
+  "active",
+  "past_due",
+  "canceled",
+  "expired",
+] as const;
+export const workspaceMemberRoles = ["owner", "member"] as const;
+export const journalTypes = ["general", "proposal", "thesis"] as const;
+export const journalStatuses = ["active", "archived"] as const;
+export const journalVersionTriggers = [
+  "journal_create",
+  "outline_apply",
+  "ai_proposal_apply",
+  "manual_save",
+] as const;
+export const journalProposalActionTypes = ["replace", "insert_below"] as const;
+export const journalProposalStatuses = [
+  "pending",
+  "applied",
+  "dismissed",
+  "invalidated",
+  "failed",
+] as const;
+export const sourceStatuses = [
+  "queued",
+  "processing",
+  "ready",
+  "failed",
+] as const;
+export const embeddingStatuses = ["pending", "ready", "skipped"] as const;
+export const exportTypes = ["docx"] as const;
+export const exportStatuses = [
+  "queued",
+  "processing",
+  "ready",
+  "failed",
+] as const;
+
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue =
+  | JsonPrimitive
+  | { [key: string]: JsonValue }
+  | JsonValue[];
+
+const idColumn = (name: string) =>
+  uuid(name)
+    .$defaultFn(() => crypto.randomUUID())
+    .primaryKey();
+
+const createdAtColumn = () =>
+  timestamp("created_at", { withTimezone: true }).defaultNow().notNull();
+
+const updatedAtColumn = () =>
+  timestamp("updated_at", { withTimezone: true }).defaultNow().notNull();
+
+export const users = pgTable(
+  "users",
+  {
+    id: idColumn("id"),
+    clerkUserId: text("clerk_user_id").notNull().unique(),
+    authTokenIdentifier: text("auth_token_identifier").notNull().unique(),
+    email: text("email").notNull(),
+    name: text("name"),
+    avatarUrl: text("avatar_url"),
+    onboardingCompletedAt: timestamp("onboarding_completed_at", {
+      withTimezone: true,
+    }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+);
+
+export const workspaces = pgTable(
+  "workspaces",
+  {
+    id: idColumn("id"),
+    ownerUserId: uuid("owner_user_id")
+      .notNull()
+      .references(() => users.id),
+    name: text("name").notNull(),
+    slug: text("slug"),
+    activeJournalCount: integer("active_journal_count").default(0).notNull(),
+    archivedJournalCount: integer("archived_journal_count")
+      .default(0)
+      .notNull(),
+    aiActionsUsed: integer("ai_actions_used").default(0).notNull(),
+    aiActionsReserved: integer("ai_actions_reserved").default(0).notNull(),
+    exportsUsed: integer("exports_used").default(0).notNull(),
+    sourceUploadsUsed: integer("source_uploads_used").default(0).notNull(),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (table) => [
+    index("workspaces_owner_user_id_idx").on(table.ownerUserId),
+    uniqueIndex("workspaces_slug_unique_idx")
+      .on(table.slug)
+      .where(sql`${table.slug} is not null`),
+  ],
+);
+
+export const subscriptions = pgTable(
+  "subscriptions",
+  {
+    id: idColumn("id"),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    providerCustomerId: text("provider_customer_id"),
+    providerSubscriptionId: text("provider_subscription_id").notNull(),
+    providerPriceId: text("provider_price_id"),
+    planCode: text("plan_code", { enum: planCodes }).notNull(),
+    status: text("status", { enum: subscriptionStatuses }).notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    currentPeriodStartAt: timestamp("current_period_start_at", {
+      withTimezone: true,
+    }),
+    currentPeriodEndAt: timestamp("current_period_end_at", {
+      withTimezone: true,
+    }),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end")
+      .default(false)
+      .notNull(),
+    canceledAt: timestamp("canceled_at", { withTimezone: true }),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    providerMetadata: jsonb("provider_metadata").$type<JsonValue>(),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (table) => [
+    check(
+      "subscriptions_plan_code_check",
+      sql`${table.planCode} in ('free', 'pro')`,
+    ),
+    check(
+      "subscriptions_status_check",
+      sql`${table.status} in ('trialing', 'active', 'past_due', 'canceled', 'expired')`,
+    ),
+    uniqueIndex("subscriptions_provider_subscription_unique_idx").on(
+      table.provider,
+      table.providerSubscriptionId,
+    ),
+    index("subscriptions_workspace_id_idx").on(table.workspaceId),
+    index("subscriptions_workspace_status_idx").on(
+      table.workspaceId,
+      table.status,
+    ),
+    uniqueIndex("subscriptions_current_workspace_unique_idx")
+      .on(table.workspaceId)
+      .where(sql`${table.endedAt} is null`),
+  ],
+);
+
+export const workspaceMembers = pgTable(
+  "workspace_members",
+  {
+    id: idColumn("id"),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: text("role", { enum: workspaceMemberRoles }).notNull(),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (table) => [
+    check(
+      "workspace_members_role_check",
+      sql`${table.role} in ('owner', 'member')`,
+    ),
+    unique("workspace_members_workspace_id_user_id_unique").on(
+      table.workspaceId,
+      table.userId,
+    ),
+    index("workspace_members_user_id_idx").on(table.userId),
+  ],
+);
+
+export const journals = pgTable(
+  "journals",
+  {
+    id: idColumn("id"),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    ownerUserId: uuid("owner_user_id")
+      .notNull()
+      .references(() => users.id),
+    title: text("title").notNull(),
+    type: text("type", { enum: journalTypes }).notNull(),
+    status: text("status", { enum: journalStatuses })
+      .notNull()
+      .default("active"),
+    contentJson: jsonb("content_json").$type<JsonValue>().notNull(),
+    outlineJson: jsonb("outline_json").$type<JsonValue>(),
+    plainText: text("plain_text"),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    lastOpenedAt: timestamp("last_opened_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (table) => [
+    check(
+      "journals_type_check",
+      sql`${table.type} in ('general', 'proposal', 'thesis')`,
+    ),
+    check(
+      "journals_status_check",
+      sql`${table.status} in ('active', 'archived')`,
+    ),
+    index("journals_workspace_archived_idx").on(
+      table.workspaceId,
+      table.archivedAt,
+    ),
+    index("journals_workspace_updated_idx").on(
+      table.workspaceId,
+      table.updatedAt,
+    ),
+    index("journals_owner_user_id_idx").on(table.ownerUserId),
+  ],
+);
+
+export const journalVersions = pgTable(
+  "journal_versions",
+  {
+    id: idColumn("id"),
+    journalId: uuid("journal_id")
+      .notNull()
+      .references(() => journals.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id),
+    versionNumber: integer("version_number").notNull(),
+    contentJson: jsonb("content_json").$type<JsonValue>().notNull(),
+    plainText: text("plain_text"),
+    trigger: text("trigger", { enum: journalVersionTriggers }).notNull(),
+    snapshotLabel: text("snapshot_label"),
+    createdAt: createdAtColumn(),
+  },
+  (table) => [
+    check(
+      "journal_versions_trigger_check",
+      sql`${table.trigger} in ('journal_create', 'outline_apply', 'ai_proposal_apply', 'manual_save')`,
+    ),
+    unique("journal_versions_journal_id_version_number_unique").on(
+      table.journalId,
+      table.versionNumber,
+    ),
+    index("journal_versions_journal_created_idx").on(
+      table.journalId,
+      table.createdAt,
+    ),
+  ],
+);
+
+export const journalProposals = pgTable(
+  "journal_proposals",
+  {
+    id: idColumn("id"),
+    journalId: uuid("journal_id")
+      .notNull()
+      .references(() => journals.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    ownerUserId: uuid("owner_user_id")
+      .notNull()
+      .references(() => users.id),
+    proposalJson: jsonb("proposal_json").$type<JsonValue>().notNull(),
+    actionType: text("action_type", {
+      enum: journalProposalActionTypes,
+    }).notNull(),
+    status: text("status", { enum: journalProposalStatuses }).notNull(),
+    baseUpdatedAt: timestamp("base_updated_at", {
+      withTimezone: true,
+    }).notNull(),
+    targetBlockIds: jsonb("target_block_ids").$type<string[]>().notNull(),
+    appliedAt: timestamp("applied_at", { withTimezone: true }),
+    dismissedAt: timestamp("dismissed_at", { withTimezone: true }),
+    invalidatedAt: timestamp("invalidated_at", { withTimezone: true }),
+    errorMessage: text("error_message"),
+    idempotencyKey: text("idempotency_key"),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (table) => [
+    check(
+      "journal_proposals_action_type_check",
+      sql`${table.actionType} in ('replace', 'insert_below')`,
+    ),
+    check(
+      "journal_proposals_status_check",
+      sql`${table.status} in ('pending', 'applied', 'dismissed', 'invalidated', 'failed')`,
+    ),
+    index("journal_proposals_journal_status_idx").on(
+      table.journalId,
+      table.status,
+    ),
+    uniqueIndex("journal_proposals_journal_idempotency_unique_idx")
+      .on(table.journalId, table.idempotencyKey)
+      .where(sql`${table.idempotencyKey} is not null`),
+  ],
+);
+// !
+// export const sources = pgTable(
+//   "sources",
+//   {
+//     id: idColumn("id"),
+//     journalId: uuid("journal_id")
+//       .notNull()
+//       .references(() => journals.id, { onDelete: "cascade" }),
+//     workspaceId: uuid("workspace_id")
+//       .notNull()
+//       .references(() => workspaces.id, { onDelete: "cascade" }),
+//     ownerUserId: uuid("owner_user_id")
+//       .notNull()
+//       .references(() => users.id),
+//     storageKey: text("storage_key").notNull(),
+//     fileName: text("file_name").notNull(),
+//     mimeType: text("mime_type").notNull(),
+//     checksum: text("checksum").notNull(),
+//     status: text("status", { enum: sourceStatuses }).notNull(),
+//     retryCount: integer("retry_count").default(0).notNull(),
+//     pageCount: integer("page_count"),
+//     ocrStatus: text("ocr_status"),
+//     extractedTextSummary: text("extracted_text_summary"),
+//     errorMessage: text("error_message"),
+//     errorCode: text("error_code"),
+//     deletedAt: timestamp("deleted_at", { withTimezone: true }),
+//     processingStartedAt: timestamp("processing_started_at", {
+//       withTimezone: true,
+//     }),
+//     readyAt: timestamp("ready_at", { withTimezone: true }),
+//     parsedTextStorageKey: text("parsed_text_storage_key"),
+//     parsedTextSizeBytes: integer("parsed_text_size_bytes"),
+//     idempotencyKey: text("idempotency_key"),
+//     createdAt: createdAtColumn(),
+//     updatedAt: updatedAtColumn(),
+//   },
+//   (table) => [
+//     check(
+//       "sources_status_check",
+//       sql`${table.status} in ('queued', 'processing', 'ready', 'failed')`,
+//     ),
+//     index("sources_journal_id_idx").on(table.journalId),
+//     index("sources_workspace_checksum_idx").on(
+//       table.workspaceId,
+//       table.checksum,
+//     ),
+//     index("sources_checksum_idx").on(table.checksum),
+//   ],
+// );
+
+// !
+// export const sourceChunks = pgTable(
+//   "source_chunks",
+//   {
+//     id: idColumn("id"),
+//     sourceId: uuid("source_id")
+//       .notNull()
+//       .references(() => sources.id, { onDelete: "cascade" }),
+//     journalId: uuid("journal_id")
+//       .notNull()
+//       .references(() => journals.id, { onDelete: "cascade" }),
+//     workspaceId: uuid("workspace_id")
+//       .notNull()
+//       .references(() => workspaces.id, { onDelete: "cascade" }),
+//     chunkIndex: integer("chunk_index").notNull(),
+//     text: text("text").notNull(),
+//     citationMetadata: jsonb("citation_metadata").$type<JsonValue>().notNull(),
+//     embeddingStatus: text("embedding_status", {
+//       enum: embeddingStatuses,
+//     }).notNull(),
+//     createdAt: createdAtColumn(),
+//     updatedAt: updatedAtColumn(),
+//   },
+//   (table) => [
+//     check(
+//       "source_chunks_embedding_status_check",
+//       sql`${table.embeddingStatus} in ('pending', 'ready', 'skipped')`,
+//     ),
+//     unique("source_chunks_source_id_chunk_index_unique").on(
+//       table.sourceId,
+//       table.chunkIndex,
+//     ),
+//     index("source_chunks_journal_id_idx").on(table.journalId),
+//   ],
+// );
+
+export const exports = pgTable(
+  "exports",
+  {
+    id: idColumn("id"),
+    journalId: uuid("journal_id")
+      .notNull()
+      .references(() => journals.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    ownerUserId: uuid("owner_user_id")
+      .notNull()
+      .references(() => users.id),
+    exportType: text("export_type", { enum: exportTypes }).notNull(),
+    status: text("status", { enum: exportStatuses }).notNull(),
+    storageKey: text("storage_key"),
+    warningsSnapshot: jsonb("warnings_snapshot").$type<JsonValue>(),
+    idempotencyKey: text("idempotency_key"),
+    retryCount: integer("retry_count").default(0).notNull(),
+    errorMessage: text("error_message"),
+    errorCode: text("error_code"),
+    readyAt: timestamp("ready_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (table) => [
+    check("exports_export_type_check", sql`${table.exportType} in ('docx')`),
+    check(
+      "exports_status_check",
+      sql`${table.status} in ('queued', 'processing', 'ready', 'failed')`,
+    ),
+    index("exports_journal_status_idx").on(table.journalId, table.status),
+    index("exports_workspace_id_idx").on(table.workspaceId),
+    uniqueIndex("exports_journal_idempotency_unique_idx")
+      .on(table.journalId, table.idempotencyKey)
+      .where(sql`${table.idempotencyKey} is not null`),
+  ],
+);
+
+export const table = {
+  users,
+  workspaces,
+  subscriptions,
+  workspaceMembers,
+  journals,
+  journalVersions,
+  journalProposals,
+  // sources,
+  // sourceChunks,
+  exports,
+} as const;
+
+export type Table = typeof table;

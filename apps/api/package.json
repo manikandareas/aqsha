@@ -11,12 +11,28 @@
     "dev": "bun --watch src/index.ts",
     "start": "bun run src/index.ts",
     "build": "bun build ./src/index.ts --outdir ./dist --target bun",
+    "db:generate": "bunx drizzle-kit generate --config=./drizzle.config.ts",
+    "db:migrate": "bunx drizzle-kit migrate --config=./drizzle.config.ts",
+    "db:studio": "bunx drizzle-kit studio --config=./drizzle.config.ts",
+    "db:check": "bun run src/database/check.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@aqsha/db": "workspace:*",
     "@aqsha/shared": "workspace:*",
     "@elysiajs/eden": "^1.4.9",
-    "elysia": "^1.4.28"
+    "@elysiajs/openapi": "^1.4.14",
+    "@t3-oss/env-core": "^0.13.11",
+    "@types/node": "^25.6.0",
+    "dotenv": "^17.2.3",
+    "drizzle-orm": "^0.44.7",
+    "elysia": "^1.4.28",
+    "elysia-clerk": "^1.0.1",
+    "pg": "^8.20.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.31.5"
   }
 }

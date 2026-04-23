@@ -4,3 +4,5 @@ dist
 node_modules
 coverage
 *.log
+apps/api/.env
+apps/api/.env.local

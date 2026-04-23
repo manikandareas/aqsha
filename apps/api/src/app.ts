@@ -1,11 +1,13 @@
 import { Elysia } from "elysia";
-import { exampleModule } from "./modules/example";
 import { healthModule } from "./modules/health";
+import { sessionModule } from "./modules/session";
+import openapi from "@elysiajs/openapi";
 
 export const app = new Elysia({
   name: "@aqsha/api",
 })
+  .use(openapi())
   .use(healthModule)
-  .use(exampleModule);
+  .use(sessionModule);
 
 export type ApiApp = typeof app;

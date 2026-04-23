@@ -5,10 +5,10 @@ import { HealthService } from "./service";
 export const healthModule = new Elysia({
   prefix: "/health",
   name: "module.health",
-}).get(
-  "/",
-  () => HealthService.getHealth(),
-  {
-    response: healthModel.healthResponse,
+  tags: ["health"],
+}).get("/", () => HealthService.getHealth(), {
+  response: healthModel.healthResponse,
+  detail: {
+    summary: "Check the health of the API",
   },
-);
+});
