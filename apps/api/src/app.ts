@@ -7,3 +7,5 @@ export const app = new Elysia({
 })
   .use(healthModule)
   .use(exampleModule);
+
+export type ApiApp = typeof app;

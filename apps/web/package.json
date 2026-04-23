@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@aqsha/api": "workspace:*",
     "@aqsha/shared": "workspace:*",
     "@base-ui/react": "^1.4.1",
     "class-variance-authority": "^0.7.1",
