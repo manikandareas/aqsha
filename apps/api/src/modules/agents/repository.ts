@@ -1,6 +1,7 @@
 import {
   agentEvents,
   agentMessages,
+  agentResearchCandidateSources,
   agentResearchClaims,
   agentResearchEvidenceItems,
   agentResearchSessions,
@@ -438,70 +439,154 @@ export class AgentRepository {
     return { research, evidenceItems, claims };
   }
 
-  async saveResearchArtifacts(input: {
+  /**
+   * Per-iteration persistence (design v2 §6). Called after the researcher
+   * and critic phases of each iteration so the state is recoverable even if
+   * the workflow crashes before synthesis.
+   *
+   * Candidate sources and evidence items are inserted with `iteration`
+   * tagged into their `metadata` jsonb. Claims are replaced wholesale (the
+   * critic's latest claim pool supersedes prior iterations).
+   */
+  async persistIterationArtifacts(input: {
     sessionId: string;
     workspaceId: string;
-    plan?: JsonValue;
-    synthesis?: JsonValue;
-    audit?: JsonValue;
-    researchIterations?: number;
+    iteration: number;
+    candidateSources?: {
+      candidateId: string;
+      origin: "qdrant" | "websets" | "model";
+      status: "candidate" | "accepted" | "rejected";
+      title: string;
+      url?: string | null;
+      externalId?: string | null;
+      metadata?: JsonValue;
+    }[];
     evidenceItems?: {
+      evidenceId: string;
       source: "qdrant" | "websets" | "manual";
       provenance: "retrieved" | "model_cited" | "audited";
-      citationKey: string;
       title?: string | null;
       url?: string | null;
       quote: string;
       metadata?: JsonValue;
     }[];
     claims?: {
-      text: string;
+      statement: string;
       confidence: "low" | "medium" | "high";
       supported: boolean;
       citationKeys: string[];
+      claimId: string;
     }[];
   }): Promise<void> {
     await this.db.transaction(async (tx) => {
+      if (input.candidateSources?.length) {
+        for (const candidate of input.candidateSources) {
+          const metadata: JsonValue = {
+            ...(isRecord(candidate.metadata) ? candidate.metadata : {}),
+            iteration: input.iteration,
+            candidateId: candidate.candidateId,
+          };
+          await tx
+            .insert(agentResearchCandidateSources)
+            .values({
+              sessionId: input.sessionId,
+              workspaceId: input.workspaceId,
+              origin: candidate.origin,
+              status: candidate.status,
+              title: candidate.title,
+              url: candidate.url,
+              externalId: candidate.externalId ?? candidate.candidateId,
+              metadata,
+            });
+        }
+      }
+
+      if (input.evidenceItems?.length) {
+        for (const item of input.evidenceItems) {
+          const metadata: JsonValue = {
+            ...(isRecord(item.metadata) ? item.metadata : {}),
+            iteration: input.iteration,
+          };
+          await tx
+            .insert(agentResearchEvidenceItems)
+            .values({
+              sessionId: input.sessionId,
+              workspaceId: input.workspaceId,
+              source: item.source,
+              provenance: item.provenance,
+              citationKey: item.evidenceId,
+              title: item.title,
+              url: item.url,
+              quote: item.quote,
+              metadata,
+            })
+            .onConflictDoNothing();
+        }
+      }
+
+      if (input.claims) {
+        // Critic's latest claim pool supersedes prior iterations for the
+        // same session. Delete + re-insert inside the same transaction.
+        await tx
+          .delete(agentResearchClaims)
+          .where(
+            and(
+              eq(agentResearchClaims.sessionId, input.sessionId),
+              eq(agentResearchClaims.workspaceId, input.workspaceId),
+            ),
+          );
+
+        if (input.claims.length > 0) {
+          await tx.insert(agentResearchClaims).values(
+            input.claims.map((claim) => ({
+              sessionId: input.sessionId,
+              workspaceId: input.workspaceId,
+              text: claim.statement,
+              confidence: claim.confidence,
+              supported: claim.supported,
+              citationKeys: {
+                claimId: claim.claimId,
+                iteration: input.iteration,
+                evidenceIds: claim.citationKeys,
+              } as JsonValue,
+            })),
+          );
+        }
+      }
+
       await tx
         .update(agentResearchSessions)
         .set({
-          plan: input.plan,
-          synthesis: input.synthesis,
-          audit: input.audit,
-          researchIterations: input.researchIterations,
+          researchIterations: input.iteration + 1,
           updatedAt: new Date(),
         })
         .where(eq(agentResearchSessions.sessionId, input.sessionId));
-
-      if (input.evidenceItems?.length) {
-        await tx.insert(agentResearchEvidenceItems).values(
-          input.evidenceItems.map((item) => ({
-            sessionId: input.sessionId,
-            workspaceId: input.workspaceId,
-            source: item.source,
-            provenance: item.provenance,
-            citationKey: item.citationKey,
-            title: item.title,
-            url: item.url,
-            quote: item.quote,
-            metadata: item.metadata,
-          })),
-        );
-      }
-
-      if (input.claims?.length) {
-        await tx.insert(agentResearchClaims).values(
-          input.claims.map((claim) => ({
-            sessionId: input.sessionId,
-            workspaceId: input.workspaceId,
-            text: claim.text,
-            confidence: claim.confidence,
-            supported: claim.supported,
-            citationKeys: claim.citationKeys,
-          })),
-        );
-      }
     });
+  }
+
+  /**
+   * End-of-workflow persistence of plan/synthesis/audit blobs. Evidence
+   * items and claims are already persisted per-iteration via
+   * persistIterationArtifacts.
+   */
+  async finalizeResearchArtifacts(input: {
+    sessionId: string;
+    workspaceId: string;
+    plan?: JsonValue;
+    synthesis?: JsonValue;
+    audit?: JsonValue;
+    researchIterations?: number;
+  }): Promise<void> {
+    await this.db
+      .update(agentResearchSessions)
+      .set({
+        plan: input.plan,
+        synthesis: input.synthesis,
+        audit: input.audit,
+        researchIterations: input.researchIterations,
+        updatedAt: new Date(),
+      })
+      .where(eq(agentResearchSessions.sessionId, input.sessionId));
   }
 
   async getResearchReadModel(sessionId: string, workspaceId: string) {
@@ -552,4 +637,14 @@ export class AgentRepository {
       )
       .orderBy(asc(agentEvents.sequence));
   }
+}
+
+function isRecord(
+  value: unknown,
+): value is Record<string, JsonValue> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
 }

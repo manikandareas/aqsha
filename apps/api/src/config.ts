@@ -16,6 +16,8 @@ export const env = createEnv({
     QDRANT_URL: z.string().url(),
     QDRANT_API_KEY: z.string().min(1),
     EXA_API_KEY: z.string().min(1).optional(),
+    OPENAI_API_KEY: z.string().min(1).optional(),
+    AGENT_EMBEDDING_MODEL: z.string().min(1).default("text-embedding-3-small"),
     AGENT_DEFAULT_MODEL: z.string().min(1).default("claude-sonnet-4-6"),
     AGENT_STANDARD_MAX_BUDGET_USD: z.coerce
       .number()
