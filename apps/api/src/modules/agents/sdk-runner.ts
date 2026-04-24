@@ -1,32 +1,62 @@
 import {
-  query,
-  type Options,
-  type SDKMessage,
-  type SDKResultMessage,
-} from "@anthropic-ai/claude-agent-sdk";
+  Agent,
+  run,
+  setDefaultOpenAIKey,
+  type MCPServer,
+  type Tool,
+} from "@openai/agents";
 import type { JsonValue } from "@aqsha/db";
 import type { z } from "zod";
+import type { AgentOutputType } from "@openai/agents";
+import { env } from "../../config";
 import type { AgentRepository } from "./repository";
 import type { AgentResearchPhase, PhaseModelConfig } from "./types";
+
+// Register the default OpenAI API key lazily — the SDK otherwise tries to
+// construct an OpenAI client from `OPENAI_API_KEY` at first use.
+let defaultKeyRegistered = false;
+function ensureDefaultOpenAIKey() {
+  if (defaultKeyRegistered) return;
+  if (!env.OPENAI_API_KEY) {
+    throw new Error(
+      "OPENAI_API_KEY is not configured. The research agent requires an OpenAI API key.",
+    );
+  }
+  setDefaultOpenAIKey(env.OPENAI_API_KEY);
+  defaultKeyRegistered = true;
+}
 
 export class AgentSdkRunner {
   constructor(private readonly repository: AgentRepository) {}
 
+  /**
+   * Runs one phase of the research workflow with the OpenAI Agents SDK and
+   * returns the agent's final structured output. See
+   * `agentic-research-design-v2.md` §8 for the contract.
+   */
   async runStructured<T>(input: {
     sessionId: string;
     workspaceId: string;
     phase: AgentResearchPhase;
     prompt: string;
     systemPrompt: string;
-    schema: z.ZodType<T>;
-    outputFormat: Options["outputFormat"];
+    schema: z.ZodObject<z.ZodRawShape, z.core.$strip> & z.ZodType<T>;
     modelConfig: PhaseModelConfig;
-    tools?: Options["tools"];
-    mcpServers?: Options["mcpServers"];
-    allowedTools?: string[];
-    disallowedTools?: string[];
+    /**
+     * Function tools the agent may call. Includes MCP-backed tools resolved
+     * by the caller (we manage MCP server lifecycles outside the runner so
+     * connection can be reused across phases).
+     */
+    tools?: Tool<unknown>[];
+    /**
+     * Optional list of MCP servers whose tools are merged into the agent's
+     * tool surface by the SDK. Caller owns connect() / close().
+     */
+    mcpServers?: MCPServer[];
   }): Promise<T> {
-    const run = await this.repository.startRun({
+    ensureDefaultOpenAIKey();
+
+    const runRecord = await this.repository.startRun({
       sessionId: input.sessionId,
       workspaceId: input.workspaceId,
       phase: input.phase,
@@ -34,71 +64,66 @@ export class AgentSdkRunner {
       maxTurns: input.modelConfig.maxTurns,
       maxBudgetUsd: input.modelConfig.maxBudgetUsd,
     });
-    let resultMessage: SDKResultMessage | undefined;
 
     try {
-      const messages = query({
-        prompt: input.prompt,
-        options: {
-          model: input.modelConfig.model,
-          systemPrompt: input.systemPrompt,
-          maxTurns: input.modelConfig.maxTurns,
-          maxBudgetUsd: input.modelConfig.maxBudgetUsd,
-          taskBudget: { total: input.modelConfig.taskBudgetTokens },
-          outputFormat: input.outputFormat,
-          permissionMode: "dontAsk",
-          tools: input.tools ?? [],
-          mcpServers: input.mcpServers,
-          allowedTools: input.allowedTools,
-          disallowedTools: input.disallowedTools,
-          env: {
-            ...process.env,
-            CLAUDE_AGENT_SDK_CLIENT_APP: "@aqsha/api",
-          },
-        },
+      const agent = new Agent({
+        name: `aqsha-${input.phase}`,
+        model: input.modelConfig.model,
+        instructions: input.systemPrompt,
+        tools: input.tools ?? [],
+        mcpServers: input.mcpServers ?? [],
+        // Enforce JSON output matching the phase's Zod schema.
+        outputType: input.schema as unknown as AgentOutputType,
       });
 
-      for await (const message of messages) {
-        await this.repository.appendEvent({
-          sessionId: input.sessionId,
-          runId: run.id,
-          workspaceId: input.workspaceId,
-          phase: input.phase,
-          eventType: message.type,
-          rawMessage: toJsonValue(message),
-          curated: curateSdkMessage(message, input.phase),
-        });
+      const result = await run(agent, input.prompt, {
+        maxTurns: input.modelConfig.maxTurns,
+        stream: false,
+      });
 
-        if (message.type === "result") {
-          resultMessage = message;
-        }
-      }
-
-      if (!resultMessage) {
-        throw new Error("Claude Agent SDK completed without a result message.");
-      }
-
-      if (resultMessage.subtype !== "success") {
+      const finalOutput = result.finalOutput;
+      if (finalOutput === undefined || finalOutput === null) {
         throw new Error(
-          resultMessage.errors?.join("\n") || `SDK failed: ${resultMessage.subtype}`,
+          `OpenAI Agents SDK produced no final output for phase ${input.phase}.`,
         );
       }
 
-      await this.repository.finishRun(run.id, {
+      const usage = result.state._context.usage;
+      const curatedMessages = result.newItems.map((item) =>
+        curateItem(item, input.phase),
+      );
+      for (const curated of curatedMessages) {
+        await this.repository.appendEvent({
+          sessionId: input.sessionId,
+          runId: runRecord.id,
+          workspaceId: input.workspaceId,
+          phase: input.phase,
+          eventType: String(
+            (curated as { type?: string } | null)?.type ?? "item",
+          ),
+          curated,
+        });
+      }
+
+      await this.repository.finishRun(runRecord.id, {
         status: "completed",
-        sdkSessionId: resultMessage.session_id,
-        sdkResultSubtype: resultMessage.subtype,
-        usage: toJsonValue(resultMessage.usage),
-        modelUsage: toJsonValue(resultMessage.modelUsage),
-        totalCostUsd: resultMessage.total_cost_usd,
+        sdkSessionId: result.lastResponseId,
+        sdkResultSubtype: "success",
+        usage: toJsonValue({
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          totalTokens: usage.totalTokens,
+          requests: usage.requests,
+        }),
+        modelUsage: toJsonValue(usage.requestUsageEntries ?? []),
       });
 
-      return input.schema.parse(resultMessage.structured_output);
+      // finalOutput is typed against the Zod schema but pass through parse to
+      // be defensive about surprise shapes.
+      return input.schema.parse(finalOutput);
     } catch (error) {
-      await this.repository.finishRun(run.id, {
+      await this.repository.finishRun(runRecord.id, {
         status: "failed",
-        sdkSessionId: resultMessage?.session_id,
-        sdkResultSubtype: resultMessage?.subtype,
         errorMessage: error instanceof Error ? error.message : String(error),
       });
 
@@ -107,25 +132,14 @@ export class AgentSdkRunner {
   }
 }
 
-function curateSdkMessage(
-  message: SDKMessage,
-  phase: AgentResearchPhase,
-): JsonValue {
-  if (message.type === "result") {
-    return {
-      type: "result",
-      phase,
-      subtype: message.subtype,
-      isError: message.is_error,
-      numTurns: message.num_turns,
-      totalCostUsd: message.total_cost_usd,
-    };
+function curateItem(item: unknown, phase: AgentResearchPhase): JsonValue {
+  if (!item || typeof item !== "object") {
+    return { phase, type: "unknown" };
   }
 
-  return {
-    type: message.type,
-    phase,
-  };
+  const record = item as Record<string, unknown>;
+  const type = typeof record.type === "string" ? record.type : "unknown";
+  return { phase, type };
 }
 
 function toJsonValue(value: unknown): JsonValue {

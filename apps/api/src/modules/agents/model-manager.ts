@@ -26,7 +26,7 @@ export class AgentModelManager {
     return {
       phase: input.phase,
       depthMode: input.depthMode,
-      model: env.AGENT_DEFAULT_MODEL,
+      model: this.getModelForPhase(input.phase),
       maxTurns: this.getMaxTurns(input.phase, input.depthMode),
       maxBudgetUsd:
         input.depthMode === "deep"
@@ -41,6 +41,24 @@ export class AgentModelManager {
 
   getMaxResearchIterations(depthMode: AgentDepthMode): number {
     return depthMode === "deep" ? 5 : 3;
+  }
+
+  private getModelForPhase(phase: AgentResearchPhase): string {
+    switch (phase) {
+      case "planner":
+        return env.AGENT_PLANNER_MODEL;
+      case "researcher":
+        return env.AGENT_RESEARCHER_MODEL;
+      case "critic":
+        return env.AGENT_CRITIC_MODEL;
+      case "synthesizer":
+        return env.AGENT_SYNTHESIZER_MODEL;
+      case "synthesizer_revision":
+        return env.AGENT_SYNTHESIZER_REVISION_MODEL;
+      case "citation_audit":
+      case "final":
+        return env.AGENT_DEFAULT_MODEL;
+    }
   }
 
   private getMaxTurns(

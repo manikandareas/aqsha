@@ -12,13 +12,23 @@ export const env = createEnv({
       ),
     CLERK_PUBLISHABLE_KEY: z.string().min(1),
     CLERK_SECRET_KEY: z.string().min(1),
-    ANTHROPIC_API_KEY: z.string().min(1),
     QDRANT_URL: z.string().url(),
     QDRANT_API_KEY: z.string().min(1),
     EXA_API_KEY: z.string().min(1).optional(),
-    OPENAI_API_KEY: z.string().min(1).optional(),
+    // Required: the research agent uses the OpenAI Agents SDK.
+    OPENAI_API_KEY: z.string().min(1),
     AGENT_EMBEDDING_MODEL: z.string().min(1).default("text-embedding-3-small"),
-    AGENT_DEFAULT_MODEL: z.string().min(1).default("claude-sonnet-4-6"),
+    // Per-phase model overrides. Light phases (planner, critic) default to
+    // gpt-5-mini; heavy phases (researcher, synthesizer) default to gpt-5.
+    AGENT_DEFAULT_MODEL: z.string().min(1).default("gpt-5"),
+    AGENT_PLANNER_MODEL: z.string().min(1).default("gpt-5-mini"),
+    AGENT_RESEARCHER_MODEL: z.string().min(1).default("gpt-5"),
+    AGENT_CRITIC_MODEL: z.string().min(1).default("gpt-5-mini"),
+    AGENT_SYNTHESIZER_MODEL: z.string().min(1).default("gpt-5"),
+    AGENT_SYNTHESIZER_REVISION_MODEL: z
+      .string()
+      .min(1)
+      .default("gpt-5"),
     AGENT_STANDARD_MAX_BUDGET_USD: z.coerce
       .number()
       .positive()

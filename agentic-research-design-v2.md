@@ -1,32 +1,35 @@
 # Agentic Research System - Design Draft v2
 
-**Stack:** Claude Agent SDK (TypeScript) · Bun/Elysia · Drizzle/Postgres · Qdrant Cloud · Exa Websets MCP · text-embedding-3-small
+**Stack:** OpenAI Agents SDK (TypeScript) · Bun/Elysia · Drizzle/Postgres · Qdrant Cloud · Exa Websets MCP · text-embedding-3-small
+
+**Models:** `gpt-5` for heavy reasoning (researcher, synthesizer, synthesizer_revision); `gpt-5-mini` for light reasoning (planner, critic). All model names are configurable via `AGENT_*_MODEL` env vars (see §17).
 
 ---
 
 ## 1. Core Architecture Decision
 
 Rancangan ini memakai **app-level orchestrator** sebagai pengendali domain loop.
-Claude Agent SDK tetap dipakai, tetapi setiap fase dipanggil sebagai `query()`
-terpisah:
+OpenAI Agents SDK dipakai untuk setiap fase: tiap fase membangun satu `Agent`
+baru dan memanggil `run(agent, input, options)` secara terpisah:
 
 ```text
 App Orchestrator
-  -> query(planner)
-  -> query(researcher)
-  -> query(critic)
+  -> run(plannerAgent)
+  -> run(researcherAgent)
+  -> run(criticAgent)
   -> app decides: continue gap-filling or stop
-  -> query(synthesizer)
+  -> run(synthesizerAgent)
   -> citationAudit() deterministic TypeScript function
-  -> optional query(synthesizer revision)
+  -> optional run(synthesizerRevisionAgent)
   -> citationAudit() again
 ```
 
-Ini lebih selaras dengan definisi resmi Claude Agent SDK agent loop:
+Ini selaras dengan agent loop resmi OpenAI Agents SDK:
 
 ```text
-prompt -> Claude decides response/tool calls -> SDK executes tools
-       -> tool results return to Claude -> repeat -> ResultMessage
+input -> model produces text / tool calls / handoffs -> SDK executes tools
+      -> tool results fed back to model -> repeat -> final output matching
+         Agent.outputType (Zod schema) -> RunResult
 ```
 
 Dengan desain ini, SDK agent loop terjadi **di dalam tiap fase**. Research loop
@@ -36,16 +39,17 @@ dan failure handling ditegakkan oleh aplikasi, bukan hanya prompt.
 ### Apa yang Tidak Dipakai
 
 - Tidak ada satu Supervisor prompt panjang yang mengatur seluruh workflow.
-- Tidak ada SDK `Agent` tool untuk fase utama.
+- Tidak dipakai SDK `handoff()` / agent-as-tool untuk fase utama.
 - `planner`, `researcher`, `critic`, dan `synthesizer` bukan subagents yang
   dipanggil oleh Supervisor. Mereka adalah role/fase service-level dengan
-  `query()` masing-masing.
-- Citation audit bukan MCP tool. Audit adalah fungsi TypeScript deterministik.
+  `Agent` + `run()` masing-masing.
+- Citation audit bukan tool / subagent. Audit adalah fungsi TypeScript
+  deterministik.
 
 ### Apa yang Tetap Agentic
 
 - Fase `researcher` tetap memakai agent loop SDK untuk memilih tool call
-  Qdrant, WebSearch/WebFetch, dan Exa Websets secara adaptif.
+  Qdrant, hosted `webSearchTool()`, dan Exa Websets (MCP) secara adaptif.
 - App orchestrator mengevaluasi output `critic` untuk memutuskan apakah perlu
   iterasi gap-filling berikutnya.
 - Fase `synthesizer revision` hanya dipanggil jika deterministic citation audit
@@ -100,8 +104,7 @@ standard:
   maxResearchIterations = 3
   maxRevisionCycles = 1
   researcher maxTurns = 16
-  WebSearch <= 3 / iteration
-  WebFetch <= 8 / iteration
+  web_search <= 3 / iteration
   Websets create_webset <= 1
   Websets create_search <= 2
   Websets items <= 20
@@ -110,8 +113,7 @@ deep:
   maxResearchIterations = 5
   maxRevisionCycles = 1
   researcher maxTurns = 32
-  WebSearch <= 8 / iteration
-  WebFetch <= 20 / iteration
+  web_search <= 8 / iteration
   Websets create_webset <= 2
   Websets create_search <= 5
   Websets items <= 100
@@ -133,145 +135,150 @@ audit. If a future mode needs more, thread `maxRevisionCycles` through
 
 ## 3. SDK Agent Loop Boundary
 
-Setiap fase memanggil Claude Agent SDK `query()` sampai menghasilkan
-`ResultMessage`.
+Setiap fase memanggil `run(agent, input, options)` dari OpenAI Agents SDK
+sampai menghasilkan `RunResult` dengan `finalOutput` yang cocok dengan
+`Agent.outputType` (Zod schema).
 
-Only `ResultMessage.subtype === "success"` is a valid completed phase. Subtype
-lain harus masuk retry policy eksplisit atau menghentikan workflow.
+Normal termination: `result.finalOutput` is present and parses against the
+phase's Zod schema. Any other outcome must map to a retry policy entry or
+fail the workflow.
 
 ```text
-success
-  -> read ResultMessage.structured_output (SDK native)
-  -> validate with Zod
+finalOutput present and Zod-valid
   -> persist state
   -> continue
 
-error_max_turns
+MaxTurnsExceededError
   -> researcher can retry once with reduced scope
   -> planner/critic/synthesizer fail phase
 
-error_max_budget_usd
-  -> fail workflow as budget limit reached
-
-error_max_structured_output_retries
-  -> fail phase; do not add another app-level retry on top
-
-error_during_execution
+ModelBehaviorError (bad JSON / tool misuse)
   -> retry once only when phase policy allows it
 
-blocked_by_permissions / permission_denied
-  -> fail workflow; allowedTools/tools should be fixed per phase
+GuardrailTripwireTriggered / Tool*GuardrailTripwireTriggered
+  -> fail workflow; tool surface / guardrails need human review
 
-missing ResultMessage / unknown subtype
-  -> fail workflow and keep raw events for debugging
+ToolCallError / ToolTimeoutError
+  -> retry once when phase policy allows it; else fail phase
+
+UserError / SystemError
+  -> fail workflow; configuration issue
 ```
 
 Retry policy:
 
 ```text
 planner:
-  - retry 1x only for Zod validation failure on structured output
+  - retry 1x only for ModelBehaviorError (Zod / JSON failure on final output)
   - retry prompt includes parse error + "return only valid JSON per schema"
-  - no retry for SDK non-success
+  - no retry for MaxTurnsExceeded / GuardrailTripwire
 
 researcher:
-  - retry 1x for error_during_execution or Zod validation failure
+  - retry 1x for ModelBehaviorError or transient ToolCallError/ToolTimeoutError
   - retry prompt reduces scope / limits and includes parse error if any
-  - no retry for budget limit or structured-output-retries
+  - no retry for MaxTurnsExceeded if already at researcher maxTurns ceiling
 
 critic:
-  - retry 1x only for Zod validation failure
-  - no retry for SDK non-success
+  - retry 1x only for ModelBehaviorError
+  - no retry for MaxTurnsExceeded or guardrail tripwires
 
 synthesizer:
-  - retry 1x only for Zod validation failure
-  - no retry for SDK non-success
+  - retry 1x only for ModelBehaviorError
+  - no retry for MaxTurnsExceeded or guardrail tripwires
 
 synthesizer_revision:
   - one domain revision cycle only (controlled by maxRevisionCycles)
-  - retry 1x only for Zod validation failure
+  - retry 1x only for ModelBehaviorError
 
 citationAudit:
   - no LLM retry; deterministic function
 ```
 
-`ResultMessage.structured_output` is the canonical extraction path when
-`outputFormat: { type: "json_schema", schema }` is set in `Options`. Do not
-parse from `finalText`. Zod validation always runs before persistence, even
-though the SDK already constrains the shape.
+`RunResult.finalOutput` is the canonical extraction path when
+`Agent.outputType` is a Zod schema (or JSON schema definition). Do not
+parse from text message items. The runner always runs Zod validation before
+persistence as a defensive check even though the SDK constrains the shape.
+
+Budgets (`maxBudgetUsd`, `taskBudgetTokens`) are recorded on `agent_runs` for
+audit but are **not** enforced by the OpenAI Agents SDK at runtime. `maxTurns`
+is the only hard cap the SDK enforces per run; budgets are advisory and
+reported via `RunResult.state._context.usage`.
 
 ---
 
 ## 4. Phase Tool Policy
 
-Tool permissions are strict per phase. The main workflow does not use the SDK
-`Agent` tool.
+Tool permissions are strict per phase. The main workflow does not use SDK
+handoffs or agent-as-tool.
 
-> **Important:** `Options.tools` and `Options.allowedTools` are two different
-> concepts. `tools` is the *registration* list for the base set of built-in
-> tools (e.g. `WebSearch`, `WebFetch`, `AskUserQuestion`). Passing `tools: []`
-> disables all built-in tools. `allowedTools` only auto-approves already-
-> registered tool names. Therefore, **every built-in tool a phase needs must
-> appear in both `tools` (registered) and `allowedTools` (auto-approved).**
-> MCP tool names (`mcp__<server>__<tool>`) only need to appear in
-> `allowedTools`.
+> **Important:** In the OpenAI Agents SDK, the tool surface for a phase is the
+> union of `Agent.tools[]` (function tools built with `tool({ ... })` or hosted
+> tools like `webSearchTool()`) and tools exposed by `Agent.mcpServers[]`.
+> There is no separate `allowedTools` concept — any tool listed is allowed.
+> Phases that should not call tools pass `tools: []` and `mcpServers: []`.
 >
-> `Options.maxTurns` **must** be passed to `query()` per phase. It is not
-> enough to record it in `agent_runs`; the SDK only enforces it when it is in
-> `Options`.
+> `run(agent, input, { maxTurns })` **must** pass `maxTurns` per phase. It is
+> not enough to record it in `agent_runs`; the SDK only enforces the cap when
+> it is in the run options.
 
 ```text
 planner:
-  tools:        ["AskUserQuestion"]
-  allowedTools: ["AskUserQuestion"]
-  maxTurns: 4
+  tools:       []
+  mcpServers:  []
+  maxTurns: 6
+  (AskUserQuestion equivalent not wired yet; future work moves this to an
+   app-level `awaiting_user_input` state.)
 
 researcher:
-  tools:        ["WebSearch", "WebFetch"]
-  allowedTools:
-    - WebSearch
-    - WebFetch
-    - mcp__qdrant-kb__check_coverage
-    - mcp__qdrant-kb__vector_search
-    - mcp__qdrant-kb__get_chunk
-    - mcp__websets__create_webset
-    - mcp__websets__get_webset
-    - mcp__websets__list_webset_items
-    - mcp__websets__get_item
-    - mcp__websets__create_search
-    - mcp__websets__get_search
-    - mcp__websets__create_enrichment
-    - mcp__websets__get_enrichment
+  tools:
+    - webSearchTool()           # hosted: web search + citations in one call
+    - qdrant_check_coverage     # function tool (local)
+    - qdrant_vector_search      # function tool (local)
+    - qdrant_get_chunk          # function tool (local)
+  mcpServers:
+    - aqsha-websets (MCPServerStreamableHttp to Exa Websets MCP)
+      exposes: create_webset, get_webset, list_webset_items, get_item,
+               create_search, get_search, cancel_search,
+               create_enrichment, get_enrichment,
+               delete_enrichment, cancel_enrichment
   maxTurns: 16 standard, 32 deep
 
 critic:
-  tools:        []
-  allowedTools: []
-  maxTurns: 4
+  tools:       []
+  mcpServers:  []
+  maxTurns: 8
 
 synthesizer:
-  tools:        []
-  allowedTools: []
-  maxTurns: 4
+  tools:       []
+  mcpServers:  []
+  maxTurns: 10
 
 synthesizer_revision:
-  tools:        []
-  allowedTools: []
-  maxTurns: 3
+  tools:       []
+  mcpServers:  []
+  maxTurns: 8
 ```
 
 Not allowed in v2:
 
 ```text
-Agent
-write/edit tools
-shell tools
+handoff() to subagents for main phases
+agent-as-tool for main phases
+code interpreter / image generation / file search hosted tools
+local filesystem / shell tools (shellTool, applyPatchTool)
 mcp__websets__create_monitor
 ongoing monitor/background Websets lifecycle tools
 ```
 
-`AskUserQuestion` is allowed only in planning for the current version. Longer
-term, this can move to an app-level `awaiting_user_input` state.
+`webSearchTool()` replaces Claude's separate `WebSearch` and `WebFetch`
+built-ins: it returns a model-provided web answer with citations in a single
+tool call. The researcher prompt instructs the agent to include the returned
+URLs in `candidateSources` and quote exact passages in `evidenceItems`.
+
+An `AskUserQuestion`-style capability is not yet wired. Longer term this can
+move to an app-level `awaiting_user_input` state (the OpenAI Agents SDK
+supports human-in-the-loop via `needsApproval` on function tools, but that
+interrupts the run rather than asking the user).
 
 ---
 
@@ -415,7 +422,7 @@ setelah researcher punya content/verbatim/metadata yang cukup melalui fetch,
 Qdrant payload, atau enrichment yang jelas.
 
 ```text
-Websets item / WebSearch hit
+Websets item / web_search result
   -> agent_research_candidate_sources(status=candidate)
 
 candidate source + fetched/extracted content
@@ -446,10 +453,10 @@ The researcher must not emit evidence items that bypass this pipeline.
 
 ## 7. Structured Output Contracts
 
-Contracts dibuat di TypeScript dengan Zod. Jika Claude Agent SDK TypeScript
-mendukung structured output schema langsung di `query()`, gunakan itu. Jika
-belum tersedia atau tidak cukup stabil, fallback ke prompt JSON-only plus Zod
-validation dan retry satu kali sesuai phase policy.
+Contracts dibuat di TypeScript dengan Zod. OpenAI Agents SDK menerima Zod
+`ZodObject` langsung sebagai `Agent.outputType`, dan SDK memaksa model untuk
+menghasilkan output yang cocok; Zod `parse()` tetap dijalankan oleh runner
+sebagai defensive check sebelum persistence.
 
 Suggested location:
 
@@ -569,10 +576,12 @@ This is load-bearing because:
 
 ## 8. Postgres Source of Truth
 
-Postgres is the source of truth. SDK `resume` is not the main control mechanism
-for this workflow because each phase is a separate `query()` call.
+Postgres is the source of truth. Conversation state is not carried across
+phases via the SDK; each phase is a fresh `run(agent, input)` call and the
+orchestrator passes curated state from Postgres into the next phase's prompt.
 
-SDK session ids are stored per run for observability/debugging.
+`RunResult.lastResponseId` is stored per run on `agent_runs.sdk_session_id` for
+observability/debugging (OpenAI Responses API id).
 
 Use generic tables for reusable agent platform state, and research-specific
 tables for domain state.
@@ -845,52 +854,58 @@ apps/api/src/modules/agents/sdk-runner.ts
 ```
 
 ```ts
-import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
+import { Agent, run, type MCPServer, type Tool } from "@openai/agents";
+import type { z } from "zod";
 
 export async function runSdkPhase<T>(input: {
   sessionId: string;
   phase: AgentPhase;
   prompt: string;
-  systemPrompt: string;          // REQUIRED - never inherit the SDK default
-  options: Options;              // must include maxTurns, tools, allowedTools,
-                                 // mcpServers, outputFormat, maxBudgetUsd, taskBudget
-  schema: ZodSchema<T>;
+  systemPrompt: string;              // REQUIRED - assigned to Agent.instructions
+  model: string;                     // e.g. "gpt-5", "gpt-5-mini"
+  maxTurns: number;                  // REQUIRED - passed to run() options
+  schema: z.ZodObject<z.ZodRawShape> & z.ZodType<T>;
+  tools?: Tool<unknown>[];           // function tools + hosted tools
+  mcpServers?: MCPServer[];          // connected by caller
   retryPolicy: PhaseRetryPolicy;
 }): Promise<T> {
-  const run = await agentRepository.startRun(input.sessionId, input.phase);
-  let resultMessage: SDKResultMessage | undefined;
+  const runRecord = await agentRepository.startRun(input.sessionId, input.phase);
 
-  for await (const message of query({
-    prompt: input.prompt,
-    options: {
-      ...input.options,
-      systemPrompt: input.systemPrompt,
-    },
-  })) {
-    await agentRepository.appendEvent(run.id, message);
-    if (message.type === "result") resultMessage = message;
+  const agent = new Agent({
+    name: `aqsha-${input.phase}`,
+    model: input.model,
+    instructions: input.systemPrompt,
+    tools: input.tools ?? [],
+    mcpServers: input.mcpServers ?? [],
+    // SDK-native: constrains final output to the Zod schema.
+    outputType: input.schema,
+  });
+
+  const result = await run(agent, input.prompt, {
+    maxTurns: input.maxTurns,
+    stream: false,
+  });
+
+  if (!result.finalOutput) {
+    throw new AgentPhaseError(input.phase, "missing_final_output");
   }
 
-  if (!resultMessage) {
-    throw new AgentPhaseError(input.phase, "missing_result");
-  }
-  if (resultMessage.subtype !== "success") {
-    throw new AgentPhaseError(input.phase, resultMessage.subtype);
-  }
-
-  // SDK-native: structured_output is the canonical extraction path.
-  // Do not parse from finalText.
-  return input.schema.parse(resultMessage.structured_output);
+  // Defensive Zod validation even though the SDK constrains the shape.
+  return input.schema.parse(result.finalOutput);
 }
 ```
 
-`systemPrompt` is **mandatory** per phase. Leaving it unset makes the SDK fall
-back to the Claude Code coding-agent preset, which is the wrong framing for
-research roles and pollutes prompt caches.
+`Agent.instructions` (system prompt) is **mandatory** per phase. Leaving it
+unset makes the model run with no role framing at all.
 
-Structured output extraction **must** use `ResultMessage.structured_output`
-(available when `outputFormat: { type: "json_schema", schema }` is set).
-Extracting from assembled `finalText` is no longer a sanctioned path.
+Structured output extraction **must** use `RunResult.finalOutput` with
+`Agent.outputType` set to a Zod schema (or `JsonSchemaDefinition`). Extracting
+from text items in `result.newItems` is not a sanctioned path.
+
+Usage and trace metadata are available on `result.state._context.usage`
+(`inputTokens`, `outputTokens`, `totalTokens`, `requests`,
+`requestUsageEntries[]`) and `result.lastResponseId`. The SDK runner persists
+these to `agent_runs.usage` / `agent_runs.modelUsage` / `agent_runs.sdkSessionId`.
 
 ---
 
@@ -911,9 +926,9 @@ You are the planning phase for Aqsha research.
 Clarify the user's research request and decide whether it is approved,
 needs revision, or cancelled.
 
-Return PlannerOutput only.
-If the request is ambiguous, use AskUserQuestion when needed.
-Do not perform research.
+Return PlannerOutput only. Do not perform research. You have no tools in this
+phase; if the request is ambiguous, set status="needs_revision" with a concrete
+clarification question in the revisionReason field instead of asking the user.
 `;
 ```
 
@@ -923,9 +938,14 @@ Do not perform research.
 export const researcherSystemPrompt = `
 You are the researcher phase.
 
-Use internal Qdrant first. Use WebSearch/WebFetch when internal coverage is
-partial or insufficient. Use Exa Websets only when the task benefits from
-external candidate collection or enrichment.
+Tools available:
+- qdrant_check_coverage / qdrant_vector_search / qdrant_get_chunk: local
+  academic index. Try these first.
+- web_search (hosted): returns web answers with URL citations when internal
+  coverage is partial or insufficient.
+- Websets MCP tools (create_webset, get_webset, list_webset_items, ...):
+  Exa-backed landscape scans for structured entity collection and enrichment.
+  Use only when the task benefits from external candidate collection.
 
 Websets outputs are candidate sources. Do not promote them to evidence until
 there is enough content and provenance to support citation-quality evidence.
@@ -1054,35 +1074,41 @@ apps/api/src/modules/agents/workflows/research/qdrant-tools.ts
 apps/api/src/modules/agents/workflows/research/websets-tools.ts
 ```
 
-Qdrant is exposed as an in-process MCP server with `createSdkMcpServer(...)`.
-The researcher phase can call:
+Qdrant is exposed as **in-process function tools** built with the OpenAI
+Agents SDK `tool({ ... })` helper (not as an MCP server — the SDK's preferred
+integration for in-process tools is plain function tools). The researcher
+phase gets:
 
 ```text
-mcp__qdrant-kb__check_coverage
-mcp__qdrant-kb__vector_search
-mcp__qdrant-kb__get_chunk
+qdrant_check_coverage
+qdrant_vector_search
+qdrant_get_chunk
 ```
 
 See §5 "Retrieval Semantics" for the mandatory implementation contract for
-`vector_search` (query embedding with `text-embedding-3-small`, `qdrantClient.query(...)`
-against the chunk collection, optional payload filters, `limit <= 20`).
+`qdrant_vector_search` (query embedding via the official `openai` SDK
+`client.embeddings.create(...)` with `text-embedding-3-small`,
+`qdrantClient.query(...)` against the chunk collection, optional payload
+filters, `limit <= 20`).
 
-The Websets MCP server can be configured as a remote/external MCP server. The
-researcher phase can call:
+The Websets MCP server is configured as a **streamable-HTTP MCP server**
+(`MCPServerStreamableHttp`) pointing at `https://websetsmcp.exa.ai/mcp`. The
+researcher's `Agent.mcpServers[]` includes it; the SDK auto-discovers the
+exposed tool names at connect time. Expected tools:
 
 ```text
-mcp__websets__create_webset
-mcp__websets__get_webset
-mcp__websets__list_webset_items
-mcp__websets__get_item
-mcp__websets__create_search
-mcp__websets__get_search
-mcp__websets__create_enrichment
-mcp__websets__get_enrichment
+create_webset, get_webset, update_webset, list_websets, list_webset_items,
+get_item, create_search, get_search, cancel_search,
+create_enrichment, get_enrichment, delete_enrichment, cancel_enrichment
 ```
 
-Tool results should be persisted in `agent_events`. Candidate sources extracted
-from Websets/WebSearch should be normalized into
+Lifecycle: the orchestrator calls `server.connect()` before `run(agent, ...)`
+and `server.close()` when the researcher phase finishes (or errors). Do not
+instantiate one MCP server per iteration — reuse the same connection across
+all research iterations of a session.
+
+Tool results are persisted in `agent_events`. Candidate sources extracted
+from Websets and `webSearchTool()` results are normalized into
 `agent_research_candidate_sources`.
 
 ---
@@ -1199,18 +1225,40 @@ Use Bun because Aqsha pins Bun in `packageManager`.
 From the relevant workspace:
 
 ```bash
-bun add @anthropic-ai/claude-agent-sdk zod @qdrant/js-client-rest
+bun add @openai/agents openai zod @qdrant/js-client-rest
 ```
 
-Exa Websets MCP requires Exa credentials and MCP configuration in the API
-runtime environment. Do not put long-running Websets monitor tools in the v2
-allowed tool list.
+- `@openai/agents` — OpenAI Agents SDK (includes `Agent`, `run`, `tool`,
+  `webSearchTool`, `MCPServerStreamableHttp`, `MCPServerStdio`).
+- `openai` — official OpenAI client, used by the Qdrant vector_search tool to
+  embed queries with `text-embedding-3-small` via `client.embeddings.create()`.
+
+Required environment variables (`apps/api/.env`):
+
+| Var | Default | Purpose |
+|---|---|---|
+| `OPENAI_API_KEY` | *required* | Used by both the Agents SDK (LLM calls) and the official `openai` client (embeddings). |
+| `QDRANT_URL` / `QDRANT_API_KEY` | *required* | Qdrant Cloud access. |
+| `EXA_API_KEY` | optional | Enables Websets MCP server. If unset, researcher runs without Websets. |
+| `AGENT_EMBEDDING_MODEL` | `text-embedding-3-small` | Must match ingestion provider. |
+| `AGENT_DEFAULT_MODEL` | `gpt-5` | Fallback for phases without explicit model. |
+| `AGENT_PLANNER_MODEL` | `gpt-5-mini` | Planner phase. |
+| `AGENT_RESEARCHER_MODEL` | `gpt-5` | Researcher phase. |
+| `AGENT_CRITIC_MODEL` | `gpt-5-mini` | Critic phase. |
+| `AGENT_SYNTHESIZER_MODEL` | `gpt-5` | Synthesizer phase. |
+| `AGENT_SYNTHESIZER_REVISION_MODEL` | `gpt-5` | Synthesizer revision phase. |
+| `AGENT_STANDARD_MAX_BUDGET_USD` / `AGENT_DEEP_MAX_BUDGET_USD` | `2` / `8` | Advisory only — not enforced by the SDK. |
+| `AGENT_STANDARD_TASK_BUDGET_TOKENS` / `AGENT_DEEP_TASK_BUDGET_TOKENS` | `60000` / `140000` | Advisory only. |
+
+Exa Websets MCP requires `EXA_API_KEY`. Do not put long-running Websets
+monitor tools in the researcher's tool surface.
 
 Potential existing dependencies:
 
 - Drizzle and Postgres client should follow the current `@aqsha/api` database setup.
-- OpenAI embeddings should reuse the ingestion embedding provider that already
-  writes `embeddingModel = text-embedding-3-small` and `embeddingVersion = v1`.
+- OpenAI embeddings reuse the same `AGENT_EMBEDDING_MODEL` that the ingestion
+  pipeline already writes into Qdrant payload (`embeddingModel = text-embedding-3-small`,
+  `embeddingVersion = v1`).
 
 ---
 
@@ -1221,19 +1269,19 @@ Query: "Apa dampak penggunaan LLM terhadap produktivitas software engineer?"
 ```text
 user selects: Deep
 
-planner query()
+run(plannerAgent) [gpt-5-mini]
   -> approved
 
 iteration 0: BROAD
-  researcher query()
-    -> Qdrant coverage partial
-    -> Qdrant searches
-    -> WebSearch/WebFetch
-    -> optional Websets candidate source collection
+  run(researcherAgent) [gpt-5]
+    -> qdrant_check_coverage → partial
+    -> qdrant_vector_search → evidence items
+    -> webSearchTool() → candidate sources + citations
+    -> optional Websets MCP calls for landscape scan
     -> candidateSources persisted
     -> evidencePoolDelta persisted
 
-  critic query()
+  run(criticAgent) [gpt-5-mini]
     -> claims extracted
     -> evidenceSufficient=false
     -> gaps:
@@ -1241,25 +1289,25 @@ iteration 0: BROAD
        - senior vs junior effect unclear
 
 iteration 1: GAP_FILLING
-  researcher query()
-    -> targeted Qdrant/WebSearch/Websets enrichment
+  run(researcherAgent) [gpt-5]
+    -> targeted Qdrant/web/Websets enrichment using critic.nextQueries
     -> more evidence persisted
 
-  critic query()
+  run(criticAgent) [gpt-5-mini]
     -> evidenceSufficient=true
     -> remaining gap: limited longitudinal data
 
-synthesizer query()
+run(synthesizerAgent) [gpt-5]
   -> answer with [CLAIM:id] markers and limitations
 
 citationAudit()
   -> warned because 2 low-confidence claims are used
 
-synthesizer revision query()
+run(synthesizerRevisionAgent) [gpt-5]
   -> hedges or removes low-confidence claims
 
 citationAudit()
-  -> completed
+  -> passed
 
 final answer delivered
 ```
@@ -1268,46 +1316,52 @@ final answer delivered
 
 ## 19. SDK Feature Checklist
 
-Per-phase `query()` calls MUST use these SDK `Options` fields.
+Per-phase `Agent` construction and `run()` call MUST use these fields.
 
 ### Mandatory (every phase)
 
-| Option | Required value |
-|---|---|
-| `model` | Phase-specific model id from `model-manager` (default `claude-sonnet-4-6`). |
-| `systemPrompt` | Phase-specific string (see §11). Never left unset. |
-| `outputFormat` | `{ type: "json_schema", schema: <Zod → JSON Schema> }`. |
-| `tools` | Built-in registration list for this phase (see §4). `[]` for phases with no built-ins. |
-| `allowedTools` | Union of registered built-ins this phase uses + MCP tool names (`mcp__<server>__<tool>`). |
-| `mcpServers` | Map of MCP servers this phase uses (Qdrant + optionally Websets for the researcher only). |
-| `maxTurns` | Phase-specific cap from §2 (e.g. 16 for researcher standard). MUST be passed; not enough to record it. |
-| `maxBudgetUsd` | Phase-specific budget cap. |
-| `taskBudget` | `{ total: <tokens> }` per phase. |
-| `permissionMode` | `"dontAsk"`. |
-| `env.CLAUDE_AGENT_SDK_CLIENT_APP` | `"@aqsha/api"`. |
+| Field | Applied to | Required value |
+|---|---|---|
+| `name` | `new Agent({ ... })` | `aqsha-<phase>` for traceability. |
+| `model` | `new Agent({ ... })` | Phase-specific model id from `model-manager` (defaults: `gpt-5-mini` for planner/critic, `gpt-5` for researcher/synthesizer/synthesizer_revision). |
+| `instructions` | `new Agent({ ... })` | Phase-specific system prompt string (see §11). Never left unset. |
+| `outputType` | `new Agent({ ... })` | Phase's Zod schema (a `ZodObject`). Enforced by the SDK as `RunResult.finalOutput`. |
+| `tools` | `new Agent({ ... })` | Function tools and hosted tools for this phase (see §4). `[]` for phases with no tools. |
+| `mcpServers` | `new Agent({ ... })` | Array of connected MCP servers for this phase (Websets for researcher only; planner/critic/synthesizer: `[]`). |
+| `maxTurns` | `run(agent, input, { maxTurns })` | Phase-specific cap from §2 (e.g. 16 for researcher standard). MUST be passed; not enough to record it. |
+| `stream: false` | `run(...)` options | v2 consumes `RunResult` non-streaming. |
+
+### Recorded for audit (not enforced by SDK)
+
+| Field | Stored on | Purpose |
+|---|---|---|
+| `maxBudgetUsd` | `agent_runs.max_budget_usd` | Per-phase advisory budget. |
+| `taskBudgetTokens` | `agent_runs.task_budget_tokens` | Per-phase advisory token budget. |
+| `RunResult.state._context.usage` | `agent_runs.usage` + `agent_runs.modelUsage` | Input/output/total tokens, request count, per-request usage entries. |
+| `RunResult.lastResponseId` | `agent_runs.sdk_session_id` | OpenAI Responses API id for debugging. |
 
 ### Optional (may be added later)
 
-| Option | Purpose |
+| Feature | Purpose |
 |---|---|
-| `hooks.PreToolUse` | Enforce per-iteration `WebSearch`/`WebFetch`/`Websets` caps from §2. |
-| `canUseTool` | Dynamic authorisation (alternative to `hooks`). |
-| `effort` | `"low"` for planner/critic, `"high"` for researcher, etc. Not required in v2. |
-| `agentProgressSummaries` | Progress events for long-running subagents. Not used — v2 doesn't use subagents. |
-| `promptSuggestions` | Must be `false` or unset; not part of the research workflow. |
-| `sessionId` / `resume` | Not used for phase orchestration in v2. May be used for follow-up turns if and only if §15 follow-up strategy is revised. |
+| `inputGuardrails` / `outputGuardrails` on `Agent` | Enforce per-iteration Websets / web-search caps, PII redaction, etc. |
+| `toolUseBehavior: "stop_on_first_tool"` or `stopAtToolNames` | Cheaply short-circuit a phase when a specific tool yields the final answer. |
+| `needsApproval` on function tools | Human-in-the-loop for sensitive tool calls. |
+| `session` / `conversationId` on `run()` | Share conversation state across turns. v2 uses compact prompts instead (see §15). |
+| `Runner` instance with `RunConfig` | Shared config across multiple runs (e.g. tracing, global model provider). Not required for v2. |
 
 ### Explicitly NOT used in v2
 
-- `agents` / the `Agent` tool — v2 uses per-phase `query()`, not subagents. This
-  is deliberate (budget containment + per-iteration persistence + deterministic
-  audit).
-- `Options.tools: { type: "preset", preset: "claude_code" }` — would pull in
-  `Read`/`Write`/`Edit`/`Bash`, inappropriate for a research chatbot.
-- `permissionMode: "bypassPermissions"` — never.
+- `handoff()` or agent-as-tool between main phases — v2 uses per-phase
+  `run()`, not subagents. This is deliberate (budget containment +
+  per-iteration persistence + deterministic audit).
+- `shellTool` / `applyPatchTool` / `codeInterpreterTool` / `imageGenerationTool` /
+  `fileSearchTool` — inappropriate for a research chatbot.
+- `needsApproval` gating the main research loop — would break autonomous
+  operation. Reserved for future sensitive operations only.
 
 ---
 
 The research loop stops because the app sees `evidenceSufficient=true`, not
-because the SDK agent loop ended. The SDK agent loop only governs each individual
-`query()` phase.
+because the SDK agent loop ended. The SDK agent loop only governs each
+individual phase's `run()` call.

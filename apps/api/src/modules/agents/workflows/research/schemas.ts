@@ -112,10 +112,3 @@ export type ResearchResult = z.infer<typeof researchSchema>;
 export type CriticResult = z.infer<typeof criticSchema>;
 export type SynthesisResult = z.infer<typeof synthesisSchema>;
 export type CitationAuditResult = z.infer<typeof citationAuditSchema>;
-
-export function toSdkJsonSchema(schema: z.ZodType) {
-  return {
-    type: "json_schema" as const,
-    schema: z.toJSONSchema(schema) as Record<string, unknown>,
-  };
-}

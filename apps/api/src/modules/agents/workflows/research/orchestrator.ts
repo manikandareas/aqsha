@@ -1,5 +1,5 @@
 import type { JsonValue } from "@aqsha/db";
-import type { Options } from "@anthropic-ai/claude-agent-sdk";
+import { webSearchTool, type MCPServer, type Tool } from "@openai/agents";
 import type { AgentModelManager } from "../../model-manager";
 import type { AgentRepository } from "../../repository";
 import type { AgentSdkRunner } from "../../sdk-runner";
@@ -18,28 +18,20 @@ import {
   synthesizerRevisionSystemPrompt,
   synthesizerSystemPrompt,
 } from "./prompts";
-import { createQdrantResearchServer } from "./qdrant-tools";
+import { createQdrantResearchTools } from "./qdrant-tools";
 import {
   citationAuditSchema,
   criticSchema,
   planSchema,
   researchSchema,
   synthesisSchema,
-  toSdkJsonSchema,
   type Claim,
   type CriticResult,
   type EvidenceItem,
   type ResearchResult,
   type SynthesisResult,
 } from "./schemas";
-import { allowedWebsetsTools, createWebsetsMcpServers } from "./websets-tools";
-
-const researcherBuiltInTools: Options["tools"] = ["WebSearch", "WebFetch"];
-const researcherAllowedMcpTools = [
-  "mcp__qdrant__check_coverage",
-  "mcp__qdrant__vector_search",
-  "mcp__qdrant__get_chunk",
-] as const;
+import { createWebsetsMcpServer } from "./websets-tools";
 
 export class ResearchOrchestrator {
   constructor(
@@ -148,6 +140,8 @@ export class ResearchOrchestrator {
       message: "Research session started.",
     });
 
+    const researcherMcpServers: MCPServer[] = [];
+
     try {
       yield await emit({
         type: "phase",
@@ -162,14 +156,12 @@ export class ResearchOrchestrator {
         systemPrompt: plannerSystemPrompt,
         prompt: plannerPrompt(input.prompt),
         schema: planSchema,
-        outputFormat: toSdkJsonSchema(planSchema),
         modelConfig: this.modelManager.getPhaseConfig({
           phase: "planner",
           depthMode: input.depthMode,
         }),
         // Planner has no tools today; AskUserQuestion is not wired yet.
         tools: [],
-        allowedTools: [],
       });
 
       if (plan.status === "cancelled") {
@@ -185,16 +177,21 @@ export class ResearchOrchestrator {
       const maxIterations = this.modelManager.getMaxResearchIterations(
         input.depthMode,
       );
-      const mcpServers: NonNullable<Options["mcpServers"]> = {
-        qdrant: createQdrantResearchServer(),
-      };
-      Object.assign(mcpServers, createWebsetsMcpServers());
-      const researcherAllowedTools = [
-        "WebSearch",
-        "WebFetch",
-        ...researcherAllowedMcpTools,
-        ...allowedWebsetsTools,
+
+      // Researcher tool surface:
+      //   - webSearchTool(): OpenAI's hosted web search (replaces Claude's
+      //     WebSearch + WebFetch; returns content + citations in one call)
+      //   - Qdrant function tools: local academic index
+      //   - Websets MCP server: Exa-backed landscape scans (optional)
+      const researcherTools: Tool<unknown>[] = [
+        webSearchTool(),
+        ...createQdrantResearchTools(),
       ];
+      const websetsServer = createWebsetsMcpServer();
+      if (websetsServer) {
+        await websetsServer.connect();
+        researcherMcpServers.push(websetsServer);
+      }
 
       // Accumulated state across iterations. Sources of truth for the
       // critic (evidence pool) and the citation audit (claim pool).
@@ -229,14 +226,12 @@ export class ResearchOrchestrator {
             evidencePool: Array.from(evidencePool.values()),
           }),
           schema: researchSchema,
-          outputFormat: toSdkJsonSchema(researchSchema),
           modelConfig: this.modelManager.getPhaseConfig({
             phase: "researcher",
             depthMode: input.depthMode,
           }),
-          tools: researcherBuiltInTools,
-          mcpServers,
-          allowedTools: researcherAllowedTools,
+          tools: researcherTools,
+          mcpServers: researcherMcpServers,
         });
         researchResults.push(research);
 
@@ -269,14 +264,12 @@ export class ResearchOrchestrator {
             iteration,
           }),
           schema: criticSchema,
-          outputFormat: toSdkJsonSchema(criticSchema),
           modelConfig: this.modelManager.getPhaseConfig({
             phase: "critic",
             depthMode: input.depthMode,
           }),
           // Critic must not use tools; it reasons over the persisted pool.
           tools: [],
-          allowedTools: [],
         });
         latestCritic = critique;
 
@@ -477,6 +470,10 @@ export class ResearchOrchestrator {
         sessionId: input.sessionId,
         message: error instanceof Error ? error.message : String(error),
       });
+    } finally {
+      for (const server of researcherMcpServers) {
+        await server.close().catch(() => undefined);
+      }
     }
   }
 
@@ -549,13 +546,11 @@ export class ResearchOrchestrator {
         evidencePool: args.evidencePool,
       }),
       schema: synthesisSchema,
-      outputFormat: toSdkJsonSchema(synthesisSchema),
       modelConfig: this.modelManager.getPhaseConfig({
         phase: "synthesizer",
         depthMode: args.input.depthMode,
       }),
       tools: [],
-      allowedTools: [],
     });
   }
 
@@ -584,13 +579,11 @@ export class ResearchOrchestrator {
         evidencePool: args.evidencePool,
       }),
       schema: synthesisSchema,
-      outputFormat: toSdkJsonSchema(synthesisSchema),
       modelConfig: this.modelManager.getPhaseConfig({
         phase: "synthesizer_revision",
         depthMode: args.input.depthMode,
       }),
       tools: [],
-      allowedTools: [],
     });
   }
 }
