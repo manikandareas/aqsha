@@ -22,6 +22,20 @@
       "when": 1776931896519,
       "tag": "0002_friendly_black_tarantula",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1777003592379,
+      "tag": "0003_natural_gertrude_yorkes",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1777006266455,
+      "tag": "0004_bright_dracula",
+      "breakpoints": true
     }
   ]
 }
