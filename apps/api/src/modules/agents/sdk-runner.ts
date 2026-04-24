@@ -17,6 +17,7 @@ export class AgentSdkRunner {
     workspaceId: string;
     phase: AgentResearchPhase;
     prompt: string;
+    systemPrompt: string;
     schema: z.ZodType<T>;
     outputFormat: Options["outputFormat"];
     modelConfig: PhaseModelConfig;
@@ -40,6 +41,7 @@ export class AgentSdkRunner {
         prompt: input.prompt,
         options: {
           model: input.modelConfig.model,
+          systemPrompt: input.systemPrompt,
           maxTurns: input.modelConfig.maxTurns,
           maxBudgetUsd: input.modelConfig.maxBudgetUsd,
           taskBudget: { total: input.modelConfig.taskBudgetTokens },

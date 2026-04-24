@@ -7,11 +7,16 @@ import type { AgentDepthMode, AgentProgressEvent } from "../../types";
 import { auditCitations } from "./citation-audit";
 import {
   criticPrompt,
+  criticSystemPrompt,
   followUpResearchPrompt,
   plannerPrompt,
+  plannerSystemPrompt,
   researcherPrompt,
+  researcherSystemPrompt,
   revisionPrompt,
   synthesizerPrompt,
+  synthesizerRevisionSystemPrompt,
+  synthesizerSystemPrompt,
 } from "./prompts";
 import { createQdrantResearchServer } from "./qdrant-tools";
 import {
@@ -21,10 +26,20 @@ import {
   researchSchema,
   synthesisSchema,
   toSdkJsonSchema,
+  type Claim,
+  type CriticResult,
+  type EvidenceItem,
   type ResearchResult,
   type SynthesisResult,
 } from "./schemas";
 import { allowedWebsetsTools, createWebsetsMcpServers } from "./websets-tools";
+
+const researcherBuiltInTools: Options["tools"] = ["WebSearch", "WebFetch"];
+const researcherAllowedMcpTools = [
+  "mcp__qdrant__check_coverage",
+  "mcp__qdrant__vector_search",
+  "mcp__qdrant__get_chunk",
+] as const;
 
 export class ResearchOrchestrator {
   constructor(
@@ -61,6 +76,25 @@ export class ResearchOrchestrator {
       this.repository.getResearchContext(input.sessionId, input.workspaceId),
     ]);
 
+    const priorEvidenceIds = researchContext.evidenceItems.map(
+      (item) => item.citationKey,
+    );
+    const priorSupportedClaimIds = researchContext.claims
+      .filter((claim) => claim.supported)
+      .map((claim) => {
+        const keys = claim.citationKeys;
+        if (
+          keys &&
+          typeof keys === "object" &&
+          !Array.isArray(keys) &&
+          typeof (keys as { claimId?: unknown }).claimId === "string"
+        ) {
+          return (keys as { claimId: string }).claimId;
+        }
+        return null;
+      })
+      .filter((id): id is string => typeof id === "string");
+
     yield* this.runResearch({
       sessionId: input.sessionId,
       workspaceId: input.workspaceId,
@@ -69,14 +103,9 @@ export class ResearchOrchestrator {
         originalPrompt: input.originalPrompt,
         latestMessage: input.message,
         latestFinalAnswer: input.latestFinalAnswer,
-        messages,
-        researchContext: {
-          plan: researchContext.research?.plan,
-          synthesis: researchContext.research?.synthesis,
-          audit: researchContext.research?.audit,
-          evidenceItems: researchContext.evidenceItems as JsonValue,
-          claims: researchContext.claims as JsonValue,
-        },
+        priorEvidenceIds,
+        priorSupportedClaimIds,
+        recentMessages: messages,
       }),
       depthMode: input.depthMode,
       userMessageId: input.userMessageId,
@@ -130,6 +159,7 @@ export class ResearchOrchestrator {
         sessionId: input.sessionId,
         workspaceId: input.workspaceId,
         phase: "planner",
+        systemPrompt: plannerSystemPrompt,
         prompt: plannerPrompt(input.prompt),
         schema: planSchema,
         outputFormat: toSdkJsonSchema(planSchema),
@@ -137,9 +167,21 @@ export class ResearchOrchestrator {
           phase: "planner",
           depthMode: input.depthMode,
         }),
+        // Planner has no tools today; AskUserQuestion is not wired yet.
+        tools: [],
+        allowedTools: [],
       });
 
-      const results: ResearchResult[] = [];
+      if (plan.status === "cancelled") {
+        yield* this.failSession(
+          input,
+          emit,
+          "planner_cancelled",
+          "Planner cancelled the research request.",
+        );
+        return;
+      }
+
       const maxIterations = this.modelManager.getMaxResearchIterations(
         input.depthMode,
       );
@@ -147,28 +189,44 @@ export class ResearchOrchestrator {
         qdrant: createQdrantResearchServer(),
       };
       Object.assign(mcpServers, createWebsetsMcpServers());
-      const allowedTools = [
-        "mcp__qdrant__check_coverage",
-        "mcp__qdrant__hybrid_search",
-        "mcp__qdrant__get_chunk",
+      const researcherAllowedTools = [
+        "WebSearch",
+        "WebFetch",
+        ...researcherAllowedMcpTools,
         ...allowedWebsetsTools,
       ];
 
+      // Accumulated state across iterations. Sources of truth for the
+      // critic (evidence pool) and the citation audit (claim pool).
+      const evidencePool = new Map<string, EvidenceItem>();
+      const candidatePool = new Map<string, ResearchResult["candidateSources"][number]>();
+      const previousQueries = new Set<string>();
+      const researchResults: ResearchResult[] = [];
+      let latestCritic: CriticResult | null = null;
+      let iterationsRun = 0;
+
       for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+        iterationsRun = iteration + 1;
         yield await emit({
           type: "phase",
           sessionId: input.sessionId,
           phase: "researcher",
           message: `Research iteration ${iteration + 1}.`,
         });
+
         const research = await this.sdkRunner.runStructured({
           sessionId: input.sessionId,
           workspaceId: input.workspaceId,
           phase: "researcher",
+          systemPrompt: researcherSystemPrompt,
           prompt: researcherPrompt({
             prompt: input.prompt,
             plan,
-            priorResults: results,
+            iteration,
+            gaps: latestCritic?.gaps ?? [],
+            nextQueries: latestCritic?.nextQueries ?? [],
+            previousQueries: Array.from(previousQueries),
+            evidencePool: Array.from(evidencePool.values()),
           }),
           schema: researchSchema,
           outputFormat: toSdkJsonSchema(researchSchema),
@@ -176,10 +234,21 @@ export class ResearchOrchestrator {
             phase: "researcher",
             depthMode: input.depthMode,
           }),
+          tools: researcherBuiltInTools,
           mcpServers,
-          allowedTools,
+          allowedTools: researcherAllowedTools,
         });
-        results.push(research);
+        researchResults.push(research);
+
+        for (const candidate of research.candidateSources) {
+          candidatePool.set(candidate.candidateId, candidate);
+        }
+        for (const item of research.evidenceItems) {
+          evidencePool.set(item.evidenceId, item);
+        }
+        for (const query of research.queriesUsed) {
+          previousQueries.add(query);
+        }
 
         yield await emit({
           type: "phase",
@@ -187,27 +256,98 @@ export class ResearchOrchestrator {
           phase: "critic",
           message: "Checking evidence sufficiency.",
         });
+
         const critique = await this.sdkRunner.runStructured({
           sessionId: input.sessionId,
           workspaceId: input.workspaceId,
           phase: "critic",
-          prompt: criticPrompt({ prompt: input.prompt, plan, results }),
+          systemPrompt: criticSystemPrompt,
+          prompt: criticPrompt({
+            prompt: input.prompt,
+            plan,
+            evidencePool: Array.from(evidencePool.values()),
+            iteration,
+          }),
           schema: criticSchema,
           outputFormat: toSdkJsonSchema(criticSchema),
           modelConfig: this.modelManager.getPhaseConfig({
             phase: "critic",
             depthMode: input.depthMode,
           }),
+          // Critic must not use tools; it reasons over the persisted pool.
+          tools: [],
+          allowedTools: [],
+        });
+        latestCritic = critique;
+
+        // Per-iteration persistence (design v2 §6, evaluation finding 2.5/2.6).
+        await this.repository.persistIterationArtifacts({
+          sessionId: input.sessionId,
+          workspaceId: input.workspaceId,
+          iteration,
+          candidateSources: research.candidateSources.map((c) => ({
+            candidateId: c.candidateId,
+            origin: c.origin,
+            status: c.status,
+            title: c.title || c.url || c.candidateId,
+            url: c.url ?? null,
+            externalId: c.externalId ?? c.candidateId,
+          })),
+          evidenceItems: research.evidenceItems.map((e) => ({
+            evidenceId: e.evidenceId,
+            source: e.source,
+            provenance: e.provenance,
+            title: e.title ?? null,
+            url: e.url ?? null,
+            quote: e.quote,
+          })),
+          claims: critique.claims.map((c) => ({
+            claimId: c.claimId,
+            statement: c.statement,
+            confidence: c.confidence,
+            supported: c.supported,
+            citationKeys: c.evidenceIds,
+          })),
         });
 
-        if (critique.sufficient) {
+        if (critique.evidenceSufficient) {
           break;
         }
       }
 
-      let synthesis = await this.synthesize(input, results, "synthesizer");
-      let audit = auditCitations(synthesis);
+      const claimPool: Claim[] = latestCritic?.claims ?? [];
+      const supportedClaims = claimPool.filter((claim) => claim.supported);
+      const unsupportedClaims = claimPool.filter((claim) => !claim.supported);
+      const evidenceList = Array.from(evidencePool.values());
 
+      if (supportedClaims.length === 0) {
+        yield* this.failSession(
+          input,
+          emit,
+          "insufficient_evidence",
+          "No supported claims survived the research phase.",
+        );
+        await this.repository.finalizeResearchArtifacts({
+          sessionId: input.sessionId,
+          workspaceId: input.workspaceId,
+          plan: plan as JsonValue,
+          researchIterations: iterationsRun,
+        });
+        return;
+      }
+
+      let synthesis = await this.runSynthesizer({
+        input,
+        supportedClaims,
+        unsupportedClaims,
+        evidencePool: evidenceList,
+      });
+
+      let audit = auditCitations({
+        claims: claimPool,
+        evidencePool: evidenceList,
+        synthesis,
+      });
       await citationAuditSchema.parseAsync(audit);
 
       if (!audit.passed) {
@@ -217,32 +357,28 @@ export class ResearchOrchestrator {
           phase: "synthesizer_revision",
           message: "Revising unsupported citations.",
         });
-        synthesis = await this.synthesize(
+        synthesis = await this.runSynthesizerRevision({
           input,
-          results,
-          "synthesizer_revision",
+          priorSynthesis: synthesis,
+          audit,
+          supportedClaims,
+          evidencePool: evidenceList,
+        });
+        audit = auditCitations({
+          claims: claimPool,
+          evidencePool: evidenceList,
           synthesis,
-          audit.failures,
-        );
-        audit = auditCitations(synthesis);
+        });
+        await citationAuditSchema.parseAsync(audit);
       }
 
-      await this.repository.saveResearchArtifacts({
+      await this.repository.finalizeResearchArtifacts({
         sessionId: input.sessionId,
         workspaceId: input.workspaceId,
         plan: plan as JsonValue,
         synthesis: synthesis as JsonValue,
         audit: audit as JsonValue,
-        researchIterations: results.length,
-        evidenceItems: synthesis.evidenceItems.map((item) => ({
-          source: item.source,
-          provenance: "model_cited",
-          citationKey: item.citationKey,
-          title: item.title,
-          url: item.url,
-          quote: item.quote,
-        })),
-        claims: synthesis.claims,
+        researchIterations: iterationsRun,
       });
 
       if (!audit.passed) {
@@ -344,36 +480,117 @@ export class ResearchOrchestrator {
     }
   }
 
-  private synthesize(
+  private async *failSession(
+    input: {
+      sessionId: string;
+      workspaceId: string;
+      userId: string;
+      turnNumber: number;
+      depthMode: AgentDepthMode;
+    },
+    emit: (
+      event: Omit<AgentProgressEvent, "at">,
+    ) => Promise<AgentProgressEvent>,
+    code: string,
+    message: string,
+  ): AsyncGenerator<AgentProgressEvent> {
+    await this.repository.completeSession(input.sessionId, {
+      status: "failed",
+      finalAnswer: null,
+      errorMessage: message,
+    });
+    const assistantMessage = await this.repository.appendMessage({
+      sessionId: input.sessionId,
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      role: "assistant",
+      status: "failed",
+      content: message,
+      turnNumber: input.turnNumber,
+      depthMode: input.depthMode,
+      errorMessage: message,
+    });
+    yield await emit({
+      type: "assistant_message",
+      sessionId: input.sessionId,
+      phase: "final",
+      messageId: assistantMessage.id,
+      turnNumber: assistantMessage.turnNumber,
+      message,
+    });
+    yield await emit({
+      type: "failed",
+      sessionId: input.sessionId,
+      phase: "final",
+      message: code,
+    });
+  }
+
+  private runSynthesizer(args: {
     input: {
       sessionId: string;
       workspaceId: string;
       prompt: string;
       depthMode: AgentDepthMode;
-    },
-    results: ResearchResult[],
-    phase: "synthesizer" | "synthesizer_revision",
-    previous?: SynthesisResult,
-    failures?: string[],
-  ) {
+    };
+    supportedClaims: Claim[];
+    unsupportedClaims: Claim[];
+    evidencePool: EvidenceItem[];
+  }): Promise<SynthesisResult> {
     return this.sdkRunner.runStructured({
-      sessionId: input.sessionId,
-      workspaceId: input.workspaceId,
-      phase,
-      prompt:
-        phase === "synthesizer"
-          ? synthesizerPrompt({ prompt: input.prompt, results })
-          : revisionPrompt({
-              prompt: input.prompt,
-              synthesis: previous as SynthesisResult,
-              failures: failures ?? [],
-            }),
+      sessionId: args.input.sessionId,
+      workspaceId: args.input.workspaceId,
+      phase: "synthesizer",
+      systemPrompt: synthesizerSystemPrompt,
+      prompt: synthesizerPrompt({
+        prompt: args.input.prompt,
+        supportedClaims: args.supportedClaims,
+        unsupportedClaims: args.unsupportedClaims,
+        evidencePool: args.evidencePool,
+      }),
       schema: synthesisSchema,
       outputFormat: toSdkJsonSchema(synthesisSchema),
       modelConfig: this.modelManager.getPhaseConfig({
-        phase,
-        depthMode: input.depthMode,
+        phase: "synthesizer",
+        depthMode: args.input.depthMode,
       }),
+      tools: [],
+      allowedTools: [],
+    });
+  }
+
+  private runSynthesizerRevision(args: {
+    input: {
+      sessionId: string;
+      workspaceId: string;
+      prompt: string;
+      depthMode: AgentDepthMode;
+    };
+    priorSynthesis: SynthesisResult;
+    audit: ReturnType<typeof auditCitations>;
+    supportedClaims: Claim[];
+    evidencePool: EvidenceItem[];
+  }): Promise<SynthesisResult> {
+    return this.sdkRunner.runStructured({
+      sessionId: args.input.sessionId,
+      workspaceId: args.input.workspaceId,
+      phase: "synthesizer_revision",
+      systemPrompt: synthesizerRevisionSystemPrompt,
+      prompt: revisionPrompt({
+        prompt: args.input.prompt,
+        priorSynthesis: args.priorSynthesis,
+        audit: args.audit,
+        supportedClaims: args.supportedClaims,
+        evidencePool: args.evidencePool,
+      }),
+      schema: synthesisSchema,
+      outputFormat: toSdkJsonSchema(synthesisSchema),
+      modelConfig: this.modelManager.getPhaseConfig({
+        phase: "synthesizer_revision",
+        depthMode: args.input.depthMode,
+      }),
+      tools: [],
+      allowedTools: [],
     });
   }
 }
