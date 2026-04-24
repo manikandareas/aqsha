@@ -122,6 +122,13 @@ deep:
 Deep untuk literature review besar, tetapi tidak auto-upgrade karena cost dan
 durasi lebih tinggi.
 
+### Maximum Revision Cycles
+
+`maxRevisionCycles = 1` means the orchestrator runs the synthesizer, audits,
+and — only if audit is `warned` — runs one revision pass followed by a final
+audit. If a future mode needs more, thread `maxRevisionCycles` through
+`model-manager.ts` like `maxResearchIterations`. Today: always 1.
+
 ---
 
 ## 3. SDK Agent Loop Boundary
@@ -134,8 +141,8 @@ lain harus masuk retry policy eksplisit atau menghentikan workflow.
 
 ```text
 success
-  -> collect final assistant output
-  -> parse/validate structured output
+  -> read ResultMessage.structured_output (SDK native)
+  -> validate with Zod
   -> persist state
   -> continue
 
@@ -146,11 +153,14 @@ error_max_turns
 error_max_budget_usd
   -> fail workflow as budget limit reached
 
+error_max_structured_output_retries
+  -> fail phase; do not add another app-level retry on top
+
 error_during_execution
   -> retry once only when phase policy allows it
 
 blocked_by_permissions / permission_denied
-  -> fail workflow; allowedTools should be fixed per phase
+  -> fail workflow; allowedTools/tools should be fixed per phase
 
 missing ResultMessage / unknown subtype
   -> fail workflow and keep raw events for debugging
@@ -160,29 +170,35 @@ Retry policy:
 
 ```text
 planner:
-  - retry 1x only for structured output validation failure
+  - retry 1x only for Zod validation failure on structured output
+  - retry prompt includes parse error + "return only valid JSON per schema"
   - no retry for SDK non-success
 
 researcher:
-  - retry 1x for error_during_execution or output validation failure
-  - retry prompt reduces scope / limits
-  - no retry for budget limit
+  - retry 1x for error_during_execution or Zod validation failure
+  - retry prompt reduces scope / limits and includes parse error if any
+  - no retry for budget limit or structured-output-retries
 
 critic:
-  - retry 1x only for validation failure
+  - retry 1x only for Zod validation failure
   - no retry for SDK non-success
 
 synthesizer:
-  - retry 1x only for validation failure
+  - retry 1x only for Zod validation failure
   - no retry for SDK non-success
 
 synthesizer_revision:
-  - one domain revision cycle only
-  - retry 1x only for validation failure
+  - one domain revision cycle only (controlled by maxRevisionCycles)
+  - retry 1x only for Zod validation failure
 
 citationAudit:
   - no LLM retry; deterministic function
 ```
+
+`ResultMessage.structured_output` is the canonical extraction path when
+`outputFormat: { type: "json_schema", schema }` is set in `Options`. Do not
+parse from `finalText`. Zod validation always runs before persistence, even
+though the SDK already constrains the shape.
 
 ---
 
@@ -191,18 +207,32 @@ citationAudit:
 Tool permissions are strict per phase. The main workflow does not use the SDK
 `Agent` tool.
 
+> **Important:** `Options.tools` and `Options.allowedTools` are two different
+> concepts. `tools` is the *registration* list for the base set of built-in
+> tools (e.g. `WebSearch`, `WebFetch`, `AskUserQuestion`). Passing `tools: []`
+> disables all built-in tools. `allowedTools` only auto-approves already-
+> registered tool names. Therefore, **every built-in tool a phase needs must
+> appear in both `tools` (registered) and `allowedTools` (auto-approved).**
+> MCP tool names (`mcp__<server>__<tool>`) only need to appear in
+> `allowedTools`.
+>
+> `Options.maxTurns` **must** be passed to `query()` per phase. It is not
+> enough to record it in `agent_runs`; the SDK only enforces it when it is in
+> `Options`.
+
 ```text
 planner:
-  allowedTools:
-    - AskUserQuestion
+  tools:        ["AskUserQuestion"]
+  allowedTools: ["AskUserQuestion"]
   maxTurns: 4
 
 researcher:
+  tools:        ["WebSearch", "WebFetch"]
   allowedTools:
     - WebSearch
     - WebFetch
     - mcp__qdrant-kb__check_coverage
-    - mcp__qdrant-kb__hybrid_search
+    - mcp__qdrant-kb__vector_search
     - mcp__qdrant-kb__get_chunk
     - mcp__websets__create_webset
     - mcp__websets__get_webset
@@ -215,14 +245,17 @@ researcher:
   maxTurns: 16 standard, 32 deep
 
 critic:
+  tools:        []
   allowedTools: []
   maxTurns: 4
 
 synthesizer:
+  tools:        []
   allowedTools: []
   maxTurns: 4
 
 synthesizer_revision:
+  tools:        []
   allowedTools: []
   maxTurns: 3
 ```
@@ -321,12 +354,31 @@ Indexed payload fields:
 - `academic-chunk-v1` merepresentasikan chunk dari tabel `chunks`.
 - `chunks.qdrant_point_id` menjadi bridge utama dari Postgres ke Qdrant indexing state.
 
-### Retrieval Behavior
+### Retrieval Semantics
 
-Istilah "hybrid search" di desain ini berarti orchestration pada application
-layer: vector retrieval dari Qdrant, payload filtering, query expansion, dan
-reranking di service. Desain ini tidak mengasumsikan named sparse vector atau
-multi-vector schema di Qdrant sampai ada migration baru.
+Qdrant retrieval is exposed via a single tool named `vector_search` (renamed
+from `hybrid_search` to avoid misleading naming until a named-sparse migration
+lands). The tool implementation MUST:
+
+1. Embed the query text with `text-embedding-3-small` (1536-dim, cosine) via
+   the same OpenAI provider used by ingestion (`embeddingModel = text-embedding-3-small`,
+   `embeddingVersion = v1`). The `OPENAI_API_KEY` env var must be available to
+   the API runtime.
+2. Call `qdrantClient.query(chunkCollection, { query: <vector>, limit, filter,
+   with_payload: true })` or equivalent `queryPoints` — never `scroll` with a
+   payload text match for retrieval.
+3. Accept optional payload filters from the planner/researcher: `indonesiaAffiliated`,
+   `contentTier`, `paperType`, `language`, `year` range.
+4. Return `{ points: [{ id, score, payload }], usedEmbedding: { model, version } }`.
+5. Enforce `limit <= 20`.
+
+App-layer rerank, query expansion, and cross-encoder reranking remain in the
+service (not in the MCP tool). Named sparse / multi-vector retrieval is
+deferred until a collection migration occurs.
+
+`check_coverage` is a lightweight tool that additionally checks whether a
+given query returns any results above a configurable score threshold, so the
+researcher can decide whether to fall back to web.
 
 ### Deferred Embedding Migration
 
@@ -363,19 +415,32 @@ setelah researcher punya content/verbatim/metadata yang cukup melalui fetch,
 Qdrant payload, atau enrichment yang jelas.
 
 ```text
-Websets item
+Websets item / WebSearch hit
   -> agent_research_candidate_sources(status=candidate)
 
 candidate source + fetched/extracted content
   -> candidate_sources(status=fetched)
 
-useful fetched source
-  -> agent_research_evidence_items
+useful fetched source with ≥ 1 verbatim quote + attributable metadata
+  -> agent_research_evidence_items(provenance in [web_fetch, websets_item, websets_enrichment])
   -> candidate_sources(status=promoted)
 
-duplicate/weak source
+duplicate (same URL / DOI already promoted), empty fetch, or content too thin
   -> candidate_sources(status=rejected)
 ```
+
+### Promote / Reject Thresholds
+
+A candidate may be promoted to `agent_research_evidence_items` only if ALL of:
+
+- At least one verbatim quote ≥ 40 chars OR at least one chunk from Qdrant
+  with non-empty `snippet`.
+- A resolvable `title` AND (`url` OR `doi` OR `chunkId`).
+- Not a duplicate of an already `promoted` candidate within the same session
+  (dedupe by URL, DOI, or `qdrantPointId`).
+
+Candidates failing these checks are marked `rejected` with `rejectionReason`.
+The researcher must not emit evidence items that bypass this pipeline.
 
 ---
 
@@ -401,6 +466,7 @@ export const plannerOutputSchema = z.object({
   scope: z.string().default(""),
   expectedOutput: z.string().default(""),
   revisionNotes: z.string().default(""),
+  clarifyingQuestions: z.array(z.string()).default([]),
 });
 
 export const candidateSourceSchema = z.object({
@@ -481,6 +547,23 @@ export const citationAuditOutputSchema = z.object({
 
 Do not persist phase outputs as source of truth until they pass Zod validation.
 Raw SDK messages can still be stored in `agent_events` for debugging.
+
+### Required per-iteration persistence (MUST)
+
+The researcher phase MUST persist `candidate_sources` and `evidence_items`
+before yielding control to the critic. The critic phase MUST persist `claims`
+(with `evidenceIds` and `supported`) before the orchestrator decides whether
+to continue the loop. Failure to persist fails the phase.
+
+This is load-bearing because:
+
+- The critic in iteration N reads evidence from the repository, not from an
+  in-memory variable. Without durable persistence, the "deepening" loop has
+  no cross-iteration memory if the server restarts.
+- `citationAudit` runs against the critic's persisted supported claims, not
+  against synthesizer-declared lists (see §12).
+- User-facing failure modes like "zero supported claims" (§15) require the
+  claim pool to be queryable.
 
 ---
 
@@ -666,11 +749,16 @@ export async function* runResearchWorkflow(input: ResearchWorkflowInput) {
   while (iteration < limits.maxResearchIterations) {
     yield progress("phase_started", { phase: "researcher", iteration });
 
+    // The critic's output MUST feed the next researcher iteration.
+    // Iteration 0 is BROAD; iteration > 0 receives gaps + nextQueries from
+    // the critic and `previousQueries` from the repository so that the
+    // researcher can actually deepen instead of re-running the same search.
     const research = await runResearcherPhase({
       sessionId: session.id,
       mode: iteration === 0 ? "BROAD" : "GAP_FILLING",
       researchQuestion: plan.researchQuestion,
       gaps: latestCritic?.gaps ?? [],
+      nextQueries: latestCritic?.nextQueries ?? [],
       previousQueries: await researchRepository.listQueries(session.id),
       limits,
     });
@@ -763,50 +851,46 @@ export async function runSdkPhase<T>(input: {
   sessionId: string;
   phase: AgentPhase;
   prompt: string;
-  systemPrompt: string;
-  options: Options;
+  systemPrompt: string;          // REQUIRED - never inherit the SDK default
+  options: Options;              // must include maxTurns, tools, allowedTools,
+                                 // mcpServers, outputFormat, maxBudgetUsd, taskBudget
   schema: ZodSchema<T>;
   retryPolicy: PhaseRetryPolicy;
 }): Promise<T> {
   const run = await agentRepository.startRun(input.sessionId, input.phase);
-  const messages: unknown[] = [];
-  let resultSubtype: string | undefined;
-  let finalText = "";
+  let resultMessage: SDKResultMessage | undefined;
 
   for await (const message of query({
     prompt: input.prompt,
-    options: input.options,
-    systemPrompt: input.systemPrompt,
+    options: {
+      ...input.options,
+      systemPrompt: input.systemPrompt,
+    },
   })) {
-    messages.push(message);
     await agentRepository.appendEvent(run.id, message);
-
-    if (isAssistantText(message)) {
-      finalText += message.text;
-    }
-
-    if (isResultMessage(message)) {
-      resultSubtype = message.subtype;
-      await agentRepository.completeRun(run.id, message);
-    }
+    if (message.type === "result") resultMessage = message;
   }
 
-  if (resultSubtype !== "success") {
-    throw new AgentPhaseError(input.phase, resultSubtype ?? "missing_result");
+  if (!resultMessage) {
+    throw new AgentPhaseError(input.phase, "missing_result");
+  }
+  if (resultMessage.subtype !== "success") {
+    throw new AgentPhaseError(input.phase, resultMessage.subtype);
   }
 
-  return parseAndValidateStructuredOutput({
-    phase: input.phase,
-    text: finalText,
-    schema: input.schema,
-    retryPolicy: input.retryPolicy,
-  });
+  // SDK-native: structured_output is the canonical extraction path.
+  // Do not parse from finalText.
+  return input.schema.parse(resultMessage.structured_output);
 }
 ```
 
-If Claude Agent SDK TypeScript exposes a first-class structured output option
-for `query()`, `runSdkPhase` should use that instead of extracting final text.
-Zod validation remains mandatory before persistence.
+`systemPrompt` is **mandatory** per phase. Leaving it unset makes the SDK fall
+back to the Claude Code coding-agent preset, which is the wrong framing for
+research roles and pollutes prompt caches.
+
+Structured output extraction **must** use `ResultMessage.structured_output`
+(available when `outputFormat: { type: "json_schema", schema }` is set).
+Extracting from assembled `finalText` is no longer a sanctioned path.
 
 ---
 
@@ -896,10 +980,24 @@ Suggested location:
 apps/api/src/modules/agents/workflows/research/citation-audit.ts
 ```
 
+### Audit inputs
+
+| Input | Source | Notes |
+|---|---|---|
+| `answer` | synthesizer output | The prose draft. |
+| `claimIdsUsed` | synthesizer output | The IDs the synthesizer says it cited. |
+| `claims` | **`agent_research_claims`** (critic-persisted, latest iteration) | **Not the synthesizer's self-reported `claims`.** |
+| `evidenceIds` | **`agent_research_evidence_items`** (researcher-persisted) | Used to cross-check that each `supported` claim's `evidenceIds[]` still resolve. |
+
+The grounding chain `researcher evidence → critic supports → synthesizer cites`
+is enforced by `citationAudit`. The synthesizer cannot supply its own
+`evidenceItems` inline for audit purposes; it only picks from an ID pool.
+
 ```ts
 export function citationAudit(input: {
   answer: string;
-  claims: Claim[];
+  claims: Claim[];              // MUST come from agent_research_claims (critic)
+  evidenceIds: Set<string>;     // MUST come from agent_research_evidence_items (researcher)
   claimIdsUsed: string[];
 }): CitationAuditOutput {
   const claimById = new Map(input.claims.map((claim) => [claim.claimId, claim]));
@@ -916,9 +1014,18 @@ export function citationAudit(input: {
 
     if (!claim.supported) {
       failures.push(`Unsupported claim used: ${claimId}`);
+      continue;
     }
 
-    if (claim.supported && claim.confidence === "low") {
+    for (const evidenceId of claim.evidenceIds) {
+      if (!input.evidenceIds.has(evidenceId)) {
+        failures.push(
+          `Claim ${claimId} references missing evidence: ${evidenceId}`,
+        );
+      }
+    }
+
+    if (claim.confidence === "low") {
       warnings.push(`Low-confidence claim used: ${claimId}`);
     }
   }
@@ -952,9 +1059,13 @@ The researcher phase can call:
 
 ```text
 mcp__qdrant-kb__check_coverage
-mcp__qdrant-kb__hybrid_search
+mcp__qdrant-kb__vector_search
 mcp__qdrant-kb__get_chunk
 ```
+
+See §5 "Retrieval Semantics" for the mandatory implementation contract for
+`vector_search` (query embedding with `text-embedding-3-small`, `qdrantClient.query(...)`
+against the chunk collection, optional payload filters, `limit <= 20`).
 
 The Websets MCP server can be configured as a remote/external MCP server. The
 researcher phase can call:
@@ -1027,6 +1138,26 @@ citation audit failed
 
 Insufficient evidence is not automatically a failure. It becomes a failure only
 when no supported claims exist.
+
+### Follow-up turns (v2)
+
+Follow-up turns on the same `agent_session_id` are **independent research
+runs**. They do NOT rely on SDK `resume`/`sessionId` to carry agent state
+between runs. The follow-up prompt receives a **compact summary** of the
+prior run (the final answer, the claim pool IDs, the evidence pool IDs, and
+the most recent user messages) rather than a full JSON dump of everything.
+
+Specifically, the follow-up prompt MUST include:
+
+- The user's new message, verbatim.
+- A terse recap of the prior final answer (~300 tokens max).
+- The list of prior `evidenceItemIds` and `supportedClaimIds` (IDs only), so
+  the researcher can reuse them via the repository instead of re-fetching.
+- The last 3 user messages (if any), verbatim.
+
+The follow-up prompt MUST NOT re-serialise the entire prior research context,
+plan, or audit as one giant JSON blob. If the researcher needs older
+evidence, it queries Postgres / Qdrant via tools.
 
 ---
 
@@ -1132,6 +1263,50 @@ citationAudit()
 
 final answer delivered
 ```
+
+---
+
+## 19. SDK Feature Checklist
+
+Per-phase `query()` calls MUST use these SDK `Options` fields.
+
+### Mandatory (every phase)
+
+| Option | Required value |
+|---|---|
+| `model` | Phase-specific model id from `model-manager` (default `claude-sonnet-4-6`). |
+| `systemPrompt` | Phase-specific string (see §11). Never left unset. |
+| `outputFormat` | `{ type: "json_schema", schema: <Zod → JSON Schema> }`. |
+| `tools` | Built-in registration list for this phase (see §4). `[]` for phases with no built-ins. |
+| `allowedTools` | Union of registered built-ins this phase uses + MCP tool names (`mcp__<server>__<tool>`). |
+| `mcpServers` | Map of MCP servers this phase uses (Qdrant + optionally Websets for the researcher only). |
+| `maxTurns` | Phase-specific cap from §2 (e.g. 16 for researcher standard). MUST be passed; not enough to record it. |
+| `maxBudgetUsd` | Phase-specific budget cap. |
+| `taskBudget` | `{ total: <tokens> }` per phase. |
+| `permissionMode` | `"dontAsk"`. |
+| `env.CLAUDE_AGENT_SDK_CLIENT_APP` | `"@aqsha/api"`. |
+
+### Optional (may be added later)
+
+| Option | Purpose |
+|---|---|
+| `hooks.PreToolUse` | Enforce per-iteration `WebSearch`/`WebFetch`/`Websets` caps from §2. |
+| `canUseTool` | Dynamic authorisation (alternative to `hooks`). |
+| `effort` | `"low"` for planner/critic, `"high"` for researcher, etc. Not required in v2. |
+| `agentProgressSummaries` | Progress events for long-running subagents. Not used — v2 doesn't use subagents. |
+| `promptSuggestions` | Must be `false` or unset; not part of the research workflow. |
+| `sessionId` / `resume` | Not used for phase orchestration in v2. May be used for follow-up turns if and only if §15 follow-up strategy is revised. |
+
+### Explicitly NOT used in v2
+
+- `agents` / the `Agent` tool — v2 uses per-phase `query()`, not subagents. This
+  is deliberate (budget containment + per-iteration persistence + deterministic
+  audit).
+- `Options.tools: { type: "preset", preset: "claude_code" }` — would pull in
+  `Read`/`Write`/`Edit`/`Bash`, inappropriate for a research chatbot.
+- `permissionMode: "bypassPermissions"` — never.
+
+---
 
 The research loop stops because the app sees `evidenceSufficient=true`, not
 because the SDK agent loop ended. The SDK agent loop only governs each individual
