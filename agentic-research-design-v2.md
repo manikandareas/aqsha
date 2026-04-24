@@ -208,7 +208,7 @@ Tool permissions are strict per phase. The main workflow does not use the SDK
 `Agent` tool.
 
 > **Important:** `Options.tools` and `Options.allowedTools` are two different
-> concepts. `tools` is the *registration* list for the base set of built-in
+> concepts. `tools` is the _registration_ list for the base set of built-in
 > tools (e.g. `WebSearch`, `WebFetch`, `AskUserQuestion`). Passing `tools: []`
 > disables all built-in tools. `allowedTools` only auto-approves already-
 > registered tool names. Therefore, **every built-in tool a phase needs must
@@ -277,7 +277,7 @@ term, this can move to an app-level `awaiting_user_input` state.
 
 ## 5. Current Qdrant Schema Contract
 
-Desain aktif harus mengikuti Appendix A di `convex-to-postgres-migration.md`.
+Desain aktif harus mengikuti `qdrant-turso-current-state.md`.
 Qdrant saat ini memakai dense vector OpenAI, bukan schema BGE-M3.
 
 ### `academic-paper-v1`
@@ -365,7 +365,7 @@ lands). The tool implementation MUST:
    `embeddingVersion = v1`). The `OPENAI_API_KEY` env var must be available to
    the API runtime.
 2. Call `qdrantClient.query(chunkCollection, { query: <vector>, limit, filter,
-   with_payload: true })` or equivalent `queryPoints` — never `scroll` with a
+with_payload: true })` or equivalent `queryPoints` — never `scroll` with a
    payload text match for retrieval.
 3. Accept optional payload filters from the planner/researcher: `indonesiaAffiliated`,
    `contentTier`, `paperType`, `language`, `year` range.
@@ -592,8 +592,12 @@ agent_research_claims
 ```ts
 export const agentSessions = pgTable("agent_sessions", {
   id: idColumn("id"),
-  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id),
-  userId: uuid("user_id").notNull().references(() => users.id),
+  workspaceId: uuid("workspace_id")
+    .notNull()
+    .references(() => workspaces.id),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id),
   workflowType: text("workflow_type").notNull(), // research | future workflows
   status: text("status").notNull(), // active | awaiting_user | completed | failed
   currentPhase: text("current_phase"),
@@ -648,51 +652,57 @@ export const agentResearchSessions = pgTable("agent_research_sessions", {
   updatedAt: updatedAtColumn(),
 });
 
-export const agentResearchCandidateSources = pgTable("agent_research_candidate_sources", {
-  id: idColumn("id"),
-  agentSessionId: uuid("agent_session_id")
-    .notNull()
-    .references(() => agentSessions.id, { onDelete: "cascade" }),
-  iteration: integer("iteration").default(0).notNull(),
-  origin: text("origin").notNull(),
-  status: text("status").notNull(),
-  title: text("title"),
-  url: text("url"),
-  doi: text("doi"),
-  externalId: text("external_id"),
-  websetId: text("webset_id"),
-  websetItemId: text("webset_item_id"),
-  searchId: text("search_id"),
-  reasonFound: text("reason_found"),
-  rejectionReason: text("rejection_reason"),
-  metadataJson: jsonb("metadata_json").$type<JsonValue>(),
-  createdAt: createdAtColumn(),
-  updatedAt: updatedAtColumn(),
-});
+export const agentResearchCandidateSources = pgTable(
+  "agent_research_candidate_sources",
+  {
+    id: idColumn("id"),
+    agentSessionId: uuid("agent_session_id")
+      .notNull()
+      .references(() => agentSessions.id, { onDelete: "cascade" }),
+    iteration: integer("iteration").default(0).notNull(),
+    origin: text("origin").notNull(),
+    status: text("status").notNull(),
+    title: text("title"),
+    url: text("url"),
+    doi: text("doi"),
+    externalId: text("external_id"),
+    websetId: text("webset_id"),
+    websetItemId: text("webset_item_id"),
+    searchId: text("search_id"),
+    reasonFound: text("reason_found"),
+    rejectionReason: text("rejection_reason"),
+    metadataJson: jsonb("metadata_json").$type<JsonValue>(),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+);
 
-export const agentResearchEvidenceItems = pgTable("agent_research_evidence_items", {
-  id: idColumn("id"),
-  agentSessionId: uuid("agent_session_id")
-    .notNull()
-    .references(() => agentSessions.id, { onDelete: "cascade" }),
-  iteration: integer("iteration").default(0).notNull(),
-  evidenceId: text("evidence_id").notNull(),
-  sourceType: text("source_type").notNull(),
-  provenance: text("provenance").notNull(),
-  candidateSourceId: uuid("candidate_source_id").references(
-    () => agentResearchCandidateSources.id,
-  ),
-  qdrantPointId: text("qdrant_point_id"),
-  chunkId: text("chunk_id"),
-  title: text("title").notNull(),
-  source: text("source").notNull(),
-  authorsJson: jsonb("authors_json").$type<JsonValue>(),
-  publishedAt: text("published_at"),
-  text: text("text").notNull(),
-  relevance: text("relevance").notNull(),
-  payloadJson: jsonb("payload_json").$type<JsonValue>(),
-  createdAt: createdAtColumn(),
-});
+export const agentResearchEvidenceItems = pgTable(
+  "agent_research_evidence_items",
+  {
+    id: idColumn("id"),
+    agentSessionId: uuid("agent_session_id")
+      .notNull()
+      .references(() => agentSessions.id, { onDelete: "cascade" }),
+    iteration: integer("iteration").default(0).notNull(),
+    evidenceId: text("evidence_id").notNull(),
+    sourceType: text("source_type").notNull(),
+    provenance: text("provenance").notNull(),
+    candidateSourceId: uuid("candidate_source_id").references(
+      () => agentResearchCandidateSources.id,
+    ),
+    qdrantPointId: text("qdrant_point_id"),
+    chunkId: text("chunk_id"),
+    title: text("title").notNull(),
+    source: text("source").notNull(),
+    authorsJson: jsonb("authors_json").$type<JsonValue>(),
+    publishedAt: text("published_at"),
+    text: text("text").notNull(),
+    relevance: text("relevance").notNull(),
+    payloadJson: jsonb("payload_json").$type<JsonValue>(),
+    createdAt: createdAtColumn(),
+  },
+);
 
 export const agentResearchClaims = pgTable("agent_research_claims", {
   id: idColumn("id"),
@@ -763,8 +773,16 @@ export async function* runResearchWorkflow(input: ResearchWorkflowInput) {
       limits,
     });
 
-    await researchRepository.persistCandidates(session.id, iteration, research.candidateSources);
-    await researchRepository.persistEvidence(session.id, iteration, research.evidencePoolDelta);
+    await researchRepository.persistCandidates(
+      session.id,
+      iteration,
+      research.candidateSources,
+    );
+    await researchRepository.persistEvidence(
+      session.id,
+      iteration,
+      research.evidencePoolDelta,
+    );
     yield progress("evidence_added", {
       count: research.evidencePoolDelta.length,
       iteration,
@@ -779,7 +797,11 @@ export async function* runResearchWorkflow(input: ResearchWorkflowInput) {
       evidence,
     });
 
-    await researchRepository.persistClaims(session.id, iteration, latestCritic.claims);
+    await researchRepository.persistClaims(
+      session.id,
+      iteration,
+      latestCritic.claims,
+    );
     await researchRepository.setLatestGaps(session.id, latestCritic.gaps);
 
     if (latestCritic.evidenceSufficient) {
@@ -789,7 +811,9 @@ export async function* runResearchWorkflow(input: ResearchWorkflowInput) {
     iteration += 1;
   }
 
-  const supportedClaims = await researchRepository.listSupportedClaims(session.id);
+  const supportedClaims = await researchRepository.listSupportedClaims(
+    session.id,
+  );
 
   if (supportedClaims.length === 0) {
     await agentRepository.failSession(session.id, "insufficient_evidence");
@@ -851,9 +875,9 @@ export async function runSdkPhase<T>(input: {
   sessionId: string;
   phase: AgentPhase;
   prompt: string;
-  systemPrompt: string;          // REQUIRED - never inherit the SDK default
-  options: Options;              // must include maxTurns, tools, allowedTools,
-                                 // mcpServers, outputFormat, maxBudgetUsd, taskBudget
+  systemPrompt: string; // REQUIRED - never inherit the SDK default
+  options: Options; // must include maxTurns, tools, allowedTools,
+  // mcpServers, outputFormat, maxBudgetUsd, taskBudget
   schema: ZodSchema<T>;
   retryPolicy: PhaseRetryPolicy;
 }): Promise<T> {
@@ -982,12 +1006,12 @@ apps/api/src/modules/agents/workflows/research/citation-audit.ts
 
 ### Audit inputs
 
-| Input | Source | Notes |
-|---|---|---|
-| `answer` | synthesizer output | The prose draft. |
-| `claimIdsUsed` | synthesizer output | The IDs the synthesizer says it cited. |
-| `claims` | **`agent_research_claims`** (critic-persisted, latest iteration) | **Not the synthesizer's self-reported `claims`.** |
-| `evidenceIds` | **`agent_research_evidence_items`** (researcher-persisted) | Used to cross-check that each `supported` claim's `evidenceIds[]` still resolve. |
+| Input          | Source                                                           | Notes                                                                            |
+| -------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `answer`       | synthesizer output                                               | The prose draft.                                                                 |
+| `claimIdsUsed` | synthesizer output                                               | The IDs the synthesizer says it cited.                                           |
+| `claims`       | **`agent_research_claims`** (critic-persisted, latest iteration) | **Not the synthesizer's self-reported `claims`.**                                |
+| `evidenceIds`  | **`agent_research_evidence_items`** (researcher-persisted)       | Used to cross-check that each `supported` claim's `evidenceIds[]` still resolve. |
 
 The grounding chain `researcher evidence → critic supports → synthesizer cites`
 is enforced by `citationAudit`. The synthesizer cannot supply its own
@@ -996,11 +1020,13 @@ is enforced by `citationAudit`. The synthesizer cannot supply its own
 ```ts
 export function citationAudit(input: {
   answer: string;
-  claims: Claim[];              // MUST come from agent_research_claims (critic)
-  evidenceIds: Set<string>;     // MUST come from agent_research_evidence_items (researcher)
+  claims: Claim[]; // MUST come from agent_research_claims (critic)
+  evidenceIds: Set<string>; // MUST come from agent_research_evidence_items (researcher)
   claimIdsUsed: string[];
 }): CitationAuditOutput {
-  const claimById = new Map(input.claims.map((claim) => [claim.claimId, claim]));
+  const claimById = new Map(
+    input.claims.map((claim) => [claim.claimId, claim]),
+  );
   const warnings: string[] = [];
   const failures: string[] = [];
 
@@ -1031,7 +1057,12 @@ export function citationAudit(input: {
   }
 
   return {
-    status: failures.length > 0 ? "failed" : warnings.length > 0 ? "warned" : "completed",
+    status:
+      failures.length > 0
+        ? "failed"
+        : warnings.length > 0
+          ? "warned"
+          : "completed",
     cleanAnswer: input.answer.replace(/\s*\[CLAIM:[^\]]+\]/g, ""),
     citations: input.claimIdsUsed.map((claimId) => ({ claimId })),
     warnings,
@@ -1272,30 +1303,30 @@ Per-phase `query()` calls MUST use these SDK `Options` fields.
 
 ### Mandatory (every phase)
 
-| Option | Required value |
-|---|---|
-| `model` | Phase-specific model id from `model-manager` (default `claude-sonnet-4-6`). |
-| `systemPrompt` | Phase-specific string (see §11). Never left unset. |
-| `outputFormat` | `{ type: "json_schema", schema: <Zod → JSON Schema> }`. |
-| `tools` | Built-in registration list for this phase (see §4). `[]` for phases with no built-ins. |
-| `allowedTools` | Union of registered built-ins this phase uses + MCP tool names (`mcp__<server>__<tool>`). |
-| `mcpServers` | Map of MCP servers this phase uses (Qdrant + optionally Websets for the researcher only). |
-| `maxTurns` | Phase-specific cap from §2 (e.g. 16 for researcher standard). MUST be passed; not enough to record it. |
-| `maxBudgetUsd` | Phase-specific budget cap. |
-| `taskBudget` | `{ total: <tokens> }` per phase. |
-| `permissionMode` | `"dontAsk"`. |
-| `env.CLAUDE_AGENT_SDK_CLIENT_APP` | `"@aqsha/api"`. |
+| Option                            | Required value                                                                                         |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `model`                           | Phase-specific model id from `model-manager` (default `claude-sonnet-4-6`).                            |
+| `systemPrompt`                    | Phase-specific string (see §11). Never left unset.                                                     |
+| `outputFormat`                    | `{ type: "json_schema", schema: <Zod → JSON Schema> }`.                                                |
+| `tools`                           | Built-in registration list for this phase (see §4). `[]` for phases with no built-ins.                 |
+| `allowedTools`                    | Union of registered built-ins this phase uses + MCP tool names (`mcp__<server>__<tool>`).              |
+| `mcpServers`                      | Map of MCP servers this phase uses (Qdrant + optionally Websets for the researcher only).              |
+| `maxTurns`                        | Phase-specific cap from §2 (e.g. 16 for researcher standard). MUST be passed; not enough to record it. |
+| `maxBudgetUsd`                    | Phase-specific budget cap.                                                                             |
+| `taskBudget`                      | `{ total: <tokens> }` per phase.                                                                       |
+| `permissionMode`                  | `"dontAsk"`.                                                                                           |
+| `env.CLAUDE_AGENT_SDK_CLIENT_APP` | `"@aqsha/api"`.                                                                                        |
 
 ### Optional (may be added later)
 
-| Option | Purpose |
-|---|---|
-| `hooks.PreToolUse` | Enforce per-iteration `WebSearch`/`WebFetch`/`Websets` caps from §2. |
-| `canUseTool` | Dynamic authorisation (alternative to `hooks`). |
-| `effort` | `"low"` for planner/critic, `"high"` for researcher, etc. Not required in v2. |
-| `agentProgressSummaries` | Progress events for long-running subagents. Not used — v2 doesn't use subagents. |
-| `promptSuggestions` | Must be `false` or unset; not part of the research workflow. |
-| `sessionId` / `resume` | Not used for phase orchestration in v2. May be used for follow-up turns if and only if §15 follow-up strategy is revised. |
+| Option                   | Purpose                                                                                                                   |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `hooks.PreToolUse`       | Enforce per-iteration `WebSearch`/`WebFetch`/`Websets` caps from §2.                                                      |
+| `canUseTool`             | Dynamic authorisation (alternative to `hooks`).                                                                           |
+| `effort`                 | `"low"` for planner/critic, `"high"` for researcher, etc. Not required in v2.                                             |
+| `agentProgressSummaries` | Progress events for long-running subagents. Not used — v2 doesn't use subagents.                                          |
+| `promptSuggestions`      | Must be `false` or unset; not part of the research workflow.                                                              |
+| `sessionId` / `resume`   | Not used for phase orchestration in v2. May be used for follow-up turns if and only if §15 follow-up strategy is revised. |
 
 ### Explicitly NOT used in v2
 
