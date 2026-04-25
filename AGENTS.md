@@ -7,7 +7,7 @@
 | Package | Path | Runtime | Key Tech |
 |---|---|---|---|
 | `@aqsha/web` | `apps/web` | Next.js 16 (App Router) | React 19, Tailwind v4, shadcn base-nova, no `src/` dir |
-| `@aqsha/api` | `apps/api` | Bun | Elysia 1.4, Drizzle ORM, PostgreSQL, Clerk |
+| `@aqsha/api` | `apps/api` | Bun | Elysia 1.4, Drizzle ORM, PostgreSQL, Better Auth |
 | `@aqsha/db` | `packages/db` | shared | Drizzle schema / types / model |
 | `@aqsha/shared` | `packages/shared` | shared | Types and helpers |
 
@@ -28,7 +28,7 @@ bun run build        # builds web + api only
 
 ## App-Specific Instructions
 - **Web**: UI rules, design tokens, and Next.js 16 caveats live in `apps/web/AGENTS.md` and `apps/web/DESIGN.md`. Read those before touching any frontend code.
-- **API**: Env is loaded via `dotenv/config` in `apps/api/src/config.ts`. Required vars: `DATABASE_URL`, `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`. Example at `apps/api/.env.example`.
+- **API**: Env is loaded via `dotenv/config` in `apps/api/src/config.ts`. Required vars: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `WEB_ORIGIN`. Example at `apps/api/.env.example`.
 
 ## Database / ORM
 - Schema source of truth: `packages/db/src/schema.ts`

@@ -20,7 +20,7 @@ Shared Elysia plugins live in `src/plugins/`:
 | Plugin | Responsibility |
 |---|---|
 | `services.ts` | Named plugin `plugin.services`. Composition root for singleton repositories/services. Registers them with `.decorate(...)`. |
-| `auth-identity.ts` | Named plugin `plugin.auth-identity`. Wraps Clerk and resolves normalized `identity` with `.resolve({ as: "scoped" }, ...)`. |
+| `auth-identity.ts` | Named plugin `plugin.auth-identity`. Resolves the Better Auth session and normalized `identity` with `.resolve({ as: "scoped" }, ...)`. |
 
 ### Module Wiring
 1. Create the module in `src/modules/<name>/index.ts`
@@ -80,10 +80,9 @@ constructor(private readonly db: DatabaseClient = database) {}
 
 ## Authentication
 - Every protected module **must** `.use(authIdentityPlugin)`.
-- Route handlers should destructure `identity` from Elysia context. Do not call `clerkPlugin()` or `getAuthenticatedIdentity(auth())` inside route modules.
-- `authIdentityPlugin` is the only place that should call `getAuthenticatedIdentity()` to normalize `{ clerkUserId, authTokenIdentifier }`.
+- Route handlers should destructure `identity` from Elysia context. Do not call `auth.api.getSession()` inside route modules.
+- `authIdentityPlugin` is the only place that should normalize `{ authUserId, authTokenIdentifier }`.
 - `authIdentityPlugin` owns the missing-identity `401` response shape: `status(401, { error: { code: "unauthorized", message: "Unauthorized" } })`.
-- If a route needs the Clerk client, destructure `clerk` from context after `.use(authIdentityPlugin)`.
 
 ## Database
 - **Client**: `src/database/client.ts` exports `database` using `drizzle-orm/bun-sql` with full schema loaded.
@@ -114,8 +113,9 @@ bun run db:studio     # Drizzle Studio
 ## Env Requirements
 `apps/api/.env` must define:
 - `DATABASE_URL`
-- `CLERK_PUBLISHABLE_KEY`
-- `CLERK_SECRET_KEY`
+- `BETTER_AUTH_SECRET`
+- `BETTER_AUTH_URL`
+- `WEB_ORIGIN`
 
 Example at `apps/api/.env.example`.
 

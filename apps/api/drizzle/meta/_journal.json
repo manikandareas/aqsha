@@ -43,6 +43,13 @@
       "when": 1777117706509,
       "tag": "0005_unique_carmella_unuscione",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1777121595237,
+      "tag": "0006_short_sentinels",
+      "breakpoints": true
     }
   ]
 }

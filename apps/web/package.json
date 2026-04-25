@@ -57,6 +57,7 @@
     "@radix-ui/react-toolbar": "^1.1.11",
     "@udecode/cn": "^49.0.15",
     "ai": "^6.0.161",
+    "better-auth": "^1.6.9",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",

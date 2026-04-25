@@ -84,6 +84,89 @@ export class WorkspaceRepository {
     return workspace;
   }
 
+  async ensureNamedOwnedWorkspace(
+    user: UserRecord,
+    workspaceName: string,
+  ): Promise<WorkspaceRecord> {
+    return this.db.transaction(async (tx) => {
+      const [existing] = await tx
+        .select()
+        .from(workspaces)
+        .where(eq(workspaces.ownerUserId, user.id))
+        .limit(1);
+
+      const [workspace] = existing
+        ? await tx
+            .update(workspaces)
+            .set({
+              name: workspaceName,
+              updatedAt: new Date(),
+            })
+            .where(eq(workspaces.id, existing.id))
+            .returning()
+        : await tx
+            .insert(workspaces)
+            .values({
+              ownerUserId: user.id,
+              name: workspaceName,
+            })
+            .returning();
+
+      await tx
+        .insert(workspaceMembers)
+        .values({
+          workspaceId: workspace.id,
+          userId: user.id,
+          role: "owner",
+        })
+        .onConflictDoUpdate({
+          target: [workspaceMembers.workspaceId, workspaceMembers.userId],
+          set: {
+            role: "owner",
+            updatedAt: new Date(),
+          },
+        });
+
+      await tx
+        .delete(workspaceMembers)
+        .where(
+          and(
+            eq(workspaceMembers.workspaceId, workspace.id),
+            eq(workspaceMembers.role, "owner"),
+            ne(workspaceMembers.userId, user.id),
+          ),
+        );
+
+      const [existingActiveSubscription] = await tx
+        .select()
+        .from(subscriptions)
+        .where(
+          and(
+            eq(subscriptions.workspaceId, workspace.id),
+            inArray(subscriptions.status, ["active", "trialing"]),
+            isNull(subscriptions.endedAt),
+          ),
+        )
+        .limit(1);
+
+      if (!existingActiveSubscription) {
+        await tx
+          .insert(subscriptions)
+          .values({
+            workspaceId: workspace.id,
+            provider: "internal",
+            providerSubscriptionId: `internal:free:${workspace.id}`,
+            planCode: "free",
+            status: "active",
+            startedAt: new Date(),
+          })
+          .onConflictDoNothing();
+      }
+
+      return workspace;
+    });
+  }
+
   private async ensureOwnerMembership(
     workspaceId: string,
     userId: string,
