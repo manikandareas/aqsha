@@ -1,21 +1,43 @@
-'use client';
+"use client";
 
-import { WandSparklesIcon } from 'lucide-react';
-import { useEditorReadOnly } from 'platejs/react';
+import {
+  BoldIcon,
+  ItalicIcon,
+  QuoteIcon,
+  StrikethroughIcon,
+  UnderlineIcon,
+  WandSparklesIcon,
+} from "lucide-react";
+import { KEYS } from "platejs";
+import { useEditorReadOnly, useEditorRef } from "platejs/react";
 
-import { AIToolbarButton } from './ai-toolbar-button';
-import { CommentToolbarButton } from './comment-toolbar-button';
-import { FileToolbarMenu } from './file-toolbar-menu';
-import { FontSizeToolbarButton } from './font-size-toolbar-button';
-import { FormatToolbarMenu } from './format-toolbar-menu';
-import { InsertToolbarButton } from './insert-toolbar-button';
-import { LayoutToolbarMenu } from './layout-toolbar-menu';
-import { ModeToolbarButton } from './mode-toolbar-button';
-import { MoreToolbarButton } from './more-toolbar-button';
-import { RedoToolbarButton, UndoToolbarButton } from './history-toolbar-button';
-import { TableToolbarButton } from './table-toolbar-button';
-import { ToolbarGroup } from './toolbar';
-import { TurnIntoToolbarButton } from './turn-into-toolbar-button';
+import { insertBlock } from "@/features/journal/editor/editor/transforms";
+
+import { AIToolbarButton } from "./ai-toolbar-button";
+import { AlignToolbarButton } from "./align-toolbar-button";
+import { InlineEquationToolbarButton } from "./equation-toolbar-button";
+import { RedoToolbarButton, UndoToolbarButton } from "./history-toolbar-button";
+import { MarkToolbarButton } from "./mark-toolbar-button";
+import { MediaToolbarButton } from "./media-toolbar-button";
+import { MoreToolbarButton } from "./more-toolbar-button";
+import { TableToolbarButton } from "./table-toolbar-button";
+import { ToolbarButton, ToolbarGroup } from "./toolbar";
+import { TurnIntoToolbarButton } from "./turn-into-toolbar-button";
+
+function QuoteToolbarButton() {
+  const editor = useEditorRef();
+  return (
+    <ToolbarButton
+      tooltip="Quote"
+      onClick={() => {
+        insertBlock(editor, KEYS.blockquote);
+        editor.tf.focus();
+      }}
+    >
+      <QuoteIcon />
+    </ToolbarButton>
+  );
+}
 
 export function FixedToolbarButtons() {
   const readOnly = useEditorReadOnly();
@@ -36,24 +58,33 @@ export function FixedToolbarButtons() {
           </ToolbarGroup>
 
           <ToolbarGroup>
-            <FileToolbarMenu />
-          </ToolbarGroup>
-
-          <ToolbarGroup>
-            <InsertToolbarButton />
-          </ToolbarGroup>
-
-          <ToolbarGroup>
             <TurnIntoToolbarButton />
-            <FontSizeToolbarButton />
           </ToolbarGroup>
 
           <ToolbarGroup>
-            <FormatToolbarMenu />
+            <MarkToolbarButton nodeType={KEYS.bold} tooltip="Bold">
+              <BoldIcon />
+            </MarkToolbarButton>
+            <MarkToolbarButton nodeType={KEYS.italic} tooltip="Italic">
+              <ItalicIcon />
+            </MarkToolbarButton>
+            <MarkToolbarButton nodeType={KEYS.underline} tooltip="Underline">
+              <UnderlineIcon />
+            </MarkToolbarButton>
+            <MarkToolbarButton
+              nodeType={KEYS.strikethrough}
+              tooltip="Strikethrough"
+            >
+              <StrikethroughIcon />
+            </MarkToolbarButton>
           </ToolbarGroup>
 
           <ToolbarGroup>
-            <LayoutToolbarMenu />
+            <QuoteToolbarButton />
+          </ToolbarGroup>
+
+          <ToolbarGroup>
+            <AlignToolbarButton />
           </ToolbarGroup>
 
           <ToolbarGroup>
@@ -61,17 +92,17 @@ export function FixedToolbarButtons() {
           </ToolbarGroup>
 
           <ToolbarGroup>
-            <MoreToolbarButton />
+            <InlineEquationToolbarButton />
+          </ToolbarGroup>
+
+          <ToolbarGroup>
+            <MediaToolbarButton nodeType={KEYS.img} />
           </ToolbarGroup>
         </>
       )}
 
       <ToolbarGroup>
-        <CommentToolbarButton />
-      </ToolbarGroup>
-
-      <ToolbarGroup>
-        <ModeToolbarButton />
+        <MoreToolbarButton />
       </ToolbarGroup>
     </div>
   );

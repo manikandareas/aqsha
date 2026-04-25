@@ -99,13 +99,10 @@ function PopoverTrigger({
   render,
   ...props
 }: PopoverTriggerProps) {
-  const resolvedNativeButton =
-    nativeButton ?? (render && render.type !== "button" ? false : undefined);
-
   return (
     <PopoverPrimitive.Trigger
       data-slot="popover-trigger"
-      nativeButton={resolvedNativeButton}
+      nativeButton={nativeButton}
       render={render}
       {...props}
     />

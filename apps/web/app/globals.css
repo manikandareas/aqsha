@@ -33,16 +33,16 @@
   --font-heading: var(--font-sans);
 
   /* ── Font sizes (Notion typography scale) ── */
-  --font-size-display: 4rem;        /* 64px — Display Hero */
-  --font-size-display-2: 3.375rem;  /* 54px — Display Secondary */
-  --font-size-h1: 3rem;             /* 48px — Section Heading */
-  --font-size-h2: 2.5rem;           /* 40px — Sub-heading Large */
-  --font-size-h3: 1.625rem;         /* 26px — Sub-heading */
+  --font-size-display: 4rem; /* 64px — Display Hero */
+  --font-size-display-2: 3.375rem; /* 54px — Display Secondary */
+  --font-size-h1: 3rem; /* 48px — Section Heading */
+  --font-size-h2: 2.5rem; /* 40px — Sub-heading Large */
+  --font-size-h3: 1.625rem; /* 26px — Sub-heading */
   --font-size-card-title: 1.375rem; /* 22px — Card Title */
-  --font-size-body-lg: 1.25rem;     /* 20px — Body Large */
-  --font-size-nav: 0.9375rem;       /* 15px — Nav / Button */
-  --font-size-caption: 0.875rem;    /* 14px — Caption */
-  --font-size-badge: 0.75rem;       /* 12px — Badge / Micro */
+  --font-size-body-lg: 1.25rem; /* 20px — Body Large */
+  --font-size-nav: 0.9375rem; /* 15px — Nav / Button */
+  --font-size-caption: 0.875rem; /* 14px — Caption */
+  --font-size-badge: 0.75rem; /* 12px — Badge / Micro */
 
   /* Tailwind text-* class aliases */
   --text-display: var(--font-size-display);
@@ -57,17 +57,24 @@
   --text-badge: var(--font-size-badge);
 
   /* ── Letter-spacing (Notion compression scale) ── */
-  --tracking-display: -2.125px;    /* 64px display */
-  --tracking-display-2: -1.875px;  /* 54px display */
-  --tracking-h1: -1.5px;           /* 48px section */
-  --tracking-h3: -0.625px;         /* 26px sub-heading */
-  --tracking-card-title: -0.25px;  /* 22px card title */
-  --tracking-body-lg: -0.125px;    /* 20px body large */
-  --tracking-badge: 0.125px;       /* 12px badge (positive) */
+  --tracking-display: -2.125px; /* 64px display */
+  --tracking-display-2: -1.875px; /* 54px display */
+  --tracking-h1: -1.5px; /* 48px section */
+  --tracking-h3: -0.625px; /* 26px sub-heading */
+  --tracking-card-title: -0.25px; /* 22px card title */
+  --tracking-body-lg: -0.125px; /* 20px body large */
+  --tracking-badge: 0.125px; /* 12px badge (positive) */
 
   /* ── Shadows (Notion multi-layer system) ── */
-  --shadow-soft-card: rgba(0,0,0,0.04) 0px 4px 18px, rgba(0,0,0,0.027) 0px 2.025px 7.84688px, rgba(0,0,0,0.02) 0px 0.8px 2.925px, rgba(0,0,0,0.01) 0px 0.175px 1.04062px;
-  --shadow-deep-card: rgba(0,0,0,0.01) 0px 1px 3px, rgba(0,0,0,0.02) 0px 3px 7px, rgba(0,0,0,0.02) 0px 7px 15px, rgba(0,0,0,0.04) 0px 14px 28px, rgba(0,0,0,0.05) 0px 23px 52px;
+  --shadow-soft-card:
+    rgba(0, 0, 0, 0.04) 0px 4px 18px,
+    rgba(0, 0, 0, 0.027) 0px 2.025px 7.84688px,
+    rgba(0, 0, 0, 0.02) 0px 0.8px 2.925px,
+    rgba(0, 0, 0, 0.01) 0px 0.175px 1.04062px;
+  --shadow-deep-card:
+    rgba(0, 0, 0, 0.01) 0px 1px 3px, rgba(0, 0, 0, 0.02) 0px 3px 7px,
+    rgba(0, 0, 0, 0.02) 0px 7px 15px, rgba(0, 0, 0, 0.04) 0px 14px 28px,
+    rgba(0, 0, 0, 0.05) 0px 23px 52px;
 
   /* Override default Tailwind shadows to use Notion's thin/soft shadows */
   --shadow-sm: var(--shadow-soft-card);
@@ -114,13 +121,13 @@
   --color-chart-5: var(--chart-5);
 
   /* ── Border radius scale (DESIGN.md §5) ── */
-  --radius-sm: 4px;      /* Micro — buttons, inputs */
-  --radius-md: 5px;      /* Subtle — links, menu items */
-  --radius-lg: 8px;      /* Standard — small cards, containers */
-  --radius-xl: 12px;     /* Comfortable — cards, dialogs */
-  --radius-2xl: 16px;    /* Large — hero cards */
-  --radius-3xl: 24px;    /* Extra large */
-  --radius-4xl: 9999px;  /* Full pill — badges */
+  --radius-sm: 4px; /* Micro — buttons, inputs */
+  --radius-md: 5px; /* Subtle — links, menu items */
+  --radius-lg: 8px; /* Standard — small cards, containers */
+  --radius-xl: 12px; /* Comfortable — cards, dialogs */
+  --radius-2xl: 16px; /* Large — hero cards */
+  --radius-3xl: 24px; /* Extra large */
+  --radius-4xl: 9999px; /* Full pill — badges */
 }
 
 /* ── Light theme tokens ── */
@@ -242,9 +249,7 @@
     padding-left: 1.75rem;
   }
 
-  .workspace-journal-editor
-    .ProseMirror
-    p.is-editor-empty:first-child::before {
+  .workspace-journal-editor .ProseMirror p.is-editor-empty:first-child::before {
     color: color-mix(in srgb, var(--foreground) 35%, transparent);
     content: attr(data-placeholder);
     float: left;
@@ -262,7 +267,10 @@
     justify-content: center;
     opacity: 0;
     position: relative;
-    transition: opacity 150ms ease, background-color 150ms ease, color 150ms ease;
+    transition:
+      opacity 150ms ease,
+      background-color 150ms ease,
+      color 150ms ease;
     width: 1.5rem;
     margin-left: -1.75rem;
     margin-right: 0.375rem;

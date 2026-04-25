@@ -75,6 +75,7 @@ export const EditorKit = [
   ...ExitBreakKit,
   ...DocxKit,
   ...DocxExportKit,
+  ...DndKit,
   TrailingBlockPlugin,
   ...FindReplaceKit,
   ...BlockMenuKit,
