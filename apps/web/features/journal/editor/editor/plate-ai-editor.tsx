@@ -3,14 +3,16 @@
 import * as React from "react";
 
 import { BlockSelectionPlugin } from "@platejs/selection/react";
-import { normalizeNodeId } from "platejs";
 import type { Value } from "platejs";
+import { normalizeNodeId } from "platejs";
 import { Plate, usePlateEditor } from "platejs/react";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 
-import { EditorKit } from "@/features/journal/editor/editor/editor-kit";
 import { Editor, EditorContainer } from "@/components/ui/editor";
+import { FixedToolbarButtons } from "@/components/ui/fixed-toolbar-buttons";
+import { FixedToolbar } from "@/features/journal/editor/components/fixed-toolbar";
+import { EditorKit } from "@/features/journal/editor/editor/editor-kit";
 import { cn } from "@/lib/utils";
 
 const defaultPlaygroundValue: Value = normalizeNodeId([
@@ -147,7 +149,10 @@ export function PlateAiEditor({
       const html = `<div data-slate-fragment="${encodedFragment}">${escapeHtml(plainText).replaceAll("\n", "<br>")}</div>`;
 
       event.preventDefault();
-      event.clipboardData.setData("application/x-slate-fragment", encodedFragment);
+      event.clipboardData.setData(
+        "application/x-slate-fragment",
+        encodedFragment,
+      );
       event.clipboardData.setData("text/plain", plainText);
       event.clipboardData.setData("text/html", html);
 
@@ -158,22 +163,31 @@ export function PlateAiEditor({
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 max-w-full flex-col overflow-x-hidden">
-      {header}
       <DndProvider backend={HTML5Backend}>
         <Plate editor={editor} onValueChange={onValueChange}>
+          <FixedToolbar>
+            <FixedToolbarButtons />
+          </FixedToolbar>
+          {header}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">
             <EditorContainer
-              className={cn("min-h-0 min-w-0 flex-1 overflow-x-hidden", containerClassName)}
+              className={cn(
+                "min-h-0 min-w-0 flex-1 overflow-x-hidden",
+                containerClassName,
+              )}
             >
               <Editor
                 className={cn(
-                  "min-h-[400px] overflow-x-hidden bg-transparent px-6 pt-8 pb-32 text-base leading-relaxed md:px-12 md:pb-36 lg:px-24 lg:pb-40",
+                  "min-h-[400px] overflow-x-hidden bg-transparent px-6 pt-8 pb-32 text-base leading-relaxed md:px-12.5 md:pb-36 lg:pb-40",
                   editorClassName,
                 )}
                 placeholder={placeholder}
                 onCopy={copySelectedBlocks}
                 onKeyDown={(event) => {
-                  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a") {
+                  if (
+                    (event.metaKey || event.ctrlKey) &&
+                    event.key.toLowerCase() === "a"
+                  ) {
                     event.preventDefault();
                     return selectWholeDocument();
                   }
