@@ -162,14 +162,14 @@ export function PlateAiEditor({
   );
 
   return (
-    <div className="flex h-full min-h-0 w-full min-w-0 max-w-full flex-col overflow-x-hidden">
+    <div className="flex h-full min-h-0 w-full min-w-0 max-w-full flex-col overflow-x-clip">
       <DndProvider backend={HTML5Backend}>
         <Plate editor={editor} onValueChange={onValueChange}>
           <FixedToolbar>
             <FixedToolbarButtons />
           </FixedToolbar>
           {header}
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip">
             <EditorContainer
               className={cn(
                 "min-h-0 min-w-0 flex-1 overflow-x-hidden",
