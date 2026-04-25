@@ -1,13 +1,5 @@
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import {
-  agentEvents,
-  agentMessages,
-  agentResearchCandidateSources,
-  agentResearchClaims,
-  agentResearchEvidenceItems,
-  agentResearchSessions,
-  agentRuns,
-  agentSessions,
   exports,
   journalVersions,
   journals,
@@ -25,22 +17,6 @@ export type WorkspaceMemberRecord = InferSelectModel<typeof workspaceMembers>;
 export type JournalRecord = InferSelectModel<typeof journals>;
 export type JournalVersionRecord = InferSelectModel<typeof journalVersions>;
 export type ExportRecord = InferSelectModel<typeof exports>;
-export type AgentSessionRecord = InferSelectModel<typeof agentSessions>;
-export type AgentMessageRecord = InferSelectModel<typeof agentMessages>;
-export type AgentRunRecord = InferSelectModel<typeof agentRuns>;
-export type AgentEventRecord = InferSelectModel<typeof agentEvents>;
-export type AgentResearchSessionRecord = InferSelectModel<
-  typeof agentResearchSessions
->;
-export type AgentResearchCandidateSourceRecord = InferSelectModel<
-  typeof agentResearchCandidateSources
->;
-export type AgentResearchEvidenceItemRecord = InferSelectModel<
-  typeof agentResearchEvidenceItems
->;
-export type AgentResearchClaimRecord = InferSelectModel<
-  typeof agentResearchClaims
->;
 
 export type NewUser = InferInsertModel<typeof users>;
 export type NewWorkspace = InferInsertModel<typeof workspaces>;
@@ -49,22 +25,6 @@ export type NewWorkspaceMember = InferInsertModel<typeof workspaceMembers>;
 export type NewJournal = InferInsertModel<typeof journals>;
 export type NewJournalVersion = InferInsertModel<typeof journalVersions>;
 export type NewExport = InferInsertModel<typeof exports>;
-export type NewAgentSession = InferInsertModel<typeof agentSessions>;
-export type NewAgentMessage = InferInsertModel<typeof agentMessages>;
-export type NewAgentRun = InferInsertModel<typeof agentRuns>;
-export type NewAgentEvent = InferInsertModel<typeof agentEvents>;
-export type NewAgentResearchSession = InferInsertModel<
-  typeof agentResearchSessions
->;
-export type NewAgentResearchCandidateSource = InferInsertModel<
-  typeof agentResearchCandidateSources
->;
-export type NewAgentResearchEvidenceItem = InferInsertModel<
-  typeof agentResearchEvidenceItems
->;
-export type NewAgentResearchClaim = InferInsertModel<
-  typeof agentResearchClaims
->;
 
 export type CreateJournalInput = Pick<
   NewJournal,
