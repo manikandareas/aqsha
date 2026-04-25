@@ -3,6 +3,9 @@ import { table } from "./schema";
 import { spreads } from "./utils";
 
 const _insertUsers = createInsertSchema(table.users);
+const _insertSessions = createInsertSchema(table.sessions);
+const _insertAccounts = createInsertSchema(table.accounts);
+const _insertVerifications = createInsertSchema(table.verifications);
 const _insertWorkspaces = createInsertSchema(table.workspaces);
 const _insertSubscriptions = createInsertSchema(table.subscriptions);
 const _insertWorkspaceMembers = createInsertSchema(table.workspaceMembers);
@@ -11,6 +14,9 @@ const _insertJournalVersions = createInsertSchema(table.journalVersions);
 const _insertExports = createInsertSchema(table.exports);
 
 const _selectUsers = createSelectSchema(table.users);
+const _selectSessions = createSelectSchema(table.sessions);
+const _selectAccounts = createSelectSchema(table.accounts);
+const _selectVerifications = createSelectSchema(table.verifications);
 const _selectWorkspaces = createSelectSchema(table.workspaces);
 const _selectSubscriptions = createSelectSchema(table.subscriptions);
 const _selectWorkspaceMembers = createSelectSchema(table.workspaceMembers);
@@ -21,6 +27,9 @@ const _selectExports = createSelectSchema(table.exports);
 export const dbModel = {
   insert: spreads({
     users: _insertUsers,
+    sessions: _insertSessions,
+    accounts: _insertAccounts,
+    verifications: _insertVerifications,
     workspaces: _insertWorkspaces,
     subscriptions: _insertSubscriptions,
     workspaceMembers: _insertWorkspaceMembers,
@@ -30,6 +39,9 @@ export const dbModel = {
   }),
   select: spreads({
     users: _selectUsers,
+    sessions: _selectSessions,
+    accounts: _selectAccounts,
+    verifications: _selectVerifications,
     workspaces: _selectWorkspaces,
     subscriptions: _selectSubscriptions,
     workspaceMembers: _selectWorkspaceMembers,

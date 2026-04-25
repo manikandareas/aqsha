@@ -3,7 +3,7 @@ import type { JournalModel } from "./model";
 import { JournalRepository, type JournalContext } from "./repository";
 
 type Identity = {
-  clerkUserId: string;
+  authUserId: string;
   authTokenIdentifier: string;
 };
 
@@ -432,9 +432,8 @@ export class JournalService {
   private async getContext(
     identity: Identity,
   ): Promise<JournalContext | "unauthorized" | "workspace_not_found"> {
-    const result = await this.repository.getContextByIdentity(
-      identity.authTokenIdentifier,
-      identity.clerkUserId,
+    const result = await this.repository.getContextByAuthUserId(
+      identity.authUserId,
     );
 
     return result.success ? result.data : result.error;

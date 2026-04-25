@@ -12,7 +12,7 @@ import {
   type UserRecord,
   type WorkspaceRecord,
 } from "@aqsha/db";
-import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, isNull, sql } from "drizzle-orm";
 import type { DatabaseClient } from "../../database/client";
 
 type JournalStatus = (typeof journalStatuses)[number];
@@ -64,9 +64,8 @@ export type JournalContextLookup =
 export class JournalRepository {
   constructor(private readonly db: DatabaseClient) {}
 
-  async getContextByIdentity(
-    authTokenIdentifier: string,
-    clerkUserId: string,
+  async getContextByAuthUserId(
+    authUserId: string,
   ): Promise<JournalContextLookup> {
     const [row] = await this.db
       .select({
@@ -75,12 +74,7 @@ export class JournalRepository {
       })
       .from(users)
       .leftJoin(workspaces, eq(workspaces.ownerUserId, users.id))
-      .where(
-        or(
-          eq(users.authTokenIdentifier, authTokenIdentifier),
-          eq(users.clerkUserId, clerkUserId),
-        ),
-      )
+      .where(eq(users.id, authUserId))
       .limit(1);
 
     if (!row) {

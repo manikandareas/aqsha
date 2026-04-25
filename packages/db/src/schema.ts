@@ -72,9 +72,8 @@ const updatedAtColumn = () =>
 
 export const users = pgTable("users", {
   id: idColumn("id"),
-  clerkUserId: text("clerk_user_id").notNull().unique(),
-  authTokenIdentifier: text("auth_token_identifier").notNull().unique(),
-  email: text("email").notNull(),
+  email: text("email").notNull().unique(),
+  emailVerified: boolean("email_verified").default(false).notNull(),
   name: text("name"),
   avatarUrl: text("avatar_url"),
   onboardingCompletedAt: timestamp("onboarding_completed_at", {
@@ -83,6 +82,62 @@ export const users = pgTable("users", {
   createdAt: createdAtColumn(),
   updatedAt: updatedAtColumn(),
 });
+
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: idColumn("id"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    token: text("token").notNull().unique(),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+  },
+  (table) => [index("sessions_user_id_idx").on(table.userId)],
+);
+
+export const accounts = pgTable(
+  "accounts",
+  {
+    id: idColumn("id"),
+    accountId: text("account_id").notNull(),
+    providerId: text("provider_id").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    accessToken: text("access_token"),
+    refreshToken: text("refresh_token"),
+    idToken: text("id_token"),
+    accessTokenExpiresAt: timestamp("access_token_expires_at", {
+      withTimezone: true,
+    }),
+    refreshTokenExpiresAt: timestamp("refresh_token_expires_at", {
+      withTimezone: true,
+    }),
+    scope: text("scope"),
+    password: text("password"),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (table) => [index("accounts_user_id_idx").on(table.userId)],
+);
+
+export const verifications = pgTable(
+  "verifications",
+  {
+    id: idColumn("id"),
+    identifier: text("identifier").notNull(),
+    value: text("value").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (table) => [index("verifications_identifier_idx").on(table.identifier)],
+);
 
 export const workspaces = pgTable(
   "workspaces",
@@ -397,6 +452,9 @@ export const exports = pgTable(
 
 export const table = {
   users,
+  sessions,
+  accounts,
+  verifications,
   workspaces,
   subscriptions,
   workspaceMembers,

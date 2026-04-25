@@ -17,6 +17,15 @@ const unauthorizedError = t.Object({
 export const sessionModel = {
   onboarding,
   unauthorizedError,
+  getStartedBody: t.Object({
+    workspaceName: t.String(),
+  }),
+  validationError: t.Object({
+    error: t.Object({
+      code: t.Literal("validation_error"),
+      message: t.String(),
+    }),
+  }),
   bootstrapResponse: t.Union([
     t.Object({
       user: t.Object({
