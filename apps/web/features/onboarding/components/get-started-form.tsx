@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
@@ -109,19 +109,15 @@ export function GetStartedForm() {
   return (
     <form
       onSubmit={handleSubmit}
-      className="w-full rounded-xl border border-border bg-background p-5 shadow-soft-card sm:p-6"
+      className="w-full max-w-[31rem]"
     >
-      <div>
-        <h2 className="text-card-title font-bold leading-tight tracking-card-title">
-          Create your workspace
-        </h2>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          This name appears in your Aqsha sidebar and session context.
-        </p>
-      </div>
-
-      <div className="mt-6 space-y-2">
-        <Label htmlFor="workspaceName">Workspace name</Label>
+      <div className="space-y-3">
+        <Label
+          htmlFor="workspaceName"
+          className="text-base font-semibold leading-6"
+        >
+          Organization name
+        </Label>
         <Input
           id="workspaceName"
           name="workspaceName"
@@ -130,10 +126,10 @@ export function GetStartedForm() {
             setWorkspaceName(event.target.value);
             setError(null);
           }}
-          placeholder="Research Lab"
+          placeholder="ASMobbin"
           autoComplete="organization"
           aria-invalid={Boolean(error)}
-          className="h-11 bg-background px-3 text-base md:text-base"
+          className="h-11 rounded-sm bg-background px-3 text-base shadow-soft-card md:text-base"
           maxLength={80}
         />
       </div>
@@ -148,24 +144,24 @@ export function GetStartedForm() {
         {!isPending && !session ? (
           <Button
             type="button"
-            className="h-10 w-full"
+            className="h-12 w-full bg-foreground text-background shadow-soft-card hover:bg-foreground/90"
             onClick={() => router.push("/signin")}
           >
             Sign in to continue
-            <ArrowRight aria-hidden="true" />
           </Button>
         ) : (
-          <Button type="submit" className="h-10 w-full" disabled={!canSubmit}>
+          <Button
+            type="submit"
+            className="h-12 w-full bg-foreground text-background shadow-soft-card hover:bg-foreground/90"
+            disabled={!canSubmit}
+          >
             {isSubmitting ? (
               <>
                 <Loader2 className="animate-spin" aria-hidden="true" />
-                Creating workspace
+                Creating organization
               </>
             ) : (
-              <>
-                Continue
-                <ArrowRight aria-hidden="true" />
-              </>
+              "Create organization"
             )}
           </Button>
         )}
