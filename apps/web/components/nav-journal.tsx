@@ -38,7 +38,7 @@ export function NavJournal({
   const { isMobile } = useSidebar();
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-      <SidebarGroupLabel className="text-primary font-semibold">
+      <SidebarGroupLabel>
         <span>Journal</span>
         <PlusIcon className="ml-auto size-4" />
       </SidebarGroupLabel>
