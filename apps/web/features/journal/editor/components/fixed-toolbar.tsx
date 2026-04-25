@@ -15,7 +15,7 @@ export function FixedToolbar(props: ComponentProps<typeof Toolbar>) {
     <div
       className={cn(
         chrome,
-        "relative z-40 flex w-full items-center justify-start",
+        "sticky top-0 z-50 flex w-full items-center justify-start",
       )}
     >
       <Toolbar
