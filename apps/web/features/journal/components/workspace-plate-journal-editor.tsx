@@ -14,16 +14,18 @@ export function WorkspacePlateJournalEditor({
   const [title, setTitle] = React.useState(journal.title);
 
   const header = (
-    <input
-      aria-label="Journal title"
-      className="w-full shrink-0 bg-transparent px-6 pt-2 text-4xl leading-tight font-bold tracking-tight text-foreground outline-none placeholder:text-muted-foreground/50 md:px-12 lg:px-24"
-      onChange={(event) => {
-        setTitle(event.target.value);
-      }}
-      placeholder="Untitled"
-      spellCheck={false}
-      value={title}
-    />
+    <div className="shrink-0 pt-6">
+      <input
+        aria-label="Journal title"
+        className="w-full bg-transparent px-6 text-4xl leading-tight font-bold tracking-tight text-foreground outline-none placeholder:text-muted-foreground/50 md:px-12"
+        onChange={(event) => {
+          setTitle(event.target.value);
+        }}
+        placeholder="Untitled"
+        spellCheck={false}
+        value={title}
+      />
+    </div>
   );
 
   const initialValue = (journal.contentJson ?? [
@@ -31,7 +33,7 @@ export function WorkspacePlateJournalEditor({
   ]) as Value;
 
   return (
-    <div className="relative min-h-0 max-w-4xl mx-auto flex-1 pb-28 md:pb-32 lg:pb-36">
+    <div className="relative min-h-0 max-w-4xl mx-auto flex-1 pb-28 md:pb-32 lg:pb-36 py-6 md:py-12">
       <PlateAiEditor
         editorClassName="min-h-[420px] [&_[data-slate-editor]]:min-h-[420px]"
         editorId={journal.id}
