@@ -1,5 +1,4 @@
 import { Elysia } from "elysia";
-import { agentsModule } from "./modules/agents";
 import { healthModule } from "./modules/health";
 import { journalsModule } from "./modules/journals";
 import { sessionModule } from "./modules/session";
@@ -19,7 +18,6 @@ export const app = new Elysia({
       },
     }),
   )
-  .use(agentsModule)
   .use(healthModule)
   .use(sessionModule)
   .use(journalsModule);
