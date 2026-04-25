@@ -384,7 +384,6 @@ function ColorCustom({
         }}
       >
         <ColorInput
-          className="col-start-10"
           onChange={(e) => {
             setValue(e.target.value);
             updateCustomColorDebounced(e.target.value);
@@ -512,7 +511,7 @@ export function ColorDropdownMenuItems({
   return (
     <div
       className={cn(
-        "grid grid-cols-[repeat(10,1fr)] place-items-center gap-x-1",
+        "flex max-w-full flex-wrap items-center gap-x-1",
         className,
       )}
       {...props}

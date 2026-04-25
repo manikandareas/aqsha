@@ -123,7 +123,7 @@ export function MediaToolbarButton({
           modal={false}
           {...props}
         >
-          <DropdownMenuTrigger render={<ToolbarSplitButtonSecondary />}></DropdownMenuTrigger>
+          <DropdownMenuTrigger nativeButton={false} render={<ToolbarSplitButtonSecondary />} />
 
           <DropdownMenuContent
             onClick={(e) => e.stopPropagation()}

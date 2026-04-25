@@ -51,18 +51,13 @@ const data = {
       icon: <SearchIcon />,
     },
     {
-      title: "Ask AI",
-      url: "#",
-      icon: <SparklesIcon />,
-    },
-    {
-      title: "Home",
+      title: "Journal",
       url: "#",
       icon: <HomeIcon />,
       isActive: true,
     },
     {
-      title: "Inbox",
+      title: "Threads",
       url: "#",
       icon: <InboxIcon />,
       badge: "10",
@@ -124,12 +119,7 @@ const data = {
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
-    <Sidebar
-      variant="floating"
-      collapsible="icon"
-      className="border-r-0"
-      {...props}
-    >
+    <Sidebar className="border-0 border-transparent" {...props}>
       <SidebarHeader>
         <TeamSwitcher teams={data.teams} />
         <NavMain items={data.navMain} />
