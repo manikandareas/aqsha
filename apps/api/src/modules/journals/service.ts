@@ -1,4 +1,4 @@
-import type { JsonValue } from "@aqsha/db";
+import type { JournalRecord, JournalVersionRecord, JsonValue } from "@aqsha/db";
 import type { JournalModel } from "./model";
 import { JournalRepository, type JournalContext } from "./repository";
 
@@ -36,23 +36,9 @@ export class JournalService {
       limit: this.normalizeLimit(input.limit),
     });
 
-    const summaries = journals.map((journal) => ({
-      id: journal.id,
-      workspaceId: journal.workspaceId,
-      ownerUserId: journal.ownerUserId,
-      title: journal.title,
-      type: journal.type,
-      status: journal.status,
-      plainText: journal.plainText,
-      archivedAt: journal.archivedAt?.toISOString() ?? null,
-      lastOpenedAt: journal.lastOpenedAt?.toISOString() ?? null,
-      createdAt: journal.createdAt.toISOString(),
-      updatedAt: journal.updatedAt.toISOString(),
-    }));
-
     return {
       success: true,
-      data: summaries,
+      data: journals.map((journal) => this.toJournalSummary(journal)),
     };
   }
 
@@ -77,21 +63,7 @@ export class JournalService {
 
     return {
       success: true,
-      data: {
-        id: journal.id,
-        workspaceId: journal.workspaceId,
-        ownerUserId: journal.ownerUserId,
-        title: journal.title,
-        type: journal.type,
-        status: journal.status,
-        plainText: journal.plainText,
-        contentJson: journal.contentJson,
-        outlineJson: journal.outlineJson,
-        archivedAt: journal.archivedAt?.toISOString() ?? null,
-        lastOpenedAt: journal.lastOpenedAt?.toISOString() ?? null,
-        createdAt: journal.createdAt.toISOString(),
-        updatedAt: journal.updatedAt.toISOString(),
-      },
+      data: this.toJournal(journal),
     };
   }
 
@@ -109,31 +81,14 @@ export class JournalService {
       workspaceId: context.workspace.id,
       ownerUserId: context.user.id,
       title: input.title,
-      type: input.type,
-      contentJson: {
-        type: "doc",
-        content: [],
-      },
+      type: "general",
+      contentJson: [{ type: "p", children: [{ text: "" }] }],
       plainText: "",
     });
 
     return {
       success: true,
-      data: {
-        id: journal.id,
-        workspaceId: journal.workspaceId,
-        ownerUserId: journal.ownerUserId,
-        title: journal.title,
-        type: journal.type,
-        status: journal.status,
-        plainText: journal.plainText,
-        contentJson: journal.contentJson,
-        outlineJson: journal.outlineJson,
-        archivedAt: journal.archivedAt?.toISOString() ?? null,
-        lastOpenedAt: journal.lastOpenedAt?.toISOString() ?? null,
-        createdAt: journal.createdAt.toISOString(),
-        updatedAt: journal.updatedAt.toISOString(),
-      },
+      data: this.toJournal(journal),
     };
   }
 
@@ -160,21 +115,7 @@ export class JournalService {
 
     return {
       success: true,
-      data: {
-        id: journal.id,
-        workspaceId: journal.workspaceId,
-        ownerUserId: journal.ownerUserId,
-        title: journal.title,
-        type: journal.type,
-        status: journal.status,
-        plainText: journal.plainText,
-        contentJson: journal.contentJson,
-        outlineJson: journal.outlineJson,
-        archivedAt: journal.archivedAt?.toISOString() ?? null,
-        lastOpenedAt: journal.lastOpenedAt?.toISOString() ?? null,
-        createdAt: journal.createdAt.toISOString(),
-        updatedAt: journal.updatedAt.toISOString(),
-      },
+      data: this.toJournal(journal),
     };
   }
 
@@ -214,21 +155,7 @@ export class JournalService {
 
     return {
       success: true,
-      data: {
-        id: journal.id,
-        workspaceId: journal.workspaceId,
-        ownerUserId: journal.ownerUserId,
-        title: journal.title,
-        type: journal.type,
-        status: journal.status,
-        plainText: journal.plainText,
-        contentJson: journal.contentJson,
-        outlineJson: journal.outlineJson,
-        archivedAt: journal.archivedAt?.toISOString() ?? null,
-        lastOpenedAt: journal.lastOpenedAt?.toISOString() ?? null,
-        createdAt: journal.createdAt.toISOString(),
-        updatedAt: journal.updatedAt.toISOString(),
-      },
+      data: this.toJournal(journal),
     };
   }
 
@@ -268,21 +195,7 @@ export class JournalService {
 
     return {
       success: true,
-      data: {
-        id: journal.id,
-        workspaceId: journal.workspaceId,
-        ownerUserId: journal.ownerUserId,
-        title: journal.title,
-        type: journal.type,
-        status: journal.status,
-        plainText: journal.plainText,
-        contentJson: journal.contentJson,
-        outlineJson: journal.outlineJson,
-        archivedAt: journal.archivedAt?.toISOString() ?? null,
-        lastOpenedAt: journal.lastOpenedAt?.toISOString() ?? null,
-        createdAt: journal.createdAt.toISOString(),
-        updatedAt: journal.updatedAt.toISOString(),
-      },
+      data: this.toJournal(journal),
     };
   }
 
@@ -307,21 +220,7 @@ export class JournalService {
 
     return {
       success: true,
-      data: {
-        id: journal.id,
-        workspaceId: journal.workspaceId,
-        ownerUserId: journal.ownerUserId,
-        title: journal.title,
-        type: journal.type,
-        status: journal.status,
-        plainText: journal.plainText,
-        contentJson: journal.contentJson,
-        outlineJson: journal.outlineJson,
-        archivedAt: journal.archivedAt?.toISOString() ?? null,
-        lastOpenedAt: journal.lastOpenedAt?.toISOString() ?? null,
-        createdAt: journal.createdAt.toISOString(),
-        updatedAt: journal.updatedAt.toISOString(),
-      },
+      data: this.toJournal(journal),
     };
   }
 
@@ -346,21 +245,7 @@ export class JournalService {
 
     return {
       success: true,
-      data: {
-        id: journal.id,
-        workspaceId: journal.workspaceId,
-        ownerUserId: journal.ownerUserId,
-        title: journal.title,
-        type: journal.type,
-        status: journal.status,
-        plainText: journal.plainText,
-        contentJson: journal.contentJson,
-        outlineJson: journal.outlineJson,
-        archivedAt: journal.archivedAt?.toISOString() ?? null,
-        lastOpenedAt: journal.lastOpenedAt?.toISOString() ?? null,
-        createdAt: journal.createdAt.toISOString(),
-        updatedAt: journal.updatedAt.toISOString(),
-      },
+      data: this.toJournal(journal),
     };
   }
 
@@ -414,18 +299,50 @@ export class JournalService {
 
     return {
       success: true,
-      data: versions.map((version) => ({
-        id: version.id,
-        journalId: version.journalId,
-        workspaceId: version.workspaceId,
-        createdByUserId: version.createdByUserId,
-        versionNumber: version.versionNumber,
-        contentJson: version.contentJson,
-        plainText: version.plainText,
-        trigger: version.trigger,
-        snapshotLabel: version.snapshotLabel,
-        createdAt: version.createdAt.toISOString(),
-      })),
+      data: versions.map((version) => this.toJournalVersion(version)),
+    };
+  }
+
+  private toJournalSummary(
+    journal: JournalRecord,
+  ): JournalModel["journalSummary"] {
+    return {
+      id: journal.id,
+      workspaceId: journal.workspaceId,
+      ownerUserId: journal.ownerUserId,
+      title: journal.title,
+      type: journal.type,
+      status: journal.status,
+      plainText: journal.plainText,
+      archivedAt: journal.archivedAt?.toISOString() ?? null,
+      lastOpenedAt: journal.lastOpenedAt?.toISOString() ?? null,
+      createdAt: journal.createdAt.toISOString(),
+      updatedAt: journal.updatedAt.toISOString(),
+    };
+  }
+
+  private toJournal(journal: JournalRecord): JournalModel["journal"] {
+    return {
+      ...this.toJournalSummary(journal),
+      contentJson: journal.contentJson,
+      outlineJson: journal.outlineJson,
+    };
+  }
+
+  private toJournalVersion(
+    version: JournalVersionRecord,
+  ): JournalModel["journalVersion"] {
+    return {
+      id: version.id,
+      journalId: version.journalId,
+      workspaceId: version.workspaceId,
+      createdByUserId: version.createdByUserId,
+      versionNumber: version.versionNumber,
+      contentJson: version.contentJson,
+      plainText: version.plainText,
+      trigger: version.trigger,
+      snapshotLabel: version.snapshotLabel,
+      createdAt: version.createdAt.toISOString(),
     };
   }
 
