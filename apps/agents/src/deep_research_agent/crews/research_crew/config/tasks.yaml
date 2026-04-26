@@ -8,6 +8,9 @@ plan_research_task:
     Depth mode:
     {depth_mode}
 
+    Router-suggested search queries:
+    {router_search_queries_json}
+
     Conversation history:
     {conversation_history_json}
 
@@ -15,7 +18,7 @@ plan_research_task:
     - Break the request into concrete research questions.
     - Produce exactly 3 to 5 search queries.
     - List source requirements that define what counts as reliable evidence.
-    - Keep the plan actionable for a web research crew.
+    - Keep the plan actionable for a hierarchical CrewAI research crew.
   expected_output: >
     A structured plan with:
     - research_questions: list of focused questions
@@ -24,9 +27,9 @@ plan_research_task:
     - answer_expectation: one paragraph describing what a good answer must cover
   agent: research_planner
 
-collect_sources_task:
+collect_web_sources_task:
   description: >
-    Research the user's question and produce a fresh evidence batch.
+    Search and fetch external web sources through Exa.
 
     User message:
     {user_message}
@@ -43,6 +46,46 @@ collect_sources_task:
     Planned search queries:
     {plan_search_queries_json}
 
+    Router-suggested search queries:
+    {router_search_queries_json}
+
+    Prior review:
+    {prior_review_json}
+
+    Tool rules:
+    - Use only Exa MCP tools web_search_exa and web_fetch_exa.
+    - Actually call the tools. Do not write strings such as "web_search_exa: query=..."
+      or "web_fetch_exa: url=..." as a substitute for a tool result.
+    - Prefer primary sources and recent authoritative pages when the topic is time-sensitive.
+    - Keep all web evidence provenance as web.
+    - Fetch pages when snippets are not enough to support a claim.
+  expected_output: >
+    Web findings with titles, urls, fetched evidence snippets, and clear notes
+    about source quality.
+  agent: exa_web_researcher
+
+collect_sources_task:
+  description: >
+    Merge the web findings into a fresh evidence batch.
+
+    User message:
+    {user_message}
+
+    Depth mode:
+    {depth_mode}
+
+    Iteration number:
+    {iteration_number}
+
+    Research questions:
+    {research_questions_json}
+
+    Planned search queries:
+    {plan_search_queries_json}
+
+    Router-suggested search queries:
+    {router_search_queries_json}
+
     Source requirements:
     {source_requirements_json}
 
@@ -52,13 +95,17 @@ collect_sources_task:
     Prior review:
     {prior_review_json}
 
-    Previously used queries:
+    Previously used queries from completed tool calls:
     {prior_queries_json}
 
     Tool rules:
-    - Use only Exa MCP tools.
-    - Start with search, fetch when snippets are not enough.
-    - Prefer primary sources and recent authoritative pages when the topic is time-sensitive.
+    - Treat planned and router-suggested queries as seed context, not completed work.
+    - Treat previously used queries as completed work; avoid repeating them unless the prior result was clearly insufficient.
+    - Use source_dedupe before accepting repeated sources when it is helpful.
+      Pass sources_json as a valid JSON array string.
+    - Use source_quality_score to flag weak sources when it is helpful.
+      Pass source_json as a valid JSON object string.
+    - Keep evidence provenance as web.
     - Extract direct quotes for every accepted evidence item.
     - Reject thin, duplicate, or clearly low-quality sources.
   expected_output: >
@@ -68,7 +115,7 @@ collect_sources_task:
     - queries_used: every query actually used this iteration
     - coverage_assessment: sufficient, partial, or insufficient
     - coverage_notes: one short paragraph on what was learned
-  agent: source_researcher
+  agent: source_triage_analyst
 
 critique_evidence_task:
   description: >
@@ -99,6 +146,35 @@ critique_evidence_task:
     - evidence_sufficient: true only when the answer can be grounded safely
     - iteration_recommendation: short explanation of the decision
   agent: evidence_critic
+
+final_verification_task:
+  description: >
+    Define the final verification criteria the writer must satisfy.
+
+    User message:
+    {user_message}
+
+    Research questions:
+    {research_questions_json}
+
+    Accepted evidence:
+    {accepted_evidence_json}
+
+    Supported claims:
+    {supported_claims_json}
+
+    Limitations:
+    {limitations_json}
+
+    Verification rules:
+    - The answer must use only supported claim ids.
+    - Every source_evidence_id must appear inline as [evidence_id].
+    - Every evidence id must exist in accepted_evidence.
+    - Weak sources and unsupported claims must be excluded or listed as limitations.
+  expected_output: >
+    A concise checklist for the synthesis writer. The final structured answer
+    must include final_verification.status = pass only if all rules are met.
+  agent: final_verification_critic
 
 synthesize_answer_task:
   description: >
@@ -132,6 +208,8 @@ synthesize_answer_task:
     - Keep the answer concise but substantive.
     - If limitations matter, mention them explicitly.
     - Do not invent evidence ids, sources, or claims.
+    - Include final_verification with status pass, revise, or fail. Use pass only
+      when all verification rules are satisfied.
   expected_output: >
     A structured research answer with:
     - answer: final prose with inline evidence ids
@@ -139,4 +217,5 @@ synthesize_answer_task:
     - claim_evidence_map: list of objects with claim_id and evidence_ids
     - source_evidence_ids: evidence ids that should appear in the final sources list
     - limitations_text: short caveat text if needed
+    - final_verification: critic status, issues, required_changes, and verified_claim_ids
   agent: synthesis_writer

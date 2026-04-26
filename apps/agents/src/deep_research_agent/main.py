@@ -10,7 +10,7 @@ from crewai.flow import Flow, listen, persist, router, start
 
 from deep_research_agent.crews.research_crew.crew import ResearchCrew
 from deep_research_agent.guardrails import (
-    ensure_exa_is_configured,
+    ensure_research_integrations_are_configured,
     validate_research_answer,
 )
 from deep_research_agent.models import (
@@ -94,6 +94,10 @@ def run_planning_stage(state: ResearchFlowState) -> ResearchPlan:
         inputs={
             "user_message": state.user_message,
             "depth_mode": state.depth_mode,
+            "router_search_queries_json": json.dumps(
+                state.suggested_search_queries,
+                indent=2,
+            ),
             "conversation_history_json": json.dumps(
                 [message.model_dump() for message in state.message_history],
                 indent=2,
@@ -111,7 +115,7 @@ def run_evidence_stage(
     prior_batch: ResearchBatch | None,
     prior_review: EvidenceReview | None,
 ) -> tuple[ResearchBatch, EvidenceReview]:
-    ensure_exa_is_configured()
+    ensure_research_integrations_are_configured()
     result = ResearchCrew().evidence_crew().kickoff(
         inputs={
             "user_message": state.user_message,
@@ -119,6 +123,10 @@ def run_evidence_stage(
             "iteration_number": iteration + 1,
             "research_questions_json": json.dumps(plan.research_questions, indent=2),
             "plan_search_queries_json": json.dumps(plan.search_queries, indent=2),
+            "router_search_queries_json": json.dumps(
+                state.suggested_search_queries,
+                indent=2,
+            ),
             "source_requirements_json": json.dumps(
                 plan.source_requirements, indent=2
             ),
@@ -163,6 +171,40 @@ def run_synthesis_stage(
     return extract_pydantic_output(result, ResearchAnswer)
 
 
+def merge_research_batches(
+    prior_batch: ResearchBatch | None,
+    current_batch: ResearchBatch,
+) -> ResearchBatch:
+    if prior_batch is None:
+        return current_batch
+
+    candidate_sources = {
+        candidate.candidate_id: candidate
+        for candidate in prior_batch.candidate_sources
+    }
+    for candidate in current_batch.candidate_sources:
+        candidate_sources[candidate.candidate_id] = candidate
+
+    evidence_items = {
+        evidence.evidence_id: evidence
+        for evidence in prior_batch.evidence_items
+    }
+    for evidence in current_batch.evidence_items:
+        evidence_items[evidence.evidence_id] = evidence
+
+    queries_used = list(
+        dict.fromkeys([*prior_batch.queries_used, *current_batch.queries_used])
+    )
+
+    return ResearchBatch(
+        candidate_sources=list(candidate_sources.values()),
+        evidence_items=list(evidence_items.values()),
+        queries_used=queries_used,
+        coverage_assessment=current_batch.coverage_assessment,
+        coverage_notes=current_batch.coverage_notes,
+    )
+
+
 def extract_pydantic_output(result: Any, model_type: type[Any]) -> Any:
     if getattr(result, "pydantic", None) is not None:
         return result.pydantic
@@ -197,6 +239,10 @@ def dump_json(model: Any) -> str:
 
 
 def render_failure_response(message: str) -> dict[str, str]:
+    return {"response": message}
+
+
+def render_research_response(message: str) -> dict[str, str]:
     return {"response": message}
 
 
@@ -239,6 +285,7 @@ class DeepResearchFlow(Flow[ResearchFlowState]):
         if user_message:
             self.state.user_message = user_message
         self.state.depth_mode = "deep" if depth_mode == "deep" else "standard"
+        self.state.suggested_search_queries = []
         self.state.search_queries = []
         self.state.chat_response = None
         self.state.response = None
@@ -260,7 +307,7 @@ class DeepResearchFlow(Flow[ResearchFlowState]):
             )
             return CASUAL_CHAT_ROUTE
 
-        self.state.search_queries = response.search_queries or []
+        self.state.suggested_search_queries = response.search_queries or []
         return SEARCH_ROUTE
 
     @listen(CASUAL_CHAT_ROUTE)
@@ -280,14 +327,19 @@ class DeepResearchFlow(Flow[ResearchFlowState]):
             max_iterations = 5 if self.state.depth_mode == "deep" else 3
 
             for iteration in range(max_iterations):
-                batch, review = run_evidence_stage(
+                iteration_batch, review = run_evidence_stage(
                     state=self.state,
                     plan=plan,
                     iteration=iteration,
                     prior_batch=batch,
                     prior_review=review,
                 )
-                self.state.search_queries.extend(batch.queries_used)
+                batch = merge_research_batches(batch, iteration_batch)
+                self.state.search_queries = list(
+                    dict.fromkeys(
+                        [*self.state.search_queries, *iteration_batch.queries_used]
+                    )
+                )
 
                 if review.evidence_sufficient:
                     break
@@ -331,7 +383,7 @@ class DeepResearchFlow(Flow[ResearchFlowState]):
             final_answer = render_research_answer(answer, batch)
             self.state.response = final_answer
             self.add_message("assistant", final_answer)
-            return render_failure_response(final_answer)
+            return render_research_response(final_answer)
         except Exception as error:
             failure_message = format_runtime_error(error)
             self.state.response = failure_message
@@ -353,10 +405,17 @@ def format_runtime_error(error: Exception) -> str:
     return message
 
 
-def kickoff(inputs: dict[str, Any] | None = None) -> Any:
+def run_flow(inputs: dict[str, Any] | None = None) -> Any:
     deep_research_flow = DeepResearchFlow()
     normalized_inputs = normalize_flow_inputs(inputs)
     return deep_research_flow.kickoff(inputs=normalized_inputs)
+
+def kickoff(inputs: dict[str, Any] | None = None) -> None:
+    result = run_flow(inputs)
+    if isinstance(result, dict):
+        print(result.get("response") or result.get("chat_response") or result)
+    elif result is not None:
+        print(result)
 
 
 def plot() -> None:

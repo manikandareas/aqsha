@@ -13,8 +13,8 @@ User message → @start() starting_flow
 
 1. **You send a message** — the router classifies your intent in a single `gpt-4.1-mini` call
 2. **Casual chat** — greetings, thank-yous, or meta-questions get a quick conversational reply
-3. **Search** — anything factual triggers 3–5 search queries, handed to an inline Agent with Exa MCP tools
-4. **The agent searches and fetches pages** — using Exa MCP tools exposed through CrewAI's `mcps` integration
+3. **Search** — anything factual triggers 3–5 search queries, handed to a hierarchical research crew with Exa MCP tools
+4. **The crew searches and fetches pages** — using Exa MCP tools exposed through lazy aliases
 5. **You get a cited answer** — every factual claim has a numbered inline citation
 
 State persists across runs via `@persist()`, so you can refine your topic over multiple invocations.
@@ -116,15 +116,15 @@ Heroku picks up `.python-version` and `pyproject.toml` automatically — uv hand
 | `starting_flow` | `@start()` | Appends user message to history |
 | `classify_and_respond` | `@router(starting_flow)` | Single LLM call — classifies intent AND generates response/plan |
 | `present_chat_response` | `@listen("casual_chat")` | Prints the chat reply from state |
-| `execute_search` | `@listen("search")` | Runs inline Agent with Exa MCP search/fetch tools, produces cited answer |
+| `execute_search` | `@listen("search")` | Runs the hierarchical research crew and renders a citation-checked answer |
 
 ### Key Design Decisions
 
 - **Single router LLM call** — no separate calls for classification vs response generation
-- **Inline Agent** — no Crew overhead for a single-agent research task
-- **Exa MCP** — remote MCP tools exposed through CrewAI's `mcps` field, using `EXA_API_KEY`
-- **Filtered MCP tools** — only research-path tools are exposed to OpenAI, keeping only `web_search_exa` and `web_fetch_exa` exposed to OpenAI
-- **Mandatory citations** — every factual claim must have an inline source URL
+- **Hierarchical research crew** — manager coordinates Exa web research, source triage, evidence critique, and synthesis
+- **Exa MCP aliases** — lazy wrappers expose the plain `web_search_exa` and `web_fetch_exa` names while still executing the filtered Exa MCP server
+- **Web-only source mode** — Qdrant/Turso academic retrieval is intentionally disabled until that corpus is ready to support reliable research answers
+- **Mandatory citations** — every factual claim must have inline evidence ids and deterministic source metadata
 - **`gpt-4.1-mini`** — used for both routing (temperature 0.1) and research (temperature 0.2)
 
 ### Project Structure

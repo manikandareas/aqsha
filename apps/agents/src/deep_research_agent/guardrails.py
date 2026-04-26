@@ -1,20 +1,17 @@
 import os
-from typing import Any, Tuple
-
-from crewai.tasks.task_output import TaskOutput
+from dataclasses import dataclass
 
 from deep_research_agent.models import (
     EvidenceReview,
     ResearchAnswer,
     ResearchBatch,
-    ResearchPlan,
 )
 
 
+@dataclass
 class CitationValidationResult:
-    def __init__(self, valid: bool, message: str = "") -> None:
-        self.valid = valid
-        self.message = message
+    valid: bool
+    message: str = ""
 
 
 def ensure_exa_is_configured() -> None:
@@ -22,51 +19,8 @@ def ensure_exa_is_configured() -> None:
         raise ValueError("EXA_API_KEY is required to use Exa MCP")
 
 
-def validate_research_plan_output(output: TaskOutput) -> Tuple[bool, Any]:
-    plan = output.pydantic
-    if not isinstance(plan, ResearchPlan):
-        return False, "Planning task did not return a ResearchPlan."
-    if len(plan.search_queries) < 3 or len(plan.search_queries) > 5:
-        return False, "Research plan must contain 3 to 5 search queries."
-    if not plan.research_questions:
-        return False, "Research plan must include at least one research question."
-    return True, output
-
-
-def validate_research_batch_output(output: TaskOutput) -> Tuple[bool, Any]:
-    batch = output.pydantic
-    if not isinstance(batch, ResearchBatch):
-        return False, "Source collection task did not return a ResearchBatch."
-    if not batch.queries_used:
-        return False, "Research batch must record at least one query."
-    if not batch.candidate_sources:
-        return False, "Research batch must contain at least one candidate source."
-    for evidence in batch.evidence_items:
-        if not evidence.quote.strip():
-            return False, "Every evidence item must contain a verbatim quote."
-    return True, output
-
-
-def validate_evidence_review_output(output: TaskOutput) -> Tuple[bool, Any]:
-    review = output.pydantic
-    if not isinstance(review, EvidenceReview):
-        return False, "Evidence review task did not return an EvidenceReview."
-    if review.evidence_sufficient and not review.supported_claims:
-        return False, "Evidence review cannot mark evidence sufficient without supported claims."
-    return True, output
-
-
-def validate_research_answer_shape(output: TaskOutput) -> Tuple[bool, Any]:
-    answer = output.pydantic
-    if not isinstance(answer, ResearchAnswer):
-        return False, "Synthesis task did not return a ResearchAnswer."
-    if not answer.answer.strip():
-        return False, "Synthesis answer must not be empty."
-    if not answer.claim_ids_used:
-        return False, "Synthesis answer must cite at least one supported claim."
-    if not answer.source_evidence_ids:
-        return False, "Synthesis answer must cite at least one evidence source."
-    return True, output
+def ensure_research_integrations_are_configured() -> None:
+    ensure_exa_is_configured()
 
 
 def validate_research_answer(
@@ -103,8 +57,20 @@ def validate_research_answer(
                     f"Claim '{claim_id}' references unknown evidence '{evidence_id}'.",
                 )
 
+    claim_ids_with_mappings = {mapping.claim_id for mapping in answer.claim_evidence_map}
+    for claim_id in answer.claim_ids_used:
+        if claim_id not in claim_ids_with_mappings:
+            return CitationValidationResult(
+                False,
+                f"Claim '{claim_id}' is missing from claim_evidence_map.",
+            )
+
     for evidence_id in answer.source_evidence_ids:
-        if evidence_id not in evidence_ids:
+        evidence = next(
+            (item for item in batch.evidence_items if item.evidence_id == evidence_id),
+            None,
+        )
+        if evidence is None:
             return CitationValidationResult(
                 False,
                 f"Rendered source '{evidence_id}' is missing from the evidence pool.",
@@ -114,5 +80,10 @@ def validate_research_answer(
                 False,
                 f"The answer text is missing inline citation '[{evidence_id}]'.",
             )
+    if answer.final_verification.status != "pass":
+        return CitationValidationResult(
+            False,
+            "Final verification critic did not pass the answer.",
+        )
 
     return CitationValidationResult(True)

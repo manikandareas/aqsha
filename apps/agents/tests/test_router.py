@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import unittest
+from io import StringIO
+from unittest.mock import patch
 
-from deep_research_agent.main import route_user_intent
+from deep_research_agent.main import kickoff, route_user_intent
 from deep_research_agent.models import Message, RouterOutput
 
 
@@ -57,6 +59,21 @@ class RouteUserIntentTest(unittest.TestCase):
 
         self.assertEqual(result.user_intent, "search")
         self.assertEqual(len(result.search_queries), 3)
+
+    def test_kickoff_console_entrypoint_returns_none(self) -> None:
+        with patch("deep_research_agent.main.run_flow", return_value={"ok": True}), patch(
+            "sys.stdout", new_callable=StringIO
+        ):
+            self.assertIsNone(kickoff({"user_message": "hello"}))
+
+    def test_kickoff_console_entrypoint_prints_response_body(self) -> None:
+        with patch(
+            "deep_research_agent.main.run_flow",
+            return_value={"response": "Final answer"},
+        ), patch("sys.stdout", new_callable=StringIO) as stdout:
+            kickoff({"user_message": "hello"})
+
+        self.assertEqual(stdout.getvalue().strip(), "Final answer")
 
 
 if __name__ == "__main__":
