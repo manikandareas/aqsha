@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from crewai.flow.flow import FlowState as BaseFlowState
 from pydantic import BaseModel, Field
@@ -105,6 +105,8 @@ class ResearchFlowState(BaseFlowState):
     )
     depth_mode: Literal["standard", "deep"] = "standard"
     message_history: list[Message] = Field(default_factory=list)
+    messages: list[dict[str, Any]] = Field(default_factory=list)
+    copilotkit: dict[str, Any] = Field(default_factory=dict)
     suggested_search_queries: list[str] = Field(default_factory=list)
     search_queries: list[str] = Field(default_factory=list)
     chat_response: str | None = None
