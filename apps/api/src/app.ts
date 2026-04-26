@@ -3,7 +3,6 @@ import openapi from "@elysiajs/openapi";
 import { Elysia } from "elysia";
 import { auth } from "./auth";
 import { env } from "./config";
-import { agentsModule } from "./modules/agents";
 import { healthModule } from "./modules/health";
 import { journalsModule } from "./modules/journals";
 import { sessionModule } from "./modules/session";
@@ -37,7 +36,6 @@ export const app = new Elysia({
   )
   .use(healthModule)
   .use(sessionModule)
-  .use(agentsModule)
   .use(journalsModule);
 
 export type ApiApp = typeof app;

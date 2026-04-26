@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import { NavJournal } from "@/components/nav-journal";
 import { NavMain } from "@/components/nav-main";
 import { NavSecondary } from "@/components/nav-secondary";
-import { NavThreads } from "@/components/nav-threads";
 import { TeamSwitcher } from "@/components/team-switcher";
 import {
   Sidebar,
@@ -18,7 +17,6 @@ import {
   AudioLinesIcon,
   BlocksIcon,
   HomeIcon,
-  InboxIcon,
   MessageCircleQuestionIcon,
   SearchIcon,
   Settings2Icon,
@@ -54,11 +52,6 @@ const data = {
       title: "Journal",
       url: "/app",
       icon: <HomeIcon />,
-    },
-    {
-      title: "Threads",
-      url: "/app/threads",
-      icon: <InboxIcon />,
     },
   ],
   navSecondary: [
@@ -98,7 +91,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavJournal />
-        <NavThreads />
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarRail />
