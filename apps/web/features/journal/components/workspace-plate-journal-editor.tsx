@@ -5,21 +5,37 @@ import type { Value } from "platejs";
 
 import { PlateAiEditor } from "@/features/journal/editor/editor/plate-ai-editor";
 import type { JournalRecord } from "../lib/journals";
+import { useJournalAutosave } from "./use-journal-autosave";
 
 export function WorkspacePlateJournalEditor({
   journal,
 }: {
   journal: JournalRecord;
 }) {
-  const [title, setTitle] = React.useState(journal.title);
+  const {
+    contentValue,
+    handleContentChange,
+    handleTitleChange,
+    saveStatus,
+    saveStatusLabel,
+    title,
+  } = useJournalAutosave({ journal });
 
   const header = (
     <div className="shrink-0 pt-6">
+      <div className="mb-3 flex justify-end px-6 md:px-12">
+        <span
+          className="rounded-full border border-border/60 bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground"
+          data-status={saveStatus}
+        >
+          {saveStatusLabel}
+        </span>
+      </div>
       <input
         aria-label="Journal title"
         className="w-full bg-transparent px-6 text-4xl leading-tight font-bold tracking-tight text-foreground outline-none placeholder:text-muted-foreground/50 md:px-12"
         onChange={(event) => {
-          setTitle(event.target.value);
+          handleTitleChange(event.target.value);
         }}
         placeholder="Untitled"
         spellCheck={false}
@@ -28,7 +44,7 @@ export function WorkspacePlateJournalEditor({
     </div>
   );
 
-  const initialValue = (journal.contentJson ?? [
+  const initialValue = (contentValue ?? [
     { type: "p", children: [{ text: "" }] },
   ]) as Value;
 
@@ -39,6 +55,9 @@ export function WorkspacePlateJournalEditor({
         editorId={journal.id}
         header={header}
         initialValue={initialValue}
+        onValueChange={({ value }) => {
+          handleContentChange(value as JournalRecord["contentJson"]);
+        }}
         placeholder="Start writing..."
       />
     </div>
