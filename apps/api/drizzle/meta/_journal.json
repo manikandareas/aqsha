@@ -50,6 +50,13 @@
       "when": 1777121595237,
       "tag": "0006_short_sentinels",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1777195205093,
+      "tag": "0007_lying_spiral",
+      "breakpoints": true
     }
   ]
 }

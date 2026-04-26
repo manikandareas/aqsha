@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { usePathname } from "next/navigation";
 
 import { NavJournal } from "@/components/nav-journal";
 import { NavMain } from "@/components/nav-main";
@@ -51,15 +52,13 @@ const data = {
     },
     {
       title: "Journal",
-      url: "#",
+      url: "/app",
       icon: <HomeIcon />,
-      isActive: true,
     },
     {
       title: "Threads",
-      url: "#",
+      url: "/app/threads",
       icon: <InboxIcon />,
-      badge: "10",
     },
   ],
   navSecondary: [
@@ -79,36 +78,27 @@ const data = {
       icon: <MessageCircleQuestionIcon />,
     },
   ],
-  threads: [
-    {
-      name: "Personal Life Management",
-      url: "/demo/threads/1",
-    },
-    {
-      name: "Professional Development",
-      url: "/demo/threads/2",
-    },
-    {
-      name: "Creative Projects",
-      url: "/demo/threads/3",
-    },
-    {
-      name: "Home Management",
-      url: "/demo/threads/4",
-    },
-  ],
 };
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const pathname = usePathname();
+  const navMain = data.navMain.map((item) => ({
+    ...item,
+    isActive:
+      item.url === "/app"
+        ? pathname === "/app" || pathname.startsWith("/app/journal")
+        : pathname.startsWith(item.url),
+  }));
+
   return (
     <Sidebar className="border-0 border-transparent" {...props}>
       <SidebarHeader>
         <TeamSwitcher teams={data.teams} />
-        <NavMain items={data.navMain} />
+        <NavMain items={navMain} />
       </SidebarHeader>
       <SidebarContent>
         <NavJournal />
-        <NavThreads threads={data.threads} />
+        <NavThreads />
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarRail />

@@ -16,6 +16,8 @@ export const env = createEnv({
         1,
         "DATABASE_URL is required to initialize the PostgreSQL connection.",
       ),
+    AGENTS_API_URL: z.url().default("http://localhost:8000"),
+    AGENTS_API_TOKEN: z.string().optional(),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,
