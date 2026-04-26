@@ -10,20 +10,40 @@ research_planner:
     can be supported by primary or high-quality sources.
   llm: gpt-4.1-mini
   max_iter: 8
+  max_execution_time: 120
+  max_rpm: 20
   inject_date: true
 
-source_researcher:
+exa_web_researcher:
   role: >
-    Web Research Analyst
+    Exa Web Researcher
   goal: >
-    Find candidate sources, fetch the strongest ones, and extract citation-ready
-    evidence with direct quotes.
+    Discover and fetch current web evidence through the filtered Exa MCP search
+    and fetch tools.
   backstory: >
-    You're an evidence-first web researcher. You search broadly, prefer primary
-    sources, fetch pages when snippets are weak, and reject thin or unverifiable
-    material. You never invent URLs or quotes.
+    You're a web researcher who finds current, citable evidence. You use only
+    web_search_exa and web_fetch_exa, prefer primary sources, and keep every
+    accepted source traceable to the live web result that produced it.
   llm: gpt-4.1-mini
   max_iter: 14
+  max_execution_time: 300
+  max_rpm: 12
+  inject_date: true
+
+source_triage_analyst:
+  role: >
+    Source Triage Analyst
+  goal: >
+    Merge web findings, dedupe sources deterministically, score their quality,
+    and output a citation-ready evidence batch.
+  backstory: >
+    You're a strict source operations analyst. You do not write the answer. You
+    normalize provenance, reject duplicate or weak sources, and preserve enough
+    source metadata for deterministic citation audit.
+  llm: gpt-4.1-mini
+  max_iter: 10
+  max_execution_time: 180
+  max_rpm: 20
   inject_date: true
 
 evidence_critic:
@@ -38,6 +58,8 @@ evidence_critic:
     additional searches needed to close gaps.
   llm: gpt-4.1-mini
   max_iter: 8
+  max_execution_time: 120
+  max_rpm: 20
   inject_date: true
 
 synthesis_writer:
@@ -52,4 +74,38 @@ synthesis_writer:
     traced back to accepted sources. You do not make unsupported leaps.
   llm: gpt-4.1-mini
   max_iter: 10
+  max_execution_time: 180
+  max_rpm: 20
+  inject_date: true
+
+final_verification_critic:
+  role: >
+    Final Verification Critic
+  goal: >
+    Check that the final response can pass deterministic citation, claim, and
+    source quality guardrails.
+  backstory: >
+    You're the final safety reviewer. You fail answers with unsupported claims,
+    missing inline citations, unknown evidence ids, or weak sources.
+  llm: gpt-4.1-mini
+  max_iter: 8
+  max_execution_time: 120
+  max_rpm: 20
+  inject_date: true
+
+research_manager:
+  role: >
+    Hierarchical Research Manager
+  goal: >
+    Coordinate the web, triage, and critic agents; decide when the evidence is
+    sufficient; and choose focused follow-up searches for standard or deep mode.
+  backstory: >
+    You're the supervising research manager. Standard mode should stop once the
+    core answer is supported; deep mode can continue for broader triangulation.
+    You delegate narrowly and stop loops when the evidence critic marks the
+    batch sufficient.
+  llm: gpt-4.1-mini
+  max_iter: 18
+  max_execution_time: 420
+  max_rpm: 12
   inject_date: true

@@ -4,19 +4,14 @@ from crewai import Agent, Crew, Process, Task
 from crewai.agents.agent_builder.base_agent import BaseAgent
 from crewai.project import CrewBase, agent, crew, task
 
-from deep_research_agent.guardrails import (
-    validate_evidence_review_output,
-    validate_research_answer_shape,
-    validate_research_batch_output,
-    validate_research_plan_output,
-)
 from deep_research_agent.models import (
     EvidenceReview,
     ResearchAnswer,
     ResearchBatch,
     ResearchPlan,
 )
-from deep_research_agent.tools.exa import create_exa_mcp_server
+from deep_research_agent.tools.exa import create_exa_mcp_tools
+from deep_research_agent.tools.source_tools import create_source_tools
 
 
 @CrewBase
@@ -35,10 +30,18 @@ class ResearchCrew:
         )
 
     @agent
-    def source_researcher(self) -> Agent:
+    def exa_web_researcher(self) -> Agent:
         return Agent(
-            config=self.agents_config["source_researcher"],  # type: ignore[index]
-            mcps=[create_exa_mcp_server()],
+            config=self.agents_config["exa_web_researcher"],  # type: ignore[index]
+            tools=create_exa_mcp_tools(),
+            verbose=True,
+        )
+
+    @agent
+    def source_triage_analyst(self) -> Agent:
+        return Agent(
+            config=self.agents_config["source_triage_analyst"],  # type: ignore[index]
+            tools=create_source_tools(),
             verbose=True,
         )
 
@@ -56,14 +59,27 @@ class ResearchCrew:
             verbose=True,
         )
 
+    @agent
+    def final_verification_critic(self) -> Agent:
+        return Agent(
+            config=self.agents_config["final_verification_critic"],  # type: ignore[index]
+            verbose=True,
+        )
+
+    @agent
+    def research_manager(self) -> Agent:
+        return Agent(
+            config=self.agents_config["research_manager"],  # type: ignore[index]
+            verbose=True,
+            allow_delegation=True,
+        )
+
     @task
     def plan_research_task(self) -> Task:
         return Task(
             name="plan_research_task",
             config=self.tasks_config["plan_research_task"],  # type: ignore[index]
             output_pydantic=ResearchPlan,
-            guardrail=validate_research_plan_output,
-            guardrail_max_retries=1,
         )
 
     @task
@@ -71,9 +87,18 @@ class ResearchCrew:
         return Task(
             name="collect_sources_task",
             config=self.tasks_config["collect_sources_task"],  # type: ignore[index]
+            context=[
+                self.collect_web_sources_task(),
+            ],
             output_pydantic=ResearchBatch,
-            guardrail=validate_research_batch_output,
-            guardrail_max_retries=1,
+        )
+
+    @task
+    def collect_web_sources_task(self) -> Task:
+        return Task(
+            name="collect_web_sources_task",
+            config=self.tasks_config["collect_web_sources_task"],  # type: ignore[index]
+            tools=create_exa_mcp_tools(),
         )
 
     @task
@@ -83,8 +108,6 @@ class ResearchCrew:
             config=self.tasks_config["critique_evidence_task"],  # type: ignore[index]
             context=[self.collect_sources_task()],
             output_pydantic=EvidenceReview,
-            guardrail=validate_evidence_review_output,
-            guardrail_max_retries=1,
         )
 
     @task
@@ -92,9 +115,15 @@ class ResearchCrew:
         return Task(
             name="synthesize_answer_task",
             config=self.tasks_config["synthesize_answer_task"],  # type: ignore[index]
+            context=[self.final_verification_task()],
             output_pydantic=ResearchAnswer,
-            guardrail=validate_research_answer_shape,
-            guardrail_max_retries=1,
+        )
+
+    @task
+    def final_verification_task(self) -> Task:
+        return Task(
+            name="final_verification_task",
+            config=self.tasks_config["final_verification_task"],  # type: ignore[index]
         )
 
     def planning_crew(self) -> Crew:
@@ -107,16 +136,26 @@ class ResearchCrew:
 
     def evidence_crew(self) -> Crew:
         return Crew(
-            agents=[self.source_researcher(), self.evidence_critic()],
-            tasks=[self.collect_sources_task(), self.critique_evidence_task()],
-            process=Process.sequential,
+            agents=[
+                self.exa_web_researcher(),
+                self.source_triage_analyst(),
+                self.evidence_critic(),
+            ],
+            tasks=[
+                self.collect_web_sources_task(),
+                self.collect_sources_task(),
+                self.critique_evidence_task(),
+            ],
+            manager_agent=self.research_manager(),
+            process=Process.hierarchical,
+            planning=True,
             verbose=True,
         )
 
     def synthesis_crew(self) -> Crew:
         return Crew(
-            agents=[self.synthesis_writer()],
-            tasks=[self.synthesize_answer_task()],
+            agents=[self.synthesis_writer(), self.final_verification_critic()],
+            tasks=[self.final_verification_task(), self.synthesize_answer_task()],
             process=Process.sequential,
             verbose=True,
         )

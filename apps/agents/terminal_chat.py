@@ -1,7 +1,7 @@
 from colorama import Fore, Style
 from uuid import uuid4
 
-from deep_research_agent.main import kickoff
+from deep_research_agent.main import run_flow
 
 # First chat message
 print(
@@ -31,7 +31,7 @@ while True:
         conversation_id = str(uuid4())
     inputs["conversation_id"] = conversation_id
 
-    response = kickoff(inputs)
+    response = run_flow(inputs)
 
     if isinstance(response, dict):
         text = response.get("response") or response.get("chat_response") or str(response)

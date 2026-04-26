@@ -27,12 +27,19 @@ class ResearchPlan(BaseModel):
     answer_expectation: str
 
 
+class MetadataEntry(BaseModel):
+    key: str
+    value: str
+
+
 class CandidateSource(BaseModel):
     candidate_id: str
     title: str
     url: str | None = None
+    provenance: Literal["web"] = "web"
     rationale: str
     status: Literal["candidate", "accepted", "rejected"] = "candidate"
+    metadata: list[MetadataEntry] = Field(default_factory=list)
 
 
 class EvidenceItem(BaseModel):
@@ -40,8 +47,10 @@ class EvidenceItem(BaseModel):
     candidate_id: str | None = None
     title: str | None = None
     url: str | None = None
+    provenance: Literal["web"] = "web"
     quote: str
     notes: str
+    metadata: list[MetadataEntry] = Field(default_factory=list)
 
 
 class ResearchBatch(BaseModel):
@@ -74,12 +83,20 @@ class ClaimEvidenceMap(BaseModel):
     evidence_ids: list[str]
 
 
+class FinalVerification(BaseModel):
+    status: Literal["pass", "revise", "fail"]
+    issues: list[str] = Field(default_factory=list)
+    required_changes: list[str] = Field(default_factory=list)
+    verified_claim_ids: list[str] = Field(default_factory=list)
+
+
 class ResearchAnswer(BaseModel):
     answer: str
     claim_ids_used: list[str]
     claim_evidence_map: list[ClaimEvidenceMap]
     source_evidence_ids: list[str]
     limitations_text: str
+    final_verification: FinalVerification
 
 
 class ResearchFlowState(BaseFlowState):
@@ -88,6 +105,7 @@ class ResearchFlowState(BaseFlowState):
     )
     depth_mode: Literal["standard", "deep"] = "standard"
     message_history: list[Message] = Field(default_factory=list)
+    suggested_search_queries: list[str] = Field(default_factory=list)
     search_queries: list[str] = Field(default_factory=list)
     chat_response: str | None = None
     response: str | None = None
