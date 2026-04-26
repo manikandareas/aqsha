@@ -52,6 +52,23 @@ export const exportStatuses = [
   "ready",
   "failed",
 ] as const;
+export const agentDepthModes = ["standard", "deep"] as const;
+export const agentThreadStatuses = ["active", "archived"] as const;
+export const agentMessageRoles = ["user", "assistant", "system"] as const;
+export const agentRunStatuses = [
+  "queued",
+  "running",
+  "completed",
+  "failed",
+  "cancel_requested",
+] as const;
+export const agentEventStatuses = [
+  "pending",
+  "running",
+  "completed",
+  "failed",
+] as const;
+export const agentEventVisibilities = ["public", "internal"] as const;
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue =
@@ -450,6 +467,160 @@ export const exports = pgTable(
   ],
 );
 
+export const agentThreads = pgTable(
+  "agent_threads",
+  {
+    id: idColumn("id"),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    depthMode: text("depth_mode", { enum: agentDepthModes })
+      .default("standard")
+      .notNull(),
+    status: text("status", { enum: agentThreadStatuses })
+      .default("active")
+      .notNull(),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (table) => [
+    check(
+      "agent_threads_depth_mode_check",
+      sql`${table.depthMode} in ('standard', 'deep')`,
+    ),
+    check(
+      "agent_threads_status_check",
+      sql`${table.status} in ('active', 'archived')`,
+    ),
+    index("agent_threads_workspace_updated_idx").on(
+      table.workspaceId,
+      table.updatedAt,
+    ),
+    index("agent_threads_user_id_idx").on(table.userId),
+  ],
+);
+
+export const agentRuns = pgTable(
+  "agent_runs",
+  {
+    id: idColumn("id"),
+    threadId: uuid("thread_id")
+      .notNull()
+      .references(() => agentThreads.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: text("status", { enum: agentRunStatuses })
+      .default("queued")
+      .notNull(),
+    depthMode: text("depth_mode", { enum: agentDepthModes })
+      .default("standard")
+      .notNull(),
+    errorMessage: text("error_message"),
+    errorMetadata: jsonb("error_metadata").$type<JsonValue>(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (table) => [
+    check(
+      "agent_runs_status_check",
+      sql`${table.status} in ('queued', 'running', 'completed', 'failed', 'cancel_requested')`,
+    ),
+    check(
+      "agent_runs_depth_mode_check",
+      sql`${table.depthMode} in ('standard', 'deep')`,
+    ),
+    index("agent_runs_thread_created_idx").on(table.threadId, table.createdAt),
+    uniqueIndex("agent_runs_active_thread_unique_idx")
+      .on(table.threadId)
+      .where(sql`${table.status} in ('queued', 'running')`),
+  ],
+);
+
+export const agentMessages = pgTable(
+  "agent_messages",
+  {
+    id: idColumn("id"),
+    threadId: uuid("thread_id")
+      .notNull()
+      .references(() => agentThreads.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    runId: uuid("run_id").references(() => agentRuns.id, {
+      onDelete: "set null",
+    }),
+    role: text("role", { enum: agentMessageRoles }).notNull(),
+    content: text("content").notNull(),
+    metadata: jsonb("metadata").$type<JsonValue>(),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (table) => [
+    check(
+      "agent_messages_role_check",
+      sql`${table.role} in ('user', 'assistant', 'system')`,
+    ),
+    index("agent_messages_thread_created_idx").on(
+      table.threadId,
+      table.createdAt,
+    ),
+    index("agent_messages_run_id_idx").on(table.runId),
+  ],
+);
+
+export const agentEvents = pgTable(
+  "agent_events",
+  {
+    id: idColumn("id"),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => agentRuns.id, { onDelete: "cascade" }),
+    threadId: uuid("thread_id")
+      .notNull()
+      .references(() => agentThreads.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    sequence: integer("sequence").notNull(),
+    type: text("type").notNull(),
+    status: text("status", { enum: agentEventStatuses }).notNull(),
+    title: text("title").notNull(),
+    visibility: text("visibility", { enum: agentEventVisibilities })
+      .default("public")
+      .notNull(),
+    payload: jsonb("payload").$type<JsonValue>(),
+    createdAt: createdAtColumn(),
+  },
+  (table) => [
+    check(
+      "agent_events_status_check",
+      sql`${table.status} in ('pending', 'running', 'completed', 'failed')`,
+    ),
+    check(
+      "agent_events_visibility_check",
+      sql`${table.visibility} in ('public', 'internal')`,
+    ),
+    unique("agent_events_run_sequence_unique").on(table.runId, table.sequence),
+    index("agent_events_thread_created_idx").on(
+      table.threadId,
+      table.createdAt,
+    ),
+  ],
+);
+
 export const table = {
   users,
   sessions,
@@ -463,6 +634,10 @@ export const table = {
   // sources,
   // sourceChunks,
   exports,
+  agentThreads,
+  agentMessages,
+  agentRuns,
+  agentEvents,
 } as const;
 
 export type Table = typeof table;

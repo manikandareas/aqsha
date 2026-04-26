@@ -4,6 +4,10 @@ import {
   exports,
   journalVersions,
   journals,
+  agentEvents,
+  agentMessages,
+  agentRuns,
+  agentThreads,
   sessions,
   subscriptions,
   users,
@@ -23,6 +27,10 @@ export type WorkspaceMemberRecord = InferSelectModel<typeof workspaceMembers>;
 export type JournalRecord = InferSelectModel<typeof journals>;
 export type JournalVersionRecord = InferSelectModel<typeof journalVersions>;
 export type ExportRecord = InferSelectModel<typeof exports>;
+export type AgentThreadRecord = InferSelectModel<typeof agentThreads>;
+export type AgentMessageRecord = InferSelectModel<typeof agentMessages>;
+export type AgentRunRecord = InferSelectModel<typeof agentRuns>;
+export type AgentEventRecord = InferSelectModel<typeof agentEvents>;
 
 export type NewUser = InferInsertModel<typeof users>;
 export type NewSession = InferInsertModel<typeof sessions>;
@@ -34,6 +42,10 @@ export type NewWorkspaceMember = InferInsertModel<typeof workspaceMembers>;
 export type NewJournal = InferInsertModel<typeof journals>;
 export type NewJournalVersion = InferInsertModel<typeof journalVersions>;
 export type NewExport = InferInsertModel<typeof exports>;
+export type NewAgentThread = InferInsertModel<typeof agentThreads>;
+export type NewAgentMessage = InferInsertModel<typeof agentMessages>;
+export type NewAgentRun = InferInsertModel<typeof agentRuns>;
+export type NewAgentEvent = InferInsertModel<typeof agentEvents>;
 
 export type CreateJournalInput = Pick<
   NewJournal,

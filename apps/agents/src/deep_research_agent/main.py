@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any
+from typing import Any, Callable
 
 from crewai import LLM
 from crewai.flow import Flow, listen, persist, router, start
@@ -26,6 +26,7 @@ from deep_research_agent.models import (
 DEFAULT_MODEL = os.getenv("OPENAI_MODEL_NAME", "gpt-4.1-mini")
 CASUAL_CHAT_ROUTE = "casual_chat"
 SEARCH_ROUTE = "search"
+EventSink = Callable[[dict[str, Any]], None]
 
 
 def normalize_flow_inputs(inputs: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -273,6 +274,31 @@ def render_research_answer(
 
 @persist()
 class DeepResearchFlow(Flow[ResearchFlowState]):
+    event_sink: EventSink | None = None
+
+    def emit_event(
+        self,
+        event_type: str,
+        *,
+        status: str = "running",
+        title: str | None = None,
+        visibility: str = "public",
+        data: dict[str, Any] | None = None,
+    ) -> None:
+        sink = getattr(self, "event_sink", None)
+        if sink is None:
+            return
+
+        sink(
+            {
+                "type": event_type,
+                "status": status,
+                "title": title or event_type,
+                "visibility": visibility,
+                "data": data or {},
+            }
+        )
+
     def add_message(self, role: str, content: str) -> None:
         self.state.message_history.append(Message(role=role, content=content))
 
@@ -294,6 +320,11 @@ class DeepResearchFlow(Flow[ResearchFlowState]):
 
     @router(starting_flow)
     def classify_and_respond(self) -> str:
+        self.emit_event(
+            "router.started",
+            title="Routing message",
+            data={"message": self.state.user_message},
+        )
         response = route_user_intent(
             user_message=self.state.user_message,
             message_history=self.state.message_history,
@@ -305,9 +336,28 @@ class DeepResearchFlow(Flow[ResearchFlowState]):
                 response.chat_response
                 or "Ask a research question and I will investigate it."
             )
+            self.emit_event(
+                "router.completed",
+                status="completed",
+                title="Casual chat selected",
+                data={
+                    "route": CASUAL_CHAT_ROUTE,
+                    "reasoning": response.reasoning,
+                },
+            )
             return CASUAL_CHAT_ROUTE
 
         self.state.suggested_search_queries = response.search_queries or []
+        self.emit_event(
+            "router.completed",
+            status="completed",
+            title="Research selected",
+            data={
+                "route": SEARCH_ROUTE,
+                "reasoning": response.reasoning,
+                "searchQueries": self.state.suggested_search_queries,
+            },
+        )
         return SEARCH_ROUTE
 
     @listen(CASUAL_CHAT_ROUTE)
@@ -316,17 +366,46 @@ class DeepResearchFlow(Flow[ResearchFlowState]):
             "Ask a research question and I will investigate it."
         )
         self.add_message("assistant", response)
+        self.emit_event(
+            "assistant.message.completed",
+            status="completed",
+            title="Assistant message ready",
+            data={"content": response, "chat_response": response},
+        )
         return render_chat_response(response)
 
     @listen(SEARCH_ROUTE)
     def execute_search(self) -> dict[str, str]:
         try:
+            self.emit_event("planning.started", title="Planning research")
             plan = run_planning_stage(self.state)
+            self.emit_event(
+                "planning.completed",
+                status="completed",
+                title="Research plan ready",
+                data=plan.model_dump(),
+            )
             review: EvidenceReview | None = None
             batch: ResearchBatch | None = None
             max_iterations = 5 if self.state.depth_mode == "deep" else 3
 
             for iteration in range(max_iterations):
+                self.emit_event(
+                    "evidence.iteration.started",
+                    title=f"Evidence iteration {iteration + 1}",
+                    data={"iteration": iteration + 1, "maxIterations": max_iterations},
+                )
+                self.emit_event(
+                    "evidence.search.started",
+                    title="Searching for evidence",
+                    data={
+                        "iteration": iteration + 1,
+                        "queries": [
+                            *plan.search_queries,
+                            *self.state.suggested_search_queries,
+                        ],
+                    },
+                )
                 iteration_batch, review = run_evidence_stage(
                     state=self.state,
                     plan=plan,
@@ -340,6 +419,30 @@ class DeepResearchFlow(Flow[ResearchFlowState]):
                         [*self.state.search_queries, *iteration_batch.queries_used]
                     )
                 )
+                self.emit_event(
+                    "evidence.search.completed",
+                    status="completed",
+                    title="Evidence search completed",
+                    data={
+                        "iteration": iteration + 1,
+                        "queriesUsed": iteration_batch.queries_used,
+                        "candidateCount": len(iteration_batch.candidate_sources),
+                        "evidenceCount": len(iteration_batch.evidence_items),
+                    },
+                )
+                self.emit_event(
+                    "evidence.review.completed",
+                    status="completed",
+                    title="Evidence reviewed",
+                    data={
+                        "iteration": iteration + 1,
+                        "evidenceSufficient": review.evidence_sufficient,
+                        "coverageAssessment": batch.coverage_assessment,
+                        "supportedClaimCount": len(review.supported_claims),
+                        "gaps": review.gaps,
+                        "nextQueries": review.next_queries,
+                    },
+                )
 
                 if review.evidence_sufficient:
                     break
@@ -351,17 +454,41 @@ class DeepResearchFlow(Flow[ResearchFlowState]):
                 )
                 self.state.response = failure_message
                 self.add_message("assistant", failure_message)
+                self.emit_event(
+                    "assistant.message.completed",
+                    status="completed",
+                    title="Assistant message ready",
+                    data={"content": failure_message, "response": failure_message},
+                )
                 return render_failure_response(failure_message)
 
+            self.emit_event("synthesis.started", title="Synthesizing answer")
             answer = run_synthesis_stage(
                 state=self.state,
                 plan=plan,
                 batch=batch,
                 review=review,
             )
+            self.emit_event(
+                "synthesis.completed",
+                status="completed",
+                title="Draft answer synthesized",
+                data={
+                    "claimCount": len(answer.claim_ids_used),
+                    "sourceEvidenceIds": answer.source_evidence_ids,
+                },
+            )
+            self.emit_event("citation_audit.started", title="Auditing citations")
             validation = validate_research_answer(answer, batch, review)
+            self.emit_event(
+                "citation_audit.completed",
+                status="completed" if validation.valid else "failed",
+                title="Citation audit completed",
+                data={"valid": validation.valid, "message": validation.message},
+            )
 
             if not validation.valid:
+                self.emit_event("synthesis.started", title="Revising answer")
                 answer = run_synthesis_stage(
                     state=self.state,
                     plan=plan,
@@ -369,7 +496,23 @@ class DeepResearchFlow(Flow[ResearchFlowState]):
                     review=review,
                     audit_feedback=validation.message,
                 )
+                self.emit_event(
+                    "synthesis.completed",
+                    status="completed",
+                    title="Revised answer synthesized",
+                    data={
+                        "claimCount": len(answer.claim_ids_used),
+                        "sourceEvidenceIds": answer.source_evidence_ids,
+                    },
+                )
+                self.emit_event("citation_audit.started", title="Auditing citations")
                 validation = validate_research_answer(answer, batch, review)
+                self.emit_event(
+                    "citation_audit.completed",
+                    status="completed" if validation.valid else "failed",
+                    title="Citation audit completed",
+                    data={"valid": validation.valid, "message": validation.message},
+                )
 
             if not validation.valid:
                 failure_message = (
@@ -378,16 +521,34 @@ class DeepResearchFlow(Flow[ResearchFlowState]):
                 )
                 self.state.response = failure_message
                 self.add_message("assistant", failure_message)
+                self.emit_event(
+                    "assistant.message.completed",
+                    status="completed",
+                    title="Assistant message ready",
+                    data={"content": failure_message, "response": failure_message},
+                )
                 return render_failure_response(failure_message)
 
             final_answer = render_research_answer(answer, batch)
             self.state.response = final_answer
             self.add_message("assistant", final_answer)
+            self.emit_event(
+                "assistant.message.completed",
+                status="completed",
+                title="Assistant message ready",
+                data={"content": final_answer, "response": final_answer},
+            )
             return render_research_response(final_answer)
         except Exception as error:
             failure_message = format_runtime_error(error)
             self.state.response = failure_message
             self.add_message("assistant", failure_message)
+            self.emit_event(
+                "assistant.message.completed",
+                status="completed",
+                title="Assistant message ready",
+                data={"content": failure_message, "response": failure_message},
+            )
             return render_failure_response(failure_message)
 
 
@@ -405,8 +566,12 @@ def format_runtime_error(error: Exception) -> str:
     return message
 
 
-def run_flow(inputs: dict[str, Any] | None = None) -> Any:
+def run_flow(
+    inputs: dict[str, Any] | None = None,
+    event_sink: EventSink | None = None,
+) -> Any:
     deep_research_flow = DeepResearchFlow()
+    deep_research_flow.event_sink = event_sink
     normalized_inputs = normalize_flow_inputs(inputs)
     return deep_research_flow.kickoff(inputs=normalized_inputs)
 

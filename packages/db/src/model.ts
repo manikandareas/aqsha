@@ -12,6 +12,10 @@ const _insertWorkspaceMembers = createInsertSchema(table.workspaceMembers);
 const _insertJournals = createInsertSchema(table.journals);
 const _insertJournalVersions = createInsertSchema(table.journalVersions);
 const _insertExports = createInsertSchema(table.exports);
+const _insertAgentThreads = createInsertSchema(table.agentThreads);
+const _insertAgentMessages = createInsertSchema(table.agentMessages);
+const _insertAgentRuns = createInsertSchema(table.agentRuns);
+const _insertAgentEvents = createInsertSchema(table.agentEvents);
 
 const _selectUsers = createSelectSchema(table.users);
 const _selectSessions = createSelectSchema(table.sessions);
@@ -23,6 +27,10 @@ const _selectWorkspaceMembers = createSelectSchema(table.workspaceMembers);
 const _selectJournals = createSelectSchema(table.journals);
 const _selectJournalVersions = createSelectSchema(table.journalVersions);
 const _selectExports = createSelectSchema(table.exports);
+const _selectAgentThreads = createSelectSchema(table.agentThreads);
+const _selectAgentMessages = createSelectSchema(table.agentMessages);
+const _selectAgentRuns = createSelectSchema(table.agentRuns);
+const _selectAgentEvents = createSelectSchema(table.agentEvents);
 
 export const dbModel = {
   insert: spreads({
@@ -36,6 +44,10 @@ export const dbModel = {
     journals: _insertJournals,
     journalVersions: _insertJournalVersions,
     exports: _insertExports,
+    agentThreads: _insertAgentThreads,
+    agentMessages: _insertAgentMessages,
+    agentRuns: _insertAgentRuns,
+    agentEvents: _insertAgentEvents,
   }),
   select: spreads({
     users: _selectUsers,
@@ -48,5 +60,9 @@ export const dbModel = {
     journals: _selectJournals,
     journalVersions: _selectJournalVersions,
     exports: _selectExports,
+    agentThreads: _selectAgentThreads,
+    agentMessages: _selectAgentMessages,
+    agentRuns: _selectAgentRuns,
+    agentEvents: _selectAgentEvents,
   }),
 } as const;
