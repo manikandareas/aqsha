@@ -21,7 +21,6 @@ import {
   MessageCircleQuestionIcon,
   SearchIcon,
   Settings2Icon,
-  SparklesIcon,
   TerminalIcon,
 } from "lucide-react";
 
@@ -80,23 +79,6 @@ const data = {
       icon: <MessageCircleQuestionIcon />,
     },
   ],
-  journal: [
-    {
-      name: "Project Management & Task Tracking",
-      url: "/demo/journal/1",
-      emoji: "📊",
-    },
-    {
-      name: "Family Recipe Collection & Meal Planning",
-      url: "/demo/journal/2",
-      emoji: "🍳",
-    },
-    {
-      name: "Fitness Tracker & Workout Routines",
-      url: "/demo/journal/3",
-      emoji: "💪",
-    },
-  ],
   threads: [
     {
       name: "Personal Life Management",
@@ -125,7 +107,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavMain items={data.navMain} />
       </SidebarHeader>
       <SidebarContent>
-        <NavJournal journals={data.journal} />
+        <NavJournal />
         <NavThreads threads={data.threads} />
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>

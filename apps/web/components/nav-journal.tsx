@@ -1,5 +1,17 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
+import { api } from "@/lib/eden";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,6 +20,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -18,36 +32,213 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import {
+  normalizeJournalRecord,
+  type JournalRecord,
+} from "@/features/journal/lib/journals";
+import {
   MoreHorizontalIcon,
   StarOffIcon,
   LinkIcon,
   ArrowUpRightIcon,
-  Trash2Icon,
   PlusIcon,
+  Loader2Icon,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import * as React from "react";
+import { useForm, useWatch } from "react-hook-form";
+import { z } from "zod";
 
-export function NavJournal({
-  journals,
-}: {
-  journals: {
-    name: string;
-    url: string;
-    emoji: string;
-  }[];
-}) {
+type EdenErrorValue = {
+  error?: {
+    message?: unknown;
+  };
+};
+
+const createJournalSchema = z.object({
+  title: z.string().trim().min(1, "Journal title is required."),
+});
+
+type CreateJournalFormValues = z.infer<typeof createJournalSchema>;
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function getJournalErrorMessage(error: unknown): string {
+  if (isObject(error) && "value" in error) {
+    const value = error.value;
+
+    if (isObject(value)) {
+      const apiError = (value as EdenErrorValue).error;
+
+      if (isObject(apiError) && typeof apiError.message === "string") {
+        return apiError.message;
+      }
+    }
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "Journal request failed. Try again.";
+}
+
+export function NavJournal() {
   const { isMobile } = useSidebar();
+  const router = useRouter();
+  const [journals, setJournals] = React.useState<JournalRecord[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [isDialogOpen, setIsDialogOpen] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const form = useForm<CreateJournalFormValues>({
+    resolver: zodResolver(createJournalSchema),
+    defaultValues: {
+      title: "",
+    },
+  });
+
+  const refreshJournals = React.useCallback(async () => {
+    setIsLoading(true);
+
+    try {
+      const response = await api.journals.get({ query: { status: "active" } });
+
+      if (response.error) {
+        setError(getJournalErrorMessage(response.error));
+        setJournals([]);
+        return;
+      }
+
+      setJournals((response.data ?? []).map(normalizeJournalRecord));
+    } catch (cause) {
+      setError(getJournalErrorMessage(cause));
+      setJournals([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    queueMicrotask(() => {
+      void refreshJournals();
+    });
+
+    window.addEventListener("journals:changed", refreshJournals);
+
+    return () => {
+      window.removeEventListener("journals:changed", refreshJournals);
+    };
+  }, [refreshJournals]);
+
+  async function handleCreate(values: CreateJournalFormValues): Promise<void> {
+    setError(null);
+
+    try {
+      const response = await api.journals.post({ title: values.title });
+
+      if (response.error) {
+        setError(getJournalErrorMessage(response.error));
+        return;
+      }
+
+      const journal = normalizeJournalRecord(response.data);
+      form.reset();
+      setIsDialogOpen(false);
+      window.dispatchEvent(new Event("journals:changed"));
+      router.push(`/app/journal/${journal.id}`);
+      router.refresh();
+    } catch (cause) {
+      setError(getJournalErrorMessage(cause));
+    }
+  }
+
+  const title = useWatch({ control: form.control, name: "title" });
+  const isCreating = form.formState.isSubmitting;
+  const formError = form.formState.errors.title?.message ?? error;
+
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-      <SidebarGroupLabel className="text-primary font-semibold">
+      <SidebarGroupLabel>
         <span>Journal</span>
-        <PlusIcon className="ml-auto size-4" />
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="ml-auto -mr-1 text-muted-foreground hover:text-foreground"
+              />
+            }
+          >
+            <PlusIcon />
+            <span className="sr-only">Create journal</span>
+          </DialogTrigger>
+          <DialogContent>
+            <form
+              onSubmit={form.handleSubmit(handleCreate)}
+              className="contents"
+            >
+              <DialogHeader>
+                <DialogTitle>Create journal</DialogTitle>
+                <DialogDescription>
+                  Add a title to start a blank journal.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-2">
+                <Label htmlFor="journal-title">Title</Label>
+                <Input
+                  id="journal-title"
+                  {...form.register("title", {
+                    onChange: () => setError(null),
+                  })}
+                  placeholder="Untitled"
+                  autoFocus
+                  aria-invalid={Boolean(formError)}
+                />
+                {formError ? (
+                  <p className="text-sm text-destructive">{formError}</p>
+                ) : null}
+              </div>
+              <DialogFooter>
+                <Button
+                  type="submit"
+                  disabled={isCreating || title.trim().length === 0}
+                >
+                  {isCreating ? <Loader2Icon className="animate-spin" /> : null}
+                  Create
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </SidebarGroupLabel>
       <SidebarMenu>
+        {isLoading ? (
+          <SidebarMenuItem>
+            <SidebarMenuButton disabled>
+              <Loader2Icon className="animate-spin" />
+              <span>Loading journals</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        ) : null}
+        {!isLoading && journals.length === 0 ? (
+          <SidebarMenuItem>
+            <SidebarMenuButton disabled className="text-sidebar-foreground/70">
+              <span>Journal</span>
+              <span>No journals yet</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        ) : null}
         {journals.map((item) => (
-          <SidebarMenuItem key={item.name}>
-            <SidebarMenuButton render={<a href={item.url} title={item.name} />}>
-              <span>{item.emoji}</span>
-              <span>{item.name}</span>
+          <SidebarMenuItem key={item.id}>
+            <SidebarMenuButton
+              render={
+                <a href={`/app/journal/${item.id}`} title={item.title} />
+              }
+            >
+              <span>📄</span>
+              <span>{item.title}</span>
             </SidebarMenuButton>
             <DropdownMenu>
               <DropdownMenuTrigger
@@ -80,12 +271,13 @@ export function NavJournal({
                   </DropdownMenuItem>
                   <DropdownMenuItem>
                     <ArrowUpRightIcon className="text-muted-foreground" />
-                    <span>Open in New Tab</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem>
-                    <Trash2Icon className="text-muted-foreground" />
-                    <span>Delete</span>
+                    <a
+                      href={`/app/journal/${item.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Open in New Tab
+                    </a>
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
               </DropdownMenuContent>
