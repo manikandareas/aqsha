@@ -1,8 +1,10 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 import { ArrowRight, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -10,41 +12,51 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
 
+const signInSchema = z.object({
+  email: z.string().trim().email("Enter a valid email."),
+  password: z.string().min(1, "Password is required."),
+});
+
+type SignInFormValues = z.infer<typeof signInSchema>;
+
 export default function SignInPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const form = useForm<SignInFormValues>({
+    resolver: zodResolver(signInSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+  });
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault();
-    setIsSubmitting(true);
-    setError(null);
+  async function handleSubmit(values: SignInFormValues): Promise<void> {
+    form.clearErrors("root");
 
     try {
       const response = await authClient.signIn.email({
-        email,
-        password,
+        email: values.email,
+        password: values.password,
       });
 
       if (response.error) {
-        setError(response.error.message ?? "Sign in failed.");
+        form.setError("root", {
+          message: response.error.message ?? "Sign in failed.",
+        });
         return;
       }
 
       router.push("/get-started");
       router.refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Sign in failed.");
-    } finally {
-      setIsSubmitting(false);
+      form.setError("root", {
+        message: cause instanceof Error ? cause.message : "Sign in failed.",
+      });
     }
   }
 
   return (
     <form
-      onSubmit={handleSubmit}
+      onSubmit={form.handleSubmit(handleSubmit)}
       className="w-full max-w-sm rounded-xl border border-border bg-background p-6 shadow-soft-card"
     >
       <h1 className="text-card-title font-bold leading-tight tracking-card-title">
@@ -58,36 +70,50 @@ export default function SignInPage() {
         <Label htmlFor="email">Email</Label>
         <Input
           id="email"
-          name="email"
           type="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
+          {...form.register("email", {
+            onChange: () => form.clearErrors("root"),
+          })}
           autoComplete="email"
-          required
+          aria-invalid={Boolean(form.formState.errors.email)}
         />
+        {form.formState.errors.email ? (
+          <p className="text-sm text-destructive">
+            {form.formState.errors.email.message}
+          </p>
+        ) : null}
       </div>
 
       <div className="mt-4 space-y-2">
         <Label htmlFor="password">Password</Label>
         <Input
           id="password"
-          name="password"
           type="password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
+          {...form.register("password", {
+            onChange: () => form.clearErrors("root"),
+          })}
           autoComplete="current-password"
-          required
+          aria-invalid={Boolean(form.formState.errors.password)}
         />
+        {form.formState.errors.password ? (
+          <p className="text-sm text-destructive">
+            {form.formState.errors.password.message}
+          </p>
+        ) : null}
       </div>
 
-      {error ? (
+      {form.formState.errors.root ? (
         <p className="mt-4 rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm leading-5 text-destructive">
-          {error}
+          {form.formState.errors.root.message}
         </p>
       ) : null}
 
-      <Button type="submit" className="mt-6 h-10 w-full" disabled={isSubmitting}>
-        {isSubmitting ? (
+      <Button
+        type="submit"
+        className="mt-6 h-10 w-full"
+        disabled={form.formState.isSubmitting}
+      >
+        {form.formState.isSubmitting ? (
           <>
             <Loader2 className="animate-spin" aria-hidden="true" />
             Signing in

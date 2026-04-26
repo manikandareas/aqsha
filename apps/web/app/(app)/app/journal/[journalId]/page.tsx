@@ -1,4 +1,6 @@
-import { NavActions } from "@/components/nav-actions";
+import { notFound } from "next/navigation";
+import React from "react";
+
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -8,22 +10,22 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { JournalEditorScreen } from "@/features/journal/components/journal-editor-screen";
-import { JournalRecord } from "@/features/journal/lib/journals";
-import React from "react";
+import { JournalPageActions } from "@/features/journal/components/journal-page-actions";
+import {
+  normalizeJournalRecord,
+  type JournalRecord,
+} from "@/features/journal/lib/journals";
+import { createServerApiClient } from "@/lib/server-eden";
 
-function createMockJournal(journalId: string): JournalRecord {
-  return {
-    id: journalId,
-    title: "Untitled",
-    contentJson: [
-      {
-        type: "p",
-        children: [{ text: "" }],
-      },
-    ],
-    updatedAt: new Date().toISOString(),
-    type: "general",
-  };
+async function getJournal(journalId: string): Promise<JournalRecord> {
+  const api = await createServerApiClient();
+  const response = await api.journals({ id: journalId }).get();
+
+  if (response.error || !response.data) {
+    notFound();
+  }
+
+  return normalizeJournalRecord(response.data);
 }
 
 export default async function JournalPage({
@@ -32,8 +34,7 @@ export default async function JournalPage({
   params: Promise<{ journalId: string }>;
 }) {
   const { journalId } = await params;
-
-  const journal = createMockJournal(journalId);
+  const journal = await getJournal(journalId);
 
   return (
     <React.Fragment>
@@ -48,14 +49,14 @@ export default async function JournalPage({
             <BreadcrumbList>
               <BreadcrumbItem>
                 <BreadcrumbPage className="line-clamp-1">
-                  Project Management
+                  {journal.title}
                 </BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
         </div>
         <div className="ml-auto px-3">
-          <NavActions />
+          <JournalPageActions journal={journal} />
         </div>
       </header>
       <JournalEditorScreen journalId={journalId} initialJournal={journal} />
