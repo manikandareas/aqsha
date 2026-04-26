@@ -1,0 +1,12 @@
+{
+  "name": "landingpage-ngerti-in",
+  "main": "@astrojs/cloudflare/entrypoints/server",
+  "compatibility_date": "2025-01-15",
+  "compatibility_flags": [
+    "nodejs_compat_v2"
+  ],
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./dist"
+  }
+}
