@@ -1,0 +1,13 @@
+# robots.txt for ngerti.in
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://ngerti.in/sitemap-index.xml
+
+# Crawl-delay
+Crawl-delay: 10
+
+# Disallow specific paths (if needed in the future)
+# Disallow: /api/
+# Disallow: /admin/
