@@ -4,7 +4,7 @@ import unittest
 from io import StringIO
 from unittest.mock import patch
 
-from deep_research_agent.main import kickoff, route_user_intent
+from deep_research_agent.main import kickoff, route_user_intent, run_flow_stream
 from deep_research_agent.models import Message, RouterOutput
 
 
@@ -74,6 +74,42 @@ class RouteUserIntentTest(unittest.TestCase):
             kickoff({"user_message": "hello"})
 
         self.assertEqual(stdout.getvalue().strip(), "Final answer")
+
+    def test_run_flow_stream_falls_back_to_flow_state_when_result_not_ready(self) -> None:
+        class FakeStreamingOutput:
+            def __iter__(self):
+                return iter(())
+
+            @property
+            def result(self):
+                raise RuntimeError(
+                    "Streaming has not completed yet. "
+                    "Iterate over all chunks before accessing result."
+                )
+
+        class FakeFlow:
+            def __init__(self) -> None:
+                self.event_sink = None
+                self.stream = False
+                self.state = type(
+                    "State",
+                    (),
+                    {
+                        "response": "Recovered answer",
+                        "chat_response": None,
+                        "search_queries": [],
+                        "suggested_search_queries": [],
+                        "route_reasoning": None,
+                    },
+                )()
+
+            def kickoff(self, inputs=None):
+                return FakeStreamingOutput()
+
+        with patch("deep_research_agent.main.DeepResearchFlow", FakeFlow):
+            result = run_flow_stream({"user_message": "hello"})
+
+        self.assertEqual(result, {"response": "Recovered answer"})
 
 
 if __name__ == "__main__":

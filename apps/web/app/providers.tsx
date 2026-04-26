@@ -1,5 +1,7 @@
 "use client";
 
+import { CopilotKit } from "@copilotkit/react-core";
+
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
@@ -17,7 +19,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
       enableSystem
       disableTransitionOnChange
     >
-      <TooltipProvider>{children}</TooltipProvider>
+      <TooltipProvider>
+        <CopilotKit runtimeUrl="/api/copilotkit" agent="deep_research_agent">
+          {children}
+        </CopilotKit>
+      </TooltipProvider>
     </ThemeProvider>
   );
 }

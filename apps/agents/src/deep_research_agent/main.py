@@ -27,6 +27,7 @@ DEFAULT_MODEL = os.getenv("OPENAI_MODEL_NAME", "gpt-4.1-mini")
 CASUAL_CHAT_ROUTE = "casual_chat"
 SEARCH_ROUTE = "search"
 EventSink = Callable[[dict[str, Any]], None]
+ChunkSink = Callable[[dict[str, Any]], None]
 
 
 def normalize_flow_inputs(inputs: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -35,6 +36,15 @@ def normalize_flow_inputs(inputs: dict[str, Any] | None = None) -> dict[str, Any
 
     if conversation_id and "id" not in normalized:
         normalized["id"] = conversation_id
+
+    messages = normalized.get("messages")
+    if "user_message" not in normalized and isinstance(messages, list):
+        for message in reversed(messages):
+            if not isinstance(message, dict):
+                continue
+            if message.get("role") == "user" and message.get("content"):
+                normalized["user_message"] = str(message["content"])
+                break
 
     normalized.setdefault("depth_mode", "standard")
     return normalized
@@ -301,6 +311,10 @@ class DeepResearchFlow(Flow[ResearchFlowState]):
 
     def add_message(self, role: str, content: str) -> None:
         self.state.message_history.append(Message(role=role, content=content))
+        if role in {"user", "assistant"}:
+            message = {"role": role, "content": content}
+            if not self.state.messages or self.state.messages[-1] != message:
+                self.state.messages.append(message)
 
     @start()
     def starting_flow(
@@ -308,6 +322,15 @@ class DeepResearchFlow(Flow[ResearchFlowState]):
         user_message: str | None = None,
         depth_mode: str = "standard",
     ) -> str:
+        if not user_message:
+            normalized = normalize_flow_inputs(
+                {
+                    "messages": self.state.messages,
+                    "depth_mode": depth_mode,
+                }
+            )
+            user_message = normalized.get("user_message")
+
         if user_message:
             self.state.user_message = user_message
         self.state.depth_mode = "deep" if depth_mode == "deep" else "standard"
@@ -574,6 +597,69 @@ def run_flow(
     deep_research_flow.event_sink = event_sink
     normalized_inputs = normalize_flow_inputs(inputs)
     return deep_research_flow.kickoff(inputs=normalized_inputs)
+
+def run_flow_stream(
+    inputs: dict[str, Any] | None = None,
+    event_sink: EventSink | None = None,
+    chunk_sink: ChunkSink | None = None,
+) -> Any:
+    deep_research_flow = DeepResearchFlow()
+    deep_research_flow.event_sink = event_sink
+    deep_research_flow.stream = True
+    normalized_inputs = normalize_flow_inputs(inputs)
+    streaming_output = deep_research_flow.kickoff(inputs=normalized_inputs)
+
+    if not hasattr(streaming_output, "__iter__"):
+        return streaming_output
+
+    for chunk in streaming_output:
+        if chunk_sink is None:
+            continue
+
+        content = getattr(chunk, "content", "")
+        if not content:
+            continue
+
+        chunk_sink(
+            {
+                "content": content,
+                "chunk_type": getattr(
+                    getattr(chunk, "chunk_type", ""),
+                    "value",
+                    str(getattr(chunk, "chunk_type", "")),
+                ),
+                "task_index": getattr(chunk, "task_index", 0),
+                "task_name": getattr(chunk, "task_name", ""),
+                "task_id": getattr(chunk, "task_id", ""),
+                "agent_role": getattr(chunk, "agent_role", ""),
+                "agent_id": getattr(chunk, "agent_id", ""),
+            }
+        )
+
+    try:
+        return streaming_output.result
+    except RuntimeError as error:
+        if "Streaming has not completed yet" not in str(error) and (
+            "No result available" not in str(error)
+        ):
+            raise
+        return _result_from_flow_state(deep_research_flow)
+
+def _result_from_flow_state(flow: DeepResearchFlow) -> dict[str, Any]:
+    state = flow.state
+    result: dict[str, Any] = {}
+    if getattr(state, "response", None):
+        result["response"] = state.response
+    if getattr(state, "chat_response", None):
+        result["chat_response"] = state.chat_response
+    if getattr(state, "search_queries", None):
+        result["search_queries"] = state.search_queries
+    if getattr(state, "suggested_search_queries", None):
+        result["suggested_search_queries"] = state.suggested_search_queries
+    if getattr(state, "route_reasoning", None):
+        result["route_reasoning"] = state.route_reasoning
+
+    return result or {"response": ""}
 
 def kickoff(inputs: dict[str, Any] | None = None) -> None:
     result = run_flow(inputs)
