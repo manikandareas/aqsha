@@ -12,7 +12,8 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
+import { api } from "@/lib/eden";
 
 type ProgressEvent = {
   type: string;
@@ -29,6 +30,8 @@ type StreamChunk = {
 };
 
 type AgentState = {
+  userId?: string | null;
+  workspaceId?: string | null;
   status?: "running" | "completed" | "failed" | string;
   phase?: string;
   currentStep?: string;
@@ -49,6 +52,11 @@ type AgentState = {
   }>;
 };
 
+type AgentIdentity = {
+  userId: string;
+  workspaceId: string;
+};
+
 type StatusIconProps = {
   status?: string;
   className: string;
@@ -56,6 +64,48 @@ type StatusIconProps = {
 
 export default function CopilotKitPage() {
   const [themeColor, setThemeColor] = useState("#0075de");
+  const [agentIdentity, setAgentIdentity] = useState<AgentIdentity | null>(
+    null,
+  );
+  const [bootstrapStatus, setBootstrapStatus] = useState<
+    "loading" | "ready" | "unavailable"
+  >("loading");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadAgentIdentity() {
+      try {
+        const response = await api.session.bootstrap.get();
+        const bootstrap = response.data;
+
+        if (!isMounted) {
+          return;
+        }
+
+        if (response.error || !bootstrap) {
+          setBootstrapStatus("unavailable");
+          return;
+        }
+
+        setAgentIdentity({
+          userId: bootstrap.user.id,
+          workspaceId: bootstrap.workspace.id,
+        });
+        setBootstrapStatus("ready");
+      } catch {
+        if (isMounted) {
+          setBootstrapStatus("unavailable");
+        }
+      }
+    }
+
+    void loadAgentIdentity();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useCopilotAction({
     name: "setThemeColor",
@@ -77,6 +127,30 @@ export default function CopilotKitPage() {
         { "--copilot-kit-primary-color": themeColor } as CopilotKitCSSProperties
       }
     >
+      {bootstrapStatus === "loading" ? (
+        <DemoShell themeColor={themeColor}>
+          <div className="flex min-h-screen items-center justify-center px-4 text-white">
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm font-semibold">
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+              Loading workspace context
+            </div>
+          </div>
+        </DemoShell>
+      ) : null}
+
+      {bootstrapStatus === "unavailable" || !agentIdentity ? (
+        <DemoShell themeColor={themeColor}>
+          <div className="flex min-h-screen items-center justify-center px-4 text-center text-white">
+            <div className="rounded-xl bg-white/15 px-5 py-4">
+              <p className="text-sm font-semibold">
+                Sign in and complete workspace setup before running the agent.
+              </p>
+            </div>
+          </div>
+        </DemoShell>
+      ) : null}
+
+      {bootstrapStatus === "ready" && agentIdentity ? (
       <CopilotSidebar
         disableSystemMessage={true}
         clickOutsideToClose={false}
@@ -107,16 +181,45 @@ export default function CopilotKitPage() {
           },
         ]}
       >
-        <YourMainContent themeColor={themeColor} />
+        <YourMainContent
+          agentIdentity={agentIdentity}
+          themeColor={themeColor}
+        />
       </CopilotSidebar>
+      ) : null}
     </main>
   );
 }
 
-function YourMainContent({ themeColor }: { themeColor: string }) {
+function DemoShell({
+  children,
+  themeColor,
+}: {
+  children: ReactNode;
+  themeColor: string;
+}) {
+  return (
+    <div
+      style={{ backgroundColor: themeColor }}
+      className="min-h-screen transition-colors duration-300"
+    >
+      {children}
+    </div>
+  );
+}
+
+function YourMainContent({
+  agentIdentity,
+  themeColor,
+}: {
+  agentIdentity: AgentIdentity;
+  themeColor: string;
+}) {
   const { state } = useCoAgent<AgentState>({
     name: "deep_research_agent",
     initialState: {
+      userId: agentIdentity.userId,
+      workspaceId: agentIdentity.workspaceId,
       response: null,
       chat_response: null,
       streamedResponse: "",

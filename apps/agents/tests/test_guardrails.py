@@ -22,6 +22,7 @@ from deep_research_agent.models import (
     RouterOutput,
     SupportedClaim,
 )
+from deep_research_agent.persistence import json_safe
 from deep_research_agent.tools.source_tools import (
     SourceDedupeTool,
     dedupe_sources,
@@ -30,6 +31,12 @@ from deep_research_agent.tools.source_tools import (
 
 
 class ResearchGuardrailsTest(unittest.TestCase):
+    def test_json_safe_serializes_pydantic_model_classes(self) -> None:
+        payload = json_safe({"model": ResearchPlan})
+
+        self.assertIsInstance(payload["model"], str)
+        self.assertIn("ResearchPlan", payload["model"])
+
     def test_citation_guardrail_rejects_unknown_evidence(self) -> None:
         batch = ResearchBatch(
             evidence_items=[

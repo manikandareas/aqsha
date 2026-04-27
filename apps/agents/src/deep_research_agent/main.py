@@ -408,6 +408,13 @@ class DeepResearchFlow(Flow[ResearchFlowState]):
                 title="Research plan ready",
                 data=plan.model_dump(),
             )
+            self.emit_event(
+                "planning.output",
+                status="completed",
+                title="Research plan output",
+                visibility="internal",
+                data=plan.model_dump(),
+            )
             review: EvidenceReview | None = None
             batch: ResearchBatch | None = None
             max_iterations = 5 if self.state.depth_mode == "deep" else 3
@@ -466,6 +473,20 @@ class DeepResearchFlow(Flow[ResearchFlowState]):
                         "nextQueries": review.next_queries,
                     },
                 )
+                self.emit_event(
+                    "research_batch.output",
+                    status="completed",
+                    title="Research batch output",
+                    visibility="internal",
+                    data=batch.model_dump(),
+                )
+                self.emit_event(
+                    "evidence_review.output",
+                    status="completed",
+                    title="Evidence review output",
+                    visibility="internal",
+                    data=review.model_dump(),
+                )
 
                 if review.evidence_sufficient:
                     break
@@ -501,6 +522,13 @@ class DeepResearchFlow(Flow[ResearchFlowState]):
                     "sourceEvidenceIds": answer.source_evidence_ids,
                 },
             )
+            self.emit_event(
+                "research_answer.output",
+                status="completed",
+                title="Research answer output",
+                visibility="internal",
+                data=answer.model_dump(),
+            )
             self.emit_event("citation_audit.started", title="Auditing citations")
             validation = validate_research_answer(answer, batch, review)
             self.emit_event(
@@ -527,6 +555,13 @@ class DeepResearchFlow(Flow[ResearchFlowState]):
                         "claimCount": len(answer.claim_ids_used),
                         "sourceEvidenceIds": answer.source_evidence_ids,
                     },
+                )
+                self.emit_event(
+                    "research_answer.output",
+                    status="completed",
+                    title="Revised research answer output",
+                    visibility="internal",
+                    data=answer.model_dump(),
                 )
                 self.emit_event("citation_audit.started", title="Auditing citations")
                 validation = validate_research_answer(answer, batch, review)
