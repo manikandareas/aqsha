@@ -3,7 +3,7 @@ import {
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from "@/components/ui/accordion";
+} from "@aqsha/ui/components/accordion";
 
 export const FAQ = () => {
   const faqs = [

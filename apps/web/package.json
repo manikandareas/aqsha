@@ -14,6 +14,7 @@
     "@ai-sdk/react": "^3.0.163",
     "@aqsha/api": "workspace:*",
     "@aqsha/shared": "workspace:*",
+    "@aqsha/ui": "workspace:*",
     "@ariakit/react": "^0.4.25",
     "@base-ui/react": "^1.4.1",
     "@copilotkit/react-core": "1.50.0",

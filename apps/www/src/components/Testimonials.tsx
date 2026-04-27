@@ -1,4 +1,4 @@
-import { Card } from "@/components/ui/card";
+import { Card } from "@aqsha/ui/components/card";
 import { Quote } from "lucide-react";
 import { MotionSection } from "@/components/motion-reveal";
 

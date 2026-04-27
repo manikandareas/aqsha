@@ -1,4 +1,4 @@
-import { Card } from "@/components/ui/card";
+import { Card } from "@aqsha/ui/components/card";
 import { MotionItem, MotionSection } from "@/components/motion-reveal";
 
 interface FeatureCardProps {

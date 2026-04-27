@@ -1,5 +1,5 @@
 import * as React from "react";
-import { motion, useReducedMotion, type Variants } from "motion/react";
+import { motion, useReducedMotion, type HTMLMotionProps, type Variants } from "motion/react";
 import { cn } from "@/lib/utils";
 
 type SectionMotion =
@@ -77,7 +77,7 @@ const makeItemVariants = (kind: ItemMotion): Variants => ({
   },
 });
 
-type MotionSectionProps = React.ComponentPropsWithoutRef<"section"> & {
+type MotionSectionProps = HTMLMotionProps<"section"> & {
   kind: SectionMotion;
 };
 
@@ -104,7 +104,7 @@ export const MotionSection = ({
   );
 };
 
-type MotionItemProps = React.ComponentPropsWithoutRef<"div"> & {
+type MotionItemProps = HTMLMotionProps<"div"> & {
   kind: ItemMotion;
 };
 

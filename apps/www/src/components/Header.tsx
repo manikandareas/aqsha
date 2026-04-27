@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@aqsha/ui/components/button";
 import { ModeToggle } from "@/components/ModeToggle";
 import { LogoWithText } from "./ui/logo";
 import { signInUrl } from "@/lib/urls";

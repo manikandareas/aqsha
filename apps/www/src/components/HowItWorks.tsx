@@ -1,6 +1,6 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@aqsha/ui/components/button";
 import { ArrowRight, FileText, Wand2, BarChart3 } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { Card } from "@aqsha/ui/components/card";
 import { signInUrl } from "@/lib/urls";
 import { MotionItem, MotionSection } from "@/components/motion-reveal";
 

@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@aqsha/ui/components/button";
 import { Check, X, ArrowRight } from "lucide-react";
 import { signInUrl } from "@/lib/urls";
 import { MotionItem, MotionSection } from "@/components/motion-reveal";

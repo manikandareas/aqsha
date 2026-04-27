@@ -1,0 +1,232 @@
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  /* Semantic color aliases */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Font families */
+  --font-sans:
+    var(--font-geist-sans, "Geist Variable"), Inter, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono:
+    var(--font-geist-mono, "Geist Mono Variable"), "SFMono-Regular", Consolas,
+    "Liberation Mono", monospace;
+  --font-heading: var(--font-sans);
+  --font-handwriting: "Fuzzy Bubbles", var(--font-sans);
+
+  /* Notion typography scale */
+  --font-size-display: 4rem;
+  --font-size-display-2: 3.375rem;
+  --font-size-h1: 3rem;
+  --font-size-h2: 2.5rem;
+  --font-size-h3: 1.625rem;
+  --font-size-card-title: 1.375rem;
+  --font-size-body-lg: 1.25rem;
+  --font-size-nav: 0.9375rem;
+  --font-size-caption: 0.875rem;
+  --font-size-badge: 0.75rem;
+
+  --text-display: var(--font-size-display);
+  --text-display-2: var(--font-size-display-2);
+  --text-h1: var(--font-size-h1);
+  --text-h2: var(--font-size-h2);
+  --text-h3: var(--font-size-h3);
+  --text-card-title: var(--font-size-card-title);
+  --text-body-lg: var(--font-size-body-lg);
+  --text-nav: var(--font-size-nav);
+  --text-caption: var(--font-size-caption);
+  --text-badge: var(--font-size-badge);
+
+  --tracking-display: -2.125px;
+  --tracking-display-2: -1.875px;
+  --tracking-h1: -1.5px;
+  --tracking-h3: -0.625px;
+  --tracking-card-title: -0.25px;
+  --tracking-body-lg: -0.125px;
+  --tracking-badge: 0.125px;
+
+  /* Notion multi-layer shadow system */
+  --shadow-soft-card:
+    rgba(0, 0, 0, 0.04) 0px 4px 18px,
+    rgba(0, 0, 0, 0.027) 0px 2.025px 7.84688px,
+    rgba(0, 0, 0, 0.02) 0px 0.8px 2.925px,
+    rgba(0, 0, 0, 0.01) 0px 0.175px 1.04062px;
+  --shadow-deep-card:
+    rgba(0, 0, 0, 0.01) 0px 1px 3px, rgba(0, 0, 0, 0.02) 0px 3px 7px,
+    rgba(0, 0, 0, 0.02) 0px 7px 15px, rgba(0, 0, 0, 0.04) 0px 14px 28px,
+    rgba(0, 0, 0, 0.05) 0px 23px 52px;
+  --shadow-sm: var(--shadow-soft-card);
+  --shadow-md: var(--shadow-soft-card);
+  --shadow-lg: var(--shadow-deep-card);
+  --shadow-xl: var(--shadow-deep-card);
+
+  /* Aqsha Notion-inspired brand palette */
+  --color-notion-blue: #0075de;
+  --color-notion-active-blue: #005bab;
+  --color-notion-focus-blue: #097fe8;
+  --color-notion-link-light-blue: #62aef0;
+  --color-notion-navy: #213183;
+  --color-notion-warm-white: #f6f5f4;
+  --color-notion-warm-dark: #31302e;
+  --color-notion-gray-500: #615d59;
+  --color-notion-gray-300: #a39e98;
+  --color-notion-teal: #2a9d99;
+  --color-notion-green: #1aae39;
+  --color-notion-orange: #dd5b00;
+  --color-notion-pink: #ff64c8;
+  --color-notion-purple: #391c57;
+  --color-notion-brown: #523410;
+
+  --color-badge-bg: var(--badge-bg);
+  --color-badge-foreground: var(--badge-foreground);
+  --color-base-content: var(--foreground);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --radius-sm: 4px;
+  --radius-md: 5px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-3xl: 24px;
+  --radius-4xl: 9999px;
+}
+
+:root {
+  --background: #ffffff;
+  --foreground: rgba(0, 0, 0, 0.95);
+  --card: #ffffff;
+  --card-foreground: rgba(0, 0, 0, 0.95);
+  --popover: #ffffff;
+  --popover-foreground: rgba(0, 0, 0, 0.95);
+  --primary: #0075de;
+  --primary-foreground: #ffffff;
+  --secondary: rgba(0, 0, 0, 0.05);
+  --secondary-foreground: rgba(0, 0, 0, 0.95);
+  --muted: #f6f5f4;
+  --muted-foreground: #615d59;
+  --accent: #f6f5f4;
+  --accent-foreground: rgba(0, 0, 0, 0.95);
+  --destructive: #dd5b00;
+  --destructive-foreground: #ffffff;
+  --border: rgba(0, 0, 0, 0.1);
+  --input: #dddddd;
+  --ring: #097fe8;
+  --badge-bg: #f2f9ff;
+  --badge-foreground: #097fe8;
+  --chart-1: #0075de;
+  --chart-2: #2a9d99;
+  --chart-3: #dd5b00;
+  --chart-4: #ff64c8;
+  --chart-5: #391c57;
+  --sidebar: #f6f5f4;
+  --sidebar-foreground: rgba(0, 0, 0, 0.95);
+  --sidebar-primary: #0075de;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(0, 0, 0, 0.05);
+  --sidebar-accent-foreground: rgba(0, 0, 0, 0.95);
+  --sidebar-border: rgba(0, 0, 0, 0.1);
+  --sidebar-ring: #097fe8;
+}
+
+.dark {
+  --background: #191817;
+  --foreground: #f6f5f4;
+  --card: #1f1e1c;
+  --card-foreground: #f6f5f4;
+  --popover: #1f1e1c;
+  --popover-foreground: #f6f5f4;
+  --primary: #62aef0;
+  --primary-foreground: #191817;
+  --secondary: rgba(255, 255, 255, 0.08);
+  --secondary-foreground: #f6f5f4;
+  --muted: #31302e;
+  --muted-foreground: #a39e98;
+  --accent: rgba(255, 255, 255, 0.08);
+  --accent-foreground: #f6f5f4;
+  --destructive: #f07340;
+  --destructive-foreground: #191817;
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.12);
+  --ring: #62aef0;
+  --badge-bg: rgba(9, 127, 232, 0.18);
+  --badge-foreground: #62aef0;
+  --chart-1: #62aef0;
+  --chart-2: #2a9d99;
+  --chart-3: #f07340;
+  --chart-4: #ff64c8;
+  --chart-5: #8b5cf6;
+  --sidebar: #191817;
+  --sidebar-foreground: #f6f5f4;
+  --sidebar-primary: #62aef0;
+  --sidebar-primary-foreground: #191817;
+  --sidebar-accent: rgba(255, 255, 255, 0.08);
+  --sidebar-accent-foreground: #f6f5f4;
+  --sidebar-border: rgba(255, 255, 255, 0.1);
+  --sidebar-ring: #62aef0;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply font-sans;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  h1 {
+    font-size: var(--font-size-h1);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: var(--tracking-h1);
+  }
+
+  h2 {
+    font-size: var(--font-size-h2);
+    font-weight: 700;
+    line-height: 1.5;
+  }
+
+  h3 {
+    font-size: var(--font-size-h3);
+    font-weight: 700;
+    line-height: 1.23;
+    letter-spacing: var(--tracking-h3);
+  }
+}

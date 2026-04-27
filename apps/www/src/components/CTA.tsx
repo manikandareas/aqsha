@@ -1,5 +1,5 @@
-import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@aqsha/ui/components/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@aqsha/ui/components/avatar";
 import { signInUrl } from "@/lib/urls";
 
 export const CTA = () => {

@@ -1,6 +1,6 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@aqsha/ui/components/button";
 import { Play } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@aqsha/ui/components/badge";
 import { MotionSection } from "@/components/motion-reveal";
 
 export const Changelog = () => {

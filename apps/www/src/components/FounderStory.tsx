@@ -1,4 +1,4 @@
-import { Card } from "@/components/ui/card";
+import { Card } from "@aqsha/ui/components/card";
 import { Image } from "astro:assets";
 import { MotionItem, MotionSection } from "@/components/motion-reveal";
 
