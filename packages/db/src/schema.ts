@@ -69,6 +69,36 @@ export const agentEventStatuses = [
   "failed",
 ] as const;
 export const agentEventVisibilities = ["public", "internal"] as const;
+export const agentEventSources = [
+  "api",
+  "flow",
+  "crewai_event_bus",
+  "llm_hook",
+  "tool_hook",
+  "ag_ui",
+  "system",
+] as const;
+export const agentEventScopes = [
+  "run",
+  "flow",
+  "crew",
+  "task",
+  "agent",
+  "tool",
+  "mcp",
+  "llm",
+  "message",
+  "stream",
+  "error",
+] as const;
+export const agentRunOutputKinds = [
+  "research_plan",
+  "research_batch",
+  "evidence_review",
+  "research_answer",
+  "final_response",
+  "error",
+] as const;
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue =
@@ -596,12 +626,24 @@ export const agentEvents = pgTable(
       .references(() => workspaces.id, { onDelete: "cascade" }),
     sequence: integer("sequence").notNull(),
     type: text("type").notNull(),
+    source: text("source", { enum: agentEventSources }).default("flow").notNull(),
+    rawType: text("raw_type"),
+    scope: text("scope", { enum: agentEventScopes }).default("run").notNull(),
     status: text("status", { enum: agentEventStatuses }).notNull(),
     title: text("title").notNull(),
     visibility: text("visibility", { enum: agentEventVisibilities })
       .default("public")
       .notNull(),
+    stepName: text("step_name"),
+    agentRole: text("agent_role"),
+    taskName: text("task_name"),
+    toolName: text("tool_name"),
+    parentEventId: uuid("parent_event_id"),
     payload: jsonb("payload").$type<JsonValue>(),
+    rawPayload: jsonb("raw_payload").$type<JsonValue>(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
     createdAt: createdAtColumn(),
   },
   (table) => [
@@ -613,8 +655,50 @@ export const agentEvents = pgTable(
       "agent_events_visibility_check",
       sql`${table.visibility} in ('public', 'internal')`,
     ),
+    check(
+      "agent_events_source_check",
+      sql`${table.source} in ('api', 'flow', 'crewai_event_bus', 'llm_hook', 'tool_hook', 'ag_ui', 'system')`,
+    ),
+    check(
+      "agent_events_scope_check",
+      sql`${table.scope} in ('run', 'flow', 'crew', 'task', 'agent', 'tool', 'mcp', 'llm', 'message', 'stream', 'error')`,
+    ),
     unique("agent_events_run_sequence_unique").on(table.runId, table.sequence),
     index("agent_events_thread_created_idx").on(
+      table.threadId,
+      table.createdAt,
+    ),
+    index("agent_events_run_occurred_idx").on(table.runId, table.occurredAt),
+    index("agent_events_type_idx").on(table.type),
+    index("agent_events_scope_idx").on(table.scope),
+  ],
+);
+
+export const agentRunOutputs = pgTable(
+  "agent_run_outputs",
+  {
+    id: idColumn("id"),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => agentRuns.id, { onDelete: "cascade" }),
+    threadId: uuid("thread_id")
+      .notNull()
+      .references(() => agentThreads.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: agentRunOutputKinds }).notNull(),
+    version: integer("version").default(1).notNull(),
+    payload: jsonb("payload").$type<JsonValue>().notNull(),
+    createdAt: createdAtColumn(),
+  },
+  (table) => [
+    check(
+      "agent_run_outputs_kind_check",
+      sql`${table.kind} in ('research_plan', 'research_batch', 'evidence_review', 'research_answer', 'final_response', 'error')`,
+    ),
+    index("agent_run_outputs_run_kind_idx").on(table.runId, table.kind),
+    index("agent_run_outputs_thread_created_idx").on(
       table.threadId,
       table.createdAt,
     ),
@@ -638,6 +722,7 @@ export const table = {
   agentMessages,
   agentRuns,
   agentEvents,
+  agentRunOutputs,
 } as const;
 
 export type Table = typeof table;

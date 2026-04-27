@@ -16,6 +16,7 @@ const _insertAgentThreads = createInsertSchema(table.agentThreads);
 const _insertAgentMessages = createInsertSchema(table.agentMessages);
 const _insertAgentRuns = createInsertSchema(table.agentRuns);
 const _insertAgentEvents = createInsertSchema(table.agentEvents);
+const _insertAgentRunOutputs = createInsertSchema(table.agentRunOutputs);
 
 const _selectUsers = createSelectSchema(table.users);
 const _selectSessions = createSelectSchema(table.sessions);
@@ -31,6 +32,7 @@ const _selectAgentThreads = createSelectSchema(table.agentThreads);
 const _selectAgentMessages = createSelectSchema(table.agentMessages);
 const _selectAgentRuns = createSelectSchema(table.agentRuns);
 const _selectAgentEvents = createSelectSchema(table.agentEvents);
+const _selectAgentRunOutputs = createSelectSchema(table.agentRunOutputs);
 
 export const dbModel = {
   insert: spreads({
@@ -48,6 +50,7 @@ export const dbModel = {
     agentMessages: _insertAgentMessages,
     agentRuns: _insertAgentRuns,
     agentEvents: _insertAgentEvents,
+    agentRunOutputs: _insertAgentRunOutputs,
   }),
   select: spreads({
     users: _selectUsers,
@@ -64,5 +67,6 @@ export const dbModel = {
     agentMessages: _selectAgentMessages,
     agentRuns: _selectAgentRuns,
     agentEvents: _selectAgentEvents,
+    agentRunOutputs: _selectAgentRunOutputs,
   }),
 } as const;

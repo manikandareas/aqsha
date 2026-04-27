@@ -4,6 +4,7 @@ import importlib.util
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,6 +13,11 @@ assert spec is not None
 assert spec.loader is not None
 main = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(main)
+
+
+@pytest.fixture(autouse=True)
+def disable_database_persistence(monkeypatch) -> None:
+    monkeypatch.setenv("AGENTS_PERSISTENCE_DISABLED", "1")
 
 
 def agent_request_payload() -> dict[str, Any]:

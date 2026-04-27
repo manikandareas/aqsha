@@ -25,9 +25,16 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
 
+from deep_research_agent.crewai_event_listener import install_agent_event_listener
 from deep_research_agent.main import normalize_flow_inputs, run_flow_stream
+from deep_research_agent.persistence import (
+    agent_persistence_context,
+    create_agent_persistence,
+    json_safe,
+)
 
 load_dotenv()
+install_agent_event_listener()
 
 app = FastAPI()
 MAX_PROGRESS_ITEMS = 80
@@ -115,6 +122,57 @@ def _prepare_inputs(input_data: RunAgentInput) -> dict[str, Any]:
 
     return inputs
 
+def _extract_request_ids(input_data: RunAgentInput) -> tuple[str | None, str | None]:
+    state = input_data.state if isinstance(input_data.state, dict) else {}
+    forwarded_props = (
+        input_data.forwarded_props
+        if isinstance(input_data.forwarded_props, dict)
+        else {}
+    )
+
+    user_id = _first_metadata_value(
+        [state, forwarded_props],
+        ["user_id", "userId", "user.id"],
+    )
+    workspace_id = _first_metadata_value(
+        [state, forwarded_props],
+        ["workspace_id", "workspaceId", "workspace.id"],
+    )
+
+    return user_id, workspace_id
+
+def _first_metadata_value(
+    sources: list[dict[str, Any]],
+    keys: list[str],
+) -> str | None:
+    for source in sources:
+        for key in keys:
+            value = _metadata_value(source, key)
+            if isinstance(value, str) and value:
+                return value
+    return None
+
+def _metadata_value(source: dict[str, Any], key: str) -> Any:
+    current: Any = source
+    for part in key.split("."):
+        if not isinstance(current, dict):
+            return None
+        current = current.get(part)
+    return current
+
+def _request_payload(input_data: RunAgentInput, inputs: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "threadId": input_data.thread_id,
+        "runId": input_data.run_id,
+        "parentRunId": input_data.parent_run_id,
+        "state": json_safe(input_data.state),
+        "messages": _serialize_chat_messages(input_data),
+        "toolCount": len(input_data.tools),
+        "context": json_safe(input_data.context),
+        "forwardedProps": json_safe(input_data.forwarded_props),
+        "normalizedInputs": json_safe(inputs),
+    }
+
 
 def _encode_state(encoder: EventEncoder, progress_state: dict[str, Any]) -> str:
     return encoder.encode(
@@ -155,70 +213,92 @@ async def agentic_chat_endpoint(input_data: RunAgentInput, request: Request):
         queue: asyncio.Queue[Any] = asyncio.Queue()
         message_id = str(uuid.uuid4())
         progress_state = _initial_progress_state()
+        inputs = _prepare_inputs(input_data)
+        if inputs.get("userId"):
+            progress_state["userId"] = inputs["userId"]
+        if inputs.get("workspaceId"):
+            progress_state["workspaceId"] = inputs["workspaceId"]
+        user_id, workspace_id = _extract_request_ids(input_data)
+        persistence = create_agent_persistence(
+            thread_id=input_data.thread_id,
+            run_id=input_data.run_id,
+            user_id=user_id,
+            workspace_id=workspace_id,
+        )
 
         def put(item: Any) -> None:
             loop.call_soon_threadsafe(queue.put_nowait, item)
 
         def event_sink(event: dict[str, Any]) -> None:
+            persistence.record_event(event, source="flow")
+            if event.get("visibility") == "internal":
+                return
             put({"kind": "flow_event", "event": event})
 
         def chunk_sink(chunk: dict[str, Any]) -> None:
+            persistence.record_chunk(chunk)
             put({"kind": "flow_chunk", "chunk": chunk})
 
         def run_agent() -> Any:
-            return run_flow_stream(
-                _prepare_inputs(input_data),
-                event_sink=event_sink,
-                chunk_sink=chunk_sink,
-            )
-
-        task = asyncio.create_task(asyncio.to_thread(run_agent))
-
-        yield encoder.encode(
-            RunStartedEvent(
-                type=EventType.RUN_STARTED,
-                thread_id=input_data.thread_id,
-                run_id=input_data.run_id,
-            )
-        )
-        yield encoder.encode(
-            StepStartedEvent(type=EventType.STEP_STARTED, step_name=AGENT_STEP_NAME)
-        )
-        yield encoder.encode(
-            TextMessageStartEvent(
-                type=EventType.TEXT_MESSAGE_START,
-                message_id=message_id,
-                role="assistant",
-            )
-        )
-        yield _encode_state(encoder, progress_state)
-
-        while not task.done():
-            try:
-                item = await asyncio.wait_for(
-                    queue.get(),
-                    timeout=STREAM_TIMEOUT_SECONDS,
+            with agent_persistence_context(persistence):
+                return run_flow_stream(
+                    inputs,
+                    event_sink=event_sink,
+                    chunk_sink=chunk_sink,
                 )
-            except asyncio.TimeoutError:
-                continue
-            for encoded_event in _encode_stream_item(
-                encoder=encoder,
-                item=item,
-                progress_state=progress_state,
-                message_id=message_id,
-            ):
-                yield encoded_event
-
-        while not queue.empty():
-            for encoded_event in _encode_stream_item(
-                encoder=encoder,
-                item=queue.get_nowait(),
-                progress_state=progress_state,
-                message_id=message_id,
-            ):
-                yield encoded_event
 
         try:
+            yield encoder.encode(
+                RunStartedEvent(
+                    type=EventType.RUN_STARTED,
+                    thread_id=input_data.thread_id,
+                    run_id=input_data.run_id,
+                )
+            )
+            yield encoder.encode(
+                StepStartedEvent(type=EventType.STEP_STARTED, step_name=AGENT_STEP_NAME)
+            )
+            yield encoder.encode(
+                TextMessageStartEvent(
+                    type=EventType.TEXT_MESSAGE_START,
+                    message_id=message_id,
+                    role="assistant",
+                )
+            )
+            yield _encode_state(encoder, progress_state)
+
+            persistence.start(
+                user_message=str(inputs.get("user_message") or ""),
+                depth_mode=str(inputs.get("depth_mode") or "standard"),
+                request_payload=_request_payload(input_data, inputs),
+            )
+            task = asyncio.create_task(asyncio.to_thread(run_agent))
+
+            while not task.done():
+                try:
+                    item = await asyncio.wait_for(
+                        queue.get(),
+                        timeout=STREAM_TIMEOUT_SECONDS,
+                    )
+                except asyncio.TimeoutError:
+                    continue
+                for encoded_event in _encode_stream_item(
+                    encoder=encoder,
+                    item=item,
+                    progress_state=progress_state,
+                    message_id=message_id,
+                ):
+                    yield encoded_event
+
+            while not queue.empty():
+                for encoded_event in _encode_stream_item(
+                    encoder=encoder,
+                    item=queue.get_nowait(),
+                    progress_state=progress_state,
+                    message_id=message_id,
+                ):
+                    yield encoded_event
+
             result = task.result()
             text = ""
             if isinstance(result, dict):
@@ -243,6 +323,7 @@ async def agentic_chat_endpoint(input_data: RunAgentInput, request: Request):
                     {"id": message_id, "role": "assistant", "content": text},
                 ]
 
+            persistence.complete(result, assistant_message=text or None)
             progress_state["status"] = "completed"
             progress_state["phase"] = "completed"
             progress_state["currentStep"] = "Research completed"
@@ -263,6 +344,10 @@ async def agentic_chat_endpoint(input_data: RunAgentInput, request: Request):
                 )
             )
         except Exception as error:
+            try:
+                persistence.fail(error)
+            except Exception:
+                pass
             progress_state["status"] = "failed"
             progress_state["phase"] = "failed"
             progress_state["currentStep"] = "Research failed"
@@ -281,6 +366,8 @@ async def agentic_chat_endpoint(input_data: RunAgentInput, request: Request):
                     code=error.__class__.__name__,
                 )
             )
+        finally:
+            persistence.close()
 
     return StreamingResponse(stream(), media_type=encoder.get_content_type())
 
@@ -295,6 +382,8 @@ def _encode_stream_item(
     kind = item.get("kind")
     if kind == "flow_event":
         event = item["event"]
+        if event.get("visibility") == "internal":
+            return []
         _apply_flow_event(progress_state, event)
         return [
             encoder.encode(

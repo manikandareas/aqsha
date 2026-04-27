@@ -39,7 +39,12 @@ Create a `.env` file in the project root:
 ```bash
 OPENAI_API_KEY=your_openai_api_key
 EXA_API_KEY=your_exa_api_key
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/aqsha
 ```
+
+`DATABASE_URL` is optional for local experiments. When present, the FastAPI
+AG-UI endpoint persists every run to Postgres. New threads also require
+`userId` and `workspaceId` in either AG-UI `state` or `forwardedProps`.
 
 ## Running Locally
 
@@ -126,6 +131,9 @@ Heroku picks up `.python-version` and `pyproject.toml` automatically — uv hand
 - **Web-only source mode** — Qdrant/Turso academic retrieval is intentionally disabled until that corpus is ready to support reliable research answers
 - **Mandatory citations** — every factual claim must have inline evidence ids and deterministic source metadata
 - **`gpt-4.1-mini`** — used for both routing (temperature 0.1) and research (temperature 0.2)
+- **Postgres event ledger** — `agent_messages` stores the canonical transcript,
+  while `agent_events` stores append-only raw Flow, CrewAI, LLM, tool, stream,
+  and API lifecycle events. `@persist()` remains only for CrewAI Flow recovery.
 
 ### Project Structure
 
