@@ -11,7 +11,10 @@ const serviceAdapter = new ExperimentalEmptyAdapter();
 const runtime = new CopilotRuntime({
   agents: {
     deep_research_agent: new HttpAgent({
-      url: process.env.AGENTS_RUNTIME_URL ?? "http://localhost:8000/",
+      url:
+        process.env.AGENTS_API_URL ??
+        process.env.AGENTS_RUNTIME_URL ??
+        "http://localhost:8000/",
     }),
   },
 });
