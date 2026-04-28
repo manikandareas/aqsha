@@ -1,7 +1,8 @@
 "use client";
 
-import * as React from "react";
+import { ImageIcon, MessageSquareIcon } from "lucide-react";
 import type { Value } from "platejs";
+import * as React from "react";
 
 import { PlateAiEditor } from "@/features/journal/editor/editor/plate-ai-editor";
 import type { JournalRecord } from "../lib/journals";
@@ -21,26 +22,58 @@ export function WorkspacePlateJournalEditor({
     title,
   } = useJournalAutosave({ journal });
 
+  const [showCoverHint, setShowCoverHint] = React.useState(false);
+
   const header = (
-    <div className="shrink-0 pt-6">
-      <div className="mb-3 flex justify-end px-6 md:px-12">
-        <span
-          className="rounded-full border border-border/60 bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground"
-          data-status={saveStatus}
+    <div className="shrink-0 w-full">
+      {/* Page emoji / icon area */}
+      <div
+        className="group px-6 pt-10 pb-1 md:px-12"
+        onMouseEnter={() => setShowCoverHint(true)}
+        onMouseLeave={() => setShowCoverHint(false)}
+      >
+        {/* Journal emoji icon */}
+        <div className="mb-4 text-5xl select-none leading-none" aria-hidden>
+          📓
+        </div>
+
+        {/* Ghost action buttons — visible on hover */}
+        <div
+          className={`flex items-center gap-3 mb-4 transition-opacity duration-150 ${
+            showCoverHint ? "opacity-100" : "opacity-0"
+          }`}
+          aria-hidden={!showCoverHint}
         >
-          {saveStatusLabel}
-        </span>
+          <button
+            type="button"
+            className="flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ImageIcon className="h-3.5 w-3.5 shrink-0" />
+            Add cover
+          </button>
+          <button
+            type="button"
+            className="flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <MessageSquareIcon className="h-3.5 w-3.5 shrink-0" />
+            Add comment
+          </button>
+        </div>
       </div>
-      <input
-        aria-label="Journal title"
-        className="w-full bg-transparent px-6 text-4xl leading-tight font-bold tracking-tight text-foreground outline-none placeholder:text-muted-foreground/50 md:px-12"
-        onChange={(event) => {
-          handleTitleChange(event.target.value);
-        }}
-        placeholder="Untitled"
-        spellCheck={false}
-        value={title}
-      />
+
+      {/* Title input */}
+      <div className="relative px-6 md:px-12">
+        <input
+          aria-label="Journal title"
+          className="w-full bg-transparent text-[2.25rem] leading-[1.2] font-bold tracking-tight text-foreground outline-none placeholder:text-muted-foreground/40 md:text-[2.5rem]"
+          onChange={(event) => {
+            handleTitleChange(event.target.value);
+          }}
+          placeholder="Untitled"
+          spellCheck={false}
+          value={title}
+        />
+      </div>
     </div>
   );
 
@@ -49,7 +82,7 @@ export function WorkspacePlateJournalEditor({
   ]) as Value;
 
   return (
-    <div className="relative min-h-0 max-w-4xl mx-auto flex-1 pb-28 md:pb-32 lg:pb-36 py-6 md:py-12">
+    <div className="relative min-h-0 max-w-4xl mx-auto flex-1 pb-28 md:pb-32 lg:pb-36">
       <PlateAiEditor
         editorClassName="min-h-[420px] [&_[data-slate-editor]]:min-h-[420px]"
         editorId={journal.id}

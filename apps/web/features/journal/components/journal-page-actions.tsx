@@ -130,9 +130,6 @@ export function JournalPageActions({ journal }: { journal: JournalRecord }) {
 
   return (
     <div className="flex items-center gap-2 text-sm">
-      <div className="hidden font-medium text-muted-foreground md:inline-block">
-        {formatUpdatedAt(journal.updatedAt)}
-      </div>
       <DropdownMenu>
         <DropdownMenuTrigger
           render={

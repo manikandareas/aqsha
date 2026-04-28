@@ -42,6 +42,7 @@ import {
   ArrowUpRightIcon,
   PlusIcon,
   Loader2Icon,
+  FileTextIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import * as React from "react";
@@ -224,21 +225,22 @@ export function NavJournal() {
         ) : null}
         {!isLoading && journals.length === 0 ? (
           <SidebarMenuItem>
-            <SidebarMenuButton disabled className="text-sidebar-foreground/70">
-              <span>Journal</span>
-              <span>No journals yet</span>
+            <SidebarMenuButton
+              disabled
+              className="cursor-default text-sidebar-foreground/40"
+            >
+              <span className="text-[13px]">No journals yet</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         ) : null}
         {journals.map((item) => (
           <SidebarMenuItem key={item.id}>
             <SidebarMenuButton
-              render={
-                <a href={`/app/journal/${item.id}`} title={item.title} />
-              }
+              render={<a href={`/app/journal/${item.id}`} title={item.title} />}
+              className="h-8 text-[13px] font-medium"
             >
-              <span>📄</span>
-              <span>{item.title}</span>
+              <FileTextIcon className="h-[14px] w-[14px] shrink-0 text-sidebar-foreground/45" />
+              <span className="truncate">{item.title}</span>
             </SidebarMenuButton>
             <DropdownMenu>
               <DropdownMenuTrigger
@@ -284,12 +286,6 @@ export function NavJournal() {
             </DropdownMenu>
           </SidebarMenuItem>
         ))}
-        <SidebarMenuItem>
-          <SidebarMenuButton className="text-sidebar-foreground/70">
-            <MoreHorizontalIcon />
-            <span>More</span>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
       </SidebarMenu>
     </SidebarGroup>
   );
