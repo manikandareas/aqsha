@@ -6,3 +6,5 @@ coverage
 *.log
 apps/api/.env
 apps/api/.env.local
+apps/agents/.env
+apps/agents/.venv
