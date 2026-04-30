@@ -98,7 +98,7 @@ export function GetStartedForm() {
           {...form.register("workspaceName", {
             onChange: () => form.clearErrors("root"),
           })}
-          placeholder="ASMobbin"
+          placeholder="Manik's Workspace"
           autoComplete="organization"
           aria-invalid={Boolean(form.formState.errors.workspaceName)}
           className="h-11 rounded-sm bg-background px-3 text-base shadow-soft-card md:text-base"

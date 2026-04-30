@@ -1,90 +1,39 @@
+import Image from "next/image";
 import { redirect } from "next/navigation";
-import { getServerSession } from "@/lib/server-auth";
+
 import { GetStartedForm } from "@/features/onboarding/components/get-started-form";
+import { getServerSession } from "@/lib/server-auth";
+
+function AqshaMark() {
+  return (
+    <div className="flex items-center gap-2" aria-label="Aqsha">
+      <div className="relative size-8">
+        <span className="absolute left-0 top-0 size-4 rounded-sm bg-notion-warm-dark" />
+        <span className="absolute right-0 top-1 size-4 rounded-sm bg-notion-orange" />
+        <span className="absolute bottom-0 left-2 size-4 rounded-sm bg-notion-gray-300" />
+      </div>
+      <span className="text-nav font-bold tracking-tight text-foreground">
+        Aqsha
+      </span>
+    </div>
+  );
+}
 
 function ProductPreview() {
-  const leftLines = ["w-24", "w-16", "w-28", "w-20", "w-24", "w-16"];
-  const bodyLines = ["w-20", "w-48", "w-72", "w-80", "w-64"];
-
   return (
-    <div
+    <section
+      className="hidden h-screen items-center justify-end overflow-hidden py-16 pl-12 lg:flex"
       aria-hidden="true"
-      className="pointer-events-none absolute inset-y-0 right-0 hidden w-[52vw] overflow-hidden lg:block"
     >
-      <div className="absolute -right-20 -top-44 h-[36rem] w-40 rotate-[-9deg] rounded-full border-[28px] border-notion-orange/90 opacity-90 blur-[0.2px]" />
-      <div className="absolute -bottom-56 right-2 h-[46rem] w-44 rotate-[28deg] rounded-full border-[32px] border-notion-orange/85 opacity-90 blur-[0.2px]" />
-      <div className="absolute -bottom-40 right-72 h-[34rem] w-32 rotate-[34deg] rounded-full border-[24px] border-notion-orange/80 opacity-80 blur-[0.2px]" />
-
-      <div className="absolute right-[-19rem] top-1/2 w-[58rem] -translate-y-1/2 rounded-2xl border border-border/80 bg-card/88 p-4 shadow-deep-card backdrop-blur-md dark:bg-card/82">
-        <div className="h-[31rem] rounded-xl border border-border/70 bg-background/95 p-8 shadow-soft-card">
-          <div className="mb-7 flex items-center gap-5">
-            <div className="flex items-center gap-3">
-              <div className="grid size-7 place-items-center">
-                <div className="h-7 w-5 -skew-x-[28deg] bg-foreground" />
-              </div>
-              <div className="text-card-title font-bold tracking-card-title">
-                Org Docs
-              </div>
-            </div>
-            <div className="ml-auto h-9 w-64 rounded-full border border-border bg-card shadow-soft-card">
-              <div className="ml-5 mt-2.5 size-3 rounded-full border border-muted-foreground/45" />
-            </div>
-            <div className="h-9 w-24 rounded-full border border-border bg-card shadow-soft-card" />
-          </div>
-
-          <div className="mb-6 flex gap-7">
-            <div>
-              <div className="h-2.5 w-24 rounded-full bg-notion-orange" />
-              <div className="mx-auto mt-3 h-0.5 w-24 rounded-full bg-notion-orange" />
-            </div>
-            <div className="h-2 w-20 rounded-full bg-muted" />
-            <div className="h-2 w-20 rounded-full bg-muted" />
-            <div className="h-2 w-24 rounded-full bg-muted" />
-          </div>
-
-          <div className="grid grid-cols-[13rem_1fr] gap-9">
-            <aside className="space-y-5">
-              <div className="rounded-sm bg-notion-orange/12 px-5 py-2.5">
-                <div className="h-2.5 w-28 rounded-full bg-notion-orange" />
-              </div>
-              <div className="space-y-3 px-5">
-                {leftLines.map((width, index) => (
-                  <div
-                    key={`${width}-${index}`}
-                    className={`h-2 rounded-full bg-muted ${width}`}
-                  />
-                ))}
-              </div>
-              <div className="space-y-3 px-5 pt-12">
-                <div className="h-2 w-28 rounded-full bg-muted" />
-                <div className="h-2 w-20 rounded-full bg-muted" />
-              </div>
-            </aside>
-
-            <section>
-              <div className="mb-10 h-36 rounded-sm bg-muted/55" />
-              <div className="mb-7 ml-28 h-2.5 w-28 rounded-full bg-notion-orange" />
-              <div className="space-y-4">
-                {bodyLines.map((width, index) => (
-                  <div
-                    key={`${width}-${index}`}
-                    className={`h-2.5 rounded-full bg-muted ${width}`}
-                  />
-                ))}
-              </div>
-              <div className="mt-12 grid grid-cols-2 gap-8">
-                <div className="h-28 rounded-sm bg-muted/55 p-6">
-                  <div className="size-4 rounded-full bg-notion-orange" />
-                </div>
-                <div className="h-28 rounded-sm bg-muted/55 p-6">
-                  <div className="size-4 rounded-full bg-notion-orange" />
-                </div>
-              </div>
-            </section>
-          </div>
-        </div>
-      </div>
-    </div>
+      <Image
+        src="/assets/nested-screens.png"
+        alt=""
+        width={920}
+        height={720}
+        priority
+        className="mr-[-7%] w-[min(96%,920px)] object-contain"
+      />
+    </section>
   );
 }
 
@@ -100,23 +49,28 @@ export default async function GetStartedPage() {
   // }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-background text-foreground">
-      <ProductPreview />
+    <main className="grid h-screen overflow-hidden bg-background text-foreground lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+      <section className="flex h-screen items-center justify-center overflow-hidden px-6 py-12 sm:px-8 lg:px-12">
+        <div className="w-full max-w-[390px]">
+          <AqshaMark />
 
-      <div className="relative z-10 flex min-h-screen w-full items-center px-5 py-10 sm:px-8 lg:px-0">
-        <section className="mx-auto w-full max-w-[35rem] lg:ml-[9vw] lg:mr-0 lg:mt-16">
-          <h1 className="max-w-xl text-[2.5rem] font-bold leading-[1.08] tracking-h1 sm:text-h1">
-            <span className="block text-muted-foreground">
-              Set up your organization.
-            </span>
-            <span className="block text-foreground">Your docs live here.</span>
-          </h1>
+          <div className="mt-10 space-y-3">
+            <h1 className="text-[2rem] font-semibold leading-[1.08] tracking-[-0.04em] text-foreground sm:text-[2.25rem]">
+              Name the workspace your team will use.
+            </h1>
+            <p className="max-w-[20rem] text-sm font-normal leading-6 text-muted-foreground">
+              This becomes the home for your docs, decisions, and shared
+              context.
+            </p>
+          </div>
 
-          <div className="mt-12">
+          <div className="mt-8">
             <GetStartedForm />
           </div>
-        </section>
-      </div>
+        </div>
+      </section>
+
+      <ProductPreview />
     </main>
   );
 }

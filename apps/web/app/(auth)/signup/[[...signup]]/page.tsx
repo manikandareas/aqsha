@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { ArrowRight, Loader2 } from "lucide-react";
 
+import { AuthField, AuthScreen } from "@/components/auth/auth-screen";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -65,94 +66,120 @@ export default function SignUpPage() {
   }
 
   return (
-    <form
-      onSubmit={form.handleSubmit(handleSubmit)}
-      className="w-full max-w-sm rounded-xl border border-border bg-background p-6 shadow-soft-card"
-    >
-      <h1 className="text-card-title font-bold leading-tight tracking-card-title">
-        Create account
-      </h1>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">
-        Start with email and password.
-      </p>
-
-      <div className="mt-6 space-y-2">
-        <Label htmlFor="name">Name</Label>
-        <Input
-          id="name"
-          {...form.register("name", {
-            onChange: () => form.clearErrors("root"),
-          })}
-          autoComplete="name"
-          aria-invalid={Boolean(form.formState.errors.name)}
-        />
-        {form.formState.errors.name ? (
-          <p className="text-sm text-destructive">
-            {form.formState.errors.name.message}
-          </p>
-        ) : null}
-      </div>
-
-      <div className="mt-4 space-y-2">
-        <Label htmlFor="email">Email</Label>
-        <Input
-          id="email"
-          type="email"
-          {...form.register("email", {
-            onChange: () => form.clearErrors("root"),
-          })}
-          autoComplete="email"
-          aria-invalid={Boolean(form.formState.errors.email)}
-        />
-        {form.formState.errors.email ? (
-          <p className="text-sm text-destructive">
-            {form.formState.errors.email.message}
-          </p>
-        ) : null}
-      </div>
-
-      <div className="mt-4 space-y-2">
-        <Label htmlFor="password">Password</Label>
-        <Input
-          id="password"
-          type="password"
-          {...form.register("password", {
-            onChange: () => form.clearErrors("root"),
-          })}
-          autoComplete="new-password"
-          aria-invalid={Boolean(form.formState.errors.password)}
-        />
-        {form.formState.errors.password ? (
-          <p className="text-sm text-destructive">
-            {form.formState.errors.password.message}
-          </p>
-        ) : null}
-      </div>
-
-      <Button
-        type="submit"
-        className="mt-6 h-10 w-full"
-        disabled={form.formState.isSubmitting}
+    <form onSubmit={form.handleSubmit(handleSubmit)}>
+      <AuthScreen
+        mode="signup"
+        title="A better place for product docs."
+        description="Create an account for specs, decisions, and notes your team can find again."
+        switchPrompt="Already have an account?"
+        switchHref="/signin"
+        switchLabel="Sign in"
+        termsCopy={
+          <>
+            By creating an account, you agree to Aqsha&apos;s{" "}
+            <Link
+              className="text-foreground underline underline-offset-4"
+              href="/terms"
+            >
+              Terms
+            </Link>{" "}
+            and{" "}
+            <Link
+              className="text-foreground underline underline-offset-4"
+              href="/privacy"
+            >
+              Privacy Policy
+            </Link>
+            .
+          </>
+        }
+        submit={
+          <Button
+            type="submit"
+            className="mt-5 h-10 w-full rounded-md bg-notion-warm-dark text-[0.8125rem] font-medium text-white hover:bg-foreground"
+            disabled={form.formState.isSubmitting}
+          >
+            {form.formState.isSubmitting ? (
+              <>
+                <Loader2 className="animate-spin" aria-hidden="true" />
+                Creating account
+              </>
+            ) : (
+              <>
+                Sign up
+                <ArrowRight aria-hidden="true" />
+              </>
+            )}
+          </Button>
+        }
       >
-        {form.formState.isSubmitting ? (
-          <>
-            <Loader2 className="animate-spin" aria-hidden="true" />
-            Creating account
-          </>
-        ) : (
-          <>
-            Sign up
-            <ArrowRight aria-hidden="true" />
-          </>
-        )}
-      </Button>
+        <div className="space-y-4">
+          <AuthField>
+            <Label htmlFor="name" className="sr-only">
+              Name
+            </Label>
+            <Input
+              id="name"
+              placeholder="Name"
+              className="h-10 rounded-md border-border bg-background px-3 text-[0.8125rem] shadow-none placeholder:text-notion-gray-300"
+              {...form.register("name", {
+                onChange: () => form.clearErrors("root"),
+              })}
+              autoComplete="name"
+              aria-invalid={Boolean(form.formState.errors.name)}
+            />
+            {form.formState.errors.name ? (
+              <p className="text-sm text-destructive">
+                {form.formState.errors.name.message}
+              </p>
+            ) : null}
+          </AuthField>
 
-      <p className="mt-4 text-center text-sm text-muted-foreground">
-        Have an account?{" "}
-        <Link className="font-semibold text-foreground underline" href="/signin">
-          Sign in
-        </Link>
-      </p>
+          <AuthField>
+            <Label htmlFor="email" className="sr-only">
+              Email
+            </Label>
+            <Input
+              id="email"
+              type="email"
+              placeholder="Email"
+              className="h-10 rounded-md border-border bg-background px-3 text-[0.8125rem] shadow-none placeholder:text-notion-gray-300"
+              {...form.register("email", {
+                onChange: () => form.clearErrors("root"),
+              })}
+              autoComplete="email"
+              aria-invalid={Boolean(form.formState.errors.email)}
+            />
+            {form.formState.errors.email ? (
+              <p className="text-sm text-destructive">
+                {form.formState.errors.email.message}
+              </p>
+            ) : null}
+          </AuthField>
+
+          <AuthField>
+            <Label htmlFor="password" className="sr-only">
+              Password
+            </Label>
+            <Input
+              id="password"
+              type="password"
+              placeholder="Password"
+              className="h-10 rounded-md border-border bg-background px-3 text-[0.8125rem] shadow-none placeholder:text-notion-gray-300"
+              {...form.register("password", {
+                onChange: () => form.clearErrors("root"),
+              })}
+              autoComplete="new-password"
+              aria-invalid={Boolean(form.formState.errors.password)}
+            />
+            {form.formState.errors.password ? (
+              <p className="text-sm text-destructive">
+                {form.formState.errors.password.message}
+              </p>
+            ) : null}
+          </AuthField>
+        </div>
+      </AuthScreen>
     </form>
   );
 }
