@@ -27,7 +27,7 @@ export function MessageList({ messages }: { messages: UIMessage[] }) {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 py-8 sm:px-6 lg:py-10">
+    <div className="mx-auto flex min-h-full w-full max-w-[820px] flex-col gap-5 px-4 pb-56 pt-4 sm:px-6 lg:pt-6">
       {messages.map((message) => {
         const text = textFromParts(message.parts);
         const isUser = message.role === "user";
@@ -37,14 +37,14 @@ export function MessageList({ messages }: { messages: UIMessage[] }) {
             <div
               className={
                 isUser
-                  ? "max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-3 text-sm leading-6 text-primary-foreground shadow-sm sm:max-w-[75%]"
-                  : "max-w-[90%] rounded-2xl rounded-bl-md border border-border bg-card px-4 py-3 text-sm leading-6 text-card-foreground shadow-sm sm:max-w-[82%]"
+                  ? "max-w-full rounded-2xl border border-border bg-card px-4 py-2.5 text-sm leading-6 text-card-foreground shadow-sm sm:max-w-[82%]"
+                  : "max-w-full text-[15px] leading-7 text-foreground sm:max-w-[92%]"
               }
             >
               {isUser ? (
                 <p className="whitespace-pre-wrap">{text}</p>
               ) : (
-                <div className="prose prose-sm max-w-none dark:prose-invert">
+                <div className="prose prose-neutral max-w-none dark:prose-invert prose-p:my-3 prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-foreground prose-code:before:content-none prose-code:after:content-none prose-a:text-primary">
                   <Streamdown>{text}</Streamdown>
                 </div>
               )}

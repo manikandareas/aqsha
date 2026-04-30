@@ -3,6 +3,7 @@
 @import "shadcn/tailwind.css";
 @import "katex/dist/katex.min.css";
 @import "@aqsha/ui/styles/globals.css";
+@source "../node_modules/streamdown/dist/*.js";
 
 @layer components {
   .workspace-journal-editor {

@@ -1,11 +1,16 @@
 "use client";
 
-import { SendIcon, StopCircleIcon } from "lucide-react";
+import { SendHorizonalIcon, StopCircleIcon } from "lucide-react";
 import type { FormEvent } from "react";
 import { useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import {
+  PromptInput,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputToolbar,
+  PromptInputTools,
+} from "@/components/ai-elements/prompt-input";
 import { cn } from "@/lib/utils";
 
 export function MessageInput({
@@ -37,39 +42,47 @@ export function MessageInput({
   }
 
   return (
-    <form
+    <PromptInput
       onSubmit={handleSubmit}
-      className={cn("mx-auto w-full max-w-3xl px-4 pb-5 sm:px-6", className)}
+      className={cn("mx-auto w-full max-w-[820px]", className)}
     >
-      <div className="rounded-2xl border border-border bg-card p-2 shadow-sm transition-shadow focus-within:shadow-md">
-        <Textarea
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              event.currentTarget.form?.requestSubmit();
-            }
-          }}
-          placeholder="Ask anything..."
-          disabled={disabled}
-          className="max-h-48 min-h-24 resize-none border-0 bg-transparent px-3 py-3 text-sm leading-6 shadow-none focus-visible:ring-0"
-        />
-        <div className="flex items-center justify-between border-t border-border/60 px-2 pt-2">
-          <span className="text-xs text-muted-foreground">Enter to send, Shift+Enter for a new line</span>
+      <PromptInputTextarea
+        value={input}
+        onChange={(event) => setInput(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            event.currentTarget.form?.requestSubmit();
+          }
+        }}
+        placeholder="Add a follow up"
+        disabled={disabled}
+        className="min-h-20 sm:min-h-24"
+      />
+      <PromptInputToolbar>
+        <PromptInputTools className="gap-2 text-sm text-muted-foreground">
+          <span>Enter to send, Shift+Enter for a new line</span>
+        </PromptInputTools>
+
+        <PromptInputTools className="gap-2 text-muted-foreground">
           {isStreaming ? (
-            <Button type="button" variant="outline" size="sm" onClick={onStop}>
-              <StopCircleIcon className="size-4" />
-              Stop
-            </Button>
+            <PromptInputSubmit
+              type="button"
+              onClick={onStop}
+              aria-label="Stop streaming"
+            >
+              <StopCircleIcon className="size-3.5" />
+            </PromptInputSubmit>
           ) : (
-            <Button type="submit" size="sm" disabled={disabled || input.trim().length === 0}>
-              <SendIcon className="size-4" />
-              Send
-            </Button>
+            <PromptInputSubmit
+              disabled={disabled || input.trim().length === 0}
+              aria-label="Send message"
+            >
+              <SendHorizonalIcon className="size-3.5" />
+            </PromptInputSubmit>
           )}
-        </div>
-      </div>
-    </form>
+        </PromptInputTools>
+      </PromptInputToolbar>
+    </PromptInput>
   );
 }
