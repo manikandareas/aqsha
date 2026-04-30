@@ -9,14 +9,9 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useCompleteGetStartedMutation } from "@/features/onboarding/lib/mutations";
 import { authClient } from "@/lib/auth-client";
-import { api } from "@/lib/eden";
-
-type EdenErrorValue = {
-  error?: {
-    message?: unknown;
-  };
-};
+import { getEdenErrorMessage } from "@/lib/eden-error";
 
 const getStartedSchema = z.object({
   workspaceName: z.string().trim().min(1, "Workspace name is required."),
@@ -24,50 +19,22 @@ const getStartedSchema = z.object({
 
 type GetStartedFormValues = z.infer<typeof getStartedSchema>;
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
 function getApiErrorMessage(error: unknown): string {
-  if (!error) {
-    return "Workspace setup failed. Try again.";
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    error.status === 401
+  ) {
+    return "Sign in again before creating your workspace.";
   }
 
-  if (isObject(error)) {
-    if ("value" in error) {
-      const value = error.value;
-
-      if (isObject(value)) {
-        const apiError = (value as EdenErrorValue).error;
-
-        if (isObject(apiError) && typeof apiError.message === "string") {
-          return apiError.message;
-        }
-      }
-
-      if (typeof value === "string") {
-        return value;
-      }
-    }
-
-    if ("status" in error && typeof error.status === "number") {
-      if (error.status === 401) {
-        return "Sign in again before creating your workspace.";
-      }
-
-      return `Workspace setup failed with status ${error.status}.`;
-    }
-  }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Workspace setup failed. Try again.";
+  return getEdenErrorMessage(error, "Workspace setup failed. Try again.");
 }
 
 export function GetStartedForm() {
   const router = useRouter();
+  const completeGetStartedMutation = useCompleteGetStartedMutation();
   const { data: session, isPending } = authClient.useSession();
   const form = useForm<GetStartedFormValues>({
     resolver: zodResolver(getStartedSchema),
@@ -85,7 +52,8 @@ export function GetStartedForm() {
     !isPending &&
     Boolean(session) &&
     workspaceName.trim().length > 0 &&
-    !form.formState.isSubmitting;
+    !form.formState.isSubmitting &&
+    !completeGetStartedMutation.isPending;
 
   async function handleSubmit(values: GetStartedFormValues): Promise<void> {
     if (!session) {
@@ -98,15 +66,9 @@ export function GetStartedForm() {
     form.clearErrors("root");
 
     try {
-      const response = await api.session["get-started"].post({
+      await completeGetStartedMutation.mutateAsync({
         workspaceName: values.workspaceName,
       });
-
-      if (response.error) {
-        form.setError("root", { message: getApiErrorMessage(response.error) });
-        return;
-      }
-
       router.push("/demo");
     } catch (cause) {
       form.setError("root", { message: getApiErrorMessage(cause) });
@@ -164,7 +126,8 @@ export function GetStartedForm() {
             className="h-12 w-full bg-foreground text-background shadow-soft-card hover:bg-foreground/90"
             disabled={!canSubmit}
           >
-            {form.formState.isSubmitting ? (
+            {form.formState.isSubmitting ||
+            completeGetStartedMutation.isPending ? (
               <>
                 <Loader2 className="animate-spin" aria-hidden="true" />
                 Creating organization

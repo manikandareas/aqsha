@@ -65,7 +65,7 @@ const data = {
     },
     {
       title: "My Library",
-      url: "/app/journals",
+      url: "/app/my-library",
       icon: <LibraryIcon />,
     },
   ],

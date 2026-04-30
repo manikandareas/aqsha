@@ -2,7 +2,6 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
-import { api } from "@/lib/eden";
 import { getEdenErrorMessage } from "@/lib/eden-error";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,9 +33,9 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import {
-  normalizeJournalRecord,
-  type JournalRecord,
-} from "@/features/journal/lib/journals";
+  useCreateJournalMutation,
+  useJournalsQuery,
+} from "@/features/journal/lib/queries";
 import {
   MoreHorizontalIcon,
   StarOffIcon,
@@ -64,10 +63,14 @@ function getJournalErrorMessage(error: unknown): string {
 export function NavJournal() {
   const { isMobile } = useSidebar();
   const router = useRouter();
-  const [journals, setJournals] = React.useState<JournalRecord[]>([]);
-  const [isLoading, setIsLoading] = React.useState(true);
   const [isDialogOpen, setIsDialogOpen] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const journalsQuery = useJournalsQuery();
+  const createJournalMutation = useCreateJournalMutation();
+  const journals = journalsQuery.data ?? [];
+  const queryError = journalsQuery.error
+    ? getJournalErrorMessage(journalsQuery.error)
+    : null;
   const form = useForm<CreateJournalFormValues>({
     resolver: zodResolver(createJournalSchema),
     defaultValues: {
@@ -75,64 +78,27 @@ export function NavJournal() {
     },
   });
 
-  const refreshJournals = React.useCallback(async () => {
-    setIsLoading(true);
-
-    try {
-      const response = await api.journals.get({ query: { status: "active" } });
-
-      if (response.error) {
-        setError(getJournalErrorMessage(response.error));
-        setJournals([]);
-        return;
-      }
-
-      setJournals((response.data ?? []).map(normalizeJournalRecord));
-    } catch (cause) {
-      setError(getJournalErrorMessage(cause));
-      setJournals([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    queueMicrotask(() => {
-      void refreshJournals();
-    });
-
-    window.addEventListener("journals:changed", refreshJournals);
-
-    return () => {
-      window.removeEventListener("journals:changed", refreshJournals);
-    };
-  }, [refreshJournals]);
 
   async function handleCreate(values: CreateJournalFormValues): Promise<void> {
     setError(null);
 
     try {
-      const response = await api.journals.post({ title: values.title });
-
-      if (response.error) {
-        setError(getJournalErrorMessage(response.error));
-        return;
-      }
-
-      const journal = normalizeJournalRecord(response.data);
+      const journal = await createJournalMutation.mutateAsync({
+        title: values.title,
+      });
       form.reset();
       setIsDialogOpen(false);
-      window.dispatchEvent(new Event("journals:changed"));
       router.push(`/app/journals/${journal.id}`);
-      router.refresh();
     } catch (cause) {
       setError(getJournalErrorMessage(cause));
     }
   }
 
   const title = useWatch({ control: form.control, name: "title" });
-  const isCreating = form.formState.isSubmitting;
+  const isCreating =
+    form.formState.isSubmitting || createJournalMutation.isPending;
   const formError = form.formState.errors.title?.message ?? error;
+  const displayedError = error ?? queryError;
 
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
@@ -191,7 +157,7 @@ export function NavJournal() {
         </Dialog>
       </SidebarGroupLabel>
       <SidebarMenu>
-        {isLoading ? (
+        {journalsQuery.isLoading ? (
           <SidebarMenuItem>
             <SidebarMenuButton disabled>
               <Loader2Icon className="animate-spin" />
@@ -199,7 +165,17 @@ export function NavJournal() {
             </SidebarMenuButton>
           </SidebarMenuItem>
         ) : null}
-        {!isLoading && journals.length === 0 ? (
+        {!journalsQuery.isLoading && displayedError ? (
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              disabled
+              className="cursor-default text-sidebar-foreground/40"
+            >
+              <span className="text-[13px]">{displayedError}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        ) : null}
+        {!journalsQuery.isLoading && !displayedError && journals.length === 0 ? (
           <SidebarMenuItem>
             <SidebarMenuButton
               disabled

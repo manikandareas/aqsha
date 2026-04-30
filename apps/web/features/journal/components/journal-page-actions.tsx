@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { JournalRecord } from "@/features/journal/lib/journals";
-import { api } from "@/lib/eden";
+import { useDeleteJournalMutation } from "@/features/journal/lib/queries";
 import { getEdenErrorMessage } from "@/lib/eden-error";
 
 const journalDeletionFailedMessage = "Journal deletion failed. Try again.";
@@ -25,18 +25,16 @@ function getDeleteErrorMessage(error: unknown): string {
 
 export function JournalPageActions({ journal }: { journal: JournalRecord }) {
   const router = useRouter();
+  const deleteJournalMutation = useDeleteJournalMutation();
   const [isAlertOpen, setIsAlertOpen] = React.useState(false);
 
   async function handleDelete(): Promise<void> {
-    const response = await api.journals({ id: journal.id }).delete();
-
-    if (response.error) {
-      throw new Error(getDeleteErrorMessage(response.error));
+    try {
+      await deleteJournalMutation.mutateAsync(journal.id);
+      router.push("/app/journals");
+    } catch (cause) {
+      throw new Error(getDeleteErrorMessage(cause));
     }
-
-    window.dispatchEvent(new Event("journals:changed"));
-    router.push("/app/journals");
-    router.refresh();
   }
 
   return (

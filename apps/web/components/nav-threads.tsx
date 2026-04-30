@@ -30,14 +30,10 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import {
-  createChatThread,
-  deleteChatThread,
-  listChatThreads,
-} from "@/features/chat/lib/api";
-import {
-  dispatchThreadsChanged,
-  THREADS_CHANGED_EVENT,
-} from "@/features/chat/lib/events";
+  useChatThreadsQuery,
+  useCreateChatThreadMutation,
+  useDeleteChatThreadMutation,
+} from "@/features/chat/lib/queries";
 import type { ChatThread } from "@/features/chat/lib/types";
 import { getEdenErrorMessage } from "@/lib/eden-error";
 
@@ -89,64 +85,34 @@ export function NavThreads() {
   const { isMobile } = useSidebar();
   const pathname = usePathname();
   const router = useRouter();
-  const [threads, setThreads] = React.useState<ChatThread[]>([]);
-  const [isLoading, setIsLoading] = React.useState(true);
-  const [isCreating, setIsCreating] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [threadToDelete, setThreadToDelete] = React.useState<ChatThread | null>(
     null,
   );
-
-  const refreshThreads = React.useCallback(async () => {
-    setIsLoading(true);
-
-    try {
-      setThreads(await listChatThreads());
-      setError(null);
-    } catch (cause) {
-      setError(getThreadErrorMessage(cause));
-      setThreads([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    queueMicrotask(() => {
-      void refreshThreads();
-    });
-
-    window.addEventListener(THREADS_CHANGED_EVENT, refreshThreads);
-
-    return () => {
-      window.removeEventListener(THREADS_CHANGED_EVENT, refreshThreads);
-    };
-  }, [refreshThreads]);
+  const threadsQuery = useChatThreadsQuery();
+  const createThreadMutation = useCreateChatThreadMutation();
+  const deleteThreadMutation = useDeleteChatThreadMutation();
+  const threads = threadsQuery.data ?? [];
+  const queryError = threadsQuery.error
+    ? getThreadErrorMessage(threadsQuery.error)
+    : null;
+  const displayedError = error ?? queryError;
 
   async function handleCreateThread(): Promise<void> {
     setError(null);
-    setIsCreating(true);
 
     try {
-      const thread = await createChatThread();
-      setThreads((currentThreads) => [thread, ...currentThreads]);
-      dispatchThreadsChanged();
+      const thread = await createThreadMutation.mutateAsync();
       router.push(`/app/threads/${thread.id}`);
     } catch (cause) {
       setError(getThreadErrorMessage(cause));
-    } finally {
-      setIsCreating(false);
     }
   }
 
   async function handleDeleteThread(thread: ChatThread): Promise<void> {
     try {
-      await deleteChatThread(thread.id);
+      await deleteThreadMutation.mutateAsync(thread.id);
       setError(null);
-      setThreads((currentThreads) =>
-        currentThreads.filter((item) => item.id !== thread.id),
-      );
-      dispatchThreadsChanged();
 
       if (pathname === `/app/threads/${thread.id}`) {
         router.push("/app");
@@ -165,14 +131,18 @@ export function NavThreads() {
           size="icon-xs"
           className="ml-auto -mr-1 text-muted-foreground hover:text-foreground"
           onClick={() => void handleCreateThread()}
-          disabled={isCreating}
+          disabled={createThreadMutation.isPending}
         >
-          {isCreating ? <Loader2Icon className="animate-spin" /> : <PlusIcon />}
+          {createThreadMutation.isPending ? (
+            <Loader2Icon className="animate-spin" />
+          ) : (
+            <PlusIcon />
+          )}
           <span className="sr-only">Create thread</span>
         </Button>
       </SidebarGroupLabel>
       <SidebarMenu>
-        {isLoading ? (
+        {threadsQuery.isLoading ? (
           <SidebarMenuItem>
             <SidebarMenuButton disabled>
               <Loader2Icon className="animate-spin" />
@@ -180,17 +150,17 @@ export function NavThreads() {
             </SidebarMenuButton>
           </SidebarMenuItem>
         ) : null}
-        {!isLoading && error ? (
+        {!threadsQuery.isLoading && displayedError ? (
           <SidebarMenuItem>
             <SidebarMenuButton
               disabled
               className="cursor-default text-sidebar-foreground/40"
             >
-              <span className="text-[13px]">{error}</span>
+              <span className="text-[13px]">{displayedError}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         ) : null}
-        {!isLoading && !error && threads.length === 0 ? (
+        {!threadsQuery.isLoading && !displayedError && threads.length === 0 ? (
           <SidebarMenuItem>
             <SidebarMenuButton
               disabled

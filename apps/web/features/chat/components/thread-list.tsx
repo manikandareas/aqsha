@@ -3,7 +3,6 @@
 import { PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -13,8 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { createChatThread } from "@/features/chat/lib/api";
-import { dispatchThreadsChanged } from "@/features/chat/lib/events";
+import { useCreateChatThreadMutation } from "@/features/chat/lib/queries";
 import type { ChatThread } from "@/features/chat/lib/types";
 
 const threadDateFormatter = new Intl.DateTimeFormat("en-US", {
@@ -36,19 +34,12 @@ function formatDate(value: string): string {
 
 export function ThreadList({ threads }: { threads: ChatThread[] }) {
   const router = useRouter();
-  const [isCreating, setIsCreating] = useState(false);
+  const createThreadMutation = useCreateChatThreadMutation();
+  const isCreating = createThreadMutation.isPending;
 
   async function handleCreateThread() {
-    setIsCreating(true);
-
-    try {
-      const thread = await createChatThread();
-      dispatchThreadsChanged();
-      router.push(`/app/threads/${thread.id}`);
-      router.refresh();
-    } finally {
-      setIsCreating(false);
-    }
+    const thread = await createThreadMutation.mutateAsync();
+    router.push(`/app/threads/${thread.id}`);
   }
 
   return (

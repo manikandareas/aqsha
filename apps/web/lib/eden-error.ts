@@ -1,11 +1,26 @@
 type EdenErrorValue = {
   error?: {
+    code?: unknown;
     message?: unknown;
   };
 };
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+export function getEdenErrorCode(error: unknown): string | null {
+  if (!isObject(error) || !("value" in error) || !isObject(error.value)) {
+    return null;
+  }
+
+  const apiError = (error.value as EdenErrorValue).error;
+
+  if (isObject(apiError) && typeof apiError.code === "string") {
+    return apiError.code;
+  }
+
+  return null;
 }
 
 export function getEdenErrorMessage(

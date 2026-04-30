@@ -1,12 +1,13 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 
-import {
-  normalizeJournalRecord,
-  type JournalRecord,
-} from "@/features/journal/lib/journals";
-import { api } from "@/lib/eden";
+import { saveJournalContent } from "@/features/journal/lib/api";
+import type { JournalRecord } from "@/features/journal/lib/journals";
+import { getEdenErrorCode } from "@/lib/eden-error";
+import { replaceById } from "@/lib/react-query/cache";
+import { queryKeys } from "@/lib/react-query/keys";
 import { plateValueToPlainText } from "@/lib/text";
 
 type AutosaveStatus = "saved" | "dirty" | "saving" | "error" | "conflict";
@@ -31,13 +32,6 @@ type UseJournalAutosaveResult = {
   handleTitleChange: (title: string) => void;
 };
 
-type EdenErrorValue = {
-  error?: {
-    code?: unknown;
-    message?: unknown;
-  };
-};
-
 function normalizeTitleForSave(title: string): string {
   return title.trim() || "Untitled";
 }
@@ -51,24 +45,6 @@ function areSnapshotsEqual(
     left.plainText === right.plainText &&
     JSON.stringify(left.contentJson) === JSON.stringify(right.contentJson)
   );
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function getEdenErrorCode(error: unknown): string | null {
-  if (!isObject(error) || !("value" in error) || !isObject(error.value)) {
-    return null;
-  }
-
-  const apiError = (error.value as EdenErrorValue).error;
-
-  if (isObject(apiError) && typeof apiError.code === "string") {
-    return apiError.code;
-  }
-
-  return null;
 }
 
 function createSnapshot(
@@ -111,6 +87,7 @@ export function useJournalAutosave({
     [initialContentValue, journal.title],
   );
 
+  const queryClient = useQueryClient();
   const [title, setTitle] = React.useState(journal.title);
   const [saveStatus, setSaveStatus] =
     React.useState<AutosaveStatus>("saved");
@@ -134,10 +111,6 @@ export function useJournalAutosave({
       clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
     }
-  }, []);
-
-  const dispatchJournalsChanged = React.useCallback(() => {
-    window.dispatchEvent(new Event("journals:changed"));
   }, []);
 
   const saveDraft = React.useCallback(
@@ -167,15 +140,17 @@ export function useJournalAutosave({
 
           const currentDraft = draftToSave;
           activeDraft = currentDraft;
-          const response = await api.journals({ id: journal.id }).content.put({
-            baseUpdatedAt: baseUpdatedAtRef.current,
-            title: normalizeTitleForSave(currentDraft.title),
-            contentJson: currentDraft.contentJson,
-            plainText: currentDraft.plainText,
-          });
+          let savedJournal: JournalRecord;
 
-          if (response.error) {
-            if (getEdenErrorCode(response.error) === "stale_journal_save") {
+          try {
+            savedJournal = await saveJournalContent(journal.id, {
+              baseUpdatedAt: baseUpdatedAtRef.current,
+              title: normalizeTitleForSave(currentDraft.title),
+              contentJson: currentDraft.contentJson,
+              plainText: currentDraft.plainText,
+            });
+          } catch (cause) {
+            if (getEdenErrorCode(cause) === "stale_journal_save") {
               isConflictRef.current = true;
               queuedDraftRef.current = null;
               clearDebounceTimer();
@@ -187,11 +162,12 @@ export function useJournalAutosave({
             setSaveStatus("error");
             return;
           }
-
-          const savedJournal = normalizeJournalRecord(response.data);
           baseUpdatedAtRef.current = savedJournal.updatedAt;
           lastSavedDraftRef.current = currentDraft;
-          dispatchJournalsChanged();
+          queryClient.setQueryData<JournalRecord[]>(
+            queryKeys.journals.list(),
+            (currentJournals) => replaceById(savedJournal, currentJournals),
+          );
 
           draftToSave = queuedDraftRef.current;
           queuedDraftRef.current = null;
@@ -211,7 +187,7 @@ export function useJournalAutosave({
         isSavingRef.current = false;
       }
     },
-    [clearDebounceTimer, dispatchJournalsChanged, journal.id],
+    [clearDebounceTimer, journal.id, queryClient],
   );
 
   const scheduleSave = React.useCallback(

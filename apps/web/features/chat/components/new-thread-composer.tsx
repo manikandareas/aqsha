@@ -16,16 +16,16 @@ import {
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
 import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
-import { createChatThread } from "@/features/chat/lib/api";
-import { dispatchThreadsChanged } from "@/features/chat/lib/events";
 import { pendingPromptKey } from "@/features/chat/lib/pending-prompt";
+import { useCreateChatThreadMutation } from "@/features/chat/lib/queries";
 
 const quickQuestions = ["Create an Automation", "Run security audit"];
 
 export function NewThreadComposer() {
   const router = useRouter();
   const [input, setInput] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const createThreadMutation = useCreateChatThreadMutation();
+  const isSubmitting = createThreadMutation.isPending;
 
   async function handleSend(text: string) {
     const prompt = text.trim();
@@ -34,16 +34,9 @@ export function NewThreadComposer() {
       return;
     }
 
-    setIsSubmitting(true);
-
-    try {
-      const thread = await createChatThread();
-      sessionStorage.setItem(pendingPromptKey(thread.id), prompt);
-      dispatchThreadsChanged();
-      router.push(`/app/threads/${thread.id}`);
-    } finally {
-      setIsSubmitting(false);
-    }
+    const thread = await createThreadMutation.mutateAsync();
+    sessionStorage.setItem(pendingPromptKey(thread.id), prompt);
+    router.push(`/app/threads/${thread.id}`);
   }
 
   return (

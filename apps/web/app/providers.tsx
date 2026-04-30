@@ -2,6 +2,7 @@
 
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ReactQueryProvider } from "@/lib/react-query/client";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const scriptProps =
@@ -17,7 +18,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
       enableSystem
       disableTransitionOnChange
     >
-      <TooltipProvider>{children}</TooltipProvider>
+      <ReactQueryProvider>
+        <TooltipProvider>{children}</TooltipProvider>
+      </ReactQueryProvider>
     </ThemeProvider>
   );
 }

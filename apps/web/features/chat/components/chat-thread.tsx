@@ -1,17 +1,17 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowDownIcon } from "lucide-react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef } from "react";
 
 import { MessageInput } from "@/features/chat/components/message-input";
 import { MessageList } from "@/features/chat/components/message-list";
-import { dispatchThreadsChanged } from "@/features/chat/lib/events";
 import { pendingPromptKey } from "@/features/chat/lib/pending-prompt";
 import { useChatScroll } from "@/features/chat/components/use-chat-scroll";
 import { getApiBaseUrl } from "@/lib/api-url";
+import { queryKeys } from "@/lib/react-query/keys";
 
 export function ChatThread({
   id,
@@ -20,7 +20,7 @@ export function ChatThread({
   id: string;
   initialMessages: UIMessage[];
 }) {
-  const router = useRouter();
+  const queryClient = useQueryClient();
   const sentPendingPromptRef = useRef(false);
   const { containerRef, isAtBottom, scrollToBottom } = useChatScroll(id);
   const transport = useMemo(
@@ -41,8 +41,9 @@ export function ChatThread({
     messages: initialMessages,
     transport,
     onFinish: () => {
-      dispatchThreadsChanged();
-      router.refresh();
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.chat.threads(),
+      });
     },
   });
 
