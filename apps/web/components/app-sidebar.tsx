@@ -5,8 +5,8 @@ import * as React from "react";
 
 import { NavJournal } from "@/components/nav-journal";
 import { NavMain } from "@/components/nav-main";
-import { NavThreads } from "@/components/nav-threads";
 import { NavSecondary } from "@/components/nav-secondary";
+import { NavThreads } from "@/components/nav-threads";
 import { TeamSwitcher } from "@/components/team-switcher";
 import {
   Sidebar,
@@ -15,8 +15,9 @@ import {
 } from "@/components/ui/sidebar";
 import {
   AudioLinesIcon,
-  BlocksIcon,
+  BookUpIcon,
   HomeIcon,
+  LibraryIcon,
   MessageCircleQuestionIcon,
   SearchIcon,
   Settings2Icon,
@@ -58,9 +59,14 @@ const data = {
       icon: <HomeIcon />,
     },
     {
+      title: "Journals",
+      url: "/app/journals",
+      icon: <BookUpIcon />,
+    },
+    {
       title: "My Library",
       url: "/app/journals",
-      icon: <BlocksIcon />,
+      icon: <LibraryIcon />,
     },
   ],
   navSecondary: [
