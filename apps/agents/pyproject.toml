@@ -9,9 +9,11 @@ description = "Astra multi-agent boilerplate for Aqsha using Pydantic AI."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+  "fastapi>=0.124.0",
   "pydantic-ai>=1.0.0",
   "pydantic-settings>=2.7.0",
   "python-dotenv>=1.0.1",
+  "uvicorn[standard]>=0.38.0",
 ]
 
 [project.optional-dependencies]
@@ -27,6 +29,7 @@ observability = [
 
 [project.scripts]
 astra = "astra.cli:main"
+astra-server = "astra.server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/astra"]

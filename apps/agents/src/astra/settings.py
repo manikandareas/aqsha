@@ -14,3 +14,6 @@ class AstraSettings(BaseSettings):
     user_id: str = "local-dev"
     workspace: str = "aqsha"
     enable_logfire: bool = False
+    http_host: str = "127.0.0.1"
+    http_port: int = 8001
+    internal_token: str = ""

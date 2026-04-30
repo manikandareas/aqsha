@@ -23,6 +23,7 @@
     "@aqsha/db": "workspace:*",
     "@aqsha/shared": "workspace:*",
     "@elysiajs/cors": "^1.4.2",
+    "ai": "^6.0.161",
     "@elysiajs/eden": "^1.4.9",
     "@elysiajs/openapi": "^1.4.14",
     "@t3-oss/env-core": "^0.13.11",
