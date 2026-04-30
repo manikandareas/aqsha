@@ -5,7 +5,78 @@
 @import "@aqsha/ui/styles/globals.css";
 @source "../node_modules/streamdown/dist/*.js";
 
+:root {
+  --sileo-width: 360px;
+  --sileo-height: 44px;
+  --sileo-duration: 520ms;
+  --sileo-toast-fill: #1f1e1c;
+  --sileo-toast-title: #f6f5f4;
+  --sileo-toast-description: #d8d4ce;
+  --sileo-toast-border: rgba(255, 255, 255, 0.12);
+  --sileo-state-success: #3cc6bf;
+  --sileo-state-error: #f07340;
+  --sileo-state-warning: #f59e0b;
+  --sileo-state-info: #62aef0;
+}
+
+.dark {
+  --sileo-toast-fill: #ffffff;
+  --sileo-toast-title: rgba(0, 0, 0, 0.95);
+  --sileo-toast-description: #615d59;
+  --sileo-toast-border: rgba(0, 0, 0, 0.1);
+  --sileo-state-success: #2a9d99;
+  --sileo-state-error: #dd5b00;
+  --sileo-state-warning: #dd5b00;
+  --sileo-state-info: #0075de;
+}
+
 @layer components {
+  [data-sileo-viewport] {
+    z-index: 80;
+    padding: 1rem;
+  }
+
+  [data-sileo-toast] {
+    filter: drop-shadow(0 18px 42px rgb(0 0 0 / 0.22))
+      drop-shadow(0 3px 10px rgb(0 0 0 / 0.12));
+  }
+
+  .dark [data-sileo-toast] {
+    filter: drop-shadow(0 18px 42px rgb(0 0 0 / 0.3))
+      drop-shadow(0 3px 10px rgb(0 0 0 / 0.16));
+  }
+
+  /* [data-sileo-pill],
+  [data-sileo-body] {
+    stroke: var(--sileo-toast-border);
+    stroke-width: 1px;
+    vector-effect: non-scaling-stroke;
+  } */
+
+  [data-sileo-viewport] .sileo-toast-title {
+    color: var(--sileo-toast-title);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    line-height: 1rem;
+    text-transform: none;
+  }
+
+  [data-sileo-viewport] .sileo-toast-description {
+    color: var(--sileo-toast-description);
+    font-size: 0.875rem;
+    line-height: 1.35rem;
+    padding: 0.875rem 1rem 1rem;
+  }
+
+  .sileo-toast-badge {
+    background-color: color-mix(in srgb, currentColor 12%, transparent);
+  }
+
+  .sileo-toast-button {
+    font-weight: 600;
+  }
+
   .workspace-journal-editor {
     overflow: visible;
     position: relative;

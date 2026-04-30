@@ -16,6 +16,7 @@ import {
 import type { JournalRecord } from "@/features/journal/lib/journals";
 import { useDeleteJournalMutation } from "@/features/journal/lib/queries";
 import { getEdenErrorMessage } from "@/lib/eden-error";
+import { toast } from "@/lib/toast";
 
 const journalDeletionFailedMessage = "Journal deletion failed. Try again.";
 
@@ -31,9 +32,18 @@ export function JournalPageActions({ journal }: { journal: JournalRecord }) {
   async function handleDelete(): Promise<void> {
     try {
       await deleteJournalMutation.mutateAsync(journal.id);
+      toast.success({
+        title: "Journal removed",
+        description: `Removed “${journal.title}” from your journals.`,
+      });
       router.push("/app/journals");
     } catch (cause) {
-      throw new Error(getDeleteErrorMessage(cause));
+      const message = getDeleteErrorMessage(cause);
+      toast.error({
+        title: "Could not remove journal",
+        description: message,
+      });
+      throw new Error(message);
     }
   }
 

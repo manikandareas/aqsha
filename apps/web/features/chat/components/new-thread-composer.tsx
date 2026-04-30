@@ -18,6 +18,8 @@ import {
 import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
 import { pendingPromptKey } from "@/features/chat/lib/pending-prompt";
 import { useCreateChatThreadMutation } from "@/features/chat/lib/queries";
+import { getEdenErrorMessage } from "@/lib/eden-error";
+import { toast } from "@/lib/toast";
 
 const quickQuestions = ["Create an Automation", "Run security audit"];
 
@@ -34,9 +36,19 @@ export function NewThreadComposer() {
       return;
     }
 
-    const thread = await createThreadMutation.mutateAsync();
-    sessionStorage.setItem(pendingPromptKey(thread.id), prompt);
-    router.push(`/app/threads/${thread.id}`);
+    try {
+      const thread = await createThreadMutation.mutateAsync();
+      sessionStorage.setItem(pendingPromptKey(thread.id), prompt);
+      router.push(`/app/threads/${thread.id}`);
+    } catch (cause) {
+      toast.error({
+        title: "Could not start conversation",
+        description: getEdenErrorMessage(
+          cause,
+          "Conversation start failed. Try again.",
+        ),
+      });
+    }
   }
 
   return (

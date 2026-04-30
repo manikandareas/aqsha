@@ -12,6 +12,7 @@ import { pendingPromptKey } from "@/features/chat/lib/pending-prompt";
 import { useChatScroll } from "@/features/chat/components/use-chat-scroll";
 import { getApiBaseUrl } from "@/lib/api-url";
 import { queryKeys } from "@/lib/react-query/keys";
+import { toast } from "@/lib/toast";
 
 export function ChatThread({
   id,
@@ -22,6 +23,7 @@ export function ChatThread({
 }) {
   const queryClient = useQueryClient();
   const sentPendingPromptRef = useRef(false);
+  const toastedErrorRef = useRef<unknown>(null);
   const { containerRef, isAtBottom, scrollToBottom } = useChatScroll(id);
   const transport = useMemo(
     () =>
@@ -46,6 +48,18 @@ export function ChatThread({
       });
     },
   });
+
+  useEffect(() => {
+    if (!error || toastedErrorRef.current === error) {
+      return;
+    }
+
+    toastedErrorRef.current = error;
+    toast.error({
+      title: "Could not send message",
+      description: "Something went wrong. Please try again.",
+    });
+  }, [error]);
 
   useEffect(() => {
     if (sentPendingPromptRef.current || status !== "ready") {

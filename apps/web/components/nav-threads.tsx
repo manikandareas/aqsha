@@ -36,6 +36,7 @@ import {
 } from "@/features/chat/lib/queries";
 import type { ChatThread } from "@/features/chat/lib/types";
 import { getEdenErrorMessage } from "@/lib/eden-error";
+import { toast } from "@/lib/toast";
 
 const threadRequestFailedMessage = "Thread request failed. Try again.";
 
@@ -113,12 +114,21 @@ export function NavThreads() {
     try {
       await deleteThreadMutation.mutateAsync(thread.id);
       setError(null);
+      toast.success({
+        title: "Thread deleted",
+        description: `Deleted “${thread.title}” from your threads.`,
+      });
 
       if (pathname === `/app/threads/${thread.id}`) {
         router.push("/app");
       }
     } catch (cause) {
-      throw new Error(getThreadErrorMessage(cause));
+      const message = getThreadErrorMessage(cause);
+      toast.error({
+        title: "Could not delete thread",
+        description: message,
+      });
+      throw new Error(message);
     }
   }
 

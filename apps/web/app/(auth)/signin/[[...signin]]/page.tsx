@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { toast } from "@/lib/toast";
 
 const signInSchema = z.object({
   email: z.string().trim().email("Enter a valid email."),
@@ -39,17 +40,23 @@ export default function SignInPage() {
       });
 
       if (response.error) {
-        form.setError("root", {
-          message: response.error.message ?? "Sign in failed.",
+        toast.error({
+          title: "Could not sign in",
+          description: response.error.message ?? "Sign in failed.",
         });
         return;
       }
 
+      toast.success({
+        title: "Signed in",
+        description: "Welcome back to Aqsha.",
+      });
       router.push("/get-started");
       router.refresh();
     } catch (cause) {
-      form.setError("root", {
-        message: cause instanceof Error ? cause.message : "Sign in failed.",
+      toast.error({
+        title: "Could not sign in",
+        description: cause instanceof Error ? cause.message : "Sign in failed.",
       });
     }
   }
@@ -101,12 +108,6 @@ export default function SignInPage() {
           </p>
         ) : null}
       </div>
-
-      {form.formState.errors.root ? (
-        <p className="mt-4 rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm leading-5 text-destructive">
-          {form.formState.errors.root.message}
-        </p>
-      ) : null}
 
       <Button
         type="submit"

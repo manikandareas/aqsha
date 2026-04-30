@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 export type UploadedFileResult = {
   name: string;
@@ -42,9 +42,10 @@ export function useUploadFile({
         setUploadedFile(result);
         onUploadComplete?.(result);
 
-        toast.message(
-          "Using a local preview until cloud upload is available.",
-        );
+        toast.info({
+          title: "Local preview",
+          description: "Using a local preview until cloud upload is available.",
+        });
       } catch (error) {
         onUploadError?.(error as Error);
       } finally {

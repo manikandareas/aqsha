@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { useCompleteGetStartedMutation } from "@/features/onboarding/lib/mutations";
 import { authClient } from "@/lib/auth-client";
 import { getEdenErrorMessage } from "@/lib/eden-error";
+import { toast } from "@/lib/toast";
 
 const getStartedSchema = z.object({
   workspaceName: z.string().trim().min(1, "Workspace name is required."),
@@ -71,7 +72,12 @@ export function GetStartedForm() {
       });
       router.push("/demo");
     } catch (cause) {
-      form.setError("root", { message: getApiErrorMessage(cause) });
+      const message = getApiErrorMessage(cause);
+      form.setError("root", { message });
+      toast.error({
+        title: "Could not create organization",
+        description: message,
+      });
     }
   }
 

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { toast } from "@/lib/toast";
 
 const signUpSchema = z.object({
   name: z.string().trim().min(1, "Name is required."),
@@ -42,17 +43,23 @@ export default function SignUpPage() {
       });
 
       if (response.error) {
-        form.setError("root", {
-          message: response.error.message ?? "Sign up failed.",
+        toast.error({
+          title: "Could not create account",
+          description: response.error.message ?? "Sign up failed.",
         });
         return;
       }
 
+      toast.success({
+        title: "Account created",
+        description: "Continue setting up your workspace.",
+      });
       router.push("/get-started");
       router.refresh();
     } catch (cause) {
-      form.setError("root", {
-        message: cause instanceof Error ? cause.message : "Sign up failed.",
+      toast.error({
+        title: "Could not create account",
+        description: cause instanceof Error ? cause.message : "Sign up failed.",
       });
     }
   }
@@ -121,12 +128,6 @@ export default function SignUpPage() {
           </p>
         ) : null}
       </div>
-
-      {form.formState.errors.root ? (
-        <p className="mt-4 rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm leading-5 text-destructive">
-          {form.formState.errors.root.message}
-        </p>
-      ) : null}
 
       <Button
         type="submit"
