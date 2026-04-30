@@ -12,6 +12,8 @@ const _insertWorkspaceMembers = createInsertSchema(table.workspaceMembers);
 const _insertJournals = createInsertSchema(table.journals);
 const _insertJournalVersions = createInsertSchema(table.journalVersions);
 const _insertExports = createInsertSchema(table.exports);
+const _insertChatThreads = createInsertSchema(table.chatThreads);
+const _insertChatMessages = createInsertSchema(table.chatMessages);
 const _insertAgentThreads = createInsertSchema(table.agentThreads);
 const _insertAgentMessages = createInsertSchema(table.agentMessages);
 const _insertAgentRuns = createInsertSchema(table.agentRuns);
@@ -28,6 +30,8 @@ const _selectWorkspaceMembers = createSelectSchema(table.workspaceMembers);
 const _selectJournals = createSelectSchema(table.journals);
 const _selectJournalVersions = createSelectSchema(table.journalVersions);
 const _selectExports = createSelectSchema(table.exports);
+const _selectChatThreads = createSelectSchema(table.chatThreads);
+const _selectChatMessages = createSelectSchema(table.chatMessages);
 const _selectAgentThreads = createSelectSchema(table.agentThreads);
 const _selectAgentMessages = createSelectSchema(table.agentMessages);
 const _selectAgentRuns = createSelectSchema(table.agentRuns);
@@ -46,6 +50,8 @@ export const dbModel = {
     journals: _insertJournals,
     journalVersions: _insertJournalVersions,
     exports: _insertExports,
+    chatThreads: _insertChatThreads,
+    chatMessages: _insertChatMessages,
     agentThreads: _insertAgentThreads,
     agentMessages: _insertAgentMessages,
     agentRuns: _insertAgentRuns,
@@ -63,6 +69,8 @@ export const dbModel = {
     journals: _selectJournals,
     journalVersions: _selectJournalVersions,
     exports: _selectExports,
+    chatThreads: _selectChatThreads,
+    chatMessages: _selectChatMessages,
     agentThreads: _selectAgentThreads,
     agentMessages: _selectAgentMessages,
     agentRuns: _selectAgentRuns,

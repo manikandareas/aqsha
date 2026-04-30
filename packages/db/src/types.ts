@@ -1,6 +1,8 @@
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import {
   accounts,
+  chatMessages,
+  chatThreads,
   exports,
   journalVersions,
   journals,
@@ -28,6 +30,8 @@ export type WorkspaceMemberRecord = InferSelectModel<typeof workspaceMembers>;
 export type JournalRecord = InferSelectModel<typeof journals>;
 export type JournalVersionRecord = InferSelectModel<typeof journalVersions>;
 export type ExportRecord = InferSelectModel<typeof exports>;
+export type ChatThreadRecord = InferSelectModel<typeof chatThreads>;
+export type ChatMessageRecord = InferSelectModel<typeof chatMessages>;
 export type AgentThreadRecord = InferSelectModel<typeof agentThreads>;
 export type AgentMessageRecord = InferSelectModel<typeof agentMessages>;
 export type AgentRunRecord = InferSelectModel<typeof agentRuns>;
@@ -44,6 +48,8 @@ export type NewWorkspaceMember = InferInsertModel<typeof workspaceMembers>;
 export type NewJournal = InferInsertModel<typeof journals>;
 export type NewJournalVersion = InferInsertModel<typeof journalVersions>;
 export type NewExport = InferInsertModel<typeof exports>;
+export type NewChatThread = InferInsertModel<typeof chatThreads>;
+export type NewChatMessage = InferInsertModel<typeof chatMessages>;
 export type NewAgentThread = InferInsertModel<typeof agentThreads>;
 export type NewAgentMessage = InferInsertModel<typeof agentMessages>;
 export type NewAgentRun = InferInsertModel<typeof agentRuns>;

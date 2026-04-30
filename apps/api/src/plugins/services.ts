@@ -1,7 +1,7 @@
 import { Elysia } from "elysia";
 import { database } from "../database/client";
+import { DrizzleChatStore } from "../modules/chat/repository";
 import { ChatService } from "../modules/chat/service";
-import { InMemoryChatStore } from "../modules/chat/store";
 import { JournalRepository } from "../modules/journals/repository";
 import { JournalService } from "../modules/journals/service";
 import { SessionService } from "../modules/session/service";
@@ -13,7 +13,7 @@ import { WorkspaceService } from "../modules/workspaces/service";
 const userRepository = new UserRepository(database);
 const workspaceRepository = new WorkspaceRepository(database);
 const journalRepository = new JournalRepository(database);
-const chatStore = new InMemoryChatStore();
+const chatStore = new DrizzleChatStore(database);
 
 const userService = new UserService(userRepository);
 const workspaceService = new WorkspaceService(workspaceRepository);

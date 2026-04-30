@@ -1,7 +1,7 @@
 import { generateId, type UIMessage } from "ai";
 import type { AuthIdentity } from "../../plugins/auth-identity";
 import type { ChatModel } from "./model";
-import type { ChatMessage, ChatStore } from "./store";
+import type { ChatMessage, ChatScope, ChatStore } from "./store";
 
 type ServiceError = "unauthorized" | "chat_thread_not_found";
 type ServiceResult<T> =
@@ -15,9 +15,15 @@ export class ChatService {
   async listThreads(
     identity: AuthIdentity,
   ): Promise<ServiceResult<ChatModel["chatThread"][]>> {
+    const scope = await this.getScope(identity);
+
+    if (!scope) {
+      return { success: false, error: "unauthorized" };
+    }
+
     return {
       success: true,
-      data: await this.store.listThreads(identity.authUserId),
+      data: await this.store.listThreads(scope),
     };
   }
 
@@ -25,10 +31,16 @@ export class ChatService {
     identity: AuthIdentity,
     input: ChatModel["createThreadBody"],
   ): Promise<ServiceResult<ChatModel["chatThread"]>> {
+    const scope = await this.getScope(identity);
+
+    if (!scope) {
+      return { success: false, error: "unauthorized" };
+    }
+
     return {
       success: true,
       data: await this.store.createThread({
-        userId: identity.authUserId,
+        ...scope,
         model: input.model ?? null,
       }),
     };
@@ -38,7 +50,13 @@ export class ChatService {
     identity: AuthIdentity,
     threadId: string,
   ): Promise<ServiceResult<ChatModel["chatThreadDetail"]>> {
-    const thread = await this.store.getThread(identity.authUserId, threadId);
+    const scope = await this.getScope(identity);
+
+    if (!scope) {
+      return { success: false, error: "unauthorized" };
+    }
+
+    const thread = await this.store.getThread(scope, threadId);
 
     if (!thread) {
       return { success: false, error: "chat_thread_not_found" };
@@ -48,7 +66,7 @@ export class ChatService {
       success: true,
       data: {
         thread,
-        messages: (await this.store.getMessages(identity.authUserId, threadId)) ?? [],
+        messages: await this.store.getMessages(scope, threadId),
       },
     };
   }
@@ -57,7 +75,13 @@ export class ChatService {
     identity: AuthIdentity,
     threadId: string,
   ): Promise<ServiceResult<{ ok: true }>> {
-    const deleted = await this.store.deleteThread(identity.authUserId, threadId);
+    const scope = await this.getScope(identity);
+
+    if (!scope) {
+      return { success: false, error: "unauthorized" };
+    }
+
+    const deleted = await this.store.deleteThread(scope, threadId);
 
     if (!deleted) {
       return { success: false, error: "chat_thread_not_found" };
@@ -70,33 +94,45 @@ export class ChatService {
     identity: AuthIdentity,
     threadId: string,
     message: ChatModel["sendMessageBody"]["message"],
-  ): Promise<ServiceResult<UIMessage[]>> {
-    const thread = await this.store.getThread(identity.authUserId, threadId);
+  ): Promise<ServiceResult<{ thread: ChatModel["chatThread"]; messages: UIMessage[] }>> {
+    const scope = await this.getScope(identity);
+
+    if (!scope) {
+      return { success: false, error: "unauthorized" };
+    }
+
+    const thread = await this.store.getThread(scope, threadId);
 
     if (!thread) {
       return { success: false, error: "chat_thread_not_found" };
     }
 
-    const userMessage = await this.store.appendMessage(identity.authUserId, {
+    const createdAt = new Date().toISOString();
+    const userMessage = await this.store.appendMessage(scope, {
       id: message.id ?? generateId(),
       threadId,
       role: "user",
       parts: message.parts,
+      createdAt,
     });
 
     if (!userMessage) {
       return { success: false, error: "chat_thread_not_found" };
     }
 
-    const messages = (await this.store.getMessages(identity.authUserId, threadId)) ?? [];
-    await this.store.updateThread(identity.authUserId, threadId, {
+    const messages = await this.store.getMessages(scope, threadId);
+    await this.store.updateThread(scope, threadId, {
       title: this.titleForThread(thread.title, messages),
-      updatedAt: new Date().toISOString(),
+      updatedAt: createdAt,
+      lastMessageAt: createdAt,
     });
 
     return {
       success: true,
-      data: messages.map((storedMessage) => this.toUIMessage(storedMessage)),
+      data: {
+        thread,
+        messages: messages.map((storedMessage) => this.toUIMessage(storedMessage)),
+      },
     };
   }
 
@@ -105,34 +141,38 @@ export class ChatService {
     threadId: string,
     messages: UIMessage[],
   ): Promise<void> {
-    const storedMessages: ChatMessage[] = messages
-      .filter((message) =>
-        message.role === "user" || message.role === "assistant" || message.role === "system",
-      )
-      .map((message) => ({
-        id: message.id,
-        threadId,
-        role: message.role,
-        parts: message.parts,
-        createdAt: new Date().toISOString(),
-      }));
+    const scope = await this.getScope(identity);
 
-    await this.store.replaceMessages(identity.authUserId, threadId, storedMessages);
+    if (!scope) {
+      return;
+    }
 
-    const thread = await this.store.getThread(identity.authUserId, threadId);
+    const storedMessages = await this.store.upsertMessages(scope, threadId, messages);
+
+    if (!storedMessages) {
+      return;
+    }
+
+    const thread = await this.store.getThread(scope, threadId);
 
     if (!thread) {
       return;
     }
 
-    await this.store.updateThread(identity.authUserId, threadId, {
+    const lastMessage = storedMessages.at(-1);
+    await this.store.updateThread(scope, threadId, {
       title: this.titleForThread(thread.title, storedMessages),
       updatedAt: new Date().toISOString(),
+      lastMessageAt: lastMessage?.createdAt ?? null,
     });
   }
 
   getModel(thread: ChatModel["chatThread"]): string | null {
     return thread.model;
+  }
+
+  private async getScope(identity: AuthIdentity): Promise<ChatScope | null> {
+    return this.store.getScope(identity.authUserId);
   }
 
   private toUIMessage(message: ChatMessage): UIMessage {

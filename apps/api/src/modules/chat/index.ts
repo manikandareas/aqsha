@@ -54,7 +54,7 @@ export const chatModule = new Elysia({
     {
       detail: {
         summary: "List chat threads",
-        description: "Returns temporary in-memory chat threads for the authenticated user.",
+        description: "Returns persisted chat threads for the authenticated user.",
       },
       response: {
         200: t.Array(chatModel.chatThread),
@@ -78,7 +78,7 @@ export const chatModule = new Elysia({
     {
       detail: {
         summary: "Create chat thread",
-        description: "Creates a temporary in-memory chat thread for the authenticated user.",
+        description: "Creates a persisted chat thread for the authenticated user.",
       },
       body: chatModel.createThreadBody,
       response: {
@@ -101,7 +101,7 @@ export const chatModule = new Elysia({
     {
       detail: {
         summary: "Get chat thread",
-        description: "Returns a temporary in-memory chat thread and its messages.",
+        description: "Returns a persisted chat thread and its messages.",
       },
       response: {
         200: chatModel.chatThreadDetail,
@@ -124,7 +124,7 @@ export const chatModule = new Elysia({
     {
       detail: {
         summary: "Delete chat thread",
-        description: "Deletes a temporary in-memory chat thread.",
+        description: "Deletes a persisted chat thread.",
       },
       response: {
         200: chatModel.okResponse,
@@ -136,12 +136,6 @@ export const chatModule = new Elysia({
   .post(
     "/threads/:id/messages",
     async ({ body, chatService, identity, params, status }) => {
-      const threadResult = await chatService.getThread(identity, params.id);
-
-      if (!threadResult.success) {
-        return status(404, chatThreadNotFoundResponse);
-      }
-
       const messagesResult = await chatService.appendUserMessage(
         identity,
         params.id,
@@ -152,7 +146,7 @@ export const chatModule = new Elysia({
         return status(404, chatThreadNotFoundResponse);
       }
 
-      const model = chatService.getModel(threadResult.data.thread);
+      const model = chatService.getModel(messagesResult.data.thread);
       const headers = new Headers({
         Authorization: `Bearer ${env.ASTRA_INTERNAL_TOKEN}`,
         "Content-Type": "application/json",
@@ -169,7 +163,7 @@ export const chatModule = new Elysia({
         body: JSON.stringify({
           trigger: "submit-message",
           id: params.id,
-          messages: messagesResult.data,
+          messages: messagesResult.data.messages,
         }),
       });
 
@@ -190,7 +184,7 @@ export const chatModule = new Elysia({
 
       const [clientStream, persistenceStream] = upstream.body.tee();
 
-      void collectFinishedMessages(persistenceStream, messagesResult.data)
+      void collectFinishedMessages(persistenceStream, messagesResult.data.messages)
         .then((messages) => chatService.saveFinishedMessages(identity, params.id, messages))
         .catch((error: unknown) => {
           console.error("Failed to persist streamed chat response", error);
@@ -204,7 +198,7 @@ export const chatModule = new Elysia({
     {
       detail: {
         summary: "Send chat message",
-        description: "Streams an assistant response for a temporary in-memory chat thread.",
+        description: "Streams an assistant response for a persisted chat thread.",
       },
       body: chatModel.sendMessageBody,
       response: {

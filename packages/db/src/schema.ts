@@ -52,6 +52,8 @@ export const exportStatuses = [
   "ready",
   "failed",
 ] as const;
+export const chatThreadStatuses = ["active", "archived"] as const;
+export const chatMessageRoles = ["system", "user", "assistant", "tool"] as const;
 export const agentDepthModes = ["standard", "deep"] as const;
 export const agentThreadStatuses = ["active", "archived"] as const;
 export const agentMessageRoles = ["user", "assistant", "system"] as const;
@@ -497,6 +499,80 @@ export const exports = pgTable(
   ],
 );
 
+export const chatThreads = pgTable(
+  "chat_threads",
+  {
+    id: idColumn("id"),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    ownerUserId: uuid("owner_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull().default("New chat"),
+    model: text("model"),
+    status: text("status", { enum: chatThreadStatuses })
+      .default("active")
+      .notNull(),
+    metadata: jsonb("metadata").$type<JsonValue>(),
+    lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (table) => [
+    check(
+      "chat_threads_status_check",
+      sql`${table.status} in ('active', 'archived')`,
+    ),
+    index("chat_threads_workspace_last_message_idx").on(
+      table.workspaceId,
+      table.lastMessageAt,
+    ),
+    index("chat_threads_workspace_updated_idx").on(
+      table.workspaceId,
+      table.updatedAt,
+    ),
+    index("chat_threads_owner_user_id_idx").on(table.ownerUserId),
+  ],
+);
+
+export const chatMessages = pgTable(
+  "chat_messages",
+  {
+    id: text("id").primaryKey(),
+    threadId: uuid("thread_id")
+      .notNull()
+      .references(() => chatThreads.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    role: text("role", { enum: chatMessageRoles }).notNull(),
+    uiMessage: jsonb("ui_message").$type<JsonValue>().notNull(),
+    clientMessageId: text("client_message_id"),
+    model: text("model"),
+    metadata: jsonb("metadata").$type<JsonValue>(),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (table) => [
+    check(
+      "chat_messages_role_check",
+      sql`${table.role} in ('system', 'user', 'assistant', 'tool')`,
+    ),
+    index("chat_messages_thread_created_idx").on(
+      table.threadId,
+      table.createdAt,
+    ),
+    index("chat_messages_workspace_created_idx").on(
+      table.workspaceId,
+      table.createdAt,
+    ),
+    uniqueIndex("chat_messages_thread_client_message_unique_idx")
+      .on(table.threadId, table.clientMessageId)
+      .where(sql`${table.clientMessageId} is not null`),
+  ],
+);
+
 export const agentThreads = pgTable(
   "agent_threads",
   {
@@ -718,6 +794,8 @@ export const table = {
   // sources,
   // sourceChunks,
   exports,
+  chatThreads,
+  chatMessages,
   agentThreads,
   agentMessages,
   agentRuns,
