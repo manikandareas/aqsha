@@ -7,7 +7,15 @@ import { cn } from "@/lib/utils";
 export type PromptInputProps = ComponentProps<"form">;
 
 export function PromptInput({ className, ...props }: PromptInputProps) {
-  return <form className={cn("flex flex-col gap-3", className)} {...props} />;
+  return (
+    <form
+      className={cn(
+        "rounded-2xl border border-border bg-card shadow-sm transition-shadow focus-within:shadow-md",
+        className,
+      )}
+      {...props}
+    />
+  );
 }
 
 export type PromptInputTextareaProps = ComponentProps<"textarea">;
@@ -19,7 +27,7 @@ export function PromptInputTextarea({
   return (
     <textarea
       className={cn(
-        "min-h-20 w-full resize-none bg-transparent px-3 py-2 text-[15px] leading-relaxed outline-none placeholder:text-muted-foreground/70",
+        "min-h-24 w-full resize-none bg-transparent px-3.5 py-3 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground/70 disabled:opacity-50",
         className,
       )}
       rows={3}
@@ -36,7 +44,10 @@ export function PromptInputToolbar({
 }: PromptInputToolbarProps) {
   return (
     <div
-      className={cn("flex items-center justify-between gap-3 px-1", className)}
+      className={cn(
+        "flex flex-wrap items-center justify-between gap-2.5 px-3.5 pb-3",
+        className,
+      )}
       {...props}
     />
   );
@@ -48,7 +59,9 @@ export function PromptInputTools({
   className,
   ...props
 }: PromptInputToolsProps) {
-  return <div className={cn("flex items-center gap-2", className)} {...props} />;
+  return (
+    <div className={cn("flex flex-wrap items-center gap-2", className)} {...props} />
+  );
 }
 
 export type PromptInputSubmitProps = ComponentProps<"button">;
@@ -60,7 +73,7 @@ export function PromptInputSubmit({
   return (
     <button
       className={cn(
-        "inline-flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm transition-colors hover:bg-notion-active-blue disabled:pointer-events-none disabled:opacity-50",
+        "inline-flex size-7 items-center justify-center rounded-full bg-foreground text-background shadow-sm transition-transform hover:scale-105 active:scale-95 disabled:pointer-events-none disabled:opacity-50",
         className,
       )}
       type="submit"

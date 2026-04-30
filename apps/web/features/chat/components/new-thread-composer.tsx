@@ -1,22 +1,44 @@
 "use client";
 
+import {
+  ChevronDownIcon,
+  GitBranchIcon,
+  ImageIcon,
+  SendHorizonalIcon,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { MessageInput } from "@/features/chat/components/message-input";
+import {
+  PromptInput,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputToolbar,
+  PromptInputTools,
+} from "@/components/ai-elements/prompt-input";
+import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
 import { createChatThread } from "@/features/chat/lib/api";
 import { pendingPromptKey } from "@/features/chat/lib/pending-prompt";
 
+const quickQuestions = ["Create an Automation", "Run security audit"];
+
 export function NewThreadComposer() {
   const router = useRouter();
+  const [input, setInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSend(text: string) {
+    const prompt = text.trim();
+
+    if (!prompt || isSubmitting) {
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
       const thread = await createChatThread();
-      sessionStorage.setItem(pendingPromptKey(thread.id), text);
+      sessionStorage.setItem(pendingPromptKey(thread.id), prompt);
       router.push(`/app/threads/${thread.id}`);
     } finally {
       setIsSubmitting(false);
@@ -24,47 +46,87 @@ export function NewThreadComposer() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-background">
-      <div className="flex flex-1 items-center justify-center px-4 py-8 sm:px-6 lg:px-8">
-        <div className="w-full max-w-4xl rounded-[28px] border border-border bg-[#f6f5f4]/60 px-4 py-8 shadow-sm sm:px-8 sm:py-12 lg:px-10">
-          <div className="mx-auto w-full max-w-3xl space-y-8 text-center">
-            <div className="space-y-4">
-              <p className="mx-auto w-fit rounded-full bg-badge-bg px-2 py-1 text-xs font-semibold tracking-badge text-badge-foreground">
-                Temporary thread
-              </p>
-              <div className="space-y-3">
-                <h1 className="text-3xl font-bold leading-tight tracking-[-0.625px] text-foreground sm:text-5xl sm:tracking-[-1.5px]">
-                  What can I help with?
-                </h1>
-                <p className="mx-auto max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
-                  Start with a question, idea, or rough note. Your first message creates a temporary thread and opens the conversation.
-                </p>
+    <div className="min-h-full bg-background px-4 py-12 text-foreground sm:px-6 lg:px-8 lg:py-20">
+      <div className="mx-auto w-full max-w-[720px]">
+        <PromptInput
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleSend(input);
+          }}
+        >
+          <PromptInputTextarea
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
+            placeholder="Ask Aqsha to build, fix bugs, explore"
+            disabled={isSubmitting}
+            className="min-h-24 sm:min-h-28"
+          />
+
+          <PromptInputToolbar>
+            <PromptInputTools className="gap-2 text-xs text-muted-foreground sm:text-sm">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-md transition-colors hover:text-foreground"
+              >
+                Codex 5.3 High
+                <ChevronDownIcon className="size-3.5" />
+              </button>
+
+              <div className="flex -space-x-1.5">
+                <span className="grid size-6 place-items-center rounded-full border border-card bg-primary text-[10px] font-semibold text-primary-foreground">
+                  A
+                </span>
+                <span className="grid size-6 place-items-center rounded-full border border-card bg-badge-bg text-[10px] font-semibold text-badge-foreground">
+                  C
+                </span>
+                <span className="grid size-6 place-items-center rounded-full border border-card bg-muted text-[10px] font-semibold text-muted-foreground">
+                  G
+                </span>
               </div>
-            </div>
 
-            <MessageInput
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-md transition-colors hover:text-foreground"
+              >
+                <ChevronDownIcon className="size-3.5" />
+              </button>
+            </PromptInputTools>
+
+            <PromptInputTools className="gap-2 text-muted-foreground">
+              <button
+                type="button"
+                className="rounded-md p-1 transition-colors hover:bg-muted hover:text-foreground"
+                aria-label="Attach image"
+              >
+                <ImageIcon className="size-4" />
+              </button>
+              <PromptInputSubmit
+                disabled={isSubmitting || input.trim().length === 0}
+                aria-label="Send message"
+              >
+                <SendHorizonalIcon className="size-3.5" />
+              </PromptInputSubmit>
+            </PromptInputTools>
+          </PromptInputToolbar>
+        </PromptInput>
+
+        <Suggestions className="mt-3">
+          {quickQuestions.map((question) => (
+            <Suggestion
+              key={question}
+              suggestion={question}
+              onClick={setInput}
               disabled={isSubmitting}
-              isStreaming={false}
-              onSend={handleSend}
-              onStop={() => undefined}
-              className="px-0 pb-0"
+              className="bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
             />
-
-            <div className="grid gap-2 text-left sm:grid-cols-3">
-              {["Draft a plan", "Explain an idea", "Brainstorm next steps"].map((label) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => void handleSend(label)}
-                  disabled={isSubmitting}
-                  className="rounded-xl border border-border bg-background px-3 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+          ))}
+        </Suggestions>
       </div>
     </div>
   );
