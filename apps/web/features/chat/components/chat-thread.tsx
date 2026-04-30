@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef } from "react";
 
 import { MessageInput } from "@/features/chat/components/message-input";
 import { MessageList } from "@/features/chat/components/message-list";
+import { dispatchThreadsChanged } from "@/features/chat/lib/events";
 import { pendingPromptKey } from "@/features/chat/lib/pending-prompt";
 import { useChatScroll } from "@/features/chat/components/use-chat-scroll";
 import { getApiBaseUrl } from "@/lib/api-url";
@@ -39,7 +40,10 @@ export function ChatThread({
     id,
     messages: initialMessages,
     transport,
-    onFinish: () => router.refresh(),
+    onFinish: () => {
+      dispatchThreadsChanged();
+      router.refresh();
+    },
   });
 
   useEffect(() => {

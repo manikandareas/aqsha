@@ -1,7 +1,9 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import Link from "next/link";
 import { api } from "@/lib/eden";
+import { getEdenErrorMessage } from "@/lib/eden-error";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -49,40 +51,14 @@ import * as React from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 
-type EdenErrorValue = {
-  error?: {
-    message?: unknown;
-  };
-};
-
 const createJournalSchema = z.object({
   title: z.string().trim().min(1, "Journal title is required."),
 });
 
 type CreateJournalFormValues = z.infer<typeof createJournalSchema>;
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
 function getJournalErrorMessage(error: unknown): string {
-  if (isObject(error) && "value" in error) {
-    const value = error.value;
-
-    if (isObject(value)) {
-      const apiError = (value as EdenErrorValue).error;
-
-      if (isObject(apiError) && typeof apiError.message === "string") {
-        return apiError.message;
-      }
-    }
-  }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Journal request failed. Try again.";
+  return getEdenErrorMessage(error, "Journal request failed. Try again.");
 }
 
 export function NavJournal() {
@@ -147,7 +123,7 @@ export function NavJournal() {
       form.reset();
       setIsDialogOpen(false);
       window.dispatchEvent(new Event("journals:changed"));
-      router.push(`/app/journal/${journal.id}`);
+      router.push(`/app/journals/${journal.id}`);
       router.refresh();
     } catch (cause) {
       setError(getJournalErrorMessage(cause));
@@ -236,7 +212,7 @@ export function NavJournal() {
         {journals.map((item) => (
           <SidebarMenuItem key={item.id}>
             <SidebarMenuButton
-              render={<a href={`/app/journal/${item.id}`} title={item.title} />}
+              render={<Link href={`/app/journals/${item.id}`} title={item.title} />}
               className="h-8 text-[13px] font-medium"
             >
               <FileTextIcon className="h-[14px] w-[14px] shrink-0 text-sidebar-foreground/45" />
@@ -274,7 +250,7 @@ export function NavJournal() {
                   <DropdownMenuItem>
                     <ArrowUpRightIcon className="text-muted-foreground" />
                     <a
-                      href={`/app/journal/${item.id}`}
+                      href={`/app/journals/${item.id}`}
                       target="_blank"
                       rel="noreferrer"
                     >

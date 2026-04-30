@@ -2,7 +2,6 @@
 
 import {
   ChevronDownIcon,
-  GitBranchIcon,
   ImageIcon,
   SendHorizonalIcon,
 } from "lucide-react";
@@ -18,6 +17,7 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
 import { createChatThread } from "@/features/chat/lib/api";
+import { dispatchThreadsChanged } from "@/features/chat/lib/events";
 import { pendingPromptKey } from "@/features/chat/lib/pending-prompt";
 
 const quickQuestions = ["Create an Automation", "Run security audit"];
@@ -39,6 +39,7 @@ export function NewThreadComposer() {
     try {
       const thread = await createChatThread();
       sessionStorage.setItem(pendingPromptKey(thread.id), prompt);
+      dispatchThreadsChanged();
       router.push(`/app/threads/${thread.id}`);
     } finally {
       setIsSubmitting(false);

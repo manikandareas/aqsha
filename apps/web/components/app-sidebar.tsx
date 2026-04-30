@@ -5,6 +5,7 @@ import * as React from "react";
 
 import { NavJournal } from "@/components/nav-journal";
 import { NavMain } from "@/components/nav-main";
+import { NavThreads } from "@/components/nav-threads";
 import { NavSecondary } from "@/components/nav-secondary";
 import { TeamSwitcher } from "@/components/team-switcher";
 import {
@@ -16,7 +17,6 @@ import {
   AudioLinesIcon,
   BlocksIcon,
   HomeIcon,
-  MessageCircleIcon,
   MessageCircleQuestionIcon,
   SearchIcon,
   Settings2Icon,
@@ -53,14 +53,14 @@ const data = {
       variant: "search" as const,
     },
     {
-      title: "Journal",
+      title: "Home",
       url: "/app",
       icon: <HomeIcon />,
     },
     {
-      title: "Threads",
-      url: "/app/threads",
-      icon: <MessageCircleIcon />,
+      title: "My Library",
+      url: "/app/journals",
+      icon: <BlocksIcon />,
     },
   ],
   navSecondary: [
@@ -79,12 +79,13 @@ const data = {
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
+  const isJournalsRoute = pathname.startsWith("/app/journals");
   const navMain = data.navMain.map((item) => ({
     ...item,
     isActive:
       item.url === "/app"
-        ? pathname === "/app" || pathname.startsWith("/app/journal")
-        : pathname.startsWith(item.url),
+        ? pathname === "/app" || pathname.startsWith("/app/threads/")
+        : pathname === item.url || pathname.startsWith(`${item.url}/`),
   }));
 
   return (
@@ -96,7 +97,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        <NavJournal />
+        {isJournalsRoute ? <NavJournal /> : <NavThreads />}
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
     </Sidebar>

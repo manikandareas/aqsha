@@ -14,6 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { createChatThread } from "@/features/chat/lib/api";
+import { dispatchThreadsChanged } from "@/features/chat/lib/events";
 import type { ChatThread } from "@/features/chat/lib/types";
 
 const threadDateFormatter = new Intl.DateTimeFormat("en-US", {
@@ -42,6 +43,7 @@ export function ThreadList({ threads }: { threads: ChatThread[] }) {
 
     try {
       const thread = await createChatThread();
+      dispatchThreadsChanged();
       router.push(`/app/threads/${thread.id}`);
       router.refresh();
     } finally {

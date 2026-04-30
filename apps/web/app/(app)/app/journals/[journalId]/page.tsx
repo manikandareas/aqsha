@@ -1,7 +1,6 @@
 import {
   ClockIcon,
   MessageSquareIcon,
-  ShareIcon,
   StarIcon,
 } from "lucide-react";
 import { notFound } from "next/navigation";
