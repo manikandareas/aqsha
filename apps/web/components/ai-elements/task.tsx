@@ -7,8 +7,8 @@ import { cn } from "@/lib/utils";
 
 export type TaskProps = ComponentProps<"details">;
 
-export function Task({ className, open = true, ...props }: TaskProps) {
-  return <details className={cn("group", className)} open={open} {...props} />;
+export function Task({ className, ...props }: TaskProps) {
+  return <details className={cn("group", className)} {...props} />;
 }
 
 export type TaskTriggerProps = ComponentProps<"summary"> & {

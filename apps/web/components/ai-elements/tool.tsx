@@ -37,7 +37,15 @@ function ToolStatusIcon({ state }: { state: ToolState }) {
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
 export function Tool({ className, ...props }: ToolProps) {
-  return <Collapsible className={cn("not-prose rounded-lg border border-border bg-card", className)} {...props} />;
+  return (
+    <Collapsible
+      className={cn(
+        "group/tool not-prose border-l border-border pl-2.5",
+        className,
+      )}
+      {...props}
+    />
+  );
 }
 
 export type ToolHeaderProps = ComponentProps<typeof CollapsibleTrigger> & {
@@ -51,7 +59,7 @@ export function ToolHeader({ className, toolType, state, ...props }: ToolHeaderP
   return (
     <CollapsibleTrigger
       className={cn(
-        "flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2 text-left text-sm text-foreground outline-none transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/50",
+        "flex w-full cursor-pointer items-center justify-between gap-3 py-1 text-left text-[13px] text-foreground outline-none transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring/50",
         className,
       )}
       {...props}
@@ -61,10 +69,13 @@ export function ToolHeader({ className, toolType, state, ...props }: ToolHeaderP
         <span className="truncate font-medium capitalize">{label}</span>
       </span>
       <span className="flex items-center gap-2">
-        <Badge variant="outline" className="h-5 text-[11px]">
+        <Badge
+          variant="outline"
+          className="h-5 rounded-full border-border bg-background px-2 text-[11px] font-medium"
+        >
           {stateLabel(state)}
         </Badge>
-        <ChevronDownIcon className="size-3.5 text-muted-foreground transition-transform group-data-[open]:rotate-180" />
+        <ChevronDownIcon className="size-3.5 text-muted-foreground transition-transform group-data-[state=open]/tool:rotate-180" />
       </span>
     </CollapsibleTrigger>
   );
@@ -73,7 +84,12 @@ export function ToolHeader({ className, toolType, state, ...props }: ToolHeaderP
 export type ToolContentProps = ComponentProps<typeof CollapsibleContent>;
 
 export function ToolContent({ className, ...props }: ToolContentProps) {
-  return <CollapsibleContent className={cn("border-t border-border px-3 py-2", className)} {...props} />;
+  return (
+    <CollapsibleContent
+      className={cn("pb-1.5 pl-5 pt-0.5", className)}
+      {...props}
+    />
+  );
 }
 
 function JsonBlock({ value }: { value: unknown }) {
@@ -82,7 +98,7 @@ function JsonBlock({ value }: { value: unknown }) {
   }
 
   return (
-    <pre className="max-h-48 overflow-auto rounded-md bg-muted px-3 py-2 text-xs leading-5 text-muted-foreground">
+    <pre className="max-h-40 overflow-auto border-l border-border bg-muted/45 px-2.5 py-1.5 text-xs leading-5 text-muted-foreground">
       {typeof value === "string" ? value : JSON.stringify(value, null, 2)}
     </pre>
   );
@@ -90,8 +106,8 @@ function JsonBlock({ value }: { value: unknown }) {
 
 export function ToolInput({ input }: { input: unknown }) {
   return (
-    <div className="space-y-1.5">
-      <p className="text-xs font-medium text-muted-foreground">Input</p>
+    <div className="space-y-1">
+      <p className="text-xs font-medium text-muted-foreground">Request</p>
       <JsonBlock value={input} />
     </div>
   );
@@ -105,10 +121,10 @@ export function ToolOutput({
   errorText?: string;
 }) {
   return (
-    <div className="mt-2 space-y-1.5">
-      <p className="text-xs font-medium text-muted-foreground">Output</p>
+    <div className="mt-1.5 space-y-1">
+      <p className="text-xs font-medium text-muted-foreground">Result</p>
       {errorText ? (
-        <p className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <p className="border-l border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">
           {errorText}
         </p>
       ) : (
