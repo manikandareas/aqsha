@@ -46,7 +46,7 @@ The local skill lives at:
 skills/deep-research/
 ├── SKILL.md
 ├── references/
-└── scripts/audit_evidence.py
+└── scripts/
 ```
 
 Astra must load `deep-research` for research-heavy requests such as academic
@@ -57,10 +57,16 @@ competitive analysis, and evidence synthesis. The skill requires:
 - search strategy and source discovery;
 - source screening and evidence cards;
 - synthesis with explicit uncertainty;
+- visual artifact specs when the evidence ledger has enough data;
 - `PROCEED / REFINE / PIVOT` decisions;
-- citation verification before final reporting.
+- citation and visual provenance verification before final reporting.
 
 Normal chat does not force the deep-research workflow.
+
+Deep research can save `evidence.json`, `visuals.json`, Matplotlib-generated
+SVGs, an `artifact_manifest.json`, and a `visual_artifacts.md` snippet under the
+local research artifact directory. The final answer remains Markdown and embeds
+only artifacts whose audit status is `passed`.
 
 ## Runtime Settings
 

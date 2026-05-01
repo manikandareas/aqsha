@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+import base64
+import binascii
 import re
+import sys
+from pathlib import Path
 from typing import Any
 
 from pydantic_ai import Agent, RunContext
@@ -11,6 +16,12 @@ from astra.deps import AstraDeps
 from astra.settings import AstraSettings
 from astra.skills import build_skills_capability
 
+APP_ROOT = Path(__file__).resolve().parents[3]
+DEEP_RESEARCH_RENDER_SCRIPT = (
+    APP_ROOT / "skills" / "deep-research" / "scripts" / "render_visual_artifacts.py"
+)
+ARTIFACT_FILE_SUFFIXES = (".md", ".json", ".txt", ".svg", ".html", ".png")
+RENDER_TIMEOUT_SECONDS = 30
 ASTRA_INSTRUCTIONS = """\
 You are Astra, Aqsha's primary AI agent.
 
@@ -28,6 +39,9 @@ source-grounded report, you must use the deep-research skill:
 4. Separate evidence from inference.
 5. Label uncertainty and contradictory evidence.
 6. Never fabricate sources, citations, papers, links, datasets, quotes, or numeric results.
+7. For every deep-research output, try to create visual artifact specs from the
+   verified evidence ledger when data is sufficient. Use trusted render scripts,
+   embed only audited artifacts, and omit visuals when provenance is incomplete.
 
 When tools are available, prefer source discovery through Exa MCP or provider web
 search, then fetch important URLs before using them as evidence. Direct web snippets
@@ -122,15 +136,78 @@ def build_astra_agent(
         conversation_id = ctx.deps.conversation_id or "local"
         safe_conversation_id = _sanitize_path_segment(conversation_id)
         safe_file_name = _sanitize_path_segment(file_name)
-        if not safe_file_name.endswith((".md", ".json", ".txt")):
+        if not safe_file_name.endswith(ARTIFACT_FILE_SUFFIXES):
             safe_file_name = f"{safe_file_name}.md"
 
         target_dir = artifact_dir / safe_conversation_id
         target_dir.mkdir(parents=True, exist_ok=True)
         target_path = target_dir / safe_file_name
-        target_path.write_text(content, encoding="utf-8")
+        write_error = _write_artifact_content(target_path, content)
+        if write_error is not None:
+            return write_error
 
         return f"Saved research artifact to {target_path}"
+
+    @agent.tool(requires_approval=True)
+    async def render_research_artifacts(
+        ctx: RunContext[AstraDeps],
+        evidence_file: str = "evidence.json",
+        visuals_file: str = "visuals.json",
+    ) -> str:
+        """Render audited visual artifacts from local evidence and visual spec files."""
+
+        artifact_dir = ctx.deps.research_artifact_dir
+        if artifact_dir is None:
+            return "Research artifact storage is not configured."
+
+        target_dir = _conversation_artifact_dir(ctx.deps)
+        evidence_path = _resolve_artifact_path(target_dir, evidence_file)
+        visuals_path = _resolve_artifact_path(target_dir, visuals_file)
+
+        if evidence_path is None or visuals_path is None:
+            return (
+                "Evidence and visuals file names must stay within the "
+                "conversation artifact directory."
+            )
+        if not evidence_path.exists():
+            return f"Evidence file not found: {evidence_path}"
+        if not visuals_path.exists():
+            return f"Visual spec file not found: {visuals_path}"
+
+        process = await asyncio.create_subprocess_exec(
+            sys.executable,
+            str(DEEP_RESEARCH_RENDER_SCRIPT),
+            "--evidence",
+            str(evidence_path),
+            "--visuals",
+            str(visuals_path),
+            "--out-dir",
+            str(target_dir),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=RENDER_TIMEOUT_SECONDS,
+            )
+        except TimeoutError:
+            process.kill()
+            await process.communicate()
+            return "Visual artifact rendering timed out."
+
+        if process.returncode != 0:
+            details = stderr.decode("utf-8", errors="replace").strip()
+            return f"Visual artifact rendering failed: {details or 'unknown error'}"
+
+        manifest_path = target_dir / "artifact_manifest.json"
+        markdown_path = target_dir / "visual_artifacts.md"
+        stdout_text = stdout.decode("utf-8", errors="replace").strip()
+        return (
+            f"Rendered visual artifacts in {target_dir}. "
+            f"Manifest: {manifest_path}. Markdown snippet: {markdown_path}. "
+            f"Renderer output: {stdout_text[:1000]}"
+        )
 
     return agent
 
@@ -138,6 +215,39 @@ def build_astra_agent(
 def _sanitize_path_segment(value: str) -> str:
     sanitized = _SAFE_ARTIFACT_NAME_RE.sub("-", value.strip()).strip(".-")
     return sanitized[:120] or "artifact"
+
+
+def _conversation_artifact_dir(deps: AstraDeps) -> Path:
+    artifact_dir = deps.research_artifact_dir
+    if artifact_dir is None:
+        raise ValueError("Research artifact storage is not configured.")
+    conversation_id = deps.conversation_id or "local"
+    return artifact_dir / _sanitize_path_segment(conversation_id)
+
+
+def _write_artifact_content(target_path: Path, content: str) -> str | None:
+    if target_path.suffix != ".png":
+        target_path.write_text(content, encoding="utf-8")
+        return None
+
+    try:
+        target_path.write_bytes(base64.b64decode(content, validate=True))
+    except binascii.Error:
+        return "PNG artifact content must be base64-encoded."
+    return None
+
+
+def _resolve_artifact_path(base_dir: Path, file_name: str) -> Path | None:
+    safe_name = file_name.strip()
+    if not safe_name:
+        return None
+    candidate = (base_dir / safe_name).resolve()
+    resolved_base = base_dir.resolve()
+    try:
+        candidate.relative_to(resolved_base)
+    except ValueError:
+        return None
+    return candidate
 
 
 astra_agent = build_astra_agent()

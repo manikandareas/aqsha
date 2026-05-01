@@ -9,12 +9,20 @@ from typing import Any
 
 from fastapi import Response
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import MCP, WebSearch
 from pydantic_ai.models.test import TestModel
 from pydantic_ai_skills import SkillsDirectory
 
 from astra.agents import build_astra_agent, build_astra_capabilities
+from astra.artifacts import (
+    ArtifactManifest,
+    EvidenceLedger,
+    VisualSpec,
+    audit_visual_spec,
+    compose_visual_markdown,
+)
 from astra.deps import AstraDeps
 from astra.log_config import configure_file_logging
 from astra.settings import AstraSettings
@@ -254,3 +262,243 @@ def test_audit_evidence_script_passes_and_fails(tmp_path: Path) -> None:
         text=True,
     )
     assert named_args.returncode == 0
+
+
+def test_visual_spec_schema_accepts_supported_visuals() -> None:
+    spec = VisualSpec.model_validate(_valid_visuals_payload())
+
+    assert len(spec.visuals) == 3
+    assert {visual.kind for visual in spec.visuals} == {
+        "timeline",
+        "claims_evidence",
+        "research_gap_matrix",
+    }
+
+
+def test_visual_spec_schema_rejects_unsupported_visual() -> None:
+    payload = {"visuals": [{"kind": "pie_chart", "visual_id": "bad", "title": "Bad"}]}
+
+    try:
+        VisualSpec.model_validate(payload)
+    except ValidationError as error:
+        assert "union_tag_invalid" in str(error)
+    else:
+        raise AssertionError("unsupported visual kind should fail validation")
+
+
+def test_visual_audit_rejects_unknown_source_and_metric_mismatch() -> None:
+    evidence = EvidenceLedger.from_raw(_valid_evidence_payload())
+    bad_payload = _valid_visuals_payload()
+    timeline = bad_payload["visuals"][0]
+    timeline["items"][0]["source_ids"] = ["S999"]
+    timeline["items"][0]["citation_count"]["value"] = 99
+    spec = VisualSpec.model_validate(bad_payload)
+
+    report = audit_visual_spec(evidence, spec)
+
+    assert "evidence-timeline" in report.failed_visual_ids
+    assert {issue.code for issue in report.issues} >= {"unknown_source", "metric_mismatch"}
+
+
+def test_render_visual_artifacts_creates_manifest_svg_and_markdown(tmp_path: Path) -> None:
+    evidence_path = tmp_path / "evidence.json"
+    visuals_path = tmp_path / "visuals.json"
+    evidence_path.write_text(json.dumps(_valid_evidence_payload()), encoding="utf-8")
+    visuals_path.write_text(json.dumps(_valid_visuals_payload()), encoding="utf-8")
+    script = DEFAULT_SKILLS_DIR / "deep-research" / "scripts" / "render_visual_artifacts.py"
+
+    rendered = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--evidence",
+            str(evidence_path),
+            "--visuals",
+            str(visuals_path),
+            "--out-dir",
+            str(tmp_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert rendered.returncode == 0
+    manifest = json.loads((tmp_path / "artifact_manifest.json").read_text(encoding="utf-8"))
+    assert [record["audit_status"] for record in manifest["artifacts"]] == [
+        "passed",
+        "passed",
+        "passed",
+    ]
+    timeline_svg = tmp_path / "artifacts" / "evidence-timeline.svg"
+    assert timeline_svg.exists()
+    assert "Evidence Timeline" in timeline_svg.read_text(encoding="utf-8")
+    markdown = (tmp_path / "visual_artifacts.md").read_text(encoding="utf-8")
+    assert "![Evidence Timeline](artifacts/evidence-timeline.svg)" in markdown
+
+
+def test_compose_visual_markdown_embeds_only_passed_artifacts() -> None:
+    manifest = ArtifactManifest.model_validate(
+        {
+            "artifacts": [
+                {
+                    "visual_id": "passed",
+                    "kind": "timeline",
+                    "title": "Passed Timeline",
+                    "caption": "Audited.",
+                    "path": "artifacts/passed.svg",
+                    "source_ids": ["S1"],
+                    "audit_status": "passed",
+                },
+                {
+                    "visual_id": "failed",
+                    "kind": "timeline",
+                    "title": "Failed Timeline",
+                    "caption": "Bad.",
+                    "source_ids": ["S999"],
+                    "audit_status": "failed",
+                    "issues": ["unknown source"],
+                },
+            ]
+        }
+    )
+
+    markdown = compose_visual_markdown(manifest)
+
+    assert "![Passed Timeline](artifacts/passed.svg)" in markdown
+    assert "![Failed Timeline]" not in markdown
+    assert "Omitted `failed`" in markdown
+
+
+def test_audit_visuals_script_fails_for_invalid_visual_spec(tmp_path: Path) -> None:
+    evidence_path = tmp_path / "evidence.json"
+    visuals_path = tmp_path / "visuals.json"
+    evidence_path.write_text(json.dumps(_valid_evidence_payload()), encoding="utf-8")
+    bad_payload = _valid_visuals_payload()
+    bad_payload["visuals"][2]["cells"][0]["source_ids"] = ["S404"]
+    visuals_path.write_text(json.dumps(bad_payload), encoding="utf-8")
+    script = DEFAULT_SKILLS_DIR / "deep-research" / "scripts" / "audit_visuals.py"
+
+    audited = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--evidence",
+            str(evidence_path),
+            "--visuals",
+            str(visuals_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert audited.returncode == 1
+    assert "unknown_source" in audited.stdout
+
+
+def _valid_evidence_payload() -> dict[str, Any]:
+    return {
+        "sources": [
+            {
+                "source_id": "S1",
+                "title": "Trial One",
+                "authors_or_organization": "Research Team",
+                "year": 2024,
+                "date_published": "2024-01-01",
+                "source_type": "randomized trial",
+                "journal_or_publisher": "Journal A",
+                "topics": ["weight loss"],
+                "verification_status": "verified",
+            },
+            {
+                "source_id": "S2",
+                "title": "Review Two",
+                "authors_or_organization": "Review Group",
+                "year": 2025,
+                "date_published": "2025-02-01",
+                "source_type": "systematic review",
+                "journal_or_publisher": "Journal B",
+                "topics": ["glycemic control"],
+                "verification_status": "verified",
+            },
+        ],
+        "claims": [
+            {
+                "claim_id": "C1",
+                "claim_text": "Intervention improves outcomes versus no intervention.",
+                "supporting_sources": ["S1", "S2"],
+                "counterevidence": [],
+                "evidence_strength": "high",
+                "confidence": "high",
+                "verification_status": "verified",
+            }
+        ],
+        "visual_metrics": [
+            {"metric_id": "citations-s1", "value": 9, "source_ids": ["S1"]},
+            {"metric_id": "citations-s2", "value": 4, "source_ids": ["S2"]},
+            {"metric_id": "gap-weight-loss-rct", "value": 2, "source_ids": ["S1", "S2"]},
+        ],
+    }
+
+
+def _valid_visuals_payload() -> dict[str, Any]:
+    return {
+        "visuals": [
+            {
+                "visual_id": "evidence-timeline",
+                "kind": "timeline",
+                "title": "Evidence Timeline",
+                "caption": "Timeline of verified included sources.",
+                "source_ids": ["S1", "S2"],
+                "items": [
+                    {
+                        "label": "S1",
+                        "year": 2024,
+                        "source_ids": ["S1"],
+                        "citation_count": {"metric_id": "citations-s1", "value": 9},
+                    },
+                    {
+                        "label": "S2",
+                        "year": 2025,
+                        "source_ids": ["S2"],
+                        "citation_count": {"metric_id": "citations-s2", "value": 4},
+                    },
+                ],
+            },
+            {
+                "visual_id": "claims-evidence",
+                "kind": "claims_evidence",
+                "title": "Claims Evidence",
+                "caption": "Audited claims and supporting source IDs.",
+                "source_ids": ["S1", "S2"],
+                "rows": [
+                    {
+                        "claim_id": "C1",
+                        "claim": "Intervention improves outcomes versus no intervention.",
+                        "evidence_strength": "high",
+                        "reasoning": "Supported by verified included sources.",
+                        "supporting_sources": ["S1", "S2"],
+                        "counterevidence": [],
+                    }
+                ],
+            },
+            {
+                "visual_id": "research-gaps",
+                "kind": "research_gap_matrix",
+                "title": "Research Gaps",
+                "caption": "Matrix of evidence density by topic and design.",
+                "source_ids": ["S1", "S2"],
+                "rows": ["Weight Loss"],
+                "columns": ["RCT"],
+                "cells": [
+                    {
+                        "row_label": "Weight Loss",
+                        "column_label": "RCT",
+                        "value": {"metric_id": "gap-weight-loss-rct", "value": 2},
+                        "source_ids": ["S1", "S2"],
+                    }
+                ],
+            },
+        ]
+    }
