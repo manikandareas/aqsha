@@ -33,7 +33,7 @@ export function ReasoningTrigger({
   return (
     <summary
       className={cn(
-        "flex cursor-pointer list-none items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground",
+        "flex cursor-pointer list-none items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
         className,
       )}
       {...props}
@@ -41,7 +41,7 @@ export function ReasoningTrigger({
       {children ?? (
         <>
           <BrainIcon className="size-4" />
-          <span>{isStreaming ? "Thinking..." : "Thought process"}</span>
+          <span>{isStreaming ? "Thinking it through..." : "Working notes"}</span>
           <ChevronDownIcon className="size-4 transition-transform group-open:rotate-180" />
         </>
       )}
@@ -52,5 +52,13 @@ export function ReasoningTrigger({
 export type ReasoningContentProps = ComponentProps<"div">;
 
 export function ReasoningContent({ className, ...props }: ReasoningContentProps) {
-  return <div className={cn("mt-3 text-sm text-muted-foreground", className)} {...props} />;
+  return (
+    <div
+      className={cn(
+        "mt-1.5 border-l border-border pl-3 text-[13px] leading-6 text-muted-foreground",
+        className,
+      )}
+      {...props}
+    />
+  );
 }

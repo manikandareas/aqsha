@@ -56,8 +56,8 @@ function eventForChunk(chunk: UIMessageChunk): Omit<AppendAgentEventInput, "sequ
         type: "stream_start",
         scope: "stream",
         status: "running",
-        title: "Connecting to Astra",
-        summary: "The assistant stream has started.",
+        title: "Connecting",
+        summary: "Astra is opening the response stream.",
         payload: { messageId: record.messageId ?? null },
       };
     case "start-step":
@@ -65,24 +65,24 @@ function eventForChunk(chunk: UIMessageChunk): Omit<AppendAgentEventInput, "sequ
         type: "step_start",
         scope: "step",
         status: "running",
-        title: "Starting an agent step",
-        summary: "Astra is preparing the next part of the response.",
+        title: "Preparing next step",
+        summary: "Astra is preparing the next step.",
       };
     case "finish-step":
       return {
         type: "step_finish",
         scope: "step",
         status: "completed",
-        title: "Finished an agent step",
-        summary: "Astra completed one reasoning or tool-use step.",
+        title: "Step completed",
+        summary: "Astra completed the step.",
       };
     case "reasoning-start":
       return {
         type: "reasoning_start",
         scope: "reasoning",
         status: "running",
-        title: "Thinking through the request",
-        summary: "Astra is reasoning before answering.",
+        title: "Reasoning",
+        summary: "Astra is reasoning.",
       };
     case "reasoning-end":
       return {
@@ -90,7 +90,7 @@ function eventForChunk(chunk: UIMessageChunk): Omit<AppendAgentEventInput, "sequ
         scope: "reasoning",
         status: "completed",
         title: "Reasoning completed",
-        summary: "Astra finished its private reasoning step.",
+        summary: "Astra finished reasoning.",
       };
     case "source-url":
       return {
@@ -171,8 +171,8 @@ function eventForChunk(chunk: UIMessageChunk): Omit<AppendAgentEventInput, "sequ
         type: "stream_finish",
         scope: "stream",
         status: "completed",
-        title: "Response stream completed",
-        summary: "Astra finished streaming the answer.",
+        title: "Response completed",
+        summary: "Astra finished the response.",
         payload: {
           finishReason: record.finishReason ?? null,
         },

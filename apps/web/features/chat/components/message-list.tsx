@@ -1,6 +1,21 @@
 import type { UIMessage } from "ai";
-import { CheckCircle2Icon, CircleDashedIcon, CircleIcon, XCircleIcon } from "lucide-react";
+import {
+  CheckCircle2Icon,
+  ChevronDownIcon,
+  CircleDashedIcon,
+  CircleIcon,
+  ExternalLinkIcon,
+  InfoIcon,
+  SearchIcon,
+  SparklesIcon,
+  XCircleIcon,
+} from "lucide-react";
 
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Message,
   MessageContent,
@@ -18,12 +33,6 @@ import {
   SourcesTrigger,
 } from "@/components/ai-elements/sources";
 import {
-  Task,
-  TaskContent,
-  TaskItem,
-  TaskTrigger,
-} from "@/components/ai-elements/task";
-import {
   Tool,
   ToolContent,
   ToolHeader,
@@ -36,6 +45,10 @@ import { cn } from "@/lib/utils";
 
 type MessagePart = UIMessage["parts"][number];
 type ToolPart = Extract<MessagePart, { toolCallId: string }>;
+type TimelineEvent = AgentEvent & {
+  displayTitle: string;
+  displaySummary: string | null;
+};
 
 function textFromParts(parts: UIMessage["parts"]): string {
   return parts
@@ -50,6 +63,12 @@ function partRecord(part: MessagePart): Record<string, unknown> {
   return part as unknown as Record<string, unknown>;
 }
 
+function payloadRecord(event: AgentEvent): Record<string, unknown> {
+  return event.payload && typeof event.payload === "object"
+    ? (event.payload as Record<string, unknown>)
+    : {};
+}
+
 function isToolPart(part: MessagePart): part is ToolPart {
   return part.type === "dynamic-tool" || part.type.startsWith("tool-");
 }
@@ -62,6 +81,25 @@ function toolName(part: ToolPart): string {
       : part.type.replace(/^tool-/, "");
 
   return rawName.replaceAll("_", " ");
+}
+
+function sentenceCase(value: string): string {
+  if (!value) {
+    return value;
+  }
+
+  return `${value[0]?.toUpperCase() ?? ""}${value.slice(1)}`;
+}
+
+function normalizedName(value: string | null | undefined): string {
+  return (value ?? "")
+    .replace(/^tool-/, "")
+    .replace(/^Using\s+/i, "")
+    .replace(/^Finished\s+/i, "")
+    .replace(/\s+(completed|failed)$/i, "")
+    .replaceAll("_", " ")
+    .trim()
+    .toLowerCase();
 }
 
 function toolState(part: ToolPart) {
@@ -94,8 +132,8 @@ function eventsFromMessageParts(message: UIMessage, isStreaming: boolean): Agent
         type: "reasoning",
         scope: "reasoning",
         status: part.state === "done" ? "completed" : "running",
-        title: "Thinking through the request",
-        summary: part.state === "done" ? "Reasoning completed." : "Astra is reasoning before answering.",
+        title: "Reasoning",
+        summary: part.state === "done" ? "Reasoning completed." : "Astra is reasoning.",
         agentName: "Astra",
         toolName: null,
         parentEventId: null,
@@ -120,7 +158,7 @@ function eventsFromMessageParts(message: UIMessage, isStreaming: boolean): Agent
         agentName: "Astra",
         toolName: toolName(part),
         parentEventId: null,
-        payload: null,
+        payload: { toolCallId: part.toolCallId },
         occurredAt: now,
         createdAt: now,
       });
@@ -151,72 +189,650 @@ function eventsFromMessageParts(message: UIMessage, isStreaming: boolean): Agent
   return events;
 }
 
+function latestRunEvents(events: AgentEvent[], latestRun: AgentRun | null) {
+  if (latestRun) {
+    return events.filter((event) => event.runId === latestRun.id);
+  }
+
+  const latestRunId = events.at(-1)?.runId;
+
+  if (!latestRunId) {
+    return [];
+  }
+
+  return events.filter((event) => event.runId === latestRunId);
+}
+
+function sortEvents(events: AgentEvent[]) {
+  return [...events].sort((first, second) => {
+    const sequenceDelta = first.sequence - second.sequence;
+
+    if (sequenceDelta !== 0) {
+      return sequenceDelta;
+    }
+
+    return first.occurredAt.localeCompare(second.occurredAt);
+  });
+}
+
+function timelineTitle(event: AgentEvent) {
+  if (event.scope === "run") {
+    if (event.status === "failed") {
+      return event.agentName ? `${event.agentName} failed` : "Agent failed";
+    }
+
+    if (event.type === "run_completed") {
+      return event.agentName ? `${event.agentName} finished` : "Agent finished";
+    }
+
+    return event.agentName ? `${event.agentName} started` : event.title;
+  }
+
+  if (event.scope === "reasoning") {
+    return "Reasoning";
+  }
+
+  if (event.scope === "tool") {
+    const name = event.toolName?.replace(/^tool-/, "").replaceAll("_", " ");
+
+    if (!name) {
+      return event.title;
+    }
+
+    if (event.status === "completed") {
+      return `${sentenceCase(name)} completed`;
+    }
+
+    if (event.status === "failed") {
+      return `${sentenceCase(name)} failed`;
+    }
+
+    return `Using ${name}`;
+  }
+
+  if (event.scope === "source") {
+    return "Source found";
+  }
+
+  if (event.type === "stream_finish") {
+    return "Response completed";
+  }
+
+  if (event.type === "step_start") {
+    return "Preparing next step";
+  }
+
+  return event.title;
+}
+
+function timelineSummary(event: AgentEvent) {
+  if (
+    event.scope === "run" ||
+    event.scope === "reasoning" ||
+    event.scope === "tool" ||
+    event.type === "stream_finish" ||
+    event.type === "step_start"
+  ) {
+    return null;
+  }
+
+  return event.summary;
+}
+
+function timelineKey(event: TimelineEvent) {
+  return [
+    event.runId,
+    event.scope,
+    event.type,
+    toolCallIdFromEvent(event) ?? "",
+    event.toolName ?? "",
+    event.displayTitle,
+    event.status,
+  ].join(":");
+}
+
+function normalizeTimelineEvents(events: AgentEvent[]) {
+  const sortedEvents = sortEvents(events);
+  const hasRunStart = sortedEvents.some((event) => event.type === "run_started");
+  const timelineEvents: TimelineEvent[] = [];
+  const eventIndexes = new Map<string, number>();
+  let reasoningIndex: number | null = null;
+
+  for (const event of sortedEvents) {
+    if (event.type === "stream_start" && hasRunStart) {
+      continue;
+    }
+
+    if (event.type === "step_finish") {
+      continue;
+    }
+
+    if (event.scope === "reasoning") {
+      const displayEvent: TimelineEvent = {
+        ...event,
+        id: `${event.runId}-reasoning`,
+        displayTitle: "Reasoning",
+        displaySummary: null,
+        status: event.status === "completed" ? "completed" : "running",
+      };
+
+      if (reasoningIndex === null) {
+        reasoningIndex = timelineEvents.length;
+        timelineEvents.push(displayEvent);
+      } else {
+        const previous = timelineEvents[reasoningIndex];
+        timelineEvents[reasoningIndex] = {
+          ...previous,
+          status:
+            previous.status === "completed" || event.status === "completed"
+              ? "completed"
+              : event.status,
+          occurredAt: event.occurredAt,
+        };
+      }
+
+      continue;
+    }
+
+    const displayEvent: TimelineEvent = {
+      ...event,
+      displayTitle: timelineTitle(event),
+      displaySummary: timelineSummary(event),
+    };
+    const key = timelineKey(displayEvent);
+    const existingIndex = eventIndexes.get(key);
+
+    if (existingIndex === undefined) {
+      eventIndexes.set(key, timelineEvents.length);
+      timelineEvents.push(displayEvent);
+    } else {
+      timelineEvents[existingIndex] = displayEvent;
+    }
+  }
+
+  return timelineEvents;
+}
+
+function mergeTimelineEvents(events: AgentEvent[], liveEvents: AgentEvent[]) {
+  return normalizeTimelineEvents([...events, ...liveEvents]);
+}
+
+function eventScopeLabel(scope: AgentEvent["scope"]) {
+  if (scope === "run") {
+    return "agent";
+  }
+
+  if (scope === "stream") {
+    return "response";
+  }
+
+  return scope;
+}
+
+function toolCallIdFromEvent(event: AgentEvent): string | null {
+  const rawToolCallId = payloadRecord(event).toolCallId;
+
+  return typeof rawToolCallId === "string" ? rawToolCallId : null;
+}
+
+function assignToolPartsToEvents(events: TimelineEvent[], toolParts: ToolPart[]) {
+  const assignments = new Map<string, ToolPart>();
+  const usedToolCallIds = new Set<string>();
+  const partsById = new Map(toolParts.map((part) => [part.toolCallId, part]));
+
+  for (const event of events) {
+    if (event.scope !== "tool") {
+      continue;
+    }
+
+    const toolCallId = toolCallIdFromEvent(event);
+
+    if (!toolCallId || usedToolCallIds.has(toolCallId)) {
+      continue;
+    }
+
+    const part = partsById.get(toolCallId);
+
+    if (part) {
+      assignments.set(event.id, part);
+      usedToolCallIds.add(part.toolCallId);
+    }
+  }
+
+  for (const event of events) {
+    if (event.scope !== "tool" || assignments.has(event.id)) {
+      continue;
+    }
+
+    const eventToolName = normalizedName(event.toolName ?? event.displayTitle);
+    const part = toolParts.find(
+      (candidate) =>
+        !usedToolCallIds.has(candidate.toolCallId) &&
+        normalizedName(toolName(candidate)) === eventToolName,
+    );
+
+    if (part) {
+      assignments.set(event.id, part);
+      usedToolCallIds.add(part.toolCallId);
+    }
+  }
+
+  for (const event of events) {
+    if (event.scope !== "tool" || assignments.has(event.id)) {
+      continue;
+    }
+
+    const part = toolParts.find(
+      (candidate) => !usedToolCallIds.has(candidate.toolCallId),
+    );
+
+    if (part) {
+      assignments.set(event.id, part);
+      usedToolCallIds.add(part.toolCallId);
+    }
+  }
+
+  return {
+    assignments,
+    unassignedToolParts: toolParts.filter(
+      (part) => !usedToolCallIds.has(part.toolCallId),
+    ),
+  };
+}
+
 function statusIcon(status: AgentEvent["status"]) {
   if (status === "completed") {
-    return <CheckCircle2Icon className="size-3.5 text-emerald-600" />;
+    return <CheckCircle2Icon className="size-4 text-[#2a9d99]" />;
   }
 
   if (status === "failed") {
-    return <XCircleIcon className="size-3.5 text-destructive" />;
+    return <XCircleIcon className="size-4 text-destructive" />;
   }
 
   if (status === "running") {
-    return <CircleDashedIcon className="size-3.5 animate-spin text-primary" />;
+    return <CircleDashedIcon className="size-4 animate-spin text-primary" />;
   }
 
-  return <CircleIcon className="size-3.5 text-muted-foreground" />;
+  return <CircleIcon className="size-4 text-muted-foreground" />;
+}
+
+function agentActivityLabel(events: TimelineEvent[], running: boolean, failed: boolean) {
+  const completedAgentCount = events.filter(
+    (event) => event.scope === "run" && event.status === "completed",
+  ).length;
+  const toolUseCount = events.filter((event) => event.scope === "tool").length;
+
+  if (failed) {
+    return "Agent run failed";
+  }
+
+  if (completedAgentCount > 1) {
+    return `${completedAgentCount} agents finished`;
+  }
+
+  if (running) {
+    return "Astra is working";
+  }
+
+  if (completedAgentCount === 1) {
+    return "Astra finished";
+  }
+
+  if (toolUseCount > 0) {
+    return `${toolUseCount} tool use${toolUseCount === 1 ? "" : "s"} recorded`;
+  }
+
+  return "Agent activity";
+}
+
+function compactNumber(value: number) {
+  return new Intl.NumberFormat("en", {
+    maximumFractionDigits: value >= 10 ? 0 : 1,
+    notation: "compact",
+  }).format(value);
+}
+
+function payloadNumber(event: AgentEvent, keys: string[]) {
+  const payload = payloadRecord(event);
+
+  for (const key of keys) {
+    const value = payload[key];
+
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+
+    if (typeof value === "string") {
+      const parsed = Number(value.replaceAll(",", ""));
+
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+
+  return null;
+}
+
+function firstPayloadNumber(events: AgentEvent[], keys: string[]) {
+  for (const event of events) {
+    const value = payloadNumber(event, keys);
+
+    if (value !== null) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function timelineMetrics(events: TimelineEvent[], toolParts: ToolPart[]) {
+  const toolEvents = events.filter((event) => event.scope === "tool").length;
+  const sourceEvents = events.filter((event) => event.scope === "source").length;
+  const completedEvents = events.filter(
+    (event) => event.status === "completed",
+  ).length;
+  const failedEvents = events.filter((event) => event.status === "failed").length;
+  const retrieved =
+    firstPayloadNumber(events, [
+      "retrieved",
+      "retrievedCount",
+      "totalRetrieved",
+      "totalResults",
+      "total_results",
+    ]) ?? Math.max(events.length + toolParts.length + sourceEvents, 0);
+  const eligible =
+    firstPayloadNumber(events, [
+      "eligible",
+      "eligibleCount",
+      "candidateCount",
+      "candidates",
+      "results",
+    ]) ?? Math.max(toolEvents + toolParts.length, 0);
+  const included =
+    firstPayloadNumber(events, [
+      "included",
+      "includedCount",
+      "accepted",
+      "acceptedCount",
+      "sources",
+    ]) ?? Math.max(completedEvents - failedEvents, 0);
+
+  return [
+    { label: "Found", value: retrieved },
+    { label: "Checked", value: eligible },
+    { label: "Used", value: included },
+  ];
+}
+
+function isSearchEvent(event: TimelineEvent) {
+  return (
+    event.scope === "tool" ||
+    event.scope === "source" ||
+    event.toolName?.toLowerCase().includes("search") ||
+    event.displayTitle.toLowerCase().includes("search")
+  );
+}
+
+function TimelineSearchMarker({ status }: { status: AgentEvent["status"] }) {
+  return (
+    <span className="relative flex size-4 shrink-0 items-center justify-center">
+      <SearchIcon
+        className={cn(
+          "size-3.5",
+          status === "failed" ? "text-destructive" : "text-foreground",
+        )}
+      />
+      <span
+        className={cn(
+          "absolute bottom-0 right-0 h-2 w-1.5 rounded-full",
+          status === "failed" ? "bg-destructive" : "bg-primary",
+        )}
+      />
+    </span>
+  );
+}
+
+function runStatusLabel({
+  failed,
+  running,
+}: {
+  failed: boolean;
+  running: boolean;
+}) {
+  if (failed) {
+    return "needs a look";
+  }
+
+  if (running) {
+    return "searching";
+  }
+
+  return "ready";
+}
+
+function eventStatusLabel(status: AgentEvent["status"]) {
+  if (status === "completed") {
+    return "done";
+  }
+
+  if (status === "failed") {
+    return "needs review";
+  }
+
+  if (status === "running") {
+    return "searching";
+  }
+
+  return "queued";
+}
+
+function scopeCopy(scope: AgentEvent["scope"]) {
+  if (scope === "run") {
+    return "overview";
+  }
+
+  if (scope === "stream") {
+    return "answer";
+  }
+
+  if (scope === "tool") {
+    return "search";
+  }
+
+  return eventScopeLabel(scope);
 }
 
 function AgentTimeline({
   events,
   isStreaming,
   latestRun,
+  toolParts,
 }: {
   events: AgentEvent[];
   isStreaming: boolean;
   latestRun: AgentRun | null;
+  toolParts: ToolPart[];
 }) {
-  if (events.length === 0 && !isStreaming && !latestRun) {
+  if (events.length === 0 && toolParts.length === 0 && !isStreaming && !latestRun) {
     return null;
   }
 
-  const completed = events.filter((event) => event.status === "completed").length;
-  const failed = events.some((event) => event.status === "failed") || latestRun?.status === "failed";
+  const failed =
+    events.some((event) => event.status === "failed") ||
+    latestRun?.status === "failed";
   const running = isStreaming || latestRun?.status === "running";
-  const title = failed
-    ? "Agent process failed"
-    : running
-      ? "Astra is working"
-      : `${completed || events.length} agent events finished`;
+  const timelineEvents = normalizeTimelineEvents(events);
+  const title = agentActivityLabel(timelineEvents, running, failed);
+  const { assignments, unassignedToolParts } = assignToolPartsToEvents(
+    timelineEvents,
+    toolParts,
+  );
+  const searchCount =
+    timelineEvents.filter(isSearchEvent).length + unassignedToolParts.length;
+  const metrics = timelineMetrics(timelineEvents, toolParts);
+  const statusText = runStatusLabel({ failed, running });
 
   return (
-    <Task className="not-prose my-3 rounded-lg border border-border bg-card/70 px-3 py-2" open={running || failed}>
-      <TaskTrigger
-        title={title}
+    <Collapsible
+      className="group/timeline not-prose my-3 w-full py-1"
+      defaultOpen
+    >
+      <CollapsibleTrigger
         className={cn(
-          "text-sm font-medium",
-          failed ? "text-destructive" : running ? "text-foreground" : "text-muted-foreground",
+          "mb-1.5 flex w-full cursor-pointer items-center gap-2.5 text-left outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50",
+          failed
+            ? "text-destructive"
+            : running
+              ? "text-foreground"
+              : "text-muted-foreground",
         )}
-      />
-      <TaskContent className="mt-3 space-y-2 border-l border-border pl-4">
-        {events.length === 0 ? (
-          <TaskItem className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Spinner className="size-3.5" />
-            Waiting for agent events
-          </TaskItem>
+      >
+        <span
+          className={cn(
+            "size-2.5 rounded-full",
+            failed
+              ? "bg-destructive"
+              : running
+                ? "bg-primary"
+                : "bg-[#2a9d99]",
+          )}
+        />
+        <span className="flex min-w-0 items-baseline gap-1.5">
+          <span className="text-sm font-bold text-foreground">Deep search</span>
+          <span className="text-[13px] text-muted-foreground">
+            · {searchCount || timelineEvents.length || 1} step
+            {(searchCount || timelineEvents.length || 1) === 1 ? "" : "es"}
+          </span>
+          <span className="hidden text-xs text-muted-foreground sm:inline">
+            · {statusText}
+          </span>
+        </span>
+        <ChevronDownIcon className="ml-auto size-4 text-muted-foreground transition-transform group-data-[state=open]/timeline:rotate-180" />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="ml-3 border-l border-border pl-5">
+        <div className="grid max-w-3xl grid-cols-3 border-b border-border pb-3 pt-2.5">
+          {metrics.map((metric, index) => (
+            <div
+              className={cn(
+                "min-w-0 pr-3",
+                index > 0 && "border-l border-border pl-4",
+              )}
+              key={metric.label}
+            >
+              <div className="flex items-center gap-1.5">
+                <span className="text-xl font-bold tracking-[-0.25px] text-foreground sm:text-2xl">
+                  {compactNumber(metric.value)}
+                </span>
+                <InfoIcon className="size-3 text-muted-foreground" />
+              </div>
+              <p className="mt-0.5 text-xs font-medium text-muted-foreground">
+                {metric.label}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <div className="max-w-3xl space-y-4 py-4">
+        {timelineEvents.length === 0 ? (
+          <div className="flex items-center gap-2.5 text-[13px] text-muted-foreground">
+            <span className="flex size-4 items-center justify-center">
+              <Spinner className="size-3.5" />
+            </span>
+            Getting the search ready
+          </div>
         ) : (
-          events.map((event) => (
-            <TaskItem key={event.id} className="flex items-start gap-2 text-sm text-muted-foreground">
-              <span className="mt-0.5">{statusIcon(event.status)}</span>
-              <span className="min-w-0">
-                <span className="block font-medium text-foreground">{event.title}</span>
-                {event.summary ? <span className="block leading-5">{event.summary}</span> : null}
-              </span>
-            </TaskItem>
-          ))
+          timelineEvents.map((event) => {
+            const assignedToolPart = assignments.get(event.id);
+
+            return (
+              <div key={event.id} className="space-y-1.5">
+                {isSearchEvent(event) ? (
+                  <div className="flex min-w-0 items-center gap-3">
+                    <TimelineSearchMarker status={event.status} />
+                    <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+                      <span className="min-w-0 text-sm font-semibold leading-6 text-foreground">
+                        {event.displayTitle}
+                      </span>
+                      <span className="text-xs font-semibold text-foreground">
+                        {eventStatusLabel(event.status)}
+                      </span>
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.125px] text-muted-foreground">
+                        {scopeCopy(event.scope)}
+                      </span>
+                      <ExternalLinkIcon className="size-3.5 text-muted-foreground" />
+                    </div>
+                    {event.displaySummary ? (
+                      <p className="basis-full pl-7 text-[13px] leading-5 text-muted-foreground">
+                        {event.displaySummary}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-3">
+                      <span className="flex size-4 items-center justify-center">
+                        {statusIcon(event.status)}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+                          <h3 className="text-[15px] font-bold leading-6 text-foreground">
+                            {event.displayTitle || title}
+                          </h3>
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.125px] text-muted-foreground">
+                            {scopeCopy(event.scope)}
+                          </span>
+                        </div>
+                        {event.displaySummary ? (
+                          <p className="mt-0.5 text-[13px] leading-5 text-muted-foreground">
+                            {event.displaySummary}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {assignedToolPart ? (
+                  <div className="pl-7">
+                    <ToolPartView part={assignedToolPart} />
+                  </div>
+                ) : null}
+              </div>
+            );
+          })
         )}
-      </TaskContent>
-    </Task>
+
+        {unassignedToolParts.length > 0 ? (
+          <div className="space-y-3 pt-0.5">
+            {unassignedToolParts.map((part) => (
+              <div
+                key={`agent-tool-unassigned-${part.toolCallId}`}
+                className="space-y-1.5"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <TimelineSearchMarker
+                    status={toolState(part) === "output-error" ? "failed" : "completed"}
+                  />
+                  <span className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+                    <span className="text-sm font-semibold leading-6 text-foreground">
+                      {sentenceCase(toolName(part))}
+                    </span>
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.125px] text-muted-foreground">
+                      search
+                    </span>
+                    <ExternalLinkIcon className="size-3.5 text-muted-foreground" />
+                  </span>
+                </div>
+                <div className="pl-7">
+                  <ToolPartView part={part} />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -272,7 +888,7 @@ function AssistantParts({
   return (
     <>
       {sources.length > 0 ? (
-        <Sources open={false}>
+        <Sources>
           <SourcesTrigger count={sources.length} />
           <SourcesContent>
             {sources.map((source, index) => {
@@ -299,9 +915,20 @@ function AssistantParts({
       ) : null}
 
       {hasReasoning ? (
-        <Reasoning className="w-full" isStreaming={isReasoningStreaming} open={isReasoningStreaming}>
-          <ReasoningTrigger isStreaming={isReasoningStreaming} />
-          <ReasoningContent>{reasoningText}</ReasoningContent>
+        <Reasoning
+          className="w-full"
+          isStreaming={isReasoningStreaming}
+          open={isReasoningStreaming}
+        >
+          <ReasoningTrigger isStreaming={isReasoningStreaming}>
+            <SparklesIcon className="size-4" />
+            <span>
+              {isReasoningStreaming ? "Thinking it through..." : "Working notes"}
+            </span>
+          </ReasoningTrigger>
+          <ReasoningContent className="whitespace-pre-wrap">
+            {reasoningText}
+          </ReasoningContent>
         </Reasoning>
       ) : null}
 
@@ -312,10 +939,6 @@ function AssistantParts({
               {part.text}
             </MessageResponse>
           );
-        }
-
-        if (isToolPart(part)) {
-          return <ToolPartView key={`${message.id}-tool-${index}`} part={part} />;
         }
 
         return null;
@@ -338,7 +961,7 @@ export function MessageList({
   if (messages.length === 0) {
     return (
       <div className="flex min-h-full items-center justify-center px-6 py-16 text-center">
-        <div className="max-w-md space-y-3 rounded-2xl border border-dashed border-border bg-card px-6 py-8 shadow-sm">
+        <div className="max-w-md space-y-3 border-l border-border px-6 py-8 text-left">
           <p className="text-2xl font-bold tracking-[-0.625px] text-foreground">
             Ready when you are
           </p>
@@ -350,21 +973,33 @@ export function MessageList({
     );
   }
 
+  const persistedTimelineEvents = latestRunEvents(events, latestRun);
+  const lastAssistantIndex = messages.reduce(
+    (latestIndex, message, index) =>
+      message.role === "assistant" ? index : latestIndex,
+    -1,
+  );
+
   return (
     <div className="mx-auto flex min-h-full w-full max-w-[820px] flex-col gap-6 px-4 pb-56 pt-4 sm:px-6 lg:pt-6">
       {messages.map((message, index) => {
         const isUser = message.role === "user";
         const isLastMessage = index === messages.length - 1;
-        const messageEvents = isLastMessage
-          ? [...events, ...eventsFromMessageParts(message, isStreaming)]
+        const isCurrentAssistant = message.role === "assistant" && index === lastAssistantIndex;
+        const liveEvents = isCurrentAssistant
+          ? eventsFromMessageParts(message, isStreaming && isLastMessage)
           : [];
+        const messageEvents = isCurrentAssistant
+          ? mergeTimelineEvents(persistedTimelineEvents, liveEvents)
+          : [];
+        const toolParts = isCurrentAssistant ? message.parts.filter(isToolPart) : [];
 
         return (
           <Message from={message.role} key={message.id}>
             <MessageContent
               className={
                 isUser
-                  ? "max-w-full border border-border bg-card text-card-foreground shadow-sm sm:max-w-[82%]"
+                  ? "max-w-full sm:max-w-[82%]"
                   : "w-full max-w-full gap-3 text-[15px] leading-7 sm:max-w-[92%]"
               }
             >
@@ -376,6 +1011,7 @@ export function MessageList({
                     events={messageEvents}
                     isStreaming={isStreaming && isLastMessage}
                     latestRun={isLastMessage ? latestRun : null}
+                    toolParts={toolParts}
                   />
                   <AssistantParts
                     isLastMessage={isLastMessage}
@@ -391,7 +1027,7 @@ export function MessageList({
       {isStreaming && messages.at(-1)?.role === "user" ? (
         <Message from="assistant">
           <MessageContent className="w-full max-w-full gap-3 text-[15px] leading-7 sm:max-w-[92%]">
-            <AgentTimeline events={[]} isStreaming latestRun={latestRun} />
+            <AgentTimeline events={[]} isStreaming latestRun={latestRun} toolParts={[]} />
           </MessageContent>
         </Message>
       ) : null}
