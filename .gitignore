@@ -3,6 +3,7 @@
 dist
 node_modules
 coverage
+.worktrees/
 *.log
 apps/api/.env
 apps/api/.env.local

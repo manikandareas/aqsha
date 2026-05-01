@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef } from "react";
 
 import { MessageInput } from "@/features/chat/components/message-input";
 import { MessageList } from "@/features/chat/components/message-list";
+import type { AgentEvent, AgentRun } from "@/features/chat/lib/types";
 import { pendingPromptKey } from "@/features/chat/lib/pending-prompt";
 import { useChatScroll } from "@/features/chat/components/use-chat-scroll";
 import { getApiBaseUrl } from "@/lib/api-url";
@@ -16,9 +17,13 @@ import { toast } from "@/lib/toast";
 
 export function ChatThread({
   id,
+  initialEvents,
+  initialLatestRun,
   initialMessages,
 }: {
   id: string;
+  initialEvents: AgentEvent[];
+  initialLatestRun: AgentRun | null;
   initialMessages: UIMessage[];
 }) {
   const queryClient = useQueryClient();
@@ -86,7 +91,12 @@ export function ChatThread({
         ref={containerRef}
         className="absolute inset-0 touch-pan-y overflow-y-auto scroll-smooth bg-background"
       >
-        <MessageList messages={messages} />
+        <MessageList
+          events={initialEvents}
+          isStreaming={isStreaming}
+          latestRun={initialLatestRun}
+          messages={messages}
+        />
       </div>
 
       <button

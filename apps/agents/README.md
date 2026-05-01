@@ -1,203 +1,124 @@
 # Astra Agents
 
-`apps/agents` adalah aplikasi Python untuk agen AI di Aqsha. Aplikasi ini menggunakan [Pydantic AI](https://ai.pydantic.dev/) sebagai framework agent, FastAPI sebagai server HTTP internal, dan `VercelAIAdapter` sebagai jembatan agar agent Python bisa dipakai dari UI/chat berbasis Vercel AI SDK.
+`apps/agents` is Aqsha's standalone Python agent runtime. It uses Pydantic AI,
+Agent Skills through `pydantic-ai-skills`, FastAPI for the internal HTTP server,
+and `VercelAIAdapter` so the existing API/web chat stack can keep using the
+Vercel AI SDK stream contract.
 
-Tujuan utamanya adalah menyediakan fondasi multi-agent yang tetap sederhana: satu orchestrator mengendalikan alur kerja, mendelegasikan tugas ke agen spesialis melalui Pydantic AI tools, lalu mengembalikan hasil yang terstruktur.
-
-## Ringkasan Arsitektur
-
-Astra memakai pola **DeepAgent-style orchestration**:
-
-1. User atau caller mengirim brief/prompt.
-2. `orchestrator` menerima task utama dan tetap menjadi pengendali alur.
-3. Jika perlu, orchestrator memanggil agen spesialis sebagai tool:
-   - `research` untuk discovery dan konteks.
-   - `design` untuk rencana implementasi.
-   - `review` untuk risiko dan validasi.
-4. Output akhir dikembalikan sebagai model Pydantic `AstraPlan`.
-5. Untuk chat UI, FastAPI menerima request internal dan meneruskannya ke `chat_agent` melalui `VercelAIAdapter`.
+This app intentionally stays independent from `apps/api`, `apps/web`, and the
+database. The only runtime contract consumed by the rest of the monorepo is:
 
 ```text
-Caller / CLI / Web app
-        │
-        ├── CLI: astra "task brief"
-        │       │
-        │       ▼
-        │   Astra Orchestrator
-        │       ├── Researcher agent
-        │       ├── Architect agent
-        │       └── Reviewer agent
-        │
-        └── HTTP: POST /internal/chat
-                │
-                ▼
-            FastAPI server
-                │
-                ▼
-            VercelAIAdapter
-                │
-                ▼
-            Chat agent
+POST /internal/chat
 ```
 
-## Struktur Project
+## Architecture
+
+Astra is the only public agent.
 
 ```text
-apps/agents
-├── AGENTS.md
-├── README.md
-├── pyproject.toml
-├── uv.lock
-├── src/astra
-│   ├── __init__.py
-│   ├── __main__.py
-│   ├── cli.py
-│   ├── deps.py
-│   ├── server.py
-│   ├── settings.py
-│   ├── types.py
-│   └── agents
-│       ├── __init__.py
-│       ├── architect.py
-│       ├── chat.py
-│       ├── orchestrator.py
-│       ├── researcher.py
-│       └── reviewer.py
-└── tests
+apps/api or CLI
+        |
+        v
+FastAPI /internal/chat
+        |
+        v
+VercelAIAdapter
+        |
+        v
+Astra
+        |
+        +-- Agent Skills: deep-research
+        +-- Exa MCP: web_search_exa, web_fetch_exa
+        +-- WebFetch
+        +-- Provider WebSearch when explicitly enabled
 ```
 
-## Agen yang Tersedia
+The previous `chat`, `researcher`, `architect`, and `reviewer` agents are folded
+into Astra's instructions, tools, and skills. Astra returns normal chat text so
+it remains compatible with Vercel AI SDK streaming.
 
-### 1. Astra Orchestrator
+## Deep Research Skill
 
-File: `src/astra/agents/orchestrator.py`
+The local skill lives at:
 
-Agen utama untuk workflow multi-agent. Orchestrator bertanggung jawab untuk:
-
-- menerima brief utama;
-- menjaga kontrol task loop;
-- mendelegasikan pekerjaan ke agen spesialis;
-- menyintesis hasil dari specialist agents;
-- mengembalikan output terstruktur berupa `AstraPlan`.
-
-Orchestrator menggunakan `deps_type=AstraDeps` agar konteks runtime dikirim secara eksplisit, bukan melalui global state. Specialist agents dipanggil melalui tool Pydantic AI:
-
-- `research(ctx, brief)` memanggil Researcher.
-- `design(ctx, brief)` memanggil Architect.
-- `review(ctx, brief)` memanggil Reviewer.
-
-Setiap pemanggilan specialist meneruskan `deps=ctx.deps` dan `usage=ctx.usage`, sehingga konteks dan accounting usage tetap dibagikan dalam satu run.
-
-### 2. Astra Researcher
-
-File: `src/astra/agents/researcher.py`
-
-Agen discovery yang fokus pada:
-
-- fakta yang sudah diketahui;
-- asumsi;
-- konteks yang hilang;
-- ketidakpastian;
-- decision points sebelum eksekusi.
-
-Output agen ini berupa teks ringkas yang kemudian digunakan orchestrator sebagai bahan sintesis.
-
-### 3. Astra Architect
-
-File: `src/astra/agents/architect.py`
-
-Agen perancang solusi yang mengubah konteks hasil riset menjadi rencana implementasi. Fokusnya adalah:
-
-- langkah yang berurutan;
-- desain minimal;
-- boundary yang eksplisit;
-- rencana yang bisa dieksekusi.
-
-### 4. Astra Reviewer
-
-File: `src/astra/agents/reviewer.py`
-
-Agen reviewer yang melakukan stress-test terhadap rencana. Fokusnya adalah:
-
-- correctness risk;
-- edge cases;
-- security concern;
-- potensi regression;
-- langkah validasi.
-
-### 5. Chat Agent
-
-File: `src/astra/agents/chat.py`
-
-Agen percakapan untuk integrasi UI/chat. Berbeda dari orchestrator, `chat_agent` menghasilkan respons teks biasa dan dirancang untuk interaksi langsung dengan user melalui endpoint HTTP internal.
-
-Instruksi utamanya adalah menjadi asisten Aqsha yang ringkas, thoughtful, dan praktis.
-
-## Output Terstruktur
-
-Workflow multi-agent utama mengembalikan `AstraPlan` dari `src/astra/types.py`:
-
-```python
-class AstraPlan(BaseModel):
-    summary: str
-    research: list[str]
-    plan: list[str]
-    risks: list[str]
-    validation: list[str]
+```text
+skills/deep-research/
+├── SKILL.md
+├── references/
+└── scripts/
 ```
 
-Struktur ini membuat hasil agent mudah dipakai oleh caller lain karena field-nya eksplisit:
+Astra must load `deep-research` for research-heavy requests such as academic
+research, technical investigations, market analysis, policy/regulatory analysis,
+competitive analysis, and evidence synthesis. The skill requires:
 
-- `summary`: ringkasan hasil task.
-- `research`: fakta, asumsi, atau unknowns.
-- `plan`: langkah implementasi/eksekusi.
-- `risks`: risiko, edge cases, dan tradeoff.
-- `validation`: checks untuk membuktikan hasil sudah benar.
+- scoped research questions;
+- search strategy and source discovery;
+- source screening and evidence cards;
+- synthesis with explicit uncertainty;
+- visual artifact specs when the evidence ledger has enough data;
+- `PROCEED / REFINE / PIVOT` decisions;
+- citation and visual provenance verification before final reporting.
 
-## Runtime Dependencies
+Normal chat does not force the deep-research workflow.
 
-Shared dependency context ada di `src/astra/deps.py`:
+Deep research can save `evidence.json`, `visuals.json`, Matplotlib-generated
+SVGs, an `artifact_manifest.json`, and a `visual_artifacts.md` snippet under the
+local research artifact directory. The final answer remains Markdown and embeds
+only artifacts whose audit status is `passed`.
 
-```python
-@dataclass(frozen=True)
-class AstraDeps:
-    user_id: str
-    workspace: str
-    constraints: tuple[str, ...] = ()
-```
+## Runtime Settings
 
-`AstraDeps` dikirim ke semua agent melalui `deps_type=AstraDeps`. Ini digunakan untuk menyertakan konteks runtime seperti user, workspace, dan constraint tanpa mengandalkan global mutable state.
-
-## Konfigurasi
-
-Settings dibaca dari environment dengan prefix `ASTRA_` melalui `src/astra/settings.py`.
-
-Contoh `.env`:
+Settings use the `ASTRA_` prefix and are read from `.env`.
 
 ```env
 ASTRA_MODEL=openai:gpt-5.2
 ASTRA_USER_ID=local-dev
 ASTRA_WORKSPACE=aqsha
 ASTRA_ENABLE_LOGFIRE=false
+ASTRA_ENABLE_FILE_LOGGING=true
+ASTRA_LOG_DIR=.astra/logs
+ASTRA_LOG_FILE_NAME=astra.log
+ASTRA_LOG_LEVEL=INFO
+ASTRA_LOG_MAX_BYTES=5000000
+ASTRA_LOG_BACKUP_COUNT=5
 ASTRA_INTERNAL_TOKEN=replace-with-shared-secret
 ASTRA_HTTP_HOST=127.0.0.1
 ASTRA_HTTP_PORT=8001
+
+ASTRA_EXA_MCP_URL=https://mcp.exa.ai/mcp
+ASTRA_EXA_API_KEY=
+ASTRA_EXA_MCP_AUTHORIZATION_TOKEN=
+ASTRA_ENABLE_PROVIDER_WEB_SEARCH=false
+ASTRA_PROVIDER_WEB_SEARCH_CONTEXT_SIZE=medium
+ASTRA_PROVIDER_WEB_SEARCH_MAX_USES=5
+ASTRA_ENABLE_WEB_FETCH=true
+ASTRA_WEB_FETCH_MAX_CONTENT_TOKENS=12000
+ASTRA_THINKING_EFFORT=medium
+ASTRA_RESEARCH_ARTIFACT_DIR=.astra/research
+
 OPENAI_API_KEY=
 ```
 
-Variabel penting:
+Exa MCP is attached only when `ASTRA_EXA_API_KEY` or
+`ASTRA_EXA_MCP_AUTHORIZATION_TOKEN` is configured. WebFetch is enabled by
+default and has a local fallback. Provider-native web search is off by default
+because support depends on the selected model/provider.
 
-| Variable | Fungsi |
-|---|---|
-| `ASTRA_MODEL` | Model string Pydantic AI dengan prefix provider, misalnya `openai:gpt-5.2` atau `anthropic:claude-sonnet-4-6`. |
-| `ASTRA_USER_ID` | Default user id untuk konteks lokal. |
-| `ASTRA_WORKSPACE` | Workspace aktif. |
-| `ASTRA_ENABLE_LOGFIRE` | Mengaktifkan observability Pydantic AI dengan Logfire. |
-| `ASTRA_INTERNAL_TOKEN` | Bearer token untuk endpoint internal. Wajib untuk server HTTP. |
-| `ASTRA_HTTP_HOST` | Host untuk server FastAPI. |
-| `ASTRA_HTTP_PORT` | Port untuk server FastAPI. |
+## Error Logs
 
-Provider API key mengikuti provider model yang dipakai. Contoh: jika memakai `openai:*`, isi `OPENAI_API_KEY`.
+File logging is enabled by default. Server and CLI errors are written as JSONL
+to:
+
+```text
+apps/agents/.astra/logs/astra.log
+```
+
+The file rotates according to `ASTRA_LOG_MAX_BYTES` and
+`ASTRA_LOG_BACKUP_COUNT`. Unhandled FastAPI request errors include a `request_id`,
+path, user, workspace, model, and conversation ID when available. The HTTP 500
+response also returns the `requestId`, so it can be matched to the log file.
 
 ## Setup
 
@@ -207,128 +128,57 @@ uv sync --extra dev
 cp .env.example .env
 ```
 
-Jika ingin observability dengan Logfire:
+For Logfire observability:
 
 ```bash
 uv sync --extra dev --extra observability
 ```
 
-## Menjalankan Multi-Agent CLI
+## CLI
 
-CLI menjalankan `Astra Orchestrator` dan mengembalikan `AstraPlan` dalam JSON.
+The CLI uses the same Astra runtime as the FastAPI server.
 
 ```bash
-uv run astra "Design a multi-agent research workflow for Aqsha"
+uv run astra "Research the current state of AI agent evaluation"
 ```
 
-Entry point CLI ada di `src/astra/cli.py` dan terdaftar di `pyproject.toml` sebagai:
-
-```toml
-[project.scripts]
-astra = "astra.cli:main"
-```
-
-## Menjalankan API Server
-
-Server HTTP memakai FastAPI dan endpoint internal untuk chat.
+## Server
 
 ```bash
 uv run astra-server
 ```
 
-Atau langsung dengan uvicorn:
+Equivalent:
 
 ```bash
 uv run uvicorn astra.server:app --host 127.0.0.1 --port 8001
 ```
 
-Entry point server terdaftar sebagai:
-
-```toml
-[project.scripts]
-astra-server = "astra.server:main"
-```
-
-## API Internal
-
 ### `POST /internal/chat`
 
-Endpoint ini menerima request chat internal dan meneruskannya ke `VercelAIAdapter.dispatch_request()`.
+Headers:
 
-Header:
+| Header | Required | Description |
+|---|---|---|
+| `Authorization` | Yes | `Bearer <ASTRA_INTERNAL_TOKEN>` |
+| `x-astra-user-id` | No | Caller user ID forwarded into `AstraDeps` |
+| `x-astra-workspace` | No | Workspace forwarded into `AstraDeps` |
+| `x-astra-model` | No | Per-request model override |
 
-| Header | Wajib | Fungsi |
-|---|---:|---|
-| `Authorization` | Ya | Format: `Bearer <ASTRA_INTERNAL_TOKEN>`. |
-| `x-astra-user-id` | Tidak | Override `ASTRA_USER_ID` untuk request ini. |
-| `x-astra-workspace` | Tidak | Override `ASTRA_WORKSPACE` untuk request ini. |
-| `x-astra-model` | Tidak | Override model untuk request ini. |
+The endpoint extracts the Vercel AI request `id` as `conversation_id`, but does
+not change the request body before dispatching to `VercelAIAdapter`.
 
-Contoh request:
+## Local Artifacts
 
-```bash
-curl -X POST http://127.0.0.1:8001/internal/chat \
-  -H "Authorization: Bearer replace-with-shared-secret" \
-  -H "Content-Type: application/json" \
-  -d '{"messages":[{"role":"user","content":"Bantu buat rencana fitur journal."}]}'
-```
+Astra can save optional local research artifacts under `.astra/`. This directory
+is ignored by git and is not part of the API/web contract. The streamed chat
+response remains the user-facing source of truth.
 
-Endpoint ini sengaja dibuat sebagai endpoint internal. Jika `ASTRA_INTERNAL_TOKEN` kosong, server akan mengembalikan error `500` karena token internal wajib dikonfigurasi.
-
-## Vercel AI Adapter
-
-Integrasi UI/chat dilakukan melalui:
-
-```python
-from pydantic_ai.ui.vercel_ai import VercelAIAdapter
-```
-
-Di `src/astra/server.py`, adapter dipakai seperti ini:
-
-```python
-return await VercelAIAdapter.dispatch_request(
-    request,
-    agent=chat_agent,
-    sdk_version=6,
-    deps=deps,
-    model=x_astra_model or settings.model,
-    manage_system_prompt="server",
-)
-```
-
-Artinya:
-
-- request dari client Vercel AI SDK diterima oleh FastAPI;
-- format request/streaming ditangani oleh `VercelAIAdapter`;
-- agent yang digunakan adalah `chat_agent`;
-- model bisa dioverride per request melalui `x-astra-model`;
-- system prompt dikelola di server, bukan dikirim dari client.
-
-Dengan pola ini, UI TypeScript/React dapat tetap menggunakan Vercel AI SDK, sementara eksekusi agent tetap berada di service Python berbasis Pydantic AI.
-
-## Observability
-
-Observability opsional tersedia melalui Logfire. Jika `ASTRA_ENABLE_LOGFIRE=true`, CLI/server akan menjalankan:
-
-```python
-logfire.configure()
-logfire.instrument_pydantic_ai()
-```
-
-Ini membantu tracing run agent, model request, dan tool call.
-
-## Validasi
+## Verification
 
 ```bash
+uv run pytest
 uv run ruff check .
 uv run pyright
-uv run pytest
+PYTHONPATH=src .venv/bin/python -m compileall src tests
 ```
-
-## Catatan Pengembangan
-
-- Gunakan model string dengan prefix provider, misalnya `openai:gpt-5.2`.
-- Gunakan `deps_type=AstraDeps` untuk konteks runtime.
-- Gunakan `@agent.tool` hanya untuk tool yang menerima `RunContext` sebagai argumen pertama.
-- Untuk delegation multi-agent, panggil specialist agent dari tool orchestrator dan teruskan `usage=ctx.usage`.
-- Unit test sebaiknya memakai `TestModel` atau `FunctionModel`, bukan provider model langsung.
