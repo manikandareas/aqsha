@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  ChevronDownIcon,
-  ImageIcon,
-  SendHorizonalIcon,
-} from "lucide-react";
+import { ChevronDownIcon, ImageIcon, SendHorizonalIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -52,7 +48,7 @@ export function NewThreadComposer() {
   }
 
   return (
-    <div className="min-h-full bg-background px-4 py-12 text-foreground sm:px-6 lg:px-8 lg:py-20">
+    <div className="min-h-full bg-background px-4 py-12 text-foreground sm:px-6 lg:px-8 lg:py-20 flex items-center justify-center">
       <div className="mx-auto w-full max-w-[720px]">
         <PromptInput
           onSubmit={(event) => {

@@ -95,7 +95,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   }));
 
   return (
-    <Sidebar className="border-0 border-transparent" {...props}>
+    <Sidebar
+      className="border-0 border-transparent bg-background [--sidebar:var(--background)]"
+      {...props}
+    >
       <SidebarHeader>
         <TeamSwitcher teams={data.teams} />
         <div className="px-2 mt-2">
