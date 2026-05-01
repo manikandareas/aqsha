@@ -9,6 +9,7 @@ import {
 export async function collectFinishedMessages(
   stream: ReadableStream<Uint8Array>,
   originalMessages: UIMessage[],
+  onChunk?: (chunk: UIMessageChunk) => Promise<void> | void,
 ): Promise<UIMessage[]> {
   let lastMessage: UIMessage | undefined;
 
@@ -17,11 +18,12 @@ export async function collectFinishedMessages(
     schema: uiMessageChunkSchema,
   }).pipeThrough(
     new TransformStream<{ success: true; value: UIMessageChunk } | { success: false; error: unknown }, UIMessageChunk>({
-      transform(chunk, controller) {
+      async transform(chunk, controller) {
         if (!chunk.success) {
           throw chunk.error;
         }
 
+        await onChunk?.(chunk.value);
         controller.enqueue(chunk.value);
       },
     }),

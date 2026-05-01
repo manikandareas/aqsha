@@ -19,7 +19,12 @@ export default async function ThreadPage({
   return (
     <div className="flex h-full flex-col bg-background text-foreground">
       <AppPageHeader title={detail.thread.title} sticky />
-      <ChatThread id={id} initialMessages={detail.messages} />
+      <ChatThread
+        id={id}
+        initialEvents={detail.events}
+        initialLatestRun={detail.latestRun}
+        initialMessages={detail.messages}
+      />
     </div>
   );
 }

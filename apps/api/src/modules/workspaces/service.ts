@@ -3,7 +3,11 @@ import type {
   UserRecord,
   WorkspaceRecord,
 } from "@aqsha/db";
-import type { WorkspaceRepository } from "./repository";
+import type {
+  ActiveWorkspaceContext,
+  WorkspaceListItem,
+  WorkspaceRepository,
+} from "./repository";
 
 export class WorkspaceService {
   constructor(private readonly repository: WorkspaceRepository) {}
@@ -27,5 +31,32 @@ export class WorkspaceService {
     workspaceName: string,
   ): Promise<WorkspaceRecord> {
     return this.repository.ensureNamedOwnedWorkspace(user, workspaceName);
+  }
+
+  getActiveWorkspaceContext(
+    userId: string,
+  ): Promise<ActiveWorkspaceContext | null> {
+    return this.repository.getActiveWorkspaceContext(userId);
+  }
+
+  getWorkspaceList(userId: string): Promise<WorkspaceListItem[]> {
+    return this.repository.getWorkspaceList(userId);
+  }
+
+  getWorkspaceListWithActive(
+    userId: string,
+  ): Promise<{ workspaces: WorkspaceListItem[]; activeWorkspaceId: string } | null> {
+    return this.repository.getWorkspaceListWithActive(userId);
+  }
+
+  createWorkspace(user: UserRecord, name: string): Promise<WorkspaceRecord> {
+    return this.repository.createWorkspace(user, name);
+  }
+
+  setActiveWorkspace(
+    userId: string,
+    workspaceId: string,
+  ): Promise<WorkspaceRecord | null> {
+    return this.repository.setActiveWorkspace(userId, workspaceId);
   }
 }

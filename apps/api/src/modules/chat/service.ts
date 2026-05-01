@@ -1,7 +1,15 @@
 import { generateId, type UIMessage } from "ai";
 import type { AuthIdentity } from "../../plugins/auth-identity";
 import type { ChatModel } from "./model";
-import type { ChatMessage, ChatScope, ChatStore } from "./store";
+import type {
+  AgentRun,
+  AppendAgentEventInput,
+  ChatMessage,
+  ChatScope,
+  ChatStore,
+  FinishAgentRunInput,
+} from "./store";
+import type { WorkspaceService } from "../workspaces/service";
 
 type ServiceError = "unauthorized" | "chat_thread_not_found";
 type ServiceResult<T> =
@@ -10,7 +18,10 @@ type ServiceResult<T> =
 
 
 export class ChatService {
-  constructor(private readonly store: ChatStore) {}
+  constructor(
+    private readonly store: ChatStore,
+    private readonly workspaceService: WorkspaceService,
+  ) {}
 
   async listThreads(
     identity: AuthIdentity,
@@ -67,6 +78,8 @@ export class ChatService {
       data: {
         thread,
         messages: await this.store.getMessages(scope, threadId),
+        latestRun: await this.store.getLatestRun(scope, threadId),
+        events: await this.store.getEvents(scope, threadId),
       },
     };
   }
@@ -167,12 +180,69 @@ export class ChatService {
     });
   }
 
+  async createRun(
+    identity: AuthIdentity,
+    threadId: string,
+    metadata?: unknown,
+  ): Promise<ServiceResult<{ scope: ChatScope; run: AgentRun }>> {
+    const scope = await this.getScope(identity);
+
+    if (!scope) {
+      return { success: false, error: "unauthorized" };
+    }
+
+    const thread = await this.store.getThread(scope, threadId);
+
+    if (!thread) {
+      return { success: false, error: "chat_thread_not_found" };
+    }
+
+    return {
+      success: true,
+      data: {
+        scope,
+        run: await this.store.createRun({
+          ...scope,
+          chatThreadId: threadId,
+          metadata,
+        }),
+      },
+    };
+  }
+
+  async appendRunEvent(
+    scope: ChatScope,
+    run: Pick<AgentRun, "id" | "chatThreadId">,
+    event: AppendAgentEventInput,
+  ): Promise<void> {
+    await this.store.appendEvent(scope, run, event);
+  }
+
+  async finishRun(
+    scope: ChatScope,
+    runId: string,
+    input: FinishAgentRunInput,
+  ): Promise<void> {
+    await this.store.finishRun(scope, runId, input);
+  }
+
   getModel(thread: ChatModel["chatThread"]): string | null {
     return thread.model;
   }
 
   private async getScope(identity: AuthIdentity): Promise<ChatScope | null> {
-    return this.store.getScope(identity.authUserId);
+    const context = await this.workspaceService.getActiveWorkspaceContext(
+      identity.authUserId,
+    );
+
+    if (!context) {
+      return null;
+    }
+
+    return {
+      userId: context.user.id,
+      workspaceId: context.workspace.id,
+    };
   }
 
   private toUIMessage(message: ChatMessage): UIMessage {

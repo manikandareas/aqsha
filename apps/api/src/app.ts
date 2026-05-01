@@ -7,6 +7,7 @@ import { chatModule } from "./modules/chat";
 import { healthModule } from "./modules/health";
 import { journalsModule } from "./modules/journals";
 import { sessionModule } from "./modules/session";
+import { workspacesModule } from "./modules/workspaces";
 
 export const app = new Elysia({
   name: "@aqsha/api",
@@ -37,6 +38,7 @@ export const app = new Elysia({
   )
   .use(healthModule)
   .use(sessionModule)
+  .use(workspacesModule)
   .use(journalsModule)
   .use(chatModule);
 

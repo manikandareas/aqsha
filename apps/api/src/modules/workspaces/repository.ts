@@ -1,14 +1,41 @@
-import { and, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne } from "drizzle-orm";
 import {
   subscriptions,
+  users,
+  userWorkspacePreferences,
   workspaceMembers,
   workspaces,
   type SubscriptionRecord,
   type UserRecord,
+  type WorkspaceMemberRecord,
   type WorkspaceRecord,
 } from "@aqsha/db";
 import type { DatabaseClient } from "../../database/client";
 import { getDefaultWorkspaceName } from "./model";
+
+type WorkspaceRole = WorkspaceMemberRecord["role"];
+type PlanCode = SubscriptionRecord["planCode"];
+
+export interface ActiveWorkspaceContext {
+  user: UserRecord;
+  workspace: WorkspaceRecord;
+  role: WorkspaceRole;
+}
+
+export interface WorkspaceListItem {
+  id: string;
+  name: string;
+  slug: string | null;
+  role: WorkspaceRole;
+  planCode: PlanCode;
+  isActive: boolean;
+}
+
+interface WorkspaceMembershipRow {
+  workspace: WorkspaceRecord;
+  member: WorkspaceMemberRecord;
+  subscription: SubscriptionRecord | null;
+}
 
 export class WorkspaceRepository {
   constructor(private readonly db: DatabaseClient) {}
@@ -18,6 +45,7 @@ export class WorkspaceRepository {
       .select()
       .from(workspaces)
       .where(eq(workspaces.ownerUserId, userId))
+      .orderBy(asc(workspaces.createdAt))
       .limit(1);
 
     return workspace ?? null;
@@ -64,6 +92,7 @@ export class WorkspaceRepository {
     if (existing) {
       await this.ensureOwnerMembership(existing.id, user.id);
       await this.ensureInternalFreeSubscription(existing.id);
+      await this.ensureActiveWorkspace(user.id, existing.id);
       return existing;
     }
 
@@ -80,6 +109,7 @@ export class WorkspaceRepository {
 
     await this.ensureOwnerMembership(workspace.id, user.id);
     await this.ensureInternalFreeSubscription(workspace.id);
+    await this.ensureActiveWorkspace(user.id, workspace.id);
 
     return workspace;
   }
@@ -93,6 +123,7 @@ export class WorkspaceRepository {
         .select()
         .from(workspaces)
         .where(eq(workspaces.ownerUserId, user.id))
+        .orderBy(asc(workspaces.createdAt))
         .limit(1);
 
       const [workspace] = existing
@@ -163,8 +194,240 @@ export class WorkspaceRepository {
           .onConflictDoNothing();
       }
 
+      await tx
+        .insert(userWorkspacePreferences)
+        .values({
+          userId: user.id,
+          activeWorkspaceId: workspace.id,
+        })
+        .onConflictDoUpdate({
+          target: userWorkspacePreferences.userId,
+          set: {
+            activeWorkspaceId: workspace.id,
+            updatedAt: new Date(),
+          },
+        });
+
       return workspace;
     });
+  }
+
+  async createWorkspace(user: UserRecord, name: string): Promise<WorkspaceRecord> {
+    return this.db.transaction(async (tx) => {
+      const [workspace] = await tx
+        .insert(workspaces)
+        .values({
+          ownerUserId: user.id,
+          name,
+        })
+        .returning();
+
+      await tx.insert(workspaceMembers).values({
+        workspaceId: workspace.id,
+        userId: user.id,
+        role: "owner",
+      });
+
+      await tx.insert(subscriptions).values({
+        workspaceId: workspace.id,
+        provider: "internal",
+        providerSubscriptionId: `internal:free:${workspace.id}`,
+        planCode: "free",
+        status: "active",
+        startedAt: new Date(),
+      });
+
+      await tx
+        .insert(userWorkspacePreferences)
+        .values({
+          userId: user.id,
+          activeWorkspaceId: workspace.id,
+        })
+        .onConflictDoUpdate({
+          target: userWorkspacePreferences.userId,
+          set: {
+            activeWorkspaceId: workspace.id,
+            updatedAt: new Date(),
+          },
+        });
+
+      return workspace;
+    });
+  }
+
+  async setActiveWorkspace(
+    userId: string,
+    workspaceId: string,
+  ): Promise<WorkspaceRecord | null> {
+    const row = await this.getMembershipRow(userId, workspaceId);
+
+    if (!row) {
+      return null;
+    }
+
+    await this.ensureActiveWorkspace(userId, workspaceId);
+
+    return row.workspace;
+  }
+
+  async getActiveWorkspaceContext(
+    userId: string,
+  ): Promise<ActiveWorkspaceContext | null> {
+    const rows = await this.getMembershipRows(userId);
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const [preference] = await this.db
+      .select()
+      .from(userWorkspacePreferences)
+      .where(eq(userWorkspacePreferences.userId, userId))
+      .limit(1);
+
+    const activeRow =
+      rows.find(
+        (row) => row.workspace.id === preference?.activeWorkspaceId,
+      ) ?? rows[0];
+
+    if (activeRow.workspace.id !== preference?.activeWorkspaceId) {
+      await this.ensureActiveWorkspace(userId, activeRow.workspace.id);
+    }
+
+    const user = await this.getUser(userId);
+
+    if (!user) {
+      return null;
+    }
+
+    return {
+      user,
+      workspace: activeRow.workspace,
+      role: activeRow.member.role,
+    };
+  }
+
+  async getWorkspaceList(userId: string): Promise<WorkspaceListItem[]> {
+    const rows = await this.getMembershipRows(userId);
+
+    if (rows.length === 0) {
+      return [];
+    }
+
+    const activeContext = await this.getActiveWorkspaceContext(userId);
+    const activeWorkspaceId = activeContext?.workspace.id ?? rows[0].workspace.id;
+
+    return rows.map((row) => this.toWorkspaceListItem(row, activeWorkspaceId));
+  }
+
+  async getWorkspaceListWithActive(
+    userId: string,
+  ): Promise<{ workspaces: WorkspaceListItem[]; activeWorkspaceId: string } | null> {
+    const workspaces = await this.getWorkspaceList(userId);
+    const active = workspaces.find((workspace) => workspace.isActive);
+
+    if (!active) {
+      return null;
+    }
+
+    return { workspaces, activeWorkspaceId: active.id };
+  }
+
+  private async getUser(userId: string): Promise<UserRecord | null> {
+    const [user] = await this.db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    return user ?? null;
+  }
+
+  private async getMembershipRow(
+    userId: string,
+    workspaceId: string,
+  ): Promise<WorkspaceMembershipRow | null> {
+    const [row] = await this.db
+      .select({
+        workspace: workspaces,
+        member: workspaceMembers,
+        subscription: subscriptions,
+      })
+      .from(workspaceMembers)
+      .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
+      .leftJoin(
+        subscriptions,
+        and(
+          eq(subscriptions.workspaceId, workspaces.id),
+          inArray(subscriptions.status, ["active", "trialing"]),
+          isNull(subscriptions.endedAt),
+        ),
+      )
+      .where(
+        and(
+          eq(workspaceMembers.userId, userId),
+          eq(workspaceMembers.workspaceId, workspaceId),
+        ),
+      )
+      .limit(1);
+
+    return row ?? null;
+  }
+
+  private async getMembershipRows(
+    userId: string,
+  ): Promise<WorkspaceMembershipRow[]> {
+    return this.db
+      .select({
+        workspace: workspaces,
+        member: workspaceMembers,
+        subscription: subscriptions,
+      })
+      .from(workspaceMembers)
+      .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
+      .leftJoin(
+        subscriptions,
+        and(
+          eq(subscriptions.workspaceId, workspaces.id),
+          inArray(subscriptions.status, ["active", "trialing"]),
+          isNull(subscriptions.endedAt),
+        ),
+      )
+      .where(eq(workspaceMembers.userId, userId))
+      .orderBy(asc(workspaceMembers.createdAt));
+  }
+
+  private toWorkspaceListItem(
+    row: WorkspaceMembershipRow,
+    activeWorkspaceId: string,
+  ): WorkspaceListItem {
+    return {
+      id: row.workspace.id,
+      name: row.workspace.name,
+      slug: row.workspace.slug,
+      role: row.member.role,
+      planCode: row.subscription?.planCode ?? "free",
+      isActive: row.workspace.id === activeWorkspaceId,
+    };
+  }
+
+  private async ensureActiveWorkspace(
+    userId: string,
+    workspaceId: string,
+  ): Promise<void> {
+    await this.db
+      .insert(userWorkspacePreferences)
+      .values({
+        userId,
+        activeWorkspaceId: workspaceId,
+      })
+      .onConflictDoUpdate({
+        target: userWorkspacePreferences.userId,
+        set: {
+          activeWorkspaceId: workspaceId,
+          updatedAt: new Date(),
+        },
+      });
   }
 
   private async ensureOwnerMembership(
