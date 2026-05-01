@@ -31,7 +31,6 @@ import {
 } from "@/components/ui/sidebar";
 import {
   useChatThreadsQuery,
-  useCreateChatThreadMutation,
   useDeleteChatThreadMutation,
 } from "@/features/chat/lib/queries";
 import type { ChatThread } from "@/features/chat/lib/types";
@@ -91,7 +90,6 @@ export function NavThreads() {
     null,
   );
   const threadsQuery = useChatThreadsQuery();
-  const createThreadMutation = useCreateChatThreadMutation();
   const deleteThreadMutation = useDeleteChatThreadMutation();
   const threads = threadsQuery.data ?? [];
   const queryError = threadsQuery.error
@@ -103,8 +101,7 @@ export function NavThreads() {
     setError(null);
 
     try {
-      const thread = await createThreadMutation.mutateAsync();
-      router.push(`/app/threads/${thread.id}`);
+      router.push(`/app`);
     } catch (cause) {
       setError(getThreadErrorMessage(cause));
     }
@@ -141,13 +138,8 @@ export function NavThreads() {
           size="icon-xs"
           className="ml-auto -mr-1 text-muted-foreground hover:text-foreground"
           onClick={() => void handleCreateThread()}
-          disabled={createThreadMutation.isPending}
         >
-          {createThreadMutation.isPending ? (
-            <Loader2Icon className="animate-spin" />
-          ) : (
-            <PlusIcon />
-          )}
+          <PlusIcon />
           <span className="sr-only">Create thread</span>
         </Button>
       </SidebarGroupLabel>

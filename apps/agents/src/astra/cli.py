@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 
 from astra.agents import build_astra_agent
 from astra.deps import AstraDeps
+from astra.log_config import configure_file_logging
 from astra.settings import AstraSettings
 
 
@@ -22,16 +23,22 @@ async def run(prompt: str) -> str:
     load_dotenv()
 
     settings = AstraSettings()
+    configure_file_logging(settings)
     configure_observability(settings.enable_logfire)
 
-    agent = build_astra_agent(settings.model)
-    deps = AstraDeps(user_id=settings.user_id, workspace=settings.workspace)
+    agent = build_astra_agent(settings.model, settings=settings)
+    deps = AstraDeps(
+        user_id=settings.user_id,
+        workspace=settings.workspace,
+        conversation_id="cli",
+        research_artifact_dir=settings.resolved_research_artifact_dir(),
+    )
     result = await agent.run(prompt, deps=deps)
-    return result.output.model_dump_json(indent=2)
+    return result.output
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run the Astra multi-agent orchestrator.")
+    parser = argparse.ArgumentParser(description="Run Astra.")
     parser.add_argument("prompt", help="Task brief for Astra.")
     args = parser.parse_args()
 
