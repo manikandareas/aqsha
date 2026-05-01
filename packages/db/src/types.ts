@@ -7,13 +7,11 @@ import {
   journalVersions,
   journals,
   agentEvents,
-  agentMessages,
-  agentRunOutputs,
   agentRuns,
-  agentThreads,
   sessions,
   subscriptions,
   users,
+  userWorkspacePreferences,
   verifications,
   workspaceMembers,
   workspaces,
@@ -27,16 +25,16 @@ export type VerificationRecord = InferSelectModel<typeof verifications>;
 export type WorkspaceRecord = InferSelectModel<typeof workspaces>;
 export type SubscriptionRecord = InferSelectModel<typeof subscriptions>;
 export type WorkspaceMemberRecord = InferSelectModel<typeof workspaceMembers>;
+export type UserWorkspacePreferenceRecord = InferSelectModel<
+  typeof userWorkspacePreferences
+>;
 export type JournalRecord = InferSelectModel<typeof journals>;
 export type JournalVersionRecord = InferSelectModel<typeof journalVersions>;
 export type ExportRecord = InferSelectModel<typeof exports>;
 export type ChatThreadRecord = InferSelectModel<typeof chatThreads>;
 export type ChatMessageRecord = InferSelectModel<typeof chatMessages>;
-export type AgentThreadRecord = InferSelectModel<typeof agentThreads>;
-export type AgentMessageRecord = InferSelectModel<typeof agentMessages>;
 export type AgentRunRecord = InferSelectModel<typeof agentRuns>;
 export type AgentEventRecord = InferSelectModel<typeof agentEvents>;
-export type AgentRunOutputRecord = InferSelectModel<typeof agentRunOutputs>;
 
 export type NewUser = InferInsertModel<typeof users>;
 export type NewSession = InferInsertModel<typeof sessions>;
@@ -45,16 +43,16 @@ export type NewVerification = InferInsertModel<typeof verifications>;
 export type NewWorkspace = InferInsertModel<typeof workspaces>;
 export type NewSubscription = InferInsertModel<typeof subscriptions>;
 export type NewWorkspaceMember = InferInsertModel<typeof workspaceMembers>;
+export type NewUserWorkspacePreference = InferInsertModel<
+  typeof userWorkspacePreferences
+>;
 export type NewJournal = InferInsertModel<typeof journals>;
 export type NewJournalVersion = InferInsertModel<typeof journalVersions>;
 export type NewExport = InferInsertModel<typeof exports>;
 export type NewChatThread = InferInsertModel<typeof chatThreads>;
 export type NewChatMessage = InferInsertModel<typeof chatMessages>;
-export type NewAgentThread = InferInsertModel<typeof agentThreads>;
-export type NewAgentMessage = InferInsertModel<typeof agentMessages>;
 export type NewAgentRun = InferInsertModel<typeof agentRuns>;
 export type NewAgentEvent = InferInsertModel<typeof agentEvents>;
-export type NewAgentRunOutput = InferInsertModel<typeof agentRunOutputs>;
 
 export type CreateJournalInput = Pick<
   NewJournal,

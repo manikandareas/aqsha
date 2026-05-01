@@ -1,6 +1,7 @@
 import type { JournalRecord, JournalVersionRecord, JsonValue } from "@aqsha/db";
 import type { JournalModel } from "./model";
 import { JournalRepository, type JournalContext } from "./repository";
+import type { WorkspaceService } from "../workspaces/service";
 
 type Identity = {
   authUserId: string;
@@ -17,7 +18,10 @@ type ServiceResult<T> =
   | { success: false; error: ServiceError };
 
 export class JournalService {
-  constructor(private readonly repository: JournalRepository) {}
+  constructor(
+    private readonly repository: JournalRepository,
+    private readonly workspaceService: WorkspaceService,
+  ) {}
 
   async list(
     identity: Identity,
@@ -349,11 +353,18 @@ export class JournalService {
   private async getContext(
     identity: Identity,
   ): Promise<JournalContext | "unauthorized" | "workspace_not_found"> {
-    const result = await this.repository.getContextByAuthUserId(
+    const context = await this.workspaceService.getActiveWorkspaceContext(
       identity.authUserId,
     );
 
-    return result.success ? result.data : result.error;
+    if (!context) {
+      return "workspace_not_found";
+    }
+
+    return {
+      user: context.user,
+      workspace: context.workspace,
+    };
   }
 
   private normalizeLimit(limit: number | undefined): number {

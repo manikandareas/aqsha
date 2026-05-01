@@ -25,6 +25,8 @@ interface ProvisionedSession {
   user: UserRecord;
   workspace: WorkspaceRecord;
   subscription: SubscriptionRecord | null;
+  workspaces: Awaited<ReturnType<WorkspaceService["getWorkspaceList"]>>;
+  activeWorkspaceId: string;
 }
 
 export class SessionService {
@@ -74,6 +76,8 @@ export class SessionService {
         name: session.workspace.name,
         slug: session.workspace.slug,
       },
+      workspaces: session.workspaces,
+      activeWorkspaceId: session.activeWorkspaceId,
       plan: {
         code: planCode,
         label: planCode === "pro" ? "Pro" : "Free",
@@ -123,17 +127,30 @@ export class SessionService {
       return null;
     }
 
-    const workspace = await this.workspaceService.getOwnedWorkspace(user.id);
+    const context = await this.workspaceService.getActiveWorkspaceContext(user.id);
 
-    if (!workspace) {
+    if (!context) {
       return null;
     }
 
     const subscription = await this.workspaceService.getCurrentSubscription(
-      workspace.id,
+      context.workspace.id,
+    );
+    const workspaceList = await this.workspaceService.getWorkspaceListWithActive(
+      user.id,
     );
 
-    return { user, workspace, subscription };
+    if (!workspaceList) {
+      return null;
+    }
+
+    return {
+      user,
+      workspace: context.workspace,
+      subscription,
+      workspaces: workspaceList.workspaces,
+      activeWorkspaceId: workspaceList.activeWorkspaceId,
+    };
   }
 
   private getPlanCode(subscription: SubscriptionRecord | null): PlanCode {

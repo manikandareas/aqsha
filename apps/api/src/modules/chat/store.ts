@@ -3,6 +3,8 @@ import type { ChatModel } from "./model";
 
 export type ChatThread = ChatModel["chatThread"];
 export type ChatMessage = ChatModel["chatMessage"];
+export type AgentRun = ChatModel["agentRun"];
+export type AgentEvent = ChatModel["agentEvent"];
 
 export interface ChatScope {
   userId: string;
@@ -13,12 +15,49 @@ export interface CreateChatThreadInput extends ChatScope {
   model: string | null;
 }
 
+export interface CreateAgentRunInput extends ChatScope {
+  chatThreadId: string;
+  metadata?: unknown;
+}
+
+export interface AppendAgentEventInput {
+  sequence: number;
+  type: string;
+  scope: AgentEvent["scope"];
+  status: AgentEvent["status"];
+  title: string;
+  summary?: string | null;
+  agentName?: string | null;
+  toolName?: string | null;
+  parentEventId?: string | null;
+  payload?: unknown;
+  occurredAt?: string;
+}
+
+export interface FinishAgentRunInput {
+  status: Extract<AgentRun["status"], "completed" | "failed" | "cancel_requested">;
+  errorMessage?: string | null;
+  completedAt?: string;
+}
+
 export interface ChatStore {
-  getScope(authUserId: string): Promise<ChatScope | null>;
   listThreads(scope: ChatScope): Promise<ChatThread[]>;
   createThread(input: CreateChatThreadInput): Promise<ChatThread>;
   getThread(scope: ChatScope, threadId: string): Promise<ChatThread | null>;
   getMessages(scope: ChatScope, threadId: string): Promise<ChatMessage[]>;
+  getLatestRun(scope: ChatScope, threadId: string): Promise<AgentRun | null>;
+  getEvents(scope: ChatScope, threadId: string): Promise<AgentEvent[]>;
+  createRun(input: CreateAgentRunInput): Promise<AgentRun>;
+  appendEvent(
+    scope: ChatScope,
+    run: Pick<AgentRun, "id" | "chatThreadId">,
+    event: AppendAgentEventInput,
+  ): Promise<AgentEvent>;
+  finishRun(
+    scope: ChatScope,
+    runId: string,
+    input: FinishAgentRunInput,
+  ): Promise<AgentRun | null>;
   appendMessage(
     scope: ChatScope,
     message: Omit<ChatMessage, "createdAt"> & { createdAt?: string },

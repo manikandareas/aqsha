@@ -17,8 +17,8 @@ const chatStore = new DrizzleChatStore(database);
 
 const userService = new UserService(userRepository);
 const workspaceService = new WorkspaceService(workspaceRepository);
-const journalService = new JournalService(journalRepository);
-const chatService = new ChatService(chatStore);
+const journalService = new JournalService(journalRepository, workspaceService);
+const chatService = new ChatService(chatStore, workspaceService);
 const sessionService = new SessionService(userService, workspaceService);
 
 export const servicesPlugin = new Elysia({

@@ -1,32 +1,25 @@
 import { and, desc, eq, sql } from "drizzle-orm";
-import { chatMessages, chatThreads, users, workspaces, type JsonValue } from "@aqsha/db";
+import { agentEvents, agentRuns, chatMessages, chatThreads, type JsonValue } from "@aqsha/db";
 import { generateId, type UIMessage } from "ai";
 import type { DatabaseClient } from "../../database/client";
-import type { ChatMessage, ChatScope, ChatStore, ChatThread, CreateChatThreadInput } from "./store";
+import type {
+  AgentEvent,
+  AgentRun,
+  AppendAgentEventInput,
+  ChatMessage,
+  ChatScope,
+  ChatStore,
+  ChatThread,
+  CreateAgentRunInput,
+  CreateChatThreadInput,
+  FinishAgentRunInput,
+} from "./store";
 
 type ChatMessageRole = ChatMessage["role"];
 type PersistedUIMessage = UIMessage & { createdAt?: string | Date };
 
 export class DrizzleChatStore implements ChatStore {
   constructor(private readonly db: DatabaseClient) {}
-
-  async getScope(authUserId: string): Promise<ChatScope | null> {
-    const [row] = await this.db
-      .select({ user: users, workspace: workspaces })
-      .from(users)
-      .leftJoin(workspaces, eq(workspaces.ownerUserId, users.id))
-      .where(eq(users.id, authUserId))
-      .limit(1);
-
-    if (!row?.workspace) {
-      return null;
-    }
-
-    return {
-      userId: row.user.id,
-      workspaceId: row.workspace.id,
-    };
-  }
 
   async listThreads(scope: ChatScope): Promise<ChatThread[]> {
     const rows = await this.db
@@ -91,6 +84,111 @@ export class DrizzleChatStore implements ChatStore {
       .orderBy(chatMessages.createdAt);
 
     return rows.map((row) => this.toMessage(row));
+  }
+
+  async getLatestRun(scope: ChatScope, threadId: string): Promise<AgentRun | null> {
+    const [run] = await this.db
+      .select()
+      .from(agentRuns)
+      .where(
+        and(
+          eq(agentRuns.chatThreadId, threadId),
+          eq(agentRuns.workspaceId, scope.workspaceId),
+          eq(agentRuns.userId, scope.userId),
+        ),
+      )
+      .orderBy(desc(agentRuns.createdAt))
+      .limit(1);
+
+    return run ? this.toRun(run) : null;
+  }
+
+  async getEvents(scope: ChatScope, threadId: string): Promise<AgentEvent[]> {
+    const rows = await this.db
+      .select()
+      .from(agentEvents)
+      .where(
+        and(
+          eq(agentEvents.chatThreadId, threadId),
+          eq(agentEvents.workspaceId, scope.workspaceId),
+        ),
+      )
+      .orderBy(agentEvents.occurredAt, agentEvents.sequence);
+
+    return rows.map((row) => this.toEvent(row));
+  }
+
+  async createRun(input: CreateAgentRunInput): Promise<AgentRun> {
+    const now = new Date();
+    const [run] = await this.db
+      .insert(agentRuns)
+      .values({
+        chatThreadId: input.chatThreadId,
+        workspaceId: input.workspaceId,
+        userId: input.userId,
+        status: "running",
+        startedAt: now,
+        updatedAt: now,
+        metadata: this.toJsonValue(input.metadata ?? null),
+      })
+      .returning();
+
+    return this.toRun(run);
+  }
+
+  async appendEvent(
+    scope: ChatScope,
+    run: Pick<AgentRun, "id" | "chatThreadId">,
+    event: AppendAgentEventInput,
+  ): Promise<AgentEvent> {
+    const occurredAt = event.occurredAt ? new Date(event.occurredAt) : new Date();
+    const [storedEvent] = await this.db
+      .insert(agentEvents)
+      .values({
+        runId: run.id,
+        chatThreadId: run.chatThreadId,
+        workspaceId: scope.workspaceId,
+        sequence: event.sequence,
+        type: event.type,
+        scope: event.scope,
+        status: event.status,
+        title: event.title,
+        summary: event.summary ?? null,
+        agentName: event.agentName ?? null,
+        toolName: event.toolName ?? null,
+        parentEventId: event.parentEventId ?? null,
+        payload: this.toJsonValue(event.payload ?? null),
+        occurredAt,
+      })
+      .returning();
+
+    return this.toEvent(storedEvent);
+  }
+
+  async finishRun(
+    scope: ChatScope,
+    runId: string,
+    input: FinishAgentRunInput,
+  ): Promise<AgentRun | null> {
+    const completedAt = input.completedAt ? new Date(input.completedAt) : new Date();
+    const [run] = await this.db
+      .update(agentRuns)
+      .set({
+        status: input.status,
+        errorMessage: input.errorMessage ?? null,
+        completedAt,
+        updatedAt: completedAt,
+      })
+      .where(
+        and(
+          eq(agentRuns.id, runId),
+          eq(agentRuns.workspaceId, scope.workspaceId),
+          eq(agentRuns.userId, scope.userId),
+        ),
+      )
+      .returning();
+
+    return run ? this.toRun(run) : null;
   }
 
   async appendMessage(
@@ -259,6 +357,41 @@ export class DrizzleChatStore implements ChatStore {
     };
   }
 
+  private toRun(run: typeof agentRuns.$inferSelect): AgentRun {
+    return {
+      id: run.id,
+      chatThreadId: run.chatThreadId,
+      userId: run.userId,
+      status: run.status,
+      errorMessage: run.errorMessage,
+      metadata: run.metadata ?? null,
+      startedAt: run.startedAt?.toISOString() ?? null,
+      completedAt: run.completedAt?.toISOString() ?? null,
+      createdAt: run.createdAt.toISOString(),
+      updatedAt: run.updatedAt.toISOString(),
+    };
+  }
+
+  private toEvent(event: typeof agentEvents.$inferSelect): AgentEvent {
+    return {
+      id: event.id,
+      runId: event.runId,
+      chatThreadId: event.chatThreadId,
+      sequence: event.sequence,
+      type: event.type,
+      scope: event.scope,
+      status: event.status,
+      title: event.title,
+      summary: event.summary,
+      agentName: event.agentName,
+      toolName: event.toolName,
+      parentEventId: event.parentEventId,
+      payload: event.payload ?? null,
+      occurredAt: event.occurredAt.toISOString(),
+      createdAt: event.createdAt.toISOString(),
+    };
+  }
+
   private toApiRole(role: string): ChatMessageRole {
     return role === "assistant" || role === "system" ? role : "user";
   }
@@ -281,5 +414,9 @@ export class DrizzleChatStore implements ChatStore {
 
   private toUIMessageJson(message: PersistedUIMessage): JsonValue {
     return JSON.parse(JSON.stringify(message)) as JsonValue;
+  }
+
+  private toJsonValue(value: unknown): JsonValue {
+    return JSON.parse(JSON.stringify(value)) as JsonValue;
   }
 }
