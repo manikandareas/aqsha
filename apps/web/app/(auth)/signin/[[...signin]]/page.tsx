@@ -48,11 +48,16 @@ export default function SignInPage() {
         return;
       }
 
+      const sessionResponse = await authClient.getSession();
+      const onboardingCompletedAt =
+        sessionResponse.data?.user.onboardingCompletedAt;
+      const redirectPath = onboardingCompletedAt ? "/app" : "/get-started";
+
       toast.success({
         title: "Signed in",
         description: "Welcome back to Aqsha.",
       });
-      router.push("/get-started");
+      router.push(redirectPath);
       router.refresh();
     } catch (cause) {
       toast.error({
