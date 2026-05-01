@@ -1,0 +1,191 @@
+---
+import "@/styles/global.css";
+import { Header } from "@/components/Header";
+import { Hero } from "@/components/Hero";
+import { LiveMonitoringPreview } from "@/components/LiveMonitoringPreview";
+import { Testimonials } from "@/components/Testimonials";
+import { HowItWorks } from "@/components/HowItWorks";
+import { WhatIsLab } from "@/components/WhatIsLab";
+import { Features } from "@/components/Features";
+import { FounderStory } from "@/components/FounderStory";
+import { Changelog } from "@/components/Changelog";
+import { Pricing } from "@/components/Pricing";
+import { FAQ } from "@/components/FAQ";
+import { CTA } from "@/components/CTA";
+import { Footer } from "@/components/Footer";
+---
+
+<script is:inline>
+  const getThemePreference = () => {
+    if (typeof localStorage !== "undefined" && localStorage.getItem("theme")) {
+      return localStorage.getItem("theme");
+    }
+    return window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  };
+  const isDark = getThemePreference() === "dark";
+  document.documentElement.classList[isDark ? "add" : "remove"]("dark");
+
+  if (typeof localStorage !== "undefined") {
+    const observer = new MutationObserver(() => {
+      const isDark = document.documentElement.classList.contains("dark");
+      localStorage.setItem("theme", isDark ? "dark" : "light");
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+  }
+</script>
+
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content={Astro.generator} />
+
+    <!-- Primary Meta Tags -->
+    <title>Aqsha - Platform Assessment Berbasis AI untuk Pendidikan</title>
+    <meta
+      name="title"
+      content="Aqsha - Platform Assessment Berbasis AI untuk Pendidikan"
+    />
+    <meta
+      name="description"
+      content="Platform assessment berbasis AI yang membantu pendidik membuat soal, menilai jawaban, dan memberikan feedback otomatis. Hemat waktu, tingkatkan kualitas pembelajaran dengan teknologi AI."
+    />
+    <meta
+      name="keywords"
+      content="platform assessment, AI pendidikan, penilaian otomatis, edtech Indonesia, assessment online, grading otomatis, pendidikan digital, AI assessment, Aqsha"
+    />
+    <meta name="author" content="Aqsha" />
+    <meta name="robots" content="index, follow" />
+    <meta name="language" content="Indonesian" />
+    <link rel="canonical" href="https://ngerti.in/" />
+
+    <!-- Theme Color -->
+    <meta
+      name="theme-color"
+      content="#ffffff"
+      media="(prefers-color-scheme: light)"
+    />
+    <meta
+      name="theme-color"
+      content="#191817"
+      media="(prefers-color-scheme: dark)"
+    />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://ngerti.in/" />
+    <meta
+      property="og:title"
+      content="Aqsha - Platform Assessment Berbasis AI untuk Pendidikan"
+    />
+    <meta
+      property="og:description"
+      content="Platform assessment berbasis AI yang membantu pendidik membuat soal, menilai jawaban, dan memberikan feedback otomatis. Hemat waktu, tingkatkan kualitas pembelajaran."
+    />
+    <meta property="og:image" content="https://ngerti.in/og-image.png" />
+    <meta property="og:site_name" content="Aqsha" />
+    <meta property="og:locale" content="id_ID" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://ngerti.in/" />
+    <meta
+      property="twitter:title"
+      content="Aqsha - Platform Assessment Berbasis AI untuk Pendidikan"
+    />
+    <meta
+      property="twitter:description"
+      content="Platform assessment berbasis AI yang membantu pendidik membuat soal, menilai jawaban, dan memberikan feedback otomatis."
+    />
+    <meta
+      property="twitter:image"
+      content="https://ngerti.in/twitter-image.png"
+    />
+
+    <!-- Additional SEO Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Aqsha" />
+    <meta name="format-detection" content="telephone=no" />
+
+    <!-- Structured Data (JSON-LD) for SEO -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Aqsha",
+        "url": "https://ngerti.in",
+        "logo": "https://ngerti.in/logo.png",
+        "description": "Platform assessment berbasis AI yang membantu pendidik membuat soal, menilai jawaban, dan memberikan feedback otomatis.",
+        "sameAs": [
+          "https://twitter.com/ngertiin",
+          "https://www.linkedin.com/company/ngertiin",
+          "https://www.instagram.com/ngertiin"
+        ],
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "contactType": "Customer Service",
+          "availableLanguage": ["Indonesian", "English"]
+        }
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "Aqsha",
+        "url": "https://ngerti.in",
+        "description": "Platform assessment berbasis AI untuk pendidikan",
+        "potentialAction": {
+          "@type": "SearchAction",
+          "target": "https://ngerti.in/search?q={search_term_string}",
+          "query-input": "required name=search_term_string"
+        }
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Aqsha",
+        "applicationCategory": "EducationalApplication",
+        "operatingSystem": "Web",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "IDR"
+        },
+        "aggregateRating": {
+          "@type": "AggregateRating",
+          "ratingValue": "4.8",
+          "ratingCount": "150"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <Header client:load />
+    <Hero client:load />
+    <LiveMonitoringPreview client:visible />
+    <Testimonials client:visible />
+    <HowItWorks client:visible />
+    <WhatIsLab client:visible />
+    <Features client:visible />
+    <FounderStory client:visible />
+    <Changelog client:visible />
+    <Pricing client:visible />
+    <FAQ client:visible />
+    <CTA client:load />
+    <Footer />
+    <script
+      defer
+      src="https://analytics.ngerti.in/script.js"
+      data-website-id="30ec9a2d-0516-4bb6-b8cf-81ea7e1a504b"></script>
+  </body>
+</html>

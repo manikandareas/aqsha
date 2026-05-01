@@ -12,6 +12,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { NavUser } from "./nav-user";
 
 export function NavSecondary({
   items,
@@ -32,8 +33,13 @@ export function NavSecondary({
         <SidebarMenu>
           {items.map((item) => (
             <SidebarMenuItem key={item.title}>
-              <SidebarMenuButton render={<a href={item.url} />}>
-                {item.icon}
+              <SidebarMenuButton
+                render={<a href={item.url} />}
+                className="h-8 text-[13px] font-medium text-sidebar-foreground/65 hover:text-sidebar-foreground"
+              >
+                <span className="shrink-0 [&_svg]:h-[15px] [&_svg]:w-[15px]">
+                  {item.icon}
+                </span>
                 <span>{item.title}</span>
               </SidebarMenuButton>
               {item.badge && <SidebarMenuBadge>{item.badge}</SidebarMenuBadge>}
@@ -42,12 +48,14 @@ export function NavSecondary({
           <SidebarMenuItem>
             <SidebarMenuButton
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              className="h-8 text-[13px] font-medium text-sidebar-foreground/65 hover:text-sidebar-foreground"
             >
-              <Sun className="h-4 w-4 dark:hidden" />
-              <Moon className="hidden h-4 w-4 dark:block" />
+              <Sun className="h-[15px] w-[15px] shrink-0 dark:hidden" />
+              <Moon className="hidden h-[15px] w-[15px] shrink-0 dark:block" />
               <span>Toggle theme</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          <NavUser />
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>

@@ -2,235 +2,81 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "katex/dist/katex.min.css";
+@import "@aqsha/ui/styles/globals.css";
+@source "../node_modules/streamdown/dist/*.js";
 
-@custom-variant dark (&:is(.dark *));
-
-@theme inline {
-  /* ── Semantic color aliases ── */
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-
-  /* ── Font families ── */
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
-
-  /* ── Font sizes (Notion typography scale) ── */
-  --font-size-display: 4rem;        /* 64px — Display Hero */
-  --font-size-display-2: 3.375rem;  /* 54px — Display Secondary */
-  --font-size-h1: 3rem;             /* 48px — Section Heading */
-  --font-size-h2: 2.5rem;           /* 40px — Sub-heading Large */
-  --font-size-h3: 1.625rem;         /* 26px — Sub-heading */
-  --font-size-card-title: 1.375rem; /* 22px — Card Title */
-  --font-size-body-lg: 1.25rem;     /* 20px — Body Large */
-  --font-size-nav: 0.9375rem;       /* 15px — Nav / Button */
-  --font-size-caption: 0.875rem;    /* 14px — Caption */
-  --font-size-badge: 0.75rem;       /* 12px — Badge / Micro */
-
-  /* Tailwind text-* class aliases */
-  --text-display: var(--font-size-display);
-  --text-display-2: var(--font-size-display-2);
-  --text-h1: var(--font-size-h1);
-  --text-h2: var(--font-size-h2);
-  --text-h3: var(--font-size-h3);
-  --text-card-title: var(--font-size-card-title);
-  --text-body-lg: var(--font-size-body-lg);
-  --text-nav: var(--font-size-nav);
-  --text-caption: var(--font-size-caption);
-  --text-badge: var(--font-size-badge);
-
-  /* ── Letter-spacing (Notion compression scale) ── */
-  --tracking-display: -2.125px;    /* 64px display */
-  --tracking-display-2: -1.875px;  /* 54px display */
-  --tracking-h1: -1.5px;           /* 48px section */
-  --tracking-h3: -0.625px;         /* 26px sub-heading */
-  --tracking-card-title: -0.25px;  /* 22px card title */
-  --tracking-body-lg: -0.125px;    /* 20px body large */
-  --tracking-badge: 0.125px;       /* 12px badge (positive) */
-
-  /* ── Shadows (Notion multi-layer system) ── */
-  --shadow-soft-card: rgba(0,0,0,0.04) 0px 4px 18px, rgba(0,0,0,0.027) 0px 2.025px 7.84688px, rgba(0,0,0,0.02) 0px 0.8px 2.925px, rgba(0,0,0,0.01) 0px 0.175px 1.04062px;
-  --shadow-deep-card: rgba(0,0,0,0.01) 0px 1px 3px, rgba(0,0,0,0.02) 0px 3px 7px, rgba(0,0,0,0.02) 0px 7px 15px, rgba(0,0,0,0.04) 0px 14px 28px, rgba(0,0,0,0.05) 0px 23px 52px;
-
-  /* Override default Tailwind shadows to use Notion's thin/soft shadows */
-  --shadow-sm: var(--shadow-soft-card);
-  --shadow-md: var(--shadow-soft-card);
-  --shadow-lg: var(--shadow-deep-card);
-  --shadow-xl: var(--shadow-deep-card);
-
-  /* ── Notion brand color palette ── */
-  --color-notion-blue: #0075de;
-  --color-notion-active-blue: #005bab;
-  --color-notion-focus-blue: #097fe8;
-  --color-notion-link-light-blue: #62aef0;
-  --color-notion-navy: #213183;
-  --color-notion-warm-white: #f6f5f4;
-  --color-notion-warm-dark: #31302e;
-  --color-notion-gray-500: #615d59;
-  --color-notion-gray-300: #a39e98;
-  --color-notion-teal: #2a9d99;
-  --color-notion-green: #1aae39;
-  --color-notion-orange: #dd5b00;
-  --color-notion-pink: #ff64c8;
-  --color-notion-purple: #391c57;
-  --color-notion-brown: #523410;
-
-  /* ── Badge colors ── */
-  --color-badge-bg: var(--badge-bg);
-  --color-badge-foreground: var(--badge-foreground);
-
-  /* ── Sidebar color aliases ── */
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
-
-  /* ── Chart color aliases ── */
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-
-  /* ── Border radius scale (DESIGN.md §5) ── */
-  --radius-sm: 4px;      /* Micro — buttons, inputs */
-  --radius-md: 5px;      /* Subtle — links, menu items */
-  --radius-lg: 8px;      /* Standard — small cards, containers */
-  --radius-xl: 12px;     /* Comfortable — cards, dialogs */
-  --radius-2xl: 16px;    /* Large — hero cards */
-  --radius-3xl: 24px;    /* Extra large */
-  --radius-4xl: 9999px;  /* Full pill — badges */
-}
-
-/* ── Light theme tokens ── */
 :root {
-  --background: #ffffff;
-  --foreground: rgba(0, 0, 0, 0.95);
-  --card: #ffffff;
-  --card-foreground: rgba(0, 0, 0, 0.95);
-  --popover: #ffffff;
-  --popover-foreground: rgba(0, 0, 0, 0.95);
-  --primary: #0075de;
-  --primary-foreground: #ffffff;
-  --secondary: rgba(0, 0, 0, 0.05);
-  --secondary-foreground: rgba(0, 0, 0, 0.95);
-  --muted: #f6f5f4;
-  --muted-foreground: #615d59;
-  --accent: #f6f5f4;
-  --accent-foreground: rgba(0, 0, 0, 0.95);
-  --destructive: #dd5b00;
-  --destructive-foreground: #ffffff;
-  --border: rgba(0, 0, 0, 0.1);
-  --input: #dddddd;
-  --ring: #097fe8;
-  --badge-bg: #f2f9ff;
-  --badge-foreground: #097fe8;
-  --chart-1: #0075de;
-  --chart-2: #2a9d99;
-  --chart-3: #dd5b00;
-  --chart-4: #ff64c8;
-  --chart-5: #391c57;
-  --sidebar: #f6f5f4;
-  --sidebar-foreground: rgba(0, 0, 0, 0.95);
-  --sidebar-primary: #0075de;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: rgba(0, 0, 0, 0.05);
-  --sidebar-accent-foreground: rgba(0, 0, 0, 0.95);
-  --sidebar-border: rgba(0, 0, 0, 0.1);
-  --sidebar-ring: #097fe8;
+  --sileo-width: 360px;
+  --sileo-height: 44px;
+  --sileo-duration: 520ms;
+  --sileo-toast-fill: #1f1e1c;
+  --sileo-toast-title: #f6f5f4;
+  --sileo-toast-description: #d8d4ce;
+  --sileo-toast-border: rgba(255, 255, 255, 0.12);
+  --sileo-state-success: #3cc6bf;
+  --sileo-state-error: #f07340;
+  --sileo-state-warning: #f59e0b;
+  --sileo-state-info: #62aef0;
 }
 
-/* ── Dark theme tokens ── */
 .dark {
-  --background: #191817;
-  --foreground: #f6f5f4;
-  --card: #1f1e1c;
-  --card-foreground: #f6f5f4;
-  --popover: #1f1e1c;
-  --popover-foreground: #f6f5f4;
-  --primary: #62aef0;
-  --primary-foreground: #191817;
-  --secondary: rgba(255, 255, 255, 0.08);
-  --secondary-foreground: #f6f5f4;
-  --muted: #31302e;
-  --muted-foreground: #a39e98;
-  --accent: rgba(255, 255, 255, 0.08);
-  --accent-foreground: #f6f5f4;
-  --destructive: #f07340;
-  --destructive-foreground: #191817;
-  --border: rgba(255, 255, 255, 0.1);
-  --input: rgba(255, 255, 255, 0.12);
-  --ring: #62aef0;
-  --badge-bg: rgba(9, 127, 232, 0.18);
-  --badge-foreground: #62aef0;
-  --chart-1: #62aef0;
-  --chart-2: #2a9d99;
-  --chart-3: #f07340;
-  --chart-4: #ff64c8;
-  --chart-5: #8b5cf6;
-  --sidebar: #191817;
-  --sidebar-foreground: #f6f5f4;
-  --sidebar-primary: #62aef0;
-  --sidebar-primary-foreground: #191817;
-  --sidebar-accent: rgba(255, 255, 255, 0.08);
-  --sidebar-accent-foreground: #f6f5f4;
-  --sidebar-border: rgba(255, 255, 255, 0.1);
-  --sidebar-ring: #62aef0;
-}
-
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-  html {
-    @apply font-sans;
-  }
-
-  /* Notion typography scale — headings */
-  h1 {
-    font-size: var(--font-size-h1);
-    font-weight: 700;
-    line-height: 1;
-    letter-spacing: var(--tracking-h1);
-  }
-  h2 {
-    font-size: var(--font-size-h2);
-    font-weight: 700;
-    line-height: 1.5;
-  }
-  h3 {
-    font-size: var(--font-size-h3);
-    font-weight: 700;
-    line-height: 1.23;
-    letter-spacing: var(--tracking-h3);
-  }
+  --sileo-toast-fill: #ffffff;
+  --sileo-toast-title: rgba(0, 0, 0, 0.95);
+  --sileo-toast-description: #615d59;
+  --sileo-toast-border: rgba(0, 0, 0, 0.1);
+  --sileo-state-success: #2a9d99;
+  --sileo-state-error: #dd5b00;
+  --sileo-state-warning: #dd5b00;
+  --sileo-state-info: #0075de;
 }
 
 @layer components {
+  [data-sileo-viewport] {
+    z-index: 80;
+    padding: 1rem;
+  }
+
+  [data-sileo-toast] {
+    filter: drop-shadow(0 18px 42px rgb(0 0 0 / 0.22))
+      drop-shadow(0 3px 10px rgb(0 0 0 / 0.12));
+  }
+
+  .dark [data-sileo-toast] {
+    filter: drop-shadow(0 18px 42px rgb(0 0 0 / 0.3))
+      drop-shadow(0 3px 10px rgb(0 0 0 / 0.16));
+  }
+
+  /* [data-sileo-pill],
+  [data-sileo-body] {
+    stroke: var(--sileo-toast-border);
+    stroke-width: 1px;
+    vector-effect: non-scaling-stroke;
+  } */
+
+  [data-sileo-viewport] .sileo-toast-title {
+    color: var(--sileo-toast-title);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    line-height: 1rem;
+    text-transform: none;
+  }
+
+  [data-sileo-viewport] .sileo-toast-description {
+    color: var(--sileo-toast-description);
+    font-size: 0.875rem;
+    line-height: 1.35rem;
+    padding: 0.875rem 1rem 1rem;
+  }
+
+  .sileo-toast-badge {
+    background-color: color-mix(in srgb, currentColor 12%, transparent);
+  }
+
+  .sileo-toast-button {
+    font-weight: 600;
+  }
+
   .workspace-journal-editor {
     overflow: visible;
     position: relative;
@@ -242,9 +88,7 @@
     padding-left: 1.75rem;
   }
 
-  .workspace-journal-editor
-    .ProseMirror
-    p.is-editor-empty:first-child::before {
+  .workspace-journal-editor .ProseMirror p.is-editor-empty:first-child::before {
     color: color-mix(in srgb, var(--foreground) 35%, transparent);
     content: attr(data-placeholder);
     float: left;
@@ -262,7 +106,10 @@
     justify-content: center;
     opacity: 0;
     position: relative;
-    transition: opacity 150ms ease, background-color 150ms ease, color 150ms ease;
+    transition:
+      opacity 150ms ease,
+      background-color 150ms ease,
+      color 150ms ease;
     width: 1.5rem;
     margin-left: -1.75rem;
     margin-right: 0.375rem;

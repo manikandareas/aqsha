@@ -1,7 +1,9 @@
 "use client";
 
 import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ReactQueryProvider } from "@/lib/react-query/client";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const scriptProps =
@@ -17,7 +19,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
       enableSystem
       disableTransitionOnChange
     >
-      <TooltipProvider>{children}</TooltipProvider>
+      <ReactQueryProvider>
+        <TooltipProvider>
+          {children}
+          <Toaster />
+        </TooltipProvider>
+      </ReactQueryProvider>
     </ThemeProvider>
   );
 }

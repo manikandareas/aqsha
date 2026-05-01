@@ -21,4 +21,11 @@ export class WorkspaceService {
   ensureDefaultWorkspace(user: UserRecord): Promise<WorkspaceRecord> {
     return this.repository.ensureDefaultWorkspace(user);
   }
+
+  ensureNamedOwnedWorkspace(
+    user: UserRecord,
+    workspaceName: string,
+  ): Promise<WorkspaceRecord> {
+    return this.repository.ensureNamedOwnedWorkspace(user, workspaceName);
+  }
 }

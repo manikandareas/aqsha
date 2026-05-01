@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { isUrl, KEYS } from 'platejs';
 import { useEditorRef } from 'platejs/react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 import { useFilePicker } from 'use-file-picker';
 
 import {
@@ -123,7 +123,7 @@ export function MediaToolbarButton({
           modal={false}
           {...props}
         >
-          <DropdownMenuTrigger render={<ToolbarSplitButtonSecondary />}></DropdownMenuTrigger>
+          <DropdownMenuTrigger nativeButton={false} render={<ToolbarSplitButtonSecondary />} />
 
           <DropdownMenuContent
             onClick={(e) => e.stopPropagation()}
@@ -175,7 +175,13 @@ function MediaUrlDialogContent({
   const [url, setUrl] = React.useState('');
 
   const embedMedia = React.useCallback(() => {
-    if (!isUrl(url)) return toast.error('Invalid URL');
+    if (!isUrl(url)) {
+      toast.error({
+        title: 'Invalid URL',
+        description: 'Enter a valid URL before inserting media.',
+      });
+      return;
+    }
 
     setOpen(false);
     editor.tf.insertNodes({

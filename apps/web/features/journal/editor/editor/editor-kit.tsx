@@ -26,7 +26,6 @@ import { EmojiKit } from "@/features/journal/editor/editor/plugins/emoji-kit";
 import { ExitBreakKit } from "@/features/journal/editor/editor/plugins/exit-break-kit";
 import { ExcalidrawKit } from "@/features/journal/editor/editor/plugins/excalidraw-kit";
 import { FindReplaceKit } from "@/features/journal/editor/editor/plugins/find-replace-kit";
-import { FixedToolbarKit } from "@/features/journal/editor/editor/plugins/fixed-toolbar-kit";
 import { FloatingToolbarKit } from "@/features/journal/editor/editor/plugins/floating-toolbar-kit";
 import { FontKit } from "@/features/journal/editor/editor/plugins/font-kit";
 import { LineHeightKit } from "@/features/journal/editor/editor/plugins/line-height-kit";
@@ -75,11 +74,11 @@ export const EditorKit = [
   ...ExitBreakKit,
   ...DocxKit,
   ...DocxExportKit,
+  ...DndKit,
   TrailingBlockPlugin,
   ...FindReplaceKit,
   ...BlockMenuKit,
   ...FloatingToolbarKit,
-  ...FixedToolbarKit,
 ] as AnyEditorPlugin[];
 
 export type MyEditor = TPlateEditor<Value>;

@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import * as React from "react";
 
 import { NavJournal } from "@/components/nav-journal";
@@ -11,17 +12,16 @@ import {
   Sidebar,
   SidebarContent,
   SidebarHeader,
-  SidebarRail,
 } from "@/components/ui/sidebar";
 import {
   AudioLinesIcon,
-  BlocksIcon,
+  BookUpIcon,
   HomeIcon,
-  InboxIcon,
+  LibraryIcon,
   MessageCircleQuestionIcon,
   SearchIcon,
   Settings2Icon,
-  SparklesIcon,
+  SmileIcon,
   TerminalIcon,
 } from "lucide-react";
 
@@ -30,8 +30,9 @@ const data = {
   teams: [
     {
       name: "Acme Inc",
-      logo: <TerminalIcon />,
+      logo: <SmileIcon />,
       plan: "Enterprise",
+      color: "bg-primary text-primary-foreground",
     },
     {
       name: "Acme Corp.",
@@ -49,23 +50,23 @@ const data = {
       title: "Search",
       url: "#",
       icon: <SearchIcon />,
-    },
-    {
-      title: "Ask AI",
-      url: "#",
-      icon: <SparklesIcon />,
+      shortcut: "⌘K",
+      variant: "search" as const,
     },
     {
       title: "Home",
-      url: "#",
+      url: "/app",
       icon: <HomeIcon />,
-      isActive: true,
     },
     {
-      title: "Inbox",
-      url: "#",
-      icon: <InboxIcon />,
-      badge: "10",
+      title: "Journals",
+      url: "/app/journals",
+      icon: <BookUpIcon />,
+    },
+    {
+      title: "My Library",
+      url: "/app/my-library",
+      icon: <LibraryIcon />,
     },
   ],
   navSecondary: [
@@ -75,71 +76,39 @@ const data = {
       icon: <Settings2Icon />,
     },
     {
-      title: "Templates",
-      url: "#",
-      icon: <BlocksIcon />,
-    },
-    {
       title: "Help",
       url: "#",
       icon: <MessageCircleQuestionIcon />,
     },
   ],
-  journal: [
-    {
-      name: "Project Management & Task Tracking",
-      url: "/demo/journal/1",
-      emoji: "📊",
-    },
-    {
-      name: "Family Recipe Collection & Meal Planning",
-      url: "/demo/journal/2",
-      emoji: "🍳",
-    },
-    {
-      name: "Fitness Tracker & Workout Routines",
-      url: "/demo/journal/3",
-      emoji: "💪",
-    },
-  ],
-  threads: [
-    {
-      name: "Personal Life Management",
-      url: "/demo/threads/1",
-    },
-    {
-      name: "Professional Development",
-      url: "/demo/threads/2",
-    },
-    {
-      name: "Creative Projects",
-      url: "/demo/threads/3",
-    },
-    {
-      name: "Home Management",
-      url: "/demo/threads/4",
-    },
-  ],
 };
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const pathname = usePathname();
+  const isJournalsRoute = pathname.startsWith("/app/journals");
+  const navMain = data.navMain.map((item) => ({
+    ...item,
+    isActive:
+      item.url === "/app"
+        ? pathname === "/app" || pathname.startsWith("/app/threads/")
+        : pathname === item.url || pathname.startsWith(`${item.url}/`),
+  }));
+
   return (
     <Sidebar
-      variant="floating"
-      collapsible="icon"
-      className="border-r-0"
+      className="border-0 border-transparent bg-background [--sidebar:var(--background)]"
       {...props}
     >
       <SidebarHeader>
         <TeamSwitcher teams={data.teams} />
-        <NavMain items={data.navMain} />
+        <div className="px-2 mt-2">
+          <NavMain items={navMain} />
+        </div>
       </SidebarHeader>
       <SidebarContent>
-        <NavJournal journals={data.journal} />
-        <NavThreads threads={data.threads} />
+        {isJournalsRoute ? <NavJournal /> : <NavThreads />}
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
-      <SidebarRail />
     </Sidebar>
   );
 }

@@ -84,7 +84,6 @@ export const journalModel = {
   }),
   createBody: t.Object({
     title: t.String({ minLength: 1 }),
-    type: journalBase.type,
   }),
   updateBody: t.Object({
     title: t.Optional(t.String({ minLength: 1 })),

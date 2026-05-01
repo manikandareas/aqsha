@@ -1,20 +1,21 @@
 import type { UserRecord } from "@aqsha/db";
-import type { ClerkProfileInput } from "./model";
+import type { AuthProfileInput } from "./model";
 import type { UserRepository } from "./repository";
 
-export type { ClerkProfileInput } from "./model";
+export type { AuthProfileInput } from "./model";
 
 export class UserService {
   constructor(private readonly repository: UserRepository) {}
 
-  getByIdentity(
-    authTokenIdentifier: string,
-    clerkUserId: string,
-  ): Promise<UserRecord | null> {
-    return this.repository.getByIdentity(authTokenIdentifier, clerkUserId);
+  getByAuthUserId(authUserId: string): Promise<UserRecord | null> {
+    return this.repository.getByAuthUserId(authUserId);
   }
 
-  async ensureProfile(input: ClerkProfileInput): Promise<UserRecord> {
+  async ensureProfile(input: AuthProfileInput): Promise<UserRecord> {
     return this.repository.ensureProfile(input);
+  }
+
+  completeOnboarding(userId: string): Promise<UserRecord> {
+    return this.repository.completeOnboarding(userId);
   }
 }

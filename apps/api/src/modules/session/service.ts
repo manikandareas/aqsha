@@ -3,7 +3,7 @@ import type {
   UserRecord,
   WorkspaceRecord,
 } from "@aqsha/db";
-import { UserService, type ClerkProfileInput } from "../users/service";
+import { UserService, type AuthProfileInput } from "../users/service";
 import { WorkspaceService } from "../workspaces/service";
 
 export const PLAN_LIMITS = {
@@ -32,15 +32,24 @@ export class SessionService {
     private readonly userService: UserService,
     private readonly workspaceService: WorkspaceService,
   ) {}
-  async ensureProfile(input: ClerkProfileInput): Promise<void> {
-    await this.userService.ensureProfile(input);
+  async ensureProfile(input: AuthProfileInput): Promise<void> {
+    const user = await this.userService.ensureProfile(input);
+    await this.workspaceService.ensureDefaultWorkspace(user);
   }
 
-  async getBootstrap(authTokenIdentifier: string, clerkUserId: string) {
-    const session = await this.getProvisionedSession(
-      authTokenIdentifier,
-      clerkUserId,
+  async getStarted(input: AuthProfileInput & { workspaceName: string }) {
+    const user = await this.userService.ensureProfile(input);
+    await this.workspaceService.ensureNamedOwnedWorkspace(
+      user,
+      input.workspaceName,
     );
+    await this.userService.completeOnboarding(user.id);
+
+    return this.getBootstrap(input.id);
+  }
+
+  async getBootstrap(authUserId: string) {
+    const session = await this.getProvisionedSession(authUserId);
 
     if (!session) {
       return null;
@@ -95,11 +104,8 @@ export class SessionService {
     };
   }
 
-  async getOnboarding(authTokenIdentifier: string, clerkUserId: string) {
-    const session = await this.getProvisionedSession(
-      authTokenIdentifier,
-      clerkUserId,
-    );
+  async getOnboarding(authUserId: string) {
+    const session = await this.getProvisionedSession(authUserId);
 
     if (!session) {
       return null;
@@ -109,13 +115,9 @@ export class SessionService {
   }
 
   private async getProvisionedSession(
-    authTokenIdentifier: string,
-    clerkUserId: string,
+    authUserId: string,
   ): Promise<ProvisionedSession | null> {
-    const user = await this.userService.getByIdentity(
-      authTokenIdentifier,
-      clerkUserId,
-    );
+    const user = await this.userService.getByAuthUserId(authUserId);
 
     if (!user) {
       return null;
