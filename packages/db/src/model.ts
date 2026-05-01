@@ -17,6 +17,7 @@ const _insertJournalVersions = createInsertSchema(table.journalVersions);
 const _insertExports = createInsertSchema(table.exports);
 const _insertChatThreads = createInsertSchema(table.chatThreads);
 const _insertChatMessages = createInsertSchema(table.chatMessages);
+const _insertChatSources = createInsertSchema(table.chatSources);
 const _insertAgentRuns = createInsertSchema(table.agentRuns);
 const _insertAgentEvents = createInsertSchema(table.agentEvents);
 
@@ -35,6 +36,7 @@ const _selectJournalVersions = createSelectSchema(table.journalVersions);
 const _selectExports = createSelectSchema(table.exports);
 const _selectChatThreads = createSelectSchema(table.chatThreads);
 const _selectChatMessages = createSelectSchema(table.chatMessages);
+const _selectChatSources = createSelectSchema(table.chatSources);
 const _selectAgentRuns = createSelectSchema(table.agentRuns);
 const _selectAgentEvents = createSelectSchema(table.agentEvents);
 
@@ -53,6 +55,7 @@ export const dbModel = {
     exports: _insertExports,
     chatThreads: _insertChatThreads,
     chatMessages: _insertChatMessages,
+    chatSources: _insertChatSources,
     agentRuns: _insertAgentRuns,
     agentEvents: _insertAgentEvents,
   }),
@@ -70,6 +73,7 @@ export const dbModel = {
     exports: _selectExports,
     chatThreads: _selectChatThreads,
     chatMessages: _selectChatMessages,
+    chatSources: _selectChatSources,
     agentRuns: _selectAgentRuns,
     agentEvents: _selectAgentEvents,
   }),

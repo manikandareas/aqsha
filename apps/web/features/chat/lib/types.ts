@@ -54,9 +54,27 @@ export type AgentEvent = {
   createdAt: string;
 };
 
+export type ChatSource = {
+  id: string;
+  chatThreadId: string;
+  runId: string;
+  kind: "url" | "document";
+  title: string | null;
+  url: string | null;
+  filename: string | null;
+  mediaType: string | null;
+  providerSourceId: string | null;
+  metadata: unknown;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ChatThreadDetail = {
   thread: ChatThread;
   messages: ChatMessage[];
   latestRun: AgentRun | null;
   events: AgentEvent[];
+  sources: ChatSource[];
 };

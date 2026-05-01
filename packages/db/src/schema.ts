@@ -54,6 +54,7 @@ export const exportStatuses = [
 ] as const;
 export const chatThreadStatuses = ["active", "archived"] as const;
 export const chatMessageRoles = ["system", "user", "assistant", "tool"] as const;
+export const chatSourceKinds = ["url", "document"] as const;
 export const agentRunStatuses = [
   "queued",
   "running",
@@ -607,6 +608,54 @@ export const agentRuns = pgTable(
   ],
 );
 
+export const chatSources = pgTable(
+  "chat_sources",
+  {
+    id: idColumn("id"),
+    chatThreadId: uuid("chat_thread_id")
+      .notNull()
+      .references(() => chatThreads.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => agentRuns.id, { onDelete: "cascade" }),
+    sourceKey: text("source_key").notNull(),
+    kind: text("kind", { enum: chatSourceKinds }).notNull(),
+    title: text("title"),
+    url: text("url"),
+    filename: text("filename"),
+    mediaType: text("media_type"),
+    providerSourceId: text("provider_source_id"),
+    metadata: jsonb("metadata").$type<JsonValue>(),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (table) => [
+    check("chat_sources_kind_check", sql`${table.kind} in ('url', 'document')`),
+    unique("chat_sources_thread_source_key_unique").on(
+      table.chatThreadId,
+      table.sourceKey,
+    ),
+    index("chat_sources_thread_last_seen_idx").on(
+      table.chatThreadId,
+      table.lastSeenAt,
+    ),
+    index("chat_sources_workspace_thread_idx").on(
+      table.workspaceId,
+      table.chatThreadId,
+    ),
+    index("chat_sources_run_id_idx").on(table.runId),
+  ],
+);
+
 export const agentEvents = pgTable(
   "agent_events",
   {
@@ -671,6 +720,7 @@ export const table = {
   exports,
   chatThreads,
   chatMessages,
+  chatSources,
   agentRuns,
   agentEvents,
 } as const;
