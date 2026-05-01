@@ -119,6 +119,10 @@ context differences, time trends, gaps, outliers, and bias.
 
 ## 8. Decision Loop
 
+Before the decision loop, create visual specs when the evidence ledger can support
+them. Use `visual-artifacts.md`; omit visuals when required dates, source IDs,
+metrics, or relationships are missing.
+
 After synthesis, choose:
 
 - PROCEED: enough evidence to answer.
@@ -134,6 +138,7 @@ Before final output:
 - Verify every cited source exists.
 - Check that citations support the claims attached to them.
 - Check numeric claims against source context.
+- Check visual specs against source IDs and visual metrics.
 - Check direct quotes exactly.
 - Check dates and jurisdiction.
 - Remove or qualify unsupported claims.
@@ -148,4 +153,5 @@ The final output must include:
 - Confidence level
 - Limitations
 - Uncertainty
+- Audited visual artifact embeds when available
 - References

@@ -61,9 +61,10 @@ Choose the smallest depth that satisfies the user:
 5. Extract knowledge.
 6. Synthesize.
 7. Generate hypotheses or insights.
-8. Run the research decision loop: PROCEED, REFINE, or PIVOT.
-9. Verify sources, citations, claims, quotes, numbers, and dates.
-10. Produce the final output.
+8. Generate visual artifact specs when the evidence ledger has enough structured data.
+9. Run the research decision loop: PROCEED, REFINE, or PIVOT.
+10. Verify sources, citations, claims, quotes, numbers, dates, and visual provenance.
+11. Produce the final Markdown output with audited artifact embeds when available.
 
 Load the referenced files only as needed:
 
@@ -72,10 +73,15 @@ Load the referenced files only as needed:
 - `references/extraction-schema.md` for evidence cards and claim records.
 - `references/synthesis-and-decision-loop.md` for synthesis and PROCEED/REFINE/PIVOT.
 - `references/report-templates.md` for output formats.
+- `references/visual-artifacts.md` for graph, timeline, matrix, and artifact rules.
 - `references/verification-checklist.md` before final delivery.
 
 If working with a local Markdown report and JSON evidence ledger, run
 `scripts/audit_evidence.py` before final delivery.
+
+For research reports with a local `evidence.json` and `visuals.json`, run
+`scripts/audit_visuals.py` and `scripts/render_visual_artifacts.py` before final
+delivery. Embed only artifacts whose manifest status is `passed`.
 
 ## Citation Requirements
 
@@ -120,6 +126,7 @@ If evidence is weak, missing, contradictory, inaccessible, outdated, or biased:
 - [ ] Build evidence cards.
 - [ ] Synthesize themes, conflicts, gaps, and confidence.
 - [ ] Generate insights or hypotheses with counterevidence.
+- [ ] Generate visual specs from verified evidence when data is sufficient.
 - [ ] Decide PROCEED, REFINE, or PIVOT.
-- [ ] Verify citations, claims, quotes, numbers, and dates.
-- [ ] Produce final report with uncertainty and bibliography.
+- [ ] Verify citations, claims, quotes, numbers, dates, and visual provenance.
+- [ ] Produce final Markdown report with uncertainty, bibliography, and audited artifact embeds.

@@ -34,6 +34,7 @@
 - Skills use progressive disclosure: metadata is added to agent context first, then agents can call `load_skill`, `read_skill_resource`, or `run_skill_script`.
 - Treat skill scripts as executable code. Only commit or load trusted skills, and review scripts before making them available to agents.
 - The default research skill is `skills/deep-research`. Astra must load it for source-grounded research, literature review, market analysis, policy/regulatory research, competitive analysis, and evidence synthesis.
+- Deep research reports should create visual artifact specs whenever the evidence ledger has enough structured data. Use trusted local skill scripts to render/audit artifacts; do not generate arbitrary plotting code in v1.
 
 ## Commands
 ```bash
