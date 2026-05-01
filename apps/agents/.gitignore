@@ -32,6 +32,9 @@ dist/
 # Logs
 *.log
 
+# Astra local runtime artifacts
+.astra/
+
 # OS/editor files
 .DS_Store
 .vscode/
