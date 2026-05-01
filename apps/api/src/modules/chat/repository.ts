@@ -1,5 +1,12 @@
 import { and, desc, eq, sql } from "drizzle-orm";
-import { agentEvents, agentRuns, chatMessages, chatThreads, type JsonValue } from "@aqsha/db";
+import {
+  agentEvents,
+  agentRuns,
+  chatMessages,
+  chatSources,
+  chatThreads,
+  type JsonValue,
+} from "@aqsha/db";
 import { generateId, type UIMessage } from "ai";
 import type { DatabaseClient } from "../../database/client";
 import type {
@@ -8,11 +15,13 @@ import type {
   AppendAgentEventInput,
   ChatMessage,
   ChatScope,
+  ChatSource,
   ChatStore,
   ChatThread,
   CreateAgentRunInput,
   CreateChatThreadInput,
   FinishAgentRunInput,
+  UpsertChatSourceInput,
 } from "./store";
 
 type ChatMessageRole = ChatMessage["role"];
@@ -118,6 +127,21 @@ export class DrizzleChatStore implements ChatStore {
     return rows.map((row) => this.toEvent(row));
   }
 
+  async getSources(scope: ChatScope, threadId: string): Promise<ChatSource[]> {
+    const rows = await this.db
+      .select()
+      .from(chatSources)
+      .where(
+        and(
+          eq(chatSources.chatThreadId, threadId),
+          eq(chatSources.workspaceId, scope.workspaceId),
+        ),
+      )
+      .orderBy(chatSources.firstSeenAt, chatSources.createdAt);
+
+    return rows.map((row) => this.toSource(row));
+  }
+
   async createRun(input: CreateAgentRunInput): Promise<AgentRun> {
     const now = new Date();
     const [run] = await this.db
@@ -163,6 +187,50 @@ export class DrizzleChatStore implements ChatStore {
       .returning();
 
     return this.toEvent(storedEvent);
+  }
+
+  async upsertSource(
+    scope: ChatScope,
+    source: UpsertChatSourceInput,
+  ): Promise<ChatSource> {
+    const seenAt = source.seenAt ? new Date(source.seenAt) : new Date();
+    const now = new Date();
+    const [storedSource] = await this.db
+      .insert(chatSources)
+      .values({
+        chatThreadId: source.chatThreadId,
+        workspaceId: scope.workspaceId,
+        runId: source.runId,
+        sourceKey: source.sourceKey,
+        kind: source.kind,
+        title: source.title ?? null,
+        url: source.url ?? null,
+        filename: source.filename ?? null,
+        mediaType: source.mediaType ?? null,
+        providerSourceId: source.providerSourceId ?? null,
+        metadata: this.toJsonValue(source.metadata ?? null),
+        firstSeenAt: seenAt,
+        lastSeenAt: seenAt,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [chatSources.chatThreadId, chatSources.sourceKey],
+        set: {
+          runId: source.runId,
+          kind: source.kind,
+          title: source.title ?? null,
+          url: source.url ?? null,
+          filename: source.filename ?? null,
+          mediaType: source.mediaType ?? null,
+          providerSourceId: source.providerSourceId ?? null,
+          metadata: this.toJsonValue(source.metadata ?? null),
+          lastSeenAt: seenAt,
+          updatedAt: now,
+        },
+      })
+      .returning();
+
+    return this.toSource(storedSource);
   }
 
   async finishRun(
@@ -389,6 +457,25 @@ export class DrizzleChatStore implements ChatStore {
       payload: event.payload ?? null,
       occurredAt: event.occurredAt.toISOString(),
       createdAt: event.createdAt.toISOString(),
+    };
+  }
+
+  private toSource(source: typeof chatSources.$inferSelect): ChatSource {
+    return {
+      id: source.id,
+      chatThreadId: source.chatThreadId,
+      runId: source.runId,
+      kind: source.kind,
+      title: source.title,
+      url: source.url,
+      filename: source.filename,
+      mediaType: source.mediaType,
+      providerSourceId: source.providerSourceId,
+      metadata: source.metadata ?? null,
+      firstSeenAt: source.firstSeenAt.toISOString(),
+      lastSeenAt: source.lastSeenAt.toISOString(),
+      createdAt: source.createdAt.toISOString(),
+      updatedAt: source.updatedAt.toISOString(),
     };
   }
 

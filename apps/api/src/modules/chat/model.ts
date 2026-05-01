@@ -69,11 +69,29 @@ const agentEvent = t.Object({
   createdAt: t.String(),
 });
 
+const chatSource = t.Object({
+  id: t.String(),
+  chatThreadId: t.String(),
+  runId: t.String(),
+  kind: t.Union([t.Literal("url"), t.Literal("document")]),
+  title: t.Union([t.String(), t.Null()]),
+  url: t.Union([t.String(), t.Null()]),
+  filename: t.Union([t.String(), t.Null()]),
+  mediaType: t.Union([t.String(), t.Null()]),
+  providerSourceId: t.Union([t.String(), t.Null()]),
+  metadata: t.Any(),
+  firstSeenAt: t.String(),
+  lastSeenAt: t.String(),
+  createdAt: t.String(),
+  updatedAt: t.String(),
+});
+
 const chatThreadDetail = t.Object({
   thread: chatThread,
   messages: t.Array(chatMessage),
   latestRun: t.Union([agentRun, t.Null()]),
   events: t.Array(agentEvent),
+  sources: t.Array(chatSource),
 });
 
 const unauthorizedError = t.Object({
@@ -105,6 +123,7 @@ export const chatModel = {
   chatMessage,
   agentRun,
   agentEvent,
+  chatSource,
   chatThreadDetail,
   unauthorizedError,
   chatThreadNotFoundError,

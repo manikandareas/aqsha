@@ -5,6 +5,7 @@ export type ChatThread = ChatModel["chatThread"];
 export type ChatMessage = ChatModel["chatMessage"];
 export type AgentRun = ChatModel["agentRun"];
 export type AgentEvent = ChatModel["agentEvent"];
+export type ChatSource = ChatModel["chatSource"];
 
 export interface ChatScope {
   userId: string;
@@ -34,6 +35,24 @@ export interface AppendAgentEventInput {
   occurredAt?: string;
 }
 
+export interface AppendChatSourceInput {
+  kind: ChatSource["kind"];
+  title?: string | null;
+  url?: string | null;
+  filename?: string | null;
+  mediaType?: string | null;
+  providerSourceId?: string | null;
+  metadata?: unknown;
+  seenAt?: string;
+}
+
+export interface UpsertChatSourceInput extends AppendChatSourceInput {
+  chatThreadId: string;
+  workspaceId: string;
+  runId: string;
+  sourceKey: string;
+}
+
 export interface FinishAgentRunInput {
   status: Extract<AgentRun["status"], "completed" | "failed" | "cancel_requested">;
   errorMessage?: string | null;
@@ -47,12 +66,17 @@ export interface ChatStore {
   getMessages(scope: ChatScope, threadId: string): Promise<ChatMessage[]>;
   getLatestRun(scope: ChatScope, threadId: string): Promise<AgentRun | null>;
   getEvents(scope: ChatScope, threadId: string): Promise<AgentEvent[]>;
+  getSources(scope: ChatScope, threadId: string): Promise<ChatSource[]>;
   createRun(input: CreateAgentRunInput): Promise<AgentRun>;
   appendEvent(
     scope: ChatScope,
     run: Pick<AgentRun, "id" | "chatThreadId">,
     event: AppendAgentEventInput,
   ): Promise<AgentEvent>;
+  upsertSource(
+    scope: ChatScope,
+    source: UpsertChatSourceInput,
+  ): Promise<ChatSource>;
   finishRun(
     scope: ChatScope,
     runId: string,
