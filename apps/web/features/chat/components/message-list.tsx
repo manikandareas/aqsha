@@ -1,4 +1,5 @@
 import type { UIMessage } from "ai";
+import { useState } from "react";
 import {
   CheckCircle2Icon,
   ChevronDownIcon,
@@ -839,6 +840,7 @@ function AgentTimeline({
 function ToolPartView({ part }: { part: ToolPart }) {
   const record = partRecord(part);
   const state = toolState(part) as Parameters<typeof ToolHeader>[0]["state"];
+  const [defaultOpen] = useState(() => state !== "output-available");
   const output =
     "output" in record && record.output !== undefined ? (
       <pre className="max-h-48 overflow-auto rounded-md bg-muted px-3 py-2 text-xs leading-5 text-muted-foreground">
@@ -849,7 +851,7 @@ function ToolPartView({ part }: { part: ToolPart }) {
     ) : null;
 
   return (
-    <Tool defaultOpen={state !== "output-available"}>
+    <Tool defaultOpen={defaultOpen}>
       <ToolHeader
         state={state}
         toolType={part.type === "dynamic-tool" ? `tool-${toolName(part)}` : part.type}

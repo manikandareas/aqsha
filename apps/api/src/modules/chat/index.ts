@@ -5,7 +5,12 @@ import { authIdentityPlugin } from "../../plugins/auth-identity";
 import { servicesPlugin } from "../../plugins/services";
 import { chatModel } from "./model";
 import { collectFinishedMessages } from "./vercel-stream";
-import type { AgentRun, AppendAgentEventInput, ChatScope } from "./store";
+import type {
+  AgentRun,
+  AppendAgentEventInput,
+  AppendChatSourceInput,
+  ChatScope,
+} from "./store";
 
 const chatThreadNotFoundResponse = {
   error: {
@@ -33,6 +38,33 @@ function copyStreamHeaders(headers: Headers): Headers {
   }
 
   return responseHeaders;
+}
+
+function createChatRequestId() {
+  return crypto.randomUUID();
+}
+
+function logChatError(
+  message: string,
+  context: Record<string, unknown>,
+  error?: unknown,
+) {
+  const payload: Record<string, unknown> = {
+    level: "error",
+    module: "chat",
+    message,
+    ...context,
+  };
+
+  if (error instanceof Error) {
+    payload.errorName = error.name;
+    payload.errorMessage = error.message;
+    payload.stack = error.stack;
+  } else if (error !== undefined) {
+    payload.error = error;
+  }
+
+  console.error(JSON.stringify(payload));
 }
 
 function chunkRecord(chunk: UIMessageChunk): Record<string, unknown> {
@@ -182,6 +214,51 @@ function eventForChunk(chunk: UIMessageChunk): Omit<AppendAgentEventInput, "sequ
   }
 }
 
+function sourceForChunk(chunk: UIMessageChunk): AppendChatSourceInput | null {
+  const record = chunkRecord(chunk);
+
+  if (chunk.type === "source-url") {
+    const url = typeof record.url === "string" ? record.url : null;
+
+    if (!url) {
+      return null;
+    }
+
+    return {
+      kind: "url",
+      title: typeof record.title === "string" ? record.title : null,
+      url,
+      providerSourceId:
+        typeof record.sourceId === "string" ? record.sourceId : null,
+      metadata: { chunkType: chunk.type },
+    };
+  }
+
+  if (chunk.type === "source-document") {
+    const filename =
+      typeof record.filename === "string" ? record.filename : null;
+    const mediaType =
+      typeof record.mediaType === "string" ? record.mediaType : null;
+    const providerSourceId =
+      typeof record.sourceId === "string" ? record.sourceId : null;
+
+    if (!providerSourceId && !filename && !mediaType) {
+      return null;
+    }
+
+    return {
+      kind: "document",
+      title: typeof record.title === "string" ? record.title : filename,
+      filename,
+      mediaType,
+      providerSourceId,
+      metadata: { chunkType: chunk.type },
+    };
+  }
+
+  return null;
+}
+
 function createRunEventWriter(
   chatService: {
     appendRunEvent: (
@@ -316,6 +393,7 @@ export const chatModule = new Elysia({
   .post(
     "/threads/:id/messages",
     async ({ body, chatService, identity, params, status }) => {
+      const requestId = createChatRequestId();
       const messagesResult = await chatService.appendUserMessage(
         identity,
         params.id,
@@ -355,6 +433,7 @@ export const chatModule = new Elysia({
       const headers = new Headers({
         Authorization: `Bearer ${env.ASTRA_INTERNAL_TOKEN}`,
         "Content-Type": "application/json",
+        "x-aqsha-gateway-request-id": requestId,
         "x-astra-user-id": identity.authUserId,
       });
 
@@ -362,37 +441,107 @@ export const chatModule = new Elysia({
         headers.set("x-astra-model", model);
       }
 
-      const upstream = await fetch(`${env.AGENTS_BASE_URL}/internal/chat`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          trigger: "submit-message",
-          id: params.id,
-          runId: runResult.data.run.id,
-          messages: messagesResult.data.messages,
-        }),
-      });
+      let upstream: Response;
+
+      try {
+        upstream = await fetch(`${env.AGENTS_BASE_URL}/internal/chat`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            trigger: "submit-message",
+            id: params.id,
+            runId: runResult.data.run.id,
+            messages: messagesResult.data.messages,
+          }),
+        });
+      } catch (error) {
+        logChatError(
+          "Failed to connect to agents service",
+          {
+            requestId,
+            threadId: params.id,
+            runId: runResult.data.run.id,
+            agentsBaseUrl: env.AGENTS_BASE_URL,
+          },
+          error,
+        );
+        await eventWriter({
+          type: "run_failed",
+          scope: "error",
+          status: "failed",
+          title: "Astra connection failed",
+          summary:
+            error instanceof Error
+              ? error.message
+              : "Unable to connect to the agents service.",
+          agentName: "Astra",
+          payload: { requestId },
+        });
+        await chatService.finishRun(runResult.data.scope, runResult.data.run.id, {
+          status: "failed",
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : "Unable to connect to the agents service.",
+        });
+
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: "agents_network_error",
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Unable to connect to the agents service.",
+              requestId,
+            },
+          }),
+          {
+            status: 502,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
 
       if (!upstream.ok || !upstream.body) {
+        const upstreamBody = await upstream.text().catch(() => "");
+        const astraRequestId = upstream.headers.get("x-astra-request-id");
+
+        logChatError("Agents service returned an error response", {
+          requestId,
+          astraRequestId,
+          threadId: params.id,
+          runId: runResult.data.run.id,
+          upstreamStatus: upstream.status,
+          upstreamBody,
+        });
         await eventWriter({
           type: "run_failed",
           scope: "error",
           status: "failed",
           title: "Astra failed to start",
-          summary: "The agents service failed to stream a response.",
+          summary:
+            upstreamBody ||
+            `The agents service failed with HTTP ${upstream.status}.`,
           agentName: "Astra",
-          payload: { status: upstream.status },
+          payload: { requestId, astraRequestId, status: upstream.status, upstreamBody },
         });
         await chatService.finishRun(runResult.data.scope, runResult.data.run.id, {
           status: "failed",
-          errorMessage: "Agents service failed to stream a response",
+          errorMessage:
+            upstreamBody ||
+            `Agents service failed with HTTP ${upstream.status}.`,
         });
 
         return new Response(
           JSON.stringify({
             error: {
               code: "agents_service_error",
-              message: "Agents service failed to stream a response",
+              message:
+                upstreamBody ||
+                `Agents service failed with HTTP ${upstream.status}.`,
+              requestId,
+              astraRequestId,
             },
           }),
           {
@@ -403,15 +552,25 @@ export const chatModule = new Elysia({
       }
 
       const [clientStream, persistenceStream] = upstream.body.tee();
+      const astraRequestId = upstream.headers.get("x-astra-request-id");
 
       void collectFinishedMessages(
         persistenceStream,
         messagesResult.data.messages,
         async (chunk) => {
           const event = eventForChunk(chunk);
+          const source = sourceForChunk(chunk);
 
           if (event) {
             await eventWriter(event);
+          }
+
+          if (source) {
+            await chatService.appendRunSource(
+              runResult.data.scope,
+              runResult.data.run,
+              source,
+            );
           }
         },
       )
@@ -430,14 +589,27 @@ export const chatModule = new Elysia({
           });
         })
         .catch((error: unknown) => {
-          console.error("Failed to persist streamed chat response", error);
+          logChatError(
+            "Failed to persist streamed chat response",
+            {
+              requestId,
+              astraRequestId,
+              threadId: params.id,
+              runId: runResult.data.run.id,
+            },
+            error,
+          );
           void eventWriter({
             type: "run_failed",
             scope: "error",
             status: "failed",
             title: "Astra failed",
-            summary: error instanceof Error ? error.message : "Unable to persist the streamed response.",
+            summary:
+              error instanceof Error
+                ? error.message
+                : "Unable to persist the streamed response.",
             agentName: "Astra",
+            payload: { requestId, astraRequestId },
           }).then(() =>
             chatService.finishRun(runResult.data.scope, runResult.data.run.id, {
               status: "failed",
@@ -449,9 +621,15 @@ export const chatModule = new Elysia({
           );
         });
 
+      const responseHeaders = copyStreamHeaders(upstream.headers);
+      responseHeaders.set("x-aqsha-request-id", requestId);
+      if (astraRequestId) {
+        responseHeaders.set("x-astra-request-id", astraRequestId);
+      }
+
       return new Response(clientStream, {
         status: upstream.status,
-        headers: copyStreamHeaders(upstream.headers),
+        headers: responseHeaders,
       });
     },
     {

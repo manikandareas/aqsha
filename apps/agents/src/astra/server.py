@@ -1,14 +1,14 @@
 import logging
 import secrets
-from collections.abc import Awaitable, Callable
-from typing import cast
+from collections.abc import AsyncIterator, Awaitable, Callable
+from typing import Any, cast
 from uuid import uuid4
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic_ai.ui.vercel_ai import VercelAIAdapter
-from starlette.responses import Response
+from starlette.responses import Response, StreamingResponse
 
 from astra.agents import build_astra_agent
 from astra.cli import configure_observability
@@ -92,6 +92,39 @@ async def log_unhandled_errors(
         )
 
 
+def wrap_streaming_response_errors(
+    response: Response,
+    *,
+    context: dict[str, Any],
+) -> Response:
+    body_iterator = getattr(response, "body_iterator", None)
+
+    if body_iterator is None:
+        return response
+
+    async def guarded_stream() -> AsyncIterator[bytes | str]:
+        try:
+            async for chunk in body_iterator:
+                yield chunk
+        except Exception:
+            logger.exception("Astra streaming response error", extra=context)
+            raise
+
+    wrapped = StreamingResponse(
+        guarded_stream(),
+        status_code=response.status_code,
+        media_type=response.media_type,
+        background=response.background,
+    )
+
+    for key, value in response.headers.items():
+        if key.lower() == "content-length":
+            continue
+        wrapped.headers[key] = value
+
+    return wrapped
+
+
 @app.post("/internal/chat")
 async def internal_chat(
     request: Request,
@@ -99,10 +132,14 @@ async def internal_chat(
     x_astra_user_id: str | None = Header(default=None),
     x_astra_workspace: str | None = Header(default=None),
     x_astra_model: str | None = Header(default=None),
+    x_aqsha_gateway_request_id: str | None = Header(default=None),
 ):
     require_internal_auth(authorization)
     conversation_id = await extract_conversation_id(request)
+    request_id = getattr(request.state, "astra_request_id", uuid4().hex)
     request.state.astra_context = {
+        "request_id": request_id,
+        "gateway_request_id": x_aqsha_gateway_request_id or "none",
         "conversation_id": conversation_id or "none",
         "user_id": x_astra_user_id or settings.user_id,
         "workspace": x_astra_workspace or settings.workspace,
@@ -116,13 +153,21 @@ async def internal_chat(
         research_artifact_dir=settings.resolved_research_artifact_dir(),
     )
 
-    return await VercelAIAdapter.dispatch_request(
+    logger.info("Astra internal chat request accepted", extra=request.state.astra_context)
+
+    response = await VercelAIAdapter.dispatch_request(
         request,
         agent=astra_agent,
         sdk_version=6,
         deps=deps,
         model=x_astra_model or settings.model,
         manage_system_prompt="server",
+    )
+    response.headers["x-astra-request-id"] = request_id
+
+    return wrap_streaming_response_errors(
+        response,
+        context=request.state.astra_context,
     )
 
 

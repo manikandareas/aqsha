@@ -15,19 +15,38 @@ import { getApiBaseUrl } from "@/lib/api-url";
 import { queryKeys } from "@/lib/react-query/keys";
 import { toast } from "@/lib/toast";
 
+function describeChatError(error: unknown) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return "Something went wrong. Please try again.";
+}
+
+const CHAT_UPDATE_THROTTLE_MS = 50;
+
+function messagesSignature(messages: UIMessage[]) {
+  return messages
+    .map((message) => `${message.id}:${message.role}:${message.parts.length}`)
+    .join("|");
+}
+
 export function ChatThread({
   id,
   initialEvents,
   initialLatestRun,
   initialMessages,
+  onMessagesChange,
 }: {
   id: string;
   initialEvents: AgentEvent[];
   initialLatestRun: AgentRun | null;
   initialMessages: UIMessage[];
+  onMessagesChange?: (messages: UIMessage[]) => void;
 }) {
   const queryClient = useQueryClient();
   const sentPendingPromptRef = useRef(false);
+  const emittedMessagesSignatureRef = useRef("");
   const toastedErrorRef = useRef<unknown>(null);
   const { containerRef, isAtBottom, scrollToBottom } = useChatScroll(id);
   const transport = useMemo(
@@ -47,6 +66,7 @@ export function ChatThread({
     id,
     messages: initialMessages,
     transport,
+    experimental_throttle: CHAT_UPDATE_THROTTLE_MS,
     onFinish: () => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.chat.threads(),
@@ -62,7 +82,7 @@ export function ChatThread({
     toastedErrorRef.current = error;
     toast.error({
       title: "Could not send message",
-      description: "Something went wrong. Please try again.",
+      description: describeChatError(error),
     });
   }, [error]);
 
@@ -84,6 +104,17 @@ export function ChatThread({
   }, [id, sendMessage, status]);
 
   const isStreaming = status === "submitted" || status === "streaming";
+
+  useEffect(() => {
+    const signature = messagesSignature(messages);
+
+    if (emittedMessagesSignatureRef.current === signature) {
+      return;
+    }
+
+    emittedMessagesSignatureRef.current = signature;
+    onMessagesChange?.(messages);
+  }, [messages, onMessagesChange]);
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
@@ -116,7 +147,7 @@ export function ChatThread({
       <div className="absolute inset-x-0 bottom-0 z-20 bg-background px-4 pb-6 pt-3 sm:px-6">
         {error ? (
           <div className="mx-auto mb-3 w-full max-w-[820px] rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-2 text-sm text-destructive">
-            Something went wrong. Please try again.
+            {describeChatError(error)}
           </div>
         ) : null}
         <MessageInput

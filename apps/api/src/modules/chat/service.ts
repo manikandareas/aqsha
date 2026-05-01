@@ -3,6 +3,7 @@ import type { AuthIdentity } from "../../plugins/auth-identity";
 import type { ChatModel } from "./model";
 import type {
   AgentRun,
+  AppendChatSourceInput,
   AppendAgentEventInput,
   ChatMessage,
   ChatScope,
@@ -80,6 +81,7 @@ export class ChatService {
         messages: await this.store.getMessages(scope, threadId),
         latestRun: await this.store.getLatestRun(scope, threadId),
         events: await this.store.getEvents(scope, threadId),
+        sources: await this.store.getSources(scope, threadId),
       },
     };
   }
@@ -218,6 +220,26 @@ export class ChatService {
     await this.store.appendEvent(scope, run, event);
   }
 
+  async appendRunSource(
+    scope: ChatScope,
+    run: Pick<AgentRun, "id" | "chatThreadId">,
+    source: AppendChatSourceInput,
+  ): Promise<void> {
+    const sourceKey = this.sourceKeyForSource(source);
+
+    if (!sourceKey) {
+      return;
+    }
+
+    await this.store.upsertSource(scope, {
+      ...source,
+      chatThreadId: run.chatThreadId,
+      workspaceId: scope.workspaceId,
+      runId: run.id,
+      sourceKey,
+    });
+  }
+
   async finishRun(
     scope: ChatScope,
     runId: string,
@@ -251,6 +273,39 @@ export class ChatService {
       role: message.role,
       parts: message.parts as UIMessage["parts"],
     };
+  }
+
+  private sourceKeyForSource(source: AppendChatSourceInput): string | null {
+    if (source.kind === "url") {
+      const normalizedUrl = this.normalizeUrl(source.url);
+
+      return normalizedUrl ? `url:${normalizedUrl}` : null;
+    }
+
+    const documentKey =
+      source.providerSourceId?.trim() ||
+      [source.filename?.trim(), source.mediaType?.trim()]
+        .filter(Boolean)
+        .join(":");
+
+    return documentKey ? `document:${documentKey}` : null;
+  }
+
+  private normalizeUrl(value: string | null | undefined): string | null {
+    const trimmed = value?.trim();
+
+    if (!trimmed) {
+      return null;
+    }
+
+    try {
+      const url = new URL(trimmed);
+      url.hash = "";
+
+      return url.toString();
+    } catch {
+      return trimmed;
+    }
   }
 
   private titleForThread(currentTitle: string, messages: Pick<ChatMessage, "role" | "parts">[]): string {

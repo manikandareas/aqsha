@@ -4,6 +4,7 @@ import json
 import logging
 import subprocess
 import sys
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,7 @@ from pydantic_ai import Agent
 from pydantic_ai.capabilities import MCP, WebSearch
 from pydantic_ai.models.test import TestModel
 from pydantic_ai_skills import SkillsDirectory
+from starlette.responses import StreamingResponse
 
 from astra.agents import build_astra_agent, build_astra_capabilities
 from astra.artifacts import (
@@ -200,6 +202,33 @@ def test_internal_chat_logs_unhandled_dispatch_errors(
     assert body["error"]["requestId"]
     assert any(
         record.getMessage() == "Unhandled agents request error"
+        and getattr(record, "conversation_id", None) == "thread-1"
+        for record in caplog.records
+    )
+
+
+async def test_streaming_response_errors_are_logged(caplog: Any) -> None:
+    from astra import server
+
+    async def broken_stream() -> AsyncIterator[bytes]:
+        yield b'{"type":"start"}\n'
+        raise RuntimeError("forced stream failure")
+
+    caplog.set_level(logging.ERROR, logger="astra.server")
+    response = server.wrap_streaming_response_errors(
+        StreamingResponse(broken_stream()),
+        context={"request_id": "req-1", "conversation_id": "thread-1"},
+    )
+
+    try:
+        async for _chunk in response.body_iterator:  # type: ignore[attr-defined]
+            pass
+    except RuntimeError:
+        pass
+
+    assert any(
+        record.getMessage() == "Astra streaming response error"
+        and getattr(record, "request_id", None) == "req-1"
         and getattr(record, "conversation_id", None) == "thread-1"
         for record in caplog.records
     )
