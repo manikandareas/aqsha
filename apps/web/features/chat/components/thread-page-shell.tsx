@@ -1,6 +1,6 @@
 "use client";
 
-import { PanelRightIcon } from "lucide-react";
+import { AlignLeftIcon, PanelRightIcon } from "lucide-react";
 import type { UIMessage } from "ai";
 import { useState, useSyncExternalStore } from "react";
 
@@ -88,12 +88,11 @@ export function ThreadPageShell({
         aria-expanded={mobileSourcesOpen}
         className="lg:hidden"
         onClick={() => setMobileSourcesOpen(true)}
-        size="sm"
         type="button"
-        variant="outline"
+        variant="ghost"
       >
-        <PanelRightIcon data-icon="inline-start" />
-        <span>sources</span>
+        <AlignLeftIcon className="size-4 shrink-0 text-muted-foreground" />
+        <span>Sources</span>
       </Button>
     </>
   );
@@ -115,13 +114,10 @@ export function ThreadPageShell({
 
         <aside
           className={cn(
-            "hidden min-h-0 shrink-0 overflow-hidden border-l border-border transition-[width,opacity] duration-200 lg:flex",
-            desktopSourcesOpen
-              ? "opacity-100"
-              : "border-l-0 opacity-0",
+            "hidden min-h-0 shrink-0 overflow-hidden transition-[width,opacity] duration-200 lg:flex",
+            desktopSourcesOpen ? "w-[30rem] opacity-100" : "w-0 opacity-0",
           )}
           id="thread-sources-sidebar"
-          style={{ width: desktopSourcesOpen ? 320 : 0 }}
         >
           <ThreadSourcesPanel
             events={initialEvents}

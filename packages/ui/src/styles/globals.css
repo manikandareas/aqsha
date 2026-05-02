@@ -25,16 +25,14 @@
   /* Font families */
   --font-display:
     var(--font-aqsha-display, "Nunito Rounded"), "Nunito Sans Rounded",
-    "Nunito", "Nunito Sans", var(--font-geist-sans, "Geist Variable"),
-    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-sans:
-    var(--font-aqsha-body, Inter), var(--font-geist-sans, "Geist Variable"),
-    "Nunito Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    "Nunito", "Nunito Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --font-sans: var(--font-display);
   --font-mono:
     var(--font-geist-mono, "Geist Mono Variable"), "SFMono-Regular", Consolas,
     "Liberation Mono", monospace;
   --font-heading: var(--font-display);
-  --font-handwriting: "Fuzzy Bubbles", var(--font-sans);
+  --font-handwriting: var(--font-aqsha-handwriting, "Fuzzy Bubbles"), var(--font-sans);
 
   /* Aqsha playful brand-kit typography scale */
   --font-size-display: 4.25rem;
@@ -84,18 +82,18 @@
   --shadow-xl: var(--shadow-deep-card);
 
   /* Aqsha playful brand-kit palette */
-  --color-aqsha-sky: #4a90f7;
-  --color-aqsha-sky-active: #2f73d6;
+  --color-aqsha-sky: #256fd0;
+  --color-aqsha-sky-active: #1d64c8;
   --color-aqsha-mint: #2ecc9a;
   --color-aqsha-mint-active: #22a87e;
-  --color-aqsha-coral: #ff6b6b;
-  --color-aqsha-coral-active: #eb5353;
+  --color-aqsha-coral: #c43f3f;
+  --color-aqsha-coral-active: #ad3434;
   --color-aqsha-lemon: #ffd84d;
   --color-aqsha-lavender: #bd86ff;
   --color-aqsha-lavender-dark: #b0a6ff;
   --color-aqsha-mist: #f4f1ea;
-  --color-aqsha-paper: #fff7f0;
-  --color-aqsha-paper-raised: #fffdf8;
+  --color-aqsha-paper: #fbfaf7;
+  --color-aqsha-paper-raised: #ffffff;
   --color-aqsha-ink: #1a1f2b;
   --color-aqsha-ink-soft: #3f4756;
   --color-aqsha-ink-black: #181818;
@@ -161,40 +159,40 @@
 }
 
 :root {
-  --background: #fff7f0;
+  --background: #fbfaf7;
   --foreground: #1a1f2b;
-  --card: #fffdf8;
+  --card: #ffffff;
   --card-foreground: #1a1f2b;
-  --popover: #fffdf8;
+  --popover: #ffffff;
   --popover-foreground: #1a1f2b;
-  --primary: #4a90f7;
-  --primary-foreground: #fffdf8;
-  --secondary: #e9f8f2;
+  --primary: #256fd0;
+  --primary-foreground: #ffffff;
+  --secondary: #eefaf5;
   --secondary-foreground: #1a1f2b;
-  --muted: #f1f3f5;
+  --muted: #efeee9;
   --muted-foreground: #4b5563;
-  --accent: #eaf4ff;
+  --accent: #edf5ff;
   --accent-foreground: #1a1f2b;
-  --destructive: #ff6b6b;
-  --destructive-foreground: #fffdf8;
-  --border: #e5e7eb;
-  --input: #d1d5db;
-  --ring: #4a90f7;
-  --badge-bg: #eaf4ff;
-  --badge-foreground: #2f73d6;
-  --chart-1: #4a90f7;
+  --destructive: #c43f3f;
+  --destructive-foreground: #ffffff;
+  --border: #deddd7;
+  --input: #cbc9c1;
+  --ring: #256fd0;
+  --badge-bg: #edf5ff;
+  --badge-foreground: #1d64c8;
+  --chart-1: #256fd0;
   --chart-2: #2ecc9a;
-  --chart-3: #ff6b6b;
+  --chart-3: #c43f3f;
   --chart-4: #ffd84d;
   --chart-5: #bd86ff;
-  --sidebar: #fff7f0;
+  --sidebar: #f7f6f1;
   --sidebar-foreground: #1a1f2b;
-  --sidebar-primary: #4a90f7;
-  --sidebar-primary-foreground: #fffdf8;
-  --sidebar-accent: #f1f3f5;
+  --sidebar-primary: #256fd0;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e9e8e2;
   --sidebar-accent-foreground: #1a1f2b;
-  --sidebar-border: #e5e7eb;
-  --sidebar-ring: #4a90f7;
+  --sidebar-border: #deddd7;
+  --sidebar-ring: #256fd0;
 }
 
 .dark {
