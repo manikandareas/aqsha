@@ -1,5 +1,5 @@
 import type { ProviderOptions } from "@ai-sdk/provider-utils";
-import type { LanguageModel } from "ai";
+import type { LanguageModel, ToolSet } from "ai";
 import { stepCountIs } from "ai";
 import { describeAstraDeps } from "../deps";
 import { buildSkillsPrompt, createSkillTools } from "../skills";
@@ -9,25 +9,40 @@ export type AstraAgentOptions = {
   model: LanguageModel;
   providerOptions?: ProviderOptions;
   context: AgentRuntimeContext;
+  externalTools?: ToolSet;
 };
 
-export function commonAgentSettings({ model, providerOptions, context }: AstraAgentOptions) {
+export function mergeAstraTools(skillTools: ToolSet, externalTools: ToolSet = {}): ToolSet {
+  for (const toolName of Object.keys(externalTools)) {
+    if (skillTools[toolName]) {
+      throw new Error(`External tool cannot override local skill tool: ${toolName}`);
+    }
+  }
+
+  return {
+    ...externalTools,
+    ...skillTools,
+  };
+}
+
+export function commonAgentSettings({ model, providerOptions, context, externalTools }: AstraAgentOptions) {
   const skillTools = createSkillTools({
     registry: context.skills,
     scriptsEnabled: context.skillScriptsEnabled,
     scriptTimeoutMs: context.skillScriptTimeoutMs,
   });
+  const tools = mergeAstraTools(skillTools, externalTools);
 
   return {
     model,
-    tools: skillTools,
+    tools,
     stopWhen: stepCountIs(20),
     providerOptions,
     experimental_context: context,
     prepareCall: (options: { instructions?: unknown }) => ({
       ...options,
       model,
-      tools: skillTools,
+      tools,
       stopWhen: stepCountIs(20),
       providerOptions,
       instructions: [
