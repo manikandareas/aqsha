@@ -9,6 +9,17 @@ export const agentsModel = {
   }),
 };
 
+export type AgentUsedSource = {
+  kind: "url" | "document";
+  title?: string | null;
+  url?: string | null;
+  filename?: string | null;
+  mediaType?: string | null;
+  providerSourceId?: string | null;
+  metadata?: unknown;
+  seenAt?: string;
+};
+
 export type CreateChatResponseInput = {
   requestId: string;
   userId: string;
@@ -18,6 +29,7 @@ export type CreateChatResponseInput = {
   model?: string | null;
   messages: UIMessage[];
   abortSignal?: AbortSignal;
+  onSource?: (source: AgentUsedSource) => Promise<void> | void;
 };
 
 export type AgentsModel = {
