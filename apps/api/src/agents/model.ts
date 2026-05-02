@@ -1,7 +1,7 @@
 import { openai, type OpenAILanguageModelResponsesOptions } from "@ai-sdk/openai";
 import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import type { LanguageModel } from "ai";
-import { env } from "./config";
+import { env } from "../config";
 
 export type ResolvedModel = {
   model: LanguageModel;

@@ -1,4 +1,4 @@
-import { readdir, stat } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseSkillFile } from "./frontmatter";
 import type { SkillMetadata, SkillRegistry } from "./types";
@@ -39,7 +39,7 @@ export async function discoverSkills(roots: string[]): Promise<SkillRegistry> {
         throw error;
       }
 
-      const loaded = parseSkillFile(await Bun.file(skillFile).text(), directory, skillFile);
+      const loaded = parseSkillFile(await readFile(skillFile, "utf8"), directory, skillFile);
       if (seen.has(loaded.name)) {
         throw new Error(`Duplicate skill name discovered: ${loaded.name}`);
       }

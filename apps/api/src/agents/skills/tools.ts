@@ -108,6 +108,7 @@ async function runPythonScript(scriptPath: string, args: string[], cwd: string, 
     const child = spawn(command, [scriptPath, ...args], {
       cwd,
       env: {
+        ...process.env,
         PATH: process.env.PATH ?? "/usr/bin:/bin",
         PYTHONNOUSERSITE: "1",
       },

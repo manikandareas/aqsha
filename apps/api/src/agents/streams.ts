@@ -1,6 +1,6 @@
 import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import { createAgentUIStream, createAgentUIStreamResponse, type LanguageModel, type ToolSet, type UIMessage } from "ai";
-import { buildAstraAgent } from "./agents";
+import { buildAstraAgent } from "./astra";
 import { createExaMcpTools } from "./mcp/exa";
 import type { AgentRuntimeContext } from "./types";
 

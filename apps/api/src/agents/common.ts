@@ -1,9 +1,9 @@
 import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import type { LanguageModel, ToolSet } from "ai";
 import { stepCountIs } from "ai";
-import { describeAstraDeps } from "../deps";
-import { buildSkillsPrompt, createSkillTools } from "../skills";
-import type { AgentRuntimeContext } from "../types";
+import { describeAstraDeps } from "./deps";
+import { buildSkillsPrompt, createSkillTools } from "./skills";
+import type { AgentRuntimeContext } from "./types";
 
 export type AstraAgentOptions = {
   model: LanguageModel;

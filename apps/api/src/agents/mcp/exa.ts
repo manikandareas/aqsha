@@ -1,6 +1,6 @@
 import { createMCPClient, type MCPClient } from "@ai-sdk/mcp";
 import type { ToolSet } from "ai";
-import { env } from "../config";
+import { env } from "../../config";
 
 export const EXA_MCP_URL = "https://mcp.exa.ai/mcp";
 export const EXA_MCP_ALLOWED_TOOLS = ["web_search_exa", "web_fetch_exa"] as const;
