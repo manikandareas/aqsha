@@ -6,28 +6,60 @@
 @source "../node_modules/streamdown/dist/*.js";
 
 :root {
+  --font-aqsha-display: "Nunito Rounded";
+  --font-aqsha-body: "Inter";
+  --aqsha-brand-sky: #4a90f7;
+  --aqsha-brand-mint: #2ecc9a;
+  --aqsha-brand-coral: #ff6b6b;
+  --aqsha-brand-lemon: #ffd84d;
+  --aqsha-brand-lavender: #bd86ff;
+  --aqsha-brand-lavender-dark: #b0a6ff;
+  --aqsha-brand-mist: #f4f1ea;
+  --aqsha-brand-paper: #fff7f0;
+  --aqsha-brand-ink: #1a1f2b;
+  --aqsha-brand-ink-black: #181818;
   --sileo-width: 360px;
   --sileo-height: 44px;
   --sileo-duration: 520ms;
-  --sileo-toast-fill: #1f1e1c;
-  --sileo-toast-title: #f6f5f4;
-  --sileo-toast-description: #d8d4ce;
-  --sileo-toast-border: rgba(255, 255, 255, 0.12);
-  --sileo-state-success: #3cc6bf;
-  --sileo-state-error: #f07340;
-  --sileo-state-warning: #f59e0b;
-  --sileo-state-info: #62aef0;
+  --sileo-toast-fill: #1a1f2b;
+  --sileo-toast-title: #f4f1ea;
+  --sileo-toast-description: #d9e1eb;
+  --sileo-toast-border: rgba(255, 247, 240, 0.12);
+  --sileo-state-success: #2ecc9a;
+  --sileo-state-error: #ff6b6b;
+  --sileo-state-warning: #ffd84d;
+  --sileo-state-info: #4a90f7;
 }
 
 .dark {
-  --sileo-toast-fill: #ffffff;
-  --sileo-toast-title: rgba(0, 0, 0, 0.95);
-  --sileo-toast-description: #615d59;
-  --sileo-toast-border: rgba(0, 0, 0, 0.1);
-  --sileo-state-success: #2a9d99;
-  --sileo-state-error: #dd5b00;
-  --sileo-state-warning: #dd5b00;
-  --sileo-state-info: #0075de;
+  --sileo-toast-fill: #202020;
+  --sileo-toast-title: #f4f1ea;
+  --sileo-toast-description: #a3a3a3;
+  --sileo-toast-border: #2d2d2d;
+  --sileo-state-success: #2ecc9a;
+  --sileo-state-error: #ff6b6b;
+  --sileo-state-warning: #ffd84d;
+  --sileo-state-info: #4a90f7;
+}
+
+@layer base {
+  body {
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--background) 86%, var(--card)) 0%,
+        var(--background) 38rem
+      );
+  }
+
+  .dark body {
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--background) 78%, var(--muted)) 0%,
+        var(--background) 38rem
+      );
+  }
 }
 
 @layer components {
@@ -37,13 +69,13 @@
   }
 
   [data-sileo-toast] {
-    filter: drop-shadow(0 18px 42px rgb(0 0 0 / 0.22))
-      drop-shadow(0 3px 10px rgb(0 0 0 / 0.12));
+    filter: drop-shadow(0 22px 48px rgb(26 31 43 / 0.22))
+      drop-shadow(0 4px 12px rgb(26 31 43 / 0.12));
   }
 
   .dark [data-sileo-toast] {
-    filter: drop-shadow(0 18px 42px rgb(0 0 0 / 0.3))
-      drop-shadow(0 3px 10px rgb(0 0 0 / 0.16));
+    filter: drop-shadow(0 22px 48px rgb(12 12 12 / 0.34))
+      drop-shadow(0 4px 12px rgb(12 12 12 / 0.22));
   }
 
   /* [data-sileo-pill],
@@ -89,7 +121,7 @@
   }
 
   .workspace-journal-editor .ProseMirror p.is-editor-empty:first-child::before {
-    color: color-mix(in srgb, var(--foreground) 35%, transparent);
+    color: color-mix(in srgb, var(--foreground) 34%, transparent);
     content: attr(data-placeholder);
     float: left;
     height: 0;
@@ -98,8 +130,8 @@
 
   .workspace-drag-handle {
     align-items: center;
-    border-radius: 0.25rem;
-    color: color-mix(in srgb, var(--foreground) 30%, transparent);
+    border-radius: 0.5rem;
+    color: color-mix(in srgb, var(--foreground) 32%, transparent);
     cursor: grab;
     display: inline-flex;
     height: 1.5rem;
@@ -131,8 +163,8 @@
   }
 
   .workspace-drag-handle:hover {
-    background: var(--muted);
-    color: color-mix(in srgb, var(--foreground) 60%, transparent);
+    background: color-mix(in srgb, var(--primary) 12%, var(--muted));
+    color: color-mix(in srgb, var(--foreground) 68%, transparent);
   }
 
   .workspace-drag-handle:active {
@@ -148,5 +180,48 @@
 
   .workspace-journal-editor .ProseMirror ul[data-type="taskList"] li > label {
     margin-top: 0.35rem;
+  }
+
+  .aqsha-linked-chip {
+    --aqsha-chip-color: var(--primary);
+    align-items: center;
+    background: color-mix(in srgb, var(--aqsha-chip-color) 14%, var(--card));
+    border: 1px solid color-mix(in srgb, var(--aqsha-chip-color) 26%, var(--border));
+    border-radius: 9999px;
+    color: var(--foreground);
+    display: inline-flex;
+    font-size: var(--font-size-badge);
+    font-weight: 650;
+    gap: 0.375rem;
+    letter-spacing: var(--tracking-badge);
+    min-height: 1.75rem;
+    padding: 0.25rem 0.625rem;
+  }
+
+  .aqsha-chip-draft {
+    --aqsha-chip-color: var(--color-aqsha-sky);
+  }
+
+  .aqsha-chip-source {
+    --aqsha-chip-color: var(--color-aqsha-mint);
+  }
+
+  .aqsha-chip-note {
+    --aqsha-chip-color: var(--color-aqsha-lemon);
+  }
+
+  .aqsha-chip-link {
+    --aqsha-chip-color: var(--color-aqsha-coral);
+  }
+
+  .aqsha-chip-review {
+    --aqsha-chip-color: var(--color-aqsha-lavender);
+  }
+
+  .aqsha-paper-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-soft-card);
   }
 }
