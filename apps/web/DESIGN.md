@@ -1,344 +1,416 @@
-# Design System Inspired by Notion
+# Aqsha Web Design System
 
 ## 1. Visual Theme & Atmosphere
 
-Notion's website embodies the philosophy of the tool itself: a blank canvas that gets out of your way. The design system is built on warm neutrals rather than cold grays, creating a distinctly approachable minimalism that feels like quality paper rather than sterile glass. The page canvas is pure white (`#ffffff`) but the text isn't pure black -- it's a warm near-black (`rgba(0,0,0,0.95)`) that softens the reading experience imperceptibly. The warm gray scale (`#f6f5f4`, `#31302e`, `#615d59`, `#a39e98`) carries subtle yellow-brown undertones, giving the interface a tactile, almost analog warmth.
+Aqsha's web UI should feel like a **playful modern minimalist writing workspace**: bright, calm, rounded, and student-friendly without becoming childish. The product helps students turn scattered sources, notes, and draft ideas into linked academic writing, so the interface should make organization feel light and visible.
 
-The custom NotionInter font (a modified Inter) is the backbone of the system. At display sizes (64px), it uses aggressive negative letter-spacing (-2.125px), creating headlines that feel compressed and precise. The weight range is broader than typical systems: 400 for body, 500 for UI elements, 600 for semi-bold labels, and 700 for display headings. OpenType features `"lnum"` (lining numerals) and `"locl"` (localized forms) are enabled on larger text, adding typographic sophistication that rewards close reading.
+The core visual metaphor is:
 
-What makes Notion's visual language distinctive is its border philosophy. Rather than heavy borders or shadows, Notion uses ultra-thin `1px solid rgba(0,0,0,0.1)` borders -- borders that exist as whispers, barely perceptible division lines that create structure without weight. The shadow system is equally restrained: multi-layer stacks with cumulative opacity never exceeding 0.05, creating depth that's felt rather than seen.
+> Scattered thoughts become simple linked blocks.
 
-**Key Characteristics:**
+The system uses a warm off-white canvas, ink-charcoal text, soft raised paper panels, and a small set of optimistic accents: sky blue, fresh mint, soft coral, lemon, and pale lavender. These colors should behave like the brandkit board: each accent has a clear role, repeats consistently, and never becomes rainbow decoration.
 
-- NotionInter (modified Inter) with negative letter-spacing at display sizes (-2.125px at 64px)
-- Warm neutral palette: grays carry yellow-brown undertones (`#f6f5f4` warm white, `#31302e` warm dark)
-- Near-black text via `rgba(0,0,0,0.95)` -- not pure black, creating micro-warmth
-- Ultra-thin borders: `1px solid rgba(0,0,0,0.1)` throughout -- whisper-weight division
-- Multi-layer shadow stacks with sub-0.05 opacity for barely-there depth
-- Notion Blue (`#0075de`) as the singular accent color for CTAs and interactive elements
-- Pill badges (9999px radius) with tinted blue backgrounds for status indicators
-- 8px base spacing unit with an organic, non-rigid scale
+The light reference is bright, tactile, and paper-like. The dark reference is a charcoal workspace using warm-mist text, neutral charcoal surfaces, and the same optimistic accents. Dark mode must not become a blue-black enterprise dashboard or a purple-blue AI gradient.
+
+The interface should feel:
+
+- Airy and bright.
+- Rounded but disciplined.
+- Friendly to students.
+- Calm enough for long writing sessions.
+- Structured around sources, notes, links, and drafts.
+- Premium through spacing, alignment, and restraint.
+
+Avoid:
+
+- Dark enterprise dashboard mood.
+- Severe academic audit aesthetics.
+- Generic AI purple-blue gradients.
+- Magic sparkles and novelty effects.
+- Beige clone styling.
+- Mascot-heavy student-app illustration.
+- Cards inside cards inside cards.
 
 ## 2. Color Palette & Roles
 
-### Primary
+### Core Neutrals
 
-- **Notion Black** (`rgba(0,0,0,0.95)` / `#000000f2`): Primary text, headings, body copy. The 95% opacity softens pure black without sacrificing readability.
-- **Pure White** (`#ffffff`): Page background, card surfaces, button text on blue.
-- **Notion Blue** (`#0075de`): Primary CTA, link color, interactive accent -- the only saturated color in the core UI chrome.
+- **Warm Off-White** (`#fff7f0`): page background, workspace canvas, large quiet surfaces.
+- **Raised Paper** (`#fffdf8`): cards, popovers, editor panels, floating surfaces.
+- **Warm Mist** (`#f4f1ea`): dark-mode high-emphasis text and pale surfaces.
+- **Charcoal Black** (`#181818`): dark-mode page background and deepest UI base.
+- **Ink Charcoal** (`#1a1f2b`): primary text, icon strokes, high-emphasis UI.
+- **Soft Ink** (`#3f4756`): secondary headings, important descriptions.
+- **Muted Text** (`#4b5563`): captions, supporting copy, placeholder-adjacent labels.
+- **Paper Border** (`#e5e7eb`): default border, separators, card outlines.
+- **Input Border** (`#d1d5db`): form fields and editable surfaces.
 
-### Brand Secondary
+### Neutral Ramps
 
-- **Deep Navy** (`#213183`): Secondary brand color, used sparingly for emphasis and dark feature sections.
-- **Active Blue** (`#005bab`): Button active/pressed state -- darker variant of Notion Blue.
+Light neutral ramp from the reference board:
 
-### Warm Neutral Scale
+- `50` `#fafafa`
+- `100` `#f1f3f5`
+- `200` `#e5e7eb`
+- `300` `#d1d5db`
+- `400` `#9ca3af`
+- `600` `#4b5563`
+- `800` `#1f2937`
 
-- **Warm White** (`#f6f5f4`): Background surface tint, section alternation, subtle card fill. The yellow undertone is key.
-- **Warm Dark** (`#31302e`): Dark surface background, dark section text. Warmer than standard grays.
-- **Warm Gray 500** (`#615d59`): Secondary text, descriptions, muted labels.
-- **Warm Gray 300** (`#a39e98`): Placeholder text, disabled states, caption text.
+Dark neutral ramp for the `#181818` background:
 
-### Semantic Accent Colors
+- `50` `#202020`
+- `100` `#242424`
+- `200` `#2d2d2d`
+- `300` `#3a3a3a`
+- `400` `#505050`
+- `600` `#737373`
+- `800` `#a3a3a3`
 
-- **Teal** (`#2a9d99`): Success states, positive indicators.
-- **Green** (`#1aae39`): Confirmation, completion badges.
-- **Orange** (`#dd5b00`): Warning states, attention indicators.
-- **Pink** (`#ff64c8`): Decorative accent, feature highlights.
-- **Purple** (`#391c57`): Premium features, deep accents.
-- **Brown** (`#523410`): Earthy accent, warm feature sections.
+### Brand Accents
 
-### Interactive
+- **Sky Blue** (`#4a90f7`): primary actions, links, active navigation, focus rings, selected source chips.
+- **Sky Blue Active** (`#2f73d6`): hover/pressed state for primary actions.
+- **Fresh Mint** (`#2ecc9a`): linked/complete/positive states, source-connected moments.
+- **Mint Active** (`#22a87e`): stronger success state or active connected chip.
+- **Soft Coral** (`#ff6b6b`): destructive actions, mismatch, missing context, gentle attention.
+- **Coral Active** (`#eb5353`): hover/pressed destructive state.
+- **Lemon** (`#ffd84d`): note highlights, partial support, review reminders.
+- **Pale Lavender** (`#bd86ff` light, `#b0a6ff` dark): review, secondary category, optional accent only.
 
-- **Link Blue** (`#0075de`): Primary link color with underline-on-hover.
-- **Link Light Blue** (`#62aef0`): Lighter link variant for dark backgrounds.
-- **Focus Blue** (`#097fe8`): Focus ring on interactive elements.
-- **Badge Blue Bg** (`#f2f9ff`): Pill badge background, tinted blue surface.
-- **Badge Blue Text** (`#097fe8`): Pill badge text, darker blue for readability.
+### Semantic Mapping
 
-### Shadows & Depth
+- **Primary**: `#4a90f7`
+- **Primary foreground**: `#fffdf8`
+- **Secondary**: `#e9f8f2`
+- **Accent**: `#eaf4ff`
+- **Muted**: `#f1f3f5`
+- **Destructive**: `#ff6b6b`
+- **Focus ring**: `#4a90f7`
 
-- **Card Shadow** (`rgba(0,0,0,0.04) 0px 4px 18px, rgba(0,0,0,0.027) 0px 2.025px 7.84688px, rgba(0,0,0,0.02) 0px 0.8px 2.925px, rgba(0,0,0,0.01) 0px 0.175px 1.04062px`): Multi-layer card elevation.
-- **Deep Shadow** (`rgba(0,0,0,0.01) 0px 1px 3px, rgba(0,0,0,0.02) 0px 3px 7px, rgba(0,0,0,0.02) 0px 7px 15px, rgba(0,0,0,0.04) 0px 14px 28px, rgba(0,0,0,0.05) 0px 23px 52px`): Five-layer deep elevation for modals and featured content.
-- **Whisper Border** (`1px solid rgba(0,0,0,0.1)`): Standard division border -- cards, dividers, sections.
+### Dark Mode
+
+Dark mode is a charcoal workspace, not a blue-black dashboard.
+
+- **Background**: `#181818`
+- **Card**: `#202020`
+- **Text**: `#f4f1ea`
+- **Muted surface**: `#242424`
+- **Border**: `#2d2d2d`
+- **Muted text**: `#a3a3a3`
+- **Primary**: `#4a90f7`
+- **Mint**: `#6ee3bf`
+- **Coral**: `#ff6b6b`
+- **Lemon**: `#ffe082`
+- **Lavender**: `#b0a6ff`
 
 ## 3. Typography Rules
 
-### Font Family
+### Font Families
 
-- **Primary**: `NotionInter`, with fallbacks: `Inter, -apple-system, system-ui, Segoe UI, Helvetica, Apple Color Emoji, Arial, Segoe UI Emoji, Segoe UI Symbol`
-- **OpenType Features**: `"lnum"` (lining numerals) and `"locl"` (localized forms) enabled on display and heading text.
+- **Display / Headings**: rounded modern sans. Prefer `var(--font-heading)`, which resolves through `--font-aqsha-display`, rounded sans fallbacks, then Geist.
+- **UI / Body**: `var(--font-sans)`, targeting Inter from the brandkit with Geist as the current repo fallback.
+- **Mono**: `var(--font-mono)` for code, citations, command-like snippets, and technical metadata.
+- **Handwriting Accent**: `var(--font-handwriting)` only for tiny playful annotations. Use sparingly.
 
 ### Hierarchy
 
-| Role              | Font        | Size           | Weight | Line Height  | Letter Spacing | Notes                                    |
-| ----------------- | ----------- | -------------- | ------ | ------------ | -------------- | ---------------------------------------- |
-| Display Hero      | NotionInter | 64px (4.00rem) | 700    | 1.00 (tight) | -2.125px       | Maximum compression, billboard headlines |
-| Display Secondary | NotionInter | 54px (3.38rem) | 700    | 1.04 (tight) | -1.875px       | Secondary hero, feature headlines        |
-| Section Heading   | NotionInter | 48px (3.00rem) | 700    | 1.00 (tight) | -1.5px         | Feature section titles, with `"lnum"`    |
-| Sub-heading Large | NotionInter | 40px (2.50rem) | 700    | 1.50         | normal         | Card headings, feature sub-sections      |
-| Sub-heading       | NotionInter | 26px (1.63rem) | 700    | 1.23 (tight) | -0.625px       | Section sub-titles, content headers      |
-| Card Title        | NotionInter | 22px (1.38rem) | 700    | 1.27 (tight) | -0.25px        | Feature cards, list titles               |
-| Body Large        | NotionInter | 20px (1.25rem) | 600    | 1.40         | -0.125px       | Introductions, feature descriptions      |
-| Body              | NotionInter | 16px (1.00rem) | 400    | 1.50         | normal         | Standard reading text                    |
-| Body Medium       | NotionInter | 16px (1.00rem) | 500    | 1.50         | normal         | Navigation, emphasized UI text           |
-| Body Semibold     | NotionInter | 16px (1.00rem) | 600    | 1.50         | normal         | Strong labels, active states             |
-| Body Bold         | NotionInter | 16px (1.00rem) | 700    | 1.50         | normal         | Headlines at body size                   |
-| Nav / Button      | NotionInter | 15px (0.94rem) | 600    | 1.33         | normal         | Navigation links, button text            |
-| Caption           | NotionInter | 14px (0.88rem) | 500    | 1.43         | normal         | Metadata, secondary labels               |
-| Caption Light     | NotionInter | 14px (0.88rem) | 400    | 1.43         | normal         | Body captions, descriptions              |
-| Badge             | NotionInter | 12px (0.75rem) | 600    | 1.33         | 0.125px        | Pill badges, tags, status labels         |
-| Micro Label       | NotionInter | 12px (0.75rem) | 400    | 1.33         | 0.125px        | Small metadata, timestamps               |
+| Role | Size | Weight | Line Height | Letter Spacing | Use |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Display Hero | 4.25rem | 700 | 0.98-1.02 | 0 | landing hero, major brand moments |
+| Display Secondary | 3.625rem | 700 | 1.02-1.06 | 0 | large section openers |
+| Page H1 | 3.125rem | 700 | 0.98 | 0 | page headers and primary app states |
+| Section H2 | 2.375rem | 700 | 1.06 | 0 | section headings |
+| H3 | 1.625rem | 700 | 1.23 | 0 | panel headings, feature titles |
+| Card Title | 1.375rem | 650-700 | 1.25 | 0 | card and dialog titles |
+| Body Large | 1.25rem | 500-600 | 1.4 | 0 | intro copy and key descriptions |
+| Body | 1rem | 400-500 | 1.5 | 0 | reading text and app copy |
+| Nav / Button | 0.9375rem | 600 | 1.33 | 0 | navigation and commands |
+| Caption | 0.875rem | 500 | 1.43 | 0 | metadata and supporting labels |
+| Badge | 0.75rem | 650 | 1.33 | 0 | chips, labels, linked states |
 
 ### Principles
 
-- **Compression at scale**: NotionInter at display sizes uses -2.125px letter-spacing at 64px, progressively relaxing to -0.625px at 26px and normal at 16px. The compression creates density at headlines while maintaining readability at body sizes.
-- **Four-weight system**: 400 (body/reading), 500 (UI/interactive), 600 (emphasis/navigation), 700 (headings/display). The broader weight range compared to most systems allows nuanced hierarchy.
-- **Warm scaling**: Line height tightens as size increases -- 1.50 at body (16px), 1.23-1.27 at sub-headings, 1.00-1.04 at display. This creates denser, more impactful headlines.
-- **Badge micro-tracking**: The 12px badge text uses positive letter-spacing (0.125px) -- the only positive tracking in the system, creating wider, more legible small text.
+- Use rounded display typography to make the brand feel friendly and ownable.
+- Keep body text clean and readable for long writing sessions.
+- Keep letter spacing at `0`; use weight, line height, and color for hierarchy.
+- Do not use oversized marketing type inside dense app panels.
+- Headings should feel compact and confident, not loud.
+- Avoid all-caps labels unless the text is short and functional.
 
-## 4. Component Stylings
+## 4. Component Styling
 
 ### Buttons
 
-**Primary Blue**
+**Primary**
 
-- Background: `#0075de` (Notion Blue)
-- Text: `#ffffff`
-- Padding: 8px 16px
-- Radius: 4px (subtle)
-- Border: `1px solid transparent`
-- Hover: background darkens to `#005bab`
-- Active: scale(0.9) transform
-- Focus: `2px solid` focus outline, `var(--shadow-level-200)` shadow
-- Use: Primary CTA ("Get Notion free", "Try it")
+- Background: `#4a90f7`
+- Text: `#fffdf8`
+- Hover: `#2f73d6`
+- Radius: 8-10px for app buttons, 9999px only for marketing CTAs or pills.
+- Padding: 8-12px vertical, 14-18px horizontal.
+- Active: `translateY(0) scale(0.985)` or equivalent subtle press.
+- Use for: main create/save/continue actions.
 
-**Secondary / Tertiary**
+**Secondary**
 
-- Background: `rgba(0,0,0,0.05)` (translucent warm gray)
-- Text: `#000000` (near-black)
-- Padding: 8px 16px
-- Radius: 4px
-- Hover: text color shifts, scale(1.05)
-- Active: scale(0.9) transform
-- Use: Secondary actions, form submissions
+- Background: `#e9f8f2` or `#f3efe8`
+- Text: `#1a1f2b`
+- Border: `1px solid #e5e7eb`
+- Hover: tint toward sky blue or mint, not gray-only.
+- Use for: alternate actions and non-destructive flows.
 
-**Ghost / Link Button**
+**Ghost**
 
-- Background: transparent
-- Text: `rgba(0,0,0,0.95)`
-- Decoration: underline on hover
-- Use: Tertiary actions, inline links
+- Background: transparent.
+- Text: `#1a1f2b` or muted text depending on hierarchy.
+- Hover: soft surface fill, usually `#f3efe8` or primary at 8-12% mix.
+- Use for: toolbar actions, navigation items, compact controls.
 
-**Pill Badge Button**
+**Destructive**
 
-- Background: `#f2f9ff` (tinted blue)
-- Text: `#097fe8`
-- Padding: 4px 8px
-- Radius: 9999px (full pill)
-- Font: 12px weight 600
-- Use: Status badges, feature labels, "New" tags
+- Background: `#ff6b6b`
+- Text: `#fffdf8`
+- Hover: `#eb5353`
+- Use only for irreversible or high-risk actions.
 
-### Cards & Containers
+### Chips & Badges
 
-- Background: `#ffffff`
-- Border: `1px solid rgba(0,0,0,0.1)` (whisper border)
-- Radius: 12px (standard cards), 16px (featured/hero cards)
-- Shadow: `rgba(0,0,0,0.04) 0px 4px 18px, rgba(0,0,0,0.027) 0px 2.025px 7.84688px, rgba(0,0,0,0.02) 0px 0.8px 2.925px, rgba(0,0,0,0.01) 0px 0.175px 1.04062px`
-- Hover: subtle shadow intensification
-- Image cards: 12px top radius, image fills top half
+Chips are central to Aqsha's product metaphor. They should look like small linked blocks.
 
-### Inputs & Forms
+- Radius: 9999px.
+- Min height: 28px.
+- Padding: 4px 10px.
+- Font: badge scale, 650 weight.
+- Border: 1px tinted toward the chip meaning.
+- Use consistent color roles:
+  - Draft: sky blue.
+  - Source: mint.
+  - Note: lemon.
+  - Link: coral.
+  - Review: lavender.
 
-- Background: `#ffffff`
-- Text: `rgba(0,0,0,0.9)`
-- Border: `1px solid #dddddd`
-- Padding: 6px
-- Radius: 4px
-- Focus: blue outline ring
-- Placeholder: warm gray `#a39e98`
+### Cards & Panels
+
+- Background: `#fffdf8`.
+- Border: `1px solid #e5e7eb`.
+- Radius: 14px standard, 18px for prominent panels, 24px for large product previews.
+- Shadow: use `--shadow-soft-card` for standard elevation and `--shadow-deep-card` for dialogs or hero panels.
+- Use cards for real objects: source cards, note cards, draft previews, review panels, dialogs.
+- Avoid wrapping whole page sections in giant decorative cards.
+- Avoid nested cards unless the inner object is semantically different and needs its own affordance.
+
+### Inputs & Editable Surfaces
+
+- Background: raised paper or page background.
+- Border: `1px solid #d1d5db`.
+- Focus: `#4a90f7` ring, not a heavy glow.
+- Placeholder: muted text at reduced contrast.
+- Radius: 8px for compact fields, 14px for prompt/editor inputs.
+- Labels sit above inputs.
+- Helper and error text sit below inputs.
 
 ### Navigation
 
-- Clean horizontal nav on white, not sticky
-- Brand logo left-aligned (33x34px icon + wordmark)
-- Links: NotionInter 15px weight 500-600, near-black text
-- Hover: color shift to `var(--color-link-primary-text-hover)`
-- CTA: blue pill button ("Get Notion free") right-aligned
-- Mobile: hamburger menu collapse
-- Product dropdowns with multi-level categorized menus
+- App navigation should feel calm and workspace-native.
+- Active states use sky blue or a soft sky-blue surface.
+- Sidebar surfaces should stay warm and quiet.
+- Keep navigation labels short.
+- Use icon + text for primary nav, icon-only only when the interaction is obvious and has tooltip support.
 
-### Image Treatment
+### Editor & Research Workspace
 
-- Product screenshots with `1px solid rgba(0,0,0,0.1)` border
-- Top-rounded images: `12px 12px 0px 0px` radius
-- Dashboard/workspace preview screenshots dominate feature sections
-- Warm gradient backgrounds behind hero illustrations (decorative character illustrations)
+The editor is the product's center. It should feel like a clean writing canvas with linked supporting blocks around it.
 
-### Distinctive Components
+- Preserve generous editor whitespace.
+- Keep source chips and note chips visually close to the text they support.
+- Use thin link lines or subtle grouped surfaces for source-to-note-to-draft relationships.
+- AI output appears as a suggestion before it mutates the draft.
+- Review states should be helpful and calm, not punitive.
 
-**Feature Cards with Illustrations**
+Recommended labels:
 
-- Large illustrative headers (The Great Wave, product UI screenshots)
-- 12px radius card with whisper border
-- Title at 22px weight 700, description at 16px weight 400
-- Warm white (`#f6f5f4`) background variant for alternating sections
+- Linked.
+- Source added.
+- Needs source.
+- Review note.
+- Draft idea.
+- Saved to Journal.
 
-**Trust Bar / Logo Grid**
+Avoid labels like:
 
-- Company logos (trusted teams section) in their brand colors
-- Horizontal scroll or grid layout with team counts
-- Metric display: large number + description pattern
+- Invalid citation.
+- AI hallucinated.
+- Your claim is wrong.
+- Verification failed.
 
-**Metric Cards**
+### Image & Illustration Treatment
 
-- Large number display (e.g., "$4,200 ROI")
-- NotionInter 40px+ weight 700 for the metric
-- Description below in warm gray body text
-- Whisper-bordered card container
+- Use abstract paper shapes, student desk objects, notebooks, folders, cards, and soft colored blocks.
+- Prefer crisp shadows and tactile flat-lay composition.
+- Product UI mockups should show source + note + draft relationships.
+- Avoid generic stock people, dark archive imagery, and decorative robots.
 
 ## 5. Layout Principles
 
 ### Spacing System
 
-- Base unit: 8px
-- Scale: 2px, 3px, 4px, 5px, 6px, 7px, 8px, 11px, 12px, 14px, 16px, 24px, 32px
-- Non-rigid organic scale with fractional values (5.6px, 6.4px) for micro-adjustments
+Use an 8px base rhythm with enough looseness for editorial balance.
+
+- Micro: 2px, 4px, 6px.
+- Compact UI: 8px, 10px, 12px.
+- Component spacing: 16px, 20px, 24px.
+- Section spacing: 48px, 64px, 80px, 96px.
+- Large marketing spacing: 120px when the section needs breathing room.
 
 ### Grid & Container
 
-- Max content width: approximately 1200px
-- Hero: centered single-column with generous top padding (80-120px)
-- Feature sections: 2-3 column grids for cards
-- Full-width warm white (`#f6f5f4`) section backgrounds for alternation
-- Code/dashboard screenshots as contained with whisper border
+- Max content width: 1200-1280px for marketing and broad app surfaces.
+- App surfaces can use sidebar-aware layouts and fluid editor widths.
+- Use CSS grid for boards, product previews, and source/note/draft relationships.
+- Prefer asymmetric but clear grouping over repetitive equal card rows.
+- Marketing pages should reveal one strong idea per viewport.
 
 ### Whitespace Philosophy
 
-- **Generous vertical rhythm**: 64-120px between major sections. Notion lets content breathe with vast vertical padding.
-- **Warm alternation**: White sections alternate with warm white (`#f6f5f4`) sections, creating gentle visual rhythm without harsh color breaks.
-- **Content-first density**: Body text blocks are compact (line-height 1.50) but surrounded by ample margin, creating islands of readable content in a sea of white space.
+- Whitespace is part of the brand. Do not fill every gap with chips or fake dashboard detail.
+- Keep major content blocks breathable.
+- Make the relationship between source, note, and draft visible through grouping, not clutter.
+- Use color accents as navigation aids, not decoration.
 
 ### Border Radius Scale
 
-- Micro (4px): Buttons, inputs, functional interactive elements
-- Subtle (5px): Links, list items, menu items
-- Standard (8px): Small cards, containers, inline elements
-- Comfortable (12px): Standard cards, feature containers, image tops
-- Large (16px): Hero cards, featured content, promotional blocks
-- Full Pill (9999px): Badges, pills, status indicators
-- Circle (100%): Tab indicators, avatars
+- Small controls: 6px.
+- Buttons and inputs: 8px.
+- Compact cards: 10px.
+- Standard panels: 14px.
+- Featured cards/dialogs: 18px.
+- Large previews: 24px.
+- Pills: 9999px.
 
 ## 6. Depth & Elevation
 
-| Level                 | Treatment                                          | Use                                        |
-| --------------------- | -------------------------------------------------- | ------------------------------------------ |
-| Flat (Level 0)        | No shadow, no border                               | Page background, text blocks               |
-| Whisper (Level 1)     | `1px solid rgba(0,0,0,0.1)`                        | Standard borders, card outlines, dividers  |
-| Soft Card (Level 2)   | 4-layer shadow stack (max opacity 0.04)            | Content cards, feature blocks              |
-| Deep Card (Level 3)   | 5-layer shadow stack (max opacity 0.05, 52px blur) | Modals, featured panels, hero elements     |
-| Focus (Accessibility) | `2px solid var(--focus-color)` outline             | Keyboard focus on all interactive elements |
+| Level | Treatment | Use |
+| --- | --- | --- |
+| Flat | no shadow, optional separator | page canvas, editor background |
+| Line | `1px solid #e5e7eb` | dividers, card outlines, panel boundaries |
+| Soft Card | `--shadow-soft-card` | cards, source chips, lightweight panels |
+| Deep Card | `--shadow-deep-card` | dialogs, popovers, featured previews |
+| Focus | sky-blue ring | keyboard focus and active editing states |
 
-**Shadow Philosophy**: Notion's shadow system uses multiple layers with extremely low individual opacity (0.01 to 0.05) that accumulate into soft, natural-looking elevation. The 4-layer card shadow spans from 1.04px to 18px blur, creating a gradient of depth rather than a single hard shadow. The 5-layer deep shadow extends to 52px blur at 0.05 opacity, producing ambient occlusion that feels like natural light rather than computer-generated depth. This layered approach makes elements feel embedded in the page rather than floating above it.
-
-### Decorative Depth
-
-- Hero section: decorative character illustrations (playful, hand-drawn style)
-- Section alternation: white to warm white (`#f6f5f4`) background shifts
-- No hard section borders -- separation comes from background color changes and spacing
+Depth should feel tactile and paper-like, never glassy or neon. Shadows should be broad, low-contrast, and tinted by ink charcoal rather than pure black.
 
 ## 7. Responsive Behavior
 
 ### Breakpoints
 
-| Name          | Width       | Key Changes                          |
-| ------------- | ----------- | ------------------------------------ |
-| Mobile Small  | <400px      | Tight single column, minimal padding |
-| Mobile        | 400-600px   | Standard mobile, stacked layout      |
-| Tablet Small  | 600-768px   | 2-column grids begin                 |
-| Tablet        | 768-1080px  | Full card grids, expanded padding    |
-| Desktop Small | 1080-1200px | Standard desktop layout              |
-| Desktop       | 1200-1440px | Full layout, maximum content width   |
-| Large Desktop | >1440px     | Centered, generous margins           |
+| Name | Width | Key Changes |
+| --- | --- | --- |
+| Mobile Small | <400px | single column, tighter section padding, reduced chip density |
+| Mobile | 400-600px | stacked layout, larger touch targets, simplified side panels |
+| Tablet Small | 600-768px | 2-column supporting grids where useful |
+| Tablet | 768-1080px | app sidebar and product panels become more visible |
+| Desktop Small | 1080-1200px | standard app layout |
+| Desktop | 1200-1440px | full layout, max content width |
+| Large Desktop | >1440px | centered, generous margins, avoid over-expanding text |
 
 ### Touch Targets
 
-- Buttons use comfortable padding (8px-16px vertical)
-- Navigation links at 15px with adequate spacing
-- Pill badges have 8px horizontal padding for tap targets
-- Mobile menu toggle uses standard hamburger button
+- Buttons and icon buttons should be at least 36px tall in app surfaces and 40px+ in marketing flows.
+- Chips should remain tappable with at least 28px height.
+- Toolbar controls must not rely on hover-only discovery.
 
 ### Collapsing Strategy
 
-- Hero: 64px display -> scales to 40px -> 26px on mobile, maintains proportional letter-spacing
-- Navigation: horizontal links + blue CTA -> hamburger menu
-- Feature cards: 3-column -> 2-column -> single column stacked
-- Product screenshots: maintain aspect ratio with responsive images
-- Trust bar logos: grid -> horizontal scroll on mobile
-- Footer: multi-column -> stacked single column
-- Section spacing: 80px+ -> 48px on mobile
-
-### Image Behavior
-
-- Workspace screenshots maintain whisper border at all sizes
-- Hero illustrations scale proportionally
-- Product screenshots use responsive images with consistent border radius
-- Full-width warm white sections maintain edge-to-edge treatment
+- Hero display type scales down before wrapping awkwardly.
+- Source/research side panels collapse below or behind tabs on mobile.
+- Feature boards become stacked but keep chip colors and relationship lines.
+- Editor toolbars can scroll horizontally, but text should never overflow buttons.
+- Marketing sections keep one primary visual focus on mobile.
 
 ## 8. Accessibility & States
 
 ### Focus System
 
-- All interactive elements receive visible focus indicators
-- Focus outline: `2px solid` with focus color + shadow level 200
-- Tab navigation supported throughout all interactive components
-- High contrast text: near-black on white exceeds WCAG AAA (>14:1 ratio)
+- Every interactive element must have a visible focus state.
+- Focus uses sky blue with restrained ring opacity.
+- Focus must not be represented only by color if the component state is critical.
 
 ### Interactive States
 
-- **Default**: Standard appearance with whisper borders
-- **Hover**: Color shift on text, scale(1.05) on buttons, underline on links
-- **Active/Pressed**: scale(0.9) transform, darker background variant
-- **Focus**: Blue outline ring with shadow reinforcement
-- **Disabled**: Warm gray (`#a39e98`) text, reduced opacity
+- **Default**: paper surface, clear border, readable text.
+- **Hover**: slight lift or tint, never strong glow.
+- **Active**: subtle press with scale around 0.985.
+- **Focus**: sky-blue ring.
+- **Disabled**: muted text and lower opacity, but still readable.
+- **Loading**: use shape-matched skeletons, not generic spinners.
+- **Empty**: show one friendly action and one clear next step.
+- **Error**: explain the next action, not blame the writer.
 
 ### Color Contrast
 
-- Primary text (rgba(0,0,0,0.95)) on white: ~18:1 ratio
-- Secondary text (#615d59) on white: ~5.5:1 ratio (WCAG AA)
-- Blue CTA (#0075de) on white: ~4.6:1 ratio (WCAG AA for large text)
-- Badge text (#097fe8) on badge bg (#f2f9ff): ~4.5:1 ratio (WCAG AA for large text)
+- Ink charcoal on warm off-white has strong contrast for primary text.
+- Muted text should be used for supporting copy only.
+- Lemon backgrounds need ink text, not white text.
+- Coral should be reserved for meaningful attention or destructive states.
 
-## 9. Agent Prompt Guide
+## 9. Product Language Rules
+
+Use this terminology consistently:
+
+- Journal.
+- Research Thread.
+- Source Library.
+- Linked Ideas.
+- Add to Journal.
+- Shared Journal.
+- Can review.
+- Can edit.
+
+Preferred microcopy:
+
+- "Link this idea to a source."
+- "This note is ready to move into your Journal."
+- "Add a stronger source before using this in your draft."
+- "Saved. You can review the linked source later."
+
+Avoid:
+
+- "Write your thesis instantly."
+- "Never hallucinate again."
+- "Let AI do your research for you."
+- "Invalid citation" as the default tone.
+
+## 10. Agent Prompt Guide
 
 ### Quick Color Reference
 
-- Primary CTA: Notion Blue (`#0075de`)
-- Background: Pure White (`#ffffff`)
-- Alt Background: Warm White (`#f6f5f4`)
-- Heading text: Near-Black (`rgba(0,0,0,0.95)`)
-- Body text: Near-Black (`rgba(0,0,0,0.95)`)
-- Secondary text: Warm Gray 500 (`#615d59`)
-- Muted text: Warm Gray 300 (`#a39e98`)
-- Border: `1px solid rgba(0,0,0,0.1)`
-- Link: Notion Blue (`#0075de`)
-- Focus ring: Focus Blue (`#097fe8`)
+- Background: Warm Off-White (`#fff7f0`)
+- Raised Surface: Raised Paper (`#fffdf8`)
+- Heading/Text: Ink Charcoal (`#1a1f2b`)
+- Secondary Text: Muted Text (`#4b5563`)
+- Border: Paper Border (`#e5e7eb`)
+- Primary CTA / Link / Focus: Sky Blue (`#4a90f7`)
+- Primary Hover: Sky Blue Active (`#2f73d6`)
+- Linked / Success: Fresh Mint (`#2ecc9a`)
+- Warning / Note: Lemon (`#ffd84d`)
+- Attention / Destructive: Soft Coral (`#ff6b6b`)
+- Review Accent: Pale Lavender (`#bd86ff`)
 
 ### Example Component Prompts
 
-- "Create a hero section on white background. Headline at 64px NotionInter weight 700, line-height 1.00, letter-spacing -2.125px, color rgba(0,0,0,0.95). Subtitle at 20px weight 600, line-height 1.40, color #615d59. Blue CTA button (#0075de, 4px radius, 8px 16px padding, white text) and ghost button (transparent bg, near-black text, underline on hover)."
-- "Design a card: white background, 1px solid rgba(0,0,0,0.1) border, 12px radius. Use shadow stack: rgba(0,0,0,0.04) 0px 4px 18px, rgba(0,0,0,0.027) 0px 2.025px 7.85px, rgba(0,0,0,0.02) 0px 0.8px 2.93px, rgba(0,0,0,0.01) 0px 0.175px 1.04px. Title at 22px NotionInter weight 700, letter-spacing -0.25px. Body at 16px weight 400, color #615d59."
-- "Build a pill badge: #f2f9ff background, #097fe8 text, 9999px radius, 4px 8px padding, 12px NotionInter weight 600, letter-spacing 0.125px."
-- "Create navigation: white header. NotionInter 15px weight 600 for links, near-black text. Blue pill CTA 'Get Notion free' right-aligned (#0075de bg, white text, 4px radius)."
-- "Design an alternating section layout: white sections alternate with warm white (#f6f5f4) sections. Each section has 64-80px vertical padding, max-width 1200px centered. Section heading at 48px weight 700, line-height 1.00, letter-spacing -1.5px."
+- "Create a clean Aqsha editor panel on warm off-white. Use raised paper cards, ink-charcoal text, sky-blue primary actions, mint source chips, lemon note chips, and soft coral link chips. Keep the layout airy with no nested cards."
+- "Design a linked idea chip: 9999px radius, 28px min height, 4px 10px padding, badge text at 12px/650, soft tinted background, 1px tinted border, and a small icon."
+- "Build a product card: raised paper background, 1px paper border, 14px radius, `--shadow-soft-card`, title at 22px rounded heading, body at 16px muted text, and one clear action."
+- "Create a research workspace layout: document canvas in the center, source chips near relevant text, a compact Research Thread panel, and review states that say what to do next."
 
 ### Iteration Guide
 
-1. Always use warm neutrals -- Notion's grays have yellow-brown undertones (#f6f5f4, #31302e, #615d59, #a39e98), never blue-gray
-2. Letter-spacing scales with font size: -2.125px at 64px, -1.875px at 54px, -0.625px at 26px, normal at 16px
-3. Four weights: 400 (read), 500 (interact), 600 (emphasize), 700 (announce)
-4. Borders are whispers: 1px solid rgba(0,0,0,0.1) -- never heavier
-5. Shadows use 4-5 layers with individual opacity never exceeding 0.05
-6. The warm white (#f6f5f4) section background is essential for visual rhythm
-7. Pill badges (9999px) for status/tags, 4px radius for buttons and inputs
-8. Notion Blue (#0075de) is the only saturated color in core UI -- use it sparingly for CTAs and links
+1. Use Aqsha tokens from `packages/ui/src/styles/globals.css`; do not introduce one-off colors.
+2. Keep the palette bright but disciplined. Use sky blue, mint, coral, lemon, and lavender with clear roles.
+3. Use rounded display headings for brand moments and readable sans for dense app surfaces.
+4. Preserve generous whitespace; remove decorative micro-UI before adding more detail.
+5. Use cards for real objects only: source, note, draft, review, dialog, preview.
+6. Make links between ideas visible through chips, lines, grouping, and proximity.
+7. Keep warning copy calm and action-oriented.
+8. Do not import external design-system language. Aqsha has its own visual system.
