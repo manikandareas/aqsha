@@ -440,6 +440,27 @@ export const chatModule = new Elysia({
           model,
           messages: messagesResult.data.messages,
           abortSignal: request.signal,
+          onSource: async (source) => {
+            try {
+              await chatService.appendRunSource(
+                runResult.data.scope,
+                runResult.data.run,
+                source,
+              );
+            } catch (error) {
+              logChatError(
+                "Failed to persist agent-used source",
+                {
+                  requestId,
+                  threadId: params.id,
+                  runId: runResult.data.run.id,
+                  sourceKind: source.kind,
+                  sourceRef: source.url ?? source.providerSourceId ?? null,
+                },
+                error,
+              );
+            }
+          },
         });
       } catch (error) {
         logChatError(

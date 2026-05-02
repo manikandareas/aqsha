@@ -1,8 +1,17 @@
 import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import { createAgentUIStream, createAgentUIStreamResponse, type LanguageModel, type ToolSet, type UIMessage } from "ai";
+import type { AgentUsedSource } from "../modules/agents/model";
 import { buildAstraAgent } from "./astra";
 import { createExaMcpTools } from "./mcp/exa";
 import type { AgentRuntimeContext } from "./types";
+
+type UnknownRecord = Record<string, unknown>;
+type SourceReporter = (source: AgentUsedSource) => Promise<void> | void;
+
+const EXA_SOURCE_TOOL_NAMES = new Set(["web_search_exa", "web_fetch_exa"]);
+const EXA_RESULT_CONTAINERS = ["results", "items", "content", "contents", "data", "documents"];
+const EXA_METADATA_FIELDS = ["publishedDate", "author", "summary"];
+const MAX_EXA_SOURCE_DEPTH = 5;
 
 export async function createAstraAgentUIStream({
   model,
@@ -39,6 +48,7 @@ export async function createAstraAgentResponse({
   uiMessages,
   abortSignal,
   headers,
+  onSource,
 }: {
   model: LanguageModel;
   providerOptions?: ProviderOptions;
@@ -46,14 +56,23 @@ export async function createAstraAgentResponse({
   uiMessages: UIMessage[];
   abortSignal?: AbortSignal;
   headers?: HeadersInit;
+  onSource?: SourceReporter;
 }) {
-  const exa = await createExaMcpTools();
+  const exa = await createExaMcpTools({ onSource });
   try {
     const response = await createAgentUIStreamResponse({
       agent: buildAstraAgent({ model, providerOptions, context, externalTools: exa.tools as ToolSet }),
       uiMessages,
       abortSignal,
       headers,
+      sendSources: true,
+      onStepFinish: async (step) => {
+        if (!onSource) {
+          return;
+        }
+
+        await reportStepSources(step, onSource);
+      },
     });
 
     if (!response.body) {
@@ -66,6 +85,224 @@ export async function createAstraAgentResponse({
     await exa.close();
     throw error;
   }
+}
+
+async function reportStepSources(step: unknown, onSource: SourceReporter) {
+  const record = asRecord(step);
+  const sources = [
+    ...normalizeAiSdkSources(Array.isArray(record?.sources) ? record.sources : []),
+    ...extractExaSourcesFromToolResults(Array.isArray(record?.toolResults) ? record.toolResults : []),
+  ];
+
+  for (const source of sources) {
+    try {
+      await onSource(source);
+    } catch (error) {
+      logSourceError("Failed to report agent-used source", source, error);
+    }
+  }
+}
+
+function normalizeAiSdkSources(sources: unknown[]): AgentUsedSource[] {
+  return sources.flatMap<AgentUsedSource>((source) => {
+    const record = asRecord(source);
+
+    if (!record) {
+      return [];
+    }
+
+    const sourceType = stringValue(record.sourceType);
+    const providerSourceId = stringValue(record.id);
+    const title = stringValue(record.title);
+    const providerMetadata = record.providerMetadata;
+
+    if (sourceType === "url") {
+      const url = stringValue(record.url);
+
+      if (!url) {
+        return [];
+      }
+
+      return [{
+        kind: "url",
+        title,
+        url,
+        providerSourceId,
+        metadata: { source: "ai-sdk", providerMetadata, sourceType },
+      }];
+    }
+
+    if (sourceType === "document") {
+      const filename = stringValue(record.filename);
+      const mediaType = stringValue(record.mediaType);
+
+      if (!providerSourceId && !filename && !mediaType) {
+        return [];
+      }
+
+      return [{
+        kind: "document",
+        title,
+        filename,
+        mediaType,
+        providerSourceId,
+        metadata: { source: "ai-sdk", providerMetadata, sourceType },
+      }];
+    }
+
+    return [];
+  });
+}
+
+function extractExaSourcesFromToolResults(toolResults: unknown[]): AgentUsedSource[] {
+  const sources: AgentUsedSource[] = [];
+  const seen = new Set<string>();
+
+  for (const toolResult of toolResults) {
+    const result = asRecord(toolResult);
+    const toolName = stringValue(result?.toolName);
+
+    if (!toolName || !EXA_SOURCE_TOOL_NAMES.has(toolName)) {
+      continue;
+    }
+
+    for (const source of extractExaSources(result?.output, toolName)) {
+      if (!source.url || seen.has(source.url)) {
+        continue;
+      }
+
+      seen.add(source.url);
+      sources.push(source);
+    }
+  }
+
+  return sources;
+}
+
+function extractExaSources(value: unknown, toolName: string): AgentUsedSource[] {
+  const parsed = parseJsonString(value);
+  return collectExaSources(parsed, toolName, 0);
+}
+
+function collectExaSources(value: unknown, toolName: string, depth: number): AgentUsedSource[] {
+  if (depth > MAX_EXA_SOURCE_DEPTH) {
+    return [];
+  }
+
+  const parsed = parseJsonString(value);
+
+  if (Array.isArray(parsed)) {
+    return parsed.flatMap((item) => collectExaSources(item, toolName, depth + 1));
+  }
+
+  const record = asRecord(parsed);
+
+  if (!record) {
+    return [];
+  }
+
+  const direct = sourceFromExaRecord(record, toolName);
+  const nested = EXA_RESULT_CONTAINERS.flatMap((field) => {
+    if (!(field in record)) {
+      return [];
+    }
+
+    return collectExaSources(record[field], toolName, depth + 1);
+  });
+
+  return direct ? [direct, ...nested] : nested;
+}
+
+function sourceFromExaRecord(record: UnknownRecord, toolName: string): AgentUsedSource | null {
+  const url = validUrl(stringValue(record.url));
+
+  if (!url) {
+    return null;
+  }
+
+  const metadata: Record<string, unknown> = {
+    source: "tool-result",
+    toolName,
+    provider: "exa",
+  };
+
+  for (const field of EXA_METADATA_FIELDS) {
+    const value = stringValue(record[field]);
+
+    if (value) {
+      metadata[field] = value;
+    }
+  }
+
+  return {
+    kind: "url",
+    title: stringValue(record.title),
+    url,
+    providerSourceId: stringValue(record.id),
+    metadata,
+  };
+}
+
+function parseJsonString(value: unknown): unknown {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed || (trimmed[0] !== "{" && trimmed[0] !== "[")) {
+    return value;
+  }
+
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    return value;
+  }
+}
+
+function validUrl(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function asRecord(value: unknown): UnknownRecord | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as UnknownRecord
+    : null;
+}
+
+function logSourceError(message: string, source: AgentUsedSource, error: unknown) {
+  const payload: Record<string, unknown> = {
+    level: "error",
+    module: "agents",
+    message,
+    sourceKind: source.kind,
+    sourceUrl: source.url ?? null,
+    providerSourceId: source.providerSourceId ?? null,
+  };
+
+  if (error instanceof Error) {
+    payload.errorName = error.name;
+    payload.errorMessage = error.message;
+    payload.stack = error.stack;
+  } else if (error !== undefined) {
+    payload.error = error;
+  }
+
+  console.error(JSON.stringify(payload));
 }
 
 function createCleanupStream<T>(cleanup: () => Promise<void>): TransformStream<T, T> {
