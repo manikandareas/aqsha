@@ -441,10 +441,11 @@ export const chatModule = new Elysia({
         headers.set("x-astra-model", model);
       }
 
+      const agentsBaseUrl = env.AGENTS_BASE_URL;
       let upstream: Response;
 
       try {
-        upstream = await fetch(`${env.AGENTS_BASE_URL}/internal/chat`, {
+        upstream = await fetch(`${agentsBaseUrl}/internal/chat`, {
           method: "POST",
           headers,
           body: JSON.stringify({
@@ -461,7 +462,7 @@ export const chatModule = new Elysia({
             requestId,
             threadId: params.id,
             runId: runResult.data.run.id,
-            agentsBaseUrl: env.AGENTS_BASE_URL,
+            agentsBaseUrl,
           },
           error,
         );

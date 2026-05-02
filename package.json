@@ -7,14 +7,15 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "bun run --parallel --filter '@aqsha/web' --filter '@aqsha/www' --filter '@aqsha/api' dev",
+    "dev": "bun run --parallel --filter '@aqsha/web' --filter '@aqsha/www' --filter '@aqsha/api' --filter '@aqsha/vercel-ai-sdk' dev",
     "dev:web": "bun run --filter '@aqsha/web' dev",
     "dev:www": "bun run --filter '@aqsha/www' dev",
     "dev:api": "bun run --filter '@aqsha/api' dev",
-    "build": "bun run --filter '@aqsha/web' --filter '@aqsha/www' --filter '@aqsha/api' build",
+    "dev:vercel-ai-sdk": "bun run --filter '@aqsha/vercel-ai-sdk' dev",
+    "build": "bun run --filter '@aqsha/web' --filter '@aqsha/www' --filter '@aqsha/api' --filter '@aqsha/vercel-ai-sdk' build",
     "build:www": "bun run --filter '@aqsha/www' build",
     "lint": "bun run --parallel --filter '@aqsha/web' --filter '@aqsha/api' --filter '@aqsha/shared' --filter '@aqsha/db' lint",
-    "typecheck": "bun run --parallel --filter '@aqsha/web' --filter '@aqsha/www' --filter '@aqsha/api' --filter '@aqsha/shared' --filter '@aqsha/db' --filter '@aqsha/ui' typecheck"
+    "typecheck": "bun run --parallel --filter '@aqsha/web' --filter '@aqsha/www' --filter '@aqsha/api' --filter '@aqsha/vercel-ai-sdk' --filter '@aqsha/shared' --filter '@aqsha/db' --filter '@aqsha/ui' typecheck"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

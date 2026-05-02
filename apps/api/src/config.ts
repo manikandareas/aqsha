@@ -16,7 +16,7 @@ export const env = createEnv({
         1,
         "DATABASE_URL is required to initialize the PostgreSQL connection.",
       ),
-    AGENTS_BASE_URL: z.url().default("http://127.0.0.1:8001"),
+    AGENTS_BASE_URL: z.url().default("http://127.0.0.1:8002"),
     ASTRA_INTERNAL_TOKEN: z
       .string()
       .min(1, "ASTRA_INTERNAL_TOKEN is required to call the agents service."),
