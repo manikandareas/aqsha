@@ -1,10 +1,14 @@
 "use client";
 
 import type { ComponentProps, ReactNode } from "react";
-import { CheckCircle2Icon, ChevronDownIcon, CircleDashedIcon, XCircleIcon } from "lucide-react";
+import { ChevronDownIcon } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { summaryFields, toolDisplayName } from "@/components/ai-elements/tool-utils";
 import { cn } from "@/lib/utils";
 
 type ToolState =
@@ -16,35 +20,20 @@ type ToolState =
   | "output-error"
   | "output-denied";
 
-function stateLabel(state: ToolState) {
-  if (state === "output-available") return "Done";
-  if (state === "output-error" || state === "output-denied") return "Failed";
-  return "Running";
+function stateDotClass(state: ToolState) {
+  if (state === "output-available") return "bg-[#2ecc9a]";
+  if (state === "output-error" || state === "output-denied")
+    return "bg-destructive";
+  return "bg-primary";
 }
 
-function ToolStatusIcon({ state }: { state: ToolState }) {
-  if (state === "output-available") {
-    return <CheckCircle2Icon className="size-3.5 text-emerald-600" />;
-  }
-
-  if (state === "output-error" || state === "output-denied") {
-    return <XCircleIcon className="size-3.5 text-destructive" />;
-  }
-
-  return <CircleDashedIcon className="size-3.5 animate-spin text-primary" />;
-}
+export const toolElbowClass = "relative ml-[3px] pl-5 before:absolute before:left-0 before:top-0 before:h-6 before:w-4 before:rounded-bl-[3px] before:border-b-2 before:border-l-2 before:border-muted-foreground/45";
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
 export function Tool({ className, ...props }: ToolProps) {
   return (
-    <Collapsible
-      className={cn(
-        "group/tool not-prose border-l border-border pl-2.5",
-        className,
-      )}
-      {...props}
-    />
+    <Collapsible className={cn("group/tool not-prose", className)} {...props} />
   );
 }
 
@@ -53,62 +42,77 @@ export type ToolHeaderProps = ComponentProps<typeof CollapsibleTrigger> & {
   state: ToolState;
 };
 
-export function ToolHeader({ className, toolType, state, ...props }: ToolHeaderProps) {
-  const label = toolType.replace(/^tool-/, "").replaceAll("_", " ");
+export function ToolHeader({
+  className,
+  toolType,
+  state,
+  ...props
+}: ToolHeaderProps) {
+  const label = toolDisplayName(toolType);
 
   return (
     <CollapsibleTrigger
       className={cn(
-        "flex w-full cursor-pointer items-center justify-between gap-3 py-1 text-left text-[13px] text-foreground outline-none transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring/50",
+        "flex w-full cursor-pointer items-baseline gap-2.5 py-1.5 text-left outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50",
         className,
       )}
       {...props}
     >
-      <span className="flex min-w-0 items-center gap-2">
-        <ToolStatusIcon state={state} />
-        <span className="truncate font-medium capitalize">{label}</span>
+      <span
+        className={cn(
+          "mt-2 size-1.5 shrink-0 rounded-full",
+          stateDotClass(state),
+        )}
+      />
+      <span className="min-w-0 flex-1 truncate text-sm font-medium leading-6 text-foreground">
+        {label}
       </span>
-      <span className="flex items-center gap-2">
-        <Badge
-          variant="outline"
-          className="h-5 rounded-full border-border bg-background px-2 text-[11px] font-medium"
-        >
-          {stateLabel(state)}
-        </Badge>
-        <ChevronDownIcon className="size-3.5 text-muted-foreground transition-transform group-data-[state=open]/tool:rotate-180" />
-      </span>
+
+      <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]/tool:rotate-180" />
     </CollapsibleTrigger>
   );
 }
 
 export type ToolContentProps = ComponentProps<typeof CollapsibleContent>;
 
-export function ToolContent({ className, ...props }: ToolContentProps) {
+export function ToolContent({
+  className,
+  children,
+  ...props
+}: ToolContentProps) {
   return (
-    <CollapsibleContent
-      className={cn("pb-1.5 pl-5 pt-0.5", className)}
-      {...props}
-    />
+    <CollapsibleContent className={cn("pb-3 pt-1", className)} {...props}>
+      <div className={toolElbowClass}>{children}</div>
+    </CollapsibleContent>
   );
 }
 
-function JsonBlock({ value }: { value: unknown }) {
-  if (value === undefined || value === null || value === "") {
+function DetailBlock({ value }: { value: unknown }) {
+  const fields = summaryFields(value);
+
+  if (fields.length === 0) {
     return null;
   }
 
   return (
-    <pre className="max-h-40 overflow-auto border-l border-border bg-muted/45 px-2.5 py-1.5 text-xs leading-5 text-muted-foreground">
-      {typeof value === "string" ? value : JSON.stringify(value, null, 2)}
-    </pre>
+    <dl className="space-y-1.5 text-xs leading-5">
+      {fields.map((field) => (
+        <div className="grid gap-0.5 sm:grid-cols-[72px_1fr]" key={field.label}>
+          <dt className="text-muted-foreground/75">{field.label}</dt>
+          <dd className="text-muted-foreground">{field.value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
 export function ToolInput({ input }: { input: unknown }) {
   return (
-    <div className="space-y-1">
-      <p className="text-xs font-medium text-muted-foreground">Request</p>
-      <JsonBlock value={input} />
+    <div className="space-y-1.5">
+      <p className="text-[11px] font-medium text-muted-foreground/80">
+        What Aqsha checked
+      </p>
+      <DetailBlock value={input} />
     </div>
   );
 }
@@ -121,10 +125,12 @@ export function ToolOutput({
   errorText?: string;
 }) {
   return (
-    <div className="mt-1.5 space-y-1">
-      <p className="text-xs font-medium text-muted-foreground">Result</p>
+    <div className="mt-3 space-y-1.5">
+      <p className="text-[11px] font-medium text-muted-foreground/80">
+        What came back
+      </p>
       {errorText ? (
-        <p className="border-l border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">
+        <p className="border-l-2 border-destructive/60 pl-3 text-xs leading-5 text-destructive">
           {errorText}
         </p>
       ) : (

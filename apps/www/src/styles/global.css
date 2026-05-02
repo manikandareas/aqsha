@@ -1,4 +1,4 @@
-@import "@fontsource-variable/geist";
+@import "@fontsource-variable/nunito";
 @import "@fontsource-variable/geist-mono";
 @import "@fontsource/fuzzy-bubbles/latin.css";
 @import "tailwindcss";
@@ -6,14 +6,14 @@
 
 @layer base {
   :root {
-    --font-aqsha-display: "Nunito Rounded";
-    --font-aqsha-body: "Inter";
-    --font-geist-sans: "Geist Variable";
+    --font-aqsha-display: "Nunito Variable", "Nunito Rounded";
+    --font-aqsha-body: var(--font-aqsha-display);
+    --font-aqsha-handwriting: "Fuzzy Bubbles";
     --font-geist-mono: "Geist Mono Variable";
     --marketing-canvas: var(--background);
     --marketing-surface: var(--card);
     --marketing-paper-edge: var(--border);
-    --marketing-pattern-dot: color-mix(in srgb, var(--primary) 28%, transparent);
+    --marketing-pattern-dot: color-mix(in srgb, var(--primary) 18%, transparent);
   }
 
   .dark {
@@ -50,7 +50,7 @@
   }
 
   ::selection {
-    background: color-mix(in srgb, var(--primary) 24%, var(--background));
+    background: color-mix(in srgb, var(--primary) 30%, var(--background));
     color: var(--foreground);
   }
 }

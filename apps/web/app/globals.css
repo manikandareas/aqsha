@@ -6,16 +6,17 @@
 @source "../node_modules/streamdown/dist/*.js";
 
 :root {
-  --font-aqsha-display: "Nunito Rounded";
-  --font-aqsha-body: "Inter";
-  --aqsha-brand-sky: #4a90f7;
+  --font-aqsha-display: var(--font-aqsha-display-loaded), "Nunito Rounded";
+  --font-aqsha-body: var(--font-aqsha-display);
+  --font-aqsha-handwriting: var(--font-aqsha-handwriting-loaded), "Fuzzy Bubbles";
+  --aqsha-brand-sky: #256fd0;
   --aqsha-brand-mint: #2ecc9a;
-  --aqsha-brand-coral: #ff6b6b;
+  --aqsha-brand-coral: #c43f3f;
   --aqsha-brand-lemon: #ffd84d;
   --aqsha-brand-lavender: #bd86ff;
   --aqsha-brand-lavender-dark: #b0a6ff;
   --aqsha-brand-mist: #f4f1ea;
-  --aqsha-brand-paper: #fff7f0;
+  --aqsha-brand-paper: #fbfaf7;
   --aqsha-brand-ink: #1a1f2b;
   --aqsha-brand-ink-black: #181818;
   --sileo-width: 360px;
@@ -24,11 +25,11 @@
   --sileo-toast-fill: #1a1f2b;
   --sileo-toast-title: #f4f1ea;
   --sileo-toast-description: #d9e1eb;
-  --sileo-toast-border: rgba(255, 247, 240, 0.12);
+  --sileo-toast-border: rgba(251, 250, 247, 0.14);
   --sileo-state-success: #2ecc9a;
-  --sileo-state-error: #ff6b6b;
+  --sileo-state-error: #c43f3f;
   --sileo-state-warning: #ffd84d;
-  --sileo-state-info: #4a90f7;
+  --sileo-state-info: #256fd0;
 }
 
 .dark {

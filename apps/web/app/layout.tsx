@@ -1,11 +1,17 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Fuzzy_Bubbles, Geist_Mono, Nunito } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const aqshaDisplay = Nunito({
+  variable: "--font-aqsha-display-loaded",
   subsets: ["latin"],
+});
+
+const aqshaHandwriting = Fuzzy_Bubbles({
+  variable: "--font-aqsha-handwriting-loaded",
+  subsets: ["latin"],
+  weight: ["400", "700"],
 });
 
 const geistMono = Geist_Mono({
@@ -27,10 +33,10 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${aqshaDisplay.variable} ${aqshaHandwriting.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className={`${geistSans.className} min-h-full flex flex-col`}>
+      <body className={`${aqshaDisplay.className} min-h-full flex flex-col`}>
         <Providers>{children}</Providers>
       </body>
     </html>

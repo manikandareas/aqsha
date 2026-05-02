@@ -1,7 +1,7 @@
 "use client";
 
 import type { ComponentProps } from "react";
-import { BrainIcon, ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -33,32 +33,35 @@ export function ReasoningTrigger({
   return (
     <summary
       className={cn(
-        "flex cursor-pointer list-none items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
+        "flex cursor-pointer list-none items-baseline gap-2 text-left outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50",
         className,
       )}
       {...props}
     >
       {children ?? (
-        <>
-          <BrainIcon className="size-4" />
-          <span>{isStreaming ? "Thinking it through..." : "Working notes"}</span>
-          <ChevronDownIcon className="size-4 transition-transform group-open:rotate-180" />
-        </>
+        <span className="text-[13px] font-medium leading-6 text-muted-foreground">
+          {isStreaming ? "Connecting the ideas" : "Working notes"}
+        </span>
       )}
+      <ChevronDownIcon className="ml-auto size-3.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
     </summary>
   );
 }
 
 export type ReasoningContentProps = ComponentProps<"div">;
 
-export function ReasoningContent({ className, ...props }: ReasoningContentProps) {
+export function ReasoningContent({ className, children, ...props }: ReasoningContentProps) {
   return (
-    <div
-      className={cn(
-        "mt-1.5 border-l border-border pl-3 text-[13px] leading-6 text-muted-foreground",
-        className,
-      )}
-      {...props}
-    />
+    <div className="relative ml-[3px] mt-1.5 pl-5 before:absolute before:left-0 before:top-0 before:h-6 before:w-4 before:rounded-bl-[3px] before:border-b-2 before:border-l-2 before:border-muted-foreground/45">
+      <div
+        className={cn(
+          "text-[13px] leading-6 text-muted-foreground",
+          className,
+        )}
+        {...props}
+      >
+        {children}
+      </div>
+    </div>
   );
 }
