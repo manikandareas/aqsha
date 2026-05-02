@@ -5,12 +5,9 @@ import {
   journalVersions,
   journals,
   users,
-  workspaces,
   type JournalRecord,
   type JournalVersionRecord,
   type JsonValue,
-  type UserRecord,
-  type WorkspaceRecord,
 } from "@aqsha/db";
 import { and, desc, eq, ilike, isNull, sql } from "drizzle-orm";
 import type { DatabaseClient } from "../../database/client";
@@ -20,14 +17,13 @@ type JournalType = (typeof journalTypes)[number];
 type VersionTrigger = (typeof journalVersionTriggers)[number];
 
 export interface ListJournalsInput {
-  workspaceId: string;
+  ownerUserId: string;
   status: JournalStatus;
   q?: string;
   limit: number;
 }
 
 export interface CreateJournalInput {
-  workspaceId: string;
   ownerUserId: string;
   title: string;
   type: JournalType;
@@ -52,48 +48,12 @@ export interface ApplyJournalOutlineInput {
   plainText: string | null;
 }
 
-export interface JournalContext {
-  user: UserRecord;
-  workspace: WorkspaceRecord;
-}
-
-export type JournalContextLookup =
-  | { success: true; data: JournalContext }
-  | { success: false; error: "unauthorized" | "workspace_not_found" };
-
 export class JournalRepository {
   constructor(private readonly db: DatabaseClient) {}
 
-  async getContextByAuthUserId(
-    authUserId: string,
-  ): Promise<JournalContextLookup> {
-    const [row] = await this.db
-      .select({
-        user: users,
-        workspace: workspaces,
-      })
-      .from(users)
-      .leftJoin(workspaces, eq(workspaces.ownerUserId, users.id))
-      .where(eq(users.id, authUserId))
-      .limit(1);
-
-    if (!row) {
-      return { success: false, error: "unauthorized" };
-    }
-
-    if (!row.workspace) {
-      return { success: false, error: "workspace_not_found" };
-    }
-
-    return {
-      success: true,
-      data: { user: row.user, workspace: row.workspace },
-    };
-  }
-
   async list(input: ListJournalsInput): Promise<JournalRecord[]> {
     const filters = [
-      eq(journals.workspaceId, input.workspaceId),
+      eq(journals.ownerUserId, input.ownerUserId),
       eq(journals.status, input.status),
     ];
 
@@ -111,13 +71,13 @@ export class JournalRepository {
 
   async getById(
     journalId: string,
-    workspaceId: string,
+    ownerUserId: string,
   ): Promise<JournalRecord | null> {
     const [journal] = await this.db
       .select()
       .from(journals)
       .where(
-        and(eq(journals.id, journalId), eq(journals.workspaceId, workspaceId)),
+        and(eq(journals.id, journalId), eq(journals.ownerUserId, ownerUserId)),
       )
       .limit(1);
 
@@ -130,7 +90,6 @@ export class JournalRepository {
       const [journal] = await tx
         .insert(journals)
         .values({
-          workspaceId: input.workspaceId,
           ownerUserId: input.ownerUserId,
           title: input.title,
           type: input.type,
@@ -144,7 +103,6 @@ export class JournalRepository {
 
       await tx.insert(journalVersions).values({
         journalId: journal.id,
-        workspaceId: journal.workspaceId,
         createdByUserId: journal.ownerUserId,
         versionNumber: 1,
         contentJson: journal.contentJson,
@@ -154,12 +112,12 @@ export class JournalRepository {
       });
 
       await tx
-        .update(workspaces)
+        .update(users)
         .set({
-          activeJournalCount: sql`${workspaces.activeJournalCount} + 1`,
+          activeJournalCount: sql`${users.activeJournalCount} + 1`,
           updatedAt: now,
         })
-        .where(eq(workspaces.id, journal.workspaceId));
+        .where(eq(users.id, journal.ownerUserId));
 
       await tx
         .update(users)
@@ -168,10 +126,7 @@ export class JournalRepository {
           updatedAt: now,
         })
         .where(
-          and(
-            eq(users.id, journal.ownerUserId),
-            isNull(users.onboardingCompletedAt),
-          ),
+          and(eq(users.id, journal.ownerUserId), isNull(users.onboardingCompletedAt)),
         );
 
       return journal;
@@ -180,7 +135,7 @@ export class JournalRepository {
 
   async updateMetadata(
     journalId: string,
-    workspaceId: string,
+    ownerUserId: string,
     input: UpdateJournalMetadataInput,
   ): Promise<JournalRecord | null> {
     const [journal] = await this.db
@@ -191,7 +146,7 @@ export class JournalRepository {
         updatedAt: new Date(),
       })
       .where(
-        and(eq(journals.id, journalId), eq(journals.workspaceId, workspaceId)),
+        and(eq(journals.id, journalId), eq(journals.ownerUserId, ownerUserId)),
       )
       .returning();
 
@@ -214,7 +169,7 @@ export class JournalRepository {
 
   async archive(
     journalId: string,
-    workspaceId: string,
+    ownerUserId: string,
   ): Promise<JournalRecord | null> {
     return this.db.transaction(async (tx) => {
       const now = new Date();
@@ -228,7 +183,7 @@ export class JournalRepository {
         .where(
           and(
             eq(journals.id, journalId),
-            eq(journals.workspaceId, workspaceId),
+            eq(journals.ownerUserId, ownerUserId),
             eq(journals.status, "active"),
           ),
         )
@@ -239,13 +194,13 @@ export class JournalRepository {
       }
 
       await tx
-        .update(workspaces)
+        .update(users)
         .set({
-          activeJournalCount: sql`${workspaces.activeJournalCount} - 1`,
-          archivedJournalCount: sql`${workspaces.archivedJournalCount} + 1`,
+          activeJournalCount: sql`${users.activeJournalCount} - 1`,
+          archivedJournalCount: sql`${users.archivedJournalCount} + 1`,
           updatedAt: now,
         })
-        .where(eq(workspaces.id, workspaceId));
+        .where(eq(users.id, ownerUserId));
 
       return journal;
     });
@@ -253,7 +208,7 @@ export class JournalRepository {
 
   async restore(
     journalId: string,
-    workspaceId: string,
+    ownerUserId: string,
   ): Promise<JournalRecord | null> {
     return this.db.transaction(async (tx) => {
       const now = new Date();
@@ -267,7 +222,7 @@ export class JournalRepository {
         .where(
           and(
             eq(journals.id, journalId),
-            eq(journals.workspaceId, workspaceId),
+            eq(journals.ownerUserId, ownerUserId),
             eq(journals.status, "archived"),
           ),
         )
@@ -278,26 +233,26 @@ export class JournalRepository {
       }
 
       await tx
-        .update(workspaces)
+        .update(users)
         .set({
-          activeJournalCount: sql`${workspaces.activeJournalCount} + 1`,
-          archivedJournalCount: sql`${workspaces.archivedJournalCount} - 1`,
+          activeJournalCount: sql`${users.activeJournalCount} + 1`,
+          archivedJournalCount: sql`${users.archivedJournalCount} - 1`,
           updatedAt: now,
         })
-        .where(eq(workspaces.id, workspaceId));
+        .where(eq(users.id, ownerUserId));
 
       return journal;
     });
   }
 
-  async delete(journalId: string, workspaceId: string): Promise<boolean> {
+  async delete(journalId: string, ownerUserId: string): Promise<boolean> {
     return this.db.transaction(async (tx) => {
       const [journal] = await tx
         .delete(journals)
         .where(
           and(
             eq(journals.id, journalId),
-            eq(journals.workspaceId, workspaceId),
+            eq(journals.ownerUserId, ownerUserId),
           ),
         )
         .returning({
@@ -309,19 +264,19 @@ export class JournalRepository {
       }
 
       await tx
-        .update(workspaces)
+        .update(users)
         .set({
           activeJournalCount:
             journal.status === "active"
-              ? sql`${workspaces.activeJournalCount} - 1`
-              : sql`${workspaces.activeJournalCount}`,
+              ? sql`${users.activeJournalCount} - 1`
+              : sql`${users.activeJournalCount}`,
           archivedJournalCount:
             journal.status === "archived"
-              ? sql`${workspaces.archivedJournalCount} - 1`
-              : sql`${workspaces.archivedJournalCount}`,
+              ? sql`${users.archivedJournalCount} - 1`
+              : sql`${users.archivedJournalCount}`,
           updatedAt: new Date(),
         })
-        .where(eq(workspaces.id, workspaceId));
+        .where(eq(users.id, ownerUserId));
 
       return true;
     });
@@ -329,20 +284,22 @@ export class JournalRepository {
 
   async listVersions(
     journalId: string,
-    workspaceId: string,
+    ownerUserId: string,
     limit: number,
   ): Promise<JournalVersionRecord[]> {
     return this.db
       .select()
       .from(journalVersions)
+      .innerJoin(journals, eq(journals.id, journalVersions.journalId))
       .where(
         and(
           eq(journalVersions.journalId, journalId),
-          eq(journalVersions.workspaceId, workspaceId),
+          eq(journals.ownerUserId, ownerUserId),
         ),
       )
       .orderBy(desc(journalVersions.createdAt))
-      .limit(limit);
+      .limit(limit)
+      .then((rows) => rows.map((row) => row.journal_versions));
   }
 
   private async updateJournalContent(
@@ -373,7 +330,7 @@ export class JournalRepository {
         .where(
           and(
             eq(journals.id, current.id),
-            eq(journals.workspaceId, current.workspaceId),
+            eq(journals.ownerUserId, current.ownerUserId),
             eq(journals.updatedAt, current.updatedAt),
           ),
         )
@@ -385,7 +342,6 @@ export class JournalRepository {
 
       await tx.insert(journalVersions).values({
         journalId: journal.id,
-        workspaceId: journal.workspaceId,
         createdByUserId: journal.ownerUserId,
         versionNumber: Number(nextVersion?.value ?? 1),
         contentJson: journal.contentJson,

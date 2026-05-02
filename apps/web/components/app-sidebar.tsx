@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import * as React from "react";
 
@@ -7,7 +8,6 @@ import { NavJournal } from "@/components/nav-journal";
 import { NavMain } from "@/components/nav-main";
 import { NavSecondary } from "@/components/nav-secondary";
 import { NavThreads } from "@/components/nav-threads";
-import { TeamSwitcher, type TeamSwitcherWorkspace } from "@/components/team-switcher";
 import {
   Sidebar,
   SidebarContent,
@@ -21,11 +21,6 @@ import {
   SearchIcon,
   Settings2Icon,
 } from "lucide-react";
-
-type AppSidebarBootstrap = {
-  workspaces?: TeamSwitcherWorkspace[];
-  activeWorkspaceId?: string;
-} | null;
 
 const data = {
   navMain: [
@@ -67,11 +62,8 @@ const data = {
 };
 
 export function AppSidebar({
-  bootstrap,
   ...props
-}: React.ComponentProps<typeof Sidebar> & {
-  bootstrap?: AppSidebarBootstrap;
-}) {
+}: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
   const isJournalsRoute = pathname.startsWith("/app/journals");
   const navMain = data.navMain.map((item) => ({
@@ -88,10 +80,23 @@ export function AppSidebar({
       {...props}
     >
       <SidebarHeader>
-        <TeamSwitcher
-          activeWorkspaceId={bootstrap?.activeWorkspaceId ?? null}
-          workspaces={bootstrap?.workspaces ?? []}
-        />
+        <div className="flex items-center justify-between gap-2 px-3 py-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <Image
+              src="/icon0.svg"
+              alt=""
+              width={32}
+              height={32}
+              className="size-8 shrink-0 rounded-md"
+              priority
+            />
+            <div className="min-w-0">
+              <div className="truncate text-[15px] font-semibold leading-5">
+                Aqsha
+              </div>
+            </div>
+          </div>
+        </div>
         <div className="px-2 mt-2">
           <NavMain items={navMain} />
         </div>

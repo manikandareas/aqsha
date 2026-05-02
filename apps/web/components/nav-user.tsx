@@ -135,7 +135,7 @@ export function NavUser() {
           <AlertDialogHeader>
             <AlertDialogTitle>Sign out?</AlertDialogTitle>
             <AlertDialogDescription>
-              You&apos;ll need to sign in again to access your workspace.
+              You&apos;ll need to sign in again to access your account.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

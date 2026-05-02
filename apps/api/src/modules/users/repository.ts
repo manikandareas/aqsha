@@ -1,5 +1,5 @@
-import { eq } from "drizzle-orm";
-import { users, type UserRecord } from "@aqsha/db";
+import { and, eq, inArray, isNull } from "drizzle-orm";
+import { subscriptions, users, type SubscriptionRecord, type UserRecord } from "@aqsha/db";
 import type { DatabaseClient } from "../../database/client";
 import type { AuthProfileInput } from "./model";
 
@@ -56,10 +56,68 @@ export class UserRepository {
   async ensureProfile(input: AuthProfileInput): Promise<UserRecord> {
     const existing = await this.getByAuthUserId(input.id);
 
-    if (existing) {
-      return this.updateMetadata(existing.id, input);
+    const user = existing
+      ? await this.updateMetadata(existing.id, input)
+      : await this.create(input);
+
+    await this.ensureInternalFreeSubscription(user.id);
+
+    return user;
+  }
+
+  async getCurrentSubscription(
+    userId: string,
+  ): Promise<SubscriptionRecord | null> {
+    const [subscription] = await this.db
+      .select()
+      .from(subscriptions)
+      .where(
+        and(
+          eq(subscriptions.userId, userId),
+          isNull(subscriptions.endedAt),
+        ),
+      )
+      .limit(1);
+
+    return subscription ?? null;
+  }
+
+  private async getActiveOrTrialingSubscription(
+    userId: string,
+  ): Promise<SubscriptionRecord | null> {
+    const [subscription] = await this.db
+      .select()
+      .from(subscriptions)
+      .where(
+        and(
+          eq(subscriptions.userId, userId),
+          inArray(subscriptions.status, ["active", "trialing"]),
+          isNull(subscriptions.endedAt),
+        ),
+      )
+      .limit(1);
+
+    return subscription ?? null;
+  }
+
+  private async ensureInternalFreeSubscription(userId: string): Promise<void> {
+    const existingActiveSubscription =
+      await this.getActiveOrTrialingSubscription(userId);
+
+    if (existingActiveSubscription) {
+      return;
     }
 
-    return this.create(input);
+    await this.db
+      .insert(subscriptions)
+      .values({
+        userId,
+        provider: "internal",
+        providerSubscriptionId: `internal:free:${userId}`,
+        planCode: "free",
+        status: "active",
+        startedAt: new Date(),
+      })
+      .onConflictDoNothing();
   }
 }

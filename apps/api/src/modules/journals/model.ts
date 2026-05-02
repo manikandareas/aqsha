@@ -10,7 +10,6 @@ const journalVersionBase = spreads(
 
 const journalSummary = t.Object({
   id: journalBase.id,
-  workspaceId: journalBase.workspaceId,
   ownerUserId: journalBase.ownerUserId,
   title: journalBase.title,
   type: journalBase.type,
@@ -33,7 +32,6 @@ const journal = t.Composite([
 const journalVersion = t.Object({
   id: journalVersionBase.id,
   journalId: journalVersionBase.journalId,
-  workspaceId: journalVersionBase.workspaceId,
   createdByUserId: journalVersionBase.createdByUserId,
   versionNumber: journalVersionBase.versionNumber,
   contentJson: t.Any(),
@@ -57,13 +55,6 @@ const unauthorizedError = t.Object({
   }),
 });
 
-const workspaceNotFoundError = t.Object({
-  error: t.Object({
-    code: t.Literal("workspace_not_found"),
-    message: t.String(),
-  }),
-});
-
 const journalNotFoundError = t.Object({
   error: t.Object({
     code: t.Literal("journal_not_found"),
@@ -71,7 +62,7 @@ const journalNotFoundError = t.Object({
   }),
 });
 
-const notFoundError = t.Union([workspaceNotFoundError, journalNotFoundError]);
+const notFoundError = journalNotFoundError;
 
 export const journalModel = {
   listQuery: t.Object({
@@ -105,7 +96,6 @@ export const journalModel = {
   journal,
   journalVersion,
   unauthorizedError,
-  workspaceNotFoundError,
   journalNotFoundError,
   notFoundError,
   staleJournalSaveError,

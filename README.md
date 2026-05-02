@@ -1,10 +1,10 @@
 # Aqsha
 
-Aqsha is an open-source monorepo for an AI-assisted writing and journaling workspace. It combines a modern web app, a type-safe Bun API, shared UI primitives, and a PostgreSQL-backed domain model for journals, workspaces, chat threads, and authentication.
+Aqsha is an open-source monorepo for AI-assisted writing and journaling. It combines a modern web app, a type-safe Bun API, shared UI primitives, and a PostgreSQL-backed domain model for user-owned journals, chat threads, and authentication.
 
 ## What is inside?
 
-- **AI chat workspace**: persisted chat threads and streamed assistant responses through an internal agents service.
+- **AI chat**: persisted chat threads and streamed assistant responses through an internal agents service.
 - **Journaling system**: journal CRUD, content saves, outlines, archive/restore flows, and version history.
 - **Authentication**: Better Auth integration with API-side session handling.
 - **Type-safe API client**: Elysia + Eden Treaty wiring between the frontend and backend.

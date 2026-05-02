@@ -9,7 +9,6 @@ export type ChatSource = ChatModel["chatSource"];
 
 export interface ChatScope {
   userId: string;
-  workspaceId: string;
 }
 
 export interface CreateChatThreadInput extends ChatScope {
@@ -48,7 +47,6 @@ export interface AppendChatSourceInput {
 
 export interface UpsertChatSourceInput extends AppendChatSourceInput {
   chatThreadId: string;
-  workspaceId: string;
   runId: string;
   sourceKey: string;
 }

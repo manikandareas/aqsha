@@ -56,11 +56,11 @@ export default async function GetStartedPage() {
 
           <div className="mt-10 space-y-3">
             <h1 className="text-[2rem] font-semibold leading-[1.08] tracking-[-0.04em] text-foreground sm:text-[2.25rem]">
-              Name the workspace your team will use.
+              Set up your research writing space.
             </h1>
             <p className="max-w-[20rem] text-sm font-normal leading-6 text-muted-foreground">
-              This becomes the home for your docs, decisions, and shared
-              context.
+              Continue to your journals, research threads, and source-backed
+              writing tools.
             </p>
           </div>
 

@@ -20,18 +20,6 @@ function toAuthProfileInput(user: {
   };
 }
 
-function getWorkspaceNameError(workspaceName: string): string | null {
-  if (!workspaceName) {
-    return "Workspace name is required.";
-  }
-
-  if (workspaceName.length > 80) {
-    return "Workspace name must be 80 characters or fewer.";
-  }
-
-  return null;
-}
-
 export const sessionModule = new Elysia({
   prefix: "/session",
   name: "module.session",
@@ -62,34 +50,18 @@ export const sessionModule = new Elysia({
   )
   .post(
     "/get-started",
-    async ({ authSession, body, sessionService, status }) => {
-      const workspaceName = body.workspaceName.trim();
-      const workspaceNameError = getWorkspaceNameError(workspaceName);
-
-      if (workspaceNameError) {
-        return status(400, {
-          error: {
-            code: "validation_error",
-            message: workspaceNameError,
-          },
-        });
-      }
-
-      return sessionService.getStarted({
-        ...toAuthProfileInput(authSession.user),
-        workspaceName,
-      });
+    async ({ authSession, sessionService }) => {
+      return sessionService.getStarted(toAuthProfileInput(authSession.user));
     },
     {
       body: sessionModel.getStartedBody,
       detail: {
         summary: "Complete get-started onboarding",
         description:
-          "Synchronizes the Better Auth user, provisions the owned workspace, ensures owner membership and an internal free subscription, then returns the bootstrap payload.",
+          "Synchronizes the Better Auth user, marks onboarding complete, ensures an internal free subscription, then returns the bootstrap payload.",
       },
       response: {
         200: sessionModel.bootstrapResponse,
-        400: sessionModel.validationError,
         401: sessionModel.unauthorizedError,
       },
     },
@@ -103,7 +75,7 @@ export const sessionModule = new Elysia({
       detail: {
         summary: "Bootstrap session",
         description:
-          "Returns the current user profile and workspace context required to bootstrap the client application.",
+          "Returns the current user profile required to bootstrap the client application.",
       },
       response: {
         200: sessionModel.bootstrapResponse,
