@@ -16,17 +16,8 @@ export const journalsModule = new Elysia({
       const result = await journalService.list(identity, query);
 
       if (!result.success) {
-        if (result.error === "unauthorized") {
-          return status(401, {
-            error: { code: "unauthorized", message: "Unauthorized" },
-          });
-        }
-
-        return status(404, {
-          error: {
-            code: "workspace_not_found",
-            message: "Workspace not found",
-          },
+        return status(401, {
+          error: { code: "unauthorized", message: "Unauthorized" },
         });
       }
 
@@ -36,13 +27,12 @@ export const journalsModule = new Elysia({
       detail: {
         summary: "List journals",
         description:
-          "Returns journal summaries for the authenticated user's owned workspace.",
+          "Returns journal summaries for the authenticated user account.",
       },
       query: journalModel.listQuery,
       response: {
         200: t.Array(journalModel.journalSummary),
         401: journalModel.unauthorizedError,
-        404: journalModel.workspaceNotFoundError,
       },
     },
   )
@@ -57,16 +47,6 @@ export const journalsModule = new Elysia({
             error: { code: "unauthorized", message: "Unauthorized" },
           });
         }
-
-        if (result.error === "workspace_not_found") {
-          return status(404, {
-            error: {
-              code: "workspace_not_found",
-              message: "Workspace not found",
-            },
-          });
-        }
-
         return status(404, {
           error: { code: "journal_not_found", message: "Journal not found" },
         });
@@ -78,7 +58,7 @@ export const journalsModule = new Elysia({
       detail: {
         summary: "Get journal",
         description:
-          "Returns a single journal if it belongs to the authenticated user's owned workspace.",
+          "Returns a single journal if it belongs to the authenticated user account.",
       },
       response: {
         200: journalModel.journal,
@@ -93,17 +73,8 @@ export const journalsModule = new Elysia({
       const result = await journalService.create(identity, body);
 
       if (!result.success) {
-        if (result.error === "unauthorized") {
-          return status(401, {
-            error: { code: "unauthorized", message: "Unauthorized" },
-          });
-        }
-
-        return status(404, {
-          error: {
-            code: "workspace_not_found",
-            message: "Workspace not found",
-          },
+        return status(401, {
+          error: { code: "unauthorized", message: "Unauthorized" },
         });
       }
 
@@ -119,7 +90,6 @@ export const journalsModule = new Elysia({
       response: {
         201: journalModel.journal,
         401: journalModel.unauthorizedError,
-        404: journalModel.workspaceNotFoundError,
       },
     },
   )
@@ -138,16 +108,6 @@ export const journalsModule = new Elysia({
             error: { code: "unauthorized", message: "Unauthorized" },
           });
         }
-
-        if (result.error === "workspace_not_found") {
-          return status(404, {
-            error: {
-              code: "workspace_not_found",
-              message: "Workspace not found",
-            },
-          });
-        }
-
         return status(404, {
           error: { code: "journal_not_found", message: "Journal not found" },
         });
@@ -193,16 +153,6 @@ export const journalsModule = new Elysia({
             error: { code: "unauthorized", message: "Unauthorized" },
           });
         }
-
-        if (result.error === "workspace_not_found") {
-          return status(404, {
-            error: {
-              code: "workspace_not_found",
-              message: "Workspace not found",
-            },
-          });
-        }
-
         return status(404, {
           error: { code: "journal_not_found", message: "Journal not found" },
         });
@@ -250,16 +200,6 @@ export const journalsModule = new Elysia({
             error: { code: "unauthorized", message: "Unauthorized" },
           });
         }
-
-        if (result.error === "workspace_not_found") {
-          return status(404, {
-            error: {
-              code: "workspace_not_found",
-              message: "Workspace not found",
-            },
-          });
-        }
-
         return status(404, {
           error: { code: "journal_not_found", message: "Journal not found" },
         });
@@ -293,16 +233,6 @@ export const journalsModule = new Elysia({
             error: { code: "unauthorized", message: "Unauthorized" },
           });
         }
-
-        if (result.error === "workspace_not_found") {
-          return status(404, {
-            error: {
-              code: "workspace_not_found",
-              message: "Workspace not found",
-            },
-          });
-        }
-
         return status(404, {
           error: { code: "journal_not_found", message: "Journal not found" },
         });
@@ -314,7 +244,7 @@ export const journalsModule = new Elysia({
       detail: {
         summary: "Archive journal",
         description:
-          "Archives an active journal and updates workspace journal counters.",
+          "Archives an active journal and updates user journal counters.",
       },
       response: {
         200: journalModel.journal,
@@ -334,16 +264,6 @@ export const journalsModule = new Elysia({
             error: { code: "unauthorized", message: "Unauthorized" },
           });
         }
-
-        if (result.error === "workspace_not_found") {
-          return status(404, {
-            error: {
-              code: "workspace_not_found",
-              message: "Workspace not found",
-            },
-          });
-        }
-
         return status(404, {
           error: { code: "journal_not_found", message: "Journal not found" },
         });
@@ -355,7 +275,7 @@ export const journalsModule = new Elysia({
       detail: {
         summary: "Restore journal",
         description:
-          "Restores an archived journal and updates workspace journal counters.",
+          "Restores an archived journal and updates user journal counters.",
       },
       response: {
         200: journalModel.journal,
@@ -375,16 +295,6 @@ export const journalsModule = new Elysia({
             error: { code: "unauthorized", message: "Unauthorized" },
           });
         }
-
-        if (result.error === "workspace_not_found") {
-          return status(404, {
-            error: {
-              code: "workspace_not_found",
-              message: "Workspace not found",
-            },
-          });
-        }
-
         return status(404, {
           error: { code: "journal_not_found", message: "Journal not found" },
         });
@@ -396,7 +306,7 @@ export const journalsModule = new Elysia({
       detail: {
         summary: "Delete journal",
         description:
-          "Hard deletes an authorized journal and updates workspace counters.",
+          "Hard deletes an authorized journal and updates user journal counters.",
       },
       response: {
         200: journalModel.okResponse,
@@ -420,16 +330,6 @@ export const journalsModule = new Elysia({
             error: { code: "unauthorized", message: "Unauthorized" },
           });
         }
-
-        if (result.error === "workspace_not_found") {
-          return status(404, {
-            error: {
-              code: "workspace_not_found",
-              message: "Workspace not found",
-            },
-          });
-        }
-
         return status(404, {
           error: { code: "journal_not_found", message: "Journal not found" },
         });

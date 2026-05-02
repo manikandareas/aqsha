@@ -53,7 +53,7 @@ export default function SignUpPage() {
 
       toast.success({
         title: "Account created",
-        description: "Continue setting up your workspace.",
+        description: "Continue setting up your account.",
       });
       router.push("/get-started");
       router.refresh();

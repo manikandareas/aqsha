@@ -21,7 +21,6 @@ export const subscriptionStatuses = [
   "canceled",
   "expired",
 ] as const;
-export const workspaceMemberRoles = ["owner", "member"] as const;
 export const journalTypes = ["general", "proposal", "thesis"] as const;
 export const journalStatuses = ["active", "archived"] as const;
 export const journalVersionTriggers = [
@@ -106,6 +105,14 @@ export const users = pgTable("users", {
   onboardingCompletedAt: timestamp("onboarding_completed_at", {
     withTimezone: true,
   }),
+  activeJournalCount: integer("active_journal_count").default(0).notNull(),
+  archivedJournalCount: integer("archived_journal_count")
+    .default(0)
+    .notNull(),
+  aiActionsUsed: integer("ai_actions_used").default(0).notNull(),
+  aiActionsReserved: integer("ai_actions_reserved").default(0).notNull(),
+  exportsUsed: integer("exports_used").default(0).notNull(),
+  sourceUploadsUsed: integer("source_uploads_used").default(0).notNull(),
   createdAt: createdAtColumn(),
   updatedAt: updatedAtColumn(),
 });
@@ -166,41 +173,13 @@ export const verifications = pgTable(
   (table) => [index("verifications_identifier_idx").on(table.identifier)],
 );
 
-export const workspaces = pgTable(
-  "workspaces",
-  {
-    id: idColumn("id"),
-    ownerUserId: uuid("owner_user_id")
-      .notNull()
-      .references(() => users.id),
-    name: text("name").notNull(),
-    slug: text("slug"),
-    activeJournalCount: integer("active_journal_count").default(0).notNull(),
-    archivedJournalCount: integer("archived_journal_count")
-      .default(0)
-      .notNull(),
-    aiActionsUsed: integer("ai_actions_used").default(0).notNull(),
-    aiActionsReserved: integer("ai_actions_reserved").default(0).notNull(),
-    exportsUsed: integer("exports_used").default(0).notNull(),
-    sourceUploadsUsed: integer("source_uploads_used").default(0).notNull(),
-    createdAt: createdAtColumn(),
-    updatedAt: updatedAtColumn(),
-  },
-  (table) => [
-    index("workspaces_owner_user_id_idx").on(table.ownerUserId),
-    uniqueIndex("workspaces_slug_unique_idx")
-      .on(table.slug)
-      .where(sql`${table.slug} is not null`),
-  ],
-);
-
 export const subscriptions = pgTable(
   "subscriptions",
   {
     id: idColumn("id"),
-    workspaceId: uuid("workspace_id")
+    userId: uuid("user_id")
       .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
+      .references(() => users.id, { onDelete: "cascade" }),
     provider: text("provider").notNull(),
     providerCustomerId: text("provider_customer_id"),
     providerSubscriptionId: text("provider_subscription_id").notNull(),
@@ -234,60 +213,14 @@ export const subscriptions = pgTable(
       table.provider,
       table.providerSubscriptionId,
     ),
-    index("subscriptions_workspace_id_idx").on(table.workspaceId),
-    index("subscriptions_workspace_status_idx").on(
-      table.workspaceId,
+    index("subscriptions_user_id_idx").on(table.userId),
+    index("subscriptions_user_status_idx").on(
+      table.userId,
       table.status,
     ),
-    uniqueIndex("subscriptions_current_workspace_unique_idx")
-      .on(table.workspaceId)
+    uniqueIndex("subscriptions_current_user_unique_idx")
+      .on(table.userId)
       .where(sql`${table.endedAt} is null`),
-  ],
-);
-
-export const workspaceMembers = pgTable(
-  "workspace_members",
-  {
-    id: idColumn("id"),
-    workspaceId: uuid("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    role: text("role", { enum: workspaceMemberRoles }).notNull(),
-    createdAt: createdAtColumn(),
-    updatedAt: updatedAtColumn(),
-  },
-  (table) => [
-    check(
-      "workspace_members_role_check",
-      sql`${table.role} in ('owner', 'member')`,
-    ),
-    unique("workspace_members_workspace_id_user_id_unique").on(
-      table.workspaceId,
-      table.userId,
-    ),
-    index("workspace_members_user_id_idx").on(table.userId),
-  ],
-);
-
-export const userWorkspacePreferences = pgTable(
-  "user_workspace_preferences",
-  {
-    userId: uuid("user_id")
-      .primaryKey()
-      .references(() => users.id, { onDelete: "cascade" }),
-    activeWorkspaceId: uuid("active_workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
-    createdAt: createdAtColumn(),
-    updatedAt: updatedAtColumn(),
-  },
-  (table) => [
-    index("user_workspace_preferences_active_workspace_id_idx").on(
-      table.activeWorkspaceId,
-    ),
   ],
 );
 
@@ -295,12 +228,9 @@ export const journals = pgTable(
   "journals",
   {
     id: idColumn("id"),
-    workspaceId: uuid("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
     ownerUserId: uuid("owner_user_id")
       .notNull()
-      .references(() => users.id),
+      .references(() => users.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     type: text("type", { enum: journalTypes }).notNull(),
     status: text("status", { enum: journalStatuses })
@@ -323,15 +253,14 @@ export const journals = pgTable(
       "journals_status_check",
       sql`${table.status} in ('active', 'archived')`,
     ),
-    index("journals_workspace_archived_idx").on(
-      table.workspaceId,
+    index("journals_owner_archived_idx").on(
+      table.ownerUserId,
       table.archivedAt,
     ),
-    index("journals_workspace_updated_idx").on(
-      table.workspaceId,
+    index("journals_owner_updated_idx").on(
+      table.ownerUserId,
       table.updatedAt,
     ),
-    index("journals_owner_user_id_idx").on(table.ownerUserId),
   ],
 );
 
@@ -342,12 +271,9 @@ export const journalVersions = pgTable(
     journalId: uuid("journal_id")
       .notNull()
       .references(() => journals.id, { onDelete: "cascade" }),
-    workspaceId: uuid("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
     createdByUserId: uuid("created_by_user_id")
       .notNull()
-      .references(() => users.id),
+      .references(() => users.id, { onDelete: "cascade" }),
     versionNumber: integer("version_number").notNull(),
     contentJson: jsonb("content_json").$type<JsonValue>().notNull(),
     plainText: text("plain_text"),
@@ -379,9 +305,6 @@ export const journalVersions = pgTable(
 //     journalId: uuid("journal_id")
 //       .notNull()
 //       .references(() => journals.id, { onDelete: "cascade" }),
-//     workspaceId: uuid("workspace_id")
-//       .notNull()
-//       .references(() => workspaces.id, { onDelete: "cascade" }),
 //     ownerUserId: uuid("owner_user_id")
 //       .notNull()
 //       .references(() => users.id),
@@ -413,10 +336,6 @@ export const journalVersions = pgTable(
 //       sql`${table.status} in ('queued', 'processing', 'ready', 'failed')`,
 //     ),
 //     index("sources_journal_id_idx").on(table.journalId),
-//     index("sources_workspace_checksum_idx").on(
-//       table.workspaceId,
-//       table.checksum,
-//     ),
 //     index("sources_checksum_idx").on(table.checksum),
 //   ],
 // );
@@ -432,9 +351,6 @@ export const journalVersions = pgTable(
 //     journalId: uuid("journal_id")
 //       .notNull()
 //       .references(() => journals.id, { onDelete: "cascade" }),
-//     workspaceId: uuid("workspace_id")
-//       .notNull()
-//       .references(() => workspaces.id, { onDelete: "cascade" }),
 //     chunkIndex: integer("chunk_index").notNull(),
 //     text: text("text").notNull(),
 //     citationMetadata: jsonb("citation_metadata").$type<JsonValue>().notNull(),
@@ -464,12 +380,9 @@ export const exports = pgTable(
     journalId: uuid("journal_id")
       .notNull()
       .references(() => journals.id, { onDelete: "cascade" }),
-    workspaceId: uuid("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
     ownerUserId: uuid("owner_user_id")
       .notNull()
-      .references(() => users.id),
+      .references(() => users.id, { onDelete: "cascade" }),
     exportType: text("export_type", { enum: exportTypes }).notNull(),
     status: text("status", { enum: exportStatuses }).notNull(),
     storageKey: text("storage_key"),
@@ -489,7 +402,7 @@ export const exports = pgTable(
       sql`${table.status} in ('queued', 'processing', 'ready', 'failed')`,
     ),
     index("exports_journal_status_idx").on(table.journalId, table.status),
-    index("exports_workspace_id_idx").on(table.workspaceId),
+    index("exports_owner_user_id_idx").on(table.ownerUserId),
     uniqueIndex("exports_journal_idempotency_unique_idx")
       .on(table.journalId, table.idempotencyKey)
       .where(sql`${table.idempotencyKey} is not null`),
@@ -500,9 +413,6 @@ export const chatThreads = pgTable(
   "chat_threads",
   {
     id: idColumn("id"),
-    workspaceId: uuid("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
     ownerUserId: uuid("owner_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -521,15 +431,14 @@ export const chatThreads = pgTable(
       "chat_threads_status_check",
       sql`${table.status} in ('active', 'archived')`,
     ),
-    index("chat_threads_workspace_last_message_idx").on(
-      table.workspaceId,
+    index("chat_threads_owner_last_message_idx").on(
+      table.ownerUserId,
       table.lastMessageAt,
     ),
-    index("chat_threads_workspace_updated_idx").on(
-      table.workspaceId,
+    index("chat_threads_owner_updated_idx").on(
+      table.ownerUserId,
       table.updatedAt,
     ),
-    index("chat_threads_owner_user_id_idx").on(table.ownerUserId),
   ],
 );
 
@@ -540,9 +449,6 @@ export const chatMessages = pgTable(
     threadId: uuid("thread_id")
       .notNull()
       .references(() => chatThreads.id, { onDelete: "cascade" }),
-    workspaceId: uuid("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
     role: text("role", { enum: chatMessageRoles }).notNull(),
     uiMessage: jsonb("ui_message").$type<JsonValue>().notNull(),
     clientMessageId: text("client_message_id"),
@@ -560,10 +466,6 @@ export const chatMessages = pgTable(
       table.threadId,
       table.createdAt,
     ),
-    index("chat_messages_workspace_created_idx").on(
-      table.workspaceId,
-      table.createdAt,
-    ),
     uniqueIndex("chat_messages_thread_client_message_unique_idx")
       .on(table.threadId, table.clientMessageId)
       .where(sql`${table.clientMessageId} is not null`),
@@ -577,9 +479,6 @@ export const agentRuns = pgTable(
     chatThreadId: uuid("chat_thread_id")
       .notNull()
       .references(() => chatThreads.id, { onDelete: "cascade" }),
-    workspaceId: uuid("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -615,9 +514,6 @@ export const chatSources = pgTable(
     chatThreadId: uuid("chat_thread_id")
       .notNull()
       .references(() => chatThreads.id, { onDelete: "cascade" }),
-    workspaceId: uuid("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
     runId: uuid("run_id")
       .notNull()
       .references(() => agentRuns.id, { onDelete: "cascade" }),
@@ -648,10 +544,6 @@ export const chatSources = pgTable(
       table.chatThreadId,
       table.lastSeenAt,
     ),
-    index("chat_sources_workspace_thread_idx").on(
-      table.workspaceId,
-      table.chatThreadId,
-    ),
     index("chat_sources_run_id_idx").on(table.runId),
   ],
 );
@@ -666,9 +558,6 @@ export const agentEvents = pgTable(
     chatThreadId: uuid("chat_thread_id")
       .notNull()
       .references(() => chatThreads.id, { onDelete: "cascade" }),
-    workspaceId: uuid("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
     sequence: integer("sequence").notNull(),
     type: text("type").notNull(),
     scope: text("scope", { enum: agentEventScopes }).default("run").notNull(),
@@ -709,10 +598,7 @@ export const table = {
   sessions,
   accounts,
   verifications,
-  workspaces,
   subscriptions,
-  workspaceMembers,
-  userWorkspacePreferences,
   journals,
   journalVersions,
   // sources,

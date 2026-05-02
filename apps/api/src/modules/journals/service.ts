@@ -1,7 +1,12 @@
-import type { JournalRecord, JournalVersionRecord, JsonValue } from "@aqsha/db";
+import type {
+  JournalRecord,
+  JournalVersionRecord,
+  JsonValue,
+  UserRecord,
+} from "@aqsha/db";
 import type { JournalModel } from "./model";
-import { JournalRepository, type JournalContext } from "./repository";
-import type { WorkspaceService } from "../workspaces/service";
+import { JournalRepository } from "./repository";
+import type { UserService } from "../users/service";
 
 type Identity = {
   authUserId: string;
@@ -10,7 +15,6 @@ type Identity = {
 
 type ServiceError =
   | "unauthorized"
-  | "workspace_not_found"
   | "journal_not_found"
   | "stale_journal_save";
 type ServiceResult<T> =
@@ -20,7 +24,7 @@ type ServiceResult<T> =
 export class JournalService {
   constructor(
     private readonly repository: JournalRepository,
-    private readonly workspaceService: WorkspaceService,
+    private readonly userService: UserService,
   ) {}
 
   async list(
@@ -34,7 +38,7 @@ export class JournalService {
     }
 
     const journals = await this.repository.list({
-      workspaceId: context.workspace.id,
+      ownerUserId: context.id,
       status: input.status ?? "active",
       q: input.q,
       limit: this.normalizeLimit(input.limit),
@@ -58,7 +62,7 @@ export class JournalService {
 
     const journal = await this.repository.getById(
       journalId,
-      context.workspace.id,
+      context.id,
     );
 
     if (!journal) {
@@ -82,8 +86,7 @@ export class JournalService {
     }
 
     const journal = await this.repository.create({
-      workspaceId: context.workspace.id,
-      ownerUserId: context.user.id,
+      ownerUserId: context.id,
       title: input.title,
       type: "general",
       contentJson: [{ type: "p", children: [{ text: "" }] }],
@@ -109,7 +112,7 @@ export class JournalService {
 
     const journal = await this.repository.updateMetadata(
       journalId,
-      context.workspace.id,
+      context.id,
       input,
     );
 
@@ -136,7 +139,7 @@ export class JournalService {
 
     const current = await this.repository.getById(
       journalId,
-      context.workspace.id,
+      context.id,
     );
 
     if (!current) {
@@ -176,7 +179,7 @@ export class JournalService {
 
     const current = await this.repository.getById(
       journalId,
-      context.workspace.id,
+      context.id,
     );
 
     if (!current) {
@@ -215,7 +218,7 @@ export class JournalService {
 
     const journal = await this.repository.archive(
       journalId,
-      context.workspace.id,
+      context.id,
     );
 
     if (!journal) {
@@ -240,7 +243,7 @@ export class JournalService {
 
     const journal = await this.repository.restore(
       journalId,
-      context.workspace.id,
+      context.id,
     );
 
     if (!journal) {
@@ -265,7 +268,7 @@ export class JournalService {
 
     const deleted = await this.repository.delete(
       journalId,
-      context.workspace.id,
+      context.id,
     );
 
     if (!deleted) {
@@ -288,7 +291,7 @@ export class JournalService {
 
     const journal = await this.repository.getById(
       journalId,
-      context.workspace.id,
+      context.id,
     );
 
     if (!journal) {
@@ -297,7 +300,7 @@ export class JournalService {
 
     const versions = await this.repository.listVersions(
       journal.id,
-      context.workspace.id,
+      context.id,
       this.normalizeLimit(input.limit),
     );
 
@@ -312,7 +315,6 @@ export class JournalService {
   ): JournalModel["journalSummary"] {
     return {
       id: journal.id,
-      workspaceId: journal.workspaceId,
       ownerUserId: journal.ownerUserId,
       title: journal.title,
       type: journal.type,
@@ -339,7 +341,6 @@ export class JournalService {
     return {
       id: version.id,
       journalId: version.journalId,
-      workspaceId: version.workspaceId,
       createdByUserId: version.createdByUserId,
       versionNumber: version.versionNumber,
       contentJson: version.contentJson,
@@ -352,19 +353,14 @@ export class JournalService {
 
   private async getContext(
     identity: Identity,
-  ): Promise<JournalContext | "unauthorized" | "workspace_not_found"> {
-    const context = await this.workspaceService.getActiveWorkspaceContext(
-      identity.authUserId,
-    );
+  ): Promise<UserRecord | "unauthorized"> {
+    const user = await this.userService.getByAuthUserId(identity.authUserId);
 
-    if (!context) {
-      return "workspace_not_found";
+    if (!user) {
+      return "unauthorized";
     }
 
-    return {
-      user: context.user,
-      workspace: context.workspace,
-    };
+    return user;
   }
 
   private normalizeLimit(limit: number | undefined): number {

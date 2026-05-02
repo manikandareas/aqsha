@@ -99,6 +99,13 @@
       "when": 1777600800000,
       "tag": "0013_mature_chat_sources",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1777709642581,
+      "tag": "0014_yummy_serpent_society",
+      "breakpoints": true
     }
   ]
 }

@@ -1,10 +1,5 @@
-import type {
-  SubscriptionRecord,
-  UserRecord,
-  WorkspaceRecord,
-} from "@aqsha/db";
+import type { SubscriptionRecord, UserRecord } from "@aqsha/db";
 import { UserService, type AuthProfileInput } from "../users/service";
-import { WorkspaceService } from "../workspaces/service";
 
 export const PLAN_LIMITS = {
   free: {
@@ -23,28 +18,18 @@ type PlanCode = keyof typeof PLAN_LIMITS;
 
 interface ProvisionedSession {
   user: UserRecord;
-  workspace: WorkspaceRecord;
   subscription: SubscriptionRecord | null;
-  workspaces: Awaited<ReturnType<WorkspaceService["getWorkspaceList"]>>;
-  activeWorkspaceId: string;
 }
 
 export class SessionService {
-  constructor(
-    private readonly userService: UserService,
-    private readonly workspaceService: WorkspaceService,
-  ) {}
+  constructor(private readonly userService: UserService) {}
+
   async ensureProfile(input: AuthProfileInput): Promise<void> {
-    const user = await this.userService.ensureProfile(input);
-    await this.workspaceService.ensureDefaultWorkspace(user);
+    await this.userService.ensureProfile(input);
   }
 
-  async getStarted(input: AuthProfileInput & { workspaceName: string }) {
+  async getStarted(input: AuthProfileInput) {
     const user = await this.userService.ensureProfile(input);
-    await this.workspaceService.ensureNamedOwnedWorkspace(
-      user,
-      input.workspaceName,
-    );
     await this.userService.completeOnboarding(user.id);
 
     return this.getBootstrap(input.id);
@@ -59,7 +44,7 @@ export class SessionService {
 
     const planCode = this.getPlanCode(session.subscription);
     const limits = PLAN_LIMITS[planCode];
-    const onboarding = this.buildOnboarding(session.user, session.workspace);
+    const onboarding = this.buildOnboarding(session.user);
 
     return {
       user: {
@@ -69,40 +54,28 @@ export class SessionService {
         avatarUrl: session.user.avatarUrl,
         planCode,
       },
-      workspace: {
-        id: session.workspace.id,
-        userId: session.user.id,
-        ownerUserId: session.workspace.ownerUserId,
-        name: session.workspace.name,
-        slug: session.workspace.slug,
-      },
-      workspaces: session.workspaces,
-      activeWorkspaceId: session.activeWorkspaceId,
       plan: {
         code: planCode,
         label: planCode === "pro" ? "Pro" : "Free",
       },
       usage: {
         period: this.getCurrentPeriod(),
-        aiActionsUsed: session.workspace.aiActionsUsed,
-        aiActionsReserved: session.workspace.aiActionsReserved,
+        aiActionsUsed: session.user.aiActionsUsed,
+        aiActionsReserved: session.user.aiActionsReserved,
         aiActionsRemaining: this.remaining(
           limits.aiActions,
-          session.workspace.aiActionsUsed,
-          session.workspace.aiActionsReserved,
+          session.user.aiActionsUsed,
+          session.user.aiActionsReserved,
         ),
-        exportsRemaining: this.remaining(
-          limits.exports,
-          session.workspace.exportsUsed,
-        ),
+        exportsRemaining: this.remaining(limits.exports, session.user.exportsUsed),
         sourceUploadsRemaining: this.remaining(
           limits.sourceUploads,
-          session.workspace.sourceUploadsUsed,
+          session.user.sourceUploadsUsed,
         ),
       },
       journalStats: {
-        activeCount: session.workspace.activeJournalCount,
-        archivedCount: session.workspace.archivedJournalCount,
+        activeCount: session.user.activeJournalCount,
+        archivedCount: session.user.archivedJournalCount,
       },
       onboarding,
     };
@@ -115,7 +88,7 @@ export class SessionService {
       return null;
     }
 
-    return this.buildOnboarding(session.user, session.workspace);
+    return this.buildOnboarding(session.user);
   }
 
   private async getProvisionedSession(
@@ -127,29 +100,11 @@ export class SessionService {
       return null;
     }
 
-    const context = await this.workspaceService.getActiveWorkspaceContext(user.id);
-
-    if (!context) {
-      return null;
-    }
-
-    const subscription = await this.workspaceService.getCurrentSubscription(
-      context.workspace.id,
-    );
-    const workspaceList = await this.workspaceService.getWorkspaceListWithActive(
-      user.id,
-    );
-
-    if (!workspaceList) {
-      return null;
-    }
+    const subscription = await this.userService.getCurrentSubscription(user.id);
 
     return {
       user,
-      workspace: context.workspace,
       subscription,
-      workspaces: workspaceList.workspaces,
-      activeWorkspaceId: workspaceList.activeWorkspaceId,
     };
   }
 
@@ -164,9 +119,9 @@ export class SessionService {
     return "free";
   }
 
-  private buildOnboarding(user: UserRecord, workspace: WorkspaceRecord) {
+  private buildOnboarding(user: UserRecord) {
     const shouldShow =
-      user.onboardingCompletedAt === null && workspace.activeJournalCount === 0;
+      user.onboardingCompletedAt === null && user.activeJournalCount === 0;
 
     return {
       shouldShow,

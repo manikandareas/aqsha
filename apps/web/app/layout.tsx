@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Aqsha Web",
   description:
-    "Next.js 16 app created with the official CLI and wired to the Bun API workspace.",
+    "Next.js 16 app wired to the Bun API.",
 };
 
 export default async function RootLayout({
