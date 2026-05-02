@@ -10,7 +10,7 @@ import type {
   ChatStore,
   FinishAgentRunInput,
 } from "./store";
-import type { WorkspaceService } from "../workspaces/service";
+import type { UserService } from "../users/service";
 
 type ServiceError = "unauthorized" | "chat_thread_not_found";
 type ServiceResult<T> =
@@ -21,7 +21,7 @@ type ServiceResult<T> =
 export class ChatService {
   constructor(
     private readonly store: ChatStore,
-    private readonly workspaceService: WorkspaceService,
+    private readonly userService: UserService,
   ) {}
 
   async listThreads(
@@ -234,7 +234,6 @@ export class ChatService {
     await this.store.upsertSource(scope, {
       ...source,
       chatThreadId: run.chatThreadId,
-      workspaceId: scope.workspaceId,
       runId: run.id,
       sourceKey,
     });
@@ -253,17 +252,14 @@ export class ChatService {
   }
 
   private async getScope(identity: AuthIdentity): Promise<ChatScope | null> {
-    const context = await this.workspaceService.getActiveWorkspaceContext(
-      identity.authUserId,
-    );
+    const user = await this.userService.getByAuthUserId(identity.authUserId);
 
-    if (!context) {
+    if (!user) {
       return null;
     }
 
     return {
-      userId: context.user.id,
-      workspaceId: context.workspace.id,
+      userId: user.id,
     };
   }
 

@@ -2,15 +2,6 @@ import { t } from "elysia";
 
 const planCode = t.Union([t.Literal("free"), t.Literal("pro")]);
 
-const workspaceSwitcherItem = t.Object({
-  id: t.String(),
-  name: t.String(),
-  slug: t.Union([t.String(), t.Null()]),
-  role: t.Union([t.Literal("owner"), t.Literal("member")]),
-  planCode,
-  isActive: t.Boolean(),
-});
-
 const onboarding = t.Object({
   shouldShow: t.Boolean(),
   reason: t.Union([t.Literal("missing_first_journal"), t.Null()]),
@@ -25,11 +16,8 @@ const unauthorizedError = t.Object({
 
 export const sessionModel = {
   onboarding,
-  workspaceSwitcherItem,
   unauthorizedError,
-  getStartedBody: t.Object({
-    workspaceName: t.String(),
-  }),
+  getStartedBody: t.Object({}),
   validationError: t.Object({
     error: t.Object({
       code: t.Literal("validation_error"),
@@ -45,15 +33,6 @@ export const sessionModel = {
         avatarUrl: t.Union([t.String(), t.Null()]),
         planCode,
       }),
-      workspace: t.Object({
-        id: t.String(),
-        userId: t.String(),
-        ownerUserId: t.String(),
-        name: t.String(),
-        slug: t.Union([t.String(), t.Null()]),
-      }),
-      workspaces: t.Array(workspaceSwitcherItem),
-      activeWorkspaceId: t.String(),
       plan: t.Object({
         code: planCode,
         label: t.String(),

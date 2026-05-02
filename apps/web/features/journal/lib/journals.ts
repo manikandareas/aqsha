@@ -2,7 +2,6 @@ export type JournalType = "general" | "proposal" | "thesis";
 
 export type JournalRecord = {
   id: string;
-  workspaceId?: string;
   ownerUserId?: string;
   title: string;
   contentJson: unknown[];
@@ -41,7 +40,6 @@ export function normalizeJournalRecord(journal: unknown): JournalRecord {
 
   return {
     id: String(value?.id ?? ""),
-    workspaceId: value?.workspaceId,
     ownerUserId: value?.ownerUserId,
     title: value?.title?.trim() || "Untitled",
     type: value?.type ?? "general",

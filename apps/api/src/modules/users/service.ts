@@ -1,4 +1,4 @@
-import type { UserRecord } from "@aqsha/db";
+import type { SubscriptionRecord, UserRecord } from "@aqsha/db";
 import type { AuthProfileInput } from "./model";
 import type { UserRepository } from "./repository";
 
@@ -17,5 +17,9 @@ export class UserService {
 
   completeOnboarding(userId: string): Promise<UserRecord> {
     return this.repository.completeOnboarding(userId);
+  }
+
+  getCurrentSubscription(userId: string): Promise<SubscriptionRecord | null> {
+    return this.repository.getCurrentSubscription(userId);
   }
 }

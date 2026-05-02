@@ -36,7 +36,6 @@ export class DrizzleChatStore implements ChatStore {
       .from(chatThreads)
       .where(
         and(
-          eq(chatThreads.workspaceId, scope.workspaceId),
           eq(chatThreads.ownerUserId, scope.userId),
           eq(chatThreads.status, "active"),
         ),
@@ -51,7 +50,6 @@ export class DrizzleChatStore implements ChatStore {
     const [thread] = await this.db
       .insert(chatThreads)
       .values({
-        workspaceId: input.workspaceId,
         ownerUserId: input.userId,
         title: "New chat",
         model: input.model,
@@ -70,7 +68,6 @@ export class DrizzleChatStore implements ChatStore {
       .where(
         and(
           eq(chatThreads.id, threadId),
-          eq(chatThreads.workspaceId, scope.workspaceId),
           eq(chatThreads.ownerUserId, scope.userId),
           eq(chatThreads.status, "active"),
         ),
@@ -80,16 +77,11 @@ export class DrizzleChatStore implements ChatStore {
     return thread ? this.toThread(thread) : null;
   }
 
-  async getMessages(scope: ChatScope, threadId: string): Promise<ChatMessage[]> {
+  async getMessages(_scope: ChatScope, threadId: string): Promise<ChatMessage[]> {
     const rows = await this.db
       .select()
       .from(chatMessages)
-      .where(
-        and(
-          eq(chatMessages.threadId, threadId),
-          eq(chatMessages.workspaceId, scope.workspaceId),
-        ),
-      )
+      .where(eq(chatMessages.threadId, threadId))
       .orderBy(chatMessages.createdAt);
 
     return rows.map((row) => this.toMessage(row));
@@ -102,7 +94,6 @@ export class DrizzleChatStore implements ChatStore {
       .where(
         and(
           eq(agentRuns.chatThreadId, threadId),
-          eq(agentRuns.workspaceId, scope.workspaceId),
           eq(agentRuns.userId, scope.userId),
         ),
       )
@@ -112,31 +103,21 @@ export class DrizzleChatStore implements ChatStore {
     return run ? this.toRun(run) : null;
   }
 
-  async getEvents(scope: ChatScope, threadId: string): Promise<AgentEvent[]> {
+  async getEvents(_scope: ChatScope, threadId: string): Promise<AgentEvent[]> {
     const rows = await this.db
       .select()
       .from(agentEvents)
-      .where(
-        and(
-          eq(agentEvents.chatThreadId, threadId),
-          eq(agentEvents.workspaceId, scope.workspaceId),
-        ),
-      )
+      .where(eq(agentEvents.chatThreadId, threadId))
       .orderBy(agentEvents.occurredAt, agentEvents.sequence);
 
     return rows.map((row) => this.toEvent(row));
   }
 
-  async getSources(scope: ChatScope, threadId: string): Promise<ChatSource[]> {
+  async getSources(_scope: ChatScope, threadId: string): Promise<ChatSource[]> {
     const rows = await this.db
       .select()
       .from(chatSources)
-      .where(
-        and(
-          eq(chatSources.chatThreadId, threadId),
-          eq(chatSources.workspaceId, scope.workspaceId),
-        ),
-      )
+      .where(eq(chatSources.chatThreadId, threadId))
       .orderBy(chatSources.firstSeenAt, chatSources.createdAt);
 
     return rows.map((row) => this.toSource(row));
@@ -148,7 +129,6 @@ export class DrizzleChatStore implements ChatStore {
       .insert(agentRuns)
       .values({
         chatThreadId: input.chatThreadId,
-        workspaceId: input.workspaceId,
         userId: input.userId,
         status: "running",
         startedAt: now,
@@ -161,7 +141,7 @@ export class DrizzleChatStore implements ChatStore {
   }
 
   async appendEvent(
-    scope: ChatScope,
+    _scope: ChatScope,
     run: Pick<AgentRun, "id" | "chatThreadId">,
     event: AppendAgentEventInput,
   ): Promise<AgentEvent> {
@@ -171,7 +151,6 @@ export class DrizzleChatStore implements ChatStore {
       .values({
         runId: run.id,
         chatThreadId: run.chatThreadId,
-        workspaceId: scope.workspaceId,
         sequence: event.sequence,
         type: event.type,
         scope: event.scope,
@@ -190,7 +169,7 @@ export class DrizzleChatStore implements ChatStore {
   }
 
   async upsertSource(
-    scope: ChatScope,
+    _scope: ChatScope,
     source: UpsertChatSourceInput,
   ): Promise<ChatSource> {
     const seenAt = source.seenAt ? new Date(source.seenAt) : new Date();
@@ -199,7 +178,6 @@ export class DrizzleChatStore implements ChatStore {
       .insert(chatSources)
       .values({
         chatThreadId: source.chatThreadId,
-        workspaceId: scope.workspaceId,
         runId: source.runId,
         sourceKey: source.sourceKey,
         kind: source.kind,
@@ -250,7 +228,6 @@ export class DrizzleChatStore implements ChatStore {
       .where(
         and(
           eq(agentRuns.id, runId),
-          eq(agentRuns.workspaceId, scope.workspaceId),
           eq(agentRuns.userId, scope.userId),
         ),
       )
@@ -282,7 +259,6 @@ export class DrizzleChatStore implements ChatStore {
       .values({
         id: message.id,
         threadId: message.threadId,
-        workspaceId: scope.workspaceId,
         role: message.role,
         uiMessage,
         clientMessageId: message.id,
@@ -333,7 +309,6 @@ export class DrizzleChatStore implements ChatStore {
           .values({
             id,
             threadId,
-            workspaceId: scope.workspaceId,
             role: message.role,
             uiMessage,
             clientMessageId: message.role === "user" ? id : null,
@@ -377,7 +352,6 @@ export class DrizzleChatStore implements ChatStore {
       .where(
         and(
           eq(chatThreads.id, threadId),
-          eq(chatThreads.workspaceId, scope.workspaceId),
           eq(chatThreads.ownerUserId, scope.userId),
           eq(chatThreads.status, "active"),
         ),
@@ -393,7 +367,6 @@ export class DrizzleChatStore implements ChatStore {
       .where(
         and(
           eq(chatThreads.id, threadId),
-          eq(chatThreads.workspaceId, scope.workspaceId),
           eq(chatThreads.ownerUserId, scope.userId),
         ),
       )
