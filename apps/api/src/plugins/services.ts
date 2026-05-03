@@ -1,5 +1,6 @@
 import { Elysia } from "elysia";
 import { database } from "../database/client";
+import { AgentsService } from "../modules/agents/service";
 import { DrizzleChatStore } from "../modules/chat/repository";
 import { ChatService } from "../modules/chat/service";
 import { JournalRepository } from "../modules/journals/repository";
@@ -16,10 +17,12 @@ const userService = new UserService(userRepository);
 const journalService = new JournalService(journalRepository, userService);
 const chatService = new ChatService(chatStore, userService);
 const sessionService = new SessionService(userService);
+const agentsService = new AgentsService();
 
 export const servicesPlugin = new Elysia({
   name: "plugin.services",
 }).decorate({
+  agentsService,
   chatService,
   journalService,
   sessionService,

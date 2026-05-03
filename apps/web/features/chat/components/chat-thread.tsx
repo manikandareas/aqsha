@@ -4,6 +4,7 @@ import { useChat } from "@ai-sdk/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowDownIcon } from "lucide-react";
 import { DefaultChatTransport, type UIMessage } from "ai";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef } from "react";
 
 import { MessageInput } from "@/features/chat/components/message-input";
@@ -45,6 +46,7 @@ export function ChatThread({
   onMessagesChange?: (messages: UIMessage[]) => void;
 }) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const sentPendingPromptRef = useRef(false);
   const emittedMessagesSignatureRef = useRef("");
   const toastedErrorRef = useRef<unknown>(null);
@@ -71,6 +73,7 @@ export function ChatThread({
       void queryClient.invalidateQueries({
         queryKey: queryKeys.chat.threads(),
       });
+      router.refresh();
     },
   });
 

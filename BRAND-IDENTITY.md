@@ -2,11 +2,17 @@
 
 ## A. Executive Summary
 
-Aqsha should be positioned as an **AI research-writing workspace for student researchers**. The core promise: help users turn AI-assisted research into academic writing they can prove. The sharp wedge is not "write faster"; it is **Anti-Hallucination AI through Claim-Evidence Maps, Research Trail, and Whole-Draft Context**.
+Aqsha should be positioned as a **playful, modern, minimalist AI writing and research workspace for students**. The core promise is to make research and academic writing feel less scattered, less intimidating, and easier to shape into a clear draft.
+
+The brand should still support Aqsha's real product strengths: Journal, Research Thread, Source Library, evidence-aware writing, and shared review. But the emotional direction should move away from a heavy academic proof brand and toward a lighter student-friendly system: **scattered ideas becoming neatly linked writing blocks**.
 
 Recommended hero line:
 
-> **AI gave you an answer. Now prove it.**
+> **Ideas, neatly linked.**
+
+Supporting line:
+
+> Aqsha helps students collect sources, shape notes, and turn research into writing that feels clear, organized, and review-ready.
 
 ## B. Known Context And Assumptions
 
@@ -14,13 +20,15 @@ Known:
 
 - Aqsha is not an assessment or quiz product.
 - Aqsha is a research-writing workspace with Journal, Research Thread, Journal AI Panel, Source Library, Shared Journal, and evidence-aware AI flows.
+- The preferred brand-kit direction is playful, modern, minimalist, friendly, and bright.
+- The visual system should feel premium and simple, not childish or corporate.
 
 Assumptions to validate:
 
-- Primary buyer/user starts with final-year undergraduate and master's students.
-- Users feel real anxiety around AI citation reliability.
-- "Anti-Hallucination AI" is compelling if backed by visible evidence workflows.
-- Claim-Evidence Map is technically feasible enough to become the brand anchor.
+- Primary users want help organizing research without feeling judged or overwhelmed.
+- A friendly writing-companion brand can feel more approachable than a strict anti-hallucination brand.
+- Evidence and source visibility remain important, but should be framed through clarity, linking, and review-readiness.
+- The product can express trust through visible links, source chips, draft cards, and review flows rather than intense warning language.
 
 ## C. Market And Competitor Findings
 
@@ -33,14 +41,14 @@ Assumptions to validate:
 
 ### Competitor Findings
 
-- **Jenni AI** is the direct benchmark. It already claims academic writing, AI autocomplete, AI chat, source library, citation management, collaboration, source-grounded writing, claim review, and 2,600+ citation styles. Sources: [Jenni](https://jenni.ai/), [Jenni docs](https://docs.jenni.ai/), [Jenni pricing](https://jenni.ai/pricing).
+- **Jenni AI** is the direct benchmark. It claims academic writing, AI autocomplete, AI chat, source library, citation management, collaboration, source-grounded writing, claim review, and many citation styles. Sources: [Jenni](https://jenni.ai/), [Jenni docs](https://docs.jenni.ai/), [Jenni pricing](https://jenni.ai/pricing).
 - **OpenNote** is adjacent: AI notebook/learning workspace, "notebook that thinks with you," student-friendly learning, notes, AI chat, recorder, tutorials, and flashcards. Sources: [OpenNote](https://www.opennote.com/), [OpenNote mission](https://www.opennote.com/info/mission), [OpenNote pricing](https://www.opennote.com/info/pricing).
 - **Consensus** and **Scite** own evidence-search credibility: Consensus emphasizes scientific search before AI synthesis and explicit hallucination safeguards; Scite emphasizes verified citations, fact-checking, and full-text research coverage. Sources: [Consensus](https://consensus.app/home/blog/how-consensus-works/), [Scite Assistant](https://scite.org/assistant).
 - **Zotero/Mendeley** are source-management alternatives, not writing-workflow competitors. Zotero itself warns users to verify imported metadata. Source: [Zotero docs](https://www.zotero.org/support/adding_items_to_zotero).
 
 Strategic implication:
 
-Aqsha cannot merely say "citations are traceable"; Jenni already says that. Aqsha must make **claim-level proof visible as the main product experience**, not a hidden review feature.
+Aqsha should not look like a severe research compliance tool. It should make serious academic workflows feel approachable by turning notes, sources, claims, and draft sections into simple connected building blocks.
 
 ## D. Audience And Positioning
 
@@ -49,6 +57,7 @@ Primary audience:
 - Final-year undergraduate students.
 - Master's students.
 - Early academic writers working on a proposal, thesis, dissertation, paper, or literature review.
+- Students who use AI but still want their writing to feel organized and reviewable.
 
 Secondary audience:
 
@@ -58,94 +67,101 @@ Secondary audience:
 
 Jobs-to-be-done:
 
-- Turn scattered sources into defensible arguments.
-- Use AI without looking like they blindly used AI.
-- Verify whether a claim is actually supported by a source.
-- Keep draft context consistent across chapters.
+- Turn scattered sources, notes, and AI answers into a coherent draft.
+- Keep useful source context close to writing.
+- Understand which notes, claims, and references belong together.
+- Ask research questions without losing the thread.
 - Share journals for review and edit.
 
 Positioning:
 
-> Aqsha is an AI research-writing workspace that helps student researchers turn scattered sources and AI answers into evidence-backed academic writing they can prove.
+> Aqsha is a playful AI writing and research workspace that helps students link sources, notes, and ideas into clear academic drafts.
 
 ## E. Brand Foundation
 
 Brand essence:
 
-> **Proof before prose.**
+> **Ideas, neatly linked.**
 
 Positioning statement:
 
-> For student researchers who use AI but need academic accountability, Aqsha is an AI research-writing workspace that connects claims, evidence, citations, and draft context so every AI-assisted argument can be reviewed and defended.
+> For student researchers who feel overwhelmed by scattered sources, notes, and AI answers, Aqsha is a friendly AI writing workspace that helps connect research into clear, organized, review-ready drafts.
 
 Unique value proposition:
 
-> Write with anti-hallucination AI that maps every important claim to evidence, source context, and draft location.
+> Collect sources, shape notes, and write with AI in one workspace where every idea can stay linked to the context behind it.
 
 Differentiators:
 
-- Claim-Evidence Map as the central object.
-- Research Trail as audit trail, not "AI thinking."
-- Whole-Draft Context across chapters and sections.
-- Journal AI Panel for writing-in-context.
-- Research Thread for focused investigation.
+- Linked ideas as the central product metaphor.
+- Journal + Research Thread in one writing workflow.
+- Source chips and note cards close to the draft.
+- Whole-Draft Context across sections and chapters.
 - Shared Journal for mentor review/edit.
+- Evidence-aware AI without intimidating academic policing.
 
 Brand promise:
 
-> Aqsha helps you write academic work with AI while keeping your evidence visible, traceable, and reviewable.
+> Aqsha helps students make research writing feel lighter, clearer, and easier to review.
 
 Personality:
 
+- Playful.
+- Clear.
+- Modern.
+- Minimal.
+- Helpful.
 - Calm.
-- Rigorous.
-- Guiding.
-- Quietly confident.
+- Optimistic.
+- Smart without showing off.
 
 Tone:
 
-> Firm on evidence, gentle to the writer.
+> Friendly to the writer, clear about the work.
 
 ## F. Messaging System
 
 Tagline options:
 
-- **AI gave you an answer. Now prove it.**
-- Write with AI. Prove with evidence.
-- From scattered research to defensible writing.
-- Anti-hallucination AI for academic writing.
-- Every claim deserves evidence.
+- **Ideas, neatly linked.**
+- Research, without the mess.
+- Notes into drafts.
+- Link sources. Shape ideas.
+- Your research, finally organized.
+- A calmer way to write with AI.
+- From scattered notes to clear writing.
 
 One-liner:
 
-> Aqsha helps student researchers write with anti-hallucination AI by mapping claims to evidence, citations, and whole-draft context.
+> Aqsha helps students link sources, notes, and AI-assisted ideas into clear academic writing.
 
 Elevator pitch:
 
-> Aqsha is an AI research-writing workspace for students working on theses, proposals, and literature reviews. It combines a document editor, focused research chat, source library, Claim-Evidence Map, and Research Trail so users can move from AI-generated answers to academic writing they can verify, revise, and defend.
+> Aqsha is a modern AI writing and research workspace for students working on theses, proposals, papers, and literature reviews. It combines a document editor, focused research chat, source library, linked notes, and review flows so students can move from scattered research to a draft that is easier to understand, revise, and share.
 
 Short description:
 
-> Aqsha turns scattered sources and AI answers into evidence-backed academic drafts.
+> Aqsha turns scattered research into neatly linked academic drafts.
 
 Long description:
 
-> Aqsha helps academic writers use AI responsibly by connecting research, writing, sources, and review in one workspace. Instead of pasting fragments between ChatGPT, Google Scholar, paraphrasers, and documents, users can research in threads, write in journals, inspect claim-evidence relationships, review citation support, and share work with mentors.
+> Aqsha helps students research and write in one friendly workspace. Instead of jumping between AI chat, Google Scholar, notes, paraphrasers, and documents, users can collect sources, ask research questions, shape notes, link ideas to draft sections, and share journals for review.
 
 Key messages:
 
-- AI output is not enough; academic writing needs proof.
-- Every important claim should connect to evidence.
-- Research should move into writing without losing its source trail.
-- Draft context matters across chapters, not just the paragraph selected.
-- Responsible AI writing means being able to explain what changed and why.
+- Research writing should feel organized, not overwhelming.
+- Sources, notes, and draft ideas should stay connected.
+- AI is most helpful when it works inside the writing context.
+- Long academic drafts need continuity across sections.
+- Review is easier when ideas and sources are visible together.
 
 Proof points:
 
-- Claim-Evidence Map.
-- Research Trail.
-- Whole-Draft Context.
+- Journal.
+- Research Thread.
 - Source Library.
+- Linked notes and source chips.
+- Whole-Draft Context.
 - Add to Journal review flow.
 - Shared Journal with Can review and Can edit.
 
@@ -155,91 +171,91 @@ Proof points:
 
 Headline:
 
-> **AI gave you an answer. Now prove it.**
+> **Ideas, neatly linked.**
 
 Subheadline:
 
-> Aqsha helps student researchers turn scattered sources into evidence-backed academic writing with anti-hallucination AI, Claim-Evidence Maps, and whole-draft context.
+> Aqsha helps students collect sources, shape notes, and turn research into clear academic writing with a friendly AI workspace.
 
 Primary CTA:
 
-> Start writing with evidence
+> Start writing
 
 Secondary CTA:
 
-> See how Aqsha verifies claims
+> See how ideas link
 
 Rationale:
 
-The headline leads with the real tension: AI can generate answers, but academic writers still need proof. The subheadline explains the product without reducing Aqsha to another AI editor.
+The headline leads with the new emotional promise: clarity without heaviness. The subheadline explains the product without making Aqsha feel like a strict citation-audit tool.
 
 ### 2. Problem
 
 Section headline:
 
-> AI can draft. But can you defend the sources behind it?
+> Research gets messy fast.
 
 Content direction:
 
-- AI citations can look credible while being wrong or irrelevant.
-- Research workflows are scattered across Scholar, AI chat, paraphrasers, and document editors.
-- Student researchers need defensible arguments, not just fluent text.
+- Sources live in one place, AI answers in another, notes somewhere else, and drafts somewhere else again.
+- Students need help connecting ideas, not another blank editor.
+- Academic writing is easier when the path from source to note to draft is visible.
 
 Rationale:
 
-This creates urgency without fear-based overclaiming.
+This speaks to the real workflow pain while keeping the tone approachable.
 
 ### 3. Solution
 
 Section headline:
 
-> A research-writing workspace built around proof.
+> One workspace for sources, notes, and drafts.
 
 Content direction:
 
-- Introduce Journal, Research Thread, Source Library, and evidence-aware workflows.
+- Introduce Journal, Research Thread, Source Library, and linked writing blocks.
 
 Rationale:
 
-This reframes Aqsha as a workspace, not a single writing assistant.
+This frames Aqsha as a friendly workspace, not a single AI text generator.
 
-### 4. Claim-Evidence Map
+### 4. Linked Ideas
 
 Section headline:
 
-> See which evidence supports which claim.
+> See how your ideas connect.
 
 Content direction:
 
-- Show claims, evidence cards, source metadata, labels, and draft locations.
+- Show source chips, note cards, draft sections, and visual links between them.
 
 Rationale:
 
-This is the core differentiator against Jenni and generic AI writing tools.
+This translates the old Claim-Evidence Map into a softer, more playful product metaphor.
 
-### 5. Research Trail
+### 5. Research Thread
 
 Section headline:
 
-> Review the audit trail behind AI-assisted answers.
+> Keep the research thread close.
 
 Content direction:
 
-- Show source checked, evidence matched, weak claim flagged, citation verified.
+- Ask focused research questions, save useful notes, and move good material into the Journal.
 
 Rationale:
 
-This makes transparency tangible while avoiding claims about exposing raw AI reasoning.
+This keeps investigation visible without making the experience feel like an audit log.
 
 ### 6. Whole-Draft Context
 
 Section headline:
 
-> AI that understands more than the paragraph you pasted.
+> AI that remembers the shape of your draft.
 
 Content direction:
 
-- Explain cross-chapter context and continuity.
+- Explain cross-section context and continuity.
 
 Rationale:
 
@@ -249,12 +265,12 @@ This addresses a real workflow problem in theses and long-form academic writing.
 
 Section headline:
 
-> Share your journal for review or edit.
+> Share your journal when it is ready for another view.
 
 Content direction:
 
-- Can review: comments, suggestions, evidence inspection.
-- Can edit: draft and evidence contribution.
+- Can review: comments, suggestions, source inspection.
+- Can edit: draft and note contribution.
 
 Rationale:
 
@@ -265,31 +281,32 @@ Collaboration supports academic review without making Aqsha look like a generic 
 Recommended steps:
 
 1. Add sources.
-2. Research in a thread.
-3. Map claims to evidence.
-4. Add to Journal.
-5. Review with mentor.
+2. Ask a research question.
+3. Save useful notes.
+4. Link ideas into your Journal.
+5. Share for review.
 
 ### 9. Trust Section
 
 Content direction:
 
-- "Designed to reduce unverifiable claims."
-- "Built around evidence visibility."
-- "You stay in control of what enters the draft."
+- "Designed to keep writing connected to sources."
+- "Built for reviewable research workflows."
+- "You choose what enters the draft."
 
 Avoid:
 
 - "Zero hallucination."
 - "AI is always correct."
 - "Guaranteed valid citations."
+- Fear-heavy language about hallucination.
 
 ### 10. FAQ
 
 Recommended questions:
 
-- Does Aqsha eliminate hallucinations?
-- What is a Claim-Evidence Map?
+- What can I write in Aqsha?
+- How do linked ideas work?
 - Can I upload PDFs or use DOI/URL sources?
 - Can I share my journal with a supervisor?
 - Does Aqsha replace Zotero or Mendeley?
@@ -297,24 +314,25 @@ Recommended questions:
 
 Final CTA:
 
-> Build academic writing you can defend.
+> Start with one idea.
 
 ## H. App Brand Guidelines
 
 ### UI Tone
 
-- Use clear evidence labels: **Strong evidence**, **Partial support**, **Needs stronger source**, **Citation mismatch**, **Unverified**.
-- Only show numbers in Review Summary, not per-claim confidence percentages.
-- Use "Research Trail," "Claim-Evidence Map," "Source Library," "Add to Journal," "Can review," and "Can edit" consistently.
+- Use friendly labels: **Linked**, **Source added**, **Needs source**, **Review note**, **Draft idea**, **Saved to Journal**.
+- Use "Linked Ideas," "Research Thread," "Source Library," "Add to Journal," "Can review," and "Can edit" consistently.
+- Keep evidence states useful, but do not make the interface feel punitive.
 
 ### Microcopy Rules
 
 Good:
 
-- "This claim needs stronger evidence."
-- "We found a source, but it does not directly support the claim."
-- "Citation mismatch detected. Review before adding this to your draft."
-- "Aqsha could not verify this reference yet."
+- "Link this idea to a source."
+- "This note is ready to move into your Journal."
+- "Add a stronger source before using this in your draft."
+- "Aqsha could not find enough source context yet."
+- "Saved. You can review the linked source later."
 
 Avoid:
 
@@ -322,148 +340,179 @@ Avoid:
 - "Invalid citation."
 - "AI hallucinated."
 - "This source is bad."
+- "You failed to verify this."
 
 ### Journal AI
 
 - Slash command opens AI actions.
 - Selection actions include paraphrase, expand, shorten, ask AI, and explain.
 - AI output appears as suggestion first; user chooses apply.
-- If an AI suggestion changes or adds a claim, it must include evidence/citation or be marked unverified.
+- If an AI suggestion changes or adds an important claim, prompt the user to link a source or mark it as a draft idea.
 
 ### Research Thread
 
 - Focused research surface.
-- "Add to Journal" must include a review step.
-- Research Thread should feel like a focused investigation, not generic support chat.
+- "Add to Journal" must include a quick review step.
+- Research Thread should feel like a calm place to explore and collect, not generic support chat.
 
 ### Onboarding Voice
 
-- Guide users through one clear workflow: add source, ask research question, inspect claim evidence, add to journal.
+- Guide users through one clear workflow: add source, ask research question, save note, link to journal.
 - Avoid teaching too many concepts at once.
+- Make the first success feel small and concrete.
 
 ### Empty States
 
-- Empty Source Library: "Add your first source to start building evidence-backed writing."
-- Empty Research Thread: "Ask a research question. Aqsha will keep the evidence trail visible."
-- Empty Journal: "Start with a claim, outline, or research note."
+- Empty Source Library: "Add your first source. Aqsha will keep it close while you write."
+- Empty Research Thread: "Ask a research question and save the useful bits."
+- Empty Journal: "Start with a note, outline, or one rough idea."
 
 ### Error And Warning Style
 
 - Be precise, not dramatic.
-- Explain the risk and the next action.
-- Keep warnings about evidence attached to the claim or citation they affect.
+- Explain the next action.
+- Keep warnings attached to the note, source, or draft idea they affect.
+- Use soft visual states before severe warning states.
 
 ## I. Marketing Brand Guidelines
 
 ### Voice Rules
 
-- Lead with proof, not hype.
-- Teach responsible AI use.
+- Lead with clarity, not fear.
+- Make academic writing feel lighter.
 - Never imply zero-error AI.
 - Avoid generic productivity language.
-- Treat students as capable academic writers, not passive learners.
+- Treat students as capable writers who need a better workspace.
 
 ### Do / Don't Examples
 
 Do:
 
-- "Use AI without losing control of your evidence."
-- "Map claims to sources before they enter your draft."
-- "Turn AI answers into defensible academic writing."
+- "Keep sources, notes, and drafts connected."
+- "Turn scattered research into clear writing."
+- "Write with AI inside your research context."
+- "Save the useful bits and link them into your Journal."
 
 Don't:
 
 - "Write your thesis instantly."
 - "Never hallucinate again."
 - "Let AI do your research for you."
+- "Prove everything or fail."
 
 ### Social Media Tone
 
-- Clear, educational, slightly provocative.
-- Use real pain: fake citations, scattered tabs, weak claims, advisor review.
-- Keep posts useful: checklists, examples, teardown of bad citation workflows.
+- Clear, useful, playful, and student-native.
+- Use real pain: scattered tabs, messy notes, awkward first drafts, review anxiety.
+- Keep posts practical: templates, checklists, workflows, before/after examples.
 
 ### Ad Messaging Angles
 
-- "AI gave you an answer. Now prove it."
-- "Your citation looks right. Does it support the claim?"
-- "Stop juggling Scholar, chat, paraphraser, and Docs."
-- "Don't just generate. Verify."
+- "Ideas, neatly linked."
+- "Research, without the mess."
+- "Your notes deserve a better home."
+- "Stop juggling tabs and drafts."
+- "From source to note to draft."
 
 ### Email Style
 
-- Short, practical, educational.
+- Short, practical, warm.
 - Use one idea per email.
 - Drive to a workflow, template, or product action.
 
 ### Content Pillars
 
-- Responsible AI for academic writing.
-- How to verify AI citations.
-- Claim-evidence mapping.
+- Organizing research notes.
+- Writing from sources without losing context.
+- AI-assisted drafting for students.
 - Thesis and literature review workflows.
 - Mentor review workflows.
-- Source quality and citation accuracy.
+- Better student writing systems.
 
 ### Campaign Themes
 
-- Don't just generate. Verify.
-- From AI answer to defensible argument.
-- Proof before prose.
-- Responsible AI for thesis writing.
+- Ideas, neatly linked.
+- Research, without the mess.
+- Notes into drafts.
+- A calmer way to write with AI.
 
 ## J. Visual Identity Direction
 
 Visual personality:
 
-> Scholarly workspace + evidence graph.
+> Playful modern minimalist writing workspace.
+
+Core visual metaphor:
+
+> Scattered thoughts become simple linked blocks.
+
+Logo direction:
+
+- A soft geometric Aqsha "A" mark.
+- Built from rounded modular blocks, a dot-node, and a subtle page corner or chat cue.
+- Friendly and ownable, like an intelligent writing companion.
+- Avoid strict academic seals, shields, crests, and generic AI sparkles.
 
 Color:
 
-- Base: paper white, warm neutral, soft ink.
-- Primary accent: deep teal or scholarly green for verification.
-- Secondary: muted blue for research/navigation.
-- Warning: amber for partial support.
-- Error: restrained red for mismatch/unverified.
+- Base: warm off-white `#fff7f0` with raised paper `#fffdf8`.
+- Dark base: charcoal black `#181818` with warm-mist text `#f4f1ea`.
+- Text: ink charcoal `#1a1f2b`.
+- Primary accent: sky blue `#4a90f7`.
+- Secondary accent: fresh mint `#2ecc9a`.
+- Warm accent: soft coral `#ff6b6b`.
+- Highlight accent: lemon `#ffd84d`.
+- Optional soft accent: pale lavender `#bd86ff` in light mode and `#b0a6ff` in dark mode.
+- Neutral ramps should come from the brandkit direction while fitting the charcoal background: light `#fafafa`, `#f1f3f5`, `#e5e7eb`, `#d1d5db`, `#9ca3af`, `#4b5563`, `#1f2937`; dark `#202020`, `#242424`, `#2d2d2d`, `#3a3a3a`, `#505050`, `#737373`, `#a3a3a3`.
 
 Typography:
 
-- Clean sans for UI readability.
-- Optional serif accent for academic/editorial moments.
-- Avoid oversized SaaS hero typography inside app panels.
+- Nunito Rounded for display and headings.
+- Inter for body copy, with repo-safe sans fallbacks where the font is not yet loaded.
+- Clean readable sans for dense app surfaces.
+- Letter spacing stays at `0`; hierarchy comes from weight, scale, line height, and color.
+- Avoid overly formal academic serif as the main voice.
+- Avoid oversized SaaS hero type inside compact app panels.
 
 Layout:
 
-- Document-first.
-- Evidence side panels.
-- Thin connector lines.
-- Audit timeline patterns.
-- Dense but calm information hierarchy.
+- Airy, bright, and simple.
+- Rounded cards and chips with generous spacing.
+- Source chips, draft cards, note blocks, and link lines.
+- Clear hierarchy with friendly visual rhythm.
+- More white space than density.
+- Use cards for real objects only. Do not wrap full sections in decorative boxes or stack cards inside cards.
 
 Icon and illustration style:
 
-- Minimal line icons.
-- Evidence nodes, source cards, document annotations, and trail markers.
-- Avoid mascot-heavy illustration and generic AI sparkles.
+- Soft geometric icons.
+- Rounded source chips, note cards, link nodes, folder shapes, draft blocks.
+- Pattern system made from logo blocks.
+- Icon strokes should feel light and precise, with color-coded states for Draft, Source, Note, Link, and Review.
+- Avoid mascot-heavy illustration, magic sparkles, and severe compliance icons.
 
 Imagery:
 
-- Product UI should show draft + evidence + research trail together.
-- Use real-feeling academic surfaces, not abstract AI scenes.
+- Abstract paper shapes, student desk objects, notebooks, folders, clean cards, soft colored blocks.
+- Crisp shadows and tactile flat-lay composition.
+- No generic stock people.
+- No dark academic archive mood as the default.
 
 Motion:
 
-- Calm reveal.
-- Subtle line connection animation for claim-to-evidence.
-- Progress states should feel inspectable, not magical.
+- Gentle snap, link, and organize motions.
+- Cards can softly connect, group, or move into a draft.
+- Progress states should feel helpful and visible, not magical.
 
 Avoid:
 
+- Dark enterprise dashboard mood.
+- Heavy navy academic seriousness.
+- Strict proof/audit visual language as the primary identity.
 - Purple-blue AI gradients.
 - Sparkles or magic metaphors.
 - Notion clone beige overload.
-- Mascot-heavy student app style.
-- Dark enterprise dashboard mood.
+- Childish education-app illustration.
 
 ## K. Validation Plan
 
@@ -473,19 +522,19 @@ Run 8-10 interviews with final-year undergraduate and master's students.
 
 Questions:
 
-- "When did you last distrust an AI citation?"
-- "How do you verify sources today?"
+- "Where do your research notes usually get messy?"
 - "What apps do you switch between when writing?"
-- "Would Claim-Evidence Map change your workflow?"
-- "What would make you trust AI output enough to include it in your thesis?"
+- "Would linked notes and sources change your workflow?"
+- "Does this brand feel helpful for thesis writing, or too playful?"
+- "What would make you trust AI output enough to include it in your draft?"
 
 ### Landing Page A/B Tests
 
 Test headline variants:
 
-- A: "AI gave you an answer. Now prove it."
-- B: "Write academic work with anti-hallucination AI."
-- C: "Turn scattered research into evidence-backed writing."
+- A: "Ideas, neatly linked."
+- B: "Research, without the mess."
+- C: "Turn scattered research into clear writing."
 
 Metrics:
 
@@ -496,38 +545,41 @@ Metrics:
 
 ### Message Testing
 
-Test whether "Anti-Hallucination AI" feels:
+Test whether the playful minimalist direction feels:
 
-- Strong.
-- Credible.
-- Overpromised.
-- Confusing.
+- Clear.
+- Trustworthy.
+- Student-friendly.
+- Too casual.
+- Easier to understand than anti-hallucination messaging.
 
 ### Preference Testing
 
 Compare visual concepts:
 
+- Strict academic proof board.
 - Generic AI writing editor.
-- Chat-first research assistant.
-- Draft + Claim-Evidence Map + Research Trail.
+- Playful linked ideas workspace.
 
 Expected winner:
 
-> Draft + Claim-Evidence Map + Research Trail.
+> Playful linked ideas workspace, if it still shows sources and review context clearly.
 
 ### Competitor Differentiation Review
 
 Compare Aqsha against Jenni every month until launch:
 
-- Does Aqsha still have a clear claim-level proof wedge?
-- Is the hero visual visibly different from Jenni's editor-first positioning?
-- Are Aqsha's trust claims more concrete than citation management?
+- Does Aqsha feel more approachable and student-native?
+- Is the hero visual visibly different from editor-first positioning?
+- Are linked ideas, source chips, and Research Thread visible quickly?
+- Does the brand avoid overclaiming trust while still feeling credible?
 
 ### Qualitative Feedback Questions
 
 - "What do you think Aqsha does after 10 seconds?"
+- "What feels easiest to understand?"
 - "What feels most trustworthy?"
-- "What feels overclaimed?"
+- "What feels too casual or too serious?"
 - "What would you need to see before using this for thesis writing?"
 
 ## L. Final Brand Checklist
@@ -535,12 +587,12 @@ Compare Aqsha against Jenni every month until launch:
 Before launching the landing page, app UI, or marketing assets, confirm:
 
 - Hero is not a generic AI writing claim.
-- Claim-Evidence Map is visible above the fold.
-- Anti-Hallucination AI is explained operationally.
-- Research Trail is framed as audit trail.
+- The brand feels playful, modern, minimalist, and student-friendly.
+- Linked ideas, source chips, and writing context are visible above the fold.
+- Evidence is present without making the brand feel punitive.
 - There is no "zero hallucination" guarantee.
 - Shared Journal is review/edit focused.
-- App copy is firm on evidence, gentle to the writer.
-- Visuals show draft + evidence + research trail together.
+- App copy is friendly to the writer and clear about the work.
+- Visuals show source + note + draft relationships together.
 - Pricing and trust claims avoid fabricated numbers.
 - Landing page does not mention assessment/quiz positioning.

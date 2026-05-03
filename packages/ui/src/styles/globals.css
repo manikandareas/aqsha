@@ -23,20 +23,22 @@
   --color-ring: var(--ring);
 
   /* Font families */
-  --font-sans:
-    var(--font-geist-sans, "Geist Variable"), Inter, -apple-system,
-    BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display:
+    var(--font-aqsha-display, "Nunito Rounded"), "Nunito Sans Rounded",
+    "Nunito", "Nunito Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --font-sans: var(--font-display);
   --font-mono:
     var(--font-geist-mono, "Geist Mono Variable"), "SFMono-Regular", Consolas,
     "Liberation Mono", monospace;
-  --font-heading: var(--font-sans);
-  --font-handwriting: "Fuzzy Bubbles", var(--font-sans);
+  --font-heading: var(--font-display);
+  --font-handwriting: var(--font-aqsha-handwriting, "Fuzzy Bubbles"), var(--font-sans);
 
-  /* Notion typography scale */
-  --font-size-display: 4rem;
-  --font-size-display-2: 3.375rem;
-  --font-size-h1: 3rem;
-  --font-size-h2: 2.5rem;
+  /* Aqsha playful brand-kit typography scale */
+  --font-size-display: 4.25rem;
+  --font-size-display-2: 3.625rem;
+  --font-size-h1: 3.125rem;
+  --font-size-h2: 2.375rem;
   --font-size-h3: 1.625rem;
   --font-size-card-title: 1.375rem;
   --font-size-body-lg: 1.25rem;
@@ -55,45 +57,78 @@
   --text-caption: var(--font-size-caption);
   --text-badge: var(--font-size-badge);
 
-  --tracking-display: -2.125px;
-  --tracking-display-2: -1.875px;
-  --tracking-h1: -1.5px;
-  --tracking-h3: -0.625px;
-  --tracking-card-title: -0.25px;
-  --tracking-body-lg: -0.125px;
-  --tracking-badge: 0.125px;
+  --tracking-display: 0;
+  --tracking-display-2: 0;
+  --tracking-h1: 0;
+  --tracking-h2: 0;
+  --tracking-h3: 0;
+  --tracking-card-title: 0;
+  --tracking-body-lg: 0;
+  --tracking-badge: 0;
 
-  /* Notion multi-layer shadow system */
+  /* Brand-kit depth: soft paper, crisp cards, no generic glow */
   --shadow-soft-card:
-    rgba(0, 0, 0, 0.04) 0px 4px 18px,
-    rgba(0, 0, 0, 0.027) 0px 2.025px 7.84688px,
-    rgba(0, 0, 0, 0.02) 0px 0.8px 2.925px,
-    rgba(0, 0, 0, 0.01) 0px 0.175px 1.04062px;
+    rgba(26, 31, 43, 0.055) 0px 18px 42px -28px,
+    rgba(26, 31, 43, 0.075) 0px 7px 18px -14px,
+    rgba(255, 255, 255, 0.9) 0px 1px 0px inset;
   --shadow-deep-card:
-    rgba(0, 0, 0, 0.01) 0px 1px 3px, rgba(0, 0, 0, 0.02) 0px 3px 7px,
-    rgba(0, 0, 0, 0.02) 0px 7px 15px, rgba(0, 0, 0, 0.04) 0px 14px 28px,
-    rgba(0, 0, 0, 0.05) 0px 23px 52px;
+    rgba(26, 31, 43, 0.08) 0px 24px 72px -34px,
+    rgba(26, 31, 43, 0.1) 0px 12px 30px -20px,
+    rgba(26, 31, 43, 0.04) 0px 2px 8px,
+    rgba(255, 255, 255, 0.95) 0px 1px 0px inset;
   --shadow-sm: var(--shadow-soft-card);
   --shadow-md: var(--shadow-soft-card);
   --shadow-lg: var(--shadow-deep-card);
   --shadow-xl: var(--shadow-deep-card);
 
-  /* Aqsha Notion-inspired brand palette */
-  --color-notion-blue: #0075de;
-  --color-notion-active-blue: #005bab;
-  --color-notion-focus-blue: #097fe8;
-  --color-notion-link-light-blue: #62aef0;
-  --color-notion-navy: #213183;
-  --color-notion-warm-white: #f6f5f4;
-  --color-notion-warm-dark: #31302e;
-  --color-notion-gray-500: #615d59;
-  --color-notion-gray-300: #a39e98;
-  --color-notion-teal: #2a9d99;
-  --color-notion-green: #1aae39;
-  --color-notion-orange: #dd5b00;
-  --color-notion-pink: #ff64c8;
-  --color-notion-purple: #391c57;
-  --color-notion-brown: #523410;
+  /* Aqsha playful brand-kit palette */
+  --color-aqsha-sky: #256fd0;
+  --color-aqsha-sky-active: #1d64c8;
+  --color-aqsha-mint: #2ecc9a;
+  --color-aqsha-mint-active: #22a87e;
+  --color-aqsha-coral: #c43f3f;
+  --color-aqsha-coral-active: #ad3434;
+  --color-aqsha-lemon: #ffd84d;
+  --color-aqsha-lavender: #bd86ff;
+  --color-aqsha-lavender-dark: #b0a6ff;
+  --color-aqsha-mist: #f4f1ea;
+  --color-aqsha-paper: #fbfaf7;
+  --color-aqsha-paper-raised: #ffffff;
+  --color-aqsha-ink: #1a1f2b;
+  --color-aqsha-ink-soft: #3f4756;
+  --color-aqsha-ink-black: #181818;
+  --color-aqsha-neutral-50: #fafafa;
+  --color-aqsha-neutral-100: #f1f3f5;
+  --color-aqsha-neutral-200: #e5e7eb;
+  --color-aqsha-neutral-300: #d1d5db;
+  --color-aqsha-neutral-400: #9ca3af;
+  --color-aqsha-neutral-500: #6b7280;
+  --color-aqsha-neutral-600: #4b5563;
+  --color-aqsha-neutral-800: #1f2937;
+  --color-aqsha-dark-50: #202020;
+  --color-aqsha-dark-100: #242424;
+  --color-aqsha-dark-200: #2d2d2d;
+  --color-aqsha-dark-300: #3a3a3a;
+  --color-aqsha-dark-400: #505050;
+  --color-aqsha-dark-600: #737373;
+  --color-aqsha-dark-800: #a3a3a3;
+
+  /* Backward-compatible aliases for existing components */
+  --color-notion-blue: var(--color-aqsha-sky);
+  --color-notion-active-blue: var(--color-aqsha-sky-active);
+  --color-notion-focus-blue: var(--color-aqsha-sky);
+  --color-notion-link-light-blue: #7bb4ff;
+  --color-notion-navy: var(--color-aqsha-ink);
+  --color-notion-warm-white: var(--color-aqsha-paper);
+  --color-notion-warm-dark: var(--color-aqsha-ink);
+  --color-notion-gray-500: var(--color-aqsha-neutral-600);
+  --color-notion-gray-300: var(--color-aqsha-neutral-400);
+  --color-notion-teal: var(--color-aqsha-mint);
+  --color-notion-green: var(--color-aqsha-mint-active);
+  --color-notion-orange: var(--color-aqsha-coral);
+  --color-notion-pink: var(--color-aqsha-coral);
+  --color-notion-purple: var(--color-aqsha-lavender);
+  --color-notion-brown: #8a6346;
 
   --color-badge-bg: var(--badge-bg);
   --color-badge-foreground: var(--badge-foreground);
@@ -114,87 +149,96 @@
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
 
-  --radius-sm: 4px;
-  --radius-md: 5px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
-  --radius-2xl: 16px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-2xl: 18px;
   --radius-3xl: 24px;
   --radius-4xl: 9999px;
 }
 
 :root {
-  --background: #ffffff;
-  --foreground: rgba(0, 0, 0, 0.95);
+  --background: #fbfaf7;
+  --foreground: #1a1f2b;
   --card: #ffffff;
-  --card-foreground: rgba(0, 0, 0, 0.95);
+  --card-foreground: #1a1f2b;
   --popover: #ffffff;
-  --popover-foreground: rgba(0, 0, 0, 0.95);
-  --primary: #0075de;
+  --popover-foreground: #1a1f2b;
+  --primary: #256fd0;
   --primary-foreground: #ffffff;
-  --secondary: rgba(0, 0, 0, 0.05);
-  --secondary-foreground: rgba(0, 0, 0, 0.95);
-  --muted: #f6f5f4;
-  --muted-foreground: #615d59;
-  --accent: #f6f5f4;
-  --accent-foreground: rgba(0, 0, 0, 0.95);
-  --destructive: #dd5b00;
+  --secondary: #eefaf5;
+  --secondary-foreground: #1a1f2b;
+  --muted: #efeee9;
+  --muted-foreground: #4b5563;
+  --accent: #edf5ff;
+  --accent-foreground: #1a1f2b;
+  --destructive: #c43f3f;
   --destructive-foreground: #ffffff;
-  --border: rgba(0, 0, 0, 0.1);
-  --input: #dddddd;
-  --ring: #097fe8;
-  --badge-bg: #f2f9ff;
-  --badge-foreground: #097fe8;
-  --chart-1: #0075de;
-  --chart-2: #2a9d99;
-  --chart-3: #dd5b00;
-  --chart-4: #ff64c8;
-  --chart-5: #391c57;
-  --sidebar: #f6f5f4;
-  --sidebar-foreground: rgba(0, 0, 0, 0.95);
-  --sidebar-primary: #0075de;
+  --border: #deddd7;
+  --input: #cbc9c1;
+  --ring: #256fd0;
+  --badge-bg: #edf5ff;
+  --badge-foreground: #1d64c8;
+  --chart-1: #256fd0;
+  --chart-2: #2ecc9a;
+  --chart-3: #c43f3f;
+  --chart-4: #ffd84d;
+  --chart-5: #bd86ff;
+  --sidebar: #f7f6f1;
+  --sidebar-foreground: #1a1f2b;
+  --sidebar-primary: #256fd0;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: rgba(0, 0, 0, 0.05);
-  --sidebar-accent-foreground: rgba(0, 0, 0, 0.95);
-  --sidebar-border: rgba(0, 0, 0, 0.1);
-  --sidebar-ring: #097fe8;
+  --sidebar-accent: #e9e8e2;
+  --sidebar-accent-foreground: #1a1f2b;
+  --sidebar-border: #deddd7;
+  --sidebar-ring: #256fd0;
 }
 
 .dark {
-  --background: #191817;
-  --foreground: #f6f5f4;
-  --card: #1f1e1c;
-  --card-foreground: #f6f5f4;
-  --popover: #1f1e1c;
-  --popover-foreground: #f6f5f4;
-  --primary: #62aef0;
-  --primary-foreground: #191817;
-  --secondary: rgba(255, 255, 255, 0.08);
-  --secondary-foreground: #f6f5f4;
-  --muted: #31302e;
-  --muted-foreground: #a39e98;
-  --accent: rgba(255, 255, 255, 0.08);
-  --accent-foreground: #f6f5f4;
-  --destructive: #f07340;
-  --destructive-foreground: #191817;
-  --border: rgba(255, 255, 255, 0.1);
-  --input: rgba(255, 255, 255, 0.12);
-  --ring: #62aef0;
-  --badge-bg: rgba(9, 127, 232, 0.18);
-  --badge-foreground: #62aef0;
-  --chart-1: #62aef0;
-  --chart-2: #2a9d99;
-  --chart-3: #f07340;
-  --chart-4: #ff64c8;
-  --chart-5: #8b5cf6;
-  --sidebar: #191817;
-  --sidebar-foreground: #f6f5f4;
-  --sidebar-primary: #62aef0;
-  --sidebar-primary-foreground: #191817;
-  --sidebar-accent: rgba(255, 255, 255, 0.08);
-  --sidebar-accent-foreground: #f6f5f4;
-  --sidebar-border: rgba(255, 255, 255, 0.1);
-  --sidebar-ring: #62aef0;
+  --background: #181818;
+  --foreground: #f4f1ea;
+  --card: #202020;
+  --card-foreground: #f4f1ea;
+  --popover: #202020;
+  --popover-foreground: #f4f1ea;
+  --primary: #4a90f7;
+  --primary-foreground: #fffdf8;
+  --secondary: rgba(46, 204, 154, 0.14);
+  --secondary-foreground: #f4f1ea;
+  --muted: #242424;
+  --muted-foreground: #a3a3a3;
+  --accent: rgba(74, 144, 247, 0.14);
+  --accent-foreground: #f4f1ea;
+  --destructive: #ff6b6b;
+  --destructive-foreground: #181818;
+  --border: #2d2d2d;
+  --input: #3a3a3a;
+  --ring: #4a90f7;
+  --badge-bg: rgba(74, 144, 247, 0.18);
+  --badge-foreground: #9fc8ff;
+  --chart-1: #4a90f7;
+  --chart-2: #6ee3bf;
+  --chart-3: #ff6b6b;
+  --chart-4: #ffe082;
+  --chart-5: #b0a6ff;
+  --sidebar: #181818;
+  --sidebar-foreground: #f4f1ea;
+  --sidebar-primary: #4a90f7;
+  --sidebar-primary-foreground: #fffdf8;
+  --sidebar-accent: rgba(244, 241, 234, 0.08);
+  --sidebar-accent-foreground: #f4f1ea;
+  --sidebar-border: #2d2d2d;
+  --sidebar-ring: #4a90f7;
+  --shadow-soft-card:
+    rgba(12, 12, 12, 0.42) 0px 18px 42px -28px,
+    rgba(12, 12, 12, 0.32) 0px 7px 18px -14px,
+    rgba(244, 241, 234, 0.055) 0px 1px 0px inset;
+  --shadow-deep-card:
+    rgba(12, 12, 12, 0.48) 0px 24px 72px -34px,
+    rgba(12, 12, 12, 0.4) 0px 12px 30px -20px,
+    rgba(12, 12, 12, 0.3) 0px 2px 8px,
+    rgba(244, 241, 234, 0.06) 0px 1px 0px inset;
 }
 
 @layer base {
@@ -208,22 +252,35 @@
 
   body {
     @apply bg-background text-foreground;
+    font-feature-settings:
+      "kern" 1,
+      "liga" 1,
+      "calt" 1;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--primary) 24%, var(--background));
+    color: var(--foreground);
   }
 
   h1 {
+    font-family: var(--font-heading);
     font-size: var(--font-size-h1);
     font-weight: 700;
-    line-height: 1;
+    line-height: 0.98;
     letter-spacing: var(--tracking-h1);
   }
 
   h2 {
+    font-family: var(--font-heading);
     font-size: var(--font-size-h2);
     font-weight: 700;
-    line-height: 1.5;
+    line-height: 1.06;
+    letter-spacing: var(--tracking-h2);
   }
 
   h3 {
+    font-family: var(--font-heading);
     font-size: var(--font-size-h3);
     font-weight: 700;
     line-height: 1.23;

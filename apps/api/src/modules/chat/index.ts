@@ -1,6 +1,5 @@
 import { Elysia, t } from "elysia";
 import type { UIMessageChunk } from "ai";
-import { env } from "../../config";
 import { authIdentityPlugin } from "../../plugins/auth-identity";
 import { servicesPlugin } from "../../plugins/services";
 import { chatModel } from "./model";
@@ -392,7 +391,7 @@ export const chatModule = new Elysia({
   )
   .post(
     "/threads/:id/messages",
-    async ({ body, chatService, identity, params, status }) => {
+    async ({ agentsService, body, chatService, identity, params, request, status }) => {
       const requestId = createChatRequestId();
       const messagesResult = await chatService.appendUserMessage(
         identity,
@@ -430,39 +429,46 @@ export const chatModule = new Elysia({
         payload: { model },
       });
 
-      const headers = new Headers({
-        Authorization: `Bearer ${env.ASTRA_INTERNAL_TOKEN}`,
-        "Content-Type": "application/json",
-        "x-aqsha-gateway-request-id": requestId,
-        "x-astra-user-id": identity.authUserId,
-      });
-
-      if (model) {
-        headers.set("x-astra-model", model);
-      }
-
-      const agentsBaseUrl = env.AGENTS_BASE_URL;
       let upstream: Response;
 
       try {
-        upstream = await fetch(`${agentsBaseUrl}/internal/chat`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            trigger: "submit-message",
-            id: params.id,
-            runId: runResult.data.run.id,
-            messages: messagesResult.data.messages,
-          }),
+        upstream = await agentsService.createChatResponse({
+          requestId,
+          userId: identity.authUserId,
+          threadId: params.id,
+          runId: runResult.data.run.id,
+          model,
+          messages: messagesResult.data.messages,
+          abortSignal: request.signal,
+          onSource: async (source) => {
+            try {
+              await chatService.appendRunSource(
+                runResult.data.scope,
+                runResult.data.run,
+                source,
+              );
+            } catch (error) {
+              logChatError(
+                "Failed to persist agent-used source",
+                {
+                  requestId,
+                  threadId: params.id,
+                  runId: runResult.data.run.id,
+                  sourceKind: source.kind,
+                  sourceRef: source.url ?? source.providerSourceId ?? null,
+                },
+                error,
+              );
+            }
+          },
         });
       } catch (error) {
         logChatError(
-          "Failed to connect to agents service",
+          "Failed to start agents service response",
           {
             requestId,
             threadId: params.id,
             runId: runResult.data.run.id,
-            agentsBaseUrl,
           },
           error,
         );
@@ -470,11 +476,11 @@ export const chatModule = new Elysia({
           type: "run_failed",
           scope: "error",
           status: "failed",
-          title: "Astra connection failed",
+          title: "Astra failed to start",
           summary:
             error instanceof Error
               ? error.message
-              : "Unable to connect to the agents service.",
+              : "Unable to start the agents service response.",
           agentName: "Astra",
           payload: { requestId },
         });
@@ -483,17 +489,17 @@ export const chatModule = new Elysia({
           errorMessage:
             error instanceof Error
               ? error.message
-              : "Unable to connect to the agents service.",
+              : "Unable to start the agents service response.",
         });
 
         return new Response(
           JSON.stringify({
             error: {
-              code: "agents_network_error",
+              code: "agents_service_error",
               message:
                 error instanceof Error
                   ? error.message
-                  : "Unable to connect to the agents service.",
+                  : "Unable to start the agents service response.",
               requestId,
             },
           }),
@@ -523,7 +529,7 @@ export const chatModule = new Elysia({
           title: "Astra failed to start",
           summary:
             upstreamBody ||
-            `The agents service failed with HTTP ${upstream.status}.`,
+            `The agent runtime failed with HTTP ${upstream.status}.`,
           agentName: "Astra",
           payload: { requestId, astraRequestId, status: upstream.status, upstreamBody },
         });
@@ -531,7 +537,7 @@ export const chatModule = new Elysia({
           status: "failed",
           errorMessage:
             upstreamBody ||
-            `Agents service failed with HTTP ${upstream.status}.`,
+            `Agent runtime failed with HTTP ${upstream.status}.`,
         });
 
         return new Response(
@@ -540,7 +546,7 @@ export const chatModule = new Elysia({
               code: "agents_service_error",
               message:
                 upstreamBody ||
-                `Agents service failed with HTTP ${upstream.status}.`,
+                `Agent runtime failed with HTTP ${upstream.status}.`,
               requestId,
               astraRequestId,
             },

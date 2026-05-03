@@ -14,7 +14,7 @@
     "@astrojs/react": "^5.0.4",
     "@astrojs/sitemap": "^3.7.2",
     "@aqsha/ui": "workspace:*",
-    "@fontsource-variable/geist": "^5.2.8",
+    "@fontsource-variable/nunito": "^5.2.7",
     "@fontsource-variable/geist-mono": "^5.2.7",
     "@fontsource/fuzzy-bubbles": "^5.2.7",
     "@radix-ui/react-accordion": "^1.2.12",

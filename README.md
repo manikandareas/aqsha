@@ -1,10 +1,10 @@
 # Aqsha
 
-Aqsha is an open-source monorepo for AI-assisted writing and journaling. It combines a modern web app, a type-safe Bun API, shared UI primitives, and a PostgreSQL-backed domain model for user-owned journals, chat threads, and authentication.
+Aqsha is an open-source monorepo for AI-assisted writing and journaling. It combines a modern web app, a type-safe Bun API, shared UI primitives, and a PostgreSQL-backed domain model for user-owned journals, chat threads, authentication, and API-owned agent streaming.
 
 ## What is inside?
 
-- **AI chat**: persisted chat threads and streamed assistant responses through an internal agents service.
+- **AI chat**: persisted chat threads and streamed assistant responses through the API-owned Astra agent runtime.
 - **Journaling system**: journal CRUD, content saves, outlines, archive/restore flows, and version history.
 - **Authentication**: Better Auth integration with API-side session handling.
 - **Type-safe API client**: Elysia + Eden Treaty wiring between the frontend and backend.
@@ -15,7 +15,7 @@ Aqsha is an open-source monorepo for AI-assisted writing and journaling. It comb
 
 ```txt
 apps/
-  api/      Bun + Elysia API service
+  api/      Bun + Elysia API service and Astra agent runtime
   web/      Next.js authenticated product app
   www/      Astro marketing website
 packages/
@@ -32,14 +32,14 @@ packages/
 - **API**: Elysia, Eden Treaty, OpenAPI, Zod
 - **Auth**: Better Auth
 - **Database**: PostgreSQL, Drizzle ORM, Drizzle Kit
-- **AI**: Vercel AI SDK-compatible streaming with an internal agents service
+- **AI**: Vercel AI SDK `ToolLoopAgent`, AI SDK UI message streams, OpenAI provider, optional Exa MCP tools, and API-owned skills
 - **UI/editor**: Radix UI, shadcn-style primitives, Plate editor components
 
 ## Requirements
 
 - Bun `1.3.10` or newer
 - PostgreSQL database
-- An agents service reachable by the API for chat streaming
+- OpenAI-compatible model access for Astra chat streaming
 
 ## Getting started
 
@@ -63,8 +63,11 @@ WEB_ORIGIN=http://localhost:3000
 BETTER_AUTH_URL=http://localhost:3001
 BETTER_AUTH_SECRET=replace-with-at-least-32-characters
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/aqsha
-AGENTS_BASE_URL=http://127.0.0.1:8001
-ASTRA_INTERNAL_TOKEN=replace-with-an-internal-token
+ASTRA_MODEL=gpt-5.2
+ASTRA_ALLOWED_MODELS=gpt-5.2,gpt-5.2-pro,gpt-5.4,gpt-5.4-pro,gpt-5.4-mini,o3,o4-mini
+ASTRA_SKILLS_ROOTS=./skills
+ASTRA_ENABLE_SKILL_SCRIPTS=false
+OPENAI_API_KEY=replace-with-openai-api-key
 ```
 
 Optionally create `apps/web/.env.local` to point the web app at a different API URL:
@@ -122,6 +125,9 @@ bun run --filter '@aqsha/api' db:check
 ## Development notes
 
 - The API reads environment variables from `apps/api/.env` through `@t3-oss/env-core`.
+- Astra agent implementation lives under `apps/api/src/agents` and is exposed to chat routes through `AgentsService`.
+- Skills are discovered from `apps/api/skills` by default. Skill scripts are disabled unless `ASTRA_ENABLE_SKILL_SCRIPTS=true`.
+- Exa MCP tools are loaded when `ASTRA_EXA_API_KEY` is configured and closed after streaming.
 - The web app reads `NEXT_PUBLIC_API_URL` and defaults to `http://localhost:3001`.
 - API routes are composed as Elysia modules under `apps/api/src/modules`.
 - Shared database schema and types live in `packages/db`.
