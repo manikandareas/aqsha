@@ -39,7 +39,6 @@ export class AgentsService {
           skills,
           skillScriptsEnabled: env.ASTRA_ENABLE_SKILL_SCRIPTS,
           skillScriptTimeoutMs: env.ASTRA_SKILL_SCRIPT_TIMEOUT_MS,
-          skillScriptRuntime: env.ASTRA_SKILL_SCRIPT_RUNTIME,
         },
         uiMessages: input.messages,
         abortSignal: input.abortSignal,

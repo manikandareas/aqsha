@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { basename, dirname, join } from "node:path";
 import { readFile } from "node:fs/promises";
 import { tool } from "ai";
@@ -5,14 +6,15 @@ import { z } from "zod";
 import { readSkill } from "./frontmatter";
 import {
   assertReadableResource,
+  MAX_SCRIPT_OUTPUT_BYTES,
   resolveConfinedPath,
+  trimOutput,
 } from "./path-safety";
 import type { SkillToolContext } from "./types";
 
 const TRUSTED_SCRIPT_PATTERN = /^[a-zA-Z0-9._-]+$/;
 const MAX_SCRIPT_ARGS = 20;
 const MAX_SCRIPT_ARG_LENGTH = 500;
-const MAX_SCRIPT_INPUT_JSON_BYTES = 512 * 1024;
 
 export function createSkillTools(context: SkillToolContext) {
   return {
@@ -64,10 +66,8 @@ export function createSkillTools(context: SkillToolContext) {
         skillName: z.string().min(1),
         script: z.string().min(1).describe("Script filename under scripts/ for the skill."),
         args: z.array(z.string()).optional().default([]),
-        evidenceJson: z.string().max(MAX_SCRIPT_INPUT_JSON_BYTES).optional(),
-        visualsJson: z.string().max(MAX_SCRIPT_INPUT_JSON_BYTES).optional(),
       }),
-      execute: async ({ skillName, script, args, evidenceJson, visualsJson }) => {
+      execute: async ({ skillName, script, args }) => {
         if (!context.scriptsEnabled) {
           throw new Error("Skill script execution is disabled.");
         }
@@ -89,38 +89,55 @@ export function createSkillTools(context: SkillToolContext) {
           throw new Error("Script arguments exceed safety limits.");
         }
 
-        if (evidenceJson) {
-          JSON.parse(evidenceJson);
-        }
-        if (visualsJson) {
-          JSON.parse(visualsJson);
-        }
-
         const resolved = await resolveConfinedPath(skill.directory, join("scripts", script));
         const scriptDir = await resolveConfinedPath(skill.directory, "scripts");
         if (dirname(resolved) !== scriptDir) {
           throw new Error("Script must be directly under the skill scripts directory.");
         }
 
-        if (!context.scriptRunner) {
-          throw new Error("Sandbox script execution requires the configured Daytona sandbox runtime and it is unavailable.");
-        }
-
-        return context.scriptRunner({
-          skillName,
-          scriptName: script,
-          scriptPath: resolved,
-          scriptDir,
-          scriptContent: await readFile(resolved, "utf8"),
-          args,
-          timeoutMs: context.scriptTimeoutMs,
-          artifactRoot: context.deps.researchArtifactDir,
-          workspace: context.deps.workspace,
-          conversationId: context.deps.conversationId,
-          evidenceJson,
-          visualsJson,
-        });
+        return runPythonScript(resolved, args, scriptDir, context.scriptTimeoutMs);
       },
     }),
   };
+}
+
+async function runPythonScript(scriptPath: string, args: string[], cwd: string, timeoutMs: number) {
+  const command = process.env.PYTHON ?? "python3";
+
+  return await new Promise<{ exitCode: number | null; stdout: string; stderr: string }>((resolve, reject) => {
+    const child = spawn(command, [scriptPath, ...args], {
+      cwd,
+      env: {
+        ...process.env,
+        PATH: process.env.PATH ?? "/usr/bin:/bin",
+        PYTHONNOUSERSITE: "1",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error("Skill script timed out."));
+    }, timeoutMs);
+
+    child.stdout.on("data", (chunk) => {
+      stdout = trimOutput(stdout + String(chunk), MAX_SCRIPT_OUTPUT_BYTES);
+    });
+
+    child.stderr.on("data", (chunk) => {
+      stderr = trimOutput(stderr + String(chunk), MAX_SCRIPT_OUTPUT_BYTES);
+    });
+
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+
+    child.on("close", (exitCode) => {
+      clearTimeout(timer);
+      resolve({ exitCode, stdout, stderr });
+    });
+  });
 }

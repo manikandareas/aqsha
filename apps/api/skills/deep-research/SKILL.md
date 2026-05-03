@@ -76,21 +76,12 @@ Load the referenced files only as needed:
 - `references/visual-artifacts.md` for graph, timeline, matrix, and artifact rules.
 - `references/verification-checklist.md` before final delivery.
 
-For any code execution, data analysis, Python/R/Node scripts, dependency
-installation, plotting, or file generation, use the server-provided Daytona sandbox
-through `runSkillScript`. Do not assume the API host has Python, pip, system
-packages, project-local Python modules, or plotting libraries installed. Treat
-local execution as unavailable unless explicitly enabled by the server.
+If working with a local Markdown report and JSON evidence ledger, run
+`scripts/audit_evidence.py` before final delivery.
 
-If working with a Markdown report and JSON evidence ledger, run
-`scripts/audit_evidence.py` through sandbox-backed `runSkillScript` before final
-delivery.
-
-For research reports with `evidence.json` and `visuals.json`, run
-`scripts/audit_visuals.py` and `scripts/render_visual_artifacts.py` through the
-Daytona sandbox before final delivery. Embed only artifacts whose persisted
-manifest status is `passed`. If sandbox execution, rendering, or audit fails,
-omit visuals and explain that rendering was skipped.
+For research reports with a local `evidence.json` and `visuals.json`, run
+`scripts/audit_visuals.py` and `scripts/render_visual_artifacts.py` before final
+delivery. Embed only artifacts whose manifest status is `passed`.
 
 ## Citation Requirements
 

@@ -3,7 +3,6 @@ import type { LanguageModel, ToolSet } from "ai";
 import { stepCountIs } from "ai";
 import { describeAstraDeps } from "./deps";
 import { buildSkillsPrompt, createSkillTools } from "./skills";
-import { createDaytonaScriptRunner } from "./skills/daytona-script-runner";
 import type { AgentRuntimeContext } from "./types";
 
 export type AstraAgentOptions = {
@@ -27,15 +26,10 @@ export function mergeAstraTools(skillTools: ToolSet, externalTools: ToolSet = {}
 }
 
 export function commonAgentSettings({ model, providerOptions, context, externalTools }: AstraAgentOptions) {
-  const scriptRunner = context.skillScriptRuntime === "daytona"
-    ? createDaytonaScriptRunner()
-    : undefined;
   const skillTools = createSkillTools({
     registry: context.skills,
     scriptsEnabled: context.skillScriptsEnabled,
     scriptTimeoutMs: context.skillScriptTimeoutMs,
-    scriptRunner,
-    deps: context.deps,
   });
   const tools = mergeAstraTools(skillTools, externalTools);
 
