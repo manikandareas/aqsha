@@ -59,7 +59,7 @@ function ThreadActions({
         render={
           <SidebarMenuAction
             showOnHover
-            className="text-sidebar-foreground/35 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground aria-expanded:bg-sidebar-accent/60"
+            className="text-sidebar-foreground/55 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground aria-expanded:bg-sidebar-accent/70"
           />
         }
       >
@@ -82,23 +82,6 @@ function ThreadActions({
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-}
-
-export function NewResearchButton() {
-  return (
-    <Button
-      render={<Link href="/app" />}
-      className={cn(
-        "h-9 w-full justify-start gap-2 rounded-[10px] bg-sidebar-accent/45 px-3 text-[13px] font-semibold text-sidebar-foreground",
-        "shadow-none hover:bg-sidebar-accent/70 hover:text-sidebar-foreground",
-        "focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:size-9 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0",
-      )}
-      aria-label="Create new research thread"
-    >
-      <PlusIcon className="size-4 text-sidebar-primary/80" />
-      <span className="group-data-[collapsible=icon]:hidden">New research</span>
-    </Button>
   );
 }
 
@@ -139,12 +122,12 @@ export function NavThreads() {
 
   return (
     <SidebarGroup className="px-1 py-0.5 group-data-[collapsible=icon]:hidden">
-      <SidebarGroupLabel className="h-7 px-2 text-[11px] font-semibold tracking-[0.06em] text-sidebar-foreground/40">
+      <SidebarGroupLabel className="h-7 px-2 text-[11px] font-semibold tracking-[0.06em] text-sidebar-foreground/60">
         <span>THREADS</span>
         <Button
           variant="ghost"
           size="icon-xs"
-          className="ml-auto -mr-1 text-sidebar-foreground/35 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+          className="ml-auto -mr-1 text-sidebar-foreground/55 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground"
           render={<Link href="/app" />}
         >
           <PlusIcon />
@@ -156,7 +139,7 @@ export function NavThreads() {
           <SidebarMenuItem>
             <SidebarMenuButton
               disabled
-              className="h-9 rounded-lg text-[13px] text-sidebar-foreground/45"
+              className="h-9 rounded-lg text-[13px] text-sidebar-foreground/60"
             >
               <Loader2Icon className="animate-spin" />
               <span>Loading threads</span>
@@ -167,7 +150,7 @@ export function NavThreads() {
           <SidebarMenuItem>
             <SidebarMenuButton
               disabled
-              className="h-auto min-h-9 cursor-default rounded-lg text-sidebar-foreground/45"
+              className="h-auto min-h-9 cursor-default rounded-lg text-sidebar-foreground/60"
             >
               <span className="text-[13px] leading-5">{displayedError}</span>
             </SidebarMenuButton>
@@ -177,9 +160,9 @@ export function NavThreads() {
           <SidebarMenuItem>
             <SidebarMenuButton
               disabled
-              className="h-9 cursor-default rounded-lg text-sidebar-foreground/45"
+              className="h-9 cursor-default rounded-lg text-sidebar-foreground/60"
             >
-              <MessageCircleIcon className="h-[14px] w-[14px] text-sidebar-foreground/35" />
+              <MessageCircleIcon className="h-[14px] w-[14px] text-sidebar-foreground/55" />
               <span className="text-[13px]">No threads yet</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -192,22 +175,25 @@ export function NavThreads() {
               <SidebarMenuButton
                 isActive={isActive}
                 render={
-                  <Link href={`/app/threads/${thread.id}`} title={thread.title} />
+                  <Link
+                    href={`/app/threads/${thread.id}`}
+                    title={thread.title}
+                  />
                 }
                 className={cn(
                   "h-9 rounded-lg text-[13px] font-medium transition-colors",
                   "focus-visible:ring-sidebar-ring",
                   isActive
-                    ? "bg-sidebar-accent/55 text-sidebar-foreground hover:bg-sidebar-accent/65"
-                    : "text-sidebar-foreground/60 hover:bg-sidebar-accent/45 hover:text-sidebar-foreground",
+                    ? "bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent"
+                    : "text-sidebar-foreground/72 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground",
                 )}
               >
                 <MessageCircleIcon
                   className={cn(
                     "h-[14px] w-[14px] shrink-0",
                     isActive
-                      ? "text-sidebar-foreground/70"
-                      : "text-sidebar-foreground/38",
+                      ? "text-sidebar-foreground"
+                      : "text-sidebar-foreground/62",
                   )}
                 />
                 <span className="truncate">{thread.title}</span>

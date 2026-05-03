@@ -8,7 +8,7 @@ import * as React from "react";
 import { NavJournal } from "@/components/nav-journal";
 import { NavMain } from "@/components/nav-main";
 import { NavSecondary } from "@/components/nav-secondary";
-import { NavThreads, NewResearchButton } from "@/components/nav-threads";
+import { NavThreads } from "@/components/nav-threads";
 import {
   Sidebar,
   SidebarContent,
@@ -17,19 +17,24 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
-import { BookUpIcon, MessageCircleQuestionIcon } from "lucide-react";
+import { AlbumIcon, AtSignIcon, BookUpIcon } from "lucide-react";
 
 const data = {
   navMain: [
     {
-      title: "Research Thread",
+      title: "Threads",
       url: "/app",
-      icon: <MessageCircleQuestionIcon />,
+      icon: <AtSignIcon />,
     },
     {
       title: "Journals",
       url: "/app/journals",
       icon: <BookUpIcon />,
+    },
+    {
+      title: "Library",
+      url: "/app/library",
+      icon: <AlbumIcon />,
     },
   ],
   navSecondary: [],
@@ -41,10 +46,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const navMain = data.navMain.map((item) => ({
     ...item,
-    isActive:
-      item.url === "/app"
-        ? pathname === "/app" || pathname.startsWith("/app/threads/")
-        : pathname === item.url || pathname.startsWith(`${item.url}/`),
+    isActive: pathname === item.url,
   }));
 
   return (
@@ -85,8 +87,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </span>
           </Link>
         </div>
-
-        <NewResearchButton />
         <NavMain items={navMain} />
       </SidebarHeader>
 

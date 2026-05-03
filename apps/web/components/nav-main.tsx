@@ -59,22 +59,22 @@ export function NavMain({ items }: { items: NavItem[] }) {
           <SidebarMenuItem key={item.title}>
             <SidebarMenuButton
               isActive={item.isActive}
-              render={<a href={item.url} />}
+              render={<Link href={item.url} />}
               tooltip={item.title}
               className={cn(
                 "h-9 rounded-lg text-[13px] font-semibold transition-colors",
                 "focus-visible:ring-sidebar-ring",
                 item.isActive
-                  ? "bg-sidebar-accent/55 text-sidebar-foreground hover:bg-sidebar-accent/65"
-                  : "text-sidebar-foreground/60 hover:bg-sidebar-accent/45 hover:text-sidebar-foreground",
+                  ? "bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent"
+                  : "text-sidebar-foreground/75 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground",
               )}
             >
               <span
                 className={cn(
                   "shrink-0 [&_svg]:h-[15px] [&_svg]:w-[15px]",
                   item.isActive
-                    ? "text-sidebar-foreground/70"
-                    : "text-sidebar-foreground/45",
+                    ? "text-sidebar-foreground"
+                    : "text-sidebar-foreground/65",
                 )}
               >
                 {item.icon}

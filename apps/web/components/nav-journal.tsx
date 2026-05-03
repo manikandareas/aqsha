@@ -104,7 +104,7 @@ export function NavJournal() {
 
   return (
     <SidebarGroup className="px-1 py-0.5 group-data-[collapsible=icon]:hidden">
-      <SidebarGroupLabel className="h-7 px-2 text-[11px] font-semibold tracking-[0.06em] text-sidebar-foreground/40">
+      <SidebarGroupLabel className="h-7 px-2 text-[11px] font-semibold tracking-[0.06em] text-sidebar-foreground/60">
         <span>JOURNALS</span>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger
@@ -112,7 +112,7 @@ export function NavJournal() {
               <Button
                 variant="ghost"
                 size="icon-xs"
-                className="ml-auto -mr-1 text-sidebar-foreground/35 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                className="ml-auto -mr-1 text-sidebar-foreground/55 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground"
               />
             }
           >
@@ -163,7 +163,7 @@ export function NavJournal() {
           <SidebarMenuItem>
             <SidebarMenuButton
               disabled
-              className="h-9 rounded-lg text-[13px] text-sidebar-foreground/45"
+              className="h-9 rounded-lg text-[13px] text-sidebar-foreground/60"
             >
               <Loader2Icon className="animate-spin" />
               <span>Loading journals</span>
@@ -174,7 +174,7 @@ export function NavJournal() {
           <SidebarMenuItem>
             <SidebarMenuButton
               disabled
-              className="h-auto min-h-9 cursor-default rounded-lg text-sidebar-foreground/45"
+              className="h-auto min-h-9 cursor-default rounded-lg text-sidebar-foreground/60"
             >
               <span className="text-[13px] leading-5">{displayedError}</span>
             </SidebarMenuButton>
@@ -184,9 +184,9 @@ export function NavJournal() {
           <SidebarMenuItem>
             <SidebarMenuButton
               disabled
-              className="h-9 cursor-default rounded-lg text-sidebar-foreground/45"
+              className="h-9 cursor-default rounded-lg text-sidebar-foreground/60"
             >
-              <FileTextIcon className="h-[14px] w-[14px] text-sidebar-foreground/35" />
+              <FileTextIcon className="h-[14px] w-[14px] text-sidebar-foreground/55" />
               <span className="text-[13px]">No journals yet</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -205,16 +205,16 @@ export function NavJournal() {
                   "h-9 rounded-lg text-[13px] font-medium transition-colors",
                   "focus-visible:ring-sidebar-ring",
                   isActive
-                    ? "bg-sidebar-accent/55 text-sidebar-foreground hover:bg-sidebar-accent/65"
-                    : "text-sidebar-foreground/60 hover:bg-sidebar-accent/45 hover:text-sidebar-foreground",
+                    ? "bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent"
+                    : "text-sidebar-foreground/72 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground",
                 )}
               >
                 <FileTextIcon
                   className={cn(
                     "h-[14px] w-[14px] shrink-0",
                     isActive
-                      ? "text-sidebar-foreground/70"
-                      : "text-sidebar-foreground/38",
+                      ? "text-sidebar-foreground"
+                      : "text-sidebar-foreground/62",
                   )}
                 />
                 <span className="truncate">{item.title}</span>
@@ -224,7 +224,7 @@ export function NavJournal() {
                   render={
                     <SidebarMenuAction
                       showOnHover
-                      className="text-sidebar-foreground/35 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground aria-expanded:bg-sidebar-accent/60"
+                      className="text-sidebar-foreground/55 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground aria-expanded:bg-sidebar-accent/70"
                     />
                   }
                 >
