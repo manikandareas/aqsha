@@ -2,12 +2,12 @@
 
 Deep research outputs should include visual artifacts whenever the evidence
 ledger contains enough structured data. The final report remains Markdown and
-embeds audited local artifacts using relative paths.
+embeds audited PNG artifacts.
 
 ## Artifact Principle
 
-The agent writes evidence and visual specs. Trusted local scripts render the
-graphics with Matplotlib in the sandbox. Do not generate arbitrary plotting code
+The agent writes evidence and visual specs. Trusted Bun scripts render graphics
+with Vega-Lite or Vega in the sandbox. Do not generate arbitrary plotting code
 for v1.
 
 Every visual must be traceable to `evidence.json`:
@@ -20,7 +20,7 @@ Every visual must be traceable to `evidence.json`:
 ## Required Files
 
 - `evidence.json`: sources, claims, visual metrics, and supporting metadata.
-- `visuals.json`: declarative visual specs.
+- `visuals.json`: declarative Vega-Lite or Vega visual specs.
 - `artifact_manifest.json`: render output, audit status, captions, and paths.
 - `visual_artifacts.md`: Markdown snippet containing only passed artifacts.
 
@@ -41,16 +41,16 @@ Use these visuals when data is available:
 - Put reusable numbers in `visual_metrics`, then reference them by `metric_id`.
 - Keep visual IDs stable and filename-safe, for example `evidence-timeline`.
 - Keep artifact paths relative to the report directory, for example
-  `artifacts/evidence-timeline.svg`.
-- Run `scripts/audit_visuals.py` before rendering and
-  `scripts/render_visual_artifacts.py` to create SVGs and the manifest.
+  `artifacts/evidence-timeline.png`.
+- Use the `render-vega` trusted script id to create PNG artifacts from audited
+  Vega-Lite or Vega specs.
 
 ## Markdown Embed Pattern
 
 ```markdown
 ## Evidence Timeline
 
-![Evidence Timeline](artifacts/evidence-timeline.svg)
+![Evidence Timeline](artifacts/evidence-timeline.png)
 
 Timeline of included sources by publication year. Marker size reflects citation
 count where citation metadata was available.

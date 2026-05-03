@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "scripts": [
+    {
+      "id": "render-vega",
+      "file": "render-vega.ts",
+      "runtime": "bun",
+      "timeoutMs": 30000,
+      "args": {
+        "maxCount": 8,
+        "maxLength": 500
+      },
+      "outputs": [
+        {
+          "path": "artifacts/*.png",
+          "contentType": "image/png",
+          "role": "visual"
+        }
+      ],
+      "network": "disabled"
+    }
+  ]
+}

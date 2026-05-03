@@ -76,12 +76,12 @@ Load the referenced files only as needed:
 - `references/visual-artifacts.md` for graph, timeline, matrix, and artifact rules.
 - `references/verification-checklist.md` before final delivery.
 
-If working with a local Markdown report and JSON evidence ledger, run
-`scripts/audit_evidence.py` before final delivery.
+Trusted scripts are allowlisted through `scripts/manifest.json` and run through
+the Bun skill script executor. Do not call script file paths directly.
 
-For research reports with a local `evidence.json` and `visuals.json`, run
-`scripts/audit_visuals.py` and `scripts/render_visual_artifacts.py` before final
-delivery. Embed only artifacts whose manifest status is `passed`.
+For research reports with a local Vega-Lite or Vega visual spec, use the
+`render-vega` trusted script id to render PNG artifacts. Embed only artifacts
+that pass audit and upload/persistence checks.
 
 ## Citation Requirements
 

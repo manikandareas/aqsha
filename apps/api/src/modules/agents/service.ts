@@ -1,7 +1,13 @@
 import { env, resolveAppPath } from "../../config";
 import type { AstraDeps } from "../../agents/deps";
 import { resolveModel } from "../../agents/model";
-import { discoverSkills } from "../../agents/skills";
+import {
+  DaytonaScriptExecutor,
+  DaytonaSdkScriptExecutorClient,
+  discoverSkills,
+  LocalScriptExecutor,
+  type SkillScriptExecutor,
+} from "../../agents/skills";
 import { createAstraAgentResponse } from "../../agents/streams";
 import type { CreateChatResponseInput } from "./model";
 
@@ -39,6 +45,8 @@ export class AgentsService {
           skills,
           skillScriptsEnabled: env.ASTRA_ENABLE_SKILL_SCRIPTS,
           skillScriptTimeoutMs: env.ASTRA_SKILL_SCRIPT_TIMEOUT_MS,
+          scriptExecutor: env.ASTRA_ENABLE_SKILL_SCRIPTS ? this.createScriptExecutor() : undefined,
+          sandboxImageRef: env.ASTRA_RESEARCH_SANDBOX_IMAGE_REF,
         },
         uiMessages: input.messages,
         abortSignal: input.abortSignal,
@@ -70,5 +78,24 @@ export class AgentsService {
         },
       },
     );
+  }
+
+  private createScriptExecutor(): SkillScriptExecutor {
+    if (env.ASTRA_SKILL_SCRIPT_EXECUTOR === "local") {
+      return new LocalScriptExecutor();
+    }
+
+    if (!env.ASTRA_RESEARCH_SANDBOX_IMAGE_REF) {
+      throw new Error("ASTRA_RESEARCH_SANDBOX_IMAGE_REF is required when ASTRA_SKILL_SCRIPT_EXECUTOR=daytona.");
+    }
+
+    return new DaytonaScriptExecutor({
+      imageRef: env.ASTRA_RESEARCH_SANDBOX_IMAGE_REF,
+      client: new DaytonaSdkScriptExecutorClient({
+        apiKey: env.DAYTONA_API_KEY,
+        apiUrl: env.DAYTONA_API_URL,
+        target: env.DAYTONA_TARGET,
+      }),
+    });
   }
 }

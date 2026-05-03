@@ -216,6 +216,58 @@ _Avoid_: Zotero clone as headline, file dump, generic storage
 Cara awal memasukkan sumber ke Source Library: PDF upload, URL atau DOI, dan manual citation.
 _Avoid_: Promising Zotero/Mendeley import before supported
 
+**Trusted Skill Script**:
+Script repo-shipped di dalam `skills/**/scripts/*` dari registered skill root yang boleh dijalankan oleh Deep Research Run melalui allowlist atau manifest.
+_Avoid_: Arbitrary path execution, user-uploaded code, model-generated code, free-form shell command
+
+**Skill Script Manifest**:
+Manifest per skill yang menjadi allowlist source of truth untuk **Trusted Skill Script** yang boleh dijalankan beserta runtime, arg limits, timeout, artifact outputs, dan policy eksekusinya.
+_Avoid_: Global hardcoded script list, model-selected script path, implicit executable file discovery
+
+**Bun Skill Script Runtime**:
+Runtime tunggal untuk menjalankan **Trusted Skill Script** v1 di sandbox Deep Research dengan TypeScript atau JavaScript.
+_Avoid_: Python host execution, mixed runtime by default, Go or Rust script toolchain
+
+**Library-Rendered Visual Artifact**:
+Visual artifact yang dibuat dari data dan visual spec terverifikasi memakai visualization library JavaScript, lalu dirender sebagai PNG final.
+_Avoid_: Hand-written deterministic SVG generator, arbitrary generated plotting code, unsupported image
+
+**Vega Visual Renderer**:
+Default v1 renderer untuk **Library-Rendered Visual Artifact** yang mengubah visual spec deklaratif berbasis Vega-Lite atau Vega menjadi PNG final.
+_Avoid_: Observable Plot default, Chart.js default, Mermaid default, one-off renderer per artifact
+
+**Research Sandbox**:
+Sandbox eksekusi terisolasi yang dibuat untuk satu **Deep Research Run** agar trusted script execution, artifact files, logs, dan cleanup tidak bercampur dengan run lain.
+_Avoid_: Shared global sandbox, per-script sandbox by default, API host execution
+
+**Research Sandbox Image**:
+Prebuilt container image untuk **Research Sandbox** yang berisi **Bun Skill Script Runtime** dan dependency trusted script seperti Vega renderer.
+_Avoid_: Installing dependencies during each research run, mutable ad-hoc sandbox setup, host dependency reliance
+
+**Sandbox Image Reference**:
+Immutable image reference, seperti `sha-<git-sha>`, yang disimpan pada run atau executor metadata untuk audit dan replay **Research Sandbox**.
+_Avoid_: Production `latest` tag, untracked image drift, branch-only production reference
+
+**Script Artifact Metadata**:
+Metadata artifact yang dihasilkan **Trusted Skill Script**, seperti path, content type, byte size, checksum, role, dan status retrieval, tanpa memasukkan file bytes besar ke executor result JSON.
+_Avoid_: Raw file bytes in executor JSON, untracked sandbox files, implicit artifact discovery
+
+**Trusted Script Error Code**:
+Kode error stabil dari trusted script execution yang membedakan unknown skill, unknown script, invalid script id, unsupported runtime, limit violation, timeout, sandbox failure, dependency failure, script failure, artifact failure, dan unknown failure.
+_Avoid_: Free-form exception only, raw stack trace as contract, provider-specific error labels
+
+**Offline Script Execution**:
+Default policy **Trusted Skill Script** yang menjalankan audit atau render dari input files tanpa arbitrary outbound network access.
+_Avoid_: Free network access by default, script-level web research, hidden dependency download
+
+**Script Execution Event**:
+Run event terstruktur yang mencatat start, completion, atau failure dari **Trusted Skill Script** beserta executor result, error code, sandbox image reference, dan artifact metadata yang relevan.
+_Avoid_: Console-only execution log, unpersisted sandbox result, final answer only trace
+
+**Local Script Executor**:
+Development-only executor yang menjalankan **Trusted Skill Script** secara lokal dengan manifest, limits, output shape, dan error taxonomy yang sama dengan Daytona executor.
+_Avoid_: Production local execution, test shortcut that bypasses policy, host execution by default
+
 ## Relationships
 
 - Seorang **Academic Writer** dapat memiliki satu atau lebih **Journal**.
@@ -248,6 +300,24 @@ _Avoid_: Promising Zotero/Mendeley import before supported
 - **Add to Journal** menghubungkan **Research Thread** ke **Journal** melalui review step.
 - **Source Library** adalah fondasi untuk evidence lintas **Journal** dan **Research Thread**, tetapi value utama yang terlihat tetap **Claim-Evidence Map**.
 - **Source Input** awal adalah PDF upload, URL atau DOI, dan manual citation; Zotero/Mendeley import dapat menjadi roadmap tetapi bukan janji awal.
+- **Trusted Skill Script** hanya boleh dijalankan sebagai bagian dari **Deep Research Run** ketika script berasal dari registered skill root dan lolos allowlist atau manifest.
+- **Skill Script Manifest** mendeklarasikan **Trusted Skill Script** yang tersedia untuk satu skill; file script yang tidak tercantum di manifest tidak boleh dieksekusi.
+- **Bun Skill Script Runtime** adalah satu-satunya runtime v1 untuk **Trusted Skill Script**.
+- **Library-Rendered Visual Artifact** dibuat oleh **Trusted Skill Script** melalui **Bun Skill Script Runtime**, bukan dengan menjalankan kode plotting arbitrer dari model.
+- **Library-Rendered Visual Artifact** tetap harus memakai data dari **Evidence Ledger** dan source references dari **Visual Spec**.
+- **Vega Visual Renderer** adalah default v1 untuk membuat **Library-Rendered Visual Artifact** dari visual spec deklaratif.
+- Satu **Deep Research Run** memiliki satu **Research Sandbox** v1.
+- **Research Sandbox** menjalankan **Trusted Skill Script** melalui **Bun Skill Script Runtime** dan tidak menjadi source of truth durable.
+- **Research Sandbox** dibuat dari **Research Sandbox Image** yang dipublish dari repo ke container registry.
+- **Research Sandbox Image** harus dibangun ulang lewat CI ketika trusted script dependencies berubah.
+- Setiap **Research Sandbox** harus menyimpan **Sandbox Image Reference** di executor result atau run metadata.
+- Production **Sandbox Image Reference** harus immutable agar **Deep Research Run** bisa diaudit atau direplay dengan image yang sama.
+- **Trusted Skill Script** menulis output file ke **Research Sandbox**, lalu executor mengembalikan **Script Artifact Metadata** sesuai output yang dideklarasikan di **Skill Script Manifest**.
+- API layer memakai **Script Artifact Metadata** untuk mengambil file dari sandbox dan memutuskan upload atau persistence berikutnya.
+- **Trusted Skill Script** failure harus diklasifikasikan dengan **Trusted Script Error Code**.
+- **Trusted Skill Script** memakai **Offline Script Execution** secara default; network hanya boleh aktif melalui policy eksplisit.
+- Setiap trusted script start, completion, atau failure harus menghasilkan **Script Execution Event** yang terkait dengan **Deep Research Run**.
+- **Local Script Executor** hanya boleh dipakai untuk tests atau development dan tetap mengikuti **Skill Script Manifest**.
 - **AI Research and Writing App** adalah kategori produk Aqsha; assessment atau quiz bukan kategori utama.
 - **Academic Writer** dan **Student Researcher** adalah audience utama untuk positioning awal Aqsha.
 - **Primary Persona** adalah mahasiswa S1 akhir atau S2 yang sedang menyusun proposal, skripsi, tesis, atau literature review.
@@ -271,6 +341,19 @@ _Avoid_: Promising Zotero/Mendeley import before supported
 
 - "Workspace" pernah dipakai sebagai kategori pengalaman produk dan container organisasi. Resolved: jangan gunakan workspace atau organization sebagai bahasa produk, UI, atau domain; gunakan ownership pengguna untuk **Journal**, **Research Chat**, dan artifact terkait.
 - "Aqsha" pernah dipakai untuk menyebut platform assessment berbasis quiz di marketing site, tetapi kategori produk yang dipilih adalah **AI Research and Writing App**.
+- "Trusted script" dapat berarti script repo-shipped atau path bebas yang diminta model. Resolved: gunakan **Trusted Skill Script** untuk script di `skills/**/scripts/*` dari registered skill root yang dipanggil lewat allowlist atau manifest.
+- "Allowlist" dapat berarti daftar global di kode atau manifest milik skill. Resolved: gunakan **Skill Script Manifest** per skill sebagai allowlist source of truth.
+- "Script runtime" dapat berarti Python, Bun, Node, atau banyak runtime sekaligus. Resolved: gunakan **Bun Skill Script Runtime** sebagai runtime tunggal v1 untuk trusted skill execution.
+- "Visual renderer" dapat berarti manual SVG generator atau library visualization. Resolved: gunakan **Library-Rendered Visual Artifact** untuk visual final berbasis visualization library JavaScript.
+- "Visualization library" dapat berarti Vega, Observable Plot, Chart.js, atau Mermaid. Resolved: gunakan **Vega Visual Renderer** sebagai default v1.
+- "Sandbox scope" dapat berarti per script, per run, atau shared global. Resolved: gunakan **Research Sandbox** per **Deep Research Run** untuk v1.
+- "Sandbox dependencies" dapat berarti install per run atau image prebuilt. Resolved: gunakan **Research Sandbox Image** yang dibangun CI dan dipublish ke registry.
+- "Sandbox image tag" dapat berarti branch tag, latest, atau immutable SHA. Resolved: gunakan **Sandbox Image Reference** immutable untuk production dan audit.
+- "Script output" dapat berarti stdout, JSON result, atau file artifact. Resolved: file artifact besar direpresentasikan sebagai **Script Artifact Metadata**, bukan bytes langsung di executor JSON.
+- "Script error" dapat berarti thrown exception bebas atau contract stabil. Resolved: gunakan **Trusted Script Error Code** sebagai contract.
+- "Sandbox network" dapat berarti bebas akses internet atau offline by default. Resolved: gunakan **Offline Script Execution** kecuali manifest/config mengizinkan network.
+- "Local executor" dapat berarti production fallback atau dev/test backend. Resolved: gunakan **Local Script Executor** hanya untuk development dan tests.
+- "Issue #20" dapat melebar ke full visual pipeline atau full Deep Research orchestration. Resolved: scope issue #20 adalah executor foundation; full **Vega Visual Renderer** pipeline dan full Deep Research orchestration dikerjakan pada issue terpisah.
 
 ## Example dialogue
 
@@ -330,6 +413,42 @@ _Avoid_: Promising Zotero/Mendeley import before supported
 >
 > **Dev:** "Bagaimana hasil Research Thread masuk ke Journal?"
 > **Domain expert:** "Gunakan **Add to Journal**. Hasil research masuk melalui review step, bukan langsung ditempel ke draft tanpa kontrol."
+>
+> **Dev:** "Apakah Astra boleh menjalankan script yang diminta model selama Deep Research?"
+> **Domain expert:** "Tidak. Astra hanya boleh menjalankan **Trusted Skill Script** dari registered skill root yang lolos allowlist atau manifest."
+>
+> **Dev:** "Kalau ada file baru di folder scripts, apakah otomatis executable?"
+> **Domain expert:** "Tidak. File itu baru boleh dieksekusi kalau dideklarasikan di **Skill Script Manifest**."
+>
+> **Dev:** "Runtime apa yang dipakai untuk trusted script di sandbox?"
+> **Domain expert:** "Gunakan **Bun Skill Script Runtime** sebagai runtime tunggal v1 agar execution, dependency, dan testing tetap sederhana."
+>
+> **Dev:** "Apakah chart Deep Research dibuat dengan SVG manual?"
+> **Domain expert:** "Tidak. Final chart harus menjadi **Library-Rendered Visual Artifact** dari data dan visual spec yang sudah diverifikasi."
+>
+> **Dev:** "Library visual apa yang menjadi default untuk v1?"
+> **Domain expert:** "Gunakan **Vega Visual Renderer** agar visual spec deklaratif bisa divalidasi, dirender, disimpan, dan diaudit ulang."
+>
+> **Dev:** "Apakah setiap script call membuat sandbox baru?"
+> **Domain expert:** "Tidak. Satu **Deep Research Run** memakai satu **Research Sandbox** agar artifact files dan logs tetap berada dalam konteks run yang sama."
+>
+> **Dev:** "Apakah sandbox menjalankan bun install setiap run?"
+> **Domain expert:** "Tidak. Dependency trusted script harus sudah ada di **Research Sandbox Image** yang dipublish dari CI."
+>
+> **Dev:** "Bolehkah production menunjuk image tag latest?"
+> **Domain expert:** "Tidak. Simpan **Sandbox Image Reference** immutable agar run bisa diaudit dan direplay."
+>
+> **Dev:** "Apakah PNG hasil renderer dikembalikan langsung di JSON executor?"
+> **Domain expert:** "Tidak. Executor mengembalikan **Script Artifact Metadata**; API layer mengambil file dari sandbox dan menangani upload/persistence."
+>
+> **Dev:** "Apakah script renderer boleh melakukan web request untuk melengkapi data?"
+> **Domain expert:** "Default-nya tidak. Gunakan **Offline Script Execution**; data harus berasal dari input yang sudah disiapkan oleh Deep Research."
+>
+> **Dev:** "Bagaimana UI dan developer tahu script mana yang gagal?"
+> **Domain expert:** "Gunakan **Script Execution Event** dengan **Trusted Script Error Code**, bukan hanya pesan exception bebas."
+>
+> **Dev:** "Apakah executor lokal boleh dipakai production kalau Daytona bermasalah?"
+> **Domain expert:** "Tidak. **Local Script Executor** hanya untuk development dan tests."
 
 ## Messaging directions
 
