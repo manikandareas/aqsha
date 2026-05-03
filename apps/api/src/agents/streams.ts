@@ -1,15 +1,21 @@
 import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import { Buffer } from "node:buffer";
-import { createAgentUIStream, createAgentUIStreamResponse, tool, type LanguageModel, type ToolSet, type UIMessage } from "ai";
+import { createAgentUIStream, createAgentUIStreamResponse, generateObject, tool, type LanguageModel, type ToolSet, type UIMessage } from "ai";
 import { z } from "zod";
 import type { AgentUsedSource, CreateChatResponseInput } from "../modules/agents/model";
 import { buildAstraAgent } from "./astra";
+import {
+  compactPhaseOutputSchema,
+  runDeepResearchPhase,
+  runMinimalDeepResearchPhasePath,
+} from "./deep-research/phases";
 import { createExaMcpTools } from "./mcp/exa";
 import type { AgentRuntimeContext } from "./types";
 
 type UnknownRecord = Record<string, unknown>;
 type SourceReporter = (source: AgentUsedSource) => Promise<void> | void;
 type ArtifactPublisher = NonNullable<CreateChatResponseInput["onArtifact"]>;
+type AgentEventReporter = NonNullable<CreateChatResponseInput["onAgentEvent"]>;
 
 const EXA_SOURCE_TOOL_NAMES = new Set(["web_search_exa", "web_fetch_exa"]);
 const EXA_RESULT_CONTAINERS = ["results", "items", "content", "contents", "data", "documents"];
@@ -53,6 +59,7 @@ export async function createAstraAgentResponse({
   abortSignal,
   headers,
   onSource,
+  onAgentEvent,
   onArtifact,
 }: {
   model: LanguageModel;
@@ -62,9 +69,10 @@ export async function createAstraAgentResponse({
   abortSignal?: AbortSignal;
   headers?: HeadersInit;
   onSource?: SourceReporter;
+  onAgentEvent?: AgentEventReporter;
   onArtifact?: ArtifactPublisher;
 }) {
-  const external = await createAstraExternalTools({ onSource, onArtifact });
+  const external = await createAstraExternalTools({ model, onSource, onAgentEvent, onArtifact });
   try {
     const response = await createAgentUIStreamResponse({
       agent: buildAstraAgent({ model, providerOptions, context, externalTools: external.tools }),
@@ -94,16 +102,90 @@ export async function createAstraAgentResponse({
 }
 
 async function createAstraExternalTools({
+  model,
   onSource,
+  onAgentEvent,
   onArtifact,
 }: {
+  model?: LanguageModel;
   onSource?: SourceReporter;
+  onAgentEvent?: AgentEventReporter;
   onArtifact?: ArtifactPublisher;
 } = {}) {
   const exa = await createExaMcpTools({ onSource });
   const tools: ToolSet = {
     ...(exa.tools as ToolSet),
   };
+
+  if (onAgentEvent && model) {
+    const generateCompactOutput = async ({ model: delegateModel, prompt, schema }: {
+      model: unknown;
+      prompt: string;
+      schema: typeof compactPhaseOutputSchema;
+    }) => {
+      const result = await generateObject({
+        model: delegateModel as LanguageModel,
+        prompt,
+        schema,
+        schemaName: "CompactPhaseOutput",
+        schemaDescription:
+          "Compact Deep Research phase output for Astra parent context and Research Trail persistence.",
+        maxRetries: 1,
+      });
+
+      return result.object;
+    };
+
+    tools.runDeepResearchPhasedPath = tool({
+      description:
+        "Run the full minimal Deep Research phased path linearly through named Research Sub-agents with fresh context windows, persist compact Research Trail events, and return compact phase outputs to Astra.",
+      inputSchema: z.object({
+        researchQuestion: z.string().min(1),
+        context: z
+          .string()
+          .min(1)
+          .describe("Compact initial research context. Include user scope and stable IDs; do not include full transcripts."),
+      }),
+      execute: async (input) =>
+        runMinimalDeepResearchPhasePath(
+          {
+            ...input,
+            model,
+            generateCompactOutput,
+          },
+          async (event) => {
+            await onAgentEvent(event);
+          },
+        ),
+    });
+
+    tools.runDeepResearchPhase = tool({
+      description:
+        "Run one Deep Research phase through a named internal Research Sub-agent with a fresh context window, persist compact Research Trail events, and return Compact Phase Output to Astra. Use only for one phase rerun. Do not include full transcripts, chain-of-thought, prompt details, or verbose tool logs.",
+      inputSchema: z.object({
+        phase: compactPhaseOutputSchema.shape.phase,
+        task: z.string().min(1).describe("Specific delegated task for the phase."),
+        context: z
+          .string()
+          .min(1)
+          .describe("Compact phase input context. Include stable source/claim/artifact IDs, not full transcripts."),
+        sourceIds: z.array(z.string().min(1)).default([]),
+        claimIds: z.array(z.string().min(1)).default([]),
+        artifactIds: z.array(z.string().min(1)).default([]),
+      }),
+      execute: async (input) =>
+        runDeepResearchPhase(
+          {
+            ...input,
+            model,
+            generateCompactOutput,
+          },
+          async (event) => {
+            await onAgentEvent(event);
+          },
+        ),
+    });
+  }
 
   if (onArtifact) {
     tools.publishPngArtifact = tool({

@@ -1,0 +1,5 @@
+# Named Research Sub-agents behind Astra
+
+Aqsha keeps Astra as the single user-facing agent for Research Chat, but Deep Research v1 may delegate linear internal phases to named Research Sub-agents: Vektor for source discovery and screening, Prism for evidence extraction and contradiction mapping, Quill for synthesis/report drafting support, and Sanctum for citation audit and delivery gating. These personas may appear in the Research Trail as compact progress and audit events, while full sub-agent transcripts, raw chain-of-thought, prompt details, and verbose tool logs stay out of the UI and out of Astra's parent context by default.
+
+This trades a fully hidden worker model for a more user-friendly and auditable Research Trail without turning the product into a multi-agent chat surface. Phase persistence remains event-only for v1, phase execution is linear, Astra commits final Research Decisions and user-facing responses, and Sanctum can block final delivery when important claims fail evidence or citation audit.

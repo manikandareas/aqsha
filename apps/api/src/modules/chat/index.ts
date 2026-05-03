@@ -462,6 +462,7 @@ export const chatModule = new Elysia({
               );
             }
           },
+          onAgentEvent: eventWriter,
           onArtifact: async (artifact) => {
             const publisher = new PngArtifactPublisher({
               uploadClient: pngArtifactUploadClient,

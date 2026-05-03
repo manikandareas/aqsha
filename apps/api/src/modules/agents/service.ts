@@ -51,6 +51,7 @@ export class AgentsService {
         uiMessages: input.messages,
         abortSignal: input.abortSignal,
         onSource: input.onSource,
+        onAgentEvent: input.onAgentEvent,
         onArtifact: input.onArtifact,
         headers: {
           "x-astra-request-id": requestId,

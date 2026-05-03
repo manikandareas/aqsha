@@ -81,7 +81,7 @@ Evidence yang sumber, metadata, dan hubungannya ke claim dapat diperiksa kembali
 _Avoid_: Citation decoration, unverified reference, hallucinated citation
 
 **Research Trail**:
-Jejak proses research yang menampilkan sumber yang dipakai, progress agent, evidence yang ditemukan, dan alasan ringkas di balik hasil.
+Jejak proses research yang menampilkan sumber yang dipakai, progress agent, evidence yang ditemukan, delegasi Research Sub-agent, dan alasan ringkas di balik hasil. Research Trail menampilkan compact audit/progress events, bukan full sub-agent transcript.
 _Avoid_: Hidden AI thinking, black-box answer, raw chain-of-thought
 
 **Audit Trail**:
@@ -137,8 +137,36 @@ Percakapan multi-turn milik pengguna dengan AI agent yang menyimpan messages, ru
 _Avoid_: Chatbot only, final-answer chat
 
 **Deep Research Run**:
-Proses research mendalam di dalam Research Chat yang berjalan dalam beberapa fase terstruktur untuk menghasilkan evidence ledger, research decision, visual artifact, dan final Markdown report berbasis sumber.
-_Avoid_: Separate public agent, generic chat answer, hidden autonomous research mode
+Proses research mendalam di dalam Research Chat yang berjalan dalam beberapa fase terstruktur untuk menghasilkan evidence ledger, research decision, visual artifact, dan final Markdown report berbasis sumber. V1 berjalan streaming-first melalui chat request aktif, sementara phase events tetap durable untuk reload dan audit.
+_Avoid_: Separate public agent, generic chat answer, hidden autonomous research mode, automatic background resume as v1 promise
+
+**Deep Research Phase**:
+Checkpoint durable di dalam satu Deep Research Run untuk pekerjaan seperti scoping, source discovery and screening, evidence extraction, synthesis support, citation audit, delivery gate, rendering, upload, atau final assembly. Phase boleh dieksekusi oleh Astra langsung atau Research Sub-agent, tetapi hasilnya kembali ke parent sebagai compact summary, Ledger Source IDs, decision state, dan artifact references. Phase direkam sebagai progress/audit events di Research Trail, bukan sebagai objek user-facing terpisah.
+_Avoid_: Public agent identity, separate Research Chat, full transcript handoff, separate phase record as product surface
+
+**Research Sub-agent**:
+Agen internal bernama/persona yang menerima delegasi tugas dari Astra untuk menjalankan satu atau beberapa Deep Research Phase dengan context window sendiri. Research Sub-agent boleh muncul di Research Trail sebagai aktivitas delegasi yang user-friendly, tetapi tidak menjadi agent utama yang dipilih atau diajak chat langsung oleh pengguna. V1 memakai fixed canonical set: Vektor, Prism, Quill, dan Sanctum.
+_Avoid_: Separate public chat surface, user-selected agent, hidden delegation with no trail, generic unnamed worker when a persona improves clarity, dynamic persona invented per run
+
+**Vektor**:
+Research Sub-agent untuk source discovery dan source screening.
+_Avoid_: Final synthesis owner, citation audit authority, user-selected agent
+
+**Prism**:
+Research Sub-agent untuk evidence extraction, claim mapping, dan contradiction mapping.
+_Avoid_: Source search owner, final report owner, visual renderer
+
+**Quill**:
+Research Sub-agent untuk synthesis support dan report drafting support berdasarkan evidence yang sudah dikumpulkan.
+_Avoid_: Unsupported prose generation, citation audit authority, direct final answer owner
+
+**Sanctum**:
+Research Sub-agent untuk citation audit, evidence validity gate, dan delivery safety checks.
+_Avoid_: Source discovery owner, style rewriting owner, optional reviewer only, final user-facing answer owner
+
+**Compact Phase Output**:
+Output ringkas dari Deep Research Phase yang dikembalikan ke Astra dan disimpan di Research Trail. Output minimal berisi phase ID, phase name, persona, status, summary, Ledger Source IDs, claim IDs, artifact IDs, optional Research Decision recommendation, optional user confirmation flag, dan optional Failure Summary.
+_Avoid_: Full sub-agent transcript in UI, raw tool log as parent context, prose-only handoff without stable IDs
 
 **Evidence**:
 Sumber atau artefak pendukung yang dipakai untuk memperkuat claim dalam jawaban atau tulisan.
@@ -297,6 +325,26 @@ _Avoid_: Production local execution, test shortcut that bypasses policy, host ex
 - **Claim-Changing Suggestion** harus menyertakan evidence/citation atau ditandai belum verified; paraphrase dan shorten yang hanya mengubah gaya tidak wajib membawa evidence baru.
 - **Research Thread** adalah permukaan focused research yang chat-style, terpisah dari **Journal**.
 - **Deep Research Run** berlangsung di dalam **Research Chat** dan tetap muncul melalui **Astra** sebagai satu public agent surface.
+- Sebuah **Deep Research Run** terdiri dari satu atau lebih **Deep Research Phase**.
+- **Deep Research Phase** bukan public agent identity; pengguna tetap melihat Astra sebagai satu agent surface.
+- Hasil **Deep Research Phase** harus cukup compact untuk parent context dan cukup durable untuk audit melalui run events, source IDs, decision state, dan artifact references.
+- **Deep Research Phase** muncul dalam **Research Trail** melalui progress/audit events, bukan sebagai daftar objek phase terpisah yang harus dipahami pengguna.
+- Astra boleh mendelegasikan **Deep Research Phase** ke **Research Sub-agent**.
+- **Research Sub-agent** boleh terlihat di **Research Trail** sebagai named persona untuk membuat delegasi lebih mudah dipahami, tetapi pengguna tetap berinteraksi dengan Astra sebagai agent utama.
+- V1 **Research Sub-agent** memakai fixed canonical set: **Vektor** untuk source discovery/screening, **Prism** untuk evidence extraction/contradiction mapping, **Quill** untuk synthesis/report drafting support, dan **Sanctum** untuk citation audit/validity gate.
+- Astra tetap bertanggung jawab atas user-facing response; **Research Sub-agent** memberi delegated output, bukan final answer langsung ke pengguna.
+- **Research Sub-agent** boleh merekomendasikan **Research Decision**, tetapi Astra yang meng-commit decision final di user-facing flow.
+- **Sanctum** memiliki blocking authority untuk hard audit failure; ketika **Important Claim** gagal audit, Astra harus menyampaikan **Failed Research Explanation** alih-alih final report.
+- Setiap **Deep Research Phase** yang selesai, gagal, atau blocked harus menghasilkan **Compact Phase Output**.
+- Astra memakai **Compact Phase Output** sebagai parent-context handoff; full sub-agent transcript tidak ditampilkan di UI v1 dan tidak otomatis dimasukkan kembali ke parent context.
+- **Research Trail** untuk **Research Sub-agent** menampilkan compact progress/audit events seperti delegation, screened source counts, kept/rejected sources, extracted claim counts, blocked claims, and failure summaries.
+- V1 **Deep Research Run** berjalan streaming-first: jika stream aktif pengguna melihat progress, dan jika stream putus phase events yang sudah persisted tetap dapat dilihat setelah reload.
+- V1 **Deep Research Run** belum menjanjikan automatic background resume dari phase terakhir setelah client disconnect.
+- Minimal issue #21 path memiliki lima **Deep Research Phase** wajib: scoping oleh Astra, source discovery and screening oleh **Vektor**, evidence extraction oleh **Prism**, synthesis support oleh **Quill**, dan citation audit plus delivery gate oleh **Sanctum**.
+- Rendering visual penuh, UploadThing artifact pipeline lanjutan, automatic background resume, retry per phase, dan visual planning persona terpisah bukan bagian wajib minimal issue #21 path.
+- Minimal issue #21 path berjalan linear; parallel phase execution bukan bagian v1.
+- Ketika **Sanctum** block delivery, Astra mengirim **Failed Research Explanation** yang menjelaskan claim yang gagal, evidence yang lemah, dan next step `REFINE` atau `PIVOT`.
+- **Quill** tidak menulis final report langsung ke pengguna; Quill memberi synthesis/report drafting support, lalu Astra menyusun final user-facing answer berdasarkan delegated output dan **Sanctum** decision.
 - **Add to Journal** menghubungkan **Research Thread** ke **Journal** melalui review step.
 - **Source Library** adalah fondasi untuk evidence lintas **Journal** dan **Research Thread**, tetapi value utama yang terlihat tetap **Claim-Evidence Map**.
 - **Source Input** awal adalah PDF upload, URL atau DOI, dan manual citation; Zotero/Mendeley import dapat menjadi roadmap tetapi bukan janji awal.
@@ -354,6 +402,17 @@ _Avoid_: Production local execution, test shortcut that bypasses policy, host ex
 - "Sandbox network" dapat berarti bebas akses internet atau offline by default. Resolved: gunakan **Offline Script Execution** kecuali manifest/config mengizinkan network.
 - "Local executor" dapat berarti production fallback atau dev/test backend. Resolved: gunakan **Local Script Executor** hanya untuk development dan tests.
 - "Issue #20" dapat melebar ke full visual pipeline atau full Deep Research orchestration. Resolved: scope issue #20 adalah executor foundation; full **Vega Visual Renderer** pipeline dan full Deep Research orchestration dikerjakan pada issue terpisah.
+- "Phase" dalam Deep Research dapat berarti UI step, internal agent, atau job terpisah. Resolved: gunakan **Deep Research Phase** sebagai checkpoint durable di dalam satu **Deep Research Run**, bukan public agent identity atau Research Chat baru.
+- "Phase persistence" dapat berarti dedicated phase object atau durable progress events. Resolved: v1 merekam **Deep Research Phase** melalui progress/audit events di **Research Trail**, bukan sebagai objek user-facing terpisah.
+- "Sub-agent" dapat berarti agent publik baru, worker internal generik, atau named persona. Resolved: gunakan **Research Sub-agent** sebagai named persona untuk delegasi internal yang boleh muncul di **Research Trail**, tetapi bukan agent utama yang dipilih atau diajak chat langsung oleh pengguna.
+- "Sub-agent persona" dapat berarti daftar tetap atau nama dinamis per run. Resolved: v1 memakai fixed canonical set **Vektor**, **Prism**, **Quill**, dan **Sanctum** agar Research Trail, audit, dan tests tetap stabil.
+- "Research decision authority" dapat berarti setiap sub-agent boleh memutuskan sendiri atau Astra menjadi control plane. Resolved: **Research Sub-agent** memberi recommendation, Astra meng-commit **Research Decision**, dan **Sanctum** boleh block final delivery ketika audit gagal.
+- "Compact output" dapat berarti summary bebas atau contract minimal. Resolved: gunakan **Compact Phase Output** dengan stable IDs, status, summary, persona, optional recommendation, dan failure summary agar Astra tidak perlu membaca ulang full sub-agent transcript.
+- "Sub-agent visibility" dapat berarti full transcript, hidden execution, atau compact Research Trail. Resolved: UI v1 menampilkan compact **Research Trail** untuk delegasi dan audit, bukan full sub-agent transcript, raw chain-of-thought, prompt detail, atau verbose tool logs.
+- "Long-running run" dapat berarti streaming request aktif atau background resumable job. Resolved: issue #21 v1 memakai streaming-first **Deep Research Run** dengan durable phase events, belum automatic background resume.
+- "Minimal phased path" dapat melebar ke semua Deep Research orchestration. Resolved: issue #21 v1 wajib hanya scoping, source discovery/screening, evidence extraction, synthesis support, dan citation audit/delivery gate.
+- "Phase execution order" dapat berarti linear atau parallel. Resolved: issue #21 v1 berjalan linear; parallel execution ditunda sampai event contract dan Compact Phase Output stabil.
+- "Quill output" dapat berarti final report langsung atau drafting support. Resolved: **Quill** hanya memberi synthesis/report drafting support; Astra tetap menyusun final user-facing answer.
 
 ## Example dialogue
 
