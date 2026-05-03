@@ -133,21 +133,10 @@ export function evaluateDeepResearchDelivery(
   );
 
   if (visualOmissions.length > 0) {
-    const omissionNotes = visualOmissions.map((artifact) =>
-      artifact.failureSummary
-        ? artifact.failureSummary
-        : `${artifact.title} was omitted because it was not safe to include.`,
-    );
-
     return {
       status: "completed",
       runStatus: "completed",
-      finalReportMarkdown: [
-        input.finalReportMarkdown,
-        "",
-        "### Visual omission",
-        ...omissionNotes.map((note) => `- ${note}`),
-      ].join("\n"),
+      finalReportMarkdown: input.finalReportMarkdown,
       events: visualOmissions.map((artifact) => {
         const failureSummary =
           artifact.failureSummary ??

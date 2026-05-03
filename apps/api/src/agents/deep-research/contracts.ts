@@ -91,6 +91,7 @@ export const visualSpecSchema = z
     claimIds: z.array(z.string().min(1)).default([]),
     caption: z.string().min(1),
     outputIntent: z.enum(["final_report_embed", "research_trail_preview", "audit_only"]),
+    displayOrder: z.number().int().nonnegative().optional(),
     metadata: metadataSchema.optional(),
   })
   .strict();
@@ -115,6 +116,7 @@ const artifactBaseSchema = z.object({
   contentType: z.literal("image/png"),
   sourceIds: nonEmptyStringArraySchema,
   metricIds: z.array(z.string().min(1)).default([]),
+  displayOrder: z.number().int().nonnegative().optional(),
   metadata: metadataSchema.optional(),
 });
 

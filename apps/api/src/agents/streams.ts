@@ -5,6 +5,15 @@ import { z } from "zod";
 import type { AgentUsedSource, CreateChatResponseInput } from "../modules/agents/model";
 import { buildAstraAgent } from "./astra";
 import {
+  evidenceLedgerSchema,
+  visualSpecSchema,
+} from "./deep-research/contracts";
+import {
+  createPngArtifactPublishAdapter,
+  createTrustedSkillVisualRenderer,
+  renderAndPublishVisualArtifacts,
+} from "./deep-research/visual-delivery";
+import {
   compactPhaseOutputSchema,
   runDeepResearchPhase,
   runMinimalDeepResearchPhasePath,
@@ -36,7 +45,7 @@ export async function createAstraAgentUIStream({
   uiMessages: UIMessage[];
   abortSignal?: AbortSignal;
 }) {
-  const external = await createAstraExternalTools();
+  const external = await createAstraExternalTools({ context });
   try {
     const stream = await createAgentUIStream({
       agent: buildAstraAgent({ model, providerOptions, context, externalTools: external.tools }),
@@ -72,7 +81,7 @@ export async function createAstraAgentResponse({
   onAgentEvent?: AgentEventReporter;
   onArtifact?: ArtifactPublisher;
 }) {
-  const external = await createAstraExternalTools({ model, onSource, onAgentEvent, onArtifact });
+  const external = await createAstraExternalTools({ model, context, onSource, onAgentEvent, onArtifact });
   try {
     const response = await createAgentUIStreamResponse({
       agent: buildAstraAgent({ model, providerOptions, context, externalTools: external.tools }),
@@ -103,11 +112,13 @@ export async function createAstraAgentResponse({
 
 async function createAstraExternalTools({
   model,
+  context,
   onSource,
   onAgentEvent,
   onArtifact,
 }: {
   model?: LanguageModel;
+  context?: AgentRuntimeContext;
   onSource?: SourceReporter;
   onAgentEvent?: AgentEventReporter;
   onArtifact?: ArtifactPublisher;
@@ -188,6 +199,46 @@ async function createAstraExternalTools({
   }
 
   if (onArtifact) {
+    if (context?.skillScriptsEnabled) {
+      tools.renderAndPublishVisualArtifacts = tool({
+        description:
+          "Validate Visual Specs against the Evidence Ledger, render final visual artifacts with the trusted render-vega script through the configured script executor, publish passed PNG artifacts, and return Artifact Manifest records plus Markdown embeds. Use this for Deep Research visual delivery instead of model-generated plotting code or raw/supporting files.",
+        inputSchema: z.object({
+          evidenceLedger: evidenceLedgerSchema,
+          visualSpecs: z.array(visualSpecSchema).min(1),
+        }),
+        execute: async ({ evidenceLedger, visualSpecs }) => {
+          const skill = context.skills.byName.get("deep-research");
+          if (!skill) {
+            throw new Error("deep-research skill is not registered.");
+          }
+
+          const result = await renderAndPublishVisualArtifacts({
+            evidenceLedger,
+            visualSpecs,
+            renderVisual: createTrustedSkillVisualRenderer({
+              skill,
+              evidenceLedger,
+              executor: context.scriptExecutor,
+              runId: context.deps.runId,
+              imageRef: context.sandboxImageRef,
+            }),
+            publishVisual: createPngArtifactPublishAdapter({
+              publishArtifact: onArtifact,
+            }),
+          });
+
+          if (onAgentEvent) {
+            for (const event of result.events) {
+              await onAgentEvent(event);
+            }
+          }
+
+          return result;
+        },
+      });
+    }
+
     tools.publishPngArtifact = tool({
       description:
         "Publish a final PNG visual artifact to UploadThing and return Markdown image syntax for embedding in the final answer. Use only for final audited visual artifacts, not raw/supporting files.",

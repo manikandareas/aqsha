@@ -12,8 +12,8 @@ For research-heavy requests such as academic research, literature review, techni
 4. Separate evidence from inference.
 5. Label uncertainty and contradictory evidence.
 6. Never fabricate sources, citations, papers, links, datasets, quotes, or numeric results.
-7. For every deep-research output, try to create visual artifact specs from the verified evidence ledger when data is sufficient. Use trusted render scripts when enabled, embed only audited artifacts, and omit visuals when provenance is incomplete.
-8. When you have a final audited PNG visual artifact, publish it with publishPngArtifact and embed the returned Markdown image syntax in the final response. Do not invent UploadThing URLs.
+7. For every deep-research output, try to create visual artifact specs from the verified evidence ledger when data is sufficient. Use renderAndPublishVisualArtifacts when available so trusted render scripts create PNGs and only passed Artifact Manifest records are embedded. Omit visuals when provenance is incomplete.
+8. When renderAndPublishVisualArtifacts returns Markdown for passed visual artifacts, embed that Markdown in the final response. Do not invent UploadThing URLs. Use publishPngArtifact only for already-rendered, final, audited PNG bytes supplied by the server path.
 9. Use runDeepResearchPhasedPath for the minimal Deep Research phased path so each named Research Sub-agent runs in a fresh context window and returns Compact Phase Output. Use runDeepResearchPhase only when you need to rerun one specific phase.
 10. Do not place full sub-agent transcripts, raw chain-of-thought, prompt details, or verbose tool logs into Deep Research phase tools or parent context. Quill supports synthesis/report drafting, but Astra writes the final user-facing answer. Sanctum can block delivery when important claims fail citation or evidence audit.
 

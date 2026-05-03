@@ -62,7 +62,7 @@ describe("Deep Research delivery gate", () => {
     });
   });
 
-  test("delivers a valid final report with an omitted-visual note when default visual data is insufficient", () => {
+  test("delivers a valid final report without mentioning omitted optional visuals", () => {
     const ledger = evidenceLedgerSchema.parse({
       sources: [
         {
@@ -103,9 +103,7 @@ describe("Deep Research delivery gate", () => {
     expect(result).toEqual({
       status: "completed",
       runStatus: "completed",
-      finalReportMarkdown: expect.stringContaining(
-        "Visual omitted because the Evidence Ledger has no visual-ready metrics.",
-      ),
+      finalReportMarkdown: "# Final report\n\nEvidence-backed answer. [S1]",
       events: [
         expect.objectContaining({
           type: "visual_omitted",
@@ -122,6 +120,11 @@ describe("Deep Research delivery gate", () => {
         }),
       ],
     });
+    if (result.status !== "completed") {
+      throw new Error("Expected delivery to complete.");
+    }
+    expect(result.finalReportMarkdown).not.toContain("Visual omitted");
+    expect(result.finalReportMarkdown).not.toContain("Evidence Ledger has no visual-ready metrics");
   });
 
   test("hard fails when the visual artifact is the explicit primary deliverable", () => {
@@ -228,9 +231,7 @@ describe("Deep Research delivery gate", () => {
     expect(result).toEqual({
       status: "completed",
       runStatus: "completed",
-      finalReportMarkdown: expect.stringContaining(
-        "Visual omitted because UploadThing rejected the PNG.",
-      ),
+      finalReportMarkdown: "# Final report\n\nEvidence-backed answer. [S1]",
       events: [
         expect.objectContaining({
           type: "visual_omitted",
@@ -247,5 +248,10 @@ describe("Deep Research delivery gate", () => {
         }),
       ],
     });
+    if (result.status !== "completed") {
+      throw new Error("Expected delivery to complete.");
+    }
+    expect(result.finalReportMarkdown).not.toContain("Visual omitted");
+    expect(result.finalReportMarkdown).not.toContain("UploadThing rejected the PNG");
   });
 });

@@ -144,6 +144,38 @@ describe("Skill script executor manifest", () => {
     expect(result.artifacts[0]).not.toHaveProperty("bytes");
   });
 
+  test("local executor can return artifact bytes for internal server-side upload when explicitly requested", async () => {
+    const skill = await createSkillFixture();
+    await writeFile(
+      join(skill.directory, "scripts", "render-vega.ts"),
+      "await Bun.write('artifacts/timeline.png', new Uint8Array([137, 80, 78, 71]));\n",
+    );
+
+    const manifest = await loadSkillScriptManifest(skill);
+    const resolved = await resolveSkillScript({
+      skill,
+      manifest,
+      scriptId: "render-vega",
+    });
+
+    if (!resolved.ok) {
+      throw new Error("Expected script to resolve.");
+    }
+
+    const result = await new LocalScriptExecutor().execute({
+      skillName: skill.name,
+      script: resolved.script,
+      args: [],
+      includeArtifactBytes: true,
+    });
+
+    if (!result.ok) {
+      throw new Error("Expected local execution to succeed.");
+    }
+
+    expect(result.artifacts[0]?.bytes).toEqual(new Uint8Array([137, 80, 78, 71]));
+  });
+
   test("Daytona executor maps sandbox command results into the stable executor result contract", async () => {
     const skill = await createSkillFixture();
     const manifest = await loadSkillScriptManifest(skill);
@@ -230,6 +262,72 @@ describe("Skill script executor manifest", () => {
     });
   });
 
+  test("Daytona executor materializes base64 Visual Specs for sandbox images with file-based renderers", async () => {
+    const skill = await createSkillFixture();
+    const manifest = await loadSkillScriptManifest(skill);
+    const resolved = await resolveSkillScript({
+      skill,
+      manifest,
+      scriptId: "render-vega",
+    });
+
+    if (!resolved.ok) {
+      throw new Error("Expected script to resolve.");
+    }
+
+    const specJsonBase64 = Buffer.from(JSON.stringify({ mark: "bar" }), "utf8").toString("base64");
+    const executor = new DaytonaScriptExecutor({
+      imageRef: "ghcr.io/manikandareas/aqsha/research-sandbox:sha-test",
+      client: {
+        async execute(input) {
+          expect(input.command[0]).toBe("sh");
+          expect(input.command[1]).toBe("-lc");
+          expect(input.command[2]).toContain("mkdir -p .aqsha-inputs");
+          expect(input.command[2]).toContain("'bun' '-e'");
+          expect(input.command[2]).toContain("'bun' 'render-vega.ts' '--spec' '.aqsha-inputs/visual-spec-");
+          expect(input.command[2]).toContain("'--output' 'artifacts/timeline.png'");
+          expect(input.command[2]).not.toContain("--spec-json-base64");
+
+          return {
+            exitCode: 0,
+            stdout: "rendered",
+            stderr: "",
+            artifacts: [
+              {
+                path: "artifacts/timeline.png",
+                contentType: "image/png",
+                byteSize: 4,
+                checksum: "abc123",
+                role: "visual",
+                retrievalStatus: "available",
+                bytes: new Uint8Array([137, 80, 78, 71]),
+              },
+            ],
+          };
+        },
+      },
+    });
+
+    await expect(
+      executor.execute({
+        skillName: skill.name,
+        script: resolved.script,
+        args: [
+          "--spec-json-base64",
+          specJsonBase64,
+          "--output",
+          "artifacts/timeline.png",
+        ],
+        runId: "run_123",
+        includeArtifactBytes: true,
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      backend: "daytona",
+      artifacts: [{ path: "artifacts/timeline.png", contentType: "image/png" }],
+    });
+  });
+
   test("Daytona SDK client creates one sandbox per run and returns downloaded artifact metadata", async () => {
     const commands: string[] = [];
     let createdParams: unknown;
@@ -282,6 +380,7 @@ describe("Skill script executor manifest", () => {
       timeoutMs: 30_000,
       outputs: [{ path: "artifacts/*.png", contentType: "image/png", role: "visual" }],
       network: "disabled",
+      includeArtifactBytes: true,
     });
 
     expect(createdParams).toMatchObject({
@@ -305,6 +404,7 @@ describe("Skill script executor manifest", () => {
         },
       ],
     });
+    expect(result.artifacts[0]?.bytes).toEqual(new Uint8Array([137, 80, 78, 71]));
     expect(deletedSandboxId).toBe("sandbox_123");
   });
 

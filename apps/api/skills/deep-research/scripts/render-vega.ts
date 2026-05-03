@@ -1,4 +1,5 @@
 import { mkdir } from "node:fs/promises";
+import { Buffer } from "node:buffer";
 import { dirname } from "node:path";
 import { parse, View } from "vega";
 import { compile } from "vega-lite";
@@ -6,6 +7,7 @@ import sharp from "sharp";
 
 type RenderArgs = {
   spec: string;
+  specJsonBase64?: string;
   output: string;
 };
 
@@ -21,6 +23,12 @@ function parseArgs(args: string[]): RenderArgs {
 
     if (arg === "--spec" && value) {
       parsed.spec = value;
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--spec-json-base64" && value) {
+      parsed.specJsonBase64 = value;
       index += 1;
       continue;
     }
@@ -51,7 +59,9 @@ function toVegaSpec(input: unknown): unknown {
 
 async function main() {
   const args = parseArgs(Bun.argv.slice(2));
-  const rawSpec = JSON.parse(await Bun.file(args.spec).text());
+  const rawSpec = args.specJsonBase64
+    ? JSON.parse(Buffer.from(args.specJsonBase64, "base64").toString("utf8"))
+    : JSON.parse(await Bun.file(args.spec).text());
   const runtime = parse(toVegaSpec(rawSpec) as never);
   const view = new View(runtime, { renderer: "none" });
   const svg = await view.toSVG();

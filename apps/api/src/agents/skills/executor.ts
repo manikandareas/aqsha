@@ -68,6 +68,7 @@ export type ScriptArtifactMetadata = {
   checksum: string;
   role?: string;
   retrievalStatus: "available";
+  bytes?: Uint8Array;
 };
 
 export type SkillScriptExecutionInput = {
@@ -76,6 +77,7 @@ export type SkillScriptExecutionInput = {
   args: string[];
   runId?: string;
   imageRef?: string;
+  includeArtifactBytes?: boolean;
 };
 
 export type SkillScriptExecutionSuccess = {
@@ -123,6 +125,7 @@ export type DaytonaScriptExecutorClientInput = {
   timeoutMs: number;
   outputs: ScriptArtifactOutput[];
   network: "disabled" | "enabled";
+  includeArtifactBytes?: boolean;
 };
 
 export type DaytonaScriptExecutorClientResult = {
@@ -334,7 +337,7 @@ export class LocalScriptExecutor implements SkillScriptExecutor {
 
     let artifacts: ScriptArtifactMetadata[];
     try {
-      artifacts = await collectArtifactMetadata(input.script);
+      artifacts = await collectArtifactMetadata(input.script, input.includeArtifactBytes ?? false);
     } catch (error) {
       return failureResult("local", input, {
         exitCode: processResult.exitCode,
@@ -416,10 +419,11 @@ export class DaytonaScriptExecutor implements SkillScriptExecutor {
         imageRef: this.options.imageRef,
         skillName: input.skillName,
         runId: input.runId,
-        command: ["bun", input.script.file, ...input.args],
+        command: createDaytonaScriptCommand(input.script.file, input.args),
         timeoutMs: input.script.timeoutMs,
         outputs: input.script.outputs,
         network: input.script.network,
+        includeArtifactBytes: input.includeArtifactBytes,
       });
     } catch (error) {
       return failureResult("daytona", { ...input, imageRef: this.options.imageRef }, {
@@ -536,7 +540,12 @@ export class DaytonaSdkScriptExecutorClient implements DaytonaScriptExecutorClie
         {},
         Math.ceil(input.timeoutMs / 1000),
       );
-      const artifacts = await this.collectArtifacts(sandbox, cwd, input.outputs);
+      const artifacts = await this.collectArtifacts(
+        sandbox,
+        cwd,
+        input.outputs,
+        input.includeArtifactBytes ?? false,
+      );
 
       return {
         exitCode: commandResult.exitCode,
@@ -553,20 +562,25 @@ export class DaytonaSdkScriptExecutorClient implements DaytonaScriptExecutorClie
     sandbox: DaytonaSandboxLike,
     cwd: string,
     outputs: ScriptArtifactOutput[],
+    includeArtifactBytes: boolean,
   ): Promise<ScriptArtifactMetadata[]> {
     const artifacts: ScriptArtifactMetadata[] = [];
 
     for (const output of outputs) {
       for (const artifactPath of await this.resolveRemoteOutputMatches(sandbox, cwd, output.path)) {
         const bytes = await sandbox.fs.downloadFile(artifactPath);
-        artifacts.push({
+        const artifact: ScriptArtifactMetadata = {
           path: toPosixRelativeArtifactPath(cwd, artifactPath),
           contentType: output.contentType,
           byteSize: bytes.byteLength,
           checksum: createHash("sha256").update(bytes).digest("hex"),
           role: output.role,
           retrievalStatus: "available",
-        });
+        };
+        if (includeArtifactBytes) {
+          artifact.bytes = new Uint8Array(bytes);
+        }
+        artifacts.push(artifact);
       }
     }
 
@@ -618,6 +632,38 @@ function validateArgs(script: ResolvedSkillScript, args: string[]): TrustedScrip
   }
 
   return null;
+}
+
+function createDaytonaScriptCommand(scriptFile: string, args: string[]): string[] {
+  const specJsonBase64Index = args.indexOf("--spec-json-base64");
+
+  if (specJsonBase64Index === -1) {
+    return ["bun", scriptFile, ...args];
+  }
+
+  const specJsonBase64 = args[specJsonBase64Index + 1];
+  if (!specJsonBase64) {
+    return ["bun", scriptFile, ...args];
+  }
+
+  const specPath = `.aqsha-inputs/visual-spec-${createHash("sha256")
+    .update(specJsonBase64)
+    .digest("hex")
+    .slice(0, 12)}.json`;
+  const rendererArgs = [
+    ...args.slice(0, specJsonBase64Index),
+    "--spec",
+    specPath,
+    ...args.slice(specJsonBase64Index + 2),
+  ];
+  const writeSpecCommand = toShellCommand([
+    "bun",
+    "-e",
+    `await Bun.write(${JSON.stringify(specPath)}, Buffer.from(${JSON.stringify(specJsonBase64)}, "base64"));`,
+  ]);
+  const renderCommand = toShellCommand(["bun", scriptFile, ...rendererArgs]);
+
+  return ["sh", "-lc", `mkdir -p .aqsha-inputs && ${writeSpecCommand} && ${renderCommand}`];
 }
 
 function failureResult(
@@ -712,21 +758,28 @@ async function runBunScript(script: ResolvedSkillScript, args: string[]): Promis
   });
 }
 
-async function collectArtifactMetadata(script: ResolvedSkillScript): Promise<ScriptArtifactMetadata[]> {
+async function collectArtifactMetadata(
+  script: ResolvedSkillScript,
+  includeArtifactBytes: boolean,
+): Promise<ScriptArtifactMetadata[]> {
   const artifacts: ScriptArtifactMetadata[] = [];
 
   for (const output of script.outputs) {
     for (const artifactPath of await resolveOutputMatches(script.scriptsDirectory, output.path)) {
       const info = await stat(artifactPath);
       const bytes = await readFile(artifactPath);
-      artifacts.push({
+      const artifact: ScriptArtifactMetadata = {
         path: toRelativeArtifactPath(script.scriptsDirectory, artifactPath),
         contentType: output.contentType,
         byteSize: info.size,
         checksum: createHash("sha256").update(bytes).digest("hex"),
         role: output.role,
         retrievalStatus: "available",
-      });
+      };
+      if (includeArtifactBytes) {
+        artifact.bytes = new Uint8Array(bytes);
+      }
+      artifacts.push(artifact);
     }
   }
 

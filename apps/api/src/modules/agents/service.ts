@@ -31,6 +31,7 @@ export class AgentsService {
         userId: input.userId || env.ASTRA_USER_ID,
         workspace: input.workspace?.trim() || env.ASTRA_WORKSPACE,
         conversationId: input.threadId,
+        runId: input.runId,
         researchArtifactDir: resolveAppPath(env.ASTRA_RESEARCH_ARTIFACT_DIR),
         constraints: [],
       };

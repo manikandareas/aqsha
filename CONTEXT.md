@@ -188,6 +188,10 @@ _Avoid_: New data source, generated plotting code, unsupported chart claim
 Daftar artifact visual dari Deep Research Run yang boleh dirender, diaudit, dan ditampilkan di final Markdown report.
 _Avoid_: Raw artifact inventory, private working files, all sandbox outputs
 
+**Multi-visual Final Report**:
+Final Markdown report yang dapat menampilkan lebih dari satu visual artifact, seperti chart, timeline, matrix, flow diagram, atau evidence map, selama setiap artifact lolos audit sendiri.
+_Avoid_: Single-chart-only report, decorative visuals, embedding unaudited visuals
+
 **Research Artifact Ownership**:
 Kepemilikan artifact research oleh pengguna yang membuat Research Chat, dengan relasi audit ke thread, run, dan message terkait.
 _Avoid_: Workspace ownership, organization ownership, file-only ownership
@@ -208,6 +212,10 @@ _Avoid_: Database row ID as citation label, unstable source label
 Keputusan untuk tidak menampilkan visual optional ketika data, render, atau upload tidak cukup aman, sambil tetap mengirim final report yang valid.
 _Avoid_: Evidence audit failure, failed final report, silent broken chart
 
+**Primary Visual Deliverable**:
+Artifact visual yang secara eksplisit diminta pengguna sebagai hasil utama Deep Research Run. Jika render atau upload untuk artifact ini gagal, run gagal dengan Failure Summary singkat dan Research Failure Detail untuk development.
+_Avoid_: Default visual artifact, optional chart, decorative report visual
+
 **Omitted Visual Artifact**:
 Artifact visual yang direncanakan tetapi tidak ditampilkan karena data, render, atau upload tidak cukup aman.
 _Avoid_: Missing artifact, ignored artifact, successful artifact
@@ -216,9 +224,21 @@ _Avoid_: Missing artifact, ignored artifact, successful artifact
 Informasi kegagalan yang dikirim bersama run event atau explanation agar kegagalan audit, render, upload, dan omission bisa diperbaiki saat development.
 _Avoid_: Silent failure, hidden internal error, generic failure only
 
+**Research Error Class**:
+Kategori stabil untuk kegagalan Deep Research Run atau Deep Research Phase: validation, sandbox, dependency, render, uploadthing, model_tool_misuse, canceled, atau unknown.
+_Avoid_: Provider-specific exception name, raw stack trace, free-form error category
+
 **Failure Summary**:
 Ringkasan kegagalan yang aman ditampilkan kepada pengguna, terpisah dari detail internal untuk development.
 _Avoid_: Raw stack trace as user copy, vague error message
+
+**Artifact Publishing**:
+Proses menerbitkan final visual artifact yang sudah lolos audit ke storage publik agar bisa di-embed di final Markdown report.
+_Avoid_: Provider brand as domain term, raw file dump, automatic public upload for supporting files
+
+**Orphan Published Artifact**:
+File artifact yang sudah terbit ke public storage tetapi gagal dipersist sebagai artifact valid di Postgres. Sistem harus mencoba cleanup best-effort dan mencatat event bila cleanup gagal.
+_Avoid_: Valid final artifact, silent storage leak, user-facing embed
 
 **Default Visual Artifact**:
 Visual artifact yang otomatis diupayakan untuk setiap final report Deep Research ketika Evidence Ledger memiliki data yang cukup.
@@ -227,6 +247,30 @@ _Avoid_: Opportunistic chart only, manual-only visual, unsupported visual
 **Research Decision**:
 Gate terstruktur di dalam Deep Research Run yang menentukan apakah research lanjut otomatis, perlu refinement, atau harus meminta user menyetujui pivot.
 _Avoid_: Final answer, raw chain-of-thought, mandatory approval before every report
+
+**Phase-aware Retry**:
+Upaya menjalankan ulang Deep Research Phase yang gagal tanpa mengulang phase sebelumnya yang masih valid. V1 mendukung retry untuk render dan upload terlebih dahulu, memakai Evidence Ledger, Visual Spec, PNG checksum, dan Artifact Manifest yang sudah ada bila masih valid.
+_Avoid_: Restart whole run, repeat source discovery by default, overwrite previous attempt
+
+**Retry Attempt**:
+Catatan percobaan ulang untuk visualId atau phase yang sama dengan attempt number baru, terhubung ke artifact atau phase asal agar audit trail tidak hilang.
+_Avoid_: Mutating history in place, duplicate artifact with no lineage, hidden retry
+
+**Automatic Retry Limit**:
+Batas retry otomatis untuk kegagalan transient pada render atau upload. V1 hanya melakukan satu retry otomatis sebelum membutuhkan aksi eksplisit atau manual.
+_Avoid_: Infinite retry, repeated source discovery, hidden retry loop
+
+**Run Cancellation**:
+Permintaan pengguna atau sistem untuk menghentikan Deep Research Run yang sedang berjalan. Cancellation harus dipropagasikan ke model stream, Research Sub-agent phase runner, Research Sandbox, renderer, dan upload client sejauh provider mendukung.
+_Avoid_: UI-only stop, abandoned backend run, silent request abort
+
+**Canceled Research Run**:
+Deep Research Run yang selesai dengan status terminal canceled setelah cancellation berhasil diproses atau setelah sistem berhenti pada boundary yang aman.
+_Avoid_: cancel_requested as final state, failed run caused by user stop, completed run after cancellation
+
+**Derived Research Run**:
+Deep Research Run baru yang dibuat dari konteks run sebelumnya setelah cancellation atau failure, tanpa menjanjikan resume otomatis di V1.
+_Avoid_: Background resume, mutating canceled run, hidden continuation
 
 **Failed Research Explanation**:
 Pesan assistant yang menjelaskan kenapa Deep Research Run gagal audit tanpa menyajikannya sebagai final report.
@@ -312,13 +356,28 @@ _Avoid_: Production local execution, test shortcut that bypasses policy, host ex
 - **Research Artifact Ownership** mengikuti pengguna pembuat **Research Chat**.
 - Sebuah final visual artifact harus memiliki **Artifact Audit Snapshot**; snapshot ini tidak menggandakan seluruh **Evidence Ledger**.
 - **Artifact Audit Snapshot** memakai **Ledger Source ID** sebagai source reference canonical dan boleh menyimpan persisted source refs tambahan untuk replay.
-- Sebuah artifact final hanya boleh di-embed di final report ketika **Artifact Audit Status** adalah `passed`.
+- **Multi-visual Final Report** boleh mengandung banyak final visual artifacts; setiap artifact final hanya boleh di-embed ketika **Artifact Audit Status** adalah `passed`.
+- **Visual Spec** dan **Artifact Manifest** harus mendukung banyak visual/artifact dalam satu **Deep Research Run**.
 - **Omitted Visual Artifact** tetap perlu muncul dalam audit/replay metadata tanpa dianggap final visual yang berhasil dikirim.
+- **Omitted Visual Artifact** tidak disebut di final Markdown report; alasan omission hanya muncul di Research Trail, Artifact Manifest, audit metadata, dan developer detail.
 - Sebuah **Deep Research Run** secara default mengupayakan **Default Visual Artifact** untuk final report jika data visual cukup.
+- **Primary Visual Deliverable** yang gagal render atau upload menggagalkan **Deep Research Run**; **Default Visual Artifact** yang gagal boleh menjadi **Visual Omission** jika final report tetap valid.
 - **Visual Omission** tidak menggagalkan **Deep Research Run** jika final report tetap valid dan visual bukan primary deliverable.
 - **Visual Omission** dan hard failure harus menyimpan **Research Failure Detail** agar error dapat ditelusuri dan diperbaiki.
 - **Research Failure Detail** harus dipasangkan dengan **Failure Summary** supaya error bisa dipahami user dan tetap berguna untuk development.
 - Sebuah **Research Decision** boleh melanjutkan run otomatis untuk `proceed` atau scoped `refine`, tetapi harus meminta user saat `pivot` atau `userConfirmationRequired=true`.
+- **Visual Spec** harus divalidasi sebelum **Research Sandbox** atau renderer dibuat; invalid spec menghasilkan **Research Error Class** `validation`.
+- **Artifact Manifest** menjadi source of truth untuk visual yang boleh di-embed di final Markdown; URL ad hoc dari tool atau upload tidak cukup.
+- **Artifact Publishing** hanya berlaku untuk final visual artifact yang lolos audit; raw dan supporting files tidak otomatis menjadi public artifact.
+- Jika **Artifact Publishing** berhasil tetapi persist artifact gagal, sistem memperlakukan file sebagai **Orphan Published Artifact** dan mencoba cleanup best-effort.
+- Artifact yang sudah persisted tetap valid sebagai history meskipun final stream delivery kemudian gagal.
+- **Phase-aware Retry** boleh mengulang render atau upload tanpa mengulang source discovery ketika Evidence Ledger dan Visual Spec masih valid.
+- **Retry Attempt** harus disimpan sebagai attempt baru yang terhubung ke artifact atau phase asal, bukan menimpa history.
+- **Automatic Retry Limit** V1 adalah satu retry otomatis untuk kegagalan transient render atau upload.
+- **Run Cancellation** memakai `cancel_requested` sebagai state transisi dan **Canceled Research Run** sebagai state terminal.
+- **Run Cancellation** membersihkan temporary sandbox files, tetapi tidak diam-diam menghapus artifact audit record yang sudah persisted.
+- **Canceled Research Run** tidak di-resume otomatis di V1; lanjutannya harus berupa **Derived Research Run** bila dibutuhkan.
+- Event cancellation, retry, failed upload/render, omission, dan classified failure harus muncul ringkas di Research Trail dengan **Research Error Class** dan **Research Failure Detail** untuk development.
 - **Journal AI Panel** membantu writing-in-context di dalam **Journal**.
 - **Selection Action** memberi opsi seperti paraphrase, expand, shorten, ask AI, dan explain pada bagian draft yang dipilih.
 - **Selection Action** menghasilkan **AI Suggestion** terlebih dahulu; perubahan tidak langsung mengganti isi Journal tanpa user apply.

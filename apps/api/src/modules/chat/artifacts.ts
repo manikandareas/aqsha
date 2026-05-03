@@ -62,6 +62,7 @@ export interface PersistedChatArtifact extends PersistChatArtifactInput {
 
 export interface PngArtifactUploadClient {
   uploadPng(input: PngArtifactUploadInput): Promise<UploadedPngArtifact>;
+  deletePng(fileKey: string): Promise<void>;
 }
 
 export interface PngArtifactPublisherOptions {
@@ -90,7 +91,7 @@ export class PngArtifactPublisher {
   }> {
     assertPng(input.artifact.bytes);
 
-    let upload: UploadedPngArtifact;
+    let upload: UploadedPngArtifact | null = null;
     let artifact: PersistedChatArtifact;
 
     try {
@@ -119,9 +120,34 @@ export class PngArtifactPublisher {
         auditStatus: "passed",
         auditSummary: normalizeNullableString(input.artifact.auditSummary),
         failureSummary: null,
-        developerDetail: null,
+        developerDetail: input.artifact.metadata ?? null,
       });
     } catch (error) {
+      if (upload) {
+        try {
+          await this.options.uploadClient.deletePng(upload.fileKey);
+        } catch (cleanupError) {
+          await this.options.writeEvent({
+            type: "orphan_published_artifact_cleanup_failed",
+            scope: "tool",
+            status: "failed",
+            title: "Orphan artifact cleanup failed",
+            summary:
+              cleanupError instanceof Error
+                ? cleanupError.message
+                : "Unable to clean up the published PNG after artifact persistence failed.",
+            toolName: "publishPngArtifact",
+            payload: {
+              fileKey: upload.fileKey,
+              url: upload.url,
+              filename: input.artifact.filename,
+              contentType: "image/png",
+              title: input.artifact.title,
+            },
+          });
+        }
+      }
+
       await this.options.writeEvent({
         type: "artifact_upload_failed",
         scope: "tool",
@@ -200,11 +226,23 @@ export class UploadThingPngArtifactUploadClient implements PngArtifactUploadClie
 
     return {
       fileKey: result.data.key,
-      url: result.data.url,
+      url: result.data.ufsUrl,
       name: result.data.name,
       size: result.data.size,
       contentType: "image/png",
     };
+  }
+
+  async deletePng(fileKey: string): Promise<void> {
+    if (!this.token) {
+      throw new Error("UPLOADTHING_TOKEN is required to delete PNG artifacts.");
+    }
+
+    const utapi = new UTApi({ token: this.token });
+    const result = await utapi.deleteFiles(fileKey);
+    if (!result.success) {
+      throw new Error(`UploadThing PNG cleanup failed for file key: ${fileKey}`);
+    }
   }
 }
 

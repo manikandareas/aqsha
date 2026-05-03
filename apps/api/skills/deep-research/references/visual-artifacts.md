@@ -15,7 +15,9 @@ Every visual must be traceable to `evidence.json`:
 - Source references must use stable source IDs such as `S1`.
 - Numeric visual values must use metric IDs from `visual_metrics`.
 - Captions must describe only what the evidence supports.
-- If data is insufficient, omit the visual and say why in the Markdown report.
+- If data is insufficient, omit the visual and record why in the artifact
+  manifest and Research Trail. Do not mention omitted visuals in the final
+  Markdown report.
 
 ## Required Files
 
