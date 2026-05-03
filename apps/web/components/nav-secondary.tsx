@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { cn } from "@/lib/utils";
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 
@@ -23,6 +24,7 @@ export function NavSecondary({
     url: string;
     icon: React.ReactNode;
     badge?: React.ReactNode;
+    isActive?: boolean;
   }[];
 } & React.ComponentPropsWithoutRef<typeof SidebarGroup>) {
   const { setTheme, theme } = useTheme();
@@ -34,8 +36,14 @@ export function NavSecondary({
           {items.map((item) => (
             <SidebarMenuItem key={item.title}>
               <SidebarMenuButton
+                isActive={item.isActive}
                 render={<a href={item.url} />}
-                className="h-8 text-[13px] font-medium text-sidebar-foreground/65 hover:text-sidebar-foreground"
+                className={cn(
+                  "h-8 rounded-md text-[13px] font-medium transition-colors",
+                  item.isActive
+                    ? "bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent"
+                    : "text-sidebar-foreground/65 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+                )}
               >
                 <span className="shrink-0 [&_svg]:h-[15px] [&_svg]:w-[15px]">
                   {item.icon}

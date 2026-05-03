@@ -15,7 +15,7 @@ import {
   SidebarHeader,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
-import { BookUpIcon, MessageCircleQuestionIcon } from "lucide-react";
+import { BookUpIcon, MessageCircleQuestionIcon, Settings2Icon } from "lucide-react";
 
 const data = {
   navMain: [
@@ -30,7 +30,18 @@ const data = {
       icon: <BookUpIcon />,
     },
   ],
-  navSecondary: [],
+  navSecondary: [
+    {
+      title: "Settings",
+      url: "/app/settings",
+      icon: <Settings2Icon />,
+    },
+    {
+      title: "Help",
+      url: "#",
+      icon: <MessageCircleQuestionIcon />,
+    },
+  ],
 };
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -43,6 +54,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       item.url === "/app"
         ? pathname === "/app" || pathname.startsWith("/app/threads/")
         : pathname === item.url || pathname.startsWith(`${item.url}/`),
+  }));
+  const navSecondary = data.navSecondary.map((item) => ({
+    ...item,
+    isActive:
+      item.url !== "#" &&
+      (pathname === item.url || pathname.startsWith(`${item.url}/`)),
   }));
 
   return (
@@ -86,7 +103,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
       <SidebarContent className="gap-2 px-2 pb-4 pt-1">
         {isJournalsRoute ? <NavJournal /> : <NavThreads />}
-        <NavSecondary items={data.navSecondary} className="mt-auto px-1 pt-1" />
+        <NavSecondary items={navSecondary} className="mt-auto px-1 pt-1" />
       </SidebarContent>
     </Sidebar>
   );
