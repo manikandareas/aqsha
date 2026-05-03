@@ -26,17 +26,17 @@ export async function createAstraAgentUIStream({
   uiMessages: UIMessage[];
   abortSignal?: AbortSignal;
 }) {
-  const exa = await createExaMcpTools();
+  const external = await createAstraExternalTools();
   try {
     const stream = await createAgentUIStream({
-      agent: buildAstraAgent({ model, providerOptions, context, externalTools: exa.tools as ToolSet }),
+      agent: buildAstraAgent({ model, providerOptions, context, externalTools: external.tools }),
       uiMessages,
       abortSignal,
     });
 
-    return stream.pipeThrough(createCleanupStream(exa.close));
+    return stream.pipeThrough(createCleanupStream(external.close));
   } catch (error) {
-    await exa.close();
+    await external.close();
     throw error;
   }
 }
@@ -58,10 +58,10 @@ export async function createAstraAgentResponse({
   headers?: HeadersInit;
   onSource?: SourceReporter;
 }) {
-  const exa = await createExaMcpTools({ onSource });
+  const external = await createAstraExternalTools({ onSource });
   try {
     const response = await createAgentUIStreamResponse({
-      agent: buildAstraAgent({ model, providerOptions, context, externalTools: exa.tools as ToolSet }),
+      agent: buildAstraAgent({ model, providerOptions, context, externalTools: external.tools }),
       uiMessages,
       abortSignal,
       headers,
@@ -76,15 +76,24 @@ export async function createAstraAgentResponse({
     });
 
     if (!response.body) {
-      await exa.close();
+      await external.close();
       return response;
     }
 
-    return new Response(response.body.pipeThrough(createCleanupStream(exa.close)), response);
+    return new Response(response.body.pipeThrough(createCleanupStream(external.close)), response);
   } catch (error) {
-    await exa.close();
+    await external.close();
     throw error;
   }
+}
+
+async function createAstraExternalTools({ onSource }: { onSource?: SourceReporter } = {}) {
+  const exa = await createExaMcpTools({ onSource });
+
+  return {
+    tools: exa.tools as ToolSet,
+    close: exa.close,
+  };
 }
 
 async function reportStepSources(step: unknown, onSource: SourceReporter) {

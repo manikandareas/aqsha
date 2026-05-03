@@ -14,4 +14,5 @@ export type AgentRuntimeContext = {
   skills: SkillRegistry;
   skillScriptsEnabled: boolean;
   skillScriptTimeoutMs: number;
+  skillScriptRuntime: "daytona";
 };

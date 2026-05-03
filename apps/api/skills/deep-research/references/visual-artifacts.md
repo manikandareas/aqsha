@@ -6,9 +6,10 @@ embeds audited local artifacts using relative paths.
 
 ## Artifact Principle
 
-The agent writes evidence and visual specs. Trusted local scripts render the
-graphics with Matplotlib in the sandbox. Do not generate arbitrary plotting code
-for v1.
+The agent writes evidence and visual specs. Trusted scripts render graphics with
+Matplotlib in the server-provided Daytona sandbox. Do not generate arbitrary
+plotting code for v1, and do not assume the API host has Python, pip,
+Matplotlib, or any other local plotting dependency installed.
 
 Every visual must be traceable to `evidence.json`:
 
@@ -43,7 +44,11 @@ Use these visuals when data is available:
 - Keep artifact paths relative to the report directory, for example
   `artifacts/evidence-timeline.svg`.
 - Run `scripts/audit_visuals.py` before rendering and
-  `scripts/render_visual_artifacts.py` to create SVGs and the manifest.
+  `scripts/render_visual_artifacts.py` through the Daytona sandbox to create
+  SVGs and the manifest.
+- Persist and embed only artifacts whose manifest status is `passed`; if sandbox
+  execution, rendering, or audit fails, omit visuals and explain that rendering
+  was skipped.
 
 ## Markdown Embed Pattern
 
