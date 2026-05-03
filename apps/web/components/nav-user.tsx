@@ -1,19 +1,8 @@
 "use client";
 
-import React from "react";
-import { useRouter } from "next/navigation";
-import { ChevronDownIcon, Loader2Icon, LogOutIcon, UserIcon } from "lucide-react";
+import { ChevronDownIcon, LogOutIcon, UserIcon } from "lucide-react";
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { SignOutAlertDialog } from "@/features/auth/components/sign-out-alert-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,29 +18,23 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { useSignOut } from "@/features/auth/hooks/use-sign-out";
 import { authClient } from "@/lib/auth-client";
-
-function getDiceBearAvatarUrl(name: string): string {
-  return `https://api.dicebear.com/9.x/adventurer-neutral/svg?seed=${encodeURIComponent(name)}`;
-}
+import { getDiceBearAvatarUrl } from "@/lib/avatar";
 
 export function NavUser() {
-  const router = useRouter();
   const { isMobile } = useSidebar();
   const { data: session, isPending } = authClient.useSession();
-  const [isSignOutAlertOpen, setIsSignOutAlertOpen] = React.useState(false);
-  const [isSigningOut, setIsSigningOut] = React.useState(false);
+  const {
+    isSignOutAlertOpen,
+    isSigningOut,
+    setIsSignOutAlertOpen,
+    handleSignOut,
+  } = useSignOut();
   const user = session?.user;
   const name = user?.name ?? "User";
   const email = user?.email ?? "";
   const avatarUrl = user?.image ?? getDiceBearAvatarUrl(name);
-
-  async function handleSignOut() {
-    setIsSigningOut(true);
-    await authClient.signOut();
-    router.push("/signin");
-    router.refresh();
-  }
 
   return (
     <>
@@ -123,34 +106,12 @@ export function NavUser() {
         </SidebarMenuItem>
       </SidebarMenu>
 
-      <AlertDialog
+      <SignOutAlertDialog
         open={isSignOutAlertOpen}
-        onOpenChange={(open) => {
-          if (!isSigningOut) {
-            setIsSignOutAlertOpen(open);
-          }
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Sign out?</AlertDialogTitle>
-            <AlertDialogDescription>
-              You&apos;ll need to sign in again to access your account.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isSigningOut}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={isSigningOut}
-              onClick={handleSignOut}
-            >
-              {isSigningOut ? <Loader2Icon className="animate-spin" /> : null}
-              Sign out
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        isSigningOut={isSigningOut}
+        onOpenChange={setIsSignOutAlertOpen}
+        onSignOut={handleSignOut}
+      />
     </>
   );
 }

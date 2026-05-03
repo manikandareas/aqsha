@@ -50,7 +50,7 @@ const data = {
   navSecondary: [
     {
       title: "Settings",
-      url: "#",
+      url: "/app/settings",
       icon: <Settings2Icon />,
     },
     {
@@ -72,6 +72,12 @@ export function AppSidebar({
       item.url === "/app"
         ? pathname === "/app" || pathname.startsWith("/app/threads/")
         : pathname === item.url || pathname.startsWith(`${item.url}/`),
+  }));
+  const navSecondary = data.navSecondary.map((item) => ({
+    ...item,
+    isActive:
+      item.url !== "#" &&
+      (pathname === item.url || pathname.startsWith(`${item.url}/`)),
   }));
 
   return (
@@ -103,7 +109,7 @@ export function AppSidebar({
       </SidebarHeader>
       <SidebarContent>
         {isJournalsRoute ? <NavJournal /> : <NavThreads />}
-        <NavSecondary items={data.navSecondary} className="mt-auto" />
+        <NavSecondary items={navSecondary} className="mt-auto" />
       </SidebarContent>
     </Sidebar>
   );
