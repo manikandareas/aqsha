@@ -136,9 +136,33 @@ _Avoid_: Admin, full owner
 Percakapan multi-turn dengan AI agent yang menyimpan messages, runs, dan progress events secara durable.
 _Avoid_: Chatbot only, final-answer chat
 
+**Deep Research Run**:
+Proses research mendalam di dalam Research Chat yang berjalan dalam beberapa fase terstruktur untuk menghasilkan evidence ledger, research decision, visual artifact, dan final Markdown report berbasis sumber.
+_Avoid_: Separate public agent, generic chat answer, hidden autonomous research mode
+
 **Evidence**:
 Sumber atau artefak pendukung yang dipakai untuk memperkuat claim dalam jawaban atau tulisan.
 _Avoid_: Reference decoration, citation filler
+
+**Evidence Ledger**:
+Catatan terstruktur dari Deep Research Run yang menyimpan sumber, claim, metric, verification status, dan hubungan evidence agar hasil research bisa diaudit.
+_Avoid_: Final report, bibliography only, raw source dump
+
+**Visual Spec**:
+Deklarasi visual artifact dari Deep Research Run yang menunjuk data terverifikasi di Evidence Ledger untuk kebutuhan renderer.
+_Avoid_: New data source, generated plotting code, unsupported chart claim
+
+**Artifact Manifest**:
+Daftar artifact visual dari Deep Research Run yang boleh dirender, diaudit, dan ditampilkan di final Markdown report.
+_Avoid_: Raw artifact inventory, private working files, all sandbox outputs
+
+**Research Decision**:
+Gate terstruktur di dalam Deep Research Run yang menentukan apakah research lanjut otomatis, perlu refinement, atau harus meminta user menyetujui pivot.
+_Avoid_: Final answer, raw chain-of-thought, mandatory approval before every report
+
+**Research Plan**:
+Rencana terstruktur Deep Research Run setelah scope dipahami dan sebelum source discovery utama dimulai.
+_Avoid_: Post-hoc plan, fixed outline before scoping, evidence ledger
 
 **Source Library**:
 Tempat menyimpan dan memakai ulang paper, PDF, link, citation, dan sumber lain yang menjadi fondasi evidence lintas Journal atau Research Thread.
@@ -155,11 +179,17 @@ _Avoid_: Promising Zotero/Mendeley import before supported
 - **Shared Journal** memakai dua permission awal: **Can review** dan **Can edit**.
 - Sebuah **Research Chat** berlangsung di dalam **Workspace**.
 - Sebuah **Research Chat** dapat menghasilkan **Evidence** yang mendukung tulisan di **Journal**.
+- Sebuah **Deep Research Run** menghasilkan **Evidence Ledger** sebagai dasar audit untuk source IDs, claims, visual metrics, dan artifact provenance.
+- Sebuah **Research Plan** dibuat setelah scope dipahami; reconnaissance ringan boleh terjadi sebelumnya, tetapi source discovery utama dimulai setelah plan ada.
+- Sebuah **Visual Spec** hanya boleh menunjuk data yang sudah ada di **Evidence Ledger**; jika data visual belum tersedia, extraction harus diperbaiki sebelum visual dibuat.
+- Sebuah **Artifact Manifest** berisi visual artifacts yang menjadi candidate atau final embed; raw/supporting files tidak otomatis masuk ke manifest ini.
+- Sebuah **Research Decision** boleh melanjutkan run otomatis untuk `proceed` atau scoped `refine`, tetapi harus meminta user saat `pivot` atau `userConfirmationRequired=true`.
 - **Journal AI Panel** membantu writing-in-context di dalam **Journal**.
 - **Selection Action** memberi opsi seperti paraphrase, expand, shorten, ask AI, dan explain pada bagian draft yang dipilih.
 - **Selection Action** menghasilkan **AI Suggestion** terlebih dahulu; perubahan tidak langsung mengganti isi Journal tanpa user apply.
 - **Claim-Changing Suggestion** harus menyertakan evidence/citation atau ditandai belum verified; paraphrase dan shorten yang hanya mengubah gaya tidak wajib membawa evidence baru.
 - **Research Thread** adalah permukaan focused research yang chat-style, terpisah dari **Journal**.
+- **Deep Research Run** berlangsung di dalam **Research Chat** dan tetap muncul melalui **Astra** sebagai satu public agent surface.
 - **Add to Journal** menghubungkan **Research Thread** ke **Journal** melalui review step.
 - **Source Library** adalah fondasi untuk evidence lintas **Journal** dan **Research Thread**, tetapi value utama yang terlihat tetap **Claim-Evidence Map**.
 - **Source Input** awal adalah PDF upload, URL atau DOI, dan manual citation; Zotero/Mendeley import dapat menjadi roadmap tetapi bukan janji awal.
