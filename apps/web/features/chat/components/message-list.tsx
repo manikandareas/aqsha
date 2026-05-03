@@ -362,7 +362,7 @@ export function MessageList({
   }
 
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-[820px] flex-col gap-6 px-4 pb-56 pt-4 sm:px-6 lg:pt-6">
+    <div className="mx-auto flex min-h-full w-full max-w-[820px] flex-col gap-6 px-4 pb-8 pt-4 sm:px-6 lg:pt-6">
       {messages.map((message, index) => {
         const isUser = message.role === "user";
         const isLastMessage = index === messages.length - 1;

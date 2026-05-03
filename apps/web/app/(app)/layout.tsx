@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -9,9 +9,17 @@ type AppLayoutProps = {
 
 export default async function AppLayout({ children }: AppLayoutProps) {
   return (
-    <SidebarProvider>
+    <SidebarProvider
+      style={
+        {
+          "--sidebar-width": "17.5rem",
+        } as CSSProperties
+      }
+    >
       <AppSidebar />
-      <SidebarInset>{children}</SidebarInset>
+      <SidebarInset className="h-svh min-h-svh overflow-hidden">
+        {children}
+      </SidebarInset>
     </SidebarProvider>
   );
 }
