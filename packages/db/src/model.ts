@@ -13,6 +13,7 @@ const _insertExports = createInsertSchema(table.exports);
 const _insertChatThreads = createInsertSchema(table.chatThreads);
 const _insertChatMessages = createInsertSchema(table.chatMessages);
 const _insertChatSources = createInsertSchema(table.chatSources);
+const _insertChatArtifacts = createInsertSchema(table.chatArtifacts);
 const _insertAgentRuns = createInsertSchema(table.agentRuns);
 const _insertAgentEvents = createInsertSchema(table.agentEvents);
 
@@ -27,6 +28,7 @@ const _selectExports = createSelectSchema(table.exports);
 const _selectChatThreads = createSelectSchema(table.chatThreads);
 const _selectChatMessages = createSelectSchema(table.chatMessages);
 const _selectChatSources = createSelectSchema(table.chatSources);
+const _selectChatArtifacts = createSelectSchema(table.chatArtifacts);
 const _selectAgentRuns = createSelectSchema(table.agentRuns);
 const _selectAgentEvents = createSelectSchema(table.agentEvents);
 
@@ -43,6 +45,7 @@ export const dbModel = {
     chatThreads: _insertChatThreads,
     chatMessages: _insertChatMessages,
     chatSources: _insertChatSources,
+    chatArtifacts: _insertChatArtifacts,
     agentRuns: _insertAgentRuns,
     agentEvents: _insertAgentEvents,
   }),
@@ -58,6 +61,7 @@ export const dbModel = {
     chatThreads: _selectChatThreads,
     chatMessages: _selectChatMessages,
     chatSources: _selectChatSources,
+    chatArtifacts: _selectChatArtifacts,
     agentRuns: _selectAgentRuns,
     agentEvents: _selectAgentEvents,
   }),

@@ -3,6 +3,7 @@ import type { AuthIdentity } from "../../plugins/auth-identity";
 import type { ChatModel } from "./model";
 import type {
   AgentRun,
+  AppendChatArtifactInput,
   AppendChatSourceInput,
   AppendAgentEventInput,
   ChatMessage,
@@ -11,6 +12,7 @@ import type {
   FinishAgentRunInput,
 } from "./store";
 import type { UserService } from "../users/service";
+import type { PersistedChatArtifact } from "./artifacts";
 
 type ServiceError = "unauthorized" | "chat_thread_not_found";
 type ServiceResult<T> =
@@ -237,6 +239,13 @@ export class ChatService {
       runId: run.id,
       sourceKey,
     });
+  }
+
+  async appendRunArtifact(
+    scope: ChatScope,
+    artifact: AppendChatArtifactInput,
+  ): Promise<PersistedChatArtifact> {
+    return await this.store.appendArtifact(scope, artifact);
   }
 
   async finishRun(

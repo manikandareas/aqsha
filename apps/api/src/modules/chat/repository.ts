@@ -2,6 +2,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import {
   agentEvents,
   agentRuns,
+  chatArtifacts,
   chatMessages,
   chatSources,
   chatThreads,
@@ -12,9 +13,11 @@ import type { DatabaseClient } from "../../database/client";
 import type {
   AgentEvent,
   AgentRun,
+  AppendChatArtifactInput,
   AppendAgentEventInput,
   ChatMessage,
   ChatScope,
+  ChatArtifact,
   ChatSource,
   ChatStore,
   ChatThread,
@@ -209,6 +212,30 @@ export class DrizzleChatStore implements ChatStore {
       .returning();
 
     return this.toSource(storedSource);
+  }
+
+  async appendArtifact(
+    _scope: ChatScope,
+    artifact: AppendChatArtifactInput,
+  ): Promise<ChatArtifact> {
+    const [storedArtifact] = await this.db
+      .insert(chatArtifacts)
+      .values({
+        chatThreadId: artifact.chatThreadId,
+        runId: artifact.runId,
+        kind: artifact.kind,
+        title: artifact.title,
+        caption: artifact.caption ?? null,
+        fileKey: artifact.fileKey,
+        url: artifact.url,
+        contentType: artifact.contentType,
+        byteSize: artifact.byteSize ?? null,
+        sourceIds: artifact.sourceIds ?? [],
+        metadata: this.toJsonValue(artifact.metadata ?? null),
+      })
+      .returning();
+
+    return this.toArtifact(storedArtifact);
   }
 
   async finishRun(
@@ -449,6 +476,24 @@ export class DrizzleChatStore implements ChatStore {
       lastSeenAt: source.lastSeenAt.toISOString(),
       createdAt: source.createdAt.toISOString(),
       updatedAt: source.updatedAt.toISOString(),
+    };
+  }
+
+  private toArtifact(artifact: typeof chatArtifacts.$inferSelect): ChatArtifact {
+    return {
+      id: artifact.id,
+      chatThreadId: artifact.chatThreadId,
+      runId: artifact.runId,
+      kind: artifact.kind,
+      title: artifact.title,
+      caption: artifact.caption,
+      fileKey: artifact.fileKey,
+      url: artifact.url,
+      contentType: "image/png",
+      byteSize: artifact.byteSize,
+      sourceIds: artifact.sourceIds ?? [],
+      metadata: artifact.metadata ?? null,
+      createdAt: artifact.createdAt.toISOString(),
     };
   }
 

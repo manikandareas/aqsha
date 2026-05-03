@@ -2,6 +2,7 @@ import { Elysia, t } from "elysia";
 import type { UIMessageChunk } from "ai";
 import { authIdentityPlugin } from "../../plugins/auth-identity";
 import { servicesPlugin } from "../../plugins/services";
+import { PngArtifactPublisher } from "./artifacts";
 import { chatModel } from "./model";
 import { collectFinishedMessages } from "./vercel-stream";
 import type {
@@ -391,7 +392,7 @@ export const chatModule = new Elysia({
   )
   .post(
     "/threads/:id/messages",
-    async ({ agentsService, body, chatService, identity, params, request, status }) => {
+    async ({ agentsService, body, chatService, identity, params, pngArtifactUploadClient, request, status }) => {
       const requestId = createChatRequestId();
       const messagesResult = await chatService.appendUserMessage(
         identity,
@@ -460,6 +461,20 @@ export const chatModule = new Elysia({
                 error,
               );
             }
+          },
+          onArtifact: async (artifact) => {
+            const publisher = new PngArtifactPublisher({
+              uploadClient: pngArtifactUploadClient,
+              persistArtifact: (input) =>
+                chatService.appendRunArtifact(runResult.data.scope, input),
+              writeEvent: eventWriter,
+            });
+
+            return publisher.publish({
+              scope: runResult.data.scope,
+              run: runResult.data.run,
+              artifact,
+            });
           },
         });
       } catch (error) {

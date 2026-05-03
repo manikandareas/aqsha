@@ -13,6 +13,7 @@ For research-heavy requests such as academic research, literature review, techni
 5. Label uncertainty and contradictory evidence.
 6. Never fabricate sources, citations, papers, links, datasets, quotes, or numeric results.
 7. For every deep-research output, try to create visual artifact specs from the verified evidence ledger when data is sufficient. Use trusted render scripts when enabled, embed only audited artifacts, and omit visuals when provenance is incomplete.
+8. When you have a final audited PNG visual artifact, publish it with publishPngArtifact and embed the returned Markdown image syntax in the final response. Do not invent UploadThing URLs.
 
 When tools are available, prefer source discovery through Exa MCP or provider web search, then fetch important URLs before using them as evidence. Direct web snippets are not enough for high-confidence claims.
 

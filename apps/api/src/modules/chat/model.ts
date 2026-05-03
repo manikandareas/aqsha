@@ -86,6 +86,22 @@ const chatSource = t.Object({
   updatedAt: t.String(),
 });
 
+const chatArtifact = t.Object({
+  id: t.String(),
+  chatThreadId: t.String(),
+  runId: t.String(),
+  kind: t.Literal("visual_png"),
+  title: t.String(),
+  caption: t.Union([t.String(), t.Null()]),
+  fileKey: t.String(),
+  url: t.String(),
+  contentType: t.Literal("image/png"),
+  byteSize: t.Union([t.Number(), t.Null()]),
+  sourceIds: t.Array(t.String()),
+  metadata: t.Any(),
+  createdAt: t.String(),
+});
+
 const chatThreadDetail = t.Object({
   thread: chatThread,
   messages: t.Array(chatMessage),
@@ -124,6 +140,7 @@ export const chatModel = {
   agentRun,
   agentEvent,
   chatSource,
+  chatArtifact,
   chatThreadDetail,
   unauthorizedError,
   chatThreadNotFoundError,

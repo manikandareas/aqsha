@@ -6,6 +6,7 @@ export type ChatMessage = ChatModel["chatMessage"];
 export type AgentRun = ChatModel["agentRun"];
 export type AgentEvent = ChatModel["agentEvent"];
 export type ChatSource = ChatModel["chatSource"];
+export type ChatArtifact = ChatModel["chatArtifact"];
 
 export interface ChatScope {
   userId: string;
@@ -51,6 +52,20 @@ export interface UpsertChatSourceInput extends AppendChatSourceInput {
   sourceKey: string;
 }
 
+export interface AppendChatArtifactInput {
+  chatThreadId: string;
+  runId: string;
+  kind: ChatArtifact["kind"];
+  title: string;
+  caption?: string | null;
+  fileKey: string;
+  url: string;
+  contentType: ChatArtifact["contentType"];
+  byteSize?: number | null;
+  sourceIds?: string[];
+  metadata?: unknown;
+}
+
 export interface FinishAgentRunInput {
   status: Extract<AgentRun["status"], "completed" | "failed" | "cancel_requested">;
   errorMessage?: string | null;
@@ -75,6 +90,10 @@ export interface ChatStore {
     scope: ChatScope,
     source: UpsertChatSourceInput,
   ): Promise<ChatSource>;
+  appendArtifact(
+    scope: ChatScope,
+    artifact: AppendChatArtifactInput,
+  ): Promise<ChatArtifact>;
   finishRun(
     scope: ChatScope,
     runId: string,

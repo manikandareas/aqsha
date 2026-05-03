@@ -54,6 +54,7 @@ export const exportStatuses = [
 export const chatThreadStatuses = ["active", "archived"] as const;
 export const chatMessageRoles = ["system", "user", "assistant", "tool"] as const;
 export const chatSourceKinds = ["url", "document"] as const;
+export const chatArtifactKinds = ["visual_png"] as const;
 export const agentRunStatuses = [
   "queued",
   "running",
@@ -548,6 +549,38 @@ export const chatSources = pgTable(
   ],
 );
 
+export const chatArtifacts = pgTable(
+  "chat_artifacts",
+  {
+    id: idColumn("id"),
+    chatThreadId: uuid("chat_thread_id")
+      .notNull()
+      .references(() => chatThreads.id, { onDelete: "cascade" }),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => agentRuns.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: chatArtifactKinds }).notNull(),
+    title: text("title").notNull(),
+    caption: text("caption"),
+    fileKey: text("file_key").notNull(),
+    url: text("url").notNull(),
+    contentType: text("content_type").notNull(),
+    byteSize: integer("byte_size"),
+    sourceIds: jsonb("source_ids").$type<string[]>(),
+    metadata: jsonb("metadata").$type<JsonValue>(),
+    createdAt: createdAtColumn(),
+  },
+  (table) => [
+    check("chat_artifacts_kind_check", sql`${table.kind} in ('visual_png')`),
+    index("chat_artifacts_thread_created_idx").on(
+      table.chatThreadId,
+      table.createdAt,
+    ),
+    index("chat_artifacts_run_id_idx").on(table.runId),
+    uniqueIndex("chat_artifacts_file_key_unique_idx").on(table.fileKey),
+  ],
+);
+
 export const agentEvents = pgTable(
   "agent_events",
   {
@@ -607,6 +640,7 @@ export const table = {
   chatThreads,
   chatMessages,
   chatSources,
+  chatArtifacts,
   agentRuns,
   agentEvents,
 } as const;

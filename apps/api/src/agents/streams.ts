@@ -1,17 +1,21 @@
 import type { ProviderOptions } from "@ai-sdk/provider-utils";
-import { createAgentUIStream, createAgentUIStreamResponse, type LanguageModel, type ToolSet, type UIMessage } from "ai";
-import type { AgentUsedSource } from "../modules/agents/model";
+import { Buffer } from "node:buffer";
+import { createAgentUIStream, createAgentUIStreamResponse, tool, type LanguageModel, type ToolSet, type UIMessage } from "ai";
+import { z } from "zod";
+import type { AgentUsedSource, CreateChatResponseInput } from "../modules/agents/model";
 import { buildAstraAgent } from "./astra";
 import { createExaMcpTools } from "./mcp/exa";
 import type { AgentRuntimeContext } from "./types";
 
 type UnknownRecord = Record<string, unknown>;
 type SourceReporter = (source: AgentUsedSource) => Promise<void> | void;
+type ArtifactPublisher = NonNullable<CreateChatResponseInput["onArtifact"]>;
 
 const EXA_SOURCE_TOOL_NAMES = new Set(["web_search_exa", "web_fetch_exa"]);
 const EXA_RESULT_CONTAINERS = ["results", "items", "content", "contents", "data", "documents"];
 const EXA_METADATA_FIELDS = ["publishedDate", "author", "summary"];
 const MAX_EXA_SOURCE_DEPTH = 5;
+const MAX_PNG_BASE64_LENGTH = 8_000_000;
 
 export async function createAstraAgentUIStream({
   model,
@@ -49,6 +53,7 @@ export async function createAstraAgentResponse({
   abortSignal,
   headers,
   onSource,
+  onArtifact,
 }: {
   model: LanguageModel;
   providerOptions?: ProviderOptions;
@@ -57,8 +62,9 @@ export async function createAstraAgentResponse({
   abortSignal?: AbortSignal;
   headers?: HeadersInit;
   onSource?: SourceReporter;
+  onArtifact?: ArtifactPublisher;
 }) {
-  const external = await createAstraExternalTools({ onSource });
+  const external = await createAstraExternalTools({ onSource, onArtifact });
   try {
     const response = await createAgentUIStreamResponse({
       agent: buildAstraAgent({ model, providerOptions, context, externalTools: external.tools }),
@@ -87,13 +93,68 @@ export async function createAstraAgentResponse({
   }
 }
 
-async function createAstraExternalTools({ onSource }: { onSource?: SourceReporter } = {}) {
+async function createAstraExternalTools({
+  onSource,
+  onArtifact,
+}: {
+  onSource?: SourceReporter;
+  onArtifact?: ArtifactPublisher;
+} = {}) {
   const exa = await createExaMcpTools({ onSource });
+  const tools: ToolSet = {
+    ...(exa.tools as ToolSet),
+  };
+
+  if (onArtifact) {
+    tools.publishPngArtifact = tool({
+      description:
+        "Publish a final PNG visual artifact to UploadThing and return Markdown image syntax for embedding in the final answer. Use only for final audited visual artifacts, not raw/supporting files.",
+      inputSchema: z.object({
+        filename: z.string().min(1).describe("Filename ending in .png."),
+        title: z.string().min(1).describe("Human-readable artifact title."),
+        altText: z.string().min(1).optional().describe("Accessible image alt text."),
+        caption: z.string().optional().describe("Optional Markdown caption text."),
+        pngBase64: z
+          .string()
+          .min(1)
+          .max(MAX_PNG_BASE64_LENGTH)
+          .describe("PNG bytes encoded as base64, with or without a data URL prefix."),
+        sourceIds: z.array(z.string().min(1)).optional().describe("Evidence source IDs that support the visual."),
+        metadata: z.record(z.string(), z.unknown()).optional().describe("Audit or renderer metadata."),
+      }),
+      execute: async ({ filename, title, altText, caption, pngBase64, sourceIds, metadata }) => {
+        const published = await onArtifact({
+          bytes: decodePngBase64(pngBase64),
+          filename,
+          title,
+          altText,
+          caption,
+          sourceIds,
+          metadata,
+        });
+
+        return {
+          artifactId: published.artifact.id,
+          fileKey: published.artifact.fileKey,
+          url: published.artifact.url,
+          markdown: published.markdown,
+          contentType: published.artifact.contentType,
+          byteSize: published.artifact.byteSize,
+        };
+      },
+    });
+  }
 
   return {
-    tools: exa.tools as ToolSet,
+    tools,
     close: exa.close,
   };
+}
+
+function decodePngBase64(value: string): Uint8Array {
+  const normalized = value.replace(/^data:image\/png;base64,/i, "");
+
+  return new Uint8Array(Buffer.from(normalized, "base64"));
 }
 
 async function reportStepSources(step: unknown, onSource: SourceReporter) {

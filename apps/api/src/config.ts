@@ -34,6 +34,7 @@ export const env = createEnv({
     ASTRA_SKILL_SCRIPT_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
     ASTRA_RESEARCH_ARTIFACT_DIR: z.string().min(1).default(".astra-artifacts"),
     ASTRA_EXA_API_KEY: z.string().optional(),
+    UPLOADTHING_TOKEN: z.string().min(1).optional(),
     OPENAI_API_KEY: z.string().optional(),
     OPENAI_BASE_URL: z.string().optional(),
   },
