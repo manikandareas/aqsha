@@ -53,17 +53,25 @@ export interface UpsertChatSourceInput extends AppendChatSourceInput {
 }
 
 export interface AppendChatArtifactInput {
+  ownerUserId: string;
   chatThreadId: string;
   runId: string;
+  messageId?: string | null;
   kind: ChatArtifact["kind"];
   title: string;
   caption?: string | null;
-  fileKey: string;
-  url: string;
+  fileKey?: string | null;
+  url?: string | null;
   contentType: ChatArtifact["contentType"];
   byteSize?: number | null;
+  checksum?: string | null;
   sourceIds?: string[];
-  metadata?: unknown;
+  sourceRefs?: unknown;
+  visualSpec?: unknown;
+  auditStatus: ChatArtifact["auditStatus"];
+  auditSummary?: string | null;
+  failureSummary?: string | null;
+  developerDetail?: unknown;
 }
 
 export interface FinishAgentRunInput {
@@ -80,6 +88,7 @@ export interface ChatStore {
   getLatestRun(scope: ChatScope, threadId: string): Promise<AgentRun | null>;
   getEvents(scope: ChatScope, threadId: string): Promise<AgentEvent[]>;
   getSources(scope: ChatScope, threadId: string): Promise<ChatSource[]>;
+  getArtifacts(scope: ChatScope, threadId: string): Promise<ChatArtifact[]>;
   createRun(input: CreateAgentRunInput): Promise<AgentRun>;
   appendEvent(
     scope: ChatScope,

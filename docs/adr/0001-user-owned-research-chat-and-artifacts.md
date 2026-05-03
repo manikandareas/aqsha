@@ -1,0 +1,3 @@
+# User-owned Research Chat and artifacts
+
+Aqsha does not use Workspace or Organization as product, UI, or domain language. Because the product is currently built by a single founder-developer and does not need backward compatibility with earlier workspace-scoped data, Research Chat, Deep Research runs, sources, and final research artifacts are owned directly by the user who created them. This keeps ownership, access control, replay, and artifact audit simple while preserving the option to introduce collaboration later through explicit Shared Journal permissions instead of a broad organization model.

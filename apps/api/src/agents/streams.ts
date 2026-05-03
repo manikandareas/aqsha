@@ -120,9 +120,32 @@ async function createAstraExternalTools({
           .max(MAX_PNG_BASE64_LENGTH)
           .describe("PNG bytes encoded as base64, with or without a data URL prefix."),
         sourceIds: z.array(z.string().min(1)).optional().describe("Evidence source IDs that support the visual."),
+        sourceRefs: z
+          .array(z.record(z.string(), z.unknown()))
+          .optional()
+          .describe("Optional replay snapshot mapping Ledger Source IDs to persisted or fetched source metadata."),
+        visualSpec: z
+          .record(z.string(), z.unknown())
+          .optional()
+          .describe("Visual Spec snapshot or reference used to render the artifact."),
+        auditSummary: z
+          .string()
+          .optional()
+          .describe("Concise audit summary explaining why this visual is safe to embed."),
         metadata: z.record(z.string(), z.unknown()).optional().describe("Audit or renderer metadata."),
       }),
-      execute: async ({ filename, title, altText, caption, pngBase64, sourceIds, metadata }) => {
+      execute: async ({
+        filename,
+        title,
+        altText,
+        caption,
+        pngBase64,
+        sourceIds,
+        sourceRefs,
+        visualSpec,
+        auditSummary,
+        metadata,
+      }) => {
         const published = await onArtifact({
           bytes: decodePngBase64(pngBase64),
           filename,
@@ -130,7 +153,9 @@ async function createAstraExternalTools({
           altText,
           caption,
           sourceIds,
-          metadata,
+          sourceRefs,
+          visualSpec: visualSpec ?? metadata,
+          auditSummary,
         });
 
         return {

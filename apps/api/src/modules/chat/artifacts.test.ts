@@ -49,7 +49,19 @@ describe("PngArtifactPublisher", () => {
         altText: "Evidence timeline chart",
         caption: "Verified source-backed timeline.",
         sourceIds: ["S1", "S2"],
-        metadata: { auditStatus: "passed" },
+        sourceRefs: [
+          {
+            sourceId: "S1",
+            title: "Evidence-aware writing assistants",
+            url: "https://example.com/study",
+          },
+        ],
+        visualSpec: {
+          visualId: "evidence-timeline",
+          visualKind: "timeline",
+          outputIntent: "final_report_embed",
+        },
+        auditSummary: "Visual references verified ledger source IDs.",
       },
     });
 
@@ -66,8 +78,10 @@ describe("PngArtifactPublisher", () => {
     ]);
     expect(persistedArtifacts).toEqual([
       expect.objectContaining({
+        ownerUserId: "user_123",
         chatThreadId: "thread_123",
         runId: "run_123",
+        messageId: null,
         kind: "visual_png",
         title: "Evidence timeline",
         caption: "Verified source-backed timeline.",
@@ -75,8 +89,24 @@ describe("PngArtifactPublisher", () => {
         url: "https://utfs.io/f/ut_file_123.png",
         contentType: "image/png",
         byteSize: 8,
+        checksum: expect.stringMatching(/^[a-f0-9]{64}$/),
         sourceIds: ["S1", "S2"],
-        metadata: expect.objectContaining({ auditStatus: "passed" }),
+        sourceRefs: [
+          {
+            sourceId: "S1",
+            title: "Evidence-aware writing assistants",
+            url: "https://example.com/study",
+          },
+        ],
+        visualSpec: {
+          visualId: "evidence-timeline",
+          visualKind: "timeline",
+          outputIntent: "final_report_embed",
+        },
+        auditStatus: "passed",
+        auditSummary: "Visual references verified ledger source IDs.",
+        failureSummary: null,
+        developerDetail: null,
       }),
     ]);
     expect(events).toEqual([

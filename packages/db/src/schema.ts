@@ -55,6 +55,12 @@ export const chatThreadStatuses = ["active", "archived"] as const;
 export const chatMessageRoles = ["system", "user", "assistant", "tool"] as const;
 export const chatSourceKinds = ["url", "document"] as const;
 export const chatArtifactKinds = ["visual_png"] as const;
+export const chatArtifactAuditStatuses = [
+  "pending",
+  "passed",
+  "omitted",
+  "failed",
+] as const;
 export const agentRunStatuses = [
   "queued",
   "running",
@@ -553,31 +559,55 @@ export const chatArtifacts = pgTable(
   "chat_artifacts",
   {
     id: idColumn("id"),
+    ownerUserId: uuid("owner_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
     chatThreadId: uuid("chat_thread_id")
       .notNull()
       .references(() => chatThreads.id, { onDelete: "cascade" }),
     runId: uuid("run_id")
       .notNull()
       .references(() => agentRuns.id, { onDelete: "cascade" }),
+    messageId: text("message_id").references(() => chatMessages.id, {
+      onDelete: "set null",
+    }),
     kind: text("kind", { enum: chatArtifactKinds }).notNull(),
     title: text("title").notNull(),
     caption: text("caption"),
-    fileKey: text("file_key").notNull(),
-    url: text("url").notNull(),
-    contentType: text("content_type").notNull(),
+    fileKey: text("file_key"),
+    url: text("url"),
+    contentType: text("content_type"),
     byteSize: integer("byte_size"),
+    checksum: text("checksum"),
     sourceIds: jsonb("source_ids").$type<string[]>(),
-    metadata: jsonb("metadata").$type<JsonValue>(),
+    sourceRefs: jsonb("source_refs").$type<JsonValue>(),
+    visualSpec: jsonb("visual_spec").$type<JsonValue>(),
+    auditStatus: text("audit_status", { enum: chatArtifactAuditStatuses })
+      .default("pending")
+      .notNull(),
+    auditSummary: text("audit_summary"),
+    failureSummary: text("failure_summary"),
+    developerDetail: jsonb("developer_detail").$type<JsonValue>(),
     createdAt: createdAtColumn(),
   },
   (table) => [
     check("chat_artifacts_kind_check", sql`${table.kind} in ('visual_png')`),
+    check(
+      "chat_artifacts_audit_status_check",
+      sql`${table.auditStatus} in ('pending', 'passed', 'omitted', 'failed')`,
+    ),
     index("chat_artifacts_thread_created_idx").on(
       table.chatThreadId,
       table.createdAt,
     ),
+    index("chat_artifacts_owner_created_idx").on(
+      table.ownerUserId,
+      table.createdAt,
+    ),
     index("chat_artifacts_run_id_idx").on(table.runId),
-    uniqueIndex("chat_artifacts_file_key_unique_idx").on(table.fileKey),
+    uniqueIndex("chat_artifacts_file_key_unique_idx")
+      .on(table.fileKey)
+      .where(sql`${table.fileKey} is not null`),
   ],
 );
 

@@ -126,6 +126,16 @@ export class DrizzleChatStore implements ChatStore {
     return rows.map((row) => this.toSource(row));
   }
 
+  async getArtifacts(_scope: ChatScope, threadId: string): Promise<ChatArtifact[]> {
+    const rows = await this.db
+      .select()
+      .from(chatArtifacts)
+      .where(eq(chatArtifacts.chatThreadId, threadId))
+      .orderBy(chatArtifacts.createdAt);
+
+    return rows.map((row) => this.toArtifact(row));
+  }
+
   async createRun(input: CreateAgentRunInput): Promise<AgentRun> {
     const now = new Date();
     const [run] = await this.db
@@ -221,17 +231,25 @@ export class DrizzleChatStore implements ChatStore {
     const [storedArtifact] = await this.db
       .insert(chatArtifacts)
       .values({
+        ownerUserId: artifact.ownerUserId,
         chatThreadId: artifact.chatThreadId,
         runId: artifact.runId,
+        messageId: artifact.messageId ?? null,
         kind: artifact.kind,
         title: artifact.title,
         caption: artifact.caption ?? null,
-        fileKey: artifact.fileKey,
-        url: artifact.url,
+        fileKey: artifact.fileKey ?? null,
+        url: artifact.url ?? null,
         contentType: artifact.contentType,
         byteSize: artifact.byteSize ?? null,
+        checksum: artifact.checksum ?? null,
         sourceIds: artifact.sourceIds ?? [],
-        metadata: this.toJsonValue(artifact.metadata ?? null),
+        sourceRefs: this.toJsonValue(artifact.sourceRefs ?? []),
+        visualSpec: this.toJsonValue(artifact.visualSpec ?? null),
+        auditStatus: artifact.auditStatus,
+        auditSummary: artifact.auditSummary ?? null,
+        failureSummary: artifact.failureSummary ?? null,
+        developerDetail: this.toJsonValue(artifact.developerDetail ?? null),
       })
       .returning();
 
@@ -482,17 +500,25 @@ export class DrizzleChatStore implements ChatStore {
   private toArtifact(artifact: typeof chatArtifacts.$inferSelect): ChatArtifact {
     return {
       id: artifact.id,
+      ownerUserId: artifact.ownerUserId,
       chatThreadId: artifact.chatThreadId,
       runId: artifact.runId,
+      messageId: artifact.messageId,
       kind: artifact.kind,
       title: artifact.title,
       caption: artifact.caption,
       fileKey: artifact.fileKey,
       url: artifact.url,
-      contentType: "image/png",
+      contentType: artifact.contentType === "image/png" ? "image/png" : null,
       byteSize: artifact.byteSize,
+      checksum: artifact.checksum,
       sourceIds: artifact.sourceIds ?? [],
-      metadata: artifact.metadata ?? null,
+      sourceRefs: artifact.sourceRefs ?? [],
+      visualSpec: artifact.visualSpec ?? null,
+      auditStatus: artifact.auditStatus,
+      auditSummary: artifact.auditSummary,
+      failureSummary: artifact.failureSummary,
+      developerDetail: artifact.developerDetail ?? null,
       createdAt: artifact.createdAt.toISOString(),
     };
   }

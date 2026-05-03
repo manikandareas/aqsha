@@ -1,5 +1,6 @@
 import { UTApi, UTFile } from "uploadthing/server";
 import type { AgentRun, AppendAgentEventInput, ChatScope } from "./store";
+import { createHash } from "node:crypto";
 
 const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] as const;
 
@@ -12,6 +13,10 @@ export interface PngArtifactInput {
   altText?: string | null;
   caption?: string | null;
   sourceIds?: string[];
+  sourceRefs?: unknown;
+  visualSpec?: unknown;
+  auditSummary?: string | null;
+  messageId?: string | null;
   metadata?: unknown;
 }
 
@@ -29,17 +34,25 @@ export interface UploadedPngArtifact {
 }
 
 export interface PersistChatArtifactInput {
+  ownerUserId: string;
   chatThreadId: string;
   runId: string;
+  messageId: string | null;
   kind: ChatArtifactKind;
   title: string;
   caption: string | null;
-  fileKey: string;
-  url: string;
-  contentType: "image/png";
+  fileKey: string | null;
+  url: string | null;
+  contentType: "image/png" | null;
   byteSize: number | null;
+  checksum: string | null;
   sourceIds: string[];
-  metadata: unknown;
+  sourceRefs: unknown;
+  visualSpec: unknown;
+  auditStatus: "pending" | "passed" | "omitted" | "failed";
+  auditSummary: string | null;
+  failureSummary: string | null;
+  developerDetail: unknown;
 }
 
 export interface PersistedChatArtifact extends PersistChatArtifactInput {
@@ -88,8 +101,10 @@ export class PngArtifactPublisher {
       });
 
       artifact = await this.options.persistArtifact({
+        ownerUserId: input.scope.userId,
         chatThreadId: input.run.chatThreadId,
         runId: input.run.id,
+        messageId: normalizeNullableString(input.artifact.messageId),
         kind: "visual_png",
         title: input.artifact.title,
         caption: normalizeNullableString(input.artifact.caption),
@@ -97,8 +112,14 @@ export class PngArtifactPublisher {
         url: upload.url,
         contentType: "image/png",
         byteSize: upload.size,
+        checksum: checksumForBytes(input.artifact.bytes),
         sourceIds: input.artifact.sourceIds ?? [],
-        metadata: metadataForArtifact(input.artifact.metadata, upload),
+        sourceRefs: input.artifact.sourceRefs ?? [],
+        visualSpec: input.artifact.visualSpec ?? null,
+        auditStatus: "passed",
+        auditSummary: normalizeNullableString(input.artifact.auditSummary),
+        failureSummary: null,
+        developerDetail: null,
       });
     } catch (error) {
       await this.options.writeEvent({
@@ -130,9 +151,9 @@ export class PngArtifactPublisher {
       toolName: "publishPngArtifact",
       payload: {
         artifactId: artifact.id,
-        fileKey: artifact.fileKey,
-        url: artifact.url,
-        contentType: artifact.contentType,
+        fileKey: artifact.fileKey ?? upload.fileKey,
+        url: artifact.url ?? upload.url,
+        contentType: artifact.contentType ?? upload.contentType,
         byteSize: artifact.byteSize,
         sourceIds: artifact.sourceIds,
       },
@@ -144,7 +165,7 @@ export class PngArtifactPublisher {
       markdown: createPngArtifactMarkdown({
         altText: input.artifact.altText || artifact.title,
         caption: artifact.caption,
-        url: artifact.url,
+        url: upload.url,
       }),
     };
   }
@@ -214,24 +235,8 @@ function assertPng(bytes: Uint8Array): void {
   }
 }
 
-function metadataForArtifact(metadata: unknown, upload: UploadedPngArtifact): unknown {
-  if (metadata && typeof metadata === "object" && !Array.isArray(metadata)) {
-    return {
-      ...metadata,
-      upload: {
-        provider: "uploadthing",
-        fileName: upload.name,
-      },
-    };
-  }
-
-  return {
-    value: metadata ?? null,
-    upload: {
-      provider: "uploadthing",
-      fileName: upload.name,
-    },
-  };
+function checksumForBytes(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
 }
 
 function normalizeNullableString(value: string | null | undefined): string | null {

@@ -88,17 +88,30 @@ const chatSource = t.Object({
 
 const chatArtifact = t.Object({
   id: t.String(),
+  ownerUserId: t.String(),
   chatThreadId: t.String(),
   runId: t.String(),
+  messageId: t.Union([t.String(), t.Null()]),
   kind: t.Literal("visual_png"),
   title: t.String(),
   caption: t.Union([t.String(), t.Null()]),
-  fileKey: t.String(),
-  url: t.String(),
-  contentType: t.Literal("image/png"),
+  fileKey: t.Union([t.String(), t.Null()]),
+  url: t.Union([t.String(), t.Null()]),
+  contentType: t.Union([t.Literal("image/png"), t.Null()]),
   byteSize: t.Union([t.Number(), t.Null()]),
+  checksum: t.Union([t.String(), t.Null()]),
   sourceIds: t.Array(t.String()),
-  metadata: t.Any(),
+  sourceRefs: t.Any(),
+  visualSpec: t.Any(),
+  auditStatus: t.Union([
+    t.Literal("pending"),
+    t.Literal("passed"),
+    t.Literal("omitted"),
+    t.Literal("failed"),
+  ]),
+  auditSummary: t.Union([t.String(), t.Null()]),
+  failureSummary: t.Union([t.String(), t.Null()]),
+  developerDetail: t.Any(),
   createdAt: t.String(),
 });
 
@@ -108,6 +121,7 @@ const chatThreadDetail = t.Object({
   latestRun: t.Union([agentRun, t.Null()]),
   events: t.Array(agentEvent),
   sources: t.Array(chatSource),
+  artifacts: t.Array(chatArtifact),
 });
 
 const unauthorizedError = t.Object({

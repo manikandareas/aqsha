@@ -84,6 +84,7 @@ export class ChatService {
         latestRun: await this.store.getLatestRun(scope, threadId),
         events: await this.store.getEvents(scope, threadId),
         sources: await this.store.getSources(scope, threadId),
+        artifacts: await this.store.getArtifacts(scope, threadId),
       },
     };
   }
