@@ -2,7 +2,15 @@
 
 import React from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDownIcon, Loader2Icon, LogOutIcon, UserIcon } from "lucide-react";
+import { useTheme } from "next-themes";
+import {
+  ChevronDownIcon,
+  Loader2Icon,
+  LogOutIcon,
+  MoonIcon,
+  SunIcon,
+  UserIcon,
+} from "lucide-react";
 
 import {
   AlertDialog,
@@ -38,6 +46,7 @@ function getDiceBearAvatarUrl(name: string): string {
 export function NavUser() {
   const router = useRouter();
   const { isMobile } = useSidebar();
+  const { setTheme, theme } = useTheme();
   const { data: session, isPending } = authClient.useSession();
   const [isSignOutAlertOpen, setIsSignOutAlertOpen] = React.useState(false);
   const [isSigningOut, setIsSigningOut] = React.useState(false);
@@ -62,24 +71,28 @@ export function NavUser() {
               render={
                 <SidebarMenuButton
                   size="lg"
-                  className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground mb-2"
+                  tooltip={name}
+                  className="h-12 rounded-[12px] bg-sidebar-accent/25 p-2 text-sidebar-foreground hover:bg-sidebar-accent/55 focus-visible:ring-sidebar-ring data-[state=open]:bg-sidebar-accent/60 data-[state=open]:text-sidebar-foreground group-data-[collapsible=icon]:size-9 group-data-[collapsible=icon]:bg-transparent"
                 />
               }
             >
-              <div className="relative">
+              <div className="relative shrink-0">
                 <img
                   src={avatarUrl}
                   alt={name}
-                  className="h-9 w-9 shrink-0 rounded-full object-cover select-none"
+                  className="size-9 select-none rounded-[10px] object-cover"
                 />
-                <span className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-notion-green ring-2 ring-sidebar" />
+                <span className="absolute -bottom-0.5 -right-0.5 block size-2 rounded-full bg-sidebar-foreground/30 ring-2 ring-sidebar" />
               </div>
-              <div className="grid flex-1 text-left text-sm leading-tight ml-1">
-                <span className="truncate font-medium text-[15px]">
+              <div className="ml-1 grid min-w-0 flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
+                <span className="truncate text-[13px] font-bold text-sidebar-foreground">
                   {isPending ? "Loading..." : name}
                 </span>
+                <span className="truncate text-[11px] font-medium text-sidebar-foreground/50">
+                  {email || "Free plan"}
+                </span>
               </div>
-              <ChevronDownIcon className="ml-auto h-4 w-4 shrink-0 opacity-50" />
+              <ChevronDownIcon className="ml-auto h-4 w-4 shrink-0 text-sidebar-foreground/45 group-data-[collapsible=icon]:hidden" />
             </DropdownMenuTrigger>
 
             <DropdownMenuContent
@@ -93,7 +106,7 @@ export function NavUser() {
                   <img
                     src={avatarUrl}
                     alt={name}
-                    className="h-8 w-8 shrink-0 rounded-full object-cover select-none"
+                    className="h-8 w-8 shrink-0 select-none rounded-[9px] object-cover"
                   />
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-medium">{name}</span>
@@ -108,6 +121,13 @@ export function NavUser() {
                 <DropdownMenuItem>
                   <UserIcon className="text-muted-foreground" />
                   <span>Profile</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                >
+                  <SunIcon className="text-muted-foreground dark:hidden" />
+                  <MoonIcon className="hidden text-muted-foreground dark:block" />
+                  <span>Toggle theme</span>
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />

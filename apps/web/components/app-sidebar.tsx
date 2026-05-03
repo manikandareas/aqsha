@@ -1,18 +1,20 @@
 "use client";
 
-import Link from "next/link";
 import Image from "next/image";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import * as React from "react";
 
 import { NavJournal } from "@/components/nav-journal";
 import { NavMain } from "@/components/nav-main";
 import { NavSecondary } from "@/components/nav-secondary";
-import { NavThreads } from "@/components/nav-threads";
+import { NavThreads, NewResearchButton } from "@/components/nav-threads";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarHeader,
+  SidebarRail,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { BookUpIcon, MessageCircleQuestionIcon } from "lucide-react";
@@ -47,47 +49,55 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   return (
     <Sidebar
-      className={cn(
-        "border-transparent bg-sidebar [--sidebar:var(--background)]",
-        "[--sidebar-width:17.5rem]",
-      )}
+      collapsible="icon"
+      className={cn("border-sidebar-border bg-sidebar")}
       {...props}
     >
-      <SidebarHeader className="gap-4 px-3 pb-3 pt-4">
-        <Link
-          href="/app"
-          aria-label="Go to Aqsha home"
-          className={cn(
-            "group/brand flex min-w-0 items-center gap-3 rounded-[14px] px-2 py-1.5",
-            "transition-colors hover:bg-sidebar-accent/45",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-          )}
-        >
-          <Image
-            src="/icon0.svg"
-            alt="Aqsha logo"
-            width={32}
-            height={32}
-            className="size-7 rounded-[8px] shadow-[0_6px_16px_-10px_rgba(26,31,43,0.45)]"
-            priority
-          />
-          <span className="min-w-0">
-            <span className="block truncate text-[14px] font-bold leading-5 text-sidebar-foreground">
-              Aqsha
+      <SidebarHeader className="gap-2.5 px-3 pb-2.5 pt-3">
+        <div className="flex min-w-0 items-center pb-1">
+          <Link
+            href="/app"
+            aria-label="Go to Aqsha home"
+            className={cn(
+              "group/brand flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5",
+              "transition-colors hover:bg-sidebar-accent/45",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+              "group-data-[collapsible=icon]:size-9 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0",
+            )}
+          >
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-sidebar-accent/45">
+              <Image
+                src="/icon0.svg"
+                alt="Aqsha logo"
+                width={32}
+                height={32}
+                className="size-6 rounded-[7px]"
+                priority
+              />
             </span>
-            <span className="block truncate text-[11px] font-medium leading-4 text-sidebar-foreground/50">
-              Writing workspace
+            <span className="min-w-0 group-data-[collapsible=icon]:hidden">
+              <span className="block truncate text-[15px] font-bold leading-5 text-sidebar-foreground">
+                Aqsha
+              </span>
+              <span className="block truncate text-[11px] font-medium leading-4 text-sidebar-foreground/55">
+                Research Workspace
+              </span>
             </span>
-          </span>
-        </Link>
+          </Link>
+        </div>
 
+        <NewResearchButton />
         <NavMain items={navMain} />
       </SidebarHeader>
 
-      <SidebarContent className="gap-2 px-2 pb-4 pt-1">
+      <SidebarContent className="gap-1.5 px-2 pb-2 pt-0">
         {isJournalsRoute ? <NavJournal /> : <NavThreads />}
-        <NavSecondary items={data.navSecondary} className="mt-auto px-1 pt-1" />
       </SidebarContent>
+
+      <SidebarFooter className="px-2 pb-3 pt-2">
+        <NavSecondary items={data.navSecondary} />
+      </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
   );
 }

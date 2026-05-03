@@ -98,11 +98,11 @@ export function ThreadPageShell({
   );
 
   return (
-    <div className="flex h-full flex-col bg-background text-foreground">
-      <AppPageHeader actions={trigger} sticky title={title} />
+    <div className="grid h-full min-h-0 overflow-hidden bg-background text-foreground lg:grid-cols-[minmax(0,1fr)_auto]">
+      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+        <AppPageHeader actions={trigger} title={title} />
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <main className="flex min-h-0 min-w-0 flex-1">
+        <main className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
           <ChatThread
             id={id}
             initialEvents={initialEvents}
@@ -111,21 +111,21 @@ export function ThreadPageShell({
             onMessagesChange={setDisplayMessages}
           />
         </main>
-
-        <aside
-          className={cn(
-            "hidden min-h-0 shrink-0 overflow-hidden transition-[width,opacity] duration-200 lg:flex",
-            desktopSourcesOpen ? "w-[30rem] opacity-100" : "w-0 opacity-0",
-          )}
-          id="thread-sources-sidebar"
-        >
-          <ThreadSourcesPanel
-            events={initialEvents}
-            messages={displayMessages}
-            sources={initialSources}
-          />
-        </aside>
       </div>
+
+      <aside
+        className={cn(
+          "hidden h-full min-h-0 overflow-hidden transition-[width,opacity] duration-200 lg:flex",
+          desktopSourcesOpen ? "w-[30rem] opacity-100" : "w-0 opacity-0",
+        )}
+        id="thread-sources-sidebar"
+      >
+        <ThreadSourcesPanel
+          events={initialEvents}
+          messages={displayMessages}
+          sources={initialSources}
+        />
+      </aside>
 
       <Drawer
         direction="right"

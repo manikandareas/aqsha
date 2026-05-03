@@ -120,10 +120,10 @@ export function ChatThread({
   }, [messages, onMessagesChange]);
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       <div
         ref={containerRef}
-        className="absolute inset-0 touch-pan-y overflow-y-auto scroll-smooth bg-background"
+        className="relative min-h-0 flex-1 touch-pan-y overflow-y-auto scroll-smooth bg-background"
       >
         <MessageList
           events={initialEvents}
@@ -131,25 +131,24 @@ export function ChatThread({
           latestRun={initialLatestRun}
           messages={messages}
         />
+        <button
+          type="button"
+          aria-label="Scroll to bottom"
+          onClick={() => scrollToBottom("smooth")}
+          className={
+            "sticky bottom-4 left-1/2 z-30 flex size-8 -translate-x-1/2 items-center justify-center rounded-full bg-foreground text-background shadow-lg transition-all duration-200 hover:scale-105 hover:bg-foreground/90 " +
+            (isAtBottom
+              ? "pointer-events-none scale-90 opacity-0"
+              : "pointer-events-auto scale-100 opacity-100")
+          }
+        >
+          <ArrowDownIcon className="size-3" />
+        </button>
       </div>
 
-      <button
-        type="button"
-        aria-label="Scroll to bottom"
-        onClick={() => scrollToBottom("smooth")}
-        className={
-          "absolute bottom-52 left-1/2 z-30 flex size-8 -translate-x-1/2 items-center justify-center rounded-full border border-border bg-foreground text-background shadow-lg transition-all duration-200 hover:scale-105 hover:bg-foreground/90 " +
-          (isAtBottom
-            ? "pointer-events-none scale-90 opacity-0"
-            : "pointer-events-auto scale-100 opacity-100")
-        }
-      >
-        <ArrowDownIcon className="size-3" />
-      </button>
-
-      <div className="absolute inset-x-0 bottom-0 z-20 bg-background px-4 pb-6 pt-3 sm:px-6">
+      <div className="sticky bottom-0 z-20 shrink-0 bg-background px-4 pb-5 pt-3 sm:px-6">
         {error ? (
-          <div className="mx-auto mb-3 w-full max-w-[820px] rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-2 text-sm text-destructive">
+          <div className="mx-auto mb-3 w-full max-w-[820px] rounded-lg bg-destructive/10 px-4 py-2 text-sm text-destructive">
             {describeChatError(error)}
           </div>
         ) : null}

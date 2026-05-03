@@ -10,7 +10,7 @@ export function PromptInput({ className, ...props }: PromptInputProps) {
   return (
     <form
       className={cn(
-        "rounded-2xl border border-border bg-card shadow-sm transition-shadow focus-within:shadow-md",
+        "rounded-2xl bg-card shadow-sm ring-1 ring-border/60 transition-shadow focus-within:shadow-md focus-within:ring-ring/35",
         className,
       )}
       {...props}

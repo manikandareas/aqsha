@@ -1,8 +1,21 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  ArrowUpRightIcon,
+  FileTextIcon,
+  LinkIcon,
+  Loader2Icon,
+  MoreHorizontalIcon,
+  PlusIcon,
+  StarOffIcon,
+} from "lucide-react";
 import Link from "next/link";
-import { getEdenErrorMessage } from "@/lib/eden-error";
+import { usePathname, useRouter } from "next/navigation";
+import * as React from "react";
+import { useForm, useWatch } from "react-hook-form";
+import { z } from "zod";
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -36,19 +49,8 @@ import {
   useCreateJournalMutation,
   useJournalsQuery,
 } from "@/features/journal/lib/queries";
-import {
-  MoreHorizontalIcon,
-  StarOffIcon,
-  LinkIcon,
-  ArrowUpRightIcon,
-  PlusIcon,
-  Loader2Icon,
-  FileTextIcon,
-} from "lucide-react";
-import { useRouter } from "next/navigation";
-import * as React from "react";
-import { useForm, useWatch } from "react-hook-form";
-import { z } from "zod";
+import { getEdenErrorMessage } from "@/lib/eden-error";
+import { cn } from "@/lib/utils";
 
 const createJournalSchema = z.object({
   title: z.string().trim().min(1, "Journal title is required."),
@@ -63,6 +65,7 @@ function getJournalErrorMessage(error: unknown): string {
 export function NavJournal() {
   const { isMobile } = useSidebar();
   const router = useRouter();
+  const pathname = usePathname();
   const [isDialogOpen, setIsDialogOpen] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const journalsQuery = useJournalsQuery();
@@ -77,7 +80,6 @@ export function NavJournal() {
       title: "",
     },
   });
-
 
   async function handleCreate(values: CreateJournalFormValues): Promise<void> {
     setError(null);
@@ -101,16 +103,16 @@ export function NavJournal() {
   const displayedError = error ?? queryError;
 
   return (
-    <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-      <SidebarGroupLabel>
-        <span>Journal</span>
+    <SidebarGroup className="px-1 py-0.5 group-data-[collapsible=icon]:hidden">
+      <SidebarGroupLabel className="h-7 px-2 text-[11px] font-semibold tracking-[0.06em] text-sidebar-foreground/40">
+        <span>JOURNALS</span>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger
             render={
               <Button
                 variant="ghost"
                 size="icon-xs"
-                className="ml-auto -mr-1 text-muted-foreground hover:text-foreground"
+                className="ml-auto -mr-1 text-sidebar-foreground/35 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
               />
             }
           >
@@ -156,10 +158,13 @@ export function NavJournal() {
           </DialogContent>
         </Dialog>
       </SidebarGroupLabel>
-      <SidebarMenu>
+      <SidebarMenu className="gap-1">
         {journalsQuery.isLoading ? (
           <SidebarMenuItem>
-            <SidebarMenuButton disabled>
+            <SidebarMenuButton
+              disabled
+              className="h-9 rounded-lg text-[13px] text-sidebar-foreground/45"
+            >
               <Loader2Icon className="animate-spin" />
               <span>Loading journals</span>
             </SidebarMenuButton>
@@ -169,9 +174,9 @@ export function NavJournal() {
           <SidebarMenuItem>
             <SidebarMenuButton
               disabled
-              className="cursor-default text-sidebar-foreground/40"
+              className="h-auto min-h-9 cursor-default rounded-lg text-sidebar-foreground/45"
             >
-              <span className="text-[13px]">{displayedError}</span>
+              <span className="text-[13px] leading-5">{displayedError}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         ) : null}
@@ -179,65 +184,86 @@ export function NavJournal() {
           <SidebarMenuItem>
             <SidebarMenuButton
               disabled
-              className="cursor-default text-sidebar-foreground/40"
+              className="h-9 cursor-default rounded-lg text-sidebar-foreground/45"
             >
+              <FileTextIcon className="h-[14px] w-[14px] text-sidebar-foreground/35" />
               <span className="text-[13px]">No journals yet</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         ) : null}
-        {journals.map((item) => (
-          <SidebarMenuItem key={item.id}>
-            <SidebarMenuButton
-              render={<Link href={`/app/journals/${item.id}`} title={item.title} />}
-              className="h-8 text-[13px] font-medium"
-            >
-              <FileTextIcon className="h-[14px] w-[14px] shrink-0 text-sidebar-foreground/45" />
-              <span className="truncate">{item.title}</span>
-            </SidebarMenuButton>
-            <DropdownMenu>
-              <DropdownMenuTrigger
+        {journals.map((item) => {
+          const isActive = pathname === `/app/journals/${item.id}`;
+
+          return (
+            <SidebarMenuItem key={item.id}>
+              <SidebarMenuButton
+                isActive={isActive}
                 render={
-                  <SidebarMenuAction
-                    showOnHover
-                    className="aria-expanded:bg-muted"
-                  />
+                  <Link href={`/app/journals/${item.id}`} title={item.title} />
                 }
+                className={cn(
+                  "h-9 rounded-lg text-[13px] font-medium transition-colors",
+                  "focus-visible:ring-sidebar-ring",
+                  isActive
+                    ? "bg-sidebar-accent/55 text-sidebar-foreground hover:bg-sidebar-accent/65"
+                    : "text-sidebar-foreground/60 hover:bg-sidebar-accent/45 hover:text-sidebar-foreground",
+                )}
               >
-                <MoreHorizontalIcon />
-                <span className="sr-only">More</span>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                className="w-56 rounded-lg"
-                side={isMobile ? "bottom" : "right"}
-                align={isMobile ? "end" : "start"}
-              >
-                <DropdownMenuGroup>
-                  <DropdownMenuItem>
-                    <StarOffIcon className="text-muted-foreground" />
-                    <span>Remove from Journal</span>
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuGroup>
-                  <DropdownMenuItem>
-                    <LinkIcon className="text-muted-foreground" />
-                    <span>Copy Link</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <ArrowUpRightIcon className="text-muted-foreground" />
-                    <a
-                      href={`/app/journals/${item.id}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Open in New Tab
-                    </a>
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </SidebarMenuItem>
-        ))}
+                <FileTextIcon
+                  className={cn(
+                    "h-[14px] w-[14px] shrink-0",
+                    isActive
+                      ? "text-sidebar-foreground/70"
+                      : "text-sidebar-foreground/38",
+                  )}
+                />
+                <span className="truncate">{item.title}</span>
+              </SidebarMenuButton>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <SidebarMenuAction
+                      showOnHover
+                      className="text-sidebar-foreground/35 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground aria-expanded:bg-sidebar-accent/60"
+                    />
+                  }
+                >
+                  <MoreHorizontalIcon />
+                  <span className="sr-only">More</span>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  className="w-56 rounded-lg"
+                  side={isMobile ? "bottom" : "right"}
+                  align={isMobile ? "end" : "start"}
+                >
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem>
+                      <StarOffIcon className="text-muted-foreground" />
+                      <span>Remove from Journal</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem>
+                      <LinkIcon className="text-muted-foreground" />
+                      <span>Copy Link</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem>
+                      <ArrowUpRightIcon className="text-muted-foreground" />
+                      <a
+                        href={`/app/journals/${item.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open in New Tab
+                      </a>
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </SidebarMenuItem>
+          );
+        })}
       </SidebarMenu>
     </SidebarGroup>
   );

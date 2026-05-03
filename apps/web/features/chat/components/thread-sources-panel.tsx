@@ -120,7 +120,7 @@ export function ThreadSourcesPanel({
     <Sidebar
       aria-label="Sources"
       className={cn(
-        "h-[calc(100dvh-3.5rem)] bg-background text-foreground [--sidebar-width:30rem]",
+        "h-full bg-background text-foreground [--sidebar-width:30rem]",
         className,
       )}
       collapsible="none"
