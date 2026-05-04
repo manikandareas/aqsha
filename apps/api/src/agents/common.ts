@@ -28,8 +28,6 @@ export function mergeAstraTools(skillTools: ToolSet, externalTools: ToolSet = {}
 export function commonAgentSettings({ model, providerOptions, context, externalTools }: AstraAgentOptions) {
   const skillTools = createSkillTools({
     registry: context.skills,
-    scriptsEnabled: context.skillScriptsEnabled,
-    scriptTimeoutMs: context.skillScriptTimeoutMs,
   });
   const tools = mergeAstraTools(skillTools, externalTools);
 

@@ -16,8 +16,4 @@ export type SkillRegistry = {
 
 export type SkillToolContext = {
   registry: SkillRegistry;
-  scriptsEnabled: boolean;
-  scriptTimeoutMs: number;
-  scriptExecutor?: import("./executor").SkillScriptExecutor;
-  sandboxImageRef?: string;
 };

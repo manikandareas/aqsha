@@ -48,13 +48,6 @@ important_numbers:
     unit:
     context:
     source_location:
-visual_metrics:
-  - metric_id:
-    value:
-    unit:
-    context:
-    source_ids:
-      - S1
 contradictions_or_tensions:
 related_sources:
 extraction_notes:
@@ -82,27 +75,6 @@ verification_status: verified | partially_verified | unverified
 final_wording:
 ```
 
-## Visual Spec Record
-
-Use visual specs only after evidence cards and claim records exist. Specs are
-declarative data for trusted render scripts, not generated plotting code.
-
-```yaml
-visuals:
-  - visual_id: evidence-timeline
-    kind: timeline
-    title: Evidence Timeline
-    caption: Publication timeline for included sources.
-    source_ids: [S1, S2]
-    items:
-      - label: S1
-        year: 2024
-        source_ids: [S1]
-        citation_count:
-          metric_id: citations-s1
-          value: 12
-```
-
 ## Extraction Rules
 
 - Extract before synthesizing.
@@ -114,5 +86,4 @@ visuals:
 - Do not convert correlation into causation.
 - Do not treat abstracts as full evidence when the full text is needed.
 - Keep source claims separate from agent interpretation.
-- Store visual-ready numeric values in `visual_metrics` and reference them by `metric_id`.
-- Do not create visual specs for missing dates, missing source IDs, or guessed counts.
+- Keep reusable numbers in `important_numbers` with stable `metric_id` values.

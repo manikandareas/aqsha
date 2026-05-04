@@ -2,8 +2,6 @@ import { Elysia, t } from "elysia";
 import type { UIMessageChunk } from "ai";
 import { authIdentityPlugin } from "../../plugins/auth-identity";
 import { servicesPlugin } from "../../plugins/services";
-import type { EvidenceLedger } from "../../agents/deep-research/contracts";
-import { PngArtifactPublisher } from "./artifacts";
 import { chatModel } from "./model";
 import { collectFinishedMessages } from "./vercel-stream";
 import type {
@@ -31,20 +29,6 @@ const agentRunNotFoundResponse = {
   error: {
     code: "agent_run_not_found" as const,
     message: "Agent run not found",
-  },
-};
-
-const deliveryRetryRejectedResponse = {
-  error: {
-    code: "delivery_retry_rejected" as const,
-    message: "Delivery retry rejected because saved artifact lineage is incomplete.",
-  },
-};
-
-const deliveryRetryFailedResponse = {
-  error: {
-    code: "delivery_retry_failed" as const,
-    message: "Delivery retry failed.",
   },
 };
 
@@ -100,20 +84,6 @@ function logChatError(
   }
 
   console.error(JSON.stringify(payload));
-}
-
-function developerErrorDetail(error: unknown): Record<string, unknown> {
-  if (error instanceof Error) {
-    return {
-      name: error.name,
-      message: error.message,
-      stack: error.stack,
-    };
-  }
-
-  return {
-    message: String(error),
-  };
 }
 
 function chunkRecord(chunk: UIMessageChunk): Record<string, unknown> {
@@ -490,118 +460,8 @@ export const chatModule = new Elysia({
     },
   )
   .post(
-    "/threads/:id/runs/:runId/retry-delivery",
-    async ({ agentsService, body, chatService, identity, params, pngArtifactUploadClient, status }) => {
-      const retry = await chatService.prepareDeliveryRetry(
-        identity,
-        params.id,
-        params.runId,
-        body,
-      );
-
-      if (!retry.success) {
-        if (retry.error === "agent_run_active") {
-          return status(409, agentRunActiveResponse);
-        }
-
-        if (retry.error === "delivery_retry_rejected") {
-          return status(409, deliveryRetryRejectedResponse);
-        }
-
-        if (retry.error === "agent_run_not_found") {
-          return status(404, agentRunNotFoundResponse);
-        }
-
-        return status(404, chatThreadNotFoundResponse);
-      }
-
-      const publisher = new PngArtifactPublisher({
-        uploadClient: pngArtifactUploadClient,
-        persistArtifact: (input) =>
-          chatService.appendRunArtifact(retry.data.scope, input),
-        writeEvent: (event) =>
-          chatService.appendRunEvents(retry.data.scope, retry.data.run, [event]),
-      });
-
-      try {
-        const result = await agentsService.retryVisualArtifactDelivery({
-          evidenceLedger: retry.data.evidenceLedger as EvidenceLedger,
-          visualSpecs: retry.data.visualSpecs,
-          attemptNumber: retry.data.attemptNumber,
-          phase: retry.data.phase,
-          visualId: retry.data.visualId,
-          originalArtifactId: retry.data.originalArtifactId,
-          runId: retry.data.run.id,
-          publishArtifact: (artifact) =>
-            publisher.publish({
-              scope: retry.data.scope,
-              run: retry.data.run,
-              artifact,
-            }),
-        });
-
-        await chatService.appendRunEvents(
-          retry.data.scope,
-          retry.data.run,
-          result.events,
-        );
-
-        return {
-          ok: result.status === "completed",
-          status: result.status,
-        };
-      } catch (error) {
-        await chatService.appendRunEvents(retry.data.scope, retry.data.run, [
-          {
-            type: "delivery_retry_failed",
-            scope: "error",
-            status: "failed",
-            title: "Delivery retry failed",
-            summary:
-              error instanceof Error
-                ? error.message
-                : "Visual artifact delivery retry failed.",
-            agentName: "Astra",
-            payload: {
-              attemptNumber: retry.data.attemptNumber,
-              phase: retry.data.phase,
-              visualId: retry.data.visualId ?? null,
-              originalArtifactId: retry.data.originalArtifactId ?? null,
-              errorClass: "unknown",
-              errorCode: "delivery_retry_failed",
-              developerDetail: developerErrorDetail(error),
-            },
-          },
-        ]);
-
-        return status(502, deliveryRetryFailedResponse);
-      }
-    },
-    {
-      detail: {
-        summary: "Retry visual artifact delivery",
-        description:
-          "Retries render/upload delivery from saved Evidence Ledger and Visual Spec lineage without repeating source discovery.",
-      },
-      body: chatModel.retryDeliveryBody,
-      response: {
-        200: chatModel.retryDeliveryResponse,
-        401: chatModel.unauthorizedError,
-        404: t.Union([
-          chatModel.chatThreadNotFoundError,
-          chatModel.agentRunNotFoundError,
-        ]),
-        409: t.Union([
-          chatModel.agentRunActiveError,
-          chatModel.deliveryRetryRejectedError,
-        ]),
-        502: chatModel.deliveryRetryFailedError,
-      },
-    },
-  )
-  .post(
     "/threads/:id/messages",
-    async ({ agentsService, body, chatRunCancellationRegistry, chatService, identity, params, pngArtifactUploadClient, request, status }) => {
+    async ({ agentsService, body, chatRunCancellationRegistry, chatService, identity, params, request, status }) => {
       const requestId = createChatRequestId();
       const messagesResult = await chatService.appendUserMessage(
         identity,
@@ -682,21 +542,6 @@ export const chatModule = new Elysia({
                 error,
               );
             }
-          },
-          onAgentEvent: eventWriter,
-          onArtifact: async (artifact) => {
-            const publisher = new PngArtifactPublisher({
-              uploadClient: pngArtifactUploadClient,
-              persistArtifact: (input) =>
-                chatService.appendRunArtifact(runResult.data.scope, input),
-              writeEvent: eventWriter,
-            });
-
-            return publisher.publish({
-              scope: runResult.data.scope,
-              run: runResult.data.run,
-              artifact,
-            });
           },
         });
       } catch (error) {

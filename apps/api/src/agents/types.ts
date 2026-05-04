@@ -1,6 +1,6 @@
 import type { UIMessage } from "ai";
 import type { AstraDeps } from "./deps";
-import type { SkillScriptExecutor, SkillRegistry } from "./skills";
+import type { SkillRegistry } from "./skills";
 
 export type InternalChatRequest = {
   trigger?: string;
@@ -12,8 +12,4 @@ export type InternalChatRequest = {
 export type AgentRuntimeContext = {
   deps: AstraDeps;
   skills: SkillRegistry;
-  skillScriptsEnabled: boolean;
-  skillScriptTimeoutMs: number;
-  scriptExecutor?: SkillScriptExecutor;
-  sandboxImageRef?: string;
 };

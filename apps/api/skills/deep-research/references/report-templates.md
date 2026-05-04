@@ -117,53 +117,6 @@ Confidence:
 ## 9. References
 ```
 
-## Visual Research Report
-
-Use for all deep-research reports when the evidence ledger can support at least
-one audited visual artifact.
-
-```markdown
-# Visual Research Report: [Question]
-
-## Executive Summary
-
-## 1. Research Question and Scope
-
-## 2. Method
-
-- Search strategy
-- Screening criteria
-- Extraction method
-- Visual artifact method
-- Verification method
-
-## 3. Evidence Artifacts
-
-![Search Flow](artifacts/search-flow.svg)
-
-![Evidence Timeline](artifacts/evidence-timeline.svg)
-
-![Claims Evidence](artifacts/claims-evidence.svg)
-
-## 4. Findings
-
-## 5. Synthesis and Research Gaps
-
-![Research Gaps](artifacts/research-gaps.svg)
-
-## 6. Uncertainty and Limitations
-
-## 7. Further Research
-
-## 8. Artifact Manifest
-
-- `evidence.json`
-- `visuals.json`
-- `artifact_manifest.json`
-
-## 9. References
-```
-
 ## Literature Review Variant
 
 Add:

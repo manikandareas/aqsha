@@ -87,42 +87,12 @@ const chatSource = t.Object({
   updatedAt: t.String(),
 });
 
-const chatArtifact = t.Object({
-  id: t.String(),
-  ownerUserId: t.String(),
-  chatThreadId: t.String(),
-  runId: t.String(),
-  messageId: t.Union([t.String(), t.Null()]),
-  kind: t.Literal("visual_png"),
-  title: t.String(),
-  caption: t.Union([t.String(), t.Null()]),
-  fileKey: t.Union([t.String(), t.Null()]),
-  url: t.Union([t.String(), t.Null()]),
-  contentType: t.Union([t.Literal("image/png"), t.Null()]),
-  byteSize: t.Union([t.Number(), t.Null()]),
-  checksum: t.Union([t.String(), t.Null()]),
-  sourceIds: t.Array(t.String()),
-  sourceRefs: t.Any(),
-  visualSpec: t.Any(),
-  auditStatus: t.Union([
-    t.Literal("pending"),
-    t.Literal("passed"),
-    t.Literal("omitted"),
-    t.Literal("failed"),
-  ]),
-  auditSummary: t.Union([t.String(), t.Null()]),
-  failureSummary: t.Union([t.String(), t.Null()]),
-  developerDetail: t.Any(),
-  createdAt: t.String(),
-});
-
 const chatThreadDetail = t.Object({
   thread: chatThread,
   messages: t.Array(chatMessage),
   latestRun: t.Union([agentRun, t.Null()]),
   events: t.Array(agentEvent),
   sources: t.Array(chatSource),
-  artifacts: t.Array(chatArtifact),
 });
 
 const unauthorizedError = t.Object({
@@ -153,20 +123,6 @@ const agentRunNotFoundError = t.Object({
   }),
 });
 
-const deliveryRetryRejectedError = t.Object({
-  error: t.Object({
-    code: t.Literal("delivery_retry_rejected"),
-    message: t.String(),
-  }),
-});
-
-const deliveryRetryFailedError = t.Object({
-  error: t.Object({
-    code: t.Literal("delivery_retry_failed"),
-    message: t.String(),
-  }),
-});
-
 export const chatModel = {
   createThreadBody: t.Object({
     model: t.Optional(t.Union([t.String(), t.Null()])),
@@ -178,30 +134,18 @@ export const chatModel = {
       parts: t.Array(t.Any()),
     }),
   }),
-  retryDeliveryBody: t.Object({
-    phase: t.Union([t.Literal("render"), t.Literal("upload")]),
-    visualId: t.Optional(t.String()),
-    artifactId: t.Optional(t.String()),
-  }),
   chatThread,
   chatMessage,
   agentRun,
   agentEvent,
   chatSource,
-  chatArtifact,
   chatThreadDetail,
   unauthorizedError,
   chatThreadNotFoundError,
   agentRunActiveError,
   agentRunNotFoundError,
-  deliveryRetryRejectedError,
-  deliveryRetryFailedError,
   okResponse: t.Object({
     ok: t.Boolean(),
-  }),
-  retryDeliveryResponse: t.Object({
-    ok: t.Boolean(),
-    status: t.Union([t.Literal("completed"), t.Literal("failed")]),
   }),
 };
 

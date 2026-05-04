@@ -1,38 +1,17 @@
 import type { ProviderOptions } from "@ai-sdk/provider-utils";
-import { Buffer } from "node:buffer";
-import { createAgentUIStream, createAgentUIStreamResponse, generateObject, tool, type LanguageModel, type ToolSet, type UIMessage } from "ai";
-import { z } from "zod";
-import type { AgentUsedSource, CreateChatResponseInput } from "../modules/agents/model";
+import { createAgentUIStream, createAgentUIStreamResponse, type LanguageModel, type ToolSet, type UIMessage } from "ai";
+import type { AgentUsedSource } from "../modules/agents/model";
 import { buildAstraAgent } from "./astra";
-import {
-  evidenceLedgerSchema,
-  visualSpecSchema,
-} from "./deep-research/contracts";
-import { runFunctionalDeepResearch } from "./deep-research/functional";
-import {
-  createPngArtifactPublishAdapter,
-  createTrustedSkillVisualRenderer,
-  renderAndPublishVisualArtifacts,
-} from "./deep-research/visual-delivery";
-import {
-  compactPhaseOutputSchema,
-  runDeepResearchPhase,
-  runMinimalDeepResearchPhasePath,
-} from "./deep-research/phases";
 import { createExaMcpTools } from "./mcp/exa";
-import { readSkill } from "./skills";
 import type { AgentRuntimeContext } from "./types";
 
 type UnknownRecord = Record<string, unknown>;
 type SourceReporter = (source: AgentUsedSource) => Promise<void> | void;
-type ArtifactPublisher = NonNullable<CreateChatResponseInput["onArtifact"]>;
-type AgentEventReporter = NonNullable<CreateChatResponseInput["onAgentEvent"]>;
 
 const EXA_SOURCE_TOOL_NAMES = new Set(["web_search_exa", "web_fetch_exa"]);
 const EXA_RESULT_CONTAINERS = ["results", "items", "content", "contents", "data", "documents"];
 const EXA_METADATA_FIELDS = ["publishedDate", "author", "summary"];
 const MAX_EXA_SOURCE_DEPTH = 5;
-const MAX_PNG_BASE64_LENGTH = 8_000_000;
 
 export async function createAstraAgentUIStream({
   model,
@@ -47,7 +26,7 @@ export async function createAstraAgentUIStream({
   uiMessages: UIMessage[];
   abortSignal?: AbortSignal;
 }) {
-  const external = await createAstraExternalTools({ context, abortSignal });
+  const external = await createAstraExternalTools();
   try {
     const stream = await createAgentUIStream({
       agent: buildAstraAgent({ model, providerOptions, context, externalTools: external.tools }),
@@ -70,8 +49,6 @@ export async function createAstraAgentResponse({
   abortSignal,
   headers,
   onSource,
-  onAgentEvent,
-  onArtifact,
 }: {
   model: LanguageModel;
   providerOptions?: ProviderOptions;
@@ -80,16 +57,9 @@ export async function createAstraAgentResponse({
   abortSignal?: AbortSignal;
   headers?: HeadersInit;
   onSource?: SourceReporter;
-  onAgentEvent?: AgentEventReporter;
-  onArtifact?: ArtifactPublisher;
 }) {
   const external = await createAstraExternalTools({
-    model,
-    context,
-    abortSignal,
     onSource,
-    onAgentEvent,
-    onArtifact,
   });
   try {
     const response = await createAgentUIStreamResponse({
@@ -120,326 +90,19 @@ export async function createAstraAgentResponse({
 }
 
 async function createAstraExternalTools({
-  model,
-  context,
-  abortSignal,
   onSource,
-  onAgentEvent,
-  onArtifact,
 }: {
-  model?: LanguageModel;
-  context?: AgentRuntimeContext;
-  abortSignal?: AbortSignal;
   onSource?: SourceReporter;
-  onAgentEvent?: AgentEventReporter;
-  onArtifact?: ArtifactPublisher;
 } = {}) {
   const exa = await createExaMcpTools({ onSource });
   const tools: ToolSet = {
     ...(exa.tools as ToolSet),
   };
 
-  if (onAgentEvent && model) {
-    const generateCompactOutput = async ({ model: delegateModel, prompt, schema }: {
-      model: unknown;
-      prompt: string;
-      schema: typeof compactPhaseOutputSchema;
-    }) => {
-      const result = await generateObject({
-        model: delegateModel as LanguageModel,
-        prompt,
-        schema,
-        schemaName: "CompactPhaseOutput",
-        schemaDescription:
-          "Compact Deep Research phase output for Astra parent context and Research Trail persistence.",
-        maxRetries: 1,
-        abortSignal,
-      });
-
-      return result.object;
-    };
-
-    const generateStructuredOutput = async ({
-      model: structuredModel,
-      prompt,
-      schema,
-      schemaName,
-      schemaDescription,
-    }: {
-      model: unknown;
-      prompt: string;
-      schema: z.ZodType<unknown>;
-      schemaName: string;
-      schemaDescription: string;
-    }) => {
-      const result = await generateObject({
-        model: structuredModel as LanguageModel,
-        prompt,
-        schema,
-        schemaName,
-        schemaDescription,
-        maxRetries: 1,
-        abortSignal,
-      });
-
-      return result.object;
-    };
-
-    if (onArtifact && context?.skillScriptsEnabled) {
-      tools.runFunctionalDeepResearch = tool({
-        description:
-          "Run the end-to-end Functional Deep Research Orchestration after Astra selects Deep Research Intent. It executes the full linear Functional Phase Path, records structured Research Trail outputs, renders and publishes audited final PNG visual artifacts when supported by the Evidence Ledger, applies the Final Delivery Gate, and returns either finalReportMarkdown or a failed assistantMessage.",
-        inputSchema: z.object({
-          researchQuestion: z.string().min(1),
-          context: z
-            .string()
-            .min(1)
-            .describe("Compact initial research context. Include user scope and stable IDs; do not include full transcripts."),
-          primaryDeliverable: z
-            .enum(["report", "visual"])
-            .default("report")
-            .describe("Use report unless the user explicitly asks for the visual artifact itself as the main output."),
-        }),
-        execute: async ({ researchQuestion, context: toolContext, primaryDeliverable }) => {
-          const skill = context.skills.byName.get("deep-research");
-          if (!skill) {
-            throw new Error("deep-research skill is not registered.");
-          }
-
-          const loadedSkill = await readSkill(skill);
-
-          return await runFunctionalDeepResearch(
-            {
-              model,
-              researchQuestion,
-              context: toolContext,
-              primaryDeliverable,
-              deepResearchSkillContent: loadedSkill.content,
-              generateStructuredOutput,
-              generateCompactOutput,
-              renderAndPublishVisualArtifacts: async ({ evidenceLedger, visualSpecs }) => {
-                if (onAgentEvent) {
-                  await onAgentEvent({
-                    type: "visual_delivery_lineage_recorded",
-                    scope: "tool",
-                    status: "completed",
-                    title: "Visual delivery lineage recorded",
-                    summary:
-                      "Saved Evidence Ledger and Visual Spec lineage for narrow render/upload retry.",
-                    payload: {
-                      evidenceLedger,
-                      visualSpecs,
-                      visualIds: visualSpecs.map((visualSpec) => visualSpec.visualId),
-                    },
-                  });
-                }
-
-                return await renderAndPublishVisualArtifacts({
-                  evidenceLedger,
-                  visualSpecs,
-                  renderVisual: createTrustedSkillVisualRenderer({
-                    skill,
-                    evidenceLedger,
-                    executor: context.scriptExecutor,
-                    runId: context.deps.runId,
-                    imageRef: context.sandboxImageRef,
-                  }),
-                  publishVisual: createPngArtifactPublishAdapter({
-                    publishArtifact: onArtifact,
-                  }),
-                });
-              },
-            },
-            async (event) => {
-              await onAgentEvent(event);
-            },
-          );
-        },
-      });
-    }
-
-    tools.runDeepResearchPhasedPath = tool({
-      description:
-        "Run the full minimal Deep Research phased path linearly through named Research Sub-agents with fresh context windows, persist compact Research Trail events, and return compact phase outputs to Astra.",
-      inputSchema: z.object({
-        researchQuestion: z.string().min(1),
-        context: z
-          .string()
-          .min(1)
-          .describe("Compact initial research context. Include user scope and stable IDs; do not include full transcripts."),
-      }),
-      execute: async (input) =>
-        runMinimalDeepResearchPhasePath(
-          {
-            ...input,
-            model,
-            generateCompactOutput,
-          },
-          async (event) => {
-            await onAgentEvent(event);
-          },
-        ),
-    });
-
-    tools.runDeepResearchPhase = tool({
-      description:
-        "Run one Deep Research phase through a named internal Research Sub-agent with a fresh context window, persist compact Research Trail events, and return Compact Phase Output to Astra. Use only for one phase rerun. Do not include full transcripts, chain-of-thought, prompt details, or verbose tool logs.",
-      inputSchema: z.object({
-        phase: compactPhaseOutputSchema.shape.phase,
-        task: z.string().min(1).describe("Specific delegated task for the phase."),
-        context: z
-          .string()
-          .min(1)
-          .describe("Compact phase input context. Include stable source/claim/artifact IDs, not full transcripts."),
-        sourceIds: z.array(z.string().min(1)).default([]),
-        claimIds: z.array(z.string().min(1)).default([]),
-        artifactIds: z.array(z.string().min(1)).default([]),
-      }),
-      execute: async (input) =>
-        runDeepResearchPhase(
-          {
-            ...input,
-            model,
-            generateCompactOutput,
-          },
-          async (event) => {
-            await onAgentEvent(event);
-          },
-        ),
-    });
-  }
-
-  if (onArtifact) {
-    if (context?.skillScriptsEnabled) {
-      tools.renderAndPublishVisualArtifacts = tool({
-        description:
-          "Validate Visual Specs against the Evidence Ledger, render final visual artifacts with the trusted render-vega script through the configured script executor, publish passed PNG artifacts, and return Artifact Manifest records plus Markdown embeds. Use this for Deep Research visual delivery instead of model-generated plotting code or raw/supporting files.",
-        inputSchema: z.object({
-          evidenceLedger: evidenceLedgerSchema,
-          visualSpecs: z.array(visualSpecSchema).min(1),
-        }),
-        execute: async ({ evidenceLedger, visualSpecs }) => {
-          const skill = context.skills.byName.get("deep-research");
-          if (!skill) {
-            throw new Error("deep-research skill is not registered.");
-          }
-
-          if (onAgentEvent) {
-            await onAgentEvent({
-              type: "visual_delivery_lineage_recorded",
-              scope: "tool",
-              status: "completed",
-              title: "Visual delivery lineage recorded",
-              summary:
-                "Saved Evidence Ledger and Visual Spec lineage for narrow render/upload retry.",
-              payload: {
-                evidenceLedger,
-                visualSpecs,
-                visualIds: visualSpecs.map((visualSpec) => visualSpec.visualId),
-              },
-            });
-          }
-
-          const result = await renderAndPublishVisualArtifacts({
-            evidenceLedger,
-            visualSpecs,
-            renderVisual: createTrustedSkillVisualRenderer({
-              skill,
-              evidenceLedger,
-              executor: context.scriptExecutor,
-              runId: context.deps.runId,
-              imageRef: context.sandboxImageRef,
-            }),
-            publishVisual: createPngArtifactPublishAdapter({
-              publishArtifact: onArtifact,
-            }),
-          });
-
-          if (onAgentEvent) {
-            for (const event of result.events) {
-              await onAgentEvent(event);
-            }
-          }
-
-          return result;
-        },
-      });
-    }
-
-    tools.publishPngArtifact = tool({
-      description:
-        "Publish a final PNG visual artifact to UploadThing and return Markdown image syntax for embedding in the final answer. Use only for final audited visual artifacts, not raw/supporting files.",
-      inputSchema: z.object({
-        filename: z.string().min(1).describe("Filename ending in .png."),
-        title: z.string().min(1).describe("Human-readable artifact title."),
-        altText: z.string().min(1).optional().describe("Accessible image alt text."),
-        caption: z.string().optional().describe("Optional Markdown caption text."),
-        pngBase64: z
-          .string()
-          .min(1)
-          .max(MAX_PNG_BASE64_LENGTH)
-          .describe("PNG bytes encoded as base64, with or without a data URL prefix."),
-        sourceIds: z.array(z.string().min(1)).optional().describe("Evidence source IDs that support the visual."),
-        sourceRefs: z
-          .array(z.record(z.string(), z.unknown()))
-          .optional()
-          .describe("Optional replay snapshot mapping Ledger Source IDs to persisted or fetched source metadata."),
-        visualSpec: z
-          .record(z.string(), z.unknown())
-          .optional()
-          .describe("Visual Spec snapshot or reference used to render the artifact."),
-        auditSummary: z
-          .string()
-          .optional()
-          .describe("Concise audit summary explaining why this visual is safe to embed."),
-        metadata: z.record(z.string(), z.unknown()).optional().describe("Audit or renderer metadata."),
-      }),
-      execute: async ({
-        filename,
-        title,
-        altText,
-        caption,
-        pngBase64,
-        sourceIds,
-        sourceRefs,
-        visualSpec,
-        auditSummary,
-        metadata,
-      }) => {
-        const published = await onArtifact({
-          bytes: decodePngBase64(pngBase64),
-          filename,
-          title,
-          altText,
-          caption,
-          sourceIds,
-          sourceRefs,
-          visualSpec: visualSpec ?? metadata,
-          auditSummary,
-        });
-
-        return {
-          artifactId: published.artifact.id,
-          fileKey: published.artifact.fileKey,
-          url: published.artifact.url,
-          markdown: published.markdown,
-          contentType: published.artifact.contentType,
-          byteSize: published.artifact.byteSize,
-        };
-      },
-    });
-  }
-
   return {
     tools,
     close: exa.close,
   };
-}
-
-function decodePngBase64(value: string): Uint8Array {
-  const normalized = value.replace(/^data:image\/png;base64,/i, "");
-
-  return new Uint8Array(Buffer.from(normalized, "base64"));
 }
 
 async function reportStepSources(step: unknown, onSource: SourceReporter) {

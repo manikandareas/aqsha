@@ -61,27 +61,18 @@ Choose the smallest depth that satisfies the user:
 5. Extract knowledge.
 6. Synthesize.
 7. Generate hypotheses or insights.
-8. Generate visual artifact specs when the evidence ledger has enough structured data.
-9. Run the research decision loop: PROCEED, REFINE, or PIVOT.
-10. Verify sources, citations, claims, quotes, numbers, dates, and visual provenance.
-11. Produce the final Markdown output with audited artifact embeds when available.
+8. Run the research decision loop: PROCEED, REFINE, or PIVOT.
+9. Verify sources, citations, claims, quotes, numbers, and dates.
+10. Produce the final Markdown output with uncertainty, citations, and bibliography.
 
-Load the referenced files only as needed:
+Load the reference files only as needed:
 
-- `references/research-workflow.md` for the full procedure and artifacts.
+- `references/research-workflow.md` for the full procedure.
 - `references/evidence-quality-rubric.md` for source appraisal.
 - `references/extraction-schema.md` for evidence cards and claim records.
 - `references/synthesis-and-decision-loop.md` for synthesis and PROCEED/REFINE/PIVOT.
 - `references/report-templates.md` for output formats.
-- `references/visual-artifacts.md` for graph, timeline, matrix, and artifact rules.
 - `references/verification-checklist.md` before final delivery.
-
-Trusted scripts are allowlisted through `scripts/manifest.json` and run through
-the Bun skill script executor. Do not call script file paths directly.
-
-For research reports with a local Vega-Lite or Vega visual spec, use the
-`render-vega` trusted script id to render PNG artifacts. Embed only artifacts
-that pass audit and upload/persistence checks.
 
 ## Citation Requirements
 
@@ -126,7 +117,6 @@ If evidence is weak, missing, contradictory, inaccessible, outdated, or biased:
 - [ ] Build evidence cards.
 - [ ] Synthesize themes, conflicts, gaps, and confidence.
 - [ ] Generate insights or hypotheses with counterevidence.
-- [ ] Generate visual specs from verified evidence when data is sufficient.
 - [ ] Decide PROCEED, REFINE, or PIVOT.
-- [ ] Verify citations, claims, quotes, numbers, dates, and visual provenance.
-- [ ] Produce final Markdown report with uncertainty, bibliography, and audited artifact embeds.
+- [ ] Verify citations, claims, quotes, numbers, and dates.
+- [ ] Produce final Markdown report with uncertainty, bibliography, and explicit caveats.

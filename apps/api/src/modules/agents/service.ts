@@ -1,20 +1,8 @@
 import { env, resolveAppPath } from "../../config";
 import type { AstraDeps } from "../../agents/deps";
 import { resolveModel } from "../../agents/model";
-import {
-  DaytonaScriptExecutor,
-  DaytonaSdkScriptExecutorClient,
-  discoverSkills,
-  LocalScriptExecutor,
-  type SkillScriptExecutor,
-} from "../../agents/skills";
+import { discoverSkills } from "../../agents/skills";
 import { createAstraAgentResponse } from "../../agents/streams";
-import type { EvidenceLedger } from "../../agents/deep-research/contracts";
-import {
-  createPngArtifactPublishAdapter,
-  createTrustedSkillVisualRenderer,
-  retryVisualArtifactDelivery as retryVisualArtifactDeliveryFromLineage,
-} from "../../agents/deep-research/visual-delivery";
 import type { CreateChatResponseInput } from "./model";
 
 export class AgentsService {
@@ -38,7 +26,6 @@ export class AgentsService {
         workspace: input.workspace?.trim() || env.ASTRA_WORKSPACE,
         conversationId: input.threadId,
         runId: input.runId,
-        researchArtifactDir: resolveAppPath(env.ASTRA_RESEARCH_ARTIFACT_DIR),
         constraints: [],
       };
       const resolvedModel = resolveModel(input.model);
@@ -50,16 +37,10 @@ export class AgentsService {
         context: {
           deps,
           skills,
-          skillScriptsEnabled: env.ASTRA_ENABLE_SKILL_SCRIPTS,
-          skillScriptTimeoutMs: env.ASTRA_SKILL_SCRIPT_TIMEOUT_MS,
-          scriptExecutor: env.ASTRA_ENABLE_SKILL_SCRIPTS ? this.createScriptExecutor() : undefined,
-          sandboxImageRef: env.ASTRA_RESEARCH_SANDBOX_IMAGE_REF,
         },
         uiMessages: input.messages,
         abortSignal: input.abortSignal,
         onSource: input.onSource,
-        onAgentEvent: input.onAgentEvent,
-        onArtifact: input.onArtifact,
         headers: {
           "x-astra-request-id": requestId,
         },
@@ -74,47 +55,6 @@ export class AgentsService {
     }
   }
 
-  async retryVisualArtifactDelivery(input: {
-    evidenceLedger: EvidenceLedger;
-    visualSpecs: unknown[];
-    attemptNumber: number;
-    phase: "render" | "upload";
-    visualId?: string;
-    originalArtifactId?: string;
-    runId: string;
-    publishArtifact: NonNullable<CreateChatResponseInput["onArtifact"]>;
-  }) {
-    if (!env.ASTRA_ENABLE_SKILL_SCRIPTS) {
-      throw new Error("ASTRA_ENABLE_SKILL_SCRIPTS is required for visual delivery retry.");
-    }
-
-    const skills = await this.skillsRegistryPromise;
-    const skill = skills.byName.get("deep-research");
-
-    if (!skill) {
-      throw new Error("deep-research skill is not registered.");
-    }
-
-    return await retryVisualArtifactDeliveryFromLineage({
-      evidenceLedger: input.evidenceLedger,
-      visualSpecs: input.visualSpecs,
-      attemptNumber: input.attemptNumber,
-      phase: input.phase,
-      visualId: input.visualId,
-      originalArtifactId: input.originalArtifactId,
-      renderVisual: createTrustedSkillVisualRenderer({
-        skill,
-        evidenceLedger: input.evidenceLedger,
-        executor: this.createScriptExecutor(),
-        runId: input.runId,
-        imageRef: env.ASTRA_RESEARCH_SANDBOX_IMAGE_REF,
-      }),
-      publishVisual: createPngArtifactPublishAdapter({
-        publishArtifact: input.publishArtifact,
-      }),
-    });
-  }
-
   private jsonError(status: number, code: string, message: string, requestId: string): Response {
     return Response.json(
       {
@@ -127,24 +67,5 @@ export class AgentsService {
         },
       },
     );
-  }
-
-  private createScriptExecutor(): SkillScriptExecutor {
-    if (env.ASTRA_SKILL_SCRIPT_EXECUTOR === "local") {
-      return new LocalScriptExecutor();
-    }
-
-    if (!env.ASTRA_RESEARCH_SANDBOX_IMAGE_REF) {
-      throw new Error("ASTRA_RESEARCH_SANDBOX_IMAGE_REF is required when ASTRA_SKILL_SCRIPT_EXECUTOR=daytona.");
-    }
-
-    return new DaytonaScriptExecutor({
-      imageRef: env.ASTRA_RESEARCH_SANDBOX_IMAGE_REF,
-      client: new DaytonaSdkScriptExecutorClient({
-        apiKey: env.DAYTONA_API_KEY,
-        apiUrl: env.DAYTONA_API_URL,
-        target: env.DAYTONA_TARGET,
-      }),
-    });
   }
 }

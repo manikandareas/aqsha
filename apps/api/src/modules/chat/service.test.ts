@@ -1,12 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import { runMinimalDeepResearchPhasePath } from "../../agents/deep-research/phases";
 import type { UserService } from "../users/service";
 import { ChatService } from "./service";
 import type {
   AgentEvent,
   AgentRun,
-  ChatArtifact,
   ChatMessage,
   ChatScope,
   ChatSource,
@@ -124,10 +122,6 @@ describe("ChatService", () => {
 
     await service.completeRunCancellation(scope, run, {
       modelStream: "propagated",
-      subagents: "propagated",
-      sandbox: "already_finished",
-      render: "unsupported",
-      upload: "already_finished",
     });
     const nextRun = await service.createRun(
       {
@@ -162,226 +156,12 @@ describe("ChatService", () => {
             payload: expect.objectContaining({
               boundaries: expect.objectContaining({
                 modelStream: "propagated",
-                render: "unsupported",
               }),
             }),
           }),
           expect.objectContaining({
             type: "run_canceled",
             status: "completed",
-          }),
-        ]),
-      }),
-    });
-  });
-
-  test("returns persisted artifacts in thread detail for replay and audit", async () => {
-    const store = {
-      async listThreads() {
-        return [];
-      },
-      async createThread() {
-        throw new Error("not used");
-      },
-      async getThread() {
-        return {
-          id: "thread_123",
-          userId: "user_123",
-          title: "Evidence timeline research",
-          model: null,
-          createdAt,
-          updatedAt: createdAt,
-        };
-      },
-      async getMessages() {
-        return [];
-      },
-      async getRun() {
-        return null;
-      },
-      async getLatestRun() {
-        return null;
-      },
-      async getEvents() {
-        return [];
-      },
-      async getSources() {
-        return [];
-      },
-      async getArtifacts() {
-        return [
-          {
-            id: "artifact_123",
-            ownerUserId: "user_123",
-            chatThreadId: "thread_123",
-            runId: "run_123",
-            messageId: "message_123",
-            kind: "visual_png" as const,
-            title: "Evidence timeline",
-            caption: "Verified source-backed timeline.",
-            fileKey: "ut_file_123",
-            url: "https://utfs.io/f/ut_file_123.png",
-            contentType: "image/png" as const,
-            byteSize: 8,
-            checksum: "a".repeat(64),
-            sourceIds: ["S1"],
-            sourceRefs: [{ sourceId: "S1", chatSourceId: "source_123" }],
-            visualSpec: { visualId: "evidence-timeline" },
-            auditStatus: "passed" as const,
-            auditSummary: "Visual references verified ledger source IDs.",
-            failureSummary: null,
-            developerDetail: null,
-            createdAt,
-          },
-        ];
-      },
-      async createRun() {
-        throw new Error("not used");
-      },
-      async requestRunCancellation() {
-        throw new Error("not used");
-      },
-      async appendEvent() {
-        throw new Error("not used");
-      },
-      async upsertSource() {
-        throw new Error("not used");
-      },
-      async appendArtifact() {
-        throw new Error("not used");
-      },
-      async finishRun() {
-        return null;
-      },
-      async appendMessage() {
-        return null;
-      },
-      async upsertMessages() {
-        return null;
-      },
-      async updateThread() {
-        return null;
-      },
-      async deleteThread() {
-        return false;
-      },
-    } satisfies ChatStore;
-    const userService = {
-      async getByAuthUserId() {
-        return { id: "user_123" };
-      },
-    } as unknown as UserService;
-    const service = new ChatService(store, userService);
-
-    const result = await service.getThread(
-      {
-        authUserId: "auth_user_123",
-        authTokenIdentifier: "better-auth:session",
-      },
-      "thread_123",
-    );
-
-    expect(result).toEqual({
-      success: true,
-      data: expect.objectContaining({
-        artifacts: [
-          expect.objectContaining({
-            ownerUserId: "user_123",
-            messageId: "message_123",
-            checksum: "a".repeat(64),
-            auditStatus: "passed",
-            visualSpec: { visualId: "evidence-timeline" },
-          }),
-        ],
-      }),
-    });
-  });
-
-  test("returns persisted Deep Research phase events in thread detail", async () => {
-    const run: AgentRun = {
-      id: "run_123",
-      chatThreadId: "thread_123",
-      userId: "user_123",
-      status: "running",
-      errorMessage: null,
-      metadata: null,
-      startedAt: createdAt,
-      completedAt: null,
-      createdAt,
-      updatedAt: createdAt,
-    };
-    const store = new InMemoryChatStore({
-      thread: {
-        id: "thread_123",
-        userId: "user_123",
-        title: "Deep Research",
-        model: null,
-        createdAt,
-        updatedAt: createdAt,
-      },
-      run,
-    });
-    const userService = {
-      async getByAuthUserId() {
-        return { id: "user_123" };
-      },
-    } as unknown as UserService;
-    const service = new ChatService(store, userService);
-    const scope: ChatScope = { userId: "user_123" };
-
-    await runMinimalDeepResearchPhasePath(
-      {
-        model: "fake-model",
-        researchQuestion: "How should students use evidence-aware AI?",
-        context: "Scoped user request.",
-        generateCompactOutput: async ({ phase, persona }) => ({
-          phaseId: phase,
-          phase,
-          persona,
-          status: "completed",
-          summary: `${persona} completed ${phase}.`,
-          sourceIds: phase === "scoping" ? [] : ["S1"],
-          claimIds: phase === "evidence_extraction" ? ["C1"] : [],
-          artifactIds: [],
-          recommendation: "proceed",
-        }),
-      },
-      async (event) => {
-        await service.appendRunEvent(scope, run, {
-          ...event,
-          sequence: store.nextSequence(),
-        });
-      },
-    );
-
-    const result = await service.getThread(
-      {
-        authUserId: "auth_user_123",
-        authTokenIdentifier: "better-auth:session",
-      },
-      "thread_123",
-    );
-
-    expect(result).toEqual({
-      success: true,
-      data: expect.objectContaining({
-        events: expect.arrayContaining([
-          expect.objectContaining({
-            type: "deep_research_phase_started",
-            agentName: "Vektor",
-            payload: expect.objectContaining({
-              phaseId: "source_discovery_screening",
-            }),
-          }),
-          expect.objectContaining({
-            type: "deep_research_phase_completed",
-            agentName: "Sanctum",
-            payload: expect.objectContaining({
-              compactOutput: expect.objectContaining({
-                phaseId: "citation_audit_delivery_gate",
-                recommendation: "proceed",
-              }),
-            }),
           }),
         ]),
       }),
@@ -482,17 +262,9 @@ describe("ChatService", () => {
     await service.requestRunCancellation(identity, "thread_123", "run_123");
     await service.completeRunCancellation(scope, run, {
       modelStream: "propagated",
-      subagents: "propagated",
-      sandbox: "already_finished",
-      render: "unsupported",
-      upload: "already_finished",
     });
     await service.completeRunCancellation(scope, run, {
       modelStream: "already_finished",
-      subagents: "already_finished",
-      sandbox: "already_finished",
-      render: "already_finished",
-      upload: "already_finished",
     });
 
     expect(store.eventsOfType("run_cancel_requested")).toHaveLength(1);
@@ -500,111 +272,19 @@ describe("ChatService", () => {
     expect(store.eventsOfType("run_canceled")).toHaveLength(1);
   });
 
-  test("prepares manual delivery retry from persisted visual delivery lineage", async () => {
-    const run: AgentRun = {
-      id: "run_123",
-      chatThreadId: "thread_123",
-      userId: "user_123",
-      status: "failed",
-      errorMessage: "Visual artifact render failed.",
-      metadata: null,
-      startedAt: createdAt,
-      completedAt: createdAt,
-      createdAt,
-      updatedAt: createdAt,
-    };
-    const store = new InMemoryChatStore({
-      thread: {
-        id: "thread_123",
-        userId: "user_123",
-        title: "Deep Research",
-        model: null,
-        createdAt,
-        updatedAt: createdAt,
-      },
-      run,
-    });
-    const service = new ChatService(
-      store,
-      {
-        async getByAuthUserId() {
-          return { id: "user_123" };
-        },
-      } as unknown as UserService,
-    );
-    const scope: ChatScope = { userId: "user_123" };
-
-    await service.appendRunEvent(scope, run, {
-      sequence: store.nextSequence(),
-      type: "visual_delivery_lineage_recorded",
-      scope: "tool",
-      status: "completed",
-      title: "Visual delivery lineage recorded",
-      payload: {
-        evidenceLedger: {
-          sources: [{ sourceId: "S1", title: "Source", sourceType: "study", verificationStatus: "verified" }],
-          claims: [],
-          visualMetrics: [{ metricId: "M1", label: "Metric", value: 1, sourceIds: ["S1"] }],
-        },
-        visualSpecs: [
-          {
-            visualId: "evidence-timeline",
-            visualKind: "timeline",
-            title: "Evidence timeline",
-            labels: ["2026"],
-            dataReferences: [{ referenceType: "metric", referenceId: "M1" }],
-            sourceIds: ["S1"],
-            metricIds: ["M1"],
-            caption: "Source-backed metric.",
-            outputIntent: "final_report_embed",
-          },
-        ],
-      },
-    });
-
-    const retry = await service.prepareDeliveryRetry(
-      {
-        authUserId: "auth_user_123",
-        authTokenIdentifier: "better-auth:session",
-      },
-      "thread_123",
-      "run_123",
-      {
-        phase: "render",
-        visualId: "evidence-timeline",
-      },
-    );
-
-    expect(retry).toEqual({
-      success: true,
-      data: expect.objectContaining({
-        attemptNumber: 2,
-        phase: "render",
-        visualId: "evidence-timeline",
-        originalArtifactId: "failed_evidence-timeline",
-        visualSpecs: [
-          expect.objectContaining({
-            visualId: "evidence-timeline",
-          }),
-        ],
-      }),
-    });
-  });
 });
 
 class InMemoryChatStore implements ChatStore {
   private readonly thread: ChatThread;
   private readonly run: AgentRun;
-  private readonly artifacts: ChatArtifact[];
   private readonly messages: ChatMessage[] = [];
   readonly events: AgentEvent[] = [];
   appendMessageCalls = 0;
   private sequence = 0;
 
-  constructor(input: { thread: ChatThread; run: AgentRun; artifacts?: ChatArtifact[] }) {
+  constructor(input: { thread: ChatThread; run: AgentRun }) {
     this.thread = input.thread;
     this.run = input.run;
-    this.artifacts = input.artifacts ?? [];
   }
 
   nextSequence(): number {
@@ -647,10 +327,6 @@ class InMemoryChatStore implements ChatStore {
 
   async getSources(): Promise<ChatSource[]> {
     return [];
-  }
-
-  async getArtifacts(): Promise<ChatArtifact[]> {
-    return this.artifacts;
   }
 
   async createRun(): Promise<AgentRun> {
@@ -711,10 +387,6 @@ class InMemoryChatStore implements ChatStore {
   }
 
   async upsertSource(): Promise<ChatSource> {
-    throw new Error("not used");
-  }
-
-  async appendArtifact(): Promise<ChatArtifact> {
     throw new Error("not used");
   }
 
