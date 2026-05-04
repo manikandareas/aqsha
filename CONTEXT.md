@@ -136,9 +136,37 @@ _Avoid_: Admin, full owner
 Percakapan multi-turn milik pengguna dengan AI agent yang menyimpan messages, runs, dan progress events secara durable.
 _Avoid_: Chatbot only, final-answer chat
 
+**Deep Research Intent**:
+Maksud user yang dipahami Astra untuk menjalankan Functional Deep Research Run ketika user eksplisit meminta Deep Research, deep research report, laporan riset mendalam, atau output setara.
+_Avoid_: Regex trigger, deterministic keyword router, automatic trigger for every research-ish question
+
+**Deep Research Skill**:
+Playbook runtime untuk Functional Deep Research Run yang berisi instruksi research, citation policy, report rules, visual rules, dan trusted resources, dimuat hanya ketika Deep Research dibutuhkan.
+_Avoid_: Global system prompt payload, always-on prompt content, replacing orchestration gates
+
 **Deep Research Run**:
 Proses research mendalam di dalam Research Chat yang berjalan dalam beberapa fase terstruktur untuk menghasilkan evidence ledger, research decision, visual artifact, dan final Markdown report berbasis sumber. V1 berjalan streaming-first melalui chat request aktif, sementara phase events tetap durable untuk reload dan audit.
 _Avoid_: Separate public agent, generic chat answer, hidden autonomous research mode, automatic background resume as v1 promise
+
+**Functional Deep Research Run**:
+Deep Research Run yang berjalan end-to-end dengan Research Plan, Evidence Ledger terstruktur, Research Decision, audited Visual Spec, Final Delivery Gate, final Markdown report, dan Research Trail yang durable.
+_Avoid_: Minimal demo, prompt-only tracer bullet, happy-path-only report
+
+**Functional Phase Path**:
+Urutan fase linear untuk Functional Deep Research Run yang mencakup research plan, source discovery and screening, evidence ledger, synthesis support, research decision, visual specification, citation audit, visual delivery, dan final delivery gate.
+_Avoid_: Minimal five-phase path, parallel phase graph, hidden prompt-only workflow
+
+**Research Reconnaissance**:
+Eksplorasi ringan sebelum Research Plan final untuk memahami scope, landscape sumber, dan kandidat arah pencarian tanpa menggantikan source discovery atau Evidence Ledger.
+_Avoid_: Full source discovery, evidence extraction, unsupported pre-plan conclusion
+
+**Functional Deep Research Orchestration**:
+Eksekusi end-to-end Functional Phase Path setelah Astra memilih Deep Research Intent, dengan Deep Research Skill sebagai playbook dan deterministic gates sebagai runtime safety.
+_Avoid_: Manual multi-tool phase sequence, prompt-compliance-only orchestration, deterministic intent router
+
+**Internal Research Call**:
+Model call scoped di dalam Functional Deep Research Orchestration untuk menghasilkan structured atau compact output per fase tanpa membebani parent context Astra.
+_Avoid_: Public agent response, raw transcript handoff, hidden unstructured final answer
 
 **Deep Research Phase**:
 Checkpoint durable di dalam satu Deep Research Run untuk pekerjaan seperti scoping, source discovery and screening, evidence extraction, synthesis support, citation audit, delivery gate, rendering, upload, atau final assembly. Phase boleh dieksekusi oleh Astra langsung atau Research Sub-agent, tetapi hasilnya kembali ke parent sebagai compact summary, Ledger Source IDs, decision state, dan artifact references. Phase direkam sebagai progress/audit events di Research Trail, bukan sebagai objek user-facing terpisah.
@@ -168,13 +196,17 @@ _Avoid_: Source discovery owner, style rewriting owner, optional reviewer only, 
 Output ringkas dari Deep Research Phase yang dikembalikan ke Astra dan disimpan di Research Trail. Output minimal berisi phase ID, phase name, persona, status, summary, Ledger Source IDs, claim IDs, artifact IDs, optional Research Decision recommendation, optional user confirmation flag, dan optional Failure Summary.
 _Avoid_: Full sub-agent transcript in UI, raw tool log as parent context, prose-only handoff without stable IDs
 
+**Structured Research Output**:
+Output terstruktur dari Functional Deep Research Run seperti Research Plan, Evidence Ledger, Research Decision, Visual Spec, dan Artifact Manifest yang disimpan untuk audit dan replay.
+_Avoid_: Prompt-only state, final Markdown only, separate table by default
+
 **Evidence**:
 Sumber atau artefak pendukung yang dipakai untuk memperkuat claim dalam jawaban atau tulisan.
 _Avoid_: Reference decoration, citation filler
 
 **Evidence Ledger**:
-Catatan terstruktur dari Deep Research Run yang menyimpan sumber, claim, metric, verification status, dan hubungan evidence agar hasil research bisa diaudit.
-_Avoid_: Final report, bibliography only, raw source dump
+Catatan terstruktur dari Deep Research Run yang menyimpan sumber, claim, metric, verification status, dan hubungan evidence agar hasil research bisa diaudit dan final delivery bisa digate secara deterministik.
+_Avoid_: Final report, bibliography only, raw source dump, inferred compact phase summary
 
 **Important Claim**:
 Claim di final report yang menjadi dasar jawaban atau kesimpulan, termasuk factual, numeric, causal, comparative, legal, forecast, recommendation, kutipan langsung, tanggal, nama paper atau author, dan metric.
@@ -191,6 +223,10 @@ _Avoid_: Raw artifact inventory, private working files, all sandbox outputs
 **Multi-visual Final Report**:
 Final Markdown report yang dapat menampilkan lebih dari satu visual artifact, seperti chart, timeline, matrix, flow diagram, atau evidence map, selama setiap artifact lolos audit sendiri.
 _Avoid_: Single-chart-only report, decorative visuals, embedding unaudited visuals
+
+**Final Markdown Report**:
+Output user-facing dari Functional Deep Research Run yang berisi key findings, evidence and limitations, inline Ledger Source ID citations, dan passed visual embeds bila ada.
+_Avoid_: Omitted visual note in report body, raw artifact manifest, uncited synthesis
 
 **Research Artifact Ownership**:
 Kepemilikan artifact research oleh pengguna yang membuat Research Chat, dengan relasi audit ke thread, run, dan message terkait.
@@ -213,8 +249,8 @@ Keputusan untuk tidak menampilkan visual optional ketika data, render, atau uplo
 _Avoid_: Evidence audit failure, failed final report, silent broken chart
 
 **Primary Visual Deliverable**:
-Artifact visual yang secara eksplisit diminta pengguna sebagai hasil utama Deep Research Run. Jika render atau upload untuk artifact ini gagal, run gagal dengan Failure Summary singkat dan Research Failure Detail untuk development.
-_Avoid_: Default visual artifact, optional chart, decorative report visual
+Artifact visual yang secara eksplisit diminta pengguna sebagai hasil utama Deep Research Run, seperti chart, timeline, evidence map, atau visual artifact lain sebagai output akhir utama. Jika render atau upload untuk artifact ini gagal, run gagal dengan Failure Summary singkat dan Research Failure Detail untuk development.
+_Avoid_: Default visual artifact, optional chart in a report, report with supporting visual, decorative report visual
 
 **Omitted Visual Artifact**:
 Artifact visual yang direncanakan tetapi tidak ditampilkan karena data, render, atau upload tidak cukup aman.
@@ -247,6 +283,14 @@ _Avoid_: Opportunistic chart only, manual-only visual, unsupported visual
 **Research Decision**:
 Gate terstruktur di dalam Deep Research Run yang menentukan apakah research lanjut otomatis, perlu refinement, atau harus meminta user menyetujui pivot.
 _Avoid_: Final answer, raw chain-of-thought, mandatory approval before every report
+
+**Scoped Refinement**:
+Perbaikan terbatas di dalam research question yang sama, seperti menambah sumber, memperkuat evidence, atau memperbaiki Visual Spec tanpa mengubah arah utama riset.
+_Avoid_: Pivot, new research question, silent scope change
+
+**Final Delivery Gate**:
+Gate deterministik yang mengubah candidate final report, Evidence Ledger, Artifact Manifest, dan primary deliverable intent menjadi final Markdown report, Visual Omission, Primary Visual failure, atau Failed Research Explanation.
+_Avoid_: Prompt-only delivery check, stream-finished means delivered, unchecked final answer
 
 **Phase-aware Retry**:
 Upaya menjalankan ulang Deep Research Phase yang gagal tanpa mengulang phase sebelumnya yang masih valid. V1 mendukung retry untuk render dan upload terlebih dahulu, memakai Evidence Ledger, Visual Spec, PNG checksum, dan Artifact Manifest yang sudah ada bila masih valid.
@@ -347,10 +391,24 @@ _Avoid_: Production local execution, test shortcut that bypasses policy, host ex
 - **Shared Journal** memakai dua permission awal: **Can review** dan **Can edit**.
 - Sebuah **Research Chat** dimiliki langsung oleh pengguna yang membuat chat tersebut.
 - Sebuah **Research Chat** dapat menghasilkan **Evidence** yang mendukung tulisan di **Journal**.
+- Astra menentukan **Deep Research Intent** secara agentic dari percakapan; API tidak memakai deterministic keyword classifier untuk memutuskan kapan Deep Research harus berjalan.
+- Jika tidak ada **Deep Research Intent**, Astra boleh tetap memakai source tools atau skill guidance tanpa menjalankan seluruh **Functional Phase Path**.
+- **Deep Research Skill** tidak ditempel ke system prompt untuk semua chat; Astra atau orchestration memuatnya saat **Deep Research Intent** dipilih.
 - Sebuah **Deep Research Run** menghasilkan **Evidence Ledger** sebagai dasar audit untuk source IDs, claims, visual metrics, dan artifact provenance.
+- Issue #24 harus menghasilkan **Functional Deep Research Run**, bukan minimal demo; tetap V1 streaming-first, tetapi finalization tidak boleh bergantung pada prompt compliance saja.
+- **Functional Deep Research Run** memakai **Functional Phase Path** linear, bukan minimal five-phase path dari issue #21.
+- Setelah Astra memilih **Deep Research Intent**, **Functional Deep Research Orchestration** menjalankan Functional Phase Path end-to-end; Astra tidak perlu memanggil setiap phase tool secara manual.
+- **Functional Deep Research Orchestration** harus memakai **Deep Research Skill** sebagai playbook scoped untuk run itu.
+- **Functional Deep Research Orchestration** boleh memakai **Internal Research Call** per fase untuk Research Plan, Evidence Ledger, Research Decision, Visual Spec, dan candidate final report selama outputnya structured atau compact.
+- **Internal Research Call** tidak menjadi public agent response; Astra tetap public control plane dan final user-facing surface.
+- **Compact Phase Output** tidak boleh menggantikan **Evidence Ledger**; finalization harus menerima **Evidence Ledger** eksplisit sebagai structured contract.
+- **Structured Research Output** V1 disimpan sebagai Research Trail events atau run metadata; jangan membuat tabel baru untuk Research Plan, Evidence Ledger, Research Decision, Visual Spec, atau Artifact Manifest sebelum ada kebutuhan query/inspection khusus.
+- Existing phase tools boleh tetap ada sebagai primitive untuk debugging, narrow rerun, atau tests, tetapi happy path user-facing memakai **Functional Deep Research Orchestration**.
 - Setiap **Important Claim** di final report harus lolos citation/evidence audit; kegagalan audit pada claim seperti ini menggagalkan final delivery.
+- Setiap **Important Claim** harus punya **Ledger Source ID** yang resolve ke source terstruktur di **Evidence Ledger**; web source penting harus sudah fetched/read sebelum claim dianggap verified.
 - Kegagalan audit **Important Claim** menghasilkan **Failed Research Explanation**, bukan final report yang tetap dikirim.
-- Sebuah **Research Plan** dibuat setelah scope dipahami; reconnaissance ringan boleh terjadi sebelumnya, tetapi source discovery utama dimulai setelah plan ada.
+- **Final Markdown Report** memakai inline citations seperti `[S1]`, menyertakan key findings dan evidence/limitations, meng-embed passed visual Markdown bila ada, dan tidak menyebut **Visual Omission** di body report.
+- Sebuah **Research Plan** dibuat setelah scope dipahami; **Research Reconnaissance** boleh terjadi sebelumnya, tetapi source discovery utama dan evidence extraction dimulai setelah plan ada.
 - Sebuah **Visual Spec** hanya boleh menunjuk data yang sudah ada di **Evidence Ledger**; jika data visual belum tersedia, extraction harus diperbaiki sebelum visual dibuat.
 - Sebuah **Artifact Manifest** berisi visual artifacts yang menjadi candidate atau final embed; raw/supporting files tidak otomatis masuk ke manifest ini.
 - **Research Artifact Ownership** mengikuti pengguna pembuat **Research Chat**.
@@ -361,13 +419,17 @@ _Avoid_: Production local execution, test shortcut that bypasses policy, host ex
 - **Omitted Visual Artifact** tetap perlu muncul dalam audit/replay metadata tanpa dianggap final visual yang berhasil dikirim.
 - **Omitted Visual Artifact** tidak disebut di final Markdown report; alasan omission hanya muncul di Research Trail, Artifact Manifest, audit metadata, dan developer detail.
 - Sebuah **Deep Research Run** secara default mengupayakan **Default Visual Artifact** untuk final report jika data visual cukup.
+- **Functional Deep Research Orchestration** harus mencoba **Default Visual Artifact** ketika **Evidence Ledger** memiliki visual-ready metrics, tetapi tidak boleh memaksakan visual tanpa provenance yang cukup.
+- Permintaan "Deep Research report dengan visual" tetap ber-primary deliverable `report`; **Primary Visual Deliverable** hanya berlaku ketika user menjadikan visual sebagai output utama.
 - **Primary Visual Deliverable** yang gagal render atau upload menggagalkan **Deep Research Run**; **Default Visual Artifact** yang gagal boleh menjadi **Visual Omission** jika final report tetap valid.
 - **Visual Omission** tidak menggagalkan **Deep Research Run** jika final report tetap valid dan visual bukan primary deliverable.
 - **Visual Omission** dan hard failure harus menyimpan **Research Failure Detail** agar error dapat ditelusuri dan diperbaiki.
 - **Research Failure Detail** harus dipasangkan dengan **Failure Summary** supaya error bisa dipahami user dan tetap berguna untuk development.
-- Sebuah **Research Decision** boleh melanjutkan run otomatis untuk `proceed` atau scoped `refine`, tetapi harus meminta user saat `pivot` atau `userConfirmationRequired=true`.
+- Sebuah **Research Decision** boleh melanjutkan run otomatis untuk `proceed` atau **Scoped Refinement**, tetapi harus meminta user saat `pivot`, perubahan scope utama, atau `userConfirmationRequired=true`.
 - **Visual Spec** harus divalidasi sebelum **Research Sandbox** atau renderer dibuat; invalid spec menghasilkan **Research Error Class** `validation`.
 - **Artifact Manifest** menjadi source of truth untuk visual yang boleh di-embed di final Markdown; URL ad hoc dari tool atau upload tidak cukup.
+- Astra boleh menyusun candidate final report, tetapi **Final Delivery Gate** yang meng-commit final delivery status berdasarkan **Evidence Ledger**, **Artifact Manifest**, dan primary deliverable intent.
+- Stream completion tidak cukup untuk menyatakan **Deep Research Run** berhasil; run berhasil hanya ketika **Final Delivery Gate** menerima final report atau menghasilkan failure/omission yang sesuai.
 - **Artifact Publishing** hanya berlaku untuk final visual artifact yang lolos audit; raw dan supporting files tidak otomatis menjadi public artifact.
 - Jika **Artifact Publishing** berhasil tetapi persist artifact gagal, sistem memperlakukan file sebagai **Orphan Published Artifact** dan mencoba cleanup best-effort.
 - Artifact yang sudah persisted tetap valid sebagai history meskipun final stream delivery kemudian gagal.
@@ -400,6 +462,7 @@ _Avoid_: Production local execution, test shortcut that bypasses policy, host ex
 - V1 **Deep Research Run** berjalan streaming-first: jika stream aktif pengguna melihat progress, dan jika stream putus phase events yang sudah persisted tetap dapat dilihat setelah reload.
 - V1 **Deep Research Run** belum menjanjikan automatic background resume dari phase terakhir setelah client disconnect.
 - Minimal issue #21 path memiliki lima **Deep Research Phase** wajib: scoping oleh Astra, source discovery and screening oleh **Vektor**, evidence extraction oleh **Prism**, synthesis support oleh **Quill**, dan citation audit plus delivery gate oleh **Sanctum**.
+- Issue #24 **Functional Phase Path** memiliki fase wajib: research plan, source discovery and screening, evidence ledger, synthesis support, research decision, visual specification, citation audit, visual delivery, dan final delivery gate.
 - Rendering visual penuh, UploadThing artifact pipeline lanjutan, automatic background resume, retry per phase, dan visual planning persona terpisah bukan bagian wajib minimal issue #21 path.
 - Minimal issue #21 path berjalan linear; parallel phase execution bukan bagian v1.
 - Ketika **Sanctum** block delivery, Astra mengirim **Failed Research Explanation** yang menjelaskan claim yang gagal, evidence yang lemah, dan next step `REFINE` atau `PIVOT`.
@@ -470,8 +533,23 @@ _Avoid_: Production local execution, test shortcut that bypasses policy, host ex
 - "Sub-agent visibility" dapat berarti full transcript, hidden execution, atau compact Research Trail. Resolved: UI v1 menampilkan compact **Research Trail** untuk delegasi dan audit, bukan full sub-agent transcript, raw chain-of-thought, prompt detail, atau verbose tool logs.
 - "Long-running run" dapat berarti streaming request aktif atau background resumable job. Resolved: issue #21 v1 memakai streaming-first **Deep Research Run** dengan durable phase events, belum automatic background resume.
 - "Minimal phased path" dapat melebar ke semua Deep Research orchestration. Resolved: issue #21 v1 wajib hanya scoping, source discovery/screening, evidence extraction, synthesis support, dan citation audit/delivery gate.
+- "Functional phase path" dapat berarti paralel/background workflow penuh. Resolved: issue #24 memakai **Functional Phase Path** linear yang lengkap untuk delivery, tanpa background resume, parallel phases, artifact panel, atau public sub-agent surface.
 - "Phase execution order" dapat berarti linear atau parallel. Resolved: issue #21 v1 berjalan linear; parallel execution ditunda sampai event contract dan Compact Phase Output stabil.
 - "Quill output" dapat berarti final report langsung atau drafting support. Resolved: **Quill** hanya memberi synthesis/report drafting support; Astra tetap menyusun final user-facing answer.
+- "Final delivery" dapat berarti stream selesai, model menjawab, atau report lolos audit. Resolved: **Final Delivery Gate** yang meng-commit final delivery status; stream selesai hanya transport event.
+- "Report with a chart" dapat berarti report utama atau visual utama. Resolved: default primary deliverable adalah `report`; visual menjadi **Primary Visual Deliverable** hanya jika user eksplisit meminta visual sebagai output akhir utama.
+- "Minimal Deep Research" dalam issue #24 dapat berarti demo tipis atau fitur V1 yang benar-benar berjalan. Resolved: target issue #24 adalah **Functional Deep Research Run** end-to-end; batas V1 tetap eksplisit agar tidak melebar ke background resume, parallel phases, atau artifact panel.
+- "Trigger Deep Research" dapat berarti deterministic router atau agent intent. Resolved: gunakan **Deep Research Intent** yang ditentukan Astra secara agentic; deterministic code hanya menyediakan tools, contracts, persistence, dan gates setelah Deep Research dipilih.
+- "Use deep-research skill" dapat berarti append penuh ke system prompt atau progressive loading. Resolved: **Deep Research Skill** tetap progressive-loaded hanya untuk Deep Research run, bukan always-on global prompt content.
+- "Run Functional Deep Research" dapat berarti Astra memanggil banyak phase tool sendiri atau satu orchestration surface. Resolved: gunakan **Functional Deep Research Orchestration** end-to-end setelah Astra memilih intent, supaya urutan phase dan gates tidak bergantung pada prompt compliance.
+- "Internal model calls" dapat berarti mengganti Astra atau hanya fresh context per fase. Resolved: gunakan **Internal Research Call** sebagai fresh scoped phase call; Astra tetap public control plane dan final user-facing surface.
+- "Pre-plan lookup" dapat berarti reconnaissance ringan atau source discovery penuh. Resolved: **Research Reconnaissance** boleh terjadi sebelum **Research Plan**, tetapi evidence utama tetap masuk setelah plan melalui source discovery dan Evidence Ledger.
+- "Refine" dapat berarti memperbaiki evidence dalam scope sama atau mengubah arah riset. Resolved: **Scoped Refinement** boleh otomatis, tetapi pivot atau perubahan scope utama wajib meminta user confirmation.
+- "Default visual" dapat berarti wajib selalu ada atau dicoba jika data cukup. Resolved: **Default Visual Artifact** wajib dicoba ketika visual-ready metrics tersedia, tetapi failure atau insufficient provenance menjadi **Visual Omission** jika report tetap valid.
+- "Persist structured outputs" dapat berarti membuat tabel baru atau menyimpan event snapshots. Resolved: V1 menyimpan **Structured Research Output** sebagai Research Trail events atau run metadata; tabel baru menunggu kebutuhan query/inspection khusus.
+- "Existing phase tools" dapat berarti public happy path atau primitive internal. Resolved: existing phase tools tetap boleh ada untuk debug/rerun/tests, tetapi happy path memakai **Functional Deep Research Orchestration**.
+- "Verified source" dapat berarti search snippet atau source yang sudah dibaca. Resolved: **Important Claim** hanya verified bila **Ledger Source ID** resolve ke source terstruktur dan web source penting sudah fetched/read.
+- "Final report format" dapat berarti artifact dump atau clean user-facing report. Resolved: **Final Markdown Report** memakai inline `[S#]` citations, key findings, evidence/limitations, passed visual embeds, dan tidak menyebut **Visual Omission** di body.
 
 ## Example dialogue
 

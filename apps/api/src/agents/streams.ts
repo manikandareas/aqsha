@@ -8,6 +8,7 @@ import {
   evidenceLedgerSchema,
   visualSpecSchema,
 } from "./deep-research/contracts";
+import { runFunctionalDeepResearch } from "./deep-research/functional";
 import {
   createPngArtifactPublishAdapter,
   createTrustedSkillVisualRenderer,
@@ -19,6 +20,7 @@ import {
   runMinimalDeepResearchPhasePath,
 } from "./deep-research/phases";
 import { createExaMcpTools } from "./mcp/exa";
+import { readSkill } from "./skills";
 import type { AgentRuntimeContext } from "./types";
 
 type UnknownRecord = Record<string, unknown>;
@@ -156,6 +158,105 @@ async function createAstraExternalTools({
 
       return result.object;
     };
+
+    const generateStructuredOutput = async ({
+      model: structuredModel,
+      prompt,
+      schema,
+      schemaName,
+      schemaDescription,
+    }: {
+      model: unknown;
+      prompt: string;
+      schema: z.ZodType<unknown>;
+      schemaName: string;
+      schemaDescription: string;
+    }) => {
+      const result = await generateObject({
+        model: structuredModel as LanguageModel,
+        prompt,
+        schema,
+        schemaName,
+        schemaDescription,
+        maxRetries: 1,
+        abortSignal,
+      });
+
+      return result.object;
+    };
+
+    if (onArtifact && context?.skillScriptsEnabled) {
+      tools.runFunctionalDeepResearch = tool({
+        description:
+          "Run the end-to-end Functional Deep Research Orchestration after Astra selects Deep Research Intent. It executes the full linear Functional Phase Path, records structured Research Trail outputs, renders and publishes audited final PNG visual artifacts when supported by the Evidence Ledger, applies the Final Delivery Gate, and returns either finalReportMarkdown or a failed assistantMessage.",
+        inputSchema: z.object({
+          researchQuestion: z.string().min(1),
+          context: z
+            .string()
+            .min(1)
+            .describe("Compact initial research context. Include user scope and stable IDs; do not include full transcripts."),
+          primaryDeliverable: z
+            .enum(["report", "visual"])
+            .default("report")
+            .describe("Use report unless the user explicitly asks for the visual artifact itself as the main output."),
+        }),
+        execute: async ({ researchQuestion, context: toolContext, primaryDeliverable }) => {
+          const skill = context.skills.byName.get("deep-research");
+          if (!skill) {
+            throw new Error("deep-research skill is not registered.");
+          }
+
+          const loadedSkill = await readSkill(skill);
+
+          return await runFunctionalDeepResearch(
+            {
+              model,
+              researchQuestion,
+              context: toolContext,
+              primaryDeliverable,
+              deepResearchSkillContent: loadedSkill.content,
+              generateStructuredOutput,
+              generateCompactOutput,
+              renderAndPublishVisualArtifacts: async ({ evidenceLedger, visualSpecs }) => {
+                if (onAgentEvent) {
+                  await onAgentEvent({
+                    type: "visual_delivery_lineage_recorded",
+                    scope: "tool",
+                    status: "completed",
+                    title: "Visual delivery lineage recorded",
+                    summary:
+                      "Saved Evidence Ledger and Visual Spec lineage for narrow render/upload retry.",
+                    payload: {
+                      evidenceLedger,
+                      visualSpecs,
+                      visualIds: visualSpecs.map((visualSpec) => visualSpec.visualId),
+                    },
+                  });
+                }
+
+                return await renderAndPublishVisualArtifacts({
+                  evidenceLedger,
+                  visualSpecs,
+                  renderVisual: createTrustedSkillVisualRenderer({
+                    skill,
+                    evidenceLedger,
+                    executor: context.scriptExecutor,
+                    runId: context.deps.runId,
+                    imageRef: context.sandboxImageRef,
+                  }),
+                  publishVisual: createPngArtifactPublishAdapter({
+                    publishArtifact: onArtifact,
+                  }),
+                });
+              },
+            },
+            async (event) => {
+              await onAgentEvent(event);
+            },
+          );
+        },
+      });
+    }
 
     tools.runDeepResearchPhasedPath = tool({
       description:

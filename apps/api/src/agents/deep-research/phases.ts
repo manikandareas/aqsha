@@ -1,10 +1,17 @@
 import { z } from "zod";
 
 export const deepResearchPhaseNames = [
+  "research_plan",
   "scoping",
   "source_discovery_screening",
   "evidence_extraction",
+  "evidence_ledger",
   "synthesis_support",
+  "research_decision",
+  "visual_specification",
+  "citation_audit",
+  "visual_delivery",
+  "final_delivery_gate",
   "citation_audit_delivery_gate",
 ] as const;
 
@@ -32,8 +39,23 @@ export const minimalDeepResearchPhasePath = [
   { phase: "citation_audit_delivery_gate", persona: "Sanctum" },
 ] as const satisfies readonly DeepResearchPhaseStep[];
 
+export const functionalDeepResearchPhasePath = [
+  { phase: "research_plan", persona: "Astra" },
+  { phase: "source_discovery_screening", persona: "Vektor" },
+  { phase: "evidence_ledger", persona: "Prism" },
+  { phase: "synthesis_support", persona: "Quill" },
+  { phase: "research_decision", persona: "Astra" },
+  { phase: "visual_specification", persona: "Prism" },
+  { phase: "citation_audit", persona: "Sanctum" },
+  { phase: "visual_delivery", persona: "Sanctum" },
+  { phase: "final_delivery_gate", persona: "Sanctum" },
+] as const satisfies readonly DeepResearchPhaseStep[];
+
 const phasePersona = new Map<DeepResearchPhaseName, ResearchPersona>(
-  minimalDeepResearchPhasePath.map((step) => [step.phase, step.persona]),
+  [...minimalDeepResearchPhasePath, ...functionalDeepResearchPhasePath].map((step) => [
+    step.phase,
+    step.persona,
+  ]),
 );
 
 const stableIdArraySchema = z.array(z.string().min(1)).default([]);
@@ -85,10 +107,17 @@ export type DeepResearchPhaseEventWriter = (
 ) => Promise<void> | void;
 
 const phaseDisplayNames: Record<DeepResearchPhaseName, string> = {
+  research_plan: "research plan",
   scoping: "scoping",
   source_discovery_screening: "source discovery and screening",
   evidence_extraction: "evidence extraction",
+  evidence_ledger: "evidence ledger",
   synthesis_support: "synthesis support",
+  research_decision: "research decision",
+  visual_specification: "visual specification",
+  citation_audit: "citation audit",
+  visual_delivery: "visual delivery",
+  final_delivery_gate: "final delivery gate",
   citation_audit_delivery_gate: "citation audit and delivery gate",
 };
 
@@ -118,7 +147,7 @@ export async function recordDeepResearchPhaseOutput(
   return output;
 }
 
-type GenerateCompactPhaseOutputInput = {
+export type GenerateCompactPhaseOutputInput = {
   model: unknown;
   prompt: string;
   schema: typeof compactPhaseOutputSchema;
@@ -126,7 +155,7 @@ type GenerateCompactPhaseOutputInput = {
   persona: ResearchPersona;
 };
 
-type GenerateCompactPhaseOutput = (
+export type GenerateCompactPhaseOutput = (
   input: GenerateCompactPhaseOutputInput,
 ) => Promise<CompactPhaseOutputInput>;
 
@@ -230,14 +259,28 @@ export async function runMinimalDeepResearchPhasePath(
 }
 
 const phaseTasks: Record<DeepResearchPhaseName, string> = {
+  research_plan:
+    "Create a structured Research Plan after scoping and before main source discovery.",
   scoping:
     "Scope the Deep Research Run, clarify the research question, and decide whether the request can proceed.",
   source_discovery_screening:
     "Discover and screen candidate sources. Return kept/rejected source summary and stable Ledger Source IDs.",
   evidence_extraction:
     "Extract evidence, important claims, and contradictions from screened sources.",
+  evidence_ledger:
+    "Create the explicit Evidence Ledger with verified sources, important claims, and visual-ready metrics.",
   synthesis_support:
     "Draft synthesis support from compact evidence only. Do not write the final user-facing answer.",
+  research_decision:
+    "Decide whether the run should proceed, refine within scope, pivot, or request user confirmation.",
+  visual_specification:
+    "Create Visual Specs that only reference verified Evidence Ledger data and source IDs.",
+  citation_audit:
+    "Audit important claims and visual provenance before final delivery.",
+  visual_delivery:
+    "Render, publish, or omit final visual artifacts based on audited Visual Specs and artifact policy.",
+  final_delivery_gate:
+    "Commit final delivery status from the Evidence Ledger, Artifact Manifest, primary deliverable intent, and candidate final Markdown.",
   citation_audit_delivery_gate:
     "Audit important claims and decide whether delivery should proceed, refine, or pivot.",
 };
