@@ -13,10 +13,6 @@ describe("RunCancellationRegistry", () => {
     expect(handle.cancelRequested).toBe(true);
     expect(boundaries).toEqual({
       modelStream: "propagated",
-      subagents: "propagated",
-      sandbox: "unsupported",
-      render: "unsupported",
-      upload: "unsupported",
     });
   });
 
@@ -25,10 +21,6 @@ describe("RunCancellationRegistry", () => {
 
     expect(registry.cancel("run_123")).toEqual({
       modelStream: "already_finished",
-      subagents: "already_finished",
-      sandbox: "already_finished",
-      render: "already_finished",
-      upload: "already_finished",
     });
   });
 });

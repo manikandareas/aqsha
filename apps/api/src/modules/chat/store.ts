@@ -6,7 +6,6 @@ export type ChatMessage = ChatModel["chatMessage"];
 export type AgentRun = ChatModel["agentRun"];
 export type AgentEvent = ChatModel["agentEvent"];
 export type ChatSource = ChatModel["chatSource"];
-export type ChatArtifact = ChatModel["chatArtifact"];
 
 export interface ChatScope {
   userId: string;
@@ -52,28 +51,6 @@ export interface UpsertChatSourceInput extends AppendChatSourceInput {
   sourceKey: string;
 }
 
-export interface AppendChatArtifactInput {
-  ownerUserId: string;
-  chatThreadId: string;
-  runId: string;
-  messageId?: string | null;
-  kind: ChatArtifact["kind"];
-  title: string;
-  caption?: string | null;
-  fileKey?: string | null;
-  url?: string | null;
-  contentType: ChatArtifact["contentType"];
-  byteSize?: number | null;
-  checksum?: string | null;
-  sourceIds?: string[];
-  sourceRefs?: unknown;
-  visualSpec?: unknown;
-  auditStatus: ChatArtifact["auditStatus"];
-  auditSummary?: string | null;
-  failureSummary?: string | null;
-  developerDetail?: unknown;
-}
-
 export interface FinishAgentRunInput {
   status: Extract<AgentRun["status"], "completed" | "failed" | "cancel_requested" | "canceled">;
   errorMessage?: string | null;
@@ -97,7 +74,6 @@ export interface ChatStore {
   getLatestRun(scope: ChatScope, threadId: string): Promise<AgentRun | null>;
   getEvents(scope: ChatScope, threadId: string): Promise<AgentEvent[]>;
   getSources(scope: ChatScope, threadId: string): Promise<ChatSource[]>;
-  getArtifacts(scope: ChatScope, threadId: string): Promise<ChatArtifact[]>;
   createRun(input: CreateAgentRunInput): Promise<AgentRun>;
   requestRunCancellation(
     scope: ChatScope,
@@ -114,10 +90,6 @@ export interface ChatStore {
     scope: ChatScope,
     source: UpsertChatSourceInput,
   ): Promise<ChatSource>;
-  appendArtifact(
-    scope: ChatScope,
-    artifact: AppendChatArtifactInput,
-  ): Promise<ChatArtifact>;
   finishRun(
     scope: ChatScope,
     runId: string,

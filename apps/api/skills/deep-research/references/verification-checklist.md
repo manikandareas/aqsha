@@ -26,15 +26,6 @@ Run before final delivery.
 - [ ] Denominator or sample is clear.
 - [ ] Derived calculations are shown or explained.
 
-## Visual Artifact Verification
-
-- [ ] Every visual source ID exists in `evidence.json`.
-- [ ] Every visual number references a `visual_metrics.metric_id`.
-- [ ] Visual captions do not overstate the evidence.
-- [ ] Visuals with missing dates, sources, or metrics are omitted.
-- [ ] `artifact_manifest.json` marks embedded artifacts as `passed`.
-- [ ] Final Markdown embeds only passed artifacts.
-
 ## Synthesis Verification
 
 - [ ] Contradictory evidence is represented.
@@ -49,7 +40,6 @@ Run before final delivery.
 - [ ] High-stakes claims include appropriate caveats.
 - [ ] Human review is recommended where needed.
 - [ ] No fabricated sources, papers, laws, datasets, quotes, or results remain.
-- [ ] No fabricated graph, timeline, matrix, or visual metric remains.
 
 ## Final Gate
 

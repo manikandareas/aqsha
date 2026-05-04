@@ -1,14 +1,9 @@
 export type CancellationBoundaryStatus =
   | "propagated"
-  | "unsupported"
   | "already_finished";
 
 export type CancellationBoundaries = {
   modelStream: CancellationBoundaryStatus;
-  subagents: CancellationBoundaryStatus;
-  sandbox: CancellationBoundaryStatus;
-  render: CancellationBoundaryStatus;
-  upload: CancellationBoundaryStatus;
 };
 
 export type RunCancellationHandle = {
@@ -74,10 +69,6 @@ export class RunCancellationRegistry {
     if (!state) {
       return {
         modelStream: "already_finished",
-        subagents: "already_finished",
-        sandbox: "already_finished",
-        render: "already_finished",
-        upload: "already_finished",
       };
     }
 
@@ -88,10 +79,6 @@ export class RunCancellationRegistry {
 
     return {
       modelStream: "propagated",
-      subagents: "propagated",
-      sandbox: "unsupported",
-      render: "unsupported",
-      upload: "unsupported",
     };
   }
 }
