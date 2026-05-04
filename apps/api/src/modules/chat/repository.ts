@@ -90,6 +90,26 @@ export class DrizzleChatStore implements ChatStore {
     return rows.map((row) => this.toMessage(row));
   }
 
+  async getRun(
+    scope: ChatScope,
+    threadId: string,
+    runId: string,
+  ): Promise<AgentRun | null> {
+    const [run] = await this.db
+      .select()
+      .from(agentRuns)
+      .where(
+        and(
+          eq(agentRuns.id, runId),
+          eq(agentRuns.chatThreadId, threadId),
+          eq(agentRuns.userId, scope.userId),
+        ),
+      )
+      .limit(1);
+
+    return run ? this.toRun(run) : null;
+  }
+
   async getLatestRun(scope: ChatScope, threadId: string): Promise<AgentRun | null> {
     const [run] = await this.db
       .select()
@@ -151,6 +171,49 @@ export class DrizzleChatStore implements ChatStore {
       .returning();
 
     return this.toRun(run);
+  }
+
+  async requestRunCancellation(
+    scope: ChatScope,
+    threadId: string,
+    runId: string,
+    input?: Parameters<ChatStore["requestRunCancellation"]>[3],
+  ): Promise<AgentRun | null> {
+    const requestedAt = input?.requestedAt ? new Date(input.requestedAt) : new Date();
+    const [run] = await this.db
+      .update(agentRuns)
+      .set({
+        status: "cancel_requested",
+        updatedAt: requestedAt,
+      })
+      .where(
+        and(
+          eq(agentRuns.id, runId),
+          eq(agentRuns.chatThreadId, threadId),
+          eq(agentRuns.userId, scope.userId),
+          sql`${agentRuns.status} in ('queued', 'running')`,
+        ),
+      )
+      .returning();
+
+    if (run) {
+      return this.toRun(run);
+    }
+
+    const [existingRun] = await this.db
+      .select()
+      .from(agentRuns)
+      .where(
+        and(
+          eq(agentRuns.id, runId),
+          eq(agentRuns.chatThreadId, threadId),
+          eq(agentRuns.userId, scope.userId),
+          sql`${agentRuns.status} in ('cancel_requested', 'canceled')`,
+        ),
+      )
+      .limit(1);
+
+    return existingRun ? this.toRun(existingRun) : null;
   }
 
   async appendEvent(

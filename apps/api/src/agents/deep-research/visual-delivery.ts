@@ -17,11 +17,17 @@ import {
 } from "../skills";
 import type { SkillMetadata } from "../skills";
 import type { CreateChatResponseInput } from "../../modules/agents/model";
+import {
+  ClassifiedResearchError,
+  classifyResearchError,
+  classifyTrustedScriptError,
+  type ResearchErrorClass,
+} from "./errors";
 
-type VisualDeliveryEvent = {
+export type VisualDeliveryEvent = {
   type: string;
   scope: "run" | "tool" | "error";
-  status: "completed" | "failed";
+  status: "running" | "completed" | "failed";
   title: string;
   summary: string;
   payload: Record<string, unknown>;
@@ -49,6 +55,14 @@ export type RenderAndPublishVisualArtifactsInput = {
     visualSpec: VisualSpec,
   ) => Promise<PublishedVisualArtifact>;
 };
+
+export type RetryVisualArtifactDeliveryInput =
+  RenderAndPublishVisualArtifactsInput & {
+    attemptNumber: number;
+    phase: "render" | "upload";
+    visualId?: string;
+    originalArtifactId?: string;
+  };
 
 export type TrustedSkillVisualRendererOptions = {
   skill: SkillMetadata;
@@ -100,8 +114,85 @@ export async function renderAndPublishVisualArtifacts(
   for (const visualSpec of visualSpecs.filter(
     (candidate) => candidate.outputIntent === "final_report_embed",
   )) {
-    const rendered = await input.renderVisual(visualSpec);
-    const published = await input.publishVisual(rendered, visualSpec);
+    let rendered: RenderedVisualArtifact;
+
+    try {
+      rendered = await input.renderVisual(visualSpec);
+    } catch (error) {
+      if (isTransientDeliveryFailure(error)) {
+        events.push(createDeliveryRetryStartedEvent({
+          phase: "render",
+          visualSpec,
+        }));
+
+        try {
+          rendered = await input.renderVisual(visualSpec);
+          events.push(createDeliveryRetrySucceededEvent({
+            phase: "render",
+            visualSpec,
+          }));
+        } catch (retryError) {
+          return visualArtifactFailure({
+            visualSpec,
+            error: retryError,
+            stage: "render",
+            leadingEvents: [
+              ...events,
+              createDeliveryRetryFailedEvent({
+                phase: "render",
+                visualSpec,
+              }),
+            ],
+          });
+        }
+      } else {
+        return visualArtifactFailure({
+          visualSpec,
+          error,
+          stage: "render",
+        });
+      }
+    }
+
+    let published: PublishedVisualArtifact;
+
+    try {
+      published = await input.publishVisual(rendered, visualSpec);
+    } catch (error) {
+      if (isTransientDeliveryFailure(error)) {
+        events.push(createDeliveryRetryStartedEvent({
+          phase: "upload",
+          visualSpec,
+        }));
+
+        try {
+          published = await input.publishVisual(rendered, visualSpec);
+          events.push(createDeliveryRetrySucceededEvent({
+            phase: "upload",
+            visualSpec,
+          }));
+        } catch (retryError) {
+          return visualArtifactFailure({
+            visualSpec,
+            error: retryError,
+            stage: "upload",
+            leadingEvents: [
+              ...events,
+              createDeliveryRetryFailedEvent({
+                phase: "upload",
+                visualSpec,
+              }),
+            ],
+          });
+        }
+      } else {
+        return visualArtifactFailure({
+          visualSpec,
+          error,
+          stage: "upload",
+        });
+      }
+    }
 
     artifacts.push({
       artifactId: published.artifactId,
@@ -146,6 +237,66 @@ export async function renderAndPublishVisualArtifacts(
   };
 }
 
+export async function retryVisualArtifactDelivery(
+  input: RetryVisualArtifactDeliveryInput,
+): Promise<RenderAndPublishVisualArtifactsResult> {
+  const retryPayload = {
+    attemptNumber: input.attemptNumber,
+    phase: input.phase,
+    visualId: input.visualId ?? null,
+    originalArtifactId: input.originalArtifactId ?? null,
+  };
+  const result = await renderAndPublishVisualArtifacts({
+    evidenceLedger: input.evidenceLedger,
+    visualSpecs: input.visualId
+      ? input.visualSpecs.filter((visualSpec) => {
+          const record = visualSpec as Record<string, unknown>;
+
+          return record.visualId === input.visualId;
+        })
+      : input.visualSpecs,
+    renderVisual: input.renderVisual,
+    publishVisual: input.publishVisual,
+  });
+  const terminalEvent: VisualDeliveryEvent =
+    result.status === "completed"
+      ? {
+          type: "delivery_retry_succeeded",
+          scope: "run",
+          status: "completed",
+          title: "Delivery retry succeeded",
+          summary: "Visual artifact delivery retry completed.",
+          payload: retryPayload,
+        }
+      : {
+          type: "delivery_retry_failed",
+          scope: "error",
+          status: "failed",
+          title: "Delivery retry failed",
+          summary: "Visual artifact delivery retry failed.",
+          payload: {
+            ...retryPayload,
+            failureStatus: result.status,
+          },
+        };
+
+  return {
+    ...result,
+    events: [
+      {
+        type: "delivery_retry_started",
+        scope: "run",
+        status: "running",
+        title: "Delivery retry started",
+        summary: "Retrying visual artifact delivery from existing research lineage.",
+        payload: retryPayload,
+      },
+      ...result.events,
+      terminalEvent,
+    ],
+  };
+}
+
 export function createTrustedSkillVisualRenderer({
   skill,
   evidenceLedger,
@@ -162,7 +313,7 @@ export function createTrustedSkillVisualRenderer({
     });
 
     if (!resolved.ok) {
-      throw new Error(resolved.error.message);
+      throw classifyTrustedScriptError(resolved.error);
     }
 
     const filename = `${filenameSafeVisualId(visualSpec.visualId)}.png`;
@@ -183,7 +334,7 @@ export function createTrustedSkillVisualRenderer({
     });
 
     if (!result.ok) {
-      throw new Error(result.error.message);
+      throw classifyTrustedScriptError(result.error);
     }
 
     const artifact = result.artifacts.find(
@@ -194,7 +345,11 @@ export function createTrustedSkillVisualRenderer({
     );
 
     if (!artifact?.bytes) {
-      throw new Error("Trusted render script did not return PNG artifact bytes.");
+      throw new ClassifiedResearchError({
+        errorClass: "render",
+        errorCode: "artifact_missing",
+        message: "Trusted render script did not return PNG artifact bytes.",
+      });
     }
 
     return {
@@ -367,4 +522,173 @@ function visualSpecValidationFailure({
       },
     ],
   };
+}
+
+function visualArtifactFailure({
+  visualSpec,
+  error,
+  stage,
+  leadingEvents = [],
+}: {
+  visualSpec: VisualSpec;
+  error: unknown;
+  stage: "render" | "upload";
+  leadingEvents?: VisualDeliveryEvent[];
+}): RenderAndPublishVisualArtifactsResult {
+  const classified = classifyResearchError(
+    error,
+    errorClassForDeliveryStage(stage),
+    stage === "render" ? "visual_artifact_render_failed" : "visual_artifact_upload_failed",
+  );
+  const errorClass = classified.errorClass;
+  const eventType =
+    stage === "render"
+      ? "visual_artifact_render_failed"
+      : "visual_artifact_upload_failed";
+  const title =
+    stage === "render"
+      ? "Visual artifact render failed"
+      : "Visual artifact upload failed";
+  const summary =
+    stage === "render"
+      ? "Visual artifact render failed. You can retry delivery."
+      : "Visual artifact upload failed. You can retry delivery.";
+  const metadata = {
+    errorClass,
+    errorCode: classified.errorCode,
+    retryable: classified.retryable,
+    developerDetail: classified.developerDetail,
+  };
+  const artifact = {
+    artifactId: `failed_${filenameSafeVisualId(visualSpec.visualId)}`,
+    visualId: visualSpec.visualId,
+    status: "failed" as const,
+    title: visualSpec.title,
+    caption: visualSpec.caption,
+    outputIntent: visualSpec.outputIntent,
+    contentType: "image/png" as const,
+    sourceIds: visualSpec.sourceIds,
+    metricIds: visualSpec.metricIds,
+    displayOrder: visualSpec.displayOrder,
+    reason: summary,
+    metadata: {
+      ...metadata,
+      stage,
+    },
+  };
+
+  return {
+    status: "failed",
+    manifest: artifactManifestSchema.parse({
+      artifacts: [artifact],
+      metadata,
+    }),
+    markdown: "",
+    events: [
+      ...leadingEvents,
+      {
+        type: eventType,
+        scope: "error",
+        status: "failed",
+        title,
+        summary,
+        payload: {
+          ...metadata,
+          visualId: visualSpec.visualId,
+          sourceIds: visualSpec.sourceIds,
+          metricIds: visualSpec.metricIds,
+        },
+      },
+    ],
+  };
+}
+
+function createDeliveryRetryStartedEvent({
+  phase,
+  visualSpec,
+}: {
+  phase: "render" | "upload";
+  visualSpec: VisualSpec;
+}): VisualDeliveryEvent {
+  return {
+    type: "delivery_retry_started",
+    scope: "run",
+    status: "running",
+    title: "Delivery retry started",
+    summary: "Retrying visual artifact delivery from existing research lineage.",
+    payload: {
+      attemptNumber: 2,
+      phase,
+      visualId: visualSpec.visualId,
+      originalArtifactId: `failed_${filenameSafeVisualId(visualSpec.visualId)}`,
+    },
+  };
+}
+
+function createDeliveryRetrySucceededEvent({
+  phase,
+  visualSpec,
+}: {
+  phase: "render" | "upload";
+  visualSpec: VisualSpec;
+}): VisualDeliveryEvent {
+  return {
+    type: "delivery_retry_succeeded",
+    scope: "run",
+    status: "completed",
+    title: "Delivery retry succeeded",
+    summary: "Visual artifact delivery retry completed.",
+    payload: {
+      attemptNumber: 2,
+      phase,
+      visualId: visualSpec.visualId,
+      originalArtifactId: `failed_${filenameSafeVisualId(visualSpec.visualId)}`,
+    },
+  };
+}
+
+function createDeliveryRetryFailedEvent({
+  phase,
+  visualSpec,
+}: {
+  phase: "render" | "upload";
+  visualSpec: VisualSpec;
+}): VisualDeliveryEvent {
+  return {
+    type: "delivery_retry_failed",
+    scope: "error",
+    status: "failed",
+    title: "Delivery retry failed",
+    summary: "Visual artifact delivery retry failed.",
+    payload: {
+      attemptNumber: 2,
+      phase,
+      visualId: visualSpec.visualId,
+      originalArtifactId: `failed_${filenameSafeVisualId(visualSpec.visualId)}`,
+    },
+  };
+}
+
+function isTransientDeliveryFailure(error: unknown): boolean {
+  if (error instanceof ClassifiedResearchError) {
+    return (
+      error.errorCode === "timeout" ||
+      error.errorCode === "artifact_retrieval_failed" ||
+      error.errorCode === "sandbox_create_failed"
+    );
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+
+  return (
+    normalized.includes("timeout") ||
+    normalized.includes("temporary") ||
+    normalized.includes("temporarily") ||
+    normalized.includes("artifact retrieval")
+  );
+}
+
+function errorClassForDeliveryStage(stage: "render" | "upload"): ResearchErrorClass {
+  return stage === "render" ? "render" : "uploadthing";
 }

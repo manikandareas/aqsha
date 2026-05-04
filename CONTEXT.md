@@ -261,8 +261,8 @@ Batas retry otomatis untuk kegagalan transient pada render atau upload. V1 hanya
 _Avoid_: Infinite retry, repeated source discovery, hidden retry loop
 
 **Run Cancellation**:
-Permintaan pengguna atau sistem untuk menghentikan Deep Research Run yang sedang berjalan. Cancellation harus dipropagasikan ke model stream, Research Sub-agent phase runner, Research Sandbox, renderer, dan upload client sejauh provider mendukung.
-_Avoid_: UI-only stop, abandoned backend run, silent request abort
+Permintaan pengguna atau sistem untuk menghentikan Deep Research Run yang sedang berjalan. `cancel_requested` adalah status transisi yang tetap dianggap in-flight dan memblokir run baru di Research Chat yang sama sampai sistem mencapai status terminal `canceled`. Cancellation harus dipropagasikan ke model stream, Research Sub-agent phase runner, Research Sandbox, renderer, dan upload client sejauh provider mendukung.
+_Avoid_: UI-only stop, abandoned backend run, silent request abort, treating cancel_requested as final
 
 **Canceled Research Run**:
 Deep Research Run yang selesai dengan status terminal canceled setelah cancellation berhasil diproses atau setelah sistem berhenti pada boundary yang aman.

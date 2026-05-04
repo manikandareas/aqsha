@@ -75,9 +75,13 @@ export interface AppendChatArtifactInput {
 }
 
 export interface FinishAgentRunInput {
-  status: Extract<AgentRun["status"], "completed" | "failed" | "cancel_requested">;
+  status: Extract<AgentRun["status"], "completed" | "failed" | "cancel_requested" | "canceled">;
   errorMessage?: string | null;
   completedAt?: string;
+}
+
+export interface RequestRunCancellationInput {
+  requestedAt?: string;
 }
 
 export interface ChatStore {
@@ -85,11 +89,22 @@ export interface ChatStore {
   createThread(input: CreateChatThreadInput): Promise<ChatThread>;
   getThread(scope: ChatScope, threadId: string): Promise<ChatThread | null>;
   getMessages(scope: ChatScope, threadId: string): Promise<ChatMessage[]>;
+  getRun(
+    scope: ChatScope,
+    threadId: string,
+    runId: string,
+  ): Promise<AgentRun | null>;
   getLatestRun(scope: ChatScope, threadId: string): Promise<AgentRun | null>;
   getEvents(scope: ChatScope, threadId: string): Promise<AgentEvent[]>;
   getSources(scope: ChatScope, threadId: string): Promise<ChatSource[]>;
   getArtifacts(scope: ChatScope, threadId: string): Promise<ChatArtifact[]>;
   createRun(input: CreateAgentRunInput): Promise<AgentRun>;
+  requestRunCancellation(
+    scope: ChatScope,
+    threadId: string,
+    runId: string,
+    input?: RequestRunCancellationInput,
+  ): Promise<AgentRun | null>;
   appendEvent(
     scope: ChatScope,
     run: Pick<AgentRun, "id" | "chatThreadId">,

@@ -3,6 +3,7 @@ import { env } from "../config";
 import { database } from "../database/client";
 import { AgentsService } from "../modules/agents/service";
 import { UploadThingPngArtifactUploadClient } from "../modules/chat/artifacts";
+import { RunCancellationRegistry } from "../modules/chat/cancellation";
 import { DrizzleChatStore } from "../modules/chat/repository";
 import { ChatService } from "../modules/chat/service";
 import { JournalRepository } from "../modules/journals/repository";
@@ -18,6 +19,7 @@ const chatStore = new DrizzleChatStore(database);
 const userService = new UserService(userRepository);
 const journalService = new JournalService(journalRepository, userService);
 const chatService = new ChatService(chatStore, userService);
+const chatRunCancellationRegistry = new RunCancellationRegistry();
 const pngArtifactUploadClient = new UploadThingPngArtifactUploadClient(
   env.UPLOADTHING_TOKEN,
 );
@@ -28,6 +30,7 @@ export const servicesPlugin = new Elysia({
   name: "plugin.services",
 }).decorate({
   agentsService,
+  chatRunCancellationRegistry,
   chatService,
   journalService,
   pngArtifactUploadClient,

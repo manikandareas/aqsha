@@ -9,6 +9,7 @@ import {
   createFinalVisualArtifactsMarkdown,
   createTrustedSkillVisualRenderer,
   renderAndPublishVisualArtifacts,
+  retryVisualArtifactDelivery,
 } from "./visual-delivery";
 import type { SkillMetadata } from "../skills";
 
@@ -304,6 +305,356 @@ describe("Deep Research visual delivery", () => {
     });
   });
 
+  test("classifies renderer failures without publishing or leaking provider detail into the Failure Summary", async () => {
+    let publishCalls = 0;
+
+    const result = await renderAndPublishVisualArtifacts({
+      evidenceLedger: {
+        sources: [
+          {
+            sourceId: "S1",
+            title: "Evidence-aware writing assistants",
+            sourceType: "study",
+            verificationStatus: "verified",
+          },
+        ],
+        claims: [],
+        visualMetrics: [
+          {
+            metricId: "M1",
+            label: "Included sources",
+            value: 12,
+            sourceIds: ["S1"],
+          },
+        ],
+      },
+      visualSpecs: [
+        {
+          visualId: "evidence-timeline",
+          visualKind: "timeline",
+          title: "Evidence timeline",
+          labels: ["2024"],
+          dataReferences: [{ referenceType: "metric", referenceId: "M1" }],
+          sourceIds: ["S1"],
+          metricIds: ["M1"],
+          caption: "Publication timeline for verified sources.",
+          outputIntent: "final_report_embed",
+          displayOrder: 1,
+        },
+      ],
+      renderVisual: async () => {
+        throw new Error("Vega renderer crashed with internal stack trace.");
+      },
+      publishVisual: async () => {
+        publishCalls += 1;
+        throw new Error("Publisher should not run after renderer failure.");
+      },
+    });
+
+    expect(result).toEqual({
+      status: "failed",
+      manifest: {
+        artifacts: [
+          expect.objectContaining({
+            artifactId: "failed_evidence-timeline",
+            visualId: "evidence-timeline",
+            status: "failed",
+            reason: "Visual artifact render failed. You can retry delivery.",
+            metadata: expect.objectContaining({
+              errorClass: "render",
+              retryable: true,
+              developerDetail: expect.objectContaining({
+                message: "Vega renderer crashed with internal stack trace.",
+              }),
+            }),
+          }),
+        ],
+        metadata: expect.objectContaining({
+          errorClass: "render",
+        }),
+      },
+      markdown: "",
+      events: [
+        expect.objectContaining({
+          type: "visual_artifact_render_failed",
+          scope: "error",
+          status: "failed",
+          summary: "Visual artifact render failed. You can retry delivery.",
+          payload: expect.objectContaining({
+            errorClass: "render",
+            visualId: "evidence-timeline",
+          }),
+        }),
+      ],
+    });
+    expect(publishCalls).toBe(0);
+  });
+
+  test("classifies upload failures without leaking provider detail into the Failure Summary", async () => {
+    const result = await renderAndPublishVisualArtifacts({
+      evidenceLedger: {
+        sources: [
+          {
+            sourceId: "S1",
+            title: "Evidence-aware writing assistants",
+            sourceType: "study",
+            verificationStatus: "verified",
+          },
+        ],
+        claims: [],
+        visualMetrics: [
+          {
+            metricId: "M1",
+            label: "Included sources",
+            value: 12,
+            sourceIds: ["S1"],
+          },
+        ],
+      },
+      visualSpecs: [
+        {
+          visualId: "evidence-timeline",
+          visualKind: "timeline",
+          title: "Evidence timeline",
+          labels: ["2024"],
+          dataReferences: [{ referenceType: "metric", referenceId: "M1" }],
+          sourceIds: ["S1"],
+          metricIds: ["M1"],
+          caption: "Publication timeline for verified sources.",
+          outputIntent: "final_report_embed",
+          displayOrder: 1,
+        },
+      ],
+      renderVisual: async (visualSpec) => ({
+        visualId: visualSpec.visualId,
+        bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        filename: `${visualSpec.visualId}.png`,
+        contentType: "image/png",
+      }),
+      publishVisual: async () => {
+        throw new Error("UploadThing rejected the PNG with provider details.");
+      },
+    });
+
+    expect(result).toEqual({
+      status: "failed",
+      manifest: {
+        artifacts: [
+          expect.objectContaining({
+            artifactId: "failed_evidence-timeline",
+            visualId: "evidence-timeline",
+            status: "failed",
+            reason: "Visual artifact upload failed. You can retry delivery.",
+            metadata: expect.objectContaining({
+              errorClass: "uploadthing",
+              retryable: true,
+              developerDetail: expect.objectContaining({
+                message: "UploadThing rejected the PNG with provider details.",
+              }),
+            }),
+          }),
+        ],
+        metadata: expect.objectContaining({
+          errorClass: "uploadthing",
+        }),
+      },
+      markdown: "",
+      events: [
+        expect.objectContaining({
+          type: "visual_artifact_upload_failed",
+          scope: "error",
+          status: "failed",
+          summary: "Visual artifact upload failed. You can retry delivery.",
+          payload: expect.objectContaining({
+            errorClass: "uploadthing",
+            visualId: "evidence-timeline",
+          }),
+        }),
+      ],
+    });
+  });
+
+  test("retries one render delivery attempt from existing Evidence Ledger and Visual Spec lineage", async () => {
+    const renderedVisualIds: string[] = [];
+
+    const result = await retryVisualArtifactDelivery({
+      attemptNumber: 2,
+      phase: "render",
+      visualId: "evidence-timeline",
+      originalArtifactId: "failed_evidence-timeline",
+      evidenceLedger: {
+        sources: [
+          {
+            sourceId: "S1",
+            title: "Evidence-aware writing assistants",
+            sourceType: "study",
+            verificationStatus: "verified",
+          },
+        ],
+        claims: [],
+        visualMetrics: [
+          {
+            metricId: "M1",
+            label: "Included sources",
+            value: 12,
+            sourceIds: ["S1"],
+          },
+        ],
+      },
+      visualSpecs: [
+        {
+          visualId: "evidence-timeline",
+          visualKind: "timeline",
+          title: "Evidence timeline",
+          labels: ["2024"],
+          dataReferences: [{ referenceType: "metric", referenceId: "M1" }],
+          sourceIds: ["S1"],
+          metricIds: ["M1"],
+          caption: "Publication timeline for verified sources.",
+          outputIntent: "final_report_embed",
+          displayOrder: 1,
+        },
+        {
+          visualId: "other-final-visual",
+          visualKind: "timeline",
+          title: "Other visual",
+          labels: ["2024"],
+          dataReferences: [{ referenceType: "metric", referenceId: "M1" }],
+          sourceIds: ["S1"],
+          metricIds: ["M1"],
+          caption: "Other final visual.",
+          outputIntent: "final_report_embed",
+          displayOrder: 2,
+        },
+      ],
+      renderVisual: async (visualSpec) => {
+        renderedVisualIds.push(visualSpec.visualId);
+
+        return {
+          visualId: visualSpec.visualId,
+          bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+          filename: `${visualSpec.visualId}.png`,
+          contentType: "image/png",
+        };
+      },
+      publishVisual: async (rendered, visualSpec) => ({
+        artifactId: `artifact_${visualSpec.visualId}`,
+        url: `https://utfs.io/f/${rendered.filename}`,
+        fileKey: rendered.filename,
+      }),
+    });
+
+    expect(renderedVisualIds).toEqual(["evidence-timeline"]);
+    expect(result.events).toEqual([
+      expect.objectContaining({
+        type: "delivery_retry_started",
+        payload: expect.objectContaining({
+          attemptNumber: 2,
+          phase: "render",
+          visualId: "evidence-timeline",
+          originalArtifactId: "failed_evidence-timeline",
+        }),
+      }),
+      expect.objectContaining({
+        type: "visual_artifact_published",
+      }),
+      expect.objectContaining({
+        type: "delivery_retry_succeeded",
+        payload: expect.objectContaining({
+          attemptNumber: 2,
+          phase: "render",
+          visualId: "evidence-timeline",
+        }),
+      }),
+    ]);
+    expect(result.manifest.artifacts.map((artifact) => artifact.visualId)).toEqual([
+      "evidence-timeline",
+    ]);
+  });
+
+  test("automatically retries one transient render failure before returning a passed manifest", async () => {
+    const renderAttempts: string[] = [];
+
+    const result = await renderAndPublishVisualArtifacts({
+      evidenceLedger: {
+        sources: [
+          {
+            sourceId: "S1",
+            title: "Evidence-aware writing assistants",
+            sourceType: "study",
+            verificationStatus: "verified",
+          },
+        ],
+        claims: [],
+        visualMetrics: [
+          {
+            metricId: "M1",
+            label: "Included sources",
+            value: 12,
+            sourceIds: ["S1"],
+          },
+        ],
+      },
+      visualSpecs: [
+        {
+          visualId: "evidence-timeline",
+          visualKind: "timeline",
+          title: "Evidence timeline",
+          labels: ["2024"],
+          dataReferences: [{ referenceType: "metric", referenceId: "M1" }],
+          sourceIds: ["S1"],
+          metricIds: ["M1"],
+          caption: "Publication timeline for verified sources.",
+          outputIntent: "final_report_embed",
+          displayOrder: 1,
+        },
+      ],
+      renderVisual: async (visualSpec) => {
+        renderAttempts.push(visualSpec.visualId);
+
+        if (renderAttempts.length === 1) {
+          throw new Error("Sandbox timeout while rendering visual artifact.");
+        }
+
+        return {
+          visualId: visualSpec.visualId,
+          bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+          filename: `${visualSpec.visualId}.png`,
+          contentType: "image/png",
+        };
+      },
+      publishVisual: async (rendered, visualSpec) => ({
+        artifactId: `artifact_${visualSpec.visualId}`,
+        url: `https://utfs.io/f/${rendered.filename}`,
+        fileKey: rendered.filename,
+      }),
+    });
+
+    expect(renderAttempts).toEqual(["evidence-timeline", "evidence-timeline"]);
+    expect(result.status).toBe("completed");
+    expect(result.events).toEqual([
+      expect.objectContaining({
+        type: "delivery_retry_started",
+        payload: expect.objectContaining({
+          attemptNumber: 2,
+          phase: "render",
+          visualId: "evidence-timeline",
+        }),
+      }),
+      expect.objectContaining({
+        type: "delivery_retry_succeeded",
+        payload: expect.objectContaining({
+          attemptNumber: 2,
+          phase: "render",
+          visualId: "evidence-timeline",
+        }),
+      }),
+      expect.objectContaining({
+        type: "visual_artifact_published",
+      }),
+    ]);
+  });
+
   test("does not automatically render or publish non-final supporting visual specs as public artifacts", async () => {
     const renderedVisualIds: string[] = [];
     const publishedVisualIds: string[] = [];
@@ -469,6 +820,79 @@ describe("Deep Research visual delivery", () => {
         includeArtifactBytes: true,
       }),
     ]);
+  });
+
+  test("trusted skill renderer preserves sandbox/dependency error classification", async () => {
+    const skill = await createDeepResearchSkillFixture();
+    const renderer = createTrustedSkillVisualRenderer({
+      skill,
+      evidenceLedger: {
+        sources: [
+          {
+            sourceId: "S1",
+            title: "Evidence-aware writing assistants",
+            sourceType: "study",
+            verificationStatus: "verified",
+          },
+        ],
+        claims: [],
+        visualMetrics: [
+          {
+            metricId: "M1",
+            label: "Included sources",
+            value: 12,
+            sourceIds: ["S1"],
+          },
+        ],
+      },
+      executor: {
+        async execute(input) {
+          return {
+            ok: false,
+            backend: "fake",
+            skillName: input.skillName,
+            scriptId: input.script.id,
+            runtime: "bun",
+            runId: input.runId,
+            imageRef: input.imageRef,
+            exitCode: null,
+            stdout: "",
+            stderr: "",
+            artifacts: [],
+            error: {
+              code: "sandbox_dependency_failed",
+              message: "Renderer dependency installation failed.",
+            },
+          };
+        },
+      },
+    });
+
+    try {
+      await renderer({
+        visualId: "evidence-timeline",
+        visualKind: "timeline",
+        title: "Evidence timeline",
+        labels: ["2024"],
+        dataReferences: [{ referenceType: "metric", referenceId: "M1" }],
+        sourceIds: ["S1"],
+        metricIds: ["M1"],
+        claimIds: [],
+        caption: "Publication timeline for verified sources.",
+        outputIntent: "final_report_embed",
+      });
+    } catch (error) {
+      expect(error).toEqual(
+        expect.objectContaining({
+          errorClass: "dependency",
+          errorCode: "sandbox_dependency_failed",
+          retryable: false,
+        }),
+      );
+      return;
+    }
+
+    throw new Error("Expected trusted renderer to throw a classified error.");
   });
 
   test("PNG publish adapter uploads rendered bytes and persists artifact manifest metadata", async () => {

@@ -45,7 +45,7 @@ export async function createAstraAgentUIStream({
   uiMessages: UIMessage[];
   abortSignal?: AbortSignal;
 }) {
-  const external = await createAstraExternalTools({ context });
+  const external = await createAstraExternalTools({ context, abortSignal });
   try {
     const stream = await createAgentUIStream({
       agent: buildAstraAgent({ model, providerOptions, context, externalTools: external.tools }),
@@ -81,7 +81,14 @@ export async function createAstraAgentResponse({
   onAgentEvent?: AgentEventReporter;
   onArtifact?: ArtifactPublisher;
 }) {
-  const external = await createAstraExternalTools({ model, context, onSource, onAgentEvent, onArtifact });
+  const external = await createAstraExternalTools({
+    model,
+    context,
+    abortSignal,
+    onSource,
+    onAgentEvent,
+    onArtifact,
+  });
   try {
     const response = await createAgentUIStreamResponse({
       agent: buildAstraAgent({ model, providerOptions, context, externalTools: external.tools }),
@@ -113,12 +120,14 @@ export async function createAstraAgentResponse({
 async function createAstraExternalTools({
   model,
   context,
+  abortSignal,
   onSource,
   onAgentEvent,
   onArtifact,
 }: {
   model?: LanguageModel;
   context?: AgentRuntimeContext;
+  abortSignal?: AbortSignal;
   onSource?: SourceReporter;
   onAgentEvent?: AgentEventReporter;
   onArtifact?: ArtifactPublisher;
@@ -142,6 +151,7 @@ async function createAstraExternalTools({
         schemaDescription:
           "Compact Deep Research phase output for Astra parent context and Research Trail persistence.",
         maxRetries: 1,
+        abortSignal,
       });
 
       return result.object;
@@ -211,6 +221,22 @@ async function createAstraExternalTools({
           const skill = context.skills.byName.get("deep-research");
           if (!skill) {
             throw new Error("deep-research skill is not registered.");
+          }
+
+          if (onAgentEvent) {
+            await onAgentEvent({
+              type: "visual_delivery_lineage_recorded",
+              scope: "tool",
+              status: "completed",
+              title: "Visual delivery lineage recorded",
+              summary:
+                "Saved Evidence Ledger and Visual Spec lineage for narrow render/upload retry.",
+              payload: {
+                evidenceLedger,
+                visualSpecs,
+                visualIds: visualSpecs.map((visualSpec) => visualSpec.visualId),
+              },
+            });
           }
 
           const result = await renderAndPublishVisualArtifacts({

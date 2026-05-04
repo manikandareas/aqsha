@@ -67,6 +67,7 @@ export const agentRunStatuses = [
   "completed",
   "failed",
   "cancel_requested",
+  "canceled",
 ] as const;
 export const agentEventStatuses = [
   "pending",
@@ -502,7 +503,7 @@ export const agentRuns = pgTable(
   (table) => [
     check(
       "agent_runs_status_check",
-      sql`${table.status} in ('queued', 'running', 'completed', 'failed', 'cancel_requested')`,
+      sql`${table.status} in ('queued', 'running', 'completed', 'failed', 'cancel_requested', 'canceled')`,
     ),
     index("agent_runs_thread_created_idx").on(
       table.chatThreadId,
@@ -510,7 +511,7 @@ export const agentRuns = pgTable(
     ),
     uniqueIndex("agent_runs_active_thread_unique_idx")
       .on(table.chatThreadId)
-      .where(sql`${table.status} in ('queued', 'running')`),
+      .where(sql`${table.status} in ('queued', 'running', 'cancel_requested')`),
   ],
 );
 

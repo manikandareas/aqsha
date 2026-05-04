@@ -27,6 +27,7 @@ const agentRun = t.Object({
     t.Literal("completed"),
     t.Literal("failed"),
     t.Literal("cancel_requested"),
+    t.Literal("canceled"),
   ]),
   errorMessage: t.Union([t.String(), t.Null()]),
   metadata: t.Any(),
@@ -138,6 +139,34 @@ const chatThreadNotFoundError = t.Object({
   }),
 });
 
+const agentRunActiveError = t.Object({
+  error: t.Object({
+    code: t.Literal("agent_run_active"),
+    message: t.String(),
+  }),
+});
+
+const agentRunNotFoundError = t.Object({
+  error: t.Object({
+    code: t.Literal("agent_run_not_found"),
+    message: t.String(),
+  }),
+});
+
+const deliveryRetryRejectedError = t.Object({
+  error: t.Object({
+    code: t.Literal("delivery_retry_rejected"),
+    message: t.String(),
+  }),
+});
+
+const deliveryRetryFailedError = t.Object({
+  error: t.Object({
+    code: t.Literal("delivery_retry_failed"),
+    message: t.String(),
+  }),
+});
+
 export const chatModel = {
   createThreadBody: t.Object({
     model: t.Optional(t.Union([t.String(), t.Null()])),
@@ -149,6 +178,11 @@ export const chatModel = {
       parts: t.Array(t.Any()),
     }),
   }),
+  retryDeliveryBody: t.Object({
+    phase: t.Union([t.Literal("render"), t.Literal("upload")]),
+    visualId: t.Optional(t.String()),
+    artifactId: t.Optional(t.String()),
+  }),
   chatThread,
   chatMessage,
   agentRun,
@@ -158,8 +192,16 @@ export const chatModel = {
   chatThreadDetail,
   unauthorizedError,
   chatThreadNotFoundError,
+  agentRunActiveError,
+  agentRunNotFoundError,
+  deliveryRetryRejectedError,
+  deliveryRetryFailedError,
   okResponse: t.Object({
     ok: t.Boolean(),
+  }),
+  retryDeliveryResponse: t.Object({
+    ok: t.Boolean(),
+    status: t.Union([t.Literal("completed"), t.Literal("failed")]),
   }),
 };
 

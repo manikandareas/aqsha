@@ -2,6 +2,7 @@ import { Elysia, t } from "elysia";
 import type { UIMessageChunk } from "ai";
 import { authIdentityPlugin } from "../../plugins/auth-identity";
 import { servicesPlugin } from "../../plugins/services";
+import type { EvidenceLedger } from "../../agents/deep-research/contracts";
 import { PngArtifactPublisher } from "./artifacts";
 import { chatModel } from "./model";
 import { collectFinishedMessages } from "./vercel-stream";
@@ -16,6 +17,34 @@ const chatThreadNotFoundResponse = {
   error: {
     code: "chat_thread_not_found" as const,
     message: "Chat thread not found",
+  },
+};
+
+const agentRunActiveResponse = {
+  error: {
+    code: "agent_run_active" as const,
+    message: "A Deep Research Run is already active for this Research Chat.",
+  },
+};
+
+const agentRunNotFoundResponse = {
+  error: {
+    code: "agent_run_not_found" as const,
+    message: "Agent run not found",
+  },
+};
+
+const deliveryRetryRejectedResponse = {
+  error: {
+    code: "delivery_retry_rejected" as const,
+    message: "Delivery retry rejected because saved artifact lineage is incomplete.",
+  },
+};
+
+const deliveryRetryFailedResponse = {
+  error: {
+    code: "delivery_retry_failed" as const,
+    message: "Delivery retry failed.",
   },
 };
 
@@ -44,6 +73,12 @@ function createChatRequestId() {
   return crypto.randomUUID();
 }
 
+function allCancellationBoundariesFinished(
+  boundaries: Record<string, string>,
+): boolean {
+  return Object.values(boundaries).every((value) => value === "already_finished");
+}
+
 function logChatError(
   message: string,
   context: Record<string, unknown>,
@@ -65,6 +100,20 @@ function logChatError(
   }
 
   console.error(JSON.stringify(payload));
+}
+
+function developerErrorDetail(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    };
+  }
+
+  return {
+    message: String(error),
+  };
 }
 
 function chunkRecord(chunk: UIMessageChunk): Record<string, unknown> {
@@ -195,6 +244,12 @@ function eventForChunk(chunk: UIMessageChunk): Omit<AppendAgentEventInput, "sequ
         toolName: typeof record.toolName === "string" ? record.toolName : null,
         payload: {
           toolCallId: record.toolCallId ?? null,
+          errorClass: "model_tool_misuse",
+          errorCode: chunk.type,
+          developerDetail: {
+            errorText: record.errorText ?? null,
+            providerExecuted: record.providerExecuted ?? null,
+          },
         },
       };
     }
@@ -391,8 +446,162 @@ export const chatModule = new Elysia({
     },
   )
   .post(
+    "/threads/:id/runs/:runId/cancel",
+    async ({ chatRunCancellationRegistry, chatService, identity, params, status }) => {
+      const result = await chatService.requestRunCancellation(
+        identity,
+        params.id,
+        params.runId,
+      );
+
+      if (!result.success) {
+        return status(404, agentRunNotFoundResponse);
+      }
+
+      const boundaries = chatRunCancellationRegistry.cancel(params.runId);
+      const scope = { userId: result.data.userId };
+
+      await chatService.recordRunCancellationPropagation(
+        scope,
+        result.data,
+        boundaries,
+      );
+
+      if (allCancellationBoundariesFinished(boundaries)) {
+        await chatService.markRunCanceled(scope, result.data);
+      }
+
+      return { ok: true };
+    },
+    {
+      detail: {
+        summary: "Cancel agent run",
+        description:
+          "Requests cancellation for an active Deep Research Run in a Research Chat.",
+      },
+      response: {
+        200: chatModel.okResponse,
+        401: chatModel.unauthorizedError,
+        404: t.Union([
+          chatModel.chatThreadNotFoundError,
+          chatModel.agentRunNotFoundError,
+        ]),
+      },
+    },
+  )
+  .post(
+    "/threads/:id/runs/:runId/retry-delivery",
+    async ({ agentsService, body, chatService, identity, params, pngArtifactUploadClient, status }) => {
+      const retry = await chatService.prepareDeliveryRetry(
+        identity,
+        params.id,
+        params.runId,
+        body,
+      );
+
+      if (!retry.success) {
+        if (retry.error === "agent_run_active") {
+          return status(409, agentRunActiveResponse);
+        }
+
+        if (retry.error === "delivery_retry_rejected") {
+          return status(409, deliveryRetryRejectedResponse);
+        }
+
+        if (retry.error === "agent_run_not_found") {
+          return status(404, agentRunNotFoundResponse);
+        }
+
+        return status(404, chatThreadNotFoundResponse);
+      }
+
+      const publisher = new PngArtifactPublisher({
+        uploadClient: pngArtifactUploadClient,
+        persistArtifact: (input) =>
+          chatService.appendRunArtifact(retry.data.scope, input),
+        writeEvent: (event) =>
+          chatService.appendRunEvents(retry.data.scope, retry.data.run, [event]),
+      });
+
+      try {
+        const result = await agentsService.retryVisualArtifactDelivery({
+          evidenceLedger: retry.data.evidenceLedger as EvidenceLedger,
+          visualSpecs: retry.data.visualSpecs,
+          attemptNumber: retry.data.attemptNumber,
+          phase: retry.data.phase,
+          visualId: retry.data.visualId,
+          originalArtifactId: retry.data.originalArtifactId,
+          runId: retry.data.run.id,
+          publishArtifact: (artifact) =>
+            publisher.publish({
+              scope: retry.data.scope,
+              run: retry.data.run,
+              artifact,
+            }),
+        });
+
+        await chatService.appendRunEvents(
+          retry.data.scope,
+          retry.data.run,
+          result.events,
+        );
+
+        return {
+          ok: result.status === "completed",
+          status: result.status,
+        };
+      } catch (error) {
+        await chatService.appendRunEvents(retry.data.scope, retry.data.run, [
+          {
+            type: "delivery_retry_failed",
+            scope: "error",
+            status: "failed",
+            title: "Delivery retry failed",
+            summary:
+              error instanceof Error
+                ? error.message
+                : "Visual artifact delivery retry failed.",
+            agentName: "Astra",
+            payload: {
+              attemptNumber: retry.data.attemptNumber,
+              phase: retry.data.phase,
+              visualId: retry.data.visualId ?? null,
+              originalArtifactId: retry.data.originalArtifactId ?? null,
+              errorClass: "unknown",
+              errorCode: "delivery_retry_failed",
+              developerDetail: developerErrorDetail(error),
+            },
+          },
+        ]);
+
+        return status(502, deliveryRetryFailedResponse);
+      }
+    },
+    {
+      detail: {
+        summary: "Retry visual artifact delivery",
+        description:
+          "Retries render/upload delivery from saved Evidence Ledger and Visual Spec lineage without repeating source discovery.",
+      },
+      body: chatModel.retryDeliveryBody,
+      response: {
+        200: chatModel.retryDeliveryResponse,
+        401: chatModel.unauthorizedError,
+        404: t.Union([
+          chatModel.chatThreadNotFoundError,
+          chatModel.agentRunNotFoundError,
+        ]),
+        409: t.Union([
+          chatModel.agentRunActiveError,
+          chatModel.deliveryRetryRejectedError,
+        ]),
+        502: chatModel.deliveryRetryFailedError,
+      },
+    },
+  )
+  .post(
     "/threads/:id/messages",
-    async ({ agentsService, body, chatService, identity, params, pngArtifactUploadClient, request, status }) => {
+    async ({ agentsService, body, chatRunCancellationRegistry, chatService, identity, params, pngArtifactUploadClient, request, status }) => {
       const requestId = createChatRequestId();
       const messagesResult = await chatService.appendUserMessage(
         identity,
@@ -401,6 +610,10 @@ export const chatModule = new Elysia({
       );
 
       if (!messagesResult.success) {
+        if (messagesResult.error === "agent_run_active") {
+          return status(409, agentRunActiveResponse);
+        }
+
         return status(404, chatThreadNotFoundResponse);
       }
 
@@ -411,6 +624,10 @@ export const chatModule = new Elysia({
       });
 
       if (!runResult.success) {
+        if (runResult.error === "agent_run_active") {
+          return status(409, agentRunActiveResponse);
+        }
+
         return status(404, chatThreadNotFoundResponse);
       }
 
@@ -431,6 +648,10 @@ export const chatModule = new Elysia({
       });
 
       let upstream: Response;
+      const cancellationHandle = chatRunCancellationRegistry.track(
+        runResult.data.run.id,
+        request.signal,
+      );
 
       try {
         upstream = await agentsService.createChatResponse({
@@ -440,7 +661,7 @@ export const chatModule = new Elysia({
           runId: runResult.data.run.id,
           model,
           messages: messagesResult.data.messages,
-          abortSignal: request.signal,
+          abortSignal: cancellationHandle.signal,
           onSource: async (source) => {
             try {
               await chatService.appendRunSource(
@@ -479,6 +700,17 @@ export const chatModule = new Elysia({
           },
         });
       } catch (error) {
+        if (cancellationHandle.cancelRequested) {
+          await chatService.markRunCanceled(
+            runResult.data.scope,
+            runResult.data.run,
+          );
+          cancellationHandle.release();
+
+          return new Response(null, { status: 499 });
+        }
+
+        cancellationHandle.release();
         logChatError(
           "Failed to start agents service response",
           {
@@ -527,6 +759,7 @@ export const chatModule = new Elysia({
       }
 
       if (!upstream.ok || !upstream.body) {
+        cancellationHandle.release();
         const upstreamBody = await upstream.text().catch(() => "");
         const astraRequestId = upstream.headers.get("x-astra-request-id");
 
@@ -598,6 +831,14 @@ export const chatModule = new Elysia({
         },
       )
         .then(async (messages) => {
+          if (cancellationHandle.cancelRequested) {
+            await chatService.markRunCanceled(
+              runResult.data.scope,
+              runResult.data.run,
+            );
+            return;
+          }
+
           await chatService.saveFinishedMessages(identity, params.id, messages);
           await eventWriter({
             type: "run_completed",
@@ -612,6 +853,14 @@ export const chatModule = new Elysia({
           });
         })
         .catch((error: unknown) => {
+          if (cancellationHandle.cancelRequested) {
+            void chatService.markRunCanceled(
+              runResult.data.scope,
+              runResult.data.run,
+            );
+            return;
+          }
+
           logChatError(
             "Failed to persist streamed chat response",
             {
@@ -642,6 +891,9 @@ export const chatModule = new Elysia({
                   : "Unable to persist the streamed response.",
             }),
           );
+        })
+        .finally(() => {
+          cancellationHandle.release();
         });
 
       const responseHeaders = copyStreamHeaders(upstream.headers);
@@ -664,6 +916,7 @@ export const chatModule = new Elysia({
       response: {
         401: chatModel.unauthorizedError,
         404: chatModel.chatThreadNotFoundError,
+        409: chatModel.agentRunActiveError,
       },
     },
   );
