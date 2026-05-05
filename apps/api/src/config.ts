@@ -37,6 +37,17 @@ export const env = createEnv({
     ASTRA_PLANNER_MODEL: z.string().optional(),
     ASTRA_CRITIC_MODEL: z.string().optional(),
     ASTRA_SEARCHER_MAX_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(3),
+    ASTRA_COHERE_API_KEY: z.string().optional(),
+    ASTRA_COHERE_RERANK_MODEL: z.string().min(1).default("rerank-v3.5"),
+    ASTRA_RERANK_TOP_N: z.coerce.number().int().min(1).max(20).default(8),
+    ASTRA_FETCH_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
+    ASTRA_FETCH_MAX_BYTES: z.coerce.number().int().positive().default(2_500_000),
+    ASTRA_HTTP_USER_AGENT: z
+      .string()
+      .min(1)
+      .default("AqshaResearchBot/1.0 (+https://aqsha.app/bot)"),
+    ASTRA_PUBMED_API_KEY: z.string().optional(),
+    ASTRA_CROSSREF_MAILTO: z.string().optional(),
     RUN_INTEGRATION_TESTS: z
       .enum(["true", "false"])
       .default("false")

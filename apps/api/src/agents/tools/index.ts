@@ -17,6 +17,11 @@ import { createResearchSynthesizerTool } from "./research-synthesizer";
 export type SubAgentToolsOptions = {
   context: AgentRuntimeContext;
   exaTools: ToolSet;
+  /**
+   * Phase 2: arxiv_search, crossref_search, pubmed_search, rerank_sources,
+   * fetch_url, pdf_extract. Searcher and Reader pick the subset they need.
+   */
+  researchTools: ToolSet;
   defaultModel: LanguageModel;
   defaultProviderOptions?: ProviderOptions;
   plannerModel?: LanguageModel;
@@ -45,6 +50,7 @@ export function createSubAgentTools(opts: SubAgentToolsOptions): SubAgentTools {
     providerOptions: opts.defaultProviderOptions,
     context: opts.context,
     exaTools: opts.exaTools,
+    researchTools: opts.researchTools,
   });
 
   const reader = buildReaderAgent({
@@ -52,6 +58,7 @@ export function createSubAgentTools(opts: SubAgentToolsOptions): SubAgentTools {
     providerOptions: opts.defaultProviderOptions,
     context: opts.context,
     exaTools: opts.exaTools,
+    researchTools: opts.researchTools,
   });
 
   const synthesizer = buildSynthesizerAgent({

@@ -3,10 +3,17 @@ import { pickTools, subAgentSettings, subAgentStopWhen, type SubAgentOptions } f
 import { READER_INSTRUCTIONS } from "./instructions";
 import { evidenceCardsSchema } from "./schemas";
 
-type ReaderOptions = SubAgentOptions & { exaTools: ToolSet };
+type ReaderOptions = SubAgentOptions & {
+  exaTools: ToolSet;
+  /** Phase 2: fetch_url (Readability) + pdf_extract for fallback / PDF sources. */
+  researchTools: ToolSet;
+};
 
 export function buildReaderAgent(opts: ReaderOptions) {
-  const tools = pickTools(opts.exaTools, ["web_fetch_exa"]);
+  const tools: ToolSet = {
+    ...pickTools(opts.exaTools, ["web_fetch_exa"]),
+    ...pickTools(opts.researchTools, ["fetch_url", "pdf_extract"]),
+  };
   return new ToolLoopAgent({
     id: "reader",
     instructions: READER_INSTRUCTIONS,
@@ -17,7 +24,8 @@ export function buildReaderAgent(opts: ReaderOptions) {
       context: opts.context,
       externalTools: tools,
     }),
-    stopWhen: subAgentStopWhen(8),
+    // Bumped from 8 → 10 to allow fallback chain (exa → fetch_url → pdf_extract).
+    stopWhen: subAgentStopWhen(10),
   });
 }
 

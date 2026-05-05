@@ -6,6 +6,12 @@ import { phaseAwarePrepareStep, looksLikeResearchRequest } from "./loop-control"
 import { createExaMcpTools } from "./mcp/exa";
 import { resolveSubAgentModel } from "./model";
 import { createSubAgentTools } from "./tools";
+import { createArxivSearchTool } from "./tools/arxiv-search";
+import { createCrossrefSearchTool } from "./tools/crossref-search";
+import { createFetchUrlTool } from "./tools/fetch-url";
+import { createPdfExtractTool } from "./tools/pdf-extract";
+import { createPubmedSearchTool } from "./tools/pubmed-search";
+import { createRerankSourcesTool } from "./tools/rerank-sources";
 import type { AgentRuntimeContext } from "./types";
 
 type UnknownRecord = Record<string, unknown>;
@@ -15,6 +21,13 @@ const EXA_SOURCE_TOOL_NAMES = new Set(["web_search_exa", "web_fetch_exa"]);
 const EXA_RESULT_CONTAINERS = ["results", "items", "content", "contents", "data", "documents"];
 const EXA_METADATA_FIELDS = ["publishedDate", "author", "summary"];
 const MAX_EXA_SOURCE_DEPTH = 5;
+
+/** Phase 2 discovery tools whose outputs follow `{ provider, candidates: [...] }`. */
+const RESEARCH_DISCOVERY_TOOL_NAMES = new Set([
+  "arxiv_search",
+  "crossref_search",
+  "pubmed_search",
+]);
 
 type StreamCommonOptions = {
   model: LanguageModel;
@@ -29,7 +42,8 @@ export async function createAstraAgentUIStream(opts: StreamCommonOptions) {
   try {
     const subAgentTools = createSubAgentTools({
       context: opts.context,
-      exaTools: external.tools,
+      exaTools: external.exa,
+      researchTools: external.research,
       defaultModel: opts.model,
       defaultProviderOptions: opts.providerOptions,
       ...resolveSubAgentRoleModels(opts),
@@ -42,7 +56,7 @@ export async function createAstraAgentUIStream(opts: StreamCommonOptions) {
         model: opts.model,
         providerOptions: opts.providerOptions,
         context: opts.context,
-        externalTools: { ...subAgentTools, ...external.tools } as ToolSet,
+        externalTools: { ...subAgentTools, ...external.exa } as ToolSet,
         prepareStep: phaseAwarePrepareStep({ isResearch }),
       }),
       uiMessages: opts.uiMessages,
@@ -72,7 +86,8 @@ export async function createAstraAgentResponse({
   try {
     const subAgentTools = createSubAgentTools({
       context,
-      exaTools: external.tools,
+      exaTools: external.exa,
+      researchTools: external.research,
       defaultModel: model,
       defaultProviderOptions: providerOptions,
       ...resolveSubAgentRoleModels({ model, providerOptions }),
@@ -85,7 +100,7 @@ export async function createAstraAgentResponse({
         model,
         providerOptions,
         context,
-        externalTools: { ...subAgentTools, ...external.tools } as ToolSet,
+        externalTools: { ...subAgentTools, ...external.exa } as ToolSet,
         prepareStep: phaseAwarePrepareStep({ isResearch }),
       }),
       uiMessages,
@@ -132,24 +147,47 @@ async function createAstraExternalTools({
   onSource?: SourceReporter;
 } = {}) {
   const exa = await createExaMcpTools({ onSource });
-  const tools: ToolSet = {
-    ...(exa.tools as ToolSet),
+
+  // Phase 2 research tools. These are NOT given to the orchestrator directly
+  // — they are scoped into searcher/reader sub-agents via createSubAgentTools.
+  // Source reporting for these tools happens at the orchestrator step level
+  // (see RESEARCH_DISCOVERY_TOOL_NAMES + extractResearchSourcesFromToolResults).
+  const research: ToolSet = {
+    arxiv_search: createArxivSearchTool(),
+    crossref_search: createCrossrefSearchTool(),
+    pubmed_search: createPubmedSearchTool(),
+    rerank_sources: createRerankSourcesTool(),
+    fetch_url: createFetchUrlTool(),
+    pdf_extract: createPdfExtractTool(),
   };
 
   return {
-    tools,
+    exa: exa.tools as ToolSet,
+    research,
     close: exa.close,
   };
 }
 
 async function reportStepSources(step: unknown, onSource: SourceReporter) {
   const record = asRecord(step);
+  const toolResults = Array.isArray(record?.toolResults) ? record.toolResults : [];
   const sources = [
     ...normalizeAiSdkSources(Array.isArray(record?.sources) ? record.sources : []),
-    ...extractExaSourcesFromToolResults(Array.isArray(record?.toolResults) ? record.toolResults : []),
+    ...extractExaSourcesFromToolResults(toolResults),
+    ...extractResearchSourcesFromToolResults(toolResults),
   ];
 
+  // Dedupe by URL — both Exa-style and research-tool extraction can surface the
+  // same URL, and AI SDK source records may overlap with tool-result extraction.
+  const seen = new Set<string>();
   for (const source of sources) {
+    const key = source.url ?? source.providerSourceId ?? null;
+    if (key) {
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+    }
     try {
       await onSource(source);
     } catch (error) {
@@ -207,6 +245,71 @@ function normalizeAiSdkSources(sources: unknown[]): AgentUsedSource[] {
 
     return [];
   });
+}
+
+function extractResearchSourcesFromToolResults(toolResults: unknown[]): AgentUsedSource[] {
+  const sources: AgentUsedSource[] = [];
+  const seen = new Set<string>();
+
+  for (const toolResult of toolResults) {
+    const result = asRecord(toolResult);
+    const toolName = stringValue(result?.toolName);
+    if (!toolName || !RESEARCH_DISCOVERY_TOOL_NAMES.has(toolName)) {
+      continue;
+    }
+
+    const output = parseJsonString(result?.output);
+    const outputRecord = asRecord(output);
+    if (!outputRecord) {
+      continue;
+    }
+
+    const provider = stringValue(outputRecord.provider) ?? toolName.replace(/_search$/, "");
+    const candidates = Array.isArray(outputRecord.candidates) ? outputRecord.candidates : [];
+
+    for (const candidate of candidates) {
+      const record = asRecord(candidate);
+      if (!record) {
+        continue;
+      }
+      const url = validUrl(stringValue(record.url));
+      if (!url || seen.has(url)) {
+        continue;
+      }
+      seen.add(url);
+
+      const metadata: Record<string, unknown> = {
+        source: "tool-result",
+        toolName,
+        provider,
+      };
+
+      const publishedDate = stringValue(record.publishedDate);
+      if (publishedDate) {
+        metadata.publishedDate = publishedDate;
+      }
+      const doi = stringValue(record.doi);
+      if (doi) {
+        metadata.doi = doi;
+      }
+      const authors = Array.isArray(record.authors)
+        ? record.authors.filter((a): a is string => typeof a === "string" && a.trim().length > 0)
+        : [];
+      if (authors.length > 0) {
+        metadata.authors = authors;
+      }
+
+      sources.push({
+        kind: "url",
+        title: stringValue(record.title),
+        url,
+        providerSourceId: stringValue(record.id),
+        metadata,
+      });
+    }
+  }
+
+  return sources;
 }
 
 function extractExaSourcesFromToolResults(toolResults: unknown[]): AgentUsedSource[] {

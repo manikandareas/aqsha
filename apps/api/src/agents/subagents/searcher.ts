@@ -3,10 +3,22 @@ import { pickTools, subAgentSettings, subAgentStopWhen, type SubAgentOptions } f
 import { SEARCHER_INSTRUCTIONS } from "./instructions";
 import { searchResultsSchema } from "./schemas";
 
-type SearcherOptions = SubAgentOptions & { exaTools: ToolSet };
+type SearcherOptions = SubAgentOptions & {
+  exaTools: ToolSet;
+  /** Phase 2: arxiv_search / crossref_search / pubmed_search / rerank_sources. */
+  researchTools: ToolSet;
+};
 
 export function buildSearcherAgent(opts: SearcherOptions) {
-  const tools = pickTools(opts.exaTools, ["web_search_exa"]);
+  const tools: ToolSet = {
+    ...pickTools(opts.exaTools, ["web_search_exa"]),
+    ...pickTools(opts.researchTools, [
+      "arxiv_search",
+      "crossref_search",
+      "pubmed_search",
+      "rerank_sources",
+    ]),
+  };
   return new ToolLoopAgent({
     id: "searcher",
     instructions: SEARCHER_INSTRUCTIONS,
@@ -17,7 +29,8 @@ export function buildSearcherAgent(opts: SearcherOptions) {
       context: opts.context,
       externalTools: tools,
     }),
-    stopWhen: subAgentStopWhen(6),
+    // Bumped from 6 → 8 to allow fan-out across multiple providers + rerank.
+    stopWhen: subAgentStopWhen(8),
   });
 }
 

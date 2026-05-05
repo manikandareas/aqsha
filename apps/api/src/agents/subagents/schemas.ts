@@ -17,6 +17,21 @@ export const sourceClassWithUnknownEnum = z.enum([
   "unknown",
 ]);
 
+/**
+ * Discovery provider that surfaced a candidate / evidence card.
+ *
+ * Helps synthesizer + critic down-weight web-only sources when a primary
+ * source (arxiv / crossref / pubmed) is also available.
+ */
+export const sourceProviderEnum = z.enum([
+  "exa",
+  "arxiv",
+  "crossref",
+  "pubmed",
+  "direct",
+  "memory",
+]);
+
 export const researchDepthEnum = z.enum(["quick_scan", "standard_brief", "deep_report"]);
 
 export const decisionEnum = z.enum(["PROCEED", "REFINE", "PIVOT"]);
@@ -48,6 +63,8 @@ export const searchCandidateSchema = z.object({
   publishedDate: z.string().nullable(),
   sourceClass: sourceClassWithUnknownEnum,
   relevanceScore: z.number().min(0).max(1),
+  /** Discovery provider that surfaced this candidate. Null when unknown. */
+  provider: sourceProviderEnum.nullable(),
 });
 
 export const searchResultsSchema = z.object({
@@ -77,6 +94,8 @@ export const evidenceCardSchema = z.object({
   tier: z.enum(["A", "B", "C", "D"]),
   qualityScore: z.number().int().min(0).max(3),
   notes: z.string().nullable(),
+  /** Discovery provider that surfaced this source. Null when unknown. */
+  provider: sourceProviderEnum.nullable(),
 });
 
 export const evidenceCardsSchema = z.object({
