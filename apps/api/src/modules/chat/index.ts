@@ -1,5 +1,6 @@
 import { Elysia, t } from "elysia";
 import type { UIMessageChunk } from "ai";
+import { subAgentForToolName } from "../../agents/agent-events";
 import { authIdentityPlugin } from "../../plugins/auth-identity";
 import { servicesPlugin } from "../../plugins/services";
 import { chatModel } from "./model";
@@ -98,8 +99,28 @@ function readableToolName(value: unknown): string | null {
   return value.replace(/^tool-/, "").replaceAll("_", " ");
 }
 
-function eventForChunk(chunk: UIMessageChunk): Omit<AppendAgentEventInput, "sequence"> | null {
+function eventForChunk(
+  chunk: UIMessageChunk,
+  toolCallNames: Map<string, string>,
+): Omit<AppendAgentEventInput, "sequence"> | null {
   const record = chunkRecord(chunk);
+
+  if (
+    typeof record.toolCallId === "string" &&
+    typeof record.toolName === "string"
+  ) {
+    toolCallNames.set(record.toolCallId, record.toolName);
+  }
+
+  const resolveToolName = (): string | null => {
+    if (typeof record.toolName === "string") {
+      return record.toolName;
+    }
+    if (typeof record.toolCallId === "string") {
+      return toolCallNames.get(record.toolCallId) ?? null;
+    }
+    return null;
+  };
 
   switch (chunk.type) {
     case "start":
@@ -172,14 +193,22 @@ function eventForChunk(chunk: UIMessageChunk): Omit<AppendAgentEventInput, "sequ
       };
     case "tool-input-start":
     case "tool-input-available": {
-      const toolName = readableToolName(record.toolName);
+      const rawToolName = resolveToolName();
+      const subAgent = subAgentForToolName(rawToolName);
+      const toolName = readableToolName(rawToolName);
+      const isAgent = subAgent !== null;
       return {
-        type: "tool_running",
-        scope: "tool",
+        type: isAgent ? "agent_running" : "tool_running",
+        scope: isAgent ? "agent" : "tool",
         status: "running",
-        title: toolName ? `Using ${toolName}` : "Using a tool",
-        summary: "Astra is preparing a tool call.",
-        toolName: typeof record.toolName === "string" ? record.toolName : null,
+        title: isAgent
+          ? `${subAgent.charAt(0).toUpperCase()}${subAgent.slice(1)} sub-agent running`
+          : toolName ? `Using ${toolName}` : "Using a tool",
+        summary: isAgent
+          ? `Astra delegated work to the ${subAgent} sub-agent.`
+          : "Astra is preparing a tool call.",
+        toolName: rawToolName,
+        agentName: isAgent ? subAgent : null,
         payload: {
           toolCallId: record.toolCallId ?? null,
           providerExecuted: record.providerExecuted ?? null,
@@ -187,14 +216,22 @@ function eventForChunk(chunk: UIMessageChunk): Omit<AppendAgentEventInput, "sequ
       };
     }
     case "tool-output-available": {
-      const toolName = readableToolName(record.toolName);
+      const rawToolName = resolveToolName();
+      const subAgent = subAgentForToolName(rawToolName);
+      const toolName = readableToolName(rawToolName);
+      const isAgent = subAgent !== null;
       return {
-        type: "tool_completed",
-        scope: "tool",
+        type: isAgent ? "agent_completed" : "tool_completed",
+        scope: isAgent ? "agent" : "tool",
         status: "completed",
-        title: toolName ? `Finished ${toolName}` : "Tool completed",
-        summary: "Astra received the tool result.",
-        toolName: typeof record.toolName === "string" ? record.toolName : null,
+        title: isAgent
+          ? `${subAgent.charAt(0).toUpperCase()}${subAgent.slice(1)} sub-agent finished`
+          : toolName ? `Finished ${toolName}` : "Tool completed",
+        summary: isAgent
+          ? `The ${subAgent} sub-agent returned its structured result.`
+          : "Astra received the tool result.",
+        toolName: rawToolName,
+        agentName: isAgent ? subAgent : null,
         payload: {
           toolCallId: record.toolCallId ?? null,
           providerExecuted: record.providerExecuted ?? null,
@@ -204,14 +241,20 @@ function eventForChunk(chunk: UIMessageChunk): Omit<AppendAgentEventInput, "sequ
     }
     case "tool-input-error":
     case "tool-output-error": {
-      const toolName = readableToolName(record.toolName);
+      const rawToolName = resolveToolName();
+      const subAgent = subAgentForToolName(rawToolName);
+      const toolName = readableToolName(rawToolName);
+      const isAgent = subAgent !== null;
       return {
-        type: "tool_failed",
-        scope: "tool",
+        type: isAgent ? "agent_failed" : "tool_failed",
+        scope: isAgent ? "agent" : "tool",
         status: "failed",
-        title: toolName ? `${toolName} failed` : "Tool failed",
+        title: isAgent
+          ? `${subAgent.charAt(0).toUpperCase()}${subAgent.slice(1)} sub-agent failed`
+          : toolName ? `${toolName} failed` : "Tool failed",
         summary: typeof record.errorText === "string" ? record.errorText : "A tool failed.",
-        toolName: typeof record.toolName === "string" ? record.toolName : null,
+        toolName: rawToolName,
+        agentName: isAgent ? subAgent : null,
         payload: {
           toolCallId: record.toolCallId ?? null,
           errorClass: "model_tool_misuse",
@@ -654,12 +697,13 @@ export const chatModule = new Elysia({
 
       const [clientStream, persistenceStream] = upstream.body.tee();
       const astraRequestId = upstream.headers.get("x-astra-request-id");
+      const toolCallNames = new Map<string, string>();
 
       void collectFinishedMessages(
         persistenceStream,
         messagesResult.data.messages,
         async (chunk) => {
-          const event = eventForChunk(chunk);
+          const event = eventForChunk(chunk, toolCallNames);
           const source = sourceForChunk(chunk);
 
           if (event) {

@@ -8,6 +8,8 @@ export type ResolvedModel = {
   providerOptions?: ProviderOptions;
 };
 
+export type SubAgentRole = "planner" | "searcher" | "reader" | "synthesizer" | "critic";
+
 const PYDANTIC_MODEL_MAP: Record<string, string> = {
   "openai:gpt-5.2": "gpt-5.2",
   "openai:gpt-5.4": "gpt-5.4",
@@ -37,6 +39,35 @@ export function resolveModel(modelOverride?: string | null): ResolvedModel {
     model: openai(modelId),
     providerOptions: buildOpenAIProviderOptions(modelId),
   };
+}
+
+export function resolveSubAgentModel(role: SubAgentRole, fallback: ResolvedModel): ResolvedModel {
+  const override = pickRoleOverride(role);
+  if (!override) {
+    return fallback;
+  }
+
+  const normalized = normalizeModelId(override);
+  const allowed = allowedModels();
+  if (!normalized || !allowed.has(normalized)) {
+    return fallback;
+  }
+
+  return {
+    model: openai(normalized),
+    providerOptions: buildOpenAIProviderOptions(normalized),
+  };
+}
+
+function pickRoleOverride(role: SubAgentRole): string | undefined {
+  switch (role) {
+    case "planner":
+      return env.ASTRA_PLANNER_MODEL;
+    case "critic":
+      return env.ASTRA_CRITIC_MODEL;
+    default:
+      return undefined;
+  }
 }
 
 export function normalizeModelId(model?: string | null): string | null {

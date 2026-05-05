@@ -33,6 +33,14 @@ export const env = createEnv({
     ASTRA_EXA_API_KEY: z.string().optional(),
     OPENAI_API_KEY: z.string().optional(),
     OPENAI_BASE_URL: z.string().optional(),
+    ASTRA_TOTAL_TOKEN_BUDGET: z.coerce.number().int().positive().default(200_000),
+    ASTRA_PLANNER_MODEL: z.string().optional(),
+    ASTRA_CRITIC_MODEL: z.string().optional(),
+    ASTRA_SEARCHER_MAX_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(3),
+    RUN_INTEGRATION_TESTS: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

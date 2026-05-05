@@ -2,7 +2,10 @@ import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import { createAgentUIStream, createAgentUIStreamResponse, type LanguageModel, type ToolSet, type UIMessage } from "ai";
 import type { AgentUsedSource } from "../modules/agents/model";
 import { buildAstraAgent } from "./astra";
+import { phaseAwarePrepareStep, looksLikeResearchRequest } from "./loop-control";
 import { createExaMcpTools } from "./mcp/exa";
+import { resolveSubAgentModel } from "./model";
+import { createSubAgentTools } from "./tools";
 import type { AgentRuntimeContext } from "./types";
 
 type UnknownRecord = Record<string, unknown>;
@@ -13,25 +16,37 @@ const EXA_RESULT_CONTAINERS = ["results", "items", "content", "contents", "data"
 const EXA_METADATA_FIELDS = ["publishedDate", "author", "summary"];
 const MAX_EXA_SOURCE_DEPTH = 5;
 
-export async function createAstraAgentUIStream({
-  model,
-  providerOptions,
-  context,
-  uiMessages,
-  abortSignal,
-}: {
+type StreamCommonOptions = {
   model: LanguageModel;
   providerOptions?: ProviderOptions;
   context: AgentRuntimeContext;
   uiMessages: UIMessage[];
   abortSignal?: AbortSignal;
-}) {
+};
+
+export async function createAstraAgentUIStream(opts: StreamCommonOptions) {
   const external = await createAstraExternalTools();
   try {
+    const subAgentTools = createSubAgentTools({
+      context: opts.context,
+      exaTools: external.tools,
+      defaultModel: opts.model,
+      defaultProviderOptions: opts.providerOptions,
+      ...resolveSubAgentRoleModels(opts),
+    });
+
+    const isResearch = looksLikeResearchRequest(opts.uiMessages);
+
     const stream = await createAgentUIStream({
-      agent: buildAstraAgent({ model, providerOptions, context, externalTools: external.tools }),
-      uiMessages,
-      abortSignal,
+      agent: buildAstraAgent({
+        model: opts.model,
+        providerOptions: opts.providerOptions,
+        context: opts.context,
+        externalTools: { ...subAgentTools, ...external.tools } as ToolSet,
+        prepareStep: phaseAwarePrepareStep({ isResearch }),
+      }),
+      uiMessages: opts.uiMessages,
+      abortSignal: opts.abortSignal,
     });
 
     return stream.pipeThrough(createCleanupStream(external.close));
@@ -49,21 +64,30 @@ export async function createAstraAgentResponse({
   abortSignal,
   headers,
   onSource,
-}: {
-  model: LanguageModel;
-  providerOptions?: ProviderOptions;
-  context: AgentRuntimeContext;
-  uiMessages: UIMessage[];
-  abortSignal?: AbortSignal;
+}: StreamCommonOptions & {
   headers?: HeadersInit;
   onSource?: SourceReporter;
 }) {
-  const external = await createAstraExternalTools({
-    onSource,
-  });
+  const external = await createAstraExternalTools({ onSource });
   try {
+    const subAgentTools = createSubAgentTools({
+      context,
+      exaTools: external.tools,
+      defaultModel: model,
+      defaultProviderOptions: providerOptions,
+      ...resolveSubAgentRoleModels({ model, providerOptions }),
+    });
+
+    const isResearch = looksLikeResearchRequest(uiMessages);
+
     const response = await createAgentUIStreamResponse({
-      agent: buildAstraAgent({ model, providerOptions, context, externalTools: external.tools }),
+      agent: buildAstraAgent({
+        model,
+        providerOptions,
+        context,
+        externalTools: { ...subAgentTools, ...external.tools } as ToolSet,
+        prepareStep: phaseAwarePrepareStep({ isResearch }),
+      }),
       uiMessages,
       abortSignal,
       headers,
@@ -87,6 +111,19 @@ export async function createAstraAgentResponse({
     await external.close();
     throw error;
   }
+}
+
+function resolveSubAgentRoleModels(opts: { model: LanguageModel; providerOptions?: ProviderOptions }) {
+  const fallback = { model: opts.model, providerOptions: opts.providerOptions };
+  const planner = resolveSubAgentModel("planner", fallback);
+  const critic = resolveSubAgentModel("critic", fallback);
+
+  return {
+    plannerModel: planner.model,
+    plannerProviderOptions: planner.providerOptions,
+    criticModel: critic.model,
+    criticProviderOptions: critic.providerOptions,
+  };
 }
 
 async function createAstraExternalTools({

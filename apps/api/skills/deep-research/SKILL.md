@@ -7,6 +7,12 @@ metadata:
   category: research
 ---
 
+> **Runtime note (2026-05-05):** This file and its `references/` are the canonical
+> long-form documentation, but they are **no longer loaded at runtime** for the
+> deep-research flow. The prosa here has been ported into sub-agent instructions at
+> `apps/api/src/agents/subagents/instructions.ts`. Whenever you revise the playbook
+> below, update `instructions.ts` in the same change.
+
 # Deep Research Skill
 
 ## Purpose

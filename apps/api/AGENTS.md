@@ -180,5 +180,30 @@ Only create custom types when:
 2. The type is truly module-specific and not found in `@aqsha/db/types`
 3. The Elysia schema needs transformation that can't use `spread()` directly
 
+## Multi-Agent Pattern (`src/agents/`)
+
+Astra is the **orchestrator** (`src/agents/astra.ts`). For research-heavy work it delegates to five **sub-agents** exposed as tools:
+
+| Tool name (orchestrator-facing) | Sub-agent file | Output schema |
+|---|---|---|
+| `research_planner` | `subagents/planner.ts` | `researchPlanSchema` |
+| `research_searcher` | `subagents/searcher.ts` | `searchResultsSchema` |
+| `research_reader` | `subagents/reader.ts` | `evidenceCardsSchema` |
+| `research_synthesizer` | `subagents/synthesizer.ts` | `synthesisSchema` |
+| `research_critic` | `subagents/critic.ts` | `criticSchema` |
+
+Each sub-agent is a `ToolLoopAgent` with its own instructions (`subagents/instructions.ts`), narrow tool set, and `stopWhen` budget. The wrapper in `tools/research-*.ts` calls `agent.generate({ prompt })` and returns the structured `result.output`.
+
+Loop control:
+- `phaseAwarePrepareStep` in `loop-control.ts` gates `activeTools` per phase (planner first; synthesizer/critic last; loop back to synthesizer when critic returns `ok=false`).
+- `looksLikeResearchRequest(messages)` decides whether to enable phase scoping. Plain chat skips the multi-agent flow entirely.
+- `tokenBudget(env.ASTRA_TOTAL_TOKEN_BUDGET)` is added alongside `stepCountIs` so all loops stop when total tokens exceed the budget.
+
+Sub-agent instantiation lives in `streams.ts` (per-request) so each request gets a fresh Exa MCP client whose tools are shared between searcher and reader. Do **not** create singleton sub-agents in `plugins/services.ts` — they are tied to per-request resources.
+
+Telemetry: sub-agent invocations surface as standard AI SDK tool chunks. `chat/index.ts → eventForChunk` recognizes `research_*` tool names (via `subAgentForToolName`) and rewrites them as `agent_events` rows with `scope='agent'` and `agentName='<role>'`. This piggybacks on the existing tool-chunk pipeline — no new callback chain is needed.
+
+Skill source-of-truth: `apps/api/skills/deep-research/SKILL.md` + `references/` remain the canonical playbook prosa. Sub-agent instructions are ported copies in `subagents/instructions.ts`. Update both when changing the playbook.
+
 ## Testing
-No test runner is configured. Do not add test files unless you also add the runner config.
+Testing uses Bun's built-in `bun test`. Existing unit tests live in `src/modules/<feature>/*.test.ts`. Long-running integration tests that hit external services (OpenAI, Exa) are gated behind `RUN_INTEGRATION_TESTS=true` and named `*.integration.test.ts`.
