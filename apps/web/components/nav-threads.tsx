@@ -11,7 +11,16 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 
-import { ConfirmTitleDeleteDialog } from "@/components/confirm-title-delete-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -129,6 +138,19 @@ export function NavThreads() {
     }
   }
 
+  async function handleConfirmDeleteThread(): Promise<void> {
+    if (!threadToDelete) {
+      return;
+    }
+
+    try {
+      await handleDeleteThread(threadToDelete);
+      setThreadToDelete(null);
+    } catch {
+      // Toast is already shown in handleDeleteThread. Keep the dialog open.
+    }
+  }
+
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
       <SidebarGroupLabel>
@@ -193,21 +215,39 @@ export function NavThreads() {
         ))}
       </SidebarMenu>
       {threadToDelete ? (
-        <ConfirmTitleDeleteDialog
+        <AlertDialog
           open={Boolean(threadToDelete)}
           onOpenChange={(open) => {
-            if (!open) {
+            if (!open && !deleteThreadMutation.isPending) {
               setThreadToDelete(null);
             }
           }}
-          confirmationTitle={threadToDelete.title}
-          inputId={`delete-thread-title-${threadToDelete.id}`}
-          title="Delete thread?"
-          description="Type the exact thread title before deleting it permanently."
-          actionLabel="Delete"
-          errorMessage={threadRequestFailedMessage}
-          onDelete={() => handleDeleteThread(threadToDelete)}
-        />
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete thread?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Delete &ldquo;{threadToDelete.title}&rdquo; permanently from your
+                threads.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleteThreadMutation.isPending}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                disabled={deleteThreadMutation.isPending}
+                onClick={() => void handleConfirmDeleteThread()}
+              >
+                {deleteThreadMutation.isPending ? (
+                  <Loader2Icon className="animate-spin" />
+                ) : null}
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       ) : null}
     </SidebarGroup>
   );
