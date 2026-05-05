@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  customType,
   index,
   integer,
   jsonb,
@@ -12,6 +13,23 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+
+export const EMBEDDING_DIM = 1536;
+
+export const vector = (name: string, dim: number) =>
+  customType<{
+    data: number[];
+    driverData: string;
+  }>({
+    dataType: () => `vector(${dim})`,
+    toDriver: (value: number[]) => `[${value.join(",")}]`,
+    fromDriver: (value: string) => {
+      if (Array.isArray(value)) return value as unknown as number[];
+      const trimmed = value.trim().slice(1, -1);
+      if (!trimmed) return [];
+      return trimmed.split(",").map((part) => Number(part));
+    },
+  })(name);
 
 export const planCodes = ["free", "pro"] as const;
 export const subscriptionStatuses = [
@@ -298,81 +316,80 @@ export const journalVersions = pgTable(
   ],
 );
 
-// !
-// export const sources = pgTable(
-//   "sources",
-//   {
-//     id: idColumn("id"),
-//     journalId: uuid("journal_id")
-//       .notNull()
-//       .references(() => journals.id, { onDelete: "cascade" }),
-//     ownerUserId: uuid("owner_user_id")
-//       .notNull()
-//       .references(() => users.id),
-//     storageKey: text("storage_key").notNull(),
-//     fileName: text("file_name").notNull(),
-//     mimeType: text("mime_type").notNull(),
-//     checksum: text("checksum").notNull(),
-//     status: text("status", { enum: sourceStatuses }).notNull(),
-//     retryCount: integer("retry_count").default(0).notNull(),
-//     pageCount: integer("page_count"),
-//     ocrStatus: text("ocr_status"),
-//     extractedTextSummary: text("extracted_text_summary"),
-//     errorMessage: text("error_message"),
-//     errorCode: text("error_code"),
-//     deletedAt: timestamp("deleted_at", { withTimezone: true }),
-//     processingStartedAt: timestamp("processing_started_at", {
-//       withTimezone: true,
-//     }),
-//     readyAt: timestamp("ready_at", { withTimezone: true }),
-//     parsedTextStorageKey: text("parsed_text_storage_key"),
-//     parsedTextSizeBytes: integer("parsed_text_size_bytes"),
-//     idempotencyKey: text("idempotency_key"),
-//     createdAt: createdAtColumn(),
-//     updatedAt: updatedAtColumn(),
-//   },
-//   (table) => [
-//     check(
-//       "sources_status_check",
-//       sql`${table.status} in ('queued', 'processing', 'ready', 'failed')`,
-//     ),
-//     index("sources_journal_id_idx").on(table.journalId),
-//     index("sources_checksum_idx").on(table.checksum),
-//   ],
-// );
+export const sources = pgTable(
+  "sources",
+  {
+    id: idColumn("id"),
+    ownerUserId: uuid("owner_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    journalId: uuid("journal_id").references(() => journals.id, {
+      onDelete: "cascade",
+    }),
+    urlHash: text("url_hash").notNull(),
+    sourceUrl: text("source_url"),
+    title: text("title"),
+    storageKey: text("storage_key"),
+    fileName: text("file_name"),
+    mimeType: text("mime_type"),
+    checksum: text("checksum"),
+    status: text("status", { enum: sourceStatuses }).notNull(),
+    retryCount: integer("retry_count").default(0).notNull(),
+    pageCount: integer("page_count"),
+    ocrStatus: text("ocr_status"),
+    extractedTextSummary: text("extracted_text_summary"),
+    errorMessage: text("error_message"),
+    errorCode: text("error_code"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    processingStartedAt: timestamp("processing_started_at", {
+      withTimezone: true,
+    }),
+    readyAt: timestamp("ready_at", { withTimezone: true }),
+    parsedTextStorageKey: text("parsed_text_storage_key"),
+    parsedTextSizeBytes: integer("parsed_text_size_bytes"),
+    idempotencyKey: text("idempotency_key"),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (table) => [
+    check(
+      "sources_status_check",
+      sql`${table.status} in ('queued', 'processing', 'ready', 'failed')`,
+    ),
+    uniqueIndex("sources_owner_url_hash_unique_idx").on(
+      table.ownerUserId,
+      table.urlHash,
+    ),
+    index("sources_journal_id_idx").on(table.journalId),
+    index("sources_checksum_idx").on(table.checksum),
+  ],
+);
 
-// !
-// export const sourceChunks = pgTable(
-//   "source_chunks",
-//   {
-//     id: idColumn("id"),
-//     sourceId: uuid("source_id")
-//       .notNull()
-//       .references(() => sources.id, { onDelete: "cascade" }),
-//     journalId: uuid("journal_id")
-//       .notNull()
-//       .references(() => journals.id, { onDelete: "cascade" }),
-//     chunkIndex: integer("chunk_index").notNull(),
-//     text: text("text").notNull(),
-//     citationMetadata: jsonb("citation_metadata").$type<JsonValue>().notNull(),
-//     embeddingStatus: text("embedding_status", {
-//       enum: embeddingStatuses,
-//     }).notNull(),
-//     createdAt: createdAtColumn(),
-//     updatedAt: updatedAtColumn(),
-//   },
-//   (table) => [
-//     check(
-//       "source_chunks_embedding_status_check",
-//       sql`${table.embeddingStatus} in ('pending', 'ready', 'skipped')`,
-//     ),
-//     unique("source_chunks_source_id_chunk_index_unique").on(
-//       table.sourceId,
-//       table.chunkIndex,
-//     ),
-//     index("source_chunks_journal_id_idx").on(table.journalId),
-//   ],
-// );
+export const sourceChunks = pgTable(
+  "source_chunks",
+  {
+    id: idColumn("id"),
+    sourceId: uuid("source_id")
+      .notNull()
+      .references(() => sources.id, { onDelete: "cascade" }),
+    journalId: uuid("journal_id").references(() => journals.id, {
+      onDelete: "cascade",
+    }),
+    chunkIndex: integer("chunk_index").notNull(),
+    text: text("text").notNull(),
+    citationMetadata: jsonb("citation_metadata").$type<JsonValue>(),
+    embedding: vector("embedding", EMBEDDING_DIM),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (table) => [
+    unique("source_chunks_source_id_chunk_index_unique").on(
+      table.sourceId,
+      table.chunkIndex,
+    ),
+    index("source_chunks_journal_id_idx").on(table.journalId),
+  ],
+);
 
 export const exports = pgTable(
   "exports",
@@ -549,6 +566,57 @@ export const chatSources = pgTable(
   ],
 );
 
+export const researchEvidenceCards = pgTable(
+  "research_evidence_cards",
+  {
+    id: idColumn("id"),
+    ownerUserId: uuid("owner_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    chatThreadId: uuid("chat_thread_id").references(() => chatThreads.id, {
+      onDelete: "set null",
+    }),
+    runId: uuid("run_id").references(() => agentRuns.id, {
+      onDelete: "set null",
+    }),
+    chatSourceId: uuid("chat_source_id").references(() => chatSources.id, {
+      onDelete: "set null",
+    }),
+    sourceUrl: text("source_url").notNull(),
+    sourceTitle: text("source_title"),
+    claimText: text("claim_text").notNull(),
+    quote: text("quote"),
+    importantNumbers: jsonb("important_numbers").$type<JsonValue>(),
+    confidence: text("confidence").notNull(),
+    tier: text("tier").notNull(),
+    qualityScore: integer("quality_score").notNull(),
+    provider: text("provider"),
+    notes: text("notes"),
+    embedding: vector("embedding", EMBEDDING_DIM).notNull(),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (table) => [
+    check(
+      "research_evidence_cards_confidence_check",
+      sql`${table.confidence} in ('high', 'medium', 'low')`,
+    ),
+    check(
+      "research_evidence_cards_tier_check",
+      sql`${table.tier} in ('A', 'B', 'C', 'D')`,
+    ),
+    unique("research_evidence_cards_owner_url_claim_unique").on(
+      table.ownerUserId,
+      table.sourceUrl,
+      table.claimText,
+    ),
+    index("research_evidence_cards_owner_created_idx").on(
+      table.ownerUserId,
+      table.createdAt,
+    ),
+  ],
+);
+
 export const agentEvents = pgTable(
   "agent_events",
   {
@@ -602,8 +670,9 @@ export const table = {
   subscriptions,
   journals,
   journalVersions,
-  // sources,
-  // sourceChunks,
+  sources,
+  sourceChunks,
+  researchEvidenceCards,
   exports,
   chatThreads,
   chatMessages,

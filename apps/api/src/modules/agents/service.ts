@@ -3,6 +3,7 @@ import type { AstraDeps } from "../../agents/deps";
 import { resolveModel } from "../../agents/model";
 import { discoverSkills } from "../../agents/skills";
 import { createAstraAgentResponse } from "../../agents/streams";
+import type { MemoryService } from "../memory/service";
 import type { CreateChatResponseInput } from "./model";
 
 export class AgentsService {
@@ -12,6 +13,8 @@ export class AgentsService {
       .filter(Boolean)
       .map((root) => resolveAppPath(root)),
   );
+
+  constructor(private readonly memoryService?: MemoryService) {}
 
   async createChatResponse(input: CreateChatResponseInput): Promise<Response> {
     const requestId = input.requestId || crypto.randomUUID().replaceAll("-", "");
@@ -41,6 +44,7 @@ export class AgentsService {
         uiMessages: input.messages,
         abortSignal: input.abortSignal,
         onSource: input.onSource,
+        memoryService: this.memoryService,
         headers: {
           "x-astra-request-id": requestId,
         },

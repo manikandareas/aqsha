@@ -28,7 +28,10 @@ export const env = createEnv({
       .optional(),
     OPENAI_REASONING_SUMMARY: z.enum(["auto", "detailed"]).optional(),
     OPENAI_TEXT_VERBOSITY: z.enum(["low", "medium", "high"]).optional(),
-    OPENAI_FORCE_REASONING: z.coerce.boolean().default(false),
+    OPENAI_FORCE_REASONING: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
     ASTRA_SKILLS_ROOTS: z.string().min(1).default("./skills"),
     ASTRA_EXA_API_KEY: z.string().optional(),
     OPENAI_API_KEY: z.string().optional(),
@@ -48,6 +51,19 @@ export const env = createEnv({
       .default("AqshaResearchBot/1.0 (+https://aqsha.app/bot)"),
     ASTRA_PUBMED_API_KEY: z.string().optional(),
     ASTRA_CROSSREF_MAILTO: z.string().optional(),
+    ASTRA_EMBEDDING_MODEL: z.string().min(1).default("text-embedding-3-small"),
+    ASTRA_MEMORY_ENABLED: z
+      .enum(["true", "false"])
+      .default("true")
+      .transform((value) => value === "true"),
+    ASTRA_MEMORY_RECALL_THRESHOLD: z.coerce
+      .number()
+      .min(0)
+      .max(1)
+      .default(0.78),
+    ASTRA_MEMORY_RECALL_LIMIT: z.coerce.number().int().min(1).max(20).default(8),
+    ASTRA_CACHE_MAX_CHARS: z.coerce.number().int().positive().default(25_000),
+    ASTRA_CHUNK_SIZE_CHARS: z.coerce.number().int().positive().default(1_500),
     RUN_INTEGRATION_TESTS: z
       .enum(["true", "false"])
       .default("false")

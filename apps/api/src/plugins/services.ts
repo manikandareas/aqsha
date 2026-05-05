@@ -1,4 +1,6 @@
+import { openai } from "@ai-sdk/openai";
 import { Elysia } from "elysia";
+import { env } from "../config";
 import { database } from "../database/client";
 import { AgentsService } from "../modules/agents/service";
 import { RunCancellationRegistry } from "../modules/chat/cancellation";
@@ -6,6 +8,8 @@ import { DrizzleChatStore } from "../modules/chat/repository";
 import { ChatService } from "../modules/chat/service";
 import { JournalRepository } from "../modules/journals/repository";
 import { JournalService } from "../modules/journals/service";
+import { MemoryRepository } from "../modules/memory/repository";
+import { MemoryService } from "../modules/memory/service";
 import { SessionService } from "../modules/session/service";
 import { UserRepository } from "../modules/users/repository";
 import { UserService } from "../modules/users/service";
@@ -13,13 +17,16 @@ import { UserService } from "../modules/users/service";
 const userRepository = new UserRepository(database);
 const journalRepository = new JournalRepository(database);
 const chatStore = new DrizzleChatStore(database);
+const memoryRepository = new MemoryRepository(database);
 
 const userService = new UserService(userRepository);
 const journalService = new JournalService(journalRepository, userService);
 const chatService = new ChatService(chatStore, userService);
 const chatRunCancellationRegistry = new RunCancellationRegistry();
 const sessionService = new SessionService(userService);
-const agentsService = new AgentsService();
+const embeddingModel = openai.textEmbedding(env.ASTRA_EMBEDDING_MODEL);
+const memoryService = new MemoryService(memoryRepository, embeddingModel);
+const agentsService = new AgentsService(memoryService);
 
 export const servicesPlugin = new Elysia({
   name: "plugin.services",
@@ -28,6 +35,7 @@ export const servicesPlugin = new Elysia({
   chatRunCancellationRegistry,
   chatService,
   journalService,
+  memoryService,
   sessionService,
   userService,
 });

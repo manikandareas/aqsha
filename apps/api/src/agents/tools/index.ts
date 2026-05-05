@@ -1,5 +1,6 @@
 import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import type { LanguageModel, ToolSet } from "ai";
+import type { MemoryService } from "../../modules/memory/service";
 import {
   buildCriticAgent,
   buildPlannerAgent,
@@ -8,6 +9,7 @@ import {
   buildSynthesizerAgent,
 } from "../subagents";
 import type { AgentRuntimeContext } from "../types";
+import { createMemoryRecallTool } from "./memory-recall";
 import { createResearchCriticTool } from "./research-critic";
 import { createResearchPlannerTool } from "./research-planner";
 import { createResearchReaderTool } from "./research-reader";
@@ -20,6 +22,7 @@ export type SubAgentToolsOptions = {
   /**
    * Phase 2: arxiv_search, crossref_search, pubmed_search, rerank_sources,
    * fetch_url, pdf_extract. Searcher and Reader pick the subset they need.
+   * Phase 3 augments this with `memory_recall` when memoryService is provided.
    */
   researchTools: ToolSet;
   defaultModel: LanguageModel;
@@ -28,6 +31,7 @@ export type SubAgentToolsOptions = {
   plannerProviderOptions?: ProviderOptions;
   criticModel?: LanguageModel;
   criticProviderOptions?: ProviderOptions;
+  memoryService?: MemoryService;
 };
 
 export type SubAgentTools = {
@@ -39,6 +43,16 @@ export type SubAgentTools = {
 };
 
 export function createSubAgentTools(opts: SubAgentToolsOptions): SubAgentTools {
+  const augmentedResearchTools: ToolSet = opts.memoryService
+    ? {
+        ...opts.researchTools,
+        memory_recall: createMemoryRecallTool({
+          memoryService: opts.memoryService,
+          ownerUserId: opts.context.deps.userId,
+        }),
+      }
+    : opts.researchTools;
+
   const planner = buildPlannerAgent({
     model: opts.plannerModel ?? opts.defaultModel,
     providerOptions: opts.plannerProviderOptions ?? opts.defaultProviderOptions,
@@ -50,7 +64,7 @@ export function createSubAgentTools(opts: SubAgentToolsOptions): SubAgentTools {
     providerOptions: opts.defaultProviderOptions,
     context: opts.context,
     exaTools: opts.exaTools,
-    researchTools: opts.researchTools,
+    researchTools: augmentedResearchTools,
   });
 
   const reader = buildReaderAgent({
@@ -58,7 +72,7 @@ export function createSubAgentTools(opts: SubAgentToolsOptions): SubAgentTools {
     providerOptions: opts.defaultProviderOptions,
     context: opts.context,
     exaTools: opts.exaTools,
-    researchTools: opts.researchTools,
+    researchTools: augmentedResearchTools,
   });
 
   const synthesizer = buildSynthesizerAgent({
@@ -73,10 +87,21 @@ export function createSubAgentTools(opts: SubAgentToolsOptions): SubAgentTools {
     context: opts.context,
   });
 
+  const ownerUserId = opts.context.deps.userId;
+  const scope = {
+    ownerUserId,
+    chatThreadId: opts.context.deps.conversationId ?? null,
+    runId: opts.context.deps.runId ?? null,
+  };
+
   return {
     research_planner: createResearchPlannerTool({ agent: planner }),
     research_searcher: createResearchSearcherTool({ agent: searcher }),
-    research_reader: createResearchReaderTool({ agent: reader }),
+    research_reader: createResearchReaderTool({
+      agent: reader,
+      memoryService: opts.memoryService,
+      scope,
+    }),
     research_synthesizer: createResearchSynthesizerTool({ agent: synthesizer }),
     research_critic: createResearchCriticTool({ agent: critic }),
   };

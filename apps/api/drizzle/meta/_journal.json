@@ -134,6 +134,13 @@
       "when": 1777890646740,
       "tag": "0018_clammy_tyger_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1777973359732,
+      "tag": "0019_safe_blob",
+      "breakpoints": true
     }
   ]
 }

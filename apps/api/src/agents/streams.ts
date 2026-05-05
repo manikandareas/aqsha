@@ -1,6 +1,7 @@
 import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import { createAgentUIStream, createAgentUIStreamResponse, type LanguageModel, type ToolSet, type UIMessage } from "ai";
 import type { AgentUsedSource } from "../modules/agents/model";
+import type { MemoryService } from "../modules/memory/service";
 import { buildAstraAgent } from "./astra";
 import { phaseAwarePrepareStep, looksLikeResearchRequest } from "./loop-control";
 import { createExaMcpTools } from "./mcp/exa";
@@ -27,6 +28,7 @@ const RESEARCH_DISCOVERY_TOOL_NAMES = new Set([
   "arxiv_search",
   "crossref_search",
   "pubmed_search",
+  "memory_recall",
 ]);
 
 type StreamCommonOptions = {
@@ -35,6 +37,7 @@ type StreamCommonOptions = {
   context: AgentRuntimeContext;
   uiMessages: UIMessage[];
   abortSignal?: AbortSignal;
+  memoryService?: MemoryService;
 };
 
 export async function createAstraAgentUIStream(opts: StreamCommonOptions) {
@@ -46,6 +49,7 @@ export async function createAstraAgentUIStream(opts: StreamCommonOptions) {
       researchTools: external.research,
       defaultModel: opts.model,
       defaultProviderOptions: opts.providerOptions,
+      memoryService: opts.memoryService,
       ...resolveSubAgentRoleModels(opts),
     });
 
@@ -78,6 +82,7 @@ export async function createAstraAgentResponse({
   abortSignal,
   headers,
   onSource,
+  memoryService,
 }: StreamCommonOptions & {
   headers?: HeadersInit;
   onSource?: SourceReporter;
@@ -90,6 +95,7 @@ export async function createAstraAgentResponse({
       researchTools: external.research,
       defaultModel: model,
       defaultProviderOptions: providerOptions,
+      memoryService,
       ...resolveSubAgentRoleModels({ model, providerOptions }),
     });
 

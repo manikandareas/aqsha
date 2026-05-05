@@ -9,7 +9,10 @@ import {
   journals,
   agentEvents,
   agentRuns,
+  researchEvidenceCards,
   sessions,
+  sourceChunks,
+  sources,
   subscriptions,
   users,
   verifications,
@@ -29,6 +32,11 @@ export type ChatMessageRecord = InferSelectModel<typeof chatMessages>;
 export type ChatSourceRecord = InferSelectModel<typeof chatSources>;
 export type AgentRunRecord = InferSelectModel<typeof agentRuns>;
 export type AgentEventRecord = InferSelectModel<typeof agentEvents>;
+export type SourceRecord = InferSelectModel<typeof sources>;
+export type SourceChunkRecord = InferSelectModel<typeof sourceChunks>;
+export type ResearchEvidenceCardRecord = InferSelectModel<
+  typeof researchEvidenceCards
+>;
 
 export type NewUser = InferInsertModel<typeof users>;
 export type NewSession = InferInsertModel<typeof sessions>;
@@ -43,6 +51,11 @@ export type NewChatMessage = InferInsertModel<typeof chatMessages>;
 export type NewChatSource = InferInsertModel<typeof chatSources>;
 export type NewAgentRun = InferInsertModel<typeof agentRuns>;
 export type NewAgentEvent = InferInsertModel<typeof agentEvents>;
+export type NewSource = InferInsertModel<typeof sources>;
+export type NewSourceChunk = InferInsertModel<typeof sourceChunks>;
+export type NewResearchEvidenceCard = InferInsertModel<
+  typeof researchEvidenceCards
+>;
 
 export type CreateJournalInput = Pick<
   NewJournal,

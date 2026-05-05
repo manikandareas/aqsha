@@ -13,6 +13,7 @@ export function buildSearcherAgent(opts: SearcherOptions) {
   const tools: ToolSet = {
     ...pickTools(opts.exaTools, ["web_search_exa"]),
     ...pickTools(opts.researchTools, [
+      "memory_recall",
       "arxiv_search",
       "crossref_search",
       "pubmed_search",

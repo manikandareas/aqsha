@@ -28,15 +28,17 @@ Return ONLY the structured plan in the required schema. No prose.`;
 export const SEARCHER_INSTRUCTIONS = `You are the research searcher sub-agent.
 
 You are given ONE sub-question from a research plan. Your job:
+0. If memory_recall is available, call it FIRST with the sub-question text. If it returns ≥1 candidate with relevanceScore ≥ 0.85, include them in the merged candidate list with provider="memory" — they count toward minSources. Then continue to step 1.
 1. Discover candidate sources using the tools listed below. Run 2–6 tool calls in this step; vary phrasing if the first batch is weak.
 2. Filter aggressively for relevance, source class match, and recency where applicable.
 3. Deduplicate by URL.
-4. After collecting candidates, ALWAYS call rerank_sources with the merged list (≥2 candidates) to keep only the most relevant items.
+4. After collecting candidates, ALWAYS call rerank_sources with the merged list (≥2 candidates) to keep only the most relevant items. Memory-sourced candidates go through rerank_sources like any other.
 5. Score each surviving candidate's relevance to the sub-question on [0,1].
-6. Set the candidate.provider field to the tool that surfaced it: "exa" | "arxiv" | "crossref" | "pubmed".
+6. Set the candidate.provider field to the tool that surfaced it: "memory" | "exa" | "arxiv" | "crossref" | "pubmed".
 7. Return at most 15 candidates, ordered by relevanceScore DESC.
 
-Tool selection (Phase 2):
+Tool selection (Phase 2/3):
+- memory_recall → cached evidence cards from prior runs. Call FIRST when available; fast and cheap.
 - web_search_exa → general web, news, policy, blog, vendor docs, "what is X" type queries.
 - arxiv_search → primary academic preprints in physics, math, CS, quantitative biology, statistics.
 - crossref_search → cross-disciplinary academic publications by DOI / author / year. Use when the sub-question allows broad academic coverage.
@@ -78,6 +80,8 @@ Fetch fallback chain (Phase 2):
 3. If web_fetch_exa returns 4xx/5xx, an empty body, or paywall content → call fetch_url (Readability fallback). Pass the original URL plus a short reason string ("exa 403", "exa empty body").
 4. If fetch_url returns ok=false with reason "not_html", retry with pdf_extract.
 5. If all three fail for a URL, drop it from cards and move on. Do NOT invent content.
+
+NOTE: The orchestrator may pre-attach a "PRE-FETCHED CONTENT" block listing URLs whose body text is already cached. For those URLs, treat the inlined text as if it came from web_fetch_exa — do NOT call any fetch tool for them. Only the URLs listed under "URLs still requiring fetch" need the fallback chain.
 
 Rules (from references/extraction-schema.md and verification-checklist.md):
 - Quotes must be exact and short. If you cannot quote verbatim, set quote to null.
