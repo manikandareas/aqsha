@@ -52,10 +52,18 @@ export type ExtractedPdf = {
   url: string;
   pages: number;
   textContent: string;
+  processor: "mistral_ocr" | "pdf_parse";
   meta: {
     title: string | null;
     author: string | null;
     creationDate: string | null;
+    model?: string | null;
+    usageInfo?: Record<string, unknown> | null;
+    ocr?: Record<string, unknown> | null;
+    fallback?: {
+      from: "mistral_ocr";
+      reason: string;
+    } | null;
   };
   /** True when the upstream response was cut off by `MAX_BYTES`. */
   truncated: boolean;

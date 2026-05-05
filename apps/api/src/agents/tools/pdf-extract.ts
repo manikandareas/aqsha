@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { extractPdf, NotPdfError } from "../external/pdf";
+import type { ExtractedPdf } from "../external/types";
 import { HttpFetchError } from "../external/types";
 
 const inputSchema = z.object({
@@ -17,7 +18,13 @@ const inputSchema = z.object({
 
 const HARD_TEXT_CAP = 25_000;
 
-export function createPdfExtractTool() {
+export type PdfExtractToolOptions = {
+  extractPdf?: typeof extractPdf;
+};
+
+export function createPdfExtractTool(options: PdfExtractToolOptions = {}) {
+  const runExtractPdf = options.extractPdf ?? extractPdf;
+
   return tool({
     description:
       "Extract text from a PDF URL. Use this for arXiv / DOI PDFs, government reports, "
@@ -26,26 +33,39 @@ export function createPdfExtractTool() {
     inputSchema,
     execute: async ({ url, forcePdf }, { abortSignal }) => {
       try {
-        const result = await extractPdf(url, {
+        const result = await runExtractPdf(url, {
           signal: abortSignal,
           maxChars: HARD_TEXT_CAP,
           forcePdf,
         });
-        return {
-          ok: true as const,
-          url: result.url,
-          pages: result.pages,
-          title: result.meta.title,
-          author: result.meta.author,
-          creationDate: result.meta.creationDate,
-          textContent: result.textContent,
-          truncated: result.truncated,
-        };
+        return successResult(result);
       } catch (error) {
         return failureResult(url, error);
       }
     },
   });
+}
+
+function successResult(result: ExtractedPdf) {
+  return {
+    ok: true as const,
+    url: result.url,
+    pages: result.pages,
+    title: result.meta.title,
+    author: result.meta.author,
+    creationDate: result.meta.creationDate,
+    textContent: result.textContent,
+    truncated: result.truncated,
+    processor: result.processor,
+    metadata: {
+      processor: result.processor,
+      model: result.meta.model ?? null,
+      usageInfo: result.meta.usageInfo ?? null,
+      usage_info: result.meta.usageInfo ?? null,
+      ocr: result.meta.ocr ?? null,
+      fallback: result.meta.fallback ?? null,
+    },
+  };
 }
 
 function failureResult(url: string, error: unknown) {

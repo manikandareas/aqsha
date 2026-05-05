@@ -34,6 +34,7 @@ export const env = createEnv({
       .transform((value) => value === "true"),
     ASTRA_SKILLS_ROOTS: z.string().min(1).default("./skills"),
     ASTRA_EXA_API_KEY: z.string().optional(),
+    MISTRAL_API_KEY: z.string().optional(),
     OPENAI_API_KEY: z.string().optional(),
     OPENAI_BASE_URL: z.string().optional(),
     ASTRA_TOTAL_TOKEN_BUDGET: z.coerce.number().int().positive().default(200_000),
