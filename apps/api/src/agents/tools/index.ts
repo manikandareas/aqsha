@@ -15,6 +15,9 @@ import { createResearchPlannerTool } from "./research-planner";
 import { createResearchReaderTool } from "./research-reader";
 import { createResearchSearcherTool } from "./research-searcher";
 import { createResearchSynthesizerTool } from "./research-synthesizer";
+import { createVerifyCitationExistsTool } from "./verify-citation-exists";
+import { createVerifyQuoteInSourceTool } from "./verify-quote-in-source";
+import { createVerifyUrlLiveTool } from "./verify-url-live";
 
 export type SubAgentToolsOptions = {
   context: AgentRuntimeContext;
@@ -81,10 +84,25 @@ export function createSubAgentTools(opts: SubAgentToolsOptions): SubAgentTools {
     context: opts.context,
   });
 
+  const criticTools: ToolSet = {
+    verify_url_live: createVerifyUrlLiveTool(),
+  };
+  if (opts.memoryService) {
+    criticTools.verify_citation_exists = createVerifyCitationExistsTool({
+      memoryService: opts.memoryService,
+      ownerUserId: opts.context.deps.userId,
+    });
+    criticTools.verify_quote_in_source = createVerifyQuoteInSourceTool({
+      memoryService: opts.memoryService,
+      ownerUserId: opts.context.deps.userId,
+    });
+  }
+
   const critic = buildCriticAgent({
     model: opts.criticModel ?? opts.defaultModel,
     providerOptions: opts.criticProviderOptions ?? opts.defaultProviderOptions,
     context: opts.context,
+    externalTools: criticTools,
   });
 
   const ownerUserId = opts.context.deps.userId;

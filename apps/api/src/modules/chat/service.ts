@@ -1,6 +1,7 @@
 import { generateId, type UIMessage } from "ai";
 import type { AuthIdentity } from "../../plugins/auth-identity";
 import type { ChatModel } from "./model";
+import { enrichDeepResearchReports } from "./research-report-enrichment";
 import type {
   AgentRun,
   AppendChatSourceInput,
@@ -269,7 +270,10 @@ export class ChatService {
       return;
     }
 
-    const storedMessages = await this.store.upsertMessages(scope, threadId, messages);
+    const sources = await this.store.getSources(scope, threadId);
+    const enriched = enrichDeepResearchReports(messages, sources);
+
+    const storedMessages = await this.store.upsertMessages(scope, threadId, enriched);
 
     if (!storedMessages) {
       return;

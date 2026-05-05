@@ -135,6 +135,7 @@ export const criticSchema = z.object({
         "numeric_mismatch",
         "conflict_undisclosed",
         "weak_source_for_claim",
+        "dead_link",
       ]),
       detail: z.string().min(1),
       citationId: z.string().nullable(),
@@ -151,3 +152,45 @@ export const bibliographyEntrySchema = z.object({
 });
 
 export type BibliographyEntry = z.infer<typeof bibliographyEntrySchema>;
+
+// Bibliography entry shape for the final structured deep-research report. Adds
+// `chatSourceId` (resolved post-stream by the chat service via URL match) and
+// `accessedAt` so the frontend can render proper hover-cards. Kept separate
+// from `bibliographyEntrySchema` because critic input does not need FK linkage.
+export const deepResearchBibliographyEntrySchema = z.object({
+  id: z.string().min(1),
+  chatSourceId: z.string().nullable(),
+  title: z.string().min(1),
+  url: z.string().min(1),
+  accessedAt: z.string().min(1),
+});
+
+export type DeepResearchBibliographyEntry = z.infer<
+  typeof deepResearchBibliographyEntrySchema
+>;
+
+export const deepResearchReportSchema = z.object({
+  question: z.string().min(1),
+  depth: researchDepthEnum,
+  executiveSummary: z.string().min(1),
+  sections: z
+    .array(
+      z.object({
+        heading: z.string().min(1),
+        paragraphs: z.array(z.string().min(1)).min(1),
+        citations: z.array(z.string()),
+      }),
+    )
+    .min(1),
+  evidenceConflicts: z.array(
+    z.object({
+      topic: z.string().min(1),
+      positions: z.array(z.string()).min(2),
+    }),
+  ),
+  uncertainties: z.array(z.string()),
+  bibliography: z.array(deepResearchBibliographyEntrySchema).min(1),
+  decision: decisionEnum,
+});
+
+export type DeepResearchReport = z.infer<typeof deepResearchReportSchema>;

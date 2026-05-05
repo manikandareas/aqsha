@@ -112,6 +112,32 @@ export class MemoryService {
     return result;
   }
 
+  async embedQuery(query: string): Promise<number[] | null> {
+    if (!query.trim()) return null;
+    const { embedding } = await embed({
+      model: this.embeddingModel,
+      value: query,
+    });
+    return embedding;
+  }
+
+  async findEvidenceCardsByUrl(
+    ownerUserId: string,
+    sourceUrl: string,
+  ): Promise<{ cardId: string; claimText: string; quote: string | null }[]> {
+    if (!env.ASTRA_MEMORY_ENABLED) return [];
+    return this.repo.findCardsByUrl(ownerUserId, sourceUrl);
+  }
+
+  async findSourceChunksForUrl(
+    ownerUserId: string,
+    sourceUrl: string,
+  ): Promise<{ chunkIndex: number; text: string; embedding: number[] | null }[]> {
+    if (!env.ASTRA_MEMORY_ENABLED) return [];
+    const urlHash = urlNormalizeAndHash(sourceUrl);
+    return this.repo.findChunksByUrlHash(ownerUserId, urlHash);
+  }
+
   async persistFetchedBodies(
     steps: ReadonlyArray<unknown>,
     scope: { ownerUserId: string },

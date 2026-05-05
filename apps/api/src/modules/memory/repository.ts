@@ -177,6 +177,69 @@ export class MemoryRepository {
     });
   }
 
+  async findCardsByUrl(
+    ownerUserId: string,
+    sourceUrl: string,
+  ): Promise<{ cardId: string; claimText: string; quote: string | null }[]> {
+    const rows = await this.db
+      .select({
+        id: researchEvidenceCards.id,
+        claimText: researchEvidenceCards.claimText,
+        quote: researchEvidenceCards.quote,
+      })
+      .from(researchEvidenceCards)
+      .where(
+        and(
+          eq(researchEvidenceCards.ownerUserId, ownerUserId),
+          eq(researchEvidenceCards.sourceUrl, sourceUrl),
+        ),
+      );
+
+    return rows.map((row) => ({
+      cardId: row.id,
+      claimText: row.claimText,
+      quote: row.quote,
+    }));
+  }
+
+  async findChunksByUrlHash(
+    ownerUserId: string,
+    urlHash: string,
+  ): Promise<{ chunkIndex: number; text: string; embedding: number[] | null }[]> {
+    const [source] = await this.db
+      .select({ id: sources.id })
+      .from(sources)
+      .where(
+        and(
+          eq(sources.ownerUserId, ownerUserId),
+          eq(sources.urlHash, urlHash),
+          eq(sources.status, "ready"),
+        ),
+      )
+      .limit(1);
+
+    if (!source) return [];
+
+    type Row = {
+      chunk_index: number;
+      text: string;
+      embedding: string | number[] | null;
+    };
+    const result = (await this.db.execute<Row>(sql`
+      SELECT chunk_index, text, embedding::text AS embedding
+      FROM source_chunks
+      WHERE source_id = ${source.id}
+      ORDER BY chunk_index ASC
+    `)) as unknown as Row[];
+
+    const rows = extractRows<Row>(result);
+    return rows.map((row) => ({
+      chunkIndex: Number(row.chunk_index),
+      text: row.text,
+      embedding: parseEmbedding(row.embedding),
+    }));
+  }
+
   async upsertSourceWithChunks(
     input: SourceUpsertInput,
     chunks: ChunkInsert[],
@@ -249,4 +312,24 @@ function extractRows<T>(result: unknown): T[] {
     if (Array.isArray(rows)) return rows as T[];
   }
   return [];
+}
+
+function parseEmbedding(value: string | number[] | null): number[] | null {
+  if (value === null || value === undefined) return null;
+  if (Array.isArray(value)) return value;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) return null;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    const out: number[] = [];
+    for (const item of parsed) {
+      const num = typeof item === "number" ? item : Number(item);
+      if (!Number.isFinite(num)) return null;
+      out.push(num);
+    }
+    return out;
+  } catch {
+    return null;
+  }
 }

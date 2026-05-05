@@ -9,7 +9,7 @@ export function buildCriticAgent(opts: SubAgentOptions) {
     instructions: CRITIC_INSTRUCTIONS,
     output: Output.object({ schema: criticSchema }),
     ...subAgentSettings(opts),
-    stopWhen: subAgentStopWhen(5),
+    stopWhen: subAgentStopWhen(15),
   });
 }
 
