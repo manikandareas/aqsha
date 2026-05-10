@@ -149,3 +149,19 @@
 .shadow-aqsha {
   box-shadow: var(--shadow-soft-card);
 }
+
+.stream-caret {
+  animation: stream-caret 1s steps(2, start) infinite;
+}
+
+@keyframes stream-caret {
+  0%,
+  45% {
+    opacity: 1;
+  }
+
+  46%,
+  100% {
+    opacity: 0;
+  }
+}

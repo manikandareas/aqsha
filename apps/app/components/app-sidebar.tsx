@@ -27,6 +27,10 @@ type ThreadSummary = {
   threadId: string;
   title: string;
   createdAt: number;
+  lastActivityAt: number;
+  lastMessagePreview: string;
+  messageCount: number;
+  status: "idle" | "streaming" | "failed";
 };
 
 export function AppSidebar({
@@ -104,8 +108,14 @@ export function AppSidebar({
                         <span className="truncate text-sm font-semibold">
                           {thread.title}
                         </span>
-                        <span className="text-xs text-muted-foreground">
-                          {formatThreadDate(thread.createdAt)}
+                        <span className="truncate text-xs text-muted-foreground">
+                          {thread.lastMessagePreview ||
+                            formatThreadActivity(thread.lastActivityAt)}
+                        </span>
+                        <span className="text-[11px] font-medium text-muted-foreground">
+                          {thread.status === "streaming"
+                            ? "Astra sedang menulis"
+                            : formatThreadActivity(thread.lastActivityAt)}
                         </span>
                       </span>
                     </Link>
@@ -124,10 +134,23 @@ export function AppSidebar({
   );
 }
 
-function formatThreadDate(value: number) {
+function formatThreadActivity(value: number) {
+  const diff = Date.now() - value;
+  const minute = 60_000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (diff < minute) {
+    return "Baru saja";
+  }
+  if (diff < hour) {
+    return `${Math.floor(diff / minute)} menit lalu`;
+  }
+  if (diff < day) {
+    return `${Math.floor(diff / hour)} jam lalu`;
+  }
   return new Intl.DateTimeFormat("id-ID", {
     day: "2-digit",
     month: "short",
-    year: "numeric",
   }).format(new Date(value));
 }

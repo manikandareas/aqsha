@@ -8,9 +8,13 @@
  * @module
  */
 
+import type * as agent from "../agent.js";
 import type * as astra from "../astra.js";
 import type * as auth from "../auth.js";
 import type * as http from "../http.js";
+import type * as limits from "../limits.js";
+import type * as messages from "../messages.js";
+import type * as rateLimits from "../rateLimits.js";
 import type * as threads from "../threads.js";
 
 import type {
@@ -20,9 +24,13 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  agent: typeof agent;
   astra: typeof astra;
   auth: typeof auth;
   http: typeof http;
+  limits: typeof limits;
+  messages: typeof messages;
+  rateLimits: typeof rateLimits;
   threads: typeof threads;
 }>;
 
@@ -55,4 +63,5 @@ export declare const internal: FilterApi<
 export declare const components: {
   betterAuth: import("@convex-dev/better-auth/_generated/component.js").ComponentApi<"betterAuth">;
   agent: import("@convex-dev/agent/_generated/component.js").ComponentApi<"agent">;
+  rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
 };

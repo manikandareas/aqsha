@@ -11,6 +11,10 @@ const threadSummaryValidator = v.object({
   threadId: v.string(),
   title: v.string(),
   createdAt: v.number(),
+  lastActivityAt: v.number(),
+  lastMessagePreview: v.string(),
+  messageCount: v.number(),
+  status: v.union(v.literal("idle"), v.literal("streaming"), v.literal("failed")),
 });
 
 const threadPageValidator = v.object({
@@ -27,15 +31,27 @@ const threadPageValidator = v.object({
   ),
 });
 
-function summarizeThread(thread: {
+async function getThreadMetadata(ctx: QueryCtx, threadId: string) {
+  return await ctx.db
+    .query("threadMetadata")
+    .withIndex("by_thread", (q) => q.eq("threadId", threadId))
+    .unique();
+}
+
+async function summarizeThread(ctx: QueryCtx, thread: {
   _id: string;
   _creationTime: number;
   title?: string;
 }) {
+  const metadata = await getThreadMetadata(ctx, thread._id);
   return {
     threadId: thread._id,
     title: thread.title ?? "Thread baru",
     createdAt: thread._creationTime,
+    lastActivityAt: metadata?.lastActivityAt ?? thread._creationTime,
+    lastMessagePreview: metadata?.lastMessagePreview ?? "",
+    messageCount: metadata?.messageCount ?? 0,
+    status: metadata?.status ?? "idle",
   };
 }
 
@@ -87,9 +103,13 @@ export const list = query({
       },
     );
 
+    const page = await Promise.all(
+      threads.page.map((thread) => summarizeThread(ctx, thread)),
+    );
+
     return {
       ...threads,
-      page: threads.page.map(summarizeThread),
+      page: page.sort((a, b) => b.lastActivityAt - a.lastActivityAt),
     };
   },
 });
@@ -109,6 +129,6 @@ export const get = query({
       return null;
     }
 
-    return summarizeThread(thread);
+    return await summarizeThread(ctx, thread);
   },
 });

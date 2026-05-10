@@ -1,17 +1,7 @@
-import { Agent, stepCountIs } from "@convex-dev/agent";
-import { openai } from "@ai-sdk/openai";
 import { v } from "convex/values";
-import { components } from "./_generated/api";
 import { action } from "./_generated/server";
+import { astra } from "./agent";
 import { authComponent } from "./auth";
-
-const astra = new Agent(components.agent, {
-  name: "Astra",
-  languageModel: openai.chat("gpt-4o-mini"),
-  instructions:
-    "You are Astra, Aqsha's concise product research assistant. Answer directly and keep smoke-test responses short.",
-  stopWhen: stepCountIs(3),
-});
 
 export const sendPrompt = action({
   args: {
