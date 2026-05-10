@@ -1,0 +1,1297 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aqsha — Prototype Preview</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@600;700;800&family=JetBrains+Mono:wght@400;500&family=Caveat:wght@500;600&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'ui-sans-serif', 'system-ui'],
+              display: ['Nunito', 'Inter', 'ui-rounded', 'system-ui'],
+              mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+              hand: ['Caveat', 'cursive'],
+            },
+            colors: {
+              paper: {
+                bg: '#fff7f0',
+                raised: '#fffdf8',
+                mist: '#f4f1ea',
+                border: '#e5e7eb',
+                input: '#d1d5db',
+              },
+              ink: {
+                DEFAULT: '#1a1f2b',
+                soft: '#3f4756',
+                muted: '#4b5563',
+              },
+              sky: {
+                DEFAULT: '#4a90f7',
+                active: '#2f73d6',
+                soft: '#eaf4ff',
+              },
+              mint: {
+                DEFAULT: '#2ecc9a',
+                active: '#22a87e',
+                soft: '#e9f8f2',
+              },
+              coral: {
+                DEFAULT: '#ff6b6b',
+                active: '#eb5353',
+                soft: '#ffecec',
+              },
+              lemon: {
+                DEFAULT: '#ffd84d',
+                soft: '#fff6cc',
+              },
+              lavender: {
+                DEFAULT: '#bd86ff',
+                soft: '#f1e8ff',
+              },
+              charcoal: '#181818',
+            },
+            boxShadow: {
+              'soft-card': '0 1px 2px rgba(26,31,43,0.04), 0 6px 18px rgba(26,31,43,0.06)',
+              'deep-card': '0 8px 30px rgba(26,31,43,0.10), 0 2px 6px rgba(26,31,43,0.04)',
+            },
+            borderRadius: {
+              xs: '6px',
+              sm: '8px',
+              md: '10px',
+              lg: '14px',
+              xl: '18px',
+              '2xl': '24px',
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      html,
+      body {
+        background: #fff7f0;
+        color: #1a1f2b;
+      }
+      * {
+        font-feature-settings: 'cv11', 'ss01';
+      }
+      .scroll-thin::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      .scroll-thin::-webkit-scrollbar-thumb {
+        background: #e5e7eb;
+        border-radius: 8px;
+      }
+      .scroll-thin::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .stream-caret::after {
+        content: '▍';
+        margin-left: 2px;
+        color: #4a90f7;
+        animation: blink 1s steps(1) infinite;
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0;
+        }
+      }
+      @keyframes shimmer {
+        0% { background-position: -400px 0; }
+        100% { background-position: 400px 0; }
+      }
+      .shimmer-text {
+        background: linear-gradient(90deg, #4b5563 0%, #1a1f2b 50%, #4b5563 100%);
+        background-size: 400px 100%;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        animation: shimmer 1.6s linear infinite;
+      }
+      details > summary {
+        list-style: none;
+        cursor: pointer;
+      }
+      details > summary::-webkit-details-marker {
+        display: none;
+      }
+      .page { display: none; }
+      .page.active { display: block; }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 28px;
+        padding: 4px 10px;
+        border-radius: 9999px;
+        font-size: 12px;
+        font-weight: 650;
+        line-height: 1.33;
+        border: 1px solid transparent;
+      }
+      .chip-sky { background: #eaf4ff; color: #2f73d6; border-color: #cfe1fb; }
+      .chip-mint { background: #e9f8f2; color: #22a87e; border-color: #c6ebd9; }
+      .chip-lemon { background: #fff6cc; color: #8a6d00; border-color: #f2d97a; }
+      .chip-coral { background: #ffecec; color: #c0392b; border-color: #f6c7c7; }
+      .chip-lavender { background: #f1e8ff; color: #7a4fd1; border-color: #dcc9f7; }
+      .chip-ink { background: #f1f3f5; color: #1a1f2b; border-color: #e5e7eb; }
+      .dot { width: 6px; height: 6px; border-radius: 9999px; display: inline-block; }
+      .kbd {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        border: 1px solid #e5e7eb;
+        background: #fffdf8;
+        color: #3f4756;
+      }
+      .citation {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        border-radius: 6px;
+        background: #e9f8f2;
+        color: #22a87e;
+        border: 1px solid #c6ebd9;
+        font-size: 11px;
+        font-weight: 700;
+        vertical-align: text-top;
+        margin: 0 1px;
+        cursor: pointer;
+      }
+      .citation:hover { background: #d7f1e6; }
+      .nav-btn {
+        display: block;
+        width: 100%;
+        text-align: left;
+        padding: 8px 10px;
+        border-radius: 8px;
+        color: #3f4756;
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .nav-btn:hover { background: #fff7f0; color: #1a1f2b; }
+      .nav-btn.active {
+        background: #eaf4ff;
+        color: #2f73d6;
+        font-weight: 650;
+      }
+      .nav-btn.active::before {
+        content: '';
+        display: inline-block;
+        width: 3px;
+        height: 14px;
+        background: #4a90f7;
+        border-radius: 3px;
+        vertical-align: -2px;
+        margin-right: 8px;
+        margin-left: -6px;
+      }
+      .tab-btn {
+        padding: 8px 14px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #4b5563;
+        border-bottom: 2px solid transparent;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .tab-btn:hover { color: #1a1f2b; }
+      .tab-btn.active { color: #2f73d6; border-color: #4a90f7; }
+      .tab-count {
+        background: #f1f3f5;
+        color: #4b5563;
+        font-size: 11px;
+        font-weight: 650;
+        padding: 1px 7px;
+        border-radius: 9999px;
+      }
+      .tab-btn.active .tab-count { background: #eaf4ff; color: #2f73d6; }
+      .press:active { transform: scale(0.985); }
+      .soft-focus:focus { outline: none; box-shadow: 0 0 0 3px rgba(74,144,247,0.25); border-color: #4a90f7; }
+      .mode-switch {
+        display: inline-flex;
+        background: #f4f1ea;
+        border-radius: 9999px;
+        padding: 3px;
+        border: 1px solid #e5e7eb;
+      }
+      .mode-switch button {
+        padding: 5px 14px;
+        border-radius: 9999px;
+        font-size: 12.5px;
+        font-weight: 600;
+        color: #4b5563;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .mode-switch button.active {
+        background: #fffdf8;
+        color: #1a1f2b;
+        box-shadow: 0 1px 2px rgba(26,31,43,0.08);
+      }
+      .mode-switch button.active.deep { color: #7a4fd1; }
+      .prose-aqsha p { line-height: 1.6; }
+      .prose-aqsha h2 { font-family: Nunito, Inter, sans-serif; font-weight: 700; }
+      .link-line {
+        position: relative;
+      }
+      .link-line::before {
+        content: '';
+        position: absolute;
+        left: -18px;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: linear-gradient(to bottom, transparent, #c6ebd9 15%, #c6ebd9 85%, transparent);
+      }
+
+      /* ==================== Dark mode (DESIGN.md §2) ==================== */
+      html.dark body { background: #181818; color: #f4f1ea; }
+
+      html.dark .bg-paper-bg { background-color: #181818 !important; }
+      html.dark .bg-paper-raised { background-color: #202020 !important; }
+      html.dark .bg-paper-mist { background-color: #242424 !important; }
+      html.dark .border-paper-border { border-color: #2d2d2d !important; }
+      html.dark .border-paper-input { border-color: #3a3a3a !important; }
+      html.dark .text-ink { color: #f4f1ea !important; }
+      html.dark .text-ink-soft { color: #d4d4d4 !important; }
+      html.dark .text-ink-muted { color: #a3a3a3 !important; }
+      html.dark .divide-paper-border > :not([hidden]) ~ :not([hidden]) { border-color: #2d2d2d !important; }
+
+      html.dark .bg-paper-bg\/90 { background-color: rgba(24,24,24,0.92) !important; }
+      html.dark .bg-paper-raised\/70 { background-color: rgba(32,32,32,0.75) !important; }
+
+      html.dark .chip-sky { background: rgba(74,144,247,0.16); color: #8fb8ff; border-color: rgba(74,144,247,0.32); }
+      html.dark .chip-mint { background: rgba(46,204,154,0.14); color: #6ee3bf; border-color: rgba(46,204,154,0.32); }
+      html.dark .chip-lemon { background: rgba(255,216,77,0.14); color: #ffe082; border-color: rgba(255,216,77,0.32); }
+      html.dark .chip-coral { background: rgba(255,107,107,0.14); color: #ff8e8e; border-color: rgba(255,107,107,0.32); }
+      html.dark .chip-lavender { background: rgba(176,166,255,0.14); color: #b0a6ff; border-color: rgba(176,166,255,0.32); }
+      html.dark .chip-ink { background: #242424; color: #f4f1ea; border-color: #2d2d2d; }
+
+      html.dark .bg-sky-soft { background-color: rgba(74,144,247,0.16) !important; }
+      html.dark .text-sky-active { color: #8fb8ff !important; }
+      html.dark .bg-mint-soft { background-color: rgba(46,204,154,0.15) !important; }
+      html.dark .text-mint-active { color: #6ee3bf !important; }
+      html.dark .bg-coral-soft { background-color: rgba(255,107,107,0.14) !important; }
+      html.dark .text-coral-active { color: #ff8e8e !important; }
+      html.dark .bg-lemon-soft { background-color: rgba(255,216,77,0.1) !important; }
+      html.dark .border-lemon { border-color: rgba(255,216,77,0.38) !important; }
+      html.dark .border-coral-soft { border-color: rgba(255,107,107,0.32) !important; }
+      html.dark .hover\:bg-coral-soft:hover { background-color: rgba(255,107,107,0.12) !important; }
+
+      html.dark .citation { background: rgba(46,204,154,0.16); color: #6ee3bf; border-color: rgba(46,204,154,0.36); }
+      html.dark .citation:hover { background: rgba(46,204,154,0.24); }
+
+      html.dark .kbd { background: #242424; border-color: #2d2d2d; color: #d4d4d4; }
+
+      html.dark .nav-btn { color: #d4d4d4; }
+      html.dark .nav-btn:hover { background: #242424; color: #f4f1ea; }
+      html.dark .nav-btn.active { background: rgba(74,144,247,0.16); color: #8fb8ff; }
+
+      html.dark .mode-switch { background: #242424; border-color: #2d2d2d; }
+      html.dark .mode-switch button { color: #a3a3a3; }
+      html.dark .mode-switch button.active { background: #181818; color: #f4f1ea; box-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+      html.dark .mode-switch button.active.deep { color: #b0a6ff; }
+
+      html.dark .tab-btn { color: #a3a3a3; }
+      html.dark .tab-btn:hover { color: #f4f1ea; }
+      html.dark .tab-btn.active { color: #8fb8ff; border-color: #4a90f7; }
+      html.dark .tab-count { background: #242424; color: #a3a3a3; }
+      html.dark .tab-btn.active .tab-count { background: rgba(74,144,247,0.22); color: #8fb8ff; }
+
+      html.dark .placeholder\:text-ink-muted::placeholder { color: #737373; }
+      html.dark textarea, html.dark input { color: #f4f1ea; caret-color: #4a90f7; }
+      html.dark input[type="checkbox"] { accent-color: #4a90f7; }
+
+      html.dark .hover\:bg-paper-mist:hover { background-color: #242424 !important; }
+      html.dark .hover\:bg-paper-bg:hover { background-color: #1f1f1f !important; }
+
+      html.dark .shadow-soft-card { box-shadow: 0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(0,0,0,0.28); }
+      html.dark .shadow-deep-card { box-shadow: 0 8px 30px rgba(0,0,0,0.45), 0 2px 6px rgba(0,0,0,0.3); }
+
+      html.dark .shimmer-text {
+        background: linear-gradient(90deg, #737373 0%, #f4f1ea 50%, #737373 100%);
+        background-size: 400px 100%;
+        -webkit-background-clip: text;
+        background-clip: text;
+      }
+
+      html.dark .stream-caret::after { color: #8fb8ff; }
+
+      /* Toggle button state */
+      .theme-toggle .sun { display: inline; }
+      .theme-toggle .moon { display: none; }
+      html.dark .theme-toggle .sun { display: none; }
+      html.dark .theme-toggle .moon { display: inline; }
+    </style>
+  </head>
+  <body class="font-sans antialiased">
+    <div class="flex min-h-screen">
+      <!-- Prototype navigator -->
+      <aside class="hidden lg:flex w-72 flex-col border-r border-paper-border bg-paper-raised">
+        <div class="px-5 py-5 border-b border-paper-border">
+          <div class="flex items-center gap-2.5">
+            <div class="w-9 h-9 rounded-lg bg-sky text-white flex items-center justify-center font-display font-bold text-lg">
+              A
+            </div>
+            <div>
+              <div class="text-sm font-display font-bold text-ink">Aqsha Prototype</div>
+              <div class="text-[11px] text-ink-muted">PRD preview · research chatbot</div>
+            </div>
+          </div>
+        </div>
+
+        <nav class="flex-1 overflow-y-auto scroll-thin px-3 py-4">
+          <div class="px-2 text-[11px] font-bold uppercase tracking-wider text-ink-muted mb-2">Auth</div>
+          <button data-nav="signin" class="nav-btn">Sign in</button>
+          <button data-nav="signup" class="nav-btn">Sign up</button>
+
+          <div class="px-2 mt-5 text-[11px] font-bold uppercase tracking-wider text-ink-muted mb-2">Chat</div>
+          <button data-nav="empty" class="nav-btn">Empty state</button>
+          <button data-nav="normal" class="nav-btn">Normal · streaming</button>
+          <button data-nav="normal-tools" class="nav-btn">Normal · tools jalan</button>
+          <button data-nav="deep-thinking" class="nav-btn">Deep · sedang berjalan</button>
+          <button data-nav="deep-done" class="nav-btn">Deep · selesai</button>
+          <button data-nav="retry-inline" class="nav-btn">Retry inline</button>
+
+          <div class="px-2 mt-5 text-[11px] font-bold uppercase tracking-wider text-ink-muted mb-2">Panel tab</div>
+          <button data-nav="panel-sources" class="nav-btn">Sources tab</button>
+          <button data-nav="panel-artifacts" class="nav-btn">Artifacts tab</button>
+          <button data-nav="artifact-reader" class="nav-btn">Artifact reader</button>
+          <button data-nav="source-detail" class="nav-btn">Source detail</button>
+
+          <div class="px-2 mt-5 text-[11px] font-bold uppercase tracking-wider text-ink-muted mb-2">Library</div>
+          <button data-nav="corpus" class="nav-btn">Source Library</button>
+
+          <div class="px-2 mt-5 text-[11px] font-bold uppercase tracking-wider text-ink-muted mb-2">Feedback</div>
+          <button data-nav="ratelimit" class="nav-btn">Perlu istirahat sebentar</button>
+          <button data-nav="ownership" class="nav-btn">Akses ditolak</button>
+        </nav>
+
+        <div class="px-4 py-3 border-t border-paper-border text-[11px] text-ink-muted leading-relaxed">
+          Prototipe statis untuk validasi PRD. Tidak ada data nyata.
+        </div>
+      </aside>
+
+      <main class="flex-1 min-w-0">
+        <div class="sticky top-0 z-20 bg-paper-bg/90 backdrop-blur border-b border-paper-border">
+          <div class="flex items-center justify-between px-6 h-12">
+            <div class="flex items-center gap-2 text-xs text-ink-muted">
+              <span id="breadcrumb" class="font-semibold text-ink">Sign in</span>
+              <span>·</span>
+              <span id="breadcrumb-hint">User story 1</span>
+            </div>
+            <div class="flex items-center gap-2 text-[11px] text-ink-muted">
+              <button id="theme-toggle" class="theme-toggle press h-8 w-8 rounded-sm border border-paper-border bg-paper-raised hover:bg-paper-mist flex items-center justify-center" title="Toggle dark mode" aria-label="Toggle dark mode">
+                <svg class="sun w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path stroke-linecap="round" d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+                <svg class="moon w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/></svg>
+              </button>
+              <span class="kbd">⌘</span><span class="kbd">K</span>
+              <span>switch pages</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sign in -->
+        <section id="page-signin" class="page">
+          <div class="min-h-[calc(100vh-3rem)] grid lg:grid-cols-2">
+            <div class="hidden lg:flex flex-col justify-between bg-paper-mist px-12 py-14 relative overflow-hidden">
+              <div>
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-lg bg-sky text-white flex items-center justify-center font-display font-bold text-xl">A</div>
+                  <div class="text-lg font-display font-bold text-ink">Aqsha</div>
+                </div>
+                <div class="mt-16 max-w-md">
+                  <h1 class="font-display font-bold text-5xl leading-[1.02] text-ink">Pikiran yang berserakan, jadi kaitan yang rapi.</h1>
+                  <p class="mt-6 text-ink-soft text-base leading-relaxed">
+                    Satu chat riset pribadi. Chat biasa untuk jawaban cepat, mode Deep untuk laporan dengan sitasi — Aqsha ingat sumbermu dan tidak kehilangan progres saat kamu refresh.
+                  </p>
+                </div>
+              </div>
+              <!-- brandkit-style cluster -->
+              <div class="relative">
+                <div class="flex flex-wrap gap-2 max-w-sm">
+                  <span class="chip chip-mint">✓ Source added</span>
+                  <span class="chip chip-lemon">Review note</span>
+                  <span class="chip chip-sky">Draft idea</span>
+                  <span class="chip chip-coral">Needs source</span>
+                  <span class="chip chip-lavender">Review</span>
+                </div>
+                <div class="mt-3 font-hand text-2xl text-ink-soft">satu akun · satu Source Library</div>
+              </div>
+            </div>
+            <div class="flex items-center justify-center px-6 py-14">
+              <div class="w-full max-w-md">
+                <div class="font-display font-bold text-4xl text-ink">Masuk ke Aqsha</div>
+                <p class="mt-2 text-sm text-ink-muted">Thread riset kamu privat. Hanya kamu yang bisa membukanya.</p>
+
+                <div class="mt-8 space-y-3">
+                  <button class="press w-full h-11 rounded-sm border border-paper-border bg-paper-raised text-sm font-semibold text-ink hover:bg-paper-mist flex items-center justify-center gap-3">
+                    <svg class="w-4 h-4" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.9 32.4 29.4 35.5 24 35.5c-6.4 0-11.5-5.1-11.5-11.5S17.6 12.5 24 12.5c2.9 0 5.5 1.1 7.5 2.8l5.7-5.7C33.6 6.3 29 4.5 24 4.5 13.2 4.5 4.5 13.2 4.5 24S13.2 43.5 24 43.5c10.8 0 19.5-8.7 19.5-19.5 0-1.3-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 12.5 24 12.5c2.9 0 5.5 1.1 7.5 2.8l5.7-5.7C33.6 6.3 29 4.5 24 4.5 16.3 4.5 9.7 8.8 6.3 14.7z"/><path fill="#4CAF50" d="M24 43.5c5 0 9.5-1.7 13-4.7l-6-5.1c-1.8 1.2-4.1 2-7 2-5.4 0-9.9-3.1-11.3-7.5l-6.6 5.1C9.5 39 16.3 43.5 24 43.5z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.3 4.1-4.3 5.5l6 5.1c-.4.4 7-5.1 7-14.1 0-1.3-.1-2.3-.4-4z"/></svg>
+                    Lanjut dengan Google
+                  </button>
+                  <button class="press w-full h-11 rounded-sm border border-paper-border bg-paper-raised text-sm font-semibold text-ink hover:bg-paper-mist flex items-center justify-center gap-3">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.73.5.5 5.73.5 12c0 5.08 3.29 9.39 7.86 10.92.58.1.79-.25.79-.56v-2.17c-3.2.7-3.87-1.37-3.87-1.37-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.47.11-3.07 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.8 0c2.21-1.49 3.18-1.18 3.18-1.18.63 1.6.23 2.78.12 3.07.74.81 1.19 1.84 1.19 3.1 0 4.42-2.69 5.39-5.26 5.68.41.36.77 1.05.77 2.12v3.14c0 .31.21.67.8.56A11.51 11.51 0 0 0 23.5 12C23.5 5.73 18.27.5 12 .5z"/></svg>
+                    Lanjut dengan GitHub
+                  </button>
+                </div>
+
+                <div class="my-6 flex items-center gap-3 text-[11px] text-ink-muted">
+                  <div class="flex-1 h-px bg-paper-border"></div>
+                  ATAU EMAIL
+                  <div class="flex-1 h-px bg-paper-border"></div>
+                </div>
+
+                <form class="space-y-3" onsubmit="return false">
+                  <label class="block">
+                    <div class="text-xs font-semibold text-ink-soft mb-1.5">Email</div>
+                    <input type="email" placeholder="kamu@riset.id" class="soft-focus w-full h-11 rounded-sm border border-paper-input bg-paper-raised px-3 text-sm" />
+                  </label>
+                  <label class="block">
+                    <div class="flex items-center justify-between mb-1.5">
+                      <div class="text-xs font-semibold text-ink-soft">Password</div>
+                      <a href="#" class="text-xs text-sky hover:text-sky-active font-semibold">Lupa password</a>
+                    </div>
+                    <input type="password" placeholder="••••••••" class="soft-focus w-full h-11 rounded-sm border border-paper-input bg-paper-raised px-3 text-sm" />
+                  </label>
+                  <button class="press w-full h-11 rounded-sm bg-sky text-white text-sm font-semibold hover:bg-sky-active">Masuk</button>
+                </form>
+
+                <div class="mt-6 text-xs text-ink-muted text-center">
+                  Belum punya akun? <button data-nav="signup" class="text-sky hover:text-sky-active font-semibold">Buat akun</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Sign up -->
+        <section id="page-signup" class="page">
+          <div class="min-h-[calc(100vh-3rem)] flex items-center justify-center px-6 py-14">
+            <div class="w-full max-w-md">
+              <div class="flex items-center gap-2.5 mb-8">
+                <div class="w-9 h-9 rounded-lg bg-sky text-white flex items-center justify-center font-display font-bold text-lg">A</div>
+                <div class="font-display font-bold text-ink">Aqsha</div>
+              </div>
+              <div class="font-display font-bold text-4xl text-ink">Buat akun riset</div>
+              <p class="mt-2 text-sm text-ink-muted">Satu akun, satu Source Library. Tidak ada tim, tidak ada workspace.</p>
+
+              <form class="mt-8 space-y-3" onsubmit="return false">
+                <label class="block">
+                  <div class="text-xs font-semibold text-ink-soft mb-1.5">Nama</div>
+                  <input type="text" placeholder="Vito" class="soft-focus w-full h-11 rounded-sm border border-paper-input bg-paper-raised px-3 text-sm" />
+                </label>
+                <label class="block">
+                  <div class="text-xs font-semibold text-ink-soft mb-1.5">Email</div>
+                  <input type="email" placeholder="kamu@riset.id" class="soft-focus w-full h-11 rounded-sm border border-paper-input bg-paper-raised px-3 text-sm" />
+                </label>
+                <label class="block">
+                  <div class="text-xs font-semibold text-ink-soft mb-1.5">Password</div>
+                  <input type="password" placeholder="Minimum 8 karakter" class="soft-focus w-full h-11 rounded-sm border border-paper-input bg-paper-raised px-3 text-sm" />
+                </label>
+                <label class="flex items-start gap-2 text-xs text-ink-soft pt-1">
+                  <input type="checkbox" class="mt-0.5 accent-sky" />
+                  <span>Saya paham Aqsha menyimpan thread dan sources saya sebagai data pribadi.</span>
+                </label>
+                <button class="press w-full h-11 rounded-sm bg-sky text-white text-sm font-semibold hover:bg-sky-active">Daftar</button>
+              </form>
+
+              <div class="mt-6 text-xs text-ink-muted text-center">
+                Sudah punya akun? <button data-nav="signin" class="text-sky hover:text-sky-active font-semibold">Masuk</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- App shell pages -->
+        <section id="page-empty" class="page"><div data-shell="empty"></div></section>
+        <section id="page-normal" class="page"><div data-shell="normal"></div></section>
+        <section id="page-normal-tools" class="page"><div data-shell="normal-tools"></div></section>
+        <section id="page-deep-thinking" class="page"><div data-shell="deep-thinking"></div></section>
+        <section id="page-deep-done" class="page"><div data-shell="deep-done"></div></section>
+        <section id="page-retry-inline" class="page"><div data-shell="retry-inline"></div></section>
+        <section id="page-panel-sources" class="page"><div data-shell="panel-sources"></div></section>
+        <section id="page-panel-artifacts" class="page"><div data-shell="panel-artifacts"></div></section>
+        <section id="page-artifact-reader" class="page"><div data-shell="artifact-reader"></div></section>
+        <section id="page-source-detail" class="page"><div data-shell="source-detail"></div></section>
+        <section id="page-corpus" class="page"><div data-shell="corpus"></div></section>
+        <section id="page-ratelimit" class="page"><div data-shell="ratelimit"></div></section>
+        <section id="page-ownership" class="page"><div data-shell="ownership"></div></section>
+      </main>
+    </div>
+
+    <script>
+      // ---- dummy data ----
+      const threadsDummy = [
+        { id: 't1', title: 'Prompt caching & cost GPT-4o-mini', time: 'hari ini', badge: null },
+        { id: 't2', title: 'RAG naive vs hybrid BM25+embeddings', time: 'kemarin', badge: 'sources' },
+        { id: 't3', title: 'OJK crypto custody 2025', time: '3 hari lalu', badge: 'report' },
+        { id: 't4', title: 'OCR state-of-the-art dokumen Arab', time: 'minggu lalu' },
+        { id: 't5', title: 'Bias publication meta-analisis', time: 'minggu lalu' },
+      ];
+
+      // which page has which active thread
+      const activeThreadByPage = {
+        empty: null,
+        normal: 't1',
+        'normal-tools': 't1',
+        'deep-thinking': 't3',
+        'deep-done': 't3',
+        'retry-inline': 't3',
+        'panel-sources': 't2',
+        'panel-artifacts': 't3',
+        'artifact-reader': 't3',
+        'source-detail': 't2',
+        corpus: null,
+        ratelimit: 't1',
+        ownership: null,
+      };
+
+      function shouldShowPanel(kind) {
+        return ['panel-sources', 'panel-artifacts', 'artifact-reader', 'source-detail', 'deep-done', 'corpus'].includes(kind);
+      }
+
+      function defaultPanelTab(kind) {
+        if (kind === 'panel-sources' || kind === 'source-detail') return 'sources';
+        if (kind === 'panel-artifacts' || kind === 'artifact-reader' || kind === 'deep-done') return 'artifacts';
+        if (kind === 'corpus') return 'library';
+        return 'sources';
+      }
+
+      // ---- shell ----
+      function renderShell(kind) {
+        const activeId = activeThreadByPage[kind];
+        const threadRows = threadsDummy
+          .map((t) => {
+            const active = t.id === activeId;
+            const badge = t.badge === 'sources' ? '<span class="chip chip-mint !min-h-0 !py-0.5 !px-2 !text-[10px]">linked</span>' : t.badge === 'report' ? '<span class="chip chip-sky !min-h-0 !py-0.5 !px-2 !text-[10px]">laporan</span>' : '';
+            return `
+              <button class="w-full text-left px-2.5 py-2 rounded-sm ${active ? 'bg-sky-soft' : 'hover:bg-paper-bg'}">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="text-[13px] ${active ? 'text-sky-active font-semibold' : 'text-ink'} truncate">${t.title}</div>
+                  ${badge}
+                </div>
+                <div class="text-[11px] ${active ? 'text-sky-active/70' : 'text-ink-muted'} mt-0.5">${t.time}</div>
+              </button>`;
+          })
+          .join('');
+
+        const showPanel = shouldShowPanel(kind);
+        const cols = showPanel ? 'grid-cols-[288px_1fr_400px]' : 'grid-cols-[288px_1fr]';
+
+        return `
+          <div class="grid ${cols} h-[calc(100vh-3rem)]">
+            <aside class="border-r border-paper-border bg-paper-raised flex flex-col min-w-0">
+              <div class="p-3 border-b border-paper-border flex items-center gap-2">
+                <button class="press flex-1 h-9 rounded-sm bg-sky text-white text-[13px] font-semibold hover:bg-sky-active flex items-center justify-center gap-2">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+                  Research Thread baru
+                </button>
+                <button data-nav="corpus" class="press w-9 h-9 rounded-sm border border-paper-border bg-paper-raised hover:bg-paper-mist text-ink-soft flex items-center justify-center" title="Source Library">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14z"/><path stroke-linecap="round" d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>
+                </button>
+              </div>
+              <div class="px-3 pt-3 pb-1 text-[11px] text-ink-muted font-bold tracking-wider uppercase">Research Thread</div>
+              <div class="flex-1 overflow-y-auto scroll-thin px-2 space-y-0.5">${threadRows}</div>
+              <div class="border-t border-paper-border p-3">
+                <div class="flex items-center gap-2">
+                  <div class="w-8 h-8 rounded-full bg-mint-soft text-mint-active font-bold text-xs flex items-center justify-center">V</div>
+                  <div class="min-w-0">
+                    <div class="text-xs font-semibold text-ink truncate">Vito A. Manik</div>
+                    <div class="text-[11px] text-ink-muted truncate">vito@aqsha.id</div>
+                  </div>
+                </div>
+              </div>
+            </aside>
+
+            <section class="flex flex-col min-w-0 bg-paper-bg">
+              ${renderHeader(kind)}
+              <div class="flex-1 overflow-y-auto scroll-thin">
+                <div class="max-w-3xl mx-auto px-6 py-6">${renderMessages(kind)}</div>
+              </div>
+              ${renderComposer(kind)}
+            </section>
+
+            ${showPanel ? `<aside class="border-l border-paper-border bg-paper-raised flex flex-col min-w-0">${renderPanel(kind)}</aside>` : ''}
+          </div>
+        `;
+      }
+
+      function renderHeader(kind) {
+        const titles = {
+          empty: { title: 'Research Thread baru', sub: 'Mulai pertanyaan atau tambahkan sumber ke Source Library.' },
+          normal: { title: 'Prompt caching & cost GPT-4o-mini', sub: 'Normal · jawaban ringkas' },
+          'normal-tools': { title: 'Prompt caching & cost GPT-4o-mini', sub: 'Normal · menggunakan web search' },
+          'deep-thinking': { title: 'OJK crypto custody 2025', sub: 'Deep mode aktif' },
+          'deep-done': { title: 'OJK crypto custody 2025', sub: 'Deep · laporan siap dibaca' },
+          'retry-inline': { title: 'OJK crypto custody 2025', sub: 'Deep mode aktif' },
+          'panel-sources': { title: 'RAG naive vs hybrid BM25+embeddings', sub: 'Normal · sumber tersedia' },
+          'panel-artifacts': { title: 'OJK crypto custody 2025', sub: 'Deep · laporan siap dibaca' },
+          'artifact-reader': { title: 'OJK crypto custody 2025', sub: 'Deep · laporan siap dibaca' },
+          'source-detail': { title: 'RAG naive vs hybrid BM25+embeddings', sub: 'Sumber dipilih' },
+          corpus: { title: 'Source Library', sub: 'Kumpulkan referensi yang Aqsha ingat di antar thread' },
+          ratelimit: { title: 'Prompt caching & cost GPT-4o-mini', sub: 'Perlu istirahat sebentar' },
+          ownership: { title: 'Akses ditolak', sub: 'Resource bukan milik akun ini' },
+        };
+        const t = titles[kind] || titles.empty;
+        const showShareHint = ['deep-done', 'artifact-reader', 'panel-artifacts'].includes(kind);
+        return `
+          <div class="border-b border-paper-border bg-paper-raised/70 backdrop-blur px-6 h-14 flex items-center justify-between gap-4">
+            <div class="min-w-0 flex items-center gap-3">
+              <div>
+                <div class="text-[14px] font-display font-bold text-ink truncate">${t.title}</div>
+                <div class="text-[11.5px] text-ink-muted truncate">${t.sub}</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 text-ink-soft">
+              ${showShareHint ? '<button class="press h-8 px-3 rounded-sm border border-paper-border bg-paper-raised text-xs font-semibold hover:bg-paper-mist flex items-center gap-1.5"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>Export</button>' : ''}
+              <button class="press h-8 w-8 rounded-sm border border-paper-border bg-paper-raised hover:bg-paper-mist flex items-center justify-center">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+              </button>
+            </div>
+          </div>
+        `;
+      }
+
+      // ---- messages ----
+      function msgUser(text) {
+        return `
+          <div class="flex gap-3 mb-6 justify-end">
+            <div class="flex-1 min-w-0 max-w-[80%]">
+              <div class="bg-paper-raised border border-paper-border rounded-lg rounded-tr-sm px-4 py-3 text-[14.5px] text-ink leading-relaxed ml-auto">${text}</div>
+              <div class="text-[11px] text-ink-muted mt-1 text-right">Kamu</div>
+            </div>
+            <div class="w-8 h-8 shrink-0 rounded-full bg-mint-soft text-mint-active text-xs flex items-center justify-center font-bold">V</div>
+          </div>`;
+      }
+      function msgAssistant(inner, opts = {}) {
+        return `
+          <div class="flex gap-3 mb-6">
+            <div class="w-8 h-8 shrink-0 rounded-lg bg-sky text-white text-sm flex items-center justify-center font-display font-bold">A</div>
+            <div class="flex-1 min-w-0">
+              ${opts.preamble || ''}
+              <div class="prose-aqsha text-[14.5px] text-ink leading-relaxed">${inner}</div>
+              ${opts.footer || ''}
+            </div>
+          </div>`;
+      }
+
+      function inlineStep(state, icon, label, detail) {
+        const cls = state === 'done' ? 'text-mint-active' : state === 'active' ? 'text-sky-active' : 'text-ink-muted';
+        const iconEl =
+          state === 'done'
+            ? '<span class="w-4 h-4 rounded-full bg-mint-soft text-mint-active text-[10px] flex items-center justify-center font-bold">✓</span>'
+            : state === 'active'
+              ? '<span class="w-4 h-4 rounded-full border-2 border-sky border-t-transparent animate-spin"></span>'
+              : '<span class="w-4 h-4 rounded-full border border-paper-input"></span>';
+        return `
+          <div class="flex items-start gap-2.5 text-[13px] ${cls} py-1.5">
+            ${iconEl}
+            <div class="min-w-0">
+              <div class="${state === 'active' ? 'shimmer-text font-semibold' : 'font-semibold'}">${label}</div>
+              ${detail ? `<div class="text-[12px] text-ink-muted mt-0.5">${detail}</div>` : ''}
+            </div>
+          </div>`;
+      }
+
+      function stepsBlock(steps, title) {
+        return `
+          <details open class="mb-3 rounded-lg border border-paper-border bg-paper-raised">
+            <summary class="px-3.5 py-2.5 flex items-center gap-2 text-[12.5px] text-ink-soft">
+              <svg class="w-3.5 h-3.5 text-sky" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M21 21l-4.35-4.35M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0z"/></svg>
+              <span class="font-semibold">${title}</span>
+              <svg class="ml-auto w-3.5 h-3.5 text-ink-muted transition" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 9l6 6 6-6"/></svg>
+            </summary>
+            <div class="border-t border-paper-border px-3.5 py-2">${steps}</div>
+          </details>`;
+      }
+
+      function renderMessages(kind) {
+        if (kind === 'empty') {
+          return `
+            <div class="py-16 text-center">
+              <div class="inline-flex items-center justify-center w-14 h-14 rounded-lg bg-sky text-white font-display font-bold text-2xl mb-5 shadow-soft-card">A</div>
+              <h2 class="font-display font-bold text-3xl text-ink">Apa yang kamu riset hari ini?</h2>
+              <p class="text-[15px] text-ink-soft mt-3 max-w-md mx-auto">
+                Tanya apa saja. Aqsha akan pakai sumber dari Source Library kamu dulu sebelum menjawab.
+              </p>
+
+              <div class="grid sm:grid-cols-2 gap-3 mt-10 max-w-2xl mx-auto text-left">
+                ${suggestCard('Normal', 'Ringkas beda prompt caching di Anthropic vs OpenAI.', 'sky')}
+                ${suggestCard('Normal', 'Cari paper hybrid retrieval terbaru, sertakan link.', 'sky')}
+                ${suggestCard('Deep', 'Bangun laporan regulasi crypto custody OJK 2025 dengan sitasi.', 'lavender')}
+                ${suggestCard('Deep', 'Perbandingan lengkap OCR untuk dokumen Arab, metrik + limitasi.', 'lavender')}
+              </div>
+
+              <div class="mt-10 text-[12px] text-ink-muted font-hand text-lg">semua thread privat · tidak ada tim · tidak ada workspace</div>
+            </div>
+          `;
+        }
+
+        if (kind === 'normal') {
+          return (
+            msgUser('Secara singkat, kapan prompt caching di Anthropic paling menguntungkan untuk chatbot kita?') +
+            msgAssistant(
+              `<p>Paling menguntungkan saat <strong>prefix prompt sama</strong> dipakai berkali-kali dalam jendela 5 menit. Skenario yang jelas untung:</p>
+              <ul class="list-disc pl-5 mt-2 space-y-1">
+                <li>System prompt panjang + few-shot contoh yang statis.</li>
+                <li>Long context dokumen yang dipakai untuk banyak pertanyaan.</li>
+                <li>Tool / schema definitions yang tidak berubah antar turn.</li>
+              </ul>
+              <p class="mt-2">Untuk turn pendek tanpa konteks panjang, overhead cache write bisa lebih mahal dari hit savings.<span class="stream-caret"></span></p>`,
+            )
+          );
+        }
+
+        if (kind === 'normal-tools') {
+          const steps =
+            inlineStep('done', '', 'Mencari di Source Library kamu', '3 dokumen cocok di tag "caching"') +
+            inlineStep('done', '', 'Mencari di web', 'Anthropic docs · OpenAI cookbook · 2 blog engineering') +
+            inlineStep('active', '', 'Merangkum temuan', 'membandingkan 5 sumber utama');
+          return (
+            msgUser('Cari data pricing prompt caching Anthropic yang paling baru, sama yang OpenAI — bandingkan.') +
+            msgAssistant(
+              `<p>Sedang saya rapikan — ini yang sudah ketemu:</p>
+              <ul class="list-disc pl-5 mt-2 space-y-1">
+                <li>Anthropic: cache write 25% mahal dari base, cache read 10% dari base <span class="citation">1</span>.</li>
+                <li>OpenAI (prompt caching otomatis): 50% diskon untuk cached input tokens, tidak ada cache write surcharge <span class="citation">2</span>.</li>
+              </ul>
+              <p class="mt-2 shimmer-text font-semibold">Menyusun tabel perbandingan<span class="stream-caret"></span></p>`,
+              { preamble: stepsBlock(steps, 'Mencari sumber · 2 tools aktif') },
+            )
+          );
+        }
+
+        if (kind === 'deep-thinking') {
+          const steps =
+            inlineStep('done', '', 'Memahami pertanyaan', 'Topik regulasi · lingkup: Indonesia · tahun: 2025') +
+            inlineStep('done', '', 'Mencari sumber primer', '14 POJK, SE OJK, dan peraturan Bappebti ditemukan') +
+            inlineStep('done', '', 'Menambah sumber akademik', '4 paper BIS/IMF dan 2 SSRN preprint') +
+            inlineStep('active', '', 'Membaca dan mengutip', 'memproses 12 dari 18 dokumen') +
+            inlineStep('idle', '', 'Memeriksa setiap klaim', '') +
+            inlineStep('idle', '', 'Menyusun laporan', '');
+          return (
+            msgUser('Buatkan laporan lengkap regulasi OJK untuk crypto custody di Indonesia per 2025, dengan sitasi.') +
+            msgAssistant(
+              `<p>Baik, ini masuk mode Deep. Saya gabungkan Source Library kamu + pencarian tambahan.</p>
+              <p class="mt-2 shimmer-text font-semibold">Sedang membaca sumber<span class="stream-caret"></span></p>`,
+              { preamble: stepsBlock(steps, 'Riset · 18 sumber dikumpulkan') },
+            )
+          );
+        }
+
+        if (kind === 'deep-done') {
+          const steps =
+            inlineStep('done', '', 'Memahami pertanyaan', 'Regulasi · Indonesia · 2025') +
+            inlineStep('done', '', 'Mencari sumber primer', '14 regulasi OJK/Bappebti') +
+            inlineStep('done', '', 'Menambah sumber akademik', '4 paper · 2 preprint') +
+            inlineStep('done', '', 'Membaca dan mengutip', '18 dokumen · 47 kutipan diambil') +
+            inlineStep('done', '', 'Memeriksa setiap klaim', '21 supported · 1 butuh sumber tambahan · 1 tidak didukung') +
+            inlineStep('done', '', 'Menyusun laporan', 'Draft siap + catatan review');
+          return (
+            msgUser('Buatkan laporan lengkap regulasi OJK untuk crypto custody di Indonesia per 2025, dengan sitasi.') +
+            msgAssistant(
+              `<p>Selesai. Panel di kanan berisi laporan dan semua sumbernya — klik untuk baca.</p>
+              <p class="mt-3">Ringkasan singkat:</p>
+              <ul class="list-disc pl-5 mt-1 space-y-1">
+                <li>Per Jan 2025, OJK mengambil alih pengawasan kripto dari Bappebti via POJK 3/2024 <span class="citation">1</span>.</li>
+                <li>Custodian non-bank wajib modal min IDR 250M <span class="citation">1</span> dan audit tahunan oleh penilai terdaftar OJK <span class="citation">4</span>.</li>
+                <li>Satu klaim timeline enforcement <span class="chip chip-lemon !min-h-0 !py-0.5 !px-1.5 !text-[10px] !rounded-sm align-middle">Add a stronger source</span> — hanya didukung blog industri <span class="citation">6</span>.</li>
+              </ul>
+              <p class="mt-3 text-ink-muted text-[13.5px]">Ada 1 catatan untuk kamu review sebelum dipakai di draft kamu.</p>`,
+              {
+                preamble: stepsBlock(steps, 'Riset selesai · 18 sumber · 6m 12s'),
+                footer: `
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    <button data-nav="artifact-reader" class="press h-8 px-3 rounded-sm bg-sky text-white text-[12.5px] font-semibold hover:bg-sky-active flex items-center gap-1.5">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path stroke-linecap="round" d="M14 2v6h6"/></svg>
+                      Buka laporan
+                    </button>
+                    <button class="press h-8 px-3 rounded-sm border border-paper-border bg-paper-raised text-[12.5px] font-semibold hover:bg-paper-mist">Salin markdown</button>
+                    <button data-nav="panel-sources" class="press h-8 px-3 rounded-sm border border-paper-border bg-paper-raised text-[12.5px] font-semibold hover:bg-paper-mist">18 sources</button>
+                  </div>`,
+              },
+            )
+          );
+        }
+
+        if (kind === 'retry-inline') {
+          const steps =
+            inlineStep('done', '', 'Memahami pertanyaan', '') +
+            inlineStep('done', '', 'Mencari sumber primer', '14 regulasi ditemukan') +
+            inlineStep('done', '', 'Menambah sumber akademik', '4 paper · 2 preprint') +
+            `<div class="flex items-start gap-2.5 text-[13px] py-1.5">
+              <span class="w-4 h-4 rounded-full bg-coral-soft text-coral-active text-[11px] flex items-center justify-center font-bold">!</span>
+              <div class="min-w-0">
+                <div class="font-semibold text-coral-active">Sempat tersendat saat membaca PDF</div>
+                <div class="text-[12px] text-ink-muted mt-0.5">12 sumber sudah diproses; 6 sisanya gagal dibuka. Ini aman diulang.</div>
+              </div>
+            </div>`;
+          return (
+            msgUser('Buatkan laporan lengkap regulasi OJK untuk crypto custody di Indonesia per 2025, dengan sitasi.') +
+            msgAssistant(
+              `<p>Saya sempat kesulitan membuka 6 dokumen. Progress yang sudah jadi tetap tersimpan — tinggal lanjutkan.</p>`,
+              {
+                preamble: stepsBlock(steps, 'Riset · 12 dari 18 sumber'),
+                footer: `
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    <button class="press h-8 px-3 rounded-sm bg-sky text-white text-[12.5px] font-semibold hover:bg-sky-active flex items-center gap-1.5">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M23 4v6h-6M1 20v-6h6"/><path stroke-linecap="round" d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                      Coba lagi
+                    </button>
+                    <button class="press h-8 px-3 rounded-sm border border-paper-border bg-paper-raised text-[12.5px] font-semibold hover:bg-paper-mist">Ubah pertanyaan</button>
+                  </div>`,
+              },
+            )
+          );
+        }
+
+        if (kind === 'panel-sources' || kind === 'source-detail') {
+          return (
+            msgUser('Bandingkan RAG naive vs hybrid BM25+embedding di corpus saya. Fokus ke recall untuk query teknis.') +
+            msgAssistant(
+              `<p>Berdasarkan 6 paper di Source Library kamu <span class="citation">1</span><span class="citation">2</span> dan 3 hasil web terbaru <span class="citation">3</span>, hybrid BM25+embedding memberi <strong>recall@10 rata-rata +14%</strong> untuk query teknis dibanding embedding-only <span class="citation">4</span>.</p>
+              <p class="mt-2">Keuntungan terbesar:</p>
+              <ul class="list-disc pl-5 mt-1 space-y-1">
+                <li>Query dengan token langka atau identifier kode <span class="citation">2</span>.</li>
+                <li>Query campuran terminologi domain + bahasa alami <span class="citation">3</span>.</li>
+              </ul>
+              <p class="mt-2">Trade-off: latency p95 naik 30–80ms karena dual-retriever + fusion <span class="citation">5</span>. Untuk corpus kamu (±1.2k docs), masih aman.</p>`,
+            )
+          );
+        }
+
+        if (kind === 'panel-artifacts' || kind === 'artifact-reader') {
+          return (
+            msgUser('Buatkan laporan lengkap regulasi OJK untuk crypto custody di Indonesia per 2025, dengan sitasi.') +
+            msgAssistant(
+              `<p>Selesai. Laporan ada di panel kanan — kamu bisa baca, salin markdown, atau export PDF.</p>`,
+            )
+          );
+        }
+
+        if (kind === 'ratelimit') {
+          return (
+            msgUser('Cepat, ringkas cost prompt caching GPT-4o-mini untuk 1k request/hari.') +
+            msgAssistant(
+              `<p>Sebentar — Aqsha lagi butuh jeda 40 detik supaya layanan tetap stabil. Pesan kamu belum dipakai, tidak akan terhitung.</p>
+              <p class="mt-2 text-ink-muted text-[13px]">Kalau mau, sambil menunggu kamu bisa tambahkan PDF ke Source Library — itu yang paling sering mempercepat jawaban berikutnya.</p>`,
+            )
+          );
+        }
+
+        if (kind === 'ownership') {
+          return `
+            <div class="py-20 text-center">
+              <div class="inline-flex items-center justify-center w-14 h-14 rounded-lg bg-coral-soft text-coral-active mb-4">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+              </div>
+              <div class="font-display font-bold text-2xl text-ink">Thread ini bukan milik akun kamu</div>
+              <p class="text-[14px] text-ink-muted mt-2 max-w-md mx-auto">
+                Aqsha memverifikasi pemilik thread di server sebelum membukanya. Tautan ini mungkin milik akun lain atau sudah kedaluwarsa.
+              </p>
+              <button data-nav="empty" class="press mt-6 h-10 px-4 rounded-sm bg-sky text-white text-[13px] font-semibold hover:bg-sky-active">Kembali ke thread saya</button>
+            </div>`;
+        }
+
+        if (kind === 'corpus') {
+          return `
+            <div class="py-14 text-center">
+              <div class="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-mint-soft text-mint-active mb-3">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14z"/></svg>
+              </div>
+              <div class="font-display font-bold text-2xl text-ink">Source Library</div>
+              <p class="text-[14px] text-ink-muted mt-2 max-w-md mx-auto">
+                Semua sumber yang kamu unggah atau simpan hidup di sini. Aqsha otomatis menariknya saat relevan di thread mana pun.
+              </p>
+            </div>`;
+        }
+
+        return '';
+      }
+
+      function suggestCard(label, text, accent) {
+        const chipCls = accent === 'lavender' ? 'chip-lavender' : 'chip-sky';
+        return `
+          <button class="text-left p-4 rounded-lg border border-paper-border bg-paper-raised hover:border-sky hover:shadow-soft-card transition">
+            <span class="chip ${chipCls} !min-h-0 !py-0.5 !text-[11px]">${label}</span>
+            <div class="text-[14px] text-ink mt-2 leading-snug">${text}</div>
+          </button>
+        `;
+      }
+
+      // ---- composer ----
+      function renderComposer(kind) {
+        if (kind === 'ownership') return '';
+        const generating = ['normal-tools', 'deep-thinking'].includes(kind);
+        const disabled = kind === 'ratelimit';
+        const deepActive = kind === 'deep-thinking' || kind === 'deep-done' || kind === 'retry-inline' || kind === 'panel-artifacts' || kind === 'artifact-reader';
+
+        const placeholder = disabled
+          ? 'Aqsha perlu istirahat 40 detik — kamu bisa lanjutkan sebentar lagi'
+          : generating
+            ? 'Aqsha sedang mengerjakan — tekan Stop untuk menghentikan'
+            : 'Tanya Aqsha, atau tempel PDF/URL. ⌘↵ untuk kirim.';
+
+        const sendBtn = generating
+          ? `<button class="press h-9 w-9 rounded-sm bg-ink text-white hover:bg-ink-soft flex items-center justify-center" title="Stop">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>
+            </button>`
+          : `<button ${disabled ? 'disabled' : ''} class="press h-9 w-9 rounded-sm ${disabled ? 'bg-paper-input text-paper-raised' : 'bg-sky text-white hover:bg-sky-active'} flex items-center justify-center">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 12h14M13 5l7 7-7 7"/></svg>
+            </button>`;
+
+        return `
+          <div class="border-t border-paper-border bg-paper-raised">
+            <div class="max-w-3xl mx-auto px-6 py-4">
+              <div class="rounded-lg border border-paper-input bg-paper-bg focus-within:border-sky focus-within:shadow-[0_0_0_3px_rgba(74,144,247,0.18)] transition">
+                <textarea ${disabled ? 'disabled' : ''} rows="2" placeholder="${placeholder}" class="w-full resize-none bg-transparent p-3.5 text-[14.5px] outline-none text-ink placeholder:text-ink-muted"></textarea>
+                <div class="flex items-center justify-between px-3 pb-2.5 gap-3">
+                  <div class="flex items-center gap-1.5 text-ink-soft">
+                    <button class="press w-8 h-8 rounded-sm hover:bg-paper-mist flex items-center justify-center" title="Upload PDF">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path stroke-linecap="round" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                    </button>
+                    <button class="press w-8 h-8 rounded-sm hover:bg-paper-mist flex items-center justify-center" title="Tempel URL">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path stroke-linecap="round" d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path stroke-linecap="round" d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
+                    </button>
+                  </div>
+                  <div class="flex items-center gap-2.5">
+                    <div class="mode-switch">
+                      <button class="${deepActive ? '' : 'active'}">Normal</button>
+                      <button class="${deepActive ? 'active deep' : ''}">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                        Deep
+                      </button>
+                    </div>
+                    ${sendBtn}
+                  </div>
+                </div>
+              </div>
+              <div class="mt-2 text-[11.5px] text-ink-muted flex items-center justify-between">
+                <span>${deepActive ? 'Mode Deep: riset lebih dalam, butuh waktu lebih lama.' : 'Mode Normal: jawaban cepat, Aqsha tetap bisa akses sumber bila perlu.'}</span>
+                <span class="font-mono text-[11px] text-ink-muted">claude-sonnet-4-6</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      // ---- right panel ----
+      function renderPanel(kind) {
+        if (kind === 'corpus') return corpusPanel();
+        const tab = defaultPanelTab(kind);
+        const counts = { sources: 6, artifacts: kind === 'panel-artifacts' || kind === 'artifact-reader' || kind === 'deep-done' ? 2 : 1 };
+        if (kind === 'source-detail') return sourcesTabWithDetail();
+        return `
+          <div class="flex items-center gap-1 px-5 pt-4 border-b border-paper-border">
+            <button data-paneltab="sources" class="tab-btn ${tab === 'sources' ? 'active' : ''}">
+              Sources <span class="tab-count">${counts.sources}</span>
+            </button>
+            <button data-paneltab="artifacts" class="tab-btn ${tab === 'artifacts' ? 'active' : ''}">
+              Artifacts <span class="tab-count">${counts.artifacts}</span>
+            </button>
+            <button class="press ml-auto mb-1 w-8 h-8 rounded-sm hover:bg-paper-mist text-ink-soft flex items-center justify-center" title="Tutup panel">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="flex-1 overflow-y-auto scroll-thin">
+            ${tab === 'sources' ? sourcesTabContent() : artifactsTabContent(kind)}
+          </div>
+        `;
+      }
+
+      function sourcesTabContent() {
+        const sources = [
+          { n: 1, title: 'Khattab et al. — ColBERTv2', meta: 'NeurIPS 2022 · paper', origin: 'library', chip: 'mint', chipText: 'Linked' },
+          { n: 2, title: 'Zhou et al. — Hybrid Retrieval Recall Study', meta: 'EMNLP 2023 · paper', origin: 'library', chip: 'mint', chipText: 'Linked' },
+          { n: 3, title: 'Semantic vs lexical benchmarks 2024', meta: 'exa.ai · artikel', origin: 'web', chip: 'sky', chipText: 'Web' },
+          { n: 4, title: 'Pyserini BM25 baselines', meta: 'github.io · dokumen', origin: 'library', chip: 'mint', chipText: 'Linked' },
+          { n: 5, title: 'RRF latency notes', meta: 'vespa.ai · blog', origin: 'web', chip: 'sky', chipText: 'Web' },
+          { n: 6, title: 'rag-eval-internal.pdf', meta: 'kamu unggah · 22 Apr 2026', origin: 'upload', chip: 'lavender', chipText: 'Dokumen kamu' },
+        ];
+        return `
+          <div class="p-4 space-y-2">
+            <div class="text-[11.5px] text-ink-muted px-1 pb-1">6 sumber dipakai untuk menjawab pertanyaan di atas.</div>
+            ${sources
+              .map(
+                (s) => `
+              <button data-nav="source-detail" class="w-full text-left p-3 rounded-lg border border-paper-border bg-paper-raised hover:border-sky hover:shadow-soft-card transition">
+                <div class="flex items-start gap-2.5">
+                  <span class="citation !min-w-[22px] !h-[22px]">${s.n}</span>
+                  <div class="min-w-0 flex-1">
+                    <div class="text-[13.5px] font-semibold text-ink leading-snug">${s.title}</div>
+                    <div class="text-[11.5px] text-ink-muted mt-0.5 flex items-center gap-2">
+                      <span class="chip chip-${s.chip} !min-h-0 !py-0.5 !px-2 !text-[10.5px]">${s.chipText}</span>
+                      <span>${s.meta}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="text-[12.5px] text-ink-soft mt-2.5 line-clamp-2">
+                  "…hybrid BM25 + dense retrieval consistently improved recall on out-of-distribution queries, with fusion adding &lt;15ms overhead at p95…"
+                </div>
+              </button>`,
+              )
+              .join('')}
+          </div>
+        `;
+      }
+
+      function sourcesTabWithDetail() {
+        return `
+          <div class="flex items-center gap-1 px-5 pt-4 border-b border-paper-border">
+            <button data-nav="panel-sources" class="tab-btn flex items-center gap-1.5 text-ink-soft">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 18l-6-6 6-6"/></svg>
+              Kembali ke Sources
+            </button>
+          </div>
+          <div class="flex-1 overflow-y-auto scroll-thin p-5 text-[13px] text-ink">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="citation !min-w-[22px] !h-[22px]">2</span>
+              <span class="chip chip-mint">Linked</span>
+              <span class="chip chip-ink">Peer-reviewed</span>
+            </div>
+            <div class="font-display font-bold text-[18px] text-ink leading-snug">Hybrid BM25 + Dense Retrieval Recall Study</div>
+            <div class="text-[12.5px] text-ink-muted mt-1">Zhou, Lee, Al-Mahdi · EMNLP 2023</div>
+
+            <dl class="mt-4 grid grid-cols-[100px_1fr] gap-y-2 text-[12.5px]">
+              <dt class="text-ink-muted">DOI</dt><dd class="font-mono text-[12px]">10.18653/v1/2023.emnlp-long.451</dd>
+              <dt class="text-ink-muted">Dari</dt><dd>Source Library · disimpan 22 Apr 2026</dd>
+              <dt class="text-ink-muted">Diakses</dt><dd>10 Mei 2026, 07:01</dd>
+            </dl>
+
+            <div class="mt-5 text-[11px] font-bold uppercase tracking-wider text-ink-muted">Bagian yang dipakai</div>
+            <blockquote class="mt-1.5 rounded-md bg-mint-soft/60 border-l-2 border-mint px-3 py-2.5 text-[13px] italic text-ink-soft">
+              "Across 4 benchmarks, hybrid BM25+dense consistently improved recall@10 by 12–17%, with the largest gains on queries containing rare tokens or code identifiers. Fusion (RRF) added &lt;15ms overhead at p95."
+            </blockquote>
+
+            <div class="mt-5 text-[11px] font-bold uppercase tracking-wider text-ink-muted">Didukung 2 klaim</div>
+            <ul class="mt-1.5 space-y-1.5 text-[13px]">
+              <li class="flex items-start gap-2"><span class="w-4 h-4 shrink-0 rounded-full bg-mint-soft text-mint-active text-[10px] flex items-center justify-center font-bold mt-0.5">✓</span>Hybrid retrieval memberi recall@10 +14% rata-rata untuk query teknis.</li>
+              <li class="flex items-start gap-2"><span class="w-4 h-4 shrink-0 rounded-full bg-mint-soft text-mint-active text-[10px] flex items-center justify-center font-bold mt-0.5">✓</span>Keuntungan terbesar untuk query dengan rare token / identifier.</li>
+            </ul>
+
+            <div class="mt-6 flex flex-wrap gap-2">
+              <button class="press h-8 px-3 rounded-sm border border-paper-border bg-paper-raised text-xs font-semibold hover:bg-paper-mist">Buka PDF</button>
+              <button class="press h-8 px-3 rounded-sm border border-paper-border bg-paper-raised text-xs font-semibold hover:bg-paper-mist">Salin kutipan</button>
+              <button class="press h-8 px-3 rounded-sm border border-coral-soft text-coral-active text-xs font-semibold hover:bg-coral-soft">Hapus dari Library</button>
+            </div>
+          </div>
+        `;
+      }
+
+      function artifactsTabContent(kind) {
+        const showReader = kind === 'artifact-reader';
+        if (showReader) {
+          return `
+            <div class="px-5 pt-4 pb-2 flex items-center gap-2">
+              <button data-nav="panel-artifacts" class="press h-7 px-2 rounded-sm hover:bg-paper-mist text-ink-soft text-xs font-semibold flex items-center gap-1">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M15 18l-6-6 6-6"/></svg>
+                Semua artifact
+              </button>
+              <span class="chip chip-sky ml-auto">Laporan</span>
+            </div>
+            <div class="px-5 pb-6 overflow-y-auto scroll-thin">
+              <article class="font-sans text-ink">
+                <h1 class="font-display font-bold text-[24px] leading-tight">Regulasi OJK untuk Crypto Custody 2025</h1>
+                <div class="mt-1 text-[11.5px] text-ink-muted">Disusun Aqsha · 10 Mei 2026 · 18 sumber</div>
+
+                <p class="mt-4 text-[14px] leading-relaxed">
+                  Per Januari 2025, OJK mengambil alih pengawasan aset kripto dari Bappebti melalui POJK 3/2024 <span class="citation">1</span>. Custody kripto kini diklasifikasikan sebagai layanan penitipan aset keuangan digital dengan kewajiban segregasi aset <span class="citation">2</span>.
+                </p>
+
+                <h2 class="font-display font-bold text-[17px] mt-5 mb-2">Kewajiban Custodian</h2>
+                <ul class="list-disc pl-5 text-[14px] leading-relaxed space-y-1.5">
+                  <li>Modal minimum IDR 250M untuk custodian non-bank <span class="citation">1</span>.</li>
+                  <li>Segregasi cold-storage vs hot-wallet dengan rasio operasional maksimal 2% <span class="citation">3</span>.</li>
+                  <li>Audit keamanan tahunan oleh penilai yang terdaftar di OJK <span class="citation">4</span>.</li>
+                </ul>
+
+                <h2 class="font-display font-bold text-[17px] mt-5 mb-2">Yang masih perlu kamu cek</h2>
+                <div class="rounded-lg border border-lemon bg-lemon-soft p-3 text-[13.5px] text-ink-soft">
+                  <div class="flex items-center gap-2 mb-1">
+                    <span class="chip chip-lemon !min-h-0 !py-0.5 !px-2 !text-[11px]">Add a stronger source</span>
+                  </div>
+                  <p>Klaim "enforcement penuh diperkirakan Q3 2025" saat ini hanya didukung satu blog industri <span class="citation">6</span>. Sebelum dipakai di draft kamu, cari sumber primer dari OJK.</p>
+                </div>
+
+                <h2 class="font-display font-bold text-[17px] mt-5 mb-2">Celah Interpretasi</h2>
+                <p class="text-[14px] leading-relaxed">
+                  Definisi "aset kripto stabil" belum diperjelas dalam POJK 23/2024, menimbulkan ambiguitas untuk stablecoin dengan backing non-IDR <span class="citation">5</span>.
+                </p>
+
+                <div class="mt-6 flex flex-wrap gap-2">
+                  <button class="press h-9 px-3.5 rounded-sm bg-sky text-white text-[13px] font-semibold hover:bg-sky-active">Salin markdown</button>
+                  <button class="press h-9 px-3.5 rounded-sm border border-paper-border bg-paper-raised text-[13px] font-semibold hover:bg-paper-mist">Export PDF</button>
+                  <button class="press h-9 px-3.5 rounded-sm border border-paper-border bg-paper-raised text-[13px] font-semibold hover:bg-paper-mist">Bagikan link</button>
+                </div>
+              </article>
+            </div>
+          `;
+        }
+
+        const items = [
+          { type: 'Laporan', title: 'Regulasi OJK untuk Crypto Custody 2025', meta: '18 sources · 23 klaim · 1 review note', chip: 'sky' },
+          { type: 'Markdown', title: 'ojk-crypto-custody-2025.md', meta: '4.820 kata · siap export', chip: 'mint' },
+        ];
+        return `
+          <div class="p-4 space-y-2.5">
+            <div class="text-[11.5px] text-ink-muted px-1 pb-1">2 hasil dari Research Thread ini.</div>
+            ${items
+              .map(
+                (it) => `
+              <button data-nav="artifact-reader" class="w-full text-left p-4 rounded-lg border border-paper-border bg-paper-raised hover:border-sky hover:shadow-soft-card transition">
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="chip chip-${it.chip} !min-h-0 !py-0.5">${it.type}</span>
+                  <span class="text-[11px] text-ink-muted ml-auto">baru saja</span>
+                </div>
+                <div class="font-display font-bold text-[15px] text-ink leading-snug">${it.title}</div>
+                <div class="text-[12px] text-ink-muted mt-1">${it.meta}</div>
+              </button>`,
+              )
+              .join('')}
+          </div>
+        `;
+      }
+
+      function corpusPanel() {
+        const rows = [
+          { title: 'rag-eval-internal.pdf', type: 'PDF', tag: 'rag-eval', docs: '18 chunks' },
+          { title: 'ColBERTv2.pdf', type: 'PDF', tag: 'retrieval', docs: '9 chunks' },
+          { title: 'POJK 3/2024 · Custody', type: 'URL', tag: 'regulasi', docs: '3 halaman' },
+          { title: 'Saved search — "crypto custody asia"', type: 'Saved', tag: 'web', docs: '24 hasil' },
+        ];
+        return `
+          <div class="px-5 pt-4 pb-2 border-b border-paper-border">
+            <div class="text-sm font-display font-bold text-ink">Source Library</div>
+            <div class="text-[11.5px] text-ink-muted mt-0.5">Privat untuk akunmu. Aqsha ingat ini di semua thread.</div>
+          </div>
+          <div class="p-4">
+            <div class="flex gap-2 mb-3">
+              <button class="press flex-1 h-9 rounded-sm bg-sky text-white text-[12.5px] font-semibold hover:bg-sky-active flex items-center justify-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+                Upload PDF
+              </button>
+              <button class="press flex-1 h-9 rounded-sm border border-paper-border bg-paper-raised text-[12.5px] font-semibold hover:bg-paper-mist">Tempel URL</button>
+            </div>
+            <div class="rounded-lg border border-paper-border bg-paper-raised divide-y divide-paper-border overflow-hidden">
+              ${rows
+                .map(
+                  (r) => `
+                <div class="p-3 flex items-center gap-3 hover:bg-paper-bg">
+                  <div class="w-9 h-9 rounded-sm bg-paper-mist text-ink-soft text-[10px] flex items-center justify-center font-bold">${r.type.slice(0, 3).toUpperCase()}</div>
+                  <div class="flex-1 min-w-0">
+                    <div class="text-[13px] font-semibold text-ink truncate">${r.title}</div>
+                    <div class="text-[11px] text-ink-muted mt-0.5 flex items-center gap-2">
+                      <span class="chip chip-ink !min-h-0 !py-0.5 !px-1.5 !text-[10.5px]">${r.tag}</span>
+                      <span>${r.docs}</span>
+                    </div>
+                  </div>
+                  <button class="press h-7 px-2 rounded-sm border border-paper-border text-[11px] font-semibold hover:bg-paper-mist">Kelola</button>
+                </div>`,
+                )
+                .join('')}
+            </div>
+            <div class="mt-4 text-[11.5px] text-ink-muted leading-relaxed">
+              Menghapus sumber akan menghentikannya muncul di jawaban baru. Kutipan di laporan yang sudah final tetap tersimpan.
+            </div>
+          </div>
+        `;
+      }
+
+      // ---- router ----
+      const breadcrumbMap = {
+        signin: ['Sign in', 'User story 1 · signed-out visitor'],
+        signup: ['Sign up', 'Auth via Better Auth × Convex'],
+        empty: ['Chat · empty', 'User story 2 · thread pertama'],
+        normal: ['Chat · normal streaming', 'User story 4 & 5'],
+        'normal-tools': ['Chat · normal + tools', 'User story 7 · retrieval halus tanpa banner run'],
+        'deep-thinking': ['Chat · deep sedang berjalan', 'User story 8 · inline steps, UX natural'],
+        'deep-done': ['Chat · deep selesai', 'User stories 14–15 · artifact siap'],
+        'retry-inline': ['Chat · retry inline', 'User story 11 · retry halus, bukan banner failed'],
+        'panel-sources': ['Panel · Sources tab', 'User story 12 · inspect sources'],
+        'panel-artifacts': ['Panel · Artifacts tab', 'User story 14 · artifact list'],
+        'artifact-reader': ['Panel · Artifact reader', 'User story 15 · baca laporan'],
+        'source-detail': ['Panel · Source detail', 'User story 12 & 13 · evidence per klaim'],
+        corpus: ['Source Library', 'User stories 16 & 17 · namespace user'],
+        ratelimit: ['Perlu istirahat', 'User story 19 · feedback lembut, tanpa jargon'],
+        ownership: ['Akses ditolak', 'User story 20 · cross-user denied'],
+      };
+
+      function gotoPage(key) {
+        document.querySelectorAll('.page').forEach((el) => el.classList.remove('active'));
+        const target = document.getElementById('page-' + key);
+        if (!target) return;
+        target.classList.add('active');
+
+        const shellHolder = target.querySelector('[data-shell]');
+        if (shellHolder) {
+          shellHolder.innerHTML = renderShell(shellHolder.dataset.shell);
+          shellHolder.dataset.rendered = '1';
+        }
+
+        document.querySelectorAll('[data-nav]').forEach((b) => b.classList.toggle('active', b.dataset.nav === key));
+        const [crumb, hint] = breadcrumbMap[key] || ['', ''];
+        document.getElementById('breadcrumb').textContent = crumb;
+        document.getElementById('breadcrumb-hint').textContent = hint;
+        history.replaceState(null, '', '#' + key);
+        window.scrollTo({ top: 0 });
+      }
+
+      document.addEventListener('click', (e) => {
+        const tab = e.target.closest('[data-paneltab]');
+        if (tab) {
+          const cur = (location.hash || '').replace('#', '');
+          const map = { sources: ['panel-sources', 'panel-artifacts'], artifacts: ['panel-artifacts', 'panel-sources'] };
+          const t = tab.dataset.paneltab;
+          gotoPage(t === 'sources' ? 'panel-sources' : 'panel-artifacts');
+          return;
+        }
+        const btn = e.target.closest('[data-nav]');
+        if (!btn) return;
+        e.preventDefault();
+        gotoPage(btn.dataset.nav);
+      });
+
+      const initial = (location.hash || '#empty').replace('#', '');
+      gotoPage(initial);
+
+      // Dark mode toggle + persistence
+      (function () {
+        const root = document.documentElement;
+        const saved = localStorage.getItem('aqsha-theme');
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (saved === 'dark' || (!saved && prefersDark)) root.classList.add('dark');
+        const btn = document.getElementById('theme-toggle');
+        btn && btn.addEventListener('click', () => {
+          const isDark = root.classList.toggle('dark');
+          localStorage.setItem('aqsha-theme', isDark ? 'dark' : 'light');
+        });
+      })();
+
+      document.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+          e.preventDefault();
+          const aside = document.querySelector('aside');
+          aside && aside.scrollIntoView({ behavior: 'smooth' });
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,43 @@
+{
+  "name": "@aqsha/convex",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    "./api": {
+      "types": "./convex/_generated/api.d.ts",
+      "default": "./convex/_generated/api.js"
+    },
+    "./server": {
+      "types": "./convex/_generated/server.d.ts",
+      "default": "./convex/_generated/server.js"
+    }
+  },
+  "scripts": {
+    "dev": "convex dev",
+    "codegen": "convex codegen",
+    "deploy": "convex deploy",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc -p convex && eslint . --report-unused-disable-directives --max-warnings 0",
+    "logs": "convex logs"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^3.0.63",
+    "@convex-dev/agent": "^0.6.1",
+    "@convex-dev/better-auth": "^0.12.2",
+    "ai": "^6.0.177",
+    "better-auth": "1.4.9",
+    "convex": "^1.38.0"
+  },
+  "devDependencies": {
+    "@convex-dev/eslint-plugin": "^1.2.2",
+    "@eslint/eslintrc": "^3.3.5",
+    "@eslint/js": "^9.39.4",
+    "@types/node": "^24.12.2",
+    "@typescript-eslint/eslint-plugin": "^8.58.2",
+    "@typescript-eslint/parser": "^8.58.2",
+    "eslint": "^9.39.4",
+    "globals": "^17.5.0",
+    "typescript": "^5.9.3"
+  }
+}
