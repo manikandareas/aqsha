@@ -77,6 +77,12 @@
   --lavender: #7a4fd1;
   --lavender-soft: #f1e8ff;
   --lavender-soft-border: #dcc9f7;
+  --lemon: #9a6a00;
+  --lemon-soft: #fff7cc;
+  --lemon-soft-border: #ecd36f;
+  --coral: #d84b3f;
+  --coral-soft: #ffe9e5;
+  --coral-soft-border: #ffc0b8;
   --shadow-soft-card: 0 14px 40px rgb(26 31 43 / 0.08);
 }
 
@@ -116,6 +122,12 @@
   --lavender: #b0a6ff;
   --lavender-soft: rgb(176 166 255 / 0.14);
   --lavender-soft-border: rgb(176 166 255 / 0.28);
+  --lemon: #f7d66b;
+  --lemon-soft: rgb(247 214 107 / 0.14);
+  --lemon-soft-border: rgb(247 214 107 / 0.28);
+  --coral: #ff9c91;
+  --coral-soft: rgb(255 107 107 / 0.14);
+  --coral-soft-border: rgb(255 107 107 / 0.28);
   --shadow-soft-card: 0 18px 50px rgb(0 0 0 / 0.22);
 }
 

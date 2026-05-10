@@ -17,6 +17,8 @@ import {
 import { astra, NORMAL_MODEL, recordUsage as handleUsage } from "./agent";
 import { requireCurrentUser } from "./auth";
 import { rateLimiter } from "./limits";
+import { researchTools } from "./researchTools";
+import type { SourceCandidate } from "./sourceCandidates";
 import { assertThreadOwner } from "./threads";
 
 const MAX_CONTENT_LENGTH = 8_000;
@@ -69,7 +71,7 @@ async function upsertThreadMetadata(
   const now = Date.now();
   const existing = await getThreadMetadata(ctx, args.threadId);
   if (existing) {
-    await ctx.db.patch(existing._id, {
+    await ctx.db.patch("threadMetadata", existing._id, {
       lastActivityAt: now,
       lastMessagePreview: args.preview,
       messageCount: existing.messageCount + (args.incrementMessageCount ? 1 : 0),
@@ -195,7 +197,7 @@ export const generateReply = internalAction({
       const result = await astra.streamText(
         ctx,
         { threadId: args.threadId, userId: args.userId },
-        { promptMessageId: args.promptMessageId },
+        { promptMessageId: args.promptMessageId, tools: researchTools },
         {
           saveStreamDeltas: { chunking: "word", throttleMs: 100 },
           usageHandler: handleUsage,
@@ -203,6 +205,17 @@ export const generateReply = internalAction({
       );
       await result.consumeStream();
       const text = await result.text;
+      const steps = await result.steps;
+      const assistantMessageId = getAssistantMessageId(result.savedMessages);
+      if (assistantMessageId) {
+        await ctx.runMutation(internal.sources.persistCited, {
+          ownerUserId: args.userId,
+          threadId: args.threadId,
+          messageId: assistantMessageId,
+          candidates: collectSourceCandidates(steps),
+          citedNumbers: extractCitationNumbers(text),
+        });
+      }
       await ctx.runMutation(internal.messages.markThreadIdle, {
         ownerUserId: args.userId,
         threadId: args.threadId,
@@ -227,6 +240,53 @@ export const generateReply = internalAction({
     }
   },
 });
+
+function extractCitationNumbers(text: string) {
+  const matches = text.matchAll(/\[(\d{1,3})\]/g);
+  return [...new Set([...matches].map((match) => Number(match[1])))];
+}
+
+function collectSourceCandidates(
+  steps: Array<{ toolResults?: Array<{ output?: unknown }> }>,
+) {
+  const candidates: SourceCandidate[] = [];
+  for (const step of steps) {
+    for (const result of step.toolResults ?? []) {
+      if (!Array.isArray(result.output)) {
+        continue;
+      }
+      for (const item of result.output) {
+        if (isSourceCandidate(item)) {
+          candidates.push(item);
+        }
+      }
+    }
+  }
+  return candidates;
+}
+
+function isSourceCandidate(value: unknown): value is SourceCandidate {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const candidate = value as Partial<SourceCandidate>;
+  return (
+    typeof candidate.citationNumber === "number" &&
+    typeof candidate.title === "string" &&
+    typeof candidate.locator === "string" &&
+    typeof candidate.snippet === "string"
+  );
+}
+
+function getAssistantMessageId(
+  savedMessages:
+    | Array<{ _id: string; message?: { role?: string }; role?: string }>
+    | undefined,
+) {
+  return savedMessages
+    ?.filter((message) => (message.message?.role ?? message.role) === "assistant")
+    .at(-1)?._id;
+}
 
 export const markThreadIdle = internalMutation({
   args: {

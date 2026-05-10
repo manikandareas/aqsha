@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { ComponentProps } from "react";
-import { BookOpenTextIcon, MessageSquarePlusIcon } from "lucide-react";
+import { BookOpenTextIcon, LibraryIcon, MessageSquarePlusIcon } from "lucide-react";
 import { NavUser } from "@/components/nav-user";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -81,6 +81,16 @@ export function AppSidebar({
       </SidebarHeader>
 
       <SidebarContent className="p-2">
+        <SidebarMenu className="mb-2">
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild className="rounded-[10px]">
+              <Link href="/sources">
+                <LibraryIcon className="size-4 text-[var(--mint)]" />
+                <span className="font-semibold">Sources</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
         <div className="px-2 py-2 text-xs font-semibold text-muted-foreground">
           Threads
         </div>

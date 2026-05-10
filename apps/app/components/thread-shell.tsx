@@ -8,13 +8,17 @@ import { useMutation, useQuery } from "convex/react";
 import {
   BotIcon,
   Loader2Icon,
+  PanelRightCloseIcon,
   SendHorizontalIcon,
   UserIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { api } from "@aqsha/convex/api";
 import { AppSidebar } from "@/components/app-sidebar";
+import { SourcesPanel, type ResearchSource } from "@/components/sources-panel";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -71,7 +75,13 @@ export function ThreadShell({ threadId }: { threadId?: string }) {
     },
   );
   const rateStatus = useQuery(api.rateLimits.getSendStatus);
+  const sources = useQuery(
+    api.sources.list,
+    threadId ? { threadId } : "skip",
+  );
   const [isCreating, setIsCreating] = useState(false);
+  const [activeCitation, setActiveCitation] = useState<number | null>(null);
+  const [showMobileSources, setShowMobileSources] = useState(false);
 
   const threads = threadPage?.page ?? [];
   const title = threadId
@@ -118,8 +128,8 @@ export function ThreadShell({ threadId }: { threadId?: string }) {
           <ThemeToggle />
         </header>
 
-        <main className="flex min-h-[calc(100svh-4rem)] flex-col">
-          <section className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-5 py-8 sm:px-8">
+        <main className="flex min-h-[calc(100svh-4rem)] min-w-0">
+          <section className="flex min-w-0 flex-1 flex-col px-4 py-6 sm:px-8">
             {threadId && selectedThread === null ? (
               <AccessDeniedState />
             ) : (
@@ -129,9 +139,41 @@ export function ThreadShell({ threadId }: { threadId?: string }) {
                 title={threadId ? selectedThread?.title : undefined}
                 rateStatus={rateStatus}
                 onSend={sendMessage}
+                sources={sources ?? []}
+                onCitationClick={(citation) => {
+                  setActiveCitation(citation);
+                  setShowMobileSources(true);
+                }}
               />
             )}
           </section>
+          {sources && sources.length > 0 ? (
+            <>
+              <div className="hidden lg:block">
+                <SourcesPanel
+                  sources={sources}
+                  activeCitation={activeCitation}
+                />
+              </div>
+              {showMobileSources ? (
+                <SourcesPanel
+                  sources={sources}
+                  activeCitation={activeCitation}
+                  onClose={() => setShowMobileSources(false)}
+                />
+              ) : (
+                <Button
+                  type="button"
+                  size="icon"
+                  className="fixed bottom-24 right-4 z-30 rounded-full lg:hidden"
+                  onClick={() => setShowMobileSources(true)}
+                  aria-label="Open sources"
+                >
+                  <PanelRightCloseIcon className="size-4" />
+                </Button>
+              )}
+            </>
+          ) : null}
         </main>
       </SidebarInset>
     </SidebarProvider>
@@ -144,6 +186,8 @@ function ChatThreadState({
   title,
   rateStatus,
   onSend,
+  sources,
+  onCitationClick,
 }: {
   threadId?: string;
   isLoading: boolean;
@@ -154,6 +198,8 @@ function ChatThreadState({
     content: string;
     mode: "normal";
   }) => Promise<SendResult>;
+  sources: ResearchSource[];
+  onCitationClick: (citation: number) => void;
 }) {
   const messages = useUIMessages(
     api.messages.list,
@@ -177,7 +223,12 @@ function ChatThreadState({
         ) : hasMessages ? (
           <div className="grid gap-7">
             {sortedMessages.map((message) => (
-              <MessageRow key={message.key ?? message.id} message={message} />
+              <MessageRow
+                key={message.key ?? message.id}
+                message={message}
+                sources={sources}
+                onCitationClick={onCitationClick}
+              />
             ))}
           </div>
         ) : messages.status === "LoadingFirstPage" && threadId ? (
@@ -196,9 +247,18 @@ function ChatThreadState({
   );
 }
 
-function MessageRow({ message }: { message: ChatMessage }) {
+function MessageRow({
+  message,
+  sources,
+  onCitationClick,
+}: {
+  message: ChatMessage;
+  sources: ResearchSource[];
+  onCitationClick: (citation: number) => void;
+}) {
   const isUser = message.role === "user";
   const text = getMessageText(message);
+  const citedNumbers = new Set(sources.map((source) => source.citationNumber));
 
   return (
     <article className="grid grid-cols-[32px_1fr] gap-3">
@@ -216,14 +276,78 @@ function MessageRow({ message }: { message: ChatMessage }) {
             </span>
           ) : null}
         </div>
-        <div className="whitespace-pre-wrap break-words text-[15px] leading-7 text-[var(--ink-soft)]">
-          {text}
+        <div className="break-words text-[15px] leading-7 text-[var(--ink-soft)]">
+          {isUser ? (
+            <div className="whitespace-pre-wrap">{text}</div>
+          ) : (
+            <AssistantMarkdown
+              text={text}
+              citedNumbers={citedNumbers}
+              onCitationClick={onCitationClick}
+            />
+          )}
           {message.status === "streaming" ? (
             <span className="stream-caret ml-1 inline-block h-4 w-0.5 translate-y-0.5 bg-primary" />
           ) : null}
         </div>
       </div>
     </article>
+  );
+}
+
+function AssistantMarkdown({
+  text,
+  citedNumbers,
+  onCitationClick,
+}: {
+  text: string;
+  citedNumbers: Set<number>;
+  onCitationClick: (citation: number) => void;
+}) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+        ul: ({ children }) => (
+          <ul className="mb-3 list-disc space-y-1 pl-5 last:mb-0">{children}</ul>
+        ),
+        ol: ({ children }) => (
+          <ol className="mb-3 list-decimal space-y-1 pl-5 last:mb-0">{children}</ol>
+        ),
+        code: ({ children }) => (
+          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[13px]">
+            {children}
+          </code>
+        ),
+        text: ({ children }) => (
+          <>
+            {String(children)
+              .split(/(\[\d{1,3}\])/g)
+              .map((part, index) => {
+                const match = part.match(/^\[(\d{1,3})\]$/);
+                if (!match) {
+                  return part;
+                }
+                const citation = Number(match[1]);
+                return (
+                  <button
+                    key={`${part}-${index}`}
+                    type="button"
+                    className="mx-0.5 inline-flex min-w-6 items-center justify-center rounded-full border border-[var(--mint-soft-border)] bg-[var(--mint-soft)] px-1.5 py-0.5 align-baseline font-mono text-[11px] font-semibold text-[var(--mint)] hover:border-[var(--mint)] disabled:opacity-60"
+                    disabled={!citedNumbers.has(citation)}
+                    onClick={() => onCitationClick(citation)}
+                  >
+                    {citation}
+                  </button>
+                );
+              })}
+          </>
+        ),
+      }}
+    >
+      {text}
+    </ReactMarkdown>
   );
 }
 
@@ -261,12 +385,6 @@ function Composer({
     const timer = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(timer);
   }, []);
-
-  useEffect(() => {
-    if (localRetryAt && localRetryAt <= now) {
-      setLocalRetryAt(null);
-    }
-  }, [localRetryAt, now]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

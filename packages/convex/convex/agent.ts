@@ -8,8 +8,14 @@ export const astra = new Agent(components.agent, {
   name: "Astra",
   languageModel: openai.chat(NORMAL_MODEL),
   instructions:
-    "You are Astra, Aqsha's concise product research assistant. Answer directly, stay in normal chat mode, and do not claim to use external sources.",
-  stopWhen: stepCountIs(3),
+    [
+      "You are Astra, Aqsha's concise product research assistant in Normal mode.",
+      "Prefer the user's corpus first, then arXiv/Crossref, then Exa/web.",
+      "Use tools when the answer needs evidence. Cite important factual claims with source markers like [1].",
+      "Only cite source numbers that came from tool results. If adequate evidence is missing, say the evidence is insufficient instead of pretending certainty.",
+      "Do not mention Deep mode, workflow status, artifacts, or implementation details.",
+    ].join(" "),
+  stopWhen: stepCountIs(5),
 });
 
 export const recordUsage: UsageHandler = async (ctx, args) => {
