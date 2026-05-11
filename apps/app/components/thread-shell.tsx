@@ -14,7 +14,6 @@ import {
   Loader2Icon,
   MoreHorizontalIcon,
   PanelLeftIcon,
-  PanelRightIcon,
   PaperclipIcon,
   PlusIcon,
   RotateCcwIcon,
@@ -349,8 +348,8 @@ function ThreadShellLayout({
           defaultOpen={Boolean(hasResearchPayload)}
           style={
             {
-              "--sidebar-width": "34rem",
-              "--sidebar-width-mobile": "26rem",
+              "--sidebar-width": "42rem",
+              "--sidebar-width-mobile": "30rem",
             } as CSSProperties
           }
           className="min-h-0 flex-1"
@@ -451,7 +450,11 @@ function ThreadHeader({
 }
 
 function RightSidebarTrigger() {
-  const { toggleSidebar } = useSidebar();
+  const { isMobile, open, openMobile, toggleSidebar } = useSidebar();
+  const isOpen = isMobile ? openMobile : open;
+
+  if (isOpen) return null;
+
   return (
     <Button
       type="button"
@@ -461,7 +464,7 @@ function RightSidebarTrigger() {
       onClick={toggleSidebar}
       aria-label="Toggle research panel"
     >
-      <PanelRightIcon className="size-4" />
+      <PanelLeftIcon className="size-4 rotate-180" />
     </Button>
   );
 }
@@ -512,7 +515,11 @@ function ChatThreadState({
     [messages.results],
   );
   const hasMessages = sortedMessages.length > 0;
-  const activeRun = runs.find(isRunActive);
+  const activeRun = useMemo(() => runs.find(isRunActive), [runs]);
+  const interleavedEntries = useMemo(
+    () => interleaveRunsWithMessages(sortedMessages, runs),
+    [sortedMessages, runs],
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
@@ -529,24 +536,23 @@ function ChatThreadState({
               <CenteredLoading label="Memuat thread..." />
             ) : hasMessages || runs.length > 0 ? (
               <>
-                {interleaveRunsWithMessages(sortedMessages, runs).map(
-                  (entry) =>
-                    entry.kind === "run" ? (
-                      <DeepRunBlock
-                        key={entry.run._id}
-                        run={entry.run}
-                        artifacts={artifacts ?? []}
-                        onCancelRun={onCancelRun}
-                        onRetryRun={onRetryRun}
-                      />
-                    ) : (
-                      <MessageRow
-                        key={entry.message.key ?? entry.message.id}
-                        message={entry.message}
-                        sources={sources}
-                        onCitationClick={onCitationClick}
-                      />
-                    ),
+                {interleavedEntries.map((entry) =>
+                  entry.kind === "run" ? (
+                    <DeepRunBlock
+                      key={entry.run._id}
+                      run={entry.run}
+                      artifacts={artifacts ?? []}
+                      onCancelRun={onCancelRun}
+                      onRetryRun={onRetryRun}
+                    />
+                  ) : (
+                    <MessageRow
+                      key={entry.message.key ?? entry.message.id}
+                      message={entry.message}
+                      sources={sources}
+                      onCitationClick={onCitationClick}
+                    />
+                  ),
                 )}
               </>
             ) : messages.status === "LoadingFirstPage" && threadId ? (
@@ -561,7 +567,7 @@ function ChatThreadState({
         <ConversationScrollButton className="bottom-4 size-8 border-border/70 bg-card/85 text-muted-foreground shadow-none" />
       </Conversation>
       <div className="sticky bottom-0 bg-background/92 px-4 pb-4 pt-2 backdrop-blur sm:px-8">
-        <div className="mx-auto w-full max-w-4xl">
+        <div className="mx-auto w-full max-w-3xl">
           <Composer
             threadId={threadId}
             disabled={!threadId || isLoading}
@@ -587,7 +593,14 @@ function MessageRow({
 }) {
   const isUser = message.role === "user";
   const text = getMessageText(message);
-  const citedNumbers = new Set(sources.map((source) => source.citationNumber));
+  const messageSources = useMemo(
+    () => getSourcesForMessage(message, text, sources),
+    [message, text, sources],
+  );
+  const citedNumbers = useMemo(
+    () => new Set(messageSources.map((source) => source.citationNumber)),
+    [messageSources],
+  );
 
   if (isUser) {
     return (
@@ -601,10 +614,10 @@ function MessageRow({
 
   return (
     <Message from="assistant">
-      <MessageContent className="w-full bg-transparent px-0 py-0 text-[15px] leading-[1.65] text-[var(--ink-soft)]">
+      <MessageContent className="w-full overflow-visible bg-transparent px-0 py-0 text-[15px] leading-[1.65] text-[var(--ink-soft)]">
         <AssistantMarkdown
           text={text}
-          sources={sources}
+          sources={messageSources}
           citedNumbers={citedNumbers}
           onCitationClick={onCitationClick}
         />
@@ -617,9 +630,29 @@ function MessageRow({
           Sedang menulis
         </span>
       ) : null}
-      <MessageSources sources={sources} />
+      <MessageSources sources={messageSources} />
     </Message>
   );
+}
+
+function getSourcesForMessage(
+  message: ChatMessage,
+  text: string,
+  sources: ResearchSource[],
+) {
+  const directlyLinked = sources.filter(
+    (source) => source.messageId === message.id,
+  );
+  if (directlyLinked.length > 0) {
+    return directlyLinked;
+  }
+
+  const citedNumbers = extractCitations(text);
+  if (citedNumbers.size === 0) {
+    return [];
+  }
+
+  return sources.filter((source) => citedNumbers.has(source.citationNumber));
 }
 
 function MessageSources({ sources }: { sources: ResearchSource[] }) {
@@ -646,7 +679,7 @@ function MessageSources({ sources }: { sources: ResearchSource[] }) {
             <span className="font-mono text-[10px]">
               [{source.citationNumber}]
             </span>
-            <span className="line-clamp-1 font-medium">{source.title}</span>
+            <span className="font-medium">{source.title}</span>
           </Source>
         ))}
       </SourcesContent>
@@ -665,8 +698,10 @@ function AssistantMarkdown({
   citedNumbers: Set<number>;
   onCitationClick: (citation: number) => void;
 }) {
-  const sourceByCitation = new Map(
-    (sources ?? []).map((source) => [source.citationNumber, source]),
+  const sourceByCitation = useMemo(
+    () =>
+      new Map((sources ?? []).map((source) => [source.citationNumber, source])),
+    [sources],
   );
   return (
     <ReactMarkdown
@@ -730,7 +765,7 @@ function AssistantMarkdown({
                           <InlineCitationText className="block text-[12px] font-semibold text-foreground">
                             {source.title}
                           </InlineCitationText>
-                          <p className="mt-1 line-clamp-3 text-[11px] leading-4 text-muted-foreground">
+                          <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
                             {source.snippet}
                           </p>
                         </InlineCitationCardBody>
@@ -1017,9 +1052,9 @@ function DeepRunBlock({
           className="group flex min-w-0 flex-1 items-center gap-1.5 text-left hover:text-foreground"
         >
           {isActive ? (
-            <Shimmer className="truncate font-medium">{summaryText}</Shimmer>
+            <Shimmer className="font-medium">{summaryText}</Shimmer>
           ) : (
-            <span className="truncate font-medium">{summaryText}</span>
+            <span className="font-medium">{summaryText}</span>
           )}
           <ChevronDownIcon
             className={cn(
@@ -1040,7 +1075,7 @@ function DeepRunBlock({
         ) : null}
       </div>
       {open ? (
-        <ol className="mt-2 divide-y divide-border/60 border-l border-border/60 pl-4">
+        <ol className="mt-2 grid gap-1.5 pl-0">
           {sortedSteps.map((step) => (
             <DeepRunStep
               key={step.stepKey}
@@ -1114,19 +1149,19 @@ function DeepRunStep({
   };
 
   return (
-    <li className="py-1.5">
+    <li>
       <button
         type="button"
         onClick={toggle}
         aria-expanded={expandable ? expanded : undefined}
         disabled={!expandable}
         className={cn(
-          "flex w-full items-center gap-2 text-left text-[13px] leading-5",
+          "inline-flex max-w-full items-center gap-1.5 text-left text-[13px] leading-5",
           toneClass,
           expandable ? "hover:text-foreground" : "cursor-default",
         )}
       >
-        <span className="flex-1 truncate">
+        <span className="min-w-0">
           {step.status === "running" ? (
             <Shimmer>{step.label}</Shimmer>
           ) : (
@@ -1154,9 +1189,9 @@ function DeepRunStep({
         <div className="mt-1.5 grid gap-2 text-[12px] leading-5 text-muted-foreground">
           {step.summary ? <p>{step.summary}</p> : null}
           {(step.artifactCount ?? 0) > 0 ? (
-            <span className="inline-flex w-fit items-center gap-2 rounded-[8px] border border-border/70 bg-card/60 px-2.5 py-1.5 text-[12px] text-foreground">
+            <span className="inline-flex w-fit items-center gap-2 rounded-[8px] bg-muted/45 px-2.5 py-1.5 text-[12px] text-foreground">
               <FileTextIcon className="size-3.5 text-[var(--lavender)]" />
-              <span className="truncate font-medium">
+              <span className="font-medium">
                 {artifact?.title ?? "Artefak riset"}
               </span>
               <span className="text-[var(--mint)]">

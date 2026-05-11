@@ -30,7 +30,7 @@ export const ConversationContent = ({
 }: ConversationContentProps) => (
   <StickToBottom.Content
     className={cn(
-      "mx-auto flex w-full max-w-4xl flex-col gap-8 p-4",
+      "mx-auto flex w-full max-w-3xl flex-col gap-8 p-4",
       className
     )}
     {...props}

@@ -5,20 +5,34 @@ import {
   CopyIcon,
   ExternalLinkIcon,
   FileTextIcon,
+  MoreHorizontalIcon,
+  PanelLeftIcon,
   SearchIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sidebar,
   SidebarContent,
   SidebarHeader,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 
 export type ResearchSource = {
   _id: string;
+  messageId?: string;
+  runId?: string;
+  artifactId?: string;
   citationNumber: number;
   origin: "corpus" | "web" | "arxiv" | "doi";
   evidenceStrength: "strong" | "medium" | "weak";
@@ -59,6 +73,8 @@ export function ResearchSidebar({
   const [tab, setTab] = useState<"sources" | "artifacts">(
     sources.length > 0 ? "sources" : "artifacts",
   );
+  const [copiedSummary, setCopiedSummary] = useState(false);
+  const { toggleSidebar } = useSidebar();
 
   const sorted = useMemo(
     () => [...sources].sort((a, b) => a.citationNumber - b.citationNumber),
@@ -74,81 +90,154 @@ export function ResearchSidebar({
     });
   }, [activeCitation]);
 
+  const handleCopySummary = async () => {
+    const sourceLines = sorted.map(
+      (source) =>
+        `[${source.citationNumber}] ${source.title} - ${
+          source.url ?? source.doi ?? source.arxivId ?? source.locator
+        }`,
+    );
+    const artifactLines = artifacts.map((artifact) => `- ${artifact.title}`);
+    const panelSummary = [
+      threadTitle ?? "Research thread",
+      "",
+      `${sources.length} sumber`,
+      ...sourceLines,
+      "",
+      `${artifacts.length} artefak`,
+      ...artifactLines,
+    ].join("\n");
+    await navigator.clipboard.writeText(panelSummary);
+    setCopiedSummary(true);
+    window.setTimeout(() => setCopiedSummary(false), 1200);
+  };
+
+  const handleOpenPrimaryArtifact = () => {
+    const artifact = artifacts[0];
+    if (!artifact) return;
+    setTab("artifacts");
+    onOpenArtifact?.(artifact._id);
+  };
+
   return (
     <Sidebar
       side="right"
       collapsible="offcanvas"
-      className="overflow-hidden bg-card [&_[data-slot=sidebar-container]]:border-l [&_[data-slot=sidebar-inner]]:bg-card"
+      className="overflow-hidden bg-background [&_[data-slot=sidebar-inner]]:bg-background"
     >
-      <SidebarHeader className="gap-3 border-b border-sidebar-border/80 p-4">
-        <div className="grid gap-1">
-          <span className="text-[11px] font-semibold text-muted-foreground">
-            Panel riset
-          </span>
-          <h2 className="truncate font-heading text-base font-bold">
-            {threadTitle ?? "Panel riset"}
-          </h2>
-        </div>
-        <div className="flex gap-1 border-b border-transparent">
-          <TabButton
-            active={tab === "sources"}
-            onClick={() => setTab("sources")}
-            label="Sumber"
-            count={sources.length}
-          />
-          <TabButton
-            active={tab === "artifacts"}
-            onClick={() => setTab("artifacts")}
-            label="Artefak"
-            count={artifacts.length}
-          />
+      <SidebarHeader className="gap-0 p-0">
+        <div className="flex h-9 items-center gap-2 px-2.5">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+            <HeaderTabButton
+              active={tab === "sources"}
+              onClick={() => setTab("sources")}
+              label="Sumber"
+              count={sources.length}
+            />
+            <HeaderTabButton
+              active={tab === "artifacts"}
+              onClick={() => setTab("artifacts")}
+              label="Artefak"
+              count={artifacts.length}
+            />
+          </div>
+          <div className="flex items-center gap-0.5">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="size-6 rounded-[6px] text-muted-foreground"
+                  aria-label="Aksi panel riset"
+                >
+                  <MoreHorizontalIcon className="size-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuLabel>Panel riset</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={handleCopySummary}>
+                  <CopyIcon className="size-3.5" />
+                  {copiedSummary ? "Ringkasan disalin" : "Salin ringkasan"}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={artifacts.length === 0}
+                  onSelect={handleOpenPrimaryArtifact}
+                >
+                  <FileTextIcon className="size-3.5" />
+                  Buka artefak utama
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              className="size-6 rounded-[6px] text-muted-foreground"
+              onClick={toggleSidebar}
+              aria-label="Tutup panel riset"
+            >
+              <PanelLeftIcon className="size-3.5 rotate-180" />
+            </Button>
+          </div>
         </div>
       </SidebarHeader>
 
       <SidebarContent className="min-h-0 overflow-x-hidden">
         <ScrollArea className="h-full">
-          <div className="grid min-w-0 gap-3 p-3">
-            {tab === "sources" ? (
-              sorted.length === 0 ? (
-                <EmptyBlock
-                  title="Belum ada sumber"
-                  body="Sumber akan muncul saat Aqsha menemukan kutipan yang relevan."
-                />
-              ) : (
-                sorted.map((source) => (
-                  <SourceCard
-                    key={source._id}
-                    source={source}
-                    isActive={source.citationNumber === activeCitation}
-                    refSetter={(node) => {
-                      refs.current[source.citationNumber] = node;
-                    }}
-                  />
-                ))
-              )
-            ) : artifacts.length === 0 ? (
-              <EmptyBlock
-                title="Belum ada artefak"
-                body="Laporan dan evidence view akan tersimpan di sini."
-              />
-            ) : (
-              artifacts.map((artifact) => (
-                <ArtifactCard
-                  key={artifact._id}
-                  artifact={artifact}
-                  active={artifact._id === activeArtifactId}
-                  onOpen={() => onOpenArtifact?.(artifact._id)}
-                />
-              ))
-            )}
+          <div className="grid min-w-0 gap-3 px-3 pb-4 pt-1">
+            {tab === "sources"
+              ? renderSources()
+              : renderArtifacts()}
           </div>
         </ScrollArea>
       </SidebarContent>
     </Sidebar>
   );
+
+  function renderSources() {
+    if (sorted.length === 0) {
+      return (
+        <EmptyBlock
+          title="Belum ada sumber"
+          body="Sumber akan muncul saat Aqsha menemukan kutipan yang relevan."
+        />
+      );
+    }
+    return sorted.map((source) => (
+      <SourceCard
+        key={source._id}
+        source={source}
+        isActive={source.citationNumber === activeCitation}
+        refSetter={(node) => {
+          refs.current[source.citationNumber] = node;
+        }}
+      />
+    ));
+  }
+
+  function renderArtifacts() {
+    if (artifacts.length === 0) {
+      return (
+        <EmptyBlock
+          title="Belum ada artefak"
+          body="Laporan dan evidence view akan tersimpan di sini."
+        />
+      );
+    }
+    return artifacts.map((artifact) => (
+      <ArtifactCard
+        key={artifact._id}
+        artifact={artifact}
+        active={artifact._id === activeArtifactId}
+        onOpen={() => onOpenArtifact?.(artifact._id)}
+      />
+    ));
+  }
 }
 
-function TabButton({
+function HeaderTabButton({
   active,
   onClick,
   label,
@@ -164,16 +253,16 @@ function TabButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex items-center gap-2 border-b-2 px-3 pb-2.5 pt-1 text-[13px] font-semibold transition-colors",
+        "flex h-7 min-w-0 items-center gap-1.5 rounded-[7px] px-2 text-[12px] font-semibold transition-colors",
         active
-          ? "border-primary text-foreground"
-          : "border-transparent text-muted-foreground hover:text-foreground",
+          ? "bg-muted text-foreground"
+          : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
       )}
     >
-      {label}
+      <span className="truncate">{label}</span>
       <span
         className={cn(
-          "inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold",
+          "inline-flex min-w-4 items-center justify-center rounded-[6px] px-1.5 py-0.5 text-[10px] font-semibold",
           active
             ? "bg-[var(--sky-soft)] text-primary"
             : "bg-muted text-muted-foreground",
@@ -187,7 +276,7 @@ function TabButton({
 
 function EmptyBlock({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-[8px] border border-dashed bg-muted/30 p-4 text-center">
+    <div className="rounded-[12px] bg-muted/30 p-4 text-center">
       <p className="text-sm font-semibold">{title}</p>
       <p className="mt-1 text-xs text-muted-foreground">{body}</p>
     </div>
@@ -214,19 +303,21 @@ function ArtifactCard({
       type="button"
       onClick={onOpen}
       className={cn(
-        "block w-full min-w-0 overflow-hidden rounded-[10px] border bg-background/60 p-3 text-left transition-colors hover:border-[var(--lavender-soft-border)]",
-        active && "border-[var(--lavender)] bg-[var(--lavender-soft)]",
+        "block w-full min-w-0 overflow-hidden rounded-[12px] bg-card text-left transition-colors hover:bg-muted/45",
+        active && "bg-[var(--lavender-soft)] ring-1 ring-[var(--lavender-soft-border)]",
       )}
     >
-      <div className="mb-2 flex items-center gap-2">
-        <FileTextIcon className="size-3.5 text-[var(--lavender)]" />
-        <span className="rounded-full border border-[var(--lavender-soft-border)] bg-[var(--lavender-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--lavender)]">
+      <div className="flex items-center gap-2 px-3 py-2">
+        <FileTextIcon className="size-3.5 shrink-0 text-[var(--lavender)]" />
+        <span className="rounded-[7px] border border-[var(--lavender-soft-border)] bg-[var(--lavender-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--lavender)]">
           {label}
         </span>
       </div>
-      <h3 className="line-clamp-2 text-[13px] font-semibold leading-5">
-        {artifact.title}
-      </h3>
+      <div className="p-3">
+        <h3 className="line-clamp-2 text-[13px] font-semibold leading-5">
+          {artifact.title}
+        </h3>
+      </div>
     </button>
   );
 }
@@ -254,53 +345,64 @@ function SourceCard({
     <article
       ref={refSetter}
       className={cn(
-        "min-w-0 overflow-hidden rounded-[10px] border bg-background/60 p-3 transition-colors",
-        isActive && "border-[var(--mint)] bg-[var(--mint-soft)]",
+        "min-w-0 overflow-hidden rounded-[12px] bg-card transition-colors hover:bg-muted/45",
+        isActive && "bg-[var(--mint-soft)] ring-1 ring-[var(--mint-soft-border)]",
       )}
     >
-      <div className="mb-2 flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="grid size-6 shrink-0 place-items-center rounded-full border border-[var(--mint-soft-border)] bg-[var(--mint-soft)] font-mono text-[11px] font-semibold text-[var(--mint)]">
+          <span className="grid size-6 shrink-0 place-items-center rounded-[7px] border border-[var(--mint-soft-border)] bg-[var(--mint-soft)] font-mono text-[11px] font-semibold text-[var(--mint)]">
             {source.citationNumber}
           </span>
           <OriginChip origin={source.origin} />
         </div>
         <EvidenceChip strength={source.evidenceStrength} />
       </div>
-      <button
-        type="button"
-        onClick={() => setExpanded((value) => !value)}
-        className="block w-full min-w-0 text-left"
-      >
-        <h3 className="line-clamp-2 break-words text-[13px] font-semibold leading-5 [overflow-wrap:anywhere]">
-          {source.title}
-        </h3>
-        <p className="mt-1 break-all font-mono text-[11px] leading-4 text-muted-foreground [overflow-wrap:anywhere]">
-          {source.doi ?? source.arxivId ?? source.url ?? source.locator}
-        </p>
-      </button>
-      <p className="mt-3 break-words text-[13px] leading-6 text-[var(--ink-soft)] [overflow-wrap:anywhere]">
-        {expanded ? source.snippet : clamp(source.snippet, 220)}
-      </p>
-      <div className="mt-3 flex flex-wrap gap-2">
-        {source.url ? (
-          <Button asChild variant="outline" size="sm" className="h-7 text-[12px]">
-            <a href={source.url} target="_blank" rel="noreferrer">
-              <ExternalLinkIcon className="size-3" />
-              Buka sumber
-            </a>
-          </Button>
-        ) : null}
-        <Button
+      <div className="p-3">
+        <button
           type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 text-[12px]"
-          onClick={handleCopy}
+          onClick={() => setExpanded((value) => !value)}
+          className="block w-full min-w-0 text-left"
         >
-          {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
-          Salin kutipan
-        </Button>
+          <h3 className="line-clamp-2 break-words text-[13px] font-semibold leading-5 [overflow-wrap:anywhere]">
+            {source.title}
+          </h3>
+          <p className="mt-1 break-all font-mono text-[11px] leading-4 text-muted-foreground [overflow-wrap:anywhere]">
+            {source.doi ?? source.arxivId ?? source.url ?? source.locator}
+          </p>
+        </button>
+        <p className="mt-3 border-l-2 border-[var(--lemon-soft-border)] bg-[var(--lemon-soft)] px-3 py-2 text-[13px] leading-6 text-[var(--ink-soft)] [overflow-wrap:anywhere]">
+          {expanded ? source.snippet : clamp(source.snippet, 220)}
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {source.url ? (
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="h-7 text-[12px]"
+            >
+              <a href={source.url} target="_blank" rel="noreferrer">
+                <ExternalLinkIcon className="size-3" />
+                Buka sumber
+              </a>
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-[12px]"
+            onClick={handleCopy}
+          >
+            {copied ? (
+              <CheckIcon className="size-3" />
+            ) : (
+              <CopyIcon className="size-3" />
+            )}
+            Salin kutipan
+          </Button>
+        </div>
       </div>
     </article>
   );
@@ -315,7 +417,7 @@ function OriginChip({ origin }: { origin: ResearchSource["origin"] }) {
   }[origin];
   const Icon = origin === "web" ? SearchIcon : FileTextIcon;
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-[var(--mint-soft-border)] bg-[var(--mint-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--mint)]">
+    <span className="inline-flex items-center gap-1 rounded-[7px] border border-[var(--mint-soft-border)] bg-[var(--mint-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--mint)]">
       <Icon className="size-3" />
       {label}
     </span>
@@ -328,7 +430,7 @@ function EvidenceChip({ strength }: { strength: ResearchSource["evidenceStrength
   return (
     <span
       className={cn(
-        "rounded-full border px-2 py-0.5 text-[11px] font-semibold",
+        "rounded-[7px] border px-2 py-0.5 text-[11px] font-semibold",
         weak
           ? "border-[var(--lemon-soft-border)] bg-[var(--lemon-soft)] text-[var(--lemon)]"
           : "border-[var(--mint-soft-border)] bg-[var(--mint-soft)] text-[var(--mint)]",
