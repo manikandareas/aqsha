@@ -3,18 +3,18 @@
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
   FilePlus2Icon,
+  FolderIcon,
   Loader2Icon,
+  MoreHorizontalIcon,
   PlusIcon,
   ScrollTextIcon,
 } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { type CSSProperties, FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@aqsha/convex/api";
 import { AppSidebar } from "@/components/app-sidebar";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import {
   SidebarInset,
   SidebarProvider,
@@ -87,7 +87,14 @@ export function SourceLibrary() {
   };
 
   return (
-    <SidebarProvider>
+    <SidebarProvider
+      style={
+        {
+          "--sidebar-width": "16.5rem",
+          "--sidebar-width-mobile": "17.5rem",
+        } as CSSProperties
+      }
+    >
       <AppSidebar
         viewer={viewer}
         threads={threadPage?.page ?? []}
@@ -95,22 +102,32 @@ export function SourceLibrary() {
         onCreateThread={handleCreateThread}
       />
       <SidebarInset className="bg-background">
-        <header className="flex h-16 shrink-0 items-center justify-between gap-3 border-b bg-card/80 px-4 backdrop-blur">
+        <header className="flex h-9 shrink-0 items-center justify-between gap-2 bg-background px-3">
           <div className="flex min-w-0 items-center gap-2">
-            <SidebarTrigger className="-ml-1" />
-            <Separator
-              orientation="vertical"
-              className="mr-2 data-vertical:h-4 data-vertical:self-auto"
-            />
-            <h1 className="truncate font-heading text-lg font-bold">
-              Source Library
+            <SidebarTrigger className="-ml-1 size-7 rounded-[7px] text-muted-foreground" />
+            <h1 className="truncate text-[13px] font-semibold text-foreground">
+              Perpustakaan sumber
             </h1>
+            <div className="hidden min-w-0 items-center gap-1.5 text-[12px] font-medium text-muted-foreground sm:flex">
+              <FolderIcon className="size-3.5 shrink-0" />
+              <span className="truncate">aqsha / sources</span>
+            </div>
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-0.5">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="size-7 rounded-[7px] text-muted-foreground"
+              aria-label="Source library actions"
+            >
+              <MoreHorizontalIcon className="size-4" />
+            </Button>
+          </div>
         </header>
 
         <main className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 sm:px-8 lg:grid-cols-[380px_1fr]">
-          <section className="h-fit rounded-[8px] border bg-card p-4 shadow-aqsha">
+          <section className="h-fit rounded-[10px] border bg-card/95 p-4 shadow-aqsha">
             <div className="mb-4 flex items-center gap-2">
               <FilePlus2Icon className="size-4 text-[var(--mint)]" />
               <h2 className="font-heading text-base font-bold">Add Source</h2>
@@ -122,10 +139,10 @@ export function SourceLibrary() {
                   type="button"
                   onClick={() => setMode(item.value)}
                   className={cn(
-                    "rounded-[8px] border px-3 py-2 text-left text-sm font-semibold",
+                    "rounded-[8px] border px-3 py-2 text-left text-sm font-semibold transition-colors",
                     mode === item.value
                       ? "border-[var(--mint)] bg-[var(--mint-soft)] text-[var(--mint)]"
-                      : "bg-background text-muted-foreground",
+                      : "bg-background/60 text-muted-foreground hover:text-foreground",
                   )}
                 >
                   {item.label}
@@ -197,7 +214,7 @@ export function SourceLibrary() {
                 sources.map((source) => (
                   <article
                     key={source._id}
-                    className="rounded-[8px] border bg-card p-4 shadow-aqsha"
+                  className="rounded-[10px] border bg-card/95 p-4 shadow-aqsha"
                   >
                     <div className="mb-2 flex flex-wrap items-center gap-2">
                       <span className="rounded-full border border-[var(--mint-soft-border)] bg-[var(--mint-soft)] px-2 py-1 text-[11px] font-semibold text-[var(--mint)]">

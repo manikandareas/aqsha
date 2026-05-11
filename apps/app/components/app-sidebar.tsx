@@ -2,9 +2,15 @@
 
 import Link from "next/link";
 import type { ComponentProps } from "react";
-import { BookOpenTextIcon, LibraryIcon, MessageSquarePlusIcon } from "lucide-react";
+import {
+  BugIcon,
+  LibraryIcon,
+  MessageSquarePlusIcon,
+  PanelLeftIcon,
+  SearchIcon,
+  SparklesIcon,
+} from "lucide-react";
 import { NavUser } from "@/components/nav-user";
-import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sidebar,
@@ -14,6 +20,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 
@@ -47,120 +54,216 @@ export function AppSidebar({
   isCreating: boolean;
   onCreateThread: () => void;
 }) {
+  const grouped = groupThreads(threads);
+  const { isMobile, setOpen, setOpenMobile } = useSidebar();
+
+  const closeSidebar = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+      return;
+    }
+    setOpen(false);
+  };
+
   return (
-    <Sidebar collapsible="offcanvas" {...props}>
-      <SidebarHeader className="gap-3 border-b border-sidebar-border p-3">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link href="/">
-                <div className="flex aspect-square size-9 items-center justify-center rounded-[10px] bg-sidebar-primary text-sm font-bold text-sidebar-primary-foreground">
-                  A
-                </div>
-                <div className="grid flex-1 text-left leading-tight">
-                  <span className="font-heading truncate text-base font-bold">
-                    Aqsha
-                  </span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    Research threads
-                  </span>
-                </div>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+    <Sidebar
+      collapsible="offcanvas"
+      className="border-r border-sidebar-border/80 bg-sidebar [&_[data-slot=sidebar-inner]]:bg-sidebar"
+      {...props}
+    >
+      <SidebarHeader className="gap-2 px-2.5 pb-1.5 pt-2.5">
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={closeSidebar}
+            className="flex size-6 items-center justify-center rounded-[6px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="Tutup sidebar kiri"
+          >
+            <PanelLeftIcon className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            className="flex size-6 items-center justify-center rounded-[6px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-70"
+            disabled
+            aria-label="Cari thread"
+          >
+            <SearchIcon className="size-3.5" />
+          </button>
+        </div>
+        <SidebarMenu className="gap-0.5">
+          <PrimaryNavRow
+            icon={MessageSquarePlusIcon}
+            label={isCreating ? "Membuat..." : "Chat baru"}
+            onClick={onCreateThread}
+            disabled={isCreating}
+          />
+          <PrimaryNavLink
+            href="/sources"
+            icon={LibraryIcon}
+            label="Sumber"
+            accent="mint"
+          />
+          <PrimaryNavRow icon={SparklesIcon} label="Otomasi" disabled />
+          <PrimaryNavRow icon={BugIcon} label="Audit riset" disabled />
         </SidebarMenu>
-        <Button
-          type="button"
-          className="h-10 justify-start gap-2 rounded-[10px]"
-          onClick={onCreateThread}
-          disabled={isCreating}
-        >
-          <MessageSquarePlusIcon className="size-4" />
-          {isCreating ? "Membuat..." : "Tulis chat baru"}
-        </Button>
       </SidebarHeader>
 
-      <SidebarContent className="p-2">
-        <SidebarMenu className="mb-2">
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild className="rounded-[10px]">
-              <Link href="/sources">
-                <LibraryIcon className="size-4 text-[var(--mint)]" />
-                <span className="font-semibold">Sources</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-        <div className="px-2 py-2 text-xs font-semibold text-muted-foreground">
-          Threads
-        </div>
-        <ScrollArea className="min-h-0 flex-1">
-          <SidebarMenu className="gap-1">
-            {threads.length === 0 ? (
-              <div className="mx-2 rounded-[10px] border border-dashed bg-muted/40 p-4 text-sm text-muted-foreground">
+      <SidebarContent className="px-1 pb-1 pt-0">
+        <ScrollArea className="min-h-0 min-w-0 flex-1 overflow-hidden px-0">
+          <div className="grid min-w-0 gap-1.5 overflow-hidden">
+            {grouped.length === 0 ? (
+              <div className="mx-1.5 mt-1.5 rounded-[7px] border border-dashed border-sidebar-border bg-muted/25 p-2 text-[12px] text-muted-foreground">
                 Belum ada thread.
               </div>
             ) : (
-              threads.map((thread) => (
-                <SidebarMenuItem key={thread.threadId}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={thread.threadId === selectedThreadId}
-                    className={cn(
-                      "h-auto items-start gap-3 rounded-[10px] py-3",
-                      thread.threadId === selectedThreadId &&
-                        "border-l-[3px] border-l-primary bg-sidebar-accent text-sidebar-accent-foreground",
-                    )}
-                  >
-                    <Link href={`/thread/${thread.threadId}`}>
-                      <BookOpenTextIcon className="mt-0.5 size-4 text-primary" />
-                      <span className="grid min-w-0 flex-1 gap-1">
-                        <span className="truncate text-sm font-semibold">
-                          {thread.title}
-                        </span>
-                        <span className="truncate text-xs text-muted-foreground">
-                          {thread.lastMessagePreview ||
-                            formatThreadActivity(thread.lastActivityAt)}
-                        </span>
-                        <span className="text-[11px] font-medium text-muted-foreground">
-                          {thread.status === "streaming"
-                            ? "Astra sedang menulis"
-                            : formatThreadActivity(thread.lastActivityAt)}
-                        </span>
-                      </span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+              grouped.map((section) => (
+                <div key={section.label} className="min-w-0 overflow-hidden">
+                  <div className="px-2 pb-0.5 pt-1 text-[11px] font-medium text-muted-foreground">
+                    {section.label}
+                  </div>
+                  <SidebarMenu className="min-w-0 gap-px overflow-hidden">
+                    {section.items.map((thread) => (
+                      <ThreadRow
+                        key={thread.threadId}
+                        thread={thread}
+                        active={thread.threadId === selectedThreadId}
+                      />
+                    ))}
+                  </SidebarMenu>
+                </div>
               ))
             )}
-          </SidebarMenu>
+          </div>
         </ScrollArea>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border p-3">
+      <SidebarFooter className="mt-auto border-t border-transparent p-1.5">
         <NavUser user={viewer} />
       </SidebarFooter>
     </Sidebar>
   );
 }
 
-function formatThreadActivity(value: number) {
-  const diff = Date.now() - value;
-  const minute = 60_000;
-  const hour = 60 * minute;
-  const day = 24 * hour;
+function PrimaryNavLink({
+  href,
+  icon: Icon,
+  label,
+  accent,
+}: {
+  href: string;
+  icon: typeof MessageSquarePlusIcon;
+  label: string;
+  accent?: "mint" | "sky";
+}) {
+  return (
+    <SidebarMenuItem className="min-w-0 overflow-hidden">
+      <SidebarMenuButton
+        asChild
+        className="h-7 rounded-[7px] px-1.5 text-[12px] font-medium text-sidebar-foreground/88 hover:bg-muted/70 hover:text-foreground"
+      >
+        <Link href={href}>
+          <Icon
+            className={cn(
+              "size-3.5",
+              accent === "mint" ? "text-[var(--mint)]" : "text-primary",
+            )}
+          />
+          <span>{label}</span>
+        </Link>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
 
-  if (diff < minute) {
-    return "Baru saja";
+function PrimaryNavRow({
+  icon: Icon,
+  label,
+  disabled,
+  onClick,
+}: {
+  icon: typeof MessageSquarePlusIcon;
+  label: string;
+  disabled?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <SidebarMenuItem className="min-w-0 overflow-hidden">
+      <SidebarMenuButton
+        type="button"
+        className={cn(
+          "h-7 rounded-[7px] px-1.5 text-[12px] font-medium text-sidebar-foreground/88 hover:bg-muted/70 hover:text-foreground",
+          disabled && "opacity-70",
+        )}
+        onClick={onClick}
+        disabled={disabled}
+      >
+        <Icon className="size-3.5 text-muted-foreground" />
+        <span>{label}</span>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
+
+function ThreadRow({
+  thread,
+  active,
+}: {
+  thread: ThreadSummary;
+  active: boolean;
+}) {
+  const title = truncateWords(thread.title, 18);
+
+  return (
+    <SidebarMenuItem className="min-w-0 overflow-hidden">
+      <SidebarMenuButton
+        asChild
+        isActive={active}
+        className={cn(
+          "h-8 w-full min-w-0 max-w-full overflow-hidden rounded-[7px] px-2 text-[12px] text-sidebar-foreground/88 hover:bg-muted/70",
+          active &&
+            "bg-muted text-foreground shadow-none",
+        )}
+      >
+        <Link
+          href={`/thread/${thread.threadId}`}
+          className="flex min-w-0 max-w-full items-center overflow-hidden"
+        >
+          <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-medium leading-4">
+            {title}
+          </span>
+          {thread.status === "streaming" ? (
+            <span className="ml-auto inline-flex size-1.5 shrink-0 rounded-full bg-primary" />
+          ) : null}
+        </Link>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
+
+function truncateWords(value: string, maxWords: number) {
+  const words = value.trim().split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return value;
+  return `${words.slice(0, maxWords).join(" ")}...`;
+}
+
+type ThreadSection = { label: string; items: ThreadSummary[] };
+
+function groupThreads(threads: ThreadSummary[]): ThreadSection[] {
+  if (threads.length === 0) return [];
+  const now = Date.now();
+  const day = 24 * 60 * 60 * 1000;
+  const buckets: Record<string, ThreadSummary[]> = {
+    "Hari ini": [],
+    "7 hari terakhir": [],
+    Older: [],
+  };
+  for (const thread of threads) {
+    const diff = now - thread.lastActivityAt;
+    if (diff < day) buckets["Hari ini"].push(thread);
+    else if (diff < 7 * day) buckets["7 hari terakhir"].push(thread);
+    else buckets.Older.push(thread);
   }
-  if (diff < hour) {
-    return `${Math.floor(diff / minute)} menit lalu`;
-  }
-  if (diff < day) {
-    return `${Math.floor(diff / hour)} jam lalu`;
-  }
-  return new Intl.DateTimeFormat("id-ID", {
-    day: "2-digit",
-    month: "short",
-  }).format(new Date(value));
+  return Object.entries(buckets)
+    .filter(([, items]) => items.length > 0)
+    .map(([label, items]) => ({ label, items }));
 }
