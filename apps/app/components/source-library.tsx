@@ -27,12 +27,12 @@ type SourceMode = "manual_text" | "url" | "doi" | "arxiv" | "uploaded_text";
 export function SourceLibrary() {
   const router = useRouter();
   const viewer = useQuery(api.auth.getCurrentUser);
-  const threadPage = useQuery(api.threads.list, {
+  const threadPage = useQuery(api.agent.threads.list, {
     paginationOpts: { cursor: null, numItems: 50 },
   });
-  const sources = useQuery(api.corpus.list);
-  const addSource = useAction(api.corpus.addSource);
-  const createThread = useMutation(api.threads.create);
+  const sources = useQuery(api.agent.corpus.list);
+  const addSource = useAction(api.agent.corpus.addSource);
+  const createThread = useMutation(api.agent.threads.create);
   const [mode, setMode] = useState<SourceMode>("manual_text");
   const [title, setTitle] = useState("");
   const [value, setValue] = useState("");

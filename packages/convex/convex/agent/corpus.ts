@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values";
-import { internal } from "./_generated/api";
-import type { Doc, Id } from "./_generated/dataModel";
+import { internal } from "../_generated/api";
+import type { Doc, Id } from "../_generated/dataModel";
 import {
   action,
   internalAction,
@@ -9,7 +9,7 @@ import {
   query,
   type ActionCtx,
   type MutationCtx,
-} from "./_generated/server";
+} from "../_generated/server";
 import {
   getUrlContentProvider,
   type ExternalCandidate,
@@ -17,7 +17,7 @@ import {
   searchArxivProvider,
 } from "./externalProviders";
 import { corpusRag, userNamespace } from "./rag";
-import { requireCurrentUser } from "./auth";
+import { requireCurrentUser } from "../auth";
 import { trimForSnippet } from "./sourceCandidates";
 
 const MAX_SOURCE_TEXT = 40_000;
@@ -118,7 +118,7 @@ export const addSource = action({
     const user = await requireCurrentUser(ctx);
     const prepared: PreparedSource = await prepareSource(ctx, user._id, args.input);
     const sourceId: Id<"corpusSources"> = await ctx.runMutation(
-      internal.corpus.insertSource,
+      internal.agent.corpus.insertSource,
       {
         ownerUserId: user._id,
         ...prepared,
@@ -146,14 +146,14 @@ export const addSource = action({
             { name: "corpusSourceId", value: sourceId },
           ],
         });
-        await ctx.runMutation(internal.corpus.markIndexed, {
+        await ctx.runMutation(internal.agent.corpus.markIndexed, {
           sourceId,
           ownerUserId: user._id,
           ragEntryId: indexed.entryId,
         });
         return { sourceId, status: "ready" as const };
       } catch (error) {
-        await ctx.runMutation(internal.corpus.markFailed, {
+        await ctx.runMutation(internal.agent.corpus.markFailed, {
           sourceId,
           ownerUserId: user._id,
           failureReason: readableError(error),

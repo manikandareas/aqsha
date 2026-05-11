@@ -1,7 +1,7 @@
 import { v } from "convex/values";
-import { query } from "./_generated/server";
-import { requireCurrentUser } from "./auth";
-import { rateLimiter } from "./limits";
+import { query } from "../_generated/server";
+import { requireCurrentUser } from "../auth";
+import { rateLimiter } from "../limits";
 
 const statusValidator = v.object({
   ok: v.boolean(),

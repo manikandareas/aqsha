@@ -58,25 +58,25 @@ type ChatMessage = {
 export function ThreadShell({ threadId }: { threadId?: string }) {
   const router = useRouter();
   const viewer = useQuery(api.auth.getCurrentUser);
-  const threadPage = useQuery(api.threads.list, {
+  const threadPage = useQuery(api.agent.threads.list, {
     paginationOpts: { cursor: null, numItems: 50 },
   });
   const selectedThread = useQuery(
-    api.threads.get,
+    api.agent.threads.get,
     threadId ? { threadId } : "skip",
   );
-  const createThread = useMutation(api.threads.create);
-  const sendMessage = useMutation(api.messages.send).withOptimisticUpdate(
+  const createThread = useMutation(api.agent.threads.create);
+  const sendMessage = useMutation(api.agent.messages.send).withOptimisticUpdate(
     (store, args) => {
-      optimisticallySendMessage(api.messages.list)(store, {
+      optimisticallySendMessage(api.agent.messages.list)(store, {
         threadId: args.threadId,
         prompt: args.content,
       });
     },
   );
-  const rateStatus = useQuery(api.rateLimits.getSendStatus);
+  const rateStatus = useQuery(api.agent.rateLimits.getSendStatus);
   const sources = useQuery(
-    api.sources.list,
+    api.agent.sources.list,
     threadId ? { threadId } : "skip",
   );
   const [isCreating, setIsCreating] = useState(false);
@@ -202,7 +202,7 @@ function ChatThreadState({
   onCitationClick: (citation: number) => void;
 }) {
   const messages = useUIMessages(
-    api.messages.list,
+    api.agent.messages.list,
     threadId ? { threadId } : "skip",
     { initialNumItems: 30, stream: true },
   );

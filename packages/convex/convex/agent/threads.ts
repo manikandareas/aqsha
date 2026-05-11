@@ -1,9 +1,9 @@
 import { createThread } from "@convex-dev/agent";
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
-import { components } from "./_generated/api";
-import { mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "./_generated/server";
-import { requireCurrentUser } from "./auth";
+import { components } from "../_generated/api";
+import { mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "../_generated/server";
+import { requireCurrentUser } from "../auth";
 
 type ThreadCtx = QueryCtx | MutationCtx | ActionCtx;
 

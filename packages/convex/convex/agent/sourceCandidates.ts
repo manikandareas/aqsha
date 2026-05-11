@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
+import type { Id } from "../_generated/dataModel";
 
 export type EvidenceStrength = "strong" | "medium" | "weak";
 export type SourceOrigin = "corpus" | "web" | "arxiv" | "doi";

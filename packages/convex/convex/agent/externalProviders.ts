@@ -1,13 +1,13 @@
 import Exa from "exa-js";
 import { XMLParser } from "fast-xml-parser";
 import { ConvexError, v } from "convex/values";
-import { internal } from "./_generated/api";
+import { internal } from "../_generated/api";
 import {
   internalMutation,
   internalQuery,
   type ActionCtx,
-} from "./_generated/server";
-import { rateLimiter } from "./limits";
+} from "../_generated/server";
+import { rateLimiter } from "../limits";
 import type { SourceCandidate, SourceOrigin } from "./sourceCandidates";
 import { trimForSnippet } from "./sourceCandidates";
 
@@ -275,7 +275,7 @@ async function readCachedCandidates(
   cacheKey: string,
 ): Promise<ExternalCandidate[] | null> {
   const cached: { valueJson: string } | null = await ctx.runQuery(
-    internal.externalProviders.getCache,
+    internal.agent.externalProviders.getCache,
     {
     provider,
     cacheKey,
@@ -298,7 +298,7 @@ async function writeCachedCandidates(
   candidates: ExternalCandidate[],
   failureReason?: string,
 ) {
-  await ctx.runMutation(internal.externalProviders.putCache, {
+  await ctx.runMutation(internal.agent.externalProviders.putCache, {
     provider,
     cacheKey,
     status: failureReason ? "failed" : candidates.length > 0 ? "ready" : "empty",

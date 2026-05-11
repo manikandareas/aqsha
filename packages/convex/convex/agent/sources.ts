@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values";
-import { internalMutation, query } from "./_generated/server";
-import { requireCurrentUser } from "./auth";
+import { internalMutation, query } from "../_generated/server";
+import { requireCurrentUser } from "../auth";
 import { assertThreadOwner } from "./threads";
 import { sourceCandidateValidator } from "./sourceCandidates";
 

@@ -1,6 +1,6 @@
 import { openai } from "@ai-sdk/openai";
 import { RAG } from "@convex-dev/rag";
-import { components } from "./_generated/api";
+import { components } from "../_generated/api";
 
 export type CorpusFilter = {
   sourceType: string;

@@ -1,8 +1,8 @@
 import { createTool } from "@convex-dev/agent";
 import type { ToolSet } from "ai";
 import { z } from "zod";
-import type { Id } from "./_generated/dataModel";
-import type { ActionCtx } from "./_generated/server";
+import type { Id } from "../_generated/dataModel";
+import type { ActionCtx } from "../_generated/server";
 import {
   lookupDoiProvider,
   searchArxivProvider,

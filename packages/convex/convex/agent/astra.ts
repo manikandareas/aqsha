@@ -1,7 +1,7 @@
 import { v } from "convex/values";
-import { action } from "./_generated/server";
-import { astra } from "./agent";
-import { authComponent } from "./auth";
+import { action } from "../_generated/server";
+import { astra } from "./runtime";
+import { authComponent } from "../auth";
 
 export const sendPrompt = action({
   args: {

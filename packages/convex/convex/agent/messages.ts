@@ -5,7 +5,7 @@ import {
 } from "@convex-dev/agent";
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
-import { components, internal } from "./_generated/api";
+import { components, internal } from "../_generated/api";
 import {
   internalAction,
   internalMutation,
@@ -13,10 +13,10 @@ import {
   query,
   type MutationCtx,
   type QueryCtx,
-} from "./_generated/server";
-import { astra, NORMAL_MODEL, recordUsage as handleUsage } from "./agent";
-import { requireCurrentUser } from "./auth";
-import { rateLimiter } from "./limits";
+} from "../_generated/server";
+import { astra, NORMAL_MODEL, recordUsage as handleUsage } from "./runtime";
+import { requireCurrentUser } from "../auth";
+import { rateLimiter } from "../limits";
 import { researchTools } from "./researchTools";
 import type { SourceCandidate } from "./sourceCandidates";
 import { assertThreadOwner } from "./threads";
@@ -155,7 +155,7 @@ export const send = mutation({
       });
     }
 
-    await ctx.scheduler.runAfter(0, internal.messages.generateReply, {
+    await ctx.scheduler.runAfter(0, internal.agent.messages.generateReply, {
       threadId: args.threadId,
       userId: user._id,
       promptMessageId: messageId,
@@ -208,7 +208,7 @@ export const generateReply = internalAction({
       const steps = await result.steps;
       const assistantMessageId = getAssistantMessageId(result.savedMessages);
       if (assistantMessageId) {
-        await ctx.runMutation(internal.sources.persistCited, {
+        await ctx.runMutation(internal.agent.sources.persistCited, {
           ownerUserId: args.userId,
           threadId: args.threadId,
           messageId: assistantMessageId,
@@ -216,7 +216,7 @@ export const generateReply = internalAction({
           citedNumbers: extractCitationNumbers(text),
         });
       }
-      await ctx.runMutation(internal.messages.markThreadIdle, {
+      await ctx.runMutation(internal.agent.messages.markThreadIdle, {
         ownerUserId: args.userId,
         threadId: args.threadId,
         preview: previewFromContent(text),
@@ -231,7 +231,7 @@ export const generateReply = internalAction({
         failPendingSteps: true,
         skipEmbeddings: true,
       });
-      await ctx.runMutation(internal.messages.markThreadFailed, {
+      await ctx.runMutation(internal.agent.messages.markThreadFailed, {
         ownerUserId: args.userId,
         threadId: args.threadId,
         preview: FAILURE_TEXT,

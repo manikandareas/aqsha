@@ -8,20 +8,20 @@
  * @module
  */
 
-import type * as agent from "../agent.js";
-import type * as astra from "../astra.js";
+import type * as agent_astra from "../agent/astra.js";
+import type * as agent_corpus from "../agent/corpus.js";
+import type * as agent_externalProviders from "../agent/externalProviders.js";
+import type * as agent_messages from "../agent/messages.js";
+import type * as agent_rag from "../agent/rag.js";
+import type * as agent_rateLimits from "../agent/rateLimits.js";
+import type * as agent_researchTools from "../agent/researchTools.js";
+import type * as agent_runtime from "../agent/runtime.js";
+import type * as agent_sourceCandidates from "../agent/sourceCandidates.js";
+import type * as agent_sources from "../agent/sources.js";
+import type * as agent_threads from "../agent/threads.js";
 import type * as auth from "../auth.js";
-import type * as corpus from "../corpus.js";
-import type * as externalProviders from "../externalProviders.js";
 import type * as http from "../http.js";
 import type * as limits from "../limits.js";
-import type * as messages from "../messages.js";
-import type * as rag from "../rag.js";
-import type * as rateLimits from "../rateLimits.js";
-import type * as researchTools from "../researchTools.js";
-import type * as sourceCandidates from "../sourceCandidates.js";
-import type * as sources from "../sources.js";
-import type * as threads from "../threads.js";
 
 import type {
   ApiFromModules,
@@ -30,20 +30,20 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  agent: typeof agent;
-  astra: typeof astra;
+  "agent/astra": typeof agent_astra;
+  "agent/corpus": typeof agent_corpus;
+  "agent/externalProviders": typeof agent_externalProviders;
+  "agent/messages": typeof agent_messages;
+  "agent/rag": typeof agent_rag;
+  "agent/rateLimits": typeof agent_rateLimits;
+  "agent/researchTools": typeof agent_researchTools;
+  "agent/runtime": typeof agent_runtime;
+  "agent/sourceCandidates": typeof agent_sourceCandidates;
+  "agent/sources": typeof agent_sources;
+  "agent/threads": typeof agent_threads;
   auth: typeof auth;
-  corpus: typeof corpus;
-  externalProviders: typeof externalProviders;
   http: typeof http;
   limits: typeof limits;
-  messages: typeof messages;
-  rag: typeof rag;
-  rateLimits: typeof rateLimits;
-  researchTools: typeof researchTools;
-  sourceCandidates: typeof sourceCandidates;
-  sources: typeof sources;
-  threads: typeof threads;
 }>;
 
 /**
