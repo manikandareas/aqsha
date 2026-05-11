@@ -1,1 +1,0 @@
-ALTER TABLE "chat_messages" ALTER COLUMN "id" SET DATA TYPE text;

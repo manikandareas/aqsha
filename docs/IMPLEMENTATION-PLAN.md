@@ -22,7 +22,7 @@ Three rules shape the phase boundaries:
 - `apps/app` is a Next.js 16 app with a Convex provider and Better Auth client.
 - `packages/convex` has `@convex-dev/agent` + `@convex-dev/better-auth` installed; `convex.config.ts` wires both.
 - `packages/convex/convex/schema.ts` is empty and ready to define.
-- No data migration from the old `apps/web` journal exists or will exist.
+- No legacy journal data migration exists or will exist.
 - The design prototype at `docs/aqsha-prototype.html` is the visual target for every phase.
 
 If any of these drifts, the plan's first phase absorbs the fix; we do not create a phase 0.

@@ -7,7 +7,7 @@ Related: `apps/app/DESIGN.md`, `docs/aqsha-prototype.html`
 
 ## Problem Statement
 
-Aqsha sedang dipivot dari AI writing and journaling workspace berbasis `apps/web`, `apps/api`, PostgreSQL, dan journal editor menjadi research chatbot personal berbasis Convex. Produk v1 harus membantu satu authenticated user melakukan chat riset, mengumpulkan sumber, menjalankan Deep Research yang tahan refresh atau proses panjang, dan membuka hasil riset sebagai artifact yang bisa diperiksa ulang.
+Aqsha sedang dipivot dari AI writing and journaling workspace lama menjadi research chatbot personal berbasis Convex. Produk v1 harus membantu satu authenticated user melakukan chat riset, mengumpulkan sumber, menjalankan Deep Research yang tahan refresh atau proses panjang, dan membuka hasil riset sebagai artifact yang bisa diperiksa ulang.
 
 Masalah utama yang harus diselesaikan:
 
@@ -86,7 +86,7 @@ This PRD defines the target product and implementation surface. It does not clai
 - No collaborative editing.
 - No legacy journal editor work.
 - No risk-stake editor work.
-- No migration of historical `apps/web` journal data in this PRD.
+- No migration of historical journal data in this PRD.
 - No Postgres/Drizzle feature expansion for the new chatbot runtime.
 
 ## User Stories
@@ -560,7 +560,7 @@ The following are explicitly eliminated or out of scope for this PRD:
 - Risk-stake editor.
 - Workspace switching.
 - Organization membership and permissions.
-- Existing PostgreSQL `apps/api` agent runtime.
+- Retired PostgreSQL agent runtime.
 - Marketing site changes.
 - Historical data migration from old threads/journals into Convex.
 

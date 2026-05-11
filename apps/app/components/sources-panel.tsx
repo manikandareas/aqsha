@@ -123,7 +123,7 @@ export function ResearchSidebar({
     <Sidebar
       side="right"
       collapsible="offcanvas"
-      className="overflow-hidden bg-background [&_[data-slot=sidebar-inner]]:bg-background"
+      className="overflow-hidden bg-transparent [&_[data-slot=sidebar-container]]:border-l-0 [&_[data-slot=sidebar-inner]]:bg-transparent"
     >
       <SidebarHeader className="gap-0 p-0">
         <div className="flex h-9 items-center gap-2 px-2.5">
@@ -276,7 +276,7 @@ function HeaderTabButton({
 
 function EmptyBlock({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-[12px] bg-muted/30 p-4 text-center">
+    <div className="rounded-[12px] border border-border/70 bg-card p-4 text-center shadow-sm">
       <p className="text-sm font-semibold">{title}</p>
       <p className="mt-1 text-xs text-muted-foreground">{body}</p>
     </div>
@@ -303,8 +303,8 @@ function ArtifactCard({
       type="button"
       onClick={onOpen}
       className={cn(
-        "block w-full min-w-0 overflow-hidden rounded-[12px] bg-card text-left transition-colors hover:bg-muted/45",
-        active && "bg-[var(--lavender-soft)] ring-1 ring-[var(--lavender-soft-border)]",
+        "block w-full min-w-0 overflow-hidden rounded-[12px] border border-border/70 bg-card text-left shadow-sm transition-colors hover:border-[var(--lavender-soft-border)] hover:bg-muted/45",
+        active && "border-[var(--lavender-soft-border)] bg-[var(--lavender-soft)] ring-1 ring-[var(--lavender-soft-border)]",
       )}
     >
       <div className="flex items-center gap-2 px-3 py-2">
@@ -345,8 +345,8 @@ function SourceCard({
     <article
       ref={refSetter}
       className={cn(
-        "min-w-0 overflow-hidden rounded-[12px] bg-card transition-colors hover:bg-muted/45",
-        isActive && "bg-[var(--mint-soft)] ring-1 ring-[var(--mint-soft-border)]",
+        "min-w-0 overflow-hidden rounded-[12px] border border-border/70 bg-card shadow-sm transition-colors hover:border-[var(--mint-soft-border)] hover:bg-muted/45",
+        isActive && "border-[var(--mint-soft-border)] bg-[var(--mint-soft)] ring-1 ring-[var(--mint-soft-border)]",
       )}
     >
       <div className="flex items-center justify-between gap-2 px-3 py-2">

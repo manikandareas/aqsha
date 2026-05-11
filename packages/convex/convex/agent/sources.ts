@@ -49,21 +49,21 @@ export const list = query({
       ? await ctx.db
           .query("researchSources")
           .withIndex("by_owner_artifact", (q) =>
-            q.eq("ownerUserId", user._id).eq("artifactId", args.artifactId!),
+            q.eq("ownerUserId", user._id).eq("artifactId", args.artifactId),
           )
           .collect()
       : args.runId
         ? await ctx.db
             .query("researchSources")
             .withIndex("by_owner_run", (q) =>
-              q.eq("ownerUserId", user._id).eq("runId", args.runId!),
+              q.eq("ownerUserId", user._id).eq("runId", args.runId),
             )
             .collect()
         : args.messageId
       ? await ctx.db
           .query("researchSources")
           .withIndex("by_owner_message", (q) =>
-            q.eq("ownerUserId", user._id).eq("messageId", args.messageId!),
+            q.eq("ownerUserId", user._id).eq("messageId", args.messageId),
           )
           .collect()
       : await ctx.db

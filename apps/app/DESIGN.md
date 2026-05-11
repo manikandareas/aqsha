@@ -6,7 +6,7 @@ Companion artifacts:
 
 - `docs/aqsha-convex-research-chatbot-prd.md` — product scope and behavior.
 - `docs/aqsha-prototype.html` — working HTML preview of every screen state. Tokens here mirror it.
-- `apps/web/DESIGN.md` — marketing/writing-workspace variant. Do not import its journal-era language into `apps/app`.
+- Previous writing-workspace design language has been retired. Do not import journal-era language into `apps/app`.
 
 ## 1. Visual Theme & Atmosphere
 

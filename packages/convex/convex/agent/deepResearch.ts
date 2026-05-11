@@ -34,22 +34,6 @@ const stepDefinitions = [
   ["finalizeThread", "Menutup riset"],
 ] as const;
 
-const artifactTypeValidator = v.union(
-  v.literal("markdown_report"),
-  v.literal("research_document"),
-  v.literal("source_bundle"),
-  v.literal("citation_evidence_view"),
-);
-
-const runStatusValidator = v.union(
-  v.literal("queued"),
-  v.literal("running"),
-  v.literal("waiting"),
-  v.literal("completed"),
-  v.literal("failed"),
-  v.literal("canceled"),
-);
-
 const stepStatusValidator = v.union(
   v.literal("pending"),
   v.literal("running"),
@@ -106,7 +90,7 @@ export const getStatus = query({
   args: { runId: v.id("researchRuns") },
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
-    const run = await ctx.db.get(args.runId);
+    const run = await ctx.db.get("researchRuns", args.runId);
     if (!run || run.ownerUserId !== user._id) {
       return null;
     }
@@ -139,7 +123,7 @@ export const cancel = mutation({
   returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
-    const run = await ctx.db.get(args.runId);
+    const run = await ctx.db.get("researchRuns", args.runId);
     if (!run || run.ownerUserId !== user._id) {
       throw new ConvexError("Run not found");
     }
@@ -158,7 +142,7 @@ export const retry = mutation({
   args: { runId: v.id("researchRuns") },
   handler: async (ctx, args): Promise<{ ok: true; runId: Id<"researchRuns">; workflowId: string }> => {
     const user = await requireCurrentUser(ctx);
-    const run = await ctx.db.get(args.runId);
+    const run = await ctx.db.get("researchRuns", args.runId);
     if (!run || run.ownerUserId !== user._id) {
       throw new ConvexError("Run not found");
     }
@@ -188,7 +172,7 @@ export const retry = mutation({
       },
     );
     const workflowIdString = String(workflowId);
-    await ctx.db.patch(newRunId, { workflowId: workflowIdString, updatedAt: Date.now() });
+    await ctx.db.patch("researchRuns", newRunId, { workflowId: workflowIdString, updatedAt: Date.now() });
     return { ok: true as const, runId: newRunId, workflowId: workflowIdString };
   },
 });
@@ -221,7 +205,7 @@ export const getArtifact = query({
   args: { artifactId: v.id("researchArtifacts") },
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
-    const artifact = await ctx.db.get(args.artifactId);
+    const artifact = await ctx.db.get("researchArtifacts", args.artifactId);
     if (!artifact || artifact.ownerUserId !== user._id) {
       return null;
     }
@@ -233,7 +217,7 @@ export const listCitationChecks = query({
   args: { artifactId: v.id("researchArtifacts") },
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
-    const artifact = await ctx.db.get(args.artifactId);
+    const artifact = await ctx.db.get("researchArtifacts", args.artifactId);
     if (!artifact || artifact.ownerUserId !== user._id) {
       return [];
     }
@@ -265,7 +249,7 @@ export const startForMessage = internalMutation({
       },
     );
     const workflowIdString = String(workflowId);
-    await ctx.db.patch(runId, { workflowId: workflowIdString, updatedAt: Date.now() });
+    await ctx.db.patch("researchRuns", runId, { workflowId: workflowIdString, updatedAt: Date.now() });
     return { runId, workflowId: workflowIdString };
   },
 });
@@ -540,7 +524,7 @@ export const persistArtifact = internalMutation({
       artifactCount: 3,
       summary: "Artefak tersimpan",
     });
-    await ctx.db.patch(args.runId, {
+    await ctx.db.patch("researchRuns", args.runId, {
       activeArtifactId: reportId,
       artifactCount: 3,
       sourceCount: args.sources.length,
@@ -582,7 +566,7 @@ export const finalizeThread = internalMutation({
       status: "completed",
       summary: "Riset selesai",
     });
-    await ctx.db.patch(args.runId, {
+    await ctx.db.patch("researchRuns", args.runId, {
       status: "completed",
       currentStep: "finalizeThread",
       retryable: false,
@@ -604,7 +588,7 @@ export const handleWorkflowComplete = internalMutation({
     if (!runId || !ownerUserId) {
       return;
     }
-    const run = await ctx.db.get(runId);
+    const run = await ctx.db.get("researchRuns", runId);
     if (!run || run.ownerUserId !== ownerUserId || run.status === "completed") {
       return;
     }
@@ -685,7 +669,7 @@ async function listSteps(ctx: QueryCtx, ownerUserId: string, runId: Id<"research
 }
 
 async function assertRunOwner(ctx: QueryCtx | MutationCtx, runId: Id<"researchRuns">, ownerUserId: string) {
-  const run = await ctx.db.get(runId);
+  const run = await ctx.db.get("researchRuns", runId);
   if (!run || run.ownerUserId !== ownerUserId) {
     throw new ConvexError("Run not found");
   }
@@ -712,7 +696,7 @@ async function markStepMutation(
     .filter((q) => q.eq(q.field("stepKey"), args.stepKey))
     .unique();
   if (step) {
-    await ctx.db.patch(step._id, {
+    await ctx.db.patch("researchRunSteps", step._id, {
       status: args.status,
       summary: args.summary ?? step.summary,
       sourceCount: args.sourceCount ?? step.sourceCount,
@@ -727,7 +711,7 @@ async function markStepMutation(
     });
   }
   if (args.status === "running") {
-    await ctx.db.patch(args.runId, {
+    await ctx.db.patch("researchRuns", args.runId, {
       status: "running",
       currentStep: args.stepKey,
       updatedAt: now,
@@ -737,7 +721,7 @@ async function markStepMutation(
 
 async function markCanceled(ctx: MutationCtx, runId: Id<"researchRuns">, ownerUserId: string) {
   const now = Date.now();
-  await ctx.db.patch(runId, {
+  await ctx.db.patch("researchRuns", runId, {
     status: "canceled",
     canceledAt: now,
     retryable: false,
@@ -750,7 +734,9 @@ async function markCanceled(ctx: MutationCtx, runId: Id<"researchRuns">, ownerUs
   await Promise.all(
     steps
       .filter((step) => step.status === "pending" || step.status === "running")
-      .map((step) => ctx.db.patch(step._id, { status: "canceled", completedAt: now, updatedAt: now })),
+      .map((step) =>
+        ctx.db.patch("researchRunSteps", step._id, { status: "canceled", completedAt: now, updatedAt: now }),
+      ),
   );
 }
 
@@ -771,7 +757,7 @@ async function failRun(
     status: "failed",
     failureReason: args.message,
   });
-  await ctx.db.patch(args.runId, {
+  await ctx.db.patch("researchRuns", args.runId, {
     status: "failed",
     failedStep: args.stepKey,
     retryable: true,
@@ -793,7 +779,7 @@ async function ensureNotCanceled(
 
 export const getInternalRun = internalQuery({
   args: { runId: v.id("researchRuns") },
-  handler: async (ctx, args) => await ctx.db.get(args.runId),
+  handler: async (ctx, args) => await ctx.db.get("researchRuns", args.runId),
 });
 
 async function readPromptMessage(_ctx: MutationCtx, messageId: string) {

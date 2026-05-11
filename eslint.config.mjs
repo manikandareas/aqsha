@@ -5,7 +5,6 @@ import globals from "globals";
 
 export default defineConfig([
   globalIgnores([
-    "apps/web/**",
     "**/.next/**",
     "**/dist/**",
     "**/node_modules/**",
