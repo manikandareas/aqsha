@@ -25,15 +25,35 @@ export type ResearchSource = {
   snippet: string;
 };
 
+type ResearchArtifact = {
+  _id: string;
+  type:
+    | "markdown_report"
+    | "research_document"
+    | "source_bundle"
+    | "citation_evidence_view";
+  title: string;
+  createdAt: number;
+};
+
 export function SourcesPanel({
   sources,
+  artifacts = [],
+  activeArtifactId,
   activeCitation,
+  onOpenArtifact,
   onClose,
 }: {
   sources: ResearchSource[];
+  artifacts?: ResearchArtifact[];
+  activeArtifactId?: string | null;
   activeCitation: number | null;
+  onOpenArtifact?: (artifactId: string) => void;
   onClose?: () => void;
 }) {
+  const [tab, setTab] = useState<"sources" | "artifacts">(
+    sources.length > 0 ? "sources" : "artifacts",
+  );
   const sorted = useMemo(
     () => [...sources].sort((a, b) => a.citationNumber - b.citationNumber),
     [sources],
@@ -55,7 +75,7 @@ export function SourcesPanel({
       <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
         <div className="flex min-w-0 items-center gap-2">
           <LibraryIcon className="size-4 text-[var(--mint)]" />
-          <h2 className="truncate font-heading text-base font-bold">Sources</h2>
+          <h2 className="truncate font-heading text-base font-bold">Research</h2>
         </div>
         {onClose ? (
           <Button variant="ghost" size="sm" onClick={onClose}>
@@ -63,8 +83,40 @@ export function SourcesPanel({
           </Button>
         ) : null}
       </div>
+      <div className="flex gap-3 border-b px-4 text-sm font-semibold">
+        <button
+          type="button"
+          onClick={() => setTab("sources")}
+          className={cn(
+            "border-b-2 px-1 py-3",
+            tab === "sources"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground",
+          )}
+        >
+          Sources
+          <span className="ml-2 rounded-full bg-[var(--sky-soft)] px-1.5 py-0.5 text-[11px] text-primary">
+            {sources.length}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("artifacts")}
+          className={cn(
+            "border-b-2 px-1 py-3",
+            tab === "artifacts"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground",
+          )}
+        >
+          Artifacts
+          <span className="ml-2 rounded-full bg-[var(--sky-soft)] px-1.5 py-0.5 text-[11px] text-primary">
+            {artifacts.length}
+          </span>
+        </button>
+      </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
-        {sorted.map((source) => (
+        {tab === "sources" ? sorted.map((source) => (
           <SourceCard
             key={source._id}
             source={source}
@@ -73,9 +125,53 @@ export function SourcesPanel({
               refs.current[source.citationNumber] = node;
             }}
           />
+        )) : artifacts.map((artifact) => (
+          <ArtifactCard
+            key={artifact._id}
+            artifact={artifact}
+            active={artifact._id === activeArtifactId}
+            onOpen={() => onOpenArtifact?.(artifact._id)}
+          />
         ))}
       </div>
     </aside>
+  );
+}
+
+function ArtifactCard({
+  artifact,
+  active,
+  onOpen,
+}: {
+  artifact: ResearchArtifact;
+  active: boolean;
+  onOpen: () => void;
+}) {
+  const label = {
+    markdown_report: "Markdown",
+    research_document: "Document",
+    source_bundle: "Sources",
+    citation_evidence_view: "Evidence",
+  }[artifact.type];
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={cn(
+        "block w-full rounded-[8px] border bg-background/78 p-3 text-left transition-colors",
+        active && "border-[var(--lavender)] bg-[var(--lavender-soft)]",
+      )}
+    >
+      <div className="mb-2 flex items-center gap-2">
+        <FileTextIcon className="size-4 text-[var(--lavender)]" />
+        <span className="rounded-full border border-[var(--lavender-soft-border)] bg-[var(--lavender-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--lavender)]">
+          {label}
+        </span>
+      </div>
+      <h3 className="line-clamp-2 text-sm font-semibold leading-5">
+        {artifact.title}
+      </h3>
+    </button>
   );
 }
 

@@ -9,7 +9,9 @@ const sourceSummaryValidator = v.object({
   _creationTime: v.number(),
   ownerUserId: v.string(),
   threadId: v.string(),
-  messageId: v.string(),
+  messageId: v.optional(v.string()),
+  runId: v.optional(v.id("researchRuns")),
+  artifactId: v.optional(v.id("researchArtifacts")),
   citationNumber: v.number(),
   origin: v.union(
     v.literal("corpus"),
@@ -36,12 +38,28 @@ export const list = query({
   args: {
     threadId: v.string(),
     messageId: v.optional(v.string()),
+    runId: v.optional(v.id("researchRuns")),
+    artifactId: v.optional(v.id("researchArtifacts")),
   },
   returns: v.array(sourceSummaryValidator),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     await assertThreadOwner(ctx, args.threadId);
-    const rows = args.messageId
+    const rows = args.artifactId
+      ? await ctx.db
+          .query("researchSources")
+          .withIndex("by_owner_artifact", (q) =>
+            q.eq("ownerUserId", user._id).eq("artifactId", args.artifactId!),
+          )
+          .collect()
+      : args.runId
+        ? await ctx.db
+            .query("researchSources")
+            .withIndex("by_owner_run", (q) =>
+              q.eq("ownerUserId", user._id).eq("runId", args.runId!),
+            )
+            .collect()
+        : args.messageId
       ? await ctx.db
           .query("researchSources")
           .withIndex("by_owner_message", (q) =>

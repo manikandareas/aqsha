@@ -7,10 +7,16 @@ import {
 import { useMutation, useQuery } from "convex/react";
 import {
   BotIcon,
+  CheckCircle2Icon,
+  CopyIcon,
+  FileTextIcon,
   Loader2Icon,
   PanelRightCloseIcon,
+  RotateCcwIcon,
   SendHorizontalIcon,
+  SquareIcon,
   UserIcon,
+  XCircleIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -35,7 +41,7 @@ import {
 } from "@/components/ui/sidebar";
 
 type SendResult =
-  | { ok: true; messageId: string }
+  | { ok: true; messageId: string; runId?: string; workflowId?: string }
   | { ok: false; reason: "rate_limited"; retryAt: number };
 
 type RateStatus = {
@@ -53,6 +59,46 @@ type ChatMessage = {
   stepOrder: number;
   text?: string;
   parts?: Array<{ type: string; text?: string }>;
+};
+
+type ResearchRun = {
+  _id: string;
+  status: "queued" | "running" | "waiting" | "completed" | "failed" | "canceled";
+  currentStep?: string;
+  activeArtifactId?: string;
+  retryable: boolean;
+  errorMessage?: string;
+  steps: Array<{
+    stepKey: string;
+    label: string;
+    order: number;
+    status: "pending" | "running" | "completed" | "failed" | "canceled";
+    summary?: string;
+    sourceCount?: number;
+    artifactCount?: number;
+    failureReason?: string;
+  }>;
+};
+
+type ResearchArtifact = {
+  _id: string;
+  runId: string;
+  type:
+    | "markdown_report"
+    | "research_document"
+    | "source_bundle"
+    | "citation_evidence_view";
+  title: string;
+  markdown?: string;
+  createdAt: number;
+};
+
+type CitationCheck = {
+  _id: string;
+  claim: string;
+  support: "supported" | "partial" | "unsupported";
+  sourceIds: string[];
+  evidence: string;
 };
 
 export function ThreadShell({ threadId }: { threadId?: string }) {
@@ -79,9 +125,28 @@ export function ThreadShell({ threadId }: { threadId?: string }) {
     api.agent.sources.list,
     threadId ? { threadId } : "skip",
   );
+  const runs = useQuery(
+    api.agent.deepResearch.listForThread,
+    threadId ? { threadId } : "skip",
+  ) as ResearchRun[] | undefined;
+  const artifacts = useQuery(
+    api.agent.deepResearch.listArtifacts,
+    threadId ? { threadId } : "skip",
+  ) as ResearchArtifact[] | undefined;
+  const cancelRun = useMutation(api.agent.deepResearch.cancel);
+  const retryRun = useMutation(api.agent.deepResearch.retry);
   const [isCreating, setIsCreating] = useState(false);
   const [activeCitation, setActiveCitation] = useState<number | null>(null);
   const [showMobileSources, setShowMobileSources] = useState(false);
+  const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
+  const activeArtifact = useQuery(
+    api.agent.deepResearch.getArtifact,
+    activeArtifactId ? { artifactId: activeArtifactId as never } : "skip",
+  ) as ResearchArtifact | null | undefined;
+  const citationChecks = useQuery(
+    api.agent.deepResearch.listCitationChecks,
+    activeArtifactId ? { artifactId: activeArtifactId as never } : "skip",
+  ) as CitationCheck[] | undefined;
 
   const threads = threadPage?.page ?? [];
   const title = threadId
@@ -140,25 +205,38 @@ export function ThreadShell({ threadId }: { threadId?: string }) {
                 rateStatus={rateStatus}
                 onSend={sendMessage}
                 sources={sources ?? []}
+                runs={runs ?? []}
+                activeArtifact={activeArtifact ?? null}
+                citationChecks={citationChecks ?? []}
                 onCitationClick={(citation) => {
                   setActiveCitation(citation);
                   setShowMobileSources(true);
                 }}
+                onCancelRun={(runId) => cancelRun({ runId: runId as never })}
+                onRetryRun={(runId) => retryRun({ runId: runId as never })}
               />
             )}
           </section>
-          {sources && sources.length > 0 ? (
+          {(sources && sources.length > 0) ||
+          (artifacts && artifacts.length > 0) ||
+          runs?.some((run) => isRunActive(run)) ? (
             <>
               <div className="hidden lg:block">
                 <SourcesPanel
-                  sources={sources}
+                  sources={sources ?? []}
+                  artifacts={artifacts ?? []}
+                  activeArtifactId={activeArtifactId}
                   activeCitation={activeCitation}
+                  onOpenArtifact={setActiveArtifactId}
                 />
               </div>
               {showMobileSources ? (
                 <SourcesPanel
-                  sources={sources}
+                  sources={sources ?? []}
+                  artifacts={artifacts ?? []}
+                  activeArtifactId={activeArtifactId}
                   activeCitation={activeCitation}
+                  onOpenArtifact={setActiveArtifactId}
                   onClose={() => setShowMobileSources(false)}
                 />
               ) : (
@@ -187,7 +265,12 @@ function ChatThreadState({
   rateStatus,
   onSend,
   sources,
+  runs,
+  activeArtifact,
+  citationChecks,
   onCitationClick,
+  onCancelRun,
+  onRetryRun,
 }: {
   threadId?: string;
   isLoading: boolean;
@@ -196,10 +279,15 @@ function ChatThreadState({
   onSend: (args: {
     threadId: string;
     content: string;
-    mode: "normal";
+    mode: "normal" | "deep";
   }) => Promise<SendResult>;
   sources: ResearchSource[];
+  runs: ResearchRun[];
+  activeArtifact: ResearchArtifact | null;
+  citationChecks: CitationCheck[];
   onCitationClick: (citation: number) => void;
+  onCancelRun: (runId: string) => Promise<unknown>;
+  onRetryRun: (runId: string) => Promise<unknown>;
 }) {
   const messages = useUIMessages(
     api.agent.messages.list,
@@ -214,11 +302,18 @@ function ChatThreadState({
     [messages.results],
   );
   const hasMessages = sortedMessages.length > 0;
+  const activeRun = runs.find(isRunActive);
 
   return (
     <div className="flex flex-1 flex-col justify-between gap-8">
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col py-6">
-        {isLoading ? (
+        {activeArtifact ? (
+          <ArtifactReader
+            artifact={activeArtifact}
+            citationChecks={citationChecks}
+            onCitationClick={onCitationClick}
+          />
+        ) : isLoading ? (
           <CenteredLoading label="Loading thread..." />
         ) : hasMessages ? (
           <div className="grid gap-7">
@@ -228,6 +323,14 @@ function ChatThreadState({
                 message={message}
                 sources={sources}
                 onCitationClick={onCitationClick}
+              />
+            ))}
+            {runs.map((run) => (
+              <DeepRunBlock
+                key={run._id}
+                run={run}
+                onCancelRun={onCancelRun}
+                onRetryRun={onRetryRun}
               />
             ))}
           </div>
@@ -241,6 +344,8 @@ function ChatThreadState({
         threadId={threadId}
         disabled={!threadId || isLoading}
         rateStatus={rateStatus}
+        activeRun={activeRun}
+        onCancelRun={onCancelRun}
         onSend={onSend}
       />
     </div>
@@ -355,6 +460,8 @@ function Composer({
   threadId,
   disabled,
   rateStatus,
+  activeRun,
+  onCancelRun,
   onSend,
 }: {
   threadId?: string;
@@ -363,10 +470,13 @@ function Composer({
   onSend: (args: {
     threadId: string;
     content: string;
-    mode: "normal";
+    mode: "normal" | "deep";
   }) => Promise<SendResult>;
+  activeRun?: ResearchRun;
+  onCancelRun?: (runId: string) => Promise<unknown>;
 }) {
   const [content, setContent] = useState("");
+  const [mode, setMode] = useState<"normal" | "deep">("normal");
   const [isSending, setIsSending] = useState(false);
   const [localRetryAt, setLocalRetryAt] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -380,11 +490,22 @@ function Composer({
     !disabled &&
     !isSending &&
     !isRateLimited;
+  const isDeepActive = Boolean(activeRun);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && isDeepActive && activeRun && onCancelRun) {
+        void onCancelRun(activeRun._id);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeRun, isDeepActive, onCancelRun]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -399,7 +520,7 @@ function Composer({
       const result = await onSend({
         threadId,
         content: nextContent,
-        mode: "normal",
+        mode,
       });
       if (!result.ok) {
         setLocalRetryAt(result.retryAt);
@@ -416,14 +537,14 @@ function Composer({
       className="sticky bottom-4 rounded-[14px] border bg-card p-3 shadow-aqsha"
     >
       {isRateLimited ? (
-        <div className="mb-3 rounded-[10px] border border-[var(--lavender-soft-border)] bg-[var(--lavender-soft)] px-3 py-2 text-sm font-medium text-[var(--lavender)]">
+        <div className="mb-3 rounded-[10px] border border-[var(--lemon-soft-border)] bg-[var(--lemon-soft)] px-3 py-2 text-sm font-medium text-[var(--lemon)]">
           Perlu istirahat sebentar. Coba lagi dalam {retrySeconds || 1} detik.
         </div>
       ) : null}
       <textarea
         value={content}
         onChange={(event) => setContent(event.target.value)}
-        disabled={disabled}
+        disabled={disabled || isDeepActive}
         rows={3}
         maxLength={8000}
         placeholder={
@@ -432,11 +553,35 @@ function Composer({
         className="min-h-24 w-full resize-none rounded-[10px] border border-input bg-transparent px-3 py-3 text-[15px] leading-6 outline-none placeholder:text-muted-foreground focus:border-primary"
       />
       <div className="mt-3 flex items-center justify-between gap-3">
-        <div className="inline-flex rounded-full border bg-muted p-1 text-xs font-semibold">
-          <span className="rounded-full bg-card px-3 py-1 text-foreground">
+        <div className="inline-flex rounded-full border border-[var(--lavender-soft-border)] bg-[var(--lavender-soft)] p-1 text-xs font-semibold">
+          <button
+            type="button"
+            disabled={isDeepActive}
+            onClick={() => setMode("normal")}
+            className={mode === "normal" ? "rounded-full bg-card px-3 py-1 text-foreground shadow-sm" : "px-3 py-1 text-[var(--lavender)]"}
+          >
             Normal
-          </span>
+          </button>
+          <button
+            type="button"
+            disabled={isDeepActive}
+            onClick={() => setMode("deep")}
+            className={mode === "deep" ? "rounded-full bg-card px-3 py-1 text-foreground shadow-sm" : "px-3 py-1 text-[var(--lavender)]"}
+          >
+            Deep
+          </button>
         </div>
+        {isDeepActive && activeRun && onCancelRun ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="border-[var(--coral-soft-border)] bg-[var(--coral-soft)] text-[var(--coral)] hover:bg-[var(--coral-soft)]"
+            onClick={() => onCancelRun(activeRun._id)}
+          >
+            <SquareIcon className="size-4" />
+            Hentikan
+          </Button>
+        ) : (
         <Button type="submit" disabled={!canSend}>
           {isSending ? (
             <Loader2Icon className="size-4 animate-spin" />
@@ -445,9 +590,150 @@ function Composer({
           )}
           Send
         </Button>
+        )}
       </div>
     </form>
   );
+}
+
+function DeepRunBlock({
+  run,
+  onCancelRun,
+  onRetryRun,
+}: {
+  run: ResearchRun;
+  onCancelRun: (runId: string) => Promise<unknown>;
+  onRetryRun: (runId: string) => Promise<unknown>;
+}) {
+  return (
+    <article className="grid grid-cols-[32px_1fr] gap-3">
+      <div className="flex size-8 items-center justify-center rounded-full border bg-card text-primary">
+        <BotIcon className="size-4" />
+      </div>
+      <div className="rounded-[10px] border bg-card/80 p-3 shadow-soft-card">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <span className="text-sm font-semibold">Astra</span>
+          {isRunActive(run) ? (
+            <Button variant="ghost" size="sm" onClick={() => onCancelRun(run._id)}>
+              Hentikan
+            </Button>
+          ) : null}
+        </div>
+        <div className="grid gap-2">
+          {run.steps
+            .slice()
+            .sort((a, b) => a.order - b.order)
+            .map((step) => (
+              <div key={step.stepKey} className="flex items-center gap-2 rounded-[8px] border bg-background/70 px-3 py-2 text-sm">
+                <StepIcon status={step.status} />
+                <span className={step.status === "running" ? "shimmer-text font-semibold" : "font-medium"}>
+                  {step.label}
+                </span>
+                {step.sourceCount ? (
+                  <span className="ml-auto rounded-full border border-[var(--sky-soft-border)] bg-[var(--sky-soft)] px-2 py-0.5 text-[11px] font-semibold text-primary">
+                    {step.sourceCount} sources
+                  </span>
+                ) : null}
+              </div>
+            ))}
+        </div>
+        {run.status === "failed" && run.retryable ? (
+          <div className="mt-3 rounded-[10px] border border-[var(--coral-soft-border)] bg-[var(--coral-soft)] p-3 text-sm text-[var(--coral)]">
+            <p>{run.errorMessage ?? "Riset terhenti sebelum selesai."}</p>
+            <Button size="sm" variant="outline" className="mt-2" onClick={() => onRetryRun(run._id)}>
+              <RotateCcwIcon className="size-3.5" />
+              Coba lagi
+            </Button>
+          </div>
+        ) : null}
+        {run.status === "canceled" ? (
+          <p className="mt-3 text-sm font-medium text-muted-foreground">Dihentikan</p>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+function StepIcon({ status }: { status: ResearchRun["steps"][number]["status"] }) {
+  if (status === "completed") {
+    return <CheckCircle2Icon className="size-4 text-[var(--mint)]" />;
+  }
+  if (status === "failed" || status === "canceled") {
+    return <XCircleIcon className="size-4 text-[var(--coral)]" />;
+  }
+  if (status === "running") {
+    return <Loader2Icon className="size-4 animate-spin text-primary" />;
+  }
+  return <span className="size-2 rounded-full bg-muted-foreground/40" />;
+}
+
+function ArtifactReader({
+  artifact,
+  citationChecks,
+  onCitationClick,
+}: {
+  artifact: ResearchArtifact;
+  citationChecks: CitationCheck[];
+  onCitationClick: (citation: number) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const markdown = artifact.markdown ?? "Artefak ini disimpan di storage.";
+  const copyMarkdown = async () => {
+    await navigator.clipboard.writeText(markdown);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
+  };
+  const copyLink = async () => {
+    await navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}?artifact=${artifact._id}`);
+  };
+  return (
+    <div className="grid gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <FileTextIcon className="size-4 text-[var(--lavender)]" />
+          <h2 className="truncate font-heading text-xl font-bold">{artifact.title}</h2>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={copyMarkdown}>
+            <CopyIcon className="size-3.5" />
+            {copied ? "Tersalin" : "Salin markdown"}
+          </Button>
+          <Button variant="outline" size="sm" onClick={copyLink}>
+            Bagikan link
+          </Button>
+        </div>
+      </div>
+      {artifact.type === "citation_evidence_view" && citationChecks.length > 0 ? (
+        <div className="grid gap-3">
+          {citationChecks.map((check) => (
+            <div key={check._id} className="rounded-[8px] border bg-card p-3">
+              <div className="mb-2 flex items-center gap-2">
+                <span className="rounded-full border px-2 py-0.5 text-[11px] font-semibold">
+                  {check.support}
+                </span>
+              </div>
+              <p className="text-sm leading-6">{check.claim}</p>
+              <p className="mt-2 text-xs text-muted-foreground">{check.evidence}</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <AssistantMarkdown
+          text={markdown}
+          citedNumbers={extractCitations(markdown)}
+          onCitationClick={onCitationClick}
+        />
+      )}
+    </div>
+  );
+}
+
+function isRunActive(run: ResearchRun) {
+  return run.status === "queued" || run.status === "running" || run.status === "waiting";
+}
+
+function extractCitations(text: string) {
+  return new Set([...text.matchAll(/\[(\d{1,3})\]/g)].map((match) => Number(match[1])));
 }
 
 function CenteredLoading({ label }: { label: string }) {

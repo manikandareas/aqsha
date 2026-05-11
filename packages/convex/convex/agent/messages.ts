@@ -29,6 +29,8 @@ const sendResultValidator = v.union(
   v.object({
     ok: v.literal(true),
     messageId: v.string(),
+    runId: v.optional(v.id("researchRuns")),
+    workflowId: v.optional(v.string()),
   }),
   v.object({
     ok: v.literal(false),
@@ -36,6 +38,15 @@ const sendResultValidator = v.union(
     retryAt: v.number(),
   }),
 );
+
+type SendResult =
+  | {
+      ok: true;
+      messageId: string;
+      runId?: import("../_generated/dataModel").Id<"researchRuns">;
+      workflowId?: string;
+    }
+  | { ok: false; reason: "rate_limited"; retryAt: number };
 
 function previewFromContent(content: string) {
   const singleLine = content.replace(/\s+/g, " ").trim();
@@ -94,10 +105,10 @@ export const send = mutation({
   args: {
     threadId: v.string(),
     content: v.string(),
-    mode: v.literal("normal"),
+    mode: v.union(v.literal("normal"), v.literal("deep")),
   },
   returns: sendResultValidator,
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<SendResult> => {
     const user = await requireCurrentUser(ctx);
     const content = args.content.trim();
     if (content.length < 1) {
@@ -153,6 +164,17 @@ export const send = mutation({
         threadId: args.threadId,
         patch: { title: titleFromContent(content) },
       });
+    }
+
+    if (args.mode === "deep") {
+      const run: { runId: import("../_generated/dataModel").Id<"researchRuns">; workflowId: string } = await ctx.runMutation(internal.agent.deepResearch.startForMessage, {
+        ownerUserId: user._id,
+        threadId: args.threadId,
+        promptMessageId: messageId,
+        prompt: content,
+      });
+
+      return { ok: true as const, messageId, ...run };
     }
 
     await ctx.scheduler.runAfter(0, internal.agent.messages.generateReply, {
@@ -318,6 +340,31 @@ export const markThreadFailed = internalMutation({
       threadId: args.threadId,
       preview: args.preview,
       status: "failed",
+    });
+  },
+});
+
+export const saveAssistantMessage = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    threadId: v.string(),
+    promptMessageId: v.string(),
+    content: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await astra.saveMessages(ctx, {
+      threadId: args.threadId,
+      userId: args.ownerUserId,
+      promptMessageId: args.promptMessageId,
+      messages: [{ role: "assistant", content: args.content }],
+      skipEmbeddings: true,
+    });
+    await upsertThreadMetadata(ctx, {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      preview: previewFromContent(args.content),
+      status: "idle",
+      incrementMessageCount: true,
     });
   },
 });

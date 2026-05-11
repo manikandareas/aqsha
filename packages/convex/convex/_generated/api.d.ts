@@ -10,6 +10,7 @@
 
 import type * as agent_astra from "../agent/astra.js";
 import type * as agent_corpus from "../agent/corpus.js";
+import type * as agent_deepResearch from "../agent/deepResearch.js";
 import type * as agent_externalProviders from "../agent/externalProviders.js";
 import type * as agent_messages from "../agent/messages.js";
 import type * as agent_rag from "../agent/rag.js";
@@ -19,6 +20,7 @@ import type * as agent_runtime from "../agent/runtime.js";
 import type * as agent_sourceCandidates from "../agent/sourceCandidates.js";
 import type * as agent_sources from "../agent/sources.js";
 import type * as agent_threads from "../agent/threads.js";
+import type * as agent_workflow from "../agent/workflow.js";
 import type * as auth from "../auth.js";
 import type * as http from "../http.js";
 import type * as limits from "../limits.js";
@@ -32,6 +34,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   "agent/astra": typeof agent_astra;
   "agent/corpus": typeof agent_corpus;
+  "agent/deepResearch": typeof agent_deepResearch;
   "agent/externalProviders": typeof agent_externalProviders;
   "agent/messages": typeof agent_messages;
   "agent/rag": typeof agent_rag;
@@ -41,6 +44,7 @@ declare const fullApi: ApiFromModules<{
   "agent/sourceCandidates": typeof agent_sourceCandidates;
   "agent/sources": typeof agent_sources;
   "agent/threads": typeof agent_threads;
+  "agent/workflow": typeof agent_workflow;
   auth: typeof auth;
   http: typeof http;
   limits: typeof limits;
@@ -77,4 +81,5 @@ export declare const components: {
   agent: import("@convex-dev/agent/_generated/component.js").ComponentApi<"agent">;
   rag: import("@convex-dev/rag/_generated/component.js").ComponentApi<"rag">;
   rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
+  workflow: import("@convex-dev/workflow/_generated/component.js").ComponentApi<"workflow">;
 };

@@ -17,6 +17,7 @@
     "dev": "convex dev",
     "codegen": "convex codegen",
     "deploy": "convex deploy",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "tsc -p convex && eslint . --report-unused-disable-directives --max-warnings 0",
     "logs": "convex logs"
@@ -27,6 +28,7 @@
     "@convex-dev/better-auth": "^0.12.2",
     "@convex-dev/rag": "^0.7.2",
     "@convex-dev/rate-limiter": "^0.3.2",
+    "@convex-dev/workflow": "^0.3.12",
     "ai": "^6.0.177",
     "better-auth": "1.4.9",
     "convex": "^1.38.0",
@@ -36,13 +38,16 @@
   },
   "devDependencies": {
     "@convex-dev/eslint-plugin": "^1.2.2",
+    "@edge-runtime/vm": "^5.0.0",
     "@eslint/eslintrc": "^3.3.5",
     "@eslint/js": "^9.39.4",
     "@types/node": "^24.12.2",
     "@typescript-eslint/eslint-plugin": "^8.58.2",
     "@typescript-eslint/parser": "^8.58.2",
+    "convex-test": "^0.0.51",
     "eslint": "^9.39.4",
     "globals": "^17.5.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.5"
   }
 }
