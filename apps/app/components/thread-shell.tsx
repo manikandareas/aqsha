@@ -3,6 +3,8 @@
 import { useUIMessages } from "@convex-dev/agent/react";
 import type { OptimisticLocalStore } from "convex/browser";
 import { insertAtTop, useConvexAuth, useMutation, useQuery } from "convex/react";
+import { format, formatDistanceToNowStrict } from "date-fns";
+import { id as idLocale } from "date-fns/locale";
 import {
   ArrowUpIcon,
   ChevronDownIcon,
@@ -548,6 +550,7 @@ function ThreadShellLayout({
                   threadId={threadId}
                   isLoading={threadId ? selectedThread === undefined : false}
                   title={threadId ? selectedThread?.title : undefined}
+                  recentThreads={threads.slice(0, 3)}
                   rateStatus={rateStatus}
                   startThread={startThread}
                   onSend={sendMessage}
@@ -655,6 +658,7 @@ function ChatThreadState({
   threadId,
   isLoading,
   title,
+  recentThreads,
   rateStatus,
   startThread,
   onSend,
@@ -669,6 +673,15 @@ function ChatThreadState({
   threadId?: string;
   isLoading: boolean;
   title?: string;
+  recentThreads: Array<{
+    threadId: string;
+    title: string;
+    createdAt: number;
+    lastActivityAt: number;
+    lastMessagePreview: string;
+    messageCount: number;
+    status: "idle" | "streaming" | "failed";
+  }>;
   rateStatus: RateStatus | undefined;
   startThread: (args: {
     content: string;
@@ -708,6 +721,16 @@ function ChatThreadState({
     () => interleaveRunsWithMessages(sortedMessages, runs),
     [sortedMessages, runs],
   );
+
+  if (!threadId && !hasMessages && runs.length === 0) {
+    return (
+      <HomeStartState
+        recentThreads={recentThreads}
+        rateStatus={rateStatus}
+        startThread={startThread}
+      />
+    );
+  }
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
@@ -772,6 +795,147 @@ function ChatThreadState({
       </div>
     </div>
   );
+}
+
+function HomeStartState({
+  recentThreads,
+  rateStatus,
+  startThread,
+}: {
+  recentThreads: Array<{
+    threadId: string;
+    title: string;
+    createdAt: number;
+    lastActivityAt: number;
+    lastMessagePreview: string;
+    messageCount: number;
+    status: "idle" | "streaming" | "failed";
+  }>;
+  rateStatus: RateStatus | undefined;
+  startThread: (args: {
+    content: string;
+    mode: "normal" | "deep";
+    commandId?: string;
+  }) => Promise<SendResult>;
+}) {
+  const router = useRouter();
+
+  return (
+    <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden bg-background">
+      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 pb-10 pt-[12svh] sm:px-8 lg:pt-[10svh]">
+        <div className="mx-auto w-full max-w-3xl">
+          <Composer
+            disabled={false}
+            rateStatus={rateStatus}
+            onStartThread={startThread}
+            onSend={async () => ({ ok: true, messageId: "" })}
+          />
+          <HomePromptShortcuts />
+          <RecentThreadList
+            threads={recentThreads}
+            onOpenThread={(threadId) => router.push(`/threads/${threadId}`)}
+          />
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function HomePromptShortcuts() {
+  const applySuggestion = (suggestion: string) => {
+    window.dispatchEvent(new CustomEvent("aqsha:suggestion", { detail: suggestion }));
+  };
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-2 px-0.5">
+      <button
+        type="button"
+        onClick={() => applySuggestion("Cari sumber akademik tentang ")}
+        className="inline-flex h-9 items-center rounded-full border border-[var(--mint-soft-border)] bg-[var(--mint-soft)] px-4 text-[13px] font-semibold text-[var(--mint)] transition-colors hover:bg-[var(--mint-soft)]/75"
+      >
+        Cari sumber
+      </button>
+      <button
+        type="button"
+        onClick={() => applySuggestion("Buat ringkasan literatur tentang ")}
+        className="inline-flex h-9 items-center rounded-full border border-[var(--sky-soft-border)] bg-[var(--sky-soft)] px-4 text-[13px] font-semibold text-primary transition-colors hover:bg-[var(--sky-soft)]/75"
+      >
+        Ringkasan literatur
+      </button>
+      <button
+        type="button"
+        onClick={() => applySuggestion("/deep Bandingkan bukti dan celah riset tentang ")}
+        className="inline-flex h-9 items-center rounded-full border border-[var(--lavender-soft-border)] bg-[var(--lavender-soft)] px-4 text-[13px] font-semibold text-[var(--lavender)] transition-colors hover:bg-[var(--lavender-soft)]/75"
+      >
+        Deep research
+      </button>
+    </div>
+  );
+}
+
+function RecentThreadList({
+  threads,
+  onOpenThread,
+}: {
+  threads: Array<{
+    threadId: string;
+    title: string;
+    createdAt: number;
+    lastActivityAt: number;
+    lastMessagePreview: string;
+    messageCount: number;
+    status: "idle" | "streaming" | "failed";
+  }>;
+  onOpenThread: (threadId: string) => void;
+}) {
+  if (threads.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="mt-16 w-full max-w-[520px]" aria-label="Thread terbaru">
+      <div className="grid gap-4">
+        {threads.map((thread) => (
+          <button
+            key={thread.threadId}
+            type="button"
+            onClick={() => onOpenThread(thread.threadId)}
+            className="group grid w-full grid-cols-[6.75rem_1fr] items-center gap-3 text-left transition-opacity hover:opacity-90 max-sm:grid-cols-[5.75rem_1fr]"
+          >
+            <span className="flex h-[72px] flex-col justify-between rounded-[14px] border border-border bg-card px-4 py-3 transition-colors group-hover:border-[var(--lavender-soft-border)]">
+              <span className="flex items-center justify-between text-[11px] font-semibold leading-none text-muted-foreground">
+                <span>{thread.messageCount || 1}</span>
+                <span className="font-mono font-medium text-muted-foreground/75">
+                  {formatRelativeThreadTime(thread.lastActivityAt)}
+                </span>
+              </span>
+              <span className="inline-flex w-fit items-center gap-1 rounded-full border border-[var(--lavender-soft-border)] bg-[var(--lavender-soft)] px-2 py-1 text-[10px] font-semibold leading-none text-[var(--lavender)]">
+                <FileTextIcon className="size-3" />
+                {threadStatusLabel(thread.status)}
+              </span>
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-[13px] font-semibold leading-4 text-foreground">
+                {thread.title || "Thread baru"}
+              </span>
+              <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] font-medium leading-4 text-muted-foreground">
+                <FileTextIcon className="size-3 shrink-0 text-[var(--lavender)]" />
+                <span className="truncate">
+                  {formatNaturalRelativeThreadTime(thread.lastActivityAt)}
+                </span>
+              </span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function threadStatusLabel(status: "idle" | "streaming" | "failed") {
+  if (status === "streaming") return "Aktif";
+  if (status === "failed") return "Perlu cek";
+  return "Thread";
 }
 
 function MessageRow({
@@ -1084,7 +1248,7 @@ function Composer({
     <PromptInput
       onSubmit={handleSubmit}
       data-aqsha-composer-form="true"
-      className="rounded-[14px] border border-border/80 bg-card/90 text-foreground shadow-none backdrop-blur has-disabled:bg-card/90 has-disabled:opacity-100 dark:bg-card/95 dark:has-disabled:bg-card/95"
+      className="rounded-[14px] border border-input bg-card text-foreground shadow-none transition-colors focus-within:border-ring/70 focus-within:ring-3 focus-within:ring-ring/20 has-disabled:bg-card has-disabled:opacity-100 dark:border-input dark:bg-card dark:text-foreground dark:focus-within:border-ring/65 dark:focus-within:ring-ring/18 dark:has-disabled:bg-card"
     >
       {isRateLimited ? (
         <div className="mx-3 mt-3 rounded-[9px] border border-[var(--lemon-soft-border)] bg-[var(--lemon-soft)] px-3 py-2 text-[12px] font-medium text-[var(--lemon)]">
@@ -1110,12 +1274,16 @@ function Composer({
         }}
         disabled={disabled || isDeepActive}
         maxLength={8000}
-        placeholder={threadId ? "Add a follow up" : "Mulai riset baru..."}
+        placeholder={
+          threadId
+            ? "Tulis follow up, atau ketik / untuk perintah riset..."
+            : "Tulis pertanyaan, atau ketik / untuk perintah riset..."
+        }
       />
       <input type="hidden" name="message" value={visibleContent} />
-      <PromptInputFooter className="flex w-full items-center justify-between border-t-0 px-3 pb-3 pt-1 text-muted-foreground dark:text-[#c6c6c6]">
-        <PromptInputTools className="gap-2">
-          <div className="inline-flex rounded-[8px] text-[13px] font-medium text-muted-foreground dark:text-[#c6c6c6]">
+      <PromptInputFooter className="flex w-full items-end justify-between gap-3 border-t-0 px-4 pb-4 pt-1 text-[var(--ink-soft)] dark:text-[#d4d4d4]">
+        <PromptInputTools className="min-w-0 flex-wrap gap-2">
+          <div className="inline-flex rounded-full border border-border bg-muted p-0.5 text-[13px] font-semibold text-[var(--ink-soft)] dark:border-input dark:bg-muted dark:text-[#d4d4d4]">
             <ModeButton
               active={mode === "normal"}
               onClick={() => setMode("normal")}
@@ -1133,61 +1301,57 @@ function Composer({
               Deep
             </ModeButton>
           </div>
+          <PromptInputActionMenu>
+            <PromptInputActionMenuTrigger
+              tooltip="Tambah konteks"
+              disabled={mode === "deep" || !threadId || disabled || isDeepActive}
+              className="size-9 rounded-[9px] text-[var(--ink-soft)] hover:bg-muted hover:text-foreground disabled:text-muted-foreground disabled:opacity-75 dark:text-[#d4d4d4] dark:hover:bg-muted dark:hover:text-foreground dark:disabled:text-[#a3a3a3] dark:disabled:opacity-85"
+            >
+              <PlusIcon className="size-4" />
+            </PromptInputActionMenuTrigger>
+            <PromptInputActionMenuContent>
+              <PromptInputActionMenuItem disabled>
+                <PaperclipIcon className="mr-2 size-4" />
+                Lampirkan sumber
+              </PromptInputActionMenuItem>
+              <PromptInputActionMenuItem disabled>
+                <PlusIcon className="mr-2 size-4" />
+                Tambah konteks thread
+              </PromptInputActionMenuItem>
+            </PromptInputActionMenuContent>
+          </PromptInputActionMenu>
+          <PromptInputButton
+            tooltip="Lampirkan"
+            className="size-9 rounded-[9px] text-[var(--ink-soft)] hover:bg-muted hover:text-foreground disabled:text-muted-foreground disabled:opacity-75 dark:text-[#d4d4d4] dark:hover:bg-muted dark:hover:text-foreground dark:disabled:text-[#a3a3a3] dark:disabled:opacity-85"
+            disabled
+          >
+            <PaperclipIcon className="size-4" />
+          </PromptInputButton>
         </PromptInputTools>
-        <div className="flex items-center gap-1">
-          <PromptInputTools className="gap-1">
-            <PromptInputActionMenu>
-              <PromptInputActionMenuTrigger
-                tooltip="Tambah konteks"
-                disabled={mode === "deep" || !threadId || disabled || isDeepActive}
-                className="size-8 rounded-[8px] text-muted-foreground hover:bg-muted disabled:opacity-70 dark:text-[#c6c6c6] dark:hover:text-foreground dark:disabled:text-[#b8b8b8] dark:disabled:opacity-75"
-              >
-                <PlusIcon className="size-4" />
-              </PromptInputActionMenuTrigger>
-              <PromptInputActionMenuContent>
-                <PromptInputActionMenuItem disabled>
-                  <PaperclipIcon className="mr-2 size-4" />
-                  Lampirkan sumber
-                </PromptInputActionMenuItem>
-                <PromptInputActionMenuItem disabled>
-                  <PlusIcon className="mr-2 size-4" />
-                  Tambah konteks thread
-                </PromptInputActionMenuItem>
-              </PromptInputActionMenuContent>
-            </PromptInputActionMenu>
-            <PromptInputButton
-              tooltip="Lampirkan"
-              className="size-8 rounded-[8px] text-muted-foreground hover:bg-muted disabled:opacity-70 dark:text-[#c6c6c6] dark:hover:text-foreground dark:disabled:text-[#b8b8b8] dark:disabled:opacity-75"
-              disabled
-            >
-              <PaperclipIcon className="size-4" />
-            </PromptInputButton>
-          </PromptInputTools>
-          {isDeepActive && activeRun && onCancelRun ? (
-            <PromptInputSubmit
-              status="streaming"
-              onStop={() => onCancelRun(activeRun._id)}
-              size="sm"
-              className="h-8 shrink-0 rounded-full border-[var(--coral-soft-border)] bg-[var(--coral-soft)] px-3 text-[var(--coral)] hover:bg-[var(--coral-soft)]"
-            >
-              <SquareIcon className="size-3.5" />
-              Hentikan
-            </PromptInputSubmit>
-          ) : (
-            <PromptInputSubmit
-              size="icon-sm"
-              className="size-9 shrink-0 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-70"
-              disabled={!canSend}
-              status={isSending ? "submitted" : undefined}
-            >
-              {isSending ? (
-                <Loader2Icon className="size-4 animate-spin" />
-              ) : (
-                <ArrowUpIcon className="size-4" />
-              )}
-            </PromptInputSubmit>
-          )}
-        </div>
+        {isDeepActive && activeRun && onCancelRun ? (
+          <PromptInputSubmit
+            status="streaming"
+            onStop={() => onCancelRun(activeRun._id)}
+            size="sm"
+            className="h-10 shrink-0 rounded-[10px] border border-[var(--coral-soft-border)] bg-[var(--coral-soft)] px-3.5 font-semibold text-[var(--coral)] hover:bg-[var(--coral-soft)]"
+          >
+            <SquareIcon className="size-3.5" />
+            Hentikan
+          </PromptInputSubmit>
+        ) : (
+          <PromptInputSubmit
+            size="icon-sm"
+            className="size-10 shrink-0 rounded-[12px] bg-primary text-primary-foreground shadow-none transition-colors hover:bg-[#2f73d6] disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 dark:bg-[#0b7cff] dark:text-white dark:hover:bg-[#2f8cff] dark:disabled:bg-muted dark:disabled:text-[#a3a3a3]"
+            disabled={!canSend}
+            status={isSending ? "submitted" : undefined}
+          >
+            {isSending ? (
+              <Loader2Icon className="size-4 animate-spin" />
+            ) : (
+              <ArrowUpIcon className="size-4" />
+            )}
+          </PromptInputSubmit>
+        )}
       </PromptInputFooter>
     </PromptInput>
   );
@@ -1310,7 +1474,7 @@ function TokenizedPromptInput({
       <PopoverAnchor asChild>
         <div
           className={cn(
-            "flex min-h-16 w-full items-start gap-2 px-4 pb-2 pt-3.5 text-[15px] leading-6 text-foreground",
+            "flex min-h-16 w-full items-start gap-2 px-4 pb-3 pt-4 text-[15px] font-medium leading-6 text-foreground",
             disabled && "opacity-100",
           )}
           onKeyDownCapture={(event) => {
@@ -1342,7 +1506,7 @@ function TokenizedPromptInput({
           ) : null}
           <div className="relative min-w-0 flex-1">
             {value.length === 0 ? (
-              <span className="pointer-events-none absolute left-0 top-0 text-muted-foreground dark:text-[#a3a3a3]">
+              <span className="pointer-events-none absolute left-0 top-0 font-medium text-muted-foreground dark:text-[#b8b8b8]">
                 {command?.placeholder ?? placeholder}
               </span>
             ) : null}
@@ -1353,7 +1517,7 @@ function TokenizedPromptInput({
               aria-label="Pesan"
               aria-multiline="true"
               data-slot="input-group-control"
-              className="min-h-10 max-h-48 overflow-y-auto whitespace-pre-wrap break-words outline-none disabled:opacity-100"
+              className="min-h-10 max-h-48 overflow-y-auto whitespace-pre-wrap break-words text-foreground caret-primary outline-none disabled:opacity-100"
               onInput={handleInput}
               onKeyDown={handleKeyDown}
               suppressContentEditableWarning
@@ -1494,10 +1658,10 @@ function ModeButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "rounded-full px-3 py-1 transition-colors disabled:opacity-75 dark:disabled:opacity-80",
+        "rounded-full px-3 py-1.5 transition-colors disabled:opacity-75 dark:disabled:opacity-80",
         active
-          ? "text-foreground"
-          : "text-muted-foreground hover:text-foreground dark:text-[#c6c6c6] dark:hover:text-foreground",
+          ? "bg-card text-foreground shadow-[0_1px_2px_rgb(26_31_43_/_0.08)]"
+          : "text-[var(--ink-soft)] hover:text-foreground dark:text-[#cfcfcf] dark:hover:text-foreground",
         active && variant === "deep" && "text-[var(--lavender)]",
         active && variant === "normal" && "text-foreground",
       )}
@@ -1754,6 +1918,35 @@ function formatRunDuration(
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;
   return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
+}
+
+function formatRelativeThreadTime(timestamp: number) {
+  const label = formatDistanceToNowStrict(new Date(timestamp), {
+    locale: idLocale,
+  });
+
+  return label
+    .replace(" detik", "d")
+    .replace(" menit", "m")
+    .replace(" jam", "j")
+    .replace(" hari", "h")
+    .replace(" bulan", "bln")
+    .replace(" tahun", "thn");
+}
+
+function formatNaturalRelativeThreadTime(timestamp: number) {
+  const now = Date.now();
+  const distance = Math.max(0, now - timestamp);
+  const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+
+  if (distance >= thirtyDays) {
+    return format(new Date(timestamp), "d MMM yyyy", { locale: idLocale });
+  }
+
+  return formatDistanceToNowStrict(new Date(timestamp), {
+    locale: idLocale,
+    addSuffix: true,
+  });
 }
 
 function isRunActive(run: ResearchRun) {
