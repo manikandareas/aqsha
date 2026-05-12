@@ -248,7 +248,7 @@ The right panel is **one panel with two tabs**, not two panels. See the PRD for 
 - Tab bar: two `tab-btn`s with an `8px` bottom-border accent; active tab uses sky text + sky bottom-border + sky-soft count pill.
 - Count pill: `tab-count` chip, Inter 11px/650.
 - Tab panels scroll independently; the chat timeline does not share scroll with the panel.
-- Opening an artifact replaces the chat main area with a reader view; a "Kembali ke chat" affordance returns.
+- Opening an artifact switches the right panel's Artifacts tab from the list into the reader while the main chat remains visible on the left. On mobile, the right panel becomes a full-screen sheet reader.
 
 ### Chat message styling
 
@@ -283,10 +283,11 @@ Step labels are user-facing natural language, not workflow step names:
 
 ### Artifact reader
 
-- Full-width reader that takes over the chat area, keeping the right panel visible if the user opened it from there.
-- Title (Nunito 22–24px/700), subtitle meta row (artifact type chip + timestamp + run link).
-- Body rendered as prose-aqsha.
-- Footer actions: **Salin markdown**, **Bagikan link**, **Buka run**. There is no "Add to Journal".
+- Reader lives inside the right panel's Artifacts tab on desktop; the chat timeline stays visible in the main column.
+- Mobile uses the right-panel full-screen sheet as the reader.
+- Title (Nunito 16–18px/700 in panel), subtitle meta row (artifact type chip + version + timestamp).
+- Body rendered as prose-aqsha for markdown/doc, sandboxed iframe for HTML, and fixed-width viewer for code/plain/JSON.
+- Actions: **Salin markdown/body** and **Bagikan link**. There is no "Add to Journal".
 - Source references inside the reader resolve to the Sources tab, not inline popovers.
 
 ### Source detail

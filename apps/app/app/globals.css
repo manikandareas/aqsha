@@ -162,6 +162,192 @@
   box-shadow: var(--shadow-soft-card);
 }
 
+.artifact-prose {
+  color: var(--foreground);
+  font-size: 16px;
+  line-height: 1.72;
+}
+
+.artifact-prose > :first-child {
+  margin-top: 0;
+}
+
+.artifact-prose > :last-child {
+  margin-bottom: 0;
+}
+
+.artifact-prose h1,
+.artifact-prose h2,
+.artifact-prose h3,
+.artifact-prose h4 {
+  color: var(--foreground);
+  font-family: var(--font-nunito), var(--font-inter), sans-serif;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.artifact-prose h1 {
+  margin: 2rem 0 1rem;
+  font-size: 2rem;
+  line-height: 1.15;
+}
+
+.artifact-prose h2 {
+  margin: 2rem 0 0.85rem;
+  font-size: 1.55rem;
+  line-height: 1.2;
+}
+
+.artifact-prose h3 {
+  margin: 1.6rem 0 0.7rem;
+  font-size: 1.18rem;
+  line-height: 1.3;
+}
+
+.artifact-prose h4 {
+  margin: 1.25rem 0 0.55rem;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.artifact-prose p {
+  margin: 0 0 1.05rem;
+}
+
+.artifact-prose li > p {
+  margin: 0.25rem 0;
+}
+
+.artifact-prose ul,
+.artifact-prose ol {
+  margin: 0 0 1.15rem;
+  padding-left: 1.35rem;
+}
+
+.artifact-prose ul {
+  list-style: disc;
+}
+
+.artifact-prose ol {
+  list-style: decimal;
+}
+
+.artifact-prose li {
+  margin: 0.35rem 0;
+  padding-left: 0.15rem;
+}
+
+.artifact-prose li > ul,
+.artifact-prose li > ol {
+  margin: 0.35rem 0 0.45rem;
+}
+
+.artifact-prose strong {
+  color: var(--foreground);
+  font-weight: 700;
+}
+
+.artifact-prose em {
+  font-style: italic;
+}
+
+.artifact-prose a {
+  color: var(--primary);
+  text-decoration-line: underline;
+  text-decoration-color: color-mix(in srgb, var(--primary) 35%, transparent);
+  text-underline-offset: 4px;
+}
+
+.artifact-prose a:hover {
+  text-decoration-color: var(--primary);
+}
+
+.artifact-prose blockquote {
+  margin: 1.35rem 0;
+  border-left: 2px solid var(--border);
+  padding-left: 1rem;
+  color: var(--muted-foreground);
+}
+
+.artifact-prose hr {
+  margin: 2rem 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.artifact-prose :not(pre) > code {
+  border-radius: 5px;
+  background: var(--muted);
+  padding: 0.12rem 0.35rem;
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 0.86em;
+  color: var(--foreground);
+}
+
+.artifact-prose pre {
+  margin: 1.35rem 0;
+  overflow-x: auto;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  padding: 1rem 0;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.artifact-prose pre code {
+  background: transparent;
+  padding: 0;
+  font-family: var(--font-jetbrains-mono), monospace;
+  color: var(--foreground);
+}
+
+.artifact-prose table {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin: 1.4rem 0;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.artifact-prose thead {
+  background: var(--muted);
+}
+
+.artifact-prose th,
+.artifact-prose td {
+  border: 1px solid var(--border);
+  padding: 0.55rem 0.7rem;
+  vertical-align: top;
+}
+
+.artifact-prose th {
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.artifact-prose td p,
+.artifact-prose th p {
+  margin: 0;
+}
+
+.artifact-prose td ul,
+.artifact-prose td ol {
+  margin: 0.25rem 0;
+  padding-left: 1rem;
+}
+
+.artifact-prose img {
+  max-width: 100%;
+  height: auto;
+  margin: 1.5rem 0;
+}
+
 .stream-caret {
   animation: stream-caret 1s steps(2, start) infinite;
 }

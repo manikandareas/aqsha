@@ -129,10 +129,10 @@ Deep mode, workflow, artifacts tab, citation verification as a separate step, PD
 ### Backend
 
 - Install + configure `@convex-dev/workflow`.
-- Schema: `researchRuns`, `researchArtifacts`, `citationChecks`.
+- Schema: `researchRuns`, generic `artifacts`, `artifactVersions`, `messageArtifacts`, `researchSources`, and `citationChecks`.
 - Workflow with the seven PRD steps (`planResearch`, `retrieveSources`, `readExtract`, `synthesize`, `verifyCitations`, `persistArtifact`, `finalizeThread`) — real implementations, reusing the RAG and tool infrastructure from phase 3.
 - `messages.send({ mode: "deep" })` creates a run record and starts the workflow.
-- Public functions: `runs.getStatus`, `runs.cancel`, `runs.retry`, `artifacts.list`, `artifacts.get`.
+- Public functions: `runs.getStatus`, `runs.cancel`, `runs.retry`, `artifacts.list`, `artifacts.get`, `artifacts.listVersions`, `artifacts.listForMessage`.
 - Internal workflow status (`queued` / `running` / `waiting` / `retrying` / `completed` / `failed` / `canceled`) persisted on the run, but the public API exposes what the UI actually needs (current step, done steps, error code/message, artifact ids).
 - Rate limiter now also guards external API budget (Exa calls, academic fetch, OCR).
 
@@ -143,13 +143,13 @@ Deep mode, workflow, artifacts tab, citation verification as a separate step, PD
 - Inline step blocks inside the assistant message: icon state per step (sky spinner / mint check / coral square / ink dot), shimmer on the active step, optional right count chip ("6 sources", "3 excerpts"). Labels use the Indonesian copy table from `apps/app/DESIGN.md` — never `queued`, `retrying`, etc.
 - Inline retry bubble on step failure — Coral-soft card with a short human reason and one Retry action.
 - Dihentikan marker when the user stops a run.
-- Artifacts tab in the right panel; opening an artifact swaps the chat area for the artifact reader (Nunito title, prose body, **Salin markdown** + **Bagikan link** + **Buka run**).
+- Artifacts tab in the right panel; opening an artifact renders the reader in that panel while chat stays visible (Nunito title, prose/body viewer, **Salin markdown/body** + **Bagikan link**).
 - Citation evidence view: claim → source mapping rendered as a compact table with evidence-quality chips.
 - Run state recovers across refresh: step blocks repaint with current status; if a run finished while the user was away, the finalize message + artifact are already there.
 
 ### Demo you can show
 
-Flip Deep → "buat laporan tentang kebijakan kripto OJK 2025" → watch the seven steps advance with shimmer → press Stop mid-run → see the dihentikan marker → Retry → watch it continue → completes → Artifacts tab reveals **Laporan** → open reader → every claim has a citation → click a citation → Sources tab scrolls to the source → refresh browser → everything still there.
+Flip Deep → "buat laporan tentang kebijakan kripto OJK 2025" → watch the seven steps advance with shimmer → press Stop mid-run → see the dihentikan marker → Retry → watch it continue → completes → assistant message shows an artifact card → Artifacts tab reveals the primary **Laporan** → open reader in the right panel → every claim has a citation trail → click a citation → Sources tab scrolls to the source → refresh browser → everything still there.
 
 ### Acceptance scenarios covered
 

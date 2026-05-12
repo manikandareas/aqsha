@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as agent_artifacts from "../agent/artifacts.js";
 import type * as agent_astra from "../agent/astra.js";
 import type * as agent_corpus from "../agent/corpus.js";
 import type * as agent_deepResearch from "../agent/deepResearch.js";
@@ -32,6 +33,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "agent/artifacts": typeof agent_artifacts;
   "agent/astra": typeof agent_astra;
   "agent/corpus": typeof agent_corpus;
   "agent/deepResearch": typeof agent_deepResearch;

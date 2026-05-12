@@ -71,7 +71,7 @@ export default defineSchema(
       ),
       currentStep: v.optional(v.string()),
       failedStep: v.optional(v.string()),
-      activeArtifactId: v.optional(v.id("researchArtifacts")),
+      activeArtifactId: v.optional(v.id("artifacts")),
       artifactCount: v.number(),
       sourceCount: v.number(),
       citationCheckCount: v.number(),
@@ -110,29 +110,73 @@ export default defineSchema(
     })
       .index("by_run_order", ["runId", "order"])
       .index("by_owner_run", ["ownerUserId", "runId"]),
-    researchArtifacts: defineTable({
+    artifacts: defineTable({
       ownerUserId: v.string(),
       threadId: v.string(),
-      runId: v.id("researchRuns"),
+      runId: v.optional(v.id("researchRuns")),
       type: v.union(
+        v.literal("research_report"),
         v.literal("markdown_report"),
         v.literal("research_document"),
         v.literal("source_bundle"),
         v.literal("citation_evidence_view"),
+        v.literal("document"),
+        v.literal("code"),
+        v.literal("html"),
+        v.literal("json"),
+        v.literal("plain_text"),
       ),
       title: v.string(),
-      markdown: v.optional(v.string()),
-      storageId: v.optional(v.id("_storage")),
+      currentVersionId: v.optional(v.id("artifactVersions")),
       createdAt: v.number(),
       updatedAt: v.number(),
     })
       .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"])
       .index("by_owner_run", ["ownerUserId", "runId"]),
+    artifactVersions: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      artifactId: v.id("artifacts"),
+      runId: v.optional(v.id("researchRuns")),
+      versionNumber: v.number(),
+      contentFormat: v.union(
+        v.literal("markdown"),
+        v.literal("html"),
+        v.literal("plain"),
+        v.literal("code"),
+        v.literal("json"),
+      ),
+      title: v.string(),
+      body: v.optional(v.string()),
+      storageId: v.optional(v.id("_storage")),
+      createdByMessageId: v.optional(v.string()),
+      changeSummary: v.optional(v.string()),
+      createdAt: v.number(),
+    })
+      .index("by_owner_artifact_version", ["ownerUserId", "artifactId", "versionNumber"])
+      .index("by_owner_artifact_created", ["ownerUserId", "artifactId", "createdAt"]),
+    messageArtifacts: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      messageId: v.string(),
+      artifactId: v.id("artifacts"),
+      versionId: v.id("artifactVersions"),
+      relation: v.union(
+        v.literal("created"),
+        v.literal("updated"),
+        v.literal("referenced"),
+      ),
+      createdAt: v.number(),
+    })
+      .index("by_owner_message", ["ownerUserId", "messageId"])
+      .index("by_owner_artifact", ["ownerUserId", "artifactId"])
+      .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"]),
     citationChecks: defineTable({
       ownerUserId: v.string(),
       threadId: v.string(),
       runId: v.id("researchRuns"),
-      artifactId: v.id("researchArtifacts"),
+      artifactId: v.id("artifacts"),
+      artifactVersionId: v.id("artifactVersions"),
       claim: v.string(),
       support: v.union(
         v.literal("supported"),
@@ -150,7 +194,8 @@ export default defineSchema(
       threadId: v.string(),
       messageId: v.optional(v.string()),
       runId: v.optional(v.id("researchRuns")),
-      artifactId: v.optional(v.id("researchArtifacts")),
+      artifactId: v.optional(v.id("artifacts")),
+      artifactVersionId: v.optional(v.id("artifactVersions")),
       citationNumber: v.number(),
       origin: v.union(
         v.literal("corpus"),

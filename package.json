@@ -9,11 +9,10 @@
     "packages/ui"
   ],
   "scripts": {
-    "dev": "bun run --parallel --filter '@aqsha/app' --filter '@aqsha/convex' --filter '@aqsha/www' dev",
+    "dev": "bun run --parallel --filter '@aqsha/app' --filter '@aqsha/convex' dev",
     "dev:www": "bun run --filter '@aqsha/www' dev",
     "dev:app": "bun run --filter '@aqsha/app' dev",
     "dev:convex": "bun run --filter '@aqsha/convex' dev",
-    "dev:pivot": "bun run --parallel --filter '@aqsha/app' --filter '@aqsha/convex' dev",
     "build": "bun run --filter '@aqsha/app' --filter '@aqsha/www' build",
     "build:www": "bun run --filter '@aqsha/www' build",
     "build:app": "bun run --filter '@aqsha/app' build",

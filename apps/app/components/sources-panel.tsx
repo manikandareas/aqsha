@@ -10,6 +10,8 @@ import {
   SearchIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -47,11 +49,26 @@ export type ResearchSource = {
 type ResearchArtifact = {
   _id: string;
   type:
+    | "research_report"
     | "markdown_report"
     | "research_document"
     | "source_bundle"
-    | "citation_evidence_view";
+    | "citation_evidence_view"
+    | "document"
+    | "code"
+    | "html"
+    | "json"
+    | "plain_text";
   title: string;
+  version?: {
+    _id: string;
+    versionNumber: number;
+    contentFormat: "markdown" | "html" | "plain" | "code" | "json";
+    title: string;
+    body?: string;
+    changeSummary?: string;
+    createdAt: number;
+  } | null;
   createdAt: number;
 };
 
@@ -59,22 +76,25 @@ export function ResearchSidebar({
   threadTitle,
   sources,
   artifacts = [],
-  activeArtifactId,
+  activeArtifact,
+  activeTab,
   activeCitation,
+  onTabChange,
   onOpenArtifact,
+  onClosePanel,
 }: {
   threadTitle?: string;
   sources: ResearchSource[];
   artifacts?: ResearchArtifact[];
-  activeArtifactId?: string | null;
+  activeArtifact?: ResearchArtifact | null;
+  activeTab: "sources" | "artifacts";
   activeCitation: number | null;
+  onTabChange: (tab: "sources" | "artifacts") => void;
   onOpenArtifact?: (artifactId: string) => void;
+  onClosePanel: () => void;
 }) {
-  const [tab, setTab] = useState<"sources" | "artifacts">(
-    sources.length > 0 ? "sources" : "artifacts",
-  );
   const [copiedSummary, setCopiedSummary] = useState(false);
-  const { toggleSidebar } = useSidebar();
+  const { setOpenMobile } = useSidebar();
 
   const sorted = useMemo(
     () => [...sources].sort((a, b) => a.citationNumber - b.citationNumber),
@@ -115,8 +135,13 @@ export function ResearchSidebar({
   const handleOpenPrimaryArtifact = () => {
     const artifact = artifacts[0];
     if (!artifact) return;
-    setTab("artifacts");
+    onTabChange("artifacts");
     onOpenArtifact?.(artifact._id);
+  };
+
+  const handleClosePanel = () => {
+    onClosePanel();
+    setOpenMobile(false);
   };
 
   return (
@@ -129,14 +154,14 @@ export function ResearchSidebar({
         <div className="flex h-9 items-center gap-2 px-2.5">
           <div className="flex min-w-0 flex-1 items-center gap-1.5">
             <HeaderTabButton
-              active={tab === "sources"}
-              onClick={() => setTab("sources")}
+              active={activeTab === "sources"}
+              onClick={() => onTabChange("sources")}
               label="Sumber"
               count={sources.length}
             />
             <HeaderTabButton
-              active={tab === "artifacts"}
-              onClick={() => setTab("artifacts")}
+              active={activeTab === "artifacts"}
+              onClick={() => onTabChange("artifacts")}
               label="Artefak"
               count={artifacts.length}
             />
@@ -175,7 +200,7 @@ export function ResearchSidebar({
               variant="ghost"
               size="icon-xs"
               className="size-6 rounded-[6px] text-muted-foreground"
-              onClick={toggleSidebar}
+              onClick={handleClosePanel}
               aria-label="Tutup panel riset"
             >
               <PanelLeftIcon className="size-3.5 rotate-180" />
@@ -187,7 +212,7 @@ export function ResearchSidebar({
       <SidebarContent className="min-h-0 overflow-x-hidden">
         <ScrollArea className="h-full">
           <div className="grid min-w-0 gap-3 px-3 pb-4 pt-1">
-            {tab === "sources"
+            {activeTab === "sources"
               ? renderSources()
               : renderArtifacts()}
           </div>
@@ -226,14 +251,20 @@ export function ResearchSidebar({
         />
       );
     }
-    return artifacts.map((artifact) => (
-      <ArtifactCard
-        key={artifact._id}
-        artifact={artifact}
-        active={artifact._id === activeArtifactId}
-        onOpen={() => onOpenArtifact?.(artifact._id)}
-      />
-    ));
+    return (
+      <>
+        {activeArtifact ? (
+          <ArtifactReader
+            artifact={activeArtifact}
+          />
+        ) : (
+          <EmptyBlock
+            title="Pilih artefak"
+            body="Klik kartu artefak pada respons untuk membaca isinya di sini."
+          />
+        )}
+      </>
+    );
   }
 }
 
@@ -283,42 +314,106 @@ function EmptyBlock({ title, body }: { title: string; body: string }) {
   );
 }
 
-function ArtifactCard({
+function ArtifactReader({
   artifact,
-  active,
-  onOpen,
 }: {
   artifact: ResearchArtifact;
-  active: boolean;
-  onOpen: () => void;
 }) {
-  const label = {
-    markdown_report: "Laporan",
-    research_document: "Dokumen",
-    source_bundle: "Bundel sumber",
-    citation_evidence_view: "Evidence",
-  }[artifact.type];
+  const [copied, setCopied] = useState(false);
+  const version = artifact.version;
+  const body = version?.body ?? "Artefak ini disimpan di storage.";
+  const format = version?.contentFormat ?? "markdown";
+
+  const copyBody = async () => {
+    await navigator.clipboard.writeText(body);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
+  };
+
+  const copyLink = async () => {
+    await navigator.clipboard.writeText(
+      `${window.location.origin}${window.location.pathname}?artifact=${artifact._id}`,
+    );
+  };
+
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className={cn(
-        "block w-full min-w-0 overflow-hidden rounded-[12px] border border-border/70 bg-card text-left shadow-sm transition-colors hover:border-[var(--lavender-soft-border)] hover:bg-muted/45",
-        active && "border-[var(--lavender-soft-border)] bg-[var(--lavender-soft)] ring-1 ring-[var(--lavender-soft-border)]",
-      )}
-    >
-      <div className="flex items-center gap-2 px-3 py-2">
-        <FileTextIcon className="size-3.5 shrink-0 text-[var(--lavender)]" />
-        <span className="rounded-[7px] border border-[var(--lavender-soft-border)] bg-[var(--lavender-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--lavender)]">
-          {label}
-        </span>
+    <article className="-mx-3 -mt-1 min-w-0 px-5 pb-8 pt-5 sm:px-7">
+      <div className="mx-auto flex w-full max-w-[760px] items-start justify-between gap-4">
+        <div className="min-w-0 pt-1">
+          <h2 className="font-heading text-[26px] font-bold leading-tight tracking-normal text-foreground">
+            {artifact.title}
+          </h2>
+          <p className="mt-2 text-[12px] font-medium text-muted-foreground">
+            v{version?.versionNumber ?? 1} · {format}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            className="size-8 rounded-[7px] text-muted-foreground hover:bg-muted"
+            onClick={copyBody}
+            aria-label={copied ? "Tersalin" : "Salin markdown"}
+          >
+            {copied ? (
+              <CheckIcon className="size-3.5" />
+            ) : (
+              <CopyIcon className="size-3.5" />
+            )}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            className="size-8 rounded-[7px] text-muted-foreground hover:bg-muted"
+            onClick={copyLink}
+            aria-label="Bagikan link"
+          >
+            <ExternalLinkIcon className="size-3.5" />
+          </Button>
+        </div>
       </div>
-      <div className="p-3">
-        <h3 className="line-clamp-2 text-[13px] font-semibold leading-5">
-          {artifact.title}
-        </h3>
+      <div className="mx-auto mt-8 w-full max-w-[760px] text-[16px] leading-7 text-foreground">
+        {format === "html" ? (
+          <iframe
+            title={artifact.title}
+            sandbox=""
+            srcDoc={body}
+            className="h-[70svh] w-full border-0 bg-white"
+          />
+        ) : format === "code" || format === "plain" || format === "json" ? (
+          <pre className="overflow-auto border-y bg-transparent py-4 font-mono text-[13px] leading-6 text-foreground">
+            <code>{body}</code>
+          </pre>
+        ) : (
+          <ArtifactMarkdown body={body} />
+        )}
       </div>
-    </button>
+    </article>
+  );
+}
+
+function ArtifactMarkdown({ body }: { body: string }) {
+  return (
+    <div className="artifact-prose">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          a: ({ children, href }) => (
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {children}
+            </a>
+          ),
+        }}
+      >
+        {body}
+      </ReactMarkdown>
+    </div>
   );
 }
 

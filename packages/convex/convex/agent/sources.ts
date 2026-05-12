@@ -11,7 +11,8 @@ const sourceSummaryValidator = v.object({
   threadId: v.string(),
   messageId: v.optional(v.string()),
   runId: v.optional(v.id("researchRuns")),
-  artifactId: v.optional(v.id("researchArtifacts")),
+  artifactId: v.optional(v.id("artifacts")),
+  artifactVersionId: v.optional(v.id("artifactVersions")),
   citationNumber: v.number(),
   origin: v.union(
     v.literal("corpus"),
@@ -39,7 +40,7 @@ export const list = query({
     threadId: v.string(),
     messageId: v.optional(v.string()),
     runId: v.optional(v.id("researchRuns")),
-    artifactId: v.optional(v.id("researchArtifacts")),
+    artifactId: v.optional(v.id("artifacts")),
   },
   returns: v.array(sourceSummaryValidator),
   handler: async (ctx, args) => {

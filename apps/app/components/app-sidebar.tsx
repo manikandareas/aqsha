@@ -11,6 +11,7 @@ import {
   SparklesIcon,
 } from "lucide-react";
 import { NavUser } from "@/components/nav-user";
+import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sidebar,
@@ -137,10 +138,35 @@ export function AppSidebar({
         </ScrollArea>
       </SidebarContent>
 
-      <SidebarFooter className="mt-auto border-t border-transparent p-1.5">
+      <SidebarFooter className="mt-auto flex flex-col gap-2 border-t border-transparent p-1.5">
+        <UpgradeCard />
         <NavUser user={viewer} />
       </SidebarFooter>
     </Sidebar>
+  );
+}
+
+function UpgradeCard() {
+  return (
+    <div className="flex min-h-[154px] flex-col rounded-[14px] border border-[var(--lemon-soft-border)] bg-[var(--lemon-soft)] px-3 py-3.5 shadow-[0_12px_28px_rgb(154_106_0_/_0.08)] dark:shadow-none">
+      <div className="mb-2 inline-flex w-fit items-center gap-1 rounded-full border border-[var(--lemon-soft-border)] bg-background/55 px-2 py-1 text-[11px] font-semibold leading-none text-[var(--lemon)]">
+        <SparklesIcon className="size-3" />
+        7 hari trial
+      </div>
+      <h3 className="font-heading text-[15px] font-extrabold leading-[1.18] text-foreground [text-wrap:balance]">
+        Plus atau Pro untuk riset panjang
+      </h3>
+      <p className="mt-1.5 text-[12px] font-medium leading-[1.5] text-muted-foreground">
+        Lebih banyak konteks, tools lanjutan, dan akses premium saat riset mulai serius.
+      </p>
+      <Button
+        type="button"
+        size="sm"
+        className="mt-auto h-9 w-full rounded-[9px] bg-primary text-[13px] font-semibold text-primary-foreground shadow-none transition-transform hover:bg-primary/90 active:scale-[0.985]"
+      >
+        Coba gratis
+      </Button>
+    </div>
   );
 }
 

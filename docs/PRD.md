@@ -134,13 +134,13 @@ Each tab is defined below.
 
 Shows artifacts scoped to the current thread/run. Supports:
 
-- Research document preview.
-- Generated markdown report preview.
-- Source bundle summary.
-- Citation/evidence view.
+- Generic chat artifact preview.
+- Research report preview.
+- Markdown, plain text, code, JSON, and sandboxed HTML reader formats.
+- Artifact version history.
 - Artifact status and generation timestamp.
 
-Opening an artifact expands a reader view over the chat area (not a new page).
+Opening an artifact shows the reader in the right panel while the chat stays visible. On mobile, the panel becomes a full-screen sheet reader.
 
 #### Sources tab
 
@@ -187,27 +187,36 @@ Expected behavior:
 - Execute internal steps for planning, retrieval, extraction, synthesis, citation verification, and artifact persistence.
 - Keep the run observable after refresh.
 - Support cancel and retry.
-- Produce at least one research document or markdown report artifact when completed.
+- Produce one primary research report artifact when completed. Sources and citation checks are evidence metadata linked to that artifact version.
 
 ## Artifact V1
 
 V1 artifact types:
 
-- `research_document`: Structured research document generated from a Deep Research run.
-- `source_bundle`: Curated set of sources used or recommended for the thread/run.
-- `citation_evidence_view`: Claim-to-source map with verification notes.
-- `markdown_report`: Generated markdown report that can be reused outside chat.
+- `research_report`: Primary Deep Research report.
+- `markdown_report` / `document`: Reusable markdown or prose artifacts created in Normal mode.
+- `code`, `json`, `plain_text`, `html`: Non-React executable artifact formats for reusable outputs.
 
 Artifact records must include:
 
 - `ownerUserId`
 - `threadId`
-- `runId` when created by workflow
+- optional `runId` when created by workflow
 - `type`
 - `title`
-- `status`
-- `content` or storage pointer
-- `sourceIds`
+- current version pointer
+
+Artifact versions are immutable and include:
+
+- `versionNumber`
+- `contentFormat`
+- `title`
+- `body` or storage pointer
+- optional `createdByMessageId`
+- optional `runId`
+- `changeSummary`
+
+Assistant messages may link to artifacts through a message-artifact relation: `created`, `updated`, or `referenced`.
 - `createdAt`
 - `updatedAt`
 
@@ -381,8 +390,14 @@ Function names are conceptual and may be adjusted to match final module naming.
 - `artifacts.list({ threadId })`
   - Lists artifacts for an owned thread.
 
-- `artifacts.get({ artifactId })`
-  - Returns one artifact if owned by the authenticated user.
+- `artifacts.get({ artifactId, versionId? })`
+  - Returns one artifact with its selected/current version if owned by the authenticated user.
+
+- `artifacts.listVersions({ artifactId })`
+  - Lists immutable versions for an owned artifact.
+
+- `artifacts.listForMessage({ messageId })`
+  - Lists artifact cards linked to an assistant message.
 
 ### Sources
 
@@ -467,7 +482,9 @@ Rate limit behavior:
 Agent component owns thread/message internals. Product tables should store only Aqsha-specific metadata and durable product records:
 
 - `researchRuns`
-- `researchArtifacts`
+- `artifacts`
+- `artifactVersions`
+- `messageArtifacts`
 - `researchSources`
 - `citationChecks`
 - `corpusSources`

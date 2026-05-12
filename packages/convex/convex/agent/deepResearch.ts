@@ -22,7 +22,6 @@ import { assertThreadOwner } from "./threads";
 import { researchWorkflow } from "./workflow";
 
 const DEEP_MODEL = process.env.AQSHA_DEEP_MODEL ?? "gpt-5.5";
-const ARTIFACT_INLINE_LIMIT = 800_000;
 
 const stepDefinitions = [
   ["planResearch", "Merencanakan riset"],
@@ -185,14 +184,14 @@ export const listArtifacts = query({
     if (args.runId) {
       await assertRunOwner(ctx, args.runId, user._id);
       return await ctx.db
-        .query("researchArtifacts")
+        .query("artifacts")
         .withIndex("by_owner_run", (q) =>
-          q.eq("ownerUserId", user._id).eq("runId", args.runId!),
+          q.eq("ownerUserId", user._id).eq("runId", args.runId),
         )
         .collect();
     }
     return await ctx.db
-      .query("researchArtifacts")
+      .query("artifacts")
       .withIndex("by_owner_thread_created", (q) =>
         q.eq("ownerUserId", user._id).eq("threadId", args.threadId),
       )
@@ -202,22 +201,25 @@ export const listArtifacts = query({
 });
 
 export const getArtifact = query({
-  args: { artifactId: v.id("researchArtifacts") },
+  args: { artifactId: v.id("artifacts") },
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
-    const artifact = await ctx.db.get("researchArtifacts", args.artifactId);
+    const artifact = await ctx.db.get("artifacts", args.artifactId);
     if (!artifact || artifact.ownerUserId !== user._id) {
       return null;
     }
-    return artifact;
+    const version = artifact.currentVersionId
+      ? await ctx.db.get("artifactVersions", artifact.currentVersionId)
+      : null;
+    return { ...artifact, version };
   },
 });
 
 export const listCitationChecks = query({
-  args: { artifactId: v.id("researchArtifacts") },
+  args: { artifactId: v.id("artifacts"), versionId: v.optional(v.id("artifactVersions")) },
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
-    const artifact = await ctx.db.get("researchArtifacts", args.artifactId);
+    const artifact = await ctx.db.get("artifacts", args.artifactId);
     if (!artifact || artifact.ownerUserId !== user._id) {
       return [];
     }
@@ -464,10 +466,16 @@ export const persistArtifact = internalMutation({
       }),
     ),
   },
-  handler: async (ctx, args) => {
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    primaryArtifactId: Id<"artifacts">;
+    primaryVersionId?: Id<"artifactVersions">;
+  }> => {
     const run = await assertRunOwner(ctx, args.runId, args.ownerUserId);
     if (run.status === "canceled") {
-      return { primaryArtifactId: run.activeArtifactId as Id<"researchArtifacts"> };
+      return { primaryArtifactId: run.activeArtifactId as Id<"artifacts"> };
     }
     await markStepMutation(ctx, {
       runId: args.runId,
@@ -475,70 +483,52 @@ export const persistArtifact = internalMutation({
       stepKey: "persistArtifact",
       status: "running",
     });
-    const sourceIds = await persistSourcesForRun(ctx, args);
-    const now = Date.now();
-    const reportId = await ctx.db.insert("researchArtifacts", {
+    const report: {
+      artifactId: Id<"artifacts">;
+      versionId: Id<"artifactVersions">;
+    } = await ctx.runMutation(internal.agent.artifacts.createResearchReportFromRun, {
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
       runId: args.runId,
-      type: "markdown_report",
       title: "Deep Research Report",
-      markdown: args.markdown.length <= ARTIFACT_INLINE_LIMIT ? args.markdown : undefined,
-      createdAt: now,
-      updatedAt: now,
+      markdown: args.markdown,
+      changeSummary: "Initial Deep Research report",
     });
-    const bundleId = await ctx.db.insert("researchArtifacts", {
-      ownerUserId: args.ownerUserId,
-      threadId: args.threadId,
-      runId: args.runId,
-      type: "source_bundle",
-      title: "Source Bundle",
-      markdown: args.sources
-        .map((source) => `- [${source.citationNumber}] ${source.title}\n  ${source.snippet}`)
-        .join("\n"),
-      createdAt: now,
-      updatedAt: now,
-    });
-    const evidenceId = await ctx.db.insert("researchArtifacts", {
-      ownerUserId: args.ownerUserId,
-      threadId: args.threadId,
-      runId: args.runId,
-      type: "citation_evidence_view",
-      title: "Citation Evidence",
-      markdown: args.checks
-        .map((check) => `- ${check.support}: ${check.claim}`)
-        .join("\n"),
-      createdAt: now,
-      updatedAt: now,
+    const sourceIds = await persistSourcesForRun(ctx, {
+      ...args,
+      artifactId: report.artifactId,
+      artifactVersionId: report.versionId,
     });
     await persistCitationChecks(ctx, {
       ...args,
-      artifactId: evidenceId,
+      artifactId: report.artifactId,
+      artifactVersionId: report.versionId,
       sourceIdsByNumber: sourceIds,
     });
+    const now = Date.now();
     await markStepMutation(ctx, {
       runId: args.runId,
       ownerUserId: args.ownerUserId,
       stepKey: "persistArtifact",
       status: "completed",
-      artifactCount: 3,
+      artifactCount: 1,
       summary: "Artefak tersimpan",
     });
     await ctx.db.patch("researchRuns", args.runId, {
-      activeArtifactId: reportId,
-      artifactCount: 3,
+      activeArtifactId: report.artifactId,
+      artifactCount: 1,
       sourceCount: args.sources.length,
       citationCheckCount: args.checks.length,
       updatedAt: now,
     });
-    return { primaryArtifactId: reportId, bundleId, evidenceId };
+    return { primaryArtifactId: report.artifactId, primaryVersionId: report.versionId };
   },
 });
 
 export const finalizeThread = internalMutation({
   args: {
     ...workflowArgs(),
-    artifactId: v.id("researchArtifacts"),
+    artifactId: v.id("artifacts"),
     summary: v.string(),
   },
   handler: async (ctx, args) => {
@@ -552,12 +542,23 @@ export const finalizeThread = internalMutation({
       stepKey: "finalizeThread",
       status: "running",
     });
-    await ctx.runMutation(internal.agent.messages.saveAssistantMessage, {
+    const savedMessage = await ctx.runMutation(internal.agent.messages.saveAssistantMessage, {
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
       promptMessageId: args.promptMessageId,
-      content: `${args.summary}\n\nArtefak riset sudah tersimpan.`,
+      content: `${args.summary}\n\nLaporan lengkap sudah tersimpan sebagai artefak.`,
     });
+    const artifact = await ctx.db.get("artifacts", args.artifactId);
+    if (savedMessage.messageId && artifact?.currentVersionId) {
+      await ctx.runMutation(internal.agent.artifacts.attachToMessage, {
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+        messageId: savedMessage.messageId,
+        artifactId: args.artifactId,
+        versionId: artifact.currentVersionId,
+        relation: "created",
+      });
+    }
     const now = Date.now();
     await markStepMutation(ctx, {
       runId: args.runId,
@@ -858,6 +859,8 @@ async function persistSourcesForRun(
     ownerUserId: string;
     threadId: string;
     runId: Id<"researchRuns">;
+    artifactId?: Id<"artifacts">;
+    artifactVersionId?: Id<"artifactVersions">;
     sources: SourceCandidate[];
   },
 ) {
@@ -868,6 +871,8 @@ async function persistSourcesForRun(
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
       runId: args.runId,
+      artifactId: args.artifactId,
+      artifactVersionId: args.artifactVersionId,
       citationNumber: source.citationNumber,
       origin: source.origin,
       evidenceStrength: source.evidenceStrength,
@@ -891,7 +896,8 @@ async function persistCitationChecks(
     ownerUserId: string;
     threadId: string;
     runId: Id<"researchRuns">;
-    artifactId: Id<"researchArtifacts">;
+    artifactId: Id<"artifacts">;
+    artifactVersionId: Id<"artifactVersions">;
     checks: Array<{
       claim: string;
       support: "supported" | "partial" | "unsupported";
@@ -909,6 +915,7 @@ async function persistCitationChecks(
         threadId: args.threadId,
         runId: args.runId,
         artifactId: args.artifactId,
+        artifactVersionId: args.artifactVersionId,
         claim: check.claim,
         support: check.support,
         sourceIds: check.citationNumbers

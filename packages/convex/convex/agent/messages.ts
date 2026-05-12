@@ -5,7 +5,9 @@ import {
 } from "@convex-dev/agent";
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
+import { z } from "zod";
 import { components, internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
 import {
   internalAction,
   internalMutation,
@@ -53,13 +55,12 @@ function previewFromContent(content: string) {
   return singleLine.length > 140 ? `${singleLine.slice(0, 137)}...` : singleLine;
 }
 
-function titleFromContent(content: string) {
-  const preview = previewFromContent(content);
-  return preview.length > 60 ? `${preview.slice(0, 57)}...` : preview;
-}
-
 function estimateTokens(content: string) {
   return Math.max(1, Math.ceil(content.length / 4));
+}
+
+function shouldGenerateThreadTitle(title: string | undefined) {
+  return !title || title === "Thread baru";
 }
 
 async function getThreadMetadata(ctx: QueryCtx | MutationCtx, threadId: string) {
@@ -159,10 +160,10 @@ export const send = mutation({
       incrementMessageCount: true,
     });
 
-    if (!thread.title || thread.title === "Thread baru") {
-      await astra.updateThreadMetadata(ctx, {
+    if (shouldGenerateThreadTitle(thread.title)) {
+      await ctx.scheduler.runAfter(0, internal.agent.messages.generateThreadTitle, {
         threadId: args.threadId,
-        patch: { title: titleFromContent(content) },
+        userId: user._id,
       });
     }
 
@@ -228,7 +229,7 @@ export const generateReply = internalAction({
       await result.consumeStream();
       const text = await result.text;
       const steps = await result.steps;
-      const assistantMessageId = getAssistantMessageId(result.savedMessages);
+      const assistantMessageId = getVisibleAssistantMessageId(result.savedMessages);
       if (assistantMessageId) {
         await ctx.runMutation(internal.agent.sources.persistCited, {
           ownerUserId: args.userId,
@@ -237,6 +238,16 @@ export const generateReply = internalAction({
           candidates: collectSourceCandidates(steps),
           citedNumbers: extractCitationNumbers(text),
         });
+        for (const artifact of collectArtifactResults(steps)) {
+          await ctx.runMutation(internal.agent.artifacts.attachToMessage, {
+            ownerUserId: args.userId,
+            threadId: args.threadId,
+            messageId: assistantMessageId,
+            artifactId: artifact.artifactId,
+            versionId: artifact.versionId,
+            relation: artifact.relation,
+          });
+        }
       }
       await ctx.runMutation(internal.agent.messages.markThreadIdle, {
         ownerUserId: args.userId,
@@ -244,6 +255,15 @@ export const generateReply = internalAction({
         preview: previewFromContent(text),
         incrementMessageCount: true,
       });
+      const latestThread = await ctx.runQuery(components.agent.threads.getThread, {
+        threadId: args.threadId,
+      });
+      if (shouldGenerateThreadTitle(latestThread?.title)) {
+        await ctx.scheduler.runAfter(0, internal.agent.messages.generateThreadTitle, {
+          threadId: args.threadId,
+          userId: args.userId,
+        });
+      }
     } catch (error) {
       await astra.saveMessages(ctx, {
         threadId: args.threadId,
@@ -260,6 +280,59 @@ export const generateReply = internalAction({
       });
       throw error;
     }
+  },
+});
+
+export const generateThreadTitle = internalAction({
+  args: {
+    threadId: v.string(),
+    userId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const metadata = await ctx.runQuery(components.agent.threads.getThread, {
+      threadId: args.threadId,
+    });
+    if (!metadata || metadata.userId !== args.userId) {
+      throw new ConvexError("Thread not found");
+    }
+    if (!shouldGenerateThreadTitle(metadata.title)) {
+      return null;
+    }
+
+    const { thread } = await astra.continueThread(ctx, {
+      threadId: args.threadId,
+      userId: args.userId,
+    });
+    const {
+      object: { title },
+    } = await thread.generateObject(
+      {
+        schemaDescription:
+          "Generate a concise thread title from the existing conversation. The title should capture the user's core research intent and should not be a generic greeting.",
+        schema: z.object({
+          title: z
+            .string()
+            .min(1)
+            .describe("A concise, specific title for the thread, at most 80 characters"),
+        }),
+        prompt:
+          "Generate a concise title for this thread. Return only the structured title field.",
+      },
+      { storageOptions: { saveMessages: "none" } },
+    );
+
+    const normalizedTitle = title.replace(/\s+/g, " ").trim();
+    if (!normalizedTitle) {
+      return null;
+    }
+
+    await thread.updateMetadata({
+      title:
+        normalizedTitle.length > 80
+          ? `${normalizedTitle.slice(0, 77)}...`
+          : normalizedTitle,
+    });
+    return null;
   },
 });
 
@@ -300,14 +373,99 @@ function isSourceCandidate(value: unknown): value is SourceCandidate {
   );
 }
 
-function getAssistantMessageId(
+function collectArtifactResults(
+  steps: Array<{ toolResults?: Array<{ output?: unknown }> }>,
+) {
+  const results: Array<{
+    artifactId: Id<"artifacts">;
+    versionId: Id<"artifactVersions">;
+    relation: "created" | "updated";
+  }> = [];
+  for (const step of steps) {
+    for (const result of step.toolResults ?? []) {
+      if (isArtifactToolResult(result.output)) {
+        results.push(result.output);
+      }
+    }
+  }
+  return results;
+}
+
+function isArtifactToolResult(value: unknown): value is {
+  artifactId: Id<"artifacts">;
+  versionId: Id<"artifactVersions">;
+  relation: "created" | "updated";
+} {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const result = value as {
+    artifactId?: unknown;
+    versionId?: unknown;
+    relation?: unknown;
+  };
+  return (
+    typeof result.artifactId === "string" &&
+    typeof result.versionId === "string" &&
+    (result.relation === "created" || result.relation === "updated")
+  );
+}
+
+function getVisibleAssistantMessageId(
   savedMessages:
-    | Array<{ _id: string; message?: { role?: string }; role?: string }>
+    | Array<{
+        _id: string;
+        order?: number;
+        stepOrder?: number;
+        tool?: boolean;
+        message?: { role?: string };
+        role?: string;
+      }>
     | undefined,
 ) {
-  return savedMessages
-    ?.filter((message) => (message.message?.role ?? message.role) === "assistant")
-    .at(-1)?._id;
+  if (!savedMessages?.length) {
+    return undefined;
+  }
+
+  const sortedMessages = [...savedMessages].sort((a, b) => {
+    const order = (a.order ?? 0) - (b.order ?? 0);
+    return order || (a.stepOrder ?? 0) - (b.stepOrder ?? 0);
+  });
+  let currentGroup: typeof sortedMessages = [];
+  let currentOrder: number | undefined;
+  let visibleMessageId: string | undefined;
+
+  const flushGroup = () => {
+    if (currentGroup.length > 0) {
+      visibleMessageId = currentGroup[0]._id;
+      currentGroup = [];
+      currentOrder = undefined;
+    }
+  };
+
+  for (const message of sortedMessages) {
+    const role = message.message?.role ?? message.role;
+    if (role === "user" || role === "system") {
+      flushGroup();
+      continue;
+    }
+    if (role !== "assistant" && role !== "tool") {
+      continue;
+    }
+
+    if (currentOrder !== undefined && message.order !== currentOrder) {
+      flushGroup();
+    }
+    currentOrder = message.order;
+    currentGroup.push(message);
+
+    if (role === "assistant" && !message.tool) {
+      flushGroup();
+    }
+  }
+  flushGroup();
+
+  return visibleMessageId;
 }
 
 export const markThreadIdle = internalMutation({
@@ -352,7 +510,7 @@ export const saveAssistantMessage = internalMutation({
     content: v.string(),
   },
   handler: async (ctx, args) => {
-    await astra.saveMessages(ctx, {
+    const saved = await astra.saveMessages(ctx, {
       threadId: args.threadId,
       userId: args.ownerUserId,
       promptMessageId: args.promptMessageId,
@@ -366,6 +524,16 @@ export const saveAssistantMessage = internalMutation({
       status: "idle",
       incrementMessageCount: true,
     });
+    const thread = await ctx.runQuery(components.agent.threads.getThread, {
+      threadId: args.threadId,
+    });
+    if (shouldGenerateThreadTitle(thread?.title)) {
+      await ctx.scheduler.runAfter(0, internal.agent.messages.generateThreadTitle, {
+        threadId: args.threadId,
+        userId: args.ownerUserId,
+      });
+    }
+    return { messageId: getVisibleAssistantMessageId(saved.messages) };
   },
 });
 

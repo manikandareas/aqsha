@@ -8,7 +8,6 @@ import { useMutation, useQuery } from "convex/react";
 import {
   ArrowUpIcon,
   ChevronDownIcon,
-  CopyIcon,
   FileTextIcon,
   FolderIcon,
   Loader2Icon,
@@ -24,14 +23,6 @@ import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "@aqsha/convex/api";
-import {
-  Artifact,
-  ArtifactAction,
-  ArtifactActions,
-  ArtifactContent,
-  ArtifactHeader,
-  ArtifactTitle,
-} from "@/components/ai-elements/artifact";
 import {
   Conversation,
   ConversationContent,
@@ -139,23 +130,30 @@ type ResearchRun = {
 
 type ResearchArtifact = {
   _id: string;
-  runId: string;
+  runId?: string;
   type:
+    | "research_report"
     | "markdown_report"
     | "research_document"
     | "source_bundle"
-    | "citation_evidence_view";
+    | "citation_evidence_view"
+    | "document"
+    | "code"
+    | "html"
+    | "json"
+    | "plain_text";
   title: string;
-  markdown?: string;
+  currentVersionId?: string;
+  version?: {
+    _id: string;
+    versionNumber: number;
+    contentFormat: "markdown" | "html" | "plain" | "code" | "json";
+    title: string;
+    body?: string;
+    changeSummary?: string;
+    createdAt: number;
+  } | null;
   createdAt: number;
-};
-
-type CitationCheck = {
-  _id: string;
-  claim: string;
-  support: "supported" | "partial" | "unsupported";
-  sourceIds: string[];
-  evidence: string;
 };
 
 export function ThreadShell({ threadId }: { threadId?: string }) {
@@ -187,7 +185,7 @@ export function ThreadShell({ threadId }: { threadId?: string }) {
     threadId ? { threadId } : "skip",
   ) as ResearchRun[] | undefined;
   const artifacts = useQuery(
-    api.agent.deepResearch.listArtifacts,
+    api.agent.artifacts.list,
     threadId ? { threadId } : "skip",
   ) as ResearchArtifact[] | undefined;
   const cancelRun = useMutation(api.agent.deepResearch.cancel);
@@ -195,15 +193,16 @@ export function ThreadShell({ threadId }: { threadId?: string }) {
   const [isCreating, setIsCreating] = useState(false);
   const [activeCitation, setActiveCitation] = useState<number | null>(null);
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
+  const [rightPanelTab, setRightPanelTab] = useState<"sources" | "artifacts">(
+    "sources",
+  );
+  const [rightPanelOpen, setRightPanelOpen] = useState(false);
+  const [seenArtifactCount, setSeenArtifactCount] = useState(0);
+  const selectedArtifactId = activeArtifactId ?? artifacts?.[0]?._id ?? null;
   const activeArtifact = useQuery(
-    api.agent.deepResearch.getArtifact,
-    activeArtifactId ? { artifactId: activeArtifactId as never } : "skip",
+    api.agent.artifacts.get,
+    selectedArtifactId ? { artifactId: selectedArtifactId as never } : "skip",
   ) as ResearchArtifact | null | undefined;
-  const citationChecks = useQuery(
-    api.agent.deepResearch.listCitationChecks,
-    activeArtifactId ? { artifactId: activeArtifactId as never } : "skip",
-  ) as CitationCheck[] | undefined;
-
   const threads = threadPage?.page ?? [];
   const title = threadId
     ? (selectedThread?.title ?? "Thread tidak ditemukan")
@@ -213,6 +212,11 @@ export function ThreadShell({ threadId }: { threadId?: string }) {
     (sources && sources.length > 0) ||
     (artifacts && artifacts.length > 0) ||
     (runs ?? []).some(isRunActive);
+  const artifactCount = artifacts?.length ?? 0;
+  const hasUnseenArtifact = artifactCount > seenArtifactCount;
+  const effectiveRightPanelTab = hasUnseenArtifact ? "artifacts" : rightPanelTab;
+  const effectiveRightPanelOpen =
+    Boolean(hasResearchPayload) && (rightPanelOpen || hasUnseenArtifact);
 
   const handleCreateThread = async () => {
     setIsCreating(true);
@@ -222,6 +226,25 @@ export function ThreadShell({ threadId }: { threadId?: string }) {
     } finally {
       setIsCreating(false);
     }
+  };
+
+  const handleOpenArtifact = (artifactId: string) => {
+    setActiveArtifactId(artifactId);
+    setRightPanelTab("artifacts");
+    setSeenArtifactCount(artifactCount);
+    setRightPanelOpen(true);
+  };
+
+  const handleRightPanelOpenChange = (open: boolean) => {
+    setRightPanelOpen(open);
+    if (!open) {
+      setSeenArtifactCount(artifactCount);
+    }
+  };
+
+  const handleRightPanelTabChange = (tab: "sources" | "artifacts") => {
+    setRightPanelTab(tab);
+    setSeenArtifactCount(artifactCount);
   };
 
   return (
@@ -249,11 +272,13 @@ export function ThreadShell({ threadId }: { threadId?: string }) {
         runs={runs ?? []}
         artifacts={artifacts ?? []}
         activeArtifact={activeArtifact ?? null}
-        citationChecks={citationChecks ?? []}
-        activeArtifactId={activeArtifactId}
         activeCitation={activeCitation}
         onCitationClick={setActiveCitation}
-        onOpenArtifact={setActiveArtifactId}
+        rightPanelOpen={effectiveRightPanelOpen}
+        rightPanelTab={effectiveRightPanelTab}
+        onRightPanelOpenChange={handleRightPanelOpenChange}
+        onRightPanelTabChange={handleRightPanelTabChange}
+        onOpenArtifact={handleOpenArtifact}
         onCancelRun={(runId) => cancelRun({ runId: runId as never })}
         onRetryRun={(runId) => retryRun({ runId: runId as never })}
       />
@@ -277,10 +302,12 @@ function ThreadShellLayout({
   runs,
   artifacts,
   activeArtifact,
-  citationChecks,
-  activeArtifactId,
   activeCitation,
   onCitationClick,
+  rightPanelOpen,
+  rightPanelTab,
+  onRightPanelOpenChange,
+  onRightPanelTabChange,
   onOpenArtifact,
   onCancelRun,
   onRetryRun,
@@ -321,10 +348,12 @@ function ThreadShellLayout({
   runs: ResearchRun[];
   artifacts: ResearchArtifact[];
   activeArtifact: ResearchArtifact | null;
-  citationChecks: CitationCheck[];
-  activeArtifactId: string | null;
   activeCitation: number | null;
   onCitationClick: (citation: number) => void;
+  rightPanelOpen: boolean;
+  rightPanelTab: "sources" | "artifacts";
+  onRightPanelOpenChange: (open: boolean) => void;
+  onRightPanelTabChange: (tab: "sources" | "artifacts") => void;
   onOpenArtifact: (artifactId: string) => void;
   onCancelRun: (runId: string) => Promise<unknown>;
   onRetryRun: (runId: string) => Promise<unknown>;
@@ -345,11 +374,12 @@ function ThreadShellLayout({
       />
       <SidebarInset className="bg-background">
         <SidebarProvider
-          defaultOpen={Boolean(hasResearchPayload)}
+          open={rightPanelOpen}
+          onOpenChange={onRightPanelOpenChange}
           style={
             {
-              "--sidebar-width": "42rem",
-              "--sidebar-width-mobile": "30rem",
+              "--sidebar-width": "52rem",
+              "--sidebar-width-mobile": "34rem",
             } as CSSProperties
           }
           className="min-h-0 flex-1"
@@ -373,10 +403,9 @@ function ThreadShellLayout({
                   onSend={sendMessage}
                   sources={sources}
                   runs={runs}
-                  artifacts={artifacts}
-                  activeArtifact={activeArtifact}
-                  citationChecks={citationChecks}
-                  onCitationClick={onCitationClick}
+              artifacts={artifacts}
+              onCitationClick={onCitationClick}
+              onOpenArtifact={onOpenArtifact}
                   onCancelRun={onCancelRun}
                   onRetryRun={onRetryRun}
                 />
@@ -388,9 +417,12 @@ function ThreadShellLayout({
               threadTitle={threadId ? selectedThread?.title : undefined}
               sources={sources}
               artifacts={artifacts}
-              activeArtifactId={activeArtifactId}
+              activeArtifact={activeArtifact ?? null}
+              activeTab={rightPanelTab}
               activeCitation={activeCitation}
+              onTabChange={onRightPanelTabChange}
               onOpenArtifact={onOpenArtifact}
+              onClosePanel={() => onRightPanelOpenChange(false)}
             />
           ) : null}
         </SidebarProvider>
@@ -478,9 +510,8 @@ function ChatThreadState({
   sources,
   runs,
   artifacts,
-  activeArtifact,
-  citationChecks,
   onCitationClick,
+  onOpenArtifact,
   onCancelRun,
   onRetryRun,
 }: {
@@ -496,9 +527,8 @@ function ChatThreadState({
   sources: ResearchSource[];
   runs: ResearchRun[];
   artifacts: ResearchArtifact[];
-  activeArtifact: ResearchArtifact | null;
-  citationChecks: CitationCheck[];
   onCitationClick: (citation: number) => void;
+  onOpenArtifact: (artifactId: string) => void;
   onCancelRun: (runId: string) => Promise<unknown>;
   onRetryRun: (runId: string) => Promise<unknown>;
 }) {
@@ -526,13 +556,7 @@ function ChatThreadState({
       <Conversation className="min-h-0 flex-1">
         <ConversationContent className="gap-4 px-5 pb-28 pt-4 sm:px-8 lg:pt-6">
           <div className="flex w-full flex-col gap-4">
-            {activeArtifact ? (
-              <ArtifactReader
-                artifact={activeArtifact}
-                citationChecks={citationChecks}
-                onCitationClick={onCitationClick}
-              />
-            ) : isLoading ? (
+            {isLoading ? (
               <CenteredLoading label="Memuat thread..." />
             ) : hasMessages || runs.length > 0 ? (
               <>
@@ -551,6 +575,7 @@ function ChatThreadState({
                       message={entry.message}
                       sources={sources}
                       onCitationClick={onCitationClick}
+                      onOpenArtifact={onOpenArtifact}
                     />
                   ),
                 )}
@@ -586,10 +611,12 @@ function MessageRow({
   message,
   sources,
   onCitationClick,
+  onOpenArtifact,
 }: {
   message: ChatMessage;
   sources: ResearchSource[];
   onCitationClick: (citation: number) => void;
+  onOpenArtifact: (artifactId: string) => void;
 }) {
   const isUser = message.role === "user";
   const text = getMessageText(message);
@@ -601,6 +628,10 @@ function MessageRow({
     () => new Set(messageSources.map((source) => source.citationNumber)),
     [messageSources],
   );
+  const messageArtifacts = useQuery(
+    api.agent.artifacts.listForMessage,
+    !isUser && message.id ? { messageId: message.id } : "skip",
+  ) as MessageArtifactLink[] | undefined;
 
   if (isUser) {
     return (
@@ -631,7 +662,60 @@ function MessageRow({
         </span>
       ) : null}
       <MessageSources sources={messageSources} />
+      <MessageArtifacts
+        links={messageArtifacts ?? []}
+        onOpenArtifact={onOpenArtifact}
+      />
     </Message>
+  );
+}
+
+type MessageArtifactLink = {
+  artifactId: string;
+  versionId: string;
+  relation: "created" | "updated" | "referenced";
+  artifact: ResearchArtifact;
+  version: NonNullable<ResearchArtifact["version"]>;
+};
+
+function MessageArtifacts({
+  links,
+  onOpenArtifact,
+}: {
+  links: MessageArtifactLink[];
+  onOpenArtifact: (artifactId: string) => void;
+}) {
+  const { setOpen, setOpenMobile } = useSidebar();
+  if (links.length === 0) return null;
+
+  const handleOpen = (artifactId: string) => {
+    onOpenArtifact(artifactId);
+    setOpen(true);
+    setOpenMobile(true);
+  };
+
+  return (
+    <div className="mt-3 grid gap-2">
+      {links.map((link) => (
+        <button
+          key={`${link.artifactId}-${link.versionId}`}
+          type="button"
+          onClick={() => handleOpen(link.artifactId)}
+          className="flex max-w-xl items-center gap-3 rounded-[10px] border border-[var(--lavender-soft-border)] bg-[var(--lavender-soft)] px-3 py-2 text-left text-[13px] text-[var(--lavender)] transition-colors hover:bg-[var(--lavender-soft)]/75"
+        >
+          <FileTextIcon className="size-4 shrink-0" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-semibold">
+              {link.artifact.title}
+            </span>
+            <span className="block text-[11px] font-medium opacity-80">
+              {link.relation === "updated" ? "Diperbarui" : "Artefak"} · v
+              {link.version.versionNumber}
+            </span>
+          </span>
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -875,7 +959,7 @@ function Composer({
   return (
     <PromptInput
       onSubmit={handleSubmit}
-      className="rounded-[14px] border border-border/80 bg-card/78 shadow-none backdrop-blur"
+      className="rounded-[14px] border border-border/80 bg-card/90 text-foreground shadow-none backdrop-blur has-disabled:bg-card/90 has-disabled:opacity-100 dark:bg-card/95 dark:has-disabled:bg-card/95"
     >
       {isRateLimited ? (
         <div className="mx-3 mt-3 rounded-[9px] border border-[var(--lemon-soft-border)] bg-[var(--lemon-soft)] px-3 py-2 text-[12px] font-medium text-[var(--lemon)]">
@@ -901,11 +985,11 @@ function Composer({
         placeholder={
           threadId ? "Add a follow up" : "Buat thread baru dulu..."
         }
-        className="min-h-16 w-full resize-none bg-transparent px-4 pb-2 pt-3.5 text-[15px] leading-6 outline-none placeholder:text-muted-foreground"
+        className="min-h-16 w-full resize-none bg-transparent px-4 pb-2 pt-3.5 text-[15px] leading-6 text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-100 dark:placeholder:text-[#a3a3a3]"
       />
-      <PromptInputFooter className="flex w-full items-center justify-between border-t-0 px-3 pb-3 pt-1">
+      <PromptInputFooter className="flex w-full items-center justify-between border-t-0 px-3 pb-3 pt-1 text-muted-foreground dark:text-[#c6c6c6]">
         <PromptInputTools className="gap-2">
-          <div className="inline-flex rounded-[8px] text-[13px] font-medium text-muted-foreground">
+          <div className="inline-flex rounded-[8px] text-[13px] font-medium text-muted-foreground dark:text-[#c6c6c6]">
             <ModeButton
               active={mode === "normal"}
               onClick={() => setMode("normal")}
@@ -930,7 +1014,7 @@ function Composer({
               <PromptInputActionMenuTrigger
                 tooltip="Tambah konteks"
                 disabled={mode === "deep" || disabled || isDeepActive}
-                className="size-8 rounded-[8px] text-muted-foreground hover:bg-muted"
+                className="size-8 rounded-[8px] text-muted-foreground hover:bg-muted disabled:opacity-70 dark:text-[#c6c6c6] dark:hover:text-foreground dark:disabled:text-[#b8b8b8] dark:disabled:opacity-75"
               >
                 <PlusIcon className="size-4" />
               </PromptInputActionMenuTrigger>
@@ -947,7 +1031,7 @@ function Composer({
             </PromptInputActionMenu>
             <PromptInputButton
               tooltip="Lampirkan"
-              className="size-8 rounded-[8px] text-muted-foreground hover:bg-muted"
+              className="size-8 rounded-[8px] text-muted-foreground hover:bg-muted disabled:opacity-70 dark:text-[#c6c6c6] dark:hover:text-foreground dark:disabled:text-[#b8b8b8] dark:disabled:opacity-75"
               disabled
             >
               <PaperclipIcon className="size-4" />
@@ -966,7 +1050,7 @@ function Composer({
           ) : (
             <PromptInputSubmit
               size="icon-sm"
-              className="size-9 shrink-0 rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
+              className="size-9 shrink-0 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-70"
               disabled={!canSend}
               status={isSending ? "submitted" : undefined}
             >
@@ -1002,10 +1086,10 @@ function ModeButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "rounded-full px-3 py-1 transition-colors disabled:opacity-60",
+        "rounded-full px-3 py-1 transition-colors disabled:opacity-75 dark:disabled:opacity-80",
         active
           ? "text-foreground"
-          : "text-muted-foreground hover:text-foreground",
+          : "text-muted-foreground hover:text-foreground dark:text-[#c6c6c6] dark:hover:text-foreground",
         active && variant === "deep" && "text-[var(--lavender)]",
         active && variant === "normal" && "text-foreground",
       )}
@@ -1222,83 +1306,6 @@ function formatRunDuration(
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;
   return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
-}
-
-function ArtifactReader({
-  artifact,
-  citationChecks,
-  onCitationClick,
-}: {
-  artifact: ResearchArtifact;
-  citationChecks: CitationCheck[];
-  onCitationClick: (citation: number) => void;
-}) {
-  const [copied, setCopied] = useState(false);
-  const markdown = artifact.markdown ?? "Artefak ini disimpan di storage.";
-  const copyMarkdown = async () => {
-    await navigator.clipboard.writeText(markdown);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1200);
-  };
-  const copyLink = async () => {
-    await navigator.clipboard.writeText(
-      `${window.location.origin}${window.location.pathname}?artifact=${artifact._id}`,
-    );
-  };
-  return (
-    <Artifact className="rounded-[14px] border bg-card/95 shadow-aqsha">
-      <ArtifactHeader className="bg-card/80">
-        <div className="flex min-w-0 items-center gap-2">
-          <FileTextIcon className="size-4 text-[var(--lavender)]" />
-          <ArtifactTitle className="truncate font-heading text-xl font-bold">
-            {artifact.title}
-          </ArtifactTitle>
-        </div>
-        <ArtifactActions>
-          <ArtifactAction
-            icon={CopyIcon}
-            tooltip={copied ? "Tersalin" : "Salin markdown"}
-            onClick={copyMarkdown}
-          />
-          <ArtifactAction
-            tooltip="Bagikan link"
-            onClick={copyLink}
-          >
-            <CopyIcon className="size-4" />
-          </ArtifactAction>
-        </ArtifactActions>
-      </ArtifactHeader>
-      <ArtifactContent className="grid gap-4 text-[15px] leading-7">
-      {artifact.type === "citation_evidence_view" &&
-      citationChecks.length > 0 ? (
-        <div className="grid gap-3">
-          {citationChecks.map((check) => (
-            <div
-              key={check._id}
-              className="rounded-[8px] border bg-card p-3"
-            >
-              <div className="mb-2 flex items-center gap-2">
-                <span className="rounded-full border px-2 py-0.5 text-[11px] font-semibold">
-                  {check.support}
-                </span>
-              </div>
-              <p className="text-sm leading-6">{check.claim}</p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                {check.evidence}
-              </p>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <AssistantMarkdown
-          text={markdown}
-          citedNumbers={extractCitations(markdown)}
-          onCitationClick={onCitationClick}
-        />
-      )}
-      </ArtifactContent>
-    </Artifact>
-  );
 }
 
 function isRunActive(run: ResearchRun) {

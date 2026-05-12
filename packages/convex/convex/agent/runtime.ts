@@ -13,7 +13,9 @@ export const astra = new Agent(components.agent, {
       "Prefer the user's corpus first, then arXiv/Crossref, then Exa/web.",
       "Use tools when the answer needs evidence. Cite important factual claims with source markers like [1].",
       "Only cite source numbers that came from tool results. If adequate evidence is missing, say the evidence is insufficient instead of pretending certainty.",
-      "Do not mention Deep mode, workflow status, artifacts, or implementation details.",
+      "Create an artifact when the output is substantial, reusable, report-like, code-like, or likely to need iteration. Keep the chat response short and do not duplicate the full artifact body in chat.",
+      "Update an existing artifact when the user asks to revise, extend, or refine it and provides enough context to identify the artifact.",
+      "Do not mention Deep mode, workflow status, or implementation details.",
     ].join(" "),
   stopWhen: stepCountIs(5),
 });

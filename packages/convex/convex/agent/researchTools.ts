@@ -1,6 +1,7 @@
 import { createTool } from "@convex-dev/agent";
 import type { ToolSet } from "ai";
 import { z } from "zod";
+import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
 import {
@@ -22,6 +23,40 @@ const querySchema = z.object({
   query: z.string().min(1).max(500).describe("Search query"),
   limit: z.number().int().min(1).max(5).optional().describe("Maximum results"),
 });
+
+const artifactContentSchema = z.object({
+  title: z.string().min(1).max(160),
+  body: z.string().min(1).max(200_000),
+  contentFormat: z
+    .enum(["markdown", "html", "plain", "code", "json"])
+    .default("markdown"),
+  type: z
+    .enum(["document", "code", "html", "json", "plain_text", "markdown_report"])
+    .default("document"),
+  changeSummary: z.string().max(500).optional(),
+});
+
+const updateArtifactSchema = artifactContentSchema.extend({
+  artifactId: z
+    .string()
+    .min(1)
+    .describe(
+      "Exact existing Convex artifact id from an artifact card/tool result. Do not use a title or slug.",
+    ),
+});
+
+type ArtifactToolResult = {
+  artifactId: Id<"artifacts">;
+  versionId: Id<"artifactVersions">;
+  relation: "created" | "updated";
+  title: string;
+};
+
+type ArtifactToolFailure = {
+  ok: false;
+  reason: "invalid_artifact_id";
+  message: string;
+};
 
 export const researchTools: ToolSet = {
   searchCorpus: createTool<typeof querySchema._output, SourceCandidate[], AqshaToolCtx>({
@@ -98,6 +133,72 @@ export const researchTools: ToolSet = {
       return numberCandidates(results, 41);
     },
   }),
+  createArtifact: createTool<
+    typeof artifactContentSchema._output,
+    ArtifactToolResult,
+    AqshaToolCtx
+  >({
+    description:
+      "Create a standalone chat artifact when the response is substantial, reusable, report-like, code-like, or likely to need iteration. Return a short chat summary separately instead of duplicating the full artifact body.",
+    inputSchema: artifactContentSchema,
+    execute: async (ctx, input): Promise<ArtifactToolResult> => {
+      const ownerUserId = requireToolUser(ctx);
+      const threadId = requireToolThread(ctx);
+      const result = await ctx.runMutation(
+        internal.agent.artifacts.createVersionFromAgent,
+        {
+          ownerUserId,
+          threadId,
+          type: input.type,
+          title: input.title,
+          contentFormat: input.contentFormat,
+          body: input.body,
+          changeSummary: input.changeSummary,
+        },
+      );
+      return {
+        ...result,
+        relation: "created",
+        title: input.title,
+      };
+    },
+  }),
+  updateArtifact: createTool<
+    typeof updateArtifactSchema._output,
+    ArtifactToolResult | ArtifactToolFailure,
+    AqshaToolCtx
+  >({
+    description:
+      "Create a new immutable version for an existing artifact when the user asks to revise, extend, or refine it. Only call this when you have the exact artifact id from a prior artifact card or tool result; if you only know a title/slug, create a new artifact instead.",
+    inputSchema: updateArtifactSchema,
+    execute: async (ctx, input): Promise<ArtifactToolResult | ArtifactToolFailure> => {
+      const ownerUserId = requireToolUser(ctx);
+      if (!isLikelyConvexId(input.artifactId)) {
+        return {
+          ok: false,
+          reason: "invalid_artifact_id",
+          message:
+            "artifactId must be the exact Convex artifact id, not a title or slug. Create a new artifact instead unless the exact id is available.",
+        };
+      }
+      const result = await ctx.runMutation(
+        internal.agent.artifacts.updateVersionFromAgent,
+        {
+          ownerUserId,
+          artifactId: input.artifactId as Id<"artifacts">,
+          title: input.title,
+          contentFormat: input.contentFormat,
+          body: input.body,
+          changeSummary: input.changeSummary,
+        },
+      );
+      return {
+        ...result,
+        relation: "updated",
+        title: input.title,
+      };
+    },
+  }),
 };
 
 function numberCandidates(
@@ -115,4 +216,15 @@ function requireToolUser(ctx: AqshaToolCtx) {
     throw new Error("Tool call is missing user context");
   }
   return ctx.userId;
+}
+
+function requireToolThread(ctx: AqshaToolCtx) {
+  if (!ctx.threadId) {
+    throw new Error("Tool call is missing thread context");
+  }
+  return ctx.threadId;
+}
+
+function isLikelyConvexId(value: string) {
+  return /^[a-z0-9]{24,40}$/.test(value);
 }
