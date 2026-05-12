@@ -4,7 +4,7 @@ import type {
   ComposerSubmission,
   ResearchRun,
   SendResult,
-} from "./types";
+} from "../types";
 import { isRunActive } from "./transcript-model";
 
 export function findPromptCommandInContent(content: string) {

@@ -4,7 +4,7 @@ import {
   interleaveRunsWithMessages,
   sortTranscriptMessages,
 } from "./transcript-model";
-import type { ChatMessage, ResearchRun } from "./types";
+import type { ChatMessage, ResearchRun } from "../types";
 
 function message(overrides: Partial<ChatMessage>): ChatMessage {
   return {

@@ -1,5 +1,5 @@
 import type { ResearchSource } from "@/components/sources-panel";
-import type { ChatMessage, ResearchRun, TranscriptEntry } from "./types";
+import type { ChatMessage, ResearchRun, TranscriptEntry } from "../types";
 
 export function sortTranscriptMessages(messages: ChatMessage[]) {
   return [...messages].sort(

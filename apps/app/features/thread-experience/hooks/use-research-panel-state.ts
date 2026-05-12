@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { ResearchArtifact, ResearchRun } from "./types";
-import { isRunActive } from "./transcript-model";
+import type { ResearchArtifact, ResearchRun } from "../types";
+import { getResearchPanelViewState } from "../utils/research-panel-model";
 
 export function useResearchPanelState({
   hasSources,
@@ -20,42 +20,41 @@ export function useResearchPanelState({
   const [seenArtifactCount, setSeenArtifactCount] = useState(0);
 
   const selectedArtifactId = activeArtifactId ?? artifacts?.[0]?._id ?? null;
-  const artifactCount = artifacts?.length ?? 0;
-  const hasResearchPayload =
-    hasSources ||
-    artifactCount > 0 ||
-    runs.some(isRunActive);
-  const hasUnseenArtifact = artifactCount > seenArtifactCount;
-  const effectiveRightPanelTab = hasUnseenArtifact ? "artifacts" : rightPanelTab;
-  const effectiveRightPanelOpen =
-    hasResearchPayload && (rightPanelOpen || hasUnseenArtifact);
+  const panelView = getResearchPanelViewState({
+    hasSources,
+    artifacts,
+    runs,
+    rightPanelOpen,
+    rightPanelTab,
+    seenArtifactCount,
+  });
 
   const openArtifact = (artifactId: string) => {
     setActiveArtifactId(artifactId);
     setRightPanelTab("artifacts");
-    setSeenArtifactCount(artifactCount);
+    setSeenArtifactCount(panelView.artifactCount);
     setRightPanelOpen(true);
   };
 
   const setPanelOpen = (open: boolean) => {
     setRightPanelOpen(open);
     if (!open) {
-      setSeenArtifactCount(artifactCount);
+      setSeenArtifactCount(panelView.artifactCount);
     }
   };
 
   const setPanelTab = (tab: "sources" | "artifacts") => {
     setRightPanelTab(tab);
-    setSeenArtifactCount(artifactCount);
+    setSeenArtifactCount(panelView.artifactCount);
   };
 
   return {
     activeCitation,
     setActiveCitation,
     selectedArtifactId,
-    hasResearchPayload,
-    rightPanelOpen: effectiveRightPanelOpen,
-    rightPanelTab: effectiveRightPanelTab,
+    hasResearchPayload: panelView.hasResearchPayload,
+    rightPanelOpen: panelView.rightPanelOpen,
+    rightPanelTab: panelView.rightPanelTab,
     openArtifact,
     setPanelOpen,
     setPanelTab,

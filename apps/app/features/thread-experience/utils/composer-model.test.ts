@@ -5,7 +5,7 @@ import {
   getComposerAvailability,
   restoreComposerContentAfterBlockedSend,
 } from "./composer-model";
-import type { ResearchRun } from "./types";
+import type { ResearchRun } from "../types";
 
 function activeDeepRun(): ResearchRun {
   return {
