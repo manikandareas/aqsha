@@ -832,6 +832,12 @@ export const finalizeThread = internalMutation({
       completedAt: now,
       updatedAt: now,
     });
+    await ctx.scheduler.runAfter(0, internal.agent.messages.generateThreadTitle, {
+      threadId: args.threadId,
+      userId: args.ownerUserId,
+      prompt: run.promptSnapshot ?? "",
+      assistantText: args.responseSummary,
+    });
   },
 });
 

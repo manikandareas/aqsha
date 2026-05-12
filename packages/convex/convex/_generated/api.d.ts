@@ -20,6 +20,7 @@ import type * as agent_researchTools from "../agent/researchTools.js";
 import type * as agent_runtime from "../agent/runtime.js";
 import type * as agent_sourceCandidates from "../agent/sourceCandidates.js";
 import type * as agent_sources from "../agent/sources.js";
+import type * as agent_threadTitles from "../agent/threadTitles.js";
 import type * as agent_threads from "../agent/threads.js";
 import type * as agent_workflow from "../agent/workflow.js";
 import type * as auth from "../auth.js";
@@ -45,6 +46,7 @@ declare const fullApi: ApiFromModules<{
   "agent/runtime": typeof agent_runtime;
   "agent/sourceCandidates": typeof agent_sourceCandidates;
   "agent/sources": typeof agent_sources;
+  "agent/threadTitles": typeof agent_threadTitles;
   "agent/threads": typeof agent_threads;
   "agent/workflow": typeof agent_workflow;
   auth: typeof auth;

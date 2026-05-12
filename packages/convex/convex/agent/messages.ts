@@ -4,6 +4,8 @@ import {
   syncStreams,
   vStreamArgs,
 } from "@convex-dev/agent";
+import { openai } from "@ai-sdk/openai";
+import { generateObject } from "ai";
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import { z } from "zod";
@@ -22,6 +24,12 @@ import { requireCurrentUser } from "../auth";
 import { rateLimiter } from "../limits";
 import { researchTools } from "./researchTools";
 import type { SourceCandidate } from "./sourceCandidates";
+import {
+  isUsableGeneratedThreadTitle,
+  normalizeGeneratedThreadTitle,
+  shouldUsePromptTitle,
+  threadTitleFromPrompt,
+} from "./threadTitles";
 import { assertThreadOwner } from "./threads";
 
 const MAX_CONTENT_LENGTH = 8_000;
@@ -58,12 +66,15 @@ function previewFromContent(content: string) {
   return singleLine.length > 140 ? `${singleLine.slice(0, 137)}...` : singleLine;
 }
 
-function estimateTokens(content: string) {
-  return Math.max(1, Math.ceil(content.length / 4));
+function trimForTitleContext(content: string) {
+  const singleLine = content.replace(/\s+/g, " ").trim();
+  return singleLine.length > 1_500
+    ? `${singleLine.slice(0, 1_497).trimEnd()}...`
+    : singleLine;
 }
 
-function shouldGenerateThreadTitle(title: string | undefined) {
-  return !title || title === "Thread baru";
+function estimateTokens(content: string) {
+  return Math.max(1, Math.ceil(content.length / 4));
 }
 
 async function getThreadMetadata(ctx: QueryCtx | MutationCtx, threadId: string) {
@@ -102,6 +113,24 @@ async function upsertThreadMetadata(
     lastMessagePreview: args.preview,
     messageCount: args.incrementMessageCount ? 1 : 0,
     status: args.status,
+  });
+}
+
+async function updateThreadTitleFromPrompt(
+  ctx: MutationCtx,
+  args: {
+    threadId: string;
+    currentTitle?: string;
+    prompt: string;
+  },
+) {
+  if (!shouldUsePromptTitle(args.currentTitle)) {
+    return;
+  }
+
+  await astra.updateThreadMetadata(ctx, {
+    threadId: args.threadId,
+    patch: { title: threadTitleFromPrompt(args.prompt) },
   });
 }
 
@@ -174,12 +203,11 @@ async function savePromptAndScheduleRun(
     incrementMessageCount: true,
   });
 
-  if (shouldGenerateThreadTitle(args.threadTitle)) {
-    await ctx.scheduler.runAfter(0, internal.agent.messages.generateThreadTitle, {
-      threadId: args.threadId,
-      userId: args.ownerUserId,
-    });
-  }
+  await updateThreadTitleFromPrompt(ctx, {
+    threadId: args.threadId,
+    currentTitle: args.threadTitle,
+    prompt: args.content,
+  });
 
   if (args.mode === "deep") {
     const run: {
@@ -205,6 +233,7 @@ async function savePromptAndScheduleRun(
     threadId: args.threadId,
     userId: args.ownerUserId,
     promptMessageId: messageId,
+    prompt: args.content,
     runId,
   });
 
@@ -234,12 +263,12 @@ export const startThread = mutation({
 
     const threadId = await createThread(ctx, components.agent, {
       userId: user._id,
-      title: "Thread baru",
+      title: threadTitleFromPrompt(content),
     });
     const result = await savePromptAndScheduleRun(ctx, {
       ownerUserId: user._id,
       threadId,
-      threadTitle: "Thread baru",
+      threadTitle: threadTitleFromPrompt(content),
       content,
       mode: args.mode,
     });
@@ -299,6 +328,7 @@ export const generateReply = internalAction({
     threadId: v.string(),
     userId: v.string(),
     promptMessageId: v.string(),
+    prompt: v.string(),
     runId: v.optional(v.id("agentRuns")),
   },
   handler: async (ctx, args) => {
@@ -360,15 +390,12 @@ export const generateReply = internalAction({
         preview: previewFromContent(text),
         incrementMessageCount: true,
       });
-      const latestThread = await ctx.runQuery(components.agent.threads.getThread, {
+      await ctx.scheduler.runAfter(0, internal.agent.messages.generateThreadTitle, {
         threadId: args.threadId,
+        userId: args.userId,
+        prompt: args.prompt,
+        assistantText: text,
       });
-      if (shouldGenerateThreadTitle(latestThread?.title)) {
-        await ctx.scheduler.runAfter(0, internal.agent.messages.generateThreadTitle, {
-          threadId: args.threadId,
-          userId: args.userId,
-        });
-      }
     } catch (error) {
       if (args.runId) {
         await ctx.runMutation(internal.agent.messages.failInlineRun, {
@@ -393,6 +420,67 @@ export const generateReply = internalAction({
       });
       throw error;
     }
+  },
+});
+
+export const generateThreadTitle = internalAction({
+  args: {
+    threadId: v.string(),
+    userId: v.string(),
+    prompt: v.string(),
+    assistantText: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const thread = await ctx.runQuery(components.agent.threads.getThread, {
+      threadId: args.threadId,
+    });
+    if (!thread || thread.userId !== args.userId) {
+      throw new ConvexError("Thread not found");
+    }
+
+    const fallbackTitle = threadTitleFromPrompt(args.prompt);
+    if (thread.title && thread.title !== "Thread baru" && thread.title !== fallbackTitle) {
+      return null;
+    }
+
+    const result = await generateObject({
+      model: openai.chat(NORMAL_MODEL),
+      temperature: 0,
+      maxOutputTokens: 80,
+      schema: z.object({
+        title: z
+          .string()
+          .min(1)
+          .max(80)
+          .describe("Specific thread title in the user's language"),
+      }),
+      system: [
+        "You generate short chat thread titles.",
+        "Use the same language as the user prompt.",
+        "Capture the user's actual research intent.",
+        "Do not mention title generation, requests, prompts, threads, or internal instructions.",
+        "Return only the structured title field.",
+      ].join(" "),
+      prompt: [
+        "Create a concise, specific title for this conversation.",
+        "",
+        `User prompt:\n${trimForTitleContext(args.prompt)}`,
+        "",
+        `Assistant answer:\n${trimForTitleContext(args.assistantText)}`,
+      ].join("\n"),
+    });
+
+    const generatedTitle = normalizeGeneratedThreadTitle(result.object.title);
+    if (!isUsableGeneratedThreadTitle(generatedTitle)) {
+      return null;
+    }
+
+    await astra.updateThreadMetadata(ctx, {
+      threadId: args.threadId,
+      patch: { title: generatedTitle },
+    });
+
+    return null;
   },
 });
 
@@ -533,59 +621,6 @@ export const failInlineRun = internalMutation({
       completedAt: now,
       updatedAt: now,
     });
-  },
-});
-
-export const generateThreadTitle = internalAction({
-  args: {
-    threadId: v.string(),
-    userId: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const metadata = await ctx.runQuery(components.agent.threads.getThread, {
-      threadId: args.threadId,
-    });
-    if (!metadata || metadata.userId !== args.userId) {
-      throw new ConvexError("Thread not found");
-    }
-    if (!shouldGenerateThreadTitle(metadata.title)) {
-      return null;
-    }
-
-    const { thread } = await astra.continueThread(ctx, {
-      threadId: args.threadId,
-      userId: args.userId,
-    });
-    const {
-      object: { title },
-    } = await thread.generateObject(
-      {
-        schemaDescription:
-          "Generate a concise thread title from the existing conversation. The title should capture the user's core research intent and should not be a generic greeting.",
-        schema: z.object({
-          title: z
-            .string()
-            .min(1)
-            .describe("A concise, specific title for the thread, at most 80 characters"),
-        }),
-        prompt:
-          "Generate a concise title for this thread. Return only the structured title field.",
-      },
-      { storageOptions: { saveMessages: "none" } },
-    );
-
-    const normalizedTitle = title.replace(/\s+/g, " ").trim();
-    if (!normalizedTitle) {
-      return null;
-    }
-
-    await thread.updateMetadata({
-      title:
-        normalizedTitle.length > 80
-          ? `${normalizedTitle.slice(0, 77)}...`
-          : normalizedTitle,
-    });
-    return null;
   },
 });
 
@@ -862,15 +897,6 @@ export const saveAssistantMessage = internalMutation({
       status: "idle",
       incrementMessageCount: true,
     });
-    const thread = await ctx.runQuery(components.agent.threads.getThread, {
-      threadId: args.threadId,
-    });
-    if (shouldGenerateThreadTitle(thread?.title)) {
-      await ctx.scheduler.runAfter(0, internal.agent.messages.generateThreadTitle, {
-        threadId: args.threadId,
-        userId: args.ownerUserId,
-      });
-    }
     return { messageId: getVisibleAssistantMessageId(saved.messages) };
   },
 });
