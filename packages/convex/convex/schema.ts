@@ -28,6 +28,20 @@ export default defineSchema(
     })
       .index("by_owner_created", ["ownerUserId", "createdAt"])
       .index("by_thread_created", ["threadId", "createdAt"]),
+    messageCommands: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      messageId: v.string(),
+      commandId: v.string(),
+      commandLabel: v.string(),
+      commandSlug: v.string(),
+      mode: v.union(v.literal("normal"), v.literal("deep")),
+      argumentPreview: v.string(),
+      expandedPromptSnapshot: v.string(),
+      createdAt: v.number(),
+    })
+      .index("by_owner_message", ["ownerUserId", "messageId"])
+      .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"]),
     corpusSources: defineTable({
       ownerUserId: v.string(),
       sourceType: v.union(

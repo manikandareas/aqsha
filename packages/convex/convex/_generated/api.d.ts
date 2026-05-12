@@ -14,6 +14,7 @@ import type * as agent_corpus from "../agent/corpus.js";
 import type * as agent_deepResearch from "../agent/deepResearch.js";
 import type * as agent_externalProviders from "../agent/externalProviders.js";
 import type * as agent_messages from "../agent/messages.js";
+import type * as agent_promptCommands from "../agent/promptCommands.js";
 import type * as agent_rag from "../agent/rag.js";
 import type * as agent_rateLimits from "../agent/rateLimits.js";
 import type * as agent_researchTools from "../agent/researchTools.js";
@@ -40,6 +41,7 @@ declare const fullApi: ApiFromModules<{
   "agent/deepResearch": typeof agent_deepResearch;
   "agent/externalProviders": typeof agent_externalProviders;
   "agent/messages": typeof agent_messages;
+  "agent/promptCommands": typeof agent_promptCommands;
   "agent/rag": typeof agent_rag;
   "agent/rateLimits": typeof agent_rateLimits;
   "agent/researchTools": typeof agent_researchTools;

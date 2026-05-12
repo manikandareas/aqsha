@@ -1,10 +1,8 @@
 "use client";
 
-import {
-  optimisticallySendMessage,
-  useUIMessages,
-} from "@convex-dev/agent/react";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useUIMessages } from "@convex-dev/agent/react";
+import type { OptimisticLocalStore } from "convex/browser";
+import { insertAtTop, useConvexAuth, useMutation, useQuery } from "convex/react";
 import {
   ArrowUpIcon,
   ChevronDownIcon,
@@ -19,8 +17,21 @@ import {
   SquareIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type CSSProperties, useEffect, useMemo, useState } from "react";
+import {
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { api } from "@aqsha/convex/api";
+import {
+  promptCommands,
+  type PromptCommand,
+} from "@aqsha/convex/prompt-commands";
 import {
   Conversation,
   ConversationContent,
@@ -41,7 +52,6 @@ import {
   PromptInputButton,
   PromptInputFooter,
   PromptInputSubmit,
-  PromptInputTextarea,
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
@@ -61,6 +71,17 @@ import {
   type ResearchSource,
 } from "@/components/sources-panel";
 import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandGroup,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+} from "@/components/ui/popover";
 import {
   SidebarInset,
   SidebarProvider,
@@ -93,7 +114,84 @@ type ChatMessage = {
   stepOrder: number;
   text?: string;
   parts?: Array<{ type: string; text?: string }>;
+  metadata?: {
+    promptCommand?: PromptCommandMetadata;
+  };
 };
+
+type PromptCommandMetadata = {
+  commandId: string;
+  commandLabel: string;
+  commandSlug: string;
+  mode: "normal" | "deep";
+  argumentPreview: string;
+};
+
+function optimisticallyInsertUserMessage(
+  store: OptimisticLocalStore,
+  args: {
+    threadId: string;
+    text: string;
+    promptCommand?: PromptCommandMetadata;
+  },
+) {
+  const queries = store.getAllQueries(api.agent.messages.list);
+  let maxOrder = -1;
+  for (const query of queries) {
+    if (query.args?.threadId !== args.threadId) continue;
+    if (query.args.streamArgs) continue;
+    for (const message of query.value?.page ?? []) {
+      maxOrder = Math.max(maxOrder, message.order);
+    }
+  }
+  const order = maxOrder + 1;
+  const stepOrder = 0;
+  const id = randomId();
+  insertAtTop({
+    paginatedQuery: api.agent.messages.list,
+    argsToMatch: { threadId: args.threadId, streamArgs: undefined },
+    item: {
+      _creationTime: Date.now(),
+      id,
+      key: `${args.threadId}-${order}-${stepOrder}`,
+      order,
+      stepOrder,
+      status: "pending",
+      parts: [{ type: "text", text: args.text }],
+      role: "user",
+      text: args.text,
+      metadata: args.promptCommand
+        ? { promptCommand: args.promptCommand }
+        : undefined,
+    },
+    localQueryStore: store,
+  });
+}
+
+function randomId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+}
+
+function previewFromComposerContent(content: string, command: PromptCommand) {
+  const argument = stripCommandFromContent(content, command);
+  const singleLine = argument.replace(/\s+/g, " ").trim();
+  return singleLine.length > 140 ? `${singleLine.slice(0, 137)}...` : singleLine;
+}
+
+function stripCommandFromContent(content: string, command: PromptCommand) {
+  const trimmed = content.trim();
+  const slugs = [command.slug, ...command.aliases].sort((a, b) => b.length - a.length);
+  for (const slug of slugs) {
+    if (trimmed === slug) return "";
+    if (trimmed.startsWith(`${slug} `) || trimmed.startsWith(`${slug}\n`)) {
+      return trimmed.slice(slug.length).trim();
+    }
+  }
+  return trimmed;
+}
 
 type ResearchRun = {
   _id: string;
@@ -196,9 +294,22 @@ export function ThreadShell({ threadId }: { threadId?: string }) {
   const startThread = useMutation(api.agent.messages.startThread);
   const sendMessage = useMutation(api.agent.messages.send).withOptimisticUpdate(
     (store, args) => {
-      optimisticallySendMessage(api.agent.messages.list)(store, {
+      const command = args.commandId
+        ? promptCommands.find((item) => item.id === args.commandId)
+        : undefined;
+      const promptCommand = command
+        ? {
+            commandId: command.id,
+            commandLabel: command.label,
+            commandSlug: command.slug,
+            mode: command.mode,
+            argumentPreview: previewFromComposerContent(args.content, command),
+          }
+        : undefined;
+      optimisticallyInsertUserMessage(store, {
         threadId: args.threadId,
-        prompt: args.content,
+        text: args.content,
+        promptCommand,
       });
     },
   );
@@ -375,11 +486,13 @@ function ThreadShellLayout({
   startThread: (args: {
     content: string;
     mode: "normal" | "deep";
+    commandId?: string;
   }) => Promise<SendResult>;
   sendMessage: (args: {
     threadId: string;
     content: string;
     mode: "normal" | "deep";
+    commandId?: string;
   }) => Promise<SendResult>;
   sources: ResearchSource[];
   runs: ResearchRun[];
@@ -560,11 +673,13 @@ function ChatThreadState({
   startThread: (args: {
     content: string;
     mode: "normal" | "deep";
+    commandId?: string;
   }) => Promise<SendResult>;
   onSend: (args: {
     threadId: string;
     content: string;
     mode: "normal" | "deep";
+    commandId?: string;
   }) => Promise<SendResult>;
   sources: ResearchSource[];
   runs: ResearchRun[];
@@ -584,7 +699,7 @@ function ChatThreadState({
     () =>
       [...messages.results].sort(
         (a, b) => a.order - b.order || a.stepOrder - b.stepOrder,
-      ),
+      ) as unknown as ChatMessage[],
     [messages.results],
   );
   const hasMessages = sortedMessages.length > 0;
@@ -682,10 +797,13 @@ function MessageRow({
   ) as MessageArtifactLink[] | undefined;
 
   if (isUser) {
+    const promptCommand = message.metadata?.promptCommand;
+    const displayText = promptCommand ? stripVisibleCommandText(text, promptCommand) : text;
     return (
       <div className="flex w-full min-w-0 justify-end overflow-x-hidden">
         <div className="max-w-full whitespace-pre-wrap break-words rounded-[14px] border border-border/80 bg-card px-4 py-2.5 text-[13px] leading-[1.55] text-foreground sm:max-w-[560px]">
-          {text}
+          {promptCommand ? <PromptCommandChip command={promptCommand} /> : null}
+          {displayText}
         </div>
       </div>
     );
@@ -823,6 +941,33 @@ function MessageSources({
   );
 }
 
+function PromptCommandChip({ command }: { command: PromptCommandMetadata }) {
+  return (
+    <span
+      contentEditable={false}
+      className={cn(
+        "mr-1.5 inline-flex translate-y-[-1px] items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-none",
+        command.mode === "deep"
+          ? "border-[var(--lavender-soft-border)] bg-[var(--lavender-soft)] text-[var(--lavender)]"
+          : "border-[var(--sky-soft-border)] bg-[var(--sky-soft)] text-primary",
+      )}
+    >
+      {command.commandSlug}
+    </span>
+  );
+}
+
+function stripVisibleCommandText(text: string, command: PromptCommandMetadata) {
+  const trimmed = text.trim();
+  if (trimmed === command.commandSlug) {
+    return "";
+  }
+  if (trimmed.startsWith(`${command.commandSlug} `)) {
+    return trimmed.slice(command.commandSlug.length).trimStart();
+  }
+  return text;
+}
+
 function Composer({
   threadId,
   disabled,
@@ -838,16 +983,19 @@ function Composer({
   onStartThread: (args: {
     content: string;
     mode: "normal" | "deep";
+    commandId?: string;
   }) => Promise<SendResult>;
   onSend: (args: {
     threadId: string;
     content: string;
     mode: "normal" | "deep";
+    commandId?: string;
   }) => Promise<SendResult>;
   activeRun?: ResearchRun;
   onCancelRun?: (runId: string) => Promise<unknown>;
 }) {
   const [content, setContent] = useState("");
+  const [selectedCommand, setSelectedCommand] = useState<PromptCommand | null>(null);
   const [mode, setMode] = useState<"normal" | "deep">("normal");
   const [isSending, setIsSending] = useState(false);
   const [localRetryAt, setLocalRetryAt] = useState<number | null>(null);
@@ -858,8 +1006,10 @@ function Composer({
       ? Math.max(1, Math.ceil((retryAt - now) / 1000))
       : 0;
   const isRateLimited = retrySeconds > 0;
+  const visibleContent = createVisibleComposerContent(content, selectedCommand);
+  const effectiveMode = selectedCommand?.mode === "deep" ? "deep" : mode;
   const canSend =
-    content.trim().length > 0 &&
+    visibleContent.trim().length > 0 &&
     !disabled &&
     !isSending &&
     !isRateLimited;
@@ -875,6 +1025,7 @@ function Composer({
     const handleSuggestion = (event: Event) => {
       const suggestion = (event as CustomEvent<string>).detail;
       if (typeof suggestion === "string") {
+        setSelectedCommand(null);
         setContent(suggestion);
       }
     };
@@ -898,22 +1049,27 @@ function Composer({
     }
 
     const nextContent = text.trim();
+    const nextCommand = selectedCommand;
     setContent("");
+    setSelectedCommand(null);
     setIsSending(true);
     try {
       const result = threadId
         ? await onSend({
             threadId,
             content: nextContent,
-            mode,
+            mode: effectiveMode,
+            commandId: nextCommand?.id,
           })
         : await onStartThread({
             content: nextContent,
-            mode,
+            mode: effectiveMode,
+            commandId: nextCommand?.id,
           });
       if (!result.ok) {
         setLocalRetryAt(result.retryAt);
-        setContent(nextContent);
+        setContent(stripCommandFromSubmittedContent(nextContent, nextCommand));
+        setSelectedCommand(nextCommand);
         return;
       }
       if (!threadId && result.threadId) {
@@ -927,6 +1083,7 @@ function Composer({
   return (
     <PromptInput
       onSubmit={handleSubmit}
+      data-aqsha-composer-form="true"
       className="rounded-[14px] border border-border/80 bg-card/90 text-foreground shadow-none backdrop-blur has-disabled:bg-card/90 has-disabled:opacity-100 dark:bg-card/95 dark:has-disabled:bg-card/95"
     >
       {isRateLimited ? (
@@ -934,25 +1091,28 @@ function Composer({
           Perlu istirahat sebentar. Coba lagi dalam {retrySeconds || 1} detik.
         </div>
       ) : null}
-      <PromptInputTextarea
+      <TokenizedPromptInput
         value={content}
-        onChange={(event) => setContent(event.target.value)}
-        onKeyDown={(event) => {
-          if (
-            (event.metaKey || event.ctrlKey) &&
-            event.key === "Enter" &&
-            canSend
-          ) {
-            event.preventDefault();
-            event.currentTarget.form?.requestSubmit();
+        command={selectedCommand}
+        onValueChange={setContent}
+        onCommandChange={(command) => {
+          setSelectedCommand(command);
+          if (command?.mode === "deep") {
+            setMode("deep");
+          }
+        }}
+        onSubmit={() => {
+          if (canSend) {
+            document
+              .querySelector<HTMLFormElement>("[data-aqsha-composer-form='true']")
+              ?.requestSubmit();
           }
         }}
         disabled={disabled || isDeepActive}
-        rows={2}
         maxLength={8000}
         placeholder={threadId ? "Add a follow up" : "Mulai riset baru..."}
-        className="min-h-16 w-full resize-none bg-transparent px-4 pb-2 pt-3.5 text-[15px] leading-6 text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-100 dark:placeholder:text-[#a3a3a3]"
       />
+      <input type="hidden" name="message" value={visibleContent} />
       <PromptInputFooter className="flex w-full items-center justify-between border-t-0 px-3 pb-3 pt-1 text-muted-foreground dark:text-[#c6c6c6]">
         <PromptInputTools className="gap-2">
           <div className="inline-flex rounded-[8px] text-[13px] font-medium text-muted-foreground dark:text-[#c6c6c6]">
@@ -1033,6 +1193,288 @@ function Composer({
   );
 }
 
+function TokenizedPromptInput({
+  value,
+  command,
+  onValueChange,
+  onCommandChange,
+  onSubmit,
+  disabled,
+  maxLength,
+  placeholder,
+}: {
+  value: string;
+  command: PromptCommand | null;
+  onValueChange: (value: string) => void;
+  onCommandChange: (command: PromptCommand | null) => void;
+  onSubmit: () => void;
+  disabled?: boolean;
+  maxLength: number;
+  placeholder: string;
+}) {
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const [commandOpen, setCommandOpen] = useState(false);
+  const isArgumentEmpty = value.length === 0;
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+    const shouldSyncWhileFocused = value.length === 0;
+    if (
+      editor.innerText !== value &&
+      (document.activeElement !== editor || shouldSyncWhileFocused)
+    ) {
+      editor.innerText = value;
+    }
+  }, [value]);
+
+  const focusEditor = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      editor.focus();
+      moveCaretToEnd(editor);
+    });
+  }, []);
+
+  const handleSelectCommand = useCallback(
+    (selected: PromptCommand) => {
+      onCommandChange(selected);
+      setCommandOpen(false);
+      focusEditor();
+    },
+    [focusEditor, onCommandChange],
+  );
+
+  const clearCommand = useCallback(() => {
+    onCommandChange(null);
+    focusEditor();
+  }, [focusEditor, onCommandChange]);
+
+  const handleInput = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const text = editor.innerText.replace(/\u00a0/g, " ");
+    if (text.length <= maxLength) {
+      onValueChange(text);
+      return;
+    }
+    const trimmed = text.slice(0, maxLength);
+    editor.innerText = trimmed;
+    moveCaretToEnd(editor);
+    onValueChange(trimmed);
+  }, [maxLength, onValueChange]);
+
+  const handleKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (event.nativeEvent.isComposing) {
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        event.preventDefault();
+        onSubmit();
+        return;
+      }
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        onSubmit();
+        return;
+      }
+      if (event.key === "/" && !command && isSlashCommandPosition(editorRef.current)) {
+        event.preventDefault();
+        setCommandOpen(true);
+        return;
+      }
+      if (
+        (event.key === "Backspace" || event.key === "Delete") &&
+        command &&
+        isArgumentEmpty
+      ) {
+        event.preventDefault();
+        clearCommand();
+        return;
+      }
+      if (event.key === "Escape" && commandOpen) {
+        event.preventDefault();
+        setCommandOpen(false);
+        focusEditor();
+      }
+    },
+    [clearCommand, command, commandOpen, focusEditor, isArgumentEmpty, onSubmit],
+  );
+
+  return (
+    <Popover open={commandOpen} onOpenChange={setCommandOpen}>
+      <PopoverAnchor asChild>
+        <div
+          className={cn(
+            "flex min-h-16 w-full items-start gap-2 px-4 pb-2 pt-3.5 text-[15px] leading-6 text-foreground",
+            disabled && "opacity-100",
+          )}
+          onKeyDownCapture={(event) => {
+            if (
+              (event.key === "Backspace" || event.key === "Delete") &&
+              command &&
+              isArgumentEmpty
+            ) {
+              event.preventDefault();
+              event.stopPropagation();
+              clearCommand();
+            }
+          }}
+        >
+          {command ? (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={clearCommand}
+              className={cn(
+                "mt-0.5 shrink-0 rounded-full border px-2 py-1 text-[11px] font-semibold leading-none",
+                command.mode === "deep"
+                  ? "border-[var(--lavender-soft-border)] bg-[var(--lavender-soft)] text-[var(--lavender)]"
+                  : "border-[var(--sky-soft-border)] bg-[var(--sky-soft)] text-primary",
+              )}
+            >
+              {command.slug}
+            </button>
+          ) : null}
+          <div className="relative min-w-0 flex-1">
+            {value.length === 0 ? (
+              <span className="pointer-events-none absolute left-0 top-0 text-muted-foreground dark:text-[#a3a3a3]">
+                {command?.placeholder ?? placeholder}
+              </span>
+            ) : null}
+            <div
+              ref={editorRef}
+              contentEditable={!disabled}
+              role="textbox"
+              aria-label="Pesan"
+              aria-multiline="true"
+              data-slot="input-group-control"
+              className="min-h-10 max-h-48 overflow-y-auto whitespace-pre-wrap break-words outline-none disabled:opacity-100"
+              onInput={handleInput}
+              onKeyDown={handleKeyDown}
+              suppressContentEditableWarning
+            />
+          </div>
+        </div>
+      </PopoverAnchor>
+      <PopoverContent
+        align="start"
+        side="top"
+        className="w-[min(21rem,calc(100vw-2rem))] overflow-hidden p-0"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          focusEditor();
+        }}
+      >
+        <Command
+          key={commandOpen ? "open" : "closed"}
+          shouldFilter={false}
+          className="rounded-lg p-0"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setCommandOpen(false);
+              focusEditor();
+            }
+          }}
+        >
+          <CommandList className="max-h-[17rem] py-1">
+            {promptCommandGroups.map((group) => (
+              <CommandGroup
+                key={group}
+                heading={group}
+                className="border-b border-border/70 p-1 last:border-b-0 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pb-0.5 [&_[cmdk-group-heading]]:pt-0 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:leading-3"
+              >
+                {promptCommands
+                  .filter((item) => item.group === group)
+                  .map((item) => (
+                    <CommandItem
+                      key={item.id}
+                      value={item.id}
+                      onSelect={() => handleSelectCommand(item)}
+                      className="min-h-10 items-start gap-2 rounded-md px-2 py-1.5 text-[13px]"
+                    >
+                      <span className="min-w-0 flex-1 space-y-1">
+                        <span className="block truncate font-medium leading-4">
+                          {item.slug}
+                        </span>
+                        <span className="block whitespace-normal text-[10px] leading-3 text-muted-foreground">
+                          {item.description}
+                        </span>
+                      </span>
+                      {item.mode === "deep" ? (
+                        <span className="shrink-0 rounded-full bg-[var(--lavender-soft)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--lavender)]">
+                          Deep
+                        </span>
+                      ) : null}
+                    </CommandItem>
+                  ))}
+              </CommandGroup>
+            ))}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+const promptCommandGroups = [
+  "Tulis Akademik",
+  "Rancang Riset",
+  "Riset Mendalam",
+] as const;
+
+function createVisibleComposerContent(content: string, command: PromptCommand | null) {
+  const trimmed = content.trim();
+  if (!command) {
+    return content;
+  }
+  return trimmed.length > 0 ? `${command.slug} ${trimmed}` : command.slug;
+}
+
+function stripCommandFromSubmittedContent(
+  content: string,
+  command: PromptCommand | null,
+) {
+  return command ? stripCommandFromContent(content, command) : content;
+}
+
+function isSlashCommandPosition(editor: HTMLDivElement | null) {
+  if (!editor) {
+    return false;
+  }
+  const beforeCursor = getTextBeforeCursor(editor);
+  return beforeCursor.length === 0 || /\s$/.test(beforeCursor);
+}
+
+function getTextBeforeCursor(editor: HTMLDivElement) {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) {
+    return editor.innerText;
+  }
+  const range = selection.getRangeAt(0);
+  if (!editor.contains(range.startContainer)) {
+    return editor.innerText;
+  }
+  const beforeRange = range.cloneRange();
+  beforeRange.selectNodeContents(editor);
+  beforeRange.setEnd(range.startContainer, range.startOffset);
+  return beforeRange.toString();
+}
+
+function moveCaretToEnd(element: HTMLElement) {
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  range.collapse(false);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
 function ModeButton({
   active,
   onClick,
@@ -1044,7 +1486,7 @@ function ModeButton({
   onClick: () => void;
   disabled?: boolean;
   variant: "normal" | "deep";
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <button

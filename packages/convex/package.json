@@ -11,6 +11,10 @@
     "./server": {
       "types": "./convex/_generated/server.d.ts",
       "default": "./convex/_generated/server.js"
+    },
+    "./prompt-commands": {
+      "types": "./convex/agent/promptCommands.ts",
+      "default": "./convex/agent/promptCommands.ts"
     }
   },
   "scripts": {

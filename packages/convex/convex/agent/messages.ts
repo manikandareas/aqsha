@@ -31,6 +31,7 @@ import {
   threadTitleFromPrompt,
 } from "./threadTitles";
 import { assertThreadOwner } from "./threads";
+import { buildPromptCommandPrompt, getPromptCommand } from "./promptCommands";
 
 const MAX_CONTENT_LENGTH = 8_000;
 const FAILURE_TEXT =
@@ -64,6 +65,59 @@ type SendResult =
 function previewFromContent(content: string) {
   const singleLine = content.replace(/\s+/g, " ").trim();
   return singleLine.length > 140 ? `${singleLine.slice(0, 137)}...` : singleLine;
+}
+
+function stripCommandSlug(content: string, command: NonNullable<ReturnType<typeof getPromptCommand>>) {
+  const trimmed = content.trim();
+  const slugs = [command.slug, ...command.aliases].sort((a, b) => b.length - a.length);
+  for (const slug of slugs) {
+    if (trimmed === slug) {
+      return "";
+    }
+    if (trimmed.startsWith(`${slug} `) || trimmed.startsWith(`${slug}\n`)) {
+      return trimmed.slice(slug.length).trim();
+    }
+  }
+  return trimmed;
+}
+
+function promptPayloadFromCommand(args: {
+  content: string;
+  mode: "normal" | "deep";
+  commandId?: string;
+}) {
+  if (!args.commandId) {
+    return {
+      visibleContent: args.content,
+      expandedPrompt: args.content,
+      mode: args.mode,
+      commandMetadata: null,
+    };
+  }
+
+  const command = getPromptCommand(args.commandId);
+  if (!command) {
+    throw new ConvexError("Unknown prompt command");
+  }
+  const argument = stripCommandSlug(args.content, command);
+  const compiled = buildPromptCommandPrompt(command.id, argument);
+  if (!compiled) {
+    throw new ConvexError("Unknown prompt command");
+  }
+  const visibleContent = argument.length > 0 ? `${command.slug} ${argument}` : command.slug;
+  return {
+    visibleContent,
+    expandedPrompt: compiled.expandedPrompt,
+    mode: command.mode === "deep" ? "deep" as const : args.mode,
+    commandMetadata: {
+      commandId: command.id,
+      commandLabel: command.label,
+      commandSlug: command.slug,
+      mode: command.mode,
+      argumentPreview: previewFromContent(argument),
+      expandedPromptSnapshot: compiled.expandedPrompt,
+    },
+  };
 }
 
 function trimForTitleContext(content: string) {
@@ -184,16 +238,28 @@ async function savePromptAndScheduleRun(
     threadTitle?: string;
     content: string;
     mode: "normal" | "deep";
+    commandId?: string;
   },
 ): Promise<SendResult> {
+  const promptPayload = promptPayloadFromCommand(args);
   const saved = await astra.saveMessages(ctx, {
     threadId: args.threadId,
     userId: args.ownerUserId,
-    messages: [{ role: "user", content: args.content }],
+    messages: [{ role: "user", content: promptPayload.visibleContent }],
     skipEmbeddings: true,
   });
   const messageId = saved.messages[0]._id;
-  const preview = previewFromContent(args.content);
+  const preview = previewFromContent(promptPayload.visibleContent);
+
+  if (promptPayload.commandMetadata) {
+    await ctx.db.insert("messageCommands", {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      messageId,
+      ...promptPayload.commandMetadata,
+      createdAt: Date.now(),
+    });
+  }
 
   await upsertThreadMetadata(ctx, {
     ownerUserId: args.ownerUserId,
@@ -206,10 +272,10 @@ async function savePromptAndScheduleRun(
   await updateThreadTitleFromPrompt(ctx, {
     threadId: args.threadId,
     currentTitle: args.threadTitle,
-    prompt: args.content,
+    prompt: promptPayload.visibleContent,
   });
 
-  if (args.mode === "deep") {
+  if (promptPayload.mode === "deep") {
     const run: {
       runId: import("../_generated/dataModel").Id<"agentRuns">;
       workflowId: string;
@@ -217,7 +283,7 @@ async function savePromptAndScheduleRun(
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
       promptMessageId: messageId,
-      prompt: args.content,
+      prompt: promptPayload.expandedPrompt,
     });
 
     return { ok: true as const, messageId, ...run };
@@ -227,13 +293,13 @@ async function savePromptAndScheduleRun(
     ownerUserId: args.ownerUserId,
     threadId: args.threadId,
     promptMessageId: messageId,
-    prompt: args.content,
+    prompt: promptPayload.expandedPrompt,
   });
   await ctx.scheduler.runAfter(0, internal.agent.messages.generateReply, {
     threadId: args.threadId,
     userId: args.ownerUserId,
     promptMessageId: messageId,
-    prompt: args.content,
+    prompt: promptPayload.expandedPrompt,
     runId,
   });
 
@@ -244,6 +310,7 @@ export const startThread = mutation({
   args: {
     content: v.string(),
     mode: v.union(v.literal("normal"), v.literal("deep")),
+    commandId: v.optional(v.string()),
   },
   returns: sendResultValidator,
   handler: async (ctx, args): Promise<SendResult> => {
@@ -271,6 +338,7 @@ export const startThread = mutation({
       threadTitle: threadTitleFromPrompt(content),
       content,
       mode: args.mode,
+      commandId: args.commandId,
     });
 
     return result.ok ? { ...result, threadId } : result;
@@ -282,6 +350,7 @@ export const send = mutation({
     threadId: v.string(),
     content: v.string(),
     mode: v.union(v.literal("normal"), v.literal("deep")),
+    commandId: v.optional(v.string()),
   },
   returns: sendResultValidator,
   handler: async (ctx, args): Promise<SendResult> => {
@@ -305,6 +374,7 @@ export const send = mutation({
       threadTitle: thread.title,
       content,
       mode: args.mode,
+      commandId: args.commandId,
     });
   },
 });
@@ -316,10 +386,56 @@ export const list = query({
     streamArgs: vStreamArgs,
   },
   handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
     await assertThreadOwner(ctx, args.threadId);
     const paginated = await listUIMessages(ctx, components.agent, args);
     const streams = await syncStreams(ctx, components.agent, args);
-    return { ...paginated, streams };
+    const messageIds = paginated.page
+      .map((message) => message.id)
+      .filter((id): id is string => typeof id === "string");
+    const commandRows = await Promise.all(
+      messageIds.map((messageId) =>
+        ctx.db
+          .query("messageCommands")
+          .withIndex("by_owner_message", (q) =>
+            q.eq("ownerUserId", user._id).eq("messageId", messageId),
+          )
+          .unique(),
+      ),
+    );
+    const byMessageId = new Map();
+    for (const row of commandRows) {
+      if (!row || row.threadId !== args.threadId) {
+        continue;
+      }
+      byMessageId.set(row.messageId, {
+        commandId: row.commandId,
+        commandLabel: row.commandLabel,
+        commandSlug: row.commandSlug,
+        mode: row.mode,
+        argumentPreview: row.argumentPreview,
+      });
+    }
+    return {
+      ...paginated,
+      page: paginated.page.map((message) => {
+        const promptCommand = byMessageId.get(message.id);
+        if (!promptCommand) {
+          return message;
+        }
+        const existingMetadata = (message as { metadata?: unknown }).metadata;
+        return {
+          ...message,
+          metadata: {
+            ...(typeof existingMetadata === "object" && existingMetadata !== null
+              ? existingMetadata
+              : {}),
+            promptCommand,
+          },
+        };
+      }),
+      streams,
+    };
   },
 });
 
@@ -343,7 +459,7 @@ export const generateReply = internalAction({
       const result = await astra.streamText(
         ctx,
         { threadId: args.threadId, userId: args.userId },
-        { promptMessageId: args.promptMessageId, tools: researchTools },
+        { promptMessageId: args.promptMessageId, prompt: args.prompt, tools: researchTools },
         {
           saveStreamDeltas: { chunking: "word", throttleMs: 100 },
           usageHandler: handleUsage,
