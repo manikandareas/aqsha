@@ -430,6 +430,18 @@ export async function getUrlContentProvider(
 }
 
 async function limitExternal(ctx: ActionCtx, ownerUserId: string, provider: Provider) {
+  const billing = await ctx.runMutation(
+    internal.billing.entitlements.consumeCreditsInternal,
+    {
+      ownerUserId,
+      feature: "external_search",
+      provider,
+      credits: provider === "crossref" || provider === "arxiv" ? 1 : undefined,
+    },
+  );
+  if (!billing.ok) {
+    throw new ConvexError(billing.reason);
+  }
   const checks = await Promise.all([
     rateLimiter.check(ctx, "externalSearchPerUser", { key: ownerUserId }),
     providerRateCheck(ctx, ownerUserId, provider),

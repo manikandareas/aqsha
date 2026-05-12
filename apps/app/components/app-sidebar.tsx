@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { ComponentProps } from "react";
 import {
   BugIcon,
+  CreditCardIcon,
   LibraryIcon,
   MessageSquarePlusIcon,
   PanelLeftIcon,
@@ -101,6 +102,12 @@ export function AppSidebar({
             label="Sumber"
             accent="mint"
           />
+          <PrimaryNavLink
+            href="/billing"
+            icon={CreditCardIcon}
+            label="Billing"
+            accent="sky"
+          />
           <PrimaryNavRow icon={SparklesIcon} label="Otomasi" disabled />
           <PrimaryNavRow icon={BugIcon} label="Audit riset" disabled />
         </SidebarMenu>
@@ -151,17 +158,17 @@ function UpgradeCard() {
         7 hari trial
       </div>
       <h3 className="font-heading text-[15px] font-extrabold leading-[1.18] text-foreground [text-wrap:balance]">
-        Plus atau Pro untuk riset panjang
+        Starter atau Plus untuk riset panjang
       </h3>
       <p className="mt-1.5 text-[12px] font-medium leading-[1.5] text-muted-foreground">
-        Lebih banyak konteks, tools lanjutan, dan akses premium saat riset mulai serius.
+        Credits bulanan, Deep Research, dan guard biaya provider saat riset mulai serius.
       </p>
       <Button
-        type="button"
+        asChild
         size="sm"
         className="mt-auto h-9 w-full rounded-[9px] bg-primary text-[13px] font-semibold text-primary-foreground shadow-none transition-transform hover:bg-primary/90 active:scale-[0.985]"
       >
-        Coba gratis
+        <Link href="/billing">Lihat paket</Link>
       </Button>
     </div>
   );

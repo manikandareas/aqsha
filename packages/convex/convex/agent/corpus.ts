@@ -116,6 +116,17 @@ export const addSource = action({
   }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
+    const billing = await ctx.runMutation(
+      internal.billing.entitlements.consumeCreditsInternal,
+      {
+        ownerUserId: user._id,
+        feature: "source_ingest",
+        provider: "convex_rag",
+      },
+    );
+    if (!billing.ok) {
+      throw new ConvexError(billing.reason);
+    }
     const prepared: PreparedSource = await prepareSource(ctx, user._id, args.input);
     const sourceId: Id<"corpusSources"> = await ctx.runMutation(
       internal.agent.corpus.insertSource,

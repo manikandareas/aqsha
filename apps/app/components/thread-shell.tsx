@@ -99,7 +99,18 @@ type SendResult =
       runId?: string;
       workflowId?: string;
     }
-  | { ok: false; reason: "rate_limited"; retryAt: number };
+  | {
+      ok: false;
+      reason:
+        | "rate_limited"
+        | "quota_exceeded"
+        | "subscription_required"
+        | "billing_inactive";
+      retryAt?: number;
+      resetAt?: number;
+      requiredPlan?: "free" | "starter" | "plus";
+      creditsRemaining?: number;
+    };
 
 type RateStatus = {
   ok: boolean;
@@ -1163,6 +1174,7 @@ function Composer({
   const [mode, setMode] = useState<"normal" | "deep">("normal");
   const [isSending, setIsSending] = useState(false);
   const [localRetryAt, setLocalRetryAt] = useState<number | null>(null);
+  const [billingBlock, setBillingBlock] = useState<SendResult & { ok: false } | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const retryAt = localRetryAt ?? rateStatus?.retryAt ?? null;
   const retrySeconds =
@@ -1231,11 +1243,17 @@ function Composer({
             commandId: nextCommand?.id,
           });
       if (!result.ok) {
-        setLocalRetryAt(result.retryAt);
+        if (result.reason === "rate_limited" && result.retryAt) {
+          setLocalRetryAt(result.retryAt);
+          setBillingBlock(null);
+        } else {
+          setBillingBlock(result);
+        }
         setContent(stripCommandFromSubmittedContent(nextContent, nextCommand));
         setSelectedCommand(nextCommand);
         return;
       }
+      setBillingBlock(null);
       if (!threadId && result.threadId) {
         router.push(`/threads/${result.threadId}`);
       }
@@ -1253,6 +1271,18 @@ function Composer({
       {isRateLimited ? (
         <div className="mx-3 mt-3 rounded-[9px] border border-[var(--lemon-soft-border)] bg-[var(--lemon-soft)] px-3 py-2 text-[12px] font-medium text-[var(--lemon)]">
           Perlu istirahat sebentar. Coba lagi dalam {retrySeconds || 1} detik.
+        </div>
+      ) : null}
+      {billingBlock ? (
+        <div className="mx-3 mt-3 rounded-[9px] border border-[var(--coral-soft-border)] bg-[var(--coral-soft)] px-3 py-2 text-[12px] font-medium leading-5 text-[var(--coral)]">
+          {billingBlock.reason === "quota_exceeded"
+            ? `Credits habis. Reset ${billingBlock.resetAt ? format(new Date(billingBlock.resetAt), "d MMM yyyy", { locale: idLocale }) : "periode berikutnya"}.`
+            : billingBlock.reason === "subscription_required"
+              ? `Butuh plan ${billingBlock.requiredPlan ?? "berbayar"} untuk mode ini.`
+              : "Billing belum aktif. Periksa subscription di halaman Billing."}{" "}
+          <a href="/billing" className="font-semibold underline underline-offset-2">
+            Buka Billing
+          </a>
         </div>
       ) : null}
       <TokenizedPromptInput

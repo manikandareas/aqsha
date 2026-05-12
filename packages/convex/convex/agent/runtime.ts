@@ -2,7 +2,7 @@ import { Agent, stepCountIs, type UsageHandler } from "@convex-dev/agent";
 import { openai } from "@ai-sdk/openai";
 import { components, internal } from "../_generated/api";
 
-export const NORMAL_MODEL = process.env.AQSHA_NORMAL_MODEL ?? "gpt-5.5-mini";
+export const NORMAL_MODEL = process.env.AQSHA_NORMAL_MODEL ?? "gpt-5.4-mini";
 
 export const astra = new Agent(components.agent, {
   name: "Astra",

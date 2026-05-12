@@ -21,6 +21,12 @@ import {
 } from "../_generated/server";
 import { astra, NORMAL_MODEL, recordUsage as handleUsage } from "./runtime";
 import { requireCurrentUser } from "../auth";
+import { estimateCredits } from "../billing/catalog";
+import {
+  consumeCredits,
+  recordProviderUsage,
+  type EntitlementResult,
+} from "../billing/entitlements";
 import { rateLimiter } from "../limits";
 import { researchTools } from "./researchTools";
 import type { SourceCandidate } from "./sourceCandidates";
@@ -47,8 +53,16 @@ const sendResultValidator = v.union(
   }),
   v.object({
     ok: v.literal(false),
-    reason: v.literal("rate_limited"),
-    retryAt: v.number(),
+    reason: v.union(
+      v.literal("rate_limited"),
+      v.literal("quota_exceeded"),
+      v.literal("subscription_required"),
+      v.literal("billing_inactive"),
+    ),
+    retryAt: v.optional(v.number()),
+    resetAt: v.optional(v.number()),
+    requiredPlan: v.optional(v.union(v.literal("free"), v.literal("starter"), v.literal("plus"))),
+    creditsRemaining: v.optional(v.number()),
   }),
 );
 
@@ -60,7 +74,14 @@ type SendResult =
       runId?: import("../_generated/dataModel").Id<"agentRuns">;
       workflowId?: string;
     }
-  | { ok: false; reason: "rate_limited"; retryAt: number };
+  | {
+      ok: false;
+      reason: "rate_limited" | "quota_exceeded" | "subscription_required" | "billing_inactive";
+      retryAt?: number;
+      resetAt?: number;
+      requiredPlan?: "free" | "starter" | "plus";
+      creditsRemaining?: number;
+    };
 
 function previewFromContent(content: string) {
   const singleLine = content.replace(/\s+/g, " ").trim();
@@ -199,14 +220,45 @@ function validateContent(content: string) {
   return trimmed;
 }
 
+function sendBillingFailure(entitlement: Extract<EntitlementResult, { ok: false }>): SendResult {
+  return {
+    ok: false,
+    reason: entitlement.reason,
+    resetAt: entitlement.resetAt,
+    requiredPlan: entitlement.requiredPlan,
+    creditsRemaining: entitlement.creditsRemaining,
+  };
+}
+
 async function checkAndConsumeSendQuota(
   ctx: MutationCtx,
   args: {
     ownerUserId: string;
     content: string;
+    mode: "normal" | "deep";
   },
-): Promise<{ ok: true } | { ok: false; retryAt: number }> {
+): Promise<
+  | { ok: true }
+  | { ok: false; retryAt?: number; entitlement?: Extract<EntitlementResult, { ok: false }> }
+> {
   const estimatedTokens = estimateTokens(args.content);
+  const entitlement = await consumeCredits(ctx, {
+    ownerUserId: args.ownerUserId,
+    feature: args.mode === "deep" ? "deep_research" : "normal_chat",
+    provider: "openai",
+    model: args.mode === "deep" ? process.env.AQSHA_DEEP_MODEL ?? "gpt-5.5" : NORMAL_MODEL,
+    inputTokens: estimatedTokens,
+    totalTokens: estimatedTokens,
+    credits: estimateCredits({
+      feature: args.mode === "deep" ? "deep_research" : "normal_chat",
+      inputTokens: estimatedTokens,
+      totalTokens: estimatedTokens,
+    }),
+    requiredPlan: args.mode === "deep" ? "starter" : "free",
+  });
+  if (!entitlement.ok) {
+    return { ok: false, entitlement };
+  }
   const rateChecks = await Promise.all([
     rateLimiter.check(ctx, "sendMessage", { key: args.ownerUserId }),
     rateLimiter.check(ctx, "globalSendMessage"),
@@ -319,13 +371,16 @@ export const startThread = mutation({
     const quota = await checkAndConsumeSendQuota(ctx, {
       ownerUserId: user._id,
       content,
+      mode: args.mode,
     });
     if (!quota.ok) {
-      return {
-        ok: false as const,
-        reason: "rate_limited" as const,
-        retryAt: quota.retryAt,
-      };
+      return quota.entitlement
+        ? sendBillingFailure(quota.entitlement)
+        : {
+            ok: false as const,
+            reason: "rate_limited" as const,
+            retryAt: quota.retryAt,
+          };
     }
 
     const threadId = await createThread(ctx, components.agent, {
@@ -360,13 +415,16 @@ export const send = mutation({
     const quota = await checkAndConsumeSendQuota(ctx, {
       ownerUserId: user._id,
       content,
+      mode: args.mode,
     });
     if (!quota.ok) {
-      return {
-        ok: false as const,
-        reason: "rate_limited" as const,
-        retryAt: quota.retryAt,
-      };
+      return quota.entitlement
+        ? sendBillingFailure(quota.entitlement)
+        : {
+            ok: false as const,
+            reason: "rate_limited" as const,
+            retryAt: quota.retryAt,
+          };
     }
     return await savePromptAndScheduleRun(ctx, {
       ownerUserId: user._id,
@@ -1039,6 +1097,22 @@ export const recordUsage = internalMutation({
       ...args,
       model: args.model || NORMAL_MODEL,
       createdAt: Date.now(),
+    });
+    await recordProviderUsage(ctx, {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      feature: "normal_chat",
+      provider: args.provider,
+      model: args.model || NORMAL_MODEL,
+      inputTokens: args.inputTokens,
+      outputTokens: args.outputTokens,
+      totalTokens: args.totalTokens,
+      credits: estimateCredits({
+        feature: "normal_chat",
+        inputTokens: args.inputTokens,
+        outputTokens: args.outputTokens,
+        totalTokens: args.totalTokens,
+      }),
     });
   },
 });

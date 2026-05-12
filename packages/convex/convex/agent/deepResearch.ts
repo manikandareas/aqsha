@@ -16,6 +16,8 @@ import {
   type QueryCtx,
 } from "../_generated/server";
 import { requireCurrentUser } from "../auth";
+import { estimateCredits } from "../billing/catalog";
+import { consumeCredits } from "../billing/entitlements";
 import {
   jinaReadUrl,
   jinaRerank,
@@ -224,6 +226,24 @@ export const retry = mutation({
       throw new ConvexError("Run is not retryable");
     }
     const prompt = run.promptSnapshot || await readPromptMessage(ctx, run.promptMessageId);
+    const billing = await consumeCredits(ctx, {
+      ownerUserId: user._id,
+      threadId: run.threadId,
+      feature: "deep_research",
+      provider: "openai",
+      model: DEEP_MODEL,
+      inputTokens: estimateTokens(prompt),
+      totalTokens: estimateTokens(prompt),
+      credits: estimateCredits({
+        feature: "deep_research",
+        inputTokens: estimateTokens(prompt),
+        totalTokens: estimateTokens(prompt),
+      }),
+      requiredPlan: "starter",
+    });
+    if (!billing.ok) {
+      throw new ConvexError(billing.reason);
+    }
     const newRunId = await createRun(ctx, {
       ownerUserId: user._id,
       threadId: run.threadId,
@@ -1113,6 +1133,10 @@ function labelForStep(stepKey: string) {
 function orderForStep(stepKey: string) {
   const index = stepDefinitions.findIndex(([key]) => key === stepKey);
   return index >= 0 ? index : 100;
+}
+
+function estimateTokens(content: string) {
+  return Math.max(1, Math.ceil(content.length / 4));
 }
 
 async function markCanceled(ctx: MutationCtx, runId: Id<"agentRuns">, ownerUserId: string) {

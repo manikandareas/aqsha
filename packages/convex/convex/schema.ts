@@ -28,6 +28,67 @@ export default defineSchema(
     })
       .index("by_owner_created", ["ownerUserId", "createdAt"])
       .index("by_thread_created", ["threadId", "createdAt"]),
+    billingSubscriptions: defineTable({
+      ownerUserId: v.string(),
+      polarSubscriptionId: v.string(),
+      polarProductId: v.string(),
+      productKey: v.optional(v.string()),
+      planKey: v.union(v.literal("starter"), v.literal("plus")),
+      billingInterval: v.union(v.literal("month"), v.literal("year")),
+      status: v.string(),
+      currentPeriodStart: v.optional(v.number()),
+      currentPeriodEnd: v.optional(v.number()),
+      cancelAtPeriodEnd: v.optional(v.boolean()),
+      canceledAt: v.optional(v.number()),
+      rawJson: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_owner_updated", ["ownerUserId", "updatedAt"])
+      .index("by_subscription", ["polarSubscriptionId"]),
+    billingEvents: defineTable({
+      eventKey: v.string(),
+      eventType: v.string(),
+      processedAt: v.number(),
+    }).index("by_event_key", ["eventKey"]),
+    billingCreditPeriods: defineTable({
+      ownerUserId: v.string(),
+      periodKey: v.string(),
+      planKey: v.union(v.literal("free"), v.literal("starter"), v.literal("plus")),
+      status: v.string(),
+      creditsLimit: v.number(),
+      creditsUsed: v.number(),
+      estimatedCostCents: v.number(),
+      spendCeilingCents: v.number(),
+      startedAt: v.number(),
+      resetAt: v.number(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }).index("by_owner_period", ["ownerUserId", "periodKey"]),
+    providerUsageLedger: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.optional(v.string()),
+      runId: v.optional(runId),
+      feature: v.union(
+        v.literal("normal_chat"),
+        v.literal("cited_answer"),
+        v.literal("deep_research"),
+        v.literal("external_search"),
+        v.literal("source_ingest"),
+        v.literal("rag_embedding"),
+      ),
+      provider: v.string(),
+      model: v.optional(v.string()),
+      inputTokens: v.optional(v.number()),
+      outputTokens: v.optional(v.number()),
+      totalTokens: v.optional(v.number()),
+      credits: v.number(),
+      estimatedCostCents: v.number(),
+      metadataJson: v.optional(v.string()),
+      createdAt: v.number(),
+    })
+      .index("by_owner_created", ["ownerUserId", "createdAt"])
+      .index("by_owner_feature_created", ["ownerUserId", "feature", "createdAt"]),
     messageCommands: defineTable({
       ownerUserId: v.string(),
       threadId: v.string(),

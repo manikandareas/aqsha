@@ -25,6 +25,14 @@ import type * as agent_threadTitles from "../agent/threadTitles.js";
 import type * as agent_threads from "../agent/threads.js";
 import type * as agent_workflow from "../agent/workflow.js";
 import type * as auth from "../auth.js";
+import type * as billing_catalog from "../billing/catalog.js";
+import type * as billing_checkout from "../billing/checkout.js";
+import type * as billing_current from "../billing/current.js";
+import type * as billing_entitlements from "../billing/entitlements.js";
+import type * as billing_polar from "../billing/polar.js";
+import type * as billing_portal from "../billing/portal.js";
+import type * as billing_products from "../billing/products.js";
+import type * as billing_usage from "../billing/usage.js";
 import type * as http from "../http.js";
 import type * as limits from "../limits.js";
 
@@ -52,6 +60,14 @@ declare const fullApi: ApiFromModules<{
   "agent/threads": typeof agent_threads;
   "agent/workflow": typeof agent_workflow;
   auth: typeof auth;
+  "billing/catalog": typeof billing_catalog;
+  "billing/checkout": typeof billing_checkout;
+  "billing/current": typeof billing_current;
+  "billing/entitlements": typeof billing_entitlements;
+  "billing/polar": typeof billing_polar;
+  "billing/portal": typeof billing_portal;
+  "billing/products": typeof billing_products;
+  "billing/usage": typeof billing_usage;
   http: typeof http;
   limits: typeof limits;
 }>;
@@ -88,4 +104,5 @@ export declare const components: {
   rag: import("@convex-dev/rag/_generated/component.js").ComponentApi<"rag">;
   rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
   workflow: import("@convex-dev/workflow/_generated/component.js").ComponentApi<"workflow">;
+  polar: import("@convex-dev/polar/_generated/component.js").ComponentApi<"polar">;
 };
