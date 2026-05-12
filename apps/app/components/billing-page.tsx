@@ -34,7 +34,7 @@ export function BillingPage() {
         origin,
         successUrl: `${origin}/billing?checkout=success`,
       });
-      window.location.href = url;
+      window.location.assign(url);
     } catch (error) {
       setBillingError(readableBillingError(error));
     } finally {
@@ -46,7 +46,7 @@ export function BillingPage() {
     setPendingKey("portal");
     try {
       const { url } = await createPortal({ returnUrl: window.location.href });
-      window.location.href = url;
+      window.location.assign(url);
     } finally {
       setPendingKey(null);
     }
