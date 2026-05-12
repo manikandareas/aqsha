@@ -1,6 +1,6 @@
 "use client";
 
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import {
   FilePlus2Icon,
   FolderIcon,
@@ -26,11 +26,17 @@ type SourceMode = "manual_text" | "url" | "doi" | "arxiv" | "uploaded_text";
 
 export function SourceLibrary() {
   const router = useRouter();
-  const viewer = useQuery(api.auth.getCurrentUser);
-  const threadPage = useQuery(api.agent.threads.list, {
-    paginationOpts: { cursor: null, numItems: 50 },
-  });
-  const sources = useQuery(api.agent.corpus.list);
+  const { isAuthenticated } = useConvexAuth();
+  const viewer = useQuery(api.auth.getCurrentUser, isAuthenticated ? {} : "skip");
+  const threadPage = useQuery(
+    api.agent.threads.list,
+    isAuthenticated
+      ? {
+          paginationOpts: { cursor: null, numItems: 50 },
+        }
+      : "skip",
+  );
+  const sources = useQuery(api.agent.corpus.list, isAuthenticated ? {} : "skip");
   const addSource = useAction(api.agent.corpus.addSource);
   const createThread = useMutation(api.agent.threads.create);
   const [mode, setMode] = useState<SourceMode>("manual_text");

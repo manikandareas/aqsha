@@ -6,8 +6,8 @@ import type { Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
 import {
   lookupDoiProvider,
+  jinaSearchWeb,
   searchArxivProvider,
-  searchWebProvider,
 } from "./externalProviders";
 import { corpusRag, userNamespace } from "./rag";
 import type { SourceCandidate } from "./sourceCandidates";
@@ -91,10 +91,10 @@ export const researchTools: ToolSet = {
   }),
   searchWeb: createTool<typeof querySchema._output, SourceCandidate[], AqshaToolCtx>({
     description:
-      "Search the public web through Exa for current or broad context when corpus and academic sources are not enough.",
+      "Search the public web through Jina Search for current or broad context when corpus and academic sources are not enough.",
     inputSchema: querySchema,
     execute: async (ctx, input): Promise<SourceCandidate[]> => {
-      const results = await searchWebProvider(ctx, {
+      const results = await jinaSearchWeb(ctx, {
         ownerUserId: requireToolUser(ctx),
         query: input.query,
         limit: input.limit,

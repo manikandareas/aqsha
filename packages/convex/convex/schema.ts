@@ -61,6 +61,7 @@ export default defineSchema(
       threadId: v.string(),
       promptMessageId: v.string(),
       workflowId: v.optional(v.string()),
+      promptSnapshot: v.optional(v.string()),
       status: v.union(
         v.literal("queued"),
         v.literal("running"),
@@ -71,6 +72,18 @@ export default defineSchema(
       ),
       currentStep: v.optional(v.string()),
       failedStep: v.optional(v.string()),
+      roundCount: v.optional(v.number()),
+      maxRounds: v.optional(v.number()),
+      sufficiencyStatus: v.optional(
+        v.union(
+          v.literal("unknown"),
+          v.literal("insufficient"),
+          v.literal("partial"),
+          v.literal("sufficient"),
+          v.literal("budget_exhausted"),
+        ),
+      ),
+      budgetJson: v.optional(v.string()),
       activeArtifactId: v.optional(v.id("artifacts")),
       artifactCount: v.number(),
       sourceCount: v.number(),
@@ -109,7 +122,31 @@ export default defineSchema(
       updatedAt: v.number(),
     })
       .index("by_run_order", ["runId", "order"])
-      .index("by_owner_run", ["ownerUserId", "runId"]),
+      .index("by_owner_run", ["ownerUserId", "runId"])
+      .index("by_owner_run_and_step", ["ownerUserId", "runId", "stepKey"]),
+    researchRunEvents: defineTable({
+      ownerUserId: v.string(),
+      runId: v.id("researchRuns"),
+      threadId: v.string(),
+      eventType: v.union(
+        v.literal("plan"),
+        v.literal("gap"),
+        v.literal("query"),
+        v.literal("search"),
+        v.literal("read"),
+        v.literal("rerank"),
+        v.literal("audit"),
+        v.literal("status"),
+        v.literal("failure"),
+      ),
+      round: v.optional(v.number()),
+      title: v.string(),
+      summary: v.string(),
+      metadataJson: v.optional(v.string()),
+      createdAt: v.number(),
+    })
+      .index("by_owner_run_created", ["ownerUserId", "runId", "createdAt"])
+      .index("by_run_created", ["runId", "createdAt"]),
     artifacts: defineTable({
       ownerUserId: v.string(),
       threadId: v.string(),
@@ -203,6 +240,8 @@ export default defineSchema(
         v.literal("arxiv"),
         v.literal("doi"),
       ),
+      provider: v.optional(v.string()),
+      providerRequestId: v.optional(v.string()),
       evidenceStrength: v.union(
         v.literal("strong"),
         v.literal("medium"),
@@ -214,6 +253,16 @@ export default defineSchema(
       doi: v.optional(v.string()),
       arxivId: v.optional(v.string()),
       snippet: v.string(),
+      readStatus: v.optional(
+        v.union(
+          v.literal("not_needed"),
+          v.literal("ready"),
+          v.literal("failed"),
+        ),
+      ),
+      readError: v.optional(v.string()),
+      rerankScore: v.optional(v.number()),
+      metadataJson: v.optional(v.string()),
       corpusSourceId: v.optional(v.id("corpusSources")),
       createdAt: v.number(),
     })
@@ -222,8 +271,34 @@ export default defineSchema(
       .index("by_owner_run", ["ownerUserId", "runId"])
       .index("by_owner_artifact", ["ownerUserId", "artifactId"])
       .index("by_owner_source", ["ownerUserId", "corpusSourceId"]),
+    researchExtracts: defineTable({
+      ownerUserId: v.string(),
+      runId: v.id("researchRuns"),
+      threadId: v.string(),
+      sourceKey: v.string(),
+      citationNumber: v.number(),
+      title: v.string(),
+      locator: v.string(),
+      quote: v.string(),
+      relevance: v.union(
+        v.literal("high"),
+        v.literal("medium"),
+        v.literal("low"),
+      ),
+      notes: v.optional(v.string()),
+      createdAt: v.number(),
+    })
+      .index("by_owner_run", ["ownerUserId", "runId"])
+      .index("by_run_citation", ["runId", "citationNumber"]),
     externalLookupCache: defineTable({
-      provider: v.union(v.literal("crossref"), v.literal("arxiv"), v.literal("exa")),
+      provider: v.union(
+        v.literal("crossref"),
+        v.literal("arxiv"),
+        v.literal("exa"),
+        v.literal("jina_search"),
+        v.literal("jina_read"),
+        v.literal("jina_rerank"),
+      ),
       cacheKey: v.string(),
       status: v.union(v.literal("ready"), v.literal("empty"), v.literal("failed")),
       valueJson: v.string(),

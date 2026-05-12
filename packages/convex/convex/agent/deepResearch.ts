@@ -11,17 +11,65 @@ import {
   internalQuery,
   mutation,
   query,
+  type ActionCtx,
   type MutationCtx,
   type QueryCtx,
 } from "../_generated/server";
 import { requireCurrentUser } from "../auth";
-import { searchArxivProvider, searchWebProvider } from "./externalProviders";
+import {
+  jinaReadUrl,
+  jinaRerank,
+  jinaSearchWeb,
+  searchArxivProvider,
+} from "./externalProviders";
 import { corpusRag, userNamespace } from "./rag";
 import { trimForSnippet, type SourceCandidate } from "./sourceCandidates";
 import { assertThreadOwner } from "./threads";
 import { researchWorkflow } from "./workflow";
 
 const DEEP_MODEL = process.env.AQSHA_DEEP_MODEL ?? "gpt-5.5";
+const DEFAULT_MAX_ROUNDS = Number(process.env.AQSHA_DEEP_MAX_ROUNDS ?? 3);
+const MAX_SOURCES_PER_RUN = 14;
+const MAX_EXTRACTS_PER_RUN = 24;
+const ACTION_RETRY = { maxAttempts: 3, initialBackoffMs: 2_000, base: 2 };
+
+type SufficiencyStatus =
+  | "unknown"
+  | "insufficient"
+  | "partial"
+  | "sufficient"
+  | "budget_exhausted";
+
+type ResearchPlan = {
+  title: string;
+  questions: string[];
+  sourceStrategy: string;
+  reportIntent: string;
+  sufficiencyCriteria: string[];
+  initialQueries: string[];
+  maxRounds: number;
+};
+
+type ResearchExtract = {
+  sourceKey: string;
+  citationNumber: number;
+  title: string;
+  locator: string;
+  quote: string;
+  relevance: "high" | "medium" | "low";
+  notes?: string;
+  rerankScore?: number;
+};
+
+type ResearchRoundState = {
+  round: number;
+  query: string;
+  gapAssessment: string;
+  sufficiencyStatus: SufficiencyStatus;
+  stopReason?: string;
+  sources: SourceCandidate[];
+  extracts: ResearchExtract[];
+};
 
 const stepDefinitions = [
   ["planResearch", "Merencanakan riset"],
@@ -50,37 +98,50 @@ export const deepResearchWorkflow = researchWorkflow.define({
     prompt: v.string(),
   },
   handler: async (step, args): Promise<void> => {
-    const plan = await step.runAction(internal.agent.deepResearch.planResearch, args);
-    const sources = await step.runAction(internal.agent.deepResearch.retrieveSources, {
-      ...args,
-      plan,
+    const plan = await step.runAction(internal.agent.deepResearch.planResearch, args, {
+      retry: ACTION_RETRY,
     });
-    const extracts = await step.runAction(internal.agent.deepResearch.readExtract, {
+    const loop = await step.runAction(internal.agent.deepResearch.researchLoop, {
       ...args,
       plan,
-      sources,
+    }, {
+      retry: ACTION_RETRY,
     });
     const synthesis = await step.runAction(internal.agent.deepResearch.synthesize, {
       ...args,
       plan,
-      sources,
-      extracts,
+      sources: loop.sources,
+      extracts: loop.extracts,
+      roundState: loop.roundState,
+    }, {
+      retry: ACTION_RETRY,
     });
-    const checks = await step.runAction(internal.agent.deepResearch.verifyCitations, {
+    const audit = await step.runAction(internal.agent.deepResearch.auditClaims, {
       ...args,
-      sources,
+      sources: loop.sources,
+      extracts: loop.extracts,
       markdown: synthesis.markdown,
+    }, {
+      retry: ACTION_RETRY,
+    });
+    const responseSummary = await step.runAction(internal.agent.deepResearch.summarizeResearchResponse, {
+      ...args,
+      plan,
+      markdown: audit.markdown,
+    }, {
+      retry: ACTION_RETRY,
     });
     const persisted = await step.runMutation(internal.agent.deepResearch.persistArtifact, {
       ...args,
-      sources,
-      markdown: synthesis.markdown,
-      checks,
+      sources: loop.sources,
+      extracts: loop.extracts,
+      markdown: audit.markdown,
+      checks: audit.checks,
     });
     await step.runMutation(internal.agent.deepResearch.finalizeThread, {
       ...args,
       artifactId: persisted.primaryArtifactId,
-      summary: synthesis.summary,
+      responseSummary,
     });
   },
 });
@@ -131,7 +192,13 @@ export const cancel = mutation({
     }
     await markCanceled(ctx, run._id, user._id);
     if (run.workflowId) {
-      await researchWorkflow.cancel(ctx, run.workflowId as unknown as WorkflowId);
+      try {
+        await researchWorkflow.cancel(ctx, run.workflowId as unknown as WorkflowId);
+      } catch (error) {
+        if (!isWorkflowAlreadyStoppedError(error)) {
+          throw error;
+        }
+      }
     }
     return { ok: true };
   },
@@ -148,11 +215,12 @@ export const retry = mutation({
     if (run.status !== "failed" || !run.retryable) {
       throw new ConvexError("Run is not retryable");
     }
-    const prompt = await readPromptMessage(ctx, run.promptMessageId);
+    const prompt = run.promptSnapshot || await readPromptMessage(ctx, run.promptMessageId);
     const newRunId = await createRun(ctx, {
       ownerUserId: user._id,
       threadId: run.threadId,
       promptMessageId: run.promptMessageId,
+      prompt,
       retryOfRunId: run._id,
     });
     const workflowId = await researchWorkflow.start(
@@ -270,110 +338,229 @@ export const planResearch = internalAction({
       schema: z.object({
         title: z.string(),
         questions: z.array(z.string()).min(1).max(5),
-        sourceQueries: z.array(z.string()).min(1).max(5),
-        artifactTarget: z.string(),
+        sourceStrategy: z.string(),
+        reportIntent: z.string(),
+        sufficiencyCriteria: z.array(z.string()).min(1).max(6),
+        initialQueries: z.array(z.string()).min(1).max(5),
+        maxRounds: z.number().int().min(1).max(3),
       }),
-      prompt: `Create a concise research plan for this prompt. Prefer source-grounded academic/product research.\n\n${args.prompt}`,
+      prompt: [
+        "Create a concise autonomous research plan for this prompt.",
+        "The plan must include research questions, a source strategy, the intended report shape, concrete sufficiency criteria, and initial search queries.",
+        "Keep maxRounds between 1 and 3. Prefer user corpus first, then public web discovery through Jina when corpus evidence is insufficient.",
+        "",
+        args.prompt,
+      ].join("\n"),
+    });
+    const plan = normalizePlan(object.object);
+    await ctx.runMutation(internal.agent.deepResearch.updateRunPlan, {
+      runId: args.runId,
+      ownerUserId: args.ownerUserId,
+      promptSnapshot: args.prompt,
+      maxRounds: plan.maxRounds,
+      budgetJson: JSON.stringify({
+        maxRounds: plan.maxRounds,
+        maxSources: MAX_SOURCES_PER_RUN,
+        maxExtracts: MAX_EXTRACTS_PER_RUN,
+        model: DEEP_MODEL,
+        providers: ["convex_rag", "jina_search", "jina_reader", "jina_rerank"],
+      }),
+    });
+    await ctx.runMutation(internal.agent.deepResearch.recordRunEvent, {
+      runId: args.runId,
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      eventType: "plan",
+      title: plan.title,
+      summary: plan.questions.join(" | "),
+      metadataJson: JSON.stringify(plan),
     });
     await ctx.runMutation(internal.agent.deepResearch.markStep, {
       runId: args.runId,
       ownerUserId: args.ownerUserId,
       stepKey: "planResearch",
       status: "completed",
-      summary: object.object.title,
+      summary: plan.title,
     });
-    return object.object;
+    return plan;
   },
 });
 
-export const retrieveSources = internalAction({
+export const researchLoop = internalAction({
   args: { ...workflowArgs(), plan: v.any() },
-  handler: async (ctx, args) => {
-    await ensureNotCanceled(ctx, args.runId);
-    await ctx.runMutation(internal.agent.deepResearch.markStep, {
-      runId: args.runId,
-      ownerUserId: args.ownerUserId,
-      stepKey: "retrieveSources",
-      status: "running",
-    });
-    const queries = normalizeQueries(args.plan, args.prompt);
-    const corpusResults = await Promise.all(
-      queries.slice(0, 3).map((query) =>
-        corpusRag.search(ctx, {
-          namespace: userNamespace(args.ownerUserId),
-          query,
-          limit: 4,
-          vectorScoreThreshold: 0.35,
-        }),
-      ),
-    );
-    const corpusCandidates = corpusResults.flatMap((result) =>
-      result.entries.map((entry) => ({
-        origin: "corpus" as const,
-        evidenceStrength: "strong" as const,
-        title: entry.metadata?.title ?? entry.title ?? "Corpus source",
-        locator: entry.metadata?.locator ?? entry.entryId,
-        url: entry.metadata?.url,
-        doi: entry.metadata?.doi,
-        arxivId: entry.metadata?.arxivId,
-        snippet: trimForSnippet(entry.text || result.text || "Corpus match", 1_200),
-        corpusSourceId: entry.metadata?.corpusSourceId as Id<"corpusSources"> | undefined,
-      })),
-    );
-    const externalNeeded = corpusCandidates.length < 4;
-    const [arxiv, web] = externalNeeded
-      ? await Promise.all([
-          searchArxivProvider(ctx, {
-            ownerUserId: args.ownerUserId,
-            query: queries[0],
-            limit: 4,
-          }),
-          searchWebProvider(ctx, {
-            ownerUserId: args.ownerUserId,
-            query: queries[0],
-            limit: 4,
-          }),
-        ])
-      : [[], []];
-    const sources = dedupeSources([...corpusCandidates, ...arxiv, ...web]).map(
-      (source, index) => ({ ...source, citationNumber: index + 1 }),
-    );
-    await ctx.runMutation(internal.agent.deepResearch.markStep, {
-      runId: args.runId,
-      ownerUserId: args.ownerUserId,
-      stepKey: "retrieveSources",
-      status: "completed",
-      summary: `${sources.length} sumber ditemukan`,
-      sourceCount: sources.length,
-    });
-    return sources;
-  },
-});
+  handler: async (ctx, args): Promise<{
+    sources: SourceCandidate[];
+    extracts: ResearchExtract[];
+    roundState: ResearchRoundState[];
+  }> => {
+    const plan = normalizePlan(args.plan);
+    const maxRounds = Math.min(plan.maxRounds || DEFAULT_MAX_ROUNDS, DEFAULT_MAX_ROUNDS);
+    const sourcesByKey = new Map<string, Omit<SourceCandidate, "citationNumber">>();
+    const extractsByKey = new Map<string, ResearchExtract>();
+    const roundState: ResearchRoundState[] = [];
+    let gapAssessment = `Initial plan: ${plan.sufficiencyCriteria.join("; ")}`;
+    let sufficiencyStatus: SufficiencyStatus = "unknown";
 
-export const readExtract = internalAction({
-  args: { ...workflowArgs(), plan: v.any(), sources: v.array(sourceRuntimeValidator()) },
-  handler: async (ctx, args) => {
-    await ensureNotCanceled(ctx, args.runId);
     await ctx.runMutation(internal.agent.deepResearch.markStep, {
       runId: args.runId,
       ownerUserId: args.ownerUserId,
-      stepKey: "readExtract",
+      stepKey: "retrieveSources",
       status: "running",
     });
-    const extracts = args.sources.map((source) => ({
-      citationNumber: source.citationNumber,
-      title: source.title,
-      locator: source.locator,
-      evidence: source.snippet,
-    }));
-    await ctx.runMutation(internal.agent.deepResearch.markStep, {
-      runId: args.runId,
-      ownerUserId: args.ownerUserId,
-      stepKey: "readExtract",
-      status: "completed",
-      summary: `${extracts.length} kutipan siap dipakai`,
-    });
-    return extracts;
+
+    for (let round = 1; round <= maxRounds; round += 1) {
+      await ensureNotCanceled(ctx, args.runId);
+      const query = await chooseNextQuery(ctx, {
+        prompt: args.prompt,
+        plan,
+        round,
+        previousSources: [...sourcesByKey.values()],
+        previousExtracts: [...extractsByKey.values()],
+        gapAssessment,
+      });
+      await ctx.runMutation(internal.agent.deepResearch.recordRunEvent, {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+        eventType: "query",
+        round,
+        title: `Round ${round} query`,
+        summary: query,
+      });
+
+      const corpus = await searchCorpus(ctx, args.ownerUserId, query);
+      const externalNeeded = corpus.length < 4 || round > 1;
+      const [arxiv, jina] = externalNeeded
+        ? await Promise.all([
+            searchArxivProvider(ctx, {
+              ownerUserId: args.ownerUserId,
+              query,
+              limit: 4,
+            }),
+            jinaSearchWeb(ctx, {
+              ownerUserId: args.ownerUserId,
+              query,
+              limit: 5,
+            }),
+          ])
+        : [[], []];
+      for (const source of dedupeSources([...corpus, ...arxiv, ...jina])) {
+        if (sourcesByKey.size >= MAX_SOURCES_PER_RUN) {
+          break;
+        }
+        sourcesByKey.set(sourceKey(source), source);
+      }
+
+      await ctx.runMutation(internal.agent.deepResearch.recordRunEvent, {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+        eventType: "search",
+        round,
+        title: `Round ${round} discovery`,
+        summary: `${corpus.length} corpus, ${arxiv.length} arXiv, ${jina.length} Jina results`,
+      });
+
+      await ctx.runMutation(internal.agent.deepResearch.markStep, {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        stepKey: "retrieveSources",
+        status: "completed",
+        summary: `${sourcesByKey.size} sumber ditemukan`,
+        sourceCount: sourcesByKey.size,
+      });
+      await ctx.runMutation(internal.agent.deepResearch.markStep, {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        stepKey: "readExtract",
+        status: "running",
+      });
+
+      const numberedSources = numberSources([...sourcesByKey.values()]);
+      const selected = await selectSourcesToRead(ctx, args.ownerUserId, query, numberedSources);
+      const extracts = await readAndExtract(ctx, {
+        ownerUserId: args.ownerUserId,
+        runId: args.runId,
+        threadId: args.threadId,
+        query,
+        sources: selected,
+      });
+      for (const extract of extracts) {
+        if (extractsByKey.size >= MAX_EXTRACTS_PER_RUN) {
+          break;
+        }
+        extractsByKey.set(`${extract.sourceKey}:${extract.quote.slice(0, 80)}`, extract);
+      }
+
+      const assessment = await assessSufficiency(ctx, {
+        prompt: args.prompt,
+        plan,
+        round,
+        maxRounds,
+        sources: numberSources([...sourcesByKey.values()]),
+        extracts: [...extractsByKey.values()],
+        previousGapAssessment: gapAssessment,
+      });
+      gapAssessment = assessment.gapAssessment;
+      sufficiencyStatus = assessment.sufficiencyStatus;
+
+      await ctx.runMutation(internal.agent.deepResearch.recordRunEvent, {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+        eventType: "gap",
+        round,
+        title: `Round ${round} sufficiency`,
+        summary: gapAssessment,
+        metadataJson: JSON.stringify({ sufficiencyStatus }),
+      });
+      await ctx.runMutation(internal.agent.deepResearch.updateLoopProgress, {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        roundCount: round,
+        sufficiencyStatus,
+      });
+
+      const numberedAfterRead = numberSources([...sourcesByKey.values()]).map((source) => {
+        const read = selected.find((item) => sourceKey(item) === sourceKey(source));
+        return read ?? source;
+      });
+      roundState.push({
+        round,
+        query,
+        gapAssessment,
+        sufficiencyStatus,
+        stopReason: sufficiencyStatus === "sufficient" ? "sufficient_evidence" : undefined,
+        sources: numberedAfterRead,
+        extracts: [...extractsByKey.values()],
+      });
+      await ctx.runMutation(internal.agent.deepResearch.markStep, {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        stepKey: "readExtract",
+        status: "completed",
+        summary: `${extractsByKey.size} evidence extract siap dipakai`,
+      });
+      if (sufficiencyStatus === "sufficient") {
+        break;
+      }
+    }
+
+    if (sufficiencyStatus !== "sufficient" && roundState.length >= maxRounds) {
+      sufficiencyStatus = "budget_exhausted";
+      await ctx.runMutation(internal.agent.deepResearch.updateLoopProgress, {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        roundCount: roundState.length,
+        sufficiencyStatus,
+      });
+    }
+
+    return {
+      sources: numberSources([...sourcesByKey.values()]),
+      extracts: [...extractsByKey.values()],
+      roundState,
+    };
   },
 });
 
@@ -383,6 +570,7 @@ export const synthesize = internalAction({
     plan: v.any(),
     sources: v.array(sourceRuntimeValidator()),
     extracts: v.any(),
+    roundState: v.any(),
   },
   handler: async (ctx, args) => {
     await ensureNotCanceled(ctx, args.runId);
@@ -395,11 +583,20 @@ export const synthesize = internalAction({
     const sourceBlock = args.sources
       .map((source) => `[${source.citationNumber}] ${source.title}: ${source.snippet}`)
       .join("\n");
+    const extractBlock = normalizeExtracts(args.extracts)
+      .map((extract) => `[${extract.citationNumber}] ${extract.quote}`)
+      .join("\n");
     const result = await generateText({
       model: openai.chat(DEEP_MODEL),
       system:
-        "Write a source-grounded markdown research report. Cite every factual claim with persisted source numbers. If evidence is insufficient, keep that limitation visible.",
-      prompt: `Prompt:\n${args.prompt}\n\nSources:\n${sourceBlock}`,
+        "Write a source-grounded markdown research report. Cite every factual claim with persisted source numbers. Prefer accepted evidence extracts over snippets. If evidence is insufficient, keep that limitation visible and do not overstate certainty.",
+      prompt: [
+        `Prompt:\n${args.prompt}`,
+        `Research plan:\n${JSON.stringify(normalizePlan(args.plan), null, 2)}`,
+        `Round trace:\n${JSON.stringify(args.roundState, null, 2)}`,
+        `Accepted evidence extracts:\n${extractBlock || "No extracted evidence beyond snippets."}`,
+        `Sources:\n${sourceBlock}`,
+      ].join("\n\n"),
     });
     const markdown = result.text.trim();
     await ctx.runMutation(internal.agent.deepResearch.markStep, {
@@ -416,10 +613,38 @@ export const synthesize = internalAction({
   },
 });
 
-export const verifyCitations = internalAction({
+export const summarizeResearchResponse = internalAction({
+  args: {
+    ...workflowArgs(),
+    plan: v.any(),
+    markdown: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ensureNotCanceled(ctx, args.runId);
+    const result = await generateText({
+      model: openai.chat(DEEP_MODEL),
+      system: [
+        "Write the final chat response for a completed Deep Research run.",
+        "The full report is already saved as an artifact, so this message should be a concise natural summary of the research.",
+        "Do not force bullets, checklists, or a fixed template. Use natural paragraphs unless the content genuinely calls for a short list.",
+        "Keep it user-friendly for a non-technical reader. Mention important uncertainty or caveats when they matter.",
+        "Do not include implementation details about workflow, retries, tools, or database records.",
+      ].join(" "),
+      prompt: [
+        `Original user prompt:\n${args.prompt}`,
+        `Research plan:\n${JSON.stringify(normalizePlan(args.plan), null, 2)}`,
+        `Final audited report:\n${trimForSnippet(args.markdown, 16_000)}`,
+      ].join("\n\n"),
+    });
+    return result.text.trim() || buildPlainResponseSummary(args.markdown);
+  },
+});
+
+export const auditClaims = internalAction({
   args: {
     ...workflowArgs(),
     sources: v.array(sourceRuntimeValidator()),
+    extracts: v.any(),
     markdown: v.string(),
   },
   handler: async (ctx, args) => {
@@ -431,15 +656,19 @@ export const verifyCitations = internalAction({
       status: "running",
     });
     const cited = extractCitationNumbers(args.markdown);
-    const checks = splitClaims(args.markdown).slice(0, 12).map((claim) => {
-      const claimCitations = [...extractCitationNumbers(claim)];
-      const support: "supported" | "partial" | "unsupported" =
-        claimCitations.length > 0 && claimCitations.every((n) => cited.has(n))
-          ? "supported"
-          : claimCitations.length > 0
-            ? "partial"
-            : "unsupported";
-      return { claim, support, citationNumbers: claimCitations, evidence: evidenceText(support) };
+    const checks = auditClaimsAgainstEvidence(args.markdown, args.sources, normalizeExtracts(args.extracts));
+    const unsupported = checks.filter((check) => check.support === "unsupported");
+    const markdown = unsupported.length > 0
+      ? appendAuditCaveat(args.markdown, unsupported.map((check) => check.claim))
+      : args.markdown;
+    await ctx.runMutation(internal.agent.deepResearch.recordRunEvent, {
+      runId: args.runId,
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      eventType: "audit",
+      title: "Claim audit",
+      summary: `${checks.length} claims checked; ${unsupported.length} unsupported`,
+      metadataJson: JSON.stringify({ cited: [...cited] }),
     });
     await ctx.runMutation(internal.agent.deepResearch.markStep, {
       runId: args.runId,
@@ -448,7 +677,7 @@ export const verifyCitations = internalAction({
       status: "completed",
       summary: `${checks.length} klaim diperiksa`,
     });
-    return checks;
+    return { markdown, checks };
   },
 });
 
@@ -456,6 +685,7 @@ export const persistArtifact = internalMutation({
   args: {
     ...workflowArgs(),
     sources: v.array(sourceRuntimeValidator()),
+    extracts: v.any(),
     markdown: v.string(),
     checks: v.array(
       v.object({
@@ -499,6 +729,12 @@ export const persistArtifact = internalMutation({
       artifactId: report.artifactId,
       artifactVersionId: report.versionId,
     });
+    await persistExtractsForRun(ctx, {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      runId: args.runId,
+      extracts: normalizeExtracts(args.extracts),
+    });
     await persistCitationChecks(ctx, {
       ...args,
       artifactId: report.artifactId,
@@ -529,7 +765,7 @@ export const finalizeThread = internalMutation({
   args: {
     ...workflowArgs(),
     artifactId: v.id("artifacts"),
-    summary: v.string(),
+    responseSummary: v.string(),
   },
   handler: async (ctx, args) => {
     const run = await assertRunOwner(ctx, args.runId, args.ownerUserId);
@@ -546,7 +782,7 @@ export const finalizeThread = internalMutation({
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
       promptMessageId: args.promptMessageId,
-      content: `${args.summary}\n\nLaporan lengkap sudah tersimpan sebagai artefak.`,
+      content: args.responseSummary.trim(),
     });
     const artifact = await ctx.db.get("artifacts", args.artifactId);
     if (savedMessage.messageId && artifact?.currentVersionId) {
@@ -623,12 +859,92 @@ export const markStep = internalMutation({
   handler: async (ctx, args) => markStepMutation(ctx, args),
 });
 
+export const updateRunPlan = internalMutation({
+  args: {
+    runId: v.id("researchRuns"),
+    ownerUserId: v.string(),
+    promptSnapshot: v.string(),
+    maxRounds: v.number(),
+    budgetJson: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await assertRunOwner(ctx, args.runId, args.ownerUserId);
+    await ctx.db.patch("researchRuns", args.runId, {
+      promptSnapshot: args.promptSnapshot,
+      maxRounds: Math.min(Math.max(1, args.maxRounds), DEFAULT_MAX_ROUNDS),
+      budgetJson: args.budgetJson,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const updateLoopProgress = internalMutation({
+  args: {
+    runId: v.id("researchRuns"),
+    ownerUserId: v.string(),
+    roundCount: v.number(),
+    sufficiencyStatus: v.union(
+      v.literal("unknown"),
+      v.literal("insufficient"),
+      v.literal("partial"),
+      v.literal("sufficient"),
+      v.literal("budget_exhausted"),
+    ),
+  },
+  handler: async (ctx, args) => {
+    await assertRunOwner(ctx, args.runId, args.ownerUserId);
+    await ctx.db.patch("researchRuns", args.runId, {
+      roundCount: args.roundCount,
+      sufficiencyStatus: args.sufficiencyStatus,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const recordRunEvent = internalMutation({
+  args: {
+    runId: v.id("researchRuns"),
+    ownerUserId: v.string(),
+    threadId: v.string(),
+    eventType: v.union(
+      v.literal("plan"),
+      v.literal("gap"),
+      v.literal("query"),
+      v.literal("search"),
+      v.literal("read"),
+      v.literal("rerank"),
+      v.literal("audit"),
+      v.literal("status"),
+      v.literal("failure"),
+    ),
+    round: v.optional(v.number()),
+    title: v.string(),
+    summary: v.string(),
+    metadataJson: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await assertRunOwner(ctx, args.runId, args.ownerUserId);
+    await ctx.db.insert("researchRunEvents", {
+      ownerUserId: args.ownerUserId,
+      runId: args.runId,
+      threadId: args.threadId,
+      eventType: args.eventType,
+      round: args.round,
+      title: args.title,
+      summary: trimForSnippet(args.summary, 1_500),
+      metadataJson: args.metadataJson,
+      createdAt: Date.now(),
+    });
+  },
+});
+
 async function createRun(
   ctx: MutationCtx,
   args: {
     ownerUserId: string;
     threadId: string;
     promptMessageId: string;
+    prompt?: string;
     retryOfRunId?: Id<"researchRuns">;
   },
 ) {
@@ -637,7 +953,16 @@ async function createRun(
     ownerUserId: args.ownerUserId,
     threadId: args.threadId,
     promptMessageId: args.promptMessageId,
+    promptSnapshot: args.prompt ?? "",
     status: "queued",
+    roundCount: 0,
+    maxRounds: DEFAULT_MAX_ROUNDS,
+    sufficiencyStatus: "unknown",
+    budgetJson: JSON.stringify({
+      maxRounds: DEFAULT_MAX_ROUNDS,
+      maxSources: MAX_SOURCES_PER_RUN,
+      maxExtracts: MAX_EXTRACTS_PER_RUN,
+    }),
     artifactCount: 0,
     sourceCount: 0,
     citationCheckCount: 0,
@@ -693,8 +1018,9 @@ async function markStepMutation(
   const now = Date.now();
   const step = await ctx.db
     .query("researchRunSteps")
-    .withIndex("by_owner_run", (q) => q.eq("ownerUserId", args.ownerUserId).eq("runId", args.runId))
-    .filter((q) => q.eq(q.field("stepKey"), args.stepKey))
+    .withIndex("by_owner_run_and_step", (q) =>
+      q.eq("ownerUserId", args.ownerUserId).eq("runId", args.runId).eq("stepKey", args.stepKey),
+    )
     .unique();
   if (step) {
     await ctx.db.patch("researchRunSteps", step._id, {
@@ -801,6 +1127,8 @@ function sourceRuntimeValidator() {
   return v.object({
     citationNumber: v.number(),
     origin: v.union(v.literal("corpus"), v.literal("web"), v.literal("arxiv"), v.literal("doi")),
+    provider: v.optional(v.string()),
+    providerRequestId: v.optional(v.string()),
     evidenceStrength: v.union(v.literal("strong"), v.literal("medium"), v.literal("weak")),
     title: v.string(),
     locator: v.string(),
@@ -808,28 +1136,286 @@ function sourceRuntimeValidator() {
     doi: v.optional(v.string()),
     arxivId: v.optional(v.string()),
     snippet: v.string(),
+    readStatus: v.optional(v.union(v.literal("not_needed"), v.literal("ready"), v.literal("failed"))),
+    readError: v.optional(v.string()),
+    rerankScore: v.optional(v.number()),
+    metadataJson: v.optional(v.string()),
     corpusSourceId: v.optional(v.id("corpusSources")),
   });
 }
 
-function normalizeQueries(plan: unknown, prompt: string) {
-  const queries = (plan as { sourceQueries?: unknown })?.sourceQueries;
-  if (Array.isArray(queries)) {
-    return queries.filter((query): query is string => typeof query === "string" && query.trim().length > 0);
+function normalizePlan(value: unknown): ResearchPlan {
+  const plan = isRecord(value) ? value : {};
+  return {
+    title: stringValue(plan.title) || "Deep Research Report",
+    questions: stringArray(plan.questions).slice(0, 5),
+    sourceStrategy: stringValue(plan.sourceStrategy) || "Search the user corpus first, then use Jina web discovery for gaps.",
+    reportIntent: stringValue(plan.reportIntent) || "Produce a cited research report.",
+    sufficiencyCriteria: stringArray(plan.sufficiencyCriteria).slice(0, 6),
+    initialQueries: stringArray(plan.initialQueries).slice(0, 5),
+    maxRounds: clampRoundCount(numberValue(plan.maxRounds) ?? DEFAULT_MAX_ROUNDS),
+  };
+}
+
+async function chooseNextQuery(
+  _ctx: ActionCtx,
+  args: {
+    prompt: string;
+    plan: ResearchPlan;
+    round: number;
+    previousSources: Array<Omit<SourceCandidate, "citationNumber">>;
+    previousExtracts: ResearchExtract[];
+    gapAssessment: string;
+  },
+) {
+  if (args.round === 1) {
+    return args.plan.initialQueries[0] || args.prompt;
   }
-  return [prompt];
+  const object = await generateObject({
+    model: openai.chat(DEEP_MODEL),
+    schema: z.object({
+      query: z.string().min(1).max(500),
+      rationale: z.string(),
+    }),
+    prompt: [
+      "Choose one next research query based on evidence gaps. Do not repeat earlier broad queries.",
+      `Prompt: ${args.prompt}`,
+      `Plan: ${JSON.stringify(args.plan)}`,
+      `Previous source titles: ${args.previousSources.map((source) => source.title).join("; ")}`,
+      `Previous extracts: ${args.previousExtracts.map((extract) => extract.quote).join("\n")}`,
+      `Gap assessment: ${args.gapAssessment}`,
+    ].join("\n\n"),
+  });
+  return object.object.query.trim() || args.prompt;
+}
+
+async function searchCorpus(ctx: ActionCtx, ownerUserId: string, query: string) {
+  const result = await corpusRag.search(ctx, {
+    namespace: userNamespace(ownerUserId),
+    query,
+    limit: 5,
+    vectorScoreThreshold: 0.35,
+  });
+  return result.entries.map((entry) => ({
+    origin: "corpus" as const,
+    provider: "convex_rag",
+    readStatus: "not_needed" as const,
+    evidenceStrength: "strong" as const,
+    title: entry.metadata?.title ?? entry.title ?? "Corpus source",
+    locator: entry.metadata?.locator ?? entry.entryId,
+    url: entry.metadata?.url,
+    doi: entry.metadata?.doi,
+    arxivId: entry.metadata?.arxivId,
+    snippet: trimForSnippet(entry.text || result.text || "Corpus match", 1_500),
+    corpusSourceId: entry.metadata?.corpusSourceId as Id<"corpusSources"> | undefined,
+  }));
+}
+
+async function selectSourcesToRead(
+  ctx: ActionCtx,
+  ownerUserId: string,
+  query: string,
+  sources: SourceCandidate[],
+) {
+  const documents = sources.map((source) => ({
+    sourceKey: sourceKey(source),
+    title: source.title,
+    text: source.snippet,
+  }));
+  const reranked = await jinaRerank(ctx, {
+    ownerUserId,
+    query,
+    documents,
+    topN: Math.min(6, documents.length),
+  });
+  const byKey = new Map(sources.map((source) => [sourceKey(source), source]));
+  return reranked
+    .map((ranked): SourceCandidate | null => {
+      const source = byKey.get(ranked.sourceKey);
+      return source ? { ...source, rerankScore: ranked.score } : null;
+    })
+    .filter((source): source is SourceCandidate => Boolean(source));
+}
+
+async function readAndExtract(
+  ctx: ActionCtx,
+  args: {
+    ownerUserId: string;
+    runId: Id<"researchRuns">;
+    threadId: string;
+    query: string;
+    sources: SourceCandidate[];
+  },
+) {
+  const extracts: ResearchExtract[] = [];
+  for (const source of args.sources) {
+    const key = sourceKey(source);
+    const read =
+      source.url && source.origin !== "corpus"
+        ? await jinaReadUrl(ctx, { ownerUserId: args.ownerUserId, url: source.url })
+        : {
+            ok: true,
+            title: source.title,
+            url: source.url ?? source.locator,
+            markdown: source.snippet,
+            snippet: source.snippet,
+          };
+    const text = read.ok ? read.markdown || read.snippet : source.snippet;
+    const quote = trimForSnippet(text, 1_400);
+    extracts.push({
+      sourceKey: key,
+      citationNumber: source.citationNumber,
+      title: read.title || source.title,
+      locator: source.url ?? source.locator,
+      quote,
+      relevance: source.rerankScore && source.rerankScore > 0.6 ? "high" : "medium",
+      notes: read.ok ? undefined : read.failureReason,
+      rerankScore: source.rerankScore,
+    });
+    await ctx.runMutation(internal.agent.deepResearch.recordRunEvent, {
+      runId: args.runId,
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      eventType: "read",
+      title: read.title || source.title,
+      summary: read.ok ? trimForSnippet(quote, 300) : `Read failed: ${read.failureReason}`,
+      metadataJson: JSON.stringify({ sourceKey: key, url: source.url, ok: read.ok }),
+    });
+  }
+  return extracts;
+}
+
+async function assessSufficiency(
+  _ctx: unknown,
+  args: {
+    prompt: string;
+    plan: ResearchPlan;
+    round: number;
+    maxRounds: number;
+    sources: SourceCandidate[];
+    extracts: ResearchExtract[];
+    previousGapAssessment: string;
+  },
+) {
+  if (args.extracts.length < 3 && args.round < args.maxRounds) {
+    return {
+      sufficiencyStatus: "insufficient" as const,
+      gapAssessment: "Need more evidence extracts before synthesis.",
+    };
+  }
+  const object = await generateObject({
+    model: openai.chat(DEEP_MODEL),
+    schema: z.object({
+      sufficiencyStatus: z.enum(["insufficient", "partial", "sufficient"]),
+      gapAssessment: z.string(),
+    }),
+    prompt: [
+      "Assess whether the evidence is sufficient to write a useful report. Consider bias, contradictions, and missing angles.",
+      `Prompt: ${args.prompt}`,
+      `Criteria: ${args.plan.sufficiencyCriteria.join("; ")}`,
+      `Previous assessment: ${args.previousGapAssessment}`,
+      `Sources: ${args.sources.map((source) => `[${source.citationNumber}] ${source.title}: ${source.snippet}`).join("\n")}`,
+      `Extracts: ${args.extracts.map((extract) => `[${extract.citationNumber}] ${extract.quote}`).join("\n")}`,
+    ].join("\n\n"),
+  });
+  return {
+    sufficiencyStatus: object.object.sufficiencyStatus,
+    gapAssessment: object.object.gapAssessment,
+  };
 }
 
 function dedupeSources(sources: Array<Omit<SourceCandidate, "citationNumber">>) {
   const seen = new Set<string>();
   return sources.filter((source) => {
-    const key = (source.doi ?? source.arxivId ?? source.url ?? source.locator).toLowerCase();
+    const key = sourceKey(source);
     if (seen.has(key)) {
       return false;
     }
     seen.add(key);
     return true;
   });
+}
+
+function sourceKey(source: Pick<SourceCandidate, "doi" | "arxivId" | "url" | "locator" | "title">) {
+  return (source.doi ?? source.arxivId ?? source.url ?? source.locator ?? source.title).toLowerCase();
+}
+
+function numberSources(sources: Array<Omit<SourceCandidate, "citationNumber">>): SourceCandidate[] {
+  return sources.slice(0, MAX_SOURCES_PER_RUN).map((source, index) => ({
+    ...source,
+    citationNumber: index + 1,
+  }));
+}
+
+function normalizeExtracts(value: unknown): ResearchExtract[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((item) => {
+    if (!isRecord(item)) {
+      return [];
+    }
+    const quote = stringValue(item.quote);
+    const title = stringValue(item.title);
+    const locator = stringValue(item.locator);
+    const sourceKeyValue = stringValue(item.sourceKey);
+    const citationNumber = numberValue(item.citationNumber);
+    if (!quote || !title || !locator || !sourceKeyValue || citationNumber === undefined) {
+      return [];
+    }
+    return [
+      {
+        sourceKey: sourceKeyValue,
+        citationNumber,
+        title,
+        locator,
+        quote,
+        relevance:
+          item.relevance === "high" || item.relevance === "low" ? item.relevance : "medium",
+        notes: stringValue(item.notes),
+        rerankScore: numberValue(item.rerankScore),
+      },
+    ];
+  });
+}
+
+function auditClaimsAgainstEvidence(
+  markdown: string,
+  sources: SourceCandidate[],
+  extracts: ResearchExtract[],
+) {
+  const sourceNumbers = new Set(sources.map((source) => source.citationNumber));
+  return splitClaims(markdown).slice(0, 16).map((claim) => {
+    const claimCitations = [...extractCitationNumbers(claim)].filter((number) => sourceNumbers.has(number));
+    const relevantEvidence = extracts.filter((extract) =>
+      claimCitations.includes(extract.citationNumber),
+    );
+    const support: "supported" | "partial" | "unsupported" =
+      claimCitations.length === 0
+        ? "unsupported"
+        : relevantEvidence.length > 0
+          ? "supported"
+          : "partial";
+    return {
+      claim,
+      support,
+      citationNumbers: claimCitations,
+      evidence: relevantEvidence.map((extract) => extract.quote).join("\n") || evidenceText(support),
+    };
+  });
+}
+
+function appendAuditCaveat(markdown: string, unsupportedClaims: string[]) {
+  if (unsupportedClaims.length === 0) {
+    return markdown;
+  }
+  const caveat = [
+    "",
+    "## Audit Notes",
+    "The following claims were not fully supported by accepted evidence and should be treated as caveated:",
+    ...unsupportedClaims.slice(0, 6).map((claim) => `- ${claim}`),
+  ].join("\n");
+  return `${markdown.trim()}\n${caveat}`;
 }
 
 function extractCitationNumbers(text: string) {
@@ -843,14 +1429,55 @@ function splitClaims(markdown: string) {
     .filter((claim) => claim.length > 20);
 }
 
+function buildPlainResponseSummary(markdown: string) {
+  const title = markdown.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? "Ringkasan riset";
+  const sentences = markdown
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/[>*_`|]/g, "")
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length > 40)
+    .slice(0, 3);
+
+  return [`## ${title}`, "", sentences.join(" ")].join("\n").trim();
+}
+
 function evidenceText(support: "supported" | "partial" | "unsupported") {
   if (support === "supported") {
-    return "Claim includes persisted citation markers.";
+    return "Claim has matching accepted evidence.";
   }
   if (support === "partial") {
-    return "Claim has citations but support should be reviewed.";
+    return "Claim has persisted citation markers but no accepted extract match.";
   }
   return "No persisted citation marker found for this claim.";
+}
+
+function isWorkflowAlreadyStoppedError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /Workflow not running|already (completed|canceled|failed)|not found/i.test(message);
+}
+
+function stringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value : undefined;
+}
+
+function numberValue(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function clampRoundCount(value: number) {
+  return Math.min(Math.max(1, Math.floor(value)), DEFAULT_MAX_ROUNDS);
 }
 
 async function persistSourcesForRun(
@@ -875,6 +1502,8 @@ async function persistSourcesForRun(
       artifactVersionId: args.artifactVersionId,
       citationNumber: source.citationNumber,
       origin: source.origin,
+      provider: source.provider,
+      providerRequestId: source.providerRequestId,
       evidenceStrength: source.evidenceStrength,
       title: source.title,
       locator: source.locator,
@@ -882,12 +1511,45 @@ async function persistSourcesForRun(
       doi: source.doi,
       arxivId: source.arxivId,
       snippet: source.snippet,
+      readStatus: source.readStatus,
+      readError: source.readError,
+      rerankScore: source.rerankScore,
+      metadataJson: source.metadataJson,
       corpusSourceId: source.corpusSourceId,
       createdAt: now,
     });
     ids.set(source.citationNumber, sourceId);
   }
   return ids;
+}
+
+async function persistExtractsForRun(
+  ctx: MutationCtx,
+  args: {
+    ownerUserId: string;
+    threadId: string;
+    runId: Id<"researchRuns">;
+    extracts: ResearchExtract[];
+  },
+) {
+  const now = Date.now();
+  await Promise.all(
+    args.extracts.slice(0, MAX_EXTRACTS_PER_RUN).map((extract) =>
+      ctx.db.insert("researchExtracts", {
+        ownerUserId: args.ownerUserId,
+        runId: args.runId,
+        threadId: args.threadId,
+        sourceKey: extract.sourceKey,
+        citationNumber: extract.citationNumber,
+        title: extract.title,
+        locator: extract.locator,
+        quote: extract.quote,
+        relevance: extract.relevance,
+        notes: extract.notes,
+        createdAt: now,
+      }),
+    ),
+  );
 }
 
 async function persistCitationChecks(

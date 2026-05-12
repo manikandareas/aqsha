@@ -396,7 +396,7 @@ function ArtifactReader({
 
 function ArtifactMarkdown({ body }: { body: string }) {
   return (
-    <div className="artifact-prose">
+    <div className="aqsha-prose">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{

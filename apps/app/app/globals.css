@@ -138,10 +138,14 @@
 
   html {
     @apply h-full bg-background font-sans;
+    width: 100%;
+    overflow-x: hidden;
   }
 
   body {
     @apply min-h-full bg-background text-foreground;
+    width: 100%;
+    overflow-x: hidden;
   }
 
   button:not(:disabled),
@@ -162,120 +166,133 @@
   box-shadow: var(--shadow-soft-card);
 }
 
-.artifact-prose {
+:where(.aqsha-prose, .artifact-prose) {
   color: var(--foreground);
   font-size: 16px;
   line-height: 1.72;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
-.artifact-prose > :first-child {
+:where(.aqsha-prose, .artifact-prose) > :first-child {
   margin-top: 0;
 }
 
-.artifact-prose > :last-child {
+:where(.aqsha-prose, .artifact-prose) > :last-child {
   margin-bottom: 0;
 }
 
-.artifact-prose h1,
-.artifact-prose h2,
-.artifact-prose h3,
-.artifact-prose h4 {
+:where(.aqsha-prose, .artifact-prose) h1,
+:where(.aqsha-prose, .artifact-prose) h2,
+:where(.aqsha-prose, .artifact-prose) h3,
+:where(.aqsha-prose, .artifact-prose) h4 {
   color: var(--foreground);
   font-family: var(--font-nunito), var(--font-inter), sans-serif;
   font-weight: 800;
   letter-spacing: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
-.artifact-prose h1 {
+:where(.aqsha-prose, .artifact-prose) h1 {
   margin: 2rem 0 1rem;
   font-size: 2rem;
   line-height: 1.15;
 }
 
-.artifact-prose h2 {
+:where(.aqsha-prose, .artifact-prose) h2 {
   margin: 2rem 0 0.85rem;
   font-size: 1.55rem;
   line-height: 1.2;
 }
 
-.artifact-prose h3 {
+:where(.aqsha-prose, .artifact-prose) h3 {
   margin: 1.6rem 0 0.7rem;
   font-size: 1.18rem;
   line-height: 1.3;
 }
 
-.artifact-prose h4 {
+:where(.aqsha-prose, .artifact-prose) h4 {
   margin: 1.25rem 0 0.55rem;
   font-size: 1rem;
   line-height: 1.35;
 }
 
-.artifact-prose p {
+:where(.aqsha-prose, .artifact-prose) p {
   margin: 0 0 1.05rem;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
-.artifact-prose li > p {
+:where(.aqsha-prose, .artifact-prose) li > p {
   margin: 0.25rem 0;
 }
 
-.artifact-prose ul,
-.artifact-prose ol {
+:where(.aqsha-prose, .artifact-prose) ul,
+:where(.aqsha-prose, .artifact-prose) ol {
   margin: 0 0 1.15rem;
   padding-left: 1.35rem;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
-.artifact-prose ul {
+:where(.aqsha-prose, .artifact-prose) ul {
   list-style: disc;
 }
 
-.artifact-prose ol {
+:where(.aqsha-prose, .artifact-prose) ol {
   list-style: decimal;
 }
 
-.artifact-prose li {
+:where(.aqsha-prose, .artifact-prose) li {
   margin: 0.35rem 0;
   padding-left: 0.15rem;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
-.artifact-prose li > ul,
-.artifact-prose li > ol {
+:where(.aqsha-prose, .artifact-prose) li > ul,
+:where(.aqsha-prose, .artifact-prose) li > ol {
   margin: 0.35rem 0 0.45rem;
 }
 
-.artifact-prose strong {
+:where(.aqsha-prose, .artifact-prose) strong {
   color: var(--foreground);
   font-weight: 700;
 }
 
-.artifact-prose em {
+:where(.aqsha-prose, .artifact-prose) em {
   font-style: italic;
 }
 
-.artifact-prose a {
+:where(.aqsha-prose, .artifact-prose) a {
   color: var(--primary);
   text-decoration-line: underline;
   text-decoration-color: color-mix(in srgb, var(--primary) 35%, transparent);
   text-underline-offset: 4px;
+  overflow-wrap: anywhere;
 }
 
-.artifact-prose a:hover {
+:where(.aqsha-prose, .artifact-prose) a:hover {
   text-decoration-color: var(--primary);
 }
 
-.artifact-prose blockquote {
+:where(.aqsha-prose, .artifact-prose) blockquote {
   margin: 1.35rem 0;
   border-left: 2px solid var(--border);
   padding-left: 1rem;
   color: var(--muted-foreground);
 }
 
-.artifact-prose hr {
+:where(.aqsha-prose, .artifact-prose) hr {
   margin: 2rem 0;
   border: 0;
   border-top: 1px solid var(--border);
 }
 
-.artifact-prose :not(pre) > code {
+:where(.aqsha-prose, .artifact-prose) :not(pre) > code {
   border-radius: 5px;
   background: var(--muted);
   padding: 0.12rem 0.35rem;
@@ -284,8 +301,9 @@
   color: var(--foreground);
 }
 
-.artifact-prose pre {
+:where(.aqsha-prose, .artifact-prose) pre {
   margin: 1.35rem 0;
+  max-width: 100%;
   overflow-x: auto;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
@@ -295,16 +313,17 @@
   line-height: 1.65;
 }
 
-.artifact-prose pre code {
+:where(.aqsha-prose, .artifact-prose) pre code {
   background: transparent;
   padding: 0;
   font-family: var(--font-jetbrains-mono), monospace;
   color: var(--foreground);
 }
 
-.artifact-prose table {
+:where(.aqsha-prose, .artifact-prose) table {
   display: block;
   width: 100%;
+  max-width: 100%;
   min-width: 0;
   margin: 1.4rem 0;
   overflow-x: auto;
@@ -313,39 +332,72 @@
   line-height: 1.45;
 }
 
-.artifact-prose thead {
+:where(.aqsha-prose, .artifact-prose) thead {
   background: var(--muted);
 }
 
-.artifact-prose th,
-.artifact-prose td {
+:where(.aqsha-prose, .artifact-prose) th,
+:where(.aqsha-prose, .artifact-prose) td {
   border: 1px solid var(--border);
   padding: 0.55rem 0.7rem;
   vertical-align: top;
 }
 
-.artifact-prose th {
+:where(.aqsha-prose, .artifact-prose) th {
   color: var(--foreground);
   font-size: 12px;
   font-weight: 700;
   text-align: left;
 }
 
-.artifact-prose td p,
-.artifact-prose th p {
+:where(.aqsha-prose, .artifact-prose) td p,
+:where(.aqsha-prose, .artifact-prose) th p {
   margin: 0;
 }
 
-.artifact-prose td ul,
-.artifact-prose td ol {
+:where(.aqsha-prose, .artifact-prose) td ul,
+:where(.aqsha-prose, .artifact-prose) td ol {
   margin: 0.25rem 0;
   padding-left: 1rem;
 }
 
-.artifact-prose img {
+:where(.aqsha-prose, .artifact-prose) img {
   max-width: 100%;
   height: auto;
   margin: 1.5rem 0;
+}
+
+.aqsha-prose-message {
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
+}
+
+.aqsha-prose-message h1 {
+  font-size: 1.2rem;
+}
+
+.aqsha-prose-message h2 {
+  font-size: 1.04rem;
+}
+
+.aqsha-prose-message h3 {
+  font-size: 0.95rem;
+}
+
+.aqsha-prose-message h1,
+.aqsha-prose-message h2,
+.aqsha-prose-message h3 {
+  margin: 1.25rem 0 0.55rem;
+}
+
+.aqsha-prose-message table {
+  font-size: 11.5px;
 }
 
 .stream-caret {

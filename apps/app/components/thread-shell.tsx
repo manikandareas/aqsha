@@ -4,7 +4,7 @@ import {
   optimisticallySendMessage,
   useUIMessages,
 } from "@convex-dev/agent/react";
-import { useMutation, useQuery } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import {
   ArrowUpIcon,
   ChevronDownIcon,
@@ -20,8 +20,6 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { api } from "@aqsha/convex/api";
 import {
   Conversation,
@@ -30,15 +28,9 @@ import {
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
 import {
-  InlineCitation,
-  InlineCitationCard,
-  InlineCitationCardBody,
-  InlineCitationCardTrigger,
-  InlineCitationText,
-} from "@/components/ai-elements/inline-citation";
-import {
   Message,
   MessageContent,
+  MessageResponse,
 } from "@/components/ai-elements/message";
 import {
   PromptInput,
@@ -158,13 +150,19 @@ type ResearchArtifact = {
 
 export function ThreadShell({ threadId }: { threadId?: string }) {
   const router = useRouter();
-  const viewer = useQuery(api.auth.getCurrentUser);
-  const threadPage = useQuery(api.agent.threads.list, {
-    paginationOpts: { cursor: null, numItems: 50 },
-  });
+  const { isAuthenticated } = useConvexAuth();
+  const viewer = useQuery(api.auth.getCurrentUser, isAuthenticated ? {} : "skip");
+  const threadPage = useQuery(
+    api.agent.threads.list,
+    isAuthenticated
+      ? {
+          paginationOpts: { cursor: null, numItems: 50 },
+        }
+      : "skip",
+  );
   const selectedThread = useQuery(
     api.agent.threads.get,
-    threadId ? { threadId } : "skip",
+    isAuthenticated && threadId ? { threadId } : "skip",
   );
   const createThread = useMutation(api.agent.threads.create);
   const sendMessage = useMutation(api.agent.messages.send).withOptimisticUpdate(
@@ -175,18 +173,21 @@ export function ThreadShell({ threadId }: { threadId?: string }) {
       });
     },
   );
-  const rateStatus = useQuery(api.agent.rateLimits.getSendStatus);
+  const rateStatus = useQuery(
+    api.agent.rateLimits.getSendStatus,
+    isAuthenticated ? {} : "skip",
+  );
   const sources = useQuery(
     api.agent.sources.list,
-    threadId ? { threadId } : "skip",
+    isAuthenticated && threadId ? { threadId } : "skip",
   );
   const runs = useQuery(
     api.agent.deepResearch.listForThread,
-    threadId ? { threadId } : "skip",
+    isAuthenticated && threadId ? { threadId } : "skip",
   ) as ResearchRun[] | undefined;
   const artifacts = useQuery(
     api.agent.artifacts.list,
-    threadId ? { threadId } : "skip",
+    isAuthenticated && threadId ? { threadId } : "skip",
   ) as ResearchArtifact[] | undefined;
   const cancelRun = useMutation(api.agent.deepResearch.cancel);
   const retryRun = useMutation(api.agent.deepResearch.retry);
@@ -201,7 +202,9 @@ export function ThreadShell({ threadId }: { threadId?: string }) {
   const selectedArtifactId = activeArtifactId ?? artifacts?.[0]?._id ?? null;
   const activeArtifact = useQuery(
     api.agent.artifacts.get,
-    selectedArtifactId ? { artifactId: selectedArtifactId as never } : "skip",
+    isAuthenticated && selectedArtifactId
+      ? { artifactId: selectedArtifactId as never }
+      : "skip",
   ) as ResearchArtifact | null | undefined;
   const threads = threadPage?.page ?? [];
   const title = threadId
@@ -247,6 +250,14 @@ export function ThreadShell({ threadId }: { threadId?: string }) {
     setSeenArtifactCount(artifactCount);
   };
 
+  const handleCancelRun = async (runId: string) => {
+    try {
+      await cancelRun({ runId: runId as never });
+    } catch (error) {
+      console.error("Failed to cancel deep research run", error);
+    }
+  };
+
   return (
     <SidebarProvider
       style={
@@ -255,6 +266,7 @@ export function ThreadShell({ threadId }: { threadId?: string }) {
           "--sidebar-width-mobile": "17.5rem",
         } as CSSProperties
       }
+      className="h-svh max-h-svh overflow-hidden"
     >
       <ThreadShellLayout
         viewer={viewer}
@@ -279,7 +291,7 @@ export function ThreadShell({ threadId }: { threadId?: string }) {
         onRightPanelOpenChange={handleRightPanelOpenChange}
         onRightPanelTabChange={handleRightPanelTabChange}
         onOpenArtifact={handleOpenArtifact}
-        onCancelRun={(runId) => cancelRun({ runId: runId as never })}
+        onCancelRun={handleCancelRun}
         onRetryRun={(runId) => retryRun({ runId: runId as never })}
       />
     </SidebarProvider>
@@ -372,7 +384,7 @@ function ThreadShellLayout({
         isCreating={isCreating}
         onCreateThread={onCreateThread}
       />
-      <SidebarInset className="bg-background">
+      <SidebarInset className="h-svh min-h-0 min-w-0 overflow-hidden bg-background">
         <SidebarProvider
           open={rightPanelOpen}
           onOpenChange={onRightPanelOpenChange}
@@ -382,16 +394,16 @@ function ThreadShellLayout({
               "--sidebar-width-mobile": "34rem",
             } as CSSProperties
           }
-          className="min-h-0 flex-1"
+          className="h-full min-h-0 min-w-0 flex-1 overflow-hidden"
         >
-          <SidebarInset className="bg-background">
+          <SidebarInset className="h-full min-h-0 min-w-0 overflow-hidden bg-background">
             <ThreadHeader
               title={title}
               showLeftTrigger={!isLeftSidebarOpen}
               onToggleLeftSidebar={leftSidebar.toggleSidebar}
               showRightTrigger={hasResearchPayload}
             />
-            <main className="flex min-h-0 flex-1 flex-col">
+            <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
               {threadId && selectedThread === null ? (
                 <AccessDeniedState />
               ) : (
@@ -532,9 +544,10 @@ function ChatThreadState({
   onCancelRun: (runId: string) => Promise<unknown>;
   onRetryRun: (runId: string) => Promise<unknown>;
 }) {
+  const { isAuthenticated } = useConvexAuth();
   const messages = useUIMessages(
     api.agent.messages.list,
-    threadId ? { threadId } : "skip",
+    isAuthenticated && threadId ? { threadId } : "skip",
     { initialNumItems: 30, stream: true },
   );
   const sortedMessages = useMemo(
@@ -552,33 +565,42 @@ function ChatThreadState({
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-background">
-      <Conversation className="min-h-0 flex-1">
-        <ConversationContent className="gap-4 px-5 pb-28 pt-4 sm:px-8 lg:pt-6">
-          <div className="flex w-full flex-col gap-4">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
+      <Conversation className="min-h-0 min-w-0 flex-1 overflow-x-hidden">
+        <ConversationContent className="gap-6 overflow-x-hidden px-5 pb-6 pt-4 sm:px-8 lg:pt-6">
+          <div className="flex w-full min-w-0 flex-col overflow-x-hidden">
             {isLoading ? (
               <CenteredLoading label="Memuat thread..." />
             ) : hasMessages || runs.length > 0 ? (
               <>
-                {interleavedEntries.map((entry) =>
-                  entry.kind === "run" ? (
-                    <DeepRunBlock
-                      key={entry.run._id}
-                      run={entry.run}
-                      artifacts={artifacts ?? []}
-                      onCancelRun={onCancelRun}
-                      onRetryRun={onRetryRun}
-                    />
-                  ) : (
-                    <MessageRow
-                      key={entry.message.key ?? entry.message.id}
-                      message={entry.message}
-                      sources={sources}
-                      onCitationClick={onCitationClick}
-                      onOpenArtifact={onOpenArtifact}
-                    />
-                  ),
-                )}
+                {interleavedEntries.map((entry, index) => {
+                  const previous = interleavedEntries[index - 1];
+                  return (
+                    <div
+                      key={interleavedEntryKey(entry)}
+                      className={cn(
+                        "min-w-0",
+                        index === 0 ? "mt-0" : entryGapClass(previous, entry),
+                      )}
+                    >
+                      {entry.kind === "run" ? (
+                        <DeepRunBlock
+                          run={entry.run}
+                          artifacts={artifacts ?? []}
+                          onCancelRun={onCancelRun}
+                          onRetryRun={onRetryRun}
+                        />
+                      ) : (
+                        <MessageRow
+                          message={entry.message}
+                          sources={sources}
+                          onCitationClick={onCitationClick}
+                          onOpenArtifact={onOpenArtifact}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
               </>
             ) : messages.status === "LoadingFirstPage" && threadId ? (
               <CenteredLoading label="Memuat pesan..." />
@@ -591,7 +613,7 @@ function ChatThreadState({
         </ConversationContent>
         <ConversationScrollButton className="bottom-4 size-8 border-border/70 bg-card/85 text-muted-foreground shadow-none" />
       </Conversation>
-      <div className="sticky bottom-0 bg-background/92 px-4 pb-4 pt-2 backdrop-blur sm:px-8">
+      <div className="shrink-0 min-w-0 overflow-x-hidden bg-background/92 px-4 pb-4 pt-2 backdrop-blur sm:px-8">
         <div className="mx-auto w-full max-w-3xl">
           <Composer
             threadId={threadId}
@@ -624,10 +646,6 @@ function MessageRow({
     () => getSourcesForMessage(message, text, sources),
     [message, text, sources],
   );
-  const citedNumbers = useMemo(
-    () => new Set(messageSources.map((source) => source.citationNumber)),
-    [messageSources],
-  );
   const messageArtifacts = useQuery(
     api.agent.artifacts.listForMessage,
     !isUser && message.id ? { messageId: message.id } : "skip",
@@ -635,8 +653,8 @@ function MessageRow({
 
   if (isUser) {
     return (
-      <div className="flex w-full justify-end">
-        <div className="max-w-[560px] whitespace-pre-wrap rounded-[14px] border border-border/80 bg-card px-4 py-2.5 text-[15px] leading-[1.65] text-foreground">
+      <div className="flex w-full min-w-0 justify-end overflow-x-hidden">
+        <div className="max-w-full whitespace-pre-wrap break-words rounded-[14px] border border-border/80 bg-card px-4 py-2.5 text-[13px] leading-[1.55] text-foreground sm:max-w-[560px]">
           {text}
         </div>
       </div>
@@ -644,14 +662,11 @@ function MessageRow({
   }
 
   return (
-    <Message from="assistant">
-      <MessageContent className="w-full overflow-visible bg-transparent px-0 py-0 text-[15px] leading-[1.65] text-[var(--ink-soft)]">
-        <AssistantMarkdown
-          text={text}
-          sources={messageSources}
-          citedNumbers={citedNumbers}
-          onCitationClick={onCitationClick}
-        />
+    <Message from="assistant" className="min-w-0 overflow-x-hidden">
+      <MessageContent className="w-full min-w-0 overflow-hidden bg-transparent px-0 py-0 text-[13px] leading-[1.55] text-[var(--ink-soft)]">
+        <MessageResponse className="aqsha-prose aqsha-prose-message">
+          {text}
+        </MessageResponse>
         {message.status === "streaming" ? (
           <span className="stream-caret ml-1 inline-block h-4 w-0.5 translate-y-0.5 bg-primary" />
         ) : null}
@@ -661,7 +676,7 @@ function MessageRow({
           Sedang menulis
         </span>
       ) : null}
-      <MessageSources sources={messageSources} />
+      <MessageSources sources={messageSources} onCitationClick={onCitationClick} />
       <MessageArtifacts
         links={messageArtifacts ?? []}
         onOpenArtifact={onOpenArtifact}
@@ -739,7 +754,13 @@ function getSourcesForMessage(
   return sources.filter((source) => citedNumbers.has(source.citationNumber));
 }
 
-function MessageSources({ sources }: { sources: ResearchSource[] }) {
+function MessageSources({
+  sources,
+  onCitationClick,
+}: {
+  sources: ResearchSource[];
+  onCitationClick: (citation: number) => void;
+}) {
   if (sources.length === 0) return null;
   return (
     <Sources className="mt-3 mb-0 text-[var(--mint)]">
@@ -757,6 +778,7 @@ function MessageSources({ sources }: { sources: ResearchSource[] }) {
             title={source.title}
             className="rounded-[7px] border border-[var(--mint-soft-border)] bg-[var(--mint-soft)] px-2 py-1 text-[11px] text-[var(--mint)]"
             onClick={(event) => {
+              onCitationClick(source.citationNumber);
               if (!source.url) event.preventDefault();
             }}
           >
@@ -768,104 +790,6 @@ function MessageSources({ sources }: { sources: ResearchSource[] }) {
         ))}
       </SourcesContent>
     </Sources>
-  );
-}
-
-function AssistantMarkdown({
-  text,
-  sources,
-  citedNumbers,
-  onCitationClick,
-}: {
-  text: string;
-  sources?: ResearchSource[];
-  citedNumbers: Set<number>;
-  onCitationClick: (citation: number) => void;
-}) {
-  const sourceByCitation = useMemo(
-    () =>
-      new Map((sources ?? []).map((source) => [source.citationNumber, source])),
-    [sources],
-  );
-  return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      components={{
-        p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
-        ul: ({ children }) => (
-          <ul className="mb-3 list-disc space-y-1 pl-5 last:mb-0">
-            {children}
-          </ul>
-        ),
-        ol: ({ children }) => (
-          <ol className="mb-3 list-decimal space-y-1 pl-5 last:mb-0">
-            {children}
-          </ol>
-        ),
-        strong: ({ children }) => (
-          <strong className="font-semibold text-foreground">{children}</strong>
-        ),
-        code: ({ children }) => (
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[12px]">
-            {children}
-          </code>
-        ),
-        text: ({ children }) => (
-          <>
-            {String(children)
-              .split(/(\[\d{1,3}\])/g)
-              .map((part, index) => {
-                const match = part.match(/^\[(\d{1,3})\]$/);
-                if (!match) {
-                  return part;
-                }
-                const citation = Number(match[1]);
-                const source = sourceByCitation.get(citation);
-                const marker = (
-                  <button
-                    type="button"
-                    className="inline-flex min-w-4 items-center justify-center rounded-full border border-[var(--mint-soft-border)] bg-[var(--mint-soft)] px-1.5 py-0.5 align-baseline font-mono text-[10px] font-semibold text-[var(--mint)] hover:border-[var(--mint)] disabled:opacity-60"
-                    disabled={!citedNumbers.has(citation)}
-                    onClick={() => onCitationClick(citation)}
-                  >
-                    {citation}
-                  </button>
-                );
-                return (
-                  <InlineCitation
-                    key={`${part}-${index}`}
-                    className="mx-0.5 inline-flex align-baseline"
-                  >
-                    {source ? (
-                      <InlineCitationCard>
-                        <InlineCitationCardTrigger
-                          sources={[source.url ?? `citation-${citation}`]}
-                          className="p-0 hover:bg-transparent"
-                          asChild
-                        >
-                          {marker}
-                        </InlineCitationCardTrigger>
-                        <InlineCitationCardBody className="w-72 rounded-[9px] border bg-card p-2.5 shadow-aqsha">
-                          <InlineCitationText className="block text-[12px] font-semibold text-foreground">
-                            {source.title}
-                          </InlineCitationText>
-                          <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
-                            {source.snippet}
-                          </p>
-                        </InlineCitationCardBody>
-                      </InlineCitationCard>
-                    ) : (
-                      marker
-                    )}
-                  </InlineCitation>
-                );
-              })}
-          </>
-        ),
-      }}
-    >
-      {text}
-    </ReactMarkdown>
   );
 }
 
@@ -1319,6 +1243,25 @@ function isRunActive(run: ResearchRun) {
 type InterleavedEntry =
   | { kind: "message"; message: ChatMessage }
   | { kind: "run"; run: ResearchRun };
+
+function interleavedEntryKey(entry: InterleavedEntry) {
+  return entry.kind === "run"
+    ? `run:${entry.run._id}`
+    : `message:${entry.message.key ?? entry.message.id}`;
+}
+
+function entryGapClass(
+  previous: InterleavedEntry | undefined,
+  current: InterleavedEntry,
+) {
+  if (previous?.kind === "run" && current.kind === "message") {
+    if (previous.run.status === "completed" && current.message.role === "assistant") {
+      return "mt-1";
+    }
+    return "mt-5";
+  }
+  return "mt-7";
+}
 
 function interleaveRunsWithMessages(
   messages: ChatMessage[],

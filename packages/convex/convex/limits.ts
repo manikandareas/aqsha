@@ -41,6 +41,24 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
     period: MINUTE,
     capacity: 10,
   },
+  jinaSearchPerUser: {
+    kind: "token bucket",
+    rate: 8,
+    period: MINUTE,
+    capacity: 8,
+  },
+  jinaReadPerUser: {
+    kind: "token bucket",
+    rate: 12,
+    period: MINUTE,
+    capacity: 12,
+  },
+  jinaRerankPerUser: {
+    kind: "token bucket",
+    rate: 12,
+    period: MINUTE,
+    capacity: 12,
+  },
   crossrefLookupGlobal: {
     kind: "token bucket",
     rate: 30,

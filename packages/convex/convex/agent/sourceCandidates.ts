@@ -7,6 +7,8 @@ export type SourceOrigin = "corpus" | "web" | "arxiv" | "doi";
 export type SourceCandidate = {
   citationNumber: number;
   origin: SourceOrigin;
+  provider?: string;
+  providerRequestId?: string;
   evidenceStrength: EvidenceStrength;
   title: string;
   locator: string;
@@ -14,6 +16,10 @@ export type SourceCandidate = {
   doi?: string;
   arxivId?: string;
   snippet: string;
+  readStatus?: "not_needed" | "ready" | "failed";
+  readError?: string;
+  rerankScore?: number;
+  metadataJson?: string;
   corpusSourceId?: Id<"corpusSources">;
 };
 
@@ -25,6 +31,8 @@ export const sourceCandidateValidator = v.object({
     v.literal("arxiv"),
     v.literal("doi"),
   ),
+  provider: v.optional(v.string()),
+  providerRequestId: v.optional(v.string()),
   evidenceStrength: v.union(
     v.literal("strong"),
     v.literal("medium"),
@@ -36,6 +44,12 @@ export const sourceCandidateValidator = v.object({
   doi: v.optional(v.string()),
   arxivId: v.optional(v.string()),
   snippet: v.string(),
+  readStatus: v.optional(
+    v.union(v.literal("not_needed"), v.literal("ready"), v.literal("failed")),
+  ),
+  readError: v.optional(v.string()),
+  rerankScore: v.optional(v.number()),
+  metadataJson: v.optional(v.string()),
   corpusSourceId: v.optional(v.id("corpusSources")),
 });
 
