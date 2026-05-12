@@ -92,6 +92,8 @@ type ChatMessage = {
 type ResearchRun = {
   _id: string;
   promptMessageId?: string;
+  mode: "normal" | "deep";
+  executionKind: "inline" | "workflow";
   status:
     | "queued"
     | "running"
@@ -117,6 +119,27 @@ type ResearchRun = {
     failureReason?: string;
     startedAt?: number;
     completedAt?: number;
+  }>;
+  events: Array<{
+    _id: string;
+    stepKey?: string;
+    eventType:
+      | "plan"
+      | "gap"
+      | "query"
+      | "search"
+      | "read"
+      | "rerank"
+      | "audit"
+      | "tool"
+      | "artifact"
+      | "status"
+      | "failure";
+    round?: number;
+    title: string;
+    summary: string;
+    metadataJson?: string;
+    createdAt: number;
   }>;
 };
 
@@ -584,10 +607,9 @@ function ChatThreadState({
                       )}
                     >
                       {entry.kind === "run" ? (
-                        <DeepRunBlock
+                        <AgentRunBlock
                           run={entry.run}
                           artifacts={artifacts ?? []}
-                          onCancelRun={onCancelRun}
                           onRetryRun={onRetryRun}
                         />
                       ) : (
@@ -829,7 +851,7 @@ function Composer({
     !disabled &&
     !isSending &&
     !isRateLimited;
-  const isDeepActive = Boolean(activeRun);
+  const isDeepActive = activeRun?.mode === "deep";
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 250);
@@ -1023,21 +1045,21 @@ function ModeButton({
   );
 }
 
-function DeepRunBlock({
+function AgentRunBlock({
   run,
   artifacts,
-  onCancelRun,
   onRetryRun,
 }: {
   run: ResearchRun;
   artifacts: ResearchArtifact[];
-  onCancelRun: (runId: string) => Promise<unknown>;
   onRetryRun: (runId: string) => Promise<unknown>;
 }) {
   const sortedSteps = run.steps.slice().sort((a, b) => a.order - b.order);
   const activeStep = sortedSteps.find((step) => step.status === "running");
   const isActive = isRunActive(run);
-  const [open, setOpen] = useState(true);
+  const isDeep = run.mode === "deep";
+  const [open, setOpen] = useState(isDeep);
+  const accentClass = isDeep ? "text-[var(--lavender)]" : "text-primary";
 
   const durationLabel = formatRunDuration(run, activeStep);
   const summaryText = activeStep
@@ -1062,7 +1084,7 @@ function DeepRunBlock({
           {isActive ? (
             <Shimmer className="font-medium">{summaryText}</Shimmer>
           ) : (
-            <span className="font-medium">{summaryText}</span>
+            <span className={cn("font-medium", accentClass)}>{summaryText}</span>
           )}
           <ChevronDownIcon
             className={cn(
@@ -1071,25 +1093,19 @@ function DeepRunBlock({
             )}
           />
         </button>
-        {isActive ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-[12px] text-[var(--coral)] hover:text-[var(--coral)]"
-            onClick={() => onCancelRun(run._id)}
-          >
-            Hentikan
-          </Button>
-        ) : null}
       </div>
       {open ? (
         <ol className="mt-2 grid gap-1.5 pl-0">
           {sortedSteps.map((step) => (
-            <DeepRunStep
+            <AgentRunStep
               key={step.stepKey}
               step={step}
+              events={(run.events ?? []).filter(
+                (event) => eventStepKey(event) === step.stepKey,
+              )}
               artifacts={artifacts}
               runActiveArtifactId={run.activeArtifactId}
+              accentClass={accentClass}
             />
           ))}
         </ol>
@@ -1119,16 +1135,21 @@ function DeepRunBlock({
   );
 }
 
-function DeepRunStep({
+function AgentRunStep({
   step,
+  events,
   artifacts,
   runActiveArtifactId,
+  accentClass,
 }: {
   step: ResearchRun["steps"][number];
+  events: ResearchRun["events"];
   artifacts: ResearchArtifact[];
   runActiveArtifactId?: string;
+  accentClass: string;
 }) {
-  const expandable = Boolean(step.summary) || (step.artifactCount ?? 0) > 0;
+  const expandable =
+    Boolean(step.summary) || events.length > 0 || (step.artifactCount ?? 0) > 0;
   const [expanded, setExpanded] = useState(false);
 
   const descriptor = [
@@ -1196,6 +1217,20 @@ function DeepRunStep({
       {expandable && expanded ? (
         <div className="mt-1.5 grid gap-2 text-[12px] leading-5 text-muted-foreground">
           {step.summary ? <p>{step.summary}</p> : null}
+          {events.length > 0 ? (
+            <div className="grid gap-1 border-l border-border/70 pl-3">
+              {events.map((event) => (
+                <div key={event._id} className="min-w-0">
+                  <div className={cn("font-medium", accentClass)}>
+                    {event.title}
+                  </div>
+                  <div className="break-words text-muted-foreground">
+                    {event.summary}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
           {(step.artifactCount ?? 0) > 0 ? (
             <span className="inline-flex w-fit items-center gap-2 rounded-[8px] bg-muted/45 px-2.5 py-1.5 text-[12px] text-foreground">
               <FileTextIcon className="size-3.5 text-[var(--lavender)]" />
@@ -1211,6 +1246,33 @@ function DeepRunStep({
       ) : null}
     </li>
   );
+}
+
+function eventStepKey(event: ResearchRun["events"][number]) {
+  if (event.stepKey) {
+    return event.stepKey;
+  }
+  switch (event.eventType) {
+    case "plan":
+      return "planResearch";
+    case "query":
+    case "search":
+    case "gap":
+      return "retrieveSources";
+    case "read":
+    case "rerank":
+      return "readExtract";
+    case "audit":
+      return "verifyCitations";
+    case "artifact":
+      return "persistArtifact";
+    case "status":
+      return "finalizeThread";
+    case "failure":
+    case "tool":
+    default:
+      return undefined;
+  }
 }
 
 function formatRunDuration(

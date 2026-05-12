@@ -7,6 +7,7 @@ import type { ActionCtx } from "../_generated/server";
 import {
   lookupDoiProvider,
   jinaSearchWeb,
+  searchWebProvider,
   searchArxivProvider,
 } from "./externalProviders";
 import { corpusRag, userNamespace } from "./rag";
@@ -17,6 +18,7 @@ type AqshaToolCtx = ActionCtx & {
   userId?: string;
   threadId?: string;
   messageId?: string;
+  runId?: Id<"agentRuns">;
 };
 
 const querySchema = z.object({
@@ -91,15 +93,24 @@ export const researchTools: ToolSet = {
   }),
   searchWeb: createTool<typeof querySchema._output, SourceCandidate[], AqshaToolCtx>({
     description:
-      "Search the public web through Jina Search for current or broad context when corpus and academic sources are not enough.",
+      "Search the public web through Exa with Jina Search fallback for current or broad context when corpus and academic sources are not enough.",
     inputSchema: querySchema,
     execute: async (ctx, input): Promise<SourceCandidate[]> => {
-      const results = await jinaSearchWeb(ctx, {
-        ownerUserId: requireToolUser(ctx),
+      const ownerUserId = requireToolUser(ctx);
+      const exaResults = await searchWebProvider(ctx, {
+        ownerUserId,
         query: input.query,
         limit: input.limit,
       });
-      return numberCandidates(results, 61);
+      if (hasUsableResults(exaResults)) {
+        return numberCandidates(exaResults, 61);
+      }
+      const jinaResults = await jinaSearchWeb(ctx, {
+        ownerUserId,
+        query: input.query,
+        limit: input.limit,
+      });
+      return numberCandidates(jinaResults, 61);
     },
   }),
   searchArxiv: createTool<typeof querySchema._output, SourceCandidate[], AqshaToolCtx>({
@@ -149,6 +160,7 @@ export const researchTools: ToolSet = {
         {
           ownerUserId,
           threadId,
+          runId: ctx.runId,
           type: input.type,
           title: input.title,
           contentFormat: input.contentFormat,
@@ -186,6 +198,7 @@ export const researchTools: ToolSet = {
         {
           ownerUserId,
           artifactId: input.artifactId as Id<"artifacts">,
+          runId: ctx.runId,
           title: input.title,
           contentFormat: input.contentFormat,
           body: input.body,
@@ -209,6 +222,15 @@ function numberCandidates(
     ...candidate,
     citationNumber: start + index,
   }));
+}
+
+function hasUsableResults(candidates: Array<Omit<SourceCandidate, "citationNumber">>) {
+  return candidates.some(
+    (candidate) =>
+      candidate.evidenceStrength !== "weak" &&
+      candidate.title.trim().length > 0 &&
+      candidate.snippet.trim().length > 0,
+  );
 }
 
 function requireToolUser(ctx: AqshaToolCtx) {

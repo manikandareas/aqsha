@@ -120,7 +120,6 @@ export async function searchWebProvider(
   ctx: ActionCtx,
   args: { ownerUserId: string; query: string; limit?: number },
 ): Promise<ExternalCandidate[]> {
-  await limitExternal(ctx, args.ownerUserId, "exa");
   const query = args.query.trim();
   if (!query) {
     return [];
@@ -128,8 +127,9 @@ export async function searchWebProvider(
 
   const apiKey = process.env.EXA_API_KEY;
   if (!apiKey) {
-    return providerFailure("web", "EXA_API_KEY is not configured");
+    return [];
   }
+  await limitExternal(ctx, args.ownerUserId, "exa");
 
   const cacheKey = normalizeKey(`${query}:${args.limit ?? 5}`);
   const cached: ExternalCandidate[] | null = await readCachedCandidates(ctx, "exa", cacheKey);

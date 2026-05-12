@@ -53,7 +53,7 @@ type ArtifactType =
 type ContentFormat = "markdown" | "html" | "plain" | "code" | "json";
 
 export const list = query({
-  args: { threadId: v.string(), runId: v.optional(v.id("researchRuns")) },
+  args: { threadId: v.string(), runId: v.optional(v.id("agentRuns")) },
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     await assertThreadOwner(ctx, args.threadId);
@@ -166,7 +166,7 @@ export const createVersionFromAgent = internalMutation({
   args: {
     ownerUserId: v.string(),
     threadId: v.string(),
-    runId: v.optional(v.id("researchRuns")),
+    runId: v.optional(v.id("agentRuns")),
     type: artifactTypeValidator,
     title: v.string(),
     contentFormat: contentFormatValidator,
@@ -214,7 +214,7 @@ export const updateVersionFromAgent = internalMutation({
     contentFormat: contentFormatValidator,
     body: v.string(),
     createdByMessageId: v.optional(v.string()),
-    runId: v.optional(v.id("researchRuns")),
+    runId: v.optional(v.id("agentRuns")),
     changeSummary: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -235,7 +235,7 @@ export const updateVersionFromAgent = internalMutation({
       ownerUserId: args.ownerUserId,
       threadId: artifact.threadId,
       artifactId: artifact._id,
-      runId: args.runId ?? artifact.runId,
+      runId: args.runId,
       versionNumber: latest + 1,
       title,
       contentFormat: args.contentFormat,
@@ -290,7 +290,7 @@ export const createResearchReportFromRun = internalMutation({
   args: {
     ownerUserId: v.string(),
     threadId: v.string(),
-    runId: v.id("researchRuns"),
+    runId: v.id("agentRuns"),
     title: v.string(),
     markdown: v.string(),
     changeSummary: v.optional(v.string()),
@@ -313,7 +313,7 @@ async function createArtifactVersion(
   args: {
     ownerUserId: string;
     threadId: string;
-    runId?: Id<"researchRuns">;
+    runId?: Id<"agentRuns">;
     type: ArtifactType;
     title: string;
     contentFormat: ContentFormat;
@@ -358,7 +358,7 @@ async function insertVersion(
     ownerUserId: string;
     threadId: string;
     artifactId: Id<"artifacts">;
-    runId?: Id<"researchRuns">;
+    runId?: Id<"agentRuns">;
     versionNumber: number;
     contentFormat: ContentFormat;
     title: string;
@@ -397,10 +397,10 @@ async function assertArtifactOwner(
 
 async function assertRunOwner(
   ctx: QueryCtx | MutationCtx,
-  runId: Id<"researchRuns">,
+  runId: Id<"agentRuns">,
   ownerUserId: string,
 ) {
-  const run = await ctx.db.get("researchRuns", runId);
+  const run = await ctx.db.get("agentRuns", runId);
   if (!run || run.ownerUserId !== ownerUserId) {
     throw new ConvexError("Run not found");
   }

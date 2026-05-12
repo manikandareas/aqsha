@@ -91,7 +91,7 @@ const stepStatusValidator = v.union(
 
 export const deepResearchWorkflow = researchWorkflow.define({
   args: {
-    runId: v.id("researchRuns"),
+    runId: v.id("agentRuns"),
     ownerUserId: v.string(),
     threadId: v.string(),
     promptMessageId: v.string(),
@@ -147,10 +147,10 @@ export const deepResearchWorkflow = researchWorkflow.define({
 });
 
 export const getStatus = query({
-  args: { runId: v.id("researchRuns") },
+  args: { runId: v.id("agentRuns") },
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
-    const run = await ctx.db.get("researchRuns", args.runId);
+    const run = await ctx.db.get("agentRuns", args.runId);
     if (!run || run.ownerUserId !== user._id) {
       return null;
     }
@@ -165,25 +165,33 @@ export const listForThread = query({
     const user = await requireCurrentUser(ctx);
     await assertThreadOwner(ctx, args.threadId);
     const runs = await ctx.db
-      .query("researchRuns")
+      .query("agentRuns")
       .withIndex("by_owner_thread_created", (q) =>
         q.eq("ownerUserId", user._id).eq("threadId", args.threadId),
       )
       .order("desc")
       .take(20);
     const rows = await Promise.all(
-      runs.map(async (run) => ({ ...run, steps: await listSteps(ctx, user._id, run._id) })),
+      runs.map(async (run) => {
+        const [steps, events] = await Promise.all([
+          listSteps(ctx, user._id, run._id),
+          listEvents(ctx, user._id, run._id),
+        ]);
+        return { ...run, steps, events };
+      }),
     );
-    return rows.reverse();
+    return rows
+      .filter((run) => run.mode === "deep" || run.steps.length > 0 || run.sourceCount > 0 || run.artifactCount > 0)
+      .reverse();
   },
 });
 
 export const cancel = mutation({
-  args: { runId: v.id("researchRuns") },
+  args: { runId: v.id("agentRuns") },
   returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
-    const run = await ctx.db.get("researchRuns", args.runId);
+    const run = await ctx.db.get("agentRuns", args.runId);
     if (!run || run.ownerUserId !== user._id) {
       throw new ConvexError("Run not found");
     }
@@ -205,10 +213,10 @@ export const cancel = mutation({
 });
 
 export const retry = mutation({
-  args: { runId: v.id("researchRuns") },
-  handler: async (ctx, args): Promise<{ ok: true; runId: Id<"researchRuns">; workflowId: string }> => {
+  args: { runId: v.id("agentRuns") },
+  handler: async (ctx, args): Promise<{ ok: true; runId: Id<"agentRuns">; workflowId: string }> => {
     const user = await requireCurrentUser(ctx);
-    const run = await ctx.db.get("researchRuns", args.runId);
+    const run = await ctx.db.get("agentRuns", args.runId);
     if (!run || run.ownerUserId !== user._id) {
       throw new ConvexError("Run not found");
     }
@@ -239,13 +247,13 @@ export const retry = mutation({
       },
     );
     const workflowIdString = String(workflowId);
-    await ctx.db.patch("researchRuns", newRunId, { workflowId: workflowIdString, updatedAt: Date.now() });
+    await ctx.db.patch("agentRuns", newRunId, { workflowId: workflowIdString, updatedAt: Date.now() });
     return { ok: true as const, runId: newRunId, workflowId: workflowIdString };
   },
 });
 
 export const listArtifacts = query({
-  args: { threadId: v.string(), runId: v.optional(v.id("researchRuns")) },
+  args: { threadId: v.string(), runId: v.optional(v.id("agentRuns")) },
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     await assertThreadOwner(ctx, args.threadId);
@@ -307,7 +315,7 @@ export const startForMessage = internalMutation({
     promptMessageId: v.string(),
     prompt: v.string(),
   },
-  handler: async (ctx, args): Promise<{ runId: Id<"researchRuns">; workflowId: string }> => {
+  handler: async (ctx, args): Promise<{ runId: Id<"agentRuns">; workflowId: string }> => {
     const runId = await createRun(ctx, args);
     const workflowId = await researchWorkflow.start(
       ctx,
@@ -319,7 +327,7 @@ export const startForMessage = internalMutation({
       },
     );
     const workflowIdString = String(workflowId);
-    await ctx.db.patch("researchRuns", runId, { workflowId: workflowIdString, updatedAt: Date.now() });
+    await ctx.db.patch("agentRuns", runId, { workflowId: workflowIdString, updatedAt: Date.now() });
     return { runId, workflowId: workflowIdString };
   },
 });
@@ -370,6 +378,7 @@ export const planResearch = internalAction({
       runId: args.runId,
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
+      stepKey: "planResearch",
       eventType: "plan",
       title: plan.title,
       summary: plan.questions.join(" | "),
@@ -422,6 +431,7 @@ export const researchLoop = internalAction({
         runId: args.runId,
         ownerUserId: args.ownerUserId,
         threadId: args.threadId,
+        stepKey: "retrieveSources",
         eventType: "query",
         round,
         title: `Round ${round} query`,
@@ -455,10 +465,20 @@ export const researchLoop = internalAction({
         runId: args.runId,
         ownerUserId: args.ownerUserId,
         threadId: args.threadId,
+        stepKey: "retrieveSources",
         eventType: "search",
         round,
         title: `Round ${round} discovery`,
-        summary: `${corpus.length} corpus, ${arxiv.length} arXiv, ${jina.length} Jina results`,
+        summary: summarizeSourceDiscovery({ corpus, arxiv, jina }),
+        metadataJson: JSON.stringify({
+          query,
+          counts: {
+            corpus: corpus.length,
+            arxiv: arxiv.length,
+            jina: jina.length,
+          },
+          sources: summarizeSourceMetadata([...corpus, ...arxiv, ...jina]),
+        }),
       });
 
       await ctx.runMutation(internal.agent.deepResearch.markStep, {
@@ -508,6 +528,7 @@ export const researchLoop = internalAction({
         runId: args.runId,
         ownerUserId: args.ownerUserId,
         threadId: args.threadId,
+        stepKey: "retrieveSources",
         eventType: "gap",
         round,
         title: `Round ${round} sufficiency`,
@@ -665,6 +686,7 @@ export const auditClaims = internalAction({
       runId: args.runId,
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
+      stepKey: "verifyCitations",
       eventType: "audit",
       title: "Claim audit",
       summary: `${checks.length} claims checked; ${unsupported.length} unsupported`,
@@ -750,7 +772,7 @@ export const persistArtifact = internalMutation({
       artifactCount: 1,
       summary: "Artefak tersimpan",
     });
-    await ctx.db.patch("researchRuns", args.runId, {
+    await ctx.db.patch("agentRuns", args.runId, {
       activeArtifactId: report.artifactId,
       artifactCount: 1,
       sourceCount: args.sources.length,
@@ -803,7 +825,7 @@ export const finalizeThread = internalMutation({
       status: "completed",
       summary: "Riset selesai",
     });
-    await ctx.db.patch("researchRuns", args.runId, {
+    await ctx.db.patch("agentRuns", args.runId, {
       status: "completed",
       currentStep: "finalizeThread",
       retryable: false,
@@ -820,12 +842,12 @@ export const handleWorkflowComplete = internalMutation({
     context: v.any(),
   },
   handler: async (ctx, args) => {
-    const runId = args.context?.runId as Id<"researchRuns"> | undefined;
+    const runId = args.context?.runId as Id<"agentRuns"> | undefined;
     const ownerUserId = args.context?.ownerUserId as string | undefined;
     if (!runId || !ownerUserId) {
       return;
     }
-    const run = await ctx.db.get("researchRuns", runId);
+    const run = await ctx.db.get("agentRuns", runId);
     if (!run || run.ownerUserId !== ownerUserId || run.status === "completed") {
       return;
     }
@@ -847,7 +869,7 @@ export const handleWorkflowComplete = internalMutation({
 
 export const markStep = internalMutation({
   args: {
-    runId: v.id("researchRuns"),
+    runId: v.id("agentRuns"),
     ownerUserId: v.string(),
     stepKey: v.string(),
     status: stepStatusValidator,
@@ -861,7 +883,7 @@ export const markStep = internalMutation({
 
 export const updateRunPlan = internalMutation({
   args: {
-    runId: v.id("researchRuns"),
+    runId: v.id("agentRuns"),
     ownerUserId: v.string(),
     promptSnapshot: v.string(),
     maxRounds: v.number(),
@@ -869,7 +891,7 @@ export const updateRunPlan = internalMutation({
   },
   handler: async (ctx, args) => {
     await assertRunOwner(ctx, args.runId, args.ownerUserId);
-    await ctx.db.patch("researchRuns", args.runId, {
+    await ctx.db.patch("agentRuns", args.runId, {
       promptSnapshot: args.promptSnapshot,
       maxRounds: Math.min(Math.max(1, args.maxRounds), DEFAULT_MAX_ROUNDS),
       budgetJson: args.budgetJson,
@@ -880,7 +902,7 @@ export const updateRunPlan = internalMutation({
 
 export const updateLoopProgress = internalMutation({
   args: {
-    runId: v.id("researchRuns"),
+    runId: v.id("agentRuns"),
     ownerUserId: v.string(),
     roundCount: v.number(),
     sufficiencyStatus: v.union(
@@ -893,7 +915,7 @@ export const updateLoopProgress = internalMutation({
   },
   handler: async (ctx, args) => {
     await assertRunOwner(ctx, args.runId, args.ownerUserId);
-    await ctx.db.patch("researchRuns", args.runId, {
+    await ctx.db.patch("agentRuns", args.runId, {
       roundCount: args.roundCount,
       sufficiencyStatus: args.sufficiencyStatus,
       updatedAt: Date.now(),
@@ -903,9 +925,10 @@ export const updateLoopProgress = internalMutation({
 
 export const recordRunEvent = internalMutation({
   args: {
-    runId: v.id("researchRuns"),
+    runId: v.id("agentRuns"),
     ownerUserId: v.string(),
     threadId: v.string(),
+    stepKey: v.optional(v.string()),
     eventType: v.union(
       v.literal("plan"),
       v.literal("gap"),
@@ -914,6 +937,8 @@ export const recordRunEvent = internalMutation({
       v.literal("read"),
       v.literal("rerank"),
       v.literal("audit"),
+      v.literal("tool"),
+      v.literal("artifact"),
       v.literal("status"),
       v.literal("failure"),
     ),
@@ -924,10 +949,11 @@ export const recordRunEvent = internalMutation({
   },
   handler: async (ctx, args) => {
     await assertRunOwner(ctx, args.runId, args.ownerUserId);
-    await ctx.db.insert("researchRunEvents", {
+    await ctx.db.insert("agentRunEvents", {
       ownerUserId: args.ownerUserId,
       runId: args.runId,
       threadId: args.threadId,
+      stepKey: args.stepKey,
       eventType: args.eventType,
       round: args.round,
       title: args.title,
@@ -945,14 +971,16 @@ async function createRun(
     threadId: string;
     promptMessageId: string;
     prompt?: string;
-    retryOfRunId?: Id<"researchRuns">;
+    retryOfRunId?: Id<"agentRuns">;
   },
 ) {
   const now = Date.now();
-  const runId = await ctx.db.insert("researchRuns", {
+  const runId = await ctx.db.insert("agentRuns", {
     ownerUserId: args.ownerUserId,
     threadId: args.threadId,
     promptMessageId: args.promptMessageId,
+    mode: "deep",
+    executionKind: "workflow",
     promptSnapshot: args.prompt ?? "",
     status: "queued",
     roundCount: 0,
@@ -973,7 +1001,7 @@ async function createRun(
   });
   await Promise.all(
     stepDefinitions.map(([stepKey, label], order) =>
-      ctx.db.insert("researchRunSteps", {
+      ctx.db.insert("agentRunSteps", {
         ownerUserId: args.ownerUserId,
         runId,
         stepKey,
@@ -987,15 +1015,22 @@ async function createRun(
   return runId;
 }
 
-async function listSteps(ctx: QueryCtx, ownerUserId: string, runId: Id<"researchRuns">) {
+async function listSteps(ctx: QueryCtx, ownerUserId: string, runId: Id<"agentRuns">) {
   return await ctx.db
-    .query("researchRunSteps")
+    .query("agentRunSteps")
     .withIndex("by_owner_run", (q) => q.eq("ownerUserId", ownerUserId).eq("runId", runId))
     .collect();
 }
 
-async function assertRunOwner(ctx: QueryCtx | MutationCtx, runId: Id<"researchRuns">, ownerUserId: string) {
-  const run = await ctx.db.get("researchRuns", runId);
+async function listEvents(ctx: QueryCtx, ownerUserId: string, runId: Id<"agentRuns">) {
+  return await ctx.db
+    .query("agentRunEvents")
+    .withIndex("by_owner_run_created", (q) => q.eq("ownerUserId", ownerUserId).eq("runId", runId))
+    .collect();
+}
+
+async function assertRunOwner(ctx: QueryCtx | MutationCtx, runId: Id<"agentRuns">, ownerUserId: string) {
+  const run = await ctx.db.get("agentRuns", runId);
   if (!run || run.ownerUserId !== ownerUserId) {
     throw new ConvexError("Run not found");
   }
@@ -1005,7 +1040,7 @@ async function assertRunOwner(ctx: QueryCtx | MutationCtx, runId: Id<"researchRu
 async function markStepMutation(
   ctx: MutationCtx,
   args: {
-    runId: Id<"researchRuns">;
+    runId: Id<"agentRuns">;
     ownerUserId: string;
     stepKey: string;
     status: "pending" | "running" | "completed" | "failed" | "canceled";
@@ -1017,13 +1052,13 @@ async function markStepMutation(
 ) {
   const now = Date.now();
   const step = await ctx.db
-    .query("researchRunSteps")
+    .query("agentRunSteps")
     .withIndex("by_owner_run_and_step", (q) =>
       q.eq("ownerUserId", args.ownerUserId).eq("runId", args.runId).eq("stepKey", args.stepKey),
     )
     .unique();
   if (step) {
-    await ctx.db.patch("researchRunSteps", step._id, {
+    await ctx.db.patch("agentRunSteps", step._id, {
       status: args.status,
       summary: args.summary ?? step.summary,
       sourceCount: args.sourceCount ?? step.sourceCount,
@@ -1036,9 +1071,28 @@ async function markStepMutation(
           : step.completedAt,
       updatedAt: now,
     });
+  } else {
+    await ctx.db.insert("agentRunSteps", {
+      ownerUserId: args.ownerUserId,
+      runId: args.runId,
+      stepKey: args.stepKey,
+      label: labelForStep(args.stepKey),
+      order: orderForStep(args.stepKey),
+      status: args.status,
+      summary: args.summary,
+      sourceCount: args.sourceCount,
+      artifactCount: args.artifactCount,
+      failureReason: args.failureReason,
+      startedAt: args.status === "running" ? now : undefined,
+      completedAt:
+        args.status === "completed" || args.status === "failed" || args.status === "canceled"
+          ? now
+          : undefined,
+      updatedAt: now,
+    });
   }
   if (args.status === "running") {
-    await ctx.db.patch("researchRuns", args.runId, {
+    await ctx.db.patch("agentRuns", args.runId, {
       status: "running",
       currentStep: args.stepKey,
       updatedAt: now,
@@ -1046,23 +1100,32 @@ async function markStepMutation(
   }
 }
 
-async function markCanceled(ctx: MutationCtx, runId: Id<"researchRuns">, ownerUserId: string) {
+function labelForStep(stepKey: string) {
+  return stepDefinitions.find(([key]) => key === stepKey)?.[1] ?? stepKey;
+}
+
+function orderForStep(stepKey: string) {
+  const index = stepDefinitions.findIndex(([key]) => key === stepKey);
+  return index >= 0 ? index : 100;
+}
+
+async function markCanceled(ctx: MutationCtx, runId: Id<"agentRuns">, ownerUserId: string) {
   const now = Date.now();
-  await ctx.db.patch("researchRuns", runId, {
+  await ctx.db.patch("agentRuns", runId, {
     status: "canceled",
     canceledAt: now,
     retryable: false,
     updatedAt: now,
   });
   const steps = await ctx.db
-    .query("researchRunSteps")
+    .query("agentRunSteps")
     .withIndex("by_owner_run", (q) => q.eq("ownerUserId", ownerUserId).eq("runId", runId))
     .collect();
   await Promise.all(
     steps
       .filter((step) => step.status === "pending" || step.status === "running")
       .map((step) =>
-        ctx.db.patch("researchRunSteps", step._id, { status: "canceled", completedAt: now, updatedAt: now }),
+        ctx.db.patch("agentRunSteps", step._id, { status: "canceled", completedAt: now, updatedAt: now }),
       ),
   );
 }
@@ -1070,7 +1133,7 @@ async function markCanceled(ctx: MutationCtx, runId: Id<"researchRuns">, ownerUs
 async function failRun(
   ctx: MutationCtx,
   args: {
-    runId: Id<"researchRuns">;
+    runId: Id<"agentRuns">;
     ownerUserId: string;
     stepKey: string;
     code: string;
@@ -1084,7 +1147,7 @@ async function failRun(
     status: "failed",
     failureReason: args.message,
   });
-  await ctx.db.patch("researchRuns", args.runId, {
+  await ctx.db.patch("agentRuns", args.runId, {
     status: "failed",
     failedStep: args.stepKey,
     retryable: true,
@@ -1095,8 +1158,8 @@ async function failRun(
 }
 
 async function ensureNotCanceled(
-  ctx: { runQuery: (ref: typeof internal.agent.deepResearch.getInternalRun, args: { runId: Id<"researchRuns"> }) => Promise<{ status: string } | null> },
-  runId: Id<"researchRuns">,
+  ctx: { runQuery: (ref: typeof internal.agent.deepResearch.getInternalRun, args: { runId: Id<"agentRuns"> }) => Promise<{ status: string } | null> },
+  runId: Id<"agentRuns">,
 ) {
   const run = await ctx.runQuery(internal.agent.deepResearch.getInternalRun, { runId });
   if (run?.status === "canceled") {
@@ -1105,8 +1168,8 @@ async function ensureNotCanceled(
 }
 
 export const getInternalRun = internalQuery({
-  args: { runId: v.id("researchRuns") },
-  handler: async (ctx, args) => await ctx.db.get("researchRuns", args.runId),
+  args: { runId: v.id("agentRuns") },
+  handler: async (ctx, args) => await ctx.db.get("agentRuns", args.runId),
 });
 
 async function readPromptMessage(_ctx: MutationCtx, messageId: string) {
@@ -1115,7 +1178,7 @@ async function readPromptMessage(_ctx: MutationCtx, messageId: string) {
 
 function workflowArgs() {
   return {
-    runId: v.id("researchRuns"),
+    runId: v.id("agentRuns"),
     ownerUserId: v.string(),
     threadId: v.string(),
     promptMessageId: v.string(),
@@ -1241,7 +1304,7 @@ async function readAndExtract(
   ctx: ActionCtx,
   args: {
     ownerUserId: string;
-    runId: Id<"researchRuns">;
+    runId: Id<"agentRuns">;
     threadId: string;
     query: string;
     sources: SourceCandidate[];
@@ -1276,6 +1339,7 @@ async function readAndExtract(
       runId: args.runId,
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
+      stepKey: "readExtract",
       eventType: "read",
       title: read.title || source.title,
       summary: read.ok ? trimForSnippet(quote, 300) : `Read failed: ${read.failureReason}`,
@@ -1344,6 +1408,44 @@ function numberSources(sources: Array<Omit<SourceCandidate, "citationNumber">>):
   return sources.slice(0, MAX_SOURCES_PER_RUN).map((source, index) => ({
     ...source,
     citationNumber: index + 1,
+  }));
+}
+
+function summarizeSourceDiscovery(args: {
+  corpus: Array<Omit<SourceCandidate, "citationNumber">>;
+  arxiv: Array<Omit<SourceCandidate, "citationNumber">>;
+  jina: Array<Omit<SourceCandidate, "citationNumber">>;
+}) {
+  const groups = [
+    sourceGroupSummary("corpus", args.corpus),
+    sourceGroupSummary("arXiv", args.arxiv),
+    sourceGroupSummary("Jina", args.jina),
+  ].filter(Boolean);
+  return groups.length > 0 ? groups.join(" | ") : "Tidak ada sumber baru ditemukan";
+}
+
+function sourceGroupSummary(
+  label: string,
+  sources: Array<Pick<SourceCandidate, "title" | "url" | "locator">>,
+) {
+  if (sources.length === 0) {
+    return null;
+  }
+  const titles = sources
+    .slice(0, 3)
+    .map((source) => source.title || source.url || source.locator)
+    .filter(Boolean)
+    .join("; ");
+  return `${label}: ${titles}`;
+}
+
+function summarizeSourceMetadata(sources: Array<Omit<SourceCandidate, "citationNumber">>) {
+  return sources.slice(0, MAX_SOURCES_PER_RUN).map((source) => ({
+    origin: source.origin,
+    provider: source.provider,
+    title: source.title,
+    url: source.url,
+    locator: source.locator,
   }));
 }
 
@@ -1485,7 +1587,7 @@ async function persistSourcesForRun(
   args: {
     ownerUserId: string;
     threadId: string;
-    runId: Id<"researchRuns">;
+    runId: Id<"agentRuns">;
     artifactId?: Id<"artifacts">;
     artifactVersionId?: Id<"artifactVersions">;
     sources: SourceCandidate[];
@@ -1528,7 +1630,7 @@ async function persistExtractsForRun(
   args: {
     ownerUserId: string;
     threadId: string;
-    runId: Id<"researchRuns">;
+    runId: Id<"agentRuns">;
     extracts: ResearchExtract[];
   },
 ) {
@@ -1557,7 +1659,7 @@ async function persistCitationChecks(
   args: {
     ownerUserId: string;
     threadId: string;
-    runId: Id<"researchRuns">;
+    runId: Id<"agentRuns">;
     artifactId: Id<"artifacts">;
     artifactVersionId: Id<"artifactVersions">;
     checks: Array<{

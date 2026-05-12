@@ -31,7 +31,7 @@ const sendResultValidator = v.union(
   v.object({
     ok: v.literal(true),
     messageId: v.string(),
-    runId: v.optional(v.id("researchRuns")),
+    runId: v.optional(v.id("agentRuns")),
     workflowId: v.optional(v.string()),
   }),
   v.object({
@@ -45,7 +45,7 @@ type SendResult =
   | {
       ok: true;
       messageId: string;
-      runId?: import("../_generated/dataModel").Id<"researchRuns">;
+      runId?: import("../_generated/dataModel").Id<"agentRuns">;
       workflowId?: string;
     }
   | { ok: false; reason: "rate_limited"; retryAt: number };
@@ -168,7 +168,7 @@ export const send = mutation({
     }
 
     if (args.mode === "deep") {
-      const run: { runId: import("../_generated/dataModel").Id<"researchRuns">; workflowId: string } = await ctx.runMutation(internal.agent.deepResearch.startForMessage, {
+      const run: { runId: import("../_generated/dataModel").Id<"agentRuns">; workflowId: string } = await ctx.runMutation(internal.agent.deepResearch.startForMessage, {
         ownerUserId: user._id,
         threadId: args.threadId,
         promptMessageId: messageId,
@@ -178,13 +178,20 @@ export const send = mutation({
       return { ok: true as const, messageId, ...run };
     }
 
+    const runId = await ctx.runMutation(internal.agent.messages.startInlineRun, {
+      ownerUserId: user._id,
+      threadId: args.threadId,
+      promptMessageId: messageId,
+      prompt: content,
+    });
     await ctx.scheduler.runAfter(0, internal.agent.messages.generateReply, {
       threadId: args.threadId,
       userId: user._id,
       promptMessageId: messageId,
+      runId,
     });
 
-    return { ok: true as const, messageId };
+    return { ok: true as const, messageId, runId };
   },
 });
 
@@ -207,6 +214,7 @@ export const generateReply = internalAction({
     threadId: v.string(),
     userId: v.string(),
     promptMessageId: v.string(),
+    runId: v.optional(v.id("agentRuns")),
   },
   handler: async (ctx, args) => {
     const thread = await ctx.runQuery(components.agent.threads.getThread, {
@@ -229,16 +237,18 @@ export const generateReply = internalAction({
       await result.consumeStream();
       const text = await result.text;
       const steps = await result.steps;
+      const sourceCandidates = collectSourceCandidates(steps);
+      const artifactResults = collectArtifactResults(steps);
       const assistantMessageId = getVisibleAssistantMessageId(result.savedMessages);
       if (assistantMessageId) {
         await ctx.runMutation(internal.agent.sources.persistCited, {
           ownerUserId: args.userId,
           threadId: args.threadId,
           messageId: assistantMessageId,
-          candidates: collectSourceCandidates(steps),
+          candidates: sourceCandidates,
           citedNumbers: extractCitationNumbers(text),
         });
-        for (const artifact of collectArtifactResults(steps)) {
+        for (const artifact of artifactResults) {
           await ctx.runMutation(internal.agent.artifacts.attachToMessage, {
             ownerUserId: args.userId,
             threadId: args.threadId,
@@ -248,6 +258,16 @@ export const generateReply = internalAction({
             relation: artifact.relation,
           });
         }
+      }
+      if (args.runId) {
+        await ctx.runMutation(internal.agent.messages.completeInlineRun, {
+          ownerUserId: args.userId,
+          threadId: args.threadId,
+          runId: args.runId,
+          sourceCount: sourceCandidates.length,
+          artifactCount: artifactResults.length,
+          observations: collectToolObservations(steps),
+        });
       }
       await ctx.runMutation(internal.agent.messages.markThreadIdle, {
         ownerUserId: args.userId,
@@ -265,6 +285,14 @@ export const generateReply = internalAction({
         });
       }
     } catch (error) {
+      if (args.runId) {
+        await ctx.runMutation(internal.agent.messages.failInlineRun, {
+          ownerUserId: args.userId,
+          threadId: args.threadId,
+          runId: args.runId,
+          errorMessage: readableError(error),
+        });
+      }
       await astra.saveMessages(ctx, {
         threadId: args.threadId,
         userId: args.userId,
@@ -280,6 +308,146 @@ export const generateReply = internalAction({
       });
       throw error;
     }
+  },
+});
+
+export const startInlineRun = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    threadId: v.string(),
+    promptMessageId: v.string(),
+    prompt: v.string(),
+  },
+  handler: async (ctx, args): Promise<Id<"agentRuns">> => {
+    const now = Date.now();
+    return await ctx.db.insert("agentRuns", {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      promptMessageId: args.promptMessageId,
+      mode: "normal",
+      executionKind: "inline",
+      promptSnapshot: args.prompt,
+      status: "running",
+      currentStep: "understand",
+      artifactCount: 0,
+      sourceCount: 0,
+      citationCheckCount: 0,
+      retryable: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
+export const completeInlineRun = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    threadId: v.string(),
+    runId: v.id("agentRuns"),
+    sourceCount: v.number(),
+    artifactCount: v.number(),
+    observations: v.array(
+      v.object({
+        stepKey: v.string(),
+        label: v.string(),
+        summary: v.string(),
+        sourceCount: v.optional(v.number()),
+        artifactCount: v.optional(v.number()),
+        eventType: v.union(v.literal("search"), v.literal("artifact"), v.literal("tool")),
+        eventTitle: v.string(),
+        eventSummary: v.string(),
+        metadataJson: v.optional(v.string()),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get("agentRuns", args.runId);
+    if (!run || run.ownerUserId !== args.ownerUserId || run.threadId !== args.threadId) {
+      throw new ConvexError("Run not found");
+    }
+    const now = Date.now();
+    const observations =
+      args.observations.length > 0 || (args.sourceCount === 0 && args.artifactCount === 0)
+        ? args.observations
+        : [
+            {
+              stepKey: args.sourceCount > 0 ? "searchWeb" : "artifact",
+              label: args.sourceCount > 0 ? "Mencari sumber" : "Membuat artifact",
+              summary:
+                args.sourceCount > 0
+                  ? `${args.sourceCount} sumber dipakai`
+                  : `${args.artifactCount} artifact dibuat`,
+              sourceCount: args.sourceCount || undefined,
+              artifactCount: args.artifactCount || undefined,
+              eventType: args.sourceCount > 0 ? ("search" as const) : ("artifact" as const),
+              eventTitle: args.sourceCount > 0 ? "Sumber" : "Artifact",
+              eventSummary:
+                args.sourceCount > 0
+                  ? `${args.sourceCount} kandidat sumber ditemukan`
+                  : `${args.artifactCount} artifact diproses`,
+            },
+          ];
+    for (const [index, observation] of observations.entries()) {
+      await ctx.db.insert("agentRunSteps", {
+        ownerUserId: args.ownerUserId,
+        runId: args.runId,
+        stepKey: observation.stepKey,
+        label: observation.label,
+        order: index,
+        status: "completed",
+        summary: observation.summary,
+        sourceCount: observation.sourceCount,
+        artifactCount: observation.artifactCount,
+        startedAt: run.createdAt,
+        completedAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert("agentRunEvents", {
+        ownerUserId: args.ownerUserId,
+        runId: args.runId,
+        threadId: args.threadId,
+        stepKey: observation.stepKey,
+        eventType: observation.eventType,
+        title: observation.eventTitle,
+        summary: observation.eventSummary,
+        metadataJson: observation.metadataJson,
+        createdAt: now + index,
+      });
+    }
+    await ctx.db.patch("agentRuns", args.runId, {
+      status: "completed",
+      currentStep: observations.at(-1)?.stepKey ?? "finalize",
+      sourceCount: args.sourceCount,
+      artifactCount: args.artifactCount,
+      retryable: false,
+      completedAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
+export const failInlineRun = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    threadId: v.string(),
+    runId: v.id("agentRuns"),
+    errorMessage: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get("agentRuns", args.runId);
+    if (!run || run.ownerUserId !== args.ownerUserId || run.threadId !== args.threadId) {
+      return;
+    }
+    const now = Date.now();
+    await ctx.db.patch("agentRuns", args.runId, {
+      status: "failed",
+      failedStep: "reply",
+      errorCode: "normal_reply_failed",
+      errorMessage: args.errorMessage,
+      retryable: false,
+      completedAt: now,
+      updatedAt: now,
+    });
   },
 });
 
@@ -391,6 +559,87 @@ function collectArtifactResults(
   return results;
 }
 
+type ToolObservation = {
+  stepKey: string;
+  label: string;
+  summary: string;
+  sourceCount?: number;
+  artifactCount?: number;
+  eventType: "search" | "artifact" | "tool";
+  eventTitle: string;
+  eventSummary: string;
+  metadataJson?: string;
+};
+
+function collectToolObservations(
+  steps: Array<{
+    toolCalls?: Array<{ toolName?: string; input?: unknown; args?: unknown }>;
+    toolResults?: Array<{ toolName?: string; output?: unknown; result?: unknown }>;
+  }>,
+): ToolObservation[] {
+  const observations: ToolObservation[] = [];
+  for (const step of steps) {
+    for (const result of step.toolResults ?? []) {
+      const output = result.output ?? result.result;
+      const toolName = result.toolName ?? inferToolName(output);
+      if (Array.isArray(output)) {
+        const candidates = output.filter(isSourceCandidate);
+        if (candidates.length > 0) {
+          observations.push({
+            stepKey: toolName === "searchCorpus" ? "searchCorpus" : "searchWeb",
+            label: toolName === "searchCorpus" ? "Mencari corpus" : "Mencari sumber",
+            summary: `${candidates.length} sumber ditemukan lewat ${providerLabel(candidates)}`,
+            sourceCount: candidates.length,
+            eventType: "search",
+            eventTitle: providerLabel(candidates),
+            eventSummary: candidates
+              .slice(0, 3)
+              .map((candidate) => candidate.title)
+              .join(" | "),
+            metadataJson: JSON.stringify({
+              toolName,
+              providers: [...new Set(candidates.map((candidate) => candidate.provider ?? candidate.origin))],
+              urls: candidates.map((candidate) => candidate.url ?? candidate.locator).slice(0, 5),
+            }),
+          });
+        }
+        continue;
+      }
+      if (isArtifactToolResult(output)) {
+        observations.push({
+          stepKey: "artifact",
+          label: output.relation === "updated" ? "Memperbarui artifact" : "Membuat artifact",
+          summary: output.relation === "updated" ? "Artifact diperbarui" : "Artifact dibuat",
+          artifactCount: 1,
+          eventType: "artifact",
+          eventTitle: "Artifact",
+          eventSummary: `${output.relation}: ${output.artifactId}`,
+          metadataJson: JSON.stringify({ toolName, artifactId: output.artifactId, versionId: output.versionId }),
+        });
+      }
+    }
+  }
+  return observations;
+}
+
+function inferToolName(output: unknown) {
+  if (Array.isArray(output) && output.some(isSourceCandidate)) {
+    const first = output.find(isSourceCandidate);
+    return first?.origin === "corpus" ? "searchCorpus" : "searchWeb";
+  }
+  if (isArtifactToolResult(output)) {
+    return output.relation === "updated" ? "updateArtifact" : "createArtifact";
+  }
+  return "tool";
+}
+
+function providerLabel(candidates: SourceCandidate[]) {
+  const providers = [
+    ...new Set(candidates.map((candidate) => candidate.provider ?? candidate.origin)),
+  ];
+  return providers.length > 0 ? providers.join(", ") : "provider eksternal";
+}
+
 function isArtifactToolResult(value: unknown): value is {
   artifactId: Id<"artifacts">;
   versionId: Id<"artifactVersions">;
@@ -466,6 +715,10 @@ function getVisibleAssistantMessageId(
   flushGroup();
 
   return visibleMessageId;
+}
+
+function readableError(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export const markThreadIdle = internalMutation({

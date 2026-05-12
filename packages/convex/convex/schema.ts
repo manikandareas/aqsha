@@ -1,6 +1,8 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+const runId = v.union(v.id("agentRuns"), v.id("researchRuns"));
+
 export default defineSchema(
   {
     threadMetadata: defineTable({
@@ -56,10 +58,12 @@ export default defineSchema(
       .index("by_owner_created", ["ownerUserId", "createdAt"])
       .index("by_owner_type", ["ownerUserId", "sourceType"])
       .index("by_owner_locator", ["ownerUserId", "locator"]),
-    researchRuns: defineTable({
+    agentRuns: defineTable({
       ownerUserId: v.string(),
       threadId: v.string(),
       promptMessageId: v.string(),
+      mode: v.union(v.literal("normal"), v.literal("deep")),
+      executionKind: v.union(v.literal("inline"), v.literal("workflow")),
       workflowId: v.optional(v.string()),
       promptSnapshot: v.optional(v.string()),
       status: v.union(
@@ -88,7 +92,7 @@ export default defineSchema(
       artifactCount: v.number(),
       sourceCount: v.number(),
       citationCheckCount: v.number(),
-      retryOfRunId: v.optional(v.id("researchRuns")),
+      retryOfRunId: v.optional(runId),
       retryable: v.boolean(),
       canceledAt: v.optional(v.number()),
       errorCode: v.optional(v.string()),
@@ -100,9 +104,9 @@ export default defineSchema(
       .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"])
       .index("by_owner_status", ["ownerUserId", "status"])
       .index("by_workflow", ["workflowId"]),
-    researchRunSteps: defineTable({
+    agentRunSteps: defineTable({
       ownerUserId: v.string(),
-      runId: v.id("researchRuns"),
+      runId,
       stepKey: v.string(),
       label: v.string(),
       order: v.number(),
@@ -124,10 +128,11 @@ export default defineSchema(
       .index("by_run_order", ["runId", "order"])
       .index("by_owner_run", ["ownerUserId", "runId"])
       .index("by_owner_run_and_step", ["ownerUserId", "runId", "stepKey"]),
-    researchRunEvents: defineTable({
+    agentRunEvents: defineTable({
       ownerUserId: v.string(),
-      runId: v.id("researchRuns"),
+      runId,
       threadId: v.string(),
+      stepKey: v.optional(v.string()),
       eventType: v.union(
         v.literal("plan"),
         v.literal("gap"),
@@ -136,6 +141,8 @@ export default defineSchema(
         v.literal("read"),
         v.literal("rerank"),
         v.literal("audit"),
+        v.literal("tool"),
+        v.literal("artifact"),
         v.literal("status"),
         v.literal("failure"),
       ),
@@ -150,7 +157,7 @@ export default defineSchema(
     artifacts: defineTable({
       ownerUserId: v.string(),
       threadId: v.string(),
-      runId: v.optional(v.id("researchRuns")),
+      runId: v.optional(runId),
       type: v.union(
         v.literal("research_report"),
         v.literal("markdown_report"),
@@ -174,7 +181,7 @@ export default defineSchema(
       ownerUserId: v.string(),
       threadId: v.string(),
       artifactId: v.id("artifacts"),
-      runId: v.optional(v.id("researchRuns")),
+      runId: v.optional(runId),
       versionNumber: v.number(),
       contentFormat: v.union(
         v.literal("markdown"),
@@ -211,7 +218,7 @@ export default defineSchema(
     citationChecks: defineTable({
       ownerUserId: v.string(),
       threadId: v.string(),
-      runId: v.id("researchRuns"),
+      runId,
       artifactId: v.id("artifacts"),
       artifactVersionId: v.id("artifactVersions"),
       claim: v.string(),
@@ -230,7 +237,7 @@ export default defineSchema(
       ownerUserId: v.string(),
       threadId: v.string(),
       messageId: v.optional(v.string()),
-      runId: v.optional(v.id("researchRuns")),
+      runId: v.optional(runId),
       artifactId: v.optional(v.id("artifacts")),
       artifactVersionId: v.optional(v.id("artifactVersions")),
       citationNumber: v.number(),
@@ -273,7 +280,7 @@ export default defineSchema(
       .index("by_owner_source", ["ownerUserId", "corpusSourceId"]),
     researchExtracts: defineTable({
       ownerUserId: v.string(),
-      runId: v.id("researchRuns"),
+      runId,
       threadId: v.string(),
       sourceKey: v.string(),
       citationNumber: v.number(),

@@ -4,13 +4,15 @@ import { requireCurrentUser } from "../auth";
 import { assertThreadOwner } from "./threads";
 import { sourceCandidateValidator } from "./sourceCandidates";
 
+const persistedRunIdValidator = v.union(v.id("agentRuns"), v.id("researchRuns"));
+
 const sourceSummaryValidator = v.object({
   _id: v.id("researchSources"),
   _creationTime: v.number(),
   ownerUserId: v.string(),
   threadId: v.string(),
   messageId: v.optional(v.string()),
-  runId: v.optional(v.id("researchRuns")),
+  runId: v.optional(persistedRunIdValidator),
   artifactId: v.optional(v.id("artifacts")),
   artifactVersionId: v.optional(v.id("artifactVersions")),
   citationNumber: v.number(),
@@ -47,7 +49,7 @@ export const list = query({
   args: {
     threadId: v.string(),
     messageId: v.optional(v.string()),
-    runId: v.optional(v.id("researchRuns")),
+    runId: v.optional(v.id("agentRuns")),
     artifactId: v.optional(v.id("artifacts")),
   },
   returns: v.array(sourceSummaryValidator),
