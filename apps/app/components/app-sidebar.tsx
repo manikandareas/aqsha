@@ -45,14 +45,12 @@ export function AppSidebar({
   viewer,
   threads,
   selectedThreadId,
-  isCreating,
   onCreateThread,
   ...props
 }: ComponentProps<typeof Sidebar> & {
   viewer: Viewer | undefined;
   threads: ThreadSummary[];
   selectedThreadId?: string;
-  isCreating: boolean;
   onCreateThread: () => void;
 }) {
   const grouped = groupThreads(threads);
@@ -94,9 +92,8 @@ export function AppSidebar({
         <SidebarMenu className="gap-0.5">
           <PrimaryNavRow
             icon={MessageSquarePlusIcon}
-            label={isCreating ? "Membuat..." : "Chat baru"}
+            label="Chat baru"
             onClick={onCreateThread}
-            disabled={isCreating}
           />
           <PrimaryNavLink
             href="/sources"
@@ -251,7 +248,7 @@ function ThreadRow({
         )}
       >
         <Link
-          href={`/thread/${thread.threadId}`}
+          href={`/threads/${thread.threadId}`}
           className="flex min-w-0 max-w-full items-center overflow-hidden"
         >
           <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-medium leading-4">

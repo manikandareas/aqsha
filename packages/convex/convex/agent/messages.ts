@@ -1,4 +1,5 @@
 import {
+  createThread,
   listUIMessages,
   syncStreams,
   vStreamArgs,
@@ -30,6 +31,7 @@ const FAILURE_TEXT =
 const sendResultValidator = v.union(
   v.object({
     ok: v.literal(true),
+    threadId: v.optional(v.string()),
     messageId: v.string(),
     runId: v.optional(v.id("agentRuns")),
     workflowId: v.optional(v.string()),
@@ -44,6 +46,7 @@ const sendResultValidator = v.union(
 type SendResult =
   | {
       ok: true;
+      threadId?: string;
       messageId: string;
       runId?: import("../_generated/dataModel").Id<"agentRuns">;
       workflowId?: string;
@@ -102,6 +105,149 @@ async function upsertThreadMetadata(
   });
 }
 
+function validateContent(content: string) {
+  const trimmed = content.trim();
+  if (trimmed.length < 1) {
+    throw new ConvexError("Message cannot be empty");
+  }
+  if (trimmed.length > MAX_CONTENT_LENGTH) {
+    throw new ConvexError("Message is too long");
+  }
+  return trimmed;
+}
+
+async function checkAndConsumeSendQuota(
+  ctx: MutationCtx,
+  args: {
+    ownerUserId: string;
+    content: string;
+  },
+): Promise<{ ok: true } | { ok: false; retryAt: number }> {
+  const estimatedTokens = estimateTokens(args.content);
+  const rateChecks = await Promise.all([
+    rateLimiter.check(ctx, "sendMessage", { key: args.ownerUserId }),
+    rateLimiter.check(ctx, "globalSendMessage"),
+    rateLimiter.check(ctx, "tokenUsagePerUser", {
+      key: args.ownerUserId,
+      count: estimatedTokens,
+    }),
+    rateLimiter.check(ctx, "globalTokenUsage", { count: estimatedTokens }),
+  ]);
+  const blocked = rateChecks.find((status) => !status.ok);
+  if (blocked && !blocked.ok) {
+    return {
+      ok: false,
+      retryAt: Date.now() + blocked.retryAfter,
+    };
+  }
+  await Promise.all([
+    rateLimiter.limit(ctx, "sendMessage", { key: args.ownerUserId }),
+    rateLimiter.limit(ctx, "globalSendMessage"),
+  ]);
+  return { ok: true };
+}
+
+async function savePromptAndScheduleRun(
+  ctx: MutationCtx,
+  args: {
+    ownerUserId: string;
+    threadId: string;
+    threadTitle?: string;
+    content: string;
+    mode: "normal" | "deep";
+  },
+): Promise<SendResult> {
+  const saved = await astra.saveMessages(ctx, {
+    threadId: args.threadId,
+    userId: args.ownerUserId,
+    messages: [{ role: "user", content: args.content }],
+    skipEmbeddings: true,
+  });
+  const messageId = saved.messages[0]._id;
+  const preview = previewFromContent(args.content);
+
+  await upsertThreadMetadata(ctx, {
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+    preview,
+    status: "streaming",
+    incrementMessageCount: true,
+  });
+
+  if (shouldGenerateThreadTitle(args.threadTitle)) {
+    await ctx.scheduler.runAfter(0, internal.agent.messages.generateThreadTitle, {
+      threadId: args.threadId,
+      userId: args.ownerUserId,
+    });
+  }
+
+  if (args.mode === "deep") {
+    const run: {
+      runId: import("../_generated/dataModel").Id<"agentRuns">;
+      workflowId: string;
+    } = await ctx.runMutation(internal.agent.deepResearch.startForMessage, {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      promptMessageId: messageId,
+      prompt: args.content,
+    });
+
+    return { ok: true as const, messageId, ...run };
+  }
+
+  const runId = await ctx.runMutation(internal.agent.messages.startInlineRun, {
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+    promptMessageId: messageId,
+    prompt: args.content,
+  });
+  await ctx.scheduler.runAfter(0, internal.agent.messages.generateReply, {
+    threadId: args.threadId,
+    userId: args.ownerUserId,
+    promptMessageId: messageId,
+    runId,
+  });
+
+  return { ok: true as const, messageId, runId };
+}
+
+export const startThread = mutation({
+  args: {
+    content: v.string(),
+    mode: v.union(v.literal("normal"), v.literal("deep")),
+  },
+  returns: sendResultValidator,
+  handler: async (ctx, args): Promise<SendResult> => {
+    const user = await requireCurrentUser(ctx);
+    const content = validateContent(args.content);
+    const quota = await checkAndConsumeSendQuota(ctx, {
+      ownerUserId: user._id,
+      content,
+    });
+    if (!quota.ok) {
+      return {
+        ok: false as const,
+        reason: "rate_limited" as const,
+        retryAt: quota.retryAt,
+      };
+    }
+
+    const threadId = await createThread(ctx, components.agent, {
+      userId: user._id,
+      title: "Thread baru",
+    });
+    const result = await savePromptAndScheduleRun(ctx, {
+      ownerUserId: user._id,
+      threadId,
+      threadTitle: "Thread baru",
+      content,
+      mode: args.mode,
+    });
+
+    return result.ok ? { ...result, threadId } : result;
+  },
+});
+
 export const send = mutation({
   args: {
     threadId: v.string(),
@@ -111,87 +257,26 @@ export const send = mutation({
   returns: sendResultValidator,
   handler: async (ctx, args): Promise<SendResult> => {
     const user = await requireCurrentUser(ctx);
-    const content = args.content.trim();
-    if (content.length < 1) {
-      throw new ConvexError("Message cannot be empty");
-    }
-    if (content.length > MAX_CONTENT_LENGTH) {
-      throw new ConvexError("Message is too long");
-    }
-
+    const content = validateContent(args.content);
     const thread = await assertThreadOwner(ctx, args.threadId);
-    const estimatedTokens = estimateTokens(content);
-    const rateChecks = await Promise.all([
-      rateLimiter.check(ctx, "sendMessage", { key: user._id }),
-      rateLimiter.check(ctx, "globalSendMessage"),
-      rateLimiter.check(ctx, "tokenUsagePerUser", {
-        key: user._id,
-        count: estimatedTokens,
-      }),
-      rateLimiter.check(ctx, "globalTokenUsage", { count: estimatedTokens }),
-    ]);
-    const blocked = rateChecks.find((status) => !status.ok);
-    if (blocked && !blocked.ok) {
+    const quota = await checkAndConsumeSendQuota(ctx, {
+      ownerUserId: user._id,
+      content,
+    });
+    if (!quota.ok) {
       return {
         ok: false as const,
         reason: "rate_limited" as const,
-        retryAt: Date.now() + blocked.retryAfter,
+        retryAt: quota.retryAt,
       };
     }
-    await Promise.all([
-      rateLimiter.limit(ctx, "sendMessage", { key: user._id }),
-      rateLimiter.limit(ctx, "globalSendMessage"),
-    ]);
-
-    const saved = await astra.saveMessages(ctx, {
-      threadId: args.threadId,
-      userId: user._id,
-      messages: [{ role: "user", content }],
-      skipEmbeddings: true,
-    });
-    const messageId = saved.messages[0]._id;
-    const preview = previewFromContent(content);
-
-    await upsertThreadMetadata(ctx, {
+    return await savePromptAndScheduleRun(ctx, {
       ownerUserId: user._id,
       threadId: args.threadId,
-      preview,
-      status: "streaming",
-      incrementMessageCount: true,
+      threadTitle: thread.title,
+      content,
+      mode: args.mode,
     });
-
-    if (shouldGenerateThreadTitle(thread.title)) {
-      await ctx.scheduler.runAfter(0, internal.agent.messages.generateThreadTitle, {
-        threadId: args.threadId,
-        userId: user._id,
-      });
-    }
-
-    if (args.mode === "deep") {
-      const run: { runId: import("../_generated/dataModel").Id<"agentRuns">; workflowId: string } = await ctx.runMutation(internal.agent.deepResearch.startForMessage, {
-        ownerUserId: user._id,
-        threadId: args.threadId,
-        promptMessageId: messageId,
-        prompt: content,
-      });
-
-      return { ok: true as const, messageId, ...run };
-    }
-
-    const runId = await ctx.runMutation(internal.agent.messages.startInlineRun, {
-      ownerUserId: user._id,
-      threadId: args.threadId,
-      promptMessageId: messageId,
-      prompt: content,
-    });
-    await ctx.scheduler.runAfter(0, internal.agent.messages.generateReply, {
-      threadId: args.threadId,
-      userId: user._id,
-      promptMessageId: messageId,
-      runId,
-    });
-
-    return { ok: true as const, messageId, runId };
   },
 });
 

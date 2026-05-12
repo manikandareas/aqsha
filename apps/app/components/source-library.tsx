@@ -1,6 +1,6 @@
 "use client";
 
-import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useAction, useConvexAuth, useQuery } from "convex/react";
 import {
   FilePlus2Icon,
   FolderIcon,
@@ -38,22 +38,14 @@ export function SourceLibrary() {
   );
   const sources = useQuery(api.agent.corpus.list, isAuthenticated ? {} : "skip");
   const addSource = useAction(api.agent.corpus.addSource);
-  const createThread = useMutation(api.agent.threads.create);
   const [mode, setMode] = useState<SourceMode>("manual_text");
   const [title, setTitle] = useState("");
   const [value, setValue] = useState("");
   const [isAdding, setIsAdding] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
 
-  const handleCreateThread = async () => {
-    setIsCreating(true);
-    try {
-      const result = await createThread({});
-      router.push(`/thread/${result.threadId}`);
-    } finally {
-      setIsCreating(false);
-    }
+  const handleCreateThread = () => {
+    router.push("/");
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -104,7 +96,6 @@ export function SourceLibrary() {
       <AppSidebar
         viewer={viewer}
         threads={threadPage?.page ?? []}
-        isCreating={isCreating}
         onCreateThread={handleCreateThread}
       />
       <SidebarInset className="bg-background">

@@ -69,7 +69,13 @@ import {
 import { cn } from "@/lib/utils";
 
 type SendResult =
-  | { ok: true; messageId: string; runId?: string; workflowId?: string }
+  | {
+      ok: true;
+      threadId?: string;
+      messageId: string;
+      runId?: string;
+      workflowId?: string;
+    }
   | { ok: false; reason: "rate_limited"; retryAt: number };
 
 type RateStatus = {
@@ -187,7 +193,7 @@ export function ThreadShell({ threadId }: { threadId?: string }) {
     api.agent.threads.get,
     isAuthenticated && threadId ? { threadId } : "skip",
   );
-  const createThread = useMutation(api.agent.threads.create);
+  const startThread = useMutation(api.agent.messages.startThread);
   const sendMessage = useMutation(api.agent.messages.send).withOptimisticUpdate(
     (store, args) => {
       optimisticallySendMessage(api.agent.messages.list)(store, {
@@ -214,7 +220,6 @@ export function ThreadShell({ threadId }: { threadId?: string }) {
   ) as ResearchArtifact[] | undefined;
   const cancelRun = useMutation(api.agent.deepResearch.cancel);
   const retryRun = useMutation(api.agent.deepResearch.retry);
-  const [isCreating, setIsCreating] = useState(false);
   const [activeCitation, setActiveCitation] = useState<number | null>(null);
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
   const [rightPanelTab, setRightPanelTab] = useState<"sources" | "artifacts">(
@@ -244,14 +249,8 @@ export function ThreadShell({ threadId }: { threadId?: string }) {
   const effectiveRightPanelOpen =
     Boolean(hasResearchPayload) && (rightPanelOpen || hasUnseenArtifact);
 
-  const handleCreateThread = async () => {
-    setIsCreating(true);
-    try {
-      const result = await createThread({});
-      router.push(`/thread/${result.threadId}`);
-    } finally {
-      setIsCreating(false);
-    }
+  const handleCreateThread = () => {
+    router.push("/");
   };
 
   const handleOpenArtifact = (artifactId: string) => {
@@ -295,13 +294,13 @@ export function ThreadShell({ threadId }: { threadId?: string }) {
         viewer={viewer}
         threads={threads}
         selectedThreadId={threadId}
-        isCreating={isCreating}
         onCreateThread={handleCreateThread}
         hasResearchPayload={Boolean(hasResearchPayload)}
         title={title}
         threadId={threadId}
         selectedThread={selectedThread}
         rateStatus={rateStatus}
+        startThread={startThread}
         sendMessage={sendMessage}
         sources={sources ?? []}
         runs={runs ?? []}
@@ -325,13 +324,13 @@ function ThreadShellLayout({
   viewer,
   threads,
   selectedThreadId,
-  isCreating,
   onCreateThread,
   hasResearchPayload,
   title,
   threadId,
   selectedThread,
   rateStatus,
+  startThread,
   sendMessage,
   sources,
   runs,
@@ -362,7 +361,6 @@ function ThreadShellLayout({
     status: "idle" | "streaming" | "failed";
   }>;
   selectedThreadId?: string;
-  isCreating: boolean;
   onCreateThread: () => void;
   hasResearchPayload: boolean;
   title: string;
@@ -374,6 +372,10 @@ function ThreadShellLayout({
     | null
     | undefined;
   rateStatus: RateStatus | undefined;
+  startThread: (args: {
+    content: string;
+    mode: "normal" | "deep";
+  }) => Promise<SendResult>;
   sendMessage: (args: {
     threadId: string;
     content: string;
@@ -404,7 +406,6 @@ function ThreadShellLayout({
         viewer={viewer}
         threads={threads}
         selectedThreadId={selectedThreadId}
-        isCreating={isCreating}
         onCreateThread={onCreateThread}
       />
       <SidebarInset className="h-svh min-h-0 min-w-0 overflow-hidden bg-background">
@@ -435,12 +436,13 @@ function ThreadShellLayout({
                   isLoading={threadId ? selectedThread === undefined : false}
                   title={threadId ? selectedThread?.title : undefined}
                   rateStatus={rateStatus}
+                  startThread={startThread}
                   onSend={sendMessage}
                   sources={sources}
                   runs={runs}
-              artifacts={artifacts}
-              onCitationClick={onCitationClick}
-              onOpenArtifact={onOpenArtifact}
+                  artifacts={artifacts}
+                  onCitationClick={onCitationClick}
+                  onOpenArtifact={onOpenArtifact}
                   onCancelRun={onCancelRun}
                   onRetryRun={onRetryRun}
                 />
@@ -541,6 +543,7 @@ function ChatThreadState({
   isLoading,
   title,
   rateStatus,
+  startThread,
   onSend,
   sources,
   runs,
@@ -554,6 +557,10 @@ function ChatThreadState({
   isLoading: boolean;
   title?: string;
   rateStatus: RateStatus | undefined;
+  startThread: (args: {
+    content: string;
+    mode: "normal" | "deep";
+  }) => Promise<SendResult>;
   onSend: (args: {
     threadId: string;
     content: string;
@@ -639,10 +646,11 @@ function ChatThreadState({
         <div className="mx-auto w-full max-w-3xl">
           <Composer
             threadId={threadId}
-            disabled={!threadId || isLoading}
+            disabled={isLoading}
             rateStatus={rateStatus}
             activeRun={activeRun}
             onCancelRun={onCancelRun}
+            onStartThread={startThread}
             onSend={onSend}
           />
         </div>
@@ -821,11 +829,16 @@ function Composer({
   rateStatus,
   activeRun,
   onCancelRun,
+  onStartThread,
   onSend,
 }: {
   threadId?: string;
   disabled: boolean;
   rateStatus: RateStatus | undefined;
+  onStartThread: (args: {
+    content: string;
+    mode: "normal" | "deep";
+  }) => Promise<SendResult>;
   onSend: (args: {
     threadId: string;
     content: string;
@@ -846,12 +859,12 @@ function Composer({
       : 0;
   const isRateLimited = retrySeconds > 0;
   const canSend =
-    !!threadId &&
     content.trim().length > 0 &&
     !disabled &&
     !isSending &&
     !isRateLimited;
   const isDeepActive = activeRun?.mode === "deep";
+  const router = useRouter();
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 250);
@@ -880,7 +893,7 @@ function Composer({
   }, [activeRun, isDeepActive, onCancelRun]);
 
   const handleSubmit = async ({ text }: { text: string }) => {
-    if (!threadId || !canSend) {
+    if (!canSend) {
       return;
     }
 
@@ -888,14 +901,23 @@ function Composer({
     setContent("");
     setIsSending(true);
     try {
-      const result = await onSend({
-        threadId,
-        content: nextContent,
-        mode,
-      });
+      const result = threadId
+        ? await onSend({
+            threadId,
+            content: nextContent,
+            mode,
+          })
+        : await onStartThread({
+            content: nextContent,
+            mode,
+          });
       if (!result.ok) {
         setLocalRetryAt(result.retryAt);
         setContent(nextContent);
+        return;
+      }
+      if (!threadId && result.threadId) {
+        router.push(`/threads/${result.threadId}`);
       }
     } finally {
       setIsSending(false);
@@ -928,9 +950,7 @@ function Composer({
         disabled={disabled || isDeepActive}
         rows={2}
         maxLength={8000}
-        placeholder={
-          threadId ? "Add a follow up" : "Buat thread baru dulu..."
-        }
+        placeholder={threadId ? "Add a follow up" : "Mulai riset baru..."}
         className="min-h-16 w-full resize-none bg-transparent px-4 pb-2 pt-3.5 text-[15px] leading-6 text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-100 dark:placeholder:text-[#a3a3a3]"
       />
       <PromptInputFooter className="flex w-full items-center justify-between border-t-0 px-3 pb-3 pt-1 text-muted-foreground dark:text-[#c6c6c6]">
@@ -959,7 +979,7 @@ function Composer({
             <PromptInputActionMenu>
               <PromptInputActionMenuTrigger
                 tooltip="Tambah konteks"
-                disabled={mode === "deep" || disabled || isDeepActive}
+                disabled={mode === "deep" || !threadId || disabled || isDeepActive}
                 className="size-8 rounded-[8px] text-muted-foreground hover:bg-muted disabled:opacity-70 dark:text-[#c6c6c6] dark:hover:text-foreground dark:disabled:text-[#b8b8b8] dark:disabled:opacity-75"
               >
                 <PlusIcon className="size-4" />
@@ -1460,6 +1480,7 @@ function AccessDeniedState() {
           <Composer
             disabled
             rateStatus={undefined}
+            onStartThread={async () => ({ ok: true, messageId: "" })}
             onSend={async () => ({ ok: true, messageId: "" })}
           />
         </div>
