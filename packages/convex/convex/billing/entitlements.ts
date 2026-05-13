@@ -27,8 +27,6 @@ const featureValidator = v.union(
   v.literal("cited_answer"),
   v.literal("deep_research"),
   v.literal("external_search"),
-  v.literal("source_ingest"),
-  v.literal("rag_embedding"),
 );
 
 const runIdValidator = v.id("agentRuns");

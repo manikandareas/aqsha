@@ -24,7 +24,6 @@ import {
   jinaSearchWeb,
   searchArxivProvider,
 } from "./externalProviders";
-import { corpusRag, userNamespace } from "./rag";
 import { trimForSnippet, type SourceCandidate } from "./sourceCandidates";
 import { assertThreadOwner } from "./threads";
 import { researchWorkflow } from "./workflow";
@@ -375,7 +374,7 @@ export const planResearch = internalAction({
       prompt: [
         "Create a concise autonomous research plan for this prompt.",
         "The plan must include research questions, a source strategy, the intended report shape, concrete sufficiency criteria, and initial search queries.",
-        "Keep maxRounds between 1 and 3. Prefer user corpus first, then public web discovery through Jina when corpus evidence is insufficient.",
+        "Keep maxRounds between 1 and 3. Use academic and web discovery through arXiv and Jina when evidence is needed.",
         "",
         args.prompt,
       ].join("\n"),
@@ -391,7 +390,7 @@ export const planResearch = internalAction({
         maxSources: MAX_SOURCES_PER_RUN,
         maxExtracts: MAX_EXTRACTS_PER_RUN,
         model: DEEP_MODEL,
-        providers: ["convex_rag", "jina_search", "jina_reader", "jina_rerank"],
+        providers: ["jina_search", "jina_reader", "jina_rerank", "arxiv"],
       }),
     });
     await ctx.runMutation(internal.agent.deepResearch.recordRunEvent, {
@@ -458,23 +457,19 @@ export const researchLoop = internalAction({
         summary: query,
       });
 
-      const corpus = await searchCorpus(ctx, args.ownerUserId, query);
-      const externalNeeded = corpus.length < 4 || round > 1;
-      const [arxiv, jina] = externalNeeded
-        ? await Promise.all([
-            searchArxivProvider(ctx, {
-              ownerUserId: args.ownerUserId,
-              query,
-              limit: 4,
-            }),
-            jinaSearchWeb(ctx, {
-              ownerUserId: args.ownerUserId,
-              query,
-              limit: 5,
-            }),
-          ])
-        : [[], []];
-      for (const source of dedupeSources([...corpus, ...arxiv, ...jina])) {
+      const [arxiv, jina] = await Promise.all([
+        searchArxivProvider(ctx, {
+          ownerUserId: args.ownerUserId,
+          query,
+          limit: 4,
+        }),
+        jinaSearchWeb(ctx, {
+          ownerUserId: args.ownerUserId,
+          query,
+          limit: 5,
+        }),
+      ]);
+      for (const source of dedupeSources([...arxiv, ...jina])) {
         if (sourcesByKey.size >= MAX_SOURCES_PER_RUN) {
           break;
         }
@@ -489,15 +484,14 @@ export const researchLoop = internalAction({
         eventType: "search",
         round,
         title: `Round ${round} discovery`,
-        summary: summarizeSourceDiscovery({ corpus, arxiv, jina }),
+        summary: summarizeSourceDiscovery({ arxiv, jina }),
         metadataJson: JSON.stringify({
           query,
           counts: {
-            corpus: corpus.length,
             arxiv: arxiv.length,
             jina: jina.length,
           },
-          sources: summarizeSourceMetadata([...corpus, ...arxiv, ...jina]),
+          sources: summarizeSourceMetadata([...arxiv, ...jina]),
         }),
       });
 
@@ -1219,7 +1213,7 @@ function workflowArgs() {
 function sourceRuntimeValidator() {
   return v.object({
     citationNumber: v.number(),
-    origin: v.union(v.literal("corpus"), v.literal("web"), v.literal("arxiv"), v.literal("doi")),
+    origin: v.union(v.literal("web"), v.literal("arxiv"), v.literal("doi")),
     provider: v.optional(v.string()),
     providerRequestId: v.optional(v.string()),
     evidenceStrength: v.union(v.literal("strong"), v.literal("medium"), v.literal("weak")),
@@ -1233,7 +1227,6 @@ function sourceRuntimeValidator() {
     readError: v.optional(v.string()),
     rerankScore: v.optional(v.number()),
     metadataJson: v.optional(v.string()),
-    corpusSourceId: v.optional(v.id("corpusSources")),
   });
 }
 
@@ -1242,7 +1235,7 @@ function normalizePlan(value: unknown): ResearchPlan {
   return {
     title: stringValue(plan.title) || "Deep Research Report",
     questions: stringArray(plan.questions).slice(0, 5),
-    sourceStrategy: stringValue(plan.sourceStrategy) || "Search the user corpus first, then use Jina web discovery for gaps.",
+    sourceStrategy: stringValue(plan.sourceStrategy) || "Search academic and web providers for evidence, then read the strongest results.",
     reportIntent: stringValue(plan.reportIntent) || "Produce a cited research report.",
     sufficiencyCriteria: stringArray(plan.sufficiencyCriteria).slice(0, 6),
     initialQueries: stringArray(plan.initialQueries).slice(0, 5),
@@ -1280,28 +1273,6 @@ async function chooseNextQuery(
     ].join("\n\n"),
   });
   return object.object.query.trim() || args.prompt;
-}
-
-async function searchCorpus(ctx: ActionCtx, ownerUserId: string, query: string) {
-  const result = await corpusRag.search(ctx, {
-    namespace: userNamespace(ownerUserId),
-    query,
-    limit: 5,
-    vectorScoreThreshold: 0.35,
-  });
-  return result.entries.map((entry) => ({
-    origin: "corpus" as const,
-    provider: "convex_rag",
-    readStatus: "not_needed" as const,
-    evidenceStrength: "strong" as const,
-    title: entry.metadata?.title ?? entry.title ?? "Corpus source",
-    locator: entry.metadata?.locator ?? entry.entryId,
-    url: entry.metadata?.url,
-    doi: entry.metadata?.doi,
-    arxivId: entry.metadata?.arxivId,
-    snippet: trimForSnippet(entry.text || result.text || "Corpus match", 1_500),
-    corpusSourceId: entry.metadata?.corpusSourceId as Id<"corpusSources"> | undefined,
-  }));
 }
 
 async function selectSourcesToRead(
@@ -1343,16 +1314,15 @@ async function readAndExtract(
   const extracts: ResearchExtract[] = [];
   for (const source of args.sources) {
     const key = sourceKey(source);
-    const read =
-      source.url && source.origin !== "corpus"
-        ? await jinaReadUrl(ctx, { ownerUserId: args.ownerUserId, url: source.url })
-        : {
-            ok: true,
-            title: source.title,
-            url: source.url ?? source.locator,
-            markdown: source.snippet,
-            snippet: source.snippet,
-          };
+    const read = source.url
+      ? await jinaReadUrl(ctx, { ownerUserId: args.ownerUserId, url: source.url })
+      : {
+          ok: true,
+          title: source.title,
+          url: source.url ?? source.locator,
+          markdown: source.snippet,
+          snippet: source.snippet,
+        };
     const text = read.ok ? read.markdown || read.snippet : source.snippet;
     const quote = trimForSnippet(text, 1_400);
     extracts.push({
@@ -1442,12 +1412,10 @@ function numberSources(sources: Array<Omit<SourceCandidate, "citationNumber">>):
 }
 
 function summarizeSourceDiscovery(args: {
-  corpus: Array<Omit<SourceCandidate, "citationNumber">>;
   arxiv: Array<Omit<SourceCandidate, "citationNumber">>;
   jina: Array<Omit<SourceCandidate, "citationNumber">>;
 }) {
   const groups = [
-    sourceGroupSummary("corpus", args.corpus),
     sourceGroupSummary("arXiv", args.arxiv),
     sourceGroupSummary("Jina", args.jina),
   ].filter(Boolean);
@@ -1647,7 +1615,6 @@ async function persistSourcesForRun(
       readError: source.readError,
       rerankScore: source.rerankScore,
       metadataJson: source.metadataJson,
-      corpusSourceId: source.corpusSourceId,
       createdAt: now,
     });
     ids.set(source.citationNumber, sourceId);

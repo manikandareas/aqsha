@@ -8,7 +8,7 @@
 |---|---|---|---|
 | `@aqsha/app` | `apps/app` | Next.js 16 (App Router) | React 19, Tailwind v4, Convex client |
 | `@aqsha/www` | `apps/www` | Astro | React islands, Tailwind v4, marketing pages |
-| `@aqsha/convex` | `packages/convex` | Convex | Convex functions/components, Better Auth, Agent/RAG/Workflow |
+| `@aqsha/convex` | `packages/convex` | Convex | Convex functions/components, Better Auth, Agent/Workflow, internal provenance |
 | `@aqsha/ui` | `packages/ui` | shared | React UI primitives and shared token CSS |
 
 ## Exact Dev Commands

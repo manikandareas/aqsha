@@ -1,101 +1,6 @@
-import { ConvexError, v } from "convex/values";
-import { internalMutation, query } from "../_generated/server";
-import { requireCurrentUser } from "../auth";
-import { assertThreadOwner } from "./threads";
+import { v } from "convex/values";
+import { internalMutation } from "../_generated/server";
 import { sourceCandidateValidator } from "./sourceCandidates";
-
-const persistedRunIdValidator = v.union(v.id("agentRuns"), v.id("researchRuns"));
-
-const sourceSummaryValidator = v.object({
-  _id: v.id("researchSources"),
-  _creationTime: v.number(),
-  ownerUserId: v.string(),
-  threadId: v.string(),
-  messageId: v.optional(v.string()),
-  runId: v.optional(persistedRunIdValidator),
-  artifactId: v.optional(v.id("artifacts")),
-  artifactVersionId: v.optional(v.id("artifactVersions")),
-  citationNumber: v.number(),
-  origin: v.union(
-    v.literal("corpus"),
-    v.literal("web"),
-    v.literal("arxiv"),
-    v.literal("doi"),
-  ),
-  provider: v.optional(v.string()),
-  providerRequestId: v.optional(v.string()),
-  evidenceStrength: v.union(
-    v.literal("strong"),
-    v.literal("medium"),
-    v.literal("weak"),
-  ),
-  title: v.string(),
-  locator: v.string(),
-  url: v.optional(v.string()),
-  doi: v.optional(v.string()),
-  arxivId: v.optional(v.string()),
-  snippet: v.string(),
-  readStatus: v.optional(
-    v.union(v.literal("not_needed"), v.literal("ready"), v.literal("failed")),
-  ),
-  readError: v.optional(v.string()),
-  rerankScore: v.optional(v.number()),
-  metadataJson: v.optional(v.string()),
-  corpusSourceId: v.optional(v.id("corpusSources")),
-  createdAt: v.number(),
-});
-
-export const list = query({
-  args: {
-    threadId: v.string(),
-    messageId: v.optional(v.string()),
-    runId: v.optional(v.id("agentRuns")),
-    artifactId: v.optional(v.id("artifacts")),
-  },
-  returns: v.array(sourceSummaryValidator),
-  handler: async (ctx, args) => {
-    const user = await requireCurrentUser(ctx);
-    await assertThreadOwner(ctx, args.threadId);
-    const rows = args.artifactId
-      ? await ctx.db
-          .query("researchSources")
-          .withIndex("by_owner_artifact", (q) =>
-            q.eq("ownerUserId", user._id).eq("artifactId", args.artifactId),
-          )
-          .collect()
-      : args.runId
-        ? await ctx.db
-            .query("researchSources")
-            .withIndex("by_owner_run", (q) =>
-              q.eq("ownerUserId", user._id).eq("runId", args.runId),
-            )
-            .collect()
-        : args.messageId
-      ? await ctx.db
-          .query("researchSources")
-          .withIndex("by_owner_message", (q) =>
-            q.eq("ownerUserId", user._id).eq("messageId", args.messageId),
-          )
-          .collect()
-      : await ctx.db
-          .query("researchSources")
-          .withIndex("by_owner_thread", (q) =>
-            q.eq("ownerUserId", user._id).eq("threadId", args.threadId),
-          )
-          .collect();
-    return rows.sort((a, b) => a.citationNumber - b.citationNumber);
-  },
-});
-
-export const get = query({
-  args: { sourceId: v.id("researchSources") },
-  returns: v.union(sourceSummaryValidator, v.null()),
-  handler: async (ctx, args) => {
-    const user = await requireCurrentUser(ctx);
-    const source = await ctx.db.get("researchSources", args.sourceId);
-    return source?.ownerUserId === user._id ? source : null;
-  },
-});
 
 export const persistCited = internalMutation({
   args: {
@@ -148,22 +53,9 @@ export const persistCited = internalMutation({
           readError: candidate.readError,
           rerankScore: candidate.rerankScore,
           metadataJson: candidate.metadataJson,
-          corpusSourceId: candidate.corpusSourceId,
           createdAt: now,
         }),
       ),
     );
-  },
-});
-
-export const assertCanReadSource = query({
-  args: { sourceId: v.id("researchSources") },
-  handler: async (ctx, args) => {
-    const user = await requireCurrentUser(ctx);
-    const source = await ctx.db.get("researchSources", args.sourceId);
-    if (!source || source.ownerUserId !== user._id) {
-      throw new ConvexError("Source not found");
-    }
-    return { ok: true };
   },
 });

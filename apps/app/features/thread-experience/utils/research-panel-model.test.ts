@@ -27,42 +27,35 @@ describe("research panel model", () => {
   it("auto-opens the artifact tab when an unseen artifact appears", () => {
     expect(
       getResearchPanelViewState({
-        hasSources: false,
         artifacts: [artifact("artifact-1")],
         runs: [],
         rightPanelOpen: false,
-        rightPanelTab: "sources",
         seenArtifactCount: 0,
       }),
     ).toMatchObject({
       hasResearchPayload: true,
       hasUnseenArtifact: true,
       rightPanelOpen: true,
-      rightPanelTab: "artifacts",
     });
   });
 
-  it("keeps the selected tab after artifacts have been seen", () => {
+  it("stays open after artifacts have been seen when requested", () => {
     expect(
       getResearchPanelViewState({
-        hasSources: true,
         artifacts: [artifact("artifact-1")],
         runs: [],
         rightPanelOpen: true,
-        rightPanelTab: "sources",
         seenArtifactCount: 1,
-      }).rightPanelTab,
-    ).toBe("sources");
+      }).rightPanelOpen,
+    ).toBe(true);
   });
 
-  it("treats active runs as research payload even before sources exist", () => {
+  it("treats active runs as research payload before artifacts exist", () => {
     expect(
       getResearchPanelViewState({
-        hasSources: false,
         artifacts: [],
         runs: [run("running")],
         rightPanelOpen: false,
-        rightPanelTab: "sources",
         seenArtifactCount: 0,
       }).hasResearchPayload,
     ).toBe(true);

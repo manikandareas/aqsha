@@ -1,4 +1,3 @@
-import type { ResearchSource } from "@/components/sources-panel";
 import type { RateStatus, ResearchArtifact, ResearchRun, SendResult } from "../types";
 
 export type ThreadSummary = {
@@ -49,16 +48,11 @@ export type ThreadShellLayoutProps = {
   rateStatus: RateStatus | undefined;
   startThread: StartThread;
   sendMessage: SendMessage;
-  sources: ResearchSource[];
   runs: ResearchRun[];
   artifacts: ResearchArtifact[];
   activeArtifact: ResearchArtifact | null;
-  activeCitation: number | null;
-  onCitationClick: (citation: number) => void;
   rightPanelOpen: boolean;
-  rightPanelTab: "sources" | "artifacts";
   onRightPanelOpenChange: (open: boolean) => void;
-  onRightPanelTabChange: (tab: "sources" | "artifacts") => void;
   onOpenArtifact: (artifactId: string) => void;
   onCancelRun: (runId: string) => Promise<unknown>;
   onRetryRun: (runId: string) => Promise<unknown>;

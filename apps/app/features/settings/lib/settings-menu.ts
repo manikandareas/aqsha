@@ -1,6 +1,5 @@
 import {
   CreditCardIcon,
-  DatabaseIcon,
   GaugeIcon,
   PaletteIcon,
   ShieldIcon,
@@ -11,7 +10,6 @@ export type SettingsKey =
   | "overview"
   | "account"
   | "appearance"
-  | "sources"
   | "usage-billing"
   | "security";
 
@@ -48,14 +46,6 @@ export const settingsMenu: SettingsMenuItem[] = [
     description: "Light, dark, atau system",
     group: "Personal",
     icon: PaletteIcon,
-  },
-  {
-    key: "sources",
-    href: "/settings/sources",
-    label: "Sources",
-    description: "Library dan readiness",
-    group: "Research",
-    icon: DatabaseIcon,
   },
   {
     key: "usage-billing",

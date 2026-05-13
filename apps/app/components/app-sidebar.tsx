@@ -4,8 +4,6 @@ import Link from "next/link";
 import type { ComponentProps } from "react";
 import {
   BugIcon,
-  SettingsIcon,
-  LibraryIcon,
   MessageSquarePlusIcon,
   PanelLeftIcon,
   SearchIcon,
@@ -96,18 +94,6 @@ export function AppSidebar({
             label="Chat baru"
             onClick={onCreateThread}
           />
-          <PrimaryNavLink
-            href="/sources"
-            icon={LibraryIcon}
-            label="Sumber"
-            accent="mint"
-          />
-          <PrimaryNavLink
-            href="/settings/usage-billing"
-            icon={SettingsIcon}
-            label="Settings"
-            accent="sky"
-          />
           <PrimaryNavRow icon={SparklesIcon} label="Otomasi" disabled />
           <PrimaryNavRow icon={BugIcon} label="Audit riset" disabled />
         </SidebarMenu>
@@ -171,37 +157,6 @@ function UpgradeCard() {
         <Link href="/settings/usage-billing">Lihat paket</Link>
       </Button>
     </div>
-  );
-}
-
-function PrimaryNavLink({
-  href,
-  icon: Icon,
-  label,
-  accent,
-}: {
-  href: string;
-  icon: typeof MessageSquarePlusIcon;
-  label: string;
-  accent?: "mint" | "sky";
-}) {
-  return (
-    <SidebarMenuItem className="min-w-0 overflow-hidden">
-      <SidebarMenuButton
-        asChild
-        className="h-7 rounded-[7px] px-1.5 text-[12px] font-medium text-sidebar-foreground/88 hover:bg-muted/70 hover:text-foreground"
-      >
-        <Link href={href}>
-          <Icon
-            className={cn(
-              "size-3.5",
-              accent === "mint" ? "text-[var(--mint)]" : "text-primary",
-            )}
-          />
-          <span>{label}</span>
-        </Link>
-      </SidebarMenuButton>
-    </SidebarMenuItem>
   );
 }
 

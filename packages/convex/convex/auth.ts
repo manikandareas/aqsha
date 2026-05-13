@@ -8,6 +8,7 @@ import { query, type ActionCtx, type MutationCtx, type QueryCtx } from "./_gener
 import authConfig from "./auth.config";
 
 const siteUrl = process.env.SITE_URL ?? "http://localhost:3000";
+const defaultAvatarBaseUrl = "https://api.dicebear.com/9.x/big-ears-neutral/svg";
 
 export const authComponent = createClient<DataModel>(components.betterAuth);
 
@@ -21,6 +22,24 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
   return betterAuth({
     baseURL: siteUrl,
     database: authComponent.adapter(ctx),
+    databaseHooks: {
+      user: {
+        create: {
+          before: async (user) => {
+            if (typeof user.image === "string" && user.image.trim()) {
+              return { data: user };
+            }
+
+            return {
+              data: {
+                ...user,
+                image: getDefaultAvatarUrl(user.name),
+              },
+            };
+          },
+        },
+      },
+    },
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: false,
@@ -28,6 +47,11 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
     plugins: [convex({ authConfig })],
   });
 };
+
+function getDefaultAvatarUrl(name: string) {
+  const seed = name.trim() || "Aqsha User";
+  return `${defaultAvatarBaseUrl}?seed=${encodeURIComponent(seed)}`;
+}
 
 export const getCurrentUser = query({
   args: {},

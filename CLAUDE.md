@@ -18,7 +18,7 @@ Next.js in this repo is 16.x. Before writing frontend code that depends on frame
 Aqsha now keeps the Convex-backed pivot surface only:
 
 - `apps/app`: authenticated Next.js product app.
-- `packages/convex`: Convex functions, schema, components, agent runtime, RAG, rate limiter, workflow, and tests.
+- `packages/convex`: Convex functions, schema, components, agent runtime, rate limiter, workflow, internal provenance storage, and tests.
 - `apps/www`: Astro marketing site.
 - `packages/ui`: shared React UI primitives and token CSS.
 

@@ -1,8 +1,8 @@
 "use client";
 
 import { type CSSProperties } from "react";
+import { ArtifactPanel } from "@/components/artifact-panel";
 import { AppSidebar } from "@/components/app-sidebar";
-import { ResearchSidebar } from "@/components/sources-panel";
 import {
   SidebarInset,
   SidebarProvider,
@@ -25,16 +25,11 @@ export function ThreadShellLayout({
   rateStatus,
   startThread,
   sendMessage,
-  sources,
   runs,
   artifacts,
   activeArtifact,
-  activeCitation,
-  onCitationClick,
   rightPanelOpen,
-  rightPanelTab,
   onRightPanelOpenChange,
-  onRightPanelTabChange,
   onOpenArtifact,
   onCancelRun,
   onRetryRun,
@@ -83,10 +78,8 @@ export function ThreadShellLayout({
                   rateStatus={rateStatus}
                   startThread={startThread}
                   onSend={sendMessage}
-                  sources={sources}
                   runs={runs}
                   artifacts={artifacts}
-                  onCitationClick={onCitationClick}
                   onOpenArtifact={onOpenArtifact}
                   onCancelRun={onCancelRun}
                   onRetryRun={onRetryRun}
@@ -95,14 +88,10 @@ export function ThreadShellLayout({
             </main>
           </SidebarInset>
           {hasResearchPayload ? (
-            <ResearchSidebar
+            <ArtifactPanel
               threadTitle={threadId ? selectedThread?.title : undefined}
-              sources={sources}
               artifacts={artifacts}
               activeArtifact={activeArtifact ?? null}
-              activeTab={rightPanelTab}
-              activeCitation={activeCitation}
-              onTabChange={onRightPanelTabChange}
               onOpenArtifact={onOpenArtifact}
               onClosePanel={() => onRightPanelOpenChange(false)}
             />

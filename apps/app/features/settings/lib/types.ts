@@ -48,8 +48,6 @@ export type ActivityRow = {
     cited_answer: number;
     deep_research: number;
     external_search: number;
-    source_ingest: number;
-    rag_embedding: number;
   };
 };
 

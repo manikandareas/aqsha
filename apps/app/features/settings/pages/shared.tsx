@@ -1,10 +1,9 @@
 "use client";
 
 import { useAction, useConvexAuth, useQuery } from "convex/react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { api } from "@aqsha/convex/api";
 import { readableBillingError } from "../lib/settings-format";
-import { summarizeSources } from "../lib/settings-summaries";
 import { settingsItemForPath, type SettingsKey } from "../lib/settings-menu";
 import type { ProductKey } from "../lib/types";
 
@@ -18,13 +17,10 @@ export function useSettingsData() {
     api.agent.threads.list,
     isAuthenticated ? { paginationOpts: { cursor: null, numItems: 50 } } : "skip",
   );
-  const sources = useQuery(api.agent.corpus.list, isAuthenticated ? {} : "skip");
   const createCheckout = useAction(api.billing.checkout.create);
   const createPortal = useAction(api.billing.portal.create);
   const [pendingKey, setPendingKey] = useState<ProductKey | "portal" | null>(null);
   const [billingError, setBillingError] = useState<string | null>(null);
-
-  const sourceSummary = useMemo(() => summarizeSources(sources ?? []), [sources]);
 
   const openCheckout = async (productKey: ProductKey) => {
     setPendingKey(productKey);
@@ -63,8 +59,6 @@ export function useSettingsData() {
     plans,
     activity,
     threads: threadPage?.page,
-    sources,
-    sourceSummary,
     pendingKey,
     billingError,
     openCheckout,

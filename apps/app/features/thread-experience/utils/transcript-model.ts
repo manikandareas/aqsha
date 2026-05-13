@@ -1,4 +1,3 @@
-import type { ResearchSource } from "@/components/sources-panel";
 import type { ChatMessage, ResearchRun, TranscriptEntry } from "../types";
 
 export function sortTranscriptMessages(messages: ChatMessage[]) {
@@ -65,32 +64,6 @@ export function interleaveRunsWithMessages(
   }
 
   return entries;
-}
-
-export function extractCitations(text: string) {
-  return new Set(
-    [...text.matchAll(/\[(\d{1,3})\]/g)].map((match) => Number(match[1])),
-  );
-}
-
-export function getSourcesForMessage(
-  message: ChatMessage,
-  text: string,
-  sources: ResearchSource[],
-) {
-  const directlyLinked = sources.filter(
-    (source) => source.messageId === message.id,
-  );
-  if (directlyLinked.length > 0) {
-    return directlyLinked;
-  }
-
-  const citedNumbers = extractCitations(text);
-  if (citedNumbers.size === 0) {
-    return [];
-  }
-
-  return sources.filter((source) => citedNumbers.has(source.citationNumber));
 }
 
 export function interleavedEntryKey(entry: TranscriptEntry) {

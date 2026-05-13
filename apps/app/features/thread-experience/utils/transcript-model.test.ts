@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  getSourcesForMessage,
   interleaveRunsWithMessages,
   sortTranscriptMessages,
 } from "./transcript-model";
@@ -69,21 +68,5 @@ describe("thread transcript model", () => {
       kind: "run",
       run: { _id: "orphan-run" },
     });
-  });
-
-  it("maps citation markers to sources", () => {
-    const sources = [
-      { _id: "source-1", title: "One", citationNumber: 1 },
-      { _id: "source-2", title: "Two", citationNumber: 2 },
-      { _id: "source-3", title: "Three", citationNumber: 3 },
-    ];
-
-    const linked = getSourcesForMessage(
-      message({ id: "answer", text: "Supported by [2] and [3]." }),
-      "Supported by [2] and [3].",
-      sources as never,
-    );
-
-    expect(linked.map((source) => source.citationNumber)).toEqual([2, 3]);
   });
 });

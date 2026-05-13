@@ -110,8 +110,6 @@ export type ResearchArtifact = {
     | "research_report"
     | "markdown_report"
     | "research_document"
-    | "source_bundle"
-    | "citation_evidence_view"
     | "document"
     | "code"
     | "html"
@@ -136,9 +134,7 @@ export type TranscriptEntry =
   | { kind: "run"; run: ResearchRun };
 
 export type ResearchPanelState = {
-  activeCitation: number | null;
   activeArtifactId: string | null;
-  rightPanelTab: "sources" | "artifacts";
   rightPanelOpen: boolean;
   seenArtifactCount: number;
 };
@@ -150,10 +146,9 @@ export type ThreadExperienceState = {
 };
 
 export type ThreadExperienceAction =
-  | { type: "selectCitation"; citationNumber: number | null }
   | { type: "openArtifact"; artifactId: string }
   | { type: "setPanelOpen"; open: boolean }
-  | { type: "setPanelTab"; tab: ResearchPanelState["rightPanelTab"] };
+  | { type: "markArtifactsSeen" };
 
 export type ComposerSubmission = {
   content: string;

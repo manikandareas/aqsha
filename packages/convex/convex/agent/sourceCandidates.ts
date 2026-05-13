@@ -1,8 +1,7 @@
 import { v } from "convex/values";
-import type { Id } from "../_generated/dataModel";
 
 export type EvidenceStrength = "strong" | "medium" | "weak";
-export type SourceOrigin = "corpus" | "web" | "arxiv" | "doi";
+export type SourceOrigin = "web" | "arxiv" | "doi";
 
 export type SourceCandidate = {
   citationNumber: number;
@@ -20,13 +19,11 @@ export type SourceCandidate = {
   readError?: string;
   rerankScore?: number;
   metadataJson?: string;
-  corpusSourceId?: Id<"corpusSources">;
 };
 
 export const sourceCandidateValidator = v.object({
   citationNumber: v.number(),
   origin: v.union(
-    v.literal("corpus"),
     v.literal("web"),
     v.literal("arxiv"),
     v.literal("doi"),
@@ -50,7 +47,6 @@ export const sourceCandidateValidator = v.object({
   readError: v.optional(v.string()),
   rerankScore: v.optional(v.number()),
   metadataJson: v.optional(v.string()),
-  corpusSourceId: v.optional(v.id("corpusSources")),
 });
 
 export function trimForSnippet(value: string | null | undefined, max = 700) {

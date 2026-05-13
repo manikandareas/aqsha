@@ -19,7 +19,6 @@ export function SettingsOverviewPage() {
   const usagePercent = usagePercentage(data.current);
   const completedCount = [
     data.threads.length > 0,
-    data.sourceSummary.total > 0,
     data.current.planKey !== "free",
   ].filter(Boolean).length;
 
@@ -44,11 +43,11 @@ export function SettingsOverviewPage() {
 
         <OverviewSummaryCard label="Getting started">
           <div className="flex items-baseline gap-2">
-            <h2 className="text-lg font-semibold text-foreground">{completedCount}/3 complete</h2>
+            <h2 className="text-lg font-semibold text-foreground">{completedCount}/2 complete</h2>
             <span className="text-sm font-medium text-muted-foreground">Research setup</span>
           </div>
           <p className="mt-2 text-sm font-medium text-muted-foreground">
-            Thread, sources, dan credits menentukan readiness riset Aqsha.
+            Thread dan credits menentukan readiness riset Aqsha.
           </p>
           <Button asChild size="sm" className="mt-4 rounded-[8px]">
             <Link href="/">Start research</Link>
@@ -60,7 +59,6 @@ export function SettingsOverviewPage() {
         <SettingsSectionLabel>Setup</SettingsSectionLabel>
         <SettingsCard>
           <ChecklistRow done={data.threads.length > 0} title="Research thread" text={`${data.threads.length} thread tersimpan`} href="/" />
-          <ChecklistRow done={data.sourceSummary.total > 0} title="Source library" text={`${data.sourceSummary.total} sumber, ${data.sourceSummary.ready} ready`} href="/sources" />
           <ChecklistRow done={data.current.planKey !== "free"} title="Billing readiness" text={`Plan sekarang ${data.current.planLabel}`} href="/settings/usage-billing" />
         </SettingsCard>
       </div>
@@ -88,11 +86,6 @@ export function SettingsOverviewPage() {
             <SettingRow label="Threads" description="Saved conversations and research runs.">
               <p className="text-left text-sm font-semibold text-muted-foreground sm:text-right">
                 {data.threads.length} active
-              </p>
-            </SettingRow>
-            <SettingRow label="Sources" description="Corpus entries available for cited answers.">
-              <p className="text-left text-sm font-semibold text-muted-foreground sm:text-right">
-                {data.sourceSummary.ready} ready / {data.sourceSummary.total} total
               </p>
             </SettingRow>
             <SettingRow label="Provider guard" description="Estimated cost against monthly ceiling.">

@@ -3,12 +3,10 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  ChevronsUpDownIcon,
   LogOutIcon,
-  MailIcon,
   SettingsIcon,
   MoreHorizontalIcon,
-  UserRoundIcon,
+  PaletteIcon,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
@@ -51,6 +49,9 @@ export function NavUser({ user }: { user: Viewer | undefined }) {
     router.refresh();
   };
 
+  const menuItemClass =
+    "h-9 gap-2 rounded-[8px] px-2 text-[13px] font-medium text-popover-foreground [&_svg]:size-4 [&_svg]:text-muted-foreground";
+
   return (
     <SidebarMenu>
       <SidebarMenuItem>
@@ -81,48 +82,52 @@ export function NavUser({ user }: { user: Viewer | undefined }) {
               </SidebarMenuButton>
             </DropdownMenuTrigger>
             <DropdownMenuContent
-              className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+              className="w-(--radix-dropdown-menu-trigger-width) min-w-64 rounded-[12px] p-1.5"
               side={isMobile ? "bottom" : "right"}
               align="end"
               sideOffset={4}
             >
-              <DropdownMenuLabel className="grid gap-1 p-2 font-normal">
-                <div className="flex items-center gap-2 text-sm">
-                  <UserRoundIcon className="size-4 text-muted-foreground" />
-                  <span className="truncate font-medium">{name}</span>
-                </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <MailIcon className="size-3.5" />
-                  <span className="truncate">{email}</span>
+              <DropdownMenuLabel className="p-2 font-normal">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Avatar className="h-8 w-8 rounded-full ring-1 ring-[var(--sky-soft-border)]">
+                    {user?.image ? (
+                      <AvatarImage src={user.image} alt={name} />
+                    ) : null}
+                    <AvatarFallback className="rounded-full bg-[var(--sky-soft)] text-xs font-semibold text-primary">
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="grid min-w-0 gap-0.5">
+                    <span className="truncate text-[13px] font-semibold text-popover-foreground">
+                      {name}
+                    </span>
+                    <span className="truncate text-[11px] font-medium text-muted-foreground">
+                      {email}
+                    </span>
+                  </div>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
+              <DropdownMenuItem asChild className={menuItemClass}>
                 <Link href="/settings/overview">
                   <SettingsIcon />
-                  Settings
+                  <span className="truncate">Settings</span>
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={signOut}>
-                <LogOutIcon />
-                Sign out
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem disabled>
-                <ChevronsUpDownIcon />
-                Account switcher
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <div className="flex items-center justify-between gap-3 px-2 py-1.5">
-                <span className="text-xs font-medium text-muted-foreground">
-                  Theme
-                </span>
+              <div className="flex h-9 items-center gap-2 rounded-[8px] px-2 text-[13px] font-medium text-popover-foreground">
+                <PaletteIcon className="size-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate">Theme</span>
                 <ThemeToggle
                   variant="ghost"
                   size="icon-sm"
-                  className="size-7 rounded-[7px] text-muted-foreground hover:bg-muted"
+                  className="size-7 shrink-0 rounded-[7px] text-muted-foreground hover:bg-muted"
                 />
               </div>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={signOut} className={menuItemClass}>
+                <LogOutIcon />
+                <span className="truncate">Sign out</span>
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

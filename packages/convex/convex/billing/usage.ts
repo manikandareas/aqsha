@@ -8,8 +8,6 @@ const featureCountValidator = v.object({
   cited_answer: v.number(),
   deep_research: v.number(),
   external_search: v.number(),
-  source_ingest: v.number(),
-  rag_embedding: v.number(),
 });
 
 const emptyFeatureCounts = () => ({
@@ -17,8 +15,6 @@ const emptyFeatureCounts = () => ({
   cited_answer: 0,
   deep_research: 0,
   external_search: 0,
-  source_ingest: 0,
-  rag_embedding: 0,
 });
 
 export const getCurrentPeriod = query({

@@ -3,19 +3,11 @@
 import { api } from "@aqsha/convex/api";
 import { useQuery } from "convex/react";
 import { FileTextIcon } from "lucide-react";
-import { useMemo } from "react";
 import {
   Message,
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message";
-import {
-  Source,
-  Sources,
-  SourcesContent,
-  SourcesTrigger,
-} from "@/components/ai-elements/sources";
-import type { ResearchSource } from "@/components/sources-panel";
 import { useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import type {
@@ -23,25 +15,16 @@ import type {
   PromptCommandMetadata,
   ResearchArtifact,
 } from "../types";
-import { getSourcesForMessage } from "../utils/transcript-model";
 
 export function MessageRow({
   message,
-  sources,
-  onCitationClick,
   onOpenArtifact,
 }: {
   message: ChatMessage;
-  sources: ResearchSource[];
-  onCitationClick: (citation: number) => void;
   onOpenArtifact: (artifactId: string) => void;
 }) {
   const isUser = message.role === "user";
   const text = getMessageText(message);
-  const messageSources = useMemo(
-    () => getSourcesForMessage(message, text, sources),
-    [message, text, sources],
-  );
   const messageArtifacts = useQuery(
     api.agent.artifacts.listForMessage,
     !isUser && message.id ? { messageId: message.id } : "skip",
@@ -77,7 +60,6 @@ export function MessageRow({
           Sedang menulis
         </span>
       ) : null}
-      <MessageSources sources={messageSources} onCitationClick={onCitationClick} />
       <MessageArtifacts
         links={messageArtifacts ?? []}
         onOpenArtifact={onOpenArtifact}
@@ -132,45 +114,6 @@ function MessageArtifacts({
         </button>
       ))}
     </div>
-  );
-}
-
-function MessageSources({
-  sources,
-  onCitationClick,
-}: {
-  sources: ResearchSource[];
-  onCitationClick: (citation: number) => void;
-}) {
-  if (sources.length === 0) return null;
-  return (
-    <Sources className="mt-3 mb-0 text-[var(--mint)]">
-      <SourcesTrigger
-        count={sources.length}
-        className="rounded-full border border-[var(--mint-soft-border)] bg-[var(--mint-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--mint)]"
-      >
-        {sources.length} sumber terkait
-      </SourcesTrigger>
-      <SourcesContent className="w-full">
-        {sources.slice(0, 5).map((source) => (
-          <Source
-            key={source._id}
-            href={source.url ?? "#"}
-            title={source.title}
-            className="rounded-[7px] border border-[var(--mint-soft-border)] bg-[var(--mint-soft)] px-2 py-1 text-[11px] text-[var(--mint)]"
-            onClick={(event) => {
-              onCitationClick(source.citationNumber);
-              if (!source.url) event.preventDefault();
-            }}
-          >
-            <span className="font-mono text-[10px]">
-              [{source.citationNumber}]
-            </span>
-            <span className="font-medium">{source.title}</span>
-          </Source>
-        ))}
-      </SourcesContent>
-    </Sources>
   );
 }
 

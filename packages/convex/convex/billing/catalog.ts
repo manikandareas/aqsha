@@ -20,9 +20,7 @@ export type CreditFeature =
   | "normal_chat"
   | "cited_answer"
   | "deep_research"
-  | "external_search"
-  | "source_ingest"
-  | "rag_embedding";
+  | "external_search";
 
 export const PLAN_ORDER: Record<PlanKey, number> = {
   free: 0,
@@ -173,9 +171,6 @@ export function estimateCredits(args: {
 
   if (args.feature === "deep_research") {
     return 120;
-  }
-  if (args.feature === "source_ingest" || args.feature === "rag_embedding") {
-    return 20;
   }
   if (args.feature === "external_search") {
     if (args.provider === "jina_read") return 6;

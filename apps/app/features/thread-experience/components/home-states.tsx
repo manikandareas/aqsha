@@ -52,7 +52,7 @@ export function EmptyThreadCopy({ title }: { title?: string }) {
     <div className="grid flex-1 place-items-center py-16 text-center">
       <div className="grid gap-5">
         <p className="font-hand text-2xl text-[var(--lavender)]">
-          quiet desk, clear sources
+          quiet desk, clear artifacts
         </p>
         <div className="grid gap-3">
           <h1 className="font-heading text-[28px] font-bold leading-tight sm:text-[32px]">

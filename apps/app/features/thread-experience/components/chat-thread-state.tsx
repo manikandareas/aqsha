@@ -10,7 +10,6 @@ import {
   ConversationEmptyState,
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
-import type { ResearchSource } from "@/components/sources-panel";
 import { cn } from "@/lib/utils";
 import type {
   ChatMessage,
@@ -40,10 +39,8 @@ export function ChatThreadState({
   rateStatus,
   startThread,
   onSend,
-  sources,
   runs,
   artifacts,
-  onCitationClick,
   onOpenArtifact,
   onCancelRun,
   onRetryRun,
@@ -55,10 +52,8 @@ export function ChatThreadState({
   rateStatus: RateStatus | undefined;
   startThread: StartThread;
   onSend: SendMessage;
-  sources: ResearchSource[];
   runs: ResearchRun[];
   artifacts: ResearchArtifact[];
-  onCitationClick: (citation: number) => void;
   onOpenArtifact: (artifactId: string) => void;
   onCancelRun: (runId: string) => Promise<unknown>;
   onRetryRun: (runId: string) => Promise<unknown>;
@@ -118,8 +113,6 @@ export function ChatThreadState({
                       ) : (
                         <MessageRow
                           message={entry.message}
-                          sources={sources}
-                          onCitationClick={onCitationClick}
                           onOpenArtifact={onOpenArtifact}
                         />
                       )}

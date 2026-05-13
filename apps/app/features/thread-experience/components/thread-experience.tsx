@@ -19,14 +19,12 @@ export function ThreadExperience({ threadId }: { threadId?: string }) {
     startThread,
     sendMessage,
     rateStatus,
-    sources,
     runs,
     artifacts,
     cancelRun,
     retryRun,
   } = useThreadExperienceData(threadId);
   const panelState = useResearchPanelState({
-    hasSources: sources.length > 0,
     artifacts,
     runs,
   });
@@ -69,16 +67,11 @@ export function ThreadExperience({ threadId }: { threadId?: string }) {
         rateStatus={rateStatus}
         startThread={startThread}
         sendMessage={sendMessage}
-        sources={sources ?? []}
         runs={runs ?? []}
         artifacts={artifacts ?? []}
         activeArtifact={activeArtifact ?? null}
-        activeCitation={panelState.activeCitation}
-        onCitationClick={panelState.setActiveCitation}
         rightPanelOpen={panelState.rightPanelOpen}
-        rightPanelTab={panelState.rightPanelTab}
         onRightPanelOpenChange={panelState.setPanelOpen}
-        onRightPanelTabChange={panelState.setPanelTab}
         onOpenArtifact={panelState.openArtifact}
         onCancelRun={handleCancelRun}
         onRetryRun={(runId) => retryRun({ runId: runId as never })}

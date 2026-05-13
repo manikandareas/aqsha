@@ -880,8 +880,8 @@ function collectToolObservations(
         const candidates = output.filter(isSourceCandidate);
         if (candidates.length > 0) {
           observations.push({
-            stepKey: toolName === "searchCorpus" ? "searchCorpus" : "searchWeb",
-            label: toolName === "searchCorpus" ? "Mencari corpus" : "Mencari sumber",
+            stepKey: "searchWeb",
+            label: "Mencari sumber",
             summary: `${candidates.length} sumber ditemukan lewat ${providerLabel(candidates)}`,
             sourceCount: candidates.length,
             eventType: "search",
@@ -918,8 +918,7 @@ function collectToolObservations(
 
 function inferToolName(output: unknown) {
   if (Array.isArray(output) && output.some(isSourceCandidate)) {
-    const first = output.find(isSourceCandidate);
-    return first?.origin === "corpus" ? "searchCorpus" : "searchWeb";
+    return "searchWeb";
   }
   if (isArtifactToolResult(output)) {
     return output.relation === "updated" ? "updateArtifact" : "createArtifact";

@@ -37,10 +37,6 @@ export function useThreadExperienceData(threadId?: string) {
     api.agent.rateLimits.getSendStatus,
     isAuthenticated ? {} : "skip",
   );
-  const sources = useQuery(
-    api.agent.sources.list,
-    isAuthenticated && threadId ? { threadId } : "skip",
-  );
   const runs = useQuery(
     api.agent.deepResearch.listForThread,
     isAuthenticated && threadId ? { threadId } : "skip",
@@ -60,7 +56,6 @@ export function useThreadExperienceData(threadId?: string) {
     startThread,
     sendMessage,
     rateStatus,
-    sources: sources ?? [],
     runs: runs ?? [],
     artifacts: artifacts ?? [],
     cancelRun,

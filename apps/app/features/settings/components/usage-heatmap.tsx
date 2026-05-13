@@ -6,8 +6,6 @@ const featureLabels: Record<keyof ActivityRow["featureCounts"], string> = {
   cited_answer: "Cited answer",
   deep_research: "Deep Research",
   external_search: "External search",
-  source_ingest: "Source ingest",
-  rag_embedding: "RAG embedding",
 };
 
 export function UsageHeatmap({ rows }: { rows: ActivityRow[] }) {
@@ -69,8 +67,6 @@ function FeatureBreakdown({ rows }: { rows: ActivityRow[] }) {
       cited_answer: 0,
       deep_research: 0,
       external_search: 0,
-      source_ingest: 0,
-      rag_embedding: 0,
     },
   );
   const visible = Object.entries(totals).filter(([, count]) => count > 0) as Array<[
