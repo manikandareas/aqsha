@@ -14,12 +14,6 @@ import {
 import { useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import {
-  FileTree,
-  FileTreeActions,
-  FileTreeFile,
-  FileTreeFolder,
-} from "@/components/ai-elements/file-tree";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -29,6 +23,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sidebar,
@@ -37,11 +32,8 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import type { ResearchSource, SourceFocus } from "@/features/thread-experience/types";
-import {
-  defaultExpandedSourcePaths,
-  getSourceGroups,
-  selectedSourcePath,
-} from "@/features/thread-experience/utils/research-panel-model";
+import { getSourceGroups } from "@/features/thread-experience/utils/research-panel-model";
+import { cn } from "@/lib/utils";
 
 type ResearchArtifact = {
   _id: string;
@@ -259,142 +251,236 @@ function SourcesReader({
   ].join(":");
 
   return (
-    <SourcesTree
+    <SourcesTable
       key={treeKey}
       groups={groups}
       sources={sources}
-      sourceFocus={sourceFocus}
     />
   );
 }
 
-function SourcesTree({
+function SourcesTable({
   groups,
   sources,
-  sourceFocus,
 }: {
   groups: ReturnType<typeof getSourceGroups>;
   sources: ResearchSource[];
-  sourceFocus: SourceFocus | null;
 }) {
-  const focusedGroup = sourceFocus
-    ? groups.find((group) =>
-      sourceFocus.type === "run" && group.focus.type === "run"
-        ? group.focus.runId === sourceFocus.runId
-        : sourceFocus.type === "message" && group.focus.type === "message"
-          ? group.focus.messageId === sourceFocus.messageId
-          : false,
-    )
-    : groups[0];
-  const initialSource = focusedGroup?.sources[0] ?? groups[0]?.sources[0];
-  const [selectedPath, setSelectedPath] = useState<string | undefined>(
-    initialSource ? selectedSourcePath(initialSource) : undefined,
-  );
-  const [expanded, setExpanded] = useState<Set<string>>(
-    () => defaultExpandedSourcePaths(groups, sourceFocus),
-  );
-  const selectedSource = useMemo(
+  const [query, setQuery] = useState("");
+  const rows = useMemo(
     () =>
-      sources.find((source) => selectedPath === selectedSourcePath(source)) ??
-      groups[0]?.sources[0],
-    [groups, selectedPath, sources],
+      groups.flatMap((group) =>
+        group.sources.map((source) => ({
+          group,
+          source,
+        })),
+      ),
+    [groups],
   );
+  const filteredRows = useMemo(
+    () => filterSourceRows(rows, query),
+    [query, rows],
+  );
+  const usageCounts = useMemo(() => countSourcesByUsage(sources), [sources]);
 
   return (
-    <div className="grid min-w-0 gap-3">
-      <FileTree
-        className="border-border/70 bg-card text-[12px]"
-        expanded={expanded}
-        onExpandedChange={setExpanded}
-        onSelect={setSelectedPath}
-        selectedPath={selectedPath}
-      >
-        {groups.map((group) => (
-          <FileTreeFolder
-            key={group.key}
-            path={group.path}
-            name={`${group.label} (${group.sources.length})`}
-          >
-            {group.sources.map((source) => (
-              <FileTreeFile
-                key={source._id}
-                path={selectedSourcePath(source)}
-                name={source.title}
-                icon={sourceIcon(source)}
+    <div className="rounded-[10px] border border-border/70 bg-card">
+      <div className="grid gap-3 border-b border-border/70 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-[12px] font-semibold text-foreground">
+              Source provenance
+            </p>
+            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+              {filteredRows.length} dari {sources.length} kandidat
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {(["cited", "accepted", "rejected", "candidate"] as const).map((usage) => (
+              <span
+                key={usage}
+                className={cn(
+                  "rounded-[6px] border px-2 py-1 text-[10px] font-semibold capitalize",
+                  usageToneClass(usage),
+                )}
               >
-                <span className="size-4 shrink-0" />
-                {sourceIcon(source)}
-                <span className="min-w-0 flex-1 truncate">{source.title}</span>
-                <span className="rounded-[5px] bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                  {source.usage}
-                </span>
-                {source.url ? (
-                  <FileTreeActions>
-                    <a
-                      href={source.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded p-0.5 text-muted-foreground hover:text-foreground"
-                      aria-label="Buka source"
-                    >
-                      <ExternalLinkIcon className="size-3" />
-                    </a>
-                  </FileTreeActions>
-                ) : null}
-              </FileTreeFile>
+                {usage} {usageCounts[usage] ?? 0}
+              </span>
             ))}
-          </FileTreeFolder>
-        ))}
-      </FileTree>
-      {selectedSource ? <SourceDetails source={selectedSource} /> : null}
+          </div>
+        </div>
+        <label className="relative block">
+          <span className="sr-only">Cari source</span>
+          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Cari judul, provider, status, DOI, URL..."
+            className="h-9 rounded-[8px] border-border/70 bg-background pl-8 text-[12px] shadow-none"
+          />
+        </label>
+      </div>
+
+      <div className="w-full overflow-x-auto">
+        <table className="w-full min-w-[640px] table-fixed border-collapse text-left text-[12px]">
+          <colgroup>
+            <col className="w-[58%]" />
+            <col className="w-[16%]" />
+            <col className="w-[18%]" />
+            <col className="w-[8%]" />
+          </colgroup>
+          <thead className="sticky top-0 bg-card text-[10px] uppercase tracking-normal text-muted-foreground">
+            <tr className="border-b border-border/70">
+              <th className="px-3 py-2 font-semibold">Judul</th>
+              <th className="px-3 py-2 font-semibold">Status</th>
+              <th className="px-3 py-2 font-semibold">Domain</th>
+              <th className="px-2 py-2 font-semibold" aria-label="Aksi" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/60">
+            {filteredRows.length > 0 ? (
+              filteredRows.map(({ source }) => (
+                <tr
+                  key={source._id}
+                  className="align-top transition-colors hover:bg-muted/35"
+                >
+                  <td className="px-3 py-2.5">
+                    <div className="flex min-w-0 items-center gap-2">
+                      {sourceIcon(source)}
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold text-foreground">
+                          {source.title}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <span className={cn(
+                      "inline-flex rounded-[6px] border px-2 py-1 text-[10px] font-semibold capitalize",
+                      usageToneClass(source.usage),
+                    )}>
+                      {source.usage}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <span className="block truncate font-medium text-foreground">
+                      {sourceDomainLabel(source)}
+                    </span>
+                  </td>
+                  <td className="px-2 py-2.5">
+                    {source.url ? (
+                      <a
+                        href={source.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-muted hover:text-foreground"
+                        aria-label="Buka source"
+                      >
+                        <ExternalLinkIcon className="size-3.5" />
+                      </a>
+                    ) : null}
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={4} className="px-3 py-8 text-center text-[12px] text-muted-foreground">
+                  Tidak ada source yang cocok dengan pencarian.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
 
 function sourceIcon(source: ResearchSource) {
+  const className = "size-4 shrink-0";
   if (source.origin === "arxiv" || source.origin === "doi") {
-    return <BookOpenIcon className="size-4 text-[var(--lavender)]" />;
+    return <BookOpenIcon className={cn(className, "text-[var(--lavender)]")} />;
   }
   if (source.provider?.includes("jina")) {
-    return <SearchIcon className="size-4 text-primary" />;
+    return <SearchIcon className={cn(className, "text-primary")} />;
   }
-  return <GlobeIcon className="size-4 text-[var(--mint)]" />;
+  return <GlobeIcon className={cn(className, "text-[var(--mint)]")} />;
 }
 
-function SourceDetails({ source }: { source: ResearchSource }) {
-  const metadata = [
-    source.provider ? `Provider: ${source.provider}` : null,
-    source.bucketName ? `Bucket: ${source.bucketName}` : null,
-    source.discoveryQuery ? `Query: ${source.discoveryQuery}` : null,
-    source.doi ? `DOI: ${source.doi}` : null,
-    source.arxivId ? `arXiv: ${source.arxivId}` : null,
-    source.readStatus ? `Read: ${source.readStatus}` : null,
-    source.qualityReason ? `Quality: ${source.qualityReason}` : null,
-  ].filter(Boolean);
+function sourceDomainLabel(source: ResearchSource) {
+  const locator = source.url ?? source.locator;
+  if (locator) {
+    try {
+      return new URL(locator).hostname.replace(/^www\./, "");
+    } catch {
+      return locator.replace(/^https?:\/\//, "").split("/")[0] || locator;
+    }
+  }
+  if (source.doi) {
+    return "doi.org";
+  }
+  if (source.arxivId) {
+    return "arxiv.org";
+  }
+  return source.origin;
+}
 
-  return (
-    <section className="rounded-[10px] border border-border/70 bg-card p-3 text-[12px] leading-5">
-      <div className="flex min-w-0 items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="truncate text-[13px] font-semibold text-foreground">
-            {source.title}
-          </h3>
-          <p className="mt-0.5 truncate text-muted-foreground">{source.locator}</p>
-        </div>
-        <span className="shrink-0 rounded-[6px] bg-muted px-2 py-1 text-[10px] font-semibold text-muted-foreground">
-          {source.usage}
-        </span>
-      </div>
-      <p className="mt-3 text-[12px] text-foreground">{source.snippet}</p>
-      {metadata.length > 0 ? (
-        <div className="mt-3 grid gap-1 border-t border-border/70 pt-3 text-[11px] text-muted-foreground">
-          {metadata.map((item) => (
-            <div key={item}>{item}</div>
-          ))}
-        </div>
-      ) : null}
-    </section>
+type SourceTableRow = {
+  group: ReturnType<typeof getSourceGroups>[number];
+  source: ResearchSource;
+};
+
+function filterSourceRows(rows: SourceTableRow[], query: string) {
+  const needle = query.trim().toLowerCase();
+  if (!needle) {
+    return rows;
+  }
+
+  return rows.filter(({ group, source }) =>
+    [
+      group.label,
+      source.title,
+      source.locator,
+      source.url,
+      source.doi,
+      source.arxivId,
+      source.provider,
+      source.origin,
+      source.usage,
+      source.evidenceStrength,
+      source.readStatus,
+      source.qualityReason,
+      source.bucketName,
+      source.discoveryQuery,
+      source.snippet,
+    ]
+      .filter(Boolean)
+      .some((value) => value!.toLowerCase().includes(needle)),
   );
+}
+
+function countSourcesByUsage(sources: ResearchSource[]) {
+  return sources.reduce<Record<ResearchSource["usage"], number>>(
+    (counts, source) => {
+      counts[source.usage] += 1;
+      return counts;
+    },
+    { accepted: 0, candidate: 0, cited: 0, rejected: 0 },
+  );
+}
+
+function usageToneClass(usage: ResearchSource["usage"]) {
+  switch (usage) {
+    case "accepted":
+      return "border-[var(--mint-soft-border)] bg-[var(--mint-soft)] text-[var(--mint)]";
+    case "cited":
+      return "border-[var(--sky-soft-border)] bg-[var(--sky-soft)] text-primary";
+    case "rejected":
+      return "border-[var(--coral-soft-border)] bg-[var(--coral-soft)] text-[var(--coral)]";
+    case "candidate":
+    default:
+      return "border-border/70 bg-muted text-muted-foreground";
+  }
 }
 
 function ArtifactReader({ artifact }: { artifact: ResearchArtifact }) {
