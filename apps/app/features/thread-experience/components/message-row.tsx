@@ -2,7 +2,7 @@
 
 import { api } from "@aqsha/convex/api";
 import { useQuery } from "convex/react";
-import { FileTextIcon } from "lucide-react";
+import { FileTextIcon, FolderTreeIcon } from "lucide-react";
 import {
   Message,
   MessageContent,
@@ -14,14 +14,19 @@ import type {
   ChatMessage,
   PromptCommandMetadata,
   ResearchArtifact,
+  SourceFocus,
 } from "../types";
 
 export function MessageRow({
   message,
   onOpenArtifact,
+  sourceCount = 0,
+  onOpenSources,
 }: {
   message: ChatMessage;
   onOpenArtifact: (artifactId: string) => void;
+  sourceCount?: number;
+  onOpenSources: (focus?: SourceFocus) => void;
 }) {
   const isUser = message.role === "user";
   const text = getMessageText(message);
@@ -63,6 +68,11 @@ export function MessageRow({
       <MessageArtifacts
         links={messageArtifacts ?? []}
         onOpenArtifact={onOpenArtifact}
+      />
+      <MessageSourceAction
+        messageId={message.id}
+        sourceCount={sourceCount}
+        onOpenSources={onOpenSources}
       />
     </Message>
   );
@@ -114,6 +124,36 @@ function MessageArtifacts({
         </button>
       ))}
     </div>
+  );
+}
+
+function MessageSourceAction({
+  messageId,
+  sourceCount,
+  onOpenSources,
+}: {
+  messageId: string;
+  sourceCount: number;
+  onOpenSources: (focus?: SourceFocus) => void;
+}) {
+  const { setOpen, setOpenMobile } = useSidebar();
+  if (sourceCount <= 0) return null;
+
+  const handleOpen = () => {
+    onOpenSources({ type: "message", messageId });
+    setOpen(true);
+    setOpenMobile(true);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleOpen}
+      className="mt-2 inline-flex w-fit items-center gap-1.5 rounded-[8px] border border-border/70 bg-muted/35 px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+    >
+      <FolderTreeIcon className="size-3.5" />
+      <span>{sourceCount} sumber</span>
+    </button>
   );
 }
 

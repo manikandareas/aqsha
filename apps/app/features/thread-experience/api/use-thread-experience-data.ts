@@ -6,7 +6,7 @@ import {
   optimisticallyInsertUserMessage,
   promptCommandMetadataForContent,
 } from "./optimistic-updates";
-import type { ResearchArtifact, ResearchRun } from "../types";
+import type { ResearchArtifact, ResearchRun, ResearchSource } from "../types";
 
 export function useThreadExperienceData(threadId?: string) {
   const { isAuthenticated } = useConvexAuth();
@@ -45,6 +45,10 @@ export function useThreadExperienceData(threadId?: string) {
     api.agent.artifacts.list,
     isAuthenticated && threadId ? { threadId } : "skip",
   ) as ResearchArtifact[] | undefined;
+  const sources = useQuery(
+    api.agent.sources.listForThread,
+    isAuthenticated && threadId ? { threadId } : "skip",
+  ) as ResearchSource[] | undefined;
   const cancelRun = useMutation(api.agent.deepResearch.cancel);
   const retryRun = useMutation(api.agent.deepResearch.retry);
 
@@ -58,6 +62,7 @@ export function useThreadExperienceData(threadId?: string) {
     rateStatus,
     runs: runs ?? [],
     artifacts: artifacts ?? [],
+    sources: sources ?? [],
     cancelRun,
     retryRun,
   };

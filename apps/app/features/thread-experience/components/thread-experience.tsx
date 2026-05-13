@@ -21,11 +21,13 @@ export function ThreadExperience({ threadId }: { threadId?: string }) {
     rateStatus,
     runs,
     artifacts,
+    sources,
     cancelRun,
   } = useThreadExperienceData(threadId);
   const panelState = useResearchPanelState({
     artifacts,
     runs,
+    sources,
   });
   const activeArtifact = useActiveArtifact(panelState.selectedArtifactId);
   const title = threadId
@@ -68,10 +70,15 @@ export function ThreadExperience({ threadId }: { threadId?: string }) {
         sendMessage={sendMessage}
         runs={runs ?? []}
         artifacts={artifacts ?? []}
+        sources={sources ?? []}
         activeArtifact={activeArtifact ?? null}
+        activePanelTab={panelState.activeTab}
+        sourceFocus={panelState.sourceFocus}
         rightPanelOpen={panelState.rightPanelOpen}
         onRightPanelOpenChange={panelState.setPanelOpen}
         onOpenArtifact={panelState.openArtifact}
+        onOpenSources={panelState.openSources}
+        onPanelTabChange={panelState.setActiveTab}
         onCancelRun={handleCancelRun}
       />
     </SidebarProvider>

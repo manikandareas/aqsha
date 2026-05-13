@@ -599,6 +599,15 @@ export const researchLoop = internalAction({
           .filter(([, count]) => count >= 1)
           .map(([domain]) => domain),
       });
+      await ctx.runMutation(internal.agent.sources.upsertRunCandidates, {
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+        runId: args.runId,
+        usage: "candidate",
+        candidates: discovery.candidates.map((source) =>
+          sourceForStorage(source, "candidate"),
+        ),
+      });
       mergeCandidatePool(candidatePool, discovery.candidates, {
         acceptedKeys: new Set(acceptedByKey.keys()),
         rejectedKeys: new Set(rejected.map((item) => sourceKey(item.source))),
@@ -665,6 +674,13 @@ export const researchLoop = internalAction({
         candidates: selected,
         acceptedByDomain: acceptedDomainCounts([...acceptedByKey.values()].map((item) => item.source)),
         domainPenalties,
+      });
+      await recordValidationSources(ctx, {
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+        runId: args.runId,
+        accepted: validation.accepted,
+        rejected: validation.rejected,
       });
       for (const item of validation.accepted) {
         acceptedByKey.set(sourceKey(item.source), item);
@@ -842,6 +858,15 @@ export const researchLoop = internalAction({
         queries: [{ bucket: counterBucket, query: counterBucket.queries[0] }],
         excludedDomains: [],
       });
+      await ctx.runMutation(internal.agent.sources.upsertRunCandidates, {
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+        runId: args.runId,
+        usage: "candidate",
+        candidates: discovery.candidates.map((source) =>
+          sourceForStorage(source, "candidate"),
+        ),
+      });
       mergeCandidatePool(candidatePool, discovery.candidates, {
         acceptedKeys: new Set(acceptedByKey.keys()),
         rejectedKeys: new Set(rejected.map((item) => sourceKey(item.source))),
@@ -860,6 +885,13 @@ export const researchLoop = internalAction({
         candidates: selected.slice(0, 4),
         acceptedByDomain: acceptedDomainCounts([...acceptedByKey.values()].map((item) => item.source)),
         domainPenalties,
+      });
+      await recordValidationSources(ctx, {
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+        runId: args.runId,
+        accepted: validation.accepted,
+        rejected: validation.rejected,
       });
       for (const item of validation.accepted) {
         acceptedByKey.set(sourceKey(item.source), item);
@@ -2206,6 +2238,40 @@ async function lookupDiscoveredDois(
   return results.flat();
 }
 
+async function recordValidationSources(
+  ctx: ActionCtx,
+  args: {
+    ownerUserId: string;
+    threadId: string;
+    runId: Id<"agentRuns">;
+    accepted: AcceptedSource[];
+    rejected: RejectedSource[];
+  },
+) {
+  if (args.accepted.length > 0) {
+    await ctx.runMutation(internal.agent.sources.upsertRunCandidates, {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      runId: args.runId,
+      usage: "accepted",
+      candidates: args.accepted.map((item) =>
+        sourceForStorage(item.source, "accepted", item.quality.reason),
+      ),
+    });
+  }
+  if (args.rejected.length > 0) {
+    await ctx.runMutation(internal.agent.sources.upsertRunCandidates, {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      runId: args.runId,
+      usage: "rejected",
+      candidates: args.rejected.map((item) =>
+        sourceForStorage(item.source, "rejected", item.reason),
+      ),
+    });
+  }
+}
+
 async function selectCandidatesToValidate(
   ctx: ActionCtx,
   args: {
@@ -2563,10 +2629,26 @@ function sourceKey(source: Pick<SourceCandidate, "doi" | "arxivId" | "url" | "lo
   return canonicalSourceKey(source);
 }
 
+function sourceForStorage(
+  source: Omit<SourceCandidate, "citationNumber">,
+  usage: "candidate" | "accepted" | "rejected",
+  qualityReason?: string,
+): SourceCandidate {
+  return {
+    ...source,
+    citationNumber: 0,
+    sourceKey: sourceKey(source),
+    usage,
+    qualityReason,
+  };
+}
+
 function numberSources(sources: Array<Omit<SourceCandidate, "citationNumber">>): SourceCandidate[] {
   return sources.slice(0, MAX_SOURCES_PER_RUN).map((source, index) => ({
     ...source,
     citationNumber: index + 1,
+    sourceKey: sourceKey(source),
+    usage: "accepted" as const,
   }));
 }
 
@@ -2895,12 +2977,24 @@ async function persistSourcesForRun(
   const now = Date.now();
   const ids = new Map<number, Id<"researchSources">>();
   for (const source of args.sources) {
-    const sourceId = await ctx.db.insert("researchSources", {
+    const sourceKeyValue = source.sourceKey ?? sourceKey(source);
+    const existing = await ctx.db
+      .query("researchSources")
+      .withIndex("by_owner_run_source_key", (q) =>
+        q
+          .eq("ownerUserId", args.ownerUserId)
+          .eq("runId", args.runId)
+          .eq("sourceKey", sourceKeyValue),
+      )
+      .unique();
+    const value = {
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
       runId: args.runId,
       artifactId: args.artifactId,
       artifactVersionId: args.artifactVersionId,
+      sourceKey: sourceKeyValue,
+      usage: "accepted" as const,
       citationNumber: source.citationNumber,
       origin: source.origin,
       provider: source.provider,
@@ -2914,10 +3008,22 @@ async function persistSourcesForRun(
       snippet: source.snippet,
       readStatus: source.readStatus,
       readError: source.readError,
+      qualityReason: source.qualityReason,
+      bucketName: source.bucketName,
+      discoveryQuery: source.discoveryQuery,
       rerankScore: source.rerankScore,
       metadataJson: source.metadataJson,
-      createdAt: now,
-    });
+      lastSeenAt: now,
+    };
+    const sourceId = existing
+      ? existing._id
+      : await ctx.db.insert("researchSources", {
+        ...value,
+        createdAt: now,
+      });
+    if (existing) {
+      await ctx.db.patch("researchSources", existing._id, value);
+    }
     ids.set(source.citationNumber, sourceId);
   }
   return ids;

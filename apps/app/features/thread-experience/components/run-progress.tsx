@@ -3,26 +3,33 @@
 import {
   ChevronDownIcon,
   FileTextIcon,
+  FolderTreeIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
+import { useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
-import type { ResearchArtifact, ResearchRun } from "../types";
+import type { ResearchArtifact, ResearchRun, SourceFocus } from "../types";
 import { formatCompactDuration } from "../utils/datetime";
 import { isRunActive } from "../utils/transcript-model";
 
 export function AgentRunBlock({
   run,
   artifacts,
+  sourceCount = 0,
+  onOpenSources,
 }: {
   run: ResearchRun;
   artifacts: ResearchArtifact[];
+  sourceCount?: number;
+  onOpenSources: (focus?: SourceFocus) => void;
 }) {
   const sortedSteps = run.steps.slice().sort((a, b) => a.order - b.order);
   const activeStep = sortedSteps.find((step) => step.status === "running");
   const isActive = isRunActive(run);
   const isDeep = run.mode === "deep";
   const [open, setOpen] = useState(isDeep);
+  const { setOpen: setRightPanelOpen, setOpenMobile } = useSidebar();
   const accentClass = isDeep ? "text-[var(--lavender)]" : "text-primary";
 
   const durationLabel = formatRunDuration(run, activeStep);
@@ -40,7 +47,12 @@ export function AgentRunBlock({
         ? "Berhenti sebelum selesai"
         : run.status === "canceled"
           ? "Dihentikan"
-          : `Berjalan · ${durationLabel}`;
+        : `Berjalan · ${durationLabel}`;
+  const handleOpenSources = () => {
+    onOpenSources({ type: "run", runId: run._id });
+    setRightPanelOpen(true);
+    setOpenMobile(true);
+  };
 
   return (
     <div className="w-full text-[13px] text-muted-foreground">
@@ -63,6 +75,16 @@ export function AgentRunBlock({
             )}
           />
         </button>
+        {sourceCount > 0 ? (
+          <button
+            type="button"
+            onClick={handleOpenSources}
+            className="inline-flex shrink-0 items-center gap-1 rounded-[7px] border border-border/70 bg-muted/35 px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <FolderTreeIcon className="size-3.5" />
+            <span>{sourceCount}</span>
+          </button>
+        ) : null}
       </div>
       {open ? (
         <ol className="mt-2 grid gap-1.5 pl-0">

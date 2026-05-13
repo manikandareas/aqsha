@@ -1,4 +1,11 @@
-import type { RateStatus, ResearchArtifact, ResearchRun, SendResult } from "../types";
+import type {
+  RateStatus,
+  ResearchArtifact,
+  ResearchRun,
+  ResearchSource,
+  SendResult,
+  SourceFocus,
+} from "../types";
 
 export type ThreadSummary = {
   threadId: string;
@@ -50,9 +57,14 @@ export type ThreadShellLayoutProps = {
   sendMessage: SendMessage;
   runs: ResearchRun[];
   artifacts: ResearchArtifact[];
+  sources: ResearchSource[];
   activeArtifact: ResearchArtifact | null;
+  activePanelTab: "artifacts" | "sources";
+  sourceFocus: SourceFocus | null;
   rightPanelOpen: boolean;
   onRightPanelOpenChange: (open: boolean) => void;
   onOpenArtifact: (artifactId: string) => void;
+  onOpenSources: (focus?: SourceFocus) => void;
+  onPanelTabChange: (tab: "artifacts" | "sources") => void;
   onCancelRun: (runId: string) => Promise<unknown>;
 };

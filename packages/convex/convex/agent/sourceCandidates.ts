@@ -5,6 +5,8 @@ export type SourceOrigin = "web" | "arxiv" | "doi";
 
 export type SourceCandidate = {
   citationNumber: number;
+  sourceKey?: string;
+  usage?: "candidate" | "cited" | "accepted" | "rejected";
   origin: SourceOrigin;
   provider?: string;
   providerRequestId?: string;
@@ -17,12 +19,24 @@ export type SourceCandidate = {
   snippet: string;
   readStatus?: "not_needed" | "ready" | "failed";
   readError?: string;
+  qualityReason?: string;
+  bucketName?: string;
+  discoveryQuery?: string;
   rerankScore?: number;
   metadataJson?: string;
 };
 
 export const sourceCandidateValidator = v.object({
   citationNumber: v.number(),
+  sourceKey: v.optional(v.string()),
+  usage: v.optional(
+    v.union(
+      v.literal("candidate"),
+      v.literal("cited"),
+      v.literal("accepted"),
+      v.literal("rejected"),
+    ),
+  ),
   origin: v.union(
     v.literal("web"),
     v.literal("arxiv"),
@@ -45,6 +59,9 @@ export const sourceCandidateValidator = v.object({
     v.union(v.literal("not_needed"), v.literal("ready"), v.literal("failed")),
   ),
   readError: v.optional(v.string()),
+  qualityReason: v.optional(v.string()),
+  bucketName: v.optional(v.string()),
+  discoveryQuery: v.optional(v.string()),
   rerankScore: v.optional(v.number()),
   metadataJson: v.optional(v.string()),
 });

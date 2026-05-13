@@ -8,17 +8,17 @@ Aqsha is a personal research chatbot backed by Convex. The product surface is in
 - Research threads with Normal and Deep modes.
 - Durable run status for long research work.
 - Artifacts for reusable outputs such as reports, documents, code, and structured notes.
-- Internal provenance storage for sources used by agent tools.
+- Right-panel provenance inspection for source candidates produced by runs/messages.
 
-There is no user-facing Sources feature in this scope. Aqsha does not expose a Source Library page, a Sources sidebar item, a Sources settings page, or a Sources tab in the right panel.
+Aqsha does not expose a Source Library page, a Sources sidebar item, a Sources settings page, `/sources`, `/settings/sources`, or public corpus ingestion UI. The only user-facing Sources surface is the right-panel tab for inspecting provenance candidates.
 
 ## Core Requirements
 
 1. Authenticated users can create and continue research threads.
 2. Normal mode streams a direct answer and may call external tools when evidence is needed.
 3. Deep mode starts a durable workflow that can survive refresh, cancel, retry, and completion.
-4. Agent/tool runs must persist the sources they actually use or cite as internal provenance records.
-5. Users inspect generated work through artifacts, not through a separate sources surface.
+4. Agent/tool runs must persist all produced source candidates and mark whether each was cited, accepted, rejected, or remains a candidate.
+5. Users inspect generated work through artifacts and inspect evidence provenance through the right-panel Sources tab.
 6. Cross-user reads and mutations are denied for threads, runs, artifacts, messages, usage, and internal provenance records.
 
 ## User-Facing Surfaces
@@ -35,13 +35,14 @@ The chat is the primary product. It supports:
 
 ### Artifact Panel
 
-The right panel is artifact-only. It opens when:
+The right panel supports `Artefak | Sources`. It opens when:
 
 - An artifact exists for the current thread.
 - A Deep run is active and may create an artifact.
 - The user clicks an artifact card.
+- The user clicks a compact source action under a message/run or selects the Sources tab.
 
-The panel does not include Sources tabs, source cards, citation-detail views, or Source Library controls.
+Artifact creation still auto-opens the panel. Source candidates do not auto-open the panel by themselves. The Sources tab groups candidates by run/message and shows provenance metadata only. It does not include Source Library controls, corpus ingestion, or settings.
 
 ### Settings
 
@@ -53,7 +54,7 @@ Settings covers account, appearance, usage/billing, and security. It does not in
 
 Normal and Deep agents may call external tools such as web search, arXiv, DOI/Crossref lookup, page reading, reranking, and artifact creation/update.
 
-When a tool returns evidence candidates and the final answer cites them, the backend persists those used sources to `researchSources`. This is an internal audit/provenance table, not a public feature.
+When a tool returns evidence candidates, the backend persists those candidates to `researchSources`. Normal mode marks cited final-answer sources as `cited` and uncited rows as `candidate`. Deep mode records discovery candidates and upgrades them to `accepted` or `rejected` during validation/persistence.
 
 ### Public API
 
@@ -63,6 +64,7 @@ Public functions should expose:
 - Thread list/get/create/send.
 - Run status/cancel/retry.
 - Artifact list/get/version/message-link APIs.
+- Thread-scoped source provenance list API.
 - Billing and usage APIs.
 
 Public functions should not expose:
@@ -70,16 +72,14 @@ Public functions should not expose:
 - `corpus.addSource`
 - `corpus.search`
 - `corpus.list`
-- `sources.list`
-- `sources.get`
-- Source Library mutations or queries.
+- Source Library mutations or general source-browsing APIs outside the active thread.
 
 ### Internal Provenance
 
 Internal source storage remains required:
 
-- Normal mode persists source records via internal mutations after cited tool results are known.
-- Deep mode persists source records, extracts, and citation checks as part of the workflow.
+- Normal mode persists source records via internal mutations after tool results are known, with usage labels for cited and candidate rows.
+- Deep mode persists source candidates, accepted/rejected validation outcomes, extracts, and citation checks as part of the workflow.
 - Provenance records are scoped by `ownerUserId`, `threadId`, and when applicable `messageId`, `runId`, `artifactId`, and `artifactVersionId`.
 
 ## Data Model
@@ -101,15 +101,15 @@ Required product tables include:
 - `citationChecks`
 - `externalLookupCache`
 
-`researchSources`, `researchExtracts`, and `citationChecks` are backend provenance tables. They do not imply a user-facing Sources feature.
+`researchSources`, `researchExtracts`, and `citationChecks` are backend provenance tables. Only thread-scoped `researchSources` rows are exposed to the right-panel Sources tab.
 
 ## Acceptance Criteria
 
 1. The sidebar has no Sources/Sumber link.
 2. `/sources` and `/settings/sources` are not valid product routes.
 3. The settings menu has no Sources item.
-4. The right panel renders artifacts only.
-5. No app code calls `api.agent.sources.*` or `api.agent.corpus.*`.
-6. Normal-mode cited external tool results are still stored through internal provenance persistence.
-7. Deep-mode source discovery and citation checks still persist internally.
-8. Documentation does not describe Source Library, Sources tab, or public sources/corpus APIs as product features.
+4. The right panel renders `Artefak | Sources`.
+5. App code may call only thread-scoped `api.agent.sources.listForThread`; it must not call corpus APIs.
+6. Normal-mode external tool candidates are stored with `cited` or `candidate` usage.
+7. Deep-mode source discovery, validation status, extracts, and citation checks still persist.
+8. Documentation does not describe Source Library or public corpus APIs as product features.

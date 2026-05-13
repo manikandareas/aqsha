@@ -142,6 +142,31 @@ export type ResearchArtifact = {
   createdAt: number;
 };
 
+export type ResearchSource = {
+  _id: string;
+  messageId?: string;
+  runId?: string;
+  usage: "candidate" | "cited" | "accepted" | "rejected";
+  origin: "web" | "arxiv" | "doi";
+  provider?: string;
+  title: string;
+  locator: string;
+  url?: string;
+  doi?: string;
+  arxivId?: string;
+  snippet: string;
+  evidenceStrength: "strong" | "medium" | "weak";
+  readStatus?: "not_needed" | "ready" | "failed";
+  qualityReason?: string;
+  bucketName?: string;
+  discoveryQuery?: string;
+  createdAt: number;
+};
+
+export type SourceFocus =
+  | { type: "message"; messageId: string }
+  | { type: "run"; runId: string };
+
 export type TranscriptEntry =
   | { kind: "message"; message: ChatMessage }
   | { kind: "run"; run: ResearchRun };
@@ -149,6 +174,8 @@ export type TranscriptEntry =
 export type ResearchPanelState = {
   activeArtifactId: string | null;
   rightPanelOpen: boolean;
+  activeTab: "artifacts" | "sources";
+  sourceFocus: SourceFocus | null;
   seenArtifactCount: number;
 };
 

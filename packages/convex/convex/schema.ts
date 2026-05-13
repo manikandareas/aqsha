@@ -336,6 +336,15 @@ export default defineSchema(
       runId: v.optional(runId),
       artifactId: v.optional(v.id("artifacts")),
       artifactVersionId: v.optional(v.id("artifactVersions")),
+      sourceKey: v.optional(v.string()),
+      usage: v.optional(
+        v.union(
+          v.literal("candidate"),
+          v.literal("cited"),
+          v.literal("accepted"),
+          v.literal("rejected"),
+        ),
+      ),
       citationNumber: v.number(),
       origin: v.union(
         v.literal("web"),
@@ -363,13 +372,18 @@ export default defineSchema(
         ),
       ),
       readError: v.optional(v.string()),
+      qualityReason: v.optional(v.string()),
+      bucketName: v.optional(v.string()),
+      discoveryQuery: v.optional(v.string()),
       rerankScore: v.optional(v.number()),
       metadataJson: v.optional(v.string()),
       createdAt: v.number(),
+      lastSeenAt: v.optional(v.number()),
     })
       .index("by_owner_thread", ["ownerUserId", "threadId"])
       .index("by_owner_message", ["ownerUserId", "messageId"])
       .index("by_owner_run", ["ownerUserId", "runId"])
+      .index("by_owner_run_source_key", ["ownerUserId", "runId", "sourceKey"])
       .index("by_owner_artifact", ["ownerUserId", "artifactId"]),
     researchExtracts: defineTable({
       ownerUserId: v.string(),

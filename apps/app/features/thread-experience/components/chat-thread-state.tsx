@@ -16,6 +16,8 @@ import type {
   RateStatus,
   ResearchArtifact,
   ResearchRun,
+  ResearchSource,
+  SourceFocus,
 } from "../types";
 import {
   entryGapClass,
@@ -24,6 +26,7 @@ import {
   isRunActive,
   sortTranscriptMessages,
 } from "../utils/transcript-model";
+import { getSourceCountsByOwner } from "../utils/research-panel-model";
 import type { SendMessage, StartThread, ThreadSummary } from "./component-types";
 import { Composer } from "./composer";
 import { EmptyThreadCopy, HomeStartState } from "./home-states";
@@ -42,6 +45,8 @@ export function ChatThreadState({
   runs,
   artifacts,
   onOpenArtifact,
+  sources,
+  onOpenSources,
   onCancelRun,
 }: {
   threadId?: string;
@@ -54,6 +59,8 @@ export function ChatThreadState({
   runs: ResearchRun[];
   artifacts: ResearchArtifact[];
   onOpenArtifact: (artifactId: string) => void;
+  sources: ResearchSource[];
+  onOpenSources: (focus?: SourceFocus) => void;
   onCancelRun: (runId: string) => Promise<unknown>;
 }) {
   const { isAuthenticated } = useConvexAuth();
@@ -72,6 +79,7 @@ export function ChatThreadState({
     () => interleaveRunsWithMessages(sortedMessages, runs),
     [sortedMessages, runs],
   );
+  const sourceCounts = useMemo(() => getSourceCountsByOwner(sources), [sources]);
 
   if (!threadId && !hasMessages && runs.length === 0) {
     return (
@@ -106,11 +114,15 @@ export function ChatThreadState({
                         <AgentRunBlock
                           run={entry.run}
                           artifacts={artifacts ?? []}
+                          sourceCount={sourceCounts.byRunId.get(entry.run._id) ?? 0}
+                          onOpenSources={onOpenSources}
                         />
                       ) : (
                         <MessageRow
                           message={entry.message}
                           onOpenArtifact={onOpenArtifact}
+                          sourceCount={sourceCounts.byMessageId.get(entry.message.id) ?? 0}
+                          onOpenSources={onOpenSources}
                         />
                       )}
                     </div>

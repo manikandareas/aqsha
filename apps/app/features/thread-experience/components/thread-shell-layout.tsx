@@ -27,10 +27,15 @@ export function ThreadShellLayout({
   sendMessage,
   runs,
   artifacts,
+  sources,
   activeArtifact,
+  activePanelTab,
+  sourceFocus,
   rightPanelOpen,
   onRightPanelOpenChange,
   onOpenArtifact,
+  onOpenSources,
+  onPanelTabChange,
   onCancelRun,
 }: ThreadShellLayoutProps) {
   const leftSidebar = useSidebar();
@@ -80,6 +85,8 @@ export function ThreadShellLayout({
                   runs={runs}
                   artifacts={artifacts}
                   onOpenArtifact={onOpenArtifact}
+                  sources={sources}
+                  onOpenSources={onOpenSources}
                   onCancelRun={onCancelRun}
                 />
               )}
@@ -89,8 +96,13 @@ export function ThreadShellLayout({
             <ArtifactPanel
               threadTitle={threadId ? selectedThread?.title : undefined}
               artifacts={artifacts}
+              sources={sources}
               activeArtifact={activeArtifact ?? null}
+              activeTab={activePanelTab}
+              sourceFocus={sourceFocus}
               onOpenArtifact={onOpenArtifact}
+              onOpenSources={onOpenSources}
+              onTabChange={onPanelTabChange}
               onClosePanel={() => onRightPanelOpenChange(false)}
             />
           ) : null}
