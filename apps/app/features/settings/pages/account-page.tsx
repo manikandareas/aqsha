@@ -1,12 +1,14 @@
 "use client";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { getInitials } from "../lib/settings-format";
+import { useSettingsAccountData } from "../api/use-settings-account-data";
+import { LoadingSettingsPage } from "../components/loading-settings-page";
 import { PlanChip, ReadonlyField, SettingRow, SettingsCard, SettingsSectionLabel } from "../components/settings-card";
-import { LoadingSettingsPage, SettingsHeader, useSettingsData } from "./shared";
+import { SettingsHeader } from "../components/settings-header";
+import { getInitials } from "../lib/settings-format";
 
 export function SettingsAccountPage() {
-  const { viewer, current } = useSettingsData();
+  const { viewer, current } = useSettingsAccountData();
   if (!viewer || !current) return <LoadingSettingsPage />;
 
   const name = viewer.name || "Aqsha user";

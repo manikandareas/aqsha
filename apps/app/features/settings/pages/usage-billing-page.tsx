@@ -2,15 +2,18 @@
 
 import { GiftIcon, Loader2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useSettingsUsageBillingData } from "../api/use-settings-usage-billing-data";
+import { BillingErrorBanner } from "../components/billing-error-banner";
+import { LoadingSettingsPage } from "../components/loading-settings-page";
 import { SettingRow, SettingsCard, SettingsSectionLabel } from "../components/settings-card";
+import { SettingsHeader } from "../components/settings-header";
 import { UsageHeatmap } from "../components/usage-heatmap";
 import { formatIdr, formatShortDate } from "../lib/settings-format";
-import { usagePercentage } from "../lib/settings-summaries";
-import type { BillingCurrent, Plan, ProductKey } from "../lib/types";
-import { BillingErrorBanner, LoadingSettingsPage, SettingsHeader, useSettingsData } from "./shared";
+import { findUpgradePlan, formatPlanPrice, formatProviderSpend, usagePercentage } from "../utils/settings-summary";
+import type { Plan, ProductKey } from "../lib/types";
 
 export function SettingsUsageBillingPage() {
-  const data = useSettingsData();
+  const data = useSettingsUsageBillingData();
   if (!data.current || !data.plans || !data.activity) return <LoadingSettingsPage />;
 
   const nextPlan = findUpgradePlan(data.plans, data.current.planKey);
@@ -94,7 +97,7 @@ export function SettingsUsageBillingPage() {
             description="Aqsha blocks new provider calls before this guard is exceeded."
           >
             <p className="text-left text-sm font-semibold text-muted-foreground sm:text-right">
-              ${(data.current.estimatedCostCents / 100).toFixed(2)} / ${(data.current.providerSpendCeilingCents / 100).toFixed(2)}
+              {formatProviderSpend(data.current)}
             </p>
           </SettingRow>
           <SettingRow label="On-demand spending" description="Extra usage outside the monthly plan is disabled in v1.">
@@ -156,21 +159,4 @@ function UpgradeButton({
       Upgrade
     </Button>
   );
-}
-
-function findUpgradePlan(plans: Plan[], currentKey: BillingCurrent["planKey"]) {
-  const order: Record<BillingCurrent["planKey"], number> = {
-    free: 0,
-    starter: 1,
-    plus: 2,
-  };
-  return plans
-    .filter((plan) => order[plan.key] > order[currentKey])
-    .sort((a, b) => order[a.key] - order[b.key])[0];
-}
-
-function formatPlanPrice(plans: Plan[], planKey: BillingCurrent["planKey"]) {
-  const plan = plans.find((item) => item.key === planKey);
-  if (!plan) return "";
-  return `${formatIdr(plan.monthlyPriceIdr)}/bulan`;
 }

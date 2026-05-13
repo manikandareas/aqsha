@@ -4,28 +4,29 @@ import Link from "next/link";
 import { CheckIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useSettingsOverviewData } from "../api/use-settings-overview-data";
+import { LoadingSettingsPage } from "../components/loading-settings-page";
 import { PlanChip, SettingRow, SettingsCard, SettingsSectionLabel } from "../components/settings-card";
+import { SettingsHeader } from "../components/settings-header";
 import { UsageHeatmap } from "../components/usage-heatmap";
 import { formatShortDate } from "../lib/settings-format";
-import { usagePercentage } from "../lib/settings-summaries";
-import { BillingErrorBanner, LoadingSettingsPage, SettingsHeader, useSettingsData } from "./shared";
+import { formatProviderSpend, getSetupCompletion, usagePercentage } from "../utils/settings-summary";
 
 export function SettingsOverviewPage() {
-  const data = useSettingsData();
-  if (!data.current || !data.activity || !data.threads) {
+  const data = useSettingsOverviewData();
+  if (!data.current || !data.activity || data.threadCount === undefined) {
     return <LoadingSettingsPage />;
   }
 
   const usagePercent = usagePercentage(data.current);
-  const completedCount = [
-    data.threads.length > 0,
-    data.current.planKey !== "free",
-  ].filter(Boolean).length;
+  const setup = getSetupCompletion({
+    threadCount: data.threadCount,
+    planKey: data.current.planKey,
+  });
 
   return (
     <>
       <SettingsHeader section="overview" title="Settings" />
-      <BillingErrorBanner message={data.billingError} />
 
       <div className="grid gap-4 md:grid-cols-2">
         <OverviewSummaryCard label="Current plan">
@@ -43,7 +44,9 @@ export function SettingsOverviewPage() {
 
         <OverviewSummaryCard label="Getting started">
           <div className="flex items-baseline gap-2">
-            <h2 className="text-lg font-semibold text-foreground">{completedCount}/2 complete</h2>
+            <h2 className="text-lg font-semibold text-foreground">
+              {setup.completedCount}/{setup.totalCount} complete
+            </h2>
             <span className="text-sm font-medium text-muted-foreground">Research setup</span>
           </div>
           <p className="mt-2 text-sm font-medium text-muted-foreground">
@@ -58,8 +61,8 @@ export function SettingsOverviewPage() {
       <div className="grid gap-4">
         <SettingsSectionLabel>Setup</SettingsSectionLabel>
         <SettingsCard>
-          <ChecklistRow done={data.threads.length > 0} title="Research thread" text={`${data.threads.length} thread tersimpan`} href="/" />
-          <ChecklistRow done={data.current.planKey !== "free"} title="Billing readiness" text={`Plan sekarang ${data.current.planLabel}`} href="/settings/usage-billing" />
+          <ChecklistRow done={setup.hasThreads} title="Research thread" text={`${data.threadCount} thread tersimpan`} href="/" />
+          <ChecklistRow done={setup.hasPaidPlan} title="Billing readiness" text={`Plan sekarang ${data.current.planLabel}`} href="/settings/usage-billing" />
         </SettingsCard>
       </div>
 
@@ -85,12 +88,12 @@ export function SettingsOverviewPage() {
           <SettingsCard>
             <SettingRow label="Threads" description="Saved conversations and research runs.">
               <p className="text-left text-sm font-semibold text-muted-foreground sm:text-right">
-                {data.threads.length} active
+                {data.threadCount} active
               </p>
             </SettingRow>
             <SettingRow label="Provider guard" description="Estimated cost against monthly ceiling.">
               <p className="text-left text-sm font-semibold text-muted-foreground sm:text-right">
-                ${(data.current.estimatedCostCents / 100).toFixed(2)} / ${(data.current.providerSpendCeilingCents / 100).toFixed(2)}
+                {formatProviderSpend(data.current)}
               </p>
             </SettingRow>
           </SettingsCard>

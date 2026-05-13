@@ -4,7 +4,7 @@ import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import { SettingRow, SettingsCard, SettingsSectionLabel } from "../components/settings-card";
-import { SettingsHeader } from "./shared";
+import { SettingsHeader } from "../components/settings-header";
 
 export function SettingsAppearancePage() {
   const { theme, resolvedTheme, setTheme } = useTheme();

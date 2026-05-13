@@ -4,12 +4,14 @@ import { useRouter } from "next/navigation";
 import { LogOutIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
+import { useSettingsSecurityData } from "../api/use-settings-security-data";
+import { LoadingSettingsPage } from "../components/loading-settings-page";
 import { ReadonlyField, SettingRow, SettingsCard, SettingsSectionLabel } from "../components/settings-card";
-import { LoadingSettingsPage, SettingsHeader, useSettingsData } from "./shared";
+import { SettingsHeader } from "../components/settings-header";
 
 export function SettingsSecurityPage() {
   const router = useRouter();
-  const { viewer } = useSettingsData();
+  const { viewer } = useSettingsSecurityData();
   if (!viewer) return <LoadingSettingsPage />;
 
   const signOut = async () => {
