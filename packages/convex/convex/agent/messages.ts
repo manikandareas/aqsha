@@ -619,7 +619,6 @@ export const generateThreadTitle = internalAction({
 
     const result = await generateObject({
       model: openai.chat(NORMAL_MODEL),
-      temperature: 0,
       maxOutputTokens: 80,
       schema: z.object({
         title: z

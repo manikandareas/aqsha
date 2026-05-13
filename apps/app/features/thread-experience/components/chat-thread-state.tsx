@@ -43,7 +43,6 @@ export function ChatThreadState({
   artifacts,
   onOpenArtifact,
   onCancelRun,
-  onRetryRun,
 }: {
   threadId?: string;
   isLoading: boolean;
@@ -56,7 +55,6 @@ export function ChatThreadState({
   artifacts: ResearchArtifact[];
   onOpenArtifact: (artifactId: string) => void;
   onCancelRun: (runId: string) => Promise<unknown>;
-  onRetryRun: (runId: string) => Promise<unknown>;
 }) {
   const { isAuthenticated } = useConvexAuth();
   const messages = useUIMessages(
@@ -108,7 +106,6 @@ export function ChatThreadState({
                         <AgentRunBlock
                           run={entry.run}
                           artifacts={artifacts ?? []}
-                          onRetryRun={onRetryRun}
                         />
                       ) : (
                         <MessageRow

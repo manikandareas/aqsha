@@ -19,12 +19,21 @@ import { requireCurrentUser } from "../auth";
 import { estimateCredits } from "../billing/catalog";
 import { consumeCredits } from "../billing/entitlements";
 import {
-  jinaReadUrl,
   jinaRerank,
-  jinaSearchWeb,
+  lookupDoiProvider,
+  readWithExaContents,
+  readWithJinaReader,
   searchArxivProvider,
+  searchExaCandidates,
+  searchJinaCandidates,
 } from "./externalProviders";
 import { trimForSnippet, type SourceCandidate } from "./sourceCandidates";
+import {
+  assessSourceQuality,
+  canonicalSourceKey,
+  sourceDomain,
+  type SourceQuality,
+} from "./sourceQuality";
 import { assertThreadOwner } from "./threads";
 import { researchWorkflow } from "./workflow";
 
@@ -32,6 +41,12 @@ const DEEP_MODEL = process.env.AQSHA_DEEP_MODEL ?? "gpt-5.5";
 const DEFAULT_MAX_ROUNDS = Number(process.env.AQSHA_DEEP_MAX_ROUNDS ?? 3);
 const MAX_SOURCES_PER_RUN = 14;
 const MAX_EXTRACTS_PER_RUN = 24;
+const DISCOVERY_TARGET_PER_RUN = 60;
+const MIN_ACCEPTED_SOURCES = 10;
+const MIN_ACCEPTED_EXTRACTS = 8;
+const PER_DOMAIN_ACCEPTED_CAP = 2;
+const MIN_BUCKET_COVERAGE = 3;
+const MIN_DOMAIN_DIVERSITY = 4;
 const ACTION_RETRY = { maxAttempts: 3, initialBackoffMs: 2_000, base: 2 };
 
 type SufficiencyStatus =
@@ -40,6 +55,14 @@ type SufficiencyStatus =
   | "partial"
   | "sufficient"
   | "budget_exhausted";
+
+type VerificationStatus =
+  | "not_started"
+  | "checking"
+  | "passed"
+  | "revised"
+  | "partial"
+  | "failed";
 
 type ResearchPlan = {
   title: string;
@@ -51,7 +74,7 @@ type ResearchPlan = {
   maxRounds: number;
 };
 
-type ResearchExtract = {
+export type ResearchExtract = {
   sourceKey: string;
   citationNumber: number;
   title: string;
@@ -72,12 +95,81 @@ type ResearchRoundState = {
   extracts: ResearchExtract[];
 };
 
+type CitationSupport = "supported" | "partially_supported" | "contradicted" | "partial" | "unsupported";
+
+type CitationCheckDraft = {
+  claim: string;
+  support: CitationSupport;
+  citationNumbers: number[];
+  evidence: string;
+  verifierModel?: string;
+  confidence?: number;
+  failureReason?: string;
+  extractKeys?: string[];
+  revisionAction?: "none" | "caveated" | "removed_or_rewritten";
+};
+
+type SourceBucket = {
+  name: string;
+  queries: string[];
+  preferredProviders: Array<"exa" | "jina" | "arxiv" | "crossref">;
+  includeDomains?: string[];
+  excludeDomains?: string[];
+  freshnessTarget?: "any" | "recent" | "current";
+  minAcceptedSources: number;
+};
+
+export type DiscoveryCandidate = Omit<SourceCandidate, "citationNumber"> & {
+  bucketName?: string;
+  discoveryQuery?: string;
+};
+
+export type ReadAttempt = {
+  provider: "exa" | "jina" | "none";
+  ok: boolean;
+  title: string;
+  url: string;
+  text: string;
+  snippet: string;
+  failureReason?: string;
+};
+
+type AcceptedSource = {
+  source: Omit<SourceCandidate, "citationNumber">;
+  extract: ResearchExtract;
+  quality: SourceQuality;
+  readAttempts: ReadAttempt[];
+};
+
+type RejectedSource = {
+  source: Omit<SourceCandidate, "citationNumber">;
+  reason: SourceQuality["reason"] | "domain_cap" | "domain_penalized" | "duplicate";
+  readAttempts?: ReadAttempt[];
+};
+
+type EvidenceReadiness = {
+  ready: boolean;
+  status: "insufficient" | "partial" | "sufficient";
+  readableSourceCount: number;
+  extractCount: number;
+  domainCount: number;
+  bucketCount: number;
+  highQualityExtractCount: number;
+  missing: string[];
+  recommendation: string;
+};
+
 const stepDefinitions = [
-  ["planResearch", "Merencanakan riset"],
-  ["retrieveSources", "Mencari sumber"],
-  ["readExtract", "Membaca dan mengutip"],
+  ["planRound", "Merencanakan ronde"],
+  ["discoverRoundCandidates", "Mencari sumber"],
+  ["rerankRoundCandidates", "Mengurutkan kandidat"],
+  ["readRoundSources", "Membaca sumber"],
+  ["extractRoundEvidence", "Mengekstrak evidence"],
+  ["assessRoundSufficiency", "Menilai kecukupan evidence"],
+  ["runCounterEvidencePass", "Menguji counter-evidence"],
   ["synthesize", "Menyusun laporan"],
-  ["verifyCitations", "Memeriksa kutipan"],
+  ["verifyClaimsSemantically", "Memverifikasi klaim"],
+  ["reviseUnsupportedClaims", "Merevisi klaim lemah"],
   ["persistArtifact", "Menyimpan hasil"],
   ["finalizeThread", "Menutup riset"],
 ] as const;
@@ -221,7 +313,11 @@ export const retry = mutation({
     if (!run || run.ownerUserId !== user._id) {
       throw new ConvexError("Run not found");
     }
-    if (run.status !== "failed" || !run.retryable) {
+    const canRetryPartial =
+      run.status === "completed" &&
+      run.retryable &&
+      (run.sufficiencyStatus === "partial" || run.sufficiencyStatus === "budget_exhausted");
+    if (!canRetryPartial && (run.status !== "failed" || !run.retryable)) {
       throw new ConvexError("Run is not retryable");
     }
     const prompt = run.promptSnapshot || await readPromptMessage(ctx, run.promptMessageId);
@@ -357,7 +453,7 @@ export const planResearch = internalAction({
     await ctx.runMutation(internal.agent.deepResearch.markStep, {
       runId: args.runId,
       ownerUserId: args.ownerUserId,
-      stepKey: "planResearch",
+      stepKey: "planRound",
       status: "running",
     });
     const object = await generateObject({
@@ -374,7 +470,7 @@ export const planResearch = internalAction({
       prompt: [
         "Create a concise autonomous research plan for this prompt.",
         "The plan must include research questions, a source strategy, the intended report shape, concrete sufficiency criteria, and initial search queries.",
-        "Keep maxRounds between 1 and 3. Use academic and web discovery through arXiv and Jina when evidence is needed.",
+        "Keep maxRounds between 1 and 3. Describe the evidence mix needed; the server will safely execute academic and web providers.",
         "",
         args.prompt,
       ].join("\n"),
@@ -390,14 +486,14 @@ export const planResearch = internalAction({
         maxSources: MAX_SOURCES_PER_RUN,
         maxExtracts: MAX_EXTRACTS_PER_RUN,
         model: DEEP_MODEL,
-        providers: ["jina_search", "jina_reader", "jina_rerank", "arxiv"],
+        providers: ["exa_search", "exa_contents", "jina_search", "jina_reader", "jina_rerank", "arxiv", "crossref"],
       }),
     });
     await ctx.runMutation(internal.agent.deepResearch.recordRunEvent, {
       runId: args.runId,
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
-      stepKey: "planResearch",
+      stepKey: "planRound",
       eventType: "plan",
       title: plan.title,
       summary: plan.questions.join(" | "),
@@ -406,7 +502,7 @@ export const planResearch = internalAction({
     await ctx.runMutation(internal.agent.deepResearch.markStep, {
       runId: args.runId,
       ownerUserId: args.ownerUserId,
-      stepKey: "planResearch",
+      stepKey: "planRound",
       status: "completed",
       summary: plan.title,
     });
@@ -423,115 +519,201 @@ export const researchLoop = internalAction({
   }> => {
     const plan = normalizePlan(args.plan);
     const maxRounds = Math.min(plan.maxRounds || DEFAULT_MAX_ROUNDS, DEFAULT_MAX_ROUNDS);
-    const sourcesByKey = new Map<string, Omit<SourceCandidate, "citationNumber">>();
+    const candidatePool = new Map<string, DiscoveryCandidate>();
+    const acceptedByKey = new Map<string, AcceptedSource>();
     const extractsByKey = new Map<string, ResearchExtract>();
+    const rejected: RejectedSource[] = [];
+    const domainPenalties = new Map<string, number>();
     const roundState: ResearchRoundState[] = [];
+    const buckets = await planSourceBuckets(ctx, args.prompt, plan);
     let gapAssessment = `Initial plan: ${plan.sufficiencyCriteria.join("; ")}`;
     let sufficiencyStatus: SufficiencyStatus = "unknown";
 
-    await ctx.runMutation(internal.agent.deepResearch.markStep, {
-      runId: args.runId,
-      ownerUserId: args.ownerUserId,
-      stepKey: "retrieveSources",
-      status: "running",
-    });
-
     for (let round = 1; round <= maxRounds; round += 1) {
       await ensureNotCanceled(ctx, args.runId);
-      const query = await chooseNextQuery(ctx, {
+      await ctx.runMutation(internal.agent.deepResearch.markStep, {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        stepKey: "planRound",
+        status: "running",
+      });
+      const queries = await chooseRoundQueries(ctx, {
         prompt: args.prompt,
         plan,
+        buckets,
         round,
-        previousSources: [...sourcesByKey.values()],
+        previousSources: [...acceptedByKey.values()].map((item) => item.source),
         previousExtracts: [...extractsByKey.values()],
         gapAssessment,
+        rejected,
       });
       await ctx.runMutation(internal.agent.deepResearch.recordRunEvent, {
         runId: args.runId,
         ownerUserId: args.ownerUserId,
         threadId: args.threadId,
-        stepKey: "retrieveSources",
+        stepKey: "planRound",
         eventType: "query",
         round,
-        title: `Round ${round} query`,
-        summary: query,
+        title: `Round ${round} queries`,
+        summary: queries.map((item) => `${item.bucket.name}: ${item.query}`).join(" | "),
+        metadataJson: JSON.stringify({
+          queries: queries.map((item) => ({
+            bucket: item.bucket.name,
+            query: item.query,
+            providers: item.bucket.preferredProviders,
+          })),
+          gapAssessment,
+        }),
       });
-
-      const [arxiv, jina] = await Promise.all([
-        searchArxivProvider(ctx, {
-          ownerUserId: args.ownerUserId,
-          query,
-          limit: 4,
-        }),
-        jinaSearchWeb(ctx, {
-          ownerUserId: args.ownerUserId,
-          query,
-          limit: 5,
-        }),
-      ]);
-      for (const source of dedupeSources([...arxiv, ...jina])) {
-        if (sourcesByKey.size >= MAX_SOURCES_PER_RUN) {
-          break;
-        }
-        sourcesByKey.set(sourceKey(source), source);
-      }
-
-      await ctx.runMutation(internal.agent.deepResearch.recordRunEvent, {
+      await ctx.runMutation(internal.agent.deepResearch.recordRoundState, {
         runId: args.runId,
         ownerUserId: args.ownerUserId,
         threadId: args.threadId,
-        stepKey: "retrieveSources",
-        eventType: "search",
         round,
-        title: `Round ${round} discovery`,
-        summary: summarizeSourceDiscovery({ arxiv, jina }),
-        metadataJson: JSON.stringify({
-          query,
-          counts: {
-            arxiv: arxiv.length,
-            jina: jina.length,
-          },
-          sources: summarizeSourceMetadata([...arxiv, ...jina]),
-        }),
+        status: "planned",
+        query: queries.map((item) => item.query).join(" | "),
+        gapAssessment,
+        sufficiencyStatus,
+        sourceCount: acceptedByKey.size,
+        extractCount: extractsByKey.size,
+        stateJson: JSON.stringify({ queries }),
       });
-
       await ctx.runMutation(internal.agent.deepResearch.markStep, {
         runId: args.runId,
         ownerUserId: args.ownerUserId,
-        stepKey: "retrieveSources",
+        stepKey: "planRound",
         status: "completed",
-        summary: `${sourcesByKey.size} sumber ditemukan`,
-        sourceCount: sourcesByKey.size,
+        summary: `Round ${round}: ${queries.length} query`,
       });
       await ctx.runMutation(internal.agent.deepResearch.markStep, {
         runId: args.runId,
         ownerUserId: args.ownerUserId,
-        stepKey: "readExtract",
+        stepKey: "discoverRoundCandidates",
         status: "running",
       });
 
-      const numberedSources = numberSources([...sourcesByKey.values()]);
-      const selected = await selectSourcesToRead(ctx, args.ownerUserId, query, numberedSources);
-      const extracts = await readAndExtract(ctx, {
+      const discovery = await discoverCandidates(ctx, {
+        ownerUserId: args.ownerUserId,
+        queries,
+        excludedDomains: [...domainPenalties.entries()]
+          .filter(([, count]) => count >= 1)
+          .map(([domain]) => domain),
+      });
+      mergeCandidatePool(candidatePool, discovery.candidates, {
+        acceptedKeys: new Set(acceptedByKey.keys()),
+        rejectedKeys: new Set(rejected.map((item) => sourceKey(item.source))),
+      });
+
+      await ctx.runMutation(internal.agent.deepResearch.recordRunEvent, {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+        stepKey: "discoverRoundCandidates",
+        eventType: "search",
+        round,
+        title: `Round ${round} discovery`,
+        summary: summarizeSourceDiscovery(discovery.byProvider),
+        metadataJson: JSON.stringify({
+          counts: discovery.counts,
+          poolSize: candidatePool.size,
+          newCandidateCount: discovery.candidates.filter((source) => candidatePool.has(sourceKey(source))).length,
+          sources: summarizeSourceMetadata(discovery.candidates),
+          domainPenalties: Object.fromEntries(domainPenalties),
+        }),
+      });
+
+      await ctx.runMutation(internal.agent.deepResearch.markStep, {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        stepKey: "discoverRoundCandidates",
+        status: "completed",
+        summary: `${candidatePool.size} kandidat ditemukan`,
+        sourceCount: candidatePool.size,
+      });
+      await ctx.runMutation(internal.agent.deepResearch.markStep, {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        stepKey: "rerankRoundCandidates",
+        status: "running",
+      });
+
+      const selected = await selectCandidatesToValidate(ctx, {
+        ownerUserId: args.ownerUserId,
+        query: queries.map((item) => item.query).join("\n"),
+        candidates: [...candidatePool.values()],
+        acceptedKeys: new Set(acceptedByKey.keys()),
+        rejectedKeys: new Set(rejected.map((item) => sourceKey(item.source))),
+      });
+      await ctx.runMutation(internal.agent.deepResearch.markStep, {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        stepKey: "rerankRoundCandidates",
+        status: "completed",
+        summary: `${selected.length} kandidat prioritas`,
+        sourceCount: selected.length,
+      });
+      await ctx.runMutation(internal.agent.deepResearch.markStep, {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        stepKey: "readRoundSources",
+        status: "running",
+      });
+      const validation = await validateAndRead(ctx, {
         ownerUserId: args.ownerUserId,
         runId: args.runId,
         threadId: args.threadId,
-        query,
-        sources: selected,
+        candidates: selected,
+        acceptedByDomain: acceptedDomainCounts([...acceptedByKey.values()].map((item) => item.source)),
+        domainPenalties,
       });
-      for (const extract of extracts) {
+      for (const item of validation.accepted) {
+        acceptedByKey.set(sourceKey(item.source), item);
+        const extract = item.extract;
         if (extractsByKey.size >= MAX_EXTRACTS_PER_RUN) {
           break;
         }
         extractsByKey.set(`${extract.sourceKey}:${extract.quote.slice(0, 80)}`, extract);
       }
+      rejected.push(...validation.rejected);
+      pruneResolvedCandidates(candidatePool, {
+        acceptedKeys: new Set(acceptedByKey.keys()),
+        rejectedKeys: new Set(rejected.map((item) => sourceKey(item.source))),
+      });
+      await ctx.runMutation(internal.agent.deepResearch.markStep, {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        stepKey: "readRoundSources",
+        status: "completed",
+        summary: `${validation.accepted.length} sumber readable, ${validation.rejected.length} ditolak`,
+        sourceCount: acceptedByKey.size,
+      });
+      await ctx.runMutation(internal.agent.deepResearch.markStep, {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        stepKey: "extractRoundEvidence",
+        status: "running",
+      });
+      await ctx.runMutation(internal.agent.deepResearch.markStep, {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        stepKey: "extractRoundEvidence",
+        status: "completed",
+        summary: `${extractsByKey.size} evidence extract siap dipakai`,
+        sourceCount: extractsByKey.size,
+      });
+      await ctx.runMutation(internal.agent.deepResearch.markStep, {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        stepKey: "assessRoundSufficiency",
+        status: "running",
+      });
 
       const assessment = await assessSufficiency(ctx, {
         prompt: args.prompt,
         plan,
         round,
         maxRounds,
-        sources: numberSources([...sourcesByKey.values()]),
+        sources: numberSources([...acceptedByKey.values()].map((item) => item.source)),
         extracts: [...extractsByKey.values()],
         previousGapAssessment: gapAssessment,
       });
@@ -542,12 +724,23 @@ export const researchLoop = internalAction({
         runId: args.runId,
         ownerUserId: args.ownerUserId,
         threadId: args.threadId,
-        stepKey: "retrieveSources",
+        stepKey: "assessRoundSufficiency",
         eventType: "gap",
         round,
         title: `Round ${round} sufficiency`,
         summary: gapAssessment,
-        metadataJson: JSON.stringify({ sufficiencyStatus }),
+        metadataJson: JSON.stringify({
+          sufficiencyStatus,
+          readiness: assessment.readiness,
+          acceptedSources: acceptedByKey.size,
+          acceptedExtracts: extractsByKey.size,
+          rejected: validation.rejected.map((item) => ({
+            title: item.source.title,
+            url: item.source.url,
+            reason: item.reason,
+          })),
+          domainPenalties: Object.fromEntries(domainPenalties),
+        }),
       });
       await ctx.runMutation(internal.agent.deepResearch.updateLoopProgress, {
         runId: args.runId,
@@ -555,31 +748,148 @@ export const researchLoop = internalAction({
         roundCount: round,
         sufficiencyStatus,
       });
-
-      const numberedAfterRead = numberSources([...sourcesByKey.values()]).map((source) => {
-        const read = selected.find((item) => sourceKey(item) === sourceKey(source));
-        return read ?? source;
+      const numberedAfterRead = numberSources(
+        [...acceptedByKey.values()].map((item) => sanitizeRuntimeSource(item.source)),
+      );
+      await ctx.runMutation(internal.agent.deepResearch.recordRoundState, {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+        round,
+        status: "completed",
+        query: queries.map((item) => item.query).join(" | "),
+        gapAssessment,
+        sufficiencyStatus,
+        sourceCount: acceptedByKey.size,
+        extractCount: extractsByKey.size,
+        stateJson: JSON.stringify({
+          sources: summarizeSourceMetadata(numberedAfterRead),
+          extracts: [...extractsByKey.values()].map((extract) => ({
+            sourceKey: extract.sourceKey,
+            citationNumber: extract.citationNumber,
+            relevance: extract.relevance,
+          })),
+          readiness: assessment.readiness,
+        }),
       });
+
+      const roundCitationByKey = new Map(numberedAfterRead.map((source) => [sourceKey(source), source.citationNumber]));
       roundState.push({
         round,
-        query,
+        query: queries.map((item) => item.query).join(" | "),
         gapAssessment,
         sufficiencyStatus,
         stopReason: sufficiencyStatus === "sufficient" ? "sufficient_evidence" : undefined,
         sources: numberedAfterRead,
-        extracts: [...extractsByKey.values()],
+        extracts: [...extractsByKey.values()].map((extract) => ({
+          ...extract,
+          citationNumber: roundCitationByKey.get(extract.sourceKey) ?? extract.citationNumber,
+        })),
       });
       await ctx.runMutation(internal.agent.deepResearch.markStep, {
         runId: args.runId,
         ownerUserId: args.ownerUserId,
-        stepKey: "readExtract",
+        stepKey: "assessRoundSufficiency",
         status: "completed",
-        summary: `${extractsByKey.size} evidence extract siap dipakai`,
+        summary: `${sufficiencyStatus}: ${gapAssessment}`,
+        sourceCount: acceptedByKey.size,
       });
-      if (sufficiencyStatus === "sufficient") {
+      if (
+        sufficiencyStatus === "sufficient" &&
+        assessment.readiness.ready
+      ) {
         break;
       }
+      if (round < maxRounds && !assessment.readiness.ready) {
+        gapAssessment = `${gapAssessment}\nNeed expansion: ${assessment.readiness.recommendation}`;
+      }
     }
+
+    const counterDecision = shouldRunCounterEvidencePass({
+      sufficiencyStatus,
+      acceptedSourceCount: acceptedByKey.size,
+      highRelevanceExtractCount: [...extractsByKey.values()].filter((extract) => extract.relevance === "high").length,
+    });
+    await ctx.runMutation(internal.agent.deepResearch.markStep, {
+      runId: args.runId,
+      ownerUserId: args.ownerUserId,
+      stepKey: "runCounterEvidencePass",
+      status: "running",
+    });
+    await ctx.runMutation(internal.agent.deepResearch.recordRunEvent, {
+      runId: args.runId,
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      stepKey: "runCounterEvidencePass",
+      eventType: "audit",
+      title: "Counter-evidence pass",
+      summary: counterDecision
+        ? "Counter-evidence required by sufficiency confidence"
+        : "Counter-evidence not required for this status",
+      metadataJson: JSON.stringify({ sufficiencyStatus }),
+    });
+    if (counterDecision) {
+      const counterBucket: SourceBucket = {
+        name: "practitioner examples",
+        queries: [`counter evidence criticism limitations ${args.prompt}`],
+        preferredProviders: ["exa", "jina"],
+        excludeDomains: [],
+        freshnessTarget: "current",
+        minAcceptedSources: 1,
+      };
+      const discovery = await discoverCandidates(ctx, {
+        ownerUserId: args.ownerUserId,
+        queries: [{ bucket: counterBucket, query: counterBucket.queries[0] }],
+        excludedDomains: [],
+      });
+      mergeCandidatePool(candidatePool, discovery.candidates, {
+        acceptedKeys: new Set(acceptedByKey.keys()),
+        rejectedKeys: new Set(rejected.map((item) => sourceKey(item.source))),
+      });
+      const selected = await selectCandidatesToValidate(ctx, {
+        ownerUserId: args.ownerUserId,
+        query: counterBucket.queries[0],
+        candidates: [...candidatePool.values()],
+        acceptedKeys: new Set(acceptedByKey.keys()),
+        rejectedKeys: new Set(rejected.map((item) => sourceKey(item.source))),
+      });
+      const validation = await validateAndRead(ctx, {
+        ownerUserId: args.ownerUserId,
+        runId: args.runId,
+        threadId: args.threadId,
+        candidates: selected.slice(0, 4),
+        acceptedByDomain: acceptedDomainCounts([...acceptedByKey.values()].map((item) => item.source)),
+        domainPenalties,
+      });
+      for (const item of validation.accepted) {
+        acceptedByKey.set(sourceKey(item.source), item);
+        if (extractsByKey.size < MAX_EXTRACTS_PER_RUN) {
+          extractsByKey.set(`${item.extract.sourceKey}:${item.extract.quote.slice(0, 80)}`, item.extract);
+        }
+      }
+      rejected.push(...validation.rejected);
+      await ctx.runMutation(internal.agent.deepResearch.recordRunEvent, {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+        stepKey: "runCounterEvidencePass",
+        eventType: "search",
+        title: "Counter-evidence discovery",
+        summary: `${validation.accepted.length} counter-evidence sources accepted from ${discovery.candidates.length} candidates`,
+        metadataJson: JSON.stringify({
+          counts: discovery.counts,
+          accepted: validation.accepted.map((item) => item.source.title),
+          rejected: validation.rejected.map((item) => ({ title: item.source.title, reason: item.reason })),
+        }),
+      });
+    }
+    await ctx.runMutation(internal.agent.deepResearch.markStep, {
+      runId: args.runId,
+      ownerUserId: args.ownerUserId,
+      stepKey: "runCounterEvidencePass",
+      status: "completed",
+      summary: counterDecision ? "Counter-evidence dicek sebagai risiko sintesis" : "Dilewati sesuai budget",
+    });
 
     if (sufficiencyStatus !== "sufficient" && roundState.length >= maxRounds) {
       sufficiencyStatus = "budget_exhausted";
@@ -591,9 +901,18 @@ export const researchLoop = internalAction({
       });
     }
 
+    const finalSources = numberSources(
+      [...acceptedByKey.values()].map((item) => sanitizeRuntimeSource(item.source)),
+    );
+    const citationByKey = new Map(finalSources.map((source) => [sourceKey(source), source.citationNumber]));
+    const finalExtracts = [...extractsByKey.values()].map((extract) => ({
+      ...extract,
+      citationNumber: citationByKey.get(extract.sourceKey) ?? extract.citationNumber,
+    }));
+
     return {
-      sources: numberSources([...sourcesByKey.values()]),
-      extracts: [...extractsByKey.values()],
+      sources: finalSources,
+      extracts: finalExtracts,
       roundState,
     };
   },
@@ -621,13 +940,17 @@ export const synthesize = internalAction({
     const extractBlock = normalizeExtracts(args.extracts)
       .map((extract) => `[${extract.citationNumber}] ${extract.quote}`)
       .join("\n");
+    const readiness = assessEvidenceReadiness(args.sources, normalizeExtracts(args.extracts));
     const result = await generateText({
       model: openai.chat(DEEP_MODEL),
       system:
-        "Write a source-grounded markdown research report. Cite every factual claim with persisted source numbers. Prefer accepted evidence extracts over snippets. If evidence is insufficient, keep that limitation visible and do not overstate certainty.",
+        readiness.ready
+          ? "Write a source-grounded markdown research report. Cite every factual claim with persisted source numbers. Prefer accepted evidence extracts over snippets. If evidence is insufficient, keep that limitation visible and do not overstate certainty."
+          : "Write a partial source-grounded markdown research artifact, not a full final recommendation report. State up front that accepted readable evidence did not meet the Deep Research target, cite only persisted source numbers, and ask for retry/expanded search before strong conclusions.",
       prompt: [
         `Prompt:\n${args.prompt}`,
         `Research plan:\n${JSON.stringify(normalizePlan(args.plan), null, 2)}`,
+        `Evidence readiness:\n${JSON.stringify(readiness, null, 2)}`,
         `Round trace:\n${JSON.stringify(args.roundState, null, 2)}`,
         `Accepted evidence extracts:\n${extractBlock || "No extracted evidence beyond snippets."}`,
         `Sources:\n${sourceBlock}`,
@@ -639,7 +962,7 @@ export const synthesize = internalAction({
       ownerUserId: args.ownerUserId,
       stepKey: "synthesize",
       status: "completed",
-      summary: "Laporan markdown tersusun",
+      summary: readiness.ready ? "Laporan markdown tersusun" : `Artifact parsial tersusun: ${readiness.recommendation}`,
     });
     return {
       markdown,
@@ -684,34 +1007,78 @@ export const auditClaims = internalAction({
   },
   handler: async (ctx, args) => {
     await ensureNotCanceled(ctx, args.runId);
+    await ctx.runMutation(internal.agent.deepResearch.updateVerificationStatus, {
+      runId: args.runId,
+      ownerUserId: args.ownerUserId,
+      verificationStatus: "checking",
+    });
     await ctx.runMutation(internal.agent.deepResearch.markStep, {
       runId: args.runId,
       ownerUserId: args.ownerUserId,
-      stepKey: "verifyCitations",
+      stepKey: "verifyClaimsSemantically",
       status: "running",
     });
     const cited = extractCitationNumbers(args.markdown);
-    const checks = auditClaimsAgainstEvidence(args.markdown, args.sources, normalizeExtracts(args.extracts));
-    const unsupported = checks.filter((check) => check.support === "unsupported");
-    const markdown = unsupported.length > 0
-      ? appendAuditCaveat(args.markdown, unsupported.map((check) => check.claim))
-      : args.markdown;
+    const checks = await verifyClaimsSemantically(args.markdown, args.sources, normalizeExtracts(args.extracts));
+    const needsRevision = shouldReviseUnsupportedClaims(checks);
+    let markdown = withEvidenceLimits(args.markdown, checks);
+    let verificationStatus: VerificationStatus =
+      checks.some((check) => check.support === "contradicted")
+        ? "failed"
+        : checks.some((check) => check.support === "unsupported" || check.support === "partially_supported" || check.support === "partial")
+          ? "partial"
+          : "passed";
     await ctx.runMutation(internal.agent.deepResearch.recordRunEvent, {
       runId: args.runId,
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
-      stepKey: "verifyCitations",
+      stepKey: "verifyClaimsSemantically",
       eventType: "audit",
-      title: "Claim audit",
-      summary: `${checks.length} claims checked; ${unsupported.length} unsupported`,
+      title: "Semantic claim verification",
+      summary: `${checks.length} claims checked; ${checks.filter((check) => check.support !== "supported").length} weak or unsupported`,
       metadataJson: JSON.stringify({ cited: [...cited] }),
     });
     await ctx.runMutation(internal.agent.deepResearch.markStep, {
       runId: args.runId,
       ownerUserId: args.ownerUserId,
-      stepKey: "verifyCitations",
+      stepKey: "verifyClaimsSemantically",
       status: "completed",
       summary: `${checks.length} klaim diperiksa`,
+    });
+    if (needsRevision) {
+      await ctx.runMutation(internal.agent.deepResearch.markStep, {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        stepKey: "reviseUnsupportedClaims",
+        status: "running",
+      });
+      markdown = await reviseUnsupportedMarkdown(args.markdown, checks).catch(() => markdown);
+      verificationStatus = "revised";
+      for (const check of checks) {
+        if (check.support === "contradicted" || check.support === "unsupported") {
+          check.revisionAction = "removed_or_rewritten";
+        }
+      }
+      await ctx.runMutation(internal.agent.deepResearch.markStep, {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        stepKey: "reviseUnsupportedClaims",
+        status: "completed",
+        summary: "Klaim lemah direvisi atau diberi batasan",
+      });
+    } else {
+      await ctx.runMutation(internal.agent.deepResearch.markStep, {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        stepKey: "reviseUnsupportedClaims",
+        status: "completed",
+        summary: "Tidak ada klaim high-impact yang perlu direvisi",
+      });
+    }
+    await ctx.runMutation(internal.agent.deepResearch.updateVerificationStatus, {
+      runId: args.runId,
+      ownerUserId: args.ownerUserId,
+      verificationStatus,
     });
     return { markdown, checks };
   },
@@ -726,9 +1093,20 @@ export const persistArtifact = internalMutation({
     checks: v.array(
       v.object({
         claim: v.string(),
-        support: v.union(v.literal("supported"), v.literal("partial"), v.literal("unsupported")),
+        support: v.union(
+          v.literal("supported"),
+          v.literal("partially_supported"),
+          v.literal("contradicted"),
+          v.literal("partial"),
+          v.literal("unsupported"),
+        ),
         citationNumbers: v.array(v.number()),
         evidence: v.string(),
+        verifierModel: v.optional(v.string()),
+        confidence: v.optional(v.number()),
+        failureReason: v.optional(v.string()),
+        extractKeys: v.optional(v.array(v.string())),
+        revisionAction: v.optional(v.union(v.literal("none"), v.literal("caveated"), v.literal("removed_or_rewritten"))),
       }),
     ),
   },
@@ -765,7 +1143,7 @@ export const persistArtifact = internalMutation({
       artifactId: report.artifactId,
       artifactVersionId: report.versionId,
     });
-    await persistExtractsForRun(ctx, {
+    const extractIds = await persistExtractsForRun(ctx, {
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
       runId: args.runId,
@@ -776,6 +1154,7 @@ export const persistArtifact = internalMutation({
       artifactId: report.artifactId,
       artifactVersionId: report.versionId,
       sourceIdsByNumber: sourceIds,
+      extractIdsByKey: extractIds,
     });
     const now = Date.now();
     await markStepMutation(ctx, {
@@ -842,7 +1221,7 @@ export const finalizeThread = internalMutation({
     await ctx.db.patch("agentRuns", args.runId, {
       status: "completed",
       currentStep: "finalizeThread",
-      retryable: false,
+      retryable: run.sufficiencyStatus === "budget_exhausted" || run.sufficiencyStatus === "partial",
       completedAt: now,
       updatedAt: now,
     });
@@ -879,7 +1258,7 @@ export const handleWorkflowComplete = internalMutation({
       await failRun(ctx, {
         runId,
         ownerUserId,
-        stepKey: run.currentStep ?? "planResearch",
+        stepKey: run.currentStep ?? "planRound",
         code: "workflow_failed",
         message: String(args.result.error ?? "Deep research failed"),
       });
@@ -938,6 +1317,89 @@ export const updateLoopProgress = internalMutation({
     await ctx.db.patch("agentRuns", args.runId, {
       roundCount: args.roundCount,
       sufficiencyStatus: args.sufficiencyStatus,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const recordRoundState = internalMutation({
+  args: {
+    runId: v.id("agentRuns"),
+    ownerUserId: v.string(),
+    threadId: v.string(),
+    round: v.number(),
+    status: v.union(
+      v.literal("planned"),
+      v.literal("discovering"),
+      v.literal("reading"),
+      v.literal("assessing"),
+      v.literal("completed"),
+      v.literal("failed"),
+    ),
+    query: v.string(),
+    gapAssessment: v.string(),
+    sufficiencyStatus: v.union(
+      v.literal("unknown"),
+      v.literal("insufficient"),
+      v.literal("partial"),
+      v.literal("sufficient"),
+      v.literal("budget_exhausted"),
+    ),
+    sourceCount: v.number(),
+    extractCount: v.number(),
+    stateJson: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await assertRunOwner(ctx, args.runId, args.ownerUserId);
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("researchRoundStates")
+      .withIndex("by_owner_run_round", (q) =>
+        q.eq("ownerUserId", args.ownerUserId).eq("runId", args.runId).eq("round", args.round),
+      )
+      .unique();
+    const patch = {
+      threadId: args.threadId,
+      status: args.status,
+      query: trimForSnippet(args.query, 1_500),
+      gapAssessment: trimForSnippet(args.gapAssessment, 3_000),
+      sufficiencyStatus: args.sufficiencyStatus,
+      sourceCount: args.sourceCount,
+      extractCount: args.extractCount,
+      stateJson: args.stateJson,
+      updatedAt: now,
+    };
+    if (existing) {
+      await ctx.db.patch("researchRoundStates", existing._id, patch);
+      return existing._id;
+    }
+    return await ctx.db.insert("researchRoundStates", {
+      ownerUserId: args.ownerUserId,
+      runId: args.runId,
+      round: args.round,
+      createdAt: now,
+      ...patch,
+    });
+  },
+});
+
+export const updateVerificationStatus = internalMutation({
+  args: {
+    runId: v.id("agentRuns"),
+    ownerUserId: v.string(),
+    verificationStatus: v.union(
+      v.literal("not_started"),
+      v.literal("checking"),
+      v.literal("passed"),
+      v.literal("revised"),
+      v.literal("partial"),
+      v.literal("failed"),
+    ),
+  },
+  handler: async (ctx, args) => {
+    await assertRunOwner(ctx, args.runId, args.ownerUserId);
+    await ctx.db.patch("agentRuns", args.runId, {
+      verificationStatus: args.verificationStatus,
       updatedAt: Date.now(),
     });
   },
@@ -1006,6 +1468,7 @@ async function createRun(
     roundCount: 0,
     maxRounds: DEFAULT_MAX_ROUNDS,
     sufficiencyStatus: "unknown",
+    verificationStatus: "not_started",
     budgetJson: JSON.stringify({
       maxRounds: DEFAULT_MAX_ROUNDS,
       maxSources: MAX_SOURCES_PER_RUN,
@@ -1275,78 +1738,719 @@ async function chooseNextQuery(
   return object.object.query.trim() || args.prompt;
 }
 
-async function selectSourcesToRead(
+async function planSourceBuckets(_ctx: ActionCtx, prompt: string, plan: ResearchPlan): Promise<SourceBucket[]> {
+  const fallback = defaultSourceBuckets(prompt, plan);
+  try {
+    const object = await generateObject({
+      model: openai.chat(DEEP_MODEL),
+      schema: z.object({
+        buckets: z.array(z.object({
+          name: z.enum([
+            "academic",
+            "industry reports",
+            "vendor/platform docs",
+            "government/regulation",
+            "local Indonesia/contextual",
+            "practitioner examples",
+          ]),
+          queries: z.array(z.string().min(2).max(240)).min(1).max(6),
+          preferredProviders: z.array(z.enum(["exa", "jina", "arxiv", "crossref"])).min(1).max(4),
+          includeDomains: z.array(z.string()).max(8).optional(),
+          excludeDomains: z.array(z.string()).max(12).optional(),
+          freshnessTarget: z.enum(["any", "recent", "current"]).optional(),
+          minAcceptedSources: z.number().int().min(1).max(4),
+        })).min(4).max(6),
+      }),
+      prompt: [
+        "Create a source acquisition plan for Deep Research. Use diverse buckets and query variants. Prefer legal, readable, primary or high-quality secondary sources.",
+        "Do not include social chatter unless the bucket is practitioner examples.",
+        `User prompt: ${prompt}`,
+        `Research plan: ${JSON.stringify(plan)}`,
+      ].join("\n\n"),
+    });
+    return normalizeBuckets(object.object.buckets, fallback);
+  } catch {
+    return fallback;
+  }
+}
+
+function defaultSourceBuckets(prompt: string, plan: ResearchPlan): SourceBucket[] {
+  const seedQueries = [...plan.initialQueries, ...plan.questions, prompt]
+    .filter(Boolean)
+    .slice(0, 4);
+  const baseQuery = seedQueries[0] || prompt;
+  return [
+    {
+      name: "academic",
+      queries: [`${baseQuery} empirical study`, `${baseQuery} systematic review`, `${baseQuery} arxiv`],
+      preferredProviders: ["arxiv", "exa", "jina"],
+      includeDomains: ["arxiv.org", "acm.org", "ieee.org", "springer.com", "sciencedirect.com"],
+      minAcceptedSources: 2,
+    },
+    {
+      name: "industry reports",
+      queries: [`${baseQuery} industry report PDF`, `${baseQuery} market research report`],
+      preferredProviders: ["exa", "jina"],
+      excludeDomains: ["reddit.com", "quora.com"],
+      freshnessTarget: "recent",
+      minAcceptedSources: 2,
+    },
+    {
+      name: "vendor/platform docs",
+      queries: [`${baseQuery} official documentation`, `${baseQuery} platform docs best practices`],
+      preferredProviders: ["exa", "jina"],
+      minAcceptedSources: 2,
+    },
+    {
+      name: "government/regulation",
+      queries: [`${baseQuery} government regulation`, `${baseQuery} policy guidance`],
+      preferredProviders: ["exa", "jina"],
+      includeDomains: ["go.id", "gov", "europa.eu", "oecd.org", "worldbank.org"],
+      minAcceptedSources: 1,
+    },
+    {
+      name: "local Indonesia/contextual",
+      queries: [`${baseQuery} Indonesia`, `${baseQuery} Bahasa Indonesia konteks lokal`],
+      preferredProviders: ["exa", "jina"],
+      includeDomains: ["go.id", "ac.id", "or.id"],
+      freshnessTarget: "current",
+      minAcceptedSources: 1,
+    },
+    {
+      name: "practitioner examples",
+      queries: [`${baseQuery} case study implementation`, `${baseQuery} engineering blog lessons learned`],
+      preferredProviders: ["exa", "jina"],
+      excludeDomains: ["reddit.com", "quora.com"],
+      freshnessTarget: "recent",
+      minAcceptedSources: 2,
+    },
+  ];
+}
+
+function normalizeBuckets(value: SourceBucket[], fallback: SourceBucket[]): SourceBucket[] {
+  const buckets = value
+    .map((bucket): SourceBucket => ({
+      ...bucket,
+      queries: bucket.queries.map((query) => query.trim()).filter(Boolean).slice(0, 6),
+      preferredProviders: bucket.preferredProviders.length > 0 ? bucket.preferredProviders : ["exa", "jina"],
+      minAcceptedSources: Math.min(Math.max(1, bucket.minAcceptedSources), 4),
+    }))
+    .filter((bucket) => bucket.queries.length > 0);
+  return buckets.length > 0 ? buckets : fallback;
+}
+
+function tagDiscovery(
+  sources: Array<Omit<SourceCandidate, "citationNumber">>,
+  bucketName: string,
+  discoveryQuery: string,
+): DiscoveryCandidate[] {
+  return sources.map((source) => ({
+    ...source,
+    bucketName,
+    discoveryQuery,
+    metadataJson: JSON.stringify({
+      ...(safeJson(source.metadataJson) ?? {}),
+      bucketName,
+      discoveryQuery,
+    }),
+  }));
+}
+
+function sanitizeRuntimeSource(source: Omit<SourceCandidate, "citationNumber">): Omit<SourceCandidate, "citationNumber"> {
+  const {
+    origin,
+    provider,
+    providerRequestId,
+    evidenceStrength,
+    title,
+    locator,
+    url,
+    doi,
+    arxivId,
+    snippet,
+    readStatus,
+    readError,
+    rerankScore,
+    metadataJson,
+  } = source;
+  return {
+    origin,
+    provider,
+    providerRequestId,
+    evidenceStrength,
+    title,
+    locator,
+    url,
+    doi,
+    arxivId,
+    snippet,
+    readStatus,
+    readError,
+    rerankScore,
+    metadataJson,
+  };
+}
+
+function acceptedDomainCounts(sources: Array<Omit<SourceCandidate, "citationNumber">>) {
+  const counts = new Map<string, number>();
+  for (const source of sources) {
+    const domain = sourceDomain(source);
+    if (domain) {
+      counts.set(domain, (counts.get(domain) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+export function mergeCandidatePool(
+  pool: Map<string, DiscoveryCandidate>,
+  incoming: DiscoveryCandidate[],
+  args: {
+    acceptedKeys: Set<string>;
+    rejectedKeys: Set<string>;
+  },
+) {
+  pruneResolvedCandidates(pool, args);
+  const newCandidates = dedupeSources(incoming).filter((source) => {
+    const key = sourceKey(source);
+    return !pool.has(key) && !args.acceptedKeys.has(key) && !args.rejectedKeys.has(key);
+  });
+
+  for (const candidate of newCandidates) {
+    if (pool.size >= DISCOVERY_TARGET_PER_RUN) {
+      const removableKey = oldestReplaceableCandidateKey(pool, candidate);
+      if (!removableKey) {
+        continue;
+      }
+      pool.delete(removableKey);
+    }
+    pool.set(sourceKey(candidate), candidate);
+  }
+}
+
+function pruneResolvedCandidates(
+  pool: Map<string, DiscoveryCandidate>,
+  args: {
+    acceptedKeys: Set<string>;
+    rejectedKeys: Set<string>;
+  },
+) {
+  for (const key of pool.keys()) {
+    if (args.acceptedKeys.has(key) || args.rejectedKeys.has(key)) {
+      pool.delete(key);
+    }
+  }
+}
+
+function oldestReplaceableCandidateKey(
+  pool: Map<string, DiscoveryCandidate>,
+  incoming: DiscoveryCandidate,
+) {
+  const incomingBucket = incoming.bucketName ?? "unknown";
+  const incomingOrigin = incoming.origin;
+  const bucketCounts = countBy([...pool.values()], (source) => source.bucketName ?? "unknown");
+  const originCounts = countBy([...pool.values()], (source) => source.origin);
+  for (const [key, source] of pool) {
+    const bucket = source.bucketName ?? "unknown";
+    if ((bucketCounts.get(bucket) ?? 0) > (bucketCounts.get(incomingBucket) ?? 0) + 1) {
+      return key;
+    }
+  }
+  for (const [key, source] of pool) {
+    if ((originCounts.get(source.origin) ?? 0) > (originCounts.get(incomingOrigin) ?? 0) + 1) {
+      return key;
+    }
+  }
+  return pool.keys().next().value;
+}
+
+function countBy<T>(items: T[], keyFn: (item: T) => string) {
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    const key = keyFn(item);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function recentDateIso(daysBack: number) {
+  return new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function safeJson(value: string | undefined) {
+  if (!value) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractDoiCandidates(text: string) {
+  return [...text.matchAll(/\b10\.\d{4,9}\/[-._;()/:A-Z0-9]+/gi)]
+    .map((match) => match[0].replace(/[).,;]+$/, "").toLowerCase())
+    .slice(0, 3);
+}
+
+async function chooseRoundQueries(
+  ctx: ActionCtx,
+  args: {
+    prompt: string;
+    plan: ResearchPlan;
+    buckets: SourceBucket[];
+    round: number;
+    previousSources: Array<Omit<SourceCandidate, "citationNumber">>;
+    previousExtracts: ResearchExtract[];
+    gapAssessment: string;
+    rejected: RejectedSource[];
+  },
+) {
+  if (args.round === 1) {
+    return args.buckets.flatMap((bucket) =>
+      bucket.queries.slice(0, 2).map((query) => ({ bucket, query })),
+    ).slice(0, 8);
+  }
+  const rejectedDomains = [
+    ...new Set(args.rejected.flatMap((item) => {
+      const domain = sourceDomain(item.source);
+      return domain ? [domain] : [];
+    })),
+  ].slice(0, 8);
+  const expansions = await chooseExpansionQueries(ctx, {
+    prompt: args.prompt,
+    plan: args.plan,
+    buckets: args.buckets,
+    round: args.round,
+    previousSources: args.previousSources,
+    previousExtracts: args.previousExtracts,
+    gapAssessment: args.gapAssessment,
+    rejectedDomains,
+  });
+  if (expansions.length > 0) {
+    return expansions;
+  }
+  const nextQuery = await chooseNextQuery(ctx, args);
+  const expansionBucket: SourceBucket = {
+    name: "practitioner examples",
+    queries: [nextQuery],
+    preferredProviders: ["exa", "jina"],
+    excludeDomains: rejectedDomains,
+    freshnessTarget: "current",
+    minAcceptedSources: 2,
+  };
+  return [
+    { bucket: expansionBucket, query: nextQuery },
+    ...args.buckets
+      .filter((bucket) => bucket.name !== expansionBucket.name)
+      .slice(0, 4)
+      .map((bucket) => ({ bucket, query: bucket.queries[Math.min(args.round - 1, bucket.queries.length - 1)] || args.prompt })),
+  ];
+}
+
+async function chooseExpansionQueries(
+  _ctx: ActionCtx,
+  args: {
+    prompt: string;
+    plan: ResearchPlan;
+    buckets: SourceBucket[];
+    round: number;
+    previousSources: Array<Omit<SourceCandidate, "citationNumber">>;
+    previousExtracts: ResearchExtract[];
+    gapAssessment: string;
+    rejectedDomains: string[];
+  },
+) {
+  try {
+    const object = await generateObject({
+      model: openai.chat(DEEP_MODEL),
+      schema: z.object({
+        expansions: z.array(z.object({
+          bucketName: z.string().min(2).max(80),
+          query: z.string().min(2).max(240),
+          rationale: z.string().min(2).max(400),
+        })).min(1).max(8),
+      }),
+      prompt: [
+        "Create targeted next-round search queries for Deep Research evidence gaps.",
+        "Return one query per missing or weak source bucket. Do not repeat prior broad queries.",
+        "Prefer readable primary, official, academic, government, vendor, and reputable industry sources.",
+        `Prompt: ${args.prompt}`,
+        `Plan: ${JSON.stringify(args.plan)}`,
+        `Round: ${args.round}`,
+        `Accepted source titles: ${args.previousSources.map((source) => source.title).join("; ")}`,
+        `Accepted extracts: ${args.previousExtracts.map((extract) => extract.quote).join("\n")}`,
+        `Rejected domains to avoid: ${args.rejectedDomains.join(", ") || "none"}`,
+        `Gap assessment: ${args.gapAssessment}`,
+        `Available buckets: ${args.buckets.map((bucket) => `${bucket.name}: ${bucket.queries.join(" | ")}`).join("\n")}`,
+      ].join("\n\n"),
+    });
+    return object.object.expansions.flatMap((item) => {
+      const bucket = args.buckets.find((candidate) => candidate.name === item.bucketName)
+        ?? args.buckets.find((candidate) => item.bucketName.toLowerCase().includes(candidate.name))
+        ?? args.buckets.find((candidate) => candidate.name.toLowerCase().includes(item.bucketName.toLowerCase()))
+        ?? defaultExpansionBucket(item.query, args.rejectedDomains);
+      const query = item.query.trim();
+      return query ? [{ bucket, query }] : [];
+    }).slice(0, 8);
+  } catch {
+    return [];
+  }
+}
+
+function defaultExpansionBucket(query: string, rejectedDomains: string[]): SourceBucket {
+  return {
+    name: "practitioner examples",
+    queries: [query],
+    preferredProviders: ["exa", "jina"],
+    excludeDomains: rejectedDomains,
+    freshnessTarget: "current",
+    minAcceptedSources: 2,
+  };
+}
+
+async function discoverCandidates(
+  ctx: ActionCtx,
+  args: {
+    ownerUserId: string;
+    queries: Array<{ bucket: SourceBucket; query: string }>;
+    excludedDomains: string[];
+  },
+) {
+  const byProvider = {
+    exa: [] as Array<Omit<SourceCandidate, "citationNumber">>,
+    jina: [] as Array<Omit<SourceCandidate, "citationNumber">>,
+    arxiv: [] as Array<Omit<SourceCandidate, "citationNumber">>,
+    crossref: [] as Array<Omit<SourceCandidate, "citationNumber">>,
+  };
+
+  for (const item of args.queries) {
+    const providers = item.bucket.preferredProviders;
+    const excludeDomains = [...(item.bucket.excludeDomains ?? []), ...args.excludedDomains];
+    const tasks: Array<Promise<void>> = [];
+    if (providers.includes("exa")) {
+      tasks.push(searchExaCandidates(ctx, {
+        ownerUserId: args.ownerUserId,
+        query: item.query,
+        limit: 10,
+        includeDomains: item.bucket.includeDomains,
+        excludeDomains,
+        startPublishedDate: item.bucket.freshnessTarget === "current" ? recentDateIso(730) : undefined,
+        category: item.bucket.name === "industry reports" ? "pdf" : undefined,
+      }).then((results) => {
+        byProvider.exa.push(...tagDiscovery(results, item.bucket.name, item.query));
+      }).catch(() => undefined));
+    }
+    if (providers.includes("jina")) {
+      tasks.push(searchJinaCandidates(ctx, {
+        ownerUserId: args.ownerUserId,
+        query: item.query,
+        limit: 8,
+        siteDomains: item.bucket.includeDomains,
+        excludeDomains,
+        country: item.bucket.name === "local Indonesia/contextual" ? "ID" : undefined,
+        language: item.bucket.name === "local Indonesia/contextual" ? "id" : undefined,
+        searchType: item.bucket.freshnessTarget === "current" ? "news" : "web",
+      }).then((results) => {
+        byProvider.jina.push(...tagDiscovery(results, item.bucket.name, item.query));
+      }).catch(() => undefined));
+    }
+    if (providers.includes("arxiv")) {
+      tasks.push(searchArxivProvider(ctx, {
+        ownerUserId: args.ownerUserId,
+        query: item.query,
+        limit: 8,
+      }).then((results) => {
+        byProvider.arxiv.push(...tagDiscovery(results, item.bucket.name, item.query));
+      }).catch(() => undefined));
+    }
+    await Promise.all(tasks);
+  }
+
+  const candidates = dedupeSources([
+    ...byProvider.exa,
+    ...byProvider.jina,
+    ...byProvider.arxiv,
+    ...byProvider.crossref,
+  ]).slice(0, DISCOVERY_TARGET_PER_RUN);
+  const doiCandidates = await lookupDiscoveredDois(ctx, args.ownerUserId, candidates);
+  byProvider.crossref.push(...doiCandidates);
+  const enrichedCandidates = dedupeSources([...candidates, ...doiCandidates]).slice(0, DISCOVERY_TARGET_PER_RUN);
+
+  return {
+    byProvider,
+    candidates: enrichedCandidates,
+    counts: {
+      exa: byProvider.exa.length,
+      jina: byProvider.jina.length,
+      arxiv: byProvider.arxiv.length,
+      crossref: byProvider.crossref.length,
+      deduped: enrichedCandidates.length,
+    },
+  };
+}
+
+async function lookupDiscoveredDois(
   ctx: ActionCtx,
   ownerUserId: string,
-  query: string,
-  sources: SourceCandidate[],
+  candidates: Array<Omit<SourceCandidate, "citationNumber">>,
 ) {
-  const documents = sources.map((source) => ({
+  const dois = [
+    ...new Set(candidates.flatMap((source) => source.doi ? [source.doi] : extractDoiCandidates(`${source.title} ${source.snippet} ${source.url ?? ""}`))),
+  ].slice(0, 4);
+  const results = await Promise.all(
+    dois.map((doi) => lookupDoiProvider(ctx, { ownerUserId, doi }).catch(() => [])),
+  );
+  return results.flat();
+}
+
+async function selectCandidatesToValidate(
+  ctx: ActionCtx,
+  args: {
+    ownerUserId: string;
+    query: string;
+    candidates: DiscoveryCandidate[];
+    acceptedKeys: Set<string>;
+    rejectedKeys: Set<string>;
+  },
+) {
+  const candidates = args.candidates.filter((source) => {
+    const key = sourceKey(source);
+    return !args.acceptedKeys.has(key) && !args.rejectedKeys.has(key) && assessSourceQuality(source).reason !== "provider_failure";
+  });
+  const documents = candidates.map((source) => ({
     sourceKey: sourceKey(source),
     title: source.title,
     text: source.snippet,
   }));
   const reranked = await jinaRerank(ctx, {
-    ownerUserId,
-    query,
+    ownerUserId: args.ownerUserId,
+    query: args.query,
     documents,
-    topN: Math.min(6, documents.length),
-  });
-  const byKey = new Map(sources.map((source) => [sourceKey(source), source]));
-  return reranked
-    .map((ranked): SourceCandidate | null => {
-      const source = byKey.get(ranked.sourceKey);
-      return source ? { ...source, rerankScore: ranked.score } : null;
-    })
-    .filter((source): source is SourceCandidate => Boolean(source));
+    topN: Math.min(14, documents.length),
+  }).catch(() => []);
+  const byKey = new Map(candidates.map((source) => [sourceKey(source), source]));
+  const selected: DiscoveryCandidate[] = [];
+  for (const ranked of reranked) {
+    const source = byKey.get(ranked.sourceKey);
+    if (source) {
+      selected.push({ ...source, rerankScore: ranked.score });
+    }
+  }
+  return diversifyCandidates(selected.length > 0 ? selected : candidates).slice(0, 14);
 }
 
-async function readAndExtract(
+async function validateAndRead(
   ctx: ActionCtx,
   args: {
     ownerUserId: string;
     runId: Id<"agentRuns">;
     threadId: string;
-    query: string;
-    sources: SourceCandidate[];
+    candidates: DiscoveryCandidate[];
+    acceptedByDomain: Map<string, number>;
+    domainPenalties: Map<string, number>;
   },
 ) {
-  const extracts: ResearchExtract[] = [];
-  for (const source of args.sources) {
-    const key = sourceKey(source);
-    const read = source.url
-      ? await jinaReadUrl(ctx, { ownerUserId: args.ownerUserId, url: source.url })
-      : {
-          ok: true,
-          title: source.title,
-          url: source.url ?? source.locator,
-          markdown: source.snippet,
-          snippet: source.snippet,
-        };
-    const text = read.ok ? read.markdown || read.snippet : source.snippet;
-    const quote = trimForSnippet(text, 1_400);
-    extracts.push({
-      sourceKey: key,
-      citationNumber: source.citationNumber,
-      title: read.title || source.title,
-      locator: source.url ?? source.locator,
-      quote,
+  const accepted: AcceptedSource[] = [];
+  const rejected: RejectedSource[] = [];
+
+  for (const source of args.candidates) {
+    const domain = sourceDomain(source);
+    if (domain && (args.domainPenalties.get(domain) ?? 0) >= 2) {
+      rejected.push({ source, reason: "domain_penalized" });
+      continue;
+    }
+    if (domain && (args.acceptedByDomain.get(domain) ?? 0) >= PER_DOMAIN_ACCEPTED_CAP) {
+      rejected.push({ source, reason: "domain_cap" });
+      continue;
+    }
+
+    const readAttempts = await readSourceWithFallbacks(ctx, args.ownerUserId, source).catch((error) => [{
+      provider: "none" as const,
+      ok: false,
+      title: source.title,
+      url: source.url ?? source.locator,
+      text: "",
+      snippet: source.snippet,
+      failureReason: error instanceof Error ? error.message : String(error),
+    }]);
+    const best = bestReadableAttempt(source, readAttempts);
+    const quality = best
+      ? assessSourceQuality(source, best.text || best.snippet)
+      : failedReadQuality(source, readAttempts);
+    if (!quality.ok) {
+      rejected.push({ source, reason: quality.reason, readAttempts });
+      if (domain && (quality.reason === "blocked" || quality.reason === "empty")) {
+        args.domainPenalties.set(domain, (args.domainPenalties.get(domain) ?? 0) + 1);
+      }
+      await recordReadAttempt(ctx, args, source, readAttempts, quality);
+      continue;
+    }
+
+    const sourceKeyValue = sourceKey(source);
+    const citationNumber = 0;
+    const quoteText = best?.text || source.snippet;
+    const acceptedSource = {
+      ...source,
+      title: best?.title || source.title,
+      locator: best?.url || source.url || source.locator,
+      url: best?.url || source.url,
+      snippet: trimForSnippet(best?.snippet || quoteText || source.snippet, 1_200),
+      readStatus: "ready" as const,
+      metadataJson: JSON.stringify({
+        bucketName: source.bucketName,
+        discoveryQuery: source.discoveryQuery,
+        readProviders: readAttempts.map((attempt) => ({ provider: attempt.provider, ok: attempt.ok, failureReason: attempt.failureReason })),
+        quality,
+      }),
+    };
+    const extract: ResearchExtract = {
+      sourceKey: sourceKeyValue,
+      citationNumber,
+      title: acceptedSource.title,
+      locator: acceptedSource.url ?? acceptedSource.locator,
+      quote: trimForSnippet(quoteText, 1_400),
       relevance: source.rerankScore && source.rerankScore > 0.6 ? "high" : "medium",
-      notes: read.ok ? undefined : read.failureReason,
       rerankScore: source.rerankScore,
-    });
-    await ctx.runMutation(internal.agent.deepResearch.recordRunEvent, {
-      runId: args.runId,
-      ownerUserId: args.ownerUserId,
-      threadId: args.threadId,
-      stepKey: "readExtract",
-      eventType: "read",
-      title: read.title || source.title,
-      summary: read.ok ? trimForSnippet(quote, 300) : `Read failed: ${read.failureReason}`,
-      metadataJson: JSON.stringify({ sourceKey: key, url: source.url, ok: read.ok }),
-    });
+    };
+    accepted.push({ source: acceptedSource, extract, quality, readAttempts });
+    if (domain) {
+      args.acceptedByDomain.set(domain, (args.acceptedByDomain.get(domain) ?? 0) + 1);
+    }
+    await recordReadAttempt(ctx, args, acceptedSource, readAttempts, quality);
   }
-  return extracts;
+
+  return { accepted, rejected };
+}
+
+async function readSourceWithFallbacks(
+  ctx: ActionCtx,
+  ownerUserId: string,
+  source: DiscoveryCandidate,
+): Promise<ReadAttempt[]> {
+  if (!source.url) {
+    return [{
+      provider: "none",
+      ok: true,
+      title: source.title,
+      url: source.locator,
+      text: source.snippet,
+      snippet: source.snippet,
+    }];
+  }
+
+  const attempts: ReadAttempt[] = [];
+  const exa = await readWithExaContents(ctx, { ownerUserId, url: source.url });
+  attempts.push({
+    provider: "exa",
+    ok: exa.ok,
+    title: exa.title,
+    url: exa.url,
+    text: exa.markdown,
+    snippet: exa.snippet,
+    failureReason: exa.failureReason,
+  });
+  if (assessSourceQuality(source, exa.markdown || exa.snippet).ok) {
+    return attempts;
+  }
+
+  const jina = await readWithJinaReader(ctx, { ownerUserId, url: source.url });
+  attempts.push({
+    provider: "jina",
+    ok: jina.ok,
+    title: jina.title,
+    url: jina.url,
+    text: jina.markdown,
+    snippet: jina.snippet,
+    failureReason: jina.failureReason,
+  });
+  return attempts;
+}
+
+export function bestReadableAttempt(
+  source: DiscoveryCandidate,
+  attempts: ReadAttempt[],
+) {
+  return attempts.find((attempt) =>
+    attempt.ok && assessSourceQuality(source, attempt.text || attempt.snippet).ok,
+  );
+}
+
+export function failedReadQuality(
+  source: DiscoveryCandidate,
+  attempts: ReadAttempt[],
+): SourceQuality {
+  const blocked = attempts.find((attempt) =>
+    assessSourceQuality(source, attempt.text || attempt.snippet).reason === "blocked",
+  );
+  if (blocked) {
+    return { ok: false, reason: "blocked" };
+  }
+  if (source.url && attempts.length > 0 && attempts.every((attempt) => !attempt.ok)) {
+    return { ok: false, reason: "provider_failure" };
+  }
+  return assessSourceQuality(source, source.url ? "" : source.snippet);
+}
+
+function diversifyCandidates(candidates: DiscoveryCandidate[]) {
+  const selected: DiscoveryCandidate[] = [];
+  const deferred: DiscoveryCandidate[] = [];
+  const originCounts = new Map<string, number>();
+  const domainCounts = new Map<string, number>();
+  const bucketCounts = new Map<string, number>();
+
+  for (const candidate of candidates) {
+    const origin = candidate.origin;
+    const domain = sourceDomain(candidate) ?? "unknown";
+    const bucket = candidate.bucketName ?? "unknown";
+    const originCount = originCounts.get(origin) ?? 0;
+    const domainCount = domainCounts.get(domain) ?? 0;
+    const bucketCount = bucketCounts.get(bucket) ?? 0;
+
+    if (originCount >= 6 || domainCount >= 3 || bucketCount >= 4) {
+      deferred.push(candidate);
+      continue;
+    }
+    selected.push(candidate);
+    originCounts.set(origin, originCount + 1);
+    domainCounts.set(domain, domainCount + 1);
+    bucketCounts.set(bucket, bucketCount + 1);
+  }
+
+  return [...selected, ...deferred];
+}
+
+async function recordReadAttempt(
+  ctx: ActionCtx,
+  args: { runId: Id<"agentRuns">; ownerUserId: string; threadId: string },
+  source: Omit<SourceCandidate, "citationNumber">,
+  readAttempts: ReadAttempt[],
+  quality: SourceQuality,
+) {
+  const best = readAttempts.find((attempt) => attempt.ok);
+  await ctx.runMutation(internal.agent.deepResearch.recordRunEvent, {
+    runId: args.runId,
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+    stepKey: "readRoundSources",
+    eventType: "read",
+    title: best?.title || source.title,
+    summary: quality.ok
+      ? trimForSnippet(best?.snippet || source.snippet, 300)
+      : `Rejected: ${quality.reason}`,
+    metadataJson: JSON.stringify({
+      sourceKey: sourceKey(source),
+      url: source.url,
+      quality,
+      readAttempts: readAttempts.map((attempt) => ({
+        provider: attempt.provider,
+        ok: attempt.ok,
+        failureReason: attempt.failureReason,
+      })),
+    }),
+  });
 }
 
 async function assessSufficiency(
@@ -1361,10 +2465,12 @@ async function assessSufficiency(
     previousGapAssessment: string;
   },
 ) {
-  if (args.extracts.length < 3 && args.round < args.maxRounds) {
+  const readiness = assessEvidenceReadiness(args.sources, args.extracts);
+  if (!readiness.ready && args.round < args.maxRounds) {
     return {
       sufficiencyStatus: "insufficient" as const,
-      gapAssessment: "Need more evidence extracts before synthesis.",
+      gapAssessment: `Need more readable evidence before synthesis: ${readiness.recommendation}`,
+      readiness,
     };
   }
   const object = await generateObject({
@@ -1383,8 +2489,61 @@ async function assessSufficiency(
     ].join("\n\n"),
   });
   return {
-    sufficiencyStatus: object.object.sufficiencyStatus,
-    gapAssessment: object.object.gapAssessment,
+    sufficiencyStatus: readiness.ready ? object.object.sufficiencyStatus : "partial" as const,
+    gapAssessment: readiness.ready
+      ? object.object.gapAssessment
+      : `${object.object.gapAssessment}\nEvidence readiness still short: ${readiness.recommendation}`,
+    readiness,
+  };
+}
+
+export function assessEvidenceReadiness(
+  sources: SourceCandidate[],
+  extracts: ResearchExtract[],
+): EvidenceReadiness {
+  const readableSources = sources.filter((source) => source.readStatus === "ready" || source.origin === "arxiv");
+  const domainCount = new Set(readableSources.flatMap((source) => {
+    const domain = sourceDomain(source);
+    return domain ? [domain] : [];
+  })).size;
+  const bucketCount = new Set(readableSources.flatMap((source) => {
+    const metadata = safeJson(source.metadataJson);
+    const bucketName = stringValue(metadata?.bucketName);
+    return bucketName ? [bucketName] : [];
+  })).size;
+  const highQualityExtractCount = extracts.filter((extract) =>
+    extract.relevance === "high" || (extract.quote.length >= 500 && extract.relevance !== "low"),
+  ).length;
+  const missing = [
+    readableSources.length < MIN_ACCEPTED_SOURCES
+      ? `${MIN_ACCEPTED_SOURCES - readableSources.length} more readable sources`
+      : null,
+    extracts.length < MIN_ACCEPTED_EXTRACTS
+      ? `${MIN_ACCEPTED_EXTRACTS - extracts.length} more accepted extracts`
+      : null,
+    domainCount < MIN_DOMAIN_DIVERSITY
+      ? `${MIN_DOMAIN_DIVERSITY - domainCount} more source domains`
+      : null,
+    bucketCount < MIN_BUCKET_COVERAGE
+      ? `${MIN_BUCKET_COVERAGE - bucketCount} more evidence buckets`
+      : null,
+    highQualityExtractCount < Math.min(4, MIN_ACCEPTED_EXTRACTS)
+      ? `${Math.min(4, MIN_ACCEPTED_EXTRACTS) - highQualityExtractCount} stronger extracts`
+      : null,
+  ].filter((item): item is string => Boolean(item));
+  const ready = missing.length === 0;
+  return {
+    ready,
+    status: ready ? "sufficient" : readableSources.length >= 6 && extracts.length >= 5 ? "partial" : "insufficient",
+    readableSourceCount: readableSources.length,
+    extractCount: extracts.length,
+    domainCount,
+    bucketCount,
+    highQualityExtractCount,
+    missing,
+    recommendation: ready
+      ? "Evidence is diverse and readable enough for synthesis."
+      : missing.join("; "),
   };
 }
 
@@ -1401,7 +2560,7 @@ function dedupeSources(sources: Array<Omit<SourceCandidate, "citationNumber">>) 
 }
 
 function sourceKey(source: Pick<SourceCandidate, "doi" | "arxivId" | "url" | "locator" | "title">) {
-  return (source.doi ?? source.arxivId ?? source.url ?? source.locator ?? source.title).toLowerCase();
+  return canonicalSourceKey(source);
 }
 
 function numberSources(sources: Array<Omit<SourceCandidate, "citationNumber">>): SourceCandidate[] {
@@ -1412,12 +2571,16 @@ function numberSources(sources: Array<Omit<SourceCandidate, "citationNumber">>):
 }
 
 function summarizeSourceDiscovery(args: {
-  arxiv: Array<Omit<SourceCandidate, "citationNumber">>;
-  jina: Array<Omit<SourceCandidate, "citationNumber">>;
+  exa?: Array<Omit<SourceCandidate, "citationNumber">>;
+  arxiv?: Array<Omit<SourceCandidate, "citationNumber">>;
+  jina?: Array<Omit<SourceCandidate, "citationNumber">>;
+  crossref?: Array<Omit<SourceCandidate, "citationNumber">>;
 }) {
   const groups = [
-    sourceGroupSummary("arXiv", args.arxiv),
-    sourceGroupSummary("Jina", args.jina),
+    sourceGroupSummary("Exa", args.exa ?? []),
+    sourceGroupSummary("Jina", args.jina ?? []),
+    sourceGroupSummary("arXiv", args.arxiv ?? []),
+    sourceGroupSummary("Crossref", args.crossref ?? []),
   ].filter(Boolean);
   return groups.length > 0 ? groups.join(" | ") : "Tidak ada sumber baru ditemukan";
 }
@@ -1479,13 +2642,13 @@ function normalizeExtracts(value: unknown): ResearchExtract[] {
   });
 }
 
-function auditClaimsAgainstEvidence(
+async function verifyClaimsSemantically(
   markdown: string,
   sources: SourceCandidate[],
   extracts: ResearchExtract[],
 ) {
   const sourceNumbers = new Set(sources.map((source) => source.citationNumber));
-  return splitClaims(markdown).slice(0, 16).map((claim) => {
+  const structural = splitClaims(markdown).slice(0, 16).map((claim): CitationCheckDraft => {
     const claimCitations = [...extractCitationNumbers(claim)].filter((number) => sourceNumbers.has(number));
     const relevantEvidence = extracts.filter((extract) =>
       claimCitations.includes(extract.citationNumber),
@@ -1501,32 +2664,160 @@ function auditClaimsAgainstEvidence(
       support,
       citationNumbers: claimCitations,
       evidence: relevantEvidence.map((extract) => extract.quote).join("\n") || evidenceText(support),
+      verifierModel: DEEP_MODEL,
+      confidence: support === "supported" ? 0.55 : 0.35,
+      extractKeys: relevantEvidence.map((extract) => extractKey(extract)),
+      revisionAction: "none",
     };
   });
+  const verified: CitationCheckDraft[] = [];
+  for (const check of structural) {
+    const evidence = extracts
+      .filter((extract) => check.citationNumbers.includes(extract.citationNumber))
+      .map((extract) => `[${extract.citationNumber}] ${extract.quote}`)
+      .join("\n");
+    if (!evidence) {
+      verified.push(check);
+      continue;
+    }
+    try {
+      const result = await generateObject({
+        model: openai.chat(DEEP_MODEL),
+        schema: z.object({
+          support: z.enum(["supported", "partially_supported", "contradicted", "unsupported"]),
+          confidence: z.number().min(0).max(1),
+          failureReason: z.string().optional(),
+        }),
+        prompt: [
+          "Classify whether the evidence supports the factual claim.",
+          "Use supported only when the cited extract directly backs the claim. Use partially_supported when only part of the claim is backed. Use contradicted when evidence says the opposite. Use unsupported when evidence does not substantiate it.",
+          `Claim:\n${check.claim}`,
+          `Evidence:\n${evidence}`,
+        ].join("\n\n"),
+      });
+      verified.push(normalizeSemanticVerifierOutput(check, result.object));
+    } catch (error) {
+      verified.push({
+        ...check,
+        failureReason: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  return verified;
 }
 
-function appendAuditCaveat(markdown: string, unsupportedClaims: string[]) {
-  if (unsupportedClaims.length === 0) {
+export function normalizeSemanticVerifierOutput(
+  fallback: CitationCheckDraft,
+  value: unknown,
+): CitationCheckDraft {
+  const object = isRecord(value) ? value : {};
+  const support = semanticSupportValue(object.support) ?? fallback.support;
+  const confidence = numberValue(object.confidence);
+  return {
+    ...fallback,
+    support,
+    confidence: confidence === undefined ? fallback.confidence : Math.min(Math.max(confidence, 0), 1),
+    failureReason: stringValue(object.failureReason),
+  };
+}
+
+function semanticSupportValue(value: unknown): CitationSupport | undefined {
+  if (
+    value === "supported" ||
+    value === "partially_supported" ||
+    value === "contradicted" ||
+    value === "unsupported"
+  ) {
+    return value;
+  }
+  if (value === "partial") {
+    return "partially_supported";
+  }
+  return undefined;
+}
+
+function withEvidenceLimits(markdown: string, checks: CitationCheckDraft[]) {
+  const weak = checks.filter((check) =>
+    check.support === "partially_supported" ||
+    check.support === "partial" ||
+    check.support === "unsupported" ||
+    check.support === "contradicted",
+  );
+  if (weak.length === 0 || /##\s+Evidence Limits/i.test(markdown)) {
     return markdown;
   }
-  const caveat = [
+  const limits = [
     "",
-    "## Audit Notes",
-    "The following claims were not fully supported by accepted evidence and should be treated as caveated:",
-    ...unsupportedClaims.slice(0, 6).map((claim) => `- ${claim}`),
+    "## Evidence Limits",
+    "The verifier found claims that were only partly supported, unsupported, or contradicted by the accepted extracts:",
+    ...weak.slice(0, 6).map((check) => `- ${check.support}: ${check.claim}`),
   ].join("\n");
-  return `${markdown.trim()}\n${caveat}`;
+  return `${markdown.trim()}\n${limits}`;
+}
+
+async function reviseUnsupportedMarkdown(markdown: string, checks: CitationCheckDraft[]) {
+  const weak = checks.filter((check) => check.support === "unsupported" || check.support === "contradicted");
+  if (weak.length === 0) {
+    return markdown;
+  }
+  const result = await generateText({
+    model: openai.chat(DEEP_MODEL),
+    system: [
+      "Revise the markdown report to remove, soften, or explicitly caveat contradicted and unsupported factual claims.",
+      "Keep supported claims and citations intact. Keep the Evidence Limits section when any uncertainty remains.",
+    ].join(" "),
+    prompt: [
+      `Markdown:\n${markdown}`,
+      `Weak claims:\n${JSON.stringify(weak, null, 2)}`,
+    ].join("\n\n"),
+  });
+  return withEvidenceLimits(result.text.trim() || markdown, checks);
+}
+
+export function shouldReviseUnsupportedClaims(checks: Array<Pick<CitationCheckDraft, "support" | "claim" | "confidence">>) {
+  return checks.some((check) =>
+    check.support === "contradicted" ||
+    (check.support === "unsupported" && isHighImpactClaim(check.claim) && (check.confidence ?? 0) >= 0.5),
+  );
+}
+
+function isHighImpactClaim(claim: string) {
+  return /\b(must|harus|will|pasti|causes?|menyebabkan|proves?|membuktikan|recommended|rekomendasi|legal|medical|policy|kebijakan|clinical|klinis)\b/i.test(claim)
+    || claim.length > 120;
+}
+
+function extractKey(extract: ResearchExtract) {
+  return `${extract.sourceKey}:${extract.citationNumber}:${extract.quote.slice(0, 80)}`;
 }
 
 function extractCitationNumbers(text: string) {
   return new Set([...text.matchAll(/\[(\d{1,3})\]/g)].map((match) => Number(match[1])));
 }
 
-function splitClaims(markdown: string) {
+export function splitClaims(markdown: string) {
   return markdown
-    .split(/(?<=[.!?])\s+|\n+/)
-    .map((claim) => claim.replace(/^#+\s*/, "").trim())
-    .filter((claim) => claim.length > 20);
+    .split(/\n+/)
+    .flatMap((line) => {
+      const trimmed = line.trim();
+      if (isNonFactualAuditLine(trimmed)) {
+        return [];
+      }
+      return trimmed.split(/(?<=[.!?])\s+/);
+    })
+    .map((claim) => claim.replace(/^[-*]\s*/, "").trim())
+    .filter((claim) => claim.length > 20 && !isNonFactualAuditLine(claim));
+}
+
+function isNonFactualAuditLine(line: string) {
+  return (
+    !line ||
+    /^#{1,6}\s+/.test(line) ||
+    /^>\s*/.test(line) ||
+    /^```/.test(line) ||
+    /^\|/.test(line) ||
+    /^(audit notes|evidence limits|the verifier found|evidence readiness|round trace|sources|accepted evidence extracts)\b/i.test(line) ||
+    /^(partial|completed|retryable|status|sufficiency|limitations?)\s*[:-]/i.test(line)
+  );
 }
 
 function buildPlainResponseSummary(markdown: string) {
@@ -1578,6 +2869,16 @@ function numberValue(value: unknown) {
 
 function clampRoundCount(value: number) {
   return Math.min(Math.max(1, Math.floor(value)), DEFAULT_MAX_ROUNDS);
+}
+
+export function shouldRunCounterEvidencePass(args: {
+  sufficiencyStatus: SufficiencyStatus;
+  acceptedSourceCount: number;
+  highRelevanceExtractCount: number;
+}) {
+  return args.sufficiencyStatus === "sufficient" &&
+    args.acceptedSourceCount >= MIN_ACCEPTED_SOURCES &&
+    args.highRelevanceExtractCount >= Math.min(4, MIN_ACCEPTED_EXTRACTS);
 }
 
 async function persistSourcesForRun(
@@ -1632,9 +2933,9 @@ async function persistExtractsForRun(
   },
 ) {
   const now = Date.now();
-  await Promise.all(
-    args.extracts.slice(0, MAX_EXTRACTS_PER_RUN).map((extract) =>
-      ctx.db.insert("researchExtracts", {
+  const ids = new Map<string, Id<"researchExtracts">>();
+  for (const extract of args.extracts.slice(0, MAX_EXTRACTS_PER_RUN)) {
+    const id = await ctx.db.insert("researchExtracts", {
         ownerUserId: args.ownerUserId,
         runId: args.runId,
         threadId: args.threadId,
@@ -1646,9 +2947,10 @@ async function persistExtractsForRun(
         relevance: extract.relevance,
         notes: extract.notes,
         createdAt: now,
-      }),
-    ),
-  );
+    });
+    ids.set(extractKey(extract), id);
+  }
+  return ids;
 }
 
 async function persistCitationChecks(
@@ -1661,11 +2963,17 @@ async function persistCitationChecks(
     artifactVersionId: Id<"artifactVersions">;
     checks: Array<{
       claim: string;
-      support: "supported" | "partial" | "unsupported";
+      support: CitationSupport;
       citationNumbers: number[];
       evidence: string;
+      verifierModel?: string;
+      confidence?: number;
+      failureReason?: string;
+      extractKeys?: string[];
+      revisionAction?: "none" | "caveated" | "removed_or_rewritten";
     }>;
     sourceIdsByNumber: Map<number, Id<"researchSources">>;
+    extractIdsByKey: Map<string, Id<"researchExtracts">>;
   },
 ) {
   const now = Date.now();
@@ -1682,6 +2990,13 @@ async function persistCitationChecks(
         sourceIds: check.citationNumbers
           .map((number) => args.sourceIdsByNumber.get(number))
           .filter((id): id is Id<"researchSources"> => Boolean(id)),
+        verifierModel: check.verifierModel,
+        confidence: check.confidence,
+        failureReason: check.failureReason,
+        extractIds: check.extractKeys
+          ?.map((key) => args.extractIdsByKey.get(key))
+          .filter((id): id is Id<"researchExtracts"> => Boolean(id)),
+        revisionAction: check.revisionAction,
         evidence: check.evidence,
         createdAt: now,
       }),

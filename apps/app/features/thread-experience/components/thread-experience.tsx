@@ -22,7 +22,6 @@ export function ThreadExperience({ threadId }: { threadId?: string }) {
     runs,
     artifacts,
     cancelRun,
-    retryRun,
   } = useThreadExperienceData(threadId);
   const panelState = useResearchPanelState({
     artifacts,
@@ -74,7 +73,6 @@ export function ThreadExperience({ threadId }: { threadId?: string }) {
         onRightPanelOpenChange={panelState.setPanelOpen}
         onOpenArtifact={panelState.openArtifact}
         onCancelRun={handleCancelRun}
-        onRetryRun={(runId) => retryRun({ runId: runId as never })}
       />
     </SidebarProvider>
   );

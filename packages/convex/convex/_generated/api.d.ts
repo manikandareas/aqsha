@@ -18,6 +18,7 @@ import type * as agent_rateLimits from "../agent/rateLimits.js";
 import type * as agent_researchTools from "../agent/researchTools.js";
 import type * as agent_runtime from "../agent/runtime.js";
 import type * as agent_sourceCandidates from "../agent/sourceCandidates.js";
+import type * as agent_sourceQuality from "../agent/sourceQuality.js";
 import type * as agent_sources from "../agent/sources.js";
 import type * as agent_threadTitles from "../agent/threadTitles.js";
 import type * as agent_threads from "../agent/threads.js";
@@ -51,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   "agent/researchTools": typeof agent_researchTools;
   "agent/runtime": typeof agent_runtime;
   "agent/sourceCandidates": typeof agent_sourceCandidates;
+  "agent/sourceQuality": typeof agent_sourceQuality;
   "agent/sources": typeof agent_sources;
   "agent/threadTitles": typeof agent_threadTitles;
   "agent/threads": typeof agent_threads;

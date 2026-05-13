@@ -62,6 +62,19 @@ export type ResearchRun = {
     | "failed"
     | "canceled";
   currentStep?: string;
+  sufficiencyStatus?:
+    | "unknown"
+    | "insufficient"
+    | "partial"
+    | "sufficient"
+    | "budget_exhausted";
+  verificationStatus?:
+    | "not_started"
+    | "checking"
+    | "passed"
+    | "revised"
+    | "partial"
+    | "failed";
   activeArtifactId?: string;
   retryable: boolean;
   errorMessage?: string;

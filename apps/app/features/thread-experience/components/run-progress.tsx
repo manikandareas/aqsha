@@ -3,11 +3,9 @@
 import {
   ChevronDownIcon,
   FileTextIcon,
-  RotateCcwIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ResearchArtifact, ResearchRun } from "../types";
 import { formatCompactDuration } from "../utils/datetime";
@@ -16,11 +14,9 @@ import { isRunActive } from "../utils/transcript-model";
 export function AgentRunBlock({
   run,
   artifacts,
-  onRetryRun,
 }: {
   run: ResearchRun;
   artifacts: ResearchArtifact[];
-  onRetryRun: (runId: string) => Promise<unknown>;
 }) {
   const sortedSteps = run.steps.slice().sort((a, b) => a.order - b.order);
   const activeStep = sortedSteps.find((step) => step.status === "running");
@@ -33,7 +29,13 @@ export function AgentRunBlock({
   const summaryText = activeStep
     ? `Sedang mengerjakan · ${activeStep.label.toLowerCase()}`
     : run.status === "completed"
-      ? `Selesai · ${durationLabel}`
+      ? run.verificationStatus === "revised"
+        ? `Direvisi · ${durationLabel}`
+        : run.verificationStatus === "partial" || run.verificationStatus === "failed"
+          ? `Verifikasi parsial · ${durationLabel}`
+          : run.sufficiencyStatus === "budget_exhausted" || run.sufficiencyStatus === "partial"
+            ? `Parsial · ${durationLabel}`
+            : `Selesai · ${durationLabel}`
       : run.status === "failed"
         ? "Berhenti sebelum selesai"
         : run.status === "canceled"
@@ -77,22 +79,6 @@ export function AgentRunBlock({
             />
           ))}
         </ol>
-      ) : null}
-      {run.status === "failed" && run.retryable ? (
-        <div className="mt-3 flex items-center gap-2 text-[13px] text-[var(--coral)]">
-          <span className="flex-1">
-            {run.errorMessage ?? "Riset terhenti sebelum selesai."}
-          </span>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 px-2 text-[12px] text-[var(--coral)] hover:text-[var(--coral)]"
-            onClick={() => onRetryRun(run._id)}
-          >
-            <RotateCcwIcon className="size-3.5" />
-            Coba lagi
-          </Button>
-        </div>
       ) : null}
       {run.status === "canceled" ? (
         <p className="mt-3 text-[13px] font-medium text-muted-foreground">
@@ -222,16 +208,19 @@ function eventStepKey(event: ResearchRun["events"][number]) {
   }
   switch (event.eventType) {
     case "plan":
-      return "planResearch";
+      return "planRound";
     case "query":
+      return "planRound";
     case "search":
+      return "discoverRoundCandidates";
     case "gap":
-      return "retrieveSources";
+      return "assessRoundSufficiency";
     case "read":
+      return "readRoundSources";
     case "rerank":
-      return "readExtract";
+      return "rerankRoundCandidates";
     case "audit":
-      return "verifyCitations";
+      return "verifyClaimsSemantically";
     case "artifact":
       return "persistArtifact";
     case "status":

@@ -55,5 +55,4 @@ export type ThreadShellLayoutProps = {
   onRightPanelOpenChange: (open: boolean) => void;
   onOpenArtifact: (artifactId: string) => void;
   onCancelRun: (runId: string) => Promise<unknown>;
-  onRetryRun: (runId: string) => Promise<unknown>;
 };

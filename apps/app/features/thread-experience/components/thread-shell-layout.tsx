@@ -32,7 +32,6 @@ export function ThreadShellLayout({
   onRightPanelOpenChange,
   onOpenArtifact,
   onCancelRun,
-  onRetryRun,
 }: ThreadShellLayoutProps) {
   const leftSidebar = useSidebar();
   const isLeftSidebarOpen = leftSidebar.isMobile
@@ -82,7 +81,6 @@ export function ThreadShellLayout({
                   artifacts={artifacts}
                   onOpenArtifact={onOpenArtifact}
                   onCancelRun={onCancelRun}
-                  onRetryRun={onRetryRun}
                 />
               )}
             </main>

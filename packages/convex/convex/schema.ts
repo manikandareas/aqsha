@@ -130,6 +130,16 @@ export default defineSchema(
           v.literal("budget_exhausted"),
         ),
       ),
+      verificationStatus: v.optional(
+        v.union(
+          v.literal("not_started"),
+          v.literal("checking"),
+          v.literal("passed"),
+          v.literal("revised"),
+          v.literal("partial"),
+          v.literal("failed"),
+        ),
+      ),
       budgetJson: v.optional(v.string()),
       activeArtifactId: v.optional(v.id("artifacts")),
       artifactCount: v.number(),
@@ -197,6 +207,36 @@ export default defineSchema(
     })
       .index("by_owner_run_created", ["ownerUserId", "runId", "createdAt"])
       .index("by_run_created", ["runId", "createdAt"]),
+    researchRoundStates: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      runId,
+      round: v.number(),
+      status: v.union(
+        v.literal("planned"),
+        v.literal("discovering"),
+        v.literal("reading"),
+        v.literal("assessing"),
+        v.literal("completed"),
+        v.literal("failed"),
+      ),
+      query: v.string(),
+      gapAssessment: v.string(),
+      sufficiencyStatus: v.union(
+        v.literal("unknown"),
+        v.literal("insufficient"),
+        v.literal("partial"),
+        v.literal("sufficient"),
+        v.literal("budget_exhausted"),
+      ),
+      sourceCount: v.number(),
+      extractCount: v.number(),
+      stateJson: v.string(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_owner_run_round", ["ownerUserId", "runId", "round"])
+      .index("by_run_round", ["runId", "round"]),
     artifacts: defineTable({
       ownerUserId: v.string(),
       threadId: v.string(),
@@ -267,10 +307,23 @@ export default defineSchema(
       claim: v.string(),
       support: v.union(
         v.literal("supported"),
+        v.literal("partially_supported"),
+        v.literal("contradicted"),
         v.literal("partial"),
         v.literal("unsupported"),
       ),
       sourceIds: v.array(v.id("researchSources")),
+      verifierModel: v.optional(v.string()),
+      confidence: v.optional(v.number()),
+      failureReason: v.optional(v.string()),
+      extractIds: v.optional(v.array(v.id("researchExtracts"))),
+      revisionAction: v.optional(
+        v.union(
+          v.literal("none"),
+          v.literal("caveated"),
+          v.literal("removed_or_rewritten"),
+        ),
+      ),
       evidence: v.string(),
       createdAt: v.number(),
     })

@@ -51,6 +51,21 @@ export type RerankResult = {
   rank: number;
 };
 
+export type SearchCandidateOptions = {
+  ownerUserId: string;
+  query: string;
+  limit?: number;
+  includeDomains?: string[];
+  excludeDomains?: string[];
+  startPublishedDate?: string;
+  endPublishedDate?: string;
+  category?: "company" | "news" | "pdf" | "research paper" | "personal site";
+  siteDomains?: string[];
+  country?: string;
+  language?: string;
+  searchType?: "web" | "news";
+};
+
 const providerValidator = v.union(
   v.literal("crossref"),
   v.literal("arxiv"),
@@ -120,6 +135,13 @@ export async function searchWebProvider(
   ctx: ActionCtx,
   args: { ownerUserId: string; query: string; limit?: number },
 ): Promise<ExternalCandidate[]> {
+  return searchExaCandidates(ctx, args);
+}
+
+export async function searchExaCandidates(
+  ctx: ActionCtx,
+  args: SearchCandidateOptions,
+): Promise<ExternalCandidate[]> {
   const query = args.query.trim();
   if (!query) {
     return [];
@@ -131,7 +153,16 @@ export async function searchWebProvider(
   }
   await limitExternal(ctx, args.ownerUserId, "exa");
 
-  const cacheKey = normalizeKey(`${query}:${args.limit ?? 5}`);
+  const limit = Math.min(args.limit ?? 8, 20);
+  const cacheKey = normalizeKey(JSON.stringify({
+    query,
+    limit,
+    includeDomains: args.includeDomains,
+    excludeDomains: args.excludeDomains,
+    startPublishedDate: args.startPublishedDate,
+    endPublishedDate: args.endPublishedDate,
+    category: args.category,
+  }));
   const cached: ExternalCandidate[] | null = await readCachedCandidates(ctx, "exa", cacheKey);
   if (cached) {
     return cached;
@@ -140,21 +171,29 @@ export async function searchWebProvider(
   try {
     const exa = new Exa(apiKey);
     const response = await exa.search(query, {
-      numResults: Math.min(args.limit ?? 5, 8),
+      numResults: limit,
       type: "auto",
-      contents: { text: { maxCharacters: 1_200 }, highlights: true },
+      includeDomains: cleanDomains(args.includeDomains),
+      excludeDomains: cleanDomains(args.excludeDomains),
+      startPublishedDate: args.startPublishedDate,
+      endPublishedDate: args.endPublishedDate,
+      category: args.category,
+      contents: { text: { maxCharacters: 4_000 }, highlights: { maxCharacters: 600 }, summary: true },
     });
     const candidates = response.results.map((result) =>
       candidate({
         origin: "web",
+        provider: "exa",
         evidenceStrength: "medium",
         title: result.title || result.url,
         locator: result.url,
         url: result.url,
         snippet:
+          trimForSnippet(result.summary) ||
           trimForSnippet(result.text) ||
           trimForSnippet(result.highlights?.join(" ")) ||
           "No extract was available from this web result.",
+        metadataJson: JSON.stringify({ provider: "exa", publishedDate: result.publishedDate }),
       }),
     );
     await writeCachedCandidates(ctx, "exa", cacheKey, candidates);
@@ -170,21 +209,45 @@ export async function jinaSearchWeb(
   ctx: ActionCtx,
   args: { ownerUserId: string; query: string; limit?: number },
 ): Promise<ExternalCandidate[]> {
+  return searchJinaCandidates(ctx, args);
+}
+
+export async function searchJinaCandidates(
+  ctx: ActionCtx,
+  args: SearchCandidateOptions,
+): Promise<ExternalCandidate[]> {
   await limitExternal(ctx, args.ownerUserId, "jina_search");
-  const query = args.query.trim();
+  const query = buildJinaQuery(args);
   if (!query) {
     return [];
   }
 
-  const limit = Math.min(args.limit ?? 5, 8);
-  const cacheKey = normalizeKey(`${query}:${limit}`);
+  const limit = Math.min(args.limit ?? 8, 20);
+  const cacheKey = normalizeKey(JSON.stringify({
+    query,
+    limit,
+    country: args.country,
+    language: args.language,
+    searchType: args.searchType,
+  }));
   const cached: ExternalCandidate[] | null = await readCachedCandidates(ctx, "jina_search", cacheKey);
   if (cached) {
     return cached;
   }
 
   try {
-    const response = await fetch(`${JINA_SEARCH_ENDPOINT}/${encodeURIComponent(query)}`, {
+    const url = new URL(`${JINA_SEARCH_ENDPOINT}/${encodeURIComponent(query)}`);
+    url.searchParams.set("num", String(limit));
+    if (args.country) {
+      url.searchParams.set("gl", args.country);
+    }
+    if (args.language) {
+      url.searchParams.set("hl", args.language);
+    }
+    if (args.searchType === "news") {
+      url.searchParams.set("type", "news");
+    }
+    const response = await fetch(url, {
       headers: jinaHeaders({
         Accept: "application/json",
         "X-Return-Format": "markdown",
@@ -207,6 +270,13 @@ export async function jinaSearchWeb(
 }
 
 export async function jinaReadUrl(
+  ctx: ActionCtx,
+  args: { ownerUserId: string; url: string },
+): Promise<JinaReadResult> {
+  return readWithJinaReader(ctx, args);
+}
+
+export async function readWithJinaReader(
   ctx: ActionCtx,
   args: { ownerUserId: string; url: string },
 ): Promise<JinaReadResult> {
@@ -406,27 +476,59 @@ export async function getUrlContentProvider(
   ctx: ActionCtx,
   args: { ownerUserId: string; url: string },
 ): Promise<{ title: string; url: string; text: string; snippet: string }> {
+  const read = await readWithExaContents(ctx, args);
+  if (!read.ok) {
+    throw new ConvexError(read.failureReason ?? "Exa content read failed");
+  }
+  return {
+    title: read.title,
+    url: read.url,
+    text: read.markdown,
+    snippet: read.snippet,
+  };
+}
+
+export async function readWithExaContents(
+  ctx: ActionCtx,
+  args: { ownerUserId: string; url: string },
+): Promise<JinaReadResult> {
   await limitExternal(ctx, args.ownerUserId, "exa");
   const apiKey = process.env.EXA_API_KEY;
   if (!apiKey) {
-    throw new ConvexError("EXA_API_KEY is not configured");
+    return readFailure(args.url, "EXA_API_KEY is not configured");
   }
-  const exa = new Exa(apiKey);
-  const response = await exa.getContents([args.url], {
-    text: { maxCharacters: 12_000 },
-    highlights: true,
-    summary: true,
-  });
-  const result = response.results[0];
-  return {
-    title: result?.title || args.url,
-    url: result?.url || args.url,
-    text: trimForSnippet(result?.text, 12_000),
-    snippet:
-      trimForSnippet(result?.summary) ||
-      trimForSnippet(result?.highlights?.join(" ")) ||
-      trimForSnippet(result?.text),
-  };
+  const cacheKey = normalizeKey(args.url);
+  const cached: JinaReadResult | null = await readCachedJson(ctx, "exa", `contents:${cacheKey}`);
+  if (cached) {
+    return cached;
+  }
+  try {
+    const exa = new Exa(apiKey);
+    const response = await exa.getContents([args.url], {
+      text: { maxCharacters: 18_000 },
+      highlights: true,
+      summary: true,
+    });
+    const result = response.results[0];
+    const text = trimForSnippet(result?.text, 18_000);
+    const read = {
+      ok: Boolean(text || result?.summary || result?.highlights?.length),
+      title: result?.title || args.url,
+      url: result?.url || args.url,
+      markdown: text,
+      snippet:
+        trimForSnippet(result?.summary) ||
+        trimForSnippet(result?.highlights?.join(" ")) ||
+        trimForSnippet(result?.text, 1_500),
+      failureReason: text || result?.summary || result?.highlights?.length ? undefined : "Exa returned empty content",
+    };
+    await writeCachedJson(ctx, "exa", `contents:${cacheKey}`, read, read.ok ? undefined : read.failureReason);
+    return read;
+  } catch (error) {
+    const read = readFailure(args.url, readableError(error));
+    await writeCachedJson(ctx, "exa", `contents:${cacheKey}`, read, read.failureReason);
+    return read;
+  }
 }
 
 async function limitExternal(ctx: ActionCtx, ownerUserId: string, provider: Provider) {
@@ -626,6 +728,24 @@ function parseJinaSearchResponse(text: string, limit: number): ExternalCandidate
       snippet: trimForSnippet(text, 1_200) || "Jina Search returned no readable result.",
     }),
   ];
+}
+
+function buildJinaQuery(args: SearchCandidateOptions) {
+  const query = args.query.trim();
+  const siteFilters = (cleanDomains(args.siteDomains) ?? [])
+    .map((domain) => `site:${domain}`)
+    .join(" OR ");
+  const excludeFilters = (cleanDomains(args.excludeDomains) ?? [])
+    .map((domain) => `-site:${domain}`)
+    .join(" ");
+  return [siteFilters ? `(${siteFilters})` : "", query, excludeFilters].filter(Boolean).join(" ").trim();
+}
+
+function cleanDomains(domains?: string[]) {
+  const cleaned = domains
+    ?.map((domain) => domain.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/.*$/, "").trim().toLowerCase())
+    .filter(Boolean);
+  return cleaned && cleaned.length > 0 ? cleaned : undefined;
 }
 
 function parseJinaReaderResponse(text: string, requestedUrl: string): JinaReadResult {
