@@ -188,7 +188,7 @@ export function Composer({
             : billingBlock.reason === "subscription_required"
               ? `Butuh plan ${billingBlock.requiredPlan ?? "berbayar"} untuk mode ini.`
               : "Billing belum aktif. Periksa subscription di halaman Billing."}{" "}
-          <a href="/billing" className="font-semibold underline underline-offset-2">
+          <a href="/settings/usage-billing" className="font-semibold underline underline-offset-2">
             Buka Billing
           </a>
         </div>

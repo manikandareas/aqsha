@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { ComponentProps } from "react";
 import {
   BugIcon,
-  CreditCardIcon,
+  SettingsIcon,
   LibraryIcon,
   MessageSquarePlusIcon,
   PanelLeftIcon,
@@ -103,9 +103,9 @@ export function AppSidebar({
             accent="mint"
           />
           <PrimaryNavLink
-            href="/billing"
-            icon={CreditCardIcon}
-            label="Billing"
+            href="/settings/usage-billing"
+            icon={SettingsIcon}
+            label="Settings"
             accent="sky"
           />
           <PrimaryNavRow icon={SparklesIcon} label="Otomasi" disabled />
@@ -168,7 +168,7 @@ function UpgradeCard() {
         size="sm"
         className="mt-auto h-9 w-full rounded-[9px] bg-primary text-[13px] font-semibold text-primary-foreground shadow-none transition-transform hover:bg-primary/90 active:scale-[0.985]"
       >
-        <Link href="/billing">Lihat paket</Link>
+        <Link href="/settings/usage-billing">Lihat paket</Link>
       </Button>
     </div>
   );

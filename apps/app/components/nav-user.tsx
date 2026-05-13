@@ -1,10 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   ChevronsUpDownIcon,
   LogOutIcon,
   MailIcon,
+  SettingsIcon,
   MoreHorizontalIcon,
   UserRoundIcon,
 } from "lucide-react";
@@ -95,6 +97,12 @@ export function NavUser({ user }: { user: Viewer | undefined }) {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href="/settings/overview">
+                  <SettingsIcon />
+                  Settings
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={signOut}>
                 <LogOutIcon />
                 Sign out
