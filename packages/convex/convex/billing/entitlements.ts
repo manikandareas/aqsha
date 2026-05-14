@@ -19,7 +19,9 @@ import {
   type BillingStatus,
   type CreditFeature,
   type PlanKey,
+  type PublicPlanKey,
 } from "./catalog";
+import { getAdminBillingOverride } from "./admin";
 import { polar } from "./polar";
 
 const featureValidator = v.union(
@@ -45,7 +47,7 @@ export type EntitlementResult =
       ok: false;
       reason: "quota_exceeded" | "subscription_required" | "billing_inactive";
       planKey: PlanKey;
-      requiredPlan: PlanKey;
+      requiredPlan: PublicPlanKey;
       resetAt: number;
       creditsLimit: number;
       creditsUsed: number;
@@ -61,7 +63,26 @@ export async function getBillingSnapshot(
   subscription: Awaited<ReturnType<typeof polar.getCurrentSubscription>> | null;
   productKey?: string;
   currentPeriodEnd: number | null;
+  isAdmin: boolean;
+  isUnlimitedCredits: boolean;
+  billingPortalAvailable: boolean;
 }> {
+  const admin = await getAdminBillingOverride(ctx, ownerUserId);
+  if (admin.isAdmin) {
+    const subscription = await getPolarSubscriptionOrNull(ctx, ownerUserId);
+    const mirrored = subscription ? null : await getLatestMirroredSubscription(ctx, ownerUserId);
+    return {
+      planKey: "admin",
+      status: "admin",
+      subscription,
+      productKey: undefined,
+      currentPeriodEnd: null,
+      isAdmin: true,
+      isUnlimitedCredits: true,
+      billingPortalAvailable: Boolean(subscription || mirrored),
+    };
+  }
+
   const subscription = await getPolarSubscriptionOrNull(ctx, ownerUserId);
   if (!subscription) {
     const mirrored = await getLatestMirroredSubscription(ctx, ownerUserId);
@@ -72,6 +93,9 @@ export async function getBillingSnapshot(
         subscription: null,
         productKey: mirrored.productKey,
         currentPeriodEnd: mirrored.currentPeriodEnd ?? null,
+        isAdmin: false,
+        isUnlimitedCredits: false,
+        billingPortalAvailable: true,
       };
     }
   }
@@ -85,6 +109,9 @@ export async function getBillingSnapshot(
     subscription,
     productKey,
     currentPeriodEnd: parseTime(subscription?.currentPeriodEnd),
+    isAdmin: false,
+    isUnlimitedCredits: false,
+    billingPortalAvailable: Boolean(subscription),
   };
 }
 
@@ -114,7 +141,7 @@ export async function requireEntitlement(
     ownerUserId: string;
     feature: CreditFeature;
     credits: number;
-    requiredPlan?: PlanKey;
+    requiredPlan?: PublicPlanKey;
   },
 ): Promise<EntitlementResult> {
   const requiredPlan = args.requiredPlan ?? requiredPlanForFeature(args.feature);
@@ -130,6 +157,18 @@ export async function requireEntitlement(
     status: snapshot.status,
   });
   const remaining = Math.max(0, period.creditsLimit - period.creditsUsed);
+
+  if (snapshot.isAdmin) {
+    return {
+      ok: true,
+      planKey: snapshot.planKey,
+      periodKey: period.periodKey,
+      resetAt: period.resetAt,
+      creditsLimit: period.creditsLimit,
+      creditsUsed: period.creditsUsed,
+      creditsRemaining: remaining,
+    };
+  }
 
   if (!isPlanAtLeast(snapshot.planKey, requiredPlan)) {
     return entitlementFailure("subscription_required", snapshot.planKey, requiredPlan, period);
@@ -167,7 +206,7 @@ export async function consumeCredits(
     totalTokens?: number;
     estimatedCostCents?: number;
     metadataJson?: string;
-    requiredPlan?: PlanKey;
+    requiredPlan?: PublicPlanKey;
   },
 ): Promise<EntitlementResult> {
   const entitlement = await requireEntitlement(ctx, args);
@@ -336,7 +375,7 @@ export const syncSubscriptionFromPolar = internalMutation({
 
     const productKey = args.productKey;
     const planKey = planForProductKey(productKey);
-    if (planKey === "free") {
+    if (planKey === "free" || planKey === "admin") {
       throw new ConvexError("Unknown Polar product for subscription");
     }
     const billingInterval = intervalForProductKey(productKey) ?? "month";
@@ -466,7 +505,7 @@ export async function ensureCreditPeriod(
 function entitlementFailure(
   reason: "quota_exceeded" | "subscription_required" | "billing_inactive",
   planKey: PlanKey,
-  requiredPlan: PlanKey,
+  requiredPlan: PublicPlanKey,
   period: Doc<"billingCreditPeriods">,
 ): EntitlementResult {
   return {

@@ -4,6 +4,8 @@ import {
   PLAN_CATALOG,
   PRODUCT_CATALOG,
   PRODUCT_KEYS,
+  PUBLIC_PLAN_KEYS,
+  type PublicPlanKey,
   type ProductKey,
 } from "./catalog";
 import { configuredProductId } from "./polar";
@@ -32,8 +34,9 @@ export const list = query({
   args: {},
   returns: v.array(planValidator),
   handler: async () => {
-    return Object.values(PLAN_CATALOG).map((plan) => ({
+    return PUBLIC_PLAN_KEYS.map((planKey) => PLAN_CATALOG[planKey]).map((plan) => ({
       ...plan,
+      key: plan.key as PublicPlanKey,
       products:
         plan.key === "free"
           ? []

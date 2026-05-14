@@ -8,11 +8,14 @@ export type Viewer = {
 };
 
 export type BillingCurrent = {
-  planKey: "free" | "starter" | "plus";
+  planKey: "free" | "starter" | "plus" | "admin";
   planLabel: string;
   status: string;
   productKey: string | null;
   currentPeriodEnd: number | null;
+  isAdmin: boolean;
+  isUnlimitedCredits: boolean;
+  billingPortalAvailable: boolean;
   creditsLimit: number;
   creditsUsed: number;
   creditsRemaining: number;

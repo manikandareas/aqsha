@@ -53,12 +53,14 @@ describe("settings summary helpers", () => {
     expect(findUpgradePlan(plans, "free")?.key).toBe("starter");
     expect(findUpgradePlan(plans, "starter")?.key).toBe("plus");
     expect(findUpgradePlan(plans, "plus")).toBeUndefined();
+    expect(findUpgradePlan(plans, "admin")).toBeUndefined();
   });
 
   it("formats monthly plan prices", () => {
     expect(formatPlanPrice(plans, "free")).toBe("Rp0/bulan");
     expect(formatPlanPrice(plans, "starter")).toContain("99.000");
     expect(formatPlanPrice(plans, "starter")).toMatch(/\/bulan$/);
+    expect(formatPlanPrice(plans, "admin")).toBe("Internal");
   });
 
   it("formats provider spend labels", () => {

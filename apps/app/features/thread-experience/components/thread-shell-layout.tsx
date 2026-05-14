@@ -101,7 +101,6 @@ export function ThreadShellLayout({
               activeTab={activePanelTab}
               sourceFocus={sourceFocus}
               onOpenArtifact={onOpenArtifact}
-              onOpenSources={onOpenSources}
               onTabChange={onPanelTabChange}
               onClosePanel={() => onRightPanelOpenChange(false)}
             />

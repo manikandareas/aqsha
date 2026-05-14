@@ -69,15 +69,26 @@ export function SettingsOverviewPage() {
       <div className="grid gap-4">
         <SettingsSectionLabel>Included Usage</SettingsSectionLabel>
         <SettingsCard className="px-4 py-4">
-          <div className="flex items-center justify-between gap-4 text-sm font-semibold">
-            <span>Total credits</span>
-            <span>{usagePercent}%</span>
-          </div>
-          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
-            <div className="h-full rounded-full bg-primary" style={{ width: `${usagePercent}%` }} />
-          </div>
+          {data.current.isUnlimitedCredits ? (
+            <div className="flex items-center justify-between gap-4 text-sm font-semibold">
+              <span>Tracked credits</span>
+              <span>Unlimited</span>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between gap-4 text-sm font-semibold">
+                <span>Total credits</span>
+                <span>{usagePercent}%</span>
+              </div>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+                <div className="h-full rounded-full bg-primary" style={{ width: `${usagePercent}%` }} />
+              </div>
+            </>
+          )}
           <p className="mt-4 text-sm font-medium text-muted-foreground">
-            {data.current.creditsUsed} used and {data.current.creditsRemaining} remaining from {data.current.creditsLimit} credits.
+            {data.current.isUnlimitedCredits
+              ? `${data.current.creditsUsed} credits tracked this period. No monthly credit quota applies.`
+              : `${data.current.creditsUsed} used and ${data.current.creditsRemaining} remaining from ${data.current.creditsLimit} credits.`}
           </p>
         </SettingsCard>
       </div>

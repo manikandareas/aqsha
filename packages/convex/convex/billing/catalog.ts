@@ -1,4 +1,6 @@
-export type PlanKey = "free" | "starter" | "plus";
+export type PlanKey = "free" | "starter" | "plus" | "admin";
+export type PublicPlanKey = Exclude<PlanKey, "admin">;
+export type PaidPlanKey = Exclude<PlanKey, "free" | "admin">;
 export type BillingInterval = "month" | "year";
 export type ProductKey =
   | "starterMonthly"
@@ -6,6 +8,7 @@ export type ProductKey =
   | "plusMonthly"
   | "plusYearly";
 export type BillingStatus =
+  | "admin"
   | "free"
   | "active"
   | "trialing"
@@ -26,6 +29,7 @@ export const PLAN_ORDER: Record<PlanKey, number> = {
   free: 0,
   starter: 1,
   plus: 2,
+  admin: 3,
 };
 
 export const PLAN_CATALOG: Record<
@@ -82,13 +86,27 @@ export const PLAN_CATALOG: Record<
       "Provider cost guard sekitar $4/bulan",
     ],
   },
+  admin: {
+    key: "admin",
+    label: "Admin",
+    monthlyPriceIdr: 0,
+    annualPriceIdr: 0,
+    monthlyCredits: Number.MAX_SAFE_INTEGER,
+    providerSpendCeilingCents: Number.MAX_SAFE_INTEGER,
+    features: [
+      "Unlimited internal credits",
+      "Normal chat dan Deep Research",
+      "Usage tetap tercatat",
+      "Global/provider rate limit tetap aktif",
+    ],
+  },
 };
 
 export const PRODUCT_CATALOG: Record<
   ProductKey,
   {
     key: ProductKey;
-    planKey: Exclude<PlanKey, "free">;
+    planKey: PaidPlanKey;
     interval: BillingInterval;
     displayPriceIdr: number;
   }
@@ -120,6 +138,7 @@ export const PRODUCT_CATALOG: Record<
 };
 
 export const PRODUCT_KEYS = Object.keys(PRODUCT_CATALOG) as ProductKey[];
+export const PUBLIC_PLAN_KEYS: PublicPlanKey[] = ["free", "starter", "plus"];
 
 export function planForProductKey(productKey: string | undefined): PlanKey {
   if (!productKey) {
@@ -139,7 +158,7 @@ export function isPlanAtLeast(current: PlanKey, required: PlanKey) {
   return PLAN_ORDER[current] >= PLAN_ORDER[required];
 }
 
-export function requiredPlanForFeature(feature: CreditFeature): PlanKey {
+export function requiredPlanForFeature(feature: CreditFeature): PublicPlanKey {
   if (feature === "deep_research") {
     return "starter";
   }
@@ -230,6 +249,9 @@ export function billingStatusAllowsUsage(args: {
   currentPeriodEnd?: number | null;
   now?: number;
 }) {
+  if (args.planKey === "admin" || args.status === "admin") {
+    return true;
+  }
   if (args.planKey === "free") {
     return true;
   }

@@ -40,15 +40,15 @@ export function SettingsUsageBillingPage() {
             variant="outline"
             size="sm"
             onClick={data.openPortal}
-            disabled={data.current.planKey === "free" || data.pendingKey === "portal"}
+            disabled={!data.current.billingPortalAvailable || data.pendingKey === "portal"}
             className="mt-4 rounded-[8px]"
           >
             {data.pendingKey === "portal" ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
-            Adjust plan
+            {data.current.isAdmin ? "Manage existing subscription" : "Adjust plan"}
           </Button>
         </BillingSummaryCard>
 
-        <BillingSummaryCard label="Upgrade available">
+        <BillingSummaryCard label={data.current.isAdmin ? "Internal access" : "Upgrade available"}>
           {nextPlan ? (
             <>
               <div className="flex items-baseline gap-2">
@@ -64,9 +64,13 @@ export function SettingsUsageBillingPage() {
             </>
           ) : (
             <>
-              <h2 className="text-lg font-semibold text-foreground">Plan tertinggi</h2>
+              <h2 className="text-lg font-semibold text-foreground">
+                {data.current.isAdmin ? "Unlimited credits" : "Plan tertinggi"}
+              </h2>
               <p className="mt-2 text-sm font-medium text-muted-foreground">
-                Tidak ada upgrade aktif untuk akun ini.
+                {data.current.isAdmin
+                  ? "Billing gate dilewati untuk iterasi developer. Usage tetap tercatat."
+                  : "Tidak ada upgrade aktif untuk akun ini."}
               </p>
             </>
           )}
@@ -76,15 +80,26 @@ export function SettingsUsageBillingPage() {
       <div className="grid gap-4">
         <SettingsSectionLabel>Included in {data.current.planLabel}</SettingsSectionLabel>
         <SettingsCard className="px-4 py-4">
-          <div className="flex items-center justify-between gap-4 text-sm font-semibold">
-            <span>Total</span>
-            <span>{usagePercent}%</span>
-          </div>
-          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
-            <div className="h-full rounded-full bg-primary" style={{ width: `${usagePercent}%` }} />
-          </div>
+          {data.current.isUnlimitedCredits ? (
+            <div className="flex items-center justify-between gap-4 text-sm font-semibold">
+              <span>Tracked usage</span>
+              <span>Unlimited</span>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between gap-4 text-sm font-semibold">
+                <span>Total</span>
+                <span>{usagePercent}%</span>
+              </div>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+                <div className="h-full rounded-full bg-primary" style={{ width: `${usagePercent}%` }} />
+              </div>
+            </>
+          )}
           <p className="mt-4 text-sm font-medium text-muted-foreground">
-            {data.current.creditsUsed} used and {data.current.creditsRemaining} remaining from {data.current.creditsLimit} credits.
+            {data.current.isUnlimitedCredits
+              ? `${data.current.creditsUsed} credits tracked this period. No monthly credit quota applies.`
+              : `${data.current.creditsUsed} used and ${data.current.creditsRemaining} remaining from ${data.current.creditsLimit} credits.`}
           </p>
         </SettingsCard>
       </div>

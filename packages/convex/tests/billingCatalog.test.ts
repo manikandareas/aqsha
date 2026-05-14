@@ -6,14 +6,22 @@ import {
   estimateProviderCostCents,
   isPlanAtLeast,
   PLAN_CATALOG,
+  PUBLIC_PLAN_KEYS,
   planForProductKey,
 } from "../convex/billing/catalog";
+import { parseAdminEmails } from "../convex/billing/admin";
 
 describe("billing catalog", () => {
-  it("defines Free, Starter, and Plus credit limits", () => {
+  it("defines Free, Starter, Plus, and internal Admin credit limits", () => {
     expect(PLAN_CATALOG.free.monthlyCredits).toBe(50);
     expect(PLAN_CATALOG.starter.monthlyCredits).toBe(500);
     expect(PLAN_CATALOG.plus.monthlyCredits).toBe(1_500);
+    expect(PLAN_CATALOG.admin.monthlyCredits).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  it("keeps Admin above Plus and out of public products", () => {
+    expect(isPlanAtLeast("admin", "plus")).toBe(true);
+    expect(PUBLIC_PLAN_KEYS).toEqual(["free", "starter", "plus"]);
   });
 
   it("maps Polar product keys to user-scoped plans", () => {
@@ -34,6 +42,12 @@ describe("billing catalog", () => {
     expect(isPlanAtLeast("free", "starter")).toBe(false);
     expect(isPlanAtLeast("starter", "starter")).toBe(true);
     expect(isPlanAtLeast("plus", "starter")).toBe(true);
+    expect(isPlanAtLeast("admin", "starter")).toBe(true);
+  });
+
+  it("parses admin emails case-insensitively", () => {
+    const emails = parseAdminEmails(" VitoAndareas15@gmail.com,other@example.com ");
+    expect(emails.has("vitoandareas15@gmail.com")).toBe(true);
   });
 
   it("converts token and provider usage into credits and estimated cost", () => {

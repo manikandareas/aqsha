@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Caveat, Inter, JetBrains_Mono, Nunito } from "next/font/google";
+import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ConvexClientProvider } from "./convex-client-provider";
@@ -56,7 +57,9 @@ export default async function RootLayout({
           disableTransitionOnChange
         >
           <ConvexClientProvider initialToken={initialToken}>
-            <TooltipProvider>{children}</TooltipProvider>
+            <NuqsAdapter>
+              <TooltipProvider>{children}</TooltipProvider>
+            </NuqsAdapter>
           </ConvexClientProvider>
         </ThemeProvider>
       </body>

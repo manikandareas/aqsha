@@ -80,7 +80,7 @@ export function BillingPage() {
             variant="outline"
             size="sm"
             onClick={openPortal}
-            disabled={current.planKey === "free" || pendingKey === "portal"}
+            disabled={!current.billingPortalAvailable || pendingKey === "portal"}
             className="rounded-[8px]"
           >
             {pendingKey === "portal" ? (
@@ -88,7 +88,7 @@ export function BillingPage() {
             ) : (
               <CreditCardIcon className="size-4" />
             )}
-            Manage portal
+            {current.isAdmin ? "Manage existing subscription" : "Manage portal"}
           </Button>
         </header>
 
@@ -102,8 +102,9 @@ export function BillingPage() {
               {current.planLabel}
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-              Credits reset bulanan walaupun billing tahunan. Jika credits habis,
-              Aqsha menolak sebelum memanggil model atau provider eksternal.
+              {current.isUnlimitedCredits
+                ? "Admin access melewati quota billing, sementara provider usage tetap tercatat."
+                : "Credits reset bulanan walaupun billing tahunan. Jika credits habis, Aqsha menolak sebelum memanggil model atau provider eksternal."}
             </p>
           </div>
           <div className="rounded-[12px] border border-border bg-background p-4">
@@ -111,7 +112,9 @@ export function BillingPage() {
               <div>
                 <p className="text-[12px] font-semibold text-muted-foreground">Usage</p>
                 <p className="mt-1 text-2xl font-bold">
-                  {current.creditsUsed} / {current.creditsLimit}
+                  {current.isUnlimitedCredits
+                    ? `${current.creditsUsed} tracked`
+                    : `${current.creditsUsed} / ${current.creditsLimit}`}
                 </p>
               </div>
               <span className="text-[12px] font-semibold text-muted-foreground">
@@ -121,12 +124,14 @@ export function BillingPage() {
                 })}
               </span>
             </div>
-            <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full bg-primary"
-                style={{ width: `${usagePercent}%` }}
-              />
-            </div>
+            {current.isUnlimitedCredits ? null : (
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary"
+                  style={{ width: `${usagePercent}%` }}
+                />
+              </div>
+            )}
             <p className="mt-3 text-[12px] leading-5 text-muted-foreground">
               Estimated provider cost: ${(current.estimatedCostCents / 100).toFixed(2)}
               {" "}of ${(current.providerSpendCeilingCents / 100).toFixed(2)} ceiling.

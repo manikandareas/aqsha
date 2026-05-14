@@ -67,7 +67,6 @@ export function ArtifactPanel({
   activeTab,
   sourceFocus,
   onOpenArtifact,
-  onOpenSources,
   onTabChange,
   onClosePanel,
 }: {
@@ -78,7 +77,6 @@ export function ArtifactPanel({
   activeTab: "artifacts" | "sources";
   sourceFocus: SourceFocus | null;
   onOpenArtifact?: (artifactId: string) => void;
-  onOpenSources?: (focus?: SourceFocus) => void;
   onTabChange: (tab: "artifacts" | "sources") => void;
   onClosePanel: () => void;
 }) {
@@ -118,33 +116,46 @@ export function ArtifactPanel({
       <SidebarHeader className="gap-0 p-0">
         <div className="flex h-9 items-center gap-2 px-2.5">
           <div className="flex min-w-0 flex-1 items-center gap-1.5">
-            <span className="flex h-7 min-w-0 items-center gap-1.5 rounded-[7px] bg-muted px-2 text-[12px] font-semibold text-foreground">
-              <button
-                type="button"
-                onClick={() => onTabChange("artifacts")}
-                className={activeTab === "artifacts" ? "text-foreground" : "text-muted-foreground"}
+            <button
+              type="button"
+              onClick={() => onTabChange("artifacts")}
+              className={cn(
+                "flex h-7 min-w-0 items-center gap-1.5 rounded-[7px] px-2 text-[12px] font-semibold transition-colors hover:bg-muted",
+                activeTab === "artifacts" ? "bg-muted text-foreground" : "text-muted-foreground",
+              )}
+            >
+              <span>Artefak</span>
+              <span
+                className={cn(
+                  "inline-flex min-w-4 items-center justify-center rounded-[6px] px-1.5 py-0.5 text-[10px] font-semibold",
+                  activeTab === "artifacts"
+                    ? "bg-[var(--sky-soft)] text-primary"
+                    : "bg-muted text-muted-foreground",
+                )}
               >
-                Artefak
-              </button>
-              <span className="inline-flex min-w-4 items-center justify-center rounded-[6px] bg-[var(--sky-soft)] px-1.5 py-0.5 text-[10px] font-semibold text-primary">
                 {artifacts.length}
               </span>
-            </span>
-            <span className="flex h-7 min-w-0 items-center gap-1.5 rounded-[7px] px-2 text-[12px] font-semibold text-muted-foreground hover:bg-muted">
-              <button
-                type="button"
-                onClick={() => {
-                  onTabChange("sources");
-                  onOpenSources?.();
-                }}
-                className={activeTab === "sources" ? "text-foreground" : "text-muted-foreground"}
+            </button>
+            <button
+              type="button"
+              onClick={() => onTabChange("sources")}
+              className={cn(
+                "flex h-7 min-w-0 items-center gap-1.5 rounded-[7px] px-2 text-[12px] font-semibold transition-colors hover:bg-muted",
+                activeTab === "sources" ? "bg-muted text-foreground" : "text-muted-foreground",
+              )}
+            >
+              <span>Sources</span>
+              <span
+                className={cn(
+                  "inline-flex min-w-4 items-center justify-center rounded-[6px] px-1.5 py-0.5 text-[10px] font-semibold",
+                  activeTab === "sources"
+                    ? "bg-[var(--sky-soft)] text-primary"
+                    : "bg-muted text-muted-foreground",
+                )}
               >
-                Sources
-              </button>
-              <span className="inline-flex min-w-4 items-center justify-center rounded-[6px] bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
                 {sources.length}
               </span>
-            </span>
+            </button>
           </div>
           <div className="flex items-center gap-0.5">
             <DropdownMenu>

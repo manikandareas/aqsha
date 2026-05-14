@@ -5,9 +5,16 @@ const planOrder: Record<BillingCurrent["planKey"], number> = {
   free: 0,
   starter: 1,
   plus: 2,
+  admin: 3,
 };
 
-export function usagePercentage(current: Pick<BillingCurrent, "creditsUsed" | "creditsLimit">) {
+export function usagePercentage(
+  current: Pick<BillingCurrent, "creditsUsed" | "creditsLimit"> &
+    Partial<Pick<BillingCurrent, "isUnlimitedCredits">>,
+) {
+  if (current.isUnlimitedCredits) {
+    return 0;
+  }
   const raw = Math.round((current.creditsUsed / Math.max(1, current.creditsLimit)) * 100);
   return Math.min(100, Math.max(0, raw));
 }
@@ -19,6 +26,7 @@ export function findUpgradePlan(plans: Plan[], currentKey: BillingCurrent["planK
 }
 
 export function formatPlanPrice(plans: Plan[], planKey: BillingCurrent["planKey"]) {
+  if (planKey === "admin") return "Internal";
   const plan = plans.find((item) => item.key === planKey);
   if (!plan) return "";
   return `${formatIdr(plan.monthlyPriceIdr)}/bulan`;

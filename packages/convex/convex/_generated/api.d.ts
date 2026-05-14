@@ -11,6 +11,7 @@
 import type * as agent_artifacts from "../agent/artifacts.js";
 import type * as agent_astra from "../agent/astra.js";
 import type * as agent_deepResearch from "../agent/deepResearch.js";
+import type * as agent_domainReliability from "../agent/domainReliability.js";
 import type * as agent_externalProviders from "../agent/externalProviders.js";
 import type * as agent_messages from "../agent/messages.js";
 import type * as agent_promptCommands from "../agent/promptCommands.js";
@@ -24,6 +25,7 @@ import type * as agent_threadTitles from "../agent/threadTitles.js";
 import type * as agent_threads from "../agent/threads.js";
 import type * as agent_workflow from "../agent/workflow.js";
 import type * as auth from "../auth.js";
+import type * as billing_admin from "../billing/admin.js";
 import type * as billing_catalog from "../billing/catalog.js";
 import type * as billing_checkout from "../billing/checkout.js";
 import type * as billing_current from "../billing/current.js";
@@ -45,6 +47,7 @@ declare const fullApi: ApiFromModules<{
   "agent/artifacts": typeof agent_artifacts;
   "agent/astra": typeof agent_astra;
   "agent/deepResearch": typeof agent_deepResearch;
+  "agent/domainReliability": typeof agent_domainReliability;
   "agent/externalProviders": typeof agent_externalProviders;
   "agent/messages": typeof agent_messages;
   "agent/promptCommands": typeof agent_promptCommands;
@@ -58,6 +61,7 @@ declare const fullApi: ApiFromModules<{
   "agent/threads": typeof agent_threads;
   "agent/workflow": typeof agent_workflow;
   auth: typeof auth;
+  "billing/admin": typeof billing_admin;
   "billing/catalog": typeof billing_catalog;
   "billing/checkout": typeof billing_checkout;
   "billing/current": typeof billing_current;

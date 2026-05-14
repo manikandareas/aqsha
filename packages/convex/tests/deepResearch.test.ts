@@ -7,7 +7,6 @@ import {
   normalizeSemanticVerifierOutput,
   shouldReviseUnsupportedClaims,
   shouldRunCounterEvidencePass,
-  splitClaims,
   type DiscoveryCandidate,
   type ReadAttempt,
   type ResearchExtract,
@@ -19,7 +18,6 @@ const expectedStepLabels = [
   "Mencari sumber",
   "Mengurutkan kandidat",
   "Membaca sumber",
-  "Mengekstrak evidence",
   "Menilai kecukupan evidence",
   "Menguji counter-evidence",
   "Menyusun laporan",
@@ -36,7 +34,6 @@ describe("deep research contract", () => {
       "Mencari sumber",
       "Mengurutkan kandidat",
       "Membaca sumber",
-      "Mengekstrak evidence",
       "Menilai kecukupan evidence",
       "Menguji counter-evidence",
       "Menyusun laporan",
@@ -47,17 +44,15 @@ describe("deep research contract", () => {
     ]);
   });
 
-  it("triggers counter-evidence only when evidence is already strong", () => {
-    expect(shouldRunCounterEvidencePass({
+  it("skips counter-evidence when accepted sources are too few", async () => {
+    const result = await shouldRunCounterEvidencePass({
       sufficiencyStatus: "sufficient",
-      acceptedSourceCount: 10,
+      acceptedSourceCount: 2,
       highRelevanceExtractCount: 4,
-    })).toBe(true);
-    expect(shouldRunCounterEvidencePass({
-      sufficiencyStatus: "partial",
-      acceptedSourceCount: 10,
-      highRelevanceExtractCount: 4,
-    })).toBe(false);
+      extracts: [],
+      prompt: "test prompt",
+    });
+    expect(result).toBe(false);
   });
 
   it("rejects blocked or cookie-wall source content before citation", () => {
@@ -182,18 +177,6 @@ describe("deep research contract", () => {
     });
   });
 
-  it("does not audit headings and operational status lines as factual claims", () => {
-    expect(splitClaims([
-      "# Executive Summary",
-      "Status: partial",
-      "The market grew because cloud adoption accelerated [1].",
-      "## Evidence Limits",
-      "Retryable: true",
-    ].join("\n"))).toEqual([
-      "The market grew because cloud adoption accelerated [1].",
-    ]);
-  });
-
   it("normalizes semantic verifier output safely", () => {
     expect(normalizeSemanticVerifierOutput({
       claim: "Claim [1].",
@@ -209,12 +192,12 @@ describe("deep research contract", () => {
     });
   });
 
-  it("runs the revise pass only for contradicted or high-impact unsupported claims", () => {
+  it("runs the revise pass only for contradicted or high-confidence unsupported claims", () => {
     expect(shouldReviseUnsupportedClaims([
-      { support: "unsupported", claim: "Minor descriptive claim.", confidence: 0.9 },
+      { support: "unsupported", claim: "Minor descriptive claim.", confidence: 0.4 },
     ])).toBe(false);
     expect(shouldReviseUnsupportedClaims([
-      { support: "unsupported", claim: "This policy must be adopted by clinics immediately.", confidence: 0.9 },
+      { support: "unsupported", claim: "This policy must be adopted by clinics immediately.", confidence: 0.7 },
     ])).toBe(true);
     expect(shouldReviseUnsupportedClaims([
       { support: "contradicted", claim: "Contradicted claim.", confidence: 0.2 },

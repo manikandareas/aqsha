@@ -1,4 +1,4 @@
-import { generateObject, generateText } from "ai";
+import { generateObject, generateText, Output } from "ai";
 import { openai } from "@ai-sdk/openai";
 import type { WorkflowId } from "@convex-dev/workflow";
 import { ConvexError, v } from "convex/values";
@@ -27,7 +27,7 @@ import {
   searchExaCandidates,
   searchJinaCandidates,
 } from "./externalProviders";
-import { trimForSnippet, type SourceCandidate } from "./sourceCandidates";
+import { sourceCandidateValidator, trimForSnippet, type SourceCandidate } from "./sourceCandidates";
 import {
   assessSourceQuality,
   canonicalSourceKey,
@@ -38,6 +38,7 @@ import { assertThreadOwner } from "./threads";
 import { researchWorkflow } from "./workflow";
 
 const DEEP_MODEL = process.env.AQSHA_DEEP_MODEL ?? "gpt-5.5";
+const DEEP_LITE_MODEL = process.env.AQSHA_DEEP_LITE_MODEL ?? "gpt-5.4-mini";
 const DEFAULT_MAX_ROUNDS = Number(process.env.AQSHA_DEEP_MAX_ROUNDS ?? 3);
 const MAX_SOURCES_PER_RUN = 14;
 const MAX_EXTRACTS_PER_RUN = 24;
@@ -164,7 +165,6 @@ const stepDefinitions = [
   ["discoverRoundCandidates", "Mencari sumber"],
   ["rerankRoundCandidates", "Mengurutkan kandidat"],
   ["readRoundSources", "Membaca sumber"],
-  ["extractRoundEvidence", "Mengekstrak evidence"],
   ["assessRoundSufficiency", "Menilai kecukupan evidence"],
   ["runCounterEvidencePass", "Menguji counter-evidence"],
   ["synthesize", "Menyusun laporan"],
@@ -209,32 +209,45 @@ export const deepResearchWorkflow = researchWorkflow.define({
     }, {
       retry: ACTION_RETRY,
     });
-    const audit = await step.runAction(internal.agent.deepResearch.auditClaims, {
-      ...args,
-      sources: loop.sources,
-      extracts: loop.extracts,
-      markdown: synthesis.markdown,
-    }, {
-      retry: ACTION_RETRY,
-    });
-    const responseSummary = await step.runAction(internal.agent.deepResearch.summarizeResearchResponse, {
-      ...args,
-      plan,
-      markdown: audit.markdown,
-    }, {
-      retry: ACTION_RETRY,
-    });
+
+    const isSimpleTopic = (plan.maxRounds ?? 1) === 1 && (plan.sufficiencyCriteria?.length ?? 0) <= 2;
+    let finalMarkdown = synthesis.markdown;
+    let checks: Array<{
+      claim: string;
+      support: "supported" | "partially_supported" | "contradicted" | "partial" | "unsupported";
+      citationNumbers: number[];
+      evidence: string;
+      verifierModel?: string;
+      confidence?: number;
+      failureReason?: string;
+      extractKeys?: string[];
+      revisionAction?: "none" | "caveated" | "removed_or_rewritten";
+    }> = [];
+
+    if (!isSimpleTopic) {
+      const audit = await step.runAction(internal.agent.deepResearch.auditClaims, {
+        ...args,
+        sources: loop.sources,
+        extracts: loop.extracts,
+        markdown: synthesis.markdown,
+      }, {
+        retry: ACTION_RETRY,
+      });
+      finalMarkdown = audit.markdown;
+      checks = audit.checks;
+    }
+
     const persisted = await step.runMutation(internal.agent.deepResearch.persistArtifact, {
       ...args,
       sources: loop.sources,
       extracts: loop.extracts,
-      markdown: audit.markdown,
-      checks: audit.checks,
+      markdown: finalMarkdown,
+      checks,
     });
     await step.runMutation(internal.agent.deepResearch.finalizeThread, {
       ...args,
       artifactId: persisted.primaryArtifactId,
-      responseSummary,
+      responseSummary: synthesis.chatSummary,
     });
   },
 });
@@ -531,12 +544,6 @@ export const researchLoop = internalAction({
 
     for (let round = 1; round <= maxRounds; round += 1) {
       await ensureNotCanceled(ctx, args.runId);
-      await ctx.runMutation(internal.agent.deepResearch.markStep, {
-        runId: args.runId,
-        ownerUserId: args.ownerUserId,
-        stepKey: "planRound",
-        status: "running",
-      });
       const queries = await chooseRoundQueries(ctx, {
         prompt: args.prompt,
         plan,
@@ -577,13 +584,6 @@ export const researchLoop = internalAction({
         sourceCount: acceptedByKey.size,
         extractCount: extractsByKey.size,
         stateJson: JSON.stringify({ queries }),
-      });
-      await ctx.runMutation(internal.agent.deepResearch.markStep, {
-        runId: args.runId,
-        ownerUserId: args.ownerUserId,
-        stepKey: "planRound",
-        status: "completed",
-        summary: `Round ${round}: ${queries.length} query`,
       });
       await ctx.runMutation(internal.agent.deepResearch.markStep, {
         runId: args.runId,
@@ -706,20 +706,6 @@ export const researchLoop = internalAction({
       await ctx.runMutation(internal.agent.deepResearch.markStep, {
         runId: args.runId,
         ownerUserId: args.ownerUserId,
-        stepKey: "extractRoundEvidence",
-        status: "running",
-      });
-      await ctx.runMutation(internal.agent.deepResearch.markStep, {
-        runId: args.runId,
-        ownerUserId: args.ownerUserId,
-        stepKey: "extractRoundEvidence",
-        status: "completed",
-        summary: `${extractsByKey.size} evidence extract siap dipakai`,
-        sourceCount: extractsByKey.size,
-      });
-      await ctx.runMutation(internal.agent.deepResearch.markStep, {
-        runId: args.runId,
-        ownerUserId: args.ownerUserId,
         stepKey: "assessRoundSufficiency",
         status: "running",
       });
@@ -821,10 +807,12 @@ export const researchLoop = internalAction({
       }
     }
 
-    const counterDecision = shouldRunCounterEvidencePass({
+    const counterDecision = await shouldRunCounterEvidencePass({
       sufficiencyStatus,
       acceptedSourceCount: acceptedByKey.size,
       highRelevanceExtractCount: [...extractsByKey.values()].filter((extract) => extract.relevance === "high").length,
+      extracts: [...extractsByKey.values()],
+      prompt: args.prompt,
     });
     await ctx.runMutation(internal.agent.deepResearch.markStep, {
       runId: args.runId,
@@ -977,8 +965,8 @@ export const synthesize = internalAction({
       model: openai.chat(DEEP_MODEL),
       system:
         readiness.ready
-          ? "Write a source-grounded markdown research report. Cite every factual claim with persisted source numbers. Prefer accepted evidence extracts over snippets. If evidence is insufficient, keep that limitation visible and do not overstate certainty."
-          : "Write a partial source-grounded markdown research artifact, not a full final recommendation report. State up front that accepted readable evidence did not meet the Deep Research target, cite only persisted source numbers, and ask for retry/expanded search before strong conclusions.",
+          ? "Write a source-grounded markdown research report. Cite every factual claim with persisted source numbers. Prefer accepted evidence extracts over snippets. If evidence is insufficient, keep that limitation visible and do not overstate certainty. Also produce a concise chat summary (2-4 natural paragraphs, no implementation details) for the user."
+          : "Write a partial source-grounded markdown research artifact, not a full final recommendation report. State up front that accepted readable evidence did not meet the Deep Research target, cite only persisted source numbers, and ask for retry/expanded search before strong conclusions. Also produce a concise chat summary for the user.",
       prompt: [
         `Prompt:\n${args.prompt}`,
         `Research plan:\n${JSON.stringify(normalizePlan(args.plan), null, 2)}`,
@@ -987,8 +975,15 @@ export const synthesize = internalAction({
         `Accepted evidence extracts:\n${extractBlock || "No extracted evidence beyond snippets."}`,
         `Sources:\n${sourceBlock}`,
       ].join("\n\n"),
+      output: Output.object({
+        schema: z.object({
+          markdown: z.string().describe("Full research report in markdown with citations"),
+          chatSummary: z.string().describe("Concise natural chat summary for the user, 2-4 paragraphs. No implementation details, workflow status, or database records."),
+        }),
+      }),
     });
-    const markdown = result.text.trim();
+    const markdown = result.output?.markdown?.trim() ?? result.text.trim();
+    const chatSummary = result.output?.chatSummary?.trim() || buildPlainResponseSummary(markdown);
     await ctx.runMutation(internal.agent.deepResearch.markStep, {
       runId: args.runId,
       ownerUserId: args.ownerUserId,
@@ -998,35 +993,9 @@ export const synthesize = internalAction({
     });
     return {
       markdown,
+      chatSummary,
       summary: trimForSnippet(markdown.replace(/[#*_`>-]/g, ""), 220),
     };
-  },
-});
-
-export const summarizeResearchResponse = internalAction({
-  args: {
-    ...workflowArgs(),
-    plan: v.any(),
-    markdown: v.string(),
-  },
-  handler: async (ctx, args) => {
-    await ensureNotCanceled(ctx, args.runId);
-    const result = await generateText({
-      model: openai.chat(DEEP_MODEL),
-      system: [
-        "Write the final chat response for a completed Deep Research run.",
-        "The full report is already saved as an artifact, so this message should be a concise natural summary of the research.",
-        "Do not force bullets, checklists, or a fixed template. Use natural paragraphs unless the content genuinely calls for a short list.",
-        "Keep it user-friendly for a non-technical reader. Mention important uncertainty or caveats when they matter.",
-        "Do not include implementation details about workflow, retries, tools, or database records.",
-      ].join(" "),
-      prompt: [
-        `Original user prompt:\n${args.prompt}`,
-        `Research plan:\n${JSON.stringify(normalizePlan(args.plan), null, 2)}`,
-        `Final audited report:\n${trimForSnippet(args.markdown, 16_000)}`,
-      ].join("\n\n"),
-    });
-    return result.text.trim() || buildPlainResponseSummary(args.markdown);
   },
 });
 
@@ -1706,23 +1675,7 @@ function workflowArgs() {
 }
 
 function sourceRuntimeValidator() {
-  return v.object({
-    citationNumber: v.number(),
-    origin: v.union(v.literal("web"), v.literal("arxiv"), v.literal("doi")),
-    provider: v.optional(v.string()),
-    providerRequestId: v.optional(v.string()),
-    evidenceStrength: v.union(v.literal("strong"), v.literal("medium"), v.literal("weak")),
-    title: v.string(),
-    locator: v.string(),
-    url: v.optional(v.string()),
-    doi: v.optional(v.string()),
-    arxivId: v.optional(v.string()),
-    snippet: v.string(),
-    readStatus: v.optional(v.union(v.literal("not_needed"), v.literal("ready"), v.literal("failed"))),
-    readError: v.optional(v.string()),
-    rerankScore: v.optional(v.number()),
-    metadataJson: v.optional(v.string()),
-  });
+  return sourceCandidateValidator;
 }
 
 function normalizePlan(value: unknown): ResearchPlan {
@@ -1753,7 +1706,7 @@ async function chooseNextQuery(
     return args.plan.initialQueries[0] || args.prompt;
   }
   const object = await generateObject({
-    model: openai.chat(DEEP_MODEL),
+    model: openai.chat(DEEP_LITE_MODEL),
     schema: z.object({
       query: z.string().min(1).max(500),
       rationale: z.string(),
@@ -1774,7 +1727,7 @@ async function planSourceBuckets(_ctx: ActionCtx, prompt: string, plan: Research
   const fallback = defaultSourceBuckets(prompt, plan);
   try {
     const object = await generateObject({
-      model: openai.chat(DEEP_MODEL),
+      model: openai.chat(DEEP_LITE_MODEL),
       schema: z.object({
         buckets: z.array(z.object({
           name: z.enum([
@@ -2097,7 +2050,7 @@ async function chooseExpansionQueries(
 ) {
   try {
     const object = await generateObject({
-      model: openai.chat(DEEP_MODEL),
+      model: openai.chat(DEEP_LITE_MODEL),
       schema: z.object({
         expansions: z.array(z.object({
           bucketName: z.string().min(2).max(80),
@@ -2151,6 +2104,11 @@ async function discoverCandidates(
     excludedDomains: string[];
   },
 ) {
+  const unreliableDomains = await ctx.runQuery(
+    internal.agent.domainReliability.listUnreliableDomains,
+    {},
+  );
+  const allExcludedDomains = [...new Set([...args.excludedDomains, ...unreliableDomains])];
   const byProvider = {
     exa: [] as Array<Omit<SourceCandidate, "citationNumber">>,
     jina: [] as Array<Omit<SourceCandidate, "citationNumber">>,
@@ -2160,7 +2118,7 @@ async function discoverCandidates(
 
   for (const item of args.queries) {
     const providers = item.bucket.preferredProviders;
-    const excludeDomains = [...(item.bucket.excludeDomains ?? []), ...args.excludedDomains];
+    const excludeDomains = [...(item.bucket.excludeDomains ?? []), ...allExcludedDomains];
     const tasks: Array<Promise<void>> = [];
     if (providers.includes("exa")) {
       tasks.push(searchExaCandidates(ctx, {
@@ -2517,6 +2475,14 @@ async function recordReadAttempt(
       })),
     }),
   });
+  const domain = sourceDomain(source);
+  if (domain) {
+    await ctx.runMutation(internal.agent.domainReliability.recordOutcome, {
+      domain,
+      success: quality.ok,
+      failureReason: quality.ok ? undefined : quality.reason,
+    });
+  }
 }
 
 async function assessSufficiency(
@@ -2532,33 +2498,28 @@ async function assessSufficiency(
   },
 ) {
   const readiness = assessEvidenceReadiness(args.sources, args.extracts);
-  if (!readiness.ready && args.round < args.maxRounds) {
-    return {
-      sufficiencyStatus: "insufficient" as const,
-      gapAssessment: `Need more readable evidence before synthesis: ${readiness.recommendation}`,
-      readiness,
-    };
-  }
   const object = await generateObject({
-    model: openai.chat(DEEP_MODEL),
+    model: openai.chat(DEEP_LITE_MODEL),
     schema: z.object({
       sufficiencyStatus: z.enum(["insufficient", "partial", "sufficient"]),
       gapAssessment: z.string(),
     }),
     prompt: [
-      "Assess whether the evidence is sufficient to write a useful report. Consider bias, contradictions, and missing angles.",
+      "Assess whether the evidence is sufficient to write a useful report for this specific topic.",
+      "Consider: topic breadth, available source diversity, bias risk, and whether the evidence gaps are fillable with more rounds.",
+      "A narrow topic may be 'sufficient' with fewer sources if they are high-quality and diverse enough.",
       `Prompt: ${args.prompt}`,
       `Criteria: ${args.plan.sufficiencyCriteria.join("; ")}`,
+      `Evidence metrics: ${JSON.stringify(readiness)}`,
       `Previous assessment: ${args.previousGapAssessment}`,
+      `Round: ${args.round} of ${args.maxRounds}`,
       `Sources: ${args.sources.map((source) => `[${source.citationNumber}] ${source.title}: ${source.snippet}`).join("\n")}`,
       `Extracts: ${args.extracts.map((extract) => `[${extract.citationNumber}] ${extract.quote}`).join("\n")}`,
     ].join("\n\n"),
   });
   return {
-    sufficiencyStatus: readiness.ready ? object.object.sufficiencyStatus : "partial" as const,
-    gapAssessment: readiness.ready
-      ? object.object.gapAssessment
-      : `${object.object.gapAssessment}\nEvidence readiness still short: ${readiness.recommendation}`,
+    sufficiencyStatus: object.object.sufficiencyStatus,
+    gapAssessment: object.object.gapAssessment,
     readiness,
   };
 }
@@ -2724,13 +2685,31 @@ function normalizeExtracts(value: unknown): ResearchExtract[] {
   });
 }
 
+async function extractVerifiableClaims(markdown: string): Promise<string[]> {
+  const object = await generateObject({
+    model: openai.chat(DEEP_LITE_MODEL),
+    schema: z.object({
+      claims: z.array(z.string().min(20).max(500)).max(16),
+    }),
+    prompt: [
+      "Extract up to 16 factual claims from this research report that should be verified against evidence.",
+      "Focus on: causal claims, statistical assertions, recommendations, comparisons, and definitive statements.",
+      "Skip: headings, meta-commentary, evidence limit sections, and purely structural text.",
+      "Each claim should be a complete, self-contained statement including any citation markers like [1].",
+      `Report:\n${markdown}`,
+    ].join("\n"),
+  });
+  return object.object.claims;
+}
+
 async function verifyClaimsSemantically(
   markdown: string,
   sources: SourceCandidate[],
   extracts: ResearchExtract[],
 ) {
   const sourceNumbers = new Set(sources.map((source) => source.citationNumber));
-  const structural = splitClaims(markdown).slice(0, 16).map((claim): CitationCheckDraft => {
+  const claims = await extractVerifiableClaims(markdown);
+  const structural = claims.map((claim): CitationCheckDraft => {
     const claimCitations = [...extractCitationNumbers(claim)].filter((number) => sourceNumbers.has(number));
     const relevantEvidence = extracts.filter((extract) =>
       claimCitations.includes(extract.citationNumber),
@@ -2746,7 +2725,7 @@ async function verifyClaimsSemantically(
       support,
       citationNumbers: claimCitations,
       evidence: relevantEvidence.map((extract) => extract.quote).join("\n") || evidenceText(support),
-      verifierModel: DEEP_MODEL,
+      verifierModel: DEEP_LITE_MODEL,
       confidence: support === "supported" ? 0.55 : 0.35,
       extractKeys: relevantEvidence.map((extract) => extractKey(extract)),
       revisionAction: "none",
@@ -2764,7 +2743,7 @@ async function verifyClaimsSemantically(
     }
     try {
       const result = await generateObject({
-        model: openai.chat(DEEP_MODEL),
+        model: openai.chat(DEEP_LITE_MODEL),
         schema: z.object({
           support: z.enum(["supported", "partially_supported", "contradicted", "unsupported"]),
           confidence: z.number().min(0).max(1),
@@ -2859,13 +2838,8 @@ async function reviseUnsupportedMarkdown(markdown: string, checks: CitationCheck
 export function shouldReviseUnsupportedClaims(checks: Array<Pick<CitationCheckDraft, "support" | "claim" | "confidence">>) {
   return checks.some((check) =>
     check.support === "contradicted" ||
-    (check.support === "unsupported" && isHighImpactClaim(check.claim) && (check.confidence ?? 0) >= 0.5),
+    (check.support === "unsupported" && (check.confidence ?? 0) >= 0.6),
   );
-}
-
-function isHighImpactClaim(claim: string) {
-  return /\b(must|harus|will|pasti|causes?|menyebabkan|proves?|membuktikan|recommended|rekomendasi|legal|medical|policy|kebijakan|clinical|klinis)\b/i.test(claim)
-    || claim.length > 120;
 }
 
 function extractKey(extract: ResearchExtract) {
@@ -2874,32 +2848,6 @@ function extractKey(extract: ResearchExtract) {
 
 function extractCitationNumbers(text: string) {
   return new Set([...text.matchAll(/\[(\d{1,3})\]/g)].map((match) => Number(match[1])));
-}
-
-export function splitClaims(markdown: string) {
-  return markdown
-    .split(/\n+/)
-    .flatMap((line) => {
-      const trimmed = line.trim();
-      if (isNonFactualAuditLine(trimmed)) {
-        return [];
-      }
-      return trimmed.split(/(?<=[.!?])\s+/);
-    })
-    .map((claim) => claim.replace(/^[-*]\s*/, "").trim())
-    .filter((claim) => claim.length > 20 && !isNonFactualAuditLine(claim));
-}
-
-function isNonFactualAuditLine(line: string) {
-  return (
-    !line ||
-    /^#{1,6}\s+/.test(line) ||
-    /^>\s*/.test(line) ||
-    /^```/.test(line) ||
-    /^\|/.test(line) ||
-    /^(audit notes|evidence limits|the verifier found|evidence readiness|round trace|sources|accepted evidence extracts)\b/i.test(line) ||
-    /^(partial|completed|retryable|status|sufficiency|limitations?)\s*[:-]/i.test(line)
-  );
 }
 
 function buildPlainResponseSummary(markdown: string) {
@@ -2953,14 +2901,31 @@ function clampRoundCount(value: number) {
   return Math.min(Math.max(1, Math.floor(value)), DEFAULT_MAX_ROUNDS);
 }
 
-export function shouldRunCounterEvidencePass(args: {
+export async function shouldRunCounterEvidencePass(args: {
   sufficiencyStatus: SufficiencyStatus;
   acceptedSourceCount: number;
   highRelevanceExtractCount: number;
-}) {
-  return args.sufficiencyStatus === "sufficient" &&
-    args.acceptedSourceCount >= MIN_ACCEPTED_SOURCES &&
-    args.highRelevanceExtractCount >= Math.min(4, MIN_ACCEPTED_EXTRACTS);
+  extracts: ResearchExtract[];
+  prompt: string;
+}): Promise<boolean> {
+  if (args.acceptedSourceCount < 3) return false;
+  const object = await generateObject({
+    model: openai.chat(DEEP_LITE_MODEL),
+    schema: z.object({
+      needsCounterEvidence: z.boolean(),
+      rationale: z.string(),
+    }),
+    prompt: [
+      "Decide whether this research needs a counter-evidence pass.",
+      "Counter-evidence is valuable when: claims are prescriptive/causal, topic is controversial, evidence is one-sided, or high-impact recommendations are made.",
+      "Skip when: topic is purely descriptive, evidence already shows multiple perspectives, or sources are too few to meaningfully challenge.",
+      `Sufficiency: ${args.sufficiencyStatus}`,
+      `Sources: ${args.acceptedSourceCount}, High extracts: ${args.highRelevanceExtractCount}`,
+      `Topic: ${args.prompt}`,
+      `Sample claims: ${args.extracts.slice(0, 5).map((e) => e.quote.slice(0, 200)).join("\n")}`,
+    ].join("\n"),
+  });
+  return object.object.needsCounterEvidence;
 }
 
 async function persistSourcesForRun(

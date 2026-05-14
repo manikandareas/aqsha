@@ -21,7 +21,14 @@ export const getCurrentPeriod = query({
   args: {},
   returns: v.object({
     periodKey: v.string(),
-    planKey: v.union(v.literal("free"), v.literal("starter"), v.literal("plus")),
+    planKey: v.union(
+      v.literal("free"),
+      v.literal("starter"),
+      v.literal("plus"),
+      v.literal("admin"),
+    ),
+    isAdmin: v.boolean(),
+    isUnlimitedCredits: v.boolean(),
     creditsLimit: v.number(),
     creditsUsed: v.number(),
     creditsRemaining: v.number(),
@@ -40,6 +47,8 @@ export const getCurrentPeriod = query({
     return {
       periodKey: period.periodKey,
       planKey: period.planKey,
+      isAdmin: snapshot.isAdmin,
+      isUnlimitedCredits: snapshot.isUnlimitedCredits,
       creditsLimit: period.creditsLimit,
       creditsUsed: period.creditsUsed,
       creditsRemaining: Math.max(0, period.creditsLimit - period.creditsUsed),

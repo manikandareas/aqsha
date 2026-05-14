@@ -51,10 +51,24 @@ export default defineSchema(
       eventType: v.string(),
       processedAt: v.number(),
     }).index("by_event_key", ["eventKey"]),
+    adminEntitlements: defineTable({
+      ownerUserId: v.string(),
+      email: v.string(),
+      enabled: v.boolean(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_owner", ["ownerUserId"])
+      .index("by_email", ["email"]),
     billingCreditPeriods: defineTable({
       ownerUserId: v.string(),
       periodKey: v.string(),
-      planKey: v.union(v.literal("free"), v.literal("starter"), v.literal("plus")),
+      planKey: v.union(
+        v.literal("free"),
+        v.literal("starter"),
+        v.literal("plus"),
+        v.literal("admin"),
+      ),
       status: v.string(),
       creditsLimit: v.number(),
       creditsUsed: v.number(),
@@ -421,6 +435,15 @@ export default defineSchema(
       updatedAt: v.number(),
       expiresAt: v.number(),
     }).index("by_provider_key", ["provider", "cacheKey"]),
+
+    domainReliability: defineTable({
+      domain: v.string(),
+      successCount: v.number(),
+      failureCount: v.number(),
+      lastFailureReason: v.optional(v.string()),
+      lastSeenAt: v.number(),
+      updatedAt: v.number(),
+    }).index("by_domain", ["domain"]),
   },
   { schemaValidation: true },
 );
