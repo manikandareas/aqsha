@@ -1,115 +1,226 @@
-# Aqsha Product Requirements
+# Aqsha Education Research Workspace PRD
 
-## Product Shape
+## Summary
 
-Aqsha is a personal research chatbot backed by Convex. The product surface is intentionally narrow:
+Aqsha is a personal education research workspace for students and research learners. It helps a user collect study materials, write and refine documents, save useful URLs, and use those materials as explicit context for chat.
 
-- One authenticated user account.
-- Research threads with Normal and Deep modes.
-- Durable run status for long research work.
-- Artifacts for reusable outputs such as reports, documents, code, and structured notes.
-- Right-panel provenance inspection for source candidates produced by runs/messages.
+The product should move away from making Deep Research the main interaction. Deep Research remains available as an advanced mode for expensive, long-running investigation, but the everyday loop is lighter:
 
-Aqsha does not expose a Source Library page, a Sources sidebar item, a Sources settings page, `/sources`, `/settings/sources`, or public corpus ingestion UI. The only user-facing Sources surface is the right-panel tab for inspecting provenance candidates.
+1. Create or select a personal workspace.
+2. Add documents and URLs as artifacts.
+3. Select artifacts as context for a thread.
+4. Chat with Astra against that context.
+5. Promote useful outputs back into artifacts when needed.
 
-## Core Requirements
+## Problem
 
-1. Authenticated users can create and continue research threads.
-2. Normal mode streams a direct answer and may call external tools when evidence is needed.
-3. Deep mode starts a durable workflow that can survive refresh, cancel, retry, and completion.
-4. Agent/tool runs must persist all produced source candidates and mark whether each was cited, accepted, rejected, or remains a candidate.
-5. Users inspect generated work through artifacts and inspect evidence provenance through the right-panel Sources tab.
-6. Cross-user reads and mutations are denied for threads, runs, artifacts, messages, usage, and internal provenance records.
+The current experience is too chat-first and Deep Research-heavy. It is strong for generating research reports, but expensive long-running research is not the right default for students who usually need to collect notes, organize links, ask focused questions, and iterate on learning material over time.
 
-## User-Facing Surfaces
+Users need a persistent personal research workspace where their own materials are the center of the product. Chat should operate on selected workspace artifacts, not only on the transient context of a thread or generated run.
 
-### Chat
+## Audience
 
-The chat is the primary product. It supports:
+Primary users:
 
-- New-thread and existing-thread flows.
-- Normal and Deep mode selection.
-- Prompt commands.
-- Inline run progress for long work.
-- Artifact cards when a response creates or updates an artifact.
+- Students preparing assignments, papers, exams, or thesis drafts.
+- Research learners collecting explanations, references, URLs, and notes across topics.
+- Individual users managing their own education materials without team collaboration.
 
-### Artifact Panel
+This PRD does not target organizations, classrooms, shared team workspaces, or institutional source management.
 
-The right panel supports `Artefak | Sources`. It opens when:
+## Product Direction
 
-- An artifact exists for the current thread.
-- A Deep run is active and may create an artifact.
-- The user clicks an artifact card.
-- The user clicks a compact source action under a message/run or selects the Sources tab.
+Aqsha becomes a personal education research workspace.
 
-Artifact creation still auto-opens the panel. Source candidates do not auto-open the panel by themselves. The Sources tab groups candidates by run/message and shows provenance metadata only. It does not include Source Library controls, corpus ingestion, or settings.
+The core object is a user-owned workspace. A workspace contains optional one-level folders and artifacts. Artifacts can be user-authored documents, saved URLs, or generated outputs. A thread can select artifacts from the current workspace as context. Astra uses the current content of those selected artifacts when generating a reply.
 
-### Settings
+Deep Research stays in the product, but it should be presented as an advanced mode rather than the only selling point. Sources remain backend provenance records for generated research and citations. They should not become a public Source Library or user-facing corpus management surface.
 
-Settings covers account, appearance, usage/billing, and security. It does not include source readiness, corpus ingestion, or Source Library configuration.
+## Goals
 
-## Backend Requirements
+- Support many personal workspaces per user.
+- Support one-level optional folders inside each workspace.
+- Allow artifacts to live directly under a workspace or inside one folder.
+- Support document artifacts backed by BlockNote JSON blocks.
+- Support URL artifacts with extracted readable text and fetch status.
+- Let users select artifacts as thread-level context.
+- Show context selection in the right sidebar on chat pages.
+- Let workspace pages show artifact management and thread selection.
+- Keep Normal and Deep mode chat behavior intact.
+- Keep billing, rate limits, streaming, and provenance behavior intact.
 
-### Agent Tools
+## Non-Goals
 
-Normal and Deep agents may call external tools such as web search, arXiv, DOI/Crossref lookup, page reading, reranking, and artifact creation/update.
+- Organization workspaces.
+- Team membership, sharing, or role-based collaboration.
+- Nested folders.
+- PDF ingestion.
+- Public Source Library.
+- Sources sidebar item, `/sources` route, or Sources settings page.
+- User-facing artifact version history.
+- Data migration or backfill from the current prototype schema.
 
-When a tool returns evidence candidates, the backend persists those candidates to `researchSources`. Normal mode marks cited final-answer sources as `cited` and uncited rows as `candidate`. Deep mode records discovery candidates and upgrades them to `accepted` or `rejected` during validation/persistence.
+## Core Concepts
 
-### Public API
+### Workspace
 
-Public functions should expose:
+A workspace is a private user-owned research area. Examples:
 
-- Auth/session state.
-- Thread list/get/create/send.
-- Run status/cancel/retry.
-- Artifact list/get/version/message-link APIs.
-- Thread-scoped source provenance list API.
-- Billing and usage APIs.
+- `Biology 101`
+- `Thesis: AI in Education`
+- `Machine Learning Notes`
+- `IELTS Writing`
 
-Public functions should not expose:
+The user can create multiple workspaces and switch between them from the left sidebar.
 
-- `corpus.addSource`
-- `corpus.search`
-- `corpus.list`
-- Source Library mutations or general source-browsing APIs outside the active thread.
+### Folder
 
-### Internal Provenance
+A folder is an optional one-level grouping inside a workspace. Folders are only for organization. They are not nested and they do not define permissions.
 
-Internal source storage remains required:
+Artifacts may exist without a folder.
 
-- Normal mode persists source records via internal mutations after tool results are known, with usage labels for cited and candidate rows.
-- Deep mode persists source candidates, accepted/rejected validation outcomes, extracts, and citation checks as part of the workflow.
-- Provenance records are scoped by `ownerUserId`, `threadId`, and when applicable `messageId`, `runId`, `artifactId`, and `artifactVersionId`.
+### Artifact
 
-## Data Model
+An artifact is reusable workspace material. The first implementation supports:
 
-Required product tables include:
+- Document artifact: BlockNote document with JSON blocks, derived plain text, and derived Markdown.
+- URL artifact: saved URL with title, description, readable extracted text, and fetch status.
 
-- `threadMetadata`
-- `usageLedger`
-- billing tables
-- `messageCommands`
-- `agentRuns`
-- `agentRunSteps`
-- `agentRunEvents`
-- `artifacts`
-- `artifactVersions`
-- `messageArtifacts`
-- `researchSources`
-- `researchExtracts`
-- `citationChecks`
-- `externalLookupCache`
+Existing AI-generated artifacts should move into this same flattened artifact model. User-facing version history should be removed. The current artifact content at generation time is the context snapshot used by Astra.
 
-`researchSources`, `researchExtracts`, and `citationChecks` are backend provenance tables. Only thread-scoped `researchSources` rows are exposed to the right-panel Sources tab.
+### Source
+
+A source is provenance produced by research tools and citation workflows. Sources are not a user-managed library. They remain backend records attached to messages, runs, artifacts, and citation checks where needed.
+
+## UX Requirements
+
+### App Layout
+
+The app keeps a three-panel workspace shape:
+
+- Left sidebar: workspace switcher, primary navigation, thread list, and account controls.
+- Main content: current workspace page, artifact editor, URL detail, or chat thread.
+- Right contextual panel: artifact preview, thread context picker, generated artifacts, and provenance inspection when available.
+
+### Left Sidebar
+
+The sidebar should prioritize:
+
+- Workspace switcher.
+- New workspace action.
+- New chat action.
+- Workspace-local threads.
+- Recent or pinned artifacts if useful.
+
+The sidebar must not restore a Sources or Source Library navigation item.
+
+### Workspace Page
+
+A workspace page should let the user:
+
+- Rename or delete the workspace.
+- Create a document artifact.
+- Save a URL artifact.
+- Create, rename, and delete one-level folders.
+- Move artifacts into a folder or back to the workspace root.
+- Open an artifact.
+- Start or select a thread scoped to the workspace.
+
+### Document Artifact Page
+
+A document artifact page should use BlockNote for editing. The editor must run client-only in Next.js. Save behavior should persist:
+
+- BlockNote JSON blocks.
+- Derived plain text for AI context.
+- Derived Markdown for export, preview, and prompt context.
+
+### URL Artifact Page
+
+A URL artifact page should show:
+
+- Original URL.
+- Title and description when available.
+- Extraction status: pending, ready, failed.
+- Extracted readable text when ready.
+- A clear retry action when extraction fails.
+
+PDF ingestion is intentionally later.
+
+### Chat Page
+
+A chat page should let the user:
+
+- See the current workspace.
+- Select or remove artifacts as thread context from the right panel.
+- Send Normal mode messages using selected artifacts as bounded context.
+- Start Deep Research as an advanced mode using the same thread and selected context.
+- Inspect generated artifacts and provenance without turning sources into a library.
+
+Context selection is thread-level. It should not be sent as trusted ownership metadata from the client. The backend should resolve selected artifact records server-side for every generation.
+
+## Functional Requirements
+
+### Workspace Management
+
+- Create a workspace.
+- List current user's workspaces.
+- Get a workspace by ID.
+- Rename a workspace.
+- Delete a workspace and its owned folders/context rows.
+- Prevent access to another user's workspace.
+
+### Folder Management
+
+- Create a folder inside a workspace.
+- Rename a folder.
+- Delete a folder.
+- Move artifacts out of a folder before or during folder deletion.
+- Prevent nested folders.
+
+### Artifact Management
+
+- Create document artifact.
+- Update document artifact content and derived text fields.
+- Create URL artifact.
+- Retry URL extraction.
+- Move artifact between folders or to no folder.
+- Rename artifact.
+- Soft-delete or delete artifact.
+- List artifacts by workspace and optional folder with pagination.
+
+### Thread Context
+
+- Add artifact to a thread's selected context.
+- Remove artifact from selected context.
+- List selected context artifacts for a thread.
+- Enforce that the thread, workspace, and artifacts all belong to the current user.
+- Use the artifact's current content at generation time.
+
+### Chat Generation
+
+- `messages.startThread` and `messages.send` should fetch selected context artifacts server-side.
+- Selected artifact context should be prepended to the prompt as a bounded context block.
+- The context block should include stable metadata: title, artifact type, URL when relevant, and a clipped text body.
+- The model should be told when selected artifacts are incomplete or failed URL extractions.
+- Normal and Deep mode streaming should remain intact.
 
 ## Acceptance Criteria
 
-1. The sidebar has no Sources/Sumber link.
-2. `/sources` and `/settings/sources` are not valid product routes.
-3. The settings menu has no Sources item.
-4. The right panel renders `Artefak | Sources`.
-5. App code may call only thread-scoped `api.agent.sources.listForThread`; it must not call corpus APIs.
-6. Normal-mode external tool candidates are stored with `cited` or `candidate` usage.
-7. Deep-mode source discovery, validation status, extracts, and citation checks still persist.
-8. Documentation does not describe Source Library or public corpus APIs as product features.
+- A user can create multiple personal workspaces.
+- A user can create an artifact directly under a workspace.
+- A user can create a one-level folder and move an artifact into it.
+- A user can move an artifact back out of a folder.
+- A user cannot create nested folders.
+- A document artifact saves BlockNote JSON blocks and derived text fields.
+- A URL artifact stores metadata, readable extracted text, and failure status.
+- A thread can add and remove selected context artifacts.
+- A chat response receives the selected artifact context server-side.
+- Deep Research still works as advanced mode.
+- No `/sources`, Source Library, or Sources sidebar/settings surface is restored.
+
+## Open Decisions
+
+- Whether workspace deletion should hard-delete artifacts immediately or use a soft-delete recovery window.
+- Whether generated artifacts should automatically attach to the active workspace or require user confirmation.
+- Whether thread creation should always require a workspace or allow a default personal workspace to be auto-created.
+- Whether artifact search should ship in the first implementation or wait until the workspace library becomes large.
