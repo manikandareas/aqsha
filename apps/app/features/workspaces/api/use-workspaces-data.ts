@@ -1,7 +1,7 @@
 "use client";
 
 import { api } from "@aqsha/convex/api";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 
 const workspacePageSize = 50;
 const artifactPageSize = 100;
@@ -98,9 +98,46 @@ export function useWorkspaceDetailData(workspaceId: string) {
     renameFolder: useMutation(api.workspaceFolders.rename),
     removeFolder: useMutation(api.workspaceFolders.remove),
     createDocument: useMutation(api.artifacts.createDocument),
+    createUrl: useMutation(api.artifacts.createUrl),
     renameArtifact: useMutation(api.artifacts.rename),
     moveArtifact: useMutation(api.artifacts.move),
     removeArtifact: useMutation(api.artifacts.remove),
     startThread: useMutation(api.agent.messages.startThread),
+  };
+}
+
+export function useArtifactDetailData(artifactId: string) {
+  const { isAuthenticated } = useConvexAuth();
+  const artifactArgs =
+    isAuthenticated && artifactId ? { artifactId: artifactId as never } : "skip";
+  const viewer = useQuery(api.auth.getCurrentUser, isAuthenticated ? {} : "skip");
+  const workspacesPage = useQuery(
+    api.workspaces.list,
+    isAuthenticated
+      ? { paginationOpts: { cursor: null, numItems: workspacePageSize } }
+      : "skip",
+  );
+  const threadPage = useQuery(
+    api.agent.threads.list,
+    isAuthenticated
+      ? { paginationOpts: { cursor: null, numItems: threadPageSize } }
+      : "skip",
+  );
+  const artifact = useQuery(api.artifacts.get, artifactArgs);
+
+  return {
+    isAuthenticated,
+    viewer,
+    workspaces: workspacesPage?.page ?? [],
+    threads: threadPage?.page ?? [],
+    artifact,
+    isLoading: artifact === undefined,
+    getFullContent: useAction(api.artifacts.getFullContent),
+    updateDocument: useAction(api.artifacts.updateDocument),
+    retryUrlExtraction: useMutation(api.artifacts.retryUrlExtraction),
+    renameArtifact: useMutation(api.artifacts.rename),
+    moveArtifact: useMutation(api.artifacts.move),
+    removeArtifact: useMutation(api.artifacts.remove),
+    createWorkspace: useMutation(api.workspaces.create),
   };
 }

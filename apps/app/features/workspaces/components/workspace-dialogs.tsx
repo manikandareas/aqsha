@@ -195,6 +195,77 @@ export function ConfirmDialog({
   );
 }
 
+export function UrlDialog({
+  open,
+  onOpenChange,
+  onSubmit,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (value: { url: string; title?: string }) => Promise<unknown>;
+}) {
+  const [url, setUrl] = useState("");
+  const [title, setTitle] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!url.trim()) return;
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await onSubmit({
+        url: url.trim(),
+        title: title.trim() || undefined,
+      });
+      setUrl("");
+      setTitle("");
+      onOpenChange(false);
+    } catch (submitError) {
+      setError(errorMessage(submitError));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="gap-4 sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Simpan URL</DialogTitle>
+          <DialogDescription>Tambahkan URL sebagai artifact workspace.</DialogDescription>
+        </DialogHeader>
+        <form className="grid gap-3" onSubmit={handleSubmit}>
+          <Input
+            autoFocus
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+            placeholder="https://..."
+            type="url"
+          />
+          <Input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Judul opsional"
+          />
+          {error ? <p className="text-[12px] font-medium text-destructive">{error}</p> : null}
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline" disabled={isSubmitting}>
+                Batal
+              </Button>
+            </DialogClose>
+            <Button type="submit" disabled={!url.trim() || isSubmitting}>
+              Simpan
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Aksi gagal.";
 }

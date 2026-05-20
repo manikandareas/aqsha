@@ -9,6 +9,7 @@ import {
   internalQuery,
   mutation,
   query,
+  type ActionCtx,
 } from "./_generated/server";
 import { requireCurrentUser } from "./auth";
 import {
@@ -16,6 +17,7 @@ import {
   contextFromText,
   normalizeUrl,
   previewFromText,
+  siteNameFromUrl,
   titleFromUrl,
 } from "./artifactModel";
 import {
@@ -31,6 +33,13 @@ import {
 } from "./agent/externalProviders";
 
 const documentTitleFallback = "Untitled document";
+
+type ArtifactFullContent = {
+  blocksJson: string;
+  markdown: string;
+  plainText: string;
+  readableText: string;
+};
 
 export const listByWorkspace = query({
   args: {
@@ -147,10 +156,13 @@ export const updateDocument = action({
   },
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
-    const storageId =
-      args.plainText.length > ARTIFACT_BODY_INLINE_LIMIT
-        ? await ctx.storage.store(new Blob([args.plainText], { type: "text/plain" }))
-        : undefined;
+    const storageId = await storeOversizedText(ctx, args.plainText, "text/plain");
+    const blocksStorageId = args.blocksJson
+      ? await storeOversizedText(ctx, args.blocksJson, "application/json")
+      : undefined;
+    const markdownStorageId = args.markdown
+      ? await storeOversizedText(ctx, args.markdown, "text/markdown")
+      : undefined;
     await ctx.runMutation(internal.artifacts.updateDocumentInternal, {
       ownerUserId: user._id,
       artifactId: args.artifactId,
@@ -159,8 +171,69 @@ export const updateDocument = action({
       markdown: args.markdown,
       plainText: args.plainText,
       storageId,
+      blocksStorageId,
+      markdownStorageId,
     });
     return { ok: true };
+  },
+});
+
+export const getFullContent = action({
+  args: { artifactId: v.id("artifacts") },
+  handler: async (ctx, args): Promise<ArtifactFullContent | null> => {
+    const user = await requireCurrentUser(ctx);
+    const target: {
+      artifact: {
+        kind?: "document" | "url";
+        body?: string;
+        storageId?: Id<"_storage">;
+      };
+      document?: {
+        blocksJson?: string;
+        markdown?: string;
+        plainText?: string;
+        storageId?: Id<"_storage">;
+        blocksStorageId?: Id<"_storage">;
+        markdownStorageId?: Id<"_storage">;
+      } | null;
+      url?: {
+        readableText?: string;
+        storageId?: Id<"_storage">;
+      } | null;
+    } | null = await ctx.runQuery(internal.artifacts.getContentTarget, {
+      ownerUserId: user._id,
+      artifactId: args.artifactId,
+    });
+    if (!target) {
+      return null;
+    }
+    const blocksJson: string | undefined =
+      target.document?.blocksJson ??
+      (target.document?.blocksStorageId
+        ? await readStorageText(ctx, target.document.blocksStorageId)
+        : undefined);
+    const markdown: string | undefined =
+      target.document?.markdown ??
+      (target.document?.markdownStorageId
+        ? await readStorageText(ctx, target.document.markdownStorageId)
+        : undefined);
+    const plainText: string | undefined =
+      target.document?.plainText ??
+      (target.document?.storageId
+        ? await readStorageText(ctx, target.document.storageId)
+        : target.artifact.body ??
+          (target.artifact.storageId
+            ? await readStorageText(ctx, target.artifact.storageId)
+            : undefined));
+    const readableText: string | undefined =
+      target.url?.readableText ??
+      (target.url?.storageId ? await readStorageText(ctx, target.url.storageId) : undefined);
+    return {
+      blocksJson: blocksJson ?? "",
+      markdown: markdown ?? "",
+      plainText: plainText ?? "",
+      readableText: readableText ?? "",
+    };
   },
 });
 
@@ -218,6 +291,7 @@ export const createUrl = mutation({
       normalizedUrl,
       status: "pending",
       title,
+      siteName: siteNameFromUrl(normalizedUrl),
       createdAt: now,
       updatedAt: now,
     });
@@ -315,6 +389,7 @@ export const extractUrl = internalAction({
       artifactId: Id<"artifacts">;
       title: string;
       normalizedUrl: string;
+      siteName: string;
     } | null = await ctx.runQuery(internal.artifacts.getUrlExtractionTarget, {
       artifactId: args.artifactId,
     });
@@ -352,6 +427,8 @@ export const extractUrl = internalAction({
       artifactId: args.artifactId,
       ownerUserId: target.ownerUserId,
       title: read.title || target.title,
+      description: read.snippet || undefined,
+      siteName: target.siteName,
       readableText: read.markdown,
       storageId,
     });
@@ -368,6 +445,8 @@ export const updateDocumentInternal = internalMutation({
     markdown: v.optional(v.string()),
     plainText: v.string(),
     storageId: v.optional(v.id("_storage")),
+    blocksStorageId: v.optional(v.id("_storage")),
+    markdownStorageId: v.optional(v.id("_storage")),
   },
   handler: async (ctx, args) => {
     const artifact = await assertWorkspaceArtifactOwner(ctx, args.artifactId, args.ownerUserId, {
@@ -382,6 +461,14 @@ export const updateDocumentInternal = internalMutation({
     const title = args.title ? normalizeName(args.title, "Artifact title") : artifact.title;
     const inlinePlainText =
       args.plainText.length <= ARTIFACT_BODY_INLINE_LIMIT ? args.plainText : undefined;
+    const inlineBlocksJson =
+      args.blocksJson && args.blocksJson.length <= ARTIFACT_BODY_INLINE_LIMIT
+        ? args.blocksJson
+        : undefined;
+    const inlineMarkdown =
+      args.markdown && args.markdown.length <= ARTIFACT_BODY_INLINE_LIMIT
+        ? args.markdown
+        : undefined;
     await ctx.db.patch("artifacts", args.artifactId, {
       title,
       body: inlinePlainText,
@@ -391,12 +478,47 @@ export const updateDocumentInternal = internalMutation({
       updatedAt: now,
     });
     await ctx.db.patch("artifactDocuments", row._id, {
-      blocksJson: args.blocksJson,
-      markdown: args.markdown,
+      blocksJson: inlineBlocksJson,
+      markdown: inlineMarkdown,
       plainText: inlinePlainText,
       storageId: args.storageId,
+      blocksStorageId: args.blocksStorageId,
+      markdownStorageId: args.markdownStorageId,
       updatedAt: now,
     });
+  },
+});
+
+export const getContentTarget = internalQuery({
+  args: {
+    ownerUserId: v.string(),
+    artifactId: v.id("artifacts"),
+  },
+  handler: async (ctx, args) => {
+    const artifact = await ctx.db.get("artifacts", args.artifactId);
+    if (
+      !artifact ||
+      artifact.ownerUserId !== args.ownerUserId ||
+      !artifact.workspaceId ||
+      artifact.status !== "active"
+    ) {
+      return null;
+    }
+    const [document, url] = await Promise.all([
+      ctx.db
+        .query("artifactDocuments")
+        .withIndex("by_owner_artifact", (q) =>
+          q.eq("ownerUserId", args.ownerUserId).eq("artifactId", artifact._id),
+        )
+        .unique(),
+      ctx.db
+        .query("artifactUrls")
+        .withIndex("by_owner_artifact", (q) =>
+          q.eq("ownerUserId", args.ownerUserId).eq("artifactId", artifact._id),
+        )
+        .unique(),
+    ]);
+    return { artifact, document, url };
   },
 });
 
@@ -413,6 +535,7 @@ export const getUrlExtractionTarget = internalQuery({
       artifactId: artifact._id,
       title: artifact.title,
       normalizedUrl: row.normalizedUrl,
+      siteName: row.siteName ?? siteNameFromUrl(row.normalizedUrl),
     };
   },
 });
@@ -422,6 +545,8 @@ export const patchUrlExtractionReady = internalMutation({
     ownerUserId: v.string(),
     artifactId: v.id("artifacts"),
     title: v.string(),
+    description: v.optional(v.string()),
+    siteName: v.optional(v.string()),
     readableText: v.string(),
     storageId: v.optional(v.id("_storage")),
   },
@@ -444,6 +569,8 @@ export const patchUrlExtractionReady = internalMutation({
     await ctx.db.patch("artifactUrls", row._id, {
       status: "ready",
       title: args.title,
+      description: args.description,
+      siteName: args.siteName ?? siteNameFromUrl(row.normalizedUrl),
       readableText: inlineText,
       storageId: args.storageId,
       failureReason: undefined,
@@ -504,4 +631,20 @@ async function getUrlRow(
     throw new ConvexError("URL artifact not found");
   }
   return row;
+}
+
+async function storeOversizedText(
+  ctx: ActionCtx,
+  value: string,
+  type: string,
+) {
+  if (value.length <= ARTIFACT_BODY_INLINE_LIMIT) {
+    return undefined;
+  }
+  return await ctx.storage.store(new Blob([value], { type }));
+}
+
+async function readStorageText(ctx: ActionCtx, storageId: Id<"_storage">) {
+  const blob = await ctx.storage.get(storageId);
+  return blob ? await blob.text() : "";
 }

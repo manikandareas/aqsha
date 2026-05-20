@@ -4,6 +4,7 @@ import {
   contextFromText,
   normalizeUrl,
   previewFromText,
+  siteNameFromUrl,
   titleFromUrl,
 } from "../convex/artifactModel";
 
@@ -30,5 +31,10 @@ describe("workspace artifact model helpers", () => {
   it("derives a readable fallback title from the URL path or host", () => {
     expect(titleFromUrl("https://example.com/research-paper_v1")).toBe("research paper v1");
     expect(titleFromUrl("https://example.com/")).toBe("example.com");
+  });
+
+  it("derives a compact site name from URLs", () => {
+    expect(siteNameFromUrl("https://www.example.com/research")).toBe("example.com");
+    expect(siteNameFromUrl("https://docs.example.org/page")).toBe("docs.example.org");
   });
 });

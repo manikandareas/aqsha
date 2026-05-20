@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "@blocknote/react/style.css";
+@import "@blocknote/shadcn/style.css";
+
+@source "../node_modules/@blocknote/shadcn";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -179,6 +183,16 @@
 
 .shadow-aqsha {
   box-shadow: var(--shadow-soft-card);
+}
+
+.aqsha-blocknote {
+  --bn-colors-editor-background: var(--background);
+  --bn-colors-editor-text: var(--foreground);
+  min-height: 54svh;
+}
+
+.aqsha-blocknote .bn-editor {
+  padding-inline: 1rem;
 }
 
 :where(.aqsha-prose, .artifact-prose) {

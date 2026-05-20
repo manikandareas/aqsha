@@ -49,3 +49,7 @@ export function titleFromUrl(url: string) {
   const label = lastPath ? decodeURIComponent(lastPath).replace(/[-_]+/g, " ") : parsed.hostname;
   return label || parsed.hostname;
 }
+
+export function siteNameFromUrl(url: string) {
+  return new URL(url).hostname.replace(/^www\./, "");
+}

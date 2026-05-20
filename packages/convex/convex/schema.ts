@@ -341,6 +341,8 @@ export default defineSchema(
       markdown: v.optional(v.string()),
       plainText: v.optional(v.string()),
       storageId: v.optional(v.id("_storage")),
+      blocksStorageId: v.optional(v.id("_storage")),
+      markdownStorageId: v.optional(v.id("_storage")),
       createdAt: v.number(),
       updatedAt: v.number(),
     })
@@ -354,6 +356,8 @@ export default defineSchema(
       normalizedUrl: v.string(),
       status: v.union(v.literal("pending"), v.literal("ready"), v.literal("failed")),
       title: v.optional(v.string()),
+      description: v.optional(v.string()),
+      siteName: v.optional(v.string()),
       readableText: v.optional(v.string()),
       storageId: v.optional(v.id("_storage")),
       failureReason: v.optional(v.string()),

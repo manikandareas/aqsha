@@ -26,7 +26,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Composer } from "@/features/thread-experience/components/composer";
 import { useWorkspaceDetailData } from "../api/use-workspaces-data";
 import { WorkspaceShell } from "../components/workspace-shell";
-import { ConfirmDialog, NameDialog } from "../components/workspace-dialogs";
+import { ConfirmDialog, NameDialog, UrlDialog } from "../components/workspace-dialogs";
 import {
   getMoveTargetOptions,
   groupArtifactsByFolder,
@@ -41,6 +41,7 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
   const [archiveWorkspaceOpen, setArchiveWorkspaceOpen] = useState(false);
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [createDocumentOpen, setCreateDocumentOpen] = useState(false);
+  const [createUrlOpen, setCreateUrlOpen] = useState(false);
   const [renameFolder, setRenameFolder] = useState<WorkspaceFolder | null>(null);
   const [deleteFolder, setDeleteFolder] = useState<WorkspaceFolder | null>(null);
   const [renameArtifact, setRenameArtifact] = useState<WorkspaceArtifact | null>(null);
@@ -87,6 +88,10 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
                   <FileTextIcon className="size-4" />
                   Dokumen
                 </Button>
+                <Button type="button" variant="outline" onClick={() => setCreateUrlOpen(true)}>
+                  <LinkIcon className="size-4" />
+                  URL
+                </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button type="button" variant="ghost" size="icon-sm" aria-label="Workspace actions">
@@ -118,6 +123,9 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
                   onDeleteFolder={setDeleteFolder}
                   onRenameArtifact={setRenameArtifact}
                   onDeleteArtifact={setDeleteArtifact}
+                  onOpenArtifact={(artifactId) =>
+                    router.push(`/workspaces/${workspaceId}/artifacts/${artifactId}`)
+                  }
                   onMoveArtifact={async (artifactId, target) => {
                     await data.moveArtifact({
                       artifactId: artifactId as never,
@@ -170,7 +178,23 @@ export function WorkspaceDetailPage({ workspaceId }: { workspaceId: string }) {
         description="Buat placeholder dokumen."
         submitLabel="Buat"
         onSubmit={async ({ name }) => {
-          await data.createDocument({ workspaceId: workspaceId as never, title: name });
+          const artifactId = await data.createDocument({
+            workspaceId: workspaceId as never,
+            title: name,
+          });
+          router.push(`/workspaces/${workspaceId}/artifacts/${String(artifactId)}`);
+        }}
+      />
+      <UrlDialog
+        open={createUrlOpen}
+        onOpenChange={setCreateUrlOpen}
+        onSubmit={async ({ url, title }) => {
+          const artifactId = await data.createUrl({
+            workspaceId: workspaceId as never,
+            url,
+            title,
+          });
+          router.push(`/workspaces/${workspaceId}/artifacts/${String(artifactId)}`);
         }}
       />
       <NameDialog
@@ -245,6 +269,7 @@ function WorkspaceLibrary({
   onDeleteFolder,
   onRenameArtifact,
   onDeleteArtifact,
+  onOpenArtifact,
   onMoveArtifact,
 }: {
   groups: ReturnType<typeof groupArtifactsByFolder>;
@@ -253,6 +278,7 @@ function WorkspaceLibrary({
   onDeleteFolder: (folder: WorkspaceFolder) => void;
   onRenameArtifact: (artifact: WorkspaceArtifact) => void;
   onDeleteArtifact: (artifact: WorkspaceArtifact) => void;
+  onOpenArtifact: (artifactId: string) => void;
   onMoveArtifact: (artifactId: string, target: string) => Promise<unknown>;
 }) {
   const hasArtifacts = groups.some((group) => group.artifacts.length > 0);
@@ -317,6 +343,7 @@ function WorkspaceLibrary({
                   moveTargets={moveTargets}
                   onRename={() => onRenameArtifact(artifact)}
                   onDelete={() => onDeleteArtifact(artifact)}
+                  onOpen={() => onOpenArtifact(artifact._id)}
                   onMove={onMoveArtifact}
                 />
               ))
@@ -333,17 +360,23 @@ function ArtifactRow({
   moveTargets,
   onRename,
   onDelete,
+  onOpen,
   onMove,
 }: {
   artifact: WorkspaceArtifact;
   moveTargets: Array<{ value: string; label: string }>;
   onRename: () => void;
   onDelete: () => void;
+  onOpen: () => void;
   onMove: (artifactId: string, target: string) => Promise<unknown>;
 }) {
   return (
     <div className="grid min-w-0 grid-cols-[1fr_auto] items-center gap-3 border-b border-border/70 px-3 py-2.5 last:border-b-0">
-      <div className="flex min-w-0 items-center gap-3">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex min-w-0 items-center gap-3 rounded-[6px] text-left outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+      >
         {artifact.kind === "url" ? (
           <LinkIcon className="size-4 shrink-0 text-muted-foreground" />
         ) : (
@@ -356,7 +389,7 @@ function ArtifactRow({
             {artifact.plainTextPreview ? ` / ${artifact.plainTextPreview}` : ""}
           </div>
         </div>
-      </div>
+      </button>
       <div className="flex items-center gap-1.5">
         <Select
           value={artifact.folderId ?? "root"}
@@ -459,6 +492,7 @@ function WorkspaceChat({
 function WorkspaceLoading() {
   return (
     <div className="grid gap-4 px-4 py-5 sm:px-6">
+      <p className="text-[12px] font-medium text-muted-foreground">Memuat workspace...</p>
       <Skeleton className="h-12 rounded-[8px]" />
       <Skeleton className="h-48 rounded-[8px]" />
       <Skeleton className="h-48 rounded-[8px]" />

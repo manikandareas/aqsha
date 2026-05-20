@@ -13,6 +13,9 @@
   "dependencies": {
     "@aqsha/convex": "workspace:*",
     "@aqsha/ui": "workspace:*",
+    "@blocknote/core": "^0.51.1",
+    "@blocknote/react": "^0.51.1",
+    "@blocknote/shadcn": "^0.51.1",
     "@convex-dev/agent": "^0.6.1",
     "@convex-dev/better-auth": "^0.12.2",
     "@radix-ui/react-use-controllable-state": "^1.2.2",
