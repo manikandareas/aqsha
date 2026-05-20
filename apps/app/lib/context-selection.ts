@@ -1,0 +1,1 @@
+export const MAX_CONTEXT_ARTIFACTS = 12;

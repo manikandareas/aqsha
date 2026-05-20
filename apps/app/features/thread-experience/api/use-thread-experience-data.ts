@@ -1,6 +1,7 @@
 "use client";
 
 import { api } from "@aqsha/convex/api";
+import { toArtifactId } from "@/lib/convex-refs";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import {
   optimisticallyInsertUserMessage,
@@ -31,6 +32,19 @@ export function useThreadExperienceData(threadId?: string) {
     api.agent.threads.get,
     isAuthenticated && threadId ? { threadId } : "skip",
   );
+  const selectedContextArtifacts = useQuery(
+    api.agent.threadContext.listForThread,
+    isAuthenticated && threadId ? { threadId } : "skip",
+  );
+  const contextCandidateArtifacts = useQuery(
+    api.artifacts.listForContextPicker,
+    isAuthenticated &&
+      threadId &&
+      selectedThread != null &&
+      !selectedThread.workspaceId
+      ? { workspaceId: undefined }
+      : "skip",
+  );
   const startThread = useMutation(api.agent.messages.startThread);
   const sendMessage = useMutation(api.agent.messages.send).withOptimisticUpdate(
     (store, args) => {
@@ -59,6 +73,7 @@ export function useThreadExperienceData(threadId?: string) {
   ) as ResearchSource[] | undefined;
   const cancelRun = useMutation(api.agent.deepResearch.cancel);
   const retryRun = useMutation(api.agent.deepResearch.retry);
+  const toggleThreadContextArtifact = useMutation(api.agent.threadContext.toggle);
 
   return {
     isAuthenticated,
@@ -66,6 +81,8 @@ export function useThreadExperienceData(threadId?: string) {
     workspaces: workspacePage?.page ?? [],
     threads: threadPage?.page ?? [],
     selectedThread,
+    selectedContextArtifacts: selectedContextArtifacts ?? [],
+    contextCandidateArtifacts: contextCandidateArtifacts ?? [],
     startThread,
     sendMessage,
     rateStatus,
@@ -74,6 +91,7 @@ export function useThreadExperienceData(threadId?: string) {
     sources: sources ?? [],
     cancelRun,
     retryRun,
+    toggleThreadContextArtifact,
   };
 }
 
@@ -81,6 +99,6 @@ export function useActiveArtifact(artifactId: string | null) {
   const { isAuthenticated } = useConvexAuth();
   return useQuery(
     api.agent.artifacts.get,
-    isAuthenticated && artifactId ? { artifactId: artifactId as never } : "skip",
+    isAuthenticated && artifactId ? { artifactId: toArtifactId(artifactId) } : "skip",
   ) as ResearchArtifact | null | undefined;
 }

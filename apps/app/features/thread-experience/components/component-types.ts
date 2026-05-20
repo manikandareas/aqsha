@@ -1,3 +1,5 @@
+import type { WorkspaceDriveData } from "@/features/workspaces/api/use-workspaces-data";
+import type { ArtifactId, WorkspaceId } from "@/lib/convex-refs";
 import type {
   RateStatus,
   ResearchArtifact,
@@ -6,6 +8,8 @@ import type {
   SendResult,
   SourceFocus,
 } from "../types";
+
+export type { ArtifactId, WorkspaceId };
 
 export type ThreadSummary = {
   threadId: string;
@@ -26,8 +30,6 @@ export type ViewerSummary =
     }
   | undefined;
 
-type WorkspaceId = string & { __tableName: "workspaces" };
-
 export type StartThread = (args: {
   content: string;
   mode: "normal" | "deep";
@@ -41,6 +43,30 @@ export type SendMessage = (args: {
   mode: "normal" | "deep";
   commandId?: string;
 }) => Promise<SendResult>;
+
+export type ContextCandidateArtifact = {
+  _id: ArtifactId;
+  workspaceId?: string;
+  kind?: "document" | "url";
+  title: string;
+  plainTextPreview?: string;
+  updatedAt: number;
+};
+
+export type SelectedContextArtifact = {
+  artifactId: ArtifactId;
+  artifact: {
+    title: string;
+    kind?: "document" | "url";
+    plainTextPreview?: string;
+    updatedAt: number;
+  };
+};
+
+export type ToggleThreadContextArtifact = (args: {
+  threadId: string;
+  artifactId: ArtifactId;
+}) => Promise<{ ok: boolean; selected: boolean }>;
 
 export type ThreadShellLayoutProps = {
   viewer: ViewerSummary;
@@ -58,9 +84,13 @@ export type ThreadShellLayoutProps = {
     | null
     | undefined;
   workspaces?: Array<{ _id: string; name: string }>;
+  workspaceDrive?: WorkspaceDriveData;
   rateStatus: RateStatus | undefined;
   startThread: StartThread;
   sendMessage: SendMessage;
+  contextCandidateArtifacts: ContextCandidateArtifact[];
+  selectedContextArtifacts: SelectedContextArtifact[];
+  toggleThreadContextArtifact: ToggleThreadContextArtifact;
   runs: ResearchRun[];
   artifacts: ResearchArtifact[];
   sources: ResearchSource[];

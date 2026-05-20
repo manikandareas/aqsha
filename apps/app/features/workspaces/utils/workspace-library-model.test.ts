@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   expectArtifactsReturnToRootAfterFolderDelete,
+  getFolderView,
   getMoveTargetOptions,
   groupArtifactsByFolder,
-  splitSidebarThreads,
+  resolveActiveFolderId,
+  ROOT_FOLDER_LABEL,
   type WorkspaceArtifact,
   type WorkspaceFolder,
 } from "./workspace-library-model";
@@ -56,12 +58,45 @@ describe("workspace library model", () => {
     ]);
   });
 
-  it("includes workspace root in move targets", () => {
+  it("includes semua file in move targets", () => {
     expect(getMoveTargetOptions(folders)).toEqual([
-      { value: "root", label: "Workspace root" },
+      { value: "root", label: ROOT_FOLDER_LABEL },
       { value: "folder-a", label: "Drafts" },
       { value: "folder-b", label: "Reading" },
     ]);
+  });
+
+  it("builds root folder view with folders and root artifacts", () => {
+    const groups = groupArtifactsByFolder({ folders, artifacts });
+    const view = getFolderView({ groups, activeFolderId: "root" });
+
+    expect(view.activeFolderId).toBe("root");
+    expect(view.folders.map((folder) => folder._id)).toEqual(["folder-a", "folder-b"]);
+    expect(view.folders[0]?.artifactCount).toBe(1);
+    expect(view.artifacts.map((artifact) => artifact._id)).toEqual([
+      "artifact-orphan",
+      "artifact-root",
+    ]);
+    expect(view.breadcrumb).toEqual([{ id: "root", label: ROOT_FOLDER_LABEL }]);
+  });
+
+  it("builds active folder view with breadcrumb", () => {
+    const groups = groupArtifactsByFolder({ folders, artifacts });
+    const view = getFolderView({ groups, activeFolderId: "folder-a" });
+
+    expect(view.activeFolderId).toBe("folder-a");
+    expect(view.folders).toEqual([]);
+    expect(view.artifacts.map((artifact) => artifact._id)).toEqual(["artifact-folder"]);
+    expect(view.breadcrumb).toEqual([
+      { id: "root", label: ROOT_FOLDER_LABEL },
+      { id: "folder-a", label: "Drafts" },
+    ]);
+  });
+
+  it("falls back to root for unknown folder ids", () => {
+    const groups = groupArtifactsByFolder({ folders, artifacts });
+    expect(resolveActiveFolderId({ activeFolderId: "missing", groups })).toBe("root");
+    expect(getFolderView({ groups, activeFolderId: "missing" }).activeFolderId).toBe("root");
   });
 
   it("models folder deletion as child artifacts returning to root after refetch", () => {
@@ -79,14 +114,14 @@ describe("workspace library model", () => {
   });
 
   it("separates global and workspace-bound sidebar threads", () => {
-    const threads = splitSidebarThreads([
+    const items = [
       { threadId: "global", title: "Global" },
       { threadId: "workspace", workspaceId: "workspace-1", title: "Workspace" },
-    ]);
+    ];
+    const global = items.filter((thread) => !thread.workspaceId);
+    const workspaceBound = items.filter((thread) => Boolean(thread.workspaceId));
 
-    expect(threads.global.map((thread) => thread.threadId)).toEqual(["global"]);
-    expect(threads.workspaceBound.map((thread) => thread.threadId)).toEqual([
-      "workspace",
-    ]);
+    expect(global.map((thread) => thread.threadId)).toEqual(["global"]);
+    expect(workspaceBound.map((thread) => thread.threadId)).toEqual(["workspace"]);
   });
 });

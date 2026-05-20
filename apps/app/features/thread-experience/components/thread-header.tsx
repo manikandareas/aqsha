@@ -1,81 +1,70 @@
 "use client";
 
-import {
-  FolderIcon,
-  MoreHorizontalIcon,
-  PanelLeftIcon,
-} from "lucide-react";
+import { FolderIcon, LayersIcon, PanelLeftIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useSidebar } from "@/components/ui/sidebar";
+import { panelHeaderPaddingClass } from "@/lib/panel-surface";
+import { cn } from "@/lib/utils";
 
 export function ThreadHeader({
   title,
   workspaceName,
   showLeftTrigger,
   onToggleLeftSidebar,
-  showRightTrigger,
+  showContextToggle,
+  contextPanelOpen,
+  onToggleContextPanel,
 }: {
   title: string;
   workspaceName?: string;
   showLeftTrigger: boolean;
   onToggleLeftSidebar: () => void;
-  showRightTrigger: boolean;
+  showContextToggle: boolean;
+  contextPanelOpen: boolean;
+  onToggleContextPanel: () => void;
 }) {
   return (
-    <header className="flex h-9 shrink-0 items-center justify-between gap-2 bg-background px-3">
-      <div className="flex min-w-0 items-center gap-2">
-        {showLeftTrigger ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="-ml-1 size-7 rounded-[7px] text-muted-foreground"
-            onClick={onToggleLeftSidebar}
-            aria-label="Buka sidebar kiri"
-          >
-            <PanelLeftIcon className="size-4" />
-          </Button>
-        ) : null}
-        <h1 className="max-w-[34vw] truncate text-[13px] font-semibold text-foreground sm:max-w-[360px]">
-          {title}
-        </h1>
-        <div className="hidden min-w-0 items-center gap-1.5 text-[12px] font-medium text-muted-foreground sm:flex">
-          <FolderIcon className="size-3.5 shrink-0" />
-          <span className="truncate">{workspaceName ?? "Global thread"}</span>
+    <div className={cn("flex shrink-0 flex-col gap-2 border-border bg-background", panelHeaderPaddingClass)}>
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-1.5">
+          {showLeftTrigger ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={onToggleLeftSidebar}
+              aria-label="Buka sidebar kiri"
+            >
+              <PanelLeftIcon className="size-3.5" />
+            </Button>
+          ) : null}
+          <h1 className="truncate font-heading text-lg font-semibold leading-tight tracking-tight text-foreground sm:text-xl">
+            {title}
+          </h1>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {showContextToggle ? (
+            <button
+              type="button"
+              onClick={onToggleContextPanel}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold transition-colors",
+                contextPanelOpen
+                  ? "bg-primary/15 text-primary"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+            >
+              <LayersIcon className="size-3.5" />
+              Workspace
+            </button>
+          ) : null}
         </div>
       </div>
-      <div className="flex items-center gap-0.5">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="size-7 rounded-[7px] text-muted-foreground"
-          aria-label="Thread actions"
-        >
-          <MoreHorizontalIcon className="size-4" />
-        </Button>
-        {showRightTrigger ? <RightSidebarTrigger /> : null}
-      </div>
-    </header>
-  );
-}
-
-function RightSidebarTrigger() {
-  const { isMobile, open, openMobile, toggleSidebar } = useSidebar();
-  const isOpen = isMobile ? openMobile : open;
-
-  if (isOpen) return null;
-
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon-sm"
-      className="size-7 rounded-[7px] text-muted-foreground"
-      onClick={toggleSidebar}
-      aria-label="Toggle research panel"
-    >
-      <PanelLeftIcon className="size-4 rotate-180" />
-    </Button>
+      {workspaceName ? (
+        <div className="flex min-w-0 items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
+          <FolderIcon className="size-3 shrink-0" />
+          <span className="truncate">{workspaceName}</span>
+        </div>
+      ) : null}
+    </div>
   );
 }

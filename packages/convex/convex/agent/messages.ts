@@ -39,6 +39,10 @@ import {
 import { assertThreadOwner } from "./threads";
 import { buildPromptCommandPrompt, getPromptCommand } from "./promptCommands";
 import { assertWorkspaceOwner } from "../workspaceAccess";
+import {
+  buildPromptContextForThread,
+  prependPromptContext,
+} from "./threadContext";
 
 const MAX_CONTENT_LENGTH = 8_000;
 const FAILURE_TEXT =
@@ -333,6 +337,15 @@ async function savePromptAndScheduleRun(
     prompt: promptPayload.visibleContent,
   });
 
+  const contextBlock = await buildPromptContextForThread(ctx, {
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+  });
+  const generationPrompt = prependPromptContext({
+    prompt: promptPayload.expandedPrompt,
+    contextBlock,
+  });
+
   if (promptPayload.mode === "deep") {
     const run: {
       runId: import("../_generated/dataModel").Id<"agentRuns">;
@@ -341,7 +354,7 @@ async function savePromptAndScheduleRun(
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
       promptMessageId: messageId,
-      prompt: promptPayload.expandedPrompt,
+      prompt: generationPrompt,
     });
 
     return { ok: true as const, messageId, ...run };
@@ -351,13 +364,14 @@ async function savePromptAndScheduleRun(
     ownerUserId: args.ownerUserId,
     threadId: args.threadId,
     promptMessageId: messageId,
-    prompt: promptPayload.expandedPrompt,
+    prompt: generationPrompt,
   });
   await ctx.scheduler.runAfter(0, internal.agent.messages.generateReply, {
     threadId: args.threadId,
     userId: args.ownerUserId,
     promptMessageId: messageId,
-    prompt: promptPayload.expandedPrompt,
+    prompt: generationPrompt,
+    visiblePrompt: promptPayload.visibleContent,
     runId,
   });
 
@@ -514,6 +528,7 @@ export const generateReply = internalAction({
     userId: v.string(),
     promptMessageId: v.string(),
     prompt: v.string(),
+    visiblePrompt: v.string(),
     runId: v.optional(v.id("agentRuns")),
   },
   handler: async (ctx, args) => {
@@ -578,7 +593,7 @@ export const generateReply = internalAction({
       await ctx.scheduler.runAfter(0, internal.agent.messages.generateThreadTitle, {
         threadId: args.threadId,
         userId: args.userId,
-        prompt: args.prompt,
+        prompt: args.visiblePrompt,
         assistantText: text,
       });
     } catch (error) {

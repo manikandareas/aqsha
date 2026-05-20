@@ -1,8 +1,9 @@
 "use client";
 
-import { type CSSProperties } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { SidebarProvider } from "@/components/ui/sidebar";
+import { useWorkspaceDriveData } from "@/features/workspaces/api/use-workspaces-data";
 import {
   useActiveArtifact,
   useThreadExperienceData,
@@ -17,19 +18,25 @@ export function ThreadExperience({ threadId }: { threadId?: string }) {
     workspaces,
     threads,
     selectedThread,
+    selectedContextArtifacts,
+    contextCandidateArtifacts,
     startThread,
     sendMessage,
+    toggleThreadContextArtifact,
     rateStatus,
     runs,
     artifacts,
     sources,
     cancelRun,
   } = useThreadExperienceData(threadId);
+  const boundWorkspaceId = selectedThread?.workspaceId;
+  const workspaceDrive = useWorkspaceDriveData(boundWorkspaceId ?? "");
   const panelState = useResearchPanelState({
     artifacts,
     runs,
     sources,
   });
+  const [contextPanelOpen, setContextPanelOpen] = useState(false);
   const activeArtifact = useActiveArtifact(panelState.selectedArtifactId);
   const title = threadId
     ? (selectedThread?.title ?? "Thread tidak ditemukan")
@@ -48,18 +55,11 @@ export function ThreadExperience({ threadId }: { threadId?: string }) {
   };
 
   return (
-    <SidebarProvider
-      style={
-        {
-          "--sidebar-width": "16.5rem",
-          "--sidebar-width-mobile": "17.5rem",
-        } as CSSProperties
-      }
-      className="h-svh max-h-svh overflow-hidden"
-    >
+    <SidebarProvider className="min-h-svh overflow-hidden">
       <ThreadShellLayout
         viewer={viewer}
         workspaces={workspaces}
+        workspaceDrive={boundWorkspaceId ? workspaceDrive : undefined}
         threads={threads}
         selectedThreadId={threadId}
         onCreateThread={handleCreateThread}
@@ -67,17 +67,20 @@ export function ThreadExperience({ threadId }: { threadId?: string }) {
         title={title}
         threadId={threadId}
         selectedThread={selectedThread}
+        selectedContextArtifacts={selectedContextArtifacts}
+        contextCandidateArtifacts={contextCandidateArtifacts}
+        toggleThreadContextArtifact={toggleThreadContextArtifact}
         rateStatus={rateStatus}
         startThread={startThread}
         sendMessage={sendMessage}
-        runs={runs ?? []}
-        artifacts={artifacts ?? []}
-        sources={sources ?? []}
+        runs={runs}
+        artifacts={artifacts}
+        sources={sources}
         activeArtifact={activeArtifact ?? null}
         activePanelTab={panelState.activeTab}
         sourceFocus={panelState.sourceFocus}
-        rightPanelOpen={panelState.rightPanelOpen}
-        onRightPanelOpenChange={panelState.setPanelOpen}
+        rightPanelOpen={threadId ? contextPanelOpen : panelState.rightPanelOpen}
+        onRightPanelOpenChange={threadId ? setContextPanelOpen : panelState.setPanelOpen}
         onOpenArtifact={panelState.openArtifact}
         onOpenSources={panelState.openSources}
         onPanelTabChange={panelState.setActiveTab}

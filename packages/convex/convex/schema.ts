@@ -17,6 +17,16 @@ export default defineSchema(
       .index("by_thread", ["threadId"])
       .index("by_owner_activity", ["ownerUserId", "lastActivityAt"])
       .index("by_owner_workspace_activity", ["ownerUserId", "workspaceId", "lastActivityAt"]),
+    threadContextArtifacts: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      workspaceId: v.optional(v.id("workspaces")),
+      artifactId: v.id("artifacts"),
+      createdAt: v.number(),
+    })
+      .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"])
+      .index("by_owner_thread_artifact", ["ownerUserId", "threadId", "artifactId"])
+      .index("by_owner_workspace_artifact", ["ownerUserId", "workspaceId", "artifactId"]),
     workspaces: defineTable({
       ownerUserId: v.string(),
       name: v.string(),
@@ -320,6 +330,7 @@ export default defineSchema(
     })
       .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"])
       .index("by_owner_run", ["ownerUserId", "runId"])
+      .index("by_owner_status_updated", ["ownerUserId", "status", "updatedAt"])
       .index("by_owner_workspace_status_updated", [
         "ownerUserId",
         "workspaceId",

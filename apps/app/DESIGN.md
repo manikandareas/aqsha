@@ -45,10 +45,17 @@ Do not add Sources/Sumber back to this navigation without a new product decision
 
 ### Workspace Library
 
-Workspace pages should feel like a compact working library, not a landing page. Prioritize scan-friendly lists, clear folder grouping, and direct actions for creating documents, saving URLs, renaming, moving, and deleting.
+Workspace detail uses a split **board + chat** layout: a card grid library on the left and a hero-style chat column on the right. Colors come from `globals.css` tokens (`background`, `card`, `primary`, `mint-*`, `sky-*`, `lemon-*`, `shadow-aqsha`)—not third-party palette clones.
 
+- **Folder-per-view:** one active location at a time via `?folder=root` or `?folder=<folderId>`. Root shows folder tiles plus artifacts not in a folder; inside a folder shows only that folder’s artifacts.
+- **Breadcrumb:** `Semua file` › folder name. Avoid the label “Workspace root” in UI copy.
+- **Views:** board grid only (preview cards).
+- **Toolbar:** breadcrumb, grid/list toggle, and a single **+ Baru** menu (Folder, Dokumen, URL). Workspace rename/archive stays in the workspace header.
+- **Actions:** rename, move (menu), delete, and drag artifact onto folder tiles to move. No per-row move dropdown in the main surface.
+- **Clicks:** single-click artifact toggles draft chat context (applied when a new thread starts from workspace chat); double-click opens folder or artifact. Folders open on double-click only.
 - Use one-level folder grouping only.
-- Artifacts can live in the workspace root or one folder.
+- Artifacts can live at root (`Semua file`) or in one folder.
+- New documents and URLs are created in the **currently open folder** when inside a folder.
 - Do not expose artifact search until it is explicitly added to the product scope.
 - Do not expose user-facing artifact version history.
 

@@ -1,6 +1,14 @@
 "use client";
 
 import { NavUser } from "@/components/nav-user";
+import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sidebar,
@@ -14,17 +22,23 @@ import {
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import {
-  BugIcon,
-  ChevronsUpDownIcon,
-  FolderIcon,
-  MessageSquarePlusIcon,
+  HomeIcon,
+  LayoutGridIcon,
+  MessageSquareIcon,
   PanelLeftIcon,
   PlusIcon,
   SearchIcon,
-  SparklesIcon,
+  TrendingUpIcon,
 } from "lucide-react";
 import Link from "next/link";
-import type { ComponentProps } from "react";
+import { usePathname } from "next/navigation";
+import {
+  type ComponentProps,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 type Viewer = {
   name: string | null;
@@ -46,7 +60,20 @@ type ThreadSummary = {
 type WorkspaceSummary = {
   _id: string;
   name: string;
+  updatedAt?: number;
 };
+
+const sidebarItemBaseClass =
+  "h-8 gap-2 rounded-[8px] px-2.5 py-0 text-[12px] font-medium transition-colors hover:bg-muted/60 data-active:bg-muted data-active:font-medium data-active:text-foreground data-active:shadow-none hover:text-foreground active:bg-muted active:text-foreground [&_svg]:size-3.5";
+
+function sidebarItemClass(active?: boolean) {
+  return cn(
+    sidebarItemBaseClass,
+    active
+      ? "bg-muted text-foreground [&_svg]:text-foreground/75"
+      : "text-muted-foreground [&_svg]:text-muted-foreground/80",
+  );
+}
 
 export function AppSidebar({
   viewer,
@@ -66,9 +93,49 @@ export function AppSidebar({
   onCreateThread: () => void;
   onCreateWorkspace?: () => void;
 }) {
-  const threadGroups = groupThreadsByScope(threads, selectedWorkspaceId);
-  const activeWorkspace = workspaces.find((workspace) => workspace._id === selectedWorkspaceId);
+  const pathname = usePathname();
+  const [commandOpen, setCommandOpen] = useState(false);
   const { isMobile, setOpen, setOpenMobile } = useSidebar();
+  const sortedWorkspaces = useMemo(
+    () =>
+      [...workspaces].sort(
+        (left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0),
+      ),
+    [workspaces],
+  );
+  const sortedThreads = useMemo(
+    () =>
+      [...threads].sort(
+        (left, right) => right.lastActivityAt - left.lastActivityAt,
+      ),
+    [threads],
+  );
+  const isHomeActive = pathname === "/" && !selectedThreadId;
+  const isWorkspaceRoute = pathname.startsWith("/workspaces");
+  const hasSidebarItems =
+    sortedWorkspaces.length > 0 || sortedThreads.length > 0;
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setCommandOpen(true);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const runCreateThread = () => {
+    setCommandOpen(false);
+    onCreateThread();
+  };
+
+  const runCreateWorkspace = () => {
+    setCommandOpen(false);
+    onCreateWorkspace?.();
+  };
 
   const closeSidebar = () => {
     if (isMobile) {
@@ -79,196 +146,258 @@ export function AppSidebar({
   };
 
   return (
-    <Sidebar
-      collapsible="offcanvas"
-      className="border-r border-sidebar-border/80 bg-sidebar [&_[data-slot=sidebar-inner]]:bg-sidebar"
-      {...props}
-    >
-      <SidebarHeader className="gap-2 px-2.5 pb-1.5 pt-2.5">
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={closeSidebar}
-            className="flex size-6 items-center justify-center rounded-[6px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="Tutup sidebar kiri"
-          >
-            <PanelLeftIcon className="size-3.5" />
-          </button>
-          <button
-            type="button"
-            className="flex size-6 items-center justify-center rounded-[6px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-70"
-            disabled
-            aria-label="Cari thread"
-          >
-            <SearchIcon className="size-3.5" />
-          </button>
-        </div>
-        <SidebarMenu className="gap-0.5">
-          <WorkspaceSwitcher
+    <>
+      <Sidebar
+        collapsible="offcanvas"
+        className="border-r border-sidebar-border/80 bg-sidebar [&_[data-slot=sidebar-inner]]:bg-sidebar"
+        {...props}
+      >
+        <SidebarHeader className="gap-3 px-3 pb-3 pt-3.5">
+          <div className="flex items-center gap-1.5 pl-1.5 pr-2.5">
+            <button
+              type="button"
+              onClick={closeSidebar}
+              className="flex size-6 items-center justify-center rounded-[6px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Tutup sidebar kiri"
+            >
+              <PanelLeftIcon className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setCommandOpen(true)}
+              className="flex size-6 items-center justify-center rounded-[6px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Cari thread"
+            >
+              <SearchIcon className="size-3.5" />
+            </button>
+          </div>
+
+          <SidebarMenu className="gap-1">
+            <PrimaryNavLink
+              href="/"
+              icon={HomeIcon}
+              label="Home"
+              active={isHomeActive}
+            />
+            <PrimaryNavButton icon={TrendingUpIcon} label="Jelajahi" disabled />
+          </SidebarMenu>
+        </SidebarHeader>
+
+        <SidebarContent className="min-h-0 px-3 pb-3 pt-2">
+          <ScrollArea className="min-h-0 min-w-0 flex-1 overflow-hidden px-0">
+            <div className="grid min-w-0 gap-5 overflow-hidden">
+              {!hasSidebarItems ? (
+                <div className="rounded-[8px] border border-dashed border-sidebar-border bg-muted/25 px-3 py-4 text-center text-[12px] leading-relaxed text-muted-foreground">
+                  Belum ada thread atau workspace.
+                </div>
+              ) : (
+                <>
+                  {sortedWorkspaces.length > 0 ? (
+                    <SidebarSection label="Workspaces" first>
+                      <SidebarMenu className="min-w-0 gap-1 overflow-hidden">
+                        {sortedWorkspaces.map((workspace) => (
+                          <RecentWorkspaceRow
+                            key={workspace._id}
+                            workspace={workspace}
+                            active={
+                              isWorkspaceRoute &&
+                              workspace._id === selectedWorkspaceId
+                            }
+                          />
+                        ))}
+                      </SidebarMenu>
+                    </SidebarSection>
+                  ) : null}
+                  {sortedThreads.length > 0 ? (
+                    <SidebarSection label="Threads">
+                      <SidebarMenu className="min-w-0 gap-1 overflow-hidden">
+                        {sortedThreads.map((thread) => (
+                          <RecentThreadRow
+                            key={thread.threadId}
+                            thread={thread}
+                            active={thread.threadId === selectedThreadId}
+                          />
+                        ))}
+                      </SidebarMenu>
+                    </SidebarSection>
+                  ) : null}
+                </>
+              )}
+            </div>
+          </ScrollArea>
+        </SidebarContent>
+
+        <SidebarFooter className="mt-auto px-3 py-3">
+          <NavUser
+            user={viewer}
             workspaces={workspaces}
-            activeWorkspace={activeWorkspace}
+            activeWorkspaceId={selectedWorkspaceId}
             onCreateWorkspace={onCreateWorkspace}
           />
-          <PrimaryNavRow
-            icon={MessageSquarePlusIcon}
-            label="Chat baru"
-            onClick={onCreateThread}
-          />
-          <PrimaryNavRow icon={SparklesIcon} label="Otomasi" disabled />
-          <PrimaryNavRow icon={BugIcon} label="Audit riset" disabled />
-        </SidebarMenu>
-      </SidebarHeader>
+        </SidebarFooter>
+      </Sidebar>
 
-      <SidebarContent className="px-1 pb-1 pt-0">
-        <ScrollArea className="min-h-0 min-w-0 flex-1 overflow-hidden px-0">
-          <div className="grid min-w-0 gap-1.5 overflow-hidden">
-            {threadGroups.length === 0 ? (
-              <div className="mx-1.5 mt-1.5 rounded-[7px] border border-dashed border-sidebar-border bg-muted/25 p-2 text-[12px] text-muted-foreground">
-                Belum ada thread.
-              </div>
-            ) : (
-              threadGroups.map((section) => (
-                <div key={section.label} className="min-w-0 overflow-hidden">
-                  <div className="px-2 pb-0.5 pt-1 text-[11px] font-medium text-muted-foreground">
-                    {section.label}
-                  </div>
-                  <SidebarMenu className="min-w-0 gap-px overflow-hidden">
-                    {section.items.map((thread) => (
-                      <ThreadRow
-                        key={thread.threadId}
-                        thread={thread}
-                        active={thread.threadId === selectedThreadId}
-                      />
-                    ))}
-                  </SidebarMenu>
-                </div>
-              ))
-            )}
-          </div>
-        </ScrollArea>
-      </SidebarContent>
-
-      <SidebarFooter className="mt-auto flex flex-col gap-2 border-t border-transparent p-1.5">
-        <NavUser user={viewer} />
-      </SidebarFooter>
-    </Sidebar>
+      <CommandDialog open={commandOpen} onOpenChange={setCommandOpen}>
+        {commandOpen ? (
+          <>
+        <CommandInput placeholder="Cari atau buat..." />
+        <CommandList>
+          <CommandEmpty>Tidak ada hasil.</CommandEmpty>
+          <CommandGroup heading="Buat">
+            <CommandItem onSelect={runCreateThread}>
+              <MessageSquareIcon className="size-4" />
+              Chat baru
+            </CommandItem>
+            {onCreateWorkspace ? (
+              <CommandItem onSelect={runCreateWorkspace}>
+                <LayoutGridIcon className="size-4" />
+                Workspace baru
+              </CommandItem>
+            ) : null}
+          </CommandGroup>
+          {sortedWorkspaces.length > 0 ? (
+            <CommandGroup heading="Workspaces">
+              {sortedWorkspaces.map((workspace) => (
+                <CommandItem
+                  key={workspace._id}
+                  value={`workspace-${workspace.name}`}
+                  onSelect={() => setCommandOpen(false)}
+                  asChild
+                >
+                  <Link href={`/workspaces/${workspace._id}`}>
+                    <LayoutGridIcon className="size-4" />
+                    <span className="truncate">{workspace.name}</span>
+                  </Link>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          ) : null}
+          {sortedThreads.length > 0 ? (
+            <CommandGroup heading="Threads">
+              {sortedThreads.map((thread) => (
+                <CommandItem
+                  key={thread.threadId}
+                  value={`thread-${thread.title}`}
+                  onSelect={() => setCommandOpen(false)}
+                  asChild
+                >
+                  <Link href={`/threads/${thread.threadId}`}>
+                    <MessageSquareIcon className="size-4" />
+                    <span className="truncate">{thread.title}</span>
+                  </Link>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          ) : null}
+        </CommandList>
+          </>
+        ) : null}
+      </CommandDialog>
+    </>
   );
 }
 
-function WorkspaceSwitcher({
-  workspaces,
-  activeWorkspace,
-  onCreateWorkspace,
+function PrimaryNavLink({
+  href,
+  icon: Icon,
+  label,
+  active,
 }: {
-  workspaces: WorkspaceSummary[];
-  activeWorkspace: WorkspaceSummary | undefined;
-  onCreateWorkspace?: () => void;
+  href: string;
+  icon: typeof HomeIcon;
+  label: string;
+  active?: boolean;
 }) {
   return (
     <SidebarMenuItem className="min-w-0 overflow-hidden">
       <SidebarMenuButton
         asChild
-        className="h-8 rounded-[7px] px-1.5 text-[12px] font-semibold text-sidebar-foreground/90 hover:bg-muted/70 hover:text-foreground"
+        isActive={active}
+        size="sm"
+        className={sidebarItemClass(active)}
       >
-        <Link href={activeWorkspace ? `/workspaces/${activeWorkspace._id}` : "/workspaces"}>
-          <FolderIcon className="size-3.5 text-muted-foreground" />
-          <span className="min-w-0 flex-1 truncate">
-            {activeWorkspace?.name ?? "Workspaces"}
-          </span>
-          <ChevronsUpDownIcon className="ml-auto size-3.5 text-muted-foreground" />
+        <Link href={href}>
+          <Icon className="size-3.5 shrink-0" />
+          <span>{label}</span>
         </Link>
       </SidebarMenuButton>
-      <div className="mt-1 grid gap-px pl-5">
-        {workspaces.slice(0, 5).map((workspace) => (
-          <Link
-            key={workspace._id}
-            href={`/workspaces/${workspace._id}`}
-            className={cn(
-              "truncate rounded-[6px] px-1.5 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-              activeWorkspace?._id === workspace._id && "bg-muted text-foreground",
-            )}
-          >
-            {workspace.name}
-          </Link>
-        ))}
-        <div className="flex min-w-0 items-center gap-1">
-          <Link
-            href="/workspaces"
-            className="min-w-0 flex-1 truncate rounded-[6px] px-1.5 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-          >
-            Semua workspace
-          </Link>
-          {onCreateWorkspace ? (
-            <button
-              type="button"
-              onClick={onCreateWorkspace}
-              className="flex size-5 shrink-0 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-muted hover:text-foreground"
-              aria-label="Workspace baru"
-            >
-              <PlusIcon className="size-3.5" />
-            </button>
-          ) : null}
-        </div>
-      </div>
     </SidebarMenuItem>
   );
 }
 
-function PrimaryNavRow({
+function PrimaryNavButton({
   icon: Icon,
   label,
   disabled,
-  onClick,
 }: {
-  icon: typeof MessageSquarePlusIcon;
+  icon: typeof HomeIcon;
   label: string;
   disabled?: boolean;
-  onClick?: () => void;
 }) {
   return (
     <SidebarMenuItem className="min-w-0 overflow-hidden">
       <SidebarMenuButton
         type="button"
-        className={cn(
-          "h-7 rounded-[7px] px-1.5 text-[12px] font-medium text-sidebar-foreground/88 hover:bg-muted/70 hover:text-foreground",
-          disabled && "opacity-70",
-        )}
-        onClick={onClick}
+        size="sm"
         disabled={disabled}
+        className={cn(sidebarItemClass(false), disabled && "opacity-60")}
       >
-        <Icon className="size-3.5 text-muted-foreground" />
+        <Icon className="size-3.5 shrink-0" />
         <span>{label}</span>
       </SidebarMenuButton>
     </SidebarMenuItem>
   );
 }
 
-function ThreadRow({
+function SidebarSection({
+  label,
+  children,
+  first,
+}: {
+  label: string;
+  children: ReactNode;
+  first?: boolean;
+}) {
+  return (
+    <div className="min-w-0 overflow-hidden">
+      <div
+        className={cn(
+          "px-0.5 pb-1.5 text-[11px] font-medium tracking-[-0.01em] text-muted-foreground/75",
+          first ? "pt-0" : "pt-1",
+        )}
+      >
+        {label}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function RecentThreadRow({
   thread,
   active,
 }: {
   thread: ThreadSummary;
   active: boolean;
 }) {
-  const title = truncateWords(thread.title, 18);
-
   return (
     <SidebarMenuItem className="min-w-0 overflow-hidden">
       <SidebarMenuButton
         asChild
+        size="sm"
         isActive={active}
         className={cn(
-          "h-8 w-full min-w-0 max-w-full overflow-hidden rounded-[7px] px-2 text-[12px] text-sidebar-foreground/88 hover:bg-muted/70",
-          active &&
-            "bg-muted text-foreground shadow-none",
+          sidebarItemClass(active),
+          "w-full min-w-0 max-w-full overflow-hidden",
         )}
       >
         <Link
           href={`/threads/${thread.threadId}`}
-          className="flex min-w-0 max-w-full items-center overflow-hidden"
+          className="flex min-w-0 max-w-full items-center gap-2 overflow-hidden"
         >
-          <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-medium leading-4">
-            {title}
+          <MessageSquareIcon className="size-3.5 shrink-0" />
+          <span className="min-w-0 flex-1 truncate font-normal">
+            {truncateWords(thread.title, 18)}
           </span>
           {thread.status === "streaming" ? (
             <span className="ml-auto inline-flex size-1.5 shrink-0 rounded-full bg-primary" />
@@ -279,35 +408,40 @@ function ThreadRow({
   );
 }
 
+function RecentWorkspaceRow({
+  workspace,
+  active,
+}: {
+  workspace: WorkspaceSummary;
+  active: boolean;
+}) {
+  return (
+    <SidebarMenuItem className="min-w-0 overflow-hidden">
+      <SidebarMenuButton
+        asChild
+        size="sm"
+        isActive={active}
+        className={cn(
+          sidebarItemClass(active),
+          "w-full min-w-0 max-w-full overflow-hidden",
+        )}
+      >
+        <Link
+          href={`/workspaces/${workspace._id}`}
+          className="flex min-w-0 max-w-full items-center gap-2 overflow-hidden"
+        >
+          <LayoutGridIcon className="size-3.5 shrink-0" />
+          <span className="min-w-0 flex-1 truncate font-normal">
+            {workspace.name}
+          </span>
+        </Link>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
+
 function truncateWords(value: string, maxWords: number) {
   const words = value.trim().split(/\s+/).filter(Boolean);
   if (words.length <= maxWords) return value;
   return `${words.slice(0, maxWords).join(" ")}...`;
-}
-
-type ThreadSection = { label: string; items: ThreadSummary[] };
-
-function groupThreadsByScope(
-  threads: ThreadSummary[],
-  selectedWorkspaceId?: string,
-): ThreadSection[] {
-  if (threads.length === 0) return [];
-  const workspaceThreads = selectedWorkspaceId
-    ? threads.filter((thread) => thread.workspaceId === selectedWorkspaceId)
-    : [];
-  const globalThreads = threads.filter((thread) => !thread.workspaceId);
-  const sections: ThreadSection[] = [];
-  if (workspaceThreads.length > 0) {
-    sections.push({ label: "Workspace threads", items: workspaceThreads });
-  }
-  if (globalThreads.length > 0) {
-    sections.push({ label: "Global threads", items: globalThreads });
-  }
-  const otherThreads = selectedWorkspaceId
-    ? threads.filter((thread) => thread.workspaceId && thread.workspaceId !== selectedWorkspaceId)
-    : threads.filter((thread) => thread.workspaceId);
-  if (otherThreads.length > 0) {
-    sections.push({ label: "Workspace lain", items: otherThreads });
-  }
-  return sections;
 }

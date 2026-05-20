@@ -28,6 +28,24 @@ export type MoveTargetOption = {
   label: string;
 };
 
+export type FolderSummary = WorkspaceFolder & {
+  artifactCount: number;
+};
+
+export type BreadcrumbSegment = {
+  id: "root" | string;
+  label: string;
+};
+
+export type FolderView = {
+  activeFolderId: "root" | string;
+  folders: FolderSummary[];
+  artifacts: WorkspaceArtifact[];
+  breadcrumb: BreadcrumbSegment[];
+};
+
+export const ROOT_FOLDER_LABEL = "Semua file";
+
 export function sortFolders(folders: WorkspaceFolder[]) {
   return [...folders].sort((a, b) => {
     const byName = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
@@ -82,12 +100,62 @@ export function groupArtifactsByFolder({
 
 export function getMoveTargetOptions(folders: WorkspaceFolder[]): MoveTargetOption[] {
   return [
-    { value: "root", label: "Workspace root" },
+    { value: "root", label: ROOT_FOLDER_LABEL },
     ...sortFolders(folders.filter((folder) => folder.status !== "deleted")).map((folder) => ({
       value: folder._id,
       label: folder.name,
     })),
   ];
+}
+
+export function resolveActiveFolderId({
+  activeFolderId,
+  groups,
+}: {
+  activeFolderId: string;
+  groups: ArtifactGroup[];
+}): "root" | string {
+  if (activeFolderId === "root") return "root";
+  const exists = groups.some(
+    (group) => group.folder !== null && group.id === activeFolderId,
+  );
+  return exists ? activeFolderId : "root";
+}
+
+export function getFolderView({
+  groups,
+  activeFolderId,
+}: {
+  groups: ArtifactGroup[];
+  activeFolderId: string;
+}): FolderView {
+  const resolvedId = resolveActiveFolderId({ activeFolderId, groups });
+  const rootGroup = groups.find((group) => group.id === "root");
+  const folderGroups = groups.filter((group) => group.folder !== null);
+
+  if (resolvedId === "root") {
+    return {
+      activeFolderId: "root",
+      folders: folderGroups.map((group) => ({
+        ...group.folder!,
+        artifactCount: group.artifacts.length,
+      })),
+      artifacts: rootGroup?.artifacts ?? [],
+      breadcrumb: [{ id: "root", label: ROOT_FOLDER_LABEL }],
+    };
+  }
+
+  const activeGroup = folderGroups.find((group) => group.id === resolvedId);
+
+  return {
+    activeFolderId: resolvedId,
+    folders: [],
+    artifacts: activeGroup?.artifacts ?? [],
+    breadcrumb: [
+      { id: "root", label: ROOT_FOLDER_LABEL },
+      { id: resolvedId, label: activeGroup?.folder?.name ?? ROOT_FOLDER_LABEL },
+    ],
+  };
 }
 
 export function expectArtifactsReturnToRootAfterFolderDelete({
@@ -110,15 +178,3 @@ export function expectArtifactsReturnToRootAfterFolderDelete({
     .every((artifact) => artifact.folderId === undefined);
 }
 
-export type SidebarThread = {
-  threadId: string;
-  workspaceId?: string;
-  title: string;
-};
-
-export function splitSidebarThreads(threads: SidebarThread[]) {
-  return {
-    global: threads.filter((thread) => !thread.workspaceId),
-    workspaceBound: threads.filter((thread) => Boolean(thread.workspaceId)),
-  };
-}

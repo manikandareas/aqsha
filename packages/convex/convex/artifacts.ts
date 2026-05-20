@@ -77,6 +77,36 @@ export const listByWorkspace = query({
   },
 });
 
+export const listForContextPicker = query({
+  args: {
+    workspaceId: v.optional(v.id("workspaces")),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    if (args.workspaceId) {
+      await assertWorkspaceOwner(ctx, args.workspaceId, user._id);
+      return await ctx.db
+        .query("artifacts")
+        .withIndex("by_owner_workspace_status_updated", (q) =>
+          q
+            .eq("ownerUserId", user._id)
+            .eq("workspaceId", args.workspaceId)
+            .eq("status", "active"),
+        )
+        .order("desc")
+        .take(50);
+    }
+
+    return await ctx.db
+      .query("artifacts")
+      .withIndex("by_owner_status_updated", (q) =>
+        q.eq("ownerUserId", user._id).eq("status", "active"),
+      )
+      .order("desc")
+      .take(50);
+  },
+});
+
 export const get = query({
   args: { artifactId: v.id("artifacts") },
   handler: async (ctx, args) => {

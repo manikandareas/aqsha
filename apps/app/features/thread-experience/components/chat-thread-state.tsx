@@ -10,6 +10,7 @@ import {
   ConversationEmptyState,
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
+import { panelBodyPaddingClass, panelComposerPaddingClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
 import type {
   ChatMessage,
@@ -94,7 +95,9 @@ export function ChatThreadState({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
       <Conversation className="min-h-0 min-w-0 flex-1 overflow-x-hidden">
-        <ConversationContent className="gap-6 overflow-x-hidden px-5 pb-6 pt-4 sm:px-8 lg:pt-6">
+        <ConversationContent
+          className={cn("gap-6 overflow-x-hidden", panelBodyPaddingClass)}
+        >
           <div className="flex w-full min-w-0 flex-col overflow-x-hidden">
             {isLoading ? (
               <CenteredLoading label="Memuat thread..." />
@@ -140,7 +143,9 @@ export function ChatThreadState({
         </ConversationContent>
         <ConversationScrollButton className="bottom-4 size-8 border-border/70 bg-card/85 text-muted-foreground shadow-none" />
       </Conversation>
-      <div className="shrink-0 min-w-0 overflow-x-hidden bg-background/92 px-4 pb-4 pt-2 backdrop-blur sm:px-8">
+      <div
+        className={cn("shrink-0 min-w-0 overflow-x-hidden bg-background", panelComposerPaddingClass)}
+      >
         <div className="mx-auto w-full max-w-3xl">
           <Composer
             threadId={threadId}
