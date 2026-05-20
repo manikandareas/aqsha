@@ -10,11 +10,13 @@ import { useSidebar } from "@/components/ui/sidebar";
 
 export function ThreadHeader({
   title,
+  workspaceName,
   showLeftTrigger,
   onToggleLeftSidebar,
   showRightTrigger,
 }: {
   title: string;
+  workspaceName?: string;
   showLeftTrigger: boolean;
   onToggleLeftSidebar: () => void;
   showRightTrigger: boolean;
@@ -39,7 +41,7 @@ export function ThreadHeader({
         </h1>
         <div className="hidden min-w-0 items-center gap-1.5 text-[12px] font-medium text-muted-foreground sm:flex">
           <FolderIcon className="size-3.5 shrink-0" />
-          <span className="truncate">aqsha / research thread</span>
+          <span className="truncate">{workspaceName ?? "Global thread"}</span>
         </div>
       </div>
       <div className="flex items-center gap-0.5">

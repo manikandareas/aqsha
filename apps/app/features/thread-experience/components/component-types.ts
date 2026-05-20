@@ -9,6 +9,7 @@ import type {
 
 export type ThreadSummary = {
   threadId: string;
+  workspaceId?: string;
   title: string;
   createdAt: number;
   lastActivityAt: number;
@@ -25,10 +26,13 @@ export type ViewerSummary =
     }
   | undefined;
 
+type WorkspaceId = string & { __tableName: "workspaces" };
+
 export type StartThread = (args: {
   content: string;
   mode: "normal" | "deep";
   commandId?: string;
+  workspaceId?: WorkspaceId;
 }) => Promise<SendResult>;
 
 export type SendMessage = (args: {
@@ -49,9 +53,11 @@ export type ThreadShellLayoutProps = {
   selectedThread:
     | {
         title: string;
+        workspaceId?: string;
       }
     | null
     | undefined;
+  workspaces?: Array<{ _id: string; name: string }>;
   rateStatus: RateStatus | undefined;
   startThread: StartThread;
   sendMessage: SendMessage;

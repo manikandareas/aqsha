@@ -14,6 +14,7 @@ export function ThreadExperience({ threadId }: { threadId?: string }) {
   const router = useRouter();
   const {
     viewer,
+    workspaces,
     threads,
     selectedThread,
     startThread,
@@ -58,6 +59,7 @@ export function ThreadExperience({ threadId }: { threadId?: string }) {
     >
       <ThreadShellLayout
         viewer={viewer}
+        workspaces={workspaces}
         threads={threads}
         selectedThreadId={threadId}
         onCreateThread={handleCreateThread}

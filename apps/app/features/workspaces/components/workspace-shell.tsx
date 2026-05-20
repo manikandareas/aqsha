@@ -1,0 +1,77 @@
+"use client";
+
+import { type CSSProperties, type ReactNode, useState } from "react";
+import { useRouter } from "next/navigation";
+import { AppSidebar } from "@/components/app-sidebar";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { NameDialog } from "./workspace-dialogs";
+
+export function WorkspaceShell({
+  viewer,
+  workspaces,
+  threads,
+  selectedWorkspaceId,
+  createWorkspace,
+  children,
+}: {
+  viewer:
+    | {
+        name: string | null;
+        email: string | null;
+        image: string | null;
+      }
+    | undefined;
+  workspaces: Array<{ _id: string; name: string }>;
+  threads: Array<{
+    threadId: string;
+    workspaceId?: string;
+    title: string;
+    createdAt: number;
+    lastActivityAt: number;
+    lastMessagePreview: string;
+    messageCount: number;
+    status: "idle" | "streaming" | "failed";
+  }>;
+  selectedWorkspaceId?: string;
+  createWorkspace: (args: { name: string; description?: string }) => Promise<unknown>;
+  children: ReactNode;
+}) {
+  const router = useRouter();
+  const [createOpen, setCreateOpen] = useState(false);
+
+  return (
+    <SidebarProvider
+      style={
+        {
+          "--sidebar-width": "16.5rem",
+          "--sidebar-width-mobile": "17.5rem",
+        } as CSSProperties
+      }
+      className="min-h-svh"
+    >
+      <AppSidebar
+        viewer={viewer}
+        workspaces={workspaces}
+        selectedWorkspaceId={selectedWorkspaceId}
+        threads={threads}
+        onCreateThread={() => router.push("/")}
+        onCreateWorkspace={() => setCreateOpen(true)}
+      />
+      <SidebarInset className="min-h-svh bg-background text-foreground">
+        {children}
+      </SidebarInset>
+      <NameDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        title="Workspace baru"
+        description="Buat area riset personal."
+        submitLabel="Buat"
+        descriptionField
+        onSubmit={async (value) => {
+          const workspaceId = await createWorkspace(value);
+          router.push(`/workspaces/${String(workspaceId)}`);
+        }}
+      />
+    </SidebarProvider>
+  );
+}

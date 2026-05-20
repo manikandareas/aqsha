@@ -15,8 +15,11 @@ import {
 import { cn } from "@/lib/utils";
 import {
   BugIcon,
+  ChevronsUpDownIcon,
+  FolderIcon,
   MessageSquarePlusIcon,
   PanelLeftIcon,
+  PlusIcon,
   SearchIcon,
   SparklesIcon,
 } from "lucide-react";
@@ -31,6 +34,7 @@ type Viewer = {
 
 type ThreadSummary = {
   threadId: string;
+  workspaceId?: string;
   title: string;
   createdAt: number;
   lastActivityAt: number;
@@ -39,19 +43,31 @@ type ThreadSummary = {
   status: "idle" | "streaming" | "failed";
 };
 
+type WorkspaceSummary = {
+  _id: string;
+  name: string;
+};
+
 export function AppSidebar({
   viewer,
+  workspaces = [],
+  selectedWorkspaceId,
   threads,
   selectedThreadId,
   onCreateThread,
+  onCreateWorkspace,
   ...props
 }: ComponentProps<typeof Sidebar> & {
   viewer: Viewer | undefined;
+  workspaces?: WorkspaceSummary[];
+  selectedWorkspaceId?: string;
   threads: ThreadSummary[];
   selectedThreadId?: string;
   onCreateThread: () => void;
+  onCreateWorkspace?: () => void;
 }) {
-  const grouped = groupThreads(threads);
+  const threadGroups = groupThreadsByScope(threads, selectedWorkspaceId);
+  const activeWorkspace = workspaces.find((workspace) => workspace._id === selectedWorkspaceId);
   const { isMobile, setOpen, setOpenMobile } = useSidebar();
 
   const closeSidebar = () => {
@@ -88,6 +104,11 @@ export function AppSidebar({
           </button>
         </div>
         <SidebarMenu className="gap-0.5">
+          <WorkspaceSwitcher
+            workspaces={workspaces}
+            activeWorkspace={activeWorkspace}
+            onCreateWorkspace={onCreateWorkspace}
+          />
           <PrimaryNavRow
             icon={MessageSquarePlusIcon}
             label="Chat baru"
@@ -101,12 +122,12 @@ export function AppSidebar({
       <SidebarContent className="px-1 pb-1 pt-0">
         <ScrollArea className="min-h-0 min-w-0 flex-1 overflow-hidden px-0">
           <div className="grid min-w-0 gap-1.5 overflow-hidden">
-            {grouped.length === 0 ? (
+            {threadGroups.length === 0 ? (
               <div className="mx-1.5 mt-1.5 rounded-[7px] border border-dashed border-sidebar-border bg-muted/25 p-2 text-[12px] text-muted-foreground">
                 Belum ada thread.
               </div>
             ) : (
-              grouped.map((section) => (
+              threadGroups.map((section) => (
                 <div key={section.label} className="min-w-0 overflow-hidden">
                   <div className="px-2 pb-0.5 pt-1 text-[11px] font-medium text-muted-foreground">
                     {section.label}
@@ -131,6 +152,65 @@ export function AppSidebar({
         <NavUser user={viewer} />
       </SidebarFooter>
     </Sidebar>
+  );
+}
+
+function WorkspaceSwitcher({
+  workspaces,
+  activeWorkspace,
+  onCreateWorkspace,
+}: {
+  workspaces: WorkspaceSummary[];
+  activeWorkspace: WorkspaceSummary | undefined;
+  onCreateWorkspace?: () => void;
+}) {
+  return (
+    <SidebarMenuItem className="min-w-0 overflow-hidden">
+      <SidebarMenuButton
+        asChild
+        className="h-8 rounded-[7px] px-1.5 text-[12px] font-semibold text-sidebar-foreground/90 hover:bg-muted/70 hover:text-foreground"
+      >
+        <Link href={activeWorkspace ? `/workspaces/${activeWorkspace._id}` : "/workspaces"}>
+          <FolderIcon className="size-3.5 text-muted-foreground" />
+          <span className="min-w-0 flex-1 truncate">
+            {activeWorkspace?.name ?? "Workspaces"}
+          </span>
+          <ChevronsUpDownIcon className="ml-auto size-3.5 text-muted-foreground" />
+        </Link>
+      </SidebarMenuButton>
+      <div className="mt-1 grid gap-px pl-5">
+        {workspaces.slice(0, 5).map((workspace) => (
+          <Link
+            key={workspace._id}
+            href={`/workspaces/${workspace._id}`}
+            className={cn(
+              "truncate rounded-[6px] px-1.5 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+              activeWorkspace?._id === workspace._id && "bg-muted text-foreground",
+            )}
+          >
+            {workspace.name}
+          </Link>
+        ))}
+        <div className="flex min-w-0 items-center gap-1">
+          <Link
+            href="/workspaces"
+            className="min-w-0 flex-1 truncate rounded-[6px] px-1.5 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+          >
+            Semua workspace
+          </Link>
+          {onCreateWorkspace ? (
+            <button
+              type="button"
+              onClick={onCreateWorkspace}
+              className="flex size-5 shrink-0 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label="Workspace baru"
+            >
+              <PlusIcon className="size-3.5" />
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </SidebarMenuItem>
   );
 }
 
@@ -207,22 +287,27 @@ function truncateWords(value: string, maxWords: number) {
 
 type ThreadSection = { label: string; items: ThreadSummary[] };
 
-function groupThreads(threads: ThreadSummary[]): ThreadSection[] {
+function groupThreadsByScope(
+  threads: ThreadSummary[],
+  selectedWorkspaceId?: string,
+): ThreadSection[] {
   if (threads.length === 0) return [];
-  const now = Date.now();
-  const day = 24 * 60 * 60 * 1000;
-  const buckets: Record<string, ThreadSummary[]> = {
-    "Hari ini": [],
-    "7 hari terakhir": [],
-    Older: [],
-  };
-  for (const thread of threads) {
-    const diff = now - thread.lastActivityAt;
-    if (diff < day) buckets["Hari ini"].push(thread);
-    else if (diff < 7 * day) buckets["7 hari terakhir"].push(thread);
-    else buckets.Older.push(thread);
+  const workspaceThreads = selectedWorkspaceId
+    ? threads.filter((thread) => thread.workspaceId === selectedWorkspaceId)
+    : [];
+  const globalThreads = threads.filter((thread) => !thread.workspaceId);
+  const sections: ThreadSection[] = [];
+  if (workspaceThreads.length > 0) {
+    sections.push({ label: "Workspace threads", items: workspaceThreads });
   }
-  return Object.entries(buckets)
-    .filter(([, items]) => items.length > 0)
-    .map(([label, items]) => ({ label, items }));
+  if (globalThreads.length > 0) {
+    sections.push({ label: "Global threads", items: globalThreads });
+  }
+  const otherThreads = selectedWorkspaceId
+    ? threads.filter((thread) => thread.workspaceId && thread.workspaceId !== selectedWorkspaceId)
+    : threads.filter((thread) => thread.workspaceId);
+  if (otherThreads.length > 0) {
+    sections.push({ label: "Workspace lain", items: otherThreads });
+  }
+  return sections;
 }

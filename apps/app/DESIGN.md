@@ -1,18 +1,20 @@
 # Aqsha App Design
 
-This document is the visual and interaction source of truth for `apps/app`, the authenticated Convex-backed research chatbot.
+This document is the visual and interaction source of truth for `apps/app`, the authenticated Convex-backed education research workspace.
 
 ## Product Surface
 
-Aqsha is a chat-first research workspace with durable runs and artifacts. Sources are available only as right-panel provenance inspection:
+Aqsha is a personal education research workspace with workspace-owned documents, saved URLs, optional one-level folders, chat threads, and Deep Research as an advanced mode.
 
 - No Sources/Sumber item in the sidebar.
 - No Source Library page.
 - No Sources settings page.
-- The right panel may show `Artefak | Sources`.
-- The Sources tab is candidate/provenance inspection only.
+- No user-facing Sources tab or provenance panel.
+- No separate generated-artifact right panel in the workspace-library MVP.
+- Workspace artifacts are managed from the main content surface.
+- The chat right panel is reserved for thread-level artifact context selection when that phase ships.
 
-Do not restore a Source Library, public corpus UI, `/sources`, or `/settings/sources`.
+Do not restore a Source Library, public corpus UI, `/sources`, `/settings/sources`, or any source-management navigation.
 
 ## Visual Direction
 
@@ -31,32 +33,39 @@ The app should feel calm, focused, and work-oriented:
 The left sidebar contains:
 
 - Sidebar close/search controls.
+- Workspace switcher.
+- New workspace.
 - New chat.
-- Disabled future entries such as automation and research audit.
-- Thread history grouped by recency.
+- Workspace-bound thread history where relevant.
+- Global thread access without forcing a workspace choice.
 - Upgrade card.
 - User menu.
 
 Do not add Sources/Sumber back to this navigation without a new product decision.
 
+### Workspace Library
+
+Workspace pages should feel like a compact working library, not a landing page. Prioritize scan-friendly lists, clear folder grouping, and direct actions for creating documents, saving URLs, renaming, moving, and deleting.
+
+- Use one-level folder grouping only.
+- Artifacts can live in the workspace root or one folder.
+- Do not expose artifact search until it is explicitly added to the product scope.
+- Do not expose user-facing artifact version history.
+
 ### Chat
 
 Assistant messages use readable prose with Markdown support. User messages stay compact and right-aligned. Deep run progress appears inline in the transcript so users can follow long-running work without navigating away.
 
-### Research Panel
+### Right Panel
 
-The right panel supports `Artefak | Sources`. It should:
+The right panel should not be used as a generated-artifact or provenance surface for the workspace-library MVP. When thread context selection ships, it should:
 
-- Render only when an artifact exists or an active run may produce one.
-- Open automatically when a new artifact appears.
-- Keep artifact auto-open behavior unchanged.
-- Never auto-open just because new source candidates exist.
-- Show artifact title, version, format, copy action, and share-link action.
-- Render Markdown, HTML, plain text, code, and JSON safely in `Artefak`.
-- Render source candidates grouped per run/message in `Sources`.
-- Open `Sources` from compact message/run provenance buttons or the panel tab trigger.
+- List selectable workspace artifacts for workspace-bound threads.
+- Require explicit artifact selection for global threads.
+- Show selected-context summary.
+- Avoid treating client-selected metadata as trusted ownership or prompt context.
 
-The Sources tab must not include ingestion, corpus management, settings, or Source Library controls.
+Sources remain backend provenance records only and must not render as a user-facing tab, panel, settings page, or library.
 
 ## Components
 
@@ -72,11 +81,14 @@ Preferred terms:
 
 - `Thread` for a saved conversation.
 - `Deep Research` for durable long-running research.
-- `Artifact` / `Artefak` for generated documents and reusable outputs.
+- `Workspace` for a private user-owned education research area.
+- `Folder` for one-level organization inside a workspace.
+- `Artifact` / `Artefak` for workspace documents, saved URLs, and later reusable generated outputs.
 - `Provenance` for backend source records used by tools.
-- `Sources` for the right-panel provenance tab only.
+- `Sources` only for internal/backend provenance, not a product surface.
 
 Avoid these as product surfaces:
 
 - `Source Library`
 - `Sumber` as a sidebar feature.
+- `Sources` as a tab or panel.

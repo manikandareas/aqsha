@@ -19,6 +19,14 @@ export function useThreadExperienceData(threadId?: string) {
         }
       : "skip",
   );
+  const workspacePage = useQuery(
+    api.workspaces.list,
+    isAuthenticated
+      ? {
+          paginationOpts: { cursor: null, numItems: 50 },
+        }
+      : "skip",
+  );
   const selectedThread = useQuery(
     api.agent.threads.get,
     isAuthenticated && threadId ? { threadId } : "skip",
@@ -55,6 +63,7 @@ export function useThreadExperienceData(threadId?: string) {
   return {
     isAuthenticated,
     viewer,
+    workspaces: workspacePage?.page ?? [],
     threads: threadPage?.page ?? [],
     selectedThread,
     startThread,

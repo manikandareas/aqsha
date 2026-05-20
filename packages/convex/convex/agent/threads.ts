@@ -10,6 +10,7 @@ type ThreadCtx = QueryCtx | MutationCtx | ActionCtx;
 
 const threadSummaryValidator = v.object({
   threadId: v.string(),
+  workspaceId: v.optional(v.id("workspaces")),
   title: v.string(),
   createdAt: v.number(),
   lastActivityAt: v.number(),
@@ -47,6 +48,7 @@ async function summarizeThread(ctx: QueryCtx, thread: {
   const metadata = await getThreadMetadata(ctx, thread._id);
   return {
     threadId: thread._id,
+    workspaceId: metadata?.workspaceId,
     title: thread.title ?? "Thread baru",
     createdAt: thread._creationTime,
     lastActivityAt: metadata?.lastActivityAt ?? thread._creationTime,
@@ -127,6 +129,44 @@ export const list = query({
     return {
       ...threads,
       page: page.sort((a, b) => b.lastActivityAt - a.lastActivityAt),
+    };
+  },
+});
+
+export const listByWorkspace = query({
+  args: {
+    workspaceId: v.id("workspaces"),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: threadPageValidator,
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    await assertWorkspaceOwner(ctx, args.workspaceId, user._id);
+    const metadataPage = await ctx.db
+      .query("threadMetadata")
+      .withIndex("by_owner_workspace_activity", (q) =>
+        q.eq("ownerUserId", user._id).eq("workspaceId", args.workspaceId),
+      )
+      .order("desc")
+      .paginate(args.paginationOpts);
+
+    const page = (
+      await Promise.all(
+        metadataPage.page.map(async (metadata) => {
+          const thread = await ctx.runQuery(components.agent.threads.getThread, {
+            threadId: metadata.threadId,
+          });
+          if (!thread || thread.userId !== user._id) {
+            return null;
+          }
+          return await summarizeThread(ctx, thread);
+        }),
+      )
+    ).filter((thread) => thread !== null);
+
+    return {
+      ...metadataPage,
+      page,
     };
   },
 });

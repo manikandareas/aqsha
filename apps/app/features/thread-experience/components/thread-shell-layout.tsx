@@ -1,7 +1,6 @@
 "use client";
 
 import { type CSSProperties } from "react";
-import { ArtifactPanel } from "@/components/artifact-panel";
 import { AppSidebar } from "@/components/app-sidebar";
 import {
   SidebarInset,
@@ -15,10 +14,10 @@ import { ThreadHeader } from "./thread-header";
 
 export function ThreadShellLayout({
   viewer,
+  workspaces = [],
   threads,
   selectedThreadId,
   onCreateThread,
-  hasResearchPayload,
   title,
   threadId,
   selectedThread,
@@ -28,25 +27,27 @@ export function ThreadShellLayout({
   runs,
   artifacts,
   sources,
-  activeArtifact,
-  activePanelTab,
-  sourceFocus,
   rightPanelOpen,
   onRightPanelOpenChange,
   onOpenArtifact,
   onOpenSources,
-  onPanelTabChange,
   onCancelRun,
 }: ThreadShellLayoutProps) {
   const leftSidebar = useSidebar();
   const isLeftSidebarOpen = leftSidebar.isMobile
     ? leftSidebar.openMobile
     : leftSidebar.open;
+  const workspaceName = selectedThread?.workspaceId
+    ? workspaces.find((workspace) => workspace._id === selectedThread.workspaceId)?.name ??
+      "Workspace thread"
+    : undefined;
 
   return (
     <>
       <AppSidebar
         viewer={viewer}
+        workspaces={workspaces}
+        selectedWorkspaceId={selectedThread?.workspaceId}
         threads={threads}
         selectedThreadId={selectedThreadId}
         onCreateThread={onCreateThread}
@@ -66,9 +67,10 @@ export function ThreadShellLayout({
           <SidebarInset className="h-full min-h-0 min-w-0 overflow-hidden bg-background">
             <ThreadHeader
               title={title}
+              workspaceName={workspaceName}
               showLeftTrigger={!isLeftSidebarOpen}
               onToggleLeftSidebar={leftSidebar.toggleSidebar}
-              showRightTrigger={hasResearchPayload}
+              showRightTrigger={false}
             />
             <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
               {threadId && selectedThread === null ? (
@@ -92,19 +94,6 @@ export function ThreadShellLayout({
               )}
             </main>
           </SidebarInset>
-          {hasResearchPayload ? (
-            <ArtifactPanel
-              threadTitle={threadId ? selectedThread?.title : undefined}
-              artifacts={artifacts}
-              sources={sources}
-              activeArtifact={activeArtifact ?? null}
-              activeTab={activePanelTab}
-              sourceFocus={sourceFocus}
-              onOpenArtifact={onOpenArtifact}
-              onTabChange={onPanelTabChange}
-              onClosePanel={() => onRightPanelOpenChange(false)}
-            />
-          ) : null}
         </SidebarProvider>
       </SidebarInset>
     </>
