@@ -231,6 +231,9 @@ export const updateVersionFromAgent = internalMutation({
     );
     const now = Date.now();
     const title = args.title ?? artifact.title;
+    if (!artifact.threadId) {
+      throw new ConvexError("Artifact thread not found");
+    }
     const versionId = await insertVersion(ctx, {
       ownerUserId: args.ownerUserId,
       threadId: artifact.threadId,

@@ -4,6 +4,7 @@ import { ConvexError, v } from "convex/values";
 import { components } from "../_generated/api";
 import { mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { requireCurrentUser } from "../auth";
+import { assertWorkspaceOwner } from "../workspaceAccess";
 
 type ThreadCtx = QueryCtx | MutationCtx | ActionCtx;
 
@@ -71,17 +72,33 @@ export async function assertThreadOwner(ctx: ThreadCtx, threadId: string) {
 export const create = mutation({
   args: {
     title: v.optional(v.string()),
+    workspaceId: v.optional(v.id("workspaces")),
   },
   returns: v.object({
     threadId: v.string(),
   }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
+    if (args.workspaceId) {
+      await assertWorkspaceOwner(ctx, args.workspaceId, user._id, { requireActive: true });
+    }
     const title = args.title?.trim() || "Thread baru";
     const threadId = await createThread(ctx, components.agent, {
       userId: user._id,
       title,
     });
+    if (args.workspaceId) {
+      const now = Date.now();
+      await ctx.db.insert("threadMetadata", {
+        ownerUserId: user._id,
+        workspaceId: args.workspaceId,
+        threadId,
+        lastActivityAt: now,
+        lastMessagePreview: "",
+        messageCount: 0,
+        status: "idle",
+      });
+    }
 
     return { threadId };
   },

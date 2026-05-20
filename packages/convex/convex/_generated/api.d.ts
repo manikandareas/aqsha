@@ -24,6 +24,8 @@ import type * as agent_sources from "../agent/sources.js";
 import type * as agent_threadTitles from "../agent/threadTitles.js";
 import type * as agent_threads from "../agent/threads.js";
 import type * as agent_workflow from "../agent/workflow.js";
+import type * as artifactModel from "../artifactModel.js";
+import type * as artifacts from "../artifacts.js";
 import type * as auth from "../auth.js";
 import type * as billing_admin from "../billing/admin.js";
 import type * as billing_catalog from "../billing/catalog.js";
@@ -36,6 +38,9 @@ import type * as billing_products from "../billing/products.js";
 import type * as billing_usage from "../billing/usage.js";
 import type * as http from "../http.js";
 import type * as limits from "../limits.js";
+import type * as workspaceAccess from "../workspaceAccess.js";
+import type * as workspaceFolders from "../workspaceFolders.js";
+import type * as workspaces from "../workspaces.js";
 
 import type {
   ApiFromModules,
@@ -60,6 +65,8 @@ declare const fullApi: ApiFromModules<{
   "agent/threadTitles": typeof agent_threadTitles;
   "agent/threads": typeof agent_threads;
   "agent/workflow": typeof agent_workflow;
+  artifactModel: typeof artifactModel;
+  artifacts: typeof artifacts;
   auth: typeof auth;
   "billing/admin": typeof billing_admin;
   "billing/catalog": typeof billing_catalog;
@@ -72,6 +79,9 @@ declare const fullApi: ApiFromModules<{
   "billing/usage": typeof billing_usage;
   http: typeof http;
   limits: typeof limits;
+  workspaceAccess: typeof workspaceAccess;
+  workspaceFolders: typeof workspaceFolders;
+  workspaces: typeof workspaces;
 }>;
 
 /**

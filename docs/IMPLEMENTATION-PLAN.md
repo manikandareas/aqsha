@@ -2,9 +2,17 @@
 
 ## Scope
 
-This plan implements the product direction in `docs/PRD.md`: Aqsha becomes a personal education research workspace with workspace-owned documents, URL artifacts, and thread-level artifact context.
+This plan implements the product direction in `docs/PRD.md`: Aqsha becomes a personal education research workspace with workspace-owned documents, URL artifacts, optional workspace-bound threads, and later thread-level artifact context.
 
-Breaking Convex schema changes are allowed. No data migration or backfill is required. The current artifact versioning model should be replaced rather than preserved.
+Breaking Convex schema changes are allowed. No data migration or backfill is required. MVP workspace artifacts should use a current-state model without user-facing versions. The existing generated-artifact versioning path can stay isolated until the post-MVP generated artifact cleanup.
+
+MVP boundaries:
+
+- Workspace, one-level folder, document artifact, and URL artifact management are in MVP.
+- Threads use optional workspace binding: threads started from a workspace are bound to that workspace, while threads started from global chat remain global.
+- Artifact search is deferred.
+- Chat-generated artifacts from Normal mode or Deep Research are deferred until after MVP.
+- Thread context selection and prompt injection ship after the workspace artifact layer is stable.
 
 Do not restore:
 
@@ -15,6 +23,8 @@ Do not restore:
 - Sources tab or user-facing provenance panel
 - Separate generated-artifact right panel
 - User-facing artifact version history
+- Chat-generated workspace artifacts in MVP
+- Artifact search in MVP
 
 ## Current Codebase Findings
 
@@ -52,9 +62,9 @@ There are no first-class `workspaces`, `workspaceFolders`, `artifactDocuments`, 
 - Attaches tool-created artifacts to assistant messages through `internal.agent.artifacts.attachToMessage`.
 - Keeps billing, usage tracking, rate limiting, prompt commands, thread title generation, and inline run state around the generation path.
 
-Prompt injection for selected context artifacts should be added before `astra.streamText` receives the prompt. The client should only toggle selected artifacts through backend mutations; generation should resolve the actual artifact records server-side.
+Prompt injection for selected context artifacts should be added after the MVP workspace artifact layer is stable. The client should only toggle selected artifacts through backend mutations; generation should resolve the actual artifact records server-side.
 
-Generated outputs from Normal tools and Deep Research should be saved as workspace artifacts and opened through the main content surface. Do not keep generated artifacts as a separate right-panel surface.
+Generated outputs from Normal tools and Deep Research are post-MVP. When added, they should be saved as workspace artifacts and opened through the main content surface. Do not keep generated artifacts as a separate right-panel surface.
 
 ### Agent artifacts
 
@@ -67,7 +77,7 @@ Generated outputs from Normal tools and Deep Research should be saved as workspa
 - Links artifacts to messages with a required `versionId`.
 - Stores large bodies in Convex storage when they exceed the inline limit.
 
-This file should become the main migration point for the flattened artifact model. Remove public version APIs and update tool-facing mutations to write current artifact content directly.
+This file should be treated carefully because current agent artifacts are generated-output oriented. MVP workspace artifacts can live in a new top-level `packages/convex/convex/artifacts.ts` module first. Public version APIs and generated-output mutation paths should be removed or migrated only when the post-MVP generated artifact work starts.
 
 ### Agent sources
 
@@ -88,7 +98,7 @@ Keep this as provenance infrastructure. Do not turn it into user-managed library
 - Opens the right panel when artifact payloads exist.
 - Includes provenance UI state that must be removed from the product surface.
 
-This is the old UI shape that the new plan should replace. The right panel should become a context artifact picker only. Generated artifacts should open in the main workspace surface. Source/provenance records stay backend-only and should not render as a Sources tab or panel.
+This is the old UI shape that the new plan should replace. The right panel should become a chat/context panel, not a generated-artifact or provenance surface. Source/provenance records stay backend-only and should not render as a Sources tab or panel. Generated artifacts remain outside MVP.
 
 ## External Library Notes
 
@@ -117,6 +127,8 @@ In Next.js, load the editor through a Client Component with `dynamic(() => impor
 Keep the existing Convex Agent streaming path. The implementation should add selected artifact context as prompt input before generation, not replace `astra.streamText`, `syncStreams`, or existing message persistence.
 
 The prompt context should be bounded and deterministic. It should be assembled from server-owned artifact rows, clipped to a maximum character budget, and inserted before the user's prompt with clear separators.
+
+This is not a Phase 1 concern. It belongs after workspace artifacts and UI selection are working.
 
 ### Next.js 16
 
@@ -158,7 +170,7 @@ No `parentFolderId`. Folder nesting is not supported.
 
 ### `artifacts`
 
-Replace the thread/run-generated-only shape with a generalized current-state artifact table.
+Replace the thread/run-generated-only product shape with a generalized current-state workspace artifact table. For MVP, only `document` and `url` artifacts are created by users. `generated` remains a reserved kind for post-MVP work.
 
 Fields:
 
@@ -188,6 +200,8 @@ Indexes:
 - `by_owner_run`: `["ownerUserId", "runId"]`
 
 Remove `currentVersionId`.
+
+MVP artifact CRUD should not create `generated` rows. The optional `threadId` and `runId` fields are reserved for future generated artifacts and should not make normal document or URL artifacts depend on chat.
 
 ### `artifactDocuments`
 
@@ -241,7 +255,7 @@ Fields:
 
 - `ownerUserId: string`
 - `threadId: string`
-- `workspaceId: Id<"workspaces">`
+- `workspaceId?: Id<"workspaces">`
 - `artifactId: Id<"artifacts">`
 - `createdAt: number`
 
@@ -252,6 +266,19 @@ Indexes:
 - `by_owner_workspace_artifact`: `["ownerUserId", "workspaceId", "artifactId"]`
 
 Use a row per selected artifact. Do not store selected artifact IDs as an array on the thread.
+
+`workspaceId` is optional because threads can be global. When the selected artifact belongs to a workspace, storing its workspace ID as a denormalized lookup field is useful, but it must not be treated as proof of thread ownership. Ownership is still validated from the authenticated user, the thread, and the artifact.
+
+### Thread workspace binding
+
+Threads should support optional workspace binding through the existing agent/thread metadata path where possible:
+
+- Workspace-started thread: `workspaceId` is set in thread metadata.
+- Global-started thread: `workspaceId` is omitted.
+- Workspace views default to workspace-bound threads.
+- Global chat views include global threads and may expose all user threads.
+
+Do not auto-create a default workspace just to start a global chat.
 
 ## Function Plan
 
@@ -272,7 +299,8 @@ Rules:
 - Resolve current user server-side through existing auth helpers.
 - Enforce owner checks on every read/write.
 - Use pagination or a bounded `take` for lists.
-- Optionally create a default workspace on first authenticated use.
+- Do not auto-create a default workspace for global chat. A default workspace may be created only from an explicit workspace onboarding or workspace creation flow.
+- Archive workspaces with `archivedAt`; normal list queries should hide archived workspaces by default.
 
 ### Folders
 
@@ -309,18 +337,16 @@ Public functions:
 
 Internal functions:
 
-- `createGeneratedFromAgent`
-- `updateGeneratedFromAgent`
-- `attachToMessage`
-- `getContextForThread`
+- `getContextForThread` after thread context selection is implemented
 
 Rules:
 
 - Remove `listVersions`.
 - Remove public `versionId` arguments.
-- Make `messageArtifacts` point to current `artifactId` without `versionId`.
+- Keep MVP artifact CRUD independent from chat-generated artifact creation.
+- Defer `messageArtifacts` migration until post-MVP generated artifacts are implemented.
 - Keep large body storage behavior.
-- Update `citationChecks` to reference `artifactId` without `artifactVersionId`.
+- Defer `citationChecks` artifact-version cleanup until post-MVP generated artifacts are implemented, unless removing the old generated artifact surface requires it earlier.
 
 ### URL extraction
 
@@ -351,8 +377,9 @@ Internal function:
 Rules:
 
 - Assert thread ownership through existing thread helpers.
-- Assert workspace ownership.
-- Assert every selected artifact belongs to the workspace and owner.
+- Assert artifact ownership.
+- For workspace-bound threads, default artifact listing to the bound workspace.
+- For global threads, require explicit artifact selection and do not infer a workspace.
 - Do not trust client-sent title, body, URL, or ownership metadata.
 
 ## Prompt Context Design
@@ -398,15 +425,14 @@ Budget rules:
 
 Tasks:
 
-- Update `schema.ts` with `workspaces`, `workspaceFolders`, flattened `artifacts`, `artifactDocuments`, `artifactUrls`, and `threadContextArtifacts`.
-- Remove `artifactVersions`.
-- Update `messageArtifacts` and `citationChecks`.
+- Update `schema.ts` with `workspaces`, `workspaceFolders`, flattened `artifacts`, `artifactDocuments`, and `artifactUrls`.
+- Add optional `threadContextArtifacts` only if Phase 1 includes context-selection groundwork; otherwise defer it to Phase 4.
+- Keep generated artifact routing out of MVP.
 - Add workspace CRUD functions.
 - Add folder CRUD functions.
 - Add artifact document and URL CRUD functions.
-- Add thread context toggle/list functions.
-- Update generated artifact helpers and message attachment helpers.
-- Ensure generated outputs resolve to workspace artifact routes in the main content surface.
+- Implement workspace archive/soft-delete behavior with `archivedAt`.
+- Do not add artifact search.
 
 Verification:
 
@@ -422,6 +448,8 @@ Tasks:
 - Add workspace list and detail routes under `apps/app`.
 - Add workspace artifact list with root and one-level folder grouping.
 - Add create, rename, move, and delete controls for folders and artifacts.
+- Add workspace-bound thread entry points where the user starts chat from a workspace page.
+- Keep global chat entry points available without requiring a workspace.
 - Keep sources out of navigation.
 
 Verification:
@@ -430,6 +458,8 @@ Verification:
 - User can create and rename a one-level folder.
 - User can move an artifact into and out of a folder.
 - Folder nesting is unavailable in the UI and rejected by the backend.
+- Starting chat from a workspace creates or opens a workspace-bound thread.
+- Starting chat globally creates or opens a global thread without auto-creating a workspace.
 
 ### Phase 3: Document Editor and URL Artifacts
 
@@ -458,7 +488,8 @@ Verification:
 Tasks:
 
 - Add a right-panel context picker on chat pages.
-- List workspace artifacts with selected/unselected state.
+- For workspace-bound threads, list artifacts from the bound workspace by default.
+- For global threads, require explicit artifact selection and avoid implying a workspace.
 - Toggle selected artifacts through Convex mutations.
 - Add selected context summary near the composer or thread header.
 - Update `messages.startThread` and `messages.send` to prepend selected artifact context server-side.
@@ -467,12 +498,14 @@ Tasks:
 Verification:
 
 - A thread can add and remove selected artifacts.
-- The client cannot inject context from another workspace or user.
+- The client cannot inject context from another user.
+- Workspace-bound threads default to the bound workspace's artifacts.
+- Global threads can select artifacts explicitly without being assigned to a workspace.
 - Normal chat receives selected artifact text.
 - Deep Research can still start and observe the selected context.
 - Existing billing and rate limit behavior still applies.
 
-### Phase 5: Route Generated Outputs to Main Artifact Surface
+### Post-MVP: Route Generated Outputs to Main Artifact Surface
 
 Tasks:
 
@@ -482,6 +515,8 @@ Tasks:
 - Update `messageArtifacts` usage to link only `artifactId`.
 - Update citation checks to link to `artifactId`.
 - Route newly generated Normal/Deep artifacts to the workspace artifact detail page in the main surface.
+- For workspace-bound threads, save generated artifacts into the bound workspace automatically.
+- For global threads, require the user to choose a destination workspace before saving a generated artifact.
 - Keep provenance persistence intact through `researchSources`, but do not render it as a Sources tab.
 
 Verification:
@@ -511,9 +546,11 @@ Scenario checks:
 - Folder cannot be nested.
 - Document artifact saves BlockNote JSON and derived text.
 - URL artifact stores URL metadata and readable extracted text or failure status.
+- Workspace archive hides the workspace from normal lists without hard-deleting artifacts.
+- Workspace-started threads can be bound to that workspace.
+- Global threads can exist without a workspace.
 - Thread context can add and remove artifacts.
 - Chat response receives selected artifact context.
-- Deep Research still runs as advanced mode and creates a workspace artifact in the main surface.
 - No `/sources`, Source Library, Sources tab, Sources panel, or Sources sidebar/settings surface is restored.
 
 ## Risks
@@ -521,5 +558,6 @@ Scenario checks:
 - The artifact flattening touches Deep Research, Normal mode tools, message attachment, citation checks, and UI routing. Treat it as a coordinated schema refactor, not a small table addition.
 - BlockNote adds a browser-heavy editor dependency. Keep it client-only and isolate it from route-level Server Components.
 - URL extraction may be slow or fail frequently. Persist explicit status and retry state instead of blocking artifact creation.
-- Prompt context can become too large. Enforce server-side character budgets from the first implementation.
-- If default workspace creation is implicit, thread creation and workspace routing must agree on one canonical default behavior.
+- Prompt context can become too large. When Phase 4 ships, enforce server-side character budgets from its first implementation.
+- Optional workspace binding avoids forcing every thread into a workspace, but the UI must clearly distinguish workspace-bound threads from global threads.
+- Post-MVP generated artifacts need a destination rule: bound threads can save automatically into their workspace, while global threads must ask the user to choose a workspace.

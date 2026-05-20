@@ -38,6 +38,7 @@ import {
 } from "./threadTitles";
 import { assertThreadOwner } from "./threads";
 import { buildPromptCommandPrompt, getPromptCommand } from "./promptCommands";
+import { assertWorkspaceOwner } from "../workspaceAccess";
 
 const MAX_CONTENT_LENGTH = 8_000;
 const FAILURE_TEXT =
@@ -167,6 +168,7 @@ async function upsertThreadMetadata(
     preview: string;
     status: "idle" | "streaming" | "failed";
     incrementMessageCount?: boolean;
+    workspaceId?: Id<"workspaces">;
   },
 ) {
   const now = Date.now();
@@ -177,6 +179,7 @@ async function upsertThreadMetadata(
       lastMessagePreview: args.preview,
       messageCount: existing.messageCount + (args.incrementMessageCount ? 1 : 0),
       status: args.status,
+      workspaceId: existing.workspaceId ?? args.workspaceId,
     });
     return;
   }
@@ -184,6 +187,7 @@ async function upsertThreadMetadata(
   await ctx.db.insert("threadMetadata", {
     ownerUserId: args.ownerUserId,
     threadId: args.threadId,
+    workspaceId: args.workspaceId,
     lastActivityAt: now,
     lastMessagePreview: args.preview,
     messageCount: args.incrementMessageCount ? 1 : 0,
@@ -291,6 +295,7 @@ async function savePromptAndScheduleRun(
     content: string;
     mode: "normal" | "deep";
     commandId?: string;
+    workspaceId?: Id<"workspaces">;
   },
 ): Promise<SendResult> {
   const promptPayload = promptPayloadFromCommand(args);
@@ -319,6 +324,7 @@ async function savePromptAndScheduleRun(
     preview,
     status: "streaming",
     incrementMessageCount: true,
+    workspaceId: args.workspaceId,
   });
 
   await updateThreadTitleFromPrompt(ctx, {
@@ -363,11 +369,15 @@ export const startThread = mutation({
     content: v.string(),
     mode: v.union(v.literal("normal"), v.literal("deep")),
     commandId: v.optional(v.string()),
+    workspaceId: v.optional(v.id("workspaces")),
   },
   returns: sendResultValidator,
   handler: async (ctx, args): Promise<SendResult> => {
     const user = await requireCurrentUser(ctx);
     const content = validateContent(args.content);
+    if (args.workspaceId) {
+      await assertWorkspaceOwner(ctx, args.workspaceId, user._id, { requireActive: true });
+    }
     const quota = await checkAndConsumeSendQuota(ctx, {
       ownerUserId: user._id,
       content,
@@ -394,6 +404,7 @@ export const startThread = mutation({
       content,
       mode: args.mode,
       commandId: args.commandId,
+      workspaceId: args.workspaceId,
     });
 
     return result.ok ? { ...result, threadId } : result;

@@ -8,13 +8,42 @@ export default defineSchema(
     threadMetadata: defineTable({
       ownerUserId: v.string(),
       threadId: v.string(),
+      workspaceId: v.optional(v.id("workspaces")),
       lastActivityAt: v.number(),
       lastMessagePreview: v.string(),
       messageCount: v.number(),
       status: v.union(v.literal("idle"), v.literal("streaming"), v.literal("failed")),
     })
       .index("by_thread", ["threadId"])
-      .index("by_owner_activity", ["ownerUserId", "lastActivityAt"]),
+      .index("by_owner_activity", ["ownerUserId", "lastActivityAt"])
+      .index("by_owner_workspace_activity", ["ownerUserId", "workspaceId", "lastActivityAt"]),
+    workspaces: defineTable({
+      ownerUserId: v.string(),
+      name: v.string(),
+      description: v.optional(v.string()),
+      status: v.union(v.literal("active"), v.literal("archived")),
+      archivedAt: v.optional(v.number()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_owner_status_updated", ["ownerUserId", "status", "updatedAt"])
+      .index("by_owner_updated", ["ownerUserId", "updatedAt"]),
+    workspaceFolders: defineTable({
+      ownerUserId: v.string(),
+      workspaceId: v.id("workspaces"),
+      name: v.string(),
+      status: v.union(v.literal("active"), v.literal("deleted")),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+      deletedAt: v.optional(v.number()),
+    })
+      .index("by_owner_workspace_status_updated", [
+        "ownerUserId",
+        "workspaceId",
+        "status",
+        "updatedAt",
+      ])
+      .index("by_owner_workspace_name", ["ownerUserId", "workspaceId", "name"]),
     usageLedger: defineTable({
       ownerUserId: v.string(),
       threadId: v.string(),
@@ -253,9 +282,11 @@ export default defineSchema(
       .index("by_run_round", ["runId", "round"]),
     artifacts: defineTable({
       ownerUserId: v.string(),
-      threadId: v.string(),
+      workspaceId: v.optional(v.id("workspaces")),
+      folderId: v.optional(v.id("workspaceFolders")),
+      threadId: v.optional(v.string()),
       runId: v.optional(runId),
-      type: v.union(
+      type: v.optional(v.union(
         v.literal("research_report"),
         v.literal("markdown_report"),
         v.literal("research_document"),
@@ -266,14 +297,82 @@ export default defineSchema(
         v.literal("html"),
         v.literal("json"),
         v.literal("plain_text"),
-      ),
+      )),
+      kind: v.optional(v.union(v.literal("document"), v.literal("url"))),
       title: v.string(),
+      contentFormat: v.optional(v.union(
+        v.literal("blocks_json"),
+        v.literal("markdown"),
+        v.literal("html"),
+        v.literal("plain"),
+        v.literal("code"),
+        v.literal("json"),
+      )),
+      body: v.optional(v.string()),
+      storageId: v.optional(v.id("_storage")),
+      plainTextPreview: v.optional(v.string()),
+      contextText: v.optional(v.string()),
+      status: v.optional(v.union(v.literal("active"), v.literal("deleted"))),
+      deletedAt: v.optional(v.number()),
       currentVersionId: v.optional(v.id("artifactVersions")),
       createdAt: v.number(),
       updatedAt: v.number(),
     })
       .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"])
-      .index("by_owner_run", ["ownerUserId", "runId"]),
+      .index("by_owner_run", ["ownerUserId", "runId"])
+      .index("by_owner_workspace_status_updated", [
+        "ownerUserId",
+        "workspaceId",
+        "status",
+        "updatedAt",
+      ])
+      .index("by_owner_workspace_folder_status_updated", [
+        "ownerUserId",
+        "workspaceId",
+        "folderId",
+        "status",
+        "updatedAt",
+      ]),
+    artifactDocuments: defineTable({
+      ownerUserId: v.string(),
+      workspaceId: v.id("workspaces"),
+      artifactId: v.id("artifacts"),
+      blocksJson: v.optional(v.string()),
+      markdown: v.optional(v.string()),
+      plainText: v.optional(v.string()),
+      storageId: v.optional(v.id("_storage")),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_owner_artifact", ["ownerUserId", "artifactId"])
+      .index("by_owner_workspace_updated", ["ownerUserId", "workspaceId", "updatedAt"]),
+    artifactUrls: defineTable({
+      ownerUserId: v.string(),
+      workspaceId: v.id("workspaces"),
+      artifactId: v.id("artifacts"),
+      originalUrl: v.string(),
+      normalizedUrl: v.string(),
+      status: v.union(v.literal("pending"), v.literal("ready"), v.literal("failed")),
+      title: v.optional(v.string()),
+      readableText: v.optional(v.string()),
+      storageId: v.optional(v.id("_storage")),
+      failureReason: v.optional(v.string()),
+      extractedAt: v.optional(v.number()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_owner_artifact", ["ownerUserId", "artifactId"])
+      .index("by_owner_workspace_normalized_url", [
+        "ownerUserId",
+        "workspaceId",
+        "normalizedUrl",
+      ])
+      .index("by_owner_workspace_status_updated", [
+        "ownerUserId",
+        "workspaceId",
+        "status",
+        "updatedAt",
+      ]),
     artifactVersions: defineTable({
       ownerUserId: v.string(),
       threadId: v.string(),

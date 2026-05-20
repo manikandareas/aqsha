@@ -10,7 +10,7 @@ The product should move away from making Deep Research the main interaction. Dee
 2. Add documents and URLs as artifacts.
 3. Select artifacts as context for a thread.
 4. Chat with Astra against that context.
-5. Open generated outputs as workspace artifacts in the main content surface.
+5. Continue writing, reading, and organizing artifacts from the workspace surface.
 
 ## Problem
 
@@ -32,9 +32,9 @@ This PRD does not target organizations, classrooms, shared team workspaces, or i
 
 Aqsha becomes a personal education research workspace.
 
-The core object is a user-owned workspace. A workspace contains optional one-level folders and artifacts. Artifacts can be user-authored documents, saved URLs, or generated outputs. A thread can select artifacts from the current workspace as context. Astra uses the current content of those selected artifacts when generating a reply.
+The core object is a user-owned workspace. A workspace contains optional one-level folders and artifacts. Artifacts can be user-authored documents or saved URLs in the MVP. Chat threads may be bound to a workspace when started from that workspace, or global when started outside a workspace. A thread can later select artifacts as explicit context; Astra uses the current content of those selected artifacts when generating a reply.
 
-Deep Research stays in the product, but it should be presented as an advanced mode rather than the only selling point. When Deep Research creates a report, that report becomes a normal workspace artifact shown in the main content surface, not a separate right-panel artifact tab.
+Deep Research stays in the product, but it should be presented as an advanced mode rather than the only selling point. Chat-generated artifacts from Normal or Deep Research are not part of the MVP. When this capability is added after MVP, generated outputs should become normal workspace artifacts shown in the main content surface, not a separate right-panel artifact tab.
 
 Sources remain backend provenance records for generated research and citations. They should not become a public Source Library, a Sources tab, or a user-facing corpus management surface.
 
@@ -45,10 +45,10 @@ Sources remain backend provenance records for generated research and citations. 
 - Allow artifacts to live directly under a workspace or inside one folder.
 - Support document artifacts backed by BlockNote JSON blocks.
 - Support URL artifacts with extracted readable text and fetch status.
-- Let users select artifacts as thread-level context.
-- Show only artifact context selection in the right sidebar on chat pages.
-- Let workspace pages show artifact management and thread selection.
-- Let Deep Research outputs appear as main-surface workspace artifacts.
+- Let users select artifacts as thread-level context after the workspace artifact layer is stable.
+- Show only artifact context selection in the right sidebar on chat pages when context selection is enabled.
+- Let workspace pages show artifact management and workspace-bound thread selection.
+- Support global chat threads that are not bound to any workspace.
 - Keep Normal and Deep mode chat behavior intact.
 - Keep billing, rate limits, streaming, and provenance behavior intact.
 
@@ -63,6 +63,8 @@ Sources remain backend provenance records for generated research and citations. 
 - Sources tab or user-facing source/provenance panel.
 - A separate generated-artifact right panel.
 - User-facing artifact version history.
+- Chat-generated artifacts in the MVP.
+- Artifact search in the MVP.
 - Data migration or backfill from the current prototype schema.
 
 ## Core Concepts
@@ -86,12 +88,12 @@ Artifacts may exist without a folder.
 
 ### Artifact
 
-An artifact is reusable workspace material. The first implementation supports:
+An artifact is reusable workspace material. The MVP supports:
 
 - Document artifact: BlockNote document with JSON blocks, derived plain text, and derived Markdown.
 - URL artifact: saved URL with title, description, readable extracted text, and fetch status.
 
-Existing AI-generated outputs should move into this same flattened artifact model. User-facing version history should be removed. Deep Research reports and other generated outputs are opened and managed as artifacts in the main workspace surface. The right panel may list an artifact only when it is being selected as thread context.
+User-facing version history should be removed. AI-generated outputs are deferred until after MVP; when they return, they should move into this same flattened artifact model and open in the main workspace surface. The right panel may list an artifact only when it is being selected as thread context.
 
 ### Source
 
@@ -114,7 +116,7 @@ The sidebar should prioritize:
 - Workspace switcher.
 - New workspace action.
 - New chat action.
-- Workspace-local threads.
+- Workspace-bound threads where relevant, with global threads still available outside workspace-specific views.
 - Recent or pinned artifacts if useful.
 
 The sidebar must not restore a Sources or Source Library navigation item.
@@ -129,7 +131,8 @@ A workspace page should let the user:
 - Create, rename, and delete one-level folders.
 - Move artifacts into a folder or back to the workspace root.
 - Open an artifact.
-- Start or select a thread scoped to the workspace.
+- Start or select a thread bound to the workspace.
+- Access global threads from the chat panel without forcing them into the workspace.
 
 ### Document Artifact Page
 
@@ -155,13 +158,14 @@ PDF ingestion is intentionally later.
 
 A chat page should let the user:
 
-- See the current workspace.
+- Show the bound workspace when the thread has one, or make clear that the thread is global.
 - Select or remove artifacts as thread context from the right panel.
 - Send Normal mode messages using selected artifacts as bounded context.
 - Start Deep Research as an advanced mode using the same thread and selected context.
-- Open generated Deep Research output as an artifact in the main content surface.
 
 Context selection is thread-level. It should not be sent as trusted ownership metadata from the client. The backend should resolve selected artifact records server-side for every generation.
+
+Threads do not always require a workspace. A thread started from a workspace page should be bound to that workspace. A thread started from a global chat entry point should remain global. Bound threads give the UI a natural default artifact list and workspace history, while global threads keep Astra available without requiring a workspace choice.
 
 ## Functional Requirements
 
@@ -171,7 +175,7 @@ Context selection is thread-level. It should not be sent as trusted ownership me
 - List current user's workspaces.
 - Get a workspace by ID.
 - Rename a workspace.
-- Delete a workspace and its owned folders/context rows.
+- Soft-delete or archive a workspace without hard-deleting its artifacts in the MVP.
 - Prevent access to another user's workspace.
 
 ### Folder Management
@@ -187,7 +191,6 @@ Context selection is thread-level. It should not be sent as trusted ownership me
 - Create document artifact.
 - Update document artifact content and derived text fields.
 - Create URL artifact.
-- Create generated artifact from Normal or Deep Research output.
 - Retry URL extraction.
 - Move artifact between folders or to no folder.
 - Rename artifact.
@@ -199,7 +202,9 @@ Context selection is thread-level. It should not be sent as trusted ownership me
 - Add artifact to a thread's selected context.
 - Remove artifact from selected context.
 - List selected context artifacts for a thread.
-- Enforce that the thread, workspace, and artifacts all belong to the current user.
+- Enforce that the thread and artifacts belong to the current user.
+- If the thread is workspace-bound, default context selection to artifacts from that workspace.
+- If the thread is global, require explicit artifact selection without assuming a workspace.
 - Use the artifact's current content at generation time.
 
 ### Chat Generation
@@ -208,7 +213,6 @@ Context selection is thread-level. It should not be sent as trusted ownership me
 - Selected artifact context should be prepended to the prompt as a bounded context block.
 - The context block should include stable metadata: title, artifact type, URL when relevant, and a clipped text body.
 - The model should be told when selected artifacts are incomplete or failed URL extractions.
-- Generated Normal or Deep Research outputs should be saved as workspace artifacts, then opened in the main content surface.
 - Normal and Deep mode streaming should remain intact.
 
 ## Acceptance Criteria
@@ -222,12 +226,13 @@ Context selection is thread-level. It should not be sent as trusted ownership me
 - A URL artifact stores metadata, readable extracted text, and failure status.
 - A thread can add and remove selected context artifacts.
 - A chat response receives the selected artifact context server-side.
-- Deep Research still works as advanced mode and creates a workspace artifact in the main surface.
+- Workspace-started threads are bound to that workspace.
+- Globally-started threads can exist without a workspace.
 - No `/sources`, Source Library, Sources tab, Sources panel, or Sources sidebar/settings surface is restored.
 
-## Open Decisions
+## Resolved Decisions
 
-- Whether workspace deletion should hard-delete artifacts immediately or use a soft-delete recovery window.
-- Whether generated artifacts should automatically open after creation or require user confirmation.
-- Whether thread creation should always require a workspace or allow a default personal workspace to be auto-created.
-- Whether artifact search should ship in the first implementation or wait until the workspace library becomes large.
+- Workspace deletion uses soft delete/archive behavior for the MVP.
+- Threads use optional workspace binding: workspace-started threads are bound, globally-started threads remain global.
+- Chat-generated artifacts are deferred until after MVP. When added later, bound threads can save generated artifacts into their workspace; global threads should require a destination workspace.
+- Artifact search is deferred until after the workspace library MVP.
