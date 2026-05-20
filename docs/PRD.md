@@ -10,7 +10,7 @@ The product should move away from making Deep Research the main interaction. Dee
 2. Add documents and URLs as artifacts.
 3. Select artifacts as context for a thread.
 4. Chat with Astra against that context.
-5. Promote useful outputs back into artifacts when needed.
+5. Open generated outputs as workspace artifacts in the main content surface.
 
 ## Problem
 
@@ -34,7 +34,9 @@ Aqsha becomes a personal education research workspace.
 
 The core object is a user-owned workspace. A workspace contains optional one-level folders and artifacts. Artifacts can be user-authored documents, saved URLs, or generated outputs. A thread can select artifacts from the current workspace as context. Astra uses the current content of those selected artifacts when generating a reply.
 
-Deep Research stays in the product, but it should be presented as an advanced mode rather than the only selling point. Sources remain backend provenance records for generated research and citations. They should not become a public Source Library or user-facing corpus management surface.
+Deep Research stays in the product, but it should be presented as an advanced mode rather than the only selling point. When Deep Research creates a report, that report becomes a normal workspace artifact shown in the main content surface, not a separate right-panel artifact tab.
+
+Sources remain backend provenance records for generated research and citations. They should not become a public Source Library, a Sources tab, or a user-facing corpus management surface.
 
 ## Goals
 
@@ -44,8 +46,9 @@ Deep Research stays in the product, but it should be presented as an advanced mo
 - Support document artifacts backed by BlockNote JSON blocks.
 - Support URL artifacts with extracted readable text and fetch status.
 - Let users select artifacts as thread-level context.
-- Show context selection in the right sidebar on chat pages.
+- Show only artifact context selection in the right sidebar on chat pages.
 - Let workspace pages show artifact management and thread selection.
+- Let Deep Research outputs appear as main-surface workspace artifacts.
 - Keep Normal and Deep mode chat behavior intact.
 - Keep billing, rate limits, streaming, and provenance behavior intact.
 
@@ -57,6 +60,8 @@ Deep Research stays in the product, but it should be presented as an advanced mo
 - PDF ingestion.
 - Public Source Library.
 - Sources sidebar item, `/sources` route, or Sources settings page.
+- Sources tab or user-facing source/provenance panel.
+- A separate generated-artifact right panel.
 - User-facing artifact version history.
 - Data migration or backfill from the current prototype schema.
 
@@ -86,11 +91,11 @@ An artifact is reusable workspace material. The first implementation supports:
 - Document artifact: BlockNote document with JSON blocks, derived plain text, and derived Markdown.
 - URL artifact: saved URL with title, description, readable extracted text, and fetch status.
 
-Existing AI-generated artifacts should move into this same flattened artifact model. User-facing version history should be removed. The current artifact content at generation time is the context snapshot used by Astra.
+Existing AI-generated outputs should move into this same flattened artifact model. User-facing version history should be removed. Deep Research reports and other generated outputs are opened and managed as artifacts in the main workspace surface. The right panel may list an artifact only when it is being selected as thread context.
 
 ### Source
 
-A source is provenance produced by research tools and citation workflows. Sources are not a user-managed library. They remain backend records attached to messages, runs, artifacts, and citation checks where needed.
+A source is provenance produced by research tools and citation workflows. Sources are not a user-managed library and should not have a user-facing panel. They remain backend records attached to messages, runs, artifacts, and citation checks where needed.
 
 ## UX Requirements
 
@@ -100,7 +105,7 @@ The app keeps a three-panel workspace shape:
 
 - Left sidebar: workspace switcher, primary navigation, thread list, and account controls.
 - Main content: current workspace page, artifact editor, URL detail, or chat thread.
-- Right contextual panel: artifact preview, thread context picker, generated artifacts, and provenance inspection when available.
+- Right contextual panel: thread context artifact picker and selected-context summary.
 
 ### Left Sidebar
 
@@ -154,7 +159,7 @@ A chat page should let the user:
 - Select or remove artifacts as thread context from the right panel.
 - Send Normal mode messages using selected artifacts as bounded context.
 - Start Deep Research as an advanced mode using the same thread and selected context.
-- Inspect generated artifacts and provenance without turning sources into a library.
+- Open generated Deep Research output as an artifact in the main content surface.
 
 Context selection is thread-level. It should not be sent as trusted ownership metadata from the client. The backend should resolve selected artifact records server-side for every generation.
 
@@ -182,6 +187,7 @@ Context selection is thread-level. It should not be sent as trusted ownership me
 - Create document artifact.
 - Update document artifact content and derived text fields.
 - Create URL artifact.
+- Create generated artifact from Normal or Deep Research output.
 - Retry URL extraction.
 - Move artifact between folders or to no folder.
 - Rename artifact.
@@ -202,6 +208,7 @@ Context selection is thread-level. It should not be sent as trusted ownership me
 - Selected artifact context should be prepended to the prompt as a bounded context block.
 - The context block should include stable metadata: title, artifact type, URL when relevant, and a clipped text body.
 - The model should be told when selected artifacts are incomplete or failed URL extractions.
+- Generated Normal or Deep Research outputs should be saved as workspace artifacts, then opened in the main content surface.
 - Normal and Deep mode streaming should remain intact.
 
 ## Acceptance Criteria
@@ -215,12 +222,12 @@ Context selection is thread-level. It should not be sent as trusted ownership me
 - A URL artifact stores metadata, readable extracted text, and failure status.
 - A thread can add and remove selected context artifacts.
 - A chat response receives the selected artifact context server-side.
-- Deep Research still works as advanced mode.
-- No `/sources`, Source Library, or Sources sidebar/settings surface is restored.
+- Deep Research still works as advanced mode and creates a workspace artifact in the main surface.
+- No `/sources`, Source Library, Sources tab, Sources panel, or Sources sidebar/settings surface is restored.
 
 ## Open Decisions
 
 - Whether workspace deletion should hard-delete artifacts immediately or use a soft-delete recovery window.
-- Whether generated artifacts should automatically attach to the active workspace or require user confirmation.
+- Whether generated artifacts should automatically open after creation or require user confirmation.
 - Whether thread creation should always require a workspace or allow a default personal workspace to be auto-created.
 - Whether artifact search should ship in the first implementation or wait until the workspace library becomes large.

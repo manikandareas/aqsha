@@ -12,6 +12,8 @@ Do not restore:
 - Source Library
 - Sources sidebar item
 - Sources settings
+- Sources tab or user-facing provenance panel
+- Separate generated-artifact right panel
 - User-facing artifact version history
 
 ## Current Codebase Findings
@@ -50,7 +52,9 @@ There are no first-class `workspaces`, `workspaceFolders`, `artifactDocuments`, 
 - Attaches tool-created artifacts to assistant messages through `internal.agent.artifacts.attachToMessage`.
 - Keeps billing, usage tracking, rate limiting, prompt commands, thread title generation, and inline run state around the generation path.
 
-Prompt injection for selected artifacts should be added before `astra.streamText` receives the prompt. The client should only toggle selected artifacts through backend mutations; generation should resolve the actual artifact records server-side.
+Prompt injection for selected context artifacts should be added before `astra.streamText` receives the prompt. The client should only toggle selected artifacts through backend mutations; generation should resolve the actual artifact records server-side.
+
+Generated outputs from Normal tools and Deep Research should be saved as workspace artifacts and opened through the main content surface. Do not keep generated artifacts as a separate right-panel surface.
 
 ### Agent artifacts
 
@@ -77,20 +81,20 @@ Keep this as provenance infrastructure. Do not turn it into user-managed library
 
 ### Thread experience UI
 
-`apps/app/features/thread-experience` currently:
+`apps/app/features/thread-experience` currently has the old chat-first panel shape:
 
 - Loads threads, runs, artifacts, and sources through Convex queries.
-- Renders the main chat surface and right artifact/provenance panel.
+- Renders the main chat surface with a right panel that mixes generated artifacts and provenance.
 - Opens the right panel when artifact payloads exist.
-- Keeps the Sources tab as provenance inspection only.
+- Includes provenance UI state that must be removed from the product surface.
 
-The right panel is the correct place to add thread context selection. Keep generated artifacts and provenance inspection in the panel, but add a workspace artifact picker for selected context.
+This is the old UI shape that the new plan should replace. The right panel should become a context artifact picker only. Generated artifacts should open in the main workspace surface. Source/provenance records stay backend-only and should not render as a Sources tab or panel.
 
 ## External Library Notes
 
 ### Convex
 
-Use indexed tables for workspace, folder, artifact, and thread-context reads. Avoid unbounded document arrays; child collections such as folders, artifacts, and selected context rows should be separate tables. Use pagination or explicit limits for artifact lists. Derive ownership from authenticated user records server-side, not from client-provided user IDs.
+Use indexed tables for workspace, folder, artifact, and thread-context reads. Avoid unbounded document arrays; child collections such as folders, artifacts, selected context rows, and provenance records should be separate tables. Use pagination or explicit limits for artifact lists. Derive ownership from authenticated user records server-side, not from client-provided user IDs.
 
 Convex documents have size limits. Store large artifact bodies in Convex storage when they exceed the inline threshold, and keep searchable/context summaries as bounded fields on the artifact-specific tables.
 
@@ -164,7 +168,7 @@ Fields:
 - `threadId?: string`
 - `runId?: Id<"agentRuns">`
 - `kind: "document" | "url" | "generated"`
-- `type: "document" | "url" | "research_report" | "markdown_report" | "research_document" | "source_bundle" | "citation_evidence_view" | "code" | "html" | "json" | "plain_text"`
+- `type: "document" | "url" | "research_report" | "markdown_report" | "research_document" | "code" | "html" | "json" | "plain_text"`
 - `title: string`
 - `contentFormat?: "blocknote" | "markdown" | "html" | "plain" | "code" | "json"`
 - `body?: string`
@@ -402,6 +406,7 @@ Tasks:
 - Add artifact document and URL CRUD functions.
 - Add thread context toggle/list functions.
 - Update generated artifact helpers and message attachment helpers.
+- Ensure generated outputs resolve to workspace artifact routes in the main content surface.
 
 Verification:
 
@@ -467,23 +472,25 @@ Verification:
 - Deep Research can still start and observe the selected context.
 - Existing billing and rate limit behavior still applies.
 
-### Phase 5: Flatten Existing Generated Artifact UX
+### Phase 5: Route Generated Outputs to Main Artifact Surface
 
 Tasks:
 
-- Update generated artifact panel types to no longer require versions.
+- Remove generated-artifact right-panel types and routes.
 - Remove version selector/copy that implies version history.
 - Update artifact create/update tools to write current artifact state.
 - Update `messageArtifacts` usage to link only `artifactId`.
 - Update citation checks to link to `artifactId`.
-- Keep provenance inspection intact through `researchSources`.
+- Route newly generated Normal/Deep artifacts to the workspace artifact detail page in the main surface.
+- Keep provenance persistence intact through `researchSources`, but do not render it as a Sources tab.
 
 Verification:
 
-- Generated artifacts still appear in the right panel.
+- Generated artifacts appear as main-surface workspace artifacts.
 - Updating an artifact replaces current content without exposing version history.
 - Message artifact badges still open the correct artifact.
-- Citation/provenance rows still render in the Sources tab.
+- Citation/provenance rows still persist for audit and citation checks.
+- No Sources tab or user-facing provenance panel is present.
 
 ## Test Plan
 
@@ -506,12 +513,12 @@ Scenario checks:
 - URL artifact stores URL metadata and readable extracted text or failure status.
 - Thread context can add and remove artifacts.
 - Chat response receives selected artifact context.
-- Deep Research still runs as advanced mode.
-- No `/sources`, Source Library, or Sources sidebar/settings surface is restored.
+- Deep Research still runs as advanced mode and creates a workspace artifact in the main surface.
+- No `/sources`, Source Library, Sources tab, Sources panel, or Sources sidebar/settings surface is restored.
 
 ## Risks
 
-- The artifact flattening touches Deep Research, Normal mode tools, message attachment, citation checks, and UI panel types. Treat it as a coordinated schema refactor, not a small table addition.
+- The artifact flattening touches Deep Research, Normal mode tools, message attachment, citation checks, and UI routing. Treat it as a coordinated schema refactor, not a small table addition.
 - BlockNote adds a browser-heavy editor dependency. Keep it client-only and isolate it from route-level Server Components.
 - URL extraction may be slow or fail frequently. Persist explicit status and retry state instead of blocking artifact creation.
 - Prompt context can become too large. Enforce server-side character budgets from the first implementation.
