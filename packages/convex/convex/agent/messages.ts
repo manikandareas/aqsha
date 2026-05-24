@@ -36,7 +36,7 @@ import {
   shouldUsePromptTitle,
   threadTitleFromPrompt,
 } from "./threadTitles";
-import { assertThreadOwner } from "./threads";
+import { assertThreadOwner, tryAssertThreadOwner } from "./threads";
 import { buildPromptCommandPrompt, getPromptCommand } from "./promptCommands";
 import { assertWorkspaceOwner } from "../workspaceAccess";
 import {
@@ -470,7 +470,15 @@ export const list = query({
   },
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
-    await assertThreadOwner(ctx, args.threadId);
+    if (!(await tryAssertThreadOwner(ctx, args.threadId))) {
+      const streams = await syncStreams(ctx, components.agent, args);
+      return {
+        page: [],
+        isDone: true,
+        continueCursor: args.paginationOpts.cursor ?? "",
+        streams,
+      };
+    }
     const paginated = await listUIMessages(ctx, components.agent, args);
     const streams = await syncStreams(ctx, components.agent, args);
     const messageIds = paginated.page

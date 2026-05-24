@@ -34,6 +34,8 @@ export function WorkspaceBoardToolbar({
   onToggleChat,
   chatOpen,
   onClosePanel,
+  showLeftSidebarTrigger,
+  onToggleLeftSidebar,
   showCreateActions = true,
   showWorkspaceSettings = true,
 }: {
@@ -48,6 +50,8 @@ export function WorkspaceBoardToolbar({
   onToggleChat?: () => void;
   chatOpen?: boolean;
   onClosePanel?: () => void;
+  showLeftSidebarTrigger?: boolean;
+  onToggleLeftSidebar?: () => void;
   showCreateActions?: boolean;
   showWorkspaceSettings?: boolean;
 }) {
@@ -57,6 +61,17 @@ export function WorkspaceBoardToolbar({
     <div className={cn("flex shrink-0 flex-col gap-3 border-border bg-background", panelHeaderPaddingClass)}>
       <div className="flex min-w-0 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-1.5">
+          {showLeftSidebarTrigger && onToggleLeftSidebar ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={onToggleLeftSidebar}
+              aria-label="Buka sidebar kiri"
+            >
+              <PanelLeftIcon className="size-3.5" />
+            </Button>
+          ) : null}
           <h1 className="truncate font-heading text-lg font-semibold leading-tight tracking-tight text-foreground sm:text-xl">
             {workspaceName}
           </h1>

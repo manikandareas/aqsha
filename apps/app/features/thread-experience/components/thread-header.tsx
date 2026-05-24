@@ -4,6 +4,7 @@ import { FolderIcon, LayersIcon, PanelLeftIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { panelHeaderPaddingClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
+import { ThreadDeleteActions } from "./thread-actions-menu";
 
 export function ThreadHeader({
   title,
@@ -13,6 +14,8 @@ export function ThreadHeader({
   showContextToggle,
   contextPanelOpen,
   onToggleContextPanel,
+  threadId,
+  onDeleteThread,
 }: {
   title: string;
   workspaceName?: string;
@@ -21,6 +24,8 @@ export function ThreadHeader({
   showContextToggle: boolean;
   contextPanelOpen: boolean;
   onToggleContextPanel: () => void;
+  threadId?: string;
+  onDeleteThread?: () => Promise<void>;
 }) {
   return (
     <div className={cn("flex shrink-0 flex-col gap-2 border-border bg-background", panelHeaderPaddingClass)}>
@@ -42,6 +47,12 @@ export function ThreadHeader({
           </h1>
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          {threadId && onDeleteThread ? (
+            <ThreadDeleteActions
+              description="Thread dan pesannya akan dihapus permanen."
+              onDelete={onDeleteThread}
+            />
+          ) : null}
           {showContextToggle ? (
             <button
               type="button"

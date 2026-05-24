@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type FormEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -117,7 +117,9 @@ function NameDialogContent({
             className="min-h-20 resize-none"
           />
         ) : null}
-        {error ? <p className="text-[12px] font-medium text-destructive">{error}</p> : null}
+        {error ? (
+          <p className="text-[12px] font-medium text-destructive">{error}</p>
+        ) : null}
         <DialogFooter>
           <DialogClose asChild>
             <Button type="button" variant="outline" disabled={isSubmitting}>
@@ -130,68 +132,6 @@ function NameDialogContent({
         </DialogFooter>
       </form>
     </DialogContent>
-  );
-}
-
-export function ConfirmDialog({
-  open,
-  title,
-  description,
-  confirmLabel,
-  children,
-  onOpenChange,
-  onConfirm,
-}: {
-  open: boolean;
-  title: string;
-  description: string;
-  confirmLabel: string;
-  children?: ReactNode;
-  onOpenChange: (open: boolean) => void;
-  onConfirm: () => Promise<unknown>;
-}) {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleConfirm = async () => {
-    setIsSubmitting(true);
-    setError(null);
-    try {
-      await onConfirm();
-      onOpenChange(false);
-    } catch (submitError) {
-      setError(errorMessage(submitError));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
-        {children}
-        {error ? <p className="text-[12px] font-medium text-destructive">{error}</p> : null}
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button type="button" variant="outline" disabled={isSubmitting}>
-              Batal
-            </Button>
-          </DialogClose>
-          <Button
-            type="button"
-            variant="destructive"
-            disabled={isSubmitting}
-            onClick={handleConfirm}
-          >
-            {confirmLabel}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -234,7 +174,9 @@ export function UrlDialog({
       <DialogContent className="gap-4 sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Simpan URL</DialogTitle>
-          <DialogDescription>Tambahkan URL sebagai artifact workspace.</DialogDescription>
+          <DialogDescription>
+            Tambahkan URL sebagai artifact workspace.
+          </DialogDescription>
         </DialogHeader>
         <form className="grid gap-3" onSubmit={handleSubmit}>
           <Input
@@ -249,7 +191,9 @@ export function UrlDialog({
             onChange={(event) => setTitle(event.target.value)}
             placeholder="Judul opsional"
           />
-          {error ? <p className="text-[12px] font-medium text-destructive">{error}</p> : null}
+          {error ? (
+            <p className="text-[12px] font-medium text-destructive">{error}</p>
+          ) : null}
           <DialogFooter>
             <DialogClose asChild>
               <Button type="button" variant="outline" disabled={isSubmitting}>

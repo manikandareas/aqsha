@@ -31,7 +31,8 @@ import {
   TrendingUpIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { NameDialog } from "@/features/workspaces/components/workspace-dialogs";
 import {
   type ComponentProps,
   type ReactNode,
@@ -82,7 +83,7 @@ export function AppSidebar({
   threads,
   selectedThreadId,
   onCreateThread,
-  onCreateWorkspace,
+  createWorkspace,
   ...props
 }: ComponentProps<typeof Sidebar> & {
   viewer: Viewer | undefined;
@@ -91,10 +92,12 @@ export function AppSidebar({
   threads: ThreadSummary[];
   selectedThreadId?: string;
   onCreateThread: () => void;
-  onCreateWorkspace?: () => void;
+  createWorkspace?: (args: { name: string; description?: string }) => Promise<unknown>;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [commandOpen, setCommandOpen] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const { isMobile, setOpen, setOpenMobile } = useSidebar();
   const sortedWorkspaces = useMemo(
     () =>
@@ -113,7 +116,17 @@ export function AppSidebar({
   const isHomeActive = pathname === "/" && !selectedThreadId;
   const isWorkspaceRoute = pathname.startsWith("/workspaces");
   const hasSidebarItems =
-    sortedWorkspaces.length > 0 || sortedThreads.length > 0;
+    sortedWorkspaces.length > 0 || sortedThreads.length > 0 || Boolean(createWorkspace);
+  const workspaceSectionAction = createWorkspace ? (
+    <button
+      type="button"
+      onClick={() => setCreateDialogOpen(true)}
+      className="flex size-5 shrink-0 items-center justify-center rounded-[5px] text-muted-foreground/80 transition-colors hover:bg-muted hover:text-foreground"
+      aria-label="Workspace baru"
+    >
+      <PlusIcon className="size-3" />
+    </button>
+  ) : null;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -134,7 +147,7 @@ export function AppSidebar({
 
   const runCreateWorkspace = () => {
     setCommandOpen(false);
-    onCreateWorkspace?.();
+    setCreateDialogOpen(true);
   };
 
   const closeSidebar = () => {
@@ -192,20 +205,22 @@ export function AppSidebar({
                 </div>
               ) : (
                 <>
-                  {sortedWorkspaces.length > 0 ? (
-                    <SidebarSection label="Workspaces" first>
-                      <SidebarMenu className="min-w-0 gap-1 overflow-hidden">
-                        {sortedWorkspaces.map((workspace) => (
-                          <RecentWorkspaceRow
-                            key={workspace._id}
-                            workspace={workspace}
-                            active={
-                              isWorkspaceRoute &&
-                              workspace._id === selectedWorkspaceId
-                            }
-                          />
-                        ))}
-                      </SidebarMenu>
+                  {sortedWorkspaces.length > 0 || createWorkspace ? (
+                    <SidebarSection label="Workspaces" first action={workspaceSectionAction}>
+                      {sortedWorkspaces.length > 0 ? (
+                        <SidebarMenu className="min-w-0 gap-1 overflow-hidden">
+                          {sortedWorkspaces.map((workspace) => (
+                            <RecentWorkspaceRow
+                              key={workspace._id}
+                              workspace={workspace}
+                              active={
+                                isWorkspaceRoute &&
+                                workspace._id === selectedWorkspaceId
+                              }
+                            />
+                          ))}
+                        </SidebarMenu>
+                      ) : null}
                     </SidebarSection>
                   ) : null}
                   {sortedThreads.length > 0 ? (
@@ -232,7 +247,7 @@ export function AppSidebar({
             user={viewer}
             workspaces={workspaces}
             activeWorkspaceId={selectedWorkspaceId}
-            onCreateWorkspace={onCreateWorkspace}
+            onCreateWorkspace={createWorkspace ? () => setCreateDialogOpen(true) : undefined}
           />
         </SidebarFooter>
       </Sidebar>
@@ -248,7 +263,7 @@ export function AppSidebar({
               <MessageSquareIcon className="size-4" />
               Chat baru
             </CommandItem>
-            {onCreateWorkspace ? (
+            {createWorkspace ? (
               <CommandItem onSelect={runCreateWorkspace}>
                 <LayoutGridIcon className="size-4" />
                 Workspace baru
@@ -293,6 +308,20 @@ export function AppSidebar({
           </>
         ) : null}
       </CommandDialog>
+      {createWorkspace ? (
+        <NameDialog
+          open={createDialogOpen}
+          onOpenChange={setCreateDialogOpen}
+          title="Workspace baru"
+          description="Buat area riset personal."
+          submitLabel="Buat"
+          descriptionField
+          onSubmit={async (value) => {
+            const workspaceId = await createWorkspace(value);
+            router.push(`/workspaces/${String(workspaceId)}`);
+          }}
+        />
+      ) : null}
     </>
   );
 }
@@ -353,20 +382,25 @@ function SidebarSection({
   label,
   children,
   first,
+  action,
 }: {
   label: string;
   children: ReactNode;
   first?: boolean;
+  action?: ReactNode;
 }) {
   return (
     <div className="min-w-0 overflow-hidden">
       <div
         className={cn(
-          "px-0.5 pb-1.5 text-[11px] font-medium tracking-[-0.01em] text-muted-foreground/75",
+          "flex items-center justify-between gap-1 px-0.5 pb-1.5",
           first ? "pt-0" : "pt-1",
         )}
       >
-        {label}
+        <span className="text-[11px] font-medium tracking-[-0.01em] text-muted-foreground/75">
+          {label}
+        </span>
+        {action}
       </div>
       {children}
     </div>

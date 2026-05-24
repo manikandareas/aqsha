@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { isAuthenticated } from "@/lib/auth-server";
-import { WorkspaceDetailPage } from "@/features/workspaces/pages/workspace-detail-page";
+import { WorkspaceDetailClient } from "./workspace-detail-client";
 
 export default async function WorkspacePage({
   params,
@@ -13,5 +13,5 @@ export default async function WorkspacePage({
 
   const { workspaceId } = await params;
 
-  return <WorkspaceDetailPage workspaceId={workspaceId} />;
+  return <WorkspaceDetailClient workspaceId={workspaceId} />;
 }

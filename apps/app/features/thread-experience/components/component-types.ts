@@ -1,4 +1,4 @@
-import type { WorkspaceDriveData } from "@/features/workspaces/api/use-workspaces-data";
+import type { ReactNode } from "react";
 import type { ArtifactId, WorkspaceId } from "@/lib/convex-refs";
 import type {
   RateStatus,
@@ -6,7 +6,6 @@ import type {
   ResearchRun,
   ResearchSource,
   SendResult,
-  SourceFocus,
 } from "../types";
 
 export type { ArtifactId, WorkspaceId };
@@ -73,7 +72,6 @@ export type ThreadShellLayoutProps = {
   threads: ThreadSummary[];
   selectedThreadId?: string;
   onCreateThread: () => void;
-  hasResearchPayload: boolean;
   title: string;
   threadId?: string;
   selectedThread:
@@ -84,23 +82,15 @@ export type ThreadShellLayoutProps = {
     | null
     | undefined;
   workspaces?: Array<{ _id: string; name: string }>;
-  workspaceDrive?: WorkspaceDriveData;
   rateStatus: RateStatus | undefined;
   startThread: StartThread;
   sendMessage: SendMessage;
-  contextCandidateArtifacts: ContextCandidateArtifact[];
-  selectedContextArtifacts: SelectedContextArtifact[];
-  toggleThreadContextArtifact: ToggleThreadContextArtifact;
   runs: ResearchRun[];
   artifacts: ResearchArtifact[];
   sources: ResearchSource[];
-  activeArtifact: ResearchArtifact | null;
-  activePanelTab: "artifacts" | "sources";
-  sourceFocus: SourceFocus | null;
   rightPanelOpen: boolean;
   onRightPanelOpenChange: (open: boolean) => void;
-  onOpenArtifact: (artifactId: string) => void;
-  onOpenSources: (focus?: SourceFocus) => void;
-  onPanelTabChange: (tab: "artifacts" | "sources") => void;
   onCancelRun: (runId: string) => Promise<unknown>;
+  onDeleteThread?: () => Promise<void>;
+  sidePanel?: ReactNode;
 };

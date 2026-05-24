@@ -1,10 +1,9 @@
 "use client";
 
-import { type CSSProperties, type ReactNode, useState } from "react";
+import { type CSSProperties, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { NameDialog } from "./workspace-dialogs";
 
 export function WorkspaceShell({
   viewer,
@@ -37,7 +36,6 @@ export function WorkspaceShell({
   children: ReactNode;
 }) {
   const router = useRouter();
-  const [createOpen, setCreateOpen] = useState(false);
 
   return (
     <SidebarProvider
@@ -55,23 +53,11 @@ export function WorkspaceShell({
         selectedWorkspaceId={selectedWorkspaceId}
         threads={threads}
         onCreateThread={() => router.push("/")}
-        onCreateWorkspace={() => setCreateOpen(true)}
+        createWorkspace={createWorkspace}
       />
       <SidebarInset className="min-h-svh bg-background text-foreground">
         {children}
       </SidebarInset>
-      <NameDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        title="Workspace baru"
-        description="Buat area riset personal."
-        submitLabel="Buat"
-        descriptionField
-        onSubmit={async (value) => {
-          const workspaceId = await createWorkspace(value);
-          router.push(`/workspaces/${String(workspaceId)}`);
-        }}
-      />
     </SidebarProvider>
   );
 }

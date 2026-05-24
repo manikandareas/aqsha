@@ -2,28 +2,22 @@
 
 import { useMemo } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
-import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar";
-import { panelSurfaceClass } from "@/lib/panel-surface";
-import { cn } from "@/lib/utils";
+import { DetailSplitLayout } from "@/components/layout/detail-split-layout";
+import { useSidebar } from "@/components/ui/sidebar";
 import { ChatThreadState } from "./chat-thread-state";
 import type { ThreadShellLayoutProps } from "./component-types";
 import { AccessDeniedState } from "./home-states";
-import { ThreadContextPanel } from "./thread-context-panel";
 import { ThreadHeader } from "./thread-header";
 
 export function ThreadShellLayout({
   viewer,
   workspaces = [],
-  workspaceDrive,
   threads,
   selectedThreadId,
   onCreateThread,
   title,
   threadId,
   selectedThread,
-  selectedContextArtifacts,
-  contextCandidateArtifacts,
-  toggleThreadContextArtifact,
   rateStatus,
   startThread,
   sendMessage,
@@ -32,9 +26,9 @@ export function ThreadShellLayout({
   sources,
   rightPanelOpen,
   onRightPanelOpenChange,
-  onOpenArtifact,
-  onOpenSources,
   onCancelRun,
+  onDeleteThread,
+  sidePanel,
 }: ThreadShellLayoutProps) {
   const leftSidebar = useSidebar();
   const isLeftSidebarOpen = leftSidebar.isMobile
@@ -47,7 +41,7 @@ export function ThreadShellLayout({
   const workspaceName = selectedThread?.workspaceId
     ? (workspaceNameById.get(selectedThread.workspaceId) ?? "Workspace")
     : undefined;
-  const showContextPanel = Boolean(threadId && selectedThread !== null);
+  const showContextPanel = Boolean(sidePanel && threadId && selectedThread !== null);
 
   return (
     <>
@@ -59,19 +53,12 @@ export function ThreadShellLayout({
         selectedThreadId={selectedThreadId}
         onCreateThread={onCreateThread}
       />
-      <SidebarInset className="flex h-svh min-h-0 min-w-0 flex-col overflow-hidden bg-background">
-        <SidebarProvider
-          open={rightPanelOpen}
-          onOpenChange={onRightPanelOpenChange}
-          className="flex min-h-0 min-h-svh flex-1 flex-col overflow-hidden bg-background p-3"
-        >
-          <div
-            className={cn(
-              "grid min-h-0 w-full flex-1 gap-3",
-              showContextPanel && rightPanelOpen ? "md:grid-cols-2" : "md:grid-cols-1",
-            )}
-          >
-            <SidebarInset className={panelSurfaceClass}>
+      <div className="flex h-svh min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
+        <DetailSplitLayout
+          sideOpen={showContextPanel && rightPanelOpen}
+          onSideOpenChange={onRightPanelOpenChange}
+          main={
+            <>
               <ThreadHeader
                 title={title}
                 workspaceName={workspaceName}
@@ -80,6 +67,8 @@ export function ThreadShellLayout({
                 showContextToggle={showContextPanel}
                 contextPanelOpen={rightPanelOpen}
                 onToggleContextPanel={() => onRightPanelOpenChange(!rightPanelOpen)}
+                threadId={threadId}
+                onDeleteThread={onDeleteThread}
               />
               <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                 {threadId && selectedThread === null ? (
@@ -95,28 +84,16 @@ export function ThreadShellLayout({
                     onSend={sendMessage}
                     runs={runs}
                     artifacts={artifacts}
-                    onOpenArtifact={onOpenArtifact}
                     sources={sources}
-                    onOpenSources={onOpenSources}
                     onCancelRun={onCancelRun}
                   />
                 )}
               </main>
-            </SidebarInset>
-            {showContextPanel ? (
-              <ThreadContextPanel
-                threadId={threadId!}
-                workspaceId={selectedThread?.workspaceId}
-                workspaceName={workspaceName}
-                workspaceDrive={workspaceDrive}
-                candidates={contextCandidateArtifacts}
-                selected={selectedContextArtifacts}
-                onToggle={toggleThreadContextArtifact}
-              />
-            ) : null}
-          </div>
-        </SidebarProvider>
-      </SidebarInset>
+            </>
+          }
+          side={sidePanel}
+        />
+      </div>
     </>
   );
 }

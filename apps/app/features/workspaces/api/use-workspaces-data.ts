@@ -129,6 +129,7 @@ export function useWorkspaceDetailData(workspaceId: string) {
     removeArtifact: drive.removeArtifact,
     startThread: useMutation(api.agent.messages.startThread),
     addThreadContextArtifacts: useMutation(api.agent.threadContext.addMany),
+    removeThread: useMutation(api.agent.threads.remove),
   };
 }
 

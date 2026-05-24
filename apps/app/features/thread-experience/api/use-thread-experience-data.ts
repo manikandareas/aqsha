@@ -1,7 +1,7 @@
 "use client";
 
 import { api } from "@aqsha/convex/api";
-import { toArtifactId } from "@/lib/convex-refs";
+import { toAgentRunId } from "@/lib/convex-refs";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import {
   optimisticallyInsertUserMessage,
@@ -32,16 +32,14 @@ export function useThreadExperienceData(threadId?: string) {
     api.agent.threads.get,
     isAuthenticated && threadId ? { threadId } : "skip",
   );
+  const threadQueriesEnabled = Boolean(isAuthenticated && threadId && selectedThread !== null);
   const selectedContextArtifacts = useQuery(
     api.agent.threadContext.listForThread,
-    isAuthenticated && threadId ? { threadId } : "skip",
+    threadQueriesEnabled ? { threadId: threadId! } : "skip",
   );
   const contextCandidateArtifacts = useQuery(
     api.artifacts.listForContextPicker,
-    isAuthenticated &&
-      threadId &&
-      selectedThread != null &&
-      !selectedThread.workspaceId
+    threadQueriesEnabled && !selectedThread?.workspaceId
       ? { workspaceId: undefined }
       : "skip",
   );
@@ -61,19 +59,28 @@ export function useThreadExperienceData(threadId?: string) {
   );
   const runs = useQuery(
     api.agent.deepResearch.listForThread,
-    isAuthenticated && threadId ? { threadId } : "skip",
+    threadQueriesEnabled ? { threadId: threadId! } : "skip",
   ) as ResearchRun[] | undefined;
   const artifacts = useQuery(
     api.agent.artifacts.list,
-    isAuthenticated && threadId ? { threadId } : "skip",
+    threadQueriesEnabled ? { threadId: threadId! } : "skip",
   ) as ResearchArtifact[] | undefined;
   const sources = useQuery(
     api.agent.sources.listForThread,
-    isAuthenticated && threadId ? { threadId } : "skip",
+    threadQueriesEnabled ? { threadId: threadId! } : "skip",
   ) as ResearchSource[] | undefined;
-  const cancelRun = useMutation(api.agent.deepResearch.cancel);
+  const cancelRunMutation = useMutation(api.agent.deepResearch.cancel);
   const retryRun = useMutation(api.agent.deepResearch.retry);
   const toggleThreadContextArtifact = useMutation(api.agent.threadContext.toggle);
+  const removeThread = useMutation(api.agent.threads.remove);
+
+  const cancelRun = async (runId: string) => {
+    try {
+      return await cancelRunMutation({ runId: toAgentRunId(runId) });
+    } catch (error) {
+      console.error("Failed to cancel deep research run", error);
+    }
+  };
 
   return {
     isAuthenticated,
@@ -92,13 +99,6 @@ export function useThreadExperienceData(threadId?: string) {
     cancelRun,
     retryRun,
     toggleThreadContextArtifact,
+    removeThread,
   };
-}
-
-export function useActiveArtifact(artifactId: string | null) {
-  const { isAuthenticated } = useConvexAuth();
-  return useQuery(
-    api.agent.artifacts.get,
-    isAuthenticated && artifactId ? { artifactId: toArtifactId(artifactId) } : "skip",
-  ) as ResearchArtifact | null | undefined;
 }

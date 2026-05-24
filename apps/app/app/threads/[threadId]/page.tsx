@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
-import { ThreadShell } from "@/components/thread-shell";
 import { isAuthenticated } from "@/lib/auth-server";
+import { ThreadDetailShell } from "@/features/thread-experience/components/thread-detail-shell";
 
 export default async function ThreadPage({
   params,
@@ -13,5 +13,5 @@ export default async function ThreadPage({
 
   const { threadId } = await params;
 
-  return <ThreadShell threadId={threadId} />;
+  return <ThreadDetailShell threadId={threadId} />;
 }

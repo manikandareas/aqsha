@@ -34,7 +34,7 @@ import {
   sourceDomain,
   type SourceQuality,
 } from "./sourceQuality";
-import { assertThreadOwner } from "./threads";
+import { assertThreadOwner, tryAssertThreadOwner } from "./threads";
 import { researchWorkflow } from "./workflow";
 
 const DEEP_MODEL = process.env.AQSHA_DEEP_MODEL ?? "gpt-5.5";
@@ -269,7 +269,9 @@ export const listForThread = query({
   args: { threadId: v.string() },
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
-    await assertThreadOwner(ctx, args.threadId);
+    if (!(await tryAssertThreadOwner(ctx, args.threadId))) {
+      return [];
+    }
     const runs = await ctx.db
       .query("agentRuns")
       .withIndex("by_owner_thread_created", (q) =>

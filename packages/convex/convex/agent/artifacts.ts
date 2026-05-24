@@ -7,7 +7,7 @@ import {
   type QueryCtx,
 } from "../_generated/server";
 import { requireCurrentUser } from "../auth";
-import { assertThreadOwner } from "./threads";
+import { tryAssertThreadOwner } from "./threads";
 
 const ARTIFACT_INLINE_LIMIT = 800_000;
 
@@ -56,7 +56,9 @@ export const list = query({
   args: { threadId: v.string(), runId: v.optional(v.id("agentRuns")) },
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
-    await assertThreadOwner(ctx, args.threadId);
+    if (!(await tryAssertThreadOwner(ctx, args.threadId))) {
+      return [];
+    }
     if (args.runId) {
       await assertRunOwner(ctx, args.runId, user._id);
       return await ctx.db

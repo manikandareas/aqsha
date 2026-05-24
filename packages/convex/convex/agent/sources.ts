@@ -3,7 +3,7 @@ import { internalMutation, query } from "../_generated/server";
 import { requireCurrentUser } from "../auth";
 import { sourceCandidateValidator, type SourceCandidate } from "./sourceCandidates";
 import { canonicalSourceKey } from "./sourceQuality";
-import { assertThreadOwner } from "./threads";
+import { tryAssertThreadOwner } from "./threads";
 
 type SourceUsage = "candidate" | "cited" | "accepted" | "rejected";
 
@@ -30,7 +30,9 @@ export const listForThread = query({
   args: { threadId: v.string() },
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
-    await assertThreadOwner(ctx, args.threadId);
+    if (!(await tryAssertThreadOwner(ctx, args.threadId))) {
+      return [];
+    }
     const rows = await ctx.db
       .query("researchSources")
       .withIndex("by_owner_thread", (q) =>

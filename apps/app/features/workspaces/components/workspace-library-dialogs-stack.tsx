@@ -9,7 +9,8 @@ import {
   type WorkspaceFolderId,
   type WorkspaceId,
 } from "@/lib/convex-refs";
-import { ConfirmDialog, NameDialog, UrlDialog } from "./workspace-dialogs";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { NameDialog, UrlDialog } from "./workspace-dialogs";
 import type { useWorkspaceLibraryDialogState } from "../hooks/use-workspace-library-dialogs";
 
 type DialogState = ReturnType<typeof useWorkspaceLibraryDialogState>;

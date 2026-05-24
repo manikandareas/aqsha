@@ -12,9 +12,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useWorkspaceIndexData } from "../api/use-workspaces-data";
 import { WorkspaceShell } from "../components/workspace-shell";
-import { ConfirmDialog, NameDialog } from "../components/workspace-dialogs";
+import { NameDialog } from "../components/workspace-dialogs";
 
 export function WorkspacesIndexPage() {
   const {

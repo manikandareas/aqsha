@@ -3,30 +3,25 @@
 import { api } from "@aqsha/convex/api";
 import { useQuery } from "convex/react";
 import { FileTextIcon, FolderTreeIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
 import {
   Message,
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message";
-import { useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import type {
   ChatMessage,
   PromptCommandMetadata,
   ResearchArtifact,
-  SourceFocus,
 } from "../types";
 
 export function MessageRow({
   message,
-  onOpenArtifact,
   sourceCount = 0,
-  onOpenSources,
 }: {
   message: ChatMessage;
-  onOpenArtifact: (artifactId: string) => void;
   sourceCount?: number;
-  onOpenSources: (focus?: SourceFocus) => void;
 }) {
   const isUser = message.role === "user";
   const text = getMessageText(message);
@@ -65,15 +60,8 @@ export function MessageRow({
           Sedang menulis
         </span>
       ) : null}
-      <MessageArtifacts
-        links={messageArtifacts ?? []}
-        onOpenArtifact={onOpenArtifact}
-      />
-      <MessageSourceAction
-        messageId={message.id}
-        sourceCount={sourceCount}
-        onOpenSources={onOpenSources}
-      />
+      <MessageArtifacts links={messageArtifacts ?? []} />
+      <MessageSourceCount sourceCount={sourceCount} />
     </Message>
   );
 }
@@ -82,78 +70,59 @@ type MessageArtifactLink = {
   artifactId: string;
   versionId: string;
   relation: "created" | "updated" | "referenced";
-  artifact: ResearchArtifact;
+  artifact: ResearchArtifact & { workspaceId?: string };
   version: NonNullable<ResearchArtifact["version"]>;
 };
 
-function MessageArtifacts({
-  links,
-  onOpenArtifact,
-}: {
-  links: MessageArtifactLink[];
-  onOpenArtifact: (artifactId: string) => void;
-}) {
-  const { setOpen, setOpenMobile } = useSidebar();
+function MessageArtifacts({ links }: { links: MessageArtifactLink[] }) {
+  const router = useRouter();
   if (links.length === 0) return null;
-
-  const handleOpen = (artifactId: string) => {
-    onOpenArtifact(artifactId);
-    setOpen(true);
-    setOpenMobile(true);
-  };
 
   return (
     <div className="mt-3 grid gap-2">
-      {links.map((link) => (
-        <button
-          key={`${link.artifactId}-${link.versionId}`}
-          type="button"
-          onClick={() => handleOpen(link.artifactId)}
-          className="flex max-w-xl items-center gap-3 rounded-[10px] border border-[var(--lavender-soft-border)] bg-[var(--lavender-soft)] px-3 py-2 text-left text-[13px] text-[var(--lavender)] transition-colors hover:bg-[var(--lavender-soft)]/75"
-        >
-          <FileTextIcon className="size-4 shrink-0" />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate font-semibold">
-              {link.artifact.title}
+      {links.map((link) => {
+        const workspaceId = link.artifact.workspaceId;
+        const canOpen = Boolean(workspaceId);
+
+        return (
+          <button
+            key={`${link.artifactId}-${link.versionId}`}
+            type="button"
+            disabled={!canOpen}
+            onClick={() => {
+              if (!workspaceId) return;
+              router.push(`/workspaces/${workspaceId}/artifacts/${link.artifactId}`);
+            }}
+            className={cn(
+              "flex max-w-xl items-center gap-3 rounded-[10px] border border-[var(--lavender-soft-border)] bg-[var(--lavender-soft)] px-3 py-2 text-left text-[13px] text-[var(--lavender)] transition-colors",
+              canOpen ? "hover:bg-[var(--lavender-soft)]/75" : "cursor-default opacity-70",
+            )}
+          >
+            <FileTextIcon className="size-4 shrink-0" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-semibold">
+                {link.artifact.title}
+              </span>
+              <span className="block text-[11px] font-medium opacity-80">
+                {link.relation === "updated" ? "Diperbarui" : "Artefak"} · v
+                {link.version.versionNumber}
+              </span>
             </span>
-            <span className="block text-[11px] font-medium opacity-80">
-              {link.relation === "updated" ? "Diperbarui" : "Artefak"} · v
-              {link.version.versionNumber}
-            </span>
-          </span>
-        </button>
-      ))}
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-function MessageSourceAction({
-  messageId,
-  sourceCount,
-  onOpenSources,
-}: {
-  messageId: string;
-  sourceCount: number;
-  onOpenSources: (focus?: SourceFocus) => void;
-}) {
-  const { setOpen, setOpenMobile } = useSidebar();
+function MessageSourceCount({ sourceCount }: { sourceCount: number }) {
   if (sourceCount <= 0) return null;
 
-  const handleOpen = () => {
-    onOpenSources({ type: "message", messageId });
-    setOpen(true);
-    setOpenMobile(true);
-  };
-
   return (
-    <button
-      type="button"
-      onClick={handleOpen}
-      className="mt-2 inline-flex w-fit items-center gap-1.5 rounded-[8px] border border-border/70 bg-muted/35 px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-    >
+    <span className="mt-2 inline-flex w-fit items-center gap-1.5 rounded-[8px] border border-border/70 bg-muted/35 px-2 py-1 text-[11px] font-medium text-muted-foreground">
       <FolderTreeIcon className="size-3.5" />
       <span>{sourceCount} sumber</span>
-    </button>
+    </span>
   );
 }
 

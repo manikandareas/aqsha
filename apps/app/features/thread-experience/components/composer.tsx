@@ -62,6 +62,7 @@ export function Composer({
   onCancelRun,
   onStartThread,
   onSend,
+  onThreadCreated,
 }: {
   threadId?: string;
   disabled: boolean;
@@ -70,6 +71,8 @@ export function Composer({
   onSend: SendMessage;
   activeRun?: ResearchRun;
   onCancelRun?: (runId: string) => Promise<unknown>;
+  /** When set, new threads stay in place instead of navigating to `/threads/...`. */
+  onThreadCreated?: (threadId: string) => void;
 }) {
   const [content, setContent] = useState("");
   const [selectedCommand, setSelectedCommand] = useState<PromptCommand | null>(null);
@@ -163,7 +166,11 @@ export function Composer({
       }
       setBillingBlock(null);
       if (!threadId && result.threadId) {
-        router.push(`/threads/${result.threadId}`);
+        if (onThreadCreated) {
+          onThreadCreated(result.threadId);
+        } else {
+          router.push(`/threads/${result.threadId}`);
+        }
       }
     } finally {
       setIsSending(false);

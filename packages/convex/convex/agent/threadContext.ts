@@ -58,28 +58,27 @@ async function getThreadOwner(ctx: ThreadContextCtx, threadId: string) {
   const thread = await ctx.runQuery(components.agent.threads.getThread, {
     threadId,
   });
-  if (!thread) {
-    throw new ConvexError("Thread not found");
+  if (!thread?.userId) {
+    return null;
   }
   return thread.userId;
+}
+
+async function isOwnedThread(ctx: ThreadContextCtx, args: {
+  threadId: string;
+  ownerUserId: string;
+}) {
+  const ownerUserId = await getThreadOwner(ctx, args.threadId);
+  return ownerUserId === args.ownerUserId;
 }
 
 async function assertOwnedThread(ctx: ThreadContextCtx, args: {
   threadId: string;
   ownerUserId: string;
 }) {
-  const ownerUserId = await getThreadOwner(ctx, args.threadId);
-  if (ownerUserId !== args.ownerUserId) {
+  if (!(await isOwnedThread(ctx, args))) {
     throw new ConvexError("Thread not found");
   }
-}
-
-async function getThreadWorkspaceId(ctx: ThreadContextCtx, threadId: string) {
-  const metadata = await ctx.db
-    .query("threadMetadata")
-    .withIndex("by_thread", (q) => q.eq("threadId", threadId))
-    .unique();
-  return metadata?.workspaceId;
 }
 
 async function getSelectedRow(ctx: ThreadContextCtx, args: {
@@ -328,7 +327,9 @@ export const listForThread = query({
   returns: v.array(selectedContextValidator),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
-    await assertOwnedThread(ctx, { threadId: args.threadId, ownerUserId: user._id });
+    if (!(await isOwnedThread(ctx, { threadId: args.threadId, ownerUserId: user._id }))) {
+      return [];
+    }
     const rows = await listSelectedRows(ctx, {
       ownerUserId: user._id,
       threadId: args.threadId,

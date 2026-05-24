@@ -18,7 +18,6 @@ import type {
   ResearchArtifact,
   ResearchRun,
   ResearchSource,
-  SourceFocus,
 } from "../types";
 import {
   entryGapClass,
@@ -45,10 +44,9 @@ export function ChatThreadState({
   onSend,
   runs,
   artifacts,
-  onOpenArtifact,
   sources,
-  onOpenSources,
   onCancelRun,
+  compact = false,
 }: {
   threadId?: string;
   isLoading: boolean;
@@ -59,10 +57,9 @@ export function ChatThreadState({
   onSend: SendMessage;
   runs: ResearchRun[];
   artifacts: ResearchArtifact[];
-  onOpenArtifact: (artifactId: string) => void;
   sources: ResearchSource[];
-  onOpenSources: (focus?: SourceFocus) => void;
   onCancelRun: (runId: string) => Promise<unknown>;
+  compact?: boolean;
 }) {
   const { isAuthenticated } = useConvexAuth();
   const messages = useUIMessages(
@@ -118,14 +115,11 @@ export function ChatThreadState({
                           run={entry.run}
                           artifacts={artifacts ?? []}
                           sourceCount={sourceCounts.byRunId.get(entry.run._id) ?? 0}
-                          onOpenSources={onOpenSources}
                         />
                       ) : (
                         <MessageRow
                           message={entry.message}
-                          onOpenArtifact={onOpenArtifact}
                           sourceCount={sourceCounts.byMessageId.get(entry.message.id) ?? 0}
-                          onOpenSources={onOpenSources}
                         />
                       )}
                     </div>
@@ -135,7 +129,7 @@ export function ChatThreadState({
             ) : messages.status === "LoadingFirstPage" && threadId ? (
               <CenteredLoading label="Memuat pesan..." />
             ) : (
-              <ConversationEmptyState className="min-h-[48svh]">
+              <ConversationEmptyState className={compact ? "min-h-[24svh]" : "min-h-[48svh]"}>
                 <EmptyThreadCopy title={title} />
               </ConversationEmptyState>
             )}
@@ -146,7 +140,7 @@ export function ChatThreadState({
       <div
         className={cn("shrink-0 min-w-0 overflow-x-hidden bg-background", panelComposerPaddingClass)}
       >
-        <div className="mx-auto w-full max-w-3xl">
+        <div className={cn("mx-auto w-full", compact ? "max-w-none" : "max-w-3xl")}>
           <Composer
             threadId={threadId}
             disabled={isLoading}

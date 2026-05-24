@@ -58,16 +58,24 @@ async function summarizeThread(ctx: QueryCtx, thread: {
   };
 }
 
-export async function assertThreadOwner(ctx: ThreadCtx, threadId: string) {
+export async function tryAssertThreadOwner(ctx: ThreadCtx, threadId: string) {
   const user = await requireCurrentUser(ctx);
   const thread = await ctx.runQuery(components.agent.threads.getThread, {
     threadId,
   });
 
   if (!thread || thread.userId !== user._id) {
-    throw new ConvexError("Thread not found");
+    return null;
   }
 
+  return thread;
+}
+
+export async function assertThreadOwner(ctx: ThreadCtx, threadId: string) {
+  const thread = await tryAssertThreadOwner(ctx, threadId);
+  if (!thread) {
+    throw new ConvexError("Thread not found");
+  }
   return thread;
 }
 
@@ -187,5 +195,65 @@ export const get = query({
     }
 
     return await summarizeThread(ctx, thread);
+  },
+});
+
+async function deleteThreadAppData(
+  ctx: MutationCtx,
+  ownerUserId: string,
+  threadId: string,
+) {
+  const metadata = await getThreadMetadata(ctx, threadId);
+  if (metadata && metadata.ownerUserId === ownerUserId) {
+    await ctx.db.delete("threadMetadata", metadata._id);
+  }
+
+  const contextRows = await ctx.db
+    .query("threadContextArtifacts")
+    .withIndex("by_owner_thread_created", (q) =>
+      q.eq("ownerUserId", ownerUserId).eq("threadId", threadId),
+    )
+    .collect();
+  for (const row of contextRows) {
+    await ctx.db.delete("threadContextArtifacts", row._id);
+  }
+
+  const messageCommands = await ctx.db
+    .query("messageCommands")
+    .withIndex("by_owner_thread_created", (q) =>
+      q.eq("ownerUserId", ownerUserId).eq("threadId", threadId),
+    )
+    .collect();
+  for (const row of messageCommands) {
+    await ctx.db.delete("messageCommands", row._id);
+  }
+}
+
+export const remove = mutation({
+  args: {
+    threadId: v.string(),
+  },
+  returns: v.object({ ok: v.literal(true) }),
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    await assertThreadOwner(ctx, args.threadId);
+    await deleteThreadAppData(ctx, user._id, args.threadId);
+
+    let isDone = false;
+    let guard = 0;
+    while (!isDone && guard < 50) {
+      const result: { isDone: boolean } = await ctx.runMutation(
+        components.agent.threads.deleteAllForThreadIdAsync,
+        { threadId: args.threadId },
+      );
+      isDone = result.isDone;
+      guard += 1;
+    }
+
+    if (!isDone) {
+      throw new ConvexError("Thread deletion is still in progress. Try again.");
+    }
+
+    return { ok: true as const };
   },
 });

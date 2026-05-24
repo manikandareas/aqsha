@@ -35,6 +35,8 @@ export function WorkspaceDriveLibrary({
   chatPanelOpen,
   onToggleChatPanel,
   onClosePanel,
+  showLeftSidebarTrigger,
+  onToggleLeftSidebar,
   onActiveFolderChange,
   showCreateActions,
   showWorkspaceSettings,
@@ -58,6 +60,8 @@ export function WorkspaceDriveLibrary({
   chatPanelOpen?: boolean;
   onToggleChatPanel?: () => void;
   onClosePanel?: () => void;
+  showLeftSidebarTrigger?: boolean;
+  onToggleLeftSidebar?: () => void;
   onActiveFolderChange?: (folderId: "root" | string) => void;
   showCreateActions?: boolean;
   showWorkspaceSettings?: boolean;
@@ -102,6 +106,8 @@ export function WorkspaceDriveLibrary({
         onToggleChat={onToggleChatPanel}
         chatOpen={chatPanelOpen}
         onClosePanel={onClosePanel}
+        showLeftSidebarTrigger={showLeftSidebarTrigger}
+        onToggleLeftSidebar={onToggleLeftSidebar}
         showCreateActions={showCreateActions}
         showWorkspaceSettings={showWorkspaceSettings}
       />
