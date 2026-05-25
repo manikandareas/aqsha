@@ -21,6 +21,24 @@ const promptCommandGroups = [
   "Riset Mendalam",
 ] as const;
 
+const COLLAPSED_EDITOR_HEIGHT = 24;
+
+function normalizeEditorText(source: HTMLDivElement | string): string {
+  const raw = (typeof source === "string" ? source : source.innerText).replace(/\u00a0/g, " ");
+  return raw.trim().length === 0 ? "" : raw;
+}
+
+function reportEditorHeight(
+  editor: HTMLDivElement,
+  text: string,
+  onHeightChange?: (height: number) => void,
+) {
+  if (!onHeightChange) {
+    return;
+  }
+  onHeightChange(text.length === 0 ? COLLAPSED_EDITOR_HEIGHT : editor.scrollHeight);
+}
+
 export function TokenizedPromptInput({
   value,
   command,
@@ -53,6 +71,17 @@ export function TokenizedPromptInput({
     if (!editor) {
       return;
     }
+
+    const domText = normalizeEditorText(editor);
+
+    // DOM was cleared (select-all delete, cut, etc.) but React value is stale.
+    if (domText === "" && value.length > 0) {
+      onValueChange("");
+      reportEditorHeight(editor, "", onHeightChange);
+      editor.innerText = "";
+      return;
+    }
+
     const shouldSyncWhileFocused = value.length === 0;
     if (
       editor.innerText !== value &&
@@ -61,10 +90,20 @@ export function TokenizedPromptInput({
       editor.innerText = value;
     }
 
-    if (onHeightChange) {
-      onHeightChange(editor.scrollHeight);
+    reportEditorHeight(editor, normalizeEditorText(value), onHeightChange);
+  }, [value, onValueChange, onHeightChange]);
+
+  const syncFromEditor = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
     }
-  }, [value, onHeightChange]);
+    const text = normalizeEditorText(editor);
+    if (text !== value) {
+      onValueChange(text);
+    }
+    reportEditorHeight(editor, text, onHeightChange);
+  }, [onHeightChange, onValueChange, value]);
 
   const focusEditor = useCallback(() => {
     window.requestAnimationFrame(() => {
@@ -92,11 +131,9 @@ export function TokenizedPromptInput({
   const handleInput = useCallback(() => {
     const editor = editorRef.current;
     if (!editor) return;
-    const text = editor.innerText.replace(/\u00a0/g, " ");
+    const text = normalizeEditorText(editor);
 
-    if (onHeightChange) {
-      onHeightChange(editor.scrollHeight);
-    }
+    reportEditorHeight(editor, text, onHeightChange);
 
     if (text.length <= maxLength) {
       onValueChange(text);
@@ -197,6 +234,7 @@ export function TokenizedPromptInput({
               data-slot="input-group-control"
               className="max-h-36 min-h-6 w-full overflow-y-auto whitespace-pre-wrap break-words text-foreground caret-primary outline-none disabled:opacity-100 py-1"
               onInput={handleInput}
+              onBlur={syncFromEditor}
               onKeyDown={handleKeyDown}
               suppressContentEditableWarning
             />

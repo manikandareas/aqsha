@@ -10,8 +10,9 @@ import {
   SquareIcon,
   XIcon,
 } from "lucide-react";
+import { LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import type { PromptCommand } from "@aqsha/convex/prompt-commands";
 import {
   PromptInput,
@@ -41,6 +42,38 @@ import { ComposerContextMenu } from "./composer-context-menu";
 import { TokenizedPromptInput } from "./composer-token-input";
 
 type ComposerVariant = "hero" | "docked";
+
+const COMPOSER_EASE_OUT = [0.23, 1, 0.32, 1] as const;
+
+function composerShellTransition(
+  isExpanded: boolean,
+  shouldReduceMotion: boolean | null,
+) {
+  if (shouldReduceMotion) {
+    return { duration: 0 };
+  }
+
+  return {
+    duration: isExpanded ? 0.28 : 0.22,
+    ease: COMPOSER_EASE_OUT,
+  };
+}
+
+function composerLayoutTransition(
+  isExpanded: boolean,
+  shouldReduceMotion: boolean | null,
+) {
+  if (shouldReduceMotion) {
+    return { layout: { duration: 0 } };
+  }
+
+  return {
+    layout: {
+      duration: isExpanded ? 0.28 : 0.22,
+      ease: COMPOSER_EASE_OUT,
+    },
+  };
+}
 
 type ComposerSharedProps = {
   disabled: boolean;
@@ -104,6 +137,7 @@ export function Composer(props: ComposerProps) {
   const [billingBlock, setBillingBlock] = useState<SendResult & { ok: false } | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [editorHeight, setEditorHeight] = useState(24);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const retryAt = localRetryAt ?? rateStatus?.retryAt ?? null;
   const retrySeconds =
@@ -121,7 +155,30 @@ export function Composer(props: ComposerProps) {
     activeRun,
   });
   const router = useRouter();
-  const isExpanded = editorHeight > 30 || content.includes("\n");
+  const shouldReduceMotion = useReducedMotion();
+  const isContentEmpty = content.trim().length === 0 && !selectedCommand;
+
+  // Sticky expand: once multiline, stay expanded until empty. Prevents reflow
+  // oscillation when collapsed (narrow) vs expanded (wide) widths flip line count.
+  useLayoutEffect(() => {
+    if (isContentEmpty) {
+      setIsExpanded(false);
+      return;
+    }
+
+    if (content.includes("\n") || editorHeight > 34 || selectedCommand) {
+      setIsExpanded(true);
+    }
+  }, [isContentEmpty, content, editorHeight, selectedCommand]);
+
+  const shellTransition = useMemo(
+    () => composerShellTransition(isExpanded, shouldReduceMotion),
+    [isExpanded, shouldReduceMotion],
+  );
+  const layoutTransition = useMemo(
+    () => composerLayoutTransition(isExpanded, shouldReduceMotion),
+    [isExpanded, shouldReduceMotion],
+  );
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 250);
@@ -242,100 +299,130 @@ export function Composer(props: ComposerProps) {
         </div>
       )}
 
-      <PromptInput
-        onSubmit={handleSubmit}
+      <motion.div
         className={cn(
-          "border border-border/85 bg-card/95 text-foreground transition-all duration-300 ease-out has-disabled:opacity-100 flex flex-col justify-between overflow-hidden shadow-sm text-left",
-          isExpanded ? "rounded-[24px]" : "rounded-full",
+          "w-full overflow-hidden border border-border/85 bg-card/95 text-foreground shadow-sm",
           variant === "hero" && "shadow-aqsha",
         )}
+        animate={{
+          borderRadius: isExpanded ? 24 : 9999,
+        }}
+        transition={shellTransition}
       >
-        {isRateLimited || billingBlock ? (
-          <div className="grid gap-2 border-b border-border/60 px-4 py-2.5">
-            {isRateLimited ? (
-              <div className="rounded-lg border border-lemon-soft-border bg-lemon-soft px-2.5 py-2 text-[11px] font-medium leading-5 text-lemon-foreground animate-in slide-in-from-top-2 duration-200">
-                Perlu istirahat sebentar. Coba lagi dalam {retrySeconds || 1} detik.
-              </div>
-            ) : null}
-            {billingBlock ? (
-              <div className="rounded-lg border border-coral-soft-border bg-coral-soft px-2.5 py-2 text-[11px] font-medium leading-5 text-coral-foreground animate-in slide-in-from-top-2 duration-200">
-                {billingBlock.reason === "quota_exceeded"
-                  ? `Credits habis. Reset ${billingBlock.resetAt ? formatDate(billingBlock.resetAt) : "periode berikutnya"}.`
-                  : billingBlock.reason === "subscription_required"
-                    ? `Butuh plan ${billingBlock.requiredPlan ?? "berbayar"} untuk mode ini.`
-                    : "Billing belum aktif. Periksa subscription di halaman Billing."}{" "}
-                <a href="/settings/usage-billing" className="font-semibold underline underline-offset-2">
-                  Buka Billing
-                </a>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div
-          className={cn(
-            "flex w-full min-h-0 transition-all duration-300 ease-out",
-            isExpanded ? "flex-col gap-3 p-3.5 pb-2.5 pt-3" : "flex-row items-center gap-2 pl-2 pr-1.5 py-1 min-h-[46px]",
-          )}
+        <PromptInput
+          onSubmit={handleSubmit}
+          className="flex flex-col justify-between overflow-hidden bg-transparent text-left has-disabled:opacity-100"
         >
-          <div className={cn("flex items-start flex-1 min-w-0", isExpanded ? "w-full px-1" : "gap-2")}>
-            {!isExpanded ? (
-              <ComposerContextMenu
-                threadId={threadId}
-                disabled={disabled}
-                isDeepActive={isDeepActive}
-                mode={mode}
-              />
-            ) : null}
-
-            <TokenizedPromptInput
-              value={content}
-              command={selectedCommand}
-              onValueChange={setContent}
-              onHeightChange={setEditorHeight}
-              onCommandChange={(command) => {
-                setSelectedCommand(command);
-                if (command?.mode === "deep") {
-                  setMode("deep");
-                }
-              }}
-              onSubmit={requestFormSubmit}
-              disabled={disabled || isDeepActive}
-              maxLength={8000}
-              placeholder="Select board items, @ mention creators, or / for voices..."
-              className={isExpanded ? "py-0.5" : "py-1"}
-            />
-          </div>
-
-          <div
-            className={cn(
-              "flex items-center shrink-0",
-              isExpanded ? "w-full justify-between pt-1 border-t border-border/40" : "gap-1",
-            )}
-          >
-            {isExpanded ? (
-              <ComposerContextMenu
-                threadId={threadId}
-                disabled={disabled}
-                isDeepActive={isDeepActive}
-                mode={mode}
-              />
-            ) : null}
-
-            <div className="flex items-center gap-1 shrink-0 ml-auto">
-              <ModeSelector mode={mode} setMode={setMode} disabled={isDeepActive} />
-              {showVoiceInput ? <MicButton disabled={disabled || isDeepActive} /> : null}
-              <ComposerSubmitButton
-                canSend={canSend}
-                isSending={isSending}
-                isDeepActive={isDeepActive}
-                activeRun={activeRun}
-                onCancelRun={onCancelRun}
-              />
+          {isRateLimited || billingBlock ? (
+            <div className="grid gap-2 border-b border-border/60 px-4 py-2.5">
+              {isRateLimited ? (
+                <div className="rounded-lg border border-lemon-soft-border bg-lemon-soft px-2.5 py-2 text-[11px] font-medium leading-5 text-lemon-foreground animate-in slide-in-from-top-2 duration-200">
+                  Perlu istirahat sebentar. Coba lagi dalam {retrySeconds || 1} detik.
+                </div>
+              ) : null}
+              {billingBlock ? (
+                <div className="rounded-lg border border-coral-soft-border bg-coral-soft px-2.5 py-2 text-[11px] font-medium leading-5 text-coral-foreground animate-in slide-in-from-top-2 duration-200">
+                  {billingBlock.reason === "quota_exceeded"
+                    ? `Credits habis. Reset ${billingBlock.resetAt ? formatDate(billingBlock.resetAt) : "periode berikutnya"}.`
+                    : billingBlock.reason === "subscription_required"
+                      ? `Butuh plan ${billingBlock.requiredPlan ?? "berbayar"} untuk mode ini.`
+                      : "Billing belum aktif. Periksa subscription di halaman Billing."}{" "}
+                  <a href="/settings/usage-billing" className="font-semibold underline underline-offset-2">
+                    Buka Billing
+                  </a>
+                </div>
+              ) : null}
             </div>
-          </div>
-        </div>
-      </PromptInput>
+          ) : null}
+
+          <LayoutGroup id="composer-prompt">
+            <div
+              className={cn(
+                "flex w-full min-h-0 transition-[padding,gap] duration-[220ms] ease-[cubic-bezier(0.23,1,0.32,1)]",
+                isExpanded
+                  ? "flex-col gap-3 p-3.5 pb-2.5 pt-3"
+                  : "min-h-[46px] flex-row items-center gap-2 py-1 pl-2 pr-1.5",
+              )}
+            >
+              <div
+                className={cn(
+                  "flex min-w-0 flex-1 items-start",
+                  isExpanded ? "w-full px-1" : "gap-2",
+                )}
+              >
+                {!isExpanded ? (
+                  <motion.div
+                    layoutId="composer-context-menu"
+                    transition={layoutTransition}
+                    className="shrink-0"
+                  >
+                    <ComposerContextMenu
+                      threadId={threadId}
+                      disabled={disabled}
+                      isDeepActive={isDeepActive}
+                      mode={mode}
+                    />
+                  </motion.div>
+                ) : null}
+
+                <div className="min-w-0 flex-1">
+                  <TokenizedPromptInput
+                    value={content}
+                    command={selectedCommand}
+                    onValueChange={setContent}
+                    onHeightChange={setEditorHeight}
+                    onCommandChange={(command) => {
+                      setSelectedCommand(command);
+                      if (command?.mode === "deep") {
+                        setMode("deep");
+                      }
+                    }}
+                    onSubmit={requestFormSubmit}
+                    disabled={disabled || isDeepActive}
+                    maxLength={8000}
+                    placeholder="Select board items, @ mention creators, or / for voices..."
+                    className={isExpanded ? "py-0.5" : "py-1"}
+                  />
+                </div>
+              </div>
+
+              <div
+                className={cn(
+                  "flex shrink-0 items-center",
+                  isExpanded ? "w-full justify-between pt-1" : "gap-1",
+                )}
+              >
+                {isExpanded ? (
+                  <motion.div
+                    layoutId="composer-context-menu"
+                    transition={layoutTransition}
+                    className="shrink-0"
+                  >
+                    <ComposerContextMenu
+                      threadId={threadId}
+                      disabled={disabled}
+                      isDeepActive={isDeepActive}
+                      mode={mode}
+                    />
+                  </motion.div>
+                ) : null}
+
+                <div className="ml-auto flex shrink-0 items-center gap-1">
+                  <ModeSelector mode={mode} setMode={setMode} disabled={isDeepActive} />
+                  {showVoiceInput ? <MicButton disabled={disabled || isDeepActive} /> : null}
+                  <ComposerSubmitButton
+                    canSend={canSend}
+                    isSending={isSending}
+                    isDeepActive={isDeepActive}
+                    activeRun={activeRun}
+                    onCancelRun={onCancelRun}
+                  />
+                </div>
+              </div>
+            </div>
+          </LayoutGroup>
+        </PromptInput>
+      </motion.div>
     </div>
   );
 }
