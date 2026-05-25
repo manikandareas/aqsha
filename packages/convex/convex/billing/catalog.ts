@@ -40,6 +40,9 @@ export const PLAN_CATALOG: Record<
     monthlyPriceIdr: number;
     annualPriceIdr: number;
     monthlyCredits: number;
+    deepResearchRuns: number;
+    workspaceLimit: number;
+    libraryItemLimit: number;
     providerSpendCeilingCents: number;
     features: string[];
   }
@@ -50,40 +53,49 @@ export const PLAN_CATALOG: Record<
     monthlyPriceIdr: 0,
     annualPriceIdr: 0,
     monthlyCredits: 50,
+    deepResearchRuns: 0,
+    workspaceLimit: 1,
+    libraryItemLimit: 25,
     providerSpendCeilingCents: 0,
     features: [
       "50 credits per bulan",
-      "Normal chat ringan",
-      "Cited answer terbatas",
-      "Deep Lite trial terbatas",
+      "1 workspace",
+      "25 library items",
+      "Deep Research tidak termasuk",
     ],
   },
   starter: {
     key: "starter",
     label: "Starter",
-    monthlyPriceIdr: 69_000,
-    annualPriceIdr: 690_000,
+    monthlyPriceIdr: 49_000,
+    annualPriceIdr: 490_000,
     monthlyCredits: 500,
+    deepResearchRuns: 3,
+    workspaceLimit: 5,
+    libraryItemLimit: 250,
     providerSpendCeilingCents: 125,
     features: [
       "500 credits per bulan",
-      "Normal chat dan cited answer",
-      "Deep Research kecil",
-      "Provider cost guard sekitar $1.25/bulan",
+      "3 Deep Research per bulan",
+      "5 workspaces",
+      "250 library items",
     ],
   },
   plus: {
     key: "plus",
     label: "Plus",
-    monthlyPriceIdr: 149_000,
-    annualPriceIdr: 1_490_000,
+    monthlyPriceIdr: 99_000,
+    annualPriceIdr: 990_000,
     monthlyCredits: 1_500,
+    deepResearchRuns: 12,
+    workspaceLimit: 20,
+    libraryItemLimit: 1_000,
     providerSpendCeilingCents: 400,
     features: [
       "1.500 credits per bulan",
-      "Deep Research lebih longgar",
-      "Source reading lebih banyak",
-      "Provider cost guard sekitar $4/bulan",
+      "12 Deep Research per bulan",
+      "20 workspaces",
+      "1.000 library items",
     ],
   },
   admin: {
@@ -92,10 +104,14 @@ export const PLAN_CATALOG: Record<
     monthlyPriceIdr: 0,
     annualPriceIdr: 0,
     monthlyCredits: Number.MAX_SAFE_INTEGER,
+    deepResearchRuns: Number.MAX_SAFE_INTEGER,
+    workspaceLimit: Number.MAX_SAFE_INTEGER,
+    libraryItemLimit: Number.MAX_SAFE_INTEGER,
     providerSpendCeilingCents: Number.MAX_SAFE_INTEGER,
     features: [
       "Unlimited internal credits",
-      "Normal chat dan Deep Research",
+      "Unlimited Deep Research",
+      "Unlimited workspace dan library",
       "Usage tetap tercatat",
       "Global/provider rate limit tetap aktif",
     ],
@@ -115,25 +131,25 @@ export const PRODUCT_CATALOG: Record<
     key: "starterMonthly",
     planKey: "starter",
     interval: "month",
-    displayPriceIdr: 69_000,
+    displayPriceIdr: 49_000,
   },
   starterYearly: {
     key: "starterYearly",
     planKey: "starter",
     interval: "year",
-    displayPriceIdr: 690_000,
+    displayPriceIdr: 490_000,
   },
   plusMonthly: {
     key: "plusMonthly",
     planKey: "plus",
     interval: "month",
-    displayPriceIdr: 149_000,
+    displayPriceIdr: 99_000,
   },
   plusYearly: {
     key: "plusYearly",
     planKey: "plus",
     interval: "year",
-    displayPriceIdr: 1_490_000,
+    displayPriceIdr: 990_000,
   },
 };
 
@@ -192,13 +208,7 @@ export function estimateCredits(args: {
     return 120;
   }
   if (args.feature === "external_search") {
-    if (args.provider === "jina_read") return 6;
-    if (args.provider === "jina_rerank") return 3;
-    if (args.provider === "crossref" || args.provider === "arxiv") return 1;
-    return 5;
-  }
-  if (args.feature === "cited_answer") {
-    return Math.max(3, Math.ceil(totalTokens / 1_000));
+    return 2;
   }
   return Math.max(1, Math.ceil(totalTokens / 1_500));
 }

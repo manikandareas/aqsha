@@ -30,6 +30,9 @@ export type Plan = {
   monthlyPriceIdr: number;
   annualPriceIdr: number;
   monthlyCredits: number;
+  deepResearchRuns: number;
+  workspaceLimit: number;
+  libraryItemLimit: number;
   providerSpendCeilingCents: number;
   features: string[];
   products: Array<{

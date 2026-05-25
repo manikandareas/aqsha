@@ -17,6 +17,9 @@ const planValidator = v.object({
   monthlyPriceIdr: v.number(),
   annualPriceIdr: v.number(),
   monthlyCredits: v.number(),
+  deepResearchRuns: v.number(),
+  workspaceLimit: v.number(),
+  libraryItemLimit: v.number(),
   providerSpendCeilingCents: v.number(),
   features: v.array(v.string()),
   products: v.array(

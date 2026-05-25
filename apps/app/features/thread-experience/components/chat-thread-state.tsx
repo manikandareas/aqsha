@@ -162,6 +162,7 @@ export function ChatThreadState({
             />
           ) : (
             <Composer
+              mode="draft"
               variant="docked"
               disabled={isLoading}
               rateStatus={rateStatus}

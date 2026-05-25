@@ -22,7 +22,12 @@ export function isAdminEmail(email: string | null | undefined) {
 export async function getAdminBillingOverride(
   ctx: BillingCtx,
   ownerUserId: string,
+  ownerEmail?: string | null,
 ): Promise<{ isAdmin: boolean; email: string | null }> {
+  if (isAdminEmail(ownerEmail)) {
+    return { isAdmin: true, email: ownerEmail ?? null };
+  }
+
   const mirrored = await getMirroredAdminEntitlement(ctx, ownerUserId);
   if (mirrored?.enabled && isAdminEmail(mirrored.email)) {
     return { isAdmin: true, email: mirrored.email };

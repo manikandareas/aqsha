@@ -15,6 +15,9 @@ const plans: Plan[] = [
     monthlyPriceIdr: 0,
     annualPriceIdr: 0,
     monthlyCredits: 100,
+    deepResearchRuns: 0,
+    workspaceLimit: 1,
+    libraryItemLimit: 25,
     providerSpendCeilingCents: 100,
     features: [],
     products: [],
@@ -22,9 +25,12 @@ const plans: Plan[] = [
   {
     key: "starter",
     label: "Starter",
-    monthlyPriceIdr: 99000,
-    annualPriceIdr: 990000,
+    monthlyPriceIdr: 49000,
+    annualPriceIdr: 490000,
     monthlyCredits: 1000,
+    deepResearchRuns: 3,
+    workspaceLimit: 5,
+    libraryItemLimit: 250,
     providerSpendCeilingCents: 1000,
     features: [],
     products: [],
@@ -32,9 +38,12 @@ const plans: Plan[] = [
   {
     key: "plus",
     label: "Plus",
-    monthlyPriceIdr: 199000,
-    annualPriceIdr: 1990000,
+    monthlyPriceIdr: 99000,
+    annualPriceIdr: 990000,
     monthlyCredits: 3000,
+    deepResearchRuns: 12,
+    workspaceLimit: 20,
+    libraryItemLimit: 1000,
     providerSpendCeilingCents: 3000,
     features: [],
     products: [],
@@ -58,7 +67,7 @@ describe("settings summary helpers", () => {
 
   it("formats monthly plan prices", () => {
     expect(formatPlanPrice(plans, "free")).toBe("Rp0/bulan");
-    expect(formatPlanPrice(plans, "starter")).toContain("99.000");
+    expect(formatPlanPrice(plans, "starter")).toContain("49.000");
     expect(formatPlanPrice(plans, "starter")).toMatch(/\/bulan$/);
     expect(formatPlanPrice(plans, "admin")).toBe("Internal");
   });

@@ -19,6 +19,13 @@ describe("billing catalog", () => {
     expect(PLAN_CATALOG.admin.monthlyCredits).toBe(Number.MAX_SAFE_INTEGER);
   });
 
+  it("keeps Deep Research as a simple monthly run quota", () => {
+    expect(PLAN_CATALOG.free.deepResearchRuns).toBe(0);
+    expect(PLAN_CATALOG.starter.deepResearchRuns).toBe(3);
+    expect(PLAN_CATALOG.plus.deepResearchRuns).toBe(12);
+    expect(PLAN_CATALOG.admin.deepResearchRuns).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
   it("keeps Admin above Plus and out of public products", () => {
     expect(isPlanAtLeast("admin", "plus")).toBe(true);
     expect(PUBLIC_PLAN_KEYS).toEqual(["free", "starter", "plus"]);
@@ -52,8 +59,9 @@ describe("billing catalog", () => {
 
   it("converts token and provider usage into credits and estimated cost", () => {
     expect(estimateCredits({ feature: "normal_chat", totalTokens: 1_501 })).toBe(2);
+    expect(estimateCredits({ feature: "cited_answer", totalTokens: 1_501 })).toBe(2);
     expect(estimateCredits({ feature: "deep_research" })).toBe(120);
-    expect(estimateCredits({ feature: "external_search", provider: "jina_read" })).toBe(6);
+    expect(estimateCredits({ feature: "external_search", provider: "jina_read" })).toBe(2);
     expect(
       estimateProviderCostCents({
         provider: "openai",

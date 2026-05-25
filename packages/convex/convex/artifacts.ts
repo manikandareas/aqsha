@@ -10,8 +10,11 @@ import {
   mutation,
   query,
   type ActionCtx,
+  type MutationCtx,
 } from "./_generated/server";
 import { requireCurrentUser } from "./auth";
+import { PLAN_CATALOG } from "./billing/catalog";
+import { getBillingSnapshot } from "./billing/entitlements";
 import {
   ARTIFACT_BODY_INLINE_LIMIT,
   contextFromText,
@@ -145,6 +148,7 @@ export const createDocument = mutation({
     if (args.folderId) {
       await assertFolderOwner(ctx, args.folderId, user._id, args.workspaceId);
     }
+    await assertLibraryCapacity(ctx, user._id);
     const now = Date.now();
     const title = args.title ? normalizeName(args.title, "Artifact title") : documentTitleFallback;
     const artifactId = await ctx.db.insert("artifacts", {
@@ -296,6 +300,7 @@ export const createUrl = mutation({
         return artifact._id;
       }
     }
+    await assertLibraryCapacity(ctx, user._id);
 
     const now = Date.now();
     const title = args.title ? normalizeName(args.title, "Artifact title") : titleFromUrl(normalizedUrl);
@@ -329,6 +334,24 @@ export const createUrl = mutation({
     return artifactId;
   },
 });
+
+async function assertLibraryCapacity(ctx: MutationCtx, ownerUserId: string) {
+  const user = await requireCurrentUser(ctx);
+  const snapshot = await getBillingSnapshot(ctx, ownerUserId, user.email);
+  const limit = PLAN_CATALOG[snapshot.planKey].libraryItemLimit;
+  if (limit === Number.MAX_SAFE_INTEGER) {
+    return;
+  }
+  const activeArtifacts = await ctx.db
+    .query("artifacts")
+    .withIndex("by_owner_status_updated", (q) =>
+      q.eq("ownerUserId", ownerUserId).eq("status", "active"),
+    )
+    .collect();
+  if (activeArtifacts.length >= limit) {
+    throw new ConvexError("Library item limit reached for current plan");
+  }
+}
 
 export const retryUrlExtraction = mutation({
   args: { artifactId: v.id("artifacts") },

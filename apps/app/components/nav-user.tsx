@@ -4,13 +4,10 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ChevronsUpDownIcon,
-  LayoutGridIcon,
   LogOutIcon,
-  PaletteIcon,
-  PlusIcon,
   SettingsIcon,
 } from "lucide-react";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { ThemeMenuSub } from "@/components/theme-toggle";
 import {
   Avatar,
   AvatarFallback,
@@ -30,7 +27,6 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth-client";
 
 type Viewer = {
@@ -39,22 +35,7 @@ type Viewer = {
   image: string | null;
 };
 
-type WorkspaceSummary = {
-  _id: string;
-  name: string;
-};
-
-export function NavUser({
-  user,
-  workspaces = [],
-  activeWorkspaceId,
-  onCreateWorkspace,
-}: {
-  user: Viewer | undefined;
-  workspaces?: WorkspaceSummary[];
-  activeWorkspaceId?: string;
-  onCreateWorkspace?: () => void;
-}) {
+export function NavUser({ user }: { user: Viewer | undefined }) {
   const router = useRouter();
   const { isMobile } = useSidebar();
   const name = user?.name || "Aqsha user";
@@ -116,64 +97,13 @@ export function NavUser({
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {workspaces.length > 0 ? (
-              <>
-                <DropdownMenuLabel className="px-2 py-1 text-[11px] font-medium text-primary/75">
-                  Workspace
-                </DropdownMenuLabel>
-                {workspaces.slice(0, 6).map((workspace) => (
-                  <DropdownMenuItem key={workspace._id} asChild className={menuItemClass}>
-                    <Link href={`/workspaces/${workspace._id}`}>
-                      <LayoutGridIcon
-                        className={cn(
-                          workspace._id === activeWorkspaceId && "text-primary",
-                        )}
-                      />
-                      <span
-                        className={cn(
-                          "truncate",
-                          workspace._id === activeWorkspaceId &&
-                            "font-semibold text-primary",
-                        )}
-                      >
-                        {workspace.name}
-                      </span>
-                    </Link>
-                  </DropdownMenuItem>
-                ))}
-                <DropdownMenuItem asChild className={menuItemClass}>
-                  <Link href="/workspaces">
-                    <LayoutGridIcon />
-                    <span className="truncate">Semua workspace</span>
-                  </Link>
-                </DropdownMenuItem>
-                {onCreateWorkspace ? (
-                  <DropdownMenuItem
-                    onSelect={onCreateWorkspace}
-                    className={menuItemClass}
-                  >
-                    <PlusIcon />
-                    <span className="truncate">Workspace baru</span>
-                  </DropdownMenuItem>
-                ) : null}
-                <DropdownMenuSeparator />
-              </>
-            ) : null}
             <DropdownMenuItem asChild className={menuItemClass}>
               <Link href="/settings/overview">
                 <SettingsIcon />
                 <span className="truncate">Settings</span>
               </Link>
             </DropdownMenuItem>
-            <div className="flex h-9 items-center gap-2 rounded-[8px] px-2 text-[13px] font-medium text-popover-foreground">
-              <PaletteIcon className="size-4 shrink-0 text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate">Theme</span>
-              <ThemeToggle
-                variant="ghost"
-                size="icon-sm"
-                className="size-7 shrink-0 rounded-[7px] text-muted-foreground hover:bg-muted"
-              />
-            </div>
+            <ThemeMenuSub />
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={signOut} className={menuItemClass}>
               <LogOutIcon />

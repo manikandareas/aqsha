@@ -57,6 +57,7 @@ export type EntitlementResult =
 export async function getBillingSnapshot(
   ctx: QueryCtx | MutationCtx,
   ownerUserId: string,
+  ownerEmail?: string | null,
 ): Promise<{
   planKey: PlanKey;
   status: BillingStatus;
@@ -67,7 +68,7 @@ export async function getBillingSnapshot(
   isUnlimitedCredits: boolean;
   billingPortalAvailable: boolean;
 }> {
-  const admin = await getAdminBillingOverride(ctx, ownerUserId);
+  const admin = await getAdminBillingOverride(ctx, ownerUserId, ownerEmail);
   if (admin.isAdmin) {
     const subscription = await getPolarSubscriptionOrNull(ctx, ownerUserId);
     const mirrored = subscription ? null : await getLatestMirroredSubscription(ctx, ownerUserId);
@@ -139,13 +140,14 @@ export async function requireEntitlement(
   ctx: MutationCtx,
   args: {
     ownerUserId: string;
+    ownerEmail?: string | null;
     feature: CreditFeature;
     credits: number;
     requiredPlan?: PublicPlanKey;
   },
 ): Promise<EntitlementResult> {
   const requiredPlan = args.requiredPlan ?? requiredPlanForFeature(args.feature);
-  const snapshot = await getBillingSnapshot(ctx, args.ownerUserId);
+  const snapshot = await getBillingSnapshot(ctx, args.ownerUserId, args.ownerEmail);
   const usageAllowed = billingStatusAllowsUsage({
     planKey: snapshot.planKey,
     status: snapshot.status,
@@ -176,6 +178,16 @@ export async function requireEntitlement(
   if (!usageAllowed) {
     return entitlementFailure("billing_inactive", snapshot.planKey, requiredPlan, period);
   }
+  if (args.feature === "deep_research") {
+    const deepResearchRunsUsed = await countDeepResearchRuns(ctx, {
+      ownerUserId: args.ownerUserId,
+      startedAt: period.startedAt,
+      resetAt: period.resetAt,
+    });
+    if (deepResearchRunsUsed >= PLAN_CATALOG[snapshot.planKey].deepResearchRuns) {
+      return entitlementFailure("quota_exceeded", snapshot.planKey, requiredPlan, period);
+    }
+  }
   if (remaining < args.credits) {
     return entitlementFailure("quota_exceeded", snapshot.planKey, requiredPlan, period);
   }
@@ -195,6 +207,7 @@ export async function consumeCredits(
   ctx: MutationCtx,
   args: {
     ownerUserId: string;
+    ownerEmail?: string | null;
     feature: CreditFeature;
     credits: number;
     provider: string;
@@ -265,6 +278,7 @@ export async function recordProviderUsage(
   ctx: MutationCtx,
   args: {
     ownerUserId: string;
+    ownerEmail?: string | null;
     feature: CreditFeature;
     credits: number;
     provider: string;
@@ -278,7 +292,7 @@ export async function recordProviderUsage(
     metadataJson?: string;
   },
 ) {
-  const snapshot = await getBillingSnapshot(ctx, args.ownerUserId);
+  const snapshot = await getBillingSnapshot(ctx, args.ownerUserId, args.ownerEmail);
   const period = await ensureCreditPeriod(ctx, {
     ownerUserId: args.ownerUserId,
     planKey: snapshot.planKey,
@@ -320,6 +334,7 @@ export async function recordProviderUsage(
 export const consumeCreditsInternal = internalMutation({
   args: {
     ownerUserId: v.string(),
+    ownerEmail: v.optional(v.union(v.string(), v.null())),
     feature: featureValidator,
     provider: v.string(),
     model: v.optional(v.string()),
@@ -348,6 +363,27 @@ export const consumeCreditsInternal = internalMutation({
     });
   },
 });
+
+async function countDeepResearchRuns(
+  ctx: QueryCtx | MutationCtx,
+  args: {
+    ownerUserId: string;
+    startedAt: number;
+    resetAt: number;
+  },
+) {
+  const rows = await ctx.db
+    .query("providerUsageLedger")
+    .withIndex("by_owner_feature_created", (q) =>
+      q
+        .eq("ownerUserId", args.ownerUserId)
+        .eq("feature", "deep_research")
+        .gte("createdAt", args.startedAt)
+        .lt("createdAt", args.resetAt),
+    )
+    .collect();
+  return rows.length;
+}
 
 export const syncSubscriptionFromPolar = internalMutation({
   args: {

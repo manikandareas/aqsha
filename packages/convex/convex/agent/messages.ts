@@ -243,6 +243,7 @@ async function checkAndConsumeSendQuota(
   ctx: MutationCtx,
   args: {
     ownerUserId: string;
+    ownerEmail?: string | null;
     content: string;
     mode: "normal" | "deep";
   },
@@ -253,6 +254,7 @@ async function checkAndConsumeSendQuota(
   const estimatedTokens = estimateTokens(args.content);
   const entitlement = await consumeCredits(ctx, {
     ownerUserId: args.ownerUserId,
+    ownerEmail: args.ownerEmail,
     feature: args.mode === "deep" ? "deep_research" : "normal_chat",
     provider: "openai",
     model: args.mode === "deep" ? process.env.AQSHA_DEEP_MODEL ?? "gpt-5.5" : NORMAL_MODEL,
@@ -405,6 +407,7 @@ export const startThread = mutation({
     }
     const quota = await checkAndConsumeSendQuota(ctx, {
       ownerUserId: user._id,
+      ownerEmail: user.email,
       content,
       mode: args.mode,
     });
@@ -452,6 +455,7 @@ export const send = mutation({
     const thread = await assertThreadOwner(ctx, args.threadId);
     const quota = await checkAndConsumeSendQuota(ctx, {
       ownerUserId: user._id,
+      ownerEmail: user.email,
       content,
       mode: args.mode,
     });

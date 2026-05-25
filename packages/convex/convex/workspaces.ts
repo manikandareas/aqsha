@@ -1,8 +1,10 @@
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 import { requireCurrentUser } from "./auth";
 import { assertWorkspaceOwner, normalizeName } from "./workspaceAccess";
+import { PLAN_CATALOG } from "./billing/catalog";
+import { getBillingSnapshot } from "./billing/entitlements";
 
 export const list = query({
   args: {
@@ -47,6 +49,7 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
+    await assertWorkspaceCapacity(ctx, user._id);
     const now = Date.now();
     return await ctx.db.insert("workspaces", {
       ownerUserId: user._id,
@@ -104,4 +107,25 @@ function normalizeDescription(value: string | undefined) {
     throw new ConvexError("Workspace description is too long");
   }
   return trimmed;
+}
+
+async function assertWorkspaceCapacity(
+  ctx: MutationCtx,
+  ownerUserId: string,
+) {
+  const user = await requireCurrentUser(ctx);
+  const snapshot = await getBillingSnapshot(ctx, ownerUserId, user.email);
+  const limit = PLAN_CATALOG[snapshot.planKey].workspaceLimit;
+  if (limit === Number.MAX_SAFE_INTEGER) {
+    return;
+  }
+  const activeWorkspaces = await ctx.db
+    .query("workspaces")
+    .withIndex("by_owner_status_updated", (q) =>
+      q.eq("ownerUserId", ownerUserId).eq("status", "active"),
+    )
+    .collect();
+  if (activeWorkspaces.length >= limit) {
+    throw new ConvexError("Workspace limit reached for current plan");
+  }
 }

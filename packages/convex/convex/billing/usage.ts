@@ -38,7 +38,7 @@ export const getCurrentPeriod = query({
   }),
   handler: async (ctx) => {
     const user = await requireCurrentUser(ctx);
-    const snapshot = await getBillingSnapshot(ctx, user._id);
+    const snapshot = await getBillingSnapshot(ctx, user._id, user.email);
     const period = await ensureCreditPeriod(ctx, {
       ownerUserId: user._id,
       planKey: snapshot.planKey,

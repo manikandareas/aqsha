@@ -126,8 +126,8 @@ export function Composer(props: ComposerProps) {
   } = props;
 
   const threadId = props.mode === "thread" ? props.threadId : undefined;
-  const onStartThread = props.mode === "draft" ? props.onStartThread : props.mode === "thread" ? props.onStartThread : undefined;
   const onSend = props.mode === "thread" ? props.onSend : undefined;
+  const onStartThread = props.mode === "disabled" ? undefined : props.onStartThread;
 
   const [content, setContent] = useState("");
   const [selectedCommand, setSelectedCommand] = useState<PromptCommand | null>(null);
@@ -212,6 +212,11 @@ export function Composer(props: ComposerProps) {
       return;
     }
 
+    if (!threadId && !onSend && !onStartThread) {
+      console.error("Composer is missing onSend/onStartThread handlers");
+      return;
+    }
+
     const submission = buildComposerSubmission({
       content,
       selectedCommand,
@@ -230,13 +235,11 @@ export function Composer(props: ComposerProps) {
             mode: submission.mode,
             commandId: submission.commandId,
           })
-        : onStartThread
-          ? await onStartThread({
-              content: nextContent,
-              mode: submission.mode,
-              commandId: submission.commandId,
-            })
-          : { ok: false as const, reason: "subscription_required" as const };
+        : await onStartThread!({
+            content: nextContent,
+            mode: submission.mode,
+            commandId: submission.commandId,
+          });
       if (!result.ok) {
         if (result.reason === "rate_limited" && result.retryAt) {
           setLocalRetryAt(result.retryAt);

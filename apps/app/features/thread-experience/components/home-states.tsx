@@ -27,6 +27,7 @@ export function HomeStartState({
             titleClassName="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl leading-none"
           >
             <Composer
+              mode="draft"
               variant="hero"
               disabled={false}
               rateStatus={rateStatus}

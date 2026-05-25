@@ -338,6 +338,7 @@ export const retry = mutation({
     const prompt = run.promptSnapshot || await readPromptMessage(ctx, run.promptMessageId);
     const billing = await consumeCredits(ctx, {
       ownerUserId: user._id,
+      ownerEmail: user.email,
       threadId: run.threadId,
       feature: "deep_research",
       provider: "openai",

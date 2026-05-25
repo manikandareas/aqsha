@@ -254,12 +254,7 @@ export function AppSidebar({
         </SidebarContent>
 
         <SidebarFooter className="mt-auto px-3 py-3">
-          <NavUser
-            user={viewer}
-            workspaces={workspaces}
-            activeWorkspaceId={selectedWorkspaceId}
-            onCreateWorkspace={createWorkspace ? () => setCreateDialogOpen(true) : undefined}
-          />
+          <NavUser user={viewer} />
         </SidebarFooter>
       </Sidebar>
 
