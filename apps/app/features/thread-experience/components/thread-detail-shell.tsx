@@ -141,6 +141,7 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
         threads={threads}
         selectedThreadId={threadId}
         onCreateThread={() => router.push("/")}
+        onSelectThread={(id) => router.push(`/threads/${id}`)}
         title={title}
         threadId={threadId}
         selectedThread={selectedThread}
@@ -154,6 +155,7 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
         onRightPanelOpenChange={setContextPanelOpen}
         onCancelRun={cancelRun}
         onDeleteThread={threadId ? handleDeleteThread : undefined}
+        removeThread={removeThread}
         sidePanel={sidePanel}
         contextArtifacts={draftContextArtifacts}
         onRemoveContextArtifact={draftContext.toggleArtifact}

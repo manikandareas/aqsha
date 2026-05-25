@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useSettingsUsageBillingData } from "../api/use-settings-usage-billing-data";
 import { BillingErrorBanner } from "../components/billing-error-banner";
 import { LoadingSettingsPage } from "../components/loading-settings-page";
-import { SettingRow, SettingsCard, SettingsSectionLabel } from "../components/settings-card";
+import { CreditsUsageSection, SettingRow, SettingsCard, SettingsSectionLabel, SettingsSummaryCard } from "../components/settings-card";
 import { SettingsHeader } from "../components/settings-header";
 import { UsageHeatmap } from "../components/usage-heatmap";
 import { formatIdr, formatShortDate } from "../lib/settings-format";
@@ -24,87 +24,86 @@ export function SettingsUsageBillingPage() {
       <SettingsHeader section="usage-billing" title="Billing & Usage" />
       <BillingErrorBanner message={data.billingError} />
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <BillingSummaryCard label="Current plan">
-          <div className="flex items-baseline gap-2">
-            <h2 className="text-lg font-semibold text-foreground">{data.current.planLabel}</h2>
-            <span className="text-sm font-medium text-muted-foreground">
-              {formatPlanPrice(data.plans, data.current.planKey)}
-            </span>
+      <div className="grid gap-5 md:grid-cols-2">
+        <SettingsSummaryCard label="Current plan">
+          <div>
+            <div className="flex items-baseline gap-2">
+              <h2 className="text-lg font-bold tracking-tight text-foreground">{data.current.planLabel}</h2>
+              <span className="text-[13px] font-medium text-muted-foreground bg-muted/55 px-2 py-0.5 rounded-[4px] border border-border/40">
+                {formatPlanPrice(data.plans, data.current.planKey)}
+              </span>
+            </div>
+            <p className="mt-1.5 text-[13px] font-medium text-muted-foreground">
+              Resets on {formatShortDate(data.current.resetAt)}
+            </p>
           </div>
-          <p className="mt-2 text-sm font-medium text-muted-foreground">
-            Resets on {formatShortDate(data.current.resetAt)}
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={data.openPortal}
-            disabled={!data.current.billingPortalAvailable || data.pendingKey === "portal"}
-            className="mt-4 rounded-[8px]"
-          >
-            {data.pendingKey === "portal" ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
-            {data.current.isAdmin ? "Manage existing subscription" : "Adjust plan"}
-          </Button>
-        </BillingSummaryCard>
+          <div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={data.openPortal}
+              disabled={!data.current.billingPortalAvailable || data.pendingKey === "portal"}
+              className="mt-4 rounded-[8px] active:scale-[0.97] transition-[background-color,color,box-shadow,transform] duration-150 ease-out"
+            >
+              {data.pendingKey === "portal" ? <Loader2Icon className="size-3.5 animate-spin mr-1.5" /> : null}
+              {data.current.isAdmin ? "Manage existing subscription" : "Adjust plan"}
+            </Button>
+          </div>
+        </SettingsSummaryCard>
 
-        <BillingSummaryCard label={data.current.isAdmin ? "Internal access" : "Upgrade available"}>
+        <SettingsSummaryCard label={data.current.isAdmin ? "Internal access" : "Upgrade available"}>
           {nextPlan ? (
             <>
-              <div className="flex items-baseline gap-2">
-                <h2 className="text-lg font-semibold text-foreground">{nextPlan.label}</h2>
-                <span className="text-sm font-medium text-muted-foreground">
-                  {formatIdr(nextPlan.monthlyPriceIdr)}/bulan
-                </span>
+              <div>
+                <div className="flex items-baseline gap-2">
+                  <h2 className="text-lg font-bold tracking-tight text-foreground">{nextPlan.label}</h2>
+                  <span className="text-[13px] font-medium text-muted-foreground bg-muted/55 px-2 py-0.5 rounded-[4px] border border-border/40">
+                    {formatIdr(nextPlan.monthlyPriceIdr)}/bulan
+                  </span>
+                </div>
+                <p className="mt-1.5 text-[13px] font-medium text-muted-foreground">
+                  {nextPlan.monthlyCredits.toLocaleString("id-ID")} credits/bulan dan provider guard lebih longgar.
+                </p>
               </div>
-              <p className="mt-2 text-sm font-medium text-muted-foreground">
-                {nextPlan.monthlyCredits.toLocaleString("id-ID")} credits/bulan dan provider guard lebih longgar.
-              </p>
-              <UpgradeButton plan={nextPlan} pendingKey={data.pendingKey} onCheckout={data.openCheckout} />
+              <div>
+                <UpgradeButton plan={nextPlan} pendingKey={data.pendingKey} onCheckout={data.openCheckout} />
+              </div>
             </>
           ) : (
             <>
-              <h2 className="text-lg font-semibold text-foreground">
-                {data.current.isAdmin ? "Unlimited credits" : "Plan tertinggi"}
-              </h2>
-              <p className="mt-2 text-sm font-medium text-muted-foreground">
-                {data.current.isAdmin
-                  ? "Billing gate dilewati untuk iterasi developer. Usage tetap tercatat."
-                  : "Tidak ada upgrade aktif untuk akun ini."}
-              </p>
+              <div>
+                <h2 className="text-lg font-bold tracking-tight text-foreground">
+                  {data.current.isAdmin ? "Unlimited credits" : "Plan tertinggi"}
+                </h2>
+                <p className="mt-1.5 text-[13px] font-medium text-muted-foreground">
+                  {data.current.isAdmin
+                    ? "Billing gate dilewati untuk iterasi developer. Usage tetap tercatat."
+                    : "Tidak ada upgrade aktif untuk akun ini."}
+                </p>
+              </div>
+              <div className="h-9" />
             </>
           )}
-        </BillingSummaryCard>
+        </SettingsSummaryCard>
       </div>
 
-      <div className="grid gap-4">
+      <div className="grid gap-3">
         <SettingsSectionLabel>Included in {data.current.planLabel}</SettingsSectionLabel>
-        <SettingsCard className="px-4 py-4">
-          {data.current.isUnlimitedCredits ? (
-            <div className="flex items-center justify-between gap-4 text-sm font-semibold">
-              <span>Tracked usage</span>
-              <span>Unlimited</span>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center justify-between gap-4 text-sm font-semibold">
-                <span>Total</span>
-                <span>{usagePercent}%</span>
-              </div>
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
-                <div className="h-full rounded-full bg-primary" style={{ width: `${usagePercent}%` }} />
-              </div>
-            </>
-          )}
-          <p className="mt-4 text-sm font-medium text-muted-foreground">
-            {data.current.isUnlimitedCredits
-              ? `${data.current.creditsUsed} credits tracked this period. No monthly credit quota applies.`
-              : `${data.current.creditsUsed} used and ${data.current.creditsRemaining} remaining from ${data.current.creditsLimit} credits.`}
-          </p>
+        <SettingsCard className="px-5 py-5">
+          <CreditsUsageSection
+            isUnlimitedCredits={data.current.isUnlimitedCredits}
+            usagePercent={usagePercent}
+            creditsUsed={data.current.creditsUsed}
+            creditsRemaining={data.current.creditsRemaining}
+            creditsLimit={data.current.creditsLimit}
+            unlimitedLabel="Tracked usage"
+            billingLimitedLabel="Total"
+          />
         </SettingsCard>
       </div>
 
-      <div className="grid gap-4">
+      <div className="grid gap-3">
         <SettingsSectionLabel>Provider Spend Guard</SettingsSectionLabel>
         <SettingsCard>
           <SettingRow
@@ -116,37 +115,20 @@ export function SettingsUsageBillingPage() {
             </p>
           </SettingRow>
           <SettingRow label="On-demand spending" description="Extra usage outside the monthly plan is disabled in v1.">
-            <span className="rounded-[8px] border border-border bg-muted px-2.5 py-1 text-sm font-semibold text-muted-foreground">
+            <span className="rounded-[6px] border border-border/50 bg-muted/65 px-2.5 py-1 font-mono text-xs font-semibold text-muted-foreground inline-block">
               Disabled
             </span>
           </SettingRow>
         </SettingsCard>
       </div>
 
-      <div className="grid gap-4">
+      <div className="grid gap-3">
         <SettingsSectionLabel>Activity</SettingsSectionLabel>
-        <SettingsCard className="px-4 py-4">
+        <SettingsCard className="px-5 py-5">
           <UsageHeatmap rows={data.activity} />
         </SettingsCard>
       </div>
     </>
-  );
-}
-
-function BillingSummaryCard({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="min-h-[120px] rounded-[14px] border border-border bg-card/95 px-4 py-4 shadow-none">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-        {label}
-      </p>
-      <div className="mt-3">{children}</div>
-    </section>
   );
 }
 
@@ -168,9 +150,9 @@ function UpgradeButton({
       size="sm"
       onClick={() => onCheckout(monthly.key as ProductKey)}
       disabled={pendingKey === monthly.key}
-      className="mt-4 rounded-[8px]"
+      className="mt-4 rounded-[8px] active:scale-[0.97] transition-[background-color,color,box-shadow,transform] duration-150 ease-out"
     >
-      {pendingKey === monthly.key ? <Loader2Icon className="size-3.5 animate-spin" /> : <GiftIcon className="size-3.5" />}
+      {pendingKey === monthly.key ? <Loader2Icon className="size-3.5 animate-spin mr-1.5" /> : <GiftIcon className="size-3.5 mr-1.5" />}
       Upgrade
     </Button>
   );

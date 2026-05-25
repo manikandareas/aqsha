@@ -17,14 +17,14 @@ export function SettingsAccountPage() {
   return (
     <>
       <SettingsHeader section="account" />
-      <div className="grid gap-4">
+      <div className="grid gap-3">
         <SettingsSectionLabel>Profile</SettingsSectionLabel>
         <SettingsCard>
           <SettingRow label="Avatar" description="Displayed in the Aqsha app sidebar.">
-            <div className="flex items-center justify-start gap-3 sm:justify-end">
-              <Avatar className="size-10 rounded-full ring-1 ring-[var(--sky-soft-border)]">
+            <div className="flex items-center justify-start gap-3.5 sm:justify-end">
+              <Avatar className="size-10 rounded-full ring-1 ring-border/50 shadow-sm transition-transform duration-300 hover:scale-105">
                 {viewer.image ? <AvatarImage src={viewer.image} alt={name} /> : null}
-                <AvatarFallback className="bg-[var(--sky-soft)] text-sm font-bold text-primary">
+                <AvatarFallback className="bg-sky-soft text-sm font-bold text-sky-foreground">
                   {getInitials(name, email)}
                 </AvatarFallback>
               </Avatar>

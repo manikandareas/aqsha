@@ -31,7 +31,6 @@ import type {
   DraftContextArtifact,
   SendMessage,
   StartThread,
-  ThreadSummary,
 } from "./component-types";
 import { Composer } from "./composer";
 import { EmptyThreadCopy, HomeStartState } from "./home-states";
@@ -43,7 +42,6 @@ export function ChatThreadState({
   threadId,
   isLoading,
   title,
-  recentThreads,
   rateStatus,
   startThread,
   onSend,
@@ -58,7 +56,6 @@ export function ChatThreadState({
   threadId?: string;
   isLoading: boolean;
   title?: string;
-  recentThreads: ThreadSummary[];
   rateStatus: RateStatus | undefined;
   startThread: StartThread;
   onSend: SendMessage;
@@ -91,7 +88,6 @@ export function ChatThreadState({
   if (!threadId && !hasMessages && runs.length === 0) {
     return (
       <HomeStartState
-        recentThreads={recentThreads}
         rateStatus={rateStatus}
         startThread={startThread}
       />
@@ -149,18 +145,31 @@ export function ChatThreadState({
       <div
         className={cn("shrink-0 min-w-0 overflow-x-hidden bg-background", panelComposerPaddingClass)}
       >
-        <div className={cn("mx-auto w-full", compact ? "max-w-none" : "max-w-3xl")}>
-          <Composer
-            threadId={threadId}
-            disabled={isLoading}
-            rateStatus={rateStatus}
-            activeRun={activeRun}
-            onCancelRun={onCancelRun}
-            onStartThread={startThread}
-            onSend={onSend}
-            contextArtifacts={contextArtifacts}
-            onRemoveContextArtifact={onRemoveContextArtifact}
-          />
+        <div className={cn("mx-auto w-full", compact ? "max-w-none" : "max-w-2xl")}>
+          {threadId ? (
+            <Composer
+              mode="thread"
+              variant="docked"
+              threadId={threadId}
+              disabled={isLoading}
+              rateStatus={rateStatus}
+              activeRun={activeRun}
+              onCancelRun={onCancelRun}
+              onStartThread={startThread}
+              onSend={onSend}
+              contextArtifacts={contextArtifacts}
+              onRemoveContextArtifact={onRemoveContextArtifact}
+            />
+          ) : (
+            <Composer
+              variant="docked"
+              disabled={isLoading}
+              rateStatus={rateStatus}
+              onStartThread={startThread}
+              contextArtifacts={contextArtifacts}
+              onRemoveContextArtifact={onRemoveContextArtifact}
+            />
+          )}
         </div>
       </div>
     </div>

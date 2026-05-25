@@ -87,6 +87,7 @@ export function ArtifactDetailPage({
       selectedWorkspaceId={workspaceId}
       threads={data.threads}
       createWorkspace={data.createWorkspace}
+      removeThread={data.removeThread}
     >
       <main className="grid h-svh min-h-0 grid-rows-[auto_1fr] overflow-hidden">
         {data.isLoading ? (

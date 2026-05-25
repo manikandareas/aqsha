@@ -23,7 +23,6 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import {
-  InputGroup,
   InputGroupAddon,
   InputGroupButton,
   InputGroupTextarea,
@@ -923,9 +922,9 @@ export const PromptInput = ({
         ref={formRef}
         {...props}
       >
-        <InputGroup className="h-auto flex-col items-stretch overflow-hidden rounded-[14px] border-0 bg-transparent shadow-none ring-0 has-[[data-slot=input-group-control]:focus-visible]:border-transparent has-[[data-slot=input-group-control]:focus-visible]:ring-0 dark:bg-transparent">
+        <div className="group/input-group relative flex h-auto w-full min-w-0 flex-col items-stretch overflow-hidden rounded-[14px] border-0 bg-transparent shadow-none ring-0 outline-none dark:bg-transparent">
           {children}
-        </InputGroup>
+        </div>
       </form>
     </>
   );

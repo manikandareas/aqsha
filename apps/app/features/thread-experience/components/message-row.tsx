@@ -15,6 +15,7 @@ import type {
   PromptCommandMetadata,
   ResearchArtifact,
 } from "../types";
+import { ThreadActivityIndicator } from "./shared";
 
 export function MessageRow({
   message,
@@ -24,7 +25,9 @@ export function MessageRow({
   sourceCount?: number;
 }) {
   const isUser = message.role === "user";
+  const isStreaming = message.status === "streaming";
   const text = getMessageText(message);
+  const hasText = Boolean(text.trim());
   const messageArtifacts = useQuery(
     api.agent.artifacts.listForMessage,
     !isUser && message.id ? { messageId: message.id } : "skip",
@@ -47,19 +50,15 @@ export function MessageRow({
 
   return (
     <Message from="assistant" className="min-w-0 overflow-x-hidden">
-      <MessageContent className="w-full min-w-0 overflow-hidden bg-transparent px-0 py-0 text-[13px] leading-[1.55] text-[var(--ink-soft)]">
-        <MessageResponse className="aqsha-prose aqsha-prose-message">
-          {text}
-        </MessageResponse>
-        {message.status === "streaming" ? (
-          <span className="stream-caret ml-1 inline-block h-4 w-0.5 translate-y-0.5 bg-primary" />
+      <MessageContent className="w-full min-w-0 overflow-hidden bg-transparent px-0 py-0 text-[13px] leading-[1.55] text-ink-soft">
+        {hasText ? (
+          <MessageResponse className="aqsha-prose aqsha-prose-message">
+            {text}
+          </MessageResponse>
+        ) : isStreaming ? (
+          <ThreadActivityIndicator label="Sedang menulis..." />
         ) : null}
       </MessageContent>
-      {message.status === "streaming" ? (
-        <span className="mt-1 inline-flex rounded-full bg-[var(--sky-soft)] px-2 py-0.5 text-[10px] font-medium text-primary">
-          Sedang menulis
-        </span>
-      ) : null}
       <MessageArtifacts links={messageArtifacts ?? []} />
       <MessageSourceCount sourceCount={sourceCount} />
     </Message>
@@ -94,8 +93,8 @@ function MessageArtifacts({ links }: { links: MessageArtifactLink[] }) {
               router.push(`/workspaces/${workspaceId}/artifacts/${link.artifactId}`);
             }}
             className={cn(
-              "flex max-w-xl items-center gap-3 rounded-[10px] border border-[var(--lavender-soft-border)] bg-[var(--lavender-soft)] px-3 py-2 text-left text-[13px] text-[var(--lavender)] transition-colors",
-              canOpen ? "hover:bg-[var(--lavender-soft)]/75" : "cursor-default opacity-70",
+              "flex max-w-xl items-center gap-3 rounded-[10px] border border-lavender-soft-border bg-lavender-soft px-3 py-2 text-left text-[13px] text-lavender-foreground transition-colors",
+              canOpen ? "hover:bg-lavender-soft" : "cursor-default bg-muted text-muted-foreground",
             )}
           >
             <FileTextIcon className="size-4 shrink-0" />
@@ -103,7 +102,7 @@ function MessageArtifacts({ links }: { links: MessageArtifactLink[] }) {
               <span className="block truncate font-semibold">
                 {link.artifact.title}
               </span>
-              <span className="block text-[11px] font-medium opacity-80">
+              <span className="block text-[11px] font-medium text-muted-foreground">
                 {link.relation === "updated" ? "Diperbarui" : "Artefak"} · v
                 {link.version.versionNumber}
               </span>
@@ -133,8 +132,8 @@ function PromptCommandChip({ command }: { command: PromptCommandMetadata }) {
       className={cn(
         "mr-1.5 inline-flex translate-y-[-1px] items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-none",
         command.mode === "deep"
-          ? "border-[var(--lavender-soft-border)] bg-[var(--lavender-soft)] text-[var(--lavender)]"
-          : "border-[var(--sky-soft-border)] bg-[var(--sky-soft)] text-primary",
+          ? "border-lavender-soft-border bg-lavender-soft text-lavender-foreground"
+          : "border-sky-soft-border bg-sky-soft text-sky-foreground",
       )}
     >
       {command.commandSlug}

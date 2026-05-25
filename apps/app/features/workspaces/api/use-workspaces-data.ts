@@ -32,6 +32,7 @@ export function useWorkspaceIndexData() {
     isLoadingWorkspaces: workspacePage === undefined,
     createWorkspace: useMutation(api.workspaces.create),
     archiveWorkspace: useMutation(api.workspaces.archive),
+    removeThread: useMutation(api.agent.threads.remove),
   };
 }
 
@@ -168,5 +169,6 @@ export function useArtifactDetailData(artifactId: string) {
     moveArtifact: useMutation(api.artifacts.move),
     removeArtifact: useMutation(api.artifacts.remove),
     createWorkspace: useMutation(api.workspaces.create),
+    removeThread: useMutation(api.agent.threads.remove),
   };
 }

@@ -31,6 +31,7 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
       selectedWorkspaceId={workspaceId}
       threads={data.threads}
       createWorkspace={data.createWorkspace}
+      removeThread={data.removeThread}
     >
       <WorkspaceDetailMain workspaceId={workspaceId} data={data} />
     </WorkspaceShell>

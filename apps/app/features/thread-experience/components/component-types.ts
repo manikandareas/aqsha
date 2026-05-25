@@ -74,11 +74,14 @@ export type ToggleThreadContextArtifact = (args: {
   artifactId: ArtifactId;
 }) => Promise<{ ok: boolean; selected: boolean }>;
 
+export type RemoveThread = (args: { threadId: string }) => Promise<{ ok: true }>;
+
 export type ThreadShellLayoutProps = {
   viewer: ViewerSummary;
   threads: ThreadSummary[];
   selectedThreadId?: string;
   onCreateThread: () => void;
+  onSelectThread?: (threadId: string) => void;
   title: string;
   threadId?: string;
   selectedThread:
@@ -99,6 +102,7 @@ export type ThreadShellLayoutProps = {
   onRightPanelOpenChange: (open: boolean) => void;
   onCancelRun: (runId: string) => Promise<unknown>;
   onDeleteThread?: () => Promise<void>;
+  removeThread?: (args: { threadId: string }) => Promise<{ ok: true }>;
   sidePanel?: ReactNode;
   contextArtifacts?: DraftContextArtifact[];
   onRemoveContextArtifact?: (artifactId: string) => void;

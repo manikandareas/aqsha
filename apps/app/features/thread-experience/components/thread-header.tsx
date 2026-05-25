@@ -1,14 +1,20 @@
 "use client";
 
 import { FolderIcon, LayersIcon, PanelLeftIcon } from "lucide-react";
+import { PanelTitleLabel } from "@/components/panel-title-dropdown-trigger";
 import { Button } from "@/components/ui/button";
 import { panelHeaderPaddingClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
+import type { ThreadSummary } from "./component-types";
 import { ThreadDeleteActions } from "./thread-actions-menu";
+import { ThreadRecentSwitcher } from "./thread-recent-switcher";
 
 export function ThreadHeader({
   title,
   workspaceName,
+  threads,
+  onSelectThread,
+  onCreateThread,
   showLeftTrigger,
   onToggleLeftSidebar,
   showContextToggle,
@@ -19,6 +25,9 @@ export function ThreadHeader({
 }: {
   title: string;
   workspaceName?: string;
+  threads?: ThreadSummary[];
+  onSelectThread?: (threadId: string) => void;
+  onCreateThread?: () => void;
   showLeftTrigger: boolean;
   onToggleLeftSidebar: () => void;
   showContextToggle: boolean;
@@ -27,6 +36,8 @@ export function ThreadHeader({
   threadId?: string;
   onDeleteThread?: () => Promise<void>;
 }) {
+  const showThreadSwitcher = Boolean(threadId && onSelectThread && onCreateThread && threads);
+
   return (
     <div className={cn("flex shrink-0 flex-col gap-2 border-border bg-background", panelHeaderPaddingClass)}>
       <div className="flex min-w-0 items-center justify-between gap-3">
@@ -42,9 +53,18 @@ export function ThreadHeader({
               <PanelLeftIcon className="size-3.5" />
             </Button>
           ) : null}
-          <h1 className="truncate font-heading text-lg font-semibold leading-tight tracking-tight text-foreground sm:text-xl">
-            {title}
-          </h1>
+          {showThreadSwitcher ? (
+            <ThreadRecentSwitcher
+              title={title}
+              threads={threads ?? []}
+              onSelectThread={onSelectThread!}
+              onNewThread={onCreateThread!}
+              newLabel="Thread baru"
+              emptyLabel="Belum ada thread"
+            />
+          ) : (
+            <PanelTitleLabel>{title}</PanelTitleLabel>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {threadId && onDeleteThread ? (

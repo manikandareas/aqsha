@@ -29,5 +29,5 @@ export function ResponsiveSidePanel({
     );
   }
 
-  return <SidebarInset className={panelSurfaceClass}>{children}</SidebarInset>;
+  return <SidebarInset className={panelSurfaceClass({ framed: true })}>{children}</SidebarInset>;
 }

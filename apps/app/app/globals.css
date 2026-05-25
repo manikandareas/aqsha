@@ -40,6 +40,27 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --color-ink-soft: var(--ink-soft);
+  --color-sky-soft: var(--sky-soft);
+  --color-sky-soft-border: var(--sky-soft-border);
+  --color-sky-foreground: var(--sky-foreground);
+  --color-mint: var(--mint);
+  --color-mint-foreground: var(--mint-foreground);
+  --color-mint-soft: var(--mint-soft);
+  --color-mint-soft-border: var(--mint-soft-border);
+  --color-lavender: var(--lavender);
+  --color-lavender-foreground: var(--lavender-foreground);
+  --color-lavender-soft: var(--lavender-soft);
+  --color-lavender-soft-border: var(--lavender-soft-border);
+  --color-lemon: var(--lemon);
+  --color-lemon-foreground: var(--lemon-foreground);
+  --color-lemon-soft: var(--lemon-soft);
+  --color-lemon-soft-border: var(--lemon-soft-border);
+  --color-coral: var(--coral);
+  --color-coral-foreground: var(--coral-foreground);
+  --color-coral-soft: var(--coral-soft);
+  --color-coral-soft-border: var(--coral-soft-border);
+  --color-primary-hover: var(--primary-hover);
   --font-sans: var(--font-inter);
   --font-heading: var(--font-nunito);
   --font-mono: var(--font-jetbrains-mono);
@@ -82,19 +103,25 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --primary-hover: color-mix(in oklch, var(--primary) 86%, black);
   --ink-soft: #3f4756;
   --sky-soft: #eaf4ff;
   --sky-soft-border: #cfe1fb;
+  --sky-foreground: #1a5fad;
   --mint: #2ecc9a;
+  --mint-foreground: #1a6b52;
   --mint-soft: #e9f8f2;
   --mint-soft-border: #c6ebd9;
   --lavender: #7a4fd1;
+  --lavender-foreground: #6a3fbf;
   --lavender-soft: #f1e8ff;
   --lavender-soft-border: #dcc9f7;
   --lemon: #9a6a00;
+  --lemon-foreground: #6b4a00;
   --lemon-soft: #fff7cc;
   --lemon-soft-border: #ecd36f;
   --coral: #d84b3f;
+  --coral-foreground: #a83830;
   --coral-soft: #ffe9e5;
   --coral-soft-border: #ffc0b8;
   --shadow-soft-card: 0 14px 40px rgb(26 31 43 / 0.08);
@@ -132,19 +159,25 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --primary-hover: color-mix(in oklch, var(--primary) 88%, white);
   --ink-soft: #d4d4d4;
   --sky-soft: rgb(74 144 247 / 0.16);
   --sky-soft-border: rgb(74 144 247 / 0.28);
+  --sky-foreground: #9fc8ff;
   --mint: #6ee3bf;
+  --mint-foreground: #6ee3bf;
   --mint-soft: rgb(46 204 154 / 0.14);
   --mint-soft-border: rgb(46 204 154 / 0.26);
   --lavender: #b0a6ff;
+  --lavender-foreground: #b0a6ff;
   --lavender-soft: rgb(176 166 255 / 0.14);
   --lavender-soft-border: rgb(176 166 255 / 0.28);
   --lemon: #f7d66b;
+  --lemon-foreground: #f7d66b;
   --lemon-soft: rgb(247 214 107 / 0.14);
   --lemon-soft-border: rgb(247 214 107 / 0.28);
   --coral: #ff9c91;
+  --coral-foreground: #ff9c91;
   --coral-soft: rgb(255 107 107 / 0.14);
   --coral-soft-border: rgb(255 107 107 / 0.28);
   --shadow-soft-card: 0 18px 50px rgb(0 0 0 / 0.22);
@@ -431,6 +464,33 @@
 
 .stream-caret {
   animation: stream-caret 1s steps(2, start) infinite;
+}
+
+.aqsha-composer-shell {
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  transition:
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.aqsha-composer-shell:focus-within {
+  border-color: color-mix(in oklch, var(--ring) 55%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 12%, transparent);
+}
+
+.aqsha-composer-shell--hero {
+  box-shadow: var(--shadow-soft-card);
+}
+
+.aqsha-composer-toolbar-btn {
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.aqsha-composer-toolbar-btn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 @keyframes stream-caret {

@@ -1,19 +1,7 @@
 "use client";
 
-import {
-  ChevronDownIcon,
-  MessageSquarePlusIcon,
-  PanelLeftIcon,
-  XIcon,
-} from "lucide-react";
-import { useMemo } from "react";
+import { MessageSquarePlusIcon, PanelLeftIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { SidebarContent, SidebarHeader } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCloseRightPanel } from "@/hooks/use-close-right-panel";
@@ -23,15 +11,16 @@ import { cn } from "@/lib/utils";
 import { useThreadExperienceData } from "@/features/thread-experience/api/use-thread-experience-data";
 import { ChatThreadState } from "@/features/thread-experience/components/chat-thread-state";
 import type {
+  RemoveThread,
   StartThread,
   ThreadSummary,
 } from "@/features/thread-experience/components/component-types";
+import { ComposerHeroState } from "@/features/thread-experience/components/composer-hero-state";
 import { Composer } from "@/features/thread-experience/components/composer";
 import { AccessDeniedState } from "@/features/thread-experience/components/home-states";
 import { ThreadDeleteActions } from "@/features/thread-experience/components/thread-actions-menu";
+import { ThreadRecentSwitcher } from "@/features/thread-experience/components/thread-recent-switcher";
 import type { RateStatus } from "@/features/thread-experience/types";
-
-type RemoveThread = (args: { threadId: string }) => Promise<{ ok: true }>;
 
 export function WorkspaceChatSidePanel({
   workspaceName,
@@ -60,10 +49,6 @@ export function WorkspaceChatSidePanel({
 }) {
   const closePanel = useCloseRightPanel();
   const threadExperience = useThreadExperienceData(activeThreadId ?? undefined);
-  const recentThreads = useMemo(
-    () => threads.toSorted((a, b) => b.lastActivityAt - a.lastActivityAt).slice(0, 4),
-    [threads],
-  );
   const activeThread = activeThreadId ? threadExperience.selectedThread : undefined;
   const headerLabel = activeThread?.title ?? "Chat baru";
   const sendWithDraftContext = async (
@@ -83,35 +68,14 @@ export function WorkspaceChatSidePanel({
     <>
       <SidebarHeader className={cn("gap-0 border-b-0 bg-background p-0", panelHeaderPaddingClass)}>
         <div className="flex min-w-0 items-center justify-between gap-3">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                className="h-auto min-w-0 max-w-[min(100%,12rem)] gap-1 rounded-full px-0 py-0 text-[13px] font-normal leading-none text-foreground hover:bg-transparent hover:text-foreground"
-              >
-                <span className="truncate">{headerLabel}</span>
-                <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="max-h-64 w-56 overflow-y-auto">
-              <DropdownMenuItem onClick={() => onActiveThreadIdChange(null)}>
-                Chat baru
-              </DropdownMenuItem>
-              {recentThreads.length === 0 ? (
-                <DropdownMenuItem disabled>Belum ada thread</DropdownMenuItem>
-              ) : (
-                recentThreads.map((thread) => (
-                  <DropdownMenuItem
-                    key={thread.threadId}
-                    onClick={() => onActiveThreadIdChange(thread.threadId)}
-                  >
-                    <span className="truncate">{thread.title}</span>
-                  </DropdownMenuItem>
-                ))
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ThreadRecentSwitcher
+            title={headerLabel}
+            threads={threads}
+            onSelectThread={onActiveThreadIdChange}
+            onNewThread={() => onActiveThreadIdChange(null)}
+            newLabel="Chat baru"
+            emptyLabel="Belum ada thread"
+          />
           <div className="flex shrink-0 items-center gap-1">
             {activeThreadId ? (
               <ThreadDeleteActions
@@ -154,7 +118,6 @@ export function WorkspaceChatSidePanel({
               threadId={activeThreadId}
               isLoading={activeThread === undefined}
               title={activeThread?.title}
-              recentThreads={recentThreads}
               rateStatus={rateStatus}
               startThread={startThread}
               onSend={sendWithDraftContext}
@@ -204,60 +167,23 @@ function WorkspacePanelDraftView({
         panelBodyPaddingClass,
       )}
     >
-      <div className="flex w-full flex-col items-center gap-5 text-center">
-        <h2 className="max-w-md font-heading text-lg font-semibold leading-snug tracking-tight text-foreground">
-          Apa yang ingin kita kerjakan?
-        </h2>
-        <div className="flex min-h-[28px] flex-wrap items-center justify-center gap-1.5">
-          <ContextPill label={workspaceName} locked />
-        </div>
+      <ComposerHeroState
+        logoClassName="size-6 text-mint"
+        titleClassName="font-heading text-xl font-bold tracking-tight text-foreground leading-none"
+        hint="Pilih item di board (klik sekali) atau ketik / untuk perintah riset"
+      >
         <Composer
+          variant="docked"
+          contextLabel={workspaceName}
           disabled={false}
           rateStatus={rateStatus}
           onStartThread={startThread}
-          onSend={async () => ({ ok: true, messageId: "" })}
           onThreadCreated={onThreadCreated}
           contextArtifacts={contextArtifacts}
           onRemoveContextArtifact={onRemoveContextArtifact}
         />
-        <p className="max-w-sm text-[12px] text-muted-foreground">
-          Pilih item di board (klik sekali) atau ketik / untuk perintah riset
-        </p>
-      </div>
+      </ComposerHeroState>
     </div>
-  );
-}
-
-function ContextPill({
-  label,
-  locked,
-  onRemove,
-}: {
-  label: string;
-  locked?: boolean;
-  onRemove?: () => void;
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex max-w-[11rem] items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-semibold transition-colors",
-        locked
-          ? "bg-muted text-muted-foreground"
-          : "bg-foreground text-background",
-      )}
-    >
-      <span className="truncate">{label}</span>
-      {locked ? null : (
-        <button
-          type="button"
-          onClick={onRemove}
-          className="shrink-0 rounded-full p-0.5 text-background/70 hover:bg-background/15 hover:text-background"
-          aria-label={`Hapus ${label} dari konteks`}
-        >
-          <XIcon className="size-3" />
-        </button>
-      )}
-    </span>
   );
 }
 

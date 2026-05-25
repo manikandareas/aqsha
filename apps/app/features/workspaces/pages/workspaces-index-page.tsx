@@ -25,6 +25,7 @@ export function WorkspacesIndexPage() {
     isLoadingWorkspaces,
     createWorkspace,
     archiveWorkspace,
+    removeThread,
   } = useWorkspaceIndexData();
   const [createOpen, setCreateOpen] = useState(false);
   const [archiveId, setArchiveId] = useState<string | null>(null);
@@ -36,6 +37,7 @@ export function WorkspacesIndexPage() {
       workspaces={workspaces}
       threads={threads}
       createWorkspace={createWorkspace}
+      removeThread={removeThread}
     >
       <main className="mx-auto grid w-full max-w-5xl gap-5 px-4 py-5 sm:px-8 lg:py-7">
         <header className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-border/70 pb-4">

@@ -30,17 +30,17 @@ export function SettingsRail({ viewer }: { viewer: Viewer | undefined }) {
   return (
     <Sidebar
       collapsible="offcanvas"
-      className="border-r border-sidebar-border/80 bg-sidebar [&_[data-slot=sidebar-inner]]:bg-sidebar"
+      className="border-r border-sidebar-border/60 bg-sidebar/95 backdrop-blur-sm [&_[data-slot=sidebar-inner]]:bg-sidebar/95"
     >
-      <SidebarHeader className="gap-3 px-2.5 pb-2 pt-3">
+      <SidebarHeader className="gap-3 px-3 pb-2 pt-3">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
-              className="h-8 rounded-[8px] px-2 text-[13px] font-medium text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+              className="h-8 rounded-[8px] px-2.5 text-[13px] font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground active:scale-[0.97] transition-[background-color,color,box-shadow,transform] duration-150 ease-out"
             >
               <Link href="/">
-                <ArrowLeftIcon className="size-3.5" />
+                <ArrowLeftIcon className="size-3.5 transition-transform duration-150 group-hover:-translate-x-0.5" />
                 <span>Kembali ke Chat</span>
               </Link>
             </SidebarMenuButton>
@@ -48,18 +48,18 @@ export function SettingsRail({ viewer }: { viewer: Viewer | undefined }) {
         </SidebarMenu>
       </SidebarHeader>
 
-      <SidebarContent className="px-1.5 pb-1 pt-0">
+      <SidebarContent className="px-2 pb-1 pt-0">
         <SettingsGroup label="Personal" active={active} />
         <SettingsGroup label="Research" active={active} />
       </SidebarContent>
 
-      <SidebarFooter className="mt-auto border-t border-transparent p-1.5">
+      <SidebarFooter className="mt-auto border-t border-border/40 p-2">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton className="h-11 min-w-0 rounded-[10px] px-2 text-sidebar-foreground/90 hover:bg-muted/70">
-              <Avatar className="h-8 w-8 rounded-full ring-1 ring-[var(--sky-soft-border)]">
+            <SidebarMenuButton className="h-11 min-w-0 rounded-[10px] px-2.5 text-sidebar-foreground/90 hover:bg-muted/60 active:scale-[0.97] transition-[background-color,color,box-shadow,transform] duration-150 ease-out">
+              <Avatar className="h-8 w-8 rounded-full ring-1 ring-border/50">
                 {viewer?.image ? <AvatarImage src={viewer.image} alt={name} /> : null}
-                <AvatarFallback className="rounded-full bg-[var(--sky-soft)] text-xs font-semibold text-primary">
+                <AvatarFallback className="rounded-full bg-primary/10 text-xs font-semibold text-primary">
                   {getInitials(name, email)}
                 </AvatarFallback>
               </Avatar>
@@ -78,8 +78,8 @@ export function SettingsRail({ viewer }: { viewer: Viewer | undefined }) {
 
 function SettingsGroup({ label, active }: { label: SettingsMenuItem["group"]; active: string }) {
   return (
-    <SidebarGroup className="px-0 py-2">
-      <SidebarGroupLabel className="px-2 text-[11px] font-medium text-muted-foreground">
+    <SidebarGroup className="px-1.5 py-1.5">
+      <SidebarGroupLabel className="px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">
         {label}
       </SidebarGroupLabel>
       <SidebarGroupContent>
@@ -103,12 +103,12 @@ function SettingsNavRow({ item, active }: { item: SettingsMenuItem; active: bool
         asChild
         isActive={active}
         className={cn(
-          "h-8 rounded-[8px] px-2 text-[13px] font-medium text-sidebar-foreground/88 hover:bg-muted/70 hover:text-foreground",
-          active && "bg-muted text-foreground shadow-none",
+          "h-8 rounded-[8px] px-2.5 text-[13px] font-medium text-sidebar-foreground/90 hover:bg-muted/60 hover:text-foreground active:scale-[0.97] transition-[background-color,color,box-shadow,transform] duration-150 ease-out",
+          active && "bg-primary/10 text-primary font-semibold hover:bg-primary/15 hover:text-primary",
         )}
       >
         <Link href={item.href}>
-          <Icon className={cn("size-3.5 text-muted-foreground", active && "text-primary")} />
+          <Icon className={cn("size-3.5 text-muted-foreground transition-colors duration-150", active && "text-primary")} />
           <span>{item.label}</span>
         </Link>
       </SidebarMenuButton>

@@ -23,7 +23,7 @@ export function SettingsSecurityPage() {
   return (
     <>
       <SettingsHeader section="security" />
-      <div className="grid gap-4">
+      <div className="grid gap-3">
         <SettingsSectionLabel>Session</SettingsSectionLabel>
         <SettingsCard>
           <ReadonlyField label="Email" value={viewer.email ?? "Not provided"} />
@@ -31,7 +31,12 @@ export function SettingsSecurityPage() {
           <ReadonlyField label="Active sessions" value="Unavailable in v1" />
           <ReadonlyField label="Account deletion" value="Unavailable in v1" />
           <SettingRow label="Sign out" description="Keluar dari perangkat ini.">
-            <Button type="button" variant="destructive" onClick={signOut} className="rounded-[8px]">
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={signOut}
+              className="rounded-[8px] active:scale-[0.97] transition-[background-color,color,box-shadow,transform] duration-150 ease-out cursor-pointer flex items-center gap-1.5 font-semibold"
+            >
               <LogOutIcon className="size-4" />
               Sign out
             </Button>

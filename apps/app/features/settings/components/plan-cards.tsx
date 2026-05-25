@@ -39,7 +39,7 @@ export function PlanCards({
                 </p>
               </div>
               {current.planKey === plan.key ? (
-                <span className="rounded-full border border-[var(--mint-soft-border)] bg-[var(--mint-soft)] px-2 py-1 text-[11px] font-semibold text-[var(--mint)]">
+                <span className="rounded-full border border-mint-soft-border bg-mint-soft px-2 py-1 text-[11px] font-semibold text-mint-foreground">
                   Aktif
                 </span>
               ) : null}

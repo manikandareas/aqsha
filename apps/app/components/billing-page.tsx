@@ -94,7 +94,7 @@ export function BillingPage() {
 
         <section className="grid gap-4 rounded-[14px] border border-border bg-card p-5 shadow-none md:grid-cols-[1fr_20rem]">
           <div className="min-w-0">
-            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[var(--sky-soft-border)] bg-[var(--sky-soft)] px-3 py-1 text-[12px] font-semibold text-primary">
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-sky-soft-border bg-sky-soft px-3 py-1 text-[12px] font-semibold text-sky-foreground">
               <GaugeIcon className="size-3.5" />
               Current plan
             </div>
@@ -140,7 +140,7 @@ export function BillingPage() {
         </section>
 
         {billingError ? (
-          <div className="rounded-[12px] border border-[var(--coral-soft-border)] bg-[var(--coral-soft)] px-4 py-3 text-sm font-medium leading-6 text-[var(--coral)]">
+          <div className="rounded-[12px] border border-coral-soft-border bg-coral-soft px-4 py-3 text-sm font-medium leading-6 text-coral-foreground">
             {billingError}
           </div>
         ) : null}
@@ -166,7 +166,7 @@ export function BillingPage() {
                   </p>
                 </div>
                 {current.planKey === plan.key ? (
-                  <span className="rounded-full border border-[var(--mint-soft-border)] bg-[var(--mint-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--mint)]">
+                  <span className="rounded-full border border-mint-soft-border bg-mint-soft px-2.5 py-1 text-[11px] font-semibold text-mint-foreground">
                     Aktif
                   </span>
                 ) : null}

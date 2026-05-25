@@ -4,9 +4,13 @@ export function SettingsHeader({ section, title = "Settings" }: { section: Setti
   const item = settingsItemForPath(`/settings/${section}`);
 
   return (
-    <header className="grid gap-1">
-      <h1 className="font-heading text-2xl font-bold leading-tight text-foreground">{title}</h1>
-      <p className="text-[13px] font-medium leading-5 text-muted-foreground">{item.description}</p>
+    <header className="flex flex-col mb-2">
+      <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+        {title}
+      </h1>
+      <p className="text-sm text-muted-foreground leading-normal mt-1 max-w-2xl">
+        {item.description}
+      </p>
     </header>
   );
 }

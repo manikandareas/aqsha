@@ -11,6 +11,7 @@ export function WorkspaceShell({
   threads,
   selectedWorkspaceId,
   createWorkspace,
+  removeThread,
   children,
 }: {
   viewer:
@@ -33,6 +34,7 @@ export function WorkspaceShell({
   }>;
   selectedWorkspaceId?: string;
   createWorkspace: (args: { name: string; description?: string }) => Promise<unknown>;
+  removeThread?: (args: { threadId: string }) => Promise<{ ok: true }>;
   children: ReactNode;
 }) {
   const router = useRouter();
@@ -54,6 +56,7 @@ export function WorkspaceShell({
         threads={threads}
         onCreateThread={() => router.push("/")}
         createWorkspace={createWorkspace}
+        removeThread={removeThread}
       />
       <SidebarInset className="min-h-svh bg-background text-foreground">
         {children}

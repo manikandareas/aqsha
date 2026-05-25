@@ -2,47 +2,27 @@
 
 import {
   ArrowUpIcon,
+  ChevronDownIcon,
+  LayoutGridIcon,
   Loader2Icon,
-  PaperclipIcon,
-  PlusIcon,
+  MicIcon,
+  SparklesIcon,
   SquareIcon,
   XIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import {
-  type KeyboardEvent as ReactKeyboardEvent,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
-import {
-  promptCommands,
-  type PromptCommand,
-} from "@aqsha/convex/prompt-commands";
+import { useEffect, useState } from "react";
+import type { PromptCommand } from "@aqsha/convex/prompt-commands";
 import {
   PromptInput,
-  PromptInputActionMenu,
-  PromptInputActionMenuContent,
-  PromptInputActionMenuItem,
-  PromptInputActionMenuTrigger,
-  PromptInputButton,
-  PromptInputFooter,
   PromptInputSubmit,
-  PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
 import {
-  Command,
-  CommandGroup,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverAnchor,
-  PopoverContent,
-} from "@/components/ui/popover";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import type { RateStatus, ResearchRun, SendResult } from "../types";
 import { formatDate } from "../utils/datetime";
@@ -51,38 +31,71 @@ import {
   createVisibleComposerContent,
   getComposerAvailability,
   restoreComposerContentAfterBlockedSend,
-  stripCommandFromSubmittedContent,
 } from "../utils/composer-model";
 import type {
   DraftContextArtifact,
   SendMessage,
   StartThread,
 } from "./component-types";
+import { ComposerContextMenu } from "./composer-context-menu";
+import { TokenizedPromptInput } from "./composer-token-input";
 
-export function Composer({
-  threadId,
-  disabled,
-  rateStatus,
-  activeRun,
-  onCancelRun,
-  onStartThread,
-  onSend,
-  onThreadCreated,
-  contextArtifacts = [],
-  onRemoveContextArtifact,
-}: {
-  threadId?: string;
+type ComposerVariant = "hero" | "docked";
+
+type ComposerSharedProps = {
   disabled: boolean;
   rateStatus: RateStatus | undefined;
-  onStartThread: StartThread;
-  onSend: SendMessage;
-  activeRun?: ResearchRun;
-  onCancelRun?: (runId: string) => Promise<unknown>;
-  /** When set, new threads stay in place instead of navigating to `/threads/...`. */
   onThreadCreated?: (threadId: string) => void;
   contextArtifacts?: DraftContextArtifact[];
   onRemoveContextArtifact?: (artifactId: string) => void;
-}) {
+  variant?: ComposerVariant;
+  contextLabel?: string;
+  showVoiceInput?: boolean;
+  activeRun?: ResearchRun;
+  onCancelRun?: (runId: string) => Promise<unknown>;
+};
+
+export type ComposerProps = ComposerSharedProps &
+  (
+    | {
+        mode?: "draft";
+        threadId?: undefined;
+        onStartThread: StartThread;
+        onSend?: never;
+      }
+    | {
+        mode: "thread";
+        threadId: string;
+        onSend: SendMessage;
+        onStartThread?: StartThread;
+      }
+    | {
+        mode: "disabled";
+        threadId?: undefined;
+        onStartThread?: never;
+        onSend?: never;
+        disabled: true;
+      }
+  );
+
+export function Composer(props: ComposerProps) {
+  const {
+    disabled,
+    rateStatus,
+    onThreadCreated,
+    contextArtifacts = [],
+    onRemoveContextArtifact,
+    variant = "docked",
+    contextLabel,
+    showVoiceInput = false,
+    activeRun,
+    onCancelRun,
+  } = props;
+
+  const threadId = props.mode === "thread" ? props.threadId : undefined;
+  const onStartThread = props.mode === "draft" ? props.onStartThread : props.mode === "thread" ? props.onStartThread : undefined;
+  const onSend = props.mode === "thread" ? props.onSend : undefined;
+
   const [content, setContent] = useState("");
   const [selectedCommand, setSelectedCommand] = useState<PromptCommand | null>(null);
   const [mode, setMode] = useState<"normal" | "deep">("normal");
@@ -90,6 +103,8 @@ export function Composer({
   const [localRetryAt, setLocalRetryAt] = useState<number | null>(null);
   const [billingBlock, setBillingBlock] = useState<SendResult & { ok: false } | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [editorHeight, setEditorHeight] = useState(24);
+
   const retryAt = localRetryAt ?? rateStatus?.retryAt ?? null;
   const retrySeconds =
     retryAt && retryAt > now
@@ -106,6 +121,7 @@ export function Composer({
     activeRun,
   });
   const router = useRouter();
+  const isExpanded = editorHeight > 30 || content.includes("\n");
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 250);
@@ -134,13 +150,13 @@ export function Composer({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [activeRun, isDeepActive, onCancelRun]);
 
-  const handleSubmit = async ({ text }: { text: string }) => {
+  const handleSubmit = async () => {
     if (!canSend) {
       return;
     }
 
     const submission = buildComposerSubmission({
-      content: stripCommandFromSubmittedContent(text, selectedCommand),
+      content,
       selectedCommand,
       mode: effectiveMode,
     });
@@ -150,18 +166,20 @@ export function Composer({
     setSelectedCommand(null);
     setIsSending(true);
     try {
-      const result = threadId
+      const result = threadId && onSend
         ? await onSend({
             threadId,
             content: nextContent,
             mode: submission.mode,
             commandId: submission.commandId,
           })
-        : await onStartThread({
-            content: nextContent,
-            mode: submission.mode,
-            commandId: submission.commandId,
-          });
+        : onStartThread
+          ? await onStartThread({
+              content: nextContent,
+              mode: submission.mode,
+              commandId: submission.commandId,
+            })
+          : { ok: false as const, reason: "subscription_required" as const };
       if (!result.ok) {
         if (result.reason === "rate_limited" && result.retryAt) {
           setLocalRetryAt(result.retryAt);
@@ -186,443 +204,238 @@ export function Composer({
     }
   };
 
+  const requestFormSubmit = () => {
+    if (canSend) {
+      void handleSubmit();
+    }
+  };
+
   return (
-    <PromptInput
-      onSubmit={handleSubmit}
-      data-aqsha-composer-form="true"
-      className="rounded-[14px] border border-input bg-card text-foreground shadow-none transition-colors focus-within:border-ring/70 focus-within:ring-3 focus-within:ring-ring/20 has-disabled:bg-card has-disabled:opacity-100 dark:border-input dark:bg-card dark:text-foreground dark:focus-within:border-ring/65 dark:focus-within:ring-ring/18 dark:has-disabled:bg-card"
-    >
-      {isRateLimited ? (
-        <div className="mx-3 mt-3 rounded-[9px] border border-[var(--lemon-soft-border)] bg-[var(--lemon-soft)] px-3 py-2 text-[12px] font-medium text-[var(--lemon)]">
-          Perlu istirahat sebentar. Coba lagi dalam {retrySeconds || 1} detik.
-        </div>
-      ) : null}
-      {billingBlock ? (
-        <div className="mx-3 mt-3 rounded-[9px] border border-[var(--coral-soft-border)] bg-[var(--coral-soft)] px-3 py-2 text-[12px] font-medium leading-5 text-[var(--coral)]">
-          {billingBlock.reason === "quota_exceeded"
-            ? `Credits habis. Reset ${billingBlock.resetAt ? formatDate(billingBlock.resetAt) : "periode berikutnya"}.`
-            : billingBlock.reason === "subscription_required"
-              ? `Butuh plan ${billingBlock.requiredPlan ?? "berbayar"} untuk mode ini.`
-              : "Billing belum aktif. Periksa subscription di halaman Billing."}{" "}
-          <a href="/settings/usage-billing" className="font-semibold underline underline-offset-2">
-            Buka Billing
-          </a>
-        </div>
-      ) : null}
-      {contextArtifacts.length > 0 ? (
-        <div className="flex min-w-0 flex-wrap gap-1.5 px-4 pt-3">
+    <div className="flex w-full flex-col">
+      {(contextArtifacts.length > 0 || contextLabel) && (
+        <div className="flex flex-wrap gap-1.5 mb-2.5 px-1 animate-in fade-in slide-in-from-bottom-2 duration-200 justify-start">
+          {contextLabel && contextArtifacts.length === 0 && (
+            <div className="inline-flex h-7 items-center gap-1.5 rounded-full border border-border bg-card/75 px-2.5 text-[11px] font-semibold text-foreground shadow-sm">
+              <LayoutGridIcon className="size-3.5 text-muted-foreground shrink-0" />
+              <span className="truncate max-w-[12rem]">{contextLabel}</span>
+            </div>
+          )}
           {contextArtifacts.map((artifact) => (
-            <button
+            <div
               key={artifact.artifactId}
-              type="button"
-              onClick={() => onRemoveContextArtifact?.(artifact.artifactId)}
-              disabled={!onRemoveContextArtifact || disabled || isDeepActive}
-              className="inline-flex max-w-[12rem] items-center gap-1.5 rounded-full border border-[var(--mint-soft-border)] bg-[var(--mint-soft)] px-2.5 py-1 text-[11px] font-semibold leading-none text-[var(--mint)] transition-colors hover:bg-muted disabled:cursor-default disabled:opacity-80"
-              aria-label={`Hapus ${artifact.title} dari konteks`}
+              className="inline-flex h-7 items-center gap-1.5 rounded-full border border-border bg-card px-2.5 text-[11px] font-semibold text-foreground shadow-sm animate-in zoom-in-95 duration-150"
             >
-              <span className="truncate">{artifact.title}</span>
-              {onRemoveContextArtifact ? <XIcon className="size-3 shrink-0" /> : null}
-            </button>
+              <LayoutGridIcon className="size-3.5 text-muted-foreground shrink-0" />
+              <span className="truncate max-w-[12rem]">{artifact.title}</span>
+              {onRemoveContextArtifact && (
+                <button
+                  type="button"
+                  onClick={() => onRemoveContextArtifact(artifact.artifactId)}
+                  className="rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                  aria-label={`Hapus ${artifact.title} dari konteks`}
+                >
+                  <XIcon className="size-3" />
+                </button>
+              )}
+            </div>
           ))}
         </div>
-      ) : null}
-      <TokenizedPromptInput
-        value={content}
-        command={selectedCommand}
-        onValueChange={setContent}
-        onCommandChange={(command) => {
-          setSelectedCommand(command);
-          if (command?.mode === "deep") {
-            setMode("deep");
-          }
-        }}
-        onSubmit={() => {
-          if (canSend) {
-            document
-              .querySelector<HTMLFormElement>("[data-aqsha-composer-form='true']")
-              ?.requestSubmit();
-          }
-        }}
-        disabled={disabled || isDeepActive}
-        maxLength={8000}
-        placeholder={
-          threadId
-            ? "Tulis follow up, atau ketik / untuk perintah riset..."
-            : "Tulis pertanyaan, atau ketik / untuk perintah riset..."
-        }
-      />
-      <input type="hidden" name="message" value={visibleContent} />
-      <PromptInputFooter className="flex w-full items-end justify-between gap-3 border-t-0 px-4 pb-4 pt-1 text-[var(--ink-soft)] dark:text-[#d4d4d4]">
-        <PromptInputTools className="min-w-0 flex-wrap gap-2">
-          <div className="inline-flex rounded-full border border-border bg-muted p-0.5 text-[13px] font-semibold text-[var(--ink-soft)] dark:border-input dark:bg-muted dark:text-[#d4d4d4]">
-            <ModeButton
-              active={mode === "normal"}
-              onClick={() => setMode("normal")}
-              disabled={isDeepActive}
-              variant="normal"
-            >
-              Normal
-            </ModeButton>
-            <ModeButton
-              active={mode === "deep"}
-              onClick={() => setMode("deep")}
-              disabled={isDeepActive}
-              variant="deep"
-            >
-              Deep
-            </ModeButton>
-          </div>
-          <PromptInputActionMenu>
-            <PromptInputActionMenuTrigger
-              tooltip="Tambah konteks"
-              disabled={mode === "deep" || !threadId || disabled || isDeepActive}
-              className="size-9 rounded-[9px] text-[var(--ink-soft)] hover:bg-muted hover:text-foreground disabled:text-muted-foreground disabled:opacity-75 dark:text-[#d4d4d4] dark:hover:bg-muted dark:hover:text-foreground dark:disabled:text-[#a3a3a3] dark:disabled:opacity-85"
-            >
-              <PlusIcon className="size-4" />
-            </PromptInputActionMenuTrigger>
-            <PromptInputActionMenuContent>
-              <PromptInputActionMenuItem disabled>
-                <PaperclipIcon className="mr-2 size-4" />
-                Lampirkan sumber
-              </PromptInputActionMenuItem>
-              <PromptInputActionMenuItem disabled>
-                <PlusIcon className="mr-2 size-4" />
-                Tambah konteks thread
-              </PromptInputActionMenuItem>
-            </PromptInputActionMenuContent>
-          </PromptInputActionMenu>
-          <PromptInputButton
-            tooltip="Lampirkan"
-            className="size-9 rounded-[9px] text-[var(--ink-soft)] hover:bg-muted hover:text-foreground disabled:text-muted-foreground disabled:opacity-75 dark:text-[#d4d4d4] dark:hover:bg-muted dark:hover:text-foreground dark:disabled:text-[#a3a3a3] dark:disabled:opacity-85"
-            disabled
-          >
-            <PaperclipIcon className="size-4" />
-          </PromptInputButton>
-        </PromptInputTools>
-        {isDeepActive && activeRun && onCancelRun ? (
-          <PromptInputSubmit
-            status="streaming"
-            onStop={() => onCancelRun(activeRun._id)}
-            size="sm"
-            className="h-10 shrink-0 rounded-[10px] border border-[var(--coral-soft-border)] bg-[var(--coral-soft)] px-3.5 font-semibold text-[var(--coral)] hover:bg-[var(--coral-soft)]"
-          >
-            <SquareIcon className="size-3.5" />
-            Hentikan
-          </PromptInputSubmit>
-        ) : (
-          <PromptInputSubmit
-            size="icon-sm"
-            className="size-10 shrink-0 rounded-[12px] bg-primary text-primary-foreground shadow-none transition-colors hover:bg-[#2f73d6] disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 dark:bg-[#0b7cff] dark:text-white dark:hover:bg-[#2f8cff] dark:disabled:bg-muted dark:disabled:text-[#a3a3a3]"
-            disabled={!canSend}
-            status={isSending ? "submitted" : undefined}
-          >
-            {isSending ? (
-              <Loader2Icon className="size-4 animate-spin" />
-            ) : (
-              <ArrowUpIcon className="size-4" />
-            )}
-          </PromptInputSubmit>
+      )}
+
+      <PromptInput
+        onSubmit={handleSubmit}
+        className={cn(
+          "border border-border/85 bg-card/95 text-foreground transition-all duration-300 ease-out has-disabled:opacity-100 flex flex-col justify-between overflow-hidden shadow-sm text-left",
+          isExpanded ? "rounded-[24px]" : "rounded-full",
+          variant === "hero" && "shadow-aqsha",
         )}
-      </PromptInputFooter>
-    </PromptInput>
-  );
-}
+      >
+        {isRateLimited || billingBlock ? (
+          <div className="grid gap-2 border-b border-border/60 px-4 py-2.5">
+            {isRateLimited ? (
+              <div className="rounded-lg border border-lemon-soft-border bg-lemon-soft px-2.5 py-2 text-[11px] font-medium leading-5 text-lemon-foreground animate-in slide-in-from-top-2 duration-200">
+                Perlu istirahat sebentar. Coba lagi dalam {retrySeconds || 1} detik.
+              </div>
+            ) : null}
+            {billingBlock ? (
+              <div className="rounded-lg border border-coral-soft-border bg-coral-soft px-2.5 py-2 text-[11px] font-medium leading-5 text-coral-foreground animate-in slide-in-from-top-2 duration-200">
+                {billingBlock.reason === "quota_exceeded"
+                  ? `Credits habis. Reset ${billingBlock.resetAt ? formatDate(billingBlock.resetAt) : "periode berikutnya"}.`
+                  : billingBlock.reason === "subscription_required"
+                    ? `Butuh plan ${billingBlock.requiredPlan ?? "berbayar"} untuk mode ini.`
+                    : "Billing belum aktif. Periksa subscription di halaman Billing."}{" "}
+                <a href="/settings/usage-billing" className="font-semibold underline underline-offset-2">
+                  Buka Billing
+                </a>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
-function TokenizedPromptInput({
-  value,
-  command,
-  onValueChange,
-  onCommandChange,
-  onSubmit,
-  disabled,
-  maxLength,
-  placeholder,
-}: {
-  value: string;
-  command: PromptCommand | null;
-  onValueChange: (value: string) => void;
-  onCommandChange: (command: PromptCommand | null) => void;
-  onSubmit: () => void;
-  disabled?: boolean;
-  maxLength: number;
-  placeholder: string;
-}) {
-  const editorRef = useRef<HTMLDivElement | null>(null);
-  const [commandOpen, setCommandOpen] = useState(false);
-  const isArgumentEmpty = value.length === 0;
-
-  useEffect(() => {
-    const editor = editorRef.current;
-    if (!editor) {
-      return;
-    }
-    const shouldSyncWhileFocused = value.length === 0;
-    if (
-      editor.innerText !== value &&
-      (document.activeElement !== editor || shouldSyncWhileFocused)
-    ) {
-      editor.innerText = value;
-    }
-  }, [value]);
-
-  const focusEditor = useCallback(() => {
-    window.requestAnimationFrame(() => {
-      const editor = editorRef.current;
-      if (!editor) return;
-      editor.focus();
-      moveCaretToEnd(editor);
-    });
-  }, []);
-
-  const handleSelectCommand = useCallback(
-    (selected: PromptCommand) => {
-      onCommandChange(selected);
-      setCommandOpen(false);
-      focusEditor();
-    },
-    [focusEditor, onCommandChange],
-  );
-
-  const clearCommand = useCallback(() => {
-    onCommandChange(null);
-    focusEditor();
-  }, [focusEditor, onCommandChange]);
-
-  const handleInput = useCallback(() => {
-    const editor = editorRef.current;
-    if (!editor) return;
-    const text = editor.innerText.replace(/\u00a0/g, " ");
-    if (text.length <= maxLength) {
-      onValueChange(text);
-      return;
-    }
-    const trimmed = text.slice(0, maxLength);
-    editor.innerText = trimmed;
-    moveCaretToEnd(editor);
-    onValueChange(trimmed);
-  }, [maxLength, onValueChange]);
-
-  const handleKeyDown = useCallback(
-    (event: ReactKeyboardEvent<HTMLDivElement>) => {
-      if (event.nativeEvent.isComposing) {
-        return;
-      }
-      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-        event.preventDefault();
-        onSubmit();
-        return;
-      }
-      if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        onSubmit();
-        return;
-      }
-      if (event.key === "/" && !command && isSlashCommandPosition(editorRef.current)) {
-        event.preventDefault();
-        setCommandOpen(true);
-        return;
-      }
-      if (
-        (event.key === "Backspace" || event.key === "Delete") &&
-        command &&
-        isArgumentEmpty
-      ) {
-        event.preventDefault();
-        clearCommand();
-        return;
-      }
-      if (event.key === "Escape" && commandOpen) {
-        event.preventDefault();
-        setCommandOpen(false);
-        focusEditor();
-      }
-    },
-    [clearCommand, command, commandOpen, focusEditor, isArgumentEmpty, onSubmit],
-  );
-
-  return (
-    <Popover open={commandOpen} onOpenChange={setCommandOpen}>
-      <PopoverAnchor asChild>
         <div
           className={cn(
-            "flex min-h-16 w-full items-start gap-2 px-4 pb-3 pt-4 text-[15px] font-medium leading-6 text-foreground",
-            disabled && "opacity-100",
+            "flex w-full min-h-0 transition-all duration-300 ease-out",
+            isExpanded ? "flex-col gap-3 p-3.5 pb-2.5 pt-3" : "flex-row items-center gap-2 pl-2 pr-1.5 py-1 min-h-[46px]",
           )}
-          onKeyDownCapture={(event) => {
-            if (
-              (event.key === "Backspace" || event.key === "Delete") &&
-              command &&
-              isArgumentEmpty
-            ) {
-              event.preventDefault();
-              event.stopPropagation();
-              clearCommand();
-            }
-          }}
         >
-          {command ? (
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={clearCommand}
-              className={cn(
-                "mt-0.5 shrink-0 rounded-full border px-2 py-1 text-[11px] font-semibold leading-none",
-                command.mode === "deep"
-                  ? "border-[var(--lavender-soft-border)] bg-[var(--lavender-soft)] text-[var(--lavender)]"
-                  : "border-[var(--sky-soft-border)] bg-[var(--sky-soft)] text-primary",
-              )}
-            >
-              {command.slug}
-            </button>
-          ) : null}
-          <div className="relative min-w-0 flex-1">
-            {value.length === 0 ? (
-              <span className="pointer-events-none absolute left-0 top-0 font-medium text-muted-foreground dark:text-[#b8b8b8]">
-                {command?.placeholder ?? placeholder}
-              </span>
+          <div className={cn("flex items-start flex-1 min-w-0", isExpanded ? "w-full px-1" : "gap-2")}>
+            {!isExpanded ? (
+              <ComposerContextMenu
+                threadId={threadId}
+                disabled={disabled}
+                isDeepActive={isDeepActive}
+                mode={mode}
+              />
             ) : null}
-            <div
-              ref={editorRef}
-              contentEditable={!disabled}
-              role="textbox"
-              aria-label="Pesan"
-              aria-multiline="true"
-              data-slot="input-group-control"
-              className="min-h-10 max-h-48 overflow-y-auto whitespace-pre-wrap break-words text-foreground caret-primary outline-none disabled:opacity-100"
-              onInput={handleInput}
-              onKeyDown={handleKeyDown}
-              suppressContentEditableWarning
+
+            <TokenizedPromptInput
+              value={content}
+              command={selectedCommand}
+              onValueChange={setContent}
+              onHeightChange={setEditorHeight}
+              onCommandChange={(command) => {
+                setSelectedCommand(command);
+                if (command?.mode === "deep") {
+                  setMode("deep");
+                }
+              }}
+              onSubmit={requestFormSubmit}
+              disabled={disabled || isDeepActive}
+              maxLength={8000}
+              placeholder="Select board items, @ mention creators, or / for voices..."
+              className={isExpanded ? "py-0.5" : "py-1"}
             />
           </div>
+
+          <div
+            className={cn(
+              "flex items-center shrink-0",
+              isExpanded ? "w-full justify-between pt-1 border-t border-border/40" : "gap-1",
+            )}
+          >
+            {isExpanded ? (
+              <ComposerContextMenu
+                threadId={threadId}
+                disabled={disabled}
+                isDeepActive={isDeepActive}
+                mode={mode}
+              />
+            ) : null}
+
+            <div className="flex items-center gap-1 shrink-0 ml-auto">
+              <ModeSelector mode={mode} setMode={setMode} disabled={isDeepActive} />
+              {showVoiceInput ? <MicButton disabled={disabled || isDeepActive} /> : null}
+              <ComposerSubmitButton
+                canSend={canSend}
+                isSending={isSending}
+                isDeepActive={isDeepActive}
+                activeRun={activeRun}
+                onCancelRun={onCancelRun}
+              />
+            </div>
+          </div>
         </div>
-      </PopoverAnchor>
-      <PopoverContent
-        align="start"
-        side="top"
-        className="w-[min(21rem,calc(100vw-2rem))] overflow-hidden p-0"
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          focusEditor();
-        }}
-      >
-        <Command
-          key={commandOpen ? "open" : "closed"}
-          shouldFilter={false}
-          className="rounded-lg p-0"
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.preventDefault();
-              setCommandOpen(false);
-              focusEditor();
-            }
-          }}
-        >
-          <CommandList className="max-h-[17rem] py-1">
-            {promptCommandGroups.map((group) => (
-              <CommandGroup
-                key={group}
-                heading={group}
-                className="border-b border-border/70 p-1 last:border-b-0 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pb-0.5 [&_[cmdk-group-heading]]:pt-0 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:leading-3"
-              >
-                {promptCommands
-                  .filter((item) => item.group === group)
-                  .map((item) => (
-                    <CommandItem
-                      key={item.id}
-                      value={item.id}
-                      onSelect={() => handleSelectCommand(item)}
-                      className="min-h-10 items-start gap-2 rounded-md px-2 py-1.5 text-[13px]"
-                    >
-                      <span className="min-w-0 flex-1 space-y-1">
-                        <span className="block truncate font-medium leading-4">
-                          {item.slug}
-                        </span>
-                        <span className="block whitespace-normal text-[10px] leading-3 text-muted-foreground">
-                          {item.description}
-                        </span>
-                      </span>
-                      {item.mode === "deep" ? (
-                        <span className="shrink-0 rounded-full bg-[var(--lavender-soft)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--lavender)]">
-                          Deep
-                        </span>
-                      ) : null}
-                    </CommandItem>
-                  ))}
-              </CommandGroup>
-            ))}
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+      </PromptInput>
+    </div>
   );
 }
 
-const promptCommandGroups = [
-  "Tulis Akademik",
-  "Rancang Riset",
-  "Riset Mendalam",
-] as const;
-
-function isSlashCommandPosition(editor: HTMLDivElement | null) {
-  if (!editor) {
-    return false;
-  }
-  const beforeCursor = getTextBeforeCursor(editor);
-  return beforeCursor.length === 0 || /\s$/.test(beforeCursor);
-}
-
-function getTextBeforeCursor(editor: HTMLDivElement) {
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0) {
-    return editor.innerText;
-  }
-  const range = selection.getRangeAt(0);
-  if (!editor.contains(range.startContainer)) {
-    return editor.innerText;
-  }
-  const beforeRange = range.cloneRange();
-  beforeRange.selectNodeContents(editor);
-  beforeRange.setEnd(range.startContainer, range.startOffset);
-  return beforeRange.toString();
-}
-
-function moveCaretToEnd(element: HTMLElement) {
-  const range = document.createRange();
-  range.selectNodeContents(element);
-  range.collapse(false);
-  const selection = window.getSelection();
-  selection?.removeAllRanges();
-  selection?.addRange(range);
-}
-
-function ModeButton({
-  active,
-  onClick,
+function ModeSelector({
+  mode,
+  setMode,
   disabled,
-  variant,
-  children,
 }: {
-  active: boolean;
-  onClick: () => void;
+  mode: "normal" | "deep";
+  setMode: (mode: "normal" | "deep") => void;
   disabled?: boolean;
-  variant: "normal" | "deep";
-  children: ReactNode;
 }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          disabled={disabled}
+          className="aqsha-composer-toolbar-btn inline-flex h-8 items-center gap-1 rounded-full bg-muted/20 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-all duration-150 cursor-pointer disabled:opacity-50"
+        >
+          <SparklesIcon
+            className={cn(
+              "size-3 shrink-0",
+              mode === "deep" ? "text-lavender" : "text-primary",
+            )}
+          />
+          <span className="capitalize">{mode}</span>
+          <ChevronDownIcon className="size-3 text-muted-foreground/60" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-36">
+        <DropdownMenuItem onClick={() => setMode("normal")}>
+          <span className="font-semibold text-[11px]">Normal Mode</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setMode("deep")}>
+          <span className="font-semibold text-[11px] text-lavender">Deep Mode</span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function MicButton({ disabled }: { disabled?: boolean }) {
   return (
     <button
       type="button"
       disabled={disabled}
-      onClick={onClick}
-      className={cn(
-        "rounded-full px-3 py-1.5 transition-colors disabled:opacity-75 dark:disabled:opacity-80",
-        active
-          ? "bg-card text-foreground shadow-[0_1px_2px_rgb(26_31_43_/_0.08)]"
-          : "text-[var(--ink-soft)] hover:text-foreground dark:text-[#cfcfcf] dark:hover:text-foreground",
-        active && variant === "deep" && "text-[var(--lavender)]",
-        active && variant === "normal" && "text-foreground",
-      )}
+      className="aqsha-composer-toolbar-btn flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted/30 hover:text-foreground transition-all duration-150 disabled:opacity-50 cursor-pointer"
+      title="Voice Input (Segera hadir)"
     >
-      {children}
+      <MicIcon className="size-3.5" />
     </button>
+  );
+}
+
+function ComposerSubmitButton({
+  canSend,
+  isSending,
+  isDeepActive,
+  activeRun,
+  onCancelRun,
+}: {
+  canSend: boolean;
+  isSending: boolean;
+  isDeepActive: boolean;
+  activeRun?: ResearchRun;
+  onCancelRun?: (runId: string) => Promise<unknown>;
+}) {
+  if (isDeepActive && activeRun && onCancelRun) {
+    return (
+      <PromptInputSubmit
+        status="streaming"
+        onStop={() => onCancelRun(activeRun._id)}
+        size="sm"
+        className="aqsha-composer-toolbar-btn h-8 shrink-0 rounded-full border border-coral-soft-border bg-coral-soft px-2.5 text-[11px] font-semibold text-coral-foreground hover:bg-coral-soft"
+      >
+        <SquareIcon className="size-3" />
+        Stop
+      </PromptInputSubmit>
+    );
+  }
+
+  return (
+    <PromptInputSubmit
+      size="icon-sm"
+      className={cn(
+        "aqsha-composer-toolbar-btn size-8 shrink-0 rounded-full flex items-center justify-center shadow-none transition-all duration-200 active:scale-95",
+        canSend
+          ? "bg-mint text-white hover:opacity-90"
+          : "bg-muted/30 text-muted-foreground/30 cursor-not-allowed",
+      )}
+      disabled={!canSend}
+      status={isSending ? "submitted" : undefined}
+    >
+      {isSending ? (
+        <Loader2Icon className="size-3.5 animate-spin" />
+      ) : (
+        <ArrowUpIcon className="size-3.5" />
+      )}
+    </PromptInputSubmit>
   );
 }

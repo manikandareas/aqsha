@@ -33,6 +33,11 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { NameDialog } from "@/features/workspaces/components/workspace-dialogs";
+import { ThreadDeleteActions } from "@/features/thread-experience/components/thread-actions-menu";
+import type {
+  RemoveThread,
+  ThreadSummary,
+} from "@/features/thread-experience/components/component-types";
 import {
   type ComponentProps,
   type ReactNode,
@@ -47,17 +52,6 @@ type Viewer = {
   image: string | null;
 };
 
-type ThreadSummary = {
-  threadId: string;
-  workspaceId?: string;
-  title: string;
-  createdAt: number;
-  lastActivityAt: number;
-  lastMessagePreview: string;
-  messageCount: number;
-  status: "idle" | "streaming" | "failed";
-};
-
 type WorkspaceSummary = {
   _id: string;
   name: string;
@@ -65,14 +59,14 @@ type WorkspaceSummary = {
 };
 
 const sidebarItemBaseClass =
-  "h-8 gap-2 rounded-[8px] px-2.5 py-0 text-[12px] font-medium transition-colors hover:bg-muted/60 data-active:bg-muted data-active:font-medium data-active:text-foreground data-active:shadow-none hover:text-foreground active:bg-muted active:text-foreground [&_svg]:size-3.5";
+  "h-8 gap-2 rounded-[8px] px-2.5 py-0 text-[12px] font-medium transition-[background-color,color,box-shadow] duration-150 ease-out hover:bg-muted/60 data-active:bg-primary/10 data-active:font-medium data-active:text-foreground data-active:shadow-none data-active:[&_svg]:text-primary hover:text-foreground active:bg-muted active:text-foreground [&_svg]:size-3.5";
 
 function sidebarItemClass(active?: boolean) {
   return cn(
     sidebarItemBaseClass,
     active
-      ? "bg-muted text-foreground [&_svg]:text-foreground/75"
-      : "text-muted-foreground [&_svg]:text-muted-foreground/80",
+      ? "bg-primary/10 text-foreground [&_svg]:text-primary"
+      : "text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-primary/70",
   );
 }
 
@@ -84,6 +78,7 @@ export function AppSidebar({
   selectedThreadId,
   onCreateThread,
   createWorkspace,
+  removeThread,
   ...props
 }: ComponentProps<typeof Sidebar> & {
   viewer: Viewer | undefined;
@@ -93,6 +88,7 @@ export function AppSidebar({
   selectedThreadId?: string;
   onCreateThread: () => void;
   createWorkspace?: (args: { name: string; description?: string }) => Promise<unknown>;
+  removeThread?: RemoveThread;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -121,7 +117,7 @@ export function AppSidebar({
     <button
       type="button"
       onClick={() => setCreateDialogOpen(true)}
-      className="flex size-5 shrink-0 items-center justify-center rounded-[5px] text-muted-foreground/80 transition-colors hover:bg-muted hover:text-foreground"
+      className="flex size-5 shrink-0 items-center justify-center rounded-[5px] text-muted-foreground transition-[background-color,color] duration-150 ease-out hover:bg-primary/10 hover:text-primary"
       aria-label="Workspace baru"
     >
       <PlusIcon className="size-3" />
@@ -158,6 +154,16 @@ export function AppSidebar({
     setOpen(false);
   };
 
+  const handleDeleteThread = async (thread: ThreadSummary) => {
+    if (!removeThread) return;
+    await removeThread({ threadId: thread.threadId });
+    if (pathname === `/threads/${thread.threadId}`) {
+      router.replace(
+        thread.workspaceId ? `/workspaces/${thread.workspaceId}` : "/",
+      );
+    }
+  };
+
   return (
     <>
       <Sidebar
@@ -170,7 +176,7 @@ export function AppSidebar({
             <button
               type="button"
               onClick={closeSidebar}
-              className="flex size-6 items-center justify-center rounded-[6px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="flex size-6 items-center justify-center rounded-[6px] text-muted-foreground transition-[background-color,color] duration-150 ease-out hover:bg-primary/10 hover:text-primary"
               aria-label="Tutup sidebar kiri"
             >
               <PanelLeftIcon className="size-3.5" />
@@ -178,7 +184,7 @@ export function AppSidebar({
             <button
               type="button"
               onClick={() => setCommandOpen(true)}
-              className="flex size-6 items-center justify-center rounded-[6px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="flex size-6 items-center justify-center rounded-[6px] text-muted-foreground transition-[background-color,color] duration-150 ease-out hover:bg-primary/10 hover:text-primary"
               aria-label="Cari thread"
             >
               <SearchIcon className="size-3.5" />
@@ -200,7 +206,7 @@ export function AppSidebar({
           <ScrollArea className="min-h-0 min-w-0 flex-1 overflow-hidden px-0">
             <div className="grid min-w-0 gap-5 overflow-hidden">
               {!hasSidebarItems ? (
-                <div className="rounded-[8px] border border-dashed border-sidebar-border bg-muted/25 px-3 py-4 text-center text-[12px] leading-relaxed text-muted-foreground">
+                <div className="rounded-[8px] border border-dashed border-mint-soft-border bg-mint-soft/50 px-3 py-4 text-center text-[12px] leading-relaxed text-muted-foreground">
                   Belum ada thread atau workspace.
                 </div>
               ) : (
@@ -231,6 +237,11 @@ export function AppSidebar({
                             key={thread.threadId}
                             thread={thread}
                             active={thread.threadId === selectedThreadId}
+                            onDelete={
+                              removeThread
+                                ? () => handleDeleteThread(thread)
+                                : undefined
+                            }
                           />
                         ))}
                       </SidebarMenu>
@@ -397,7 +408,7 @@ function SidebarSection({
           first ? "pt-0" : "pt-1",
         )}
       >
-        <span className="text-[11px] font-medium tracking-[-0.01em] text-muted-foreground/75">
+        <span className="text-[11px] font-medium tracking-[-0.01em] text-primary/75">
           {label}
         </span>
         {action}
@@ -410,10 +421,16 @@ function SidebarSection({
 function RecentThreadRow({
   thread,
   active,
+  onDelete,
 }: {
   thread: ThreadSummary;
   active: boolean;
+  onDelete?: () => Promise<void>;
 }) {
+  const deleteDescription = thread.workspaceId
+    ? "Thread dan pesannya akan dihapus permanen dari workspace ini."
+    : "Thread dan pesannya akan dihapus permanen.";
+
   return (
     <SidebarMenuItem className="min-w-0 overflow-hidden">
       <SidebarMenuButton
@@ -438,6 +455,13 @@ function RecentThreadRow({
           ) : null}
         </Link>
       </SidebarMenuButton>
+      {onDelete ? (
+        <ThreadDeleteActions
+          variant="sidebar-row"
+          description={deleteDescription}
+          onDelete={onDelete}
+        />
+      ) : null}
     </SidebarMenuItem>
   );
 }

@@ -138,7 +138,7 @@ function FolderTile({
         aria-label={`Folder ${folder.name}. Klik dua kali untuk membuka.`}
       >
         <FolderIcon
-          className="size-5 shrink-0 fill-[var(--lemon)] text-[var(--lemon)]"
+          className="size-5 shrink-0 fill-lemon text-lemon"
           strokeWidth={1.25}
         />
         <span className="truncate text-[13px] font-medium text-foreground">{folder.name}</span>

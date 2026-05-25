@@ -15,6 +15,7 @@ export function ThreadShellLayout({
   threads,
   selectedThreadId,
   onCreateThread,
+  onSelectThread,
   title,
   threadId,
   selectedThread,
@@ -28,6 +29,7 @@ export function ThreadShellLayout({
   onRightPanelOpenChange,
   onCancelRun,
   onDeleteThread,
+  removeThread,
   sidePanel,
   contextArtifacts,
   onRemoveContextArtifact,
@@ -54,6 +56,7 @@ export function ThreadShellLayout({
         threads={threads}
         selectedThreadId={selectedThreadId}
         onCreateThread={onCreateThread}
+        removeThread={removeThread}
       />
       <div className="flex h-svh min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
         <DetailSplitLayout
@@ -63,6 +66,9 @@ export function ThreadShellLayout({
             <>
               <ThreadHeader
                 title={title}
+                threads={threads}
+                onSelectThread={onSelectThread}
+                onCreateThread={onCreateThread}
                 workspaceName={workspaceName}
                 showLeftTrigger={!isLeftSidebarOpen}
                 onToggleLeftSidebar={leftSidebar.toggleSidebar}
@@ -80,7 +86,6 @@ export function ThreadShellLayout({
                     threadId={threadId}
                     isLoading={threadId ? selectedThread === undefined : false}
                     title={threadId ? selectedThread?.title : undefined}
-                    recentThreads={threads.slice(0, 3)}
                     rateStatus={rateStatus}
                     startThread={startThread}
                     onSend={sendMessage}

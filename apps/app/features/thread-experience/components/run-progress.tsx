@@ -26,7 +26,7 @@ export function AgentRunBlock({
   const isActive = isRunActive(run);
   const isDeep = run.mode === "deep";
   const [open, setOpen] = useState(isDeep);
-  const accentClass = isDeep ? "text-[var(--lavender)]" : "text-primary";
+  const accentClass = isDeep ? "text-lavender" : "text-primary";
 
   const durationLabel = formatRunDuration(run, activeStep);
   const summaryText = activeStep
@@ -126,10 +126,10 @@ function AgentRunStep({
     step.status === "running"
       ? "text-foreground"
       : step.status === "completed"
-        ? "text-[var(--ink-soft)]"
+        ? "text-ink-soft"
         : step.status === "failed" || step.status === "canceled"
-          ? "text-[var(--coral)]"
-          : "text-muted-foreground/80";
+          ? "text-coral-foreground"
+          : "text-muted-foreground";
 
   const artifact = runActiveArtifactId
     ? artifacts.find((item) => item._id === runActiveArtifactId)
@@ -163,7 +163,7 @@ function AgentRunStep({
             <span className="ml-2 text-muted-foreground">· {descriptor}</span>
           ) : null}
           {step.status === "failed" && step.failureReason ? (
-            <span className="ml-2 text-[var(--coral)]">
+            <span className="ml-2 text-coral-foreground">
               · {step.failureReason}
             </span>
           ) : null}
@@ -196,11 +196,11 @@ function AgentRunStep({
           ) : null}
           {(step.artifactCount ?? 0) > 0 ? (
             <span className="inline-flex w-fit items-center gap-2 rounded-[8px] bg-muted/45 px-2.5 py-1.5 text-[12px] text-foreground">
-              <FileTextIcon className="size-3.5 text-[var(--lavender)]" />
+              <FileTextIcon className="size-3.5 text-lavender" />
               <span className="font-medium">
                 {artifact?.title ?? "Artefak riset"}
               </span>
-              <span className="text-[var(--mint)]">
+              <span className="text-mint-foreground">
                 +{step.artifactCount}
               </span>
             </span>

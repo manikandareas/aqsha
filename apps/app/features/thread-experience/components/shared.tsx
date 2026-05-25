@@ -1,14 +1,38 @@
 "use client";
 
 import { Loader2Icon } from "lucide-react";
+import { Shimmer } from "@/components/ai-elements/shimmer";
+import { cn } from "@/lib/utils";
+
+export function ThreadActivityIndicator({
+  label,
+  className,
+}: {
+  label: string;
+  className?: string;
+}) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={cn(
+        "flex min-w-0 items-center gap-2 text-[13px] leading-5 text-muted-foreground",
+        className,
+      )}
+    >
+      <Loader2Icon
+        className="size-3.5 shrink-0 animate-spin text-muted-foreground"
+        aria-hidden
+      />
+      <Shimmer className="font-medium">{label}</Shimmer>
+    </div>
+  );
+}
 
 export function CenteredLoading({ label }: { label: string }) {
   return (
-    <div className="grid flex-1 place-items-center py-12">
-      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-        <Loader2Icon className="size-4 animate-spin" />
-        {label}
-      </div>
+    <div className="flex w-full min-w-0 items-start py-6 sm:py-8">
+      <ThreadActivityIndicator label={label} />
     </div>
   );
 }

@@ -40,10 +40,10 @@ function HeatmapCell({ row, max }: { row: ActivityRow; max: number }) {
   const level = row.credits === 0 ? 0 : ratio > 0.75 ? 4 : ratio > 0.45 ? 3 : ratio > 0.2 ? 2 : 1;
   const classes = [
     "bg-muted/45",
-    "border-[var(--sky-soft-border)] bg-[var(--sky-soft)]",
-    "border-[var(--mint-soft-border)] bg-[var(--mint-soft)]",
-    "border-[var(--lemon-soft-border)] bg-[var(--lemon-soft)]",
-    "border-[var(--lavender-soft-border)] bg-[var(--lavender-soft)]",
+    "border-sky-soft-border bg-sky-soft",
+    "border-mint-soft-border bg-mint-soft",
+    "border-lemon-soft-border bg-lemon-soft",
+    "border-lavender-soft-border bg-lavender-soft",
   ];
 
   return (

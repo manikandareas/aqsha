@@ -22,7 +22,7 @@ function DriveArtifactCardComponent({
     () => formatArtifactPreview(plainTextPreview),
     [plainTextPreview],
   );
-  const previewBg = kind === "url" ? "bg-[var(--sky-soft)]" : "bg-[var(--mint-soft)]";
+  const previewBg = kind === "url" ? "bg-sky-soft" : "bg-mint-soft";
   const previewLabel = kind === "url" ? "Tautan tersimpan" : "Dokumen riset";
 
   return (
