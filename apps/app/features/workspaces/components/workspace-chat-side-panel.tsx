@@ -17,6 +17,7 @@ import {
 import { SidebarContent, SidebarHeader } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCloseRightPanel } from "@/hooks/use-close-right-panel";
+import { toArtifactIds } from "@/lib/convex-refs";
 import { panelBodyPaddingClass, panelHeaderPaddingClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
 import { useThreadExperienceData } from "@/features/thread-experience/api/use-thread-experience-data";
@@ -38,7 +39,9 @@ export function WorkspaceChatSidePanel({
   onActiveThreadIdChange,
   threads,
   contextArtifacts,
+  selectedContextArtifactIds,
   onRemoveContextArtifact,
+  onContextPersisted,
   rateStatus,
   startThread,
   removeThread,
@@ -48,7 +51,9 @@ export function WorkspaceChatSidePanel({
   onActiveThreadIdChange: (threadId: string | null) => void;
   threads: ThreadSummary[];
   contextArtifacts: Array<{ artifactId: string; title: string }>;
+  selectedContextArtifactIds: string[];
   onRemoveContextArtifact: (artifactId: string) => void;
+  onContextPersisted: (artifactIds: string[]) => void;
   rateStatus: RateStatus | undefined;
   startThread: StartThread;
   removeThread: RemoveThread;
@@ -61,6 +66,18 @@ export function WorkspaceChatSidePanel({
   );
   const activeThread = activeThreadId ? threadExperience.selectedThread : undefined;
   const headerLabel = activeThread?.title ?? "Chat baru";
+  const sendWithDraftContext = async (
+    args: Parameters<typeof threadExperience.sendMessage>[0],
+  ) => {
+    const result = await threadExperience.sendMessage({
+      ...args,
+      selectedContextArtifactIds: toArtifactIds(selectedContextArtifactIds),
+    });
+    if (result.ok) {
+      onContextPersisted(selectedContextArtifactIds);
+    }
+    return result;
+  };
 
   return (
     <>
@@ -140,11 +157,13 @@ export function WorkspaceChatSidePanel({
               recentThreads={recentThreads}
               rateStatus={rateStatus}
               startThread={startThread}
-              onSend={threadExperience.sendMessage}
+              onSend={sendWithDraftContext}
               runs={threadExperience.runs}
               artifacts={threadExperience.artifacts}
               sources={threadExperience.sources}
               onCancelRun={threadExperience.cancelRun}
+              contextArtifacts={contextArtifacts}
+              onRemoveContextArtifact={onRemoveContextArtifact}
               compact
             />
           )
@@ -191,13 +210,6 @@ function WorkspacePanelDraftView({
         </h2>
         <div className="flex min-h-[28px] flex-wrap items-center justify-center gap-1.5">
           <ContextPill label={workspaceName} locked />
-          {contextArtifacts.map((item) => (
-            <ContextPill
-              key={item.artifactId}
-              label={item.title}
-              onRemove={() => onRemoveContextArtifact(item.artifactId)}
-            />
-          ))}
         </div>
         <Composer
           disabled={false}
@@ -205,6 +217,8 @@ function WorkspacePanelDraftView({
           onStartThread={startThread}
           onSend={async () => ({ ok: true, messageId: "" })}
           onThreadCreated={onThreadCreated}
+          contextArtifacts={contextArtifacts}
+          onRemoveContextArtifact={onRemoveContextArtifact}
         />
         <p className="max-w-sm text-[12px] text-muted-foreground">
           Pilih item di board (klik sekali) atau ketik / untuk perintah riset

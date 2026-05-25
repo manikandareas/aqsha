@@ -55,27 +55,22 @@ function WorkspaceDetailMain({
   const contextArtifacts = useMemo(
     () =>
       data.artifacts
-        .filter((artifact) => draftContext.selectedIds.has(artifact._id))
+        .filter((artifact) => draftContext.selectedIdSet.has(artifact._id))
         .map((artifact) => ({ artifactId: artifact._id, title: artifact.title })),
-    [data.artifacts, draftContext.selectedIds],
+    [data.artifacts, draftContext.selectedIdSet],
   );
-
-  const applyDraftContextToThread = async (threadId: string) => {
-    if (draftContext.selectedIds.size === 0) return;
-    await data.addThreadContextArtifacts({
-      threadId,
-      artifactIds: toArtifactIds(draftContext.selectedIds),
-    });
-    draftContext.clear();
-  };
 
   const handleStartThread: StartThread = async (args) => {
     const result = await data.startThread({
       ...args,
       workspaceId: toWorkspaceId(workspaceId),
+      selectedContextArtifactIds:
+        draftContext.selectedIds.length > 0
+          ? toArtifactIds(draftContext.selectedIds)
+          : undefined,
     });
     if (result.ok && result.threadId && draftContext.selectedCount > 0) {
-      await applyDraftContextToThread(result.threadId);
+      draftContext.markSelectionPersisted(draftContext.selectedIds);
     }
     return result;
   };
@@ -128,7 +123,9 @@ function WorkspaceDetailMain({
                 onActiveThreadIdChange={handlePanelThreadChange}
                 threads={data.workspaceThreads}
                 contextArtifacts={contextArtifacts}
+                selectedContextArtifactIds={draftContext.selectedIds}
                 onRemoveContextArtifact={draftContext.toggleArtifact}
+                onContextPersisted={draftContext.markSelectionPersisted}
                 rateStatus={data.rateStatus}
                 startThread={handleStartThread}
                 removeThread={data.removeThread}

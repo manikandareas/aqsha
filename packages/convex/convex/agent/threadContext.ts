@@ -428,6 +428,54 @@ export const addMany = mutation({
   },
 });
 
+export async function replaceContextArtifactsForThread(
+  ctx: MutationCtx,
+  args: {
+    ownerUserId: string;
+    threadId: string;
+    artifactIds: Id<"artifacts">[];
+  },
+) {
+  await assertOwnedThread(ctx, {
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+  });
+
+  const uniqueArtifactIds = [...new Set(args.artifactIds)];
+  if (uniqueArtifactIds.length > MAX_SELECTED_CONTEXT_ARTIFACTS) {
+    throw new ConvexError("Too many selected context artifacts");
+  }
+
+  const selectedRows = await listSelectedRows(ctx, {
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+  });
+  const nextArtifactIds = new Set(uniqueArtifactIds.map(String));
+
+  for (const row of selectedRows) {
+    if (!nextArtifactIds.has(String(row.artifactId))) {
+      await ctx.db.delete("threadContextArtifacts", row._id);
+    }
+  }
+
+  const existingArtifactIds = new Set(
+    selectedRows
+      .filter((row) => nextArtifactIds.has(String(row.artifactId)))
+      .map((row) => String(row.artifactId)),
+  );
+
+  for (const artifactId of uniqueArtifactIds) {
+    if (existingArtifactIds.has(String(artifactId))) {
+      continue;
+    }
+    await insertContextArtifact(ctx, {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      artifactId,
+    });
+  }
+}
+
 export const toggle = mutation({
   args: {
     threadId: v.string(),

@@ -7,11 +7,17 @@ import { ResponsiveSidePanel } from "@/components/layout/responsive-side-panel";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCloseRightPanel } from "@/hooks/use-close-right-panel";
-import { toArtifactId } from "@/lib/convex-refs";
+import { toArtifactIds } from "@/lib/convex-refs";
 import { driveArtifactGridClass } from "@/lib/drive-grid";
 import { panelBodyPaddingClass } from "@/lib/panel-surface";
+import {
+  threadContextScopeKey,
+  useDraftContextSelection,
+} from "@/lib/thread-context-draft-store";
 import { cn } from "@/lib/utils";
-import { useWorkspaceDriveData } from "@/features/workspaces/api/use-workspaces-data";
+import {
+  useWorkspaceDriveData,
+} from "@/features/workspaces/api/use-workspaces-data";
 import { ContextPanelHeader } from "@/features/workspaces/components/context-panel-header";
 import { WorkspaceDriveEmpty } from "@/features/workspaces/components/workspace-drive-empty";
 import { WorkspaceLibrarySurface } from "@/features/workspaces/components/workspace-library-surface";
@@ -19,8 +25,6 @@ import { useWorkspaceLibraryDialogState } from "@/features/workspaces/hooks/use-
 import { useThreadExperienceData } from "../api/use-thread-experience-data";
 import type {
   ContextCandidateArtifact,
-  SelectedContextArtifact,
-  ToggleThreadContextArtifact,
 } from "./component-types";
 import { ThreadShellLayout } from "./thread-shell-layout";
 
@@ -32,10 +36,10 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
     threads,
     selectedThread,
     selectedContextArtifacts,
+    selectedContextArtifactsLoaded,
     contextCandidateArtifacts,
     startThread,
     sendMessage,
-    toggleThreadContextArtifact,
     rateStatus,
     runs,
     artifacts,
@@ -44,6 +48,15 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
     removeThread,
   } = useThreadExperienceData(threadId);
   const [contextPanelOpen, setContextPanelOpen] = useState(false);
+  const persistedContextIds = useMemo(
+    () => selectedContextArtifacts.map((item) => String(item.artifactId)),
+    [selectedContextArtifacts],
+  );
+  const draftContext = useDraftContextSelection(
+    threadId ? threadContextScopeKey(threadId) : "thread:new",
+    threadId && selectedContextArtifactsLoaded ? persistedContextIds : undefined,
+  );
+  const workspaceDrive = useWorkspaceDriveData(selectedThread?.workspaceId ?? "");
   const title = threadId
     ? (selectedThread?.title ?? "Thread tidak ditemukan")
     : "Thread baru";
@@ -55,6 +68,41 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
   const workspaceName = selectedThread?.workspaceId
     ? (workspaceNameById.get(selectedThread.workspaceId) ?? "Workspace")
     : undefined;
+  const contextArtifactTitleById = useMemo(() => {
+    const titles = new Map<string, string>();
+    for (const item of selectedContextArtifacts) {
+      titles.set(String(item.artifactId), item.artifact.title);
+    }
+    for (const artifact of contextCandidateArtifacts) {
+      titles.set(artifact._id, artifact.title);
+    }
+    for (const artifact of workspaceDrive.artifacts) {
+      titles.set(artifact._id, artifact.title);
+    }
+    return titles;
+  }, [contextCandidateArtifacts, selectedContextArtifacts, workspaceDrive.artifacts]);
+  const draftContextArtifacts = useMemo(
+    () =>
+      draftContext.selectedIds.map((artifactId) => ({
+        artifactId,
+        title: contextArtifactTitleById.get(artifactId) ?? "Artifact",
+      })),
+    [contextArtifactTitleById, draftContext.selectedIds],
+  );
+
+  const sendMessageWithDraftContext = async (
+    args: Parameters<typeof sendMessage>[0],
+  ) => {
+    const selectedContextArtifactIds = toArtifactIds(draftContext.selectedIds);
+    const result = await sendMessage({
+      ...args,
+      selectedContextArtifactIds,
+    });
+    if (result.ok && threadId) {
+      draftContext.markSelectionPersisted(draftContext.selectedIds);
+    }
+    return result;
+  };
 
   const handleDeleteThread = async () => {
     if (!threadId) return;
@@ -70,18 +118,16 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
       <ResponsiveSidePanel open={contextPanelOpen}>
         {selectedThread.workspaceId ? (
           <ThreadWorkspaceLibraryPanel
-            threadId={threadId}
             workspaceId={selectedThread.workspaceId}
             workspaceName={workspaceName ?? "Workspace"}
-            selected={selectedContextArtifacts}
-            onToggle={toggleThreadContextArtifact}
+            selectedIds={draftContext.selectedIdSet}
+            onToggle={draftContext.toggleArtifact}
           />
         ) : (
           <ThreadGlobalContextPanel
-            threadId={threadId}
             candidates={contextCandidateArtifacts}
-            selected={selectedContextArtifacts}
-            onToggle={toggleThreadContextArtifact}
+            selectedIds={draftContext.selectedIdSet}
+            onToggle={draftContext.toggleArtifact}
           />
         )}
       </ResponsiveSidePanel>
@@ -100,7 +146,7 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
         selectedThread={selectedThread}
         rateStatus={rateStatus}
         startThread={startThread}
-        sendMessage={sendMessage}
+        sendMessage={sendMessageWithDraftContext}
         runs={runs}
         artifacts={artifacts}
         sources={sources}
@@ -109,32 +155,28 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
         onCancelRun={cancelRun}
         onDeleteThread={threadId ? handleDeleteThread : undefined}
         sidePanel={sidePanel}
+        contextArtifacts={draftContextArtifacts}
+        onRemoveContextArtifact={draftContext.toggleArtifact}
       />
     </SidebarProvider>
   );
 }
 
 function ThreadWorkspaceLibraryPanel({
-  threadId,
   workspaceId,
   workspaceName,
-  selected,
+  selectedIds,
   onToggle,
 }: {
-  threadId: string;
   workspaceId: string;
   workspaceName: string;
-  selected: SelectedContextArtifact[];
-  onToggle: ToggleThreadContextArtifact;
+  selectedIds: Set<string>;
+  onToggle: (artifactId: string) => void;
 }) {
   const router = useRouter();
   const drive = useWorkspaceDriveData(workspaceId);
   const dialogState = useWorkspaceLibraryDialogState();
   const [activeFolderId, setActiveFolderId] = useState<"root" | string>("root");
-  const selectedIds = useMemo(
-    () => new Set(selected.map((item) => String(item.artifactId))),
-    [selected],
-  );
 
   if (drive.isLoading) {
     return (
@@ -157,9 +199,7 @@ function ThreadWorkspaceLibraryPanel({
       activeFolderId={activeFolderId}
       onActiveFolderChange={setActiveFolderId}
       isArtifactSelected={(artifactId) => selectedIds.has(artifactId)}
-      onToggleArtifactContext={(artifactId) =>
-        void onToggle({ threadId, artifactId: toArtifactId(artifactId) })
-      }
+      onToggleArtifactContext={onToggle}
       onAfterArchive={() => router.push("/workspaces")}
       showCreateActions
       showWorkspaceSettings
@@ -168,21 +208,15 @@ function ThreadWorkspaceLibraryPanel({
 }
 
 function ThreadGlobalContextPanel({
-  threadId,
   candidates,
-  selected,
+  selectedIds,
   onToggle,
 }: {
-  threadId: string;
   candidates: ContextCandidateArtifact[];
-  selected: SelectedContextArtifact[];
-  onToggle: ToggleThreadContextArtifact;
+  selectedIds: Set<string>;
+  onToggle: (artifactId: string) => void;
 }) {
   const closePanel = useCloseRightPanel();
-  const selectedIds = useMemo(
-    () => new Set(selected.map((item) => String(item.artifactId))),
-    [selected],
-  );
   const isEmpty = candidates.length === 0;
 
   return (
@@ -206,7 +240,7 @@ function ThreadGlobalContextPanel({
                   kind={artifact.kind}
                   plainTextPreview={artifact.plainTextPreview}
                   isSelected={selectedIds.has(artifact._id)}
-                  onClick={() => void onToggle({ threadId, artifactId: artifact._id })}
+                  onClick={() => onToggle(artifact._id)}
                 />
               ))}
             </div>

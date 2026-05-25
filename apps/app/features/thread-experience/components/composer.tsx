@@ -6,6 +6,7 @@ import {
   PaperclipIcon,
   PlusIcon,
   SquareIcon,
+  XIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -52,7 +53,11 @@ import {
   restoreComposerContentAfterBlockedSend,
   stripCommandFromSubmittedContent,
 } from "../utils/composer-model";
-import type { SendMessage, StartThread } from "./component-types";
+import type {
+  DraftContextArtifact,
+  SendMessage,
+  StartThread,
+} from "./component-types";
 
 export function Composer({
   threadId,
@@ -63,6 +68,8 @@ export function Composer({
   onStartThread,
   onSend,
   onThreadCreated,
+  contextArtifacts = [],
+  onRemoveContextArtifact,
 }: {
   threadId?: string;
   disabled: boolean;
@@ -73,6 +80,8 @@ export function Composer({
   onCancelRun?: (runId: string) => Promise<unknown>;
   /** When set, new threads stay in place instead of navigating to `/threads/...`. */
   onThreadCreated?: (threadId: string) => void;
+  contextArtifacts?: DraftContextArtifact[];
+  onRemoveContextArtifact?: (artifactId: string) => void;
 }) {
   const [content, setContent] = useState("");
   const [selectedCommand, setSelectedCommand] = useState<PromptCommand | null>(null);
@@ -198,6 +207,23 @@ export function Composer({
           <a href="/settings/usage-billing" className="font-semibold underline underline-offset-2">
             Buka Billing
           </a>
+        </div>
+      ) : null}
+      {contextArtifacts.length > 0 ? (
+        <div className="flex min-w-0 flex-wrap gap-1.5 px-4 pt-3">
+          {contextArtifacts.map((artifact) => (
+            <button
+              key={artifact.artifactId}
+              type="button"
+              onClick={() => onRemoveContextArtifact?.(artifact.artifactId)}
+              disabled={!onRemoveContextArtifact || disabled || isDeepActive}
+              className="inline-flex max-w-[12rem] items-center gap-1.5 rounded-full border border-[var(--mint-soft-border)] bg-[var(--mint-soft)] px-2.5 py-1 text-[11px] font-semibold leading-none text-[var(--mint)] transition-colors hover:bg-muted disabled:cursor-default disabled:opacity-80"
+              aria-label={`Hapus ${artifact.title} dari konteks`}
+            >
+              <span className="truncate">{artifact.title}</span>
+              {onRemoveContextArtifact ? <XIcon className="size-3 shrink-0" /> : null}
+            </button>
+          ))}
         </div>
       ) : null}
       <TokenizedPromptInput

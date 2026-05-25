@@ -42,6 +42,7 @@ import { assertWorkspaceOwner } from "../workspaceAccess";
 import {
   buildPromptContextForThread,
   prependPromptContext,
+  replaceContextArtifactsForThread,
 } from "./threadContext";
 
 const MAX_CONTENT_LENGTH = 8_000;
@@ -300,9 +301,18 @@ async function savePromptAndScheduleRun(
     mode: "normal" | "deep";
     commandId?: string;
     workspaceId?: Id<"workspaces">;
+    selectedContextArtifactIds?: Id<"artifacts">[];
   },
 ): Promise<SendResult> {
   const promptPayload = promptPayloadFromCommand(args);
+  if (args.selectedContextArtifactIds) {
+    await replaceContextArtifactsForThread(ctx, {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      artifactIds: args.selectedContextArtifactIds,
+    });
+  }
+
   const saved = await astra.saveMessages(ctx, {
     threadId: args.threadId,
     userId: args.ownerUserId,
@@ -384,6 +394,7 @@ export const startThread = mutation({
     mode: v.union(v.literal("normal"), v.literal("deep")),
     commandId: v.optional(v.string()),
     workspaceId: v.optional(v.id("workspaces")),
+    selectedContextArtifactIds: v.optional(v.array(v.id("artifacts"))),
   },
   returns: sendResultValidator,
   handler: async (ctx, args): Promise<SendResult> => {
@@ -419,6 +430,7 @@ export const startThread = mutation({
       mode: args.mode,
       commandId: args.commandId,
       workspaceId: args.workspaceId,
+      selectedContextArtifactIds: args.selectedContextArtifactIds,
     });
 
     return result.ok ? { ...result, threadId } : result;
@@ -431,6 +443,7 @@ export const send = mutation({
     content: v.string(),
     mode: v.union(v.literal("normal"), v.literal("deep")),
     commandId: v.optional(v.string()),
+    selectedContextArtifactIds: v.optional(v.array(v.id("artifacts"))),
   },
   returns: sendResultValidator,
   handler: async (ctx, args): Promise<SendResult> => {
@@ -458,6 +471,7 @@ export const send = mutation({
       content,
       mode: args.mode,
       commandId: args.commandId,
+      selectedContextArtifactIds: args.selectedContextArtifactIds,
     });
   },
 });

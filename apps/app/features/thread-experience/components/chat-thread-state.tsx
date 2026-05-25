@@ -27,7 +27,12 @@ import {
   sortTranscriptMessages,
 } from "../utils/transcript-model";
 import { getSourceCountsByOwner } from "../utils/research-panel-model";
-import type { SendMessage, StartThread, ThreadSummary } from "./component-types";
+import type {
+  DraftContextArtifact,
+  SendMessage,
+  StartThread,
+  ThreadSummary,
+} from "./component-types";
 import { Composer } from "./composer";
 import { EmptyThreadCopy, HomeStartState } from "./home-states";
 import { MessageRow } from "./message-row";
@@ -47,6 +52,8 @@ export function ChatThreadState({
   sources,
   onCancelRun,
   compact = false,
+  contextArtifacts = [],
+  onRemoveContextArtifact,
 }: {
   threadId?: string;
   isLoading: boolean;
@@ -60,6 +67,8 @@ export function ChatThreadState({
   sources: ResearchSource[];
   onCancelRun: (runId: string) => Promise<unknown>;
   compact?: boolean;
+  contextArtifacts?: DraftContextArtifact[];
+  onRemoveContextArtifact?: (artifactId: string) => void;
 }) {
   const { isAuthenticated } = useConvexAuth();
   const messages = useUIMessages(
@@ -149,6 +158,8 @@ export function ChatThreadState({
             onCancelRun={onCancelRun}
             onStartThread={startThread}
             onSend={onSend}
+            contextArtifacts={contextArtifacts}
+            onRemoveContextArtifact={onRemoveContextArtifact}
           />
         </div>
       </div>

@@ -34,6 +34,7 @@ export type StartThread = (args: {
   mode: "normal" | "deep";
   commandId?: string;
   workspaceId?: WorkspaceId;
+  selectedContextArtifactIds?: ArtifactId[];
 }) => Promise<SendResult>;
 
 export type SendMessage = (args: {
@@ -41,6 +42,7 @@ export type SendMessage = (args: {
   content: string;
   mode: "normal" | "deep";
   commandId?: string;
+  selectedContextArtifactIds?: ArtifactId[];
 }) => Promise<SendResult>;
 
 export type ContextCandidateArtifact = {
@@ -60,6 +62,11 @@ export type SelectedContextArtifact = {
     plainTextPreview?: string;
     updatedAt: number;
   };
+};
+
+export type DraftContextArtifact = {
+  artifactId: string;
+  title: string;
 };
 
 export type ToggleThreadContextArtifact = (args: {
@@ -93,4 +100,6 @@ export type ThreadShellLayoutProps = {
   onCancelRun: (runId: string) => Promise<unknown>;
   onDeleteThread?: () => Promise<void>;
   sidePanel?: ReactNode;
+  contextArtifacts?: DraftContextArtifact[];
+  onRemoveContextArtifact?: (artifactId: string) => void;
 };

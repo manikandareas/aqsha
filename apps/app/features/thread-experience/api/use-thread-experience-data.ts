@@ -71,7 +71,6 @@ export function useThreadExperienceData(threadId?: string) {
   ) as ResearchSource[] | undefined;
   const cancelRunMutation = useMutation(api.agent.deepResearch.cancel);
   const retryRun = useMutation(api.agent.deepResearch.retry);
-  const toggleThreadContextArtifact = useMutation(api.agent.threadContext.toggle);
   const removeThread = useMutation(api.agent.threads.remove);
 
   const cancelRun = async (runId: string) => {
@@ -89,6 +88,7 @@ export function useThreadExperienceData(threadId?: string) {
     threads: threadPage?.page ?? [],
     selectedThread,
     selectedContextArtifacts: selectedContextArtifacts ?? [],
+    selectedContextArtifactsLoaded: selectedContextArtifacts !== undefined,
     contextCandidateArtifacts: contextCandidateArtifacts ?? [],
     startThread,
     sendMessage,
@@ -98,7 +98,6 @@ export function useThreadExperienceData(threadId?: string) {
     sources: sources ?? [],
     cancelRun,
     retryRun,
-    toggleThreadContextArtifact,
     removeThread,
   };
 }

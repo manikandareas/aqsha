@@ -29,6 +29,8 @@ export function ThreadShellLayout({
   onCancelRun,
   onDeleteThread,
   sidePanel,
+  contextArtifacts,
+  onRemoveContextArtifact,
 }: ThreadShellLayoutProps) {
   const leftSidebar = useSidebar();
   const isLeftSidebarOpen = leftSidebar.isMobile
@@ -86,6 +88,8 @@ export function ThreadShellLayout({
                     artifacts={artifacts}
                     sources={sources}
                     onCancelRun={onCancelRun}
+                    contextArtifacts={contextArtifacts}
+                    onRemoveContextArtifact={onRemoveContextArtifact}
                   />
                 )}
               </main>
