@@ -186,6 +186,12 @@ export const researchTools: ToolSet = {
   }),
 };
 
+export const normalChatTools: ToolSet = {
+  searchWeb: researchTools.searchWeb,
+  searchArxiv: researchTools.searchArxiv,
+  lookupDoi: researchTools.lookupDoi,
+};
+
 function numberCandidates(
   candidates: Array<Omit<SourceCandidate, "citationNumber">>,
   counter: { next: () => number },

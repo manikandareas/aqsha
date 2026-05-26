@@ -52,6 +52,49 @@ export async function assertWorkspaceArtifactOwner(
   return artifact as Doc<"artifacts"> & { workspaceId: Id<"workspaces"> };
 }
 
+export async function assertThreadAttachmentOwner(
+  ctx: QueryCtx | MutationCtx,
+  artifactId: Id<"artifacts">,
+  ownerUserId: string,
+  options: { requireActive?: boolean; threadId?: string } = {},
+) {
+  const artifact = await ctx.db.get("artifacts", artifactId);
+  if (
+    !artifact ||
+    artifact.ownerUserId !== ownerUserId ||
+    artifact.workspaceId ||
+    !artifact.threadId
+  ) {
+    throw new ConvexError("Attachment not found");
+  }
+  if (options.threadId && artifact.threadId !== options.threadId) {
+    throw new ConvexError("Attachment not found");
+  }
+  if (options.requireActive && artifact.status !== "active") {
+    throw new ConvexError("Attachment not found");
+  }
+  return artifact as Doc<"artifacts"> & { threadId: string; workspaceId: undefined };
+}
+
+export async function assertUploadedArtifactOwner(
+  ctx: QueryCtx | MutationCtx,
+  artifactId: Id<"artifacts">,
+  ownerUserId: string,
+  options: { requireActive?: boolean } = {},
+) {
+  const artifact = await ctx.db.get("artifacts", artifactId);
+  if (!artifact || artifact.ownerUserId !== ownerUserId) {
+    throw new ConvexError("Artifact not found");
+  }
+  if (!artifact.workspaceId && !artifact.threadId) {
+    throw new ConvexError("Artifact not found");
+  }
+  if (options.requireActive && artifact.status !== "active") {
+    throw new ConvexError("Artifact not found");
+  }
+  return artifact;
+}
+
 export function normalizeName(value: string, label: string) {
   const trimmed = value.replace(/\s+/g, " ").trim();
   if (!trimmed) {

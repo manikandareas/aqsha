@@ -33,15 +33,16 @@ export function useThreadExperienceData(threadId?: string) {
     isAuthenticated && threadId ? { threadId } : "skip",
   );
   const threadQueriesEnabled = Boolean(isAuthenticated && threadId && selectedThread !== null);
+  const shouldLoadGlobalContextCandidates = Boolean(
+    isAuthenticated && (!threadId || (threadQueriesEnabled && !selectedThread?.workspaceId)),
+  );
   const selectedContextArtifacts = useQuery(
     api.agent.threadContext.listForThread,
     threadQueriesEnabled ? { threadId: threadId! } : "skip",
   );
   const contextCandidateArtifacts = useQuery(
     api.artifacts.listForContextPicker,
-    threadQueriesEnabled && !selectedThread?.workspaceId
-      ? { workspaceId: undefined }
-      : "skip",
+    shouldLoadGlobalContextCandidates ? { workspaceId: undefined } : "skip",
   );
   const startThread = useMutation(api.agent.messages.startThread);
   const sendMessage = useMutation(api.agent.messages.send).withOptimisticUpdate(
@@ -50,6 +51,7 @@ export function useThreadExperienceData(threadId?: string) {
         threadId: args.threadId,
         text: args.content,
         promptCommand: promptCommandMetadataForContent(args),
+        contextArtifacts: args.contextArtifactSnapshot,
       });
     },
   );

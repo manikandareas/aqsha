@@ -13,6 +13,8 @@ import { useEffect, useReducer, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { panelBodyPaddingClass, panelHeaderPaddingClass } from "@/lib/panel-surface";
+import { cn } from "@/lib/utils";
 import { useArtifactDetailData } from "../api/use-workspaces-data";
 import { BlockNoteEditorLoader } from "../components/blocknote-editor-loader";
 import type { DocumentEditorContent } from "../components/blocknote-document-editor";
@@ -96,7 +98,12 @@ export function ArtifactDetailPage({
           <ArtifactMissing />
         ) : (
           <>
-            <header className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3 sm:px-6">
+            <header
+              className={cn(
+                "flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-border/70",
+                panelHeaderPaddingClass,
+              )}
+            >
               <div className="flex min-w-0 items-center gap-3">
                 <Button
                   asChild
@@ -126,7 +133,7 @@ export function ArtifactDetailPage({
                 </div>
               </div>
             </header>
-            <section className="min-h-0 overflow-y-auto px-4 py-4 sm:px-6">
+            <section className={cn("min-h-0 overflow-y-auto", panelBodyPaddingClass)}>
               {activeContentError ? (
                 <p className="text-[13px] font-medium text-destructive">{activeContentError}</p>
               ) : !activeFullContent ? (
@@ -319,7 +326,7 @@ function UrlArtifactDetail({
 
 function ArtifactLoading() {
   return (
-    <div className="grid gap-4 px-4 py-5 sm:px-6">
+    <div className={cn("grid gap-4", panelBodyPaddingClass)}>
       <p className="text-[12px] font-medium text-muted-foreground">Memuat artifact...</p>
       <Skeleton className="h-12 rounded-[8px]" />
       <Skeleton className="h-64 rounded-[8px]" />

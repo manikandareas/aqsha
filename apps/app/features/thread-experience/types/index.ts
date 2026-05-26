@@ -35,6 +35,15 @@ export type PromptCommandMetadata = {
   argumentPreview: string;
 };
 
+export type MessageContextArtifactMetadata = {
+  artifactId: string;
+  title: string;
+  kind?: "document" | "url";
+  source?: "upload" | "workspace";
+  savedWorkspaceId?: string;
+  savedWorkspaceName?: string;
+};
+
 export type ChatMessage = {
   id: string;
   key: string;
@@ -46,6 +55,7 @@ export type ChatMessage = {
   parts?: Array<{ type: string; text?: string }>;
   metadata?: {
     promptCommand?: PromptCommandMetadata;
+    contextArtifacts?: MessageContextArtifactMetadata[];
   };
 };
 

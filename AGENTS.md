@@ -32,6 +32,7 @@ bun run build
 
 ## App-Specific Instructions
 - **App**: UI rules and Next.js 16 caveats live in `apps/app/AGENTS.md` and `apps/app/DESIGN.md`. Read those before touching product UI.
+- **Detail/panel parity**: Thread detail and workspace detail each have a main view and an embedded side panel of the other surface. See `apps/app/AGENTS.md` → **Detail / Panel Parity** before changing either.
 - **Convex**: Convex rules live in `packages/convex/AGENTS.md`. Read `packages/convex/convex/_generated/ai/guidelines.md` before editing Convex functions.
 - **www**: Marketing site uses `@aqsha/ui` primitives and shared styles from `packages/ui`.
 

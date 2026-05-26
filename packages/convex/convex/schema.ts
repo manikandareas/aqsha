@@ -154,6 +154,16 @@ export default defineSchema(
     })
       .index("by_owner_message", ["ownerUserId", "messageId"])
       .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"]),
+    messageContextArtifacts: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      messageId: v.string(),
+      artifactId: v.id("artifacts"),
+      title: v.string(),
+      kind: v.optional(v.union(v.literal("document"), v.literal("url"))),
+      source: v.optional(v.union(v.literal("upload"), v.literal("workspace"))),
+      createdAt: v.number(),
+    }).index("by_owner_message", ["ownerUserId", "messageId"]),
     agentRuns: defineTable({
       ownerUserId: v.string(),
       threadId: v.string(),
@@ -346,7 +356,8 @@ export default defineSchema(
       ]),
     artifactDocuments: defineTable({
       ownerUserId: v.string(),
-      workspaceId: v.id("workspaces"),
+      workspaceId: v.optional(v.id("workspaces")),
+      threadId: v.optional(v.string()),
       artifactId: v.id("artifacts"),
       blocksJson: v.optional(v.string()),
       markdown: v.optional(v.string()),
@@ -354,10 +365,21 @@ export default defineSchema(
       storageId: v.optional(v.id("_storage")),
       blocksStorageId: v.optional(v.id("_storage")),
       markdownStorageId: v.optional(v.id("_storage")),
+      uploadStorageId: v.optional(v.id("_storage")),
+      uploadFileName: v.optional(v.string()),
+      uploadMimeType: v.optional(v.string()),
+      uploadSize: v.optional(v.number()),
+      ingestionStatus: v.optional(
+        v.union(v.literal("pending"), v.literal("ready"), v.literal("failed")),
+      ),
+      ingestionFailureReason: v.optional(v.string()),
+      ragEntryId: v.optional(v.string()),
+      indexedAt: v.optional(v.number()),
       createdAt: v.number(),
       updatedAt: v.number(),
     })
       .index("by_owner_artifact", ["ownerUserId", "artifactId"])
+      .index("by_owner_thread", ["ownerUserId", "threadId"])
       .index("by_owner_workspace_updated", ["ownerUserId", "workspaceId", "updatedAt"]),
     artifactUrls: defineTable({
       ownerUserId: v.string(),

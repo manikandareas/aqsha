@@ -116,7 +116,7 @@ function AgentRunStep({
   const [expanded, setExpanded] = useState(false);
 
   const descriptor = [
-    step.sourceCount ? `${step.sourceCount} sumber` : null,
+    step.sourceCount ? `${step.sourceCount} referensi` : null,
     step.artifactCount ? `${step.artifactCount} artefak` : null,
   ]
     .filter(Boolean)

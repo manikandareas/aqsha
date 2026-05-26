@@ -28,7 +28,7 @@ import {
   type EntitlementResult,
 } from "../billing/entitlements";
 import { rateLimiter } from "../limits";
-import { researchTools } from "./researchTools";
+import { normalChatTools } from "./researchTools";
 import type { SourceCandidate } from "./sourceCandidates";
 import {
   isUsableGeneratedThreadTitle,
@@ -41,6 +41,7 @@ import { buildPromptCommandPrompt, getPromptCommand } from "./promptCommands";
 import { assertWorkspaceOwner } from "../workspaceAccess";
 import {
   buildPromptContextForThread,
+  persistMessageContextArtifacts,
   prependPromptContext,
   replaceContextArtifactsForThread,
 } from "./threadContext";
@@ -170,7 +171,7 @@ async function upsertThreadMetadata(
   args: {
     ownerUserId: string;
     threadId: string;
-    preview: string;
+    preview?: string;
     status: "idle" | "streaming" | "failed";
     incrementMessageCount?: boolean;
     workspaceId?: Id<"workspaces">;
@@ -181,12 +182,16 @@ async function upsertThreadMetadata(
   if (existing) {
     await ctx.db.patch("threadMetadata", existing._id, {
       lastActivityAt: now,
-      lastMessagePreview: args.preview,
+      ...(args.preview !== undefined ? { lastMessagePreview: args.preview } : {}),
       messageCount: existing.messageCount + (args.incrementMessageCount ? 1 : 0),
       status: args.status,
       workspaceId: existing.workspaceId ?? args.workspaceId,
     });
     return;
+  }
+
+  if (args.preview === undefined) {
+    throw new ConvexError("Thread preview is required when creating metadata");
   }
 
   await ctx.db.insert("threadMetadata", {
@@ -304,6 +309,14 @@ async function savePromptAndScheduleRun(
     commandId?: string;
     workspaceId?: Id<"workspaces">;
     selectedContextArtifactIds?: Id<"artifacts">[];
+    messageAttachmentArtifactIds?: Id<"artifacts">[];
+    contextArtifactSnapshot?: Array<{
+      artifactId: Id<"artifacts">;
+      title: string;
+      kind?: "document" | "url";
+      source?: "upload" | "workspace";
+    }>;
+    deferGeneration?: boolean;
   },
 ): Promise<SendResult> {
   const promptPayload = promptPayloadFromCommand(args);
@@ -334,11 +347,18 @@ async function savePromptAndScheduleRun(
     });
   }
 
+  await persistMessageContextArtifacts(ctx, {
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+    messageId,
+    snapshot: args.contextArtifactSnapshot,
+  });
+
   await upsertThreadMetadata(ctx, {
     ownerUserId: args.ownerUserId,
     threadId: args.threadId,
     preview,
-    status: "streaming",
+    status: args.deferGeneration ? "idle" : "streaming",
     incrementMessageCount: true,
     workspaceId: args.workspaceId,
   });
@@ -349,46 +369,153 @@ async function savePromptAndScheduleRun(
     prompt: promptPayload.visibleContent,
   });
 
+  if (args.deferGeneration) {
+    return { ok: true as const, messageId };
+  }
+
+  return await scheduleGenerationForMessage(ctx, {
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+    messageId,
+    mode: args.mode,
+    promptPayload,
+    messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
+  });
+}
+
+async function scheduleGenerationForMessage(
+  ctx: MutationCtx,
+  args: {
+    ownerUserId: string;
+    threadId: string;
+    messageId: string;
+    mode: "normal" | "deep";
+    promptPayload: ReturnType<typeof promptPayloadFromCommand>;
+    messageAttachmentArtifactIds?: Id<"artifacts">[];
+  },
+): Promise<SendResult> {
   const contextBlock = await buildPromptContextForThread(ctx, {
     ownerUserId: args.ownerUserId,
     threadId: args.threadId,
+    messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
   });
   const generationPrompt = prependPromptContext({
-    prompt: promptPayload.expandedPrompt,
+    prompt: args.promptPayload.expandedPrompt,
     contextBlock,
   });
 
-  if (promptPayload.mode === "deep") {
+  if (args.mode === "deep") {
     const run: {
       runId: import("../_generated/dataModel").Id<"agentRuns">;
       workflowId: string;
     } = await ctx.runMutation(internal.agent.deepResearch.startForMessage, {
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
-      promptMessageId: messageId,
+      promptMessageId: args.messageId,
       prompt: generationPrompt,
     });
 
-    return { ok: true as const, messageId, ...run };
+    return { ok: true as const, messageId: args.messageId, ...run };
   }
 
   const runId = await ctx.runMutation(internal.agent.messages.startInlineRun, {
     ownerUserId: args.ownerUserId,
     threadId: args.threadId,
-    promptMessageId: messageId,
+    promptMessageId: args.messageId,
     prompt: generationPrompt,
   });
   await ctx.scheduler.runAfter(0, internal.agent.messages.generateReply, {
     threadId: args.threadId,
     userId: args.ownerUserId,
-    promptMessageId: messageId,
+    promptMessageId: args.messageId,
     prompt: generationPrompt,
-    visiblePrompt: promptPayload.visibleContent,
+    visiblePrompt: args.promptPayload.visibleContent,
     runId,
+    messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
   });
 
-  return { ok: true as const, messageId, runId };
+  return { ok: true as const, messageId: args.messageId, runId };
 }
+
+const contextArtifactSnapshotValidator = v.array(
+  v.object({
+    artifactId: v.id("artifacts"),
+    title: v.string(),
+    kind: v.optional(v.union(v.literal("document"), v.literal("url"))),
+    source: v.optional(v.union(v.literal("upload"), v.literal("workspace"))),
+  }),
+);
+
+const pendingAttachmentValidator = v.object({
+  storageId: v.id("_storage"),
+  fileName: v.string(),
+  mimeType: v.string(),
+  size: v.number(),
+});
+
+export const completeThreadStartAfterAttachments = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    threadId: v.string(),
+    messageId: v.string(),
+    threadTitle: v.optional(v.string()),
+    content: v.string(),
+    mode: v.union(v.literal("normal"), v.literal("deep")),
+    commandId: v.optional(v.string()),
+    workspaceId: v.optional(v.id("workspaces")),
+    selectedContextArtifactIds: v.optional(v.array(v.id("artifacts"))),
+    contextArtifactSnapshot: v.optional(contextArtifactSnapshotValidator),
+    messageAttachmentArtifactIds: v.array(v.id("artifacts")),
+  },
+  handler: async (ctx, args) => {
+    if (args.selectedContextArtifactIds) {
+      await replaceContextArtifactsForThread(ctx, {
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+        artifactIds: args.selectedContextArtifactIds,
+      });
+    }
+
+    const existingContextRows = await ctx.db
+      .query("messageContextArtifacts")
+      .withIndex("by_owner_message", (q) =>
+        q.eq("ownerUserId", args.ownerUserId).eq("messageId", args.messageId),
+      )
+      .collect();
+    for (const row of existingContextRows) {
+      await ctx.db.delete("messageContextArtifacts", row._id);
+    }
+
+    await persistMessageContextArtifacts(ctx, {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      messageId: args.messageId,
+      snapshot: args.contextArtifactSnapshot,
+    });
+
+    await upsertThreadMetadata(ctx, {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      status: "streaming",
+      workspaceId: args.workspaceId,
+    });
+
+    const promptPayload = promptPayloadFromCommand({
+      content: args.content,
+      commandId: args.commandId,
+      mode: args.mode,
+    });
+
+    await scheduleGenerationForMessage(ctx, {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      messageId: args.messageId,
+      mode: args.mode,
+      promptPayload,
+      messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
+    });
+  },
+});
 
 export const startThread = mutation({
   args: {
@@ -397,6 +524,9 @@ export const startThread = mutation({
     commandId: v.optional(v.string()),
     workspaceId: v.optional(v.id("workspaces")),
     selectedContextArtifactIds: v.optional(v.array(v.id("artifacts"))),
+    messageAttachmentArtifactIds: v.optional(v.array(v.id("artifacts"))),
+    pendingAttachments: v.optional(v.array(pendingAttachmentValidator)),
+    contextArtifactSnapshot: v.optional(contextArtifactSnapshotValidator),
   },
   returns: sendResultValidator,
   handler: async (ctx, args): Promise<SendResult> => {
@@ -425,6 +555,44 @@ export const startThread = mutation({
       userId: user._id,
       title: threadTitleFromPrompt(content),
     });
+
+    if (args.pendingAttachments && args.pendingAttachments.length > 0) {
+      const deferred = await savePromptAndScheduleRun(ctx, {
+        ownerUserId: user._id,
+        threadId,
+        threadTitle: threadTitleFromPrompt(content),
+        content,
+        mode: args.mode,
+        commandId: args.commandId,
+        workspaceId: args.workspaceId,
+        selectedContextArtifactIds: args.selectedContextArtifactIds,
+        contextArtifactSnapshot: args.contextArtifactSnapshot,
+        deferGeneration: true,
+      });
+      if (!deferred.ok) {
+        return deferred;
+      }
+      await ctx.scheduler.runAfter(
+        0,
+        internal.artifactUploads.processPendingAttachmentsAndStart,
+        {
+          ownerUserId: user._id,
+          ownerEmail: user.email ?? undefined,
+          threadId,
+          messageId: deferred.messageId,
+          threadTitle: threadTitleFromPrompt(content),
+          content,
+          mode: args.mode,
+          commandId: args.commandId,
+          workspaceId: args.workspaceId,
+          pendingAttachments: args.pendingAttachments,
+          selectedContextArtifactIds: args.selectedContextArtifactIds,
+          contextArtifactSnapshot: args.contextArtifactSnapshot,
+        },
+      );
+      return { ...deferred, threadId };
+    }
+
     const result = await savePromptAndScheduleRun(ctx, {
       ownerUserId: user._id,
       threadId,
@@ -434,6 +602,8 @@ export const startThread = mutation({
       commandId: args.commandId,
       workspaceId: args.workspaceId,
       selectedContextArtifactIds: args.selectedContextArtifactIds,
+      messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
+      contextArtifactSnapshot: args.contextArtifactSnapshot,
     });
 
     return result.ok ? { ...result, threadId } : result;
@@ -447,6 +617,8 @@ export const send = mutation({
     mode: v.union(v.literal("normal"), v.literal("deep")),
     commandId: v.optional(v.string()),
     selectedContextArtifactIds: v.optional(v.array(v.id("artifacts"))),
+    messageAttachmentArtifactIds: v.optional(v.array(v.id("artifacts"))),
+    contextArtifactSnapshot: v.optional(contextArtifactSnapshotValidator),
   },
   returns: sendResultValidator,
   handler: async (ctx, args): Promise<SendResult> => {
@@ -476,6 +648,8 @@ export const send = mutation({
       mode: args.mode,
       commandId: args.commandId,
       selectedContextArtifactIds: args.selectedContextArtifactIds,
+      messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
+      contextArtifactSnapshot: args.contextArtifactSnapshot,
     });
   },
 });
@@ -512,6 +686,16 @@ export const list = query({
           .unique(),
       ),
     );
+    const contextRows = await Promise.all(
+      messageIds.map((messageId) =>
+        ctx.db
+          .query("messageContextArtifacts")
+          .withIndex("by_owner_message", (q) =>
+            q.eq("ownerUserId", user._id).eq("messageId", messageId),
+          )
+          .collect(),
+      ),
+    );
     const byMessageId = new Map();
     for (const row of commandRows) {
       if (!row || row.threadId !== args.threadId) {
@@ -525,11 +709,66 @@ export const list = query({
         argumentPreview: row.argumentPreview,
       });
     }
+    const contextByMessageId = new Map<string, Array<{
+      artifactId: string;
+      title: string;
+      kind?: "document" | "url";
+      source?: "upload" | "workspace";
+      savedWorkspaceId?: string;
+      savedWorkspaceName?: string;
+    }>>();
+    const artifactIds = new Set<Id<"artifacts">>();
+    for (const rows of contextRows) {
+      for (const row of rows) {
+        if (row.threadId !== args.threadId) {
+          continue;
+        }
+        artifactIds.add(row.artifactId);
+      }
+    }
+    const artifactWorkspaceById = new Map<string, Id<"workspaces">>();
+    for (const artifactId of artifactIds) {
+      const artifact = await ctx.db.get("artifacts", artifactId);
+      if (artifact?.workspaceId) {
+        artifactWorkspaceById.set(String(artifactId), artifact.workspaceId);
+      }
+    }
+    const workspaceNameById = new Map<string, string>();
+    for (const workspaceId of new Set(artifactWorkspaceById.values())) {
+      const workspace = await ctx.db.get("workspaces", workspaceId);
+      if (workspace) {
+        workspaceNameById.set(String(workspaceId), workspace.name);
+      }
+    }
+    for (const rows of contextRows) {
+      for (const row of rows) {
+        if (row.threadId !== args.threadId) {
+          continue;
+        }
+        const savedWorkspaceId = artifactWorkspaceById.get(String(row.artifactId));
+        const existing = contextByMessageId.get(row.messageId) ?? [];
+        existing.push({
+          artifactId: row.artifactId,
+          title: row.title,
+          kind: row.kind,
+          source: row.source,
+          ...(savedWorkspaceId
+            ? {
+                savedWorkspaceId: String(savedWorkspaceId),
+                savedWorkspaceName:
+                  workspaceNameById.get(String(savedWorkspaceId)) ?? "Workspace",
+              }
+            : {}),
+        });
+        contextByMessageId.set(row.messageId, existing);
+      }
+    }
     return {
       ...paginated,
       page: paginated.page.map((message) => {
         const promptCommand = byMessageId.get(message.id);
-        if (!promptCommand) {
+        const contextArtifacts = contextByMessageId.get(message.id);
+        if (!promptCommand && !contextArtifacts?.length) {
           return message;
         }
         const existingMetadata = (message as { metadata?: unknown }).metadata;
@@ -539,7 +778,8 @@ export const list = query({
             ...(typeof existingMetadata === "object" && existingMetadata !== null
               ? existingMetadata
               : {}),
-            promptCommand,
+            ...(promptCommand ? { promptCommand } : {}),
+            ...(contextArtifacts?.length ? { contextArtifacts } : {}),
           },
         };
       }),
@@ -556,6 +796,7 @@ export const generateReply = internalAction({
     prompt: v.string(),
     visiblePrompt: v.string(),
     runId: v.optional(v.id("agentRuns")),
+    messageAttachmentArtifactIds: v.optional(v.array(v.id("artifacts"))),
   },
   handler: async (ctx, args) => {
     const thread = await ctx.runQuery(components.agent.threads.getThread, {
@@ -566,10 +807,22 @@ export const generateReply = internalAction({
     }
 
     try {
+      const ragContext = await ctx.runAction(
+        internal.agent.ragContext.buildRagContextForThread,
+        {
+          ownerUserId: args.userId,
+          threadId: args.threadId,
+          query: args.visiblePrompt,
+          messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
+        },
+      );
+      const prompt = ragContext
+        ? [ragContext, "", args.prompt].join("\n")
+        : args.prompt;
       const result = await astra.streamText(
         ctx,
         { threadId: args.threadId, userId: args.userId },
-        { promptMessageId: args.promptMessageId, prompt: args.prompt, tools: researchTools },
+        { promptMessageId: args.promptMessageId, prompt, tools: normalChatTools },
         {
           saveStreamDeltas: { chunking: "word", throttleMs: 100 },
           usageHandler: handleUsage,

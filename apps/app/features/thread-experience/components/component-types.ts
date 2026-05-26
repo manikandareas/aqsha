@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
-import type { ArtifactId, WorkspaceId } from "@/lib/convex-refs";
+import type { ArtifactId, StorageId, WorkspaceId } from "@/lib/convex-refs";
 import type {
   RateStatus,
   ResearchArtifact,
   ResearchRun,
   ResearchSource,
   SendResult,
+  MessageContextArtifactMetadata,
 } from "../types";
 
 export type { ArtifactId, WorkspaceId };
@@ -35,6 +36,14 @@ export type StartThread = (args: {
   commandId?: string;
   workspaceId?: WorkspaceId;
   selectedContextArtifactIds?: ArtifactId[];
+  messageAttachmentArtifactIds?: ArtifactId[];
+  pendingAttachments?: Array<{
+    storageId: StorageId;
+    fileName: string;
+    mimeType: string;
+    size: number;
+  }>;
+  contextArtifactSnapshot?: MessageContextArtifactMetadata[];
 }) => Promise<SendResult>;
 
 export type SendMessage = (args: {
@@ -43,6 +52,8 @@ export type SendMessage = (args: {
   mode: "normal" | "deep";
   commandId?: string;
   selectedContextArtifactIds?: ArtifactId[];
+  messageAttachmentArtifactIds?: ArtifactId[];
+  contextArtifactSnapshot?: MessageContextArtifactMetadata[];
 }) => Promise<SendResult>;
 
 export type ContextCandidateArtifact = {

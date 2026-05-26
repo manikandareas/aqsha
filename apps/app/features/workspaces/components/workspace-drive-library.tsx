@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { useWorkspaceFolderNav } from "../hooks/use-workspace-folder-nav";
 import {
@@ -17,6 +17,7 @@ import { WorkspaceDriveGrid } from "./workspace-drive-grid";
 
 export function WorkspaceDriveLibrary({
   workspaceName,
+  titleSlot,
   folders,
   artifacts,
   isArtifactSelected,
@@ -42,6 +43,7 @@ export function WorkspaceDriveLibrary({
   showWorkspaceSettings,
 }: {
   workspaceName: string;
+  titleSlot?: ReactNode;
   folders: WorkspaceFolder[];
   artifacts: WorkspaceArtifact[];
   isArtifactSelected: (artifactId: string) => boolean;
@@ -96,6 +98,7 @@ export function WorkspaceDriveLibrary({
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       <WorkspaceBoardToolbar
         workspaceName={workspaceName}
+        titleSlot={titleSlot}
         breadcrumb={folderView.breadcrumb}
         onNavigate={navigateTo}
         onCreateFolder={onCreateFolder}

@@ -168,7 +168,7 @@ export const promptCommands = [
       [
         "Jalankan Deep Research untuk permintaan berikut.",
         "Susun laporan berbasis sumber dengan proses pencarian, pembacaan, sintesis, dan pemeriksaan kutipan.",
-        "Prioritaskan bukti dari source library pengguna bila relevan, lalu sumber publik. Laporkan ketidakpastian dan celah bukti.",
+        "Prioritaskan konteks workspace yang dipilih pengguna bila relevan, lalu sumber publik. Laporkan ketidakpastian dan celah bukti.",
         "",
         withInput(argument, "[Pertanyaan riset belum diberikan]"),
       ].join("\n"),

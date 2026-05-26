@@ -179,8 +179,10 @@ const captureScreenshot = async (): Promise<File | null> => {
 // Provider Context & Types
 // ============================================================================
 
+export type PromptInputFile = FileUIPart & { id: string; file?: File };
+
 export interface AttachmentsContext {
-  files: (FileUIPart & { id: string })[];
+  files: PromptInputFile[];
   add: (files: File[] | FileList) => void;
   remove: (id: string) => void;
   clear: () => void;
@@ -255,9 +257,7 @@ export const PromptInputProvider = ({
   const clearInput = useCallback(() => setTextInput(""), []);
 
   // ----- attachments state (global when wrapped)
-  const [attachmentFiles, setAttachmentFiles] = useState<
-    (FileUIPart & { id: string })[]
-  >([]);
+  const [attachmentFiles, setAttachmentFiles] = useState<PromptInputFile[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   // oxlint-disable-next-line eslint(no-empty-function)
   const openRef = useRef<() => void>(() => {});
@@ -272,6 +272,7 @@ export const PromptInputProvider = ({
       ...prev,
       ...incoming.map((file) => ({
         filename: file.name,
+        file,
         id: nanoid(),
         mediaType: file.type,
         type: "file" as const,
@@ -484,7 +485,7 @@ export const PromptInputActionAddScreenshot = ({
 
 export interface PromptInputMessage {
   text: string;
-  files: FileUIPart[];
+  files: Array<FileUIPart & { file?: File }>;
 }
 
 export type PromptInputProps = Omit<
@@ -502,6 +503,7 @@ export type PromptInputProps = Omit<
   maxFiles?: number;
   // bytes
   maxFileSize?: number;
+  onFilesChange?: (files: PromptInputFile[]) => void;
   onError?: (err: {
     code: "max_files" | "max_file_size" | "accept";
     message: string;
@@ -520,6 +522,7 @@ export const PromptInput = ({
   syncHiddenInput,
   maxFiles,
   maxFileSize,
+  onFilesChange,
   onError,
   onSubmit,
   children,
@@ -534,7 +537,7 @@ export const PromptInput = ({
   const formRef = useRef<HTMLFormElement | null>(null);
 
   // ----- Local attachments (only used when no provider)
-  const [items, setItems] = useState<(FileUIPart & { id: string })[]>([]);
+  const [items, setItems] = useState<PromptInputFile[]>([]);
   const files = usingProvider ? controller.attachments.files : items;
 
   // ----- Local referenced sources (always local to PromptInput)
@@ -611,10 +614,11 @@ export const PromptInput = ({
             message: "Too many files. Some were not added.",
           });
         }
-        const next: (FileUIPart & { id: string })[] = [];
+        const next: PromptInputFile[] = [];
         for (const file of capped) {
           next.push({
             filename: file.name,
+            file,
             id: nanoid(),
             mediaType: file.type,
             type: "file",
@@ -824,6 +828,10 @@ export const PromptInput = ({
     [files, add, remove, clearAttachments, openFileDialog]
   );
 
+  useEffect(() => {
+    onFilesChange?.(files.map((item) => ({ ...item, id: item.id })));
+  }, [files, onFilesChange]);
+
   const refsCtx = useMemo<ReferencedSourcesContext>(
     () => ({
       add: (incoming: SourceDocumentUIPart[] | SourceDocumentUIPart) => {
@@ -862,7 +870,7 @@ export const PromptInput = ({
 
       try {
         // Convert blob URLs to data URLs asynchronously
-        const convertedFiles: FileUIPart[] = await Promise.all(
+        const convertedFiles: Array<FileUIPart & { file?: File }> = await Promise.all(
           files.map(async ({ id: _id, ...item }) => {
             if (item.url?.startsWith("blob:")) {
               const dataUrl = await convertBlobUrlToDataUrl(item.url);
@@ -1281,8 +1289,8 @@ export const PromptInputSelectTrigger = ({
 }: PromptInputSelectTriggerProps) => (
   <SelectTrigger
     className={cn(
-      "border-none bg-transparent font-medium text-muted-foreground shadow-none transition-colors",
-      "hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground",
+      "border-none bg-transparent px-2.5 py-1.5 font-medium text-[12px] text-muted-foreground shadow-none transition-colors",
+      "hover:bg-transparent hover:text-foreground aria-expanded:bg-transparent aria-expanded:text-foreground",
       className
     )}
     {...props}

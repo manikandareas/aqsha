@@ -3,7 +3,7 @@ import { api } from "@aqsha/convex/api";
 import type { OptimisticLocalStore } from "convex/browser";
 import { insertAtTop } from "convex/react";
 import { previewFromComposerContent } from "../utils/composer-model";
-import type { PromptCommandMetadata } from "../types";
+import type { MessageContextArtifactMetadata, PromptCommandMetadata } from "../types";
 
 export function optimisticallyInsertUserMessage(
   store: OptimisticLocalStore,
@@ -11,6 +11,7 @@ export function optimisticallyInsertUserMessage(
     threadId: string;
     text: string;
     promptCommand?: PromptCommandMetadata;
+    contextArtifacts?: MessageContextArtifactMetadata[];
   },
 ) {
   const queries = store.getAllQueries(api.agent.messages.list);
@@ -38,9 +39,15 @@ export function optimisticallyInsertUserMessage(
       parts: [{ type: "text", text: args.text }],
       role: "user",
       text: args.text,
-      metadata: args.promptCommand
-        ? { promptCommand: args.promptCommand }
-        : undefined,
+      metadata:
+        args.promptCommand || args.contextArtifacts?.length
+          ? {
+              ...(args.promptCommand ? { promptCommand: args.promptCommand } : {}),
+              ...(args.contextArtifacts?.length
+                ? { contextArtifacts: args.contextArtifacts }
+                : {}),
+            }
+          : undefined,
     },
     localQueryStore: store,
   });

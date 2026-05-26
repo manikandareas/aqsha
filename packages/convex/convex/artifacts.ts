@@ -25,10 +25,13 @@ import {
 } from "./artifactModel";
 import {
   assertFolderOwner,
+  assertThreadAttachmentOwner,
+  assertUploadedArtifactOwner,
   assertWorkspaceArtifactOwner,
   assertWorkspaceOwner,
   normalizeName,
 } from "./workspaceAccess";
+import { assertThreadOwner } from "./agent/threads";
 import {
   readWithExaContents,
   readWithJinaReader,
@@ -100,13 +103,14 @@ export const listForContextPicker = query({
         .take(50);
     }
 
-    return await ctx.db
+    return (await ctx.db
       .query("artifacts")
       .withIndex("by_owner_status_updated", (q) =>
         q.eq("ownerUserId", user._id).eq("status", "active"),
       )
       .order("desc")
-      .take(50);
+      .take(50))
+      .filter((artifact) => artifact.workspaceId != null);
   },
 });
 
@@ -177,6 +181,22 @@ export const createDocument = mutation({
       updatedAt: now,
     });
     return artifactId;
+  },
+});
+
+export const generateUploadUrl = mutation({
+  args: {
+    workspaceId: v.optional(v.id("workspaces")),
+    threadId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    if (args.workspaceId) {
+      await assertWorkspaceOwner(ctx, args.workspaceId, user._id, { requireActive: true });
+    } else if (args.threadId) {
+      await assertThreadOwner(ctx, args.threadId);
+    }
+    return await ctx.storage.generateUploadUrl();
   },
 });
 
@@ -337,7 +357,15 @@ export const createUrl = mutation({
 
 async function assertLibraryCapacity(ctx: MutationCtx, ownerUserId: string) {
   const user = await requireCurrentUser(ctx);
-  const snapshot = await getBillingSnapshot(ctx, ownerUserId, user.email);
+  await assertLibraryCapacityForOwner(ctx, ownerUserId, user.email);
+}
+
+async function assertLibraryCapacityForOwner(
+  ctx: MutationCtx,
+  ownerUserId: string,
+  ownerEmail?: string | null,
+) {
+  const snapshot = await getBillingSnapshot(ctx, ownerUserId, ownerEmail);
   const limit = PLAN_CATALOG[snapshot.planKey].libraryItemLimit;
   if (limit === Number.MAX_SAFE_INTEGER) {
     return;
@@ -542,6 +570,337 @@ export const updateDocumentInternal = internalMutation({
   },
 });
 
+export const createThreadAttachmentInternal = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    threadId: v.string(),
+    title: v.string(),
+    uploadStorageId: v.id("_storage"),
+    uploadFileName: v.string(),
+    uploadMimeType: v.string(),
+    uploadSize: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const title = normalizeName(args.title, "Artifact title");
+    const artifactId = await ctx.db.insert("artifacts", {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      kind: "document",
+      type: "document",
+      title,
+      contentFormat: "plain",
+      body: "",
+      storageId: undefined,
+      plainTextPreview: "Extraction is running.",
+      contextText: "",
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("artifactDocuments", {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      artifactId,
+      blocksJson: "",
+      markdown: "",
+      plainText: "",
+      uploadStorageId: args.uploadStorageId,
+      uploadFileName: args.uploadFileName,
+      uploadMimeType: args.uploadMimeType,
+      uploadSize: args.uploadSize,
+      ingestionStatus: "pending",
+      createdAt: now,
+      updatedAt: now,
+    });
+    return artifactId;
+  },
+});
+
+export const promoteAttachmentToWorkspaceInternal = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    ownerEmail: v.optional(v.string()),
+    artifactId: v.id("artifacts"),
+    workspaceId: v.id("workspaces"),
+  },
+  handler: async (ctx, args) => {
+    await assertThreadAttachmentOwner(ctx, args.artifactId, args.ownerUserId, {
+      requireActive: true,
+    });
+    await assertWorkspaceOwner(ctx, args.workspaceId, args.ownerUserId, {
+      requireActive: true,
+    });
+    await assertLibraryCapacityForOwner(ctx, args.ownerUserId, args.ownerEmail);
+    const row = await getDocumentRow(ctx, args.artifactId, args.ownerUserId);
+    const artifactBeforePromote = await ctx.db.get("artifacts", args.artifactId);
+    const now = Date.now();
+    await ctx.db.patch("artifacts", args.artifactId, {
+      workspaceId: args.workspaceId,
+      threadId: undefined,
+      updatedAt: now,
+    });
+    await ctx.db.patch("artifactDocuments", row._id, {
+      workspaceId: args.workspaceId,
+      threadId: undefined,
+      updatedAt: now,
+    });
+    const workspace = await ctx.db.get("workspaces", args.workspaceId);
+    return {
+      workspaceId: args.workspaceId,
+      artifactId: args.artifactId,
+      workspaceName: workspace?.name ?? "Workspace",
+      ragEntryId: row.ragEntryId,
+      title: artifactBeforePromote?.title ?? "Document",
+      plainText: row.plainText ?? artifactBeforePromote?.contextText ?? "",
+    };
+  },
+});
+
+export const saveAttachmentToWorkspace = mutation({
+  args: {
+    artifactId: v.id("artifacts"),
+    workspaceId: v.optional(v.id("workspaces")),
+  },
+  returns: v.object({
+    workspaceId: v.id("workspaces"),
+    artifactId: v.id("artifacts"),
+    workspaceName: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    const artifact = await ctx.db.get("artifacts", args.artifactId);
+    if (!artifact || artifact.ownerUserId !== user._id) {
+      throw new ConvexError("Attachment not found");
+    }
+    if (artifact.workspaceId) {
+      const workspace = await ctx.db.get("workspaces", artifact.workspaceId);
+      return {
+        workspaceId: artifact.workspaceId,
+        artifactId: artifact._id,
+        workspaceName: workspace?.name ?? "Workspace",
+      };
+    }
+    await assertThreadAttachmentOwner(ctx, args.artifactId, user._id, {
+      requireActive: true,
+    });
+
+    const threadMetadata = artifact.threadId
+      ? await ctx.db
+          .query("threadMetadata")
+          .withIndex("by_thread", (q) => q.eq("threadId", artifact.threadId!))
+          .unique()
+      : null;
+    const boundWorkspaceId =
+      threadMetadata?.ownerUserId === user._id
+        ? threadMetadata.workspaceId
+        : undefined;
+
+    let targetWorkspaceId = boundWorkspaceId ?? args.workspaceId;
+    if (!targetWorkspaceId) {
+      const activeWorkspaces = await ctx.db
+        .query("workspaces")
+        .withIndex("by_owner_status_updated", (q) =>
+          q.eq("ownerUserId", user._id).eq("status", "active"),
+        )
+        .take(2);
+      if (activeWorkspaces.length === 0) {
+        await assertWorkspaceCapacity(ctx, user._id);
+        const now = Date.now();
+        targetWorkspaceId = await ctx.db.insert("workspaces", {
+          ownerUserId: user._id,
+          name: normalizeName(artifact.title, "Workspace name"),
+          status: "active",
+          createdAt: now,
+          updatedAt: now,
+        });
+      } else if (activeWorkspaces.length === 1) {
+        targetWorkspaceId = activeWorkspaces[0]._id;
+      } else {
+        throw new ConvexError("Choose a workspace to save this attachment");
+      }
+    }
+
+    if (boundWorkspaceId && args.workspaceId && args.workspaceId !== boundWorkspaceId) {
+      throw new ConvexError("Attachment must be saved to the bound workspace");
+    }
+
+    const promoted = await ctx.runMutation(
+      internal.artifacts.promoteAttachmentToWorkspaceInternal,
+      {
+        ownerUserId: user._id,
+        ownerEmail: user.email ?? undefined,
+        artifactId: args.artifactId,
+        workspaceId: targetWorkspaceId,
+      },
+    ) as {
+      workspaceId: Id<"workspaces">;
+      artifactId: Id<"artifacts">;
+      workspaceName: string;
+      ragEntryId?: string;
+      title: string;
+      plainText: string;
+    };
+
+    await ctx.scheduler.runAfter(0, internal.artifactUploads.reindexPromotedAttachment, {
+      ownerUserId: user._id,
+      artifactId: promoted.artifactId,
+      workspaceId: promoted.workspaceId,
+      title: promoted.title,
+      plainText: promoted.plainText,
+      previousRagEntryId: promoted.ragEntryId,
+    });
+
+    return {
+      workspaceId: promoted.workspaceId,
+      artifactId: promoted.artifactId,
+      workspaceName: promoted.workspaceName,
+    };
+  },
+});
+
+async function assertWorkspaceCapacity(ctx: MutationCtx, ownerUserId: string) {
+  const user = await requireCurrentUser(ctx);
+  const snapshot = await getBillingSnapshot(ctx, ownerUserId, user.email);
+  const limit = PLAN_CATALOG[snapshot.planKey].workspaceLimit;
+  if (limit === Number.MAX_SAFE_INTEGER) {
+    return;
+  }
+  const activeWorkspaces = await ctx.db
+    .query("workspaces")
+    .withIndex("by_owner_status_updated", (q) =>
+      q.eq("ownerUserId", ownerUserId).eq("status", "active"),
+    )
+    .collect();
+  if (activeWorkspaces.length >= limit) {
+    throw new ConvexError("Workspace limit reached for current plan");
+  }
+}
+
+export const createUploadedDocumentInternal = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    ownerEmail: v.optional(v.string()),
+    workspaceId: v.id("workspaces"),
+    folderId: v.optional(v.id("workspaceFolders")),
+    title: v.string(),
+    uploadStorageId: v.id("_storage"),
+    uploadFileName: v.string(),
+    uploadMimeType: v.string(),
+    uploadSize: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await assertWorkspaceOwner(ctx, args.workspaceId, args.ownerUserId, {
+      requireActive: true,
+    });
+    if (args.folderId) {
+      await assertFolderOwner(ctx, args.folderId, args.ownerUserId, args.workspaceId);
+    }
+    await assertLibraryCapacityForOwner(ctx, args.ownerUserId, args.ownerEmail);
+    const now = Date.now();
+    const title = normalizeName(args.title, "Artifact title");
+    const artifactId = await ctx.db.insert("artifacts", {
+      ownerUserId: args.ownerUserId,
+      workspaceId: args.workspaceId,
+      folderId: args.folderId,
+      kind: "document",
+      type: "document",
+      title,
+      contentFormat: "plain",
+      body: "",
+      storageId: undefined,
+      plainTextPreview: "Extraction is running.",
+      contextText: "",
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("artifactDocuments", {
+      ownerUserId: args.ownerUserId,
+      workspaceId: args.workspaceId,
+      artifactId,
+      blocksJson: "",
+      markdown: "",
+      plainText: "",
+      uploadStorageId: args.uploadStorageId,
+      uploadFileName: args.uploadFileName,
+      uploadMimeType: args.uploadMimeType,
+      uploadSize: args.uploadSize,
+      ingestionStatus: "pending",
+      createdAt: now,
+      updatedAt: now,
+    });
+    return artifactId;
+  },
+});
+
+export const patchUploadedDocumentReady = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    artifactId: v.id("artifacts"),
+    markdown: v.string(),
+    plainText: v.string(),
+    storageId: v.optional(v.id("_storage")),
+    markdownStorageId: v.optional(v.id("_storage")),
+    ragEntryId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const artifact = await assertUploadedArtifactOwner(ctx, args.artifactId, args.ownerUserId, {
+      requireActive: true,
+    });
+    const row = await getDocumentRow(ctx, args.artifactId, args.ownerUserId);
+    const now = Date.now();
+    const inlinePlainText =
+      args.plainText.length <= ARTIFACT_BODY_INLINE_LIMIT ? args.plainText : undefined;
+    const inlineMarkdown =
+      args.markdown.length <= ARTIFACT_BODY_INLINE_LIMIT ? args.markdown : undefined;
+    await ctx.db.patch("artifacts", artifact._id, {
+      body: inlinePlainText,
+      storageId: args.storageId,
+      plainTextPreview: previewFromText(args.plainText),
+      contextText: contextFromText(args.plainText),
+      updatedAt: now,
+    });
+    await ctx.db.patch("artifactDocuments", row._id, {
+      markdown: inlineMarkdown,
+      plainText: inlinePlainText,
+      storageId: args.storageId,
+      markdownStorageId: args.markdownStorageId,
+      ingestionStatus: "ready",
+      ingestionFailureReason: undefined,
+      ragEntryId: args.ragEntryId,
+      indexedAt: args.ragEntryId ? now : undefined,
+      updatedAt: now,
+    });
+  },
+});
+
+export const patchUploadedDocumentFailed = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    artifactId: v.id("artifacts"),
+    failureReason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await assertUploadedArtifactOwner(ctx, args.artifactId, args.ownerUserId, {
+      requireActive: true,
+    });
+    const row = await getDocumentRow(ctx, args.artifactId, args.ownerUserId);
+    const reason = previewFromText(args.failureReason, 500);
+    const now = Date.now();
+    await ctx.db.patch("artifacts", args.artifactId, {
+      plainTextPreview: reason,
+      contextText: "",
+      updatedAt: now,
+    });
+    await ctx.db.patch("artifactDocuments", row._id, {
+      ingestionStatus: "failed",
+      ingestionFailureReason: reason,
+      updatedAt: now,
+    });
+  },
+});
+
 export const getContentTarget = internalQuery({
   args: {
     ownerUserId: v.string(),
@@ -604,7 +963,7 @@ export const patchUrlExtractionReady = internalMutation({
     storageId: v.optional(v.id("_storage")),
   },
   handler: async (ctx, args) => {
-    const artifact = await assertWorkspaceArtifactOwner(ctx, args.artifactId, args.ownerUserId, {
+    const artifact = await assertUploadedArtifactOwner(ctx, args.artifactId, args.ownerUserId, {
       requireActive: true,
     });
     const row = await getUrlRow(ctx, args.artifactId, args.ownerUserId);

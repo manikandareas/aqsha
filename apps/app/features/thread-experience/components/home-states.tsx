@@ -4,8 +4,13 @@ import {
   Suggestion,
   Suggestions,
 } from "@/components/ai-elements/suggestion";
+import {
+  panelComposerPaddingClass,
+  threadTranscriptColumnClass,
+} from "@/lib/panel-surface";
+import { cn } from "@/lib/utils";
 import type { RateStatus } from "../types";
-import type { StartThread } from "./component-types";
+import type { DraftContextArtifact, StartThread } from "./component-types";
 import { ComposerHeroState } from "./composer-hero-state";
 import { Composer } from "./composer";
 import { applySuggestion } from "./shared";
@@ -13,9 +18,13 @@ import { applySuggestion } from "./shared";
 export function HomeStartState({
   rateStatus,
   startThread,
+  contextArtifacts,
+  onRemoveContextArtifact,
 }: {
   rateStatus: RateStatus | undefined;
   startThread: StartThread;
+  contextArtifacts?: DraftContextArtifact[];
+  onRemoveContextArtifact?: (artifactId: string) => void;
 }) {
   return (
     <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden bg-background">
@@ -32,6 +41,8 @@ export function HomeStartState({
               disabled={false}
               rateStatus={rateStatus}
               onStartThread={startThread}
+              contextArtifacts={contextArtifacts}
+              onRemoveContextArtifact={onRemoveContextArtifact}
             />
           </ComposerHeroState>
         </div>
@@ -97,8 +108,8 @@ export function AccessDeniedState() {
           </p>
         </div>
       </div>
-      <div className="border-t bg-background/85 px-4 py-4 sm:px-8">
-        <div className="mx-auto w-full max-w-2xl">
+      <div className={cn("border-t bg-background/85", panelComposerPaddingClass)}>
+        <div className={threadTranscriptColumnClass}>
           <Composer mode="disabled" disabled rateStatus={undefined} />
         </div>
       </div>

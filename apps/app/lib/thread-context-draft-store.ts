@@ -116,6 +116,9 @@ export function useDraftContextSelection(
   const selectedIds = useThreadContextDraftStore(
     (state) => state.selections[scopeKey] ?? emptySelection,
   );
+  const isDirty = useThreadContextDraftStore(
+    (state) => state.dirtyScopes[scopeKey] ?? false,
+  );
   const setInitialSelection = useThreadContextDraftStore(
     (state) => state.setInitialSelection,
   );
@@ -147,6 +150,7 @@ export function useDraftContextSelection(
     selectedIds,
     selectedIdSet,
     selectedCount: selectedIds.length,
+    isDirty,
     isSelected,
     toggleArtifact,
     clear,

@@ -3,7 +3,7 @@ import { BrandLogoIcon } from "@/components/brand-logo-icon";
 import { cn } from "@/lib/utils";
 
 export function ComposerHeroState({
-  title = "What story are we telling?",
+  title = "Apa yang ingin kita teliti?",
   logoClassName = "size-8 text-mint",
   titleClassName = "font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl leading-none",
   headerClassName,

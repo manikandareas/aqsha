@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { DetailSplitLayout } from "@/components/layout/detail-split-layout";
 import { useSidebar } from "@/components/ui/sidebar";
@@ -38,14 +37,7 @@ export function ThreadShellLayout({
   const isLeftSidebarOpen = leftSidebar.isMobile
     ? leftSidebar.openMobile
     : leftSidebar.open;
-  const workspaceNameById = useMemo(
-    () => new Map(workspaces.map((workspace) => [workspace._id, workspace.name])),
-    [workspaces],
-  );
-  const workspaceName = selectedThread?.workspaceId
-    ? (workspaceNameById.get(selectedThread.workspaceId) ?? "Workspace")
-    : undefined;
-  const showContextPanel = Boolean(sidePanel && threadId && selectedThread !== null);
+  const showContextPanel = Boolean(sidePanel);
 
   return (
     <>
@@ -69,7 +61,6 @@ export function ThreadShellLayout({
                 threads={threads}
                 onSelectThread={onSelectThread}
                 onCreateThread={onCreateThread}
-                workspaceName={workspaceName}
                 showLeftTrigger={!isLeftSidebarOpen}
                 onToggleLeftSidebar={leftSidebar.toggleSidebar}
                 showContextToggle={showContextPanel}
@@ -95,6 +86,7 @@ export function ThreadShellLayout({
                     onCancelRun={onCancelRun}
                     contextArtifacts={contextArtifacts}
                     onRemoveContextArtifact={onRemoveContextArtifact}
+                    threadWorkspaceId={selectedThread?.workspaceId}
                   />
                 )}
               </main>

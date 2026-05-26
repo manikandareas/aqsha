@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { toArtifactId, toWorkspaceFolderId } from "@/lib/convex-refs";
 import { useCloseRightPanel } from "@/hooks/use-close-right-panel";
@@ -28,6 +29,7 @@ type LibraryDriveProps = Pick<
 export function WorkspaceLibrarySurface({
   workspaceId,
   workspaceName,
+  titleSlot,
   drive,
   dialogState,
   activeFolderId,
@@ -45,6 +47,7 @@ export function WorkspaceLibrarySurface({
 }: {
   workspaceId: string;
   workspaceName: string;
+  titleSlot?: ReactNode;
   drive: LibraryDriveProps;
   dialogState: DialogState;
   activeFolderId: "root" | string;
@@ -81,6 +84,7 @@ export function WorkspaceLibrarySurface({
     <>
       <WorkspaceDriveLibrary
         workspaceName={workspaceName}
+        titleSlot={titleSlot}
         onActiveFolderChange={onActiveFolderChange}
         folders={drive.folders}
         artifacts={drive.artifacts}

@@ -48,8 +48,6 @@ export function ThemeMenuSub({ className }: { className?: string }) {
         <span className="truncate">Theme</span>
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent
-        side="right"
-        align="start"
         className="min-w-36 rounded-[12px] p-1.5"
       >
         {themeOptions.map((option) => {

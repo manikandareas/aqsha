@@ -4,6 +4,7 @@ export type WorkspaceId = GenericId<"workspaces">;
 export type ArtifactId = GenericId<"artifacts">;
 export type WorkspaceFolderId = GenericId<"workspaceFolders">;
 export type AgentRunId = GenericId<"agentRuns">;
+export type StorageId = GenericId<"_storage">;
 
 /** Route/param strings are validated by Convex handlers at runtime. */
 export function toWorkspaceId(id: string): WorkspaceId {
@@ -24,4 +25,8 @@ export function toArtifactIds(ids: Iterable<string>): ArtifactId[] {
 
 export function toAgentRunId(id: string): AgentRunId {
   return id as AgentRunId;
+}
+
+export function toStorageId(id: string): StorageId {
+  return id as StorageId;
 }

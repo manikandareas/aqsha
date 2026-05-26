@@ -15,6 +15,8 @@ import type * as agent_domainReliability from "../agent/domainReliability.js";
 import type * as agent_externalProviders from "../agent/externalProviders.js";
 import type * as agent_messages from "../agent/messages.js";
 import type * as agent_promptCommands from "../agent/promptCommands.js";
+import type * as agent_rag from "../agent/rag.js";
+import type * as agent_ragContext from "../agent/ragContext.js";
 import type * as agent_rateLimits from "../agent/rateLimits.js";
 import type * as agent_researchTools from "../agent/researchTools.js";
 import type * as agent_runtime from "../agent/runtime.js";
@@ -26,6 +28,7 @@ import type * as agent_threadTitles from "../agent/threadTitles.js";
 import type * as agent_threads from "../agent/threads.js";
 import type * as agent_workflow from "../agent/workflow.js";
 import type * as artifactModel from "../artifactModel.js";
+import type * as artifactUploads from "../artifactUploads.js";
 import type * as artifacts from "../artifacts.js";
 import type * as auth from "../auth.js";
 import type * as billing_admin from "../billing/admin.js";
@@ -57,6 +60,8 @@ declare const fullApi: ApiFromModules<{
   "agent/externalProviders": typeof agent_externalProviders;
   "agent/messages": typeof agent_messages;
   "agent/promptCommands": typeof agent_promptCommands;
+  "agent/rag": typeof agent_rag;
+  "agent/ragContext": typeof agent_ragContext;
   "agent/rateLimits": typeof agent_rateLimits;
   "agent/researchTools": typeof agent_researchTools;
   "agent/runtime": typeof agent_runtime;
@@ -68,6 +73,7 @@ declare const fullApi: ApiFromModules<{
   "agent/threads": typeof agent_threads;
   "agent/workflow": typeof agent_workflow;
   artifactModel: typeof artifactModel;
+  artifactUploads: typeof artifactUploads;
   artifacts: typeof artifacts;
   auth: typeof auth;
   "billing/admin": typeof billing_admin;
@@ -115,6 +121,7 @@ export declare const internal: FilterApi<
 export declare const components: {
   betterAuth: import("@convex-dev/better-auth/_generated/component.js").ComponentApi<"betterAuth">;
   agent: import("@convex-dev/agent/_generated/component.js").ComponentApi<"agent">;
+  rag: import("@convex-dev/rag/_generated/component.js").ComponentApi<"rag">;
   rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
   workflow: import("@convex-dev/workflow/_generated/component.js").ComponentApi<"workflow">;
   polar: import("@convex-dev/polar/_generated/component.js").ComponentApi<"polar">;

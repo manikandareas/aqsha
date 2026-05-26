@@ -92,8 +92,10 @@ export function getComposerAvailability({
   isSending,
   isRateLimited,
   activeRun,
+  hasAttachments = false,
 }: {
   visibleContent: string;
+  hasAttachments?: boolean;
   disabled: boolean;
   isSending: boolean;
   isRateLimited: boolean;
@@ -103,7 +105,7 @@ export function getComposerAvailability({
   return {
     isDeepActive,
     canSend:
-      visibleContent.trim().length > 0 &&
+      (visibleContent.trim().length > 0 || hasAttachments) &&
       !disabled &&
       !isSending &&
       !isRateLimited &&

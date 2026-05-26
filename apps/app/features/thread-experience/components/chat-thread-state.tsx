@@ -10,7 +10,13 @@ import {
   ConversationEmptyState,
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
-import { panelBodyPaddingClass, panelComposerPaddingClass } from "@/lib/panel-surface";
+import {
+  panelBodyPaddingClass,
+  panelComposerPaddingClass,
+  threadTranscriptBodyPaddingClass,
+  threadTranscriptColumnClass,
+  threadTranscriptComposerPaddingClass,
+} from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
 import type {
   ChatMessage,
@@ -52,6 +58,7 @@ export function ChatThreadState({
   compact = false,
   contextArtifacts = [],
   onRemoveContextArtifact,
+  threadWorkspaceId,
 }: {
   threadId?: string;
   isLoading: boolean;
@@ -66,6 +73,7 @@ export function ChatThreadState({
   compact?: boolean;
   contextArtifacts?: DraftContextArtifact[];
   onRemoveContextArtifact?: (artifactId: string) => void;
+  threadWorkspaceId?: string;
 }) {
   const { isAuthenticated } = useConvexAuth();
   const messages = useUIMessages(
@@ -90,6 +98,8 @@ export function ChatThreadState({
       <HomeStartState
         rateStatus={rateStatus}
         startThread={startThread}
+        contextArtifacts={contextArtifacts}
+        onRemoveContextArtifact={onRemoveContextArtifact}
       />
     );
   }
@@ -98,7 +108,10 @@ export function ChatThreadState({
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
       <Conversation className="min-h-0 min-w-0 flex-1 overflow-x-hidden">
         <ConversationContent
-          className={cn("gap-6 overflow-x-hidden", panelBodyPaddingClass)}
+          className={cn(
+            "gap-6 overflow-x-hidden p-0",
+            compact ? cn("max-w-none", panelBodyPaddingClass) : cn(threadTranscriptColumnClass, threadTranscriptBodyPaddingClass),
+          )}
         >
           <div className="flex w-full min-w-0 flex-col overflow-x-hidden">
             {isLoading ? (
@@ -125,6 +138,7 @@ export function ChatThreadState({
                         <MessageRow
                           message={entry.message}
                           sourceCount={sourceCounts.byMessageId.get(entry.message.id) ?? 0}
+                          threadWorkspaceId={threadWorkspaceId}
                         />
                       )}
                     </div>
@@ -143,9 +157,12 @@ export function ChatThreadState({
         <ConversationScrollButton className="bottom-4 size-8 border-border/70 bg-card/85 text-muted-foreground shadow-none" />
       </Conversation>
       <div
-        className={cn("shrink-0 min-w-0 overflow-x-hidden bg-background", panelComposerPaddingClass)}
+        className={cn(
+          "shrink-0 min-w-0 overflow-x-hidden bg-background",
+          compact ? panelComposerPaddingClass : threadTranscriptComposerPaddingClass,
+        )}
       >
-        <div className={cn("mx-auto w-full", compact ? "max-w-none" : "max-w-2xl")}>
+        <div className={cn(compact ? "mx-auto w-full max-w-none" : threadTranscriptColumnClass)}>
           {threadId ? (
             <Composer
               mode="thread"

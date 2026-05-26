@@ -1,17 +1,34 @@
 "use client";
 
 import { api } from "@aqsha/convex/api";
-import { useQuery } from "convex/react";
-import { FileTextIcon, FolderTreeIcon } from "lucide-react";
+import { useMutation, useQuery } from "convex/react";
+import {
+  FileTextIcon,
+  FolderTreeIcon,
+  LayoutGridIcon,
+  Link2Icon,
+  LinkIcon,
+  Loader2Icon,
+} from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import {
   Message,
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { toArtifactId, toWorkspaceId } from "@/lib/convex-refs";
 import { cn } from "@/lib/utils";
+import { WorkspacePickerDialog } from "@/features/workspaces/components/workspace-picker-dialog";
 import type {
   ChatMessage,
+  MessageContextArtifactMetadata,
   PromptCommandMetadata,
   ResearchArtifact,
 } from "../types";
@@ -20,9 +37,11 @@ import { ThreadActivityIndicator } from "./shared";
 export function MessageRow({
   message,
   sourceCount = 0,
+  threadWorkspaceId,
 }: {
   message: ChatMessage;
   sourceCount?: number;
+  threadWorkspaceId?: string;
 }) {
   const isUser = message.role === "user";
   const isStreaming = message.status === "streaming";
@@ -35,11 +54,18 @@ export function MessageRow({
 
   if (isUser) {
     const promptCommand = message.metadata?.promptCommand;
+    const contextArtifacts = message.metadata?.contextArtifacts ?? [];
     const displayText = promptCommand
       ? stripVisibleCommandText(text, promptCommand)
       : text;
     return (
-      <div className="flex w-full min-w-0 justify-end overflow-x-hidden">
+      <div className="flex w-full min-w-0 flex-col items-end gap-2 overflow-x-hidden">
+        {contextArtifacts.length > 0 ? (
+          <UserMessageContextArtifacts
+            artifacts={contextArtifacts}
+            threadWorkspaceId={threadWorkspaceId}
+          />
+        ) : null}
         <div className="max-w-full whitespace-pre-wrap break-words rounded-[14px] border border-border/80 bg-card px-4 py-2.5 text-[13px] leading-[1.55] text-foreground sm:max-w-[560px]">
           {promptCommand ? <PromptCommandChip command={promptCommand} /> : null}
           {displayText}
@@ -72,6 +98,191 @@ type MessageArtifactLink = {
   artifact: ResearchArtifact & { workspaceId?: string };
   version: NonNullable<ResearchArtifact["version"]>;
 };
+
+function UserMessageContextArtifacts({
+  artifacts,
+  threadWorkspaceId,
+}: {
+  artifacts: MessageContextArtifactMetadata[];
+  threadWorkspaceId?: string;
+}) {
+  return (
+    <div className="flex max-w-full flex-wrap justify-end gap-2 sm:max-w-[560px]">
+      {artifacts.map((artifact) => (
+        <UserMessageContextArtifactCard
+          key={artifact.artifactId}
+          artifact={artifact}
+          threadWorkspaceId={threadWorkspaceId}
+        />
+      ))}
+    </div>
+  );
+}
+
+function UserMessageContextArtifactCard({
+  artifact,
+  threadWorkspaceId,
+}: {
+  artifact: MessageContextArtifactMetadata;
+  threadWorkspaceId?: string;
+}) {
+  const router = useRouter();
+  const saveAttachment = useMutation(api.artifacts.saveAttachmentToWorkspace);
+  const workspacePage = useQuery(api.workspaces.list, {
+    paginationOpts: { cursor: null, numItems: 50 },
+  });
+  const [isSaving, setIsSaving] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [savedState, setSavedState] = useState<{
+    workspaceId: string;
+    workspaceName: string;
+  } | null>(
+    artifact.savedWorkspaceId
+      ? {
+          workspaceId: artifact.savedWorkspaceId,
+          workspaceName: artifact.savedWorkspaceName ?? "Workspace",
+        }
+      : null,
+  );
+  const presentation = getContextArtifactPresentation(artifact);
+  const workspaceCount = workspacePage?.page.length ?? 0;
+  const canSave =
+    artifact.source === "upload" &&
+    !savedState &&
+    artifact.kind !== "url";
+  const requiresPicker = canSave && !threadWorkspaceId && workspaceCount > 1;
+
+  const handleSave = async (workspaceId?: string) => {
+    setIsSaving(true);
+    try {
+      const result = await saveAttachment({
+        artifactId: toArtifactId(artifact.artifactId),
+        workspaceId: workspaceId ? toWorkspaceId(workspaceId) : undefined,
+      });
+      setSavedState({
+        workspaceId: String(result.workspaceId),
+        workspaceName: result.workspaceName,
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <div
+        className={cn(
+          "relative flex w-[168px] max-w-full shrink-0 flex-col overflow-hidden rounded-[10px] border bg-card shadow-sm",
+          presentation.borderClass,
+        )}
+      >
+        <div
+          className={cn(
+            "relative flex h-[52px] items-end justify-start overflow-hidden px-2.5 pb-2 pt-2.5",
+            presentation.surfaceClass,
+          )}
+        >
+          <span
+            aria-hidden
+            className="pointer-events-none absolute right-0 top-0 size-4 bg-background/35"
+            style={{ clipPath: "polygon(100% 0, 0 0, 100% 100%)" }}
+          />
+          <presentation.Icon className={cn("size-4 shrink-0", presentation.iconClass)} />
+        </div>
+        <div className="border-t border-border/60 px-2.5 py-2">
+          <p className="truncate text-[11px] font-semibold leading-snug text-foreground">
+            {artifact.title}
+          </p>
+          <p className="mt-0.5 truncate text-[10px] font-medium text-muted-foreground">
+            {savedState
+              ? `Di ${savedState.workspaceName}`
+              : artifact.source === "upload"
+                ? "Lampiran chat"
+                : presentation.label}
+          </p>
+          {savedState ? (
+            <Link
+              href={`/workspaces/${savedState.workspaceId}`}
+              className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-primary hover:underline"
+            >
+              Buka workspace
+            </Link>
+          ) : canSave ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  aria-label="Simpan ke workspace"
+                  onClick={() => {
+                    if (requiresPicker) {
+                      setPickerOpen(true);
+                      return;
+                    }
+                    void handleSave(threadWorkspaceId);
+                  }}
+                  className="mt-2 inline-flex size-6 items-center justify-center rounded-full border border-border/80 bg-background text-foreground transition-colors hover:bg-muted/40 disabled:opacity-60"
+                >
+                  {isSaving ? (
+                    <Loader2Icon className="size-3 animate-spin" />
+                  ) : (
+                    <Link2Icon className="size-3" />
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                Simpan ke workspace
+              </TooltipContent>
+            </Tooltip>
+          ) : artifact.source === "workspace" && artifact.savedWorkspaceId ? (
+            <button
+              type="button"
+              onClick={() => router.push(`/workspaces/${artifact.savedWorkspaceId}`)}
+              className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-primary hover:underline"
+            >
+              Buka workspace
+            </button>
+          ) : null}
+        </div>
+      </div>
+      <WorkspacePickerDialog
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        onSelect={(workspaceId) => handleSave(workspaceId)}
+      />
+    </>
+  );
+}
+
+function getContextArtifactPresentation(artifact: MessageContextArtifactMetadata) {
+  if (artifact.kind === "url") {
+    return {
+      Icon: LinkIcon,
+      label: "Tautan tersimpan",
+      surfaceClass: "bg-sky-soft",
+      iconClass: "text-sky-foreground",
+      borderClass: "border-sky-soft-border/80",
+    };
+  }
+
+  if (artifact.source === "upload") {
+    return {
+      Icon: FileTextIcon,
+      label: "Lampiran chat",
+      surfaceClass: "bg-mint-soft",
+      iconClass: "text-mint-foreground",
+      borderClass: "border-mint-soft-border/80",
+    };
+  }
+
+  return {
+    Icon: LayoutGridIcon,
+    label: "Artifact workspace",
+    surfaceClass: "bg-muted/45",
+    iconClass: "text-muted-foreground",
+    borderClass: "border-border/80",
+  };
+}
 
 function MessageArtifacts({ links }: { links: MessageArtifactLink[] }) {
   const router = useRouter();
@@ -120,7 +331,7 @@ function MessageSourceCount({ sourceCount }: { sourceCount: number }) {
   return (
     <span className="mt-2 inline-flex w-fit items-center gap-1.5 rounded-[8px] border border-border/70 bg-muted/35 px-2 py-1 text-[11px] font-medium text-muted-foreground">
       <FolderTreeIcon className="size-3.5" />
-      <span>{sourceCount} sumber</span>
+      <span>{sourceCount} referensi</span>
     </span>
   );
 }

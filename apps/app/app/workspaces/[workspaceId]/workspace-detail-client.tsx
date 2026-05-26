@@ -5,8 +5,13 @@ import { useRouter } from "next/navigation";
 import { DetailSplitLayout } from "@/components/layout/detail-split-layout";
 import { ResponsiveSidePanel } from "@/components/layout/responsive-side-panel";
 import { useSidebar } from "@/components/ui/sidebar";
-import { toArtifactIds, toWorkspaceId } from "@/lib/convex-refs";
+import { toWorkspaceId } from "@/lib/convex-refs";
 import type { StartThread } from "@/features/thread-experience/components/component-types";
+import {
+  buildContextArtifactSnapshot,
+  toMutationContextSnapshot,
+  toSelectedContextArtifactIds,
+} from "@/features/thread-experience/utils/message-context";
 import {
   useWorkspaceDetailData,
   type WorkspaceDriveData,
@@ -62,15 +67,32 @@ function WorkspaceDetailMain({
   );
 
   const handleStartThread: StartThread = async (args) => {
+    const shouldIncludeContext = draftContext.isDirty;
+    const messageAttachmentIds = args.messageAttachmentArtifactIds?.map(String) ?? [];
+    const panelIds = shouldIncludeContext
+      ? [...new Set([...draftContext.selectedIds, ...messageAttachmentIds.map(String)])]
+      : messageAttachmentIds;
+    const titleById = new Map(
+      data.artifacts.map((artifact) => [artifact._id, artifact.title]),
+    );
+    const contextArtifactSnapshot = buildContextArtifactSnapshot(
+      panelIds,
+      titleById,
+      messageAttachmentIds,
+    );
+    const panelSnapshot = shouldIncludeContext
+      ? buildContextArtifactSnapshot(
+          draftContext.selectedIds,
+          titleById,
+        )
+      : undefined;
     const result = await data.startThread({
       ...args,
       workspaceId: toWorkspaceId(workspaceId),
-      selectedContextArtifactIds:
-        draftContext.selectedIds.length > 0
-          ? toArtifactIds(draftContext.selectedIds)
-          : undefined,
+      selectedContextArtifactIds: toSelectedContextArtifactIds(panelSnapshot),
+      contextArtifactSnapshot: toMutationContextSnapshot(contextArtifactSnapshot),
     });
-    if (result.ok && result.threadId && draftContext.selectedCount > 0) {
+    if (result.ok && result.threadId && shouldIncludeContext) {
       draftContext.markSelectionPersisted(draftContext.selectedIds);
     }
     return result;
@@ -120,13 +142,12 @@ function WorkspaceDetailMain({
             <ResponsiveSidePanel open={chatPanelOpen}>
               <WorkspaceChatSidePanel
                 workspaceName={data.workspace.name}
+                workspaceId={workspaceId}
                 activeThreadId={panelThreadId}
                 onActiveThreadIdChange={handlePanelThreadChange}
                 threads={data.workspaceThreads}
                 contextArtifacts={contextArtifacts}
-                selectedContextArtifactIds={draftContext.selectedIds}
                 onRemoveContextArtifact={draftContext.toggleArtifact}
-                onContextPersisted={draftContext.markSelectionPersisted}
                 rateStatus={data.rateStatus}
                 startThread={handleStartThread}
                 removeThread={data.removeThread}

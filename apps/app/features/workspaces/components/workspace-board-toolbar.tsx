@@ -20,10 +20,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { panelHeaderPaddingClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
+import type { ReactNode } from "react";
 import type { BreadcrumbSegment } from "../utils/workspace-library-model";
 
 export function WorkspaceBoardToolbar({
   workspaceName,
+  titleSlot,
   breadcrumb,
   onNavigate,
   onCreateFolder,
@@ -40,6 +42,7 @@ export function WorkspaceBoardToolbar({
   showWorkspaceSettings = true,
 }: {
   workspaceName: string;
+  titleSlot?: ReactNode;
   breadcrumb: BreadcrumbSegment[];
   onNavigate: (folderId: "root" | string) => void;
   onCreateFolder: () => void;
@@ -72,9 +75,11 @@ export function WorkspaceBoardToolbar({
               <PanelLeftIcon className="size-3.5" />
             </Button>
           ) : null}
-          <h1 className="truncate font-heading text-lg font-semibold leading-tight tracking-tight text-foreground sm:text-xl">
-            {workspaceName}
-          </h1>
+          {titleSlot ?? (
+            <h1 className="truncate font-heading text-lg font-semibold leading-tight tracking-tight text-foreground sm:text-xl">
+              {workspaceName}
+            </h1>
+          )}
           {showCreateActions ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

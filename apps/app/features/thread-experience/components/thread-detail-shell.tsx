@@ -1,14 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { DriveArtifactCard } from "@/components/drive-artifact-card";
 import { ResponsiveSidePanel } from "@/components/layout/responsive-side-panel";
+import { PanelBoardTitleDropdownTrigger } from "@/components/panel-title-dropdown-trigger";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCloseRightPanel } from "@/hooks/use-close-right-panel";
-import { toArtifactIds } from "@/lib/convex-refs";
-import { driveArtifactGridClass } from "@/lib/drive-grid";
 import { panelBodyPaddingClass } from "@/lib/panel-surface";
 import {
   threadContextScopeKey,
@@ -18,15 +22,20 @@ import { cn } from "@/lib/utils";
 import {
   useWorkspaceDriveData,
 } from "@/features/workspaces/api/use-workspaces-data";
-import { ContextPanelHeader } from "@/features/workspaces/components/context-panel-header";
-import { WorkspaceDriveEmpty } from "@/features/workspaces/components/workspace-drive-empty";
 import { WorkspaceLibrarySurface } from "@/features/workspaces/components/workspace-library-surface";
+import { WorkspaceBoardToolbar } from "@/features/workspaces/components/workspace-board-toolbar";
 import { useWorkspaceLibraryDialogState } from "@/features/workspaces/hooks/use-workspace-library-dialogs";
 import { useThreadExperienceData } from "../api/use-thread-experience-data";
 import type {
-  ContextCandidateArtifact,
+  SendMessage,
+  StartThread,
 } from "./component-types";
 import { ThreadShellLayout } from "./thread-shell-layout";
+import {
+  buildContextArtifactSnapshot,
+  toMutationContextSnapshot,
+  toSelectedContextArtifactIds,
+} from "../utils/message-context";
 
 export function ThreadDetailShell({ threadId }: { threadId?: string }) {
   const router = useRouter();
@@ -56,7 +65,8 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
     threadId ? threadContextScopeKey(threadId) : "thread:new",
     threadId && selectedContextArtifactsLoaded ? persistedContextIds : undefined,
   );
-  const workspaceDrive = useWorkspaceDriveData(selectedThread?.workspaceId ?? "");
+  const panelWorkspaceId = selectedThread?.workspaceId;
+  const workspaceDrive = useWorkspaceDriveData(panelWorkspaceId ?? "");
   const title = threadId
     ? (selectedThread?.title ?? "Thread tidak ditemukan")
     : "Thread baru";
@@ -65,8 +75,8 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
     () => new Map(workspaces.map((workspace) => [workspace._id, workspace.name])),
     [workspaces],
   );
-  const workspaceName = selectedThread?.workspaceId
-    ? (workspaceNameById.get(selectedThread.workspaceId) ?? "Workspace")
+  const workspaceName = panelWorkspaceId
+    ? (workspaceNameById.get(panelWorkspaceId) ?? "Workspace")
     : undefined;
   const contextArtifactTitleById = useMemo(() => {
     const titles = new Map<string, string>();
@@ -90,15 +100,55 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
     [contextArtifactTitleById, draftContext.selectedIds],
   );
 
-  const sendMessageWithDraftContext = async (
-    args: Parameters<typeof sendMessage>[0],
-  ) => {
-    const selectedContextArtifactIds = toArtifactIds(draftContext.selectedIds);
+  const sendMessageWithDraftContext: SendMessage = async (args) => {
+    const shouldReplaceContext = draftContext.isDirty;
+    const messageAttachmentIds = args.messageAttachmentArtifactIds?.map(String) ?? [];
+    const panelIds = shouldReplaceContext ? draftContext.selectedIds : persistedContextIds;
+    const snapshotIds = [...new Set([...panelIds, ...messageAttachmentIds])];
+    const contextArtifactSnapshot = buildContextArtifactSnapshot(
+      snapshotIds,
+      contextArtifactTitleById,
+      messageAttachmentIds,
+    );
+    const panelSnapshot = shouldReplaceContext
+      ? buildContextArtifactSnapshot(
+          draftContext.selectedIds,
+          contextArtifactTitleById,
+        )
+      : undefined;
     const result = await sendMessage({
       ...args,
-      selectedContextArtifactIds,
+      selectedContextArtifactIds: toSelectedContextArtifactIds(panelSnapshot),
+      contextArtifactSnapshot: toMutationContextSnapshot(contextArtifactSnapshot),
     });
-    if (result.ok && threadId) {
+    if (result.ok && threadId && shouldReplaceContext) {
+      draftContext.markSelectionPersisted(draftContext.selectedIds);
+    }
+    return result;
+  };
+
+  const startThreadWithDraftContext: StartThread = async (args) => {
+    const shouldIncludeContext = draftContext.isDirty;
+    const messageAttachmentIds = args.messageAttachmentArtifactIds?.map(String) ?? [];
+    const panelIds = shouldIncludeContext ? draftContext.selectedIds : [];
+    const snapshotIds = [...new Set([...panelIds, ...messageAttachmentIds])];
+    const contextArtifactSnapshot = buildContextArtifactSnapshot(
+      snapshotIds,
+      contextArtifactTitleById,
+      messageAttachmentIds,
+    );
+    const panelSnapshot = shouldIncludeContext
+      ? buildContextArtifactSnapshot(
+          draftContext.selectedIds,
+          contextArtifactTitleById,
+        )
+      : undefined;
+    const result = await startThread({
+      ...args,
+      selectedContextArtifactIds: toSelectedContextArtifactIds(panelSnapshot),
+      contextArtifactSnapshot: toMutationContextSnapshot(contextArtifactSnapshot),
+    });
+    if (result.ok && shouldIncludeContext) {
       draftContext.markSelectionPersisted(draftContext.selectedIds);
     }
     return result;
@@ -113,25 +163,36 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
     router.replace(destination);
   };
 
-  const sidePanel =
-    threadId && selectedThread != null ? (
-      <ResponsiveSidePanel open={contextPanelOpen}>
-        {selectedThread.workspaceId ? (
-          <ThreadWorkspaceLibraryPanel
-            workspaceId={selectedThread.workspaceId}
-            workspaceName={workspaceName ?? "Workspace"}
-            selectedIds={draftContext.selectedIdSet}
-            onToggle={draftContext.toggleArtifact}
-          />
-        ) : (
-          <ThreadGlobalContextPanel
-            candidates={contextCandidateArtifacts}
-            selectedIds={draftContext.selectedIdSet}
-            onToggle={draftContext.toggleArtifact}
-          />
-        )}
-      </ResponsiveSidePanel>
-    ) : undefined;
+  const sidePanelContent = !threadId
+    ? (
+        <ThreadGlobalContextPanel
+          workspaces={workspaces}
+          selectedIds={draftContext.selectedIdSet}
+          onToggle={draftContext.toggleArtifact}
+        />
+      )
+    : selectedThread != null
+      ? selectedThread.workspaceId
+        ? (
+            <ThreadWorkspaceLibraryPanel
+              workspaceId={selectedThread.workspaceId}
+              workspaceName={workspaceName ?? "Workspace"}
+              selectedIds={draftContext.selectedIdSet}
+              onToggle={draftContext.toggleArtifact}
+            />
+          )
+        : (
+            <ThreadGlobalContextPanel
+              workspaces={workspaces}
+              selectedIds={draftContext.selectedIdSet}
+              onToggle={draftContext.toggleArtifact}
+            />
+          )
+      : null;
+
+  const sidePanel = sidePanelContent ? (
+    <ResponsiveSidePanel open={contextPanelOpen}>{sidePanelContent}</ResponsiveSidePanel>
+  ) : undefined;
 
   return (
     <SidebarProvider className="min-h-svh overflow-hidden">
@@ -146,7 +207,7 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
         threadId={threadId}
         selectedThread={selectedThread}
         rateStatus={rateStatus}
-        startThread={startThread}
+        startThread={startThreadWithDraftContext}
         sendMessage={sendMessageWithDraftContext}
         runs={runs}
         artifacts={artifacts}
@@ -169,11 +230,13 @@ function ThreadWorkspaceLibraryPanel({
   workspaceName,
   selectedIds,
   onToggle,
+  titleSlot,
 }: {
   workspaceId: string;
   workspaceName: string;
   selectedIds: Set<string>;
   onToggle: (artifactId: string) => void;
+  titleSlot?: ReactNode;
 }) {
   const router = useRouter();
   const drive = useWorkspaceDriveData(workspaceId);
@@ -196,6 +259,7 @@ function ThreadWorkspaceLibraryPanel({
     <WorkspaceLibrarySurface
       workspaceId={workspaceId}
       workspaceName={workspaceName}
+      titleSlot={titleSlot}
       drive={drive}
       dialogState={dialogState}
       activeFolderId={activeFolderId}
@@ -209,45 +273,109 @@ function ThreadWorkspaceLibraryPanel({
   );
 }
 
+type WorkspacePickerOption = {
+  _id: string;
+  name: string;
+};
+
+function WorkspacePanelSwitcher({
+  workspaces,
+  selectedWorkspaceId,
+  onSelectWorkspace,
+  placeholder = "Pilih workspace",
+}: {
+  workspaces: WorkspacePickerOption[];
+  selectedWorkspaceId: string | null;
+  onSelectWorkspace: (workspaceId: string) => void;
+  placeholder?: string;
+}) {
+  const label = selectedWorkspaceId
+    ? (workspaces.find((workspace) => workspace._id === selectedWorkspaceId)?.name ?? placeholder)
+    : placeholder;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <PanelBoardTitleDropdownTrigger>{label}</PanelBoardTitleDropdownTrigger>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="max-h-64 w-64 overflow-y-auto">
+        {workspaces.length === 0 ? (
+          <DropdownMenuItem disabled>Belum ada workspace</DropdownMenuItem>
+        ) : (
+          workspaces.map((workspace) => (
+            <DropdownMenuItem
+              key={workspace._id}
+              onClick={() => onSelectWorkspace(workspace._id)}
+            >
+              <span className="truncate">{workspace.name}</span>
+            </DropdownMenuItem>
+          ))
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function ThreadGlobalContextPanel({
-  candidates,
+  workspaces,
   selectedIds,
   onToggle,
 }: {
-  candidates: ContextCandidateArtifact[];
+  workspaces: WorkspacePickerOption[];
   selectedIds: Set<string>;
   onToggle: (artifactId: string) => void;
 }) {
   const closePanel = useCloseRightPanel();
-  const isEmpty = candidates.length === 0;
+  const [selectedPanelWorkspaceId, setSelectedPanelWorkspaceId] = useState<string | null>(null);
+  const selectedWorkspaceName = selectedPanelWorkspaceId
+    ? (workspaces.find((workspace) => workspace._id === selectedPanelWorkspaceId)?.name ?? "Workspace")
+    : null;
+
+  const workspaceSwitcher = (
+    <WorkspacePanelSwitcher
+      workspaces={workspaces}
+      selectedWorkspaceId={selectedPanelWorkspaceId}
+      onSelectWorkspace={setSelectedPanelWorkspaceId}
+    />
+  );
+
+  if (selectedPanelWorkspaceId && selectedWorkspaceName) {
+    return (
+      <ThreadWorkspaceLibraryPanel
+        workspaceId={selectedPanelWorkspaceId}
+        workspaceName={selectedWorkspaceName}
+        selectedIds={selectedIds}
+        onToggle={onToggle}
+        titleSlot={workspaceSwitcher}
+      />
+    );
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      <ContextPanelHeader title="Konteks riset" onClose={closePanel} />
-      <div className={cn("min-h-0 flex-1 overflow-y-auto bg-background", panelBodyPaddingClass)}>
-        {isEmpty ? (
-          <WorkspaceDriveEmpty
-            variant="root"
-            title="Belum ada artifact"
-            description="Belum ada artifact yang bisa dipilih untuk thread global."
-            showActions={false}
-          />
-        ) : (
-          <div className="flex flex-col gap-4 sm:gap-5">
-            <div className={driveArtifactGridClass}>
-              {candidates.map((artifact) => (
-                <DriveArtifactCard
-                  key={artifact._id}
-                  title={artifact.title}
-                  kind={artifact.kind}
-                  plainTextPreview={artifact.plainTextPreview}
-                  isSelected={selectedIds.has(artifact._id)}
-                  onClick={() => onToggle(artifact._id)}
-                />
-              ))}
-            </div>
-          </div>
+      <WorkspaceBoardToolbar
+        workspaceName="Workspace"
+        titleSlot={workspaceSwitcher}
+        breadcrumb={[{ id: "root", label: "Root" }]}
+        onNavigate={() => {}}
+        onCreateFolder={() => {}}
+        onCreateDocument={() => {}}
+        onCreateUrl={() => {}}
+        onRenameWorkspace={() => {}}
+        onArchiveWorkspace={() => {}}
+        onClosePanel={closePanel}
+        showCreateActions={false}
+        showWorkspaceSettings={false}
+      />
+      <div
+        className={cn(
+          "flex min-h-0 flex-1 items-center justify-center overflow-y-auto bg-background",
+          panelBodyPaddingClass,
         )}
+      >
+        <p className="text-center text-[13px] font-medium text-muted-foreground">
+          Silakan pilih workspace terlebih dahulu.
+        </p>
       </div>
     </div>
   );

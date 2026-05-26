@@ -35,7 +35,7 @@ export function ThreadRecentSwitcher({
       <DropdownMenuTrigger asChild>
         <PanelTitleDropdownTrigger>{title}</PanelTitleDropdownTrigger>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="max-h-64 w-56 overflow-y-auto">
+      <DropdownMenuContent align="start" className="max-h-64 w-64 overflow-y-auto">
         <DropdownMenuItem onClick={onNewThread}>{newLabel}</DropdownMenuItem>
         {recentThreads.length === 0 ? (
           <DropdownMenuItem disabled>{emptyLabel}</DropdownMenuItem>

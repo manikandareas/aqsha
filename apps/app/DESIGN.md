@@ -63,14 +63,16 @@ Workspace detail uses a split **board + chat** layout: a card grid library on th
 
 Assistant messages use readable prose with Markdown support. User messages stay compact and right-aligned. Deep run progress appears inline in the transcript so users can follow long-running work without navigating away.
 
+Composer uploads are **thread attachments** (`Lampiran chat`) — they do not enter the workspace library until the user clicks **Simpan ke workspace** on the document card in the user message. Workspace binding on new threads only happens when the thread is started from a workspace page.
+
 ### Right Panel
 
-The right panel should not be used as a generated-artifact or provenance surface for the workspace-library MVP. When thread context selection ships, it should:
+The right panel is for **persistent thread context** from existing workspace library artifacts — not for upload destination.
 
-- List selectable workspace artifacts for workspace-bound threads.
-- Require explicit artifact selection for global threads.
-- Show selected-context summary.
-- Avoid treating client-selected metadata as trusted ownership or prompt context.
+- Workspace-bound threads: full library picker.
+- Global threads: flat picker of existing workspace artifacts (`Konteks riset`).
+- Panel selections persist in `threadContextArtifacts`; composer uploads stay message-scoped unless saved explicitly.
+- Toggle label: **Konteks** (not Workspace).
 
 Sources remain backend provenance records only and must not render as a user-facing tab, panel, settings page, or library.
 

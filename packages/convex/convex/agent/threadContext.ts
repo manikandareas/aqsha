@@ -2,6 +2,7 @@ import { ConvexError, v } from "convex/values";
 import { components } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import {
+  internalQuery,
   mutation,
   query,
   type MutationCtx,
@@ -95,6 +96,37 @@ async function getSelectedRow(ctx: ThreadContextCtx, args: {
         .eq("artifactId", args.artifactId),
     )
     .unique();
+}
+
+async function getThreadWorkspaceId(ctx: ThreadContextCtx, args: {
+  ownerUserId: string;
+  threadId: string;
+}) {
+  const metadata = await ctx.db
+    .query("threadMetadata")
+    .withIndex("by_thread", (q) => q.eq("threadId", args.threadId))
+    .unique();
+  if (!metadata || metadata.ownerUserId !== args.ownerUserId) {
+    return undefined;
+  }
+  return metadata.workspaceId;
+}
+
+async function assertArtifactAvailableForThread(
+  ctx: ThreadContextCtx,
+  args: {
+    ownerUserId: string;
+    threadId: string;
+    artifactWorkspaceId: Id<"workspaces">;
+  },
+) {
+  const threadWorkspaceId = await getThreadWorkspaceId(ctx, {
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+  });
+  if (threadWorkspaceId && threadWorkspaceId !== args.artifactWorkspaceId) {
+    throw new ConvexError("Artifact not available for this thread");
+  }
 }
 
 async function listSelectedRows(ctx: ThreadContextCtx, args: {
@@ -210,6 +242,73 @@ function buildContextBlock(artifacts: PromptContextArtifact[]) {
   return lines.join("\n").trim();
 }
 
+async function getPromptContextArtifactById(
+  ctx: ThreadContextCtx,
+  ownerUserId: string,
+  artifactId: Id<"artifacts">,
+  threadId: string,
+  remainingBudget: number,
+): Promise<PromptContextArtifact | null> {
+  if (remainingBudget <= 0) {
+    return null;
+  }
+
+  const artifact = await ctx.db.get("artifacts", artifactId);
+  if (
+    !artifact ||
+    artifact.ownerUserId !== ownerUserId ||
+    artifact.status !== "active"
+  ) {
+    return null;
+  }
+
+  if (artifact.workspaceId) {
+    await assertArtifactAvailableForThread(ctx, {
+      ownerUserId,
+      threadId,
+      artifactWorkspaceId: artifact.workspaceId,
+    });
+  } else if (artifact.threadId !== threadId) {
+    return null;
+  }
+
+  const [document, url] = await Promise.all([
+    artifact.kind === "document"
+      ? ctx.db
+          .query("artifactDocuments")
+          .withIndex("by_owner_artifact", (q) =>
+            q.eq("ownerUserId", ownerUserId).eq("artifactId", artifact._id),
+          )
+          .unique()
+      : Promise.resolve(null),
+    artifact.kind === "url"
+      ? getArtifactUrl(ctx, { ownerUserId, artifactId: artifact._id })
+      : Promise.resolve(null),
+  ]);
+
+  const rawContent =
+    artifact.contextText ??
+    document?.plainText ??
+    document?.markdown ??
+    url?.readableText ??
+    artifact.body ??
+    "";
+  const content = clipText(rawContent, Math.min(PROMPT_CONTEXT_ARTIFACT_LIMIT, remainingBudget));
+
+  return {
+    title: artifact.title,
+    kind: artifact.kind ?? "unknown",
+    url: url
+      ? {
+          normalizedUrl: url.normalizedUrl,
+          status: url.status,
+          failureReason: url.failureReason,
+        }
+      : undefined,
+    content,
+  };
+}
+
 async function getPromptContextArtifact(
   ctx: ThreadContextCtx,
   ownerUserId: string,
@@ -272,12 +371,18 @@ export async function buildPromptContextForThread(
   args: {
     ownerUserId: string;
     threadId: string;
+    messageAttachmentArtifactIds?: Id<"artifacts">[];
   },
 ) {
   await assertOwnedThread(ctx, args);
   const rows = await listSelectedRows(ctx, args);
-  const resolved = await Promise.all(
-    rows.map((row) =>
+  const selectedIds = new Set(rows.map((row) => String(row.artifactId)));
+  const messageAttachmentIds = (args.messageAttachmentArtifactIds ?? []).filter(
+    (artifactId) => !selectedIds.has(String(artifactId)),
+  );
+
+  const resolved = await Promise.all([
+    ...rows.map((row) =>
       getPromptContextArtifact(
         ctx,
         args.ownerUserId,
@@ -285,7 +390,16 @@ export async function buildPromptContextForThread(
         PROMPT_CONTEXT_ARTIFACT_LIMIT,
       ),
     ),
-  );
+    ...messageAttachmentIds.map((artifactId) =>
+      getPromptContextArtifactById(
+        ctx,
+        args.ownerUserId,
+        artifactId,
+        args.threadId,
+        PROMPT_CONTEXT_ARTIFACT_LIMIT,
+      ),
+    ),
+  ]);
 
   const artifacts: PromptContextArtifact[] = [];
   let remainingBudget = PROMPT_CONTEXT_TOTAL_LIMIT;
@@ -295,9 +409,6 @@ export async function buildPromptContextForThread(
       continue;
     }
     const content = clipText(artifact.content, remainingBudget);
-    if (!content) {
-      break;
-    }
     artifacts.push({ ...artifact, content });
     remainingBudget -= content.length;
   }
@@ -341,6 +452,101 @@ export const listForThread = query({
   },
 });
 
+export const listRagTargetsForThread = internalQuery({
+  args: {
+    ownerUserId: v.string(),
+    threadId: v.string(),
+    messageAttachmentArtifactIds: v.optional(v.array(v.id("artifacts"))),
+  },
+  returns: v.array(v.object({
+    artifactId: v.id("artifacts"),
+    workspaceId: v.optional(v.id("workspaces")),
+    title: v.string(),
+    ragEntryId: v.optional(v.string()),
+  })),
+  handler: async (ctx, args) => {
+    if (!(await isOwnedThread(ctx, args))) {
+      return [];
+    }
+    const rows = await listSelectedRows(ctx, args);
+    const threadWorkspaceId = await getThreadWorkspaceId(ctx, args);
+    const targetIds = new Set<string>();
+    const targets = [];
+
+    for (const row of rows) {
+      targetIds.add(String(row.artifactId));
+      const artifact = await ctx.db.get("artifacts", row.artifactId);
+      if (
+        !artifact ||
+        artifact.ownerUserId !== args.ownerUserId ||
+        artifact.status !== "active" ||
+        artifact.kind !== "document"
+      ) {
+        continue;
+      }
+      if (artifact.workspaceId) {
+        if (threadWorkspaceId && artifact.workspaceId !== threadWorkspaceId) {
+          continue;
+        }
+      } else if (artifact.threadId !== args.threadId) {
+        continue;
+      }
+      const document = await ctx.db
+        .query("artifactDocuments")
+        .withIndex("by_owner_artifact", (q) =>
+          q.eq("ownerUserId", args.ownerUserId).eq("artifactId", artifact._id),
+        )
+        .unique();
+      if (document?.ragEntryId && document.ingestionStatus === "ready") {
+        targets.push({
+          artifactId: artifact._id,
+          workspaceId: artifact.workspaceId,
+          title: artifact.title,
+          ragEntryId: document.ragEntryId,
+        });
+      }
+    }
+
+    for (const artifactId of args.messageAttachmentArtifactIds ?? []) {
+      if (targetIds.has(String(artifactId))) {
+        continue;
+      }
+      const artifact = await ctx.db.get("artifacts", artifactId);
+      if (
+        !artifact ||
+        artifact.ownerUserId !== args.ownerUserId ||
+        artifact.status !== "active" ||
+        artifact.kind !== "document"
+      ) {
+        continue;
+      }
+      if (artifact.workspaceId) {
+        if (threadWorkspaceId && artifact.workspaceId !== threadWorkspaceId) {
+          continue;
+        }
+      } else if (artifact.threadId !== args.threadId) {
+        continue;
+      }
+      const document = await ctx.db
+        .query("artifactDocuments")
+        .withIndex("by_owner_artifact", (q) =>
+          q.eq("ownerUserId", args.ownerUserId).eq("artifactId", artifact._id),
+        )
+        .unique();
+      if (document?.ragEntryId && document.ingestionStatus === "ready") {
+        targets.push({
+          artifactId: artifact._id,
+          workspaceId: artifact.workspaceId,
+          title: artifact.title,
+          ragEntryId: document.ragEntryId,
+        });
+      }
+    }
+
+    return targets;
+  },
+});
+
 async function insertContextArtifact(
   ctx: MutationCtx,
   args: {
@@ -351,6 +557,11 @@ async function insertContextArtifact(
 ) {
   const artifact = await assertWorkspaceArtifactOwner(ctx, args.artifactId, args.ownerUserId, {
     requireActive: true,
+  });
+  await assertArtifactAvailableForThread(ctx, {
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+    artifactWorkspaceId: artifact.workspaceId,
   });
   const existing = await getSelectedRow(ctx, {
     ownerUserId: args.ownerUserId,
@@ -428,6 +639,48 @@ export const addMany = mutation({
   },
 });
 
+export async function persistMessageContextArtifacts(
+  ctx: MutationCtx,
+  args: {
+    ownerUserId: string;
+    threadId: string;
+    messageId: string;
+    snapshot?: Array<{
+      artifactId: Id<"artifacts">;
+      title: string;
+      kind?: "document" | "url";
+      source?: "upload" | "workspace";
+    }>;
+  },
+) {
+  if (!args.snapshot?.length) {
+    return;
+  }
+
+  const createdAt = Date.now();
+  const inserted = new Set<string>();
+  for (const item of args.snapshot) {
+    if (inserted.has(String(item.artifactId))) {
+      continue;
+    }
+    const artifact = await ctx.db.get("artifacts", item.artifactId);
+    if (!artifact || artifact.ownerUserId !== args.ownerUserId) {
+      continue;
+    }
+    await ctx.db.insert("messageContextArtifacts", {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      messageId: args.messageId,
+      artifactId: item.artifactId,
+      title: item.title || artifact.title,
+      kind: item.kind ?? artifact.kind,
+      source: item.source ?? (artifact.threadId ? "upload" : "workspace"),
+      createdAt,
+    });
+    inserted.add(String(item.artifactId));
+  }
+}
+
 export async function replaceContextArtifactsForThread(
   ctx: MutationCtx,
   args: {
@@ -497,6 +750,11 @@ export const toggle = mutation({
 
     const artifact = await assertWorkspaceArtifactOwner(ctx, args.artifactId, user._id, {
       requireActive: true,
+    });
+    await assertArtifactAvailableForThread(ctx, {
+      ownerUserId: user._id,
+      threadId: args.threadId,
+      artifactWorkspaceId: artifact.workspaceId,
     });
     const selectedRows = await listSelectedRows(ctx, {
       ownerUserId: user._id,
