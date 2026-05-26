@@ -99,6 +99,12 @@ export default defineSchema(
     })
       .index("by_owner", ["ownerUserId"])
       .index("by_email", ["email"]),
+    userPreferences: defineTable({
+      ownerUserId: v.string(),
+      theme: v.union(v.literal("light"), v.literal("dark"), v.literal("system")),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }).index("by_owner", ["ownerUserId"]),
     billingCreditPeriods: defineTable({
       ownerUserId: v.string(),
       periodKey: v.string(),

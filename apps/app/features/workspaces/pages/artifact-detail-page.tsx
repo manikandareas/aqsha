@@ -5,7 +5,14 @@ import {
   Loader2Icon,
   RotateCcwIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import {
+  useEffect,
+  useReducer,
+  useRef,
+  useState,
+  type Dispatch,
+  type RefObject,
+} from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -51,12 +58,6 @@ export function ArtifactDetailPage({
   } | null>(null);
 
   const loadedContentArtifactIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    loadedContentArtifactIdRef.current = null;
-    setFullContent(null);
-    setContentError(null);
-  }, [artifactId]);
 
   useEffect(() => {
     if (!data.artifact) return;
@@ -178,54 +179,21 @@ function DocumentArtifactDetail({
     onSaveStateChange(state);
   }, [onSaveStateChange, state]);
 
-  const performSave = useCallback(async () => {
-    const content = latestContent.current;
-    if (!content) return;
-
-    if (content.blocksJson === lastSavedJsonRef.current) {
-      dispatch({ type: "changed", json: content.blocksJson });
-      return;
-    }
-
-    if (saveInFlightRef.current) {
-      queuedSaveRef.current = true;
-      return;
-    }
-
-    saveInFlightRef.current = true;
-    dispatch({ type: "saving" });
-    const snapshot = content;
-
-    try {
-      await updateDocument({
-        artifactId: artifactId as never,
-        blocksJson: snapshot.blocksJson,
-        markdown: snapshot.markdown,
-        plainText: snapshot.plainText,
-      });
-      lastSavedJsonRef.current = snapshot.blocksJson;
-      dispatch({ type: "saved", json: snapshot.blocksJson });
-    } catch (error: unknown) {
-      dispatch({
-        type: "failed",
-        message: error instanceof Error ? error.message : "Autosave gagal.",
-      });
-    } finally {
-      saveInFlightRef.current = false;
-      if (queuedSaveRef.current) {
-        queuedSaveRef.current = false;
-        void performSave();
-      }
-    }
-  }, [artifactId, updateDocument]);
-
   useEffect(() => {
     if (state.status !== "dirty") return;
     const timeout = window.setTimeout(() => {
-      void performSave();
+      void saveLatestDocumentContent({
+        artifactId,
+        latestContent,
+        lastSavedJsonRef,
+        saveInFlightRef,
+        queuedSaveRef,
+        dispatch,
+        updateDocument,
+      });
     }, 700);
     return () => window.clearTimeout(timeout);
-  }, [performSave, state.pendingJson, state.status]);
+  }, [artifactId, state.pendingJson, state.status, updateDocument]);
 
   return (
     <div className="mx-auto grid max-w-5xl gap-3">
@@ -239,6 +207,78 @@ function DocumentArtifactDetail({
       />
     </div>
   );
+}
+
+type AutosaveDispatch = Dispatch<Parameters<typeof autosaveReducer>[1]>;
+
+async function saveLatestDocumentContent({
+  artifactId,
+  latestContent,
+  lastSavedJsonRef,
+  saveInFlightRef,
+  queuedSaveRef,
+  dispatch,
+  updateDocument,
+}: {
+  artifactId: string;
+  latestContent: RefObject<DocumentEditorContent | null>;
+  lastSavedJsonRef: RefObject<string>;
+  saveInFlightRef: RefObject<boolean>;
+  queuedSaveRef: RefObject<boolean>;
+  dispatch: AutosaveDispatch;
+  updateDocument: (args: {
+    artifactId: never;
+    blocksJson: string;
+    markdown: string;
+    plainText: string;
+  }) => Promise<unknown>;
+}) {
+  const content = latestContent.current;
+  if (!content) return;
+
+  if (content.blocksJson === lastSavedJsonRef.current) {
+    dispatch({ type: "changed", json: content.blocksJson });
+    return;
+  }
+
+  if (saveInFlightRef.current) {
+    queuedSaveRef.current = true;
+    return;
+  }
+
+  saveInFlightRef.current = true;
+  dispatch({ type: "saving" });
+  const snapshot = content;
+
+  try {
+    await updateDocument({
+      artifactId: artifactId as never,
+      blocksJson: snapshot.blocksJson,
+      markdown: snapshot.markdown,
+      plainText: snapshot.plainText,
+    });
+    lastSavedJsonRef.current = snapshot.blocksJson;
+    dispatch({ type: "saved", json: snapshot.blocksJson });
+  } catch (error: unknown) {
+    dispatch({
+      type: "failed",
+      message: error instanceof Error ? error.message : "Autosave gagal.",
+    });
+  } finally {
+    saveInFlightRef.current = false;
+    if (queuedSaveRef.current) {
+      queuedSaveRef.current = false;
+      await saveLatestDocumentContent({
+        artifactId,
+        latestContent,
+        lastSavedJsonRef,
+        saveInFlightRef,
+        queuedSaveRef,
+        dispatch,
+        updateDocument,
+      });
+    }
+  }
 }
 
 function SaveStatus({ state }: { state: AutosaveState }) {

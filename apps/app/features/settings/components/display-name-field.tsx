@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useMutation } from "convex/react";
 import { Loader2Icon, SaveIcon } from "lucide-react";
 import { api } from "@aqsha/convex/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useDraftField } from "../lib/use-draft-field";
 import {
   SettingsField,
   SettingsPanelBody,
@@ -14,18 +15,12 @@ import {
 
 export function useDisplayNameEditor(savedName: string | null) {
   const updateDisplayName = useMutation(api.auth.updateDisplayName);
-  const normalizedSaved = savedName?.trim() ?? "";
-  const [draft, setDraft] = useState(normalizedSaved);
+  const { saved, draft, setDraft } = useDraftField(savedName);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setDraft(normalizedSaved);
-    setError(null);
-  }, [normalizedSaved]);
-
   const trimmedDraft = draft.trim();
-  const isDirty = trimmedDraft !== normalizedSaved;
+  const isDirty = trimmedDraft !== saved;
   const canSave = isDirty && trimmedDraft.length > 0 && !saving;
 
   const save = async () => {

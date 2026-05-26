@@ -62,8 +62,16 @@ export function TokenizedPromptInput({
   isCollapsed?: boolean;
 }) {
   const editorRef = useRef<HTMLDivElement | null>(null);
-  const [paletteDismissed, setPaletteDismissed] = useState(false);
-  const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const [paletteDismissal, setPaletteDismissal] = useState({
+    value,
+    dismissed: false,
+  });
+  const paletteDismissed =
+    paletteDismissal.value === value && paletteDismissal.dismissed;
+  const setPaletteDismissed = useCallback(
+    (dismissed: boolean) => setPaletteDismissal({ value, dismissed }),
+    [value],
+  );
   const [slashFilterQuery, setSlashFilterQuery] = useState<string | null>(null);
   const [isEditorEmpty, setIsEditorEmpty] = useState(true);
 
@@ -72,14 +80,26 @@ export function TokenizedPromptInput({
     () => (slashFilterQuery === null ? [] : filterPromptCommandsBySlashQuery(slashFilterQuery)),
     [slashFilterQuery],
   );
-
-  useEffect(() => {
-    setPaletteDismissed(false);
-  }, [value]);
-
-  useEffect(() => {
-    setHighlightedIndex(0);
-  }, [slashFilterQuery, filteredCommands.length]);
+  const highlightKey = `${slashFilterQuery ?? ""}:${filteredCommands.length}`;
+  const [highlightedState, setHighlightedState] = useState({
+    key: highlightKey,
+    index: 0,
+  });
+  const highlightedIndex =
+    highlightedState.key === highlightKey
+      ? Math.min(highlightedState.index, Math.max(filteredCommands.length - 1, 0))
+      : 0;
+  const setHighlightedIndex = useCallback(
+    (nextIndex: number | ((currentIndex: number) => number)) => {
+      setHighlightedState((current) => {
+        const baseIndex = current.key === highlightKey ? current.index : 0;
+        const index =
+          typeof nextIndex === "function" ? nextIndex(baseIndex) : nextIndex;
+        return { key: highlightKey, index };
+      });
+    },
+    [highlightKey],
+  );
 
   const syncEditorState = useCallback(() => {
     const editor = editorRef.current;
@@ -150,7 +170,7 @@ export function TokenizedPromptInput({
       syncEditorState();
       focusEditor();
     },
-    [focusEditor, syncEditorState],
+    [focusEditor, setPaletteDismissed, syncEditorState],
   );
 
   const handleInput = useCallback(() => {
@@ -231,6 +251,8 @@ export function TokenizedPromptInput({
       handleSelectCommand,
       highlightedIndex,
       onSubmit,
+      setHighlightedIndex,
+      setPaletteDismissed,
       syncEditorState,
     ],
   );
@@ -284,7 +306,6 @@ export function TokenizedPromptInput({
             role="textbox"
             aria-label="Pesan"
             aria-multiline="true"
-            aria-expanded={commandOpen}
             aria-controls={commandOpen ? "composer-slash-commands" : undefined}
             data-slot="input-group-control"
             className={cn(

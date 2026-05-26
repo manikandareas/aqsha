@@ -4,6 +4,7 @@ export type Viewer = {
   id: string;
   name: string | null;
   email: string | null;
+  emailVerified: boolean;
   image: string | null;
 };
 
@@ -12,10 +13,16 @@ export type BillingCurrent = {
   planLabel: string;
   status: string;
   productKey: string | null;
+  billingInterval: "month" | "year" | null;
+  currentPeriodStart: number | null;
   currentPeriodEnd: number | null;
+  cancelAtPeriodEnd: boolean;
+  canceledAt: number | null;
   isAdmin: boolean;
   isUnlimitedCredits: boolean;
   billingPortalAvailable: boolean;
+  canChangeSubscription: boolean;
+  canCancelSubscription: boolean;
   creditsLimit: number;
   creditsUsed: number;
   creditsRemaining: number;

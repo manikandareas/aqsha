@@ -8,5 +8,9 @@ export function useSettingsAccountData() {
   const viewer = useQuery(api.auth.getCurrentUser, isAuthenticated ? {} : "skip");
   const current = useQuery(api.billing.current.get, isAuthenticated ? {} : "skip");
 
-  return { viewer, current };
+  return {
+    viewer,
+    current,
+    isLoading: isAuthenticated && (!viewer || !current),
+  };
 }

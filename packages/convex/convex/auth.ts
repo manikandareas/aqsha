@@ -1,19 +1,33 @@
-import { createClient, type GenericCtx } from "@convex-dev/better-auth";
+import {
+  createClient,
+  type GenericCtx,
+} from "@convex-dev/better-auth";
+import { isRunMutationCtx } from "@convex-dev/better-auth/utils";
 import { convex } from "@convex-dev/better-auth/plugins";
 import { betterAuth } from "better-auth/minimal";
 import { v } from "convex/values";
-import { components } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import { mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "./_generated/server";
 import authConfig from "./auth.config";
 import {
   assertAvatarStorageFile,
+  avatarStorageIdFromImage,
   AVATAR_STORAGE_PREFIX,
   resolveUserImage,
 } from "./lib/userImage";
-
-const siteUrl = process.env.SITE_URL ?? "http://localhost:3000";
-const defaultAvatarBaseUrl = "https://api.dicebear.com/9.x/big-ears-neutral/svg";
+import {
+  sendChangeEmailConfirmation,
+  sendDeleteAccountVerification,
+  sendResetPasswordEmail,
+  sendVerificationEmail,
+} from "./lib/authEmails";
+import {
+  configuredSocialProviders,
+  getDefaultAvatarUrl,
+  getOAuthProviderCapabilities,
+  siteUrl,
+} from "./lib/authProviders";
 
 export const authComponent = createClient<DataModel>(components.betterAuth);
 
@@ -45,17 +59,57 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
         },
       },
     },
+    account: {
+      accountLinking: {
+        enabled: true,
+        trustedProviders: ["email-password", "github", "google"],
+        allowDifferentEmails: false,
+        updateUserInfoOnLink: false,
+      },
+    },
+    emailVerification: {
+      sendOnSignUp: true,
+      sendVerificationEmail,
+    },
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: false,
+      minPasswordLength: 8,
+      resetPasswordTokenExpiresIn: 60 * 60,
+      revokeSessionsOnPasswordReset: true,
+      sendResetPassword: sendResetPasswordEmail,
     },
+    user: {
+      changeEmail: {
+        enabled: true,
+        sendChangeEmailConfirmation,
+      },
+      deleteUser: {
+        enabled: true,
+        sendDeleteAccountVerification,
+        beforeDelete: async (user) => {
+          await cleanupUserDataBeforeDelete(ctx, user.id, user.image ?? null);
+        },
+      },
+    },
+    socialProviders: configuredSocialProviders(),
     plugins: [convex({ authConfig })],
   });
 };
 
-function getDefaultAvatarUrl(name: string) {
-  const seed = name.trim() || "Aqsha User";
-  return `${defaultAvatarBaseUrl}?seed=${encodeURIComponent(seed)}`;
+async function cleanupUserDataBeforeDelete(
+  ctx: GenericCtx<DataModel>,
+  ownerUserId: string,
+  image: string | null,
+) {
+  if (isRunMutationCtx(ctx)) {
+    await ctx.runMutation(internal.accountCleanup.cleanupUserOwnedData, {
+      ownerUserId,
+      image,
+    });
+    return;
+  }
+  throw new Error("Account cleanup requires a Convex mutation-capable context.");
 }
 
 export const getCurrentUser = query({
@@ -64,6 +118,7 @@ export const getCurrentUser = query({
     id: v.string(),
     name: v.union(v.string(), v.null()),
     email: v.union(v.string(), v.null()),
+    emailVerified: v.boolean(),
     image: v.union(v.string(), v.null()),
   }),
   handler: async (ctx) => {
@@ -73,7 +128,39 @@ export const getCurrentUser = query({
       id: user._id,
       name: user.name ?? null,
       email: user.email ?? null,
+      emailVerified: Boolean(user.emailVerified),
       image: await resolveUserImage(ctx, user.image ?? null),
+    };
+  },
+});
+
+export const getSecurityCapabilities = query({
+  args: {},
+  returns: v.object({
+    oauthProviders: v.object({
+      github: v.boolean(),
+      google: v.boolean(),
+    }),
+  }),
+  handler: async (ctx) => {
+    await requireCurrentUser(ctx);
+    return {
+      oauthProviders: getOAuthProviderCapabilities(),
+    };
+  },
+});
+
+export const getPublicAuthCapabilities = query({
+  args: {},
+  returns: v.object({
+    oauthProviders: v.object({
+      github: v.boolean(),
+      google: v.boolean(),
+    }),
+  }),
+  handler: async () => {
+    return {
+      oauthProviders: getOAuthProviderCapabilities(),
     };
   },
 });
@@ -121,8 +208,9 @@ export const setAvatarFromStorage = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireCurrentUser(ctx);
+    const user = await requireCurrentUser(ctx);
     await assertAvatarStorageFile(ctx, args.storageId);
+    const previousStorageId = avatarStorageIdFromImage(user.image ?? null);
 
     const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
     await auth.api.updateUser({
@@ -131,6 +219,10 @@ export const setAvatarFromStorage = mutation({
       },
       headers,
     });
+
+    if (previousStorageId && previousStorageId !== args.storageId) {
+      await ctx.storage.delete(previousStorageId);
+    }
 
     return null;
   },

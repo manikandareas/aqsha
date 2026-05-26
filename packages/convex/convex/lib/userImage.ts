@@ -17,6 +17,11 @@ export async function resolveUserImage(
   return url ?? image;
 }
 
+export function avatarStorageIdFromImage(image: string | null | undefined) {
+  if (!image?.startsWith(AVATAR_STORAGE_PREFIX)) return null;
+  return image.slice(AVATAR_STORAGE_PREFIX.length) as Id<"_storage">;
+}
+
 export async function assertAvatarStorageFile(
   ctx: Pick<QueryCtx, "db">,
   storageId: Id<"_storage">,

@@ -3,6 +3,7 @@
 import { ConvexBetterAuthProvider } from "@convex-dev/better-auth/react";
 import { ConvexReactClient } from "convex/react";
 import { type ReactNode, useMemo } from "react";
+import { AccountThemeSync } from "@/lib/account-theme";
 import { authClient } from "@/lib/auth-client";
 
 export function ConvexClientProvider({
@@ -40,6 +41,7 @@ export function ConvexClientProvider({
       authClient={authClient}
       initialToken={initialToken}
     >
+      <AccountThemeSync />
       {children}
     </ConvexBetterAuthProvider>
   );
