@@ -6,7 +6,14 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useSettingsOverviewData } from "../api/use-settings-overview-data";
 import { LoadingSettingsPage } from "../components/loading-settings-page";
-import { PlanChip, CreditsUsageSection, SettingRow, SettingsCard, SettingsSectionLabel, SettingsSummaryCard } from "../components/settings-card";
+import {
+  CreditsUsageSection,
+  PlanChip,
+  SettingsPanel,
+  SettingsPanelBody,
+  SettingsPanelHeader,
+  SettingsSummaryCard,
+} from "../components/settings-card";
 import { SettingsHeader } from "../components/settings-header";
 import { UsageHeatmap } from "../components/usage-heatmap";
 import { formatShortDate } from "../lib/settings-format";
@@ -26,57 +33,62 @@ export function SettingsOverviewPage() {
 
   return (
     <>
-      <SettingsHeader section="overview" title="Settings" />
+      <SettingsHeader section="overview" title="Pengaturan" />
 
-      <div className="grid gap-5 md:grid-cols-2">
-        <SettingsSummaryCard label="Current plan">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <SettingsSummaryCard label="Paket saat ini">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-lg font-bold tracking-tight text-foreground">{data.current.planLabel}</h2>
+              <h3 className="text-base font-semibold tracking-tight text-foreground">
+                {data.current.planLabel}
+              </h3>
               <PlanChip label={data.current.planLabel} status={data.current.status} />
             </div>
-            <p className="mt-1.5 text-[13px] font-medium text-muted-foreground">
-              Resets on {formatShortDate(data.current.resetAt)}
+            <p className="mt-1.5 text-[13px] text-muted-foreground">
+              Reset {formatShortDate(data.current.resetAt)}
             </p>
           </div>
-          <div>
-            <Button asChild variant="outline" size="sm" className="mt-4 rounded-[8px] active:scale-[0.97] transition-[background-color,color,box-shadow,transform] duration-150 ease-out">
-              <Link href="/settings/usage-billing">Manage plan</Link>
-            </Button>
-          </div>
+          <Button asChild variant="outline" size="sm" className="h-9 w-fit rounded-lg text-[13px]">
+            <Link href="/settings/usage-billing">Kelola paket</Link>
+          </Button>
         </SettingsSummaryCard>
 
-        <SettingsSummaryCard label="Getting started">
+        <SettingsSummaryCard label="Mulai riset">
           <div>
-            <div className="flex items-baseline gap-2">
-              <h2 className="text-lg font-bold tracking-tight text-foreground">
-                {setup.completedCount}/{setup.totalCount} complete
-              </h2>
-              <span className="text-[10px] font-bold tracking-wider text-muted-foreground/80 uppercase">Research setup</span>
-            </div>
-            <p className="mt-1.5 text-[13px] font-medium text-muted-foreground">
-              Thread dan credits menentukan readiness riset Aqsha.
+            <h3 className="text-base font-semibold tracking-tight text-foreground">
+              {setup.completedCount}/{setup.totalCount} selesai
+            </h3>
+            <p className="mt-1.5 text-[13px] text-muted-foreground">
+              Thread dan kredit menentukan kesiapan riset di Aqsha.
             </p>
           </div>
-          <div>
-            <Button asChild size="sm" className="mt-4 rounded-[8px] active:scale-[0.97] transition-[background-color,color,box-shadow,transform] duration-150 ease-out">
-              <Link href="/">Start research</Link>
-            </Button>
-          </div>
+          <Button asChild size="sm" className="h-9 w-fit rounded-lg text-[13px]">
+            <Link href="/">Mulai riset</Link>
+          </Button>
         </SettingsSummaryCard>
       </div>
 
-      <div className="grid gap-3">
-        <SettingsSectionLabel>Setup</SettingsSectionLabel>
-        <SettingsCard>
-          <ChecklistRow done={setup.hasThreads} title="Research thread" text={`${data.threadCount} thread tersimpan`} href="/" />
-          <ChecklistRow done={setup.hasPaidPlan} title="Billing readiness" text={`Plan sekarang ${data.current.planLabel}`} href="/settings/usage-billing" />
-        </SettingsCard>
-      </div>
+      <SettingsPanel>
+        <SettingsPanelHeader title="Persiapan" description="Langkah singkat sebelum riset penuh." />
+        <SettingsPanelBody className="grid gap-0 divide-y divide-border/50">
+          <SetupRow
+            done={setup.hasThreads}
+            title="Thread riset"
+            text={`${data.threadCount} thread tersimpan`}
+            href="/"
+          />
+          <SetupRow
+            done={setup.hasPaidPlan}
+            title="Kesiapan tagihan"
+            text={`Paket sekarang ${data.current.planLabel}`}
+            href="/settings/usage-billing"
+          />
+        </SettingsPanelBody>
+      </SettingsPanel>
 
-      <div className="grid gap-3">
-        <SettingsSectionLabel>Included Usage</SettingsSectionLabel>
-        <SettingsCard className="px-5 py-5">
+      <SettingsPanel>
+        <SettingsPanelHeader title="Penggunaan termasuk" />
+        <SettingsPanelBody>
           <CreditsUsageSection
             isUnlimitedCredits={data.current.isUnlimitedCredits}
             usagePercent={usagePercent}
@@ -84,55 +96,73 @@ export function SettingsOverviewPage() {
             creditsRemaining={data.current.creditsRemaining}
             creditsLimit={data.current.creditsLimit}
           />
-        </SettingsCard>
-      </div>
+        </SettingsPanelBody>
+      </SettingsPanel>
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <div className="grid gap-3 h-fit">
-          <SettingsSectionLabel>Research Surface</SettingsSectionLabel>
-          <SettingsCard>
-            <SettingRow label="Threads" description="Saved conversations and research runs.">
-              <p className="text-left text-sm font-semibold text-muted-foreground sm:text-right">
-                {data.threadCount} active
-              </p>
-            </SettingRow>
-            <SettingRow label="Provider guard" description="Estimated cost against monthly ceiling.">
-              <p className="text-left text-sm font-semibold text-muted-foreground sm:text-right">
-                {formatProviderSpend(data.current)}
-              </p>
-            </SettingRow>
-          </SettingsCard>
-        </div>
+      <SettingsPanel>
+        <SettingsPanelHeader title="Permukaan riset" />
+        <SettingsPanelBody className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <p className="text-[13px] font-medium text-foreground">Thread</p>
+            <p className="mt-0.5 text-[12px] text-muted-foreground">
+              Percakapan dan run riset tersimpan.
+            </p>
+            <p className="mt-2 text-sm font-semibold text-foreground">{data.threadCount} aktif</p>
+          </div>
+          <div>
+            <p className="text-[13px] font-medium text-foreground">Batas provider</p>
+            <p className="mt-0.5 text-[12px] text-muted-foreground">
+              Estimasi biaya terhadap plafon bulanan.
+            </p>
+            <p className="mt-2 text-sm font-semibold text-foreground">
+              {formatProviderSpend(data.current)}
+            </p>
+          </div>
+        </SettingsPanelBody>
+      </SettingsPanel>
 
-        <div className="grid gap-3">
-          <SettingsSectionLabel>Activity</SettingsSectionLabel>
-          <SettingsCard className="px-5 py-5">
-            <UsageHeatmap rows={data.activity} />
-          </SettingsCard>
-        </div>
-      </div>
+      <SettingsPanel>
+        <SettingsPanelHeader title="Aktivitas" />
+        <SettingsPanelBody>
+          <UsageHeatmap rows={data.activity} />
+        </SettingsPanelBody>
+      </SettingsPanel>
     </>
   );
 }
 
-function ChecklistRow({ done, title, text, href }: { done: boolean; title: string; text: string; href: string }) {
+function SetupRow({
+  done,
+  title,
+  text,
+  href,
+}: {
+  done: boolean;
+  title: string;
+  text: string;
+  href: string;
+}) {
   return (
-    <SettingRow label={title} description={text}>
-      <div className="flex items-center justify-start gap-4 sm:justify-end">
+    <div className="flex items-center justify-between gap-4 py-4 first:pt-0 last:pb-0">
+      <div className="flex min-w-0 items-start gap-3">
         <span
           className={cn(
-            "flex size-6 shrink-0 items-center justify-center rounded-full border transition-all duration-150",
+            "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border",
             done
-              ? "border-mint-soft-border/60 bg-mint-soft/80 text-mint-foreground shadow-sm"
-              : "border-border bg-muted/60 text-muted-foreground/60",
+              ? "border-mint-soft-border bg-mint-soft text-mint-foreground"
+              : "border-border bg-muted/60 text-muted-foreground/50",
           )}
         >
           {done ? <CheckIcon className="size-3.5 stroke-[2.5]" /> : null}
         </span>
-        <Button asChild variant="outline" size="sm" className="rounded-[8px] active:scale-[0.97] transition-[background-color,color,box-shadow,transform] duration-150 ease-out">
-          <Link href={href}>{done ? "Open" : "Start"}</Link>
-        </Button>
+        <div className="min-w-0">
+          <p className="text-[13px] font-semibold text-foreground">{title}</p>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">{text}</p>
+        </div>
       </div>
-    </SettingRow>
+      <Button asChild variant="outline" size="sm" className="h-8 shrink-0 rounded-lg text-[12px]">
+        <Link href={href}>{done ? "Buka" : "Mulai"}</Link>
+      </Button>
+    </div>
   );
 }

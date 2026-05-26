@@ -8,14 +8,20 @@
  * @module
  */
 
+import type * as agent_artifactCommandInference from "../agent/artifactCommandInference.js";
 import type * as agent_artifacts from "../agent/artifacts.js";
 import type * as agent_astra from "../agent/astra.js";
 import type * as agent_deepResearch from "../agent/deepResearch.js";
 import type * as agent_domainReliability from "../agent/domainReliability.js";
 import type * as agent_externalProviders from "../agent/externalProviders.js";
+import type * as agent_hitlContinuations from "../agent/hitlContinuations.js";
+import type * as agent_hitlPayloads from "../agent/hitlPayloads.js";
 import type * as agent_hitlTools from "../agent/hitlTools.js";
 import type * as agent_messages from "../agent/messages.js";
+import type * as agent_promptCommandParsing from "../agent/promptCommandParsing.js";
 import type * as agent_promptCommands from "../agent/promptCommands.js";
+import type * as agent_promptPayload from "../agent/promptPayload.js";
+import type * as agent_promptRouting from "../agent/promptRouting.js";
 import type * as agent_rag from "../agent/rag.js";
 import type * as agent_ragContext from "../agent/ragContext.js";
 import type * as agent_rateLimits from "../agent/rateLimits.js";
@@ -28,6 +34,7 @@ import type * as agent_threadContext from "../agent/threadContext.js";
 import type * as agent_threadTitles from "../agent/threadTitles.js";
 import type * as agent_threads from "../agent/threads.js";
 import type * as agent_workflow from "../agent/workflow.js";
+import type * as agent_workspaceCommandInference from "../agent/workspaceCommandInference.js";
 import type * as artifactModel from "../artifactModel.js";
 import type * as artifactUploadLimits from "../artifactUploadLimits.js";
 import type * as artifactUploads from "../artifactUploads.js";
@@ -42,10 +49,13 @@ import type * as billing_polar from "../billing/polar.js";
 import type * as billing_portal from "../billing/portal.js";
 import type * as billing_products from "../billing/products.js";
 import type * as billing_usage from "../billing/usage.js";
+import type * as hitlCardApproval from "../hitlCardApproval.js";
 import type * as hitlSessionLogic from "../hitlSessionLogic.js";
 import type * as hitlSessions from "../hitlSessions.js";
 import type * as hitlWorkspace from "../hitlWorkspace.js";
+import type * as hitlWorkspaceExecution from "../hitlWorkspaceExecution.js";
 import type * as http from "../http.js";
+import type * as lib_userImage from "../lib/userImage.js";
 import type * as limits from "../limits.js";
 import type * as workspaceAccess from "../workspaceAccess.js";
 import type * as workspaceFolders from "../workspaceFolders.js";
@@ -58,14 +68,20 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "agent/artifactCommandInference": typeof agent_artifactCommandInference;
   "agent/artifacts": typeof agent_artifacts;
   "agent/astra": typeof agent_astra;
   "agent/deepResearch": typeof agent_deepResearch;
   "agent/domainReliability": typeof agent_domainReliability;
   "agent/externalProviders": typeof agent_externalProviders;
+  "agent/hitlContinuations": typeof agent_hitlContinuations;
+  "agent/hitlPayloads": typeof agent_hitlPayloads;
   "agent/hitlTools": typeof agent_hitlTools;
   "agent/messages": typeof agent_messages;
+  "agent/promptCommandParsing": typeof agent_promptCommandParsing;
   "agent/promptCommands": typeof agent_promptCommands;
+  "agent/promptPayload": typeof agent_promptPayload;
+  "agent/promptRouting": typeof agent_promptRouting;
   "agent/rag": typeof agent_rag;
   "agent/ragContext": typeof agent_ragContext;
   "agent/rateLimits": typeof agent_rateLimits;
@@ -78,6 +94,7 @@ declare const fullApi: ApiFromModules<{
   "agent/threadTitles": typeof agent_threadTitles;
   "agent/threads": typeof agent_threads;
   "agent/workflow": typeof agent_workflow;
+  "agent/workspaceCommandInference": typeof agent_workspaceCommandInference;
   artifactModel: typeof artifactModel;
   artifactUploadLimits: typeof artifactUploadLimits;
   artifactUploads: typeof artifactUploads;
@@ -92,10 +109,13 @@ declare const fullApi: ApiFromModules<{
   "billing/portal": typeof billing_portal;
   "billing/products": typeof billing_products;
   "billing/usage": typeof billing_usage;
+  hitlCardApproval: typeof hitlCardApproval;
   hitlSessionLogic: typeof hitlSessionLogic;
   hitlSessions: typeof hitlSessions;
   hitlWorkspace: typeof hitlWorkspace;
+  hitlWorkspaceExecution: typeof hitlWorkspaceExecution;
   http: typeof http;
+  "lib/userImage": typeof lib_userImage;
   limits: typeof limits;
   workspaceAccess: typeof workspaceAccess;
   workspaceFolders: typeof workspaceFolders;

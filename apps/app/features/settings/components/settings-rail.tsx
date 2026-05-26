@@ -2,96 +2,92 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeftIcon, MoreHorizontalIcon } from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ArrowLeftIcon } from "lucide-react";
+import { NavUser } from "@/components/nav-user";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
-import { getInitials } from "../lib/settings-format";
 import { settingsItemForPath, settingsMenu, type SettingsMenuItem } from "../lib/settings-menu";
 import type { Viewer } from "../lib/types";
+
+const settingsItemBaseClass =
+  "h-8 gap-2 rounded-[8px] px-2.5 py-0 text-[12px] font-medium transition-[background-color,color,box-shadow] duration-150 ease-out hover:bg-muted/60 data-active:bg-primary/10 data-active:font-medium data-active:text-foreground data-active:shadow-none data-active:[&_svg]:text-primary hover:text-foreground active:bg-muted active:text-foreground [&_svg]:size-3.5";
+
+function settingsItemClass(active?: boolean) {
+  return cn(
+    settingsItemBaseClass,
+    active
+      ? "bg-primary/10 text-foreground [&_svg]:text-primary"
+      : "text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-primary/70",
+  );
+}
 
 export function SettingsRail({ viewer }: { viewer: Viewer | undefined }) {
   const pathname = usePathname();
   const active = settingsItemForPath(pathname).key;
-  const name = viewer?.name || "Aqsha user";
-  const email = viewer?.email || "Signed in";
 
   return (
     <Sidebar
       collapsible="offcanvas"
-      className="border-r border-sidebar-border/60 bg-sidebar/95 backdrop-blur-sm [&_[data-slot=sidebar-inner]]:bg-sidebar/95"
+      className="border-r border-sidebar-border/80 bg-sidebar [&_[data-slot=sidebar-inner]]:bg-sidebar"
     >
-      <SidebarHeader className="gap-3 px-3 pb-2 pt-3">
+      <SidebarHeader className="gap-3 px-3 pb-3 pt-3.5">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
-              className="h-8 rounded-[8px] px-2.5 text-[13px] font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground active:scale-[0.97] transition-[background-color,color,box-shadow,transform] duration-150 ease-out"
+              className={cn(settingsItemBaseClass, "text-muted-foreground hover:text-foreground")}
             >
               <Link href="/">
-                <ArrowLeftIcon className="size-3.5 transition-transform duration-150 group-hover:-translate-x-0.5" />
-                <span>Kembali ke Chat</span>
+                <ArrowLeftIcon className="size-3.5" />
+                <span>Kembali ke chat</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
 
-      <SidebarContent className="px-2 pb-1 pt-0">
-        <SettingsGroup label="Personal" active={active} />
-        <SettingsGroup label="Research" active={active} />
+      <SidebarContent className="min-h-0 px-3 pb-3 pt-0">
+        <div className="grid gap-5">
+          <SettingsNavGroup label="Pribadi" active={active} />
+          <SettingsNavGroup label="Riset" active={active} />
+        </div>
       </SidebarContent>
 
-      <SidebarFooter className="mt-auto border-t border-border/40 p-2">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton className="h-11 min-w-0 rounded-[10px] px-2.5 text-sidebar-foreground/90 hover:bg-muted/60 active:scale-[0.97] transition-[background-color,color,box-shadow,transform] duration-150 ease-out">
-              <Avatar className="h-8 w-8 rounded-full ring-1 ring-border/50">
-                {viewer?.image ? <AvatarImage src={viewer.image} alt={name} /> : null}
-                <AvatarFallback className="rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                  {getInitials(name, email)}
-                </AvatarFallback>
-              </Avatar>
-              <div className="grid min-w-0 flex-1 text-left leading-tight">
-                <span className="truncate text-[13px] font-medium">{name}</span>
-                <span className="truncate text-[11px] text-muted-foreground">Settings</span>
-              </div>
-              <MoreHorizontalIcon className="ml-auto size-3.5 text-muted-foreground" />
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+      <SidebarFooter className="mt-auto px-3 py-3">
+        <NavUser user={viewer} />
       </SidebarFooter>
     </Sidebar>
   );
 }
 
-function SettingsGroup({ label, active }: { label: SettingsMenuItem["group"]; active: string }) {
+function SettingsNavGroup({
+  label,
+  active,
+}: {
+  label: SettingsMenuItem["group"];
+  active: string;
+}) {
   return (
-    <SidebarGroup className="px-1.5 py-1.5">
-      <SidebarGroupLabel className="px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">
-        {label}
-      </SidebarGroupLabel>
-      <SidebarGroupContent>
-        <SidebarMenu className="gap-0.5">
-          {settingsMenu
-            .filter((item) => item.group === label)
-            .map((item) => (
-              <SettingsNavRow key={item.key} item={item} active={active === item.key} />
-            ))}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
+    <div className="min-w-0 overflow-hidden">
+      <div className="flex items-center justify-between gap-1 px-0.5 pb-1.5 pt-0">
+        <span className="text-[11px] font-medium tracking-[-0.01em] text-primary/75">{label}</span>
+      </div>
+      <SidebarMenu className="min-w-0 gap-1 overflow-hidden">
+        {settingsMenu
+          .filter((item) => item.group === label)
+          .map((item) => (
+            <SettingsNavRow key={item.key} item={item} active={active === item.key} />
+          ))}
+      </SidebarMenu>
+    </div>
   );
 }
 
@@ -99,16 +95,9 @@ function SettingsNavRow({ item, active }: { item: SettingsMenuItem; active: bool
   const Icon = item.icon;
   return (
     <SidebarMenuItem className="min-w-0 overflow-hidden">
-      <SidebarMenuButton
-        asChild
-        isActive={active}
-        className={cn(
-          "h-8 rounded-[8px] px-2.5 text-[13px] font-medium text-sidebar-foreground/90 hover:bg-muted/60 hover:text-foreground active:scale-[0.97] transition-[background-color,color,box-shadow,transform] duration-150 ease-out",
-          active && "bg-primary/10 text-primary font-semibold hover:bg-primary/15 hover:text-primary",
-        )}
-      >
+      <SidebarMenuButton asChild isActive={active} className={settingsItemClass(active)}>
         <Link href={item.href}>
-          <Icon className={cn("size-3.5 text-muted-foreground transition-colors duration-150", active && "text-primary")} />
+          <Icon />
           <span>{item.label}</span>
         </Link>
       </SidebarMenuButton>

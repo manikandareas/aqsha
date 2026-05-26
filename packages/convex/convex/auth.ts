@@ -4,8 +4,13 @@ import { betterAuth } from "better-auth/minimal";
 import { v } from "convex/values";
 import { components } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
-import { query, type ActionCtx, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "./_generated/server";
 import authConfig from "./auth.config";
+import {
+  assertAvatarStorageFile,
+  AVATAR_STORAGE_PREFIX,
+  resolveUserImage,
+} from "./lib/userImage";
 
 const siteUrl = process.env.SITE_URL ?? "http://localhost:3000";
 const defaultAvatarBaseUrl = "https://api.dicebear.com/9.x/big-ears-neutral/svg";
@@ -68,7 +73,65 @@ export const getCurrentUser = query({
       id: user._id,
       name: user.name ?? null,
       email: user.email ?? null,
-      image: user.image ?? null,
+      image: await resolveUserImage(ctx, user.image ?? null),
     };
+  },
+});
+
+export const generateAvatarUploadUrl = mutation({
+  args: {},
+  returns: v.string(),
+  handler: async (ctx) => {
+    await requireCurrentUser(ctx);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+const maxDisplayNameLength = 120;
+
+export const updateDisplayName = mutation({
+  args: {
+    name: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireCurrentUser(ctx);
+
+    const name = args.name.trim();
+    if (!name) {
+      throw new Error("Nama tampilan tidak boleh kosong.");
+    }
+    if (name.length > maxDisplayNameLength) {
+      throw new Error(`Nama tampilan maksimal ${maxDisplayNameLength} karakter.`);
+    }
+
+    const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
+    await auth.api.updateUser({
+      body: { name },
+      headers,
+    });
+
+    return null;
+  },
+});
+
+export const setAvatarFromStorage = mutation({
+  args: {
+    storageId: v.id("_storage"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireCurrentUser(ctx);
+    await assertAvatarStorageFile(ctx, args.storageId);
+
+    const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
+    await auth.api.updateUser({
+      body: {
+        image: `${AVATAR_STORAGE_PREFIX}${args.storageId}`,
+      },
+      headers,
+    });
+
+    return null;
   },
 });

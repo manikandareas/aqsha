@@ -33,7 +33,7 @@ export function WorkspaceShell({
     status: "idle" | "streaming" | "failed";
   }>;
   selectedWorkspaceId?: string;
-  createWorkspace: (args: { name: string; description?: string }) => Promise<unknown>;
+  createWorkspace: (args: { name: string }) => Promise<unknown>;
   removeThread?: (args: { threadId: string }) => Promise<{ ok: true }>;
   children: ReactNode;
 }) {

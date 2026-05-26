@@ -234,6 +234,16 @@ export default defineSchema(
       .index("by_owner_message", ["ownerUserId", "messageId"])
       .index("by_owner_artifact", ["ownerUserId", "artifactId"])
       .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"]),
+    messageWorkspaceActions: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      messageId: v.string(),
+      workspaceId: v.id("workspaces"),
+      action: v.union(v.literal("created"), v.literal("renamed")),
+      createdAt: v.number(),
+    })
+      .index("by_owner_message", ["ownerUserId", "messageId"])
+      .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"]),
     messageContextArtifacts: defineTable({
       ownerUserId: v.string(),
       threadId: v.string(),

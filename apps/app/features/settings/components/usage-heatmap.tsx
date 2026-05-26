@@ -2,10 +2,10 @@ import { cn } from "@/lib/utils";
 import type { ActivityRow } from "../lib/types";
 
 const featureLabels: Record<keyof ActivityRow["featureCounts"], string> = {
-  normal_chat: "Normal chat",
-  cited_answer: "Cited answer",
-  deep_research: "Deep Research",
-  external_search: "External search",
+  normal_chat: "Chat biasa",
+  cited_answer: "Jawaban dengan sitasi",
+  deep_research: "Deep research",
+  external_search: "Pencarian eksternal",
 };
 
 export function UsageHeatmap({ rows }: { rows: ActivityRow[] }) {
@@ -17,9 +17,9 @@ export function UsageHeatmap({ rows }: { rows: ActivityRow[] }) {
     <div className="min-w-0">
       <div className="mb-4 flex items-end justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-base font-semibold text-foreground">Credits activity</h3>
-          <p className="text-sm text-muted-foreground">
-            {totalCredits} credits dari {totalEvents} event dalam 365 hari
+          <h3 className="text-[15px] font-semibold text-foreground">Aktivitas kredit</h3>
+          <p className="text-[13px] text-muted-foreground">
+            {totalCredits} kredit dari {totalEvents} event dalam 365 hari
           </p>
         </div>
       </div>
@@ -37,28 +37,29 @@ export function UsageHeatmap({ rows }: { rows: ActivityRow[] }) {
 
 function HeatmapCell({ row, max }: { row: ActivityRow; max: number }) {
   const ratio = row.credits / max;
-  const level = row.credits === 0 ? 0 : ratio > 0.75 ? 4 : ratio > 0.45 ? 3 : ratio > 0.2 ? 2 : 1;
-  const classes = [
-    "bg-muted/45",
-    "border-sky-soft-border bg-sky-soft",
-    "border-mint-soft-border bg-mint-soft",
-    "border-lemon-soft-border bg-lemon-soft",
-    "border-lavender-soft-border bg-lavender-soft",
-  ];
+  const level =
+    row.credits === 0 ? 0 : ratio > 0.75 ? 4 : ratio > 0.45 ? 3 : ratio > 0.2 ? 2 : 1;
 
   return (
-    <div
-      title={`${row.date}: ${row.credits} credits, ${row.eventCount} events`}
-      className={cn("size-[10px] rounded-[2px] border border-transparent", classes[level])}
+    <span
+      title={`${row.date}: ${row.credits} kredit`}
+      className={cn(
+        "size-2.5 rounded-[3px] border border-transparent",
+        level === 0 && "bg-muted/80",
+        level === 1 && "bg-primary/25",
+        level === 2 && "bg-primary/45",
+        level === 3 && "bg-primary/70",
+        level === 4 && "bg-primary",
+      )}
     />
   );
 }
 
 function FeatureBreakdown({ rows }: { rows: ActivityRow[] }) {
-  const totals = rows.reduce<Record<keyof ActivityRow["featureCounts"], number>>(
+  const totals = rows.reduce(
     (acc, row) => {
-      for (const feature of Object.keys(featureLabels) as Array<keyof ActivityRow["featureCounts"]>) {
-        acc[feature] += row.featureCounts[feature];
+      for (const key of Object.keys(featureLabels) as Array<keyof ActivityRow["featureCounts"]>) {
+        acc[key] += row.featureCounts[key];
       }
       return acc;
     },
@@ -69,19 +70,21 @@ function FeatureBreakdown({ rows }: { rows: ActivityRow[] }) {
       external_search: 0,
     },
   );
-  const visible = Object.entries(totals).filter(([, count]) => count > 0) as Array<[
-    keyof ActivityRow["featureCounts"],
-    number,
-  ]>;
+
+  const entries = (Object.keys(featureLabels) as Array<keyof ActivityRow["featureCounts"]>)
+    .map((key) => ({ key, label: featureLabels[key], value: totals[key] }))
+    .filter((entry) => entry.value > 0);
+
+  if (entries.length === 0) return null;
 
   return (
-    <div className="mt-4 flex flex-wrap gap-2 text-[12px] text-muted-foreground">
-      {visible.map(([feature, count]) => (
-        <span key={feature} className="rounded-full border border-border bg-muted px-2.5 py-1 font-medium">
-          {featureLabels[feature]}: {count}
-        </span>
+    <div className="mt-5 grid gap-2 border-t border-border/50 pt-4">
+      {entries.map((entry) => (
+        <div key={entry.key} className="flex items-center justify-between gap-3 text-[12px]">
+          <span className="text-muted-foreground">{entry.label}</span>
+          <span className="font-medium text-foreground">{entry.value}</span>
+        </div>
       ))}
-      {visible.length === 0 ? <span>Belum ada usage ledger.</span> : null}
     </div>
   );
 }
