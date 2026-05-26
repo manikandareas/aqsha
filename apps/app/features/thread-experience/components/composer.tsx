@@ -141,7 +141,7 @@ export function Composer(props: ComposerProps) {
   const onStartThread = props.mode === "disabled" ? undefined : props.onStartThread;
 
   const [content, setContent] = useState("");
-  const [selectedCommand, setSelectedCommand] = useState<PromptCommand | null>(null);
+  const [inlineCommands, setInlineCommands] = useState<PromptCommand[]>([]);
   const [mode, setMode] = useState<"normal" | "deep">("normal");
   const [isSending, setIsSending] = useState(false);
   const [localRetryAt, setLocalRetryAt] = useState<number | null>(null);
@@ -160,8 +160,9 @@ export function Composer(props: ComposerProps) {
       ? Math.max(1, Math.ceil((retryAt - now) / 1000))
       : 0;
   const isRateLimited = retrySeconds > 0;
-  const visibleContent = createVisibleComposerContent(content, selectedCommand);
-  const effectiveMode = selectedCommand?.mode === "deep" ? "deep" : mode;
+  const visibleContent = createVisibleComposerContent(content);
+  const hasDeepInlineCommand = inlineCommands.some((command) => command.mode === "deep");
+  const effectiveMode = hasDeepInlineCommand ? "deep" : mode;
   const { canSend, isDeepActive } = getComposerAvailability({
     visibleContent,
     hasAttachments: attachmentFiles.length > 0,
@@ -174,7 +175,7 @@ export function Composer(props: ComposerProps) {
   const isInteractionLocked = isDeepActive || hitlBlocking;
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
-  const isContentEmpty = content.trim().length === 0 && !selectedCommand;
+  const isContentEmpty = content.trim().length === 0 && inlineCommands.length === 0;
   const shellExpanded =
     isExpanded ||
     attachmentFiles.length > 0 ||
@@ -190,10 +191,10 @@ export function Composer(props: ComposerProps) {
       return;
     }
 
-    if (content.includes("\n") || editorHeight > 34 || selectedCommand) {
+    if (content.includes("\n") || editorHeight > 34 || inlineCommands.length > 0) {
       setIsExpanded(true);
     }
-  }, [isContentEmpty, content, editorHeight, selectedCommand]);
+  }, [isContentEmpty, content, editorHeight, inlineCommands.length]);
 
   const shellTransition = useMemo(
     () => composerShellTransition(shellExpanded, shouldReduceMotion),
@@ -213,7 +214,7 @@ export function Composer(props: ComposerProps) {
     const handleSuggestion = (event: Event) => {
       const suggestion = (event as CustomEvent<string>).detail;
       if (typeof suggestion === "string") {
-        setSelectedCommand(null);
+        setInlineCommands([]);
         setContent(suggestion);
       }
     };
@@ -243,8 +244,8 @@ export function Composer(props: ComposerProps) {
 
     setUploadError(null);
     setIsSending(true);
-    const nextCommand = selectedCommand;
-    let nextContent = content;
+    const submittedContent = content;
+    const submittedCommands = inlineCommands;
     try {
       const { attachments: uploadedArtifacts, pendingAttachments } = await uploadAttachments(
         message?.files ?? [],
@@ -259,13 +260,12 @@ export function Composer(props: ComposerProps) {
           : content;
       const messageAttachmentArtifactIds = uploadedArtifacts.map((artifact) => artifact.artifactId);
       const submission = buildComposerSubmission({
-        content: fallbackContent,
-        selectedCommand,
+        visibleContent: fallbackContent,
+        commands: submittedCommands,
         mode: effectiveMode,
       });
-      nextContent = submission.content;
       setContent("");
-      setSelectedCommand(null);
+      setInlineCommands([]);
 
       const attachmentArgs = {
         ...(messageAttachmentArtifactIds.length > 0
@@ -276,13 +276,13 @@ export function Composer(props: ComposerProps) {
       const result = threadId && onSend
         ? await onSend({
             threadId,
-            content: nextContent,
+            content: submission.content,
             mode: submission.mode,
             commandId: submission.commandId,
             ...attachmentArgs,
           })
         : await onStartThread!({
-            content: nextContent,
+            content: submission.content,
             mode: submission.mode,
             commandId: submission.commandId,
             ...attachmentArgs,
@@ -294,8 +294,7 @@ export function Composer(props: ComposerProps) {
         } else {
           setBillingBlock(result);
         }
-        setContent(restoreComposerContentAfterBlockedSend(nextContent, nextCommand));
-        setSelectedCommand(nextCommand);
+        setContent(restoreComposerContentAfterBlockedSend(submission.content));
         return;
       }
       setBillingBlock(null);
@@ -463,8 +462,8 @@ export function Composer(props: ComposerProps) {
             >
               <div
                 className={cn(
-                  "flex min-w-0 flex-1 items-start",
-                  isExpanded ? "w-full px-1" : "gap-2",
+                  "flex min-w-0 flex-1",
+                  isExpanded ? "w-full items-start px-1" : "items-center gap-2",
                 )}
               >
                 {!isExpanded ? (
@@ -475,24 +474,24 @@ export function Composer(props: ComposerProps) {
                 <div className="min-w-0 flex-1">
                   <TokenizedPromptInput
                     value={content}
-                    command={selectedCommand}
                     onValueChange={setContent}
-                    onHeightChange={setEditorHeight}
-                    onCommandChange={(command) => {
-                      setSelectedCommand(command);
-                      if (command?.mode === "deep") {
+                    onCommandsChange={(commands) => {
+                      setInlineCommands(commands);
+                      if (commands.some((command) => command.mode === "deep")) {
                         setMode("deep");
                       }
                     }}
+                    onHeightChange={setEditorHeight}
                     onSubmit={requestFormSubmit}
                     disabled={disabled || isInteractionLocked}
                     maxLength={8000}
+                    isCollapsed={!isExpanded}
                     placeholder={
                       hitlBlocking
                         ? "Selesaikan langkah di atas terlebih dahulu…"
                         : "Select board items, or / for voices..."
                     }
-                    className={isExpanded ? "py-0.5" : "py-1"}
+                    className={isExpanded ? "py-0.5" : undefined}
                   />
                 </div>
               </div>
@@ -587,7 +586,6 @@ function ComposerChipRow({
         >
           <FileTextIcon className="size-3.5 shrink-0 text-muted-foreground" />
           <span className="max-w-[9rem] truncate">{file.filename}</span>
-          <span className="text-[10px] font-medium text-muted-foreground">Lampiran chat</span>
           {!isSending ? (
             <button
               type="button"
