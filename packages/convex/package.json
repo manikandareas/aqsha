@@ -15,6 +15,10 @@
     "./prompt-commands": {
       "types": "./convex/agent/promptCommands.ts",
       "default": "./convex/agent/promptCommands.ts"
+    },
+    "./artifact-upload-limits": {
+      "types": "./convex/artifactUploadLimits.ts",
+      "default": "./convex/artifactUploadLimits.ts"
     }
   },
   "scripts": {

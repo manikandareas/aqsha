@@ -28,6 +28,7 @@ import type * as agent_threadTitles from "../agent/threadTitles.js";
 import type * as agent_threads from "../agent/threads.js";
 import type * as agent_workflow from "../agent/workflow.js";
 import type * as artifactModel from "../artifactModel.js";
+import type * as artifactUploadLimits from "../artifactUploadLimits.js";
 import type * as artifactUploads from "../artifactUploads.js";
 import type * as artifacts from "../artifacts.js";
 import type * as auth from "../auth.js";
@@ -73,6 +74,7 @@ declare const fullApi: ApiFromModules<{
   "agent/threads": typeof agent_threads;
   "agent/workflow": typeof agent_workflow;
   artifactModel: typeof artifactModel;
+  artifactUploadLimits: typeof artifactUploadLimits;
   artifactUploads: typeof artifactUploads;
   artifacts: typeof artifacts;
   auth: typeof auth;

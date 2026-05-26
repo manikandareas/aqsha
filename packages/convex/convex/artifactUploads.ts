@@ -11,8 +11,7 @@ import {
   artifactRagNamespace,
   type ArtifactRagMetadata,
 } from "./agent/rag";
-
-const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "./artifactUploadLimits";
 const MAX_INDEXED_TEXT_CHARS = 300_000;
 
 const textLikeMimeTypes = new Set([
@@ -341,7 +340,7 @@ function validateUpload(args: {
     throw new ConvexError("File is empty");
   }
   if (args.size > MAX_UPLOAD_BYTES) {
-    throw new ConvexError("File is too large. Maximum upload size is 25 MB.");
+    throw new ConvexError(`File is too large. Maximum upload size is ${MAX_UPLOAD_MB} MB.`);
   }
   if (!isSupportedDocument(args.fileName, args.mimeType)) {
     throw new ConvexError(

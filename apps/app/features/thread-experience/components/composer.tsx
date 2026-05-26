@@ -18,6 +18,7 @@ import { useAction, useMutation } from "convex/react";
 import { LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { MAX_UPLOAD_BYTES } from "@aqsha/convex/artifact-upload-limits";
 import type { PromptCommand } from "@aqsha/convex/prompt-commands";
 import {
   PromptInput,
@@ -410,7 +411,7 @@ export function Composer(props: ComposerProps) {
           accept=".pdf,.docx,.txt,.md,.markdown,.csv,.json,.html,.htm,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv,text/html,application/json"
           multiple
           maxFiles={4}
-          maxFileSize={25 * 1024 * 1024}
+          maxFileSize={MAX_UPLOAD_BYTES}
           onFilesChange={setAttachmentFiles}
           onError={(error) => setUploadError(error.message)}
           onSubmit={(message) => handleSubmit(message)}
