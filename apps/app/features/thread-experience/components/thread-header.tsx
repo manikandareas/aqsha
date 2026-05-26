@@ -87,7 +87,7 @@ export function ThreadHeader({
             )}
           >
             <LayersIcon className="size-3.5" />
-            Konteks
+            Workspace
           </button>
         ) : null}
       </div>

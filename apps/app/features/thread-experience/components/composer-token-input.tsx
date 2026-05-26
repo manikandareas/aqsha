@@ -19,6 +19,7 @@ const promptCommandGroups = [
   "Tulis Akademik",
   "Rancang Riset",
   "Riset Mendalam",
+  "Workspace",
 ] as const;
 
 const COLLAPSED_EDITOR_HEIGHT = 24;

@@ -15,14 +15,17 @@ const ClientBlockNoteDocumentEditor = dynamic(
 
 export function BlockNoteEditorLoader({
   initialBlocksJson,
+  initialMarkdown,
   onContentChange,
 }: {
   initialBlocksJson: string;
+  initialMarkdown?: string;
   onContentChange: (content: DocumentEditorContent) => void;
 }) {
   return (
     <ClientBlockNoteDocumentEditor
       initialBlocksJson={initialBlocksJson}
+      initialMarkdown={initialMarkdown}
       onContentChange={onContentChange}
     />
   );

@@ -29,6 +29,8 @@ import {
 } from "../billing/entitlements";
 import { rateLimiter } from "../limits";
 import { normalChatTools } from "./researchTools";
+import { createHitlTools, createWorkspaceExecutionTools } from "./hitlTools";
+import type { ToolSet } from "ai";
 import type { SourceCandidate } from "./sourceCandidates";
 import {
   isUsableGeneratedThreadTitle,
@@ -413,6 +415,7 @@ async function scheduleGenerationForMessage(
       threadId: args.threadId,
       promptMessageId: args.messageId,
       prompt: generationPrompt,
+      commandId: args.promptPayload.commandMetadata?.commandId,
     });
 
     return { ok: true as const, messageId: args.messageId, ...run };
@@ -431,6 +434,7 @@ async function scheduleGenerationForMessage(
     prompt: generationPrompt,
     visiblePrompt: args.promptPayload.visibleContent,
     runId,
+    commandId: args.promptPayload.commandMetadata?.commandId,
     messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
   });
 
@@ -788,6 +792,33 @@ export const list = query({
   },
 });
 
+function resolveGenerationTools(args: {
+  hitlExecute?: boolean;
+  hitlSessionId?: Id<"hitlSessions">;
+  hitlWorkspaceId?: Id<"workspaces">;
+  hitlPayloadJson?: string;
+  commandId?: string;
+  promptMessageId: string;
+  runId?: Id<"agentRuns">;
+}): ToolSet {
+  if (args.hitlExecute && args.hitlSessionId) {
+    return createWorkspaceExecutionTools({
+      sessionId: args.hitlSessionId,
+      workspaceId: args.hitlWorkspaceId,
+      payloadJson: args.hitlPayloadJson,
+    });
+  }
+  if (args.commandId === "artifact") {
+    return createHitlTools({
+      promptMessageId: args.promptMessageId,
+      runId: args.runId,
+      commandId: args.commandId,
+      sourceKind: "artifact",
+    });
+  }
+  return normalChatTools;
+}
+
 export const generateReply = internalAction({
   args: {
     threadId: v.string(),
@@ -796,7 +827,12 @@ export const generateReply = internalAction({
     prompt: v.string(),
     visiblePrompt: v.string(),
     runId: v.optional(v.id("agentRuns")),
+    commandId: v.optional(v.string()),
     messageAttachmentArtifactIds: v.optional(v.array(v.id("artifacts"))),
+    hitlExecute: v.optional(v.boolean()),
+    hitlSessionId: v.optional(v.id("hitlSessions")),
+    hitlWorkspaceId: v.optional(v.id("workspaces")),
+    hitlPayloadJson: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const thread = await ctx.runQuery(components.agent.threads.getThread, {
@@ -819,10 +855,11 @@ export const generateReply = internalAction({
       const prompt = ragContext
         ? [ragContext, "", args.prompt].join("\n")
         : args.prompt;
+      const tools = resolveGenerationTools(args);
       const result = await astra.streamText(
         ctx,
         { threadId: args.threadId, userId: args.userId },
-        { promptMessageId: args.promptMessageId, prompt, tools: normalChatTools },
+        { promptMessageId: args.promptMessageId, prompt, tools },
         {
           saveStreamDeltas: { chunking: "word", throttleMs: 100 },
           usageHandler: handleUsage,
@@ -833,6 +870,7 @@ export const generateReply = internalAction({
       const steps = await result.steps;
       const sourceCandidates = collectSourceCandidates(steps);
       const artifactResults = collectArtifactResults(steps);
+      const hitlResults = collectHitlResults(steps);
       const assistantMessageId = getVisibleAssistantMessageId(result.savedMessages);
       if (assistantMessageId) {
         await ctx.runMutation(internal.agent.sources.persistCited, {
@@ -852,6 +890,14 @@ export const generateReply = internalAction({
             relation: artifact.relation,
           });
         }
+        if (hitlResults.length > 0) {
+          await ctx.runMutation(internal.hitlSessions.attachAssistantMessageInternal, {
+            ownerUserId: args.userId,
+            threadId: args.threadId,
+            promptMessageId: args.promptMessageId,
+            assistantMessageId,
+          });
+        }
       }
       if (args.runId) {
         await ctx.runMutation(internal.agent.messages.completeInlineRun, {
@@ -861,6 +907,7 @@ export const generateReply = internalAction({
           sourceCount: sourceCandidates.length,
           artifactCount: artifactResults.length,
           observations: collectToolObservations(steps),
+          keepWaiting: hitlResults.length > 0 && !args.hitlExecute,
         });
       }
       await ctx.runMutation(internal.agent.messages.markThreadIdle, {
@@ -876,6 +923,12 @@ export const generateReply = internalAction({
         assistantText: text,
       });
     } catch (error) {
+      if (args.hitlExecute && args.hitlSessionId) {
+        await ctx.runMutation(internal.hitlSessions.failSessionInternal, {
+          sessionId: args.hitlSessionId,
+          ownerUserId: args.userId,
+        });
+      }
       if (args.runId) {
         await ctx.runMutation(internal.agent.messages.failInlineRun, {
           ownerUserId: args.userId,
@@ -1010,6 +1063,7 @@ export const completeInlineRun = internalMutation({
         metadataJson: v.optional(v.string()),
       }),
     ),
+    keepWaiting: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const run = await ctx.db.get("agentRuns", args.runId);
@@ -1066,12 +1120,12 @@ export const completeInlineRun = internalMutation({
       });
     }
     await ctx.db.patch("agentRuns", args.runId, {
-      status: "completed",
+      status: args.keepWaiting ? "waiting" : "completed",
       currentStep: observations.at(-1)?.stepKey ?? "finalize",
       sourceCount: args.sourceCount,
       artifactCount: args.artifactCount,
       retryable: false,
-      completedAt: now,
+      completedAt: args.keepWaiting ? undefined : now,
       updatedAt: now,
     });
   },
@@ -1157,6 +1211,26 @@ function collectArtifactResults(
   return results;
 }
 
+function collectHitlResults(
+  steps: Array<{ toolResults?: Array<{ output?: unknown; toolName?: string }> }>,
+) {
+  const results: Array<{ toolName: string; sessionId?: string }> = [];
+  for (const step of steps) {
+    for (const result of step.toolResults ?? []) {
+      const toolName = result.toolName ?? "";
+      if (
+        toolName === "askHuman" ||
+        toolName === "presentPlan" ||
+        toolName === "confirmAction"
+      ) {
+        const output = result.output as { sessionId?: string } | undefined;
+        results.push({ toolName, sessionId: output?.sessionId });
+      }
+    }
+  }
+  return results;
+}
+
 type ToolObservation = {
   stepKey: string;
   label: string;
@@ -1214,6 +1288,18 @@ function collectToolObservations(
           eventSummary: `${output.relation}: ${output.artifactId}`,
           metadataJson: JSON.stringify({ toolName, artifactId: output.artifactId, versionId: output.versionId }),
         });
+        continue;
+      }
+      if (isHitlToolResult(output, toolName)) {
+        observations.push({
+          stepKey: "hitl",
+          label: "Menunggu konfirmasi",
+          summary: "Human-in-the-loop menunggu jawaban atau persetujuan",
+          eventType: "tool",
+          eventTitle: "HITL",
+          eventSummary: toolName,
+          metadataJson: JSON.stringify({ toolName, output }),
+        });
       }
     }
   }
@@ -1227,7 +1313,22 @@ function inferToolName(output: unknown) {
   if (isArtifactToolResult(output)) {
     return output.relation === "updated" ? "updateArtifact" : "createArtifact";
   }
+  if (typeof output === "object" && output !== null && "sessionId" in output) {
+    return "presentPlan";
+  }
   return "tool";
+}
+
+function isHitlToolResult(output: unknown, toolName: string) {
+  return (
+    toolName === "askHuman" ||
+    toolName === "presentPlan" ||
+    toolName === "confirmAction" ||
+    (typeof output === "object" &&
+      output !== null &&
+      "sessionId" in output &&
+      "cardId" in output)
+  );
 }
 
 function providerLabel(candidates: SourceCandidate[]) {

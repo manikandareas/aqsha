@@ -35,6 +35,17 @@ export function previewFromText(value: string, limit = ARTIFACT_PREVIEW_LIMIT) {
   return `${compact.slice(0, Math.max(0, limit - 3)).trimEnd()}...`;
 }
 
+export function plainTextFromMarkdown(markdown: string) {
+  return markdown
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`[^`]+`/g, " ")
+    .replace(/!\[[^\]]*]\([^)]+\)/g, " ")
+    .replace(/\[([^\]]+)]\([^)]+\)/g, "$1")
+    .replace(/[#*_~>-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function contextFromText(value: string) {
   const compact = value.replace(/\s+/g, " ").trim();
   if (compact.length <= ARTIFACT_CONTEXT_LIMIT) {

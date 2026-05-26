@@ -1060,3 +1060,94 @@ async function readStorageText(ctx: ActionCtx, storageId: Id<"_storage">) {
   const blob = await ctx.storage.get(storageId);
   return blob ? await blob.text() : "";
 }
+
+export const createDocumentFromAgentInternal = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    workspaceId: v.id("workspaces"),
+    folderId: v.optional(v.id("workspaceFolders")),
+    title: v.string(),
+    markdown: v.string(),
+    plainText: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await assertWorkspaceOwner(ctx, args.workspaceId, args.ownerUserId, { requireActive: true });
+    if (args.folderId) {
+      await assertFolderOwner(ctx, args.folderId, args.ownerUserId, args.workspaceId);
+    }
+    await assertLibraryCapacityForOwner(ctx, args.ownerUserId);
+    const now = Date.now();
+    const title = normalizeName(args.title, "Artifact title");
+    const inlinePlainText =
+      args.plainText.length <= ARTIFACT_BODY_INLINE_LIMIT ? args.plainText : undefined;
+    const inlineMarkdown =
+      args.markdown.length <= ARTIFACT_BODY_INLINE_LIMIT ? args.markdown : undefined;
+    const artifactId = await ctx.db.insert("artifacts", {
+      ownerUserId: args.ownerUserId,
+      workspaceId: args.workspaceId,
+      folderId: args.folderId,
+      kind: "document",
+      type: "document",
+      title,
+      contentFormat: "markdown",
+      body: inlinePlainText,
+      plainTextPreview: previewFromText(args.plainText),
+      contextText: contextFromText(args.plainText),
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("artifactDocuments", {
+      ownerUserId: args.ownerUserId,
+      workspaceId: args.workspaceId,
+      artifactId,
+      blocksJson: "",
+      markdown: inlineMarkdown,
+      plainText: inlinePlainText,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return artifactId;
+  },
+});
+
+export const updateDocumentFromAgentInternal = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    artifactId: v.id("artifacts"),
+    title: v.optional(v.string()),
+    markdown: v.string(),
+    plainText: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.runMutation(internal.artifacts.updateDocumentInternal, {
+      ownerUserId: args.ownerUserId,
+      artifactId: args.artifactId,
+      title: args.title,
+      blocksJson: "",
+      markdown: args.markdown,
+      plainText: args.plainText,
+    });
+    return { ok: true as const };
+  },
+});
+
+export const deleteDocumentFromAgentInternal = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    artifactId: v.id("artifacts"),
+  },
+  handler: async (ctx, args) => {
+    const artifact = await assertWorkspaceArtifactOwner(ctx, args.artifactId, args.ownerUserId, {
+      requireActive: true,
+    });
+    await assertWorkspaceOwner(ctx, artifact.workspaceId, args.ownerUserId, { requireActive: true });
+    const now = Date.now();
+    await ctx.db.patch("artifacts", args.artifactId, {
+      status: "deleted",
+      deletedAt: now,
+      updatedAt: now,
+    });
+    return { ok: true as const };
+  },
+});

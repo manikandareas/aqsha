@@ -7,7 +7,7 @@ export type PromptCommand = {
   slug: string;
   label: string;
   description: string;
-  group: "Tulis Akademik" | "Rancang Riset" | "Riset Mendalam";
+  group: "Tulis Akademik" | "Rancang Riset" | "Riset Mendalam" | "Workspace";
   aliases: string[];
   keywords: string[];
   mode: PromptCommandMode;
@@ -171,6 +171,30 @@ export const promptCommands = [
         "Prioritaskan konteks workspace yang dipilih pengguna bila relevan, lalu sumber publik. Laporkan ketidakpastian dan celah bukti.",
         "",
         withInput(argument, "[Pertanyaan riset belum diberikan]"),
+      ].join("\n"),
+  },
+  {
+    id: "artifact",
+    slug: "/artifact",
+    label: "Kelola artifact workspace",
+    description: "Buat, perbarui, atau hapus dokumen Markdown di workspace dengan konfirmasi.",
+    group: "Workspace",
+    aliases: [],
+    keywords: ["artifact", "artefak", "dokumen", "workspace", "markdown"],
+    mode: "normal",
+    placeholder: "Contoh: cerita rakyat, perbarui outline tesis, hapus draft lama...",
+    buildPrompt: (argument) =>
+      [
+        "Jalankan perintah workspace artifact berikut menggunakan HITL tools — jangan tanya di chat biasa.",
+        "WAJIB: create → askHuman dulu (1-2 pertanyaan), setelah user jawab via kartu → presentPlan. Update → askHuman jika tidak jelas, else presentPlan. Delete → confirmAction.",
+        "Jangan tulis daftar pilihan (1/2/3) di chat. Jangan minta user membalas teks bebas — pakai askHuman.",
+        "Inferensi intent: buat/bikin/tulis/create = create; perbarui/update = update; hapus/delete = delete.",
+        "Untuk create, meskipun instruksi sudah jelas (mis. 'buat cerita rakyat'), tetap askHuman dulu (judul, panjang, nada, atau struktur) sebelum presentPlan.",
+        "presentPlan: sertakan planBullets (3-6 poin) tanpa Markdown final — isi dokumen dibuat setelah user menekan Build.",
+        "Summary presentPlan: jelaskan apa yang akan dibuat (1-2 kalimat), jangan sebut UI/kartu/Build/tombol.",
+        "Setelah memanggil tool HITL, balas maksimal satu kalimat singkat.",
+        "",
+        withInput(argument, "[Instruksi artifact belum diberikan]"),
       ].join("\n"),
   },
 ] as const satisfies readonly PromptCommand[];

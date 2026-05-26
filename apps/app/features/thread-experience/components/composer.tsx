@@ -95,6 +95,7 @@ type ComposerSharedProps = {
   showVoiceInput?: boolean;
   activeRun?: ResearchRun;
   onCancelRun?: (runId: string) => Promise<unknown>;
+  hitlBlocking?: boolean;
 };
 
 export type ComposerProps = ComposerSharedProps &
@@ -132,6 +133,7 @@ export function Composer(props: ComposerProps) {
     showVoiceInput = false,
     activeRun,
     onCancelRun,
+    hitlBlocking = false,
   } = props;
 
   const threadId = props.mode === "thread" ? props.threadId : undefined;
@@ -167,7 +169,9 @@ export function Composer(props: ComposerProps) {
     isSending,
     isRateLimited,
     activeRun,
+    hitlBlocking,
   });
+  const isInteractionLocked = isDeepActive || hitlBlocking;
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
   const isContentEmpty = content.trim().length === 0 && !selectedCommand;
@@ -465,7 +469,7 @@ export function Composer(props: ComposerProps) {
               >
                 {!isExpanded ? (
                   <ComposerUploadButton
-                    disabled={disabled || isDeepActive || isSending}
+                    disabled={disabled || isInteractionLocked || isSending}
                   />
                 ) : null}
                 <div className="min-w-0 flex-1">
@@ -481,9 +485,13 @@ export function Composer(props: ComposerProps) {
                       }
                     }}
                     onSubmit={requestFormSubmit}
-                    disabled={disabled || isDeepActive}
+                    disabled={disabled || isInteractionLocked}
                     maxLength={8000}
-                    placeholder="Select board items, or / for voices..."
+                    placeholder={
+                      hitlBlocking
+                        ? "Selesaikan langkah di atas terlebih dahulu…"
+                        : "Select board items, or / for voices..."
+                    }
                     className={isExpanded ? "py-0.5" : "py-1"}
                   />
                 </div>
@@ -497,12 +505,12 @@ export function Composer(props: ComposerProps) {
               >
                 {isExpanded ? (
                   <ComposerUploadButton
-                    disabled={disabled || isDeepActive || isSending}
+                    disabled={disabled || isInteractionLocked || isSending}
                   />
                 ) : null}
                 <div className="flex shrink-0 items-center gap-1">
-                  <ModeSelector mode={mode} setMode={setMode} disabled={isDeepActive} />
-                  {showVoiceInput ? <MicButton disabled={disabled || isDeepActive} /> : null}
+                  <ModeSelector mode={mode} setMode={setMode} disabled={isInteractionLocked} />
+                  {showVoiceInput ? <MicButton disabled={disabled || isInteractionLocked} /> : null}
                   <ComposerSubmitButton
                     canSend={canSend}
                     isSending={isSending}

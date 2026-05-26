@@ -126,17 +126,39 @@ export const listForMessage = query({
         q.eq("ownerUserId", user._id).eq("messageId", args.messageId),
       )
       .collect();
-    const rows = await Promise.all(
+    const versionedRows = await Promise.all(
       links.map(async (link) => {
         const artifact = await ctx.db.get("artifacts", link.artifactId);
         const version = await ctx.db.get("artifactVersions", link.versionId);
         if (!artifact || !version || artifact.ownerUserId !== user._id) {
           return null;
         }
-        return { ...link, artifact, version };
+        return { ...link, artifact, version, linkKind: "versioned" as const };
       }),
     );
-    return rows.filter((row) => row !== null);
+    const workspaceLinks = await ctx.db
+      .query("messageWorkspaceArtifacts")
+      .withIndex("by_owner_message", (q) =>
+        q.eq("ownerUserId", user._id).eq("messageId", args.messageId),
+      )
+      .collect();
+    const workspaceRows = await Promise.all(
+      workspaceLinks.map(async (link) => {
+        const artifact = await ctx.db.get("artifacts", link.artifactId);
+        if (!artifact || artifact.ownerUserId !== user._id) {
+          return null;
+        }
+        return {
+          artifactId: link.artifactId,
+          versionId: undefined,
+          relation: link.relation,
+          artifact,
+          version: null,
+          linkKind: "workspace" as const,
+        };
+      }),
+    );
+    return [...versionedRows, ...workspaceRows].filter((row) => row !== null);
   },
 });
 

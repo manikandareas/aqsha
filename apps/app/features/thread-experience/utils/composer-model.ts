@@ -93,6 +93,7 @@ export function getComposerAvailability({
   isRateLimited,
   activeRun,
   hasAttachments = false,
+  hitlBlocking = false,
 }: {
   visibleContent: string;
   hasAttachments?: boolean;
@@ -100,6 +101,7 @@ export function getComposerAvailability({
   isSending: boolean;
   isRateLimited: boolean;
   activeRun?: ResearchRun;
+  hitlBlocking?: boolean;
 }) {
   const isDeepActive = shouldShowStopForActiveRun(activeRun);
   return {
@@ -109,7 +111,8 @@ export function getComposerAvailability({
       !disabled &&
       !isSending &&
       !isRateLimited &&
-      !isDeepActive,
+      !isDeepActive &&
+      !hitlBlocking,
     stopRunId: isDeepActive ? activeRun?._id : undefined,
   };
 }

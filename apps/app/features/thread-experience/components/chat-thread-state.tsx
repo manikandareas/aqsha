@@ -2,7 +2,7 @@
 
 import { useUIMessages } from "@convex-dev/agent/react";
 import { api } from "@aqsha/convex/api";
-import { useConvexAuth } from "convex/react";
+import { useConvexAuth, useQuery } from "convex/react";
 import { useMemo } from "react";
 import {
   Conversation,
@@ -39,7 +39,9 @@ import type {
   StartThread,
 } from "./component-types";
 import { Composer } from "./composer";
+import { HitlDock } from "./hitl-dock";
 import { EmptyThreadCopy, HomeStartState } from "./home-states";
+import { toWorkspaceId } from "@/lib/convex-refs";
 import { MessageRow } from "./message-row";
 import { AgentRunBlock } from "./run-progress";
 import { CenteredLoading } from "./shared";
@@ -76,6 +78,11 @@ export function ChatThreadState({
   threadWorkspaceId?: string;
 }) {
   const { isAuthenticated } = useConvexAuth();
+  const hitlSession = useQuery(
+    api.hitlSessions.getActiveForThread,
+    isAuthenticated && threadId ? { threadId } : "skip",
+  );
+  const hitlBlocking = hitlSession?.blocksComposer ?? false;
   const messages = useUIMessages(
     api.agent.messages.list,
     isAuthenticated && threadId ? { threadId } : "skip",
@@ -163,6 +170,14 @@ export function ChatThreadState({
         )}
       >
         <div className={cn(compact ? "mx-auto w-full max-w-none" : threadTranscriptColumnClass)}>
+          {threadId && hitlSession ? (
+            <HitlDock
+              session={hitlSession}
+              threadWorkspaceId={
+                threadWorkspaceId ? toWorkspaceId(threadWorkspaceId) : undefined
+              }
+            />
+          ) : null}
           {threadId ? (
             <Composer
               mode="thread"
@@ -176,6 +191,7 @@ export function ChatThreadState({
               onSend={onSend}
               contextArtifacts={contextArtifacts}
               onRemoveContextArtifact={onRemoveContextArtifact}
+              hitlBlocking={hitlBlocking}
             />
           ) : (
             <Composer

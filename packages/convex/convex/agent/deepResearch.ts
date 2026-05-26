@@ -182,18 +182,17 @@ const stepStatusValidator = v.union(
   v.literal("canceled"),
 );
 
-export const deepResearchWorkflow = researchWorkflow.define({
+export const deepResearchExecuteWorkflow = researchWorkflow.define({
   args: {
     runId: v.id("agentRuns"),
     ownerUserId: v.string(),
     threadId: v.string(),
     promptMessageId: v.string(),
     prompt: v.string(),
+    plan: v.any(),
   },
   handler: async (step, args): Promise<void> => {
-    const plan = await step.runAction(internal.agent.deepResearch.planResearch, args, {
-      retry: ACTION_RETRY,
-    });
+    const plan = normalizePlan(args.plan);
     const loop = await step.runAction(internal.agent.deepResearch.researchLoop, {
       ...args,
       plan,
@@ -248,6 +247,21 @@ export const deepResearchWorkflow = researchWorkflow.define({
       ...args,
       artifactId: persisted.primaryArtifactId,
       responseSummary: synthesis.chatSummary,
+    });
+  },
+});
+
+export const deepResearchWorkflow = researchWorkflow.define({
+  args: {
+    runId: v.id("agentRuns"),
+    ownerUserId: v.string(),
+    threadId: v.string(),
+    promptMessageId: v.string(),
+    prompt: v.string(),
+  },
+  handler: async (step, args): Promise<void> => {
+    await step.runAction(internal.agent.deepResearch.prepareDeepResearchHitl, args, {
+      retry: ACTION_RETRY,
     });
   },
 });
@@ -445,6 +459,7 @@ export const startForMessage = internalMutation({
     threadId: v.string(),
     promptMessageId: v.string(),
     prompt: v.string(),
+    commandId: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<{ runId: Id<"agentRuns">; workflowId: string }> => {
     const runId = await createRun(ctx, args);
@@ -523,6 +538,76 @@ export const planResearch = internalAction({
       summary: plan.title,
     });
     return plan;
+  },
+});
+
+export const prepareDeepResearchHitl = internalAction({
+  args: workflowArgs(),
+  handler: async (ctx, args) => {
+    const plan = await ctx.runAction(internal.agent.deepResearch.planResearch, args);
+    const planBullets = [
+      `Pertanyaan riset: ${plan.questions.join("; ")}`,
+      `Strategi sumber: ${plan.sourceStrategy}`,
+      `Bentuk laporan: ${plan.reportIntent}`,
+      `Maks. putaran: ${plan.maxRounds}`,
+      ...plan.sufficiencyCriteria.slice(0, 2).map((item: string) => `Kriteria: ${item}`),
+    ].slice(0, 8);
+    await ctx.runMutation(internal.hitlSessions.createDeepResearchPlanCardInternal, {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      promptMessageId: args.promptMessageId,
+      runId: args.runId,
+      title: plan.title,
+      summary: plan.reportIntent,
+      planBullets,
+      payloadJson: JSON.stringify({ plan, prompt: args.prompt }),
+    });
+    return { ok: true as const };
+  },
+});
+
+export const startExecuteWorkflow = internalMutation({
+  args: {
+    runId: v.id("agentRuns"),
+    ownerUserId: v.string(),
+    sessionId: v.id("hitlSessions"),
+  },
+  handler: async (ctx, args): Promise<{ workflowId: string }> => {
+    const run = await ctx.db.get("agentRuns", args.runId);
+    if (!run || run.ownerUserId !== args.ownerUserId) {
+      throw new ConvexError("Run not found");
+    }
+    const session = await ctx.db.get("hitlSessions", args.sessionId);
+    if (!session || session.ownerUserId !== args.ownerUserId || !session.executionPayloadJson) {
+      throw new ConvexError("Missing approved research plan");
+    }
+    const payload = JSON.parse(session.executionPayloadJson) as {
+      plan: ResearchPlan;
+      prompt: string;
+    };
+    const prompt = payload.prompt || run.promptSnapshot || "";
+    const workflowId = await researchWorkflow.start(
+      ctx,
+      internal.agent.deepResearch.deepResearchExecuteWorkflow,
+      {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        threadId: run.threadId,
+        promptMessageId: run.promptMessageId,
+        prompt,
+        plan: payload.plan,
+      },
+      {
+        onComplete: internal.agent.deepResearch.handleWorkflowComplete,
+        context: { runId: args.runId, ownerUserId: args.ownerUserId, sessionId: args.sessionId },
+      },
+    );
+    await ctx.db.patch("agentRuns", args.runId, {
+      workflowId: String(workflowId),
+      status: "running",
+      updatedAt: Date.now(),
+    });
+    return { workflowId: String(workflowId) };
   },
 });
 
@@ -1123,7 +1208,10 @@ export const persistArtifact = internalMutation({
   }> => {
     const run = await assertRunOwner(ctx, args.runId, args.ownerUserId);
     if (run.status === "canceled") {
-      return { primaryArtifactId: run.activeArtifactId as Id<"artifacts"> };
+      if (!run.activeArtifactId) {
+        throw new ConvexError("Run canceled without artifact");
+      }
+      return { primaryArtifactId: run.activeArtifactId };
     }
     await markStepMutation(ctx, {
       runId: args.runId,
@@ -1131,6 +1219,14 @@ export const persistArtifact = internalMutation({
       stepKey: "persistArtifact",
       status: "running",
     });
+
+    const extractIds = await persistExtractsForRun(ctx, {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      runId: args.runId,
+      extracts: normalizeExtracts(args.extracts),
+    });
+
     const report: {
       artifactId: Id<"artifacts">;
       versionId: Id<"artifactVersions">;
@@ -1146,12 +1242,6 @@ export const persistArtifact = internalMutation({
       ...args,
       artifactId: report.artifactId,
       artifactVersionId: report.versionId,
-    });
-    const extractIds = await persistExtractsForRun(ctx, {
-      ownerUserId: args.ownerUserId,
-      threadId: args.threadId,
-      runId: args.runId,
-      extracts: normalizeExtracts(args.extracts),
     });
     await persistCitationChecks(ctx, {
       ...args,
@@ -1265,6 +1355,14 @@ export const handleWorkflowComplete = internalMutation({
         stepKey: run.currentStep ?? "planRound",
         code: "workflow_failed",
         message: String(args.result.error ?? "Deep research failed"),
+      });
+      return;
+    }
+    const sessionId = args.context?.sessionId as Id<"hitlSessions"> | undefined;
+    if (sessionId) {
+      await ctx.runMutation(internal.hitlSessions.completeSessionInternal, {
+        sessionId,
+        ownerUserId,
       });
     }
   },
@@ -1457,6 +1555,7 @@ async function createRun(
     threadId: string;
     promptMessageId: string;
     prompt?: string;
+    commandId?: string;
     retryOfRunId?: Id<"agentRuns">;
   },
 ) {
@@ -1468,6 +1567,7 @@ async function createRun(
     mode: "deep",
     executionKind: "workflow",
     promptSnapshot: args.prompt ?? "",
+    commandId: args.commandId,
     status: "queued",
     roundCount: 0,
     maxRounds: DEFAULT_MAX_ROUNDS,

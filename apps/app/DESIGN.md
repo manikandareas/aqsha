@@ -72,7 +72,7 @@ The right panel is for **persistent thread context** from existing workspace lib
 - Workspace-bound threads: full library picker.
 - Global threads: flat picker of existing workspace artifacts (`Konteks riset`).
 - Panel selections persist in `threadContextArtifacts`; composer uploads stay message-scoped unless saved explicitly.
-- Toggle label: **Konteks** (not Workspace).
+- Toggle label: **Workspace**.
 
 Sources remain backend provenance records only and must not render as a user-facing tab, panel, settings page, or library.
 

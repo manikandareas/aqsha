@@ -93,10 +93,11 @@ export function MessageRow({
 
 type MessageArtifactLink = {
   artifactId: string;
-  versionId: string;
-  relation: "created" | "updated" | "referenced";
+  versionId?: string;
+  relation: "created" | "updated" | "referenced" | "deleted";
   artifact: ResearchArtifact & { workspaceId?: string };
-  version: NonNullable<ResearchArtifact["version"]>;
+  version: NonNullable<ResearchArtifact["version"]> | null;
+  linkKind?: "versioned" | "workspace";
 };
 
 function UserMessageContextArtifacts({
@@ -292,11 +293,11 @@ function MessageArtifacts({ links }: { links: MessageArtifactLink[] }) {
     <div className="mt-3 grid gap-2">
       {links.map((link) => {
         const workspaceId = link.artifact.workspaceId;
-        const canOpen = Boolean(workspaceId);
+        const canOpen = Boolean(workspaceId) && link.relation !== "deleted";
 
         return (
           <button
-            key={`${link.artifactId}-${link.versionId}`}
+            key={`${link.artifactId}-${link.versionId ?? "workspace"}`}
             type="button"
             disabled={!canOpen}
             onClick={() => {
@@ -314,8 +315,14 @@ function MessageArtifacts({ links }: { links: MessageArtifactLink[] }) {
                 {link.artifact.title}
               </span>
               <span className="block text-[11px] font-medium text-muted-foreground">
-                {link.relation === "updated" ? "Diperbarui" : "Artefak"} · v
-                {link.version.versionNumber}
+                {link.relation === "deleted"
+                  ? "Dihapus dari workspace"
+                  : link.relation === "updated"
+                    ? "Diperbarui di workspace"
+                    : link.linkKind === "workspace" || workspaceId
+                      ? "Artefak workspace"
+                      : "Artefak"}
+                {link.version ? ` · v${link.version.versionNumber}` : ""}
               </span>
             </span>
           </button>

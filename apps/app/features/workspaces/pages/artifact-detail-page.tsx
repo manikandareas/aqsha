@@ -149,6 +149,7 @@ export function ArtifactDetailPage({
                 <DocumentArtifactDetail
                   artifactId={artifactId}
                   initialBlocksJson={activeFullContent.blocksJson}
+                  initialMarkdown={activeFullContent.markdown}
                   updateDocument={data.updateDocument}
                 />
               ) : null}
@@ -163,10 +164,12 @@ export function ArtifactDetailPage({
 function DocumentArtifactDetail({
   artifactId,
   initialBlocksJson,
+  initialMarkdown,
   updateDocument,
 }: {
   artifactId: string;
   initialBlocksJson: string;
+  initialMarkdown: string;
   updateDocument: (args: {
     artifactId: never;
     blocksJson: string;
@@ -211,6 +214,7 @@ function DocumentArtifactDetail({
       </div>
       <BlockNoteEditorLoader
         initialBlocksJson={initialBlocksJson}
+        initialMarkdown={initialMarkdown}
         onContentChange={(content) => {
           latestContent.current = content;
           dispatch({ type: "changed", json: content.blocksJson });
