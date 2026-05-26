@@ -1,21 +1,18 @@
 "use client";
 
 import {
-  ArrowLeftIcon,
   ExternalLinkIcon,
-  FileTextIcon,
-  LinkIcon,
   Loader2Icon,
   RotateCcwIcon,
 } from "lucide-react";
-import Link from "next/link";
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { panelBodyPaddingClass, panelHeaderPaddingClass } from "@/lib/panel-surface";
+import { panelBodyPaddingClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
 import { useArtifactDetailData } from "../api/use-workspaces-data";
+import { ArtifactDetailHeader } from "../components/artifact-detail-header";
 import { BlockNoteEditorLoader } from "../components/blocknote-editor-loader";
 import type { DocumentEditorContent } from "../components/blocknote-document-editor";
 import { WorkspaceShell } from "../components/workspace-shell";
@@ -53,8 +50,19 @@ export function ArtifactDetailPage({
     message: string;
   } | null>(null);
 
+  const loadedContentArtifactIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    loadedContentArtifactIdRef.current = null;
+    setFullContent(null);
+    setContentError(null);
+  }, [artifactId]);
+
   useEffect(() => {
     if (!data.artifact) return;
+    if (loadedContentArtifactIdRef.current === artifactId) return;
+
+    loadedContentArtifactIdRef.current = artifactId;
     let cancelled = false;
     void getFullContent({ artifactId: artifactId as never })
       .then((content) => {
@@ -65,6 +73,7 @@ export function ArtifactDetailPage({
       })
       .catch((error: unknown) => {
         if (!cancelled) {
+          loadedContentArtifactIdRef.current = null;
           setContentError({
             artifactId,
             message: error instanceof Error ? error.message : "Content gagal dimuat.",
@@ -81,6 +90,9 @@ export function ArtifactDetailPage({
   const activeContentError = contentError?.artifactId === artifactId ? contentError.message : null;
   const workspaceMismatch =
     detail?.artifact.workspaceId && detail.artifact.workspaceId !== workspaceId;
+  const workspaceName =
+    data.workspaces.find((workspace) => workspace._id === workspaceId)?.name ?? "Workspace";
+  const [documentSaveState, setDocumentSaveState] = useState<AutosaveState>(initialAutosaveState);
 
   return (
     <WorkspaceShell
@@ -98,41 +110,12 @@ export function ArtifactDetailPage({
           <ArtifactMissing />
         ) : (
           <>
-            <header
-              className={cn(
-                "flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-border/70",
-                panelHeaderPaddingClass,
-              )}
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <Button
-                  asChild
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Back to workspace"
-                >
-                  <Link href={`/workspaces/${workspaceId}`}>
-                    <ArrowLeftIcon className="size-4" />
-                  </Link>
-                </Button>
-                <div className="min-w-0">
-                  <div className="flex min-w-0 items-center gap-2">
-                    {detail.artifact.kind === "url" ? (
-                      <LinkIcon className="size-4 shrink-0 text-muted-foreground" />
-                    ) : (
-                      <FileTextIcon className="size-4 shrink-0 text-muted-foreground" />
-                    )}
-                    <h1 className="truncate font-heading text-xl font-semibold">
-                      {detail.artifact.title}
-                    </h1>
-                    <Badge variant="outline">{detail.artifact.kind ?? detail.artifact.type}</Badge>
-                  </div>
-                  <p className="mt-1 truncate text-[12px] font-medium text-muted-foreground">
-                    Artifact workspace
-                  </p>
-                </div>
-              </div>
-            </header>
+            <ArtifactDetailHeader
+              workspaceId={workspaceId}
+              workspaceName={workspaceName}
+              artifactTitle={detail.artifact.title}
+              trailing={detail.document ? <SaveStatus state={documentSaveState} /> : null}
+            />
             <section className={cn("min-h-0 overflow-y-auto", panelBodyPaddingClass)}>
               {activeContentError ? (
                 <p className="text-[13px] font-medium text-destructive">{activeContentError}</p>
@@ -147,10 +130,12 @@ export function ArtifactDetailPage({
                 />
               ) : detail.document ? (
                 <DocumentArtifactDetail
+                  key={artifactId}
                   artifactId={artifactId}
                   initialBlocksJson={activeFullContent.blocksJson}
                   initialMarkdown={activeFullContent.markdown}
                   updateDocument={data.updateDocument}
+                  onSaveStateChange={setDocumentSaveState}
                 />
               ) : null}
             </section>
@@ -166,6 +151,7 @@ function DocumentArtifactDetail({
   initialBlocksJson,
   initialMarkdown,
   updateDocument,
+  onSaveStateChange,
 }: {
   artifactId: string;
   initialBlocksJson: string;
@@ -176,8 +162,12 @@ function DocumentArtifactDetail({
     markdown: string;
     plainText: string;
   }) => Promise<unknown>;
+  onSaveStateChange: (state: AutosaveState) => void;
 }) {
   const latestContent = useRef<DocumentEditorContent | null>(null);
+  const lastSavedJsonRef = useRef(initialBlocksJson);
+  const saveInFlightRef = useRef(false);
+  const queuedSaveRef = useRef(false);
   const [state, dispatch] = useReducer(autosaveReducer, {
     ...initialAutosaveState,
     lastSavedJson: initialBlocksJson,
@@ -185,33 +175,60 @@ function DocumentArtifactDetail({
   });
 
   useEffect(() => {
+    onSaveStateChange(state);
+  }, [onSaveStateChange, state]);
+
+  const performSave = useCallback(async () => {
+    const content = latestContent.current;
+    if (!content) return;
+
+    if (content.blocksJson === lastSavedJsonRef.current) {
+      dispatch({ type: "changed", json: content.blocksJson });
+      return;
+    }
+
+    if (saveInFlightRef.current) {
+      queuedSaveRef.current = true;
+      return;
+    }
+
+    saveInFlightRef.current = true;
+    dispatch({ type: "saving" });
+    const snapshot = content;
+
+    try {
+      await updateDocument({
+        artifactId: artifactId as never,
+        blocksJson: snapshot.blocksJson,
+        markdown: snapshot.markdown,
+        plainText: snapshot.plainText,
+      });
+      lastSavedJsonRef.current = snapshot.blocksJson;
+      dispatch({ type: "saved", json: snapshot.blocksJson });
+    } catch (error: unknown) {
+      dispatch({
+        type: "failed",
+        message: error instanceof Error ? error.message : "Autosave gagal.",
+      });
+    } finally {
+      saveInFlightRef.current = false;
+      if (queuedSaveRef.current) {
+        queuedSaveRef.current = false;
+        void performSave();
+      }
+    }
+  }, [artifactId, updateDocument]);
+
+  useEffect(() => {
     if (state.status !== "dirty") return;
     const timeout = window.setTimeout(() => {
-      const content = latestContent.current;
-      if (!content) return;
-      dispatch({ type: "saving" });
-      void updateDocument({
-        artifactId: artifactId as never,
-        blocksJson: content.blocksJson,
-        markdown: content.markdown,
-        plainText: content.plainText,
-      })
-        .then(() => dispatch({ type: "saved", json: content.blocksJson }))
-        .catch((error: unknown) => {
-          dispatch({
-            type: "failed",
-            message: error instanceof Error ? error.message : "Autosave gagal.",
-          });
-        });
+      void performSave();
     }, 700);
     return () => window.clearTimeout(timeout);
-  }, [artifactId, state.status, state.pendingJson, updateDocument]);
+  }, [performSave, state.pendingJson, state.status]);
 
   return (
     <div className="mx-auto grid max-w-5xl gap-3">
-      <div className="flex items-center justify-end">
-        <SaveStatus state={state} />
-      </div>
       <BlockNoteEditorLoader
         initialBlocksJson={initialBlocksJson}
         initialMarkdown={initialMarkdown}

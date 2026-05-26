@@ -49,13 +49,15 @@ export function autosaveReducer(state: AutosaveState, event: AutosaveEvent): Aut
       return { ...state, status: "dirty", pendingJson: event.json, error: null };
     case "saving":
       return { ...state, status: "saving", error: null };
-    case "saved":
+    case "saved": {
+      const stillDirty = state.pendingJson !== event.json;
       return {
-        status: "saved",
+        status: stillDirty ? "dirty" : "saved",
         lastSavedJson: event.json,
-        pendingJson: event.json,
+        pendingJson: state.pendingJson,
         error: null,
       };
+    }
     case "failed":
       return { ...state, status: "failed", error: event.message };
   }

@@ -21,20 +21,30 @@ export function BlockNoteDocumentEditor({
   initialMarkdown?: string;
   onContentChange: (content: DocumentEditorContent) => void;
 }) {
-  const initialContent = parseBlockNoteJson(initialBlocksJson) as PartialBlock[];
+  const initialContentRef = useRef(parseBlockNoteJson(initialBlocksJson) as PartialBlock[]);
+  const initialMarkdownRef = useRef(initialMarkdown);
   const editor = useCreateBlockNote(
-    initialContent.length > 0 ? { initialContent } : undefined,
-    [initialBlocksJson],
+    initialContentRef.current.length > 0
+      ? { initialContent: initialContentRef.current }
+      : undefined,
+    [],
   );
   const hydratedFromMarkdown = useRef(false);
+  const initialContent = initialContentRef.current;
 
   useEffect(() => {
-    if (hydratedFromMarkdown.current || initialContent.length > 0 || !initialMarkdown.trim()) {
+    if (
+      hydratedFromMarkdown.current ||
+      initialContent.length > 0 ||
+      !initialMarkdownRef.current.trim()
+    ) {
       return;
     }
     hydratedFromMarkdown.current = true;
     const hydrate = async () => {
-      const blocks = await Promise.resolve(editor.tryParseMarkdownToBlocks(initialMarkdown));
+      const blocks = await Promise.resolve(
+        editor.tryParseMarkdownToBlocks(initialMarkdownRef.current),
+      );
       if (blocks.length === 0) {
         return;
       }
@@ -47,7 +57,7 @@ export function BlockNoteDocumentEditor({
       });
     };
     void hydrate();
-  }, [editor, initialContent.length, initialMarkdown, onContentChange]);
+  }, [editor, initialContent.length, onContentChange]);
 
   useEditorChange(() => {
     const document = editor.document;
@@ -59,7 +69,7 @@ export function BlockNoteDocumentEditor({
   }, editor);
 
   return (
-    <div className="min-h-[60svh] rounded-[8px] border border-border bg-background px-1 py-3">
+    <div className="min-h-[60svh] px-1 py-3">
       <BlockNoteView editor={editor} className="aqsha-blocknote" />
     </div>
   );

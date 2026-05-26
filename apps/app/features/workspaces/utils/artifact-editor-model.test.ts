@@ -44,6 +44,13 @@ describe("artifact editor model", () => {
     expect(saving.status).toBe("saving");
     const saved = autosaveReducer(saving, { type: "saved", json: "[1]" });
     expect(saved.status).toBe("saved");
+    const editedWhileSaving = autosaveReducer(saving, { type: "changed", json: "[1,2]" });
+    const savedStale = autosaveReducer(editedWhileSaving, { type: "saved", json: "[1]" });
+    expect(savedStale).toMatchObject({
+      status: "dirty",
+      lastSavedJson: "[1]",
+      pendingJson: "[1,2]",
+    });
     const failed = autosaveReducer(saved, { type: "failed", message: "offline" });
     expect(failed).toMatchObject({ status: "failed", error: "offline" });
   });
