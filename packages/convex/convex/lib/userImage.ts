@@ -1,5 +1,5 @@
 import type { Id } from "../_generated/dataModel";
-import type { QueryCtx } from "../_generated/server";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
 
 export const AVATAR_STORAGE_PREFIX = "storage:";
 
@@ -12,9 +12,26 @@ export async function resolveUserImage(
   if (!image) return null;
   if (!image.startsWith(AVATAR_STORAGE_PREFIX)) return image;
 
-  const storageId = image.slice(AVATAR_STORAGE_PREFIX.length) as Id<"_storage">;
+  const storageId = parseAvatarStorageId(image);
+  if (!storageId) return image;
   const url = await ctx.storage.getUrl(storageId);
   return url ?? image;
+}
+
+export function parseAvatarStorageId(image: string | null | undefined) {
+  if (!image?.startsWith(AVATAR_STORAGE_PREFIX)) return null;
+  const storageId = image.slice(AVATAR_STORAGE_PREFIX.length).trim();
+  return storageId ? (storageId as Id<"_storage">) : null;
+}
+
+export async function deleteAvatarStorageIfPresent(
+  ctx: Pick<MutationCtx, "storage">,
+  image: string | null | undefined,
+) {
+  const storageId = parseAvatarStorageId(image);
+  if (!storageId) return false;
+  await ctx.storage.delete(storageId);
+  return true;
 }
 
 export async function assertAvatarStorageFile(

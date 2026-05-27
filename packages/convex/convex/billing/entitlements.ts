@@ -64,6 +64,7 @@ export async function getBillingSnapshot(
   subscription: Awaited<ReturnType<typeof polar.getCurrentSubscription>> | null;
   productKey?: string;
   currentPeriodEnd: number | null;
+  cancelAtPeriodEnd: boolean;
   isAdmin: boolean;
   isUnlimitedCredits: boolean;
   billingPortalAvailable: boolean;
@@ -78,6 +79,7 @@ export async function getBillingSnapshot(
       subscription,
       productKey: undefined,
       currentPeriodEnd: null,
+      cancelAtPeriodEnd: false,
       isAdmin: true,
       isUnlimitedCredits: true,
       billingPortalAvailable: Boolean(subscription || mirrored),
@@ -94,6 +96,7 @@ export async function getBillingSnapshot(
         subscription: null,
         productKey: mirrored.productKey,
         currentPeriodEnd: mirrored.currentPeriodEnd ?? null,
+        cancelAtPeriodEnd: Boolean(mirrored.cancelAtPeriodEnd),
         isAdmin: false,
         isUnlimitedCredits: false,
         billingPortalAvailable: true,
@@ -110,6 +113,7 @@ export async function getBillingSnapshot(
     subscription,
     productKey,
     currentPeriodEnd: parseTime(subscription?.currentPeriodEnd),
+    cancelAtPeriodEnd: Boolean(subscription?.cancelAtPeriodEnd),
     isAdmin: false,
     isUnlimitedCredits: false,
     billingPortalAvailable: Boolean(subscription),

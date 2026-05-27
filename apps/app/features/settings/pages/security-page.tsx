@@ -1,87 +1,57 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { LogOutIcon, MailIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { authClient } from "@/lib/auth-client";
-import { useSettingsSecurityData } from "../api/use-settings-security-data";
+import { useSettingsSecurityController } from "../api/use-settings-security-controller";
 import { LoadingSettingsPage } from "../components/loading-settings-page";
 import {
-  SettingsField,
-  SettingsListItem,
-  SettingsPanel,
-  SettingsPanelBody,
-  SettingsPanelFooter,
-  SettingsPanelHeader,
-  SettingsReadonlyValue,
-} from "../components/settings-card";
+  AuthProvidersPanel,
+  DeleteAccountPanel,
+  PasswordPanel,
+  SecurityFeedback,
+  SessionsPanel,
+} from "../components/security-panels";
 import { SettingsHeader } from "../components/settings-header";
 
 export function SettingsSecurityPage() {
-  const router = useRouter();
-  const { viewer } = useSettingsSecurityData();
-  if (!viewer) return <LoadingSettingsPage />;
+  const security = useSettingsSecurityController();
 
-  const signOut = async () => {
-    await authClient.signOut();
-    router.replace("/sign-in");
-    router.refresh();
-  };
+  if (!security.viewer || !security.authConfig) return <LoadingSettingsPage />;
 
   return (
     <>
       <SettingsHeader section="security" />
-
-      <SettingsPanel>
-        <SettingsPanelHeader
-          title="Autentikasi"
-          description="Hubungkan akun ke penyedia masuk pihak ketiga."
-        />
-        <SettingsPanelBody>
-          <SettingsListItem
-            icon={MailIcon}
-            title="Email & kata sandi"
-            subtitle={viewer.email ?? "Belum diisi"}
-            trailing={
-              <span className="text-[11px] text-muted-foreground">Terhubung</span>
-            }
-          />
-        </SettingsPanelBody>
-        <SettingsPanelFooter>
-          <p className="text-[12px] text-muted-foreground">
-            Penyedia tambahan (GitHub, Google) belum tersedia di versi ini.
-          </p>
-        </SettingsPanelFooter>
-      </SettingsPanel>
-
-      <SettingsPanel>
-        <SettingsPanelHeader title="Sesi" description="Kelola sesi dan akses di perangkat ini." />
-        <SettingsPanelBody className="grid gap-5">
-          <SettingsField label="Email masuk">
-            <SettingsReadonlyValue value={viewer.email ?? "Belum diisi"} />
-          </SettingsField>
-          <SettingsField label="Reset kata sandi">
-            <SettingsReadonlyValue value="Belum tersedia di v1" />
-          </SettingsField>
-          <SettingsField label="Sesi aktif">
-            <SettingsReadonlyValue value="Belum tersedia di v1" />
-          </SettingsField>
-          <SettingsField label="Hapus akun">
-            <SettingsReadonlyValue value="Belum tersedia di v1" />
-          </SettingsField>
-        </SettingsPanelBody>
-        <SettingsPanelFooter>
-          <Button
-            type="button"
-            variant="destructive"
-            onClick={signOut}
-            className="h-9 rounded-lg px-4 text-[13px] font-medium"
-          >
-            <LogOutIcon className="size-3.5" />
-            Keluar
-          </Button>
-        </SettingsPanelFooter>
-      </SettingsPanel>
+      <SecurityFeedback notice={security.notice} error={security.error} />
+      <AuthProvidersPanel
+        viewer={security.viewer}
+        authConfig={security.authConfig}
+        accounts={security.accounts}
+        linkedProviders={security.linkedProviders}
+        pendingKey={security.pendingKey}
+        onLinkProvider={security.linkProvider}
+        onUnlinkProvider={security.unlinkProvider}
+      />
+      <PasswordPanel
+        viewer={security.viewer}
+        authConfig={security.authConfig}
+        pendingKey={security.pendingKey}
+        passwordForm={security.passwordForm}
+        setPasswordForm={security.setPasswordForm}
+        onChangePassword={security.changePassword}
+        onSendResetPassword={security.sendResetPassword}
+      />
+      <SessionsPanel
+        sessions={security.sessions}
+        pendingKey={security.pendingKey}
+        onRevokeSession={security.revokeSession}
+        onRevokeOtherSessions={security.revokeOtherSessions}
+        onSignOut={security.signOut}
+      />
+      <DeleteAccountPanel
+        authConfig={security.authConfig}
+        pendingKey={security.pendingKey}
+        deleteForm={security.deleteForm}
+        setDeleteForm={security.setDeleteForm}
+        onDeleteAccount={security.deleteAccount}
+      />
     </>
   );
 }

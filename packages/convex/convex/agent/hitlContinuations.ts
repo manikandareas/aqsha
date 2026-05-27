@@ -10,7 +10,7 @@ export function buildAfterAnswersContinuation(args: {
   prompt: string;
   answersContext: string;
 }) {
-  const tail = AFTER_ANSWERS_TAIL[args.commandId ?? "artifact"] ?? AFTER_ANSWERS_TAIL.artifact!;
+  const tail = AFTER_ANSWERS_TAIL[args.commandId ?? "artifact"] ?? AFTER_ANSWERS_TAIL.artifact;
   return [
     args.prompt,
     "",

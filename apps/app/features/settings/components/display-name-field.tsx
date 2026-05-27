@@ -20,8 +20,11 @@ export function useDisplayNameEditor(savedName: string | null) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setDraft(normalizedSaved);
-    setError(null);
+    const timeout = window.setTimeout(() => {
+      setDraft(normalizedSaved);
+      setError(null);
+    }, 0);
+    return () => window.clearTimeout(timeout);
   }, [normalizedSaved]);
 
   const trimmedDraft = draft.trim();

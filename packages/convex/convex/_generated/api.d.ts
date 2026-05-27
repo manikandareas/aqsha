@@ -8,6 +8,13 @@
  * @module
  */
 
+import type * as accountCleanup from "../accountCleanup.js";
+import type * as accountCleanup_agent from "../accountCleanup/agent.js";
+import type * as accountCleanup_artifacts from "../accountCleanup/artifacts.js";
+import type * as accountCleanup_billing from "../accountCleanup/billing.js";
+import type * as accountCleanup_preferences from "../accountCleanup/preferences.js";
+import type * as accountCleanup_shared from "../accountCleanup/shared.js";
+import type * as accountCleanup_workspaces from "../accountCleanup/workspaces.js";
 import type * as agent_artifactCommandInference from "../agent/artifactCommandInference.js";
 import type * as agent_artifacts from "../agent/artifacts.js";
 import type * as agent_astra from "../agent/astra.js";
@@ -40,6 +47,9 @@ import type * as artifactUploadLimits from "../artifactUploadLimits.js";
 import type * as artifactUploads from "../artifactUploads.js";
 import type * as artifacts from "../artifacts.js";
 import type * as auth from "../auth.js";
+import type * as auth_emailDelivery from "../auth/emailDelivery.js";
+import type * as auth_env from "../auth/env.js";
+import type * as auth_providerConfig from "../auth/providerConfig.js";
 import type * as billing_admin from "../billing/admin.js";
 import type * as billing_catalog from "../billing/catalog.js";
 import type * as billing_checkout from "../billing/checkout.js";
@@ -48,7 +58,9 @@ import type * as billing_entitlements from "../billing/entitlements.js";
 import type * as billing_polar from "../billing/polar.js";
 import type * as billing_portal from "../billing/portal.js";
 import type * as billing_products from "../billing/products.js";
+import type * as billing_subscription from "../billing/subscription.js";
 import type * as billing_usage from "../billing/usage.js";
+import type * as billing_validators from "../billing/validators.js";
 import type * as hitlCardApproval from "../hitlCardApproval.js";
 import type * as hitlSessionLogic from "../hitlSessionLogic.js";
 import type * as hitlSessions from "../hitlSessions.js";
@@ -57,6 +69,7 @@ import type * as hitlWorkspaceExecution from "../hitlWorkspaceExecution.js";
 import type * as http from "../http.js";
 import type * as lib_userImage from "../lib/userImage.js";
 import type * as limits from "../limits.js";
+import type * as userPreferences from "../userPreferences.js";
 import type * as workspaceAccess from "../workspaceAccess.js";
 import type * as workspaceFolders from "../workspaceFolders.js";
 import type * as workspaces from "../workspaces.js";
@@ -68,6 +81,13 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  accountCleanup: typeof accountCleanup;
+  "accountCleanup/agent": typeof accountCleanup_agent;
+  "accountCleanup/artifacts": typeof accountCleanup_artifacts;
+  "accountCleanup/billing": typeof accountCleanup_billing;
+  "accountCleanup/preferences": typeof accountCleanup_preferences;
+  "accountCleanup/shared": typeof accountCleanup_shared;
+  "accountCleanup/workspaces": typeof accountCleanup_workspaces;
   "agent/artifactCommandInference": typeof agent_artifactCommandInference;
   "agent/artifacts": typeof agent_artifacts;
   "agent/astra": typeof agent_astra;
@@ -100,6 +120,9 @@ declare const fullApi: ApiFromModules<{
   artifactUploads: typeof artifactUploads;
   artifacts: typeof artifacts;
   auth: typeof auth;
+  "auth/emailDelivery": typeof auth_emailDelivery;
+  "auth/env": typeof auth_env;
+  "auth/providerConfig": typeof auth_providerConfig;
   "billing/admin": typeof billing_admin;
   "billing/catalog": typeof billing_catalog;
   "billing/checkout": typeof billing_checkout;
@@ -108,7 +131,9 @@ declare const fullApi: ApiFromModules<{
   "billing/polar": typeof billing_polar;
   "billing/portal": typeof billing_portal;
   "billing/products": typeof billing_products;
+  "billing/subscription": typeof billing_subscription;
   "billing/usage": typeof billing_usage;
+  "billing/validators": typeof billing_validators;
   hitlCardApproval: typeof hitlCardApproval;
   hitlSessionLogic: typeof hitlSessionLogic;
   hitlSessions: typeof hitlSessions;
@@ -117,6 +142,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "lib/userImage": typeof lib_userImage;
   limits: typeof limits;
+  userPreferences: typeof userPreferences;
   workspaceAccess: typeof workspaceAccess;
   workspaceFolders: typeof workspaceFolders;
   workspaces: typeof workspaces;

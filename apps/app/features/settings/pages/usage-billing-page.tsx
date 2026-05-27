@@ -1,10 +1,12 @@
 "use client";
 
-import { GiftIcon, Loader2Icon } from "lucide-react";
+import { useMemo, useState } from "react";
+import { GiftIcon, Loader2Icon, XCircleIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useSettingsUsageBillingData } from "../api/use-settings-usage-billing-data";
+import { useSettingsUsageBillingData, type UsageRangeDays } from "../api/use-settings-usage-billing-data";
 import { BillingErrorBanner } from "../components/billing-error-banner";
 import { LoadingSettingsPage } from "../components/loading-settings-page";
+import { PlanCards } from "../components/plan-cards";
 import {
   CreditsUsageSection,
   SettingsPanel,
@@ -15,19 +17,40 @@ import {
 import { SettingsHeader } from "../components/settings-header";
 import { UsageHeatmap } from "../components/usage-heatmap";
 import { formatIdr, formatShortDate } from "../lib/settings-format";
-import { findUpgradePlan, formatPlanPrice, formatProviderSpend, usagePercentage } from "../utils/settings-summary";
-import type { Plan, ProductKey } from "../lib/types";
+import {
+  findUpgradePlan,
+  formatPlanPrice,
+  formatProviderSpend,
+  usagePercentage,
+} from "../utils/settings-summary";
+import type { BillingInterval } from "../lib/types";
 
 export function SettingsUsageBillingPage() {
   const data = useSettingsUsageBillingData();
+  const [selectedInterval, setSelectedInterval] = useState<BillingInterval | null>(null);
+  const urlNotice = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("checkout") !== "success") return null;
+    return "Checkout berhasil. Status langganan akan tersinkron setelah webhook Polar masuk.";
+  }, []);
+
   if (!data.current || !data.plans || !data.activity) return <LoadingSettingsPage />;
 
+  const current = data.current;
+  const selectedBillingInterval = selectedInterval ?? current.billingInterval ?? "month";
   const nextPlan = findUpgradePlan(data.plans, data.current.planKey);
   const usagePercent = usagePercentage(data.current);
+  const effectiveNotice = data.billingNotice ?? urlNotice;
 
   return (
     <>
       <SettingsHeader section="usage-billing" title="Penggunaan & tagihan" />
+      {effectiveNotice ? (
+        <div className="rounded-[12px] border border-mint-soft-border bg-mint-soft px-4 py-3 text-sm font-medium leading-6 text-mint-foreground">
+          {effectiveNotice}
+        </div>
+      ) : null}
       <BillingErrorBanner message={data.billingError} />
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -43,21 +66,44 @@ export function SettingsUsageBillingPage() {
             </div>
             <p className="mt-1.5 text-[13px] text-muted-foreground">
               Reset {formatShortDate(data.current.resetAt)}
+              {data.current.billingInterval ? ` · ${intervalLabel(data.current.billingInterval)}` : ""}
+              {data.current.cancelAtPeriodEnd ? " · batal akhir periode" : ""}
             </p>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={data.openPortal}
-            disabled={!data.current.billingPortalAvailable || data.pendingKey === "portal"}
-            className="h-9 w-fit rounded-lg text-[13px]"
-          >
-            {data.pendingKey === "portal" ? (
-              <Loader2Icon className="size-3.5 animate-spin" />
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={data.openPortal}
+              disabled={!data.current.billingPortalAvailable || data.pendingKey === "portal"}
+              className="h-9 w-fit rounded-lg text-[13px]"
+            >
+              {data.pendingKey === "portal" ? (
+                <Loader2Icon className="size-3.5 animate-spin" />
+              ) : null}
+              Portal
+            </Button>
+            {!data.current.isAdmin &&
+            data.current.planKey !== "free" &&
+            !data.current.cancelAtPeriodEnd ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={data.cancelSubscription}
+                disabled={data.pendingKey === "cancel"}
+                className="h-9 w-fit rounded-lg text-[13px] text-coral-foreground hover:text-coral-foreground"
+              >
+                {data.pendingKey === "cancel" ? (
+                  <Loader2Icon className="size-3.5 animate-spin" />
+                ) : (
+                  <XCircleIcon className="size-3.5" />
+                )}
+                Batalkan
+              </Button>
             ) : null}
-            {data.current.isAdmin ? "Kelola langganan" : "Sesuaikan paket"}
-          </Button>
+          </div>
         </SettingsSummaryCard>
 
         <SettingsSummaryCard
@@ -81,8 +127,9 @@ export function SettingsUsageBillingPage() {
               </div>
               <UpgradeButton
                 plan={nextPlan}
+                interval={selectedBillingInterval}
                 pendingKey={data.pendingKey}
-                onCheckout={data.openCheckout}
+                onSelect={data.selectProduct}
               />
             </>
           ) : (
@@ -140,8 +187,29 @@ export function SettingsUsageBillingPage() {
       </SettingsPanel>
 
       <SettingsPanel>
+        <SettingsPanelHeader
+          title="Paket"
+          description="Pilih interval pembayaran sebelum checkout atau perubahan langganan."
+        />
+        <SettingsPanelBody className="grid gap-4">
+          <PlanCards
+            current={current}
+            plans={data.plans}
+            pendingKey={data.pendingKey}
+            onCheckout={data.selectProduct}
+            compact
+            selectedInterval={selectedBillingInterval}
+            onIntervalChange={setSelectedInterval}
+            currentProductKey={current.productKey}
+            disabled={current.isAdmin}
+          />
+        </SettingsPanelBody>
+      </SettingsPanel>
+
+      <SettingsPanel>
         <SettingsPanelHeader title="Aktivitas" />
-        <SettingsPanelBody>
+        <SettingsPanelBody className="grid gap-4">
+          <UsageRangeSelector value={data.usageDays} onChange={data.setUsageDays} />
           <UsageHeatmap rows={data.activity} />
         </SettingsPanelBody>
       </SettingsPanel>
@@ -151,27 +219,29 @@ export function SettingsUsageBillingPage() {
 
 function UpgradeButton({
   plan,
+  interval,
   pendingKey,
-  onCheckout,
+  onSelect,
 }: {
-  plan: Plan;
-  pendingKey: ProductKey | "portal" | null;
-  onCheckout: (productKey: ProductKey) => void;
+  plan: NonNullable<ReturnType<typeof findUpgradePlan>>;
+  interval: BillingInterval;
+  pendingKey: Parameters<typeof PlanCards>[0]["pendingKey"];
+  onSelect: Parameters<typeof PlanCards>[0]["onCheckout"];
 }) {
-  const monthly = plan.products.find(
-    (product) => product.interval === "month" && product.configured,
+  const product = plan.products.find(
+    (item) => item.interval === interval && item.configured,
   );
-  if (!monthly) return null;
+  if (!product) return null;
 
   return (
     <Button
       type="button"
       size="sm"
-      onClick={() => onCheckout(monthly.key as ProductKey)}
-      disabled={pendingKey === monthly.key}
+      onClick={() => onSelect(product.key)}
+      disabled={pendingKey === product.key}
       className="h-9 rounded-lg text-[13px]"
     >
-      {pendingKey === monthly.key ? (
+      {pendingKey === product.key ? (
         <Loader2Icon className="size-3.5 animate-spin" />
       ) : (
         <GiftIcon className="size-3.5" />
@@ -179,4 +249,36 @@ function UpgradeButton({
       Upgrade ke {plan.label}
     </Button>
   );
+}
+
+function UsageRangeSelector({
+  value,
+  onChange,
+}: {
+  value: UsageRangeDays;
+  onChange: (value: UsageRangeDays) => void;
+}) {
+  const ranges: UsageRangeDays[] = [30, 90, 365];
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {ranges.map((range) => (
+        <button
+          key={range}
+          type="button"
+          onClick={() => onChange(range)}
+          className={`rounded-lg border px-3 py-1.5 text-[12px] font-medium ${
+            value === range
+              ? "border-primary/50 bg-primary text-primary-foreground"
+              : "border-border/60 bg-muted/40 text-muted-foreground"
+          }`}
+        >
+          {range} hari
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function intervalLabel(interval: BillingInterval) {
+  return interval === "month" ? "Bulanan" : "Tahunan";
 }

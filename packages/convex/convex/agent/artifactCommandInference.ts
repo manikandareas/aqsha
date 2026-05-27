@@ -95,7 +95,7 @@ export function buildAutoArtifactRoutingHint(
   ];
 
   if (selectedWorkspaceDocuments.length === 1) {
-    const doc = selectedWorkspaceDocuments[0]!;
+    const doc = selectedWorkspaceDocuments[0];
     lines.push(
       `Primary target: "${doc.title}"`,
       `artifactId: ${doc.artifactId}`,

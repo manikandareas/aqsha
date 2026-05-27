@@ -1,8 +1,12 @@
 "use client";
 
+import { useEffect, useRef } from "react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
 import { useTheme } from "next-themes";
+import { api } from "@aqsha/convex/api";
 import { cn } from "@/lib/utils";
+import { LoadingSettingsPage } from "../components/loading-settings-page";
 import {
   SettingsPanel,
   SettingsPanelBody,
@@ -10,14 +14,34 @@ import {
   SettingsPanelHeader,
 } from "../components/settings-card";
 import { SettingsHeader } from "../components/settings-header";
+import type { SettingsTheme } from "../lib/types";
 
 export function SettingsAppearancePage() {
+  const { isAuthenticated } = useConvexAuth();
   const { theme, resolvedTheme, setTheme } = useTheme();
+  const syncedPreferenceRef = useRef<string | null>(null);
+  const preferences = useQuery(api.userPreferences.get, isAuthenticated ? {} : "skip");
+  const setThemePreference = useMutation(api.userPreferences.setTheme);
   const options = [
-    { key: "light", label: "Terang", icon: SunIcon },
-    { key: "dark", label: "Gelap", icon: MoonIcon },
-    { key: "system", label: "Sistem", icon: MonitorIcon },
+    { key: "light" as const, label: "Terang", icon: SunIcon },
+    { key: "dark" as const, label: "Gelap", icon: MoonIcon },
+    { key: "system" as const, label: "Sistem", icon: MonitorIcon },
   ];
+
+  useEffect(() => {
+    if (!preferences) return;
+    if (syncedPreferenceRef.current === preferences.theme) return;
+    syncedPreferenceRef.current = preferences.theme;
+    setTheme(preferences.theme);
+  }, [preferences, setTheme]);
+
+  const selectTheme = async (nextTheme: SettingsTheme) => {
+    syncedPreferenceRef.current = nextTheme;
+    setTheme(nextTheme);
+    await setThemePreference({ theme: nextTheme });
+  };
+
+  if (!preferences) return <LoadingSettingsPage />;
 
   return (
     <>
@@ -37,7 +61,7 @@ export function SettingsAppearancePage() {
                 <button
                   key={option.key}
                   type="button"
-                  onClick={() => setTheme(option.key)}
+                  onClick={() => void selectTheme(option.key)}
                   className={cn(
                     "flex cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2.5 py-2.5 text-[12px] font-medium transition-[background-color,color,transform] duration-150 ease-out active:scale-[0.98]",
                     active
@@ -54,7 +78,7 @@ export function SettingsAppearancePage() {
         </SettingsPanelBody>
         <SettingsPanelFooter>
           <p className="text-[12px] text-muted-foreground">
-            Pilihan disimpan di perangkat ini dan mengikuti menu pengguna.
+            Pilihan tersimpan di akun dan diterapkan saat kamu masuk di perangkat lain.
           </p>
         </SettingsPanelFooter>
       </SettingsPanel>
