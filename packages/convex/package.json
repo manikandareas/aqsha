@@ -19,6 +19,10 @@
     "./artifact-upload-limits": {
       "types": "./convex/artifactUploadLimits.ts",
       "default": "./convex/artifactUploadLimits.ts"
+    },
+    "./explore": {
+      "types": "./convex/exploreModel.ts",
+      "default": "./convex/exploreModel.ts"
     }
   },
   "scripts": {
