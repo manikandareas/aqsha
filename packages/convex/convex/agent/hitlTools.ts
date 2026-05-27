@@ -5,11 +5,17 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
 import { plainTextFromMarkdown } from "../artifactModel";
+import {
+  artifactPayloadSchema,
+  workspaceManagementPayloadSchema,
+} from "./hitlPayloads";
 
 type HitlToolCtx = ActionCtx & {
   userId?: string;
   threadId?: string;
 };
+
+export type HitlToolProfile = "artifact" | "workspace";
 
 const optionSchema = z.object({
   id: z.string().min(1).max(40),
@@ -22,43 +28,86 @@ const questionSchema = z.object({
   allowCustom: z.boolean().optional(),
 });
 
-const artifactPayloadSchema = z.object({
-  action: z.enum(["create", "update", "delete"]),
-  title: z.string().min(1).max(160),
-  artifactId: z.string().optional(),
-  workspaceId: z.string().optional(),
-  changeSummary: z.string().max(500).optional(),
-});
-
 export function createHitlTools(args: {
+  profile: HitlToolProfile;
   promptMessageId: string;
   runId?: Id<"agentRuns">;
   commandId?: string;
   sourceKind?: "artifact" | "deep_research" | "generic";
 }): ToolSet {
-  const sourceKind = args.sourceKind ?? "artifact";
+  const sourceKind =
+    args.profile === "workspace" ? ("generic" as const) : (args.sourceKind ?? "artifact");
+
+  const askHuman = createTool({
+    description:
+      args.profile === "workspace"
+        ? "REQUIRED for clarification during /workspace. Shows interactive question cards in the UI. Never ask the same questions in chat text."
+        : "REQUIRED for any clarification during /artifact. Shows interactive question cards in the UI. Never ask the same questions in chat text. Each question needs 2-8 options with stable ids (e.g. create, update, delete, other).",
+    inputSchema: z.object({
+      questions: z.array(questionSchema).min(1).max(5),
+    }),
+    execute: async (ctx, input) => {
+      const ownerUserId = requireToolUser(ctx);
+      const threadId = requireToolThread(ctx);
+      return await ctx.runMutation(internal.hitlSessions.createQuestionCardsInternal, {
+        ownerUserId,
+        threadId,
+        promptMessageId: args.promptMessageId,
+        runId: args.runId,
+        commandId: args.commandId,
+        sourceKind,
+        questions: input.questions,
+      });
+    },
+  });
+
+  if (args.profile === "workspace") {
+    return {
+      askHuman,
+      presentWorkspacePlan: createTool({
+        description:
+          "REQUIRED to propose creating or renaming a workspace for user approval (Review Plan card). Include the final proposed workspace name in `name`.",
+        inputSchema: z.object({
+          action: z.enum(["create_workspace", "rename_workspace"]),
+          title: z.string().min(1).max(160),
+          summary: z.string().min(1).max(1000),
+          planBullets: z.array(z.string().max(240)).min(1).max(8),
+          name: z.string().min(1).max(160),
+          workspaceId: z.string().optional(),
+        }),
+        execute: async (ctx, input) => {
+          const ownerUserId = requireToolUser(ctx);
+          const threadId = requireToolThread(ctx);
+          const payload = workspaceManagementPayloadSchema.parse({
+            action: input.action,
+            name: input.name,
+            workspaceId: isLikelyConvexId(input.workspaceId) ? input.workspaceId : undefined,
+          });
+          if (input.action === "rename_workspace" && !payload.workspaceId) {
+            throw new Error("workspaceId is required for rename_workspace");
+          }
+          return await ctx.runMutation(internal.hitlSessions.createPlanReviewCardInternal, {
+            ownerUserId,
+            threadId,
+            promptMessageId: args.promptMessageId,
+            runId: args.runId,
+            commandId: args.commandId,
+            sourceKind,
+            title: input.title,
+            summary: input.summary,
+            planBullets: input.planBullets,
+            payloadJson: JSON.stringify(payload),
+            workspaceId: payload.workspaceId
+              ? (payload.workspaceId as Id<"workspaces">)
+              : undefined,
+          });
+        },
+      }),
+    };
+  }
 
   return {
-    askHuman: createTool({
-      description:
-        "REQUIRED for any clarification during /artifact. Shows interactive question cards in the UI. Never ask the same questions in chat text. Each question needs 2-8 options with stable ids (e.g. create, update, delete, other).",
-      inputSchema: z.object({
-        questions: z.array(questionSchema).min(1).max(5),
-      }),
-      execute: async (ctx, input) => {
-        const ownerUserId = requireToolUser(ctx);
-        const threadId = requireToolThread(ctx);
-        return await ctx.runMutation(internal.hitlSessions.createQuestionCardsInternal, {
-          ownerUserId,
-          threadId,
-          promptMessageId: args.promptMessageId,
-          runId: args.runId,
-          commandId: args.commandId,
-          sourceKind,
-          questions: input.questions,
-        });
-      },
-    }),
+    askHuman,
     presentPlan: createTool({
       description:
         "REQUIRED to propose create/update workspace documents for user approval (Review Plan card). Call when intent is clear. Include planBullets but NO final markdown body.",

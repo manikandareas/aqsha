@@ -68,22 +68,6 @@ function composerShellTransition(
   };
 }
 
-function composerLayoutTransition(
-  isExpanded: boolean,
-  shouldReduceMotion: boolean | null,
-) {
-  if (shouldReduceMotion) {
-    return { layout: { duration: 0 } };
-  }
-
-  return {
-    layout: {
-      duration: isExpanded ? 0.28 : 0.22,
-      ease: COMPOSER_EASE_OUT,
-    },
-  };
-}
-
 type ComposerSharedProps = {
   disabled: boolean;
   rateStatus: RateStatus | undefined;
@@ -200,11 +184,6 @@ export function Composer(props: ComposerProps) {
     () => composerShellTransition(shellExpanded, shouldReduceMotion),
     [shellExpanded, shouldReduceMotion],
   );
-  const layoutTransition = useMemo(
-    () => composerLayoutTransition(isExpanded, shouldReduceMotion),
-    [isExpanded, shouldReduceMotion],
-  );
-
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(timer);
@@ -244,7 +223,6 @@ export function Composer(props: ComposerProps) {
 
     setUploadError(null);
     setIsSending(true);
-    const submittedContent = content;
     const submittedCommands = inlineCommands;
     try {
       const { attachments: uploadedArtifacts, pendingAttachments } = await uploadAttachments(

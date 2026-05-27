@@ -1,8 +1,11 @@
 "use client";
 
+import { useQuery } from "convex/react";
+import { GitBranchIcon, Loader2Icon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { api } from "@aqsha/convex/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,8 +20,12 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
+  const [socialPending, setSocialPending] = useState<"github" | "google" | null>(null);
+  const authConfig = useQuery(api.auth.publicAuthConfiguration, {});
 
   const isSignUp = mode === "sign-up";
+  const hasSocial =
+    Boolean(authConfig?.oauthProviders.github) || Boolean(authConfig?.oauthProviders.google);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -45,6 +52,23 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
 
     router.replace("/");
     router.refresh();
+  };
+
+  const signInWithProvider = async (provider: "github" | "google") => {
+    setSocialPending(provider);
+    setError(null);
+    try {
+      const result = await authClient.signIn.social({
+        provider,
+        callbackURL: "/",
+      });
+      if (result.error) {
+        throw new Error(result.error.message ?? "OAuth sign-in failed");
+      }
+    } catch (socialError) {
+      setError(socialError instanceof Error ? socialError.message : "OAuth sign-in failed");
+      setSocialPending(null);
+    }
   };
 
   return (
@@ -94,7 +118,17 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="password">Password</Label>
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor="password">Password</Label>
+              {!isSignUp ? (
+                <Link
+                  href="/reset-password"
+                  className="text-xs font-semibold text-primary hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              ) : null}
+            </div>
             <Input
               id="password"
               type="password"
@@ -120,6 +154,50 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
                 : "Sign in"}
           </Button>
         </form>
+
+        {hasSocial ? (
+          <div className="mt-5 grid gap-3">
+            <div className="flex items-center gap-3">
+              <span className="h-px flex-1 bg-border" />
+              <span className="text-xs font-medium text-muted-foreground">or</span>
+              <span className="h-px flex-1 bg-border" />
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {authConfig?.oauthProviders.github ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void signInWithProvider("github")}
+                  disabled={socialPending !== null}
+                  className="h-10 rounded-lg"
+                >
+                  {socialPending === "github" ? (
+                    <Loader2Icon className="size-4 animate-spin" />
+                  ) : (
+                    <GitBranchIcon className="size-4" />
+                  )}
+                  GitHub
+                </Button>
+              ) : null}
+              {authConfig?.oauthProviders.google ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void signInWithProvider("google")}
+                  disabled={socialPending !== null}
+                  className="h-10 rounded-lg"
+                >
+                  {socialPending === "google" ? (
+                    <Loader2Icon className="size-4 animate-spin" />
+                  ) : (
+                    <span className="text-sm font-bold">G</span>
+                  )}
+                  Google
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
 
         <p className="mt-6 text-center text-sm text-muted-foreground">
           {isSignUp ? "Already have an account?" : "New to Aqsha?"}{" "}

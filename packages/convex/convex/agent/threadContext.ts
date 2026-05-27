@@ -20,6 +20,8 @@ type ThreadContextCtx = QueryCtx | MutationCtx;
 type SelectedArtifactRow = Doc<"threadContextArtifacts">;
 
 type PromptContextArtifact = {
+  artifactId?: string;
+  workspaceId?: string;
   title: string;
   kind: "document" | "url" | "unknown";
   url?: {
@@ -220,6 +222,12 @@ function buildContextBlock(artifacts: PromptContextArtifact[]) {
 
   for (const [index, artifact] of artifacts.entries()) {
     lines.push(`[Artifact ${index + 1}]`);
+    if (artifact.artifactId) {
+      lines.push(`Artifact ID: ${artifact.artifactId}`);
+    }
+    if (artifact.workspaceId) {
+      lines.push(`Workspace ID: ${artifact.workspaceId}`);
+    }
     lines.push(`Title: ${artifact.title}`);
     lines.push(`Type: ${artifact.kind}`);
     if (artifact.url) {
@@ -296,6 +304,8 @@ async function getPromptContextArtifactById(
   const content = clipText(rawContent, Math.min(PROMPT_CONTEXT_ARTIFACT_LIMIT, remainingBudget));
 
   return {
+    artifactId: String(artifact._id),
+    workspaceId: artifact.workspaceId ? String(artifact.workspaceId) : undefined,
     title: artifact.title,
     kind: artifact.kind ?? "unknown",
     url: url
@@ -353,6 +363,8 @@ async function getPromptContextArtifact(
   const content = clipText(rawContent, Math.min(PROMPT_CONTEXT_ARTIFACT_LIMIT, remainingBudget));
 
   return {
+    artifactId: String(artifact._id),
+    workspaceId: String(artifact.workspaceId),
     title: artifact.title,
     kind: artifact.kind ?? "unknown",
     url: url
@@ -364,6 +376,37 @@ async function getPromptContextArtifact(
       : undefined,
     content,
   };
+}
+
+export async function listSelectedWorkspaceDocuments(
+  ctx: ThreadContextCtx,
+  args: {
+    ownerUserId: string;
+    threadId: string;
+  },
+) {
+  const rows = await listSelectedRows(ctx, args);
+  const documents = [];
+
+  for (const row of rows) {
+    const artifact = await ctx.db.get("artifacts", row.artifactId);
+    if (
+      !artifact ||
+      artifact.ownerUserId !== args.ownerUserId ||
+      artifact.status !== "active" ||
+      artifact.kind !== "document" ||
+      !artifact.workspaceId
+    ) {
+      continue;
+    }
+    documents.push({
+      artifactId: String(artifact._id),
+      workspaceId: String(artifact.workspaceId),
+      title: artifact.title,
+    });
+  }
+
+  return documents;
 }
 
 export async function buildPromptContextForThread(

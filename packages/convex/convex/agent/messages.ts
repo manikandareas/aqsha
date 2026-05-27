@@ -39,7 +39,8 @@ import {
   threadTitleFromPrompt,
 } from "./threadTitles";
 import { assertThreadOwner, tryAssertThreadOwner } from "./threads";
-import { buildPromptCommandPrompt, getPromptCommand } from "./promptCommands";
+import { resolvePromptPayload } from "./promptRouting";
+import type { PromptPayload } from "./promptPayload";
 import { assertWorkspaceOwner } from "../workspaceAccess";
 import {
   buildPromptContextForThread,
@@ -95,59 +96,6 @@ type SendResult =
 function previewFromContent(content: string) {
   const singleLine = content.replace(/\s+/g, " ").trim();
   return singleLine.length > 140 ? `${singleLine.slice(0, 137)}...` : singleLine;
-}
-
-function stripCommandSlug(content: string, command: NonNullable<ReturnType<typeof getPromptCommand>>) {
-  const trimmed = content.trim();
-  const slugs = [command.slug, ...command.aliases].sort((a, b) => b.length - a.length);
-  for (const slug of slugs) {
-    if (trimmed === slug) {
-      return "";
-    }
-    if (trimmed.startsWith(`${slug} `) || trimmed.startsWith(`${slug}\n`)) {
-      return trimmed.slice(slug.length).trim();
-    }
-  }
-  return trimmed;
-}
-
-function promptPayloadFromCommand(args: {
-  content: string;
-  mode: "normal" | "deep";
-  commandId?: string;
-}) {
-  if (!args.commandId) {
-    return {
-      visibleContent: args.content,
-      expandedPrompt: args.content,
-      mode: args.mode,
-      commandMetadata: null,
-    };
-  }
-
-  const command = getPromptCommand(args.commandId);
-  if (!command) {
-    throw new ConvexError("Unknown prompt command");
-  }
-  const argument = stripCommandSlug(args.content, command);
-  const compiled = buildPromptCommandPrompt(command.id, argument);
-  if (!compiled) {
-    throw new ConvexError("Unknown prompt command");
-  }
-  const visibleContent = argument.length > 0 ? `${command.slug} ${argument}` : command.slug;
-  return {
-    visibleContent,
-    expandedPrompt: compiled.expandedPrompt,
-    mode: command.mode === "deep" ? "deep" as const : args.mode,
-    commandMetadata: {
-      commandId: command.id,
-      commandLabel: command.label,
-      commandSlug: command.slug,
-      mode: command.mode,
-      argumentPreview: previewFromContent(argument),
-      expandedPromptSnapshot: compiled.expandedPrompt,
-    },
-  };
 }
 
 function trimForTitleContext(content: string) {
@@ -321,7 +269,6 @@ async function savePromptAndScheduleRun(
     deferGeneration?: boolean;
   },
 ): Promise<SendResult> {
-  const promptPayload = promptPayloadFromCommand(args);
   if (args.selectedContextArtifactIds) {
     await replaceContextArtifactsForThread(ctx, {
       ownerUserId: args.ownerUserId,
@@ -329,6 +276,14 @@ async function savePromptAndScheduleRun(
       artifactIds: args.selectedContextArtifactIds,
     });
   }
+
+  const promptPayload = await resolvePromptPayload(ctx, {
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+    content: args.content,
+    mode: args.mode,
+    commandId: args.commandId,
+  });
 
   const saved = await astra.saveMessages(ctx, {
     threadId: args.threadId,
@@ -392,7 +347,7 @@ async function scheduleGenerationForMessage(
     threadId: string;
     messageId: string;
     mode: "normal" | "deep";
-    promptPayload: ReturnType<typeof promptPayloadFromCommand>;
+    promptPayload: PromptPayload;
     messageAttachmentArtifactIds?: Id<"artifacts">[];
   },
 ): Promise<SendResult> {
@@ -504,10 +459,12 @@ export const completeThreadStartAfterAttachments = internalMutation({
       workspaceId: args.workspaceId,
     });
 
-    const promptPayload = promptPayloadFromCommand({
+    const promptPayload = await resolvePromptPayload(ctx, {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
       content: args.content,
-      commandId: args.commandId,
       mode: args.mode,
+      commandId: args.commandId,
     });
 
     await scheduleGenerationForMessage(ctx, {
@@ -792,6 +749,11 @@ export const list = query({
   },
 });
 
+const HITL_COMMAND_PROFILES = {
+  artifact: "artifact",
+  workspace: "workspace",
+} as const;
+
 function resolveGenerationTools(args: {
   hitlExecute?: boolean;
   hitlSessionId?: Id<"hitlSessions">;
@@ -808,12 +770,17 @@ function resolveGenerationTools(args: {
       payloadJson: args.hitlPayloadJson,
     });
   }
-  if (args.commandId === "artifact") {
+  const profile =
+    args.commandId && args.commandId in HITL_COMMAND_PROFILES
+      ? HITL_COMMAND_PROFILES[args.commandId as keyof typeof HITL_COMMAND_PROFILES]
+      : null;
+  if (profile) {
     return createHitlTools({
+      profile,
       promptMessageId: args.promptMessageId,
       runId: args.runId,
       commandId: args.commandId,
-      sourceKind: "artifact",
+      sourceKind: profile === "artifact" ? "artifact" : "generic",
     });
   }
   return normalChatTools;
@@ -1221,6 +1188,7 @@ function collectHitlResults(
       if (
         toolName === "askHuman" ||
         toolName === "presentPlan" ||
+        toolName === "presentWorkspacePlan" ||
         toolName === "confirmAction"
       ) {
         const output = result.output as { sessionId?: string } | undefined;
@@ -1323,6 +1291,7 @@ function isHitlToolResult(output: unknown, toolName: string) {
   return (
     toolName === "askHuman" ||
     toolName === "presentPlan" ||
+    toolName === "presentWorkspacePlan" ||
     toolName === "confirmAction" ||
     (typeof output === "object" &&
       output !== null &&

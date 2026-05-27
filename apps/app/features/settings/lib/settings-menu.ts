@@ -18,7 +18,7 @@ export type SettingsMenuItem = {
   href: string;
   label: string;
   description: string;
-  group: "Personal" | "Research";
+  group: "Pribadi" | "Riset";
   icon: typeof GaugeIcon;
 };
 
@@ -26,41 +26,41 @@ export const settingsMenu: SettingsMenuItem[] = [
   {
     key: "overview",
     href: "/settings/overview",
-    label: "Overview",
-    description: "Rangkuman akun dan aktivitas",
-    group: "Personal",
+    label: "Ringkasan",
+    description: "Rangkuman akun dan aktivitas riset.",
+    group: "Pribadi",
     icon: GaugeIcon,
   },
   {
     key: "account",
     href: "/settings/account",
-    label: "Account",
-    description: "Identitas readonly",
-    group: "Personal",
+    label: "Akun",
+    description: "Profil dan identitas yang dipakai di Aqsha.",
+    group: "Pribadi",
     icon: UserRoundIcon,
   },
   {
     key: "appearance",
     href: "/settings/appearance",
-    label: "Appearance",
-    description: "Light, dark, atau system",
-    group: "Personal",
+    label: "Tampilan",
+    description: "Tema terang, gelap, atau mengikuti sistem.",
+    group: "Pribadi",
     icon: PaletteIcon,
   },
   {
     key: "usage-billing",
     href: "/settings/usage-billing",
-    label: "Usage & Billing",
-    description: "Credits, plan, dan portal",
-    group: "Research",
+    label: "Penggunaan & tagihan",
+    description: "Kredit, paket, dan portal pembayaran.",
+    group: "Riset",
     icon: CreditCardIcon,
   },
   {
     key: "security",
     href: "/settings/security",
-    label: "Security",
-    description: "Session dan sign out",
-    group: "Research",
+    label: "Keamanan",
+    description: "Sesi aktif dan keluar dari perangkat ini.",
+    group: "Riset",
     icon: ShieldIcon,
   },
 ];

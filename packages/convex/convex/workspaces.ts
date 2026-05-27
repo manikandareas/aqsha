@@ -1,6 +1,7 @@
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
-import { mutation, query, type MutationCtx } from "./_generated/server";
+import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { requireCurrentUser } from "./auth";
 import { assertWorkspaceOwner, normalizeName } from "./workspaceAccess";
 import { PLAN_CATALOG } from "./billing/catalog";
@@ -42,22 +43,55 @@ export const get = query({
   },
 });
 
+export const listActionsForMessage = query({
+  args: { messageId: v.string() },
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    const rows = await ctx.db
+      .query("messageWorkspaceActions")
+      .withIndex("by_owner_message", (q) =>
+        q.eq("ownerUserId", user._id).eq("messageId", args.messageId),
+      )
+      .collect();
+    const results = [];
+    for (const row of rows) {
+      const workspace = await ctx.db.get("workspaces", row.workspaceId);
+      if (!workspace) {
+        continue;
+      }
+      results.push({
+        workspaceId: row.workspaceId,
+        action: row.action,
+        workspaceName: workspace.name,
+      });
+    }
+    return results;
+  },
+});
+
 export const create = mutation({
   args: {
     name: v.string(),
-    description: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
-    await assertWorkspaceCapacity(ctx, user._id);
-    const now = Date.now();
-    return await ctx.db.insert("workspaces", {
+    return await createWorkspaceForOwner(ctx, {
       ownerUserId: user._id,
-      name: normalizeName(args.name, "Workspace name"),
-      description: normalizeDescription(args.description),
-      status: "active",
-      createdAt: now,
-      updatedAt: now,
+      ownerEmail: user.email,
+      name: args.name,
+    });
+  },
+});
+
+export const createFromAgentInternal = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    name: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await createWorkspaceForOwner(ctx, {
+      ownerUserId: args.ownerUserId,
+      name: args.name,
     });
   },
 });
@@ -66,17 +100,27 @@ export const rename = mutation({
   args: {
     workspaceId: v.id("workspaces"),
     name: v.string(),
-    description: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
-    await assertWorkspaceOwner(ctx, args.workspaceId, user._id);
-    await ctx.db.patch("workspaces", args.workspaceId, {
-      name: normalizeName(args.name, "Workspace name"),
-      description: normalizeDescription(args.description),
-      updatedAt: Date.now(),
+    await renameWorkspaceForOwner(ctx, {
+      ownerUserId: user._id,
+      workspaceId: args.workspaceId,
+      name: args.name,
     });
     return { ok: true };
+  },
+});
+
+export const renameFromAgentInternal = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    workspaceId: v.id("workspaces"),
+    name: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await renameWorkspaceForOwner(ctx, args);
+    return { ok: true as const };
   },
 });
 
@@ -98,23 +142,60 @@ export const archive = mutation({
   },
 });
 
-function normalizeDescription(value: string | undefined) {
-  const trimmed = value?.replace(/\s+/g, " ").trim();
-  if (!trimmed) {
-    return undefined;
-  }
-  if (trimmed.length > 500) {
-    throw new ConvexError("Workspace description is too long");
-  }
-  return trimmed;
+async function createWorkspaceForOwner(
+  ctx: MutationCtx,
+  args: {
+    ownerUserId: string;
+    ownerEmail?: string | null;
+    name: string;
+  },
+) {
+  await assertWorkspaceCapacity(ctx, args.ownerUserId, args.ownerEmail);
+  const now = Date.now();
+  return await ctx.db.insert("workspaces", {
+    ownerUserId: args.ownerUserId,
+    name: normalizeName(args.name, "Workspace name"),
+    status: "active",
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+async function renameWorkspaceForOwner(
+  ctx: MutationCtx,
+  args: {
+    ownerUserId: string;
+    workspaceId: Id<"workspaces">;
+    name: string;
+  },
+) {
+  await assertWorkspaceOwner(ctx, args.workspaceId, args.ownerUserId);
+  await ctx.db.patch("workspaces", args.workspaceId, {
+    name: normalizeName(args.name, "Workspace name"),
+    updatedAt: Date.now(),
+  });
+}
+
+export async function listActiveWorkspacesForOwner(
+  ctx: QueryCtx | MutationCtx,
+  ownerUserId: string,
+  limit = 50,
+) {
+  return await ctx.db
+    .query("workspaces")
+    .withIndex("by_owner_status_updated", (q) =>
+      q.eq("ownerUserId", ownerUserId).eq("status", "active"),
+    )
+    .order("desc")
+    .take(limit);
 }
 
 async function assertWorkspaceCapacity(
   ctx: MutationCtx,
   ownerUserId: string,
+  ownerEmail?: string | null,
 ) {
-  const user = await requireCurrentUser(ctx);
-  const snapshot = await getBillingSnapshot(ctx, ownerUserId, user.email);
+  const snapshot = await getBillingSnapshot(ctx, ownerUserId, ownerEmail);
   const limit = PLAN_CATALOG[snapshot.planKey].workspaceLimit;
   if (limit === Number.MAX_SAFE_INTEGER) {
     return;

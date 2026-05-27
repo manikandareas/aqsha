@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { query } from "../_generated/server";
 import { requireCurrentUser } from "../auth";
-import { PLAN_CATALOG } from "./catalog";
+import { intervalForProductKey, PLAN_CATALOG } from "./catalog";
 import { ensureCreditPeriod, getBillingSnapshot } from "./entitlements";
 
 export const get = query({
@@ -16,7 +16,9 @@ export const get = query({
     planLabel: v.string(),
     status: v.string(),
     productKey: v.union(v.string(), v.null()),
+    billingInterval: v.union(v.literal("month"), v.literal("year"), v.null()),
     currentPeriodEnd: v.union(v.number(), v.null()),
+    cancelAtPeriodEnd: v.boolean(),
     isAdmin: v.boolean(),
     isUnlimitedCredits: v.boolean(),
     billingPortalAvailable: v.boolean(),
@@ -41,7 +43,9 @@ export const get = query({
       planLabel: plan.label,
       status: snapshot.status,
       productKey: snapshot.productKey ?? null,
+      billingInterval: intervalForProductKey(snapshot.productKey),
       currentPeriodEnd: snapshot.currentPeriodEnd,
+      cancelAtPeriodEnd: snapshot.cancelAtPeriodEnd,
       isAdmin: snapshot.isAdmin,
       isUnlimitedCredits: snapshot.isUnlimitedCredits,
       billingPortalAvailable: snapshot.billingPortalAvailable,

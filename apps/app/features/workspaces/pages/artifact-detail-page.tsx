@@ -53,12 +53,6 @@ export function ArtifactDetailPage({
   const loadedContentArtifactIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    loadedContentArtifactIdRef.current = null;
-    setFullContent(null);
-    setContentError(null);
-  }, [artifactId]);
-
-  useEffect(() => {
     if (!data.artifact) return;
     if (loadedContentArtifactIdRef.current === artifactId) return;
 
@@ -168,6 +162,7 @@ function DocumentArtifactDetail({
   const lastSavedJsonRef = useRef(initialBlocksJson);
   const saveInFlightRef = useRef(false);
   const queuedSaveRef = useRef(false);
+  const performSaveRef = useRef<(() => Promise<void>) | null>(null);
   const [state, dispatch] = useReducer(autosaveReducer, {
     ...initialAutosaveState,
     lastSavedJson: initialBlocksJson,
@@ -214,10 +209,14 @@ function DocumentArtifactDetail({
       saveInFlightRef.current = false;
       if (queuedSaveRef.current) {
         queuedSaveRef.current = false;
-        void performSave();
+        void performSaveRef.current?.();
       }
     }
   }, [artifactId, updateDocument]);
+
+  useEffect(() => {
+    performSaveRef.current = performSave;
+  }, [performSave]);
 
   useEffect(() => {
     if (state.status !== "dirty") return;

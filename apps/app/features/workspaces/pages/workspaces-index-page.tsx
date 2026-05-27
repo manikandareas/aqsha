@@ -81,12 +81,9 @@ export function WorkspacesIndexPage() {
               >
                 <Link
                   href={`/workspaces/${workspace._id}`}
-                  className="grid min-w-0 gap-1 hover:opacity-80"
+                  className="min-w-0 hover:opacity-80"
                 >
                   <span className="truncate text-[14px] font-semibold">{workspace.name}</span>
-                  <span className="truncate text-[12px] font-medium text-muted-foreground">
-                    {workspace.description ?? "Workspace personal"}
-                  </span>
                 </Link>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="hidden sm:inline-flex">
@@ -125,9 +122,8 @@ export function WorkspacesIndexPage() {
         title="Workspace baru"
         description="Buat area riset personal."
         submitLabel="Buat"
-        descriptionField
-        onSubmit={async (value) => {
-          await createWorkspace(value);
+        onSubmit={async ({ name }) => {
+          await createWorkspace({ name });
         }}
       />
       <ConfirmDialog

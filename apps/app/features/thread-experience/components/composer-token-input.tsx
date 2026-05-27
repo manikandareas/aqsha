@@ -74,11 +74,13 @@ export function TokenizedPromptInput({
   );
 
   useEffect(() => {
-    setPaletteDismissed(false);
+    const timeout = window.setTimeout(() => setPaletteDismissed(false), 0);
+    return () => window.clearTimeout(timeout);
   }, [value]);
 
   useEffect(() => {
-    setHighlightedIndex(0);
+    const timeout = window.setTimeout(() => setHighlightedIndex(0), 0);
+    return () => window.clearTimeout(timeout);
   }, [slashFilterQuery, filteredCommands.length]);
 
   const syncEditorState = useCallback(() => {
@@ -284,7 +286,6 @@ export function TokenizedPromptInput({
             role="textbox"
             aria-label="Pesan"
             aria-multiline="true"
-            aria-expanded={commandOpen}
             aria-controls={commandOpen ? "composer-slash-commands" : undefined}
             data-slot="input-group-control"
             className={cn(

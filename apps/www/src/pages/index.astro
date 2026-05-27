@@ -115,7 +115,7 @@ import { Footer } from "@/components/Footer";
     <meta name="format-detection" content="telephone=no" />
 
     <!-- Structured Data (JSON-LD) for SEO -->
-    <script type="application/ld+json">
+    <script is:inline type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "Organization",
@@ -135,7 +135,7 @@ import { Footer } from "@/components/Footer";
         }
       }
     </script>
-    <script type="application/ld+json">
+    <script is:inline type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "WebSite",
@@ -149,7 +149,7 @@ import { Footer } from "@/components/Footer";
         }
       }
     </script>
-    <script type="application/ld+json">
+    <script is:inline type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
@@ -184,6 +184,7 @@ import { Footer } from "@/components/Footer";
     <CTA client:load />
     <Footer />
     <script
+      is:inline
       defer
       src="https://analytics.ngerti.in/script.js"
       data-website-id="30ec9a2d-0516-4bb6-b8cf-81ea7e1a504b"></script>

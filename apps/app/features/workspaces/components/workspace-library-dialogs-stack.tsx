@@ -19,7 +19,6 @@ type WorkspaceLibraryMutations = {
   renameWorkspace: (args: {
     workspaceId: WorkspaceId;
     name: string;
-    description?: string;
   }) => Promise<unknown>;
   archiveWorkspace: (args: { workspaceId: WorkspaceId }) => Promise<unknown>;
   createFolder: (args: { workspaceId: WorkspaceId; name: string }) => Promise<unknown>;
@@ -43,7 +42,6 @@ type WorkspaceLibraryMutations = {
 export function WorkspaceLibraryDialogsStack({
   workspaceId,
   workspaceName,
-  workspaceDescription,
   activeFolderId,
   mutations,
   dialogState,
@@ -51,7 +49,6 @@ export function WorkspaceLibraryDialogsStack({
 }: {
   workspaceId: string;
   workspaceName?: string;
-  workspaceDescription?: string | null;
   activeFolderId: "root" | string;
   mutations: WorkspaceLibraryMutations;
   dialogState: DialogState;
@@ -92,13 +89,11 @@ export function WorkspaceLibraryDialogsStack({
         open={renameWorkspaceOpen}
         onOpenChange={setRenameWorkspaceOpen}
         title="Rename workspace"
-        description="Perbarui nama dan deskripsi."
+        description="Perbarui nama workspace."
         submitLabel="Simpan"
         initialName={workspaceName}
-        initialDescription={workspaceDescription ?? undefined}
-        descriptionField
-        onSubmit={async (value) => {
-          await mutations.renameWorkspace({ workspaceId: convexWorkspaceId, ...value });
+        onSubmit={async ({ name }) => {
+          await mutations.renameWorkspace({ workspaceId: convexWorkspaceId, name });
         }}
       />
       <NameDialog

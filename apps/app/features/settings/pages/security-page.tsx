@@ -1,48 +1,57 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { LogOutIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { authClient } from "@/lib/auth-client";
-import { useSettingsSecurityData } from "../api/use-settings-security-data";
+import { useSettingsSecurityController } from "../api/use-settings-security-controller";
 import { LoadingSettingsPage } from "../components/loading-settings-page";
-import { ReadonlyField, SettingRow, SettingsCard, SettingsSectionLabel } from "../components/settings-card";
+import {
+  AuthProvidersPanel,
+  DeleteAccountPanel,
+  PasswordPanel,
+  SecurityFeedback,
+  SessionsPanel,
+} from "../components/security-panels";
 import { SettingsHeader } from "../components/settings-header";
 
 export function SettingsSecurityPage() {
-  const router = useRouter();
-  const { viewer } = useSettingsSecurityData();
-  if (!viewer) return <LoadingSettingsPage />;
+  const security = useSettingsSecurityController();
 
-  const signOut = async () => {
-    await authClient.signOut();
-    router.replace("/sign-in");
-    router.refresh();
-  };
+  if (!security.viewer || !security.authConfig) return <LoadingSettingsPage />;
 
   return (
     <>
       <SettingsHeader section="security" />
-      <div className="grid gap-3">
-        <SettingsSectionLabel>Session</SettingsSectionLabel>
-        <SettingsCard>
-          <ReadonlyField label="Email" value={viewer.email ?? "Not provided"} />
-          <ReadonlyField label="Password reset" value="Unavailable in v1" />
-          <ReadonlyField label="Active sessions" value="Unavailable in v1" />
-          <ReadonlyField label="Account deletion" value="Unavailable in v1" />
-          <SettingRow label="Sign out" description="Keluar dari perangkat ini.">
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={signOut}
-              className="rounded-[8px] active:scale-[0.97] transition-[background-color,color,box-shadow,transform] duration-150 ease-out cursor-pointer flex items-center gap-1.5 font-semibold"
-            >
-              <LogOutIcon className="size-4" />
-              Sign out
-            </Button>
-          </SettingRow>
-        </SettingsCard>
-      </div>
+      <SecurityFeedback notice={security.notice} error={security.error} />
+      <AuthProvidersPanel
+        viewer={security.viewer}
+        authConfig={security.authConfig}
+        accounts={security.accounts}
+        linkedProviders={security.linkedProviders}
+        pendingKey={security.pendingKey}
+        onLinkProvider={security.linkProvider}
+        onUnlinkProvider={security.unlinkProvider}
+      />
+      <PasswordPanel
+        viewer={security.viewer}
+        authConfig={security.authConfig}
+        pendingKey={security.pendingKey}
+        passwordForm={security.passwordForm}
+        setPasswordForm={security.setPasswordForm}
+        onChangePassword={security.changePassword}
+        onSendResetPassword={security.sendResetPassword}
+      />
+      <SessionsPanel
+        sessions={security.sessions}
+        pendingKey={security.pendingKey}
+        onRevokeSession={security.revokeSession}
+        onRevokeOtherSessions={security.revokeOtherSessions}
+        onSignOut={security.signOut}
+      />
+      <DeleteAccountPanel
+        authConfig={security.authConfig}
+        pendingKey={security.pendingKey}
+        deleteForm={security.deleteForm}
+        setDeleteForm={security.setDeleteForm}
+        onDeleteAccount={security.deleteAccount}
+      />
     </>
   );
 }

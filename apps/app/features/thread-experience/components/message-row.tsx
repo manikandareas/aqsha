@@ -33,6 +33,7 @@ import type {
   ResearchArtifact,
 } from "../types";
 import { ThreadActivityIndicator } from "./shared";
+import { MessageWorkspaceActions } from "./message-workspace-actions";
 
 export function MessageRow({
   message,
@@ -51,6 +52,10 @@ export function MessageRow({
     api.agent.artifacts.listForMessage,
     !isUser && message.id ? { messageId: message.id } : "skip",
   ) as MessageArtifactLink[] | undefined;
+  const workspaceActions = useQuery(
+    api.workspaces.listActionsForMessage,
+    isUser && message.id ? { messageId: message.id } : "skip",
+  );
 
   if (isUser) {
     const promptCommand = message.metadata?.promptCommand;
@@ -70,6 +75,7 @@ export function MessageRow({
           {promptCommand ? <PromptCommandChip command={promptCommand} /> : null}
           {displayText}
         </div>
+        <MessageWorkspaceActions actions={workspaceActions ?? []} align="end" />
       </div>
     );
   }
