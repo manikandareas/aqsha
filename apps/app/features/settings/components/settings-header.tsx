@@ -1,16 +1,25 @@
 import { settingsItemForPath, type SettingsKey } from "../lib/settings-menu";
 
-export function SettingsHeader({ section, title = "Settings" }: { section: SettingsKey; title?: string }) {
+export function SettingsHeader({
+  section,
+  title,
+}: {
+  section: SettingsKey;
+  title?: string;
+}) {
   const item = settingsItemForPath(`/settings/${section}`);
+  const heading = title ?? item.label;
 
   return (
-    <header className="flex flex-col mb-2">
-      <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-        {title}
+    <header className="mb-1">
+      <h1 className="font-heading text-[1.75rem] font-bold tracking-tight text-foreground sm:text-[2rem]">
+        {heading}
       </h1>
-      <p className="text-sm text-muted-foreground leading-normal mt-1 max-w-2xl">
-        {item.description}
-      </p>
+      {item.description ? (
+        <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-muted-foreground">
+          {item.description}
+        </p>
+      ) : null}
     </header>
   );
 }

@@ -100,7 +100,7 @@ export function NavUser({ user }: { user: Viewer | undefined }) {
             <DropdownMenuItem asChild className={menuItemClass}>
               <Link href="/settings/overview">
                 <SettingsIcon />
-                <span className="truncate">Settings</span>
+                <span className="truncate">Pengaturan</span>
               </Link>
             </DropdownMenuItem>
             <ThemeMenuSub />

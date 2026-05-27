@@ -111,7 +111,6 @@ export function WorkspaceLibrarySurface({
       <WorkspaceLibraryDialogsStack
         workspaceId={workspaceId}
         workspaceName={drive.workspace?.name ?? workspaceName}
-        workspaceDescription={drive.workspace?.description}
         activeFolderId={activeFolderId}
         mutations={libraryMutations}
         dialogState={dialogState}

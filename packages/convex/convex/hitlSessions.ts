@@ -17,7 +17,10 @@ import {
   planReviewActionable,
   resolveActiveCardId,
 } from "./hitlSessionLogic";
-import { assertDocumentWorkspaceArtifact, resolveWorkspaceTarget } from "./hitlWorkspace";
+import { buildAfterAnswersContinuation } from "./agent/hitlContinuations";
+import { workspaceManagementPayloadSchema } from "./agent/hitlPayloads";
+import { dispatchApprovedCard } from "./hitlCardApproval";
+import { resolveWorkspaceTarget } from "./hitlWorkspace";
 import { assertWorkspaceOwner, normalizeName } from "./workspaceAccess";
 
 const hitlPhaseValidator = v.union(
@@ -317,11 +320,25 @@ export const createPlanReviewCardInternal = internalMutation({
       sourceKind: args.sourceKind,
       commandId: args.commandId,
     });
-    const workspaceTarget = await resolveWorkspaceTarget(ctx, {
-      ownerUserId: args.ownerUserId,
-      threadId: args.threadId,
-      workspaceId: args.workspaceId,
-    });
+    let requiresWorkspacePick = false;
+    let workspaceId = args.workspaceId;
+    if (args.commandId === "workspace") {
+      const payload = workspaceManagementPayloadSchema.parse(JSON.parse(args.payloadJson));
+      if (args.workspaceId) {
+        await assertWorkspaceOwner(ctx, args.workspaceId, args.ownerUserId, {
+          requireActive: true,
+        });
+      }
+      requiresWorkspacePick = payload.action === "rename_workspace" && !args.workspaceId;
+    } else {
+      const workspaceTarget = await resolveWorkspaceTarget(ctx, {
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+        workspaceId: args.workspaceId,
+      });
+      requiresWorkspacePick = workspaceTarget.requiresWorkspacePick;
+      workspaceId = workspaceTarget.workspaceId;
+    }
     const now = Date.now();
     const order = await nextCardOrder(ctx, session._id);
     const cardId = await ctx.db.insert("hitlCards", {
@@ -334,8 +351,8 @@ export const createPlanReviewCardInternal = internalMutation({
       summary: args.summary,
       planBullets: args.planBullets,
       payloadJson: args.payloadJson,
-      requiresWorkspacePick: workspaceTarget.requiresWorkspacePick,
-      workspaceId: workspaceTarget.workspaceId,
+      requiresWorkspacePick,
+      workspaceId,
       createdAt: now,
     });
     await ctx.db.patch("hitlSessions", session._id, {
@@ -751,18 +768,16 @@ export const continueAfterAnswers = internalMutation({
     const run = session.runId ? await ctx.db.get("agentRuns", session.runId) : null;
     const prompt = run?.promptSnapshot ?? `Continue for thread ${session.threadId}`;
     const answersContext = formatAnswersForPrompt(parseAnswersJson(session.answersJson));
+    const continuationPrompt = buildAfterAnswersContinuation({
+      commandId: session.commandId,
+      prompt,
+      answersContext,
+    });
     await ctx.scheduler.runAfter(0, internal.agent.messages.generateReply, {
       threadId: session.threadId,
       userId: session.ownerUserId,
       promptMessageId: session.promptMessageId,
-      prompt: [
-        prompt,
-        "",
-        "The user answered your clarification questions:",
-        answersContext,
-        "",
-        "Continue the /artifact flow. If you still need clarification, call askHuman again. Otherwise call presentPlan with plan bullets but do NOT include final markdown content yet.",
-      ].join("\n"),
+      prompt: continuationPrompt,
       visiblePrompt: prompt,
       runId: session.runId,
       commandId: session.commandId,
@@ -835,90 +850,33 @@ export const approveCard = mutation({
       return { ok: true as const };
     }
 
-    const payload = card.payloadJson ? JSON.parse(card.payloadJson) : {};
-    if (payload.action === "delete") {
-      await executeArtifactDelete(ctx, {
-        session,
-        card,
-        payload,
-        userId: user._id,
-        now,
-      });
+    const dispatchResult = await dispatchApprovedCard(ctx, {
+      session,
+      card,
+      userId: user._id,
+      now,
+      targetWorkspaceId,
+    });
+    if (dispatchResult.kind === "completed") {
       return { ok: true as const };
     }
 
-    const run = session.runId ? await ctx.db.get("agentRuns", session.runId) : null;
-    const prompt = run?.promptSnapshot ?? `Execute approved plan for thread ${session.threadId}`;
-    const answersContext = formatAnswersForPrompt(parseAnswersJson(session.answersJson));
     await ctx.scheduler.runAfter(0, internal.agent.messages.generateReply, {
       threadId: session.threadId,
       userId: session.ownerUserId,
       promptMessageId: session.promptMessageId,
-      prompt: [
-        prompt,
-        "",
-        "The user approved your plan. Execute it now.",
-        answersContext ? `Clarifications:\n${answersContext}` : "",
-        "",
-        `Approved plan:\nTitle: ${card.title}\nSummary: ${card.summary}`,
-        card.planBullets?.length ? `Steps:\n${card.planBullets.map((b) => `- ${b}`).join("\n")}` : "",
-        "",
-        "Generate the full Markdown content and call executeWorkspaceArtifact exactly once.",
-      ]
-        .filter(Boolean)
-        .join("\n"),
-      visiblePrompt: prompt,
+      prompt: dispatchResult.prompt,
+      visiblePrompt: dispatchResult.visiblePrompt,
       runId: session.runId,
       commandId: session.commandId,
       hitlExecute: true,
-      hitlSessionId: session._id,
-      hitlWorkspaceId: targetWorkspaceId,
-      hitlPayloadJson: card.payloadJson,
+      hitlSessionId: dispatchResult.hitlSessionId,
+      hitlWorkspaceId: dispatchResult.hitlWorkspaceId,
+      hitlPayloadJson: dispatchResult.hitlPayloadJson,
     });
     return { ok: true as const };
   },
 });
-
-async function executeArtifactDelete(
-  ctx: MutationCtx,
-  args: {
-    session: Doc<"hitlSessions">;
-    card: Doc<"hitlCards">;
-    payload: { artifactId?: string; title?: string };
-    userId: string;
-    now: number;
-  },
-) {
-  const artifactId = args.payload.artifactId as Id<"artifacts"> | undefined;
-  if (!artifactId) {
-    throw new ConvexError("Missing artifactId for delete");
-  }
-  await assertDocumentWorkspaceArtifact(ctx, args.userId, artifactId);
-  await ctx.runMutation(internal.artifacts.deleteDocumentFromAgentInternal, {
-    ownerUserId: args.userId,
-    artifactId,
-  });
-  const messageId = args.session.assistantMessageId ?? args.session.promptMessageId;
-  await ctx.db.insert("messageWorkspaceArtifacts", {
-    ownerUserId: args.userId,
-    threadId: args.session.threadId,
-    messageId,
-    artifactId,
-    relation: "deleted",
-    createdAt: args.now,
-  });
-  await ctx.db.patch("hitlSessions", args.session._id, {
-    phase: "completed",
-    resolvedAt: args.now,
-  });
-  if (args.session.runId) {
-    await ctx.db.patch("agentRuns", args.session.runId, {
-      status: "completed",
-      updatedAt: args.now,
-      completedAt: args.now,
-    });
-  }
-}
 
 export const completeSessionInternal = internalMutation({
   args: {

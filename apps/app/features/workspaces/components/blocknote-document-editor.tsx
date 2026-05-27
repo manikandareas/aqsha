@@ -3,7 +3,7 @@
 import type { PartialBlock } from "@blocknote/core";
 import { useCreateBlockNote, useEditorChange } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/shadcn";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { blockNotePlainText, parseBlockNoteJson } from "../utils/artifact-editor-model";
 
 export type DocumentEditorContent = {
@@ -21,29 +21,29 @@ export function BlockNoteDocumentEditor({
   initialMarkdown?: string;
   onContentChange: (content: DocumentEditorContent) => void;
 }) {
-  const initialContentRef = useRef(parseBlockNoteJson(initialBlocksJson) as PartialBlock[]);
-  const initialMarkdownRef = useRef(initialMarkdown);
-  const editor = useCreateBlockNote(
-    initialContentRef.current.length > 0
-      ? { initialContent: initialContentRef.current }
-      : undefined,
-    [],
+  const [initialContent] = useState(
+    () => parseBlockNoteJson(initialBlocksJson) as PartialBlock[],
   );
+  const [initialMarkdownSnapshot] = useState(initialMarkdown);
+  const initialEditorOptions = useMemo(
+    () => (initialContent.length > 0 ? { initialContent } : undefined),
+    [initialContent],
+  );
+  const editor = useCreateBlockNote(initialEditorOptions, []);
   const hydratedFromMarkdown = useRef(false);
-  const initialContent = initialContentRef.current;
 
   useEffect(() => {
     if (
       hydratedFromMarkdown.current ||
       initialContent.length > 0 ||
-      !initialMarkdownRef.current.trim()
+      !initialMarkdownSnapshot.trim()
     ) {
       return;
     }
     hydratedFromMarkdown.current = true;
     const hydrate = async () => {
       const blocks = await Promise.resolve(
-        editor.tryParseMarkdownToBlocks(initialMarkdownRef.current),
+        editor.tryParseMarkdownToBlocks(initialMarkdownSnapshot),
       );
       if (blocks.length === 0) {
         return;
@@ -57,7 +57,7 @@ export function BlockNoteDocumentEditor({
       });
     };
     void hydrate();
-  }, [editor, initialContent.length, onContentChange]);
+  }, [editor, initialContent.length, initialMarkdownSnapshot, onContentChange]);
 
   useEditorChange(() => {
     const document = editor.document;

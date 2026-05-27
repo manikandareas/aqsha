@@ -1,9 +1,11 @@
 export type ProductKey = "starterMonthly" | "starterYearly" | "plusMonthly" | "plusYearly";
+export type BillingInterval = "month" | "year";
 
 export type Viewer = {
   id: string;
   name: string | null;
   email: string | null;
+  emailVerified: boolean;
   image: string | null;
 };
 
@@ -12,10 +14,16 @@ export type BillingCurrent = {
   planLabel: string;
   status: string;
   productKey: string | null;
+  billingInterval: BillingInterval | null;
+  currentPeriodStart: number | null;
   currentPeriodEnd: number | null;
+  cancelAtPeriodEnd: boolean;
+  canceledAt: number | null;
   isAdmin: boolean;
   isUnlimitedCredits: boolean;
   billingPortalAvailable: boolean;
+  canChangeSubscription: boolean;
+  canCancelSubscription: boolean;
   creditsLimit: number;
   creditsUsed: number;
   creditsRemaining: number;
@@ -36,9 +44,9 @@ export type Plan = {
   providerSpendCeilingCents: number;
   features: string[];
   products: Array<{
-    key: string;
+    key: ProductKey;
     polarProductId: string | null;
-    interval: "month" | "year";
+    interval: BillingInterval;
     displayPriceIdr: number;
     configured: boolean;
   }>;

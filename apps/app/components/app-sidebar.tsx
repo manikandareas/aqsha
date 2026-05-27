@@ -87,7 +87,7 @@ export function AppSidebar({
   threads: ThreadSummary[];
   selectedThreadId?: string;
   onCreateThread: () => void;
-  createWorkspace?: (args: { name: string; description?: string }) => Promise<unknown>;
+  createWorkspace?: (args: { name: string }) => Promise<unknown>;
   removeThread?: RemoveThread;
 }) {
   const pathname = usePathname();
@@ -324,12 +324,11 @@ export function AppSidebar({
         <NameDialog
           open={createDialogOpen}
           onOpenChange={setCreateDialogOpen}
-          title="Workspace baru"
-          description="Buat area riset personal."
-          submitLabel="Buat"
-          descriptionField
-          onSubmit={async (value) => {
-            const workspaceId = await createWorkspace(value);
+        title="Workspace baru"
+        description="Buat area riset personal."
+        submitLabel="Buat"
+          onSubmit={async ({ name }) => {
+            const workspaceId = await createWorkspace({ name });
             router.push(`/workspaces/${String(workspaceId)}`);
           }}
         />

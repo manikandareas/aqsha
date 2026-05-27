@@ -197,6 +197,28 @@ export const promptCommands = [
         withInput(argument, "[Instruksi artifact belum diberikan]"),
       ].join("\n"),
   },
+  {
+    id: "workspace",
+    slug: "/workspace",
+    label: "Kelola workspace",
+    description: "Buat atau rename workspace dengan konfirmasi HITL.",
+    group: "Workspace",
+    aliases: [],
+    keywords: ["workspace", "ruang kerja", "rename", "ganti nama", "buat workspace"],
+    mode: "normal",
+    placeholder: "Contoh: buat workspace Tesis 2026, rename workspace Draft jadi Final...",
+    buildPrompt: (argument) =>
+      [
+        "Jalankan permintaan manajemen workspace berikut menggunakan HITL workspace tools — jangan tanya di chat biasa.",
+        "WAJIB: create_workspace → askHuman jika nama/konteks belum jelas, lalu presentWorkspacePlan. rename_workspace → askHuman jika target workspace tidak jelas, lalu presentWorkspacePlan.",
+        "Jangan tulis daftar pilihan (1/2/3) di chat. Gunakan askHuman untuk klarifikasi terstruktur.",
+        "presentWorkspacePlan wajib memuat action, name (nama akhir yang diusulkan), planBullets (2-5 poin), dan workspaceId untuk rename bila sudah diketahui.",
+        "Jangan eksekusi create/rename sebelum user menyetujui kartu Review plan.",
+        "Setelah memanggil tool HITL, balas maksimal satu kalimat singkat.",
+        "",
+        withInput(argument, "[Instruksi workspace belum diberikan]"),
+      ].join("\n"),
+  },
 ] as const satisfies readonly PromptCommand[];
 
 export type PromptCommandId = (typeof promptCommands)[number]["id"];

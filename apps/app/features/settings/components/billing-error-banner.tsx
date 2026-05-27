@@ -6,3 +6,12 @@ export function BillingErrorBanner({ message }: { message: string | null }) {
     </div>
   );
 }
+
+export function BillingNoticeBanner({ message }: { message: string | null }) {
+  if (!message) return null;
+  return (
+    <div className="rounded-[12px] border border-mint-soft-border bg-mint-soft px-4 py-3 text-sm font-medium leading-6 text-mint-foreground">
+      {message}
+    </div>
+  );
+}

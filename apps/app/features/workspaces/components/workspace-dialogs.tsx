@@ -12,7 +12,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 
 export function NameDialog({
   open,
@@ -20,8 +19,6 @@ export function NameDialog({
   description,
   submitLabel,
   initialName = "",
-  initialDescription = "",
-  descriptionField = false,
   onOpenChange,
   onSubmit,
 }: {
@@ -30,22 +27,18 @@ export function NameDialog({
   description: string;
   submitLabel: string;
   initialName?: string;
-  initialDescription?: string;
-  descriptionField?: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (value: { name: string; description?: string }) => Promise<unknown>;
+  onSubmit: (value: { name: string }) => Promise<unknown>;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {open ? (
         <NameDialogContent
-          key={`${initialName}:${initialDescription}`}
+          key={initialName}
           title={title}
           description={description}
           submitLabel={submitLabel}
           initialName={initialName}
-          initialDescription={initialDescription}
-          descriptionField={descriptionField}
           onOpenChange={onOpenChange}
           onSubmit={onSubmit}
         />
@@ -59,8 +52,6 @@ function NameDialogContent({
   description,
   submitLabel,
   initialName,
-  initialDescription,
-  descriptionField,
   onOpenChange,
   onSubmit,
 }: {
@@ -68,13 +59,10 @@ function NameDialogContent({
   description: string;
   submitLabel: string;
   initialName: string;
-  initialDescription: string;
-  descriptionField: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (value: { name: string; description?: string }) => Promise<unknown>;
+  onSubmit: (value: { name: string }) => Promise<unknown>;
 }) {
   const [name, setName] = useState(initialName);
-  const [body, setBody] = useState(initialDescription);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -84,10 +72,7 @@ function NameDialogContent({
     setIsSubmitting(true);
     setError(null);
     try {
-      await onSubmit({
-        name: name.trim(),
-        description: body.trim() || undefined,
-      });
+      await onSubmit({ name: name.trim() });
       onOpenChange(false);
     } catch (submitError) {
       setError(errorMessage(submitError));
@@ -109,14 +94,6 @@ function NameDialogContent({
           onChange={(event) => setName(event.target.value)}
           placeholder="Nama"
         />
-        {descriptionField ? (
-          <Textarea
-            value={body}
-            onChange={(event) => setBody(event.target.value)}
-            placeholder="Deskripsi"
-            className="min-h-20 resize-none"
-          />
-        ) : null}
         {error ? (
           <p className="text-[12px] font-medium text-destructive">{error}</p>
         ) : null}

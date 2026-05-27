@@ -1,48 +1,38 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { LogOutIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { authClient } from "@/lib/auth-client";
-import { useSettingsSecurityData } from "../api/use-settings-security-data";
+import { useSecuritySettingsController } from "../api/use-security-settings-controller";
 import { LoadingSettingsPage } from "../components/loading-settings-page";
-import { ReadonlyField, SettingRow, SettingsCard, SettingsSectionLabel } from "../components/settings-card";
+import {
+  SecurityAuthenticationPanel,
+  SecurityDeleteAccountPanel,
+  SecurityPasswordPanel,
+  SecuritySessionsPanel,
+} from "../components/security-panels";
 import { SettingsHeader } from "../components/settings-header";
 
 export function SettingsSecurityPage() {
-  const router = useRouter();
-  const { viewer } = useSettingsSecurityData();
-  if (!viewer) return <LoadingSettingsPage />;
-
-  const signOut = async () => {
-    await authClient.signOut();
-    router.replace("/sign-in");
-    router.refresh();
-  };
+  const controller = useSecuritySettingsController();
+  if (!controller.viewer || !controller.capabilities) return <LoadingSettingsPage />;
 
   return (
     <>
       <SettingsHeader section="security" />
-      <div className="grid gap-3">
-        <SettingsSectionLabel>Session</SettingsSectionLabel>
-        <SettingsCard>
-          <ReadonlyField label="Email" value={viewer.email ?? "Not provided"} />
-          <ReadonlyField label="Password reset" value="Unavailable in v1" />
-          <ReadonlyField label="Active sessions" value="Unavailable in v1" />
-          <ReadonlyField label="Account deletion" value="Unavailable in v1" />
-          <SettingRow label="Sign out" description="Keluar dari perangkat ini.">
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={signOut}
-              className="rounded-[8px] active:scale-[0.97] transition-[background-color,color,box-shadow,transform] duration-150 ease-out cursor-pointer flex items-center gap-1.5 font-semibold"
-            >
-              <LogOutIcon className="size-4" />
-              Sign out
-            </Button>
-          </SettingRow>
-        </SettingsCard>
-      </div>
+
+      {controller.notice ? (
+        <div className="rounded-[12px] border border-mint-soft-border bg-mint-soft px-4 py-3 text-sm font-medium leading-6 text-mint-foreground">
+          {controller.notice}
+        </div>
+      ) : null}
+      {controller.error ? (
+        <div className="rounded-[12px] border border-coral-soft-border bg-coral-soft px-4 py-3 text-sm font-medium leading-6 text-coral-foreground">
+          {controller.error}
+        </div>
+      ) : null}
+
+      <SecurityAuthenticationPanel controller={controller} />
+      <SecurityPasswordPanel controller={controller} />
+      <SecuritySessionsPanel controller={controller} />
+      <SecurityDeleteAccountPanel controller={controller} />
     </>
   );
 }

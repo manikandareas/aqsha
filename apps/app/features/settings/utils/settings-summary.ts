@@ -1,5 +1,5 @@
 import { formatIdr } from "../lib/settings-format";
-import type { BillingCurrent, Plan } from "../lib/types";
+import type { BillingCurrent, Plan, ProductKey } from "../lib/types";
 
 const planOrder: Record<BillingCurrent["planKey"], number> = {
   free: 0,
@@ -34,6 +34,37 @@ export function formatPlanPrice(plans: Plan[], planKey: BillingCurrent["planKey"
 
 export function formatProviderSpend(current: Pick<BillingCurrent, "estimatedCostCents" | "providerSpendCeilingCents">) {
   return `${formatUsdCents(current.estimatedCostCents)} / ${formatUsdCents(current.providerSpendCeilingCents)}`;
+}
+
+export type PlanBillingAction =
+  | { kind: "active"; label: "Paket aktif"; productKey?: ProductKey }
+  | { kind: "disabled"; label: "Belum dikonfigurasi"; productKey?: ProductKey }
+  | { kind: "blocked"; label: "Tidak tersedia"; productKey?: ProductKey }
+  | { kind: "change"; label: "Ganti paket"; productKey: ProductKey }
+  | { kind: "checkout"; label: "Checkout"; productKey: ProductKey };
+
+export function getPlanBillingAction({
+  plan,
+  productKey,
+  active,
+  configured,
+  current,
+}: {
+  plan: Pick<Plan, "key">;
+  productKey: ProductKey | undefined;
+  active: boolean;
+  configured: boolean;
+  current: Pick<BillingCurrent, "planKey" | "isAdmin" | "canChangeSubscription">;
+}): PlanBillingAction {
+  if (active) return { kind: "active", label: "Paket aktif", productKey };
+  if (!configured) return { kind: "disabled", label: "Belum dikonfigurasi", productKey };
+  if (!productKey || plan.key === "free" || current.isAdmin) {
+    return { kind: "blocked", label: "Tidak tersedia", productKey };
+  }
+  if (current.canChangeSubscription && current.planKey !== "free") {
+    return { kind: "change", label: "Ganti paket", productKey };
+  }
+  return { kind: "checkout", label: "Checkout", productKey };
 }
 
 export function getSetupCompletion({
