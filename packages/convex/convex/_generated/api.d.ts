@@ -69,7 +69,7 @@ import type * as hitlWorkspaceExecution from "../hitlWorkspaceExecution.js";
 import type * as http from "../http.js";
 import type * as lib_userImage from "../lib/userImage.js";
 import type * as limits from "../limits.js";
-import type * as userPreferences from "../userPreferences.js";
+import type * as preferences from "../preferences.js";
 import type * as workspaceAccess from "../workspaceAccess.js";
 import type * as workspaceFolders from "../workspaceFolders.js";
 import type * as workspaces from "../workspaces.js";
@@ -142,7 +142,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "lib/userImage": typeof lib_userImage;
   limits: typeof limits;
-  userPreferences: typeof userPreferences;
+  preferences: typeof preferences;
   workspaceAccess: typeof workspaceAccess;
   workspaceFolders: typeof workspaceFolders;
   workspaces: typeof workspaces;

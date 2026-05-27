@@ -24,6 +24,10 @@ export function parseAvatarStorageId(image: string | null | undefined) {
   return storageId ? (storageId as Id<"_storage">) : null;
 }
 
+export function avatarStorageIdFromImage(image: string | null | undefined) {
+  return parseAvatarStorageId(image);
+}
+
 export async function deleteAvatarStorageIfPresent(
   ctx: Pick<MutationCtx, "storage">,
   image: string | null | undefined,

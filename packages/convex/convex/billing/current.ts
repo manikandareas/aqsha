@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { query } from "../_generated/server";
 import { requireCurrentUser } from "../auth";
-import { intervalForProductKey, PLAN_CATALOG } from "./catalog";
+import { PLAN_CATALOG } from "./catalog";
 import { ensureCreditPeriod, getBillingSnapshot } from "./entitlements";
 
 export const get = query({
@@ -17,11 +17,15 @@ export const get = query({
     status: v.string(),
     productKey: v.union(v.string(), v.null()),
     billingInterval: v.union(v.literal("month"), v.literal("year"), v.null()),
+    currentPeriodStart: v.union(v.number(), v.null()),
     currentPeriodEnd: v.union(v.number(), v.null()),
     cancelAtPeriodEnd: v.boolean(),
+    canceledAt: v.union(v.number(), v.null()),
     isAdmin: v.boolean(),
     isUnlimitedCredits: v.boolean(),
     billingPortalAvailable: v.boolean(),
+    canChangeSubscription: v.boolean(),
+    canCancelSubscription: v.boolean(),
     creditsLimit: v.number(),
     creditsUsed: v.number(),
     creditsRemaining: v.number(),
@@ -43,12 +47,16 @@ export const get = query({
       planLabel: plan.label,
       status: snapshot.status,
       productKey: snapshot.productKey ?? null,
-      billingInterval: intervalForProductKey(snapshot.productKey),
+      billingInterval: snapshot.billingInterval,
+      currentPeriodStart: snapshot.currentPeriodStart,
       currentPeriodEnd: snapshot.currentPeriodEnd,
       cancelAtPeriodEnd: snapshot.cancelAtPeriodEnd,
+      canceledAt: snapshot.canceledAt,
       isAdmin: snapshot.isAdmin,
       isUnlimitedCredits: snapshot.isUnlimitedCredits,
       billingPortalAvailable: snapshot.billingPortalAvailable,
+      canChangeSubscription: snapshot.canChangeSubscription,
+      canCancelSubscription: snapshot.canCancelSubscription,
       creditsLimit: period.creditsLimit,
       creditsUsed: period.creditsUsed,
       creditsRemaining: Math.max(0, period.creditsLimit - period.creditsUsed),

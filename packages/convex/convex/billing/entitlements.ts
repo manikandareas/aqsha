@@ -16,6 +16,7 @@ import {
   PLAN_CATALOG,
   planForProductKey,
   requiredPlanForFeature,
+  type BillingInterval,
   type BillingStatus,
   type CreditFeature,
   type PlanKey,
@@ -63,11 +64,16 @@ export async function getBillingSnapshot(
   status: BillingStatus;
   subscription: Awaited<ReturnType<typeof polar.getCurrentSubscription>> | null;
   productKey?: string;
+  billingInterval: BillingInterval | null;
+  currentPeriodStart: number | null;
   currentPeriodEnd: number | null;
   cancelAtPeriodEnd: boolean;
+  canceledAt: number | null;
   isAdmin: boolean;
   isUnlimitedCredits: boolean;
   billingPortalAvailable: boolean;
+  canChangeSubscription: boolean;
+  canCancelSubscription: boolean;
 }> {
   const admin = await getAdminBillingOverride(ctx, ownerUserId, ownerEmail);
   if (admin.isAdmin) {
@@ -78,11 +84,16 @@ export async function getBillingSnapshot(
       status: "admin",
       subscription,
       productKey: undefined,
+      billingInterval: null,
+      currentPeriodStart: null,
       currentPeriodEnd: null,
       cancelAtPeriodEnd: false,
+      canceledAt: null,
       isAdmin: true,
       isUnlimitedCredits: true,
       billingPortalAvailable: Boolean(subscription || mirrored),
+      canChangeSubscription: false,
+      canCancelSubscription: false,
     };
   }
 
@@ -95,11 +106,16 @@ export async function getBillingSnapshot(
         status: normalizeBillingStatus(mirrored.status),
         subscription: null,
         productKey: mirrored.productKey,
+        billingInterval: mirrored.billingInterval,
+        currentPeriodStart: mirrored.currentPeriodStart ?? null,
         currentPeriodEnd: mirrored.currentPeriodEnd ?? null,
         cancelAtPeriodEnd: Boolean(mirrored.cancelAtPeriodEnd),
+        canceledAt: mirrored.canceledAt ?? null,
         isAdmin: false,
         isUnlimitedCredits: false,
         billingPortalAvailable: true,
+        canChangeSubscription: false,
+        canCancelSubscription: false,
       };
     }
   }
@@ -112,11 +128,20 @@ export async function getBillingSnapshot(
     status,
     subscription,
     productKey,
+    billingInterval: intervalForProductKey(productKey),
+    currentPeriodStart: parseTime(subscription?.currentPeriodStart),
     currentPeriodEnd: parseTime(subscription?.currentPeriodEnd),
     cancelAtPeriodEnd: Boolean(subscription?.cancelAtPeriodEnd),
+    canceledAt: parseTime(subscription?.canceledAt),
     isAdmin: false,
     isUnlimitedCredits: false,
     billingPortalAvailable: Boolean(subscription),
+    canChangeSubscription: Boolean(subscription),
+    canCancelSubscription: Boolean(
+      subscription &&
+        (subscription.status === "active" || subscription.status === "trialing") &&
+        !subscription.cancelAtPeriodEnd,
+    ),
   };
 }
 
@@ -560,11 +585,11 @@ function entitlementFailure(
   };
 }
 
-function parseTime(value: string | null | undefined) {
+function parseTime(value: Date | string | null | undefined) {
   if (!value) {
     return null;
   }
-  const time = Date.parse(value);
+  const time = value instanceof Date ? value.getTime() : Date.parse(value);
   return Number.isFinite(time) ? time : null;
 }
 

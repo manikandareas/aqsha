@@ -6,23 +6,24 @@ import { api } from "@aqsha/convex/api";
 import { readableBillingError } from "../lib/settings-format";
 import type { Plan, ProductKey } from "../lib/types";
 
-export type UsageRangeDays = 30 | 90 | 365;
+type PendingKey = ProductKey | "portal" | "cancel" | null;
+type UsageRangeDays = 30 | 90 | 365;
 
 export function useSettingsUsageBillingData() {
   const { isAuthenticated } = useConvexAuth();
-  const [usageDays, setUsageDays] = useState<UsageRangeDays>(30);
+  const [usageRangeDays, setUsageRangeDays] = useState<UsageRangeDays>(90);
   const current = useQuery(api.billing.current.get, isAuthenticated ? {} : "skip");
   const plansResult = useQuery(api.billing.products.list, isAuthenticated ? {} : "skip");
   const plans = plansResult?.map(normalizePlan);
   const activity = useQuery(
     api.billing.usage.activity,
-    isAuthenticated ? { days: usageDays } : "skip",
+    isAuthenticated ? { days: usageRangeDays } : "skip",
   );
   const createCheckout = useAction(api.billing.checkout.create);
   const createPortal = useAction(api.billing.portal.create);
   const changeSubscription = useAction(api.billing.subscription.change);
-  const cancelSubscriptionAction = useAction(api.billing.subscription.cancel);
-  const [pendingKey, setPendingKey] = useState<ProductKey | "portal" | "cancel" | null>(null);
+  const cancelSubscription = useAction(api.billing.subscription.cancel);
+  const [pendingKey, setPendingKey] = useState<PendingKey>(null);
   const [billingError, setBillingError] = useState<string | null>(null);
   const [billingNotice, setBillingNotice] = useState<string | null>(null);
 
@@ -45,6 +46,34 @@ export function useSettingsUsageBillingData() {
     }
   };
 
+  const changePlan = async (productKey: ProductKey) => {
+    setPendingKey(productKey);
+    setBillingError(null);
+    setBillingNotice(null);
+    try {
+      await changeSubscription({ productKey });
+      setBillingNotice("Perubahan paket dikirim ke Polar. Status akan diperbarui setelah webhook diterima.");
+    } catch (error) {
+      setBillingError(readableBillingError(error));
+    } finally {
+      setPendingKey(null);
+    }
+  };
+
+  const cancelPlan = async () => {
+    setPendingKey("cancel");
+    setBillingError(null);
+    setBillingNotice(null);
+    try {
+      await cancelSubscription({ revokeImmediately: false });
+      setBillingNotice("Langganan akan dibatalkan di akhir periode berjalan.");
+    } catch (error) {
+      setBillingError(readableBillingError(error));
+    } finally {
+      setPendingKey(null);
+    }
+  };
+
   const openPortal = async () => {
     setPendingKey("portal");
     setBillingError(null);
@@ -59,54 +88,23 @@ export function useSettingsUsageBillingData() {
     }
   };
 
-  const selectProduct = async (productKey: ProductKey) => {
-    if (!current || current.planKey === "free" || !current.billingPortalAvailable) {
-      await openCheckout(productKey);
-      return;
-    }
-
-    setPendingKey(productKey);
-    setBillingError(null);
-    setBillingNotice(null);
-    try {
-      await changeSubscription({ productKey });
-      setBillingNotice("Paket langganan berhasil diperbarui.");
-    } catch (error) {
-      setBillingError(readableBillingError(error));
-    } finally {
-      setPendingKey(null);
-    }
-  };
-
-  const cancelSubscription = async () => {
-    setPendingKey("cancel");
-    setBillingError(null);
-    setBillingNotice(null);
-    try {
-      await cancelSubscriptionAction({ revokeImmediately: false });
-      setBillingNotice("Langganan akan dibatalkan di akhir periode berjalan.");
-    } catch (error) {
-      setBillingError(readableBillingError(error));
-    } finally {
-      setPendingKey(null);
-    }
-  };
-
   return {
     current,
     plans,
     activity,
-    usageDays,
-    setUsageDays,
     pendingKey,
     billingError,
     billingNotice,
+    usageRangeDays,
+    setUsageRangeDays,
     openCheckout,
-    selectProduct,
+    changePlan,
+    cancelPlan,
     openPortal,
-    cancelSubscription,
   };
 }
+
+export type { PendingKey, UsageRangeDays };
 
 const productKeys = new Set<string>([
   "starterMonthly",

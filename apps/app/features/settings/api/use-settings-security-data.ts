@@ -6,7 +6,10 @@ import { api } from "@aqsha/convex/api";
 export function useSettingsSecurityData() {
   const { isAuthenticated } = useConvexAuth();
   const viewer = useQuery(api.auth.getCurrentUser, isAuthenticated ? {} : "skip");
-  const authConfig = useQuery(api.auth.publicAuthConfiguration, {});
+  const capabilities = useQuery(
+    api.auth.publicAuthConfiguration,
+    isAuthenticated ? {} : "skip",
+  );
 
-  return { viewer, authConfig };
+  return { viewer, capabilities };
 }

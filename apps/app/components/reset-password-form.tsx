@@ -1,26 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { Loader2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
 
-export function ResetPasswordForm() {
+export function ResetPasswordForm({
+  token,
+  initialError,
+}: {
+  token?: string;
+  initialError?: string;
+}) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const token = searchParams.get("token");
-  const errorParam = searchParams.get("error");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(
-    errorParam ? "Tautan reset tidak valid atau sudah kedaluwarsa." : null,
+    initialError === "INVALID_TOKEN" ? "Link reset tidak valid atau sudah kedaluwarsa." : null,
   );
+  const [message, setMessage] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -32,31 +34,31 @@ export function ResetPasswordForm() {
     try {
       if (token) {
         if (password !== confirmPassword) {
-          throw new Error("Konfirmasi kata sandi tidak sama.");
+          throw new Error("Konfirmasi password tidak sama.");
         }
         const result = await authClient.resetPassword({
-          token,
           newPassword: password,
+          token,
         });
         if (result.error) {
-          throw new Error(result.error.message ?? "Gagal menyimpan kata sandi baru.");
+          throw new Error(result.error.message ?? "Gagal reset kata sandi.");
         }
-        router.replace("/sign-in?reset=success");
+        setMessage("Kata sandi diperbarui. Silakan masuk lagi.");
         router.refresh();
-        return;
+      } else {
+        const result = await authClient.requestPasswordReset({
+          email,
+          redirectTo: `${window.location.origin}/reset-password`,
+        });
+        if (result.error) {
+          throw new Error(result.error.message ?? "Gagal mengirim email reset.");
+        }
+        setMessage("Jika email terdaftar, link reset akan masuk ke inbox kamu.");
       }
-
-      const result = await authClient.requestPasswordReset({
-        email,
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-      if (result.error) {
-        throw new Error(result.error.message ?? "Gagal mengirim email reset.");
-      }
-      setMessage("Jika email terdaftar, tautan reset sudah dikirim.");
-      setEmail("");
-    } catch (resetError) {
-      setError(resetError instanceof Error ? resetError.message : "Gagal memproses reset.");
+    } catch (submitError) {
+      const detail =
+        submitError instanceof Error ? submitError.message : "Permintaan reset gagal.";
+      setError(detail);
     } finally {
       setIsPending(false);
     }
@@ -73,12 +75,12 @@ export function ResetPasswordForm() {
             <div>
               <p className="font-heading text-lg font-bold">Aqsha</p>
               <p className="text-xs font-medium text-muted-foreground">
-                {token ? "Create a new password" : "Reset your password"}
+                Keamanan akun
               </p>
             </div>
           </div>
           <h1 className="font-heading pt-5 text-3xl font-bold leading-tight">
-            {token ? "Choose a new password" : "Password reset"}
+            {token ? "Reset kata sandi" : "Minta link reset"}
           </h1>
         </div>
 
@@ -86,7 +88,7 @@ export function ResetPasswordForm() {
           {token ? (
             <>
               <div className="grid gap-2">
-                <Label htmlFor="password">New password</Label>
+                <Label htmlFor="password">Password baru</Label>
                 <Input
                   id="password"
                   type="password"
@@ -98,7 +100,7 @@ export function ResetPasswordForm() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="confirm-password">Confirm password</Label>
+                <Label htmlFor="confirm-password">Konfirmasi password</Label>
                 <Input
                   id="confirm-password"
                   type="password"
@@ -124,26 +126,25 @@ export function ResetPasswordForm() {
             </div>
           )}
 
-          {message ? (
-            <p className="rounded-lg border border-mint-soft-border bg-mint-soft px-3 py-2 text-sm font-medium text-mint-foreground">
-              {message}
-            </p>
-          ) : null}
           {error ? (
             <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
               {error}
             </p>
           ) : null}
+          {message ? (
+            <p className="rounded-lg border border-mint-soft-border bg-mint-soft px-3 py-2 text-sm font-medium text-mint-foreground">
+              {message}
+            </p>
+          ) : null}
 
           <Button type="submit" size="lg" disabled={isPending}>
-            {isPending ? <Loader2Icon className="size-4 animate-spin" /> : null}
-            {token ? "Save new password" : "Send reset link"}
+            {isPending ? "Memproses..." : token ? "Simpan password baru" : "Kirim link reset"}
           </Button>
         </form>
 
         <p className="mt-6 text-center text-sm text-muted-foreground">
           <Link href="/sign-in" className="font-semibold text-primary hover:underline">
-            Back to sign in
+            Kembali ke sign in
           </Link>
         </p>
       </section>

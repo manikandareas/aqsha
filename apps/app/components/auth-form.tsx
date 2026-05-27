@@ -1,10 +1,10 @@
 "use client";
 
-import { useQuery } from "convex/react";
-import { GitBranchIcon, Loader2Icon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { useQuery } from "convex/react";
+import { GitBranchIcon, GlobeIcon } from "lucide-react";
 import { api } from "@aqsha/convex/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,17 +15,19 @@ type AuthMode = "sign-in" | "sign-up";
 
 export function AuthForm({ mode }: { mode: AuthMode }) {
   const router = useRouter();
+  const capabilities = useQuery(api.auth.publicAuthConfiguration, {});
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
   const [socialPending, setSocialPending] = useState<"github" | "google" | null>(null);
-  const authConfig = useQuery(api.auth.publicAuthConfiguration, {});
 
   const isSignUp = mode === "sign-up";
-  const hasSocial =
-    Boolean(authConfig?.oauthProviders.github) || Boolean(authConfig?.oauthProviders.google);
+  const availableSocialProviders = [
+    { key: "github", label: "GitHub", icon: GitBranchIcon },
+    { key: "google", label: "Google", icon: GlobeIcon },
+  ].filter((provider) => capabilities?.oauthProviders[provider.key as "github" | "google"]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -54,21 +56,25 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
     router.refresh();
   };
 
-  const signInWithProvider = async (provider: "github" | "google") => {
+  const signInSocial = async (provider: "github" | "google") => {
     setSocialPending(provider);
     setError(null);
-    try {
-      const result = await authClient.signIn.social({
-        provider,
-        callbackURL: "/",
-      });
-      if (result.error) {
-        throw new Error(result.error.message ?? "OAuth sign-in failed");
-      }
-    } catch (socialError) {
-      setError(socialError instanceof Error ? socialError.message : "OAuth sign-in failed");
+    const result = await authClient.signIn.social({
+      provider,
+      callbackURL: `${window.location.origin}/`,
+      errorCallbackURL: `${window.location.origin}/sign-in`,
+      disableRedirect: true,
+    });
+    if (result.error) {
+      setError(result.error.message ?? "Social sign in failed");
       setSocialPending(null);
+      return;
     }
+    if (result.data?.url) {
+      window.location.assign(result.data.url);
+      return;
+    }
+    setSocialPending(null);
   };
 
   return (
@@ -125,7 +131,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
                   href="/reset-password"
                   className="text-xs font-semibold text-primary hover:underline"
                 >
-                  Forgot password?
+                  Lupa password?
                 </Link>
               ) : null}
             </div>
@@ -155,46 +161,36 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
           </Button>
         </form>
 
-        {hasSocial ? (
+        {availableSocialProviders.length > 0 ? (
           <div className="mt-5 grid gap-3">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 text-xs font-medium text-muted-foreground">
               <span className="h-px flex-1 bg-border" />
-              <span className="text-xs font-medium text-muted-foreground">or</span>
+              <span>atau</span>
               <span className="h-px flex-1 bg-border" />
             </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {authConfig?.oauthProviders.github ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void signInWithProvider("github")}
-                  disabled={socialPending !== null}
-                  className="h-10 rounded-lg"
-                >
-                  {socialPending === "github" ? (
-                    <Loader2Icon className="size-4 animate-spin" />
-                  ) : (
-                    <GitBranchIcon className="size-4" />
-                  )}
-                  GitHub
-                </Button>
-              ) : null}
-              {authConfig?.oauthProviders.google ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void signInWithProvider("google")}
-                  disabled={socialPending !== null}
-                  className="h-10 rounded-lg"
-                >
-                  {socialPending === "google" ? (
-                    <Loader2Icon className="size-4 animate-spin" />
-                  ) : (
-                    <span className="text-sm font-bold">G</span>
-                  )}
-                  Google
-                </Button>
-              ) : null}
+            <div className="grid gap-2">
+              {availableSocialProviders.map((provider) => {
+                const Icon = provider.icon;
+                return (
+                  <Button
+                    key={provider.key}
+                    type="button"
+                    variant="outline"
+                    size="lg"
+                    disabled={Boolean(socialPending)}
+                    onClick={() => void signInSocial(provider.key as "github" | "google")}
+                  >
+                    {socialPending === provider.key ? (
+                      "Please wait..."
+                    ) : (
+                      <>
+                        <Icon className="size-4" />
+                        Continue with {provider.label}
+                      </>
+                    )}
+                  </Button>
+                );
+              })}
             </div>
           </div>
         ) : null}

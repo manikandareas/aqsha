@@ -2,26 +2,22 @@
 
 import {
   GitBranchIcon,
+  GlobeIcon,
   KeyRoundIcon,
-  type LucideIcon,
+  LaptopIcon,
   Loader2Icon,
   LogOutIcon,
   MailIcon,
+  RefreshCwIcon,
   ShieldCheckIcon,
   Trash2Icon,
 } from "lucide-react";
-import type { Dispatch, FormEvent, SetStateAction } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import type { SecurityPendingKey } from "../api/use-settings-security-controller";
-import type {
-  SecurityAccount,
-  SecurityProviderId,
-  SecuritySession,
-} from "../api/security-auth-client";
-import type { Viewer } from "../lib/types";
+import type { SecuritySettingsController } from "../api/use-security-settings-controller";
+import type { OAuthProvider } from "../lib/security-auth-client";
 import {
+  SettingsField,
   SettingsListItem,
   SettingsPanel,
   SettingsPanelBody,
@@ -29,114 +25,64 @@ import {
   SettingsPanelHeader,
 } from "./settings-card";
 
-type AuthConfig = {
-  emailDeliveryConfigured: boolean;
-  oauthProviders: Record<SecurityProviderId, boolean>;
-};
+const oauthProviders = [
+  { key: "github", label: "GitHub", icon: GitBranchIcon },
+  { key: "google", label: "Google", icon: GlobeIcon },
+] as const;
 
-type PasswordFormState = {
-  currentPassword: string;
-  newPassword: string;
-  confirmPassword: string;
-};
-
-type DeleteFormState = {
-  password: string;
-  confirmation: string;
-};
-
-const providers: Array<{
-  id: SecurityProviderId;
-  label: string;
-  icon: LucideIcon;
-}> = [
-  { id: "github", label: "GitHub", icon: GitBranchIcon },
-  { id: "google", label: "Google", icon: ShieldCheckIcon },
-];
-
-export function SecurityFeedback({
-  notice,
-  error,
+export function SecurityAuthenticationPanel({
+  controller,
 }: {
-  notice: string | null;
-  error: string | null;
+  controller: SecuritySettingsController;
 }) {
-  return (
-    <>
-      {notice ? (
-        <div className="rounded-[12px] border border-mint-soft-border bg-mint-soft px-4 py-3 text-sm font-medium leading-6 text-mint-foreground">
-          {notice}
-        </div>
-      ) : null}
-      {error ? (
-        <div className="rounded-[12px] border border-coral-soft-border bg-coral-soft px-4 py-3 text-sm font-medium leading-6 text-coral-foreground">
-          {error}
-        </div>
-      ) : null}
-    </>
-  );
-}
+  const { viewer, capabilities, accounts, credentialAccount, pendingKey, linkProvider } =
+    controller;
 
-export function AuthProvidersPanel({
-  viewer,
-  authConfig,
-  accounts,
-  linkedProviders,
-  pendingKey,
-  onLinkProvider,
-  onUnlinkProvider,
-}: {
-  viewer: Viewer;
-  authConfig: AuthConfig;
-  accounts: SecurityAccount[];
-  linkedProviders: Set<string>;
-  pendingKey: SecurityPendingKey;
-  onLinkProvider: (provider: SecurityProviderId) => void;
-  onUnlinkProvider: (provider: SecurityProviderId, account: SecurityAccount) => void;
-}) {
   return (
     <SettingsPanel>
       <SettingsPanelHeader
         title="Autentikasi"
-        description="Email, kata sandi, dan akun OAuth yang bisa digunakan untuk masuk."
+        description="Email dan provider sosial yang bisa dipakai untuk masuk ke akun ini."
       />
       <SettingsPanelBody>
         <SettingsListItem
           icon={MailIcon}
           title="Email & kata sandi"
-          subtitle={viewer.email ?? "Belum diisi"}
+          subtitle={viewer?.email ?? "Belum diisi"}
           trailing={
             <span className="text-[11px] text-muted-foreground">
-              {viewer.emailVerified ? "Terverifikasi" : "Belum terverifikasi"}
+              {credentialAccount ? "Terhubung" : "Belum ada password"}
             </span>
           }
         />
-        {providers.map((provider) => {
-          const configured = authConfig.oauthProviders[provider.id];
-          const linked = accounts.find((account) => account.providerId === provider.id);
+        {oauthProviders.map((provider) => {
+          const Icon = provider.icon;
+          const configured = Boolean(capabilities?.oauthProviders[provider.key]);
+          const connected = accounts.some(
+            (account) => account.providerId === provider.key,
+          );
+          const pending = pendingKey === `oauth-${provider.key}`;
+
           return (
             <SettingsListItem
-              key={provider.id}
-              icon={provider.icon}
+              key={provider.key}
+              icon={Icon}
               title={provider.label}
-              subtitle={providerSubtitle({
-                configured,
-                linked: linkedProviders.has(provider.id),
-              })}
+              subtitle={oauthProviderSubtitle({ configured, connected })}
               trailing={
-                linked ? (
-                  <ProviderButton
-                    label="Putuskan"
-                    pending={pendingKey === `unlink:${provider.id}`}
-                    onClick={() => onUnlinkProvider(provider.id, linked)}
-                  />
+                connected ? (
+                  <span className="text-[11px] text-muted-foreground">Terhubung</span>
                 ) : (
-                  <ProviderButton
-                    label="Hubungkan"
-                    pending={pendingKey === `link:${provider.id}`}
-                    disabled={!configured}
-                    onClick={() => onLinkProvider(provider.id)}
-                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!configured || pending}
+                    onClick={() => void linkProvider(provider.key)}
+                  >
+                    {pending ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
+                    Hubungkan
+                  </Button>
                 )
               }
             />
@@ -147,138 +93,128 @@ export function AuthProvidersPanel({
   );
 }
 
-export function PasswordPanel({
-  viewer,
-  authConfig,
-  pendingKey,
-  passwordForm,
-  setPasswordForm,
-  onChangePassword,
-  onSendResetPassword,
+export function SecurityPasswordPanel({
+  controller,
 }: {
-  viewer: Viewer;
-  authConfig: AuthConfig;
-  pendingKey: SecurityPendingKey;
-  passwordForm: PasswordFormState;
-  setPasswordForm: Dispatch<SetStateAction<PasswordFormState>>;
-  onChangePassword: (event: FormEvent<HTMLFormElement>) => void;
-  onSendResetPassword: () => void;
+  controller: SecuritySettingsController;
 }) {
+  const {
+    currentPassword,
+    setCurrentPassword,
+    newPassword,
+    setNewPassword,
+    viewerEmail,
+    pendingKey,
+    changePassword,
+    sendPasswordReset,
+  } = controller;
+
   return (
     <SettingsPanel>
       <SettingsPanelHeader
         title="Kata sandi"
-        description="Reset email membutuhkan Resend agar tautan dapat dikirim."
+        description="Ubah password langsung atau kirim ulang link reset lewat email."
       />
-      <SettingsPanelBody>
-        <form onSubmit={onChangePassword} className="grid gap-4">
-          <PasswordField
-            id="current-password"
-            label="Kata sandi saat ini"
-            autoComplete="current-password"
-            value={passwordForm.currentPassword}
-            onChange={(currentPassword) =>
-              setPasswordForm((value) => ({ ...value, currentPassword }))
-            }
-          />
-          <div className="grid gap-3 sm:grid-cols-2">
-            <PasswordField
-              id="new-password"
-              label="Kata sandi baru"
-              autoComplete="new-password"
-              value={passwordForm.newPassword}
-              onChange={(newPassword) =>
-                setPasswordForm((value) => ({ ...value, newPassword }))
-              }
+      <SettingsPanelBody className="grid gap-5">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <SettingsField label="Password saat ini">
+            <Input
+              value={currentPassword}
+              onChange={(event) => setCurrentPassword(event.target.value)}
+              type="password"
+              autoComplete="current-password"
+              className="h-[42px] rounded-lg border-input bg-muted/40 px-3.5 text-[13px] shadow-none"
             />
-            <PasswordField
-              id="confirm-new-password"
-              label="Konfirmasi"
+          </SettingsField>
+          <SettingsField label="Password baru">
+            <Input
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              type="password"
               autoComplete="new-password"
-              value={passwordForm.confirmPassword}
-              onChange={(confirmPassword) =>
-                setPasswordForm((value) => ({ ...value, confirmPassword }))
-              }
+              minLength={8}
+              className="h-[42px] rounded-lg border-input bg-muted/40 px-3.5 text-[13px] shadow-none"
             />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="submit"
-              disabled={
-                pendingKey === "password:change" ||
-                !passwordForm.currentPassword ||
-                !passwordForm.newPassword
-              }
-              className="h-9 rounded-lg text-[13px]"
-            >
-              {pendingKey === "password:change" ? (
-                <Loader2Icon className="size-3.5 animate-spin" />
-              ) : (
-                <KeyRoundIcon className="size-3.5" />
-              )}
-              Simpan kata sandi
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={
-                pendingKey === "password:reset" ||
-                !authConfig.emailDeliveryConfigured ||
-                !viewer.email
-              }
-              onClick={onSendResetPassword}
-              className="h-9 rounded-lg text-[13px]"
-            >
-              {pendingKey === "password:reset" ? (
-                <Loader2Icon className="size-3.5 animate-spin" />
-              ) : (
-                <MailIcon className="size-3.5" />
-              )}
-              Kirim reset
-            </Button>
-          </div>
-        </form>
+          </SettingsField>
+        </div>
       </SettingsPanelBody>
+      <SettingsPanelFooter>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          disabled={
+            pendingKey === "change-password" ||
+            currentPassword.length < 1 ||
+            newPassword.length < 8
+          }
+          onClick={() => void changePassword()}
+        >
+          {pendingKey === "change-password" ? (
+            <Loader2Icon className="size-3.5 animate-spin text-primary" />
+          ) : (
+            <KeyRoundIcon className="size-3.5 text-primary" />
+          )}
+          Simpan password
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={!viewerEmail || pendingKey === "reset-password"}
+          onClick={() => void sendPasswordReset()}
+        >
+          {pendingKey === "reset-password" ? (
+            <Loader2Icon className="size-3.5 animate-spin" />
+          ) : (
+            <RefreshCwIcon className="size-3.5" />
+          )}
+          Kirim link reset
+        </Button>
+      </SettingsPanelFooter>
     </SettingsPanel>
   );
 }
 
-export function SessionsPanel({
-  sessions,
-  pendingKey,
-  onRevokeSession,
-  onRevokeOtherSessions,
-  onSignOut,
+export function SecuritySessionsPanel({
+  controller,
 }: {
-  sessions: SecuritySession[];
-  pendingKey: SecurityPendingKey;
-  onRevokeSession: (session: SecuritySession) => void;
-  onRevokeOtherSessions: () => void;
-  onSignOut: () => void;
+  controller: SecuritySettingsController;
 }) {
+  const {
+    sessions,
+    loadingSecurity,
+    pendingKey,
+    revokeSession,
+    revokeOtherSessions,
+    signOut,
+  } = controller;
+
   return (
     <SettingsPanel>
-      <SettingsPanelHeader title="Sesi" description="Cabut akses dari perangkat lain." />
+      <SettingsPanelHeader
+        title="Sesi aktif"
+        description="Cabut akses perangkat lama tanpa keluar dari semua perangkat."
+      />
       <SettingsPanelBody>
-        {sessions.length ? (
+        {loadingSecurity ? (
+          <p className="text-[13px] text-muted-foreground">Memuat sesi...</p>
+        ) : sessions.length > 0 ? (
           sessions.map((session) => (
             <SettingsListItem
-              key={session.id}
-              icon={ShieldCheckIcon}
-              title={session.userAgent || "Perangkat tanpa nama"}
-              subtitle={`Berakhir ${formatDate(session.expiresAt)}${
-                session.ipAddress ? ` · ${session.ipAddress}` : ""
-              }`}
+              key={session.token}
+              icon={LaptopIcon}
+              title={session.userAgent || "Perangkat tidak dikenal"}
+              subtitle={`${session.ipAddress ?? "IP tidak tersedia"} · Kadaluarsa ${formatDate(session.expiresAt)}`}
               trailing={
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={pendingKey === `session:${session.token}`}
-                  onClick={() => onRevokeSession(session)}
-                  className="h-8 rounded-lg text-[12px]"
+                  disabled={pendingKey === `session-${session.token}`}
+                  onClick={() => void revokeSession(session.token)}
                 >
-                  {pendingKey === `session:${session.token}` ? (
+                  {pendingKey === `session-${session.token}` ? (
                     <Loader2Icon className="size-3.5 animate-spin" />
                   ) : null}
                   Cabut
@@ -287,28 +223,25 @@ export function SessionsPanel({
             />
           ))
         ) : (
-          <p className="text-[13px] text-muted-foreground">Sesi belum termuat.</p>
+          <p className="text-[13px] text-muted-foreground">Tidak ada sesi lain yang tercatat.</p>
         )}
       </SettingsPanelBody>
       <SettingsPanelFooter>
         <Button
           type="button"
           variant="outline"
-          onClick={onRevokeOtherSessions}
-          disabled={pendingKey === "sessions:other"}
-          className="h-9 rounded-lg px-4 text-[13px] font-medium"
+          size="sm"
+          disabled={pendingKey === "sessions-other"}
+          onClick={() => void revokeOtherSessions()}
         >
-          {pendingKey === "sessions:other" ? (
+          {pendingKey === "sessions-other" ? (
             <Loader2Icon className="size-3.5 animate-spin" />
-          ) : null}
-          Keluar dari sesi lain
+          ) : (
+            <ShieldCheckIcon className="size-3.5" />
+          )}
+          Cabut sesi lain
         </Button>
-        <Button
-          type="button"
-          variant="destructive"
-          onClick={onSignOut}
-          className="h-9 rounded-lg px-4 text-[13px] font-medium"
-        >
+        <Button type="button" variant="destructive" size="sm" onClick={signOut}>
           <LogOutIcon className="size-3.5" />
           Keluar
         </Button>
@@ -317,149 +250,86 @@ export function SessionsPanel({
   );
 }
 
-export function DeleteAccountPanel({
-  authConfig,
-  pendingKey,
-  deleteForm,
-  setDeleteForm,
-  onDeleteAccount,
+export function SecurityDeleteAccountPanel({
+  controller,
 }: {
-  authConfig: AuthConfig;
-  pendingKey: SecurityPendingKey;
-  deleteForm: DeleteFormState;
-  setDeleteForm: Dispatch<SetStateAction<DeleteFormState>>;
-  onDeleteAccount: (event: FormEvent<HTMLFormElement>) => void;
+  controller: SecuritySettingsController;
 }) {
+  const {
+    deletePassword,
+    setDeletePassword,
+    deleteConfirmation,
+    setDeleteConfirmation,
+    pendingKey,
+    deleteAccount,
+  } = controller;
+
   return (
     <SettingsPanel>
       <SettingsPanelHeader
         title="Hapus akun"
-        description="Penghapusan berjalan setelah konfirmasi email dan membersihkan data milik akun."
+        description="Aqsha akan membersihkan data, file storage, sesi, dan identitas autentikasi setelah konfirmasi email."
       />
-      <SettingsPanelBody>
-        <form onSubmit={onDeleteAccount} className="grid gap-4">
-          <PasswordField
-            id="delete-password"
-            label="Kata sandi"
+      <SettingsPanelBody className="grid gap-5">
+        <SettingsField
+          label="Password akun"
+          description="Opsional untuk akun sosial, wajib jika akun memakai email & password."
+        >
+          <Input
+            value={deletePassword}
+            onChange={(event) => setDeletePassword(event.target.value)}
+            type="password"
             autoComplete="current-password"
-            value={deleteForm.password}
-            onChange={(password) => setDeleteForm((value) => ({ ...value, password }))}
+            className="h-[42px] rounded-lg border-input bg-muted/40 px-3.5 text-[13px] shadow-none"
           />
-          <div className="grid gap-2">
-            <Label htmlFor="delete-confirmation" className="text-[13px] font-medium">
-              Ketik HAPUS
-            </Label>
-            <Input
-              id="delete-confirmation"
-              value={deleteForm.confirmation}
-              onChange={(event) =>
-                setDeleteForm((value) => ({
-                  ...value,
-                  confirmation: event.target.value,
-                }))
-              }
-              className="h-[42px] rounded-lg text-[13px]"
-            />
-          </div>
-          <Button
-            type="submit"
-            variant="destructive"
-            disabled={
-              pendingKey === "account:delete" ||
-              deleteForm.confirmation !== "HAPUS" ||
-              !authConfig.emailDeliveryConfigured
-            }
-            className="h-9 w-fit rounded-lg text-[13px]"
-          >
-            {pendingKey === "account:delete" ? (
-              <Loader2Icon className="size-3.5 animate-spin" />
-            ) : (
-              <Trash2Icon className="size-3.5" />
-            )}
-            Kirim konfirmasi hapus
-          </Button>
-        </form>
+        </SettingsField>
+        <SettingsField label="Ketik HAPUS untuk melanjutkan">
+          <Input
+            value={deleteConfirmation}
+            onChange={(event) => setDeleteConfirmation(event.target.value)}
+            className="h-[42px] rounded-lg border-input bg-muted/40 px-3.5 text-[13px] shadow-none"
+          />
+        </SettingsField>
       </SettingsPanelBody>
+      <SettingsPanelFooter>
+        <Button
+          type="button"
+          variant="destructive"
+          size="sm"
+          disabled={deleteConfirmation !== "HAPUS" || pendingKey === "delete-account"}
+          onClick={() => void deleteAccount()}
+        >
+          {pendingKey === "delete-account" ? (
+            <Loader2Icon className="size-3.5 animate-spin" />
+          ) : (
+            <Trash2Icon className="size-3.5" />
+          )}
+          Hapus akun permanen
+        </Button>
+      </SettingsPanelFooter>
     </SettingsPanel>
   );
 }
 
-function ProviderButton({
-  label,
-  pending,
-  disabled,
-  onClick,
-}: {
-  label: string;
-  pending: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      disabled={disabled || pending}
-      onClick={onClick}
-      className="h-8 rounded-lg text-[12px]"
-    >
-      {pending ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
-      {label}
-    </Button>
-  );
-}
-
-function PasswordField({
-  id,
-  label,
-  autoComplete,
-  value,
-  onChange,
-}: {
-  id: string;
-  label: string;
-  autoComplete: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <div className="grid gap-2">
-      <Label htmlFor={id} className="text-[13px] font-medium">
-        {label}
-      </Label>
-      <Input
-        id={id}
-        type="password"
-        autoComplete={autoComplete}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        minLength={8}
-        className="h-[42px] rounded-lg text-[13px]"
-      />
-    </div>
-  );
-}
-
-function providerSubtitle({
+function oauthProviderSubtitle({
   configured,
-  linked,
+  connected,
 }: {
   configured: boolean;
-  linked: boolean;
+  connected: boolean;
 }) {
-  if (!configured) return "Belum dikonfigurasi di environment";
-  return linked ? "Terhubung ke akun ini" : "Siap dihubungkan";
+  if (!configured) return "Konfigurasi provider belum lengkap di environment.";
+  return connected
+    ? "Provider sosial terhubung ke akun ini."
+    : "Hubungkan untuk masuk tanpa kata sandi.";
 }
 
-function formatDate(value: string | Date) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "tidak diketahui";
-  return new Intl.DateTimeFormat("id-ID", {
+function formatDate(value: Date | string) {
+  return new Date(value).toLocaleDateString("id-ID", {
     day: "2-digit",
     month: "short",
     year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+  });
 }
+
+export type { OAuthProvider };

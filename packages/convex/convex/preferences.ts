@@ -8,6 +8,7 @@ export const get = query({
   args: {},
   returns: v.object({
     theme: themeValidator,
+    updatedAt: v.union(v.number(), v.null()),
   }),
   handler: async (ctx) => {
     const user = await requireCurrentUser(ctx);
@@ -18,6 +19,7 @@ export const get = query({
 
     return {
       theme: preferences?.theme ?? "system",
+      updatedAt: preferences?.updatedAt ?? null,
     };
   },
 });
@@ -40,15 +42,14 @@ export const setTheme = mutation({
         theme: args.theme,
         updatedAt: now,
       });
-      return null;
+    } else {
+      await ctx.db.insert("userPreferences", {
+        ownerUserId: user._id,
+        theme: args.theme,
+        createdAt: now,
+        updatedAt: now,
+      });
     }
-
-    await ctx.db.insert("userPreferences", {
-      ownerUserId: user._id,
-      theme: args.theme,
-      createdAt: now,
-      updatedAt: now,
-    });
 
     return null;
   },
