@@ -10,6 +10,7 @@ import {
 import { rateLimiter } from "../limits";
 import type { SourceCandidate, SourceOrigin } from "./sourceCandidates";
 import { trimForSnippet } from "./sourceCandidates";
+export { searchOpenAlexWorks } from "./openalexProvider";
 
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24;
 const CROSSREF_ENDPOINT = "https://api.crossref.org/works";
@@ -26,7 +27,15 @@ const xmlParser = new XMLParser({
   trimValues: true,
 });
 
-type Provider = "crossref" | "arxiv" | "exa" | "jina_search" | "jina_read" | "jina_rerank";
+type Provider =
+  | "openalex"
+  | "crossref"
+  | "arxiv"
+  | "exa"
+  | "jina_search"
+  | "jina_read"
+  | "jina_rerank"
+  | "explore";
 
 export type ExternalCandidate = Omit<SourceCandidate, "citationNumber">;
 
@@ -68,11 +77,13 @@ export type SearchCandidateOptions = {
 
 const providerValidator = v.union(
   v.literal("crossref"),
+  v.literal("openalex"),
   v.literal("arxiv"),
   v.literal("exa"),
   v.literal("jina_search"),
   v.literal("jina_read"),
   v.literal("jina_rerank"),
+  v.literal("explore"),
 );
 
 export const getCache = internalQuery({
@@ -682,8 +693,17 @@ function providerFailure(origin: SourceOrigin, reason: string, provider?: string
       title: "Provider unavailable",
       locator: reason,
       snippet: `Source lookup failed: ${reason}`,
+      metadataJson: JSON.stringify({ providerFailure: true, reason }),
     },
   ];
+}
+
+export function providerFailureReason(candidate: ExternalCandidate) {
+  const metadata = candidate.metadataJson ? parseJson(candidate.metadataJson) : null;
+  if (isRecord(metadata) && metadata.providerFailure === true) {
+    return stringValue(metadata.reason) || candidate.locator;
+  }
+  return candidate.title === "Provider unavailable" ? candidate.locator : null;
 }
 
 function parseJinaSearchResponse(text: string, limit: number): ExternalCandidate[] {
@@ -860,6 +880,15 @@ function crossrefToCandidate(item: CrossrefItem): ExternalCandidate | null {
       trimForSnippet(stripTags(item.abstract)) ||
       trimForSnippet(item["container-title"]?.[0]) ||
       "Crossref metadata only; no abstract text was available.",
+    metadataJson: JSON.stringify({
+      authors: (item.author ?? [])
+        .map((author) => collapse([author.given, author.family].filter(Boolean).join(" ")))
+        .filter(Boolean)
+        .slice(0, 6),
+      year: item.published?.["date-parts"]?.[0]?.[0] ?? item.issued?.["date-parts"]?.[0]?.[0],
+      venue: item["container-title"]?.find((value) => value.trim()),
+      sourceLabel: item["container-title"]?.find((value) => value.trim()) ?? "Crossref",
+    }),
   };
 }
 
@@ -895,6 +924,17 @@ function arxivToCandidate(entry: ArxivEntry): ExternalCandidate | null {
     doi: extractDoi(entry["arxiv:doi"]),
     arxivId,
     snippet: trimForSnippet(entry.summary) || "arXiv metadata result.",
+    metadataJson: JSON.stringify({
+      authors: asArray(entry.author)
+        .map((author) => collapse(author.name ?? ""))
+        .filter(Boolean)
+        .slice(0, 6),
+      year: entry.published ? new Date(entry.published).getUTCFullYear() : undefined,
+      publicationDate: entry.published,
+      pdfUrl: arxivId ? `https://arxiv.org/pdf/${arxivId}.pdf` : undefined,
+      topics: ["Preprint"],
+      sourceLabel: "arXiv",
+    }),
   };
 }
 

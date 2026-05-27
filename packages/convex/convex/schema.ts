@@ -637,12 +637,14 @@ export default defineSchema(
       .index("by_run_citation", ["runId", "citationNumber"]),
     externalLookupCache: defineTable({
       provider: v.union(
+        v.literal("openalex"),
         v.literal("crossref"),
         v.literal("arxiv"),
         v.literal("exa"),
         v.literal("jina_search"),
         v.literal("jina_read"),
         v.literal("jina_rerank"),
+        v.literal("explore"),
       ),
       cacheKey: v.string(),
       status: v.union(v.literal("ready"), v.literal("empty"), v.literal("failed")),
