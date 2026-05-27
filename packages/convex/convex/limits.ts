@@ -71,4 +71,10 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
     period: THREE_SECONDS,
     capacity: 1,
   },
+  openAlexSearchGlobal: {
+    kind: "token bucket",
+    rate: 30,
+    period: MINUTE,
+    capacity: 30,
+  },
 });

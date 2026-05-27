@@ -111,6 +111,7 @@ export function AppSidebar({
   );
   const isHomeActive = pathname === "/" && !selectedThreadId;
   const isWorkspaceRoute = pathname.startsWith("/workspaces");
+  const isExploreActive = pathname.startsWith("/explore");
   const hasSidebarItems =
     sortedWorkspaces.length > 0 || sortedThreads.length > 0 || Boolean(createWorkspace);
   const workspaceSectionAction = createWorkspace ? (
@@ -198,7 +199,12 @@ export function AppSidebar({
               label="Home"
               active={isHomeActive}
             />
-            <PrimaryNavButton icon={TrendingUpIcon} label="Jelajahi" disabled />
+            <PrimaryNavLink
+              href="/explore"
+              icon={TrendingUpIcon}
+              label="Jelajahi"
+              active={isExploreActive}
+            />
           </SidebarMenu>
         </SidebarHeader>
 
@@ -354,30 +360,6 @@ function PrimaryNavLink({
           <Icon className="size-3.5 shrink-0" />
           <span>{label}</span>
         </Link>
-      </SidebarMenuButton>
-    </SidebarMenuItem>
-  );
-}
-
-function PrimaryNavButton({
-  icon: Icon,
-  label,
-  disabled,
-}: {
-  icon: typeof HomeIcon;
-  label: string;
-  disabled?: boolean;
-}) {
-  return (
-    <SidebarMenuItem className="min-w-0 overflow-hidden">
-      <SidebarMenuButton
-        type="button"
-        size="sm"
-        disabled={disabled}
-        className={cn(sidebarItemClass(false), disabled && "opacity-60")}
-      >
-        <Icon className="size-3.5 shrink-0" />
-        <span>{label}</span>
       </SidebarMenuButton>
     </SidebarMenuItem>
   );
