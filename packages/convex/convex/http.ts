@@ -1,12 +1,42 @@
 import { httpRouter } from "convex/server";
 import type { GenericDataModel, GenericMutationCtx } from "convex/server";
+import { Webhook, WebhookVerificationError } from "standardwebhooks";
 import { internal } from "./_generated/api";
-import { authComponent, createAuth } from "./auth";
+import { httpAction } from "./_generated/server";
 import { polar } from "./billing/polar";
 
 const http = httpRouter();
 
-authComponent.registerRoutes(http, createAuth);
+http.route({
+  path: "/clerk/webhook",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const signingSecret = process.env.CLERK_WEBHOOK_SIGNING_SECRET;
+    if (!signingSecret) {
+      return json({ error: "CLERK_WEBHOOK_SIGNING_SECRET is not configured." }, 500);
+    }
+
+    const payload = await request.text();
+    let event: ClerkWebhookEvent;
+    try {
+      event = new Webhook(signingSecret).verify(payload, svixHeaders(request)) as ClerkWebhookEvent;
+    } catch (error) {
+      if (error instanceof WebhookVerificationError) {
+        return json({ error: "Invalid Clerk webhook signature." }, 400);
+      }
+      throw error;
+    }
+
+    const normalized = normalizeClerkUserWebhook(event);
+    if (!normalized) {
+      return json({ ok: true, ignored: true });
+    }
+
+    await ctx.runMutation(internal.auth.processClerkWebhook, normalized);
+    return json({ ok: true });
+  }),
+});
+
 polar.registerRoutes(http, {
   path: "/polar/events",
   events: {
@@ -30,6 +60,72 @@ polar.registerRoutes(http, {
 });
 
 export default http;
+
+type ClerkWebhookEvent = {
+  id?: string;
+  type: string;
+  data: ClerkUserWebhookData;
+};
+
+type ClerkUserWebhookData = {
+  id?: string;
+  email_addresses?: Array<{ id: string; email_address: string }>;
+  primary_email_address_id?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  image_url?: string | null;
+  deleted?: boolean;
+};
+
+function normalizeClerkUserWebhook(event: ClerkWebhookEvent) {
+  if (!event.type.startsWith("user.")) {
+    return null;
+  }
+
+  const clerkUserId = event.data.id;
+  if (!clerkUserId) {
+    throw new Error("Clerk webhook payload is missing user id.");
+  }
+
+  return {
+    eventId: event.id ?? `${event.type}:${clerkUserId}`,
+    eventType: event.type,
+    clerkUserId,
+    email: primaryEmail(event.data),
+    name: displayName(event.data),
+    image: event.data.image_url ?? null,
+    deleted: event.type === "user.deleted" || event.data.deleted === true,
+  };
+}
+
+function svixHeaders(request: Request) {
+  return {
+    "webhook-id": request.headers.get("svix-id") ?? "",
+    "webhook-timestamp": request.headers.get("svix-timestamp") ?? "",
+    "webhook-signature": request.headers.get("svix-signature") ?? "",
+  };
+}
+
+function primaryEmail(data: ClerkUserWebhookData) {
+  return (
+    data.email_addresses?.find((email) => email.id === data.primary_email_address_id)
+      ?.email_address ??
+    data.email_addresses?.[0]?.email_address ??
+    null
+  );
+}
+
+function displayName(data: ClerkUserWebhookData) {
+  const name = [data.first_name, data.last_name].filter(Boolean).join(" ").trim();
+  return name || null;
+}
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
 
 type SubscriptionEventData = {
   id: string;

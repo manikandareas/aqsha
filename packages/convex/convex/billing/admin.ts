@@ -1,5 +1,5 @@
 import type { MutationCtx, QueryCtx } from "../_generated/server";
-import { authComponent } from "../auth";
+import { findUserByOwnerUserId } from "../auth/userRepository";
 
 type BillingCtx = QueryCtx | MutationCtx;
 
@@ -33,7 +33,7 @@ export async function getAdminBillingOverride(
     return { isAdmin: true, email: mirrored.email };
   }
 
-  const user = await authComponent.getAnyUserById(ctx, ownerUserId);
+  const user = await findUserByOwnerUserId(ctx, ownerUserId);
   const email = typeof user?.email === "string" ? user.email : null;
   return { isAdmin: isAdminEmail(email), email };
 }

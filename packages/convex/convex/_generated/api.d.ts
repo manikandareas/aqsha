@@ -12,7 +12,6 @@ import type * as accountCleanup from "../accountCleanup.js";
 import type * as accountCleanup_agent from "../accountCleanup/agent.js";
 import type * as accountCleanup_artifacts from "../accountCleanup/artifacts.js";
 import type * as accountCleanup_billing from "../accountCleanup/billing.js";
-import type * as accountCleanup_preferences from "../accountCleanup/preferences.js";
 import type * as accountCleanup_shared from "../accountCleanup/shared.js";
 import type * as accountCleanup_workspaces from "../accountCleanup/workspaces.js";
 import type * as agent_artifactCommandInference from "../agent/artifactCommandInference.js";
@@ -48,9 +47,6 @@ import type * as artifactUploadLimits from "../artifactUploadLimits.js";
 import type * as artifactUploads from "../artifactUploads.js";
 import type * as artifacts from "../artifacts.js";
 import type * as auth from "../auth.js";
-import type * as auth_emailDelivery from "../auth/emailDelivery.js";
-import type * as auth_env from "../auth/env.js";
-import type * as auth_providerConfig from "../auth/providerConfig.js";
 import type * as billing_admin from "../billing/admin.js";
 import type * as billing_catalog from "../billing/catalog.js";
 import type * as billing_checkout from "../billing/checkout.js";
@@ -72,7 +68,6 @@ import type * as hitlWorkspaceExecution from "../hitlWorkspaceExecution.js";
 import type * as http from "../http.js";
 import type * as lib_userImage from "../lib/userImage.js";
 import type * as limits from "../limits.js";
-import type * as preferences from "../preferences.js";
 import type * as workspaceAccess from "../workspaceAccess.js";
 import type * as workspaceFolders from "../workspaceFolders.js";
 import type * as workspaces from "../workspaces.js";
@@ -88,7 +83,6 @@ declare const fullApi: ApiFromModules<{
   "accountCleanup/agent": typeof accountCleanup_agent;
   "accountCleanup/artifacts": typeof accountCleanup_artifacts;
   "accountCleanup/billing": typeof accountCleanup_billing;
-  "accountCleanup/preferences": typeof accountCleanup_preferences;
   "accountCleanup/shared": typeof accountCleanup_shared;
   "accountCleanup/workspaces": typeof accountCleanup_workspaces;
   "agent/artifactCommandInference": typeof agent_artifactCommandInference;
@@ -124,9 +118,6 @@ declare const fullApi: ApiFromModules<{
   artifactUploads: typeof artifactUploads;
   artifacts: typeof artifacts;
   auth: typeof auth;
-  "auth/emailDelivery": typeof auth_emailDelivery;
-  "auth/env": typeof auth_env;
-  "auth/providerConfig": typeof auth_providerConfig;
   "billing/admin": typeof billing_admin;
   "billing/catalog": typeof billing_catalog;
   "billing/checkout": typeof billing_checkout;
@@ -148,7 +139,6 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "lib/userImage": typeof lib_userImage;
   limits: typeof limits;
-  preferences: typeof preferences;
   workspaceAccess: typeof workspaceAccess;
   workspaceFolders: typeof workspaceFolders;
   workspaces: typeof workspaces;
@@ -181,7 +171,6 @@ export declare const internal: FilterApi<
 >;
 
 export declare const components: {
-  betterAuth: import("@convex-dev/better-auth/_generated/component.js").ComponentApi<"betterAuth">;
   agent: import("@convex-dev/agent/_generated/component.js").ComponentApi<"agent">;
   rag: import("@convex-dev/rag/_generated/component.js").ComponentApi<"rag">;
   rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;

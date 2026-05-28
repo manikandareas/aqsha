@@ -2,7 +2,7 @@ import { Polar } from "@convex-dev/polar";
 import { api, components } from "../_generated/api";
 import type { DataModel } from "../_generated/dataModel";
 import type { ActionCtx, MutationCtx, QueryCtx } from "../_generated/server";
-import { authComponent } from "../auth";
+import { requireCurrentUser } from "../auth";
 import { PRODUCT_KEYS, type ProductKey } from "./catalog";
 
 const productIds = Object.fromEntries(
@@ -12,7 +12,7 @@ const productIds = Object.fromEntries(
 export async function getPolarUserInfo(
   ctx: QueryCtx | MutationCtx | ActionCtx,
 ): Promise<{ userId: string; email: string }> {
-  const user = await authComponent.getAuthUser(ctx);
+  const user = await requireCurrentUser(ctx);
   if (!user.email) {
     throw new Error("A verified email is required for billing");
   }

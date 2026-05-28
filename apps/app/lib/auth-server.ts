@@ -1,18 +1,6 @@
-import { convexBetterAuthNextJs } from "@convex-dev/better-auth/nextjs";
+import { auth } from "@clerk/nextjs/server";
 
-const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL ?? "http://127.0.0.1:3210";
-const convexSiteUrl =
-  process.env.NEXT_PUBLIC_CONVEX_SITE_URL ?? "http://127.0.0.1:3211";
-
-export const {
-  handler,
-  preloadAuthQuery,
-  isAuthenticated,
-  getToken,
-  fetchAuthQuery,
-  fetchAuthMutation,
-  fetchAuthAction,
-} = convexBetterAuthNextJs({
-  convexUrl,
-  convexSiteUrl,
-});
+export async function isAuthenticated() {
+  const session = await auth();
+  return Boolean(session.userId);
+}

@@ -3,7 +3,6 @@ import { internalMutation } from "./_generated/server";
 import { cleanupOwnerAgentData } from "./accountCleanup/agent";
 import { cleanupOwnerArtifacts } from "./accountCleanup/artifacts";
 import { cleanupOwnerBilling } from "./accountCleanup/billing";
-import { cleanupOwnerPreferences } from "./accountCleanup/preferences";
 import {
   deleteStorageObjects,
   mergeCleanupResults,
@@ -35,7 +34,6 @@ export const cleanupUserOwnedData = internalMutation({
     results.push(await cleanupOwnerArtifacts(ctx, args.ownerUserId, storageIds));
     results.push(await cleanupOwnerWorkspaces(ctx, args.ownerUserId));
     results.push(await cleanupOwnerBilling(ctx, args.ownerUserId));
-    results.push(await cleanupOwnerPreferences(ctx, args.ownerUserId));
     results.push({
       deletedRows: 0,
       deletedStorageObjects: await deleteStorageObjects(ctx, storageIds),

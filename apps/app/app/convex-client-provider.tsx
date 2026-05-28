@@ -1,17 +1,15 @@
 "use client";
 
-import { ConvexBetterAuthProvider } from "@convex-dev/better-auth/react";
-import { ConvexReactClient } from "convex/react";
-import { type ReactNode, useMemo } from "react";
-import { AccountThemeSync } from "@/lib/account-theme";
-import { authClient } from "@/lib/auth-client";
+import { useAuth } from "@clerk/nextjs";
+import { ConvexReactClient, useConvexAuth, useMutation } from "convex/react";
+import { ConvexProviderWithClerk } from "convex/react-clerk";
+import { type ReactNode, useEffect, useMemo, useRef } from "react";
+import { api } from "@aqsha/convex/api";
 
 export function ConvexClientProvider({
   children,
-  initialToken,
 }: {
   children: ReactNode;
-  initialToken?: string | null;
 }) {
   const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
   const convex = useMemo(
@@ -36,13 +34,47 @@ export function ConvexClientProvider({
   }
 
   return (
-    <ConvexBetterAuthProvider
-      client={convex}
-      authClient={authClient}
-      initialToken={initialToken}
-    >
-      <AccountThemeSync />
-      {children}
-    </ConvexBetterAuthProvider>
+    <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
+      <AuthenticatedUserSync>{children}</AuthenticatedUserSync>
+    </ConvexProviderWithClerk>
   );
+}
+
+function AuthenticatedUserSync({ children }: { children: ReactNode }) {
+  const { isAuthenticated: isConvexAuthenticated, isLoading: isConvexLoading } =
+    useConvexAuth();
+  const { isLoaded: isClerkLoaded, isSignedIn, userId } = useAuth();
+  const syncCurrentUser = useMutation(api.auth.syncCurrentUser);
+  const attemptedUserId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isClerkLoaded || !isSignedIn || !userId) {
+      attemptedUserId.current = null;
+      return;
+    }
+    if (isConvexLoading || !isConvexAuthenticated) return;
+    if (attemptedUserId.current === userId) return;
+
+    attemptedUserId.current = userId;
+    let cancelled = false;
+    void syncCurrentUser({})
+      .catch(() => {
+        if (!cancelled) {
+          console.error("Failed to sync Clerk user into Convex.");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isClerkLoaded,
+    isConvexAuthenticated,
+    isConvexLoading,
+    isSignedIn,
+    syncCurrentUser,
+    userId,
+  ]);
+
+  return <>{children}</>;
 }

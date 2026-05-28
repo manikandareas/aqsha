@@ -1,130 +1,36 @@
-import { createClient, type GenericCtx } from "@convex-dev/better-auth";
-import { convex } from "@convex-dev/better-auth/plugins";
-import { betterAuth } from "better-auth/minimal";
 import { v } from "convex/values";
-import { components, internal } from "./_generated/api";
-import type { DataModel } from "./_generated/dataModel";
-import { mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "./_generated/server";
-import authConfig from "./auth.config";
+import { internal } from "./_generated/api";
+import { action, internalMutation, mutation, query } from "./_generated/server";
 import {
-  assertAvatarStorageFile,
-  AVATAR_STORAGE_PREFIX,
-  deleteAvatarStorageIfPresent,
-  resolveUserImage,
-} from "./lib/userImage";
-import { sendAuthEmail } from "./auth/emailDelivery";
-import { getPublicAuthConfiguration, getSocialProviders } from "./auth/providerConfig";
+  cleanupOwnerUserData,
+  markOwnerUserDeletionFailed as markOwnerUserDeletionFailedHandler,
+  type AccountCleanupResult,
+} from "./auth/accountDeletion";
+import {
+  generateAvatarUploadUrl as generateAvatarUploadUrlHandler,
+  getCurrentUserProfile,
+  setAvatarFromStorage as setAvatarFromStorageHandler,
+  syncCurrentUser as syncCurrentUserHandler,
+  updateDisplayName as updateDisplayNameHandler,
+} from "./auth/profile";
+import type { CurrentUser } from "./auth/types";
+import { getAuthenticatedIdentity, requireCurrentUser } from "./auth/userRepository";
+import {
+  processClerkWebhook as processClerkWebhookHandler,
+  markClerkUserDeleted as markClerkUserDeletedHandler,
+} from "./auth/webhooks";
 
-const siteUrl = process.env.SITE_URL ?? "http://localhost:3000";
-const defaultAvatarBaseUrl = "https://api.dicebear.com/9.x/big-ears-neutral/svg";
+export type { CurrentUser };
+export { requireCurrentUser };
 
-export const authComponent = createClient<DataModel>(components.betterAuth);
-
-type AuthCtx = QueryCtx | MutationCtx | ActionCtx;
-
-export async function requireCurrentUser(ctx: AuthCtx) {
-  return await authComponent.getAuthUser(ctx);
-}
-
-export const createAuth = (ctx: GenericCtx<DataModel>) => {
-  return betterAuth({
-    baseURL: siteUrl,
-    database: authComponent.adapter(ctx),
-    databaseHooks: {
-      user: {
-        create: {
-          before: async (user) => {
-            if (typeof user.image === "string" && user.image.trim()) {
-              return { data: user };
-            }
-
-            return {
-              data: {
-                ...user,
-                image: getDefaultAvatarUrl(user.name),
-              },
-            };
-          },
-        },
-      },
-    },
-    emailVerification: {
-      sendOnSignUp: true,
-      sendVerificationEmail: async ({ user, url }) => {
-        await sendAuthEmail({
-          to: user.email,
-          subject: "Verifikasi email Aqsha",
-          preview: "Konfirmasi alamat email untuk akun Aqsha kamu.",
-          actionUrl: url,
-          actionLabel: "Verifikasi email",
-        });
-      },
-    },
-    emailAndPassword: {
-      enabled: true,
-      requireEmailVerification: false,
-      minPasswordLength: 8,
-      maxPasswordLength: 128,
-      resetPasswordTokenExpiresIn: 60 * 60,
-      revokeSessionsOnPasswordReset: true,
-      sendResetPassword: async ({ user, url }) => {
-        await sendAuthEmail({
-          to: user.email,
-          subject: "Reset kata sandi Aqsha",
-          preview: "Gunakan tautan ini untuk membuat kata sandi baru.",
-          actionUrl: url,
-          actionLabel: "Reset kata sandi",
-        });
-      },
-    },
-    socialProviders: getSocialProviders(),
-    user: {
-      changeEmail: {
-        enabled: true,
-        sendChangeEmailConfirmation: async ({ user, newEmail, url }) => {
-          await sendAuthEmail({
-            to: user.email,
-            subject: "Konfirmasi perubahan email Aqsha",
-            preview: `Konfirmasi perubahan email akun Aqsha ke ${newEmail}.`,
-            actionUrl: url,
-            actionLabel: "Konfirmasi perubahan email",
-          });
-        },
-      },
-      deleteUser: {
-        enabled: true,
-        sendDeleteAccountVerification: async ({ user, url }) => {
-          await sendAuthEmail({
-            to: user.email,
-            subject: "Konfirmasi penghapusan akun Aqsha",
-            preview: "Tautan ini akan menghapus akun dan data Aqsha kamu secara permanen.",
-            actionUrl: url,
-            actionLabel: "Hapus akun saya",
-          });
-        },
-        beforeDelete: async (user) => {
-          if (!("runMutation" in ctx)) {
-            throw new Error("Account deletion requires a mutation-capable context.");
-          }
-          await ctx.runMutation(internal.accountCleanup.cleanupUserOwnedData, {
-            ownerUserId: user.id,
-            avatarImage: user.image ?? null,
-          });
-        },
-      },
-    },
-    account: {
-      accountLinking: {
-        enabled: true,
-        trustedProviders: ["email-password", "github", "google"],
-        allowDifferentEmails: false,
-        allowUnlinkingAll: false,
-        updateUserInfoOnLink: false,
-      },
-    },
-    plugins: [convex({ authConfig })],
-  });
-};
+export const syncCurrentUser = mutation({
+  args: {},
+  returns: v.object({
+    id: v.string(),
+    clerkUserId: v.string(),
+  }),
+  handler: async (ctx) => await syncCurrentUserHandler(ctx),
+});
 
 export const getCurrentUser = query({
   args: {},
@@ -135,43 +41,14 @@ export const getCurrentUser = query({
     emailVerified: v.boolean(),
     image: v.union(v.string(), v.null()),
   }),
-  handler: async (ctx) => {
-    const user = await requireCurrentUser(ctx);
-
-    return {
-      id: user._id,
-      name: user.name ?? null,
-      email: user.email ?? null,
-      emailVerified: user.emailVerified ?? false,
-      image: await resolveUserImage(ctx, user.image ?? null),
-    };
-  },
-});
-
-export const publicAuthConfiguration = query({
-  args: {},
-  returns: v.object({
-    emailDeliveryConfigured: v.boolean(),
-    oauthProviders: v.object({
-      github: v.boolean(),
-      google: v.boolean(),
-    }),
-  }),
-  handler: async () => {
-    return getPublicAuthConfiguration();
-  },
+  handler: async (ctx) => await getCurrentUserProfile(ctx),
 });
 
 export const generateAvatarUploadUrl = mutation({
   args: {},
   returns: v.string(),
-  handler: async (ctx) => {
-    await requireCurrentUser(ctx);
-    return await ctx.storage.generateUploadUrl();
-  },
+  handler: async (ctx) => await generateAvatarUploadUrlHandler(ctx),
 });
-
-const maxDisplayNameLength = 120;
 
 export const updateDisplayName = mutation({
   args: {
@@ -179,22 +56,7 @@ export const updateDisplayName = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireCurrentUser(ctx);
-
-    const name = args.name.trim();
-    if (!name) {
-      throw new Error("Nama tampilan tidak boleh kosong.");
-    }
-    if (name.length > maxDisplayNameLength) {
-      throw new Error(`Nama tampilan maksimal ${maxDisplayNameLength} karakter.`);
-    }
-
-    const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
-    await auth.api.updateUser({
-      body: { name },
-      headers,
-    });
-
+    await updateDisplayNameHandler(ctx, args.name);
     return null;
   },
 });
@@ -205,27 +67,125 @@ export const setAvatarFromStorage = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const user = await requireCurrentUser(ctx);
-    await assertAvatarStorageFile(ctx, args.storageId);
-    const previousImage = user.image ?? null;
-    const nextImage = `${AVATAR_STORAGE_PREFIX}${args.storageId}`;
-
-    const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
-    await auth.api.updateUser({
-      body: {
-        image: nextImage,
-      },
-      headers,
-    });
-    if (previousImage !== nextImage) {
-      await deleteAvatarStorageIfPresent(ctx, previousImage);
-    }
-
+    await setAvatarFromStorageHandler(ctx, args.storageId);
     return null;
   },
 });
 
-function getDefaultAvatarUrl(name: string) {
-  const seed = name.trim() || "Aqsha User";
-  return `${defaultAvatarBaseUrl}?seed=${encodeURIComponent(seed)}`;
+export const deleteCurrentAccount = action({
+  args: {},
+  returns: v.object({
+    ownerUserId: v.string(),
+    deletedRows: v.number(),
+    deletedStorageObjects: v.number(),
+    deletedAgentThreads: v.number(),
+  }),
+  handler: async (ctx): Promise<AccountCleanupResult> => {
+    const identity = await getAuthenticatedIdentity(ctx);
+    const cleanupResult: AccountCleanupResult = await ctx.runMutation(
+      internal.auth.cleanupOwnerUserDataForDeletion,
+      {
+        ownerUserId: identity.tokenIdentifier,
+      },
+    );
+
+    try {
+      await deleteClerkUser(identity.subject);
+      return cleanupResult;
+    } catch (error) {
+      await ctx.runMutation(internal.auth.markOwnerUserDeletionFailed, {
+        ownerUserId: identity.tokenIdentifier,
+        reason:
+          error instanceof Error ? error.message : "Unknown Clerk user deletion error.",
+      });
+      throw error;
+    }
+  },
+});
+
+export const cleanupOwnerUserDataForDeletion = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+  },
+  returns: v.object({
+    ownerUserId: v.string(),
+    deletedRows: v.number(),
+    deletedStorageObjects: v.number(),
+    deletedAgentThreads: v.number(),
+  }),
+  handler: async (ctx, args): Promise<AccountCleanupResult> => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_owner_user_id", (q) => q.eq("ownerUserId", args.ownerUserId))
+      .unique();
+
+    return await cleanupOwnerUserData(ctx, {
+      ownerUserId: args.ownerUserId,
+      avatarImage: user?.image ?? null,
+    });
+  },
+});
+
+export const markOwnerUserDeletionFailed = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    reason: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await markOwnerUserDeletionFailedHandler(ctx, args);
+    return null;
+  },
+});
+
+export const processClerkWebhook = internalMutation({
+  args: {
+    eventId: v.string(),
+    eventType: v.string(),
+    clerkUserId: v.string(),
+    email: v.optional(v.union(v.string(), v.null())),
+    name: v.optional(v.union(v.string(), v.null())),
+    image: v.optional(v.union(v.string(), v.null())),
+    deleted: v.optional(v.boolean()),
+  },
+  returns: v.object({
+    processed: v.boolean(),
+  }),
+  handler: async (ctx, args) => await processClerkWebhookHandler(ctx, args),
+});
+
+async function deleteClerkUser(clerkUserId: string) {
+  const secretKey = process.env.CLERK_SECRET_KEY;
+  if (!secretKey) {
+    throw new Error("CLERK_SECRET_KEY is not configured in Convex.");
+  }
+
+  const response = await fetch(
+    `https://api.clerk.com/v1/users/${encodeURIComponent(clerkUserId)}`,
+    {
+      method: "DELETE",
+      headers: {
+        authorization: `Bearer ${secretKey}`,
+        "content-type": "application/json",
+      },
+    },
+  );
+
+  if (!response.ok && response.status !== 404) {
+    const body = await response.text().catch(() => "");
+    throw new Error(
+      `Failed to delete Clerk user (${response.status}).${body ? ` ${body}` : ""}`,
+    );
+  }
 }
+
+export const markClerkUserDeleted = internalMutation({
+  args: {
+    clerkUserId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await markClerkUserDeletedHandler(ctx, args.clerkUserId);
+    return null;
+  },
+});
