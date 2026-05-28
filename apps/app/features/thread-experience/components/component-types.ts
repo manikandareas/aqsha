@@ -103,6 +103,7 @@ export type ThreadShellLayoutProps = {
     | null
     | undefined;
   workspaces?: Array<{ _id: string; name: string }>;
+  createWorkspace?: (args: { name: string }) => Promise<unknown>;
   rateStatus: RateStatus | undefined;
   startThread: StartThread;
   sendMessage: SendMessage;

@@ -15,6 +15,7 @@ export function ThreadShellLayout({
   selectedThreadId,
   onCreateThread,
   onSelectThread,
+  createWorkspace,
   title,
   threadId,
   selectedThread,
@@ -48,6 +49,7 @@ export function ThreadShellLayout({
         threads={threads}
         selectedThreadId={selectedThreadId}
         onCreateThread={onCreateThread}
+        createWorkspace={createWorkspace}
         removeThread={removeThread}
       />
       <div className="flex h-svh min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">

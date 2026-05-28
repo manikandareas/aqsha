@@ -44,6 +44,7 @@ export function useThreadExperienceData(threadId?: string) {
     api.artifacts.listForContextPicker,
     shouldLoadGlobalContextCandidates ? { workspaceId: undefined } : "skip",
   );
+  const createWorkspace = useMutation(api.workspaces.create);
   const startThread = useMutation(api.agent.messages.startThread);
   const sendMessage = useMutation(api.agent.messages.send).withOptimisticUpdate(
     (store, args) => {
@@ -92,6 +93,7 @@ export function useThreadExperienceData(threadId?: string) {
     selectedContextArtifacts: selectedContextArtifacts ?? [],
     selectedContextArtifactsLoaded: selectedContextArtifacts !== undefined,
     contextCandidateArtifacts: contextCandidateArtifacts ?? [],
+    createWorkspace,
     startThread,
     sendMessage,
     rateStatus,

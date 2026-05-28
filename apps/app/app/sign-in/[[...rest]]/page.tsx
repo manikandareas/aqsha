@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
 import { SignIn } from "@clerk/nextjs";
+import { redirect } from "next/navigation";
 import { isAuthenticated } from "@/lib/auth-server";
 
 export default async function SignInPage() {

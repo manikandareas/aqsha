@@ -42,13 +42,13 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider>
-      <html
-        lang="en"
-        suppressHydrationWarning
-        className={`${inter.variable} ${nunito.variable} ${jetbrainsMono.variable} ${caveat.variable} h-full antialiased`}
-      >
-        <body className="min-h-full">
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${inter.variable} ${nunito.variable} ${jetbrainsMono.variable} ${caveat.variable} h-full antialiased`}
+    >
+      <body className="min-h-full">
+        <ClerkProvider>
           <ThemeProvider
             attribute="class"
             defaultTheme="system"
@@ -61,8 +61,8 @@ export default async function RootLayout({
               </NuqsAdapter>
             </ConvexClientProvider>
           </ThemeProvider>
-        </body>
-      </html>
-    </ClerkProvider>
+        </ClerkProvider>
+      </body>
+    </html>
   );
 }

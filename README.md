@@ -18,7 +18,7 @@ packages/
 - **Runtime and package manager**: Bun
 - **Product app**: Next.js 16, React 19, Tailwind CSS 4
 - **Marketing site**: Astro, React islands, Tailwind CSS 4
-- **Backend**: Convex, `@convex-dev/better-auth`, `@convex-dev/agent`, rate limiting, workflow, internal provenance storage
+- **Backend**: Convex, Clerk Auth, `@convex-dev/agent`, rate limiting, workflow, internal provenance storage
 - **AI**: AI SDK and OpenAI provider through Convex functions
 - **Shared UI**: Radix primitives and shadcn-style components in `packages/ui`
 

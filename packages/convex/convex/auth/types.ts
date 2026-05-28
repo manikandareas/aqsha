@@ -12,8 +12,6 @@ export type CurrentUser = {
   emailVerified: boolean;
   image: string | null;
   clerkUserId: string;
-  clerkTokenIdentifier: string;
 };
 
 export type UserDoc = Doc<"users">;
-

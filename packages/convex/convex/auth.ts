@@ -15,13 +15,14 @@ import {
 } from "./auth/profile";
 import type { CurrentUser } from "./auth/types";
 import { getAuthenticatedIdentity, requireCurrentUser } from "./auth/userRepository";
-import {
-  processClerkWebhook as processClerkWebhookHandler,
-  markClerkUserDeleted as markClerkUserDeletedHandler,
-} from "./auth/webhooks";
+import { processClerkWebhook as processClerkWebhookHandler } from "./auth/webhooks";
 
 export type { CurrentUser };
 export { requireCurrentUser };
+
+type AccountDeletionTarget = AccountCleanupResult & {
+  clerkUserId: string;
+};
 
 export const syncCurrentUser = mutation({
   args: {},
@@ -82,19 +83,25 @@ export const deleteCurrentAccount = action({
   }),
   handler: async (ctx): Promise<AccountCleanupResult> => {
     const identity = await getAuthenticatedIdentity(ctx);
-    const cleanupResult: AccountCleanupResult = await ctx.runMutation(
+    const cleanupResult = await ctx.runMutation(
       internal.auth.cleanupOwnerUserDataForDeletion,
       {
         ownerUserId: identity.tokenIdentifier,
+        clerkUserId: identity.subject,
       },
     );
 
     try {
-      await deleteClerkUser(identity.subject);
-      return cleanupResult;
+      await deleteClerkUser(cleanupResult.clerkUserId);
+      return {
+        ownerUserId: cleanupResult.ownerUserId,
+        deletedRows: cleanupResult.deletedRows,
+        deletedStorageObjects: cleanupResult.deletedStorageObjects,
+        deletedAgentThreads: cleanupResult.deletedAgentThreads,
+      };
     } catch (error) {
       await ctx.runMutation(internal.auth.markOwnerUserDeletionFailed, {
-        ownerUserId: identity.tokenIdentifier,
+        ownerUserId: cleanupResult.ownerUserId,
         reason:
           error instanceof Error ? error.message : "Unknown Clerk user deletion error.",
       });
@@ -106,23 +113,29 @@ export const deleteCurrentAccount = action({
 export const cleanupOwnerUserDataForDeletion = internalMutation({
   args: {
     ownerUserId: v.string(),
+    clerkUserId: v.string(),
   },
   returns: v.object({
     ownerUserId: v.string(),
+    clerkUserId: v.string(),
     deletedRows: v.number(),
     deletedStorageObjects: v.number(),
     deletedAgentThreads: v.number(),
   }),
-  handler: async (ctx, args): Promise<AccountCleanupResult> => {
+  handler: async (ctx, args): Promise<AccountDeletionTarget> => {
     const user = await ctx.db
       .query("users")
       .withIndex("by_owner_user_id", (q) => q.eq("ownerUserId", args.ownerUserId))
       .unique();
 
-    return await cleanupOwnerUserData(ctx, {
+    const cleanup = await cleanupOwnerUserData(ctx, {
       ownerUserId: args.ownerUserId,
       avatarImage: user?.image ?? null,
     });
+    return {
+      ...cleanup,
+      clerkUserId: user?.clerkUserId ?? args.clerkUserId,
+    };
   },
 });
 
@@ -144,8 +157,6 @@ export const processClerkWebhook = internalMutation({
     eventType: v.string(),
     clerkUserId: v.string(),
     email: v.optional(v.union(v.string(), v.null())),
-    name: v.optional(v.union(v.string(), v.null())),
-    image: v.optional(v.union(v.string(), v.null())),
     deleted: v.optional(v.boolean()),
   },
   returns: v.object({
@@ -178,14 +189,3 @@ async function deleteClerkUser(clerkUserId: string) {
     );
   }
 }
-
-export const markClerkUserDeleted = internalMutation({
-  args: {
-    clerkUserId: v.string(),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    await markClerkUserDeletedHandler(ctx, args.clerkUserId);
-    return null;
-  },
-});

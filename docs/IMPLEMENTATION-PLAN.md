@@ -33,7 +33,7 @@ Do not restore:
 The active product surface is:
 
 - `apps/app`: Next.js 16 App Router app.
-- `packages/convex`: Convex backend, Agent, Workflow, Better Auth, billing, rate limits, research tools, and provenance.
+- `packages/convex`: Convex backend, Agent, Workflow, Clerk Auth, billing, rate limits, research tools, and provenance.
 - `packages/ui`: shared UI primitives and token CSS.
 - `apps/www`: marketing site.
 

@@ -47,6 +47,7 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
     selectedContextArtifacts,
     selectedContextArtifactsLoaded,
     contextCandidateArtifacts,
+    createWorkspace,
     startThread,
     sendMessage,
     rateStatus,
@@ -203,6 +204,7 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
         selectedThreadId={threadId}
         onCreateThread={() => router.push("/")}
         onSelectThread={(id) => router.push(`/threads/${id}`)}
+        createWorkspace={createWorkspace}
         title={title}
         threadId={threadId}
         selectedThread={selectedThread}

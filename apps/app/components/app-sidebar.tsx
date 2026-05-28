@@ -112,8 +112,9 @@ export function AppSidebar({
   const isHomeActive = pathname === "/" && !selectedThreadId;
   const isWorkspaceRoute = pathname.startsWith("/workspaces");
   const isExploreActive = pathname.startsWith("/explore");
-  const hasSidebarItems =
-    sortedWorkspaces.length > 0 || sortedThreads.length > 0 || Boolean(createWorkspace);
+  const showWorkspaceSection = sortedWorkspaces.length > 0 || Boolean(createWorkspace);
+  const showThreadSection = sortedThreads.length > 0 || Boolean(onCreateThread);
+  const hasSidebarItems = showWorkspaceSection || showThreadSection;
   const workspaceSectionAction = createWorkspace ? (
     <button
       type="button"
@@ -141,6 +142,17 @@ export function AppSidebar({
     setCommandOpen(false);
     onCreateThread();
   };
+
+  const threadSectionAction = (
+    <button
+      type="button"
+      onClick={runCreateThread}
+      className="flex size-5 shrink-0 items-center justify-center rounded-[5px] text-muted-foreground transition-[background-color,color] duration-150 ease-out hover:bg-primary/10 hover:text-primary"
+      aria-label="Thread baru"
+    >
+      <PlusIcon className="size-3" />
+    </button>
+  );
 
   const runCreateWorkspace = () => {
     setCommandOpen(false);
@@ -217,7 +229,7 @@ export function AppSidebar({
                 </div>
               ) : (
                 <>
-                  {sortedWorkspaces.length > 0 || createWorkspace ? (
+                  {showWorkspaceSection ? (
                     <SidebarSection label="Workspaces" first action={workspaceSectionAction}>
                       {sortedWorkspaces.length > 0 ? (
                         <SidebarMenu className="min-w-0 gap-1 overflow-hidden">
@@ -232,25 +244,31 @@ export function AppSidebar({
                             />
                           ))}
                         </SidebarMenu>
-                      ) : null}
+                      ) : (
+                        <EmptyWorkspaceRow onCreate={createWorkspace ? runCreateWorkspace : undefined} />
+                      )}
                     </SidebarSection>
                   ) : null}
-                  {sortedThreads.length > 0 ? (
-                    <SidebarSection label="Threads">
-                      <SidebarMenu className="min-w-0 gap-1 overflow-hidden">
-                        {sortedThreads.map((thread) => (
-                          <RecentThreadRow
-                            key={thread.threadId}
-                            thread={thread}
-                            active={thread.threadId === selectedThreadId}
-                            onDelete={
-                              removeThread
-                                ? () => handleDeleteThread(thread)
-                                : undefined
-                            }
-                          />
-                        ))}
-                      </SidebarMenu>
+                  {showThreadSection ? (
+                    <SidebarSection label="Threads" action={threadSectionAction}>
+                      {sortedThreads.length > 0 ? (
+                        <SidebarMenu className="min-w-0 gap-1 overflow-hidden">
+                          {sortedThreads.map((thread) => (
+                            <RecentThreadRow
+                              key={thread.threadId}
+                              thread={thread}
+                              active={thread.threadId === selectedThreadId}
+                              onDelete={
+                                removeThread
+                                  ? () => handleDeleteThread(thread)
+                                  : undefined
+                              }
+                            />
+                          ))}
+                        </SidebarMenu>
+                      ) : (
+                        <EmptyThreadRow onCreate={runCreateThread} />
+                      )}
                     </SidebarSection>
                   ) : null}
                 </>
@@ -439,6 +457,42 @@ function RecentThreadRow({
         />
       ) : null}
     </SidebarMenuItem>
+  );
+}
+
+function EmptyWorkspaceRow({ onCreate }: { onCreate?: () => void }) {
+  if (onCreate) {
+    return (
+      <button
+        type="button"
+        onClick={onCreate}
+        className="flex h-8 w-full min-w-0 items-center gap-2 rounded-[8px] px-2.5 text-left text-[12px] font-medium text-muted-foreground transition-[background-color,color] duration-150 ease-out hover:bg-muted/60 hover:text-foreground"
+      >
+        <LayoutGridIcon className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate">Buat workspace pertama</span>
+        <PlusIcon className="size-3 shrink-0 text-muted-foreground" />
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-[8px] border border-dashed border-border/70 px-2.5 py-2 text-[11px] font-medium leading-5 text-muted-foreground">
+      Belum ada workspace.
+    </div>
+  );
+}
+
+function EmptyThreadRow({ onCreate }: { onCreate: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onCreate}
+      className="flex h-8 w-full min-w-0 items-center gap-2 rounded-[8px] px-2.5 text-left text-[12px] font-medium text-muted-foreground transition-[background-color,color] duration-150 ease-out hover:bg-muted/60 hover:text-foreground"
+    >
+      <MessageSquareIcon className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="min-w-0 flex-1 truncate">Buat thread baru</span>
+      <PlusIcon className="size-3 shrink-0 text-muted-foreground" />
+    </button>
   );
 }
 

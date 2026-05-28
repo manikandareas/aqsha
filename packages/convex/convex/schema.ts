@@ -8,10 +8,6 @@ export default defineSchema(
     users: defineTable({
       ownerUserId: v.string(),
       clerkUserId: v.string(),
-      clerkTokenIdentifier: v.string(),
-      betterAuthUserId: v.optional(v.string()),
-      workosUserId: v.optional(v.string()),
-      workosTokenIdentifier: v.optional(v.string()),
       email: v.optional(v.union(v.string(), v.null())),
       emailVerified: v.optional(v.boolean()),
       name: v.optional(v.union(v.string(), v.null())),
@@ -32,16 +28,11 @@ export default defineSchema(
       updatedAt: v.number(),
     })
       .index("by_owner_user_id", ["ownerUserId"])
-      .index("by_clerk_user_id", ["clerkUserId"])
-      .index("by_clerk_token_identifier", ["clerkTokenIdentifier"])
-      .index("by_better_auth_user_id", ["betterAuthUserId"])
-      .index("by_workos_user_id", ["workosUserId"])
-      .index("by_workos_token_identifier", ["workosTokenIdentifier"]),
+      .index("by_clerk_user_id", ["clerkUserId"]),
     authEvents: defineTable({
       eventKey: v.string(),
       eventType: v.string(),
       clerkUserId: v.optional(v.string()),
-      workosUserId: v.optional(v.string()),
       processedAt: v.number(),
     }).index("by_event_key", ["eventKey"]),
     threadMetadata: defineTable({

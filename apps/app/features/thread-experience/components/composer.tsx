@@ -53,6 +53,8 @@ import { TokenizedPromptInput } from "./composer-token-input";
 type ComposerVariant = "hero" | "docked";
 
 const COMPOSER_EASE_OUT = [0.23, 1, 0.32, 1] as const;
+const COMPOSER_COLLAPSED_RADIUS = 23;
+const COMPOSER_EXPANDED_RADIUS = 24;
 
 function composerShellTransition(
   isExpanded: boolean,
@@ -63,7 +65,7 @@ function composerShellTransition(
   }
 
   return {
-    duration: isExpanded ? 0.28 : 0.22,
+    duration: isExpanded ? 0.2 : 0.16,
     ease: COMPOSER_EASE_OUT,
   };
 }
@@ -379,12 +381,14 @@ export function Composer(props: ComposerProps) {
   return (
     <div className="flex w-full flex-col">
       <motion.div
+        initial={false}
+        layout
         className={cn(
           "w-full overflow-hidden border border-border/85 bg-card/95 text-foreground shadow-sm",
           variant === "hero" && "shadow-aqsha",
         )}
         animate={{
-          borderRadius: shellExpanded ? 24 : 9999,
+          borderRadius: shellExpanded ? COMPOSER_EXPANDED_RADIUS : COMPOSER_COLLAPSED_RADIUS,
         }}
         transition={shellTransition}
       >
@@ -430,7 +434,7 @@ export function Composer(props: ComposerProps) {
             />
             <div
               className={cn(
-                "flex w-full min-h-0 transition-[padding,gap] duration-[220ms] ease-[cubic-bezier(0.23,1,0.32,1)]",
+                "flex w-full min-h-0 transition-[padding,gap] duration-[180ms] ease-[cubic-bezier(0.23,1,0.32,1)]",
                 isExpanded
                   ? "flex-col gap-3 p-3.5 pb-2.5 pt-2"
                   : shellExpanded

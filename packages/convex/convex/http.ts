@@ -71,9 +71,6 @@ type ClerkUserWebhookData = {
   id?: string;
   email_addresses?: Array<{ id: string; email_address: string }>;
   primary_email_address_id?: string | null;
-  first_name?: string | null;
-  last_name?: string | null;
-  image_url?: string | null;
   deleted?: boolean;
 };
 
@@ -92,8 +89,6 @@ function normalizeClerkUserWebhook(event: ClerkWebhookEvent) {
     eventType: event.type,
     clerkUserId,
     email: primaryEmail(event.data),
-    name: displayName(event.data),
-    image: event.data.image_url ?? null,
     deleted: event.type === "user.deleted" || event.data.deleted === true,
   };
 }
@@ -113,11 +108,6 @@ function primaryEmail(data: ClerkUserWebhookData) {
     data.email_addresses?.[0]?.email_address ??
     null
   );
-}
-
-function displayName(data: ClerkUserWebhookData) {
-  const name = [data.first_name, data.last_name].filter(Boolean).join(" ").trim();
-  return name || null;
 }
 
 function json(body: unknown, status = 200) {

@@ -36,7 +36,7 @@ const promptCommandGroups = [
   "Workspace",
 ] as const;
 
-const COLLAPSED_EDITOR_HEIGHT = 24;
+const COLLAPSED_EDITOR_HEIGHT = 32;
 
 export function TokenizedPromptInput({
   value,
@@ -309,8 +309,8 @@ export function TokenizedPromptInput({
             aria-controls={commandOpen ? "composer-slash-commands" : undefined}
             data-slot="input-group-control"
             className={cn(
-              "min-h-6 max-h-36 w-full overflow-y-auto whitespace-pre-wrap break-words text-foreground caret-primary outline-none disabled:opacity-100",
-              isCollapsed ? "py-0 leading-[18px]" : "py-1",
+              "max-h-36 w-full overflow-y-auto whitespace-pre-wrap break-words text-foreground caret-primary outline-none disabled:opacity-100",
+              isCollapsed ? "min-h-8 py-[7px] leading-[18px]" : "min-h-6 py-1",
             )}
             onInput={handleInput}
             onBlur={syncEditorState}

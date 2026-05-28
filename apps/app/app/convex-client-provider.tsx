@@ -45,28 +45,31 @@ function AuthenticatedUserSync({ children }: { children: ReactNode }) {
     useConvexAuth();
   const { isLoaded: isClerkLoaded, isSignedIn, userId } = useAuth();
   const syncCurrentUser = useMutation(api.auth.syncCurrentUser);
-  const attemptedUserId = useRef<string | null>(null);
+  const syncedUserId = useRef<string | null>(null);
+  const syncingUserId = useRef<string | null>(null);
 
   useEffect(() => {
     if (!isClerkLoaded || !isSignedIn || !userId) {
-      attemptedUserId.current = null;
+      syncedUserId.current = null;
+      syncingUserId.current = null;
       return;
     }
     if (isConvexLoading || !isConvexAuthenticated) return;
-    if (attemptedUserId.current === userId) return;
+    if (syncedUserId.current === userId || syncingUserId.current === userId) return;
 
-    attemptedUserId.current = userId;
-    let cancelled = false;
+    syncingUserId.current = userId;
     void syncCurrentUser({})
+      .then(() => {
+        syncedUserId.current = userId;
+      })
       .catch(() => {
-        if (!cancelled) {
-          console.error("Failed to sync Clerk user into Convex.");
+        console.error("Failed to sync Clerk user into Convex.");
+      })
+      .finally(() => {
+        if (syncingUserId.current === userId) {
+          syncingUserId.current = null;
         }
       });
-
-    return () => {
-      cancelled = true;
-    };
   }, [
     isClerkLoaded,
     isConvexAuthenticated,
