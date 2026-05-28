@@ -131,6 +131,7 @@ function WorkspaceDetailMain({
               onActiveFolderChange={setActiveFolderId}
               isArtifactSelected={draftContext.isSelected}
               onToggleArtifactContext={draftContext.toggleArtifact}
+              onSetArtifactContextSelection={draftContext.setSelectedArtifacts}
               onAfterArchive={() => router.push("/workspaces")}
               chatPanelOpen={chatPanelOpen}
               onToggleChatPanel={() => setChatPanelOpen((open) => !open)}

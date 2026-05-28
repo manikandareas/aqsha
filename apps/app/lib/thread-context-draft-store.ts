@@ -123,6 +123,7 @@ export function useDraftContextSelection(
     (state) => state.setInitialSelection,
   );
   const toggle = useThreadContextDraftStore((state) => state.toggleArtifact);
+  const setSelection = useThreadContextDraftStore((state) => state.setSelection);
   const clearSelection = useThreadContextDraftStore((state) => state.clearSelection);
   const markPersisted = useThreadContextDraftStore((state) => state.markPersisted);
 
@@ -140,6 +141,10 @@ export function useDraftContextSelection(
     (artifactId: string) => toggle(scopeKey, artifactId),
     [scopeKey, toggle],
   );
+  const setSelectedArtifacts = useCallback(
+    (artifactIds: string[]) => setSelection(scopeKey, artifactIds),
+    [scopeKey, setSelection],
+  );
   const clear = useCallback(() => clearSelection(scopeKey), [clearSelection, scopeKey]);
   const markSelectionPersisted = useCallback(
     (artifactIds: string[]) => markPersisted(scopeKey, artifactIds),
@@ -153,6 +158,7 @@ export function useDraftContextSelection(
     isDirty,
     isSelected,
     toggleArtifact,
+    setSelectedArtifacts,
     clear,
     markSelectionPersisted,
   };

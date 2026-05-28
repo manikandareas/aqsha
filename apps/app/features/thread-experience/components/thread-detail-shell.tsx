@@ -170,6 +170,7 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
           workspaces={workspaces}
           selectedIds={draftContext.selectedIdSet}
           onToggle={draftContext.toggleArtifact}
+          onSetSelection={draftContext.setSelectedArtifacts}
         />
       )
     : selectedThread != null
@@ -180,6 +181,7 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
               workspaceName={workspaceName ?? "Workspace"}
               selectedIds={draftContext.selectedIdSet}
               onToggle={draftContext.toggleArtifact}
+              onSetSelection={draftContext.setSelectedArtifacts}
             />
           )
         : (
@@ -187,6 +189,7 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
               workspaces={workspaces}
               selectedIds={draftContext.selectedIdSet}
               onToggle={draftContext.toggleArtifact}
+              onSetSelection={draftContext.setSelectedArtifacts}
             />
           )
       : null;
@@ -232,12 +235,14 @@ function ThreadWorkspaceLibraryPanel({
   workspaceName,
   selectedIds,
   onToggle,
+  onSetSelection,
   titleSlot,
 }: {
   workspaceId: string;
   workspaceName: string;
   selectedIds: Set<string>;
   onToggle: (artifactId: string) => void;
+  onSetSelection: (artifactIds: string[]) => void;
   titleSlot?: ReactNode;
 }) {
   const router = useRouter();
@@ -268,6 +273,7 @@ function ThreadWorkspaceLibraryPanel({
       onActiveFolderChange={setActiveFolderId}
       isArtifactSelected={(artifactId) => selectedIds.has(artifactId)}
       onToggleArtifactContext={onToggle}
+      onSetArtifactContextSelection={onSetSelection}
       onAfterArchive={() => router.push("/workspaces")}
       showCreateActions
       showWorkspaceSettings
@@ -322,10 +328,12 @@ function ThreadGlobalContextPanel({
   workspaces,
   selectedIds,
   onToggle,
+  onSetSelection,
 }: {
   workspaces: WorkspacePickerOption[];
   selectedIds: Set<string>;
   onToggle: (artifactId: string) => void;
+  onSetSelection: (artifactIds: string[]) => void;
 }) {
   const closePanel = useCloseRightPanel();
   const [selectedPanelWorkspaceId, setSelectedPanelWorkspaceId] = useState<string | null>(null);
@@ -348,6 +356,7 @@ function ThreadGlobalContextPanel({
         workspaceName={selectedWorkspaceName}
         selectedIds={selectedIds}
         onToggle={onToggle}
+        onSetSelection={onSetSelection}
         titleSlot={workspaceSwitcher}
       />
     );

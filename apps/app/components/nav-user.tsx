@@ -4,8 +4,8 @@ import { useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  ChevronsUpDownIcon,
   LogOutIcon,
+  MoreVerticalIcon,
   SettingsIcon,
 } from "lucide-react";
 import { ThemeMenuSub } from "@/components/theme-toggle";
@@ -72,7 +72,7 @@ export function NavUser({ user }: { user: Viewer | undefined }) {
               <span className="min-w-0 flex-1 truncate text-left text-[12px] font-medium">
                 {name}
               </span>
-              <ChevronsUpDownIcon className="size-3 shrink-0 text-muted-foreground" />
+              <MoreVerticalIcon className="size-3.5 shrink-0 text-muted-foreground" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent

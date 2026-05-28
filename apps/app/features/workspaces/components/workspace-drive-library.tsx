@@ -39,6 +39,7 @@ export function WorkspaceDriveLibrary({
   workspaces,
   isArtifactSelected,
   onToggleArtifactContext,
+  onSetArtifactContextSelection,
   onOpenArtifact,
   onRenameFolder,
   onDeleteFolder,
@@ -70,6 +71,7 @@ export function WorkspaceDriveLibrary({
   workspaces: Array<{ _id: string; name: string }>;
   isArtifactSelected: (artifactId: string) => boolean;
   onToggleArtifactContext: (artifactId: string) => void;
+  onSetArtifactContextSelection: (artifactIds: string[]) => void;
   onOpenArtifact: (artifactId: string) => void;
   onRenameFolder: (folder: WorkspaceFolder) => void;
   onDeleteFolder: (folder: WorkspaceFolder) => void;
@@ -228,6 +230,7 @@ export function WorkspaceDriveLibrary({
                 dragArtifactId={dragArtifactId}
                 isArtifactSelected={isArtifactSelected}
                 onToggleArtifactContext={onToggleArtifactContext}
+                onSetArtifactContextSelection={onSetArtifactContextSelection}
                 onOpenFolder={openFolder}
                 onOpenArtifact={onOpenArtifact}
                 onRenameFolder={onRenameFolder}

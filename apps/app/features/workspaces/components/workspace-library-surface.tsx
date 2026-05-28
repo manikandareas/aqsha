@@ -41,6 +41,7 @@ export function WorkspaceLibrarySurface({
   onActiveFolderChange,
   isArtifactSelected,
   onToggleArtifactContext,
+  onSetArtifactContextSelection,
   onAfterArchive,
   showLeftSidebarTrigger,
   onToggleLeftSidebar,
@@ -59,6 +60,7 @@ export function WorkspaceLibrarySurface({
   onActiveFolderChange: (folderId: "root" | string) => void;
   isArtifactSelected: (artifactId: string) => boolean;
   onToggleArtifactContext: (artifactId: string) => void;
+  onSetArtifactContextSelection: (artifactIds: string[]) => void;
   onAfterArchive: () => void;
   showLeftSidebarTrigger?: boolean;
   onToggleLeftSidebar?: () => void;
@@ -98,6 +100,7 @@ export function WorkspaceLibrarySurface({
         {...dialogState.libraryHandlers}
         isArtifactSelected={isArtifactSelected}
         onToggleArtifactContext={onToggleArtifactContext}
+        onSetArtifactContextSelection={onSetArtifactContextSelection}
         onOpenArtifact={(artifactId) =>
           router.push(`/workspaces/${workspaceId}/artifacts/${artifactId}`)
         }
