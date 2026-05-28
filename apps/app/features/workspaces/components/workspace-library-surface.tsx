@@ -119,13 +119,14 @@ export function WorkspaceLibrarySurface({
             targetWorkspaceId: toWorkspaceId(targetWorkspaceId),
           });
         }}
-        onUploadFiles={async (files, folderId) => {
-          await uploadWorkspaceFiles({
+        onUploadFiles={async (files, folderId, options) => {
+          return await uploadWorkspaceFiles({
             files,
             workspaceId,
             folderId,
             generateUploadUrl: drive.generateUploadUrl,
             createUploadedArtifact: drive.createUploadedArtifact,
+            onFileChange: options?.onFileChange,
           });
         }}
         chatPanelOpen={chatPanelOpen}

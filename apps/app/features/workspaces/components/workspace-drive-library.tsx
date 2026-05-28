@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@aqsha/convex/artifact-upload-limits";
 import { FileTextIcon, FolderIcon, LinkIcon, UploadIcon } from "lucide-react";
 import {
   ContextMenu,
@@ -22,9 +21,14 @@ import {
   type WorkspaceFolder,
 } from "../utils/workspace-library-model";
 import { panelBodyPaddingClass } from "@/lib/panel-surface";
+import {
+  type WorkspaceUploadProgressEvent,
+  type WorkspaceUploadResult,
+} from "../utils/workspace-file-upload";
 import { WorkspaceBoardToolbar } from "./workspace-board-toolbar";
 import { WorkspaceDriveEmpty } from "./workspace-drive-empty";
 import { WorkspaceDriveGrid } from "./workspace-drive-grid";
+import { useWorkspaceUploadToast } from "./workspace-upload-toast";
 
 export function WorkspaceDriveLibrary({
   workspaceName,
@@ -74,7 +78,13 @@ export function WorkspaceDriveLibrary({
   onMoveArtifact: (artifactId: string, target: string) => Promise<void>;
   onMoveArtifactToWorkspace: (artifactId: string, targetWorkspaceId: string) => Promise<void>;
   onMoveFolderToWorkspace: (folderId: string, targetWorkspaceId: string) => Promise<void>;
-  onUploadFiles: (files: File[], folderId: "root" | string) => Promise<void>;
+  onUploadFiles: (
+    files: File[],
+    folderId: "root" | string,
+    options?: {
+      onFileChange?: (event: WorkspaceUploadProgressEvent) => void;
+    },
+  ) => Promise<WorkspaceUploadResult[]>;
   onCreateFolder: () => void;
   onCreateDocument: () => void;
   onCreateUrl: () => void;
@@ -114,9 +124,8 @@ export function WorkspaceDriveLibrary({
   );
   const [dragArtifactId, setDragArtifactId] = useState<string | null>(null);
   const [isUploadDragOver, setIsUploadDragOver] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadToast = useWorkspaceUploadToast({ onUploadFiles });
 
   const isEmpty =
     folderView.folders.length === 0 && folderView.artifacts.length === 0;
@@ -129,22 +138,12 @@ export function WorkspaceDriveLibrary({
 
   const uploadToActiveFolder = async (fileList: FileList | File[]) => {
     const files = [...fileList];
-    if (files.length === 0 || isUploading) return;
-    const oversized = files.find((file) => file.size > MAX_UPLOAD_BYTES);
-    if (oversized) {
-      setUploadError(`${oversized.name} melebihi batas ${MAX_UPLOAD_MB} MB.`);
-      return;
-    }
-    setUploadError(null);
-    setIsUploading(true);
-    try {
-      await onUploadFiles(files, getUploadTargetFolderId(folderView.activeFolderId) ?? "root");
-    } catch (error) {
-      setUploadError(error instanceof Error ? error.message : "Upload gagal.");
-    } finally {
-      setIsUploading(false);
-      setIsUploadDragOver(false);
-    }
+    if (files.length === 0) return;
+    uploadToast.enqueue(
+      files,
+      getUploadTargetFolderId(folderView.activeFolderId) ?? "root",
+    );
+    setIsUploadDragOver(false);
   };
 
   const openUploadPicker = () => fileInputRef.current?.click();
@@ -212,16 +211,6 @@ export function WorkspaceDriveLibrary({
               void uploadToActiveFolder(event.dataTransfer.files);
             }}
           >
-            {uploadError ? (
-              <div className="mb-3 rounded-lg border border-coral-soft-border bg-coral-soft px-3 py-2 text-[12px] font-medium text-coral-foreground">
-                {uploadError}
-              </div>
-            ) : null}
-            {isUploading ? (
-              <div className="mb-3 rounded-lg border border-mint-soft-border bg-mint-soft px-3 py-2 text-[12px] font-medium text-mint-foreground">
-                Mengupload file...
-              </div>
-            ) : null}
             {isEmpty ? (
               <WorkspaceDriveEmpty
                 variant={folderView.activeFolderId === "root" ? "root" : "folder"}

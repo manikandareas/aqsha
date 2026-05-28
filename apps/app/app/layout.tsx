@@ -4,6 +4,7 @@ import { Caveat, Inter, JetBrains_Mono, Nunito } from "next/font/google";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AppToaster } from "@/components/app-toaster";
 import { ConvexClientProvider } from "./convex-client-provider";
 import "./globals.css";
 
@@ -59,6 +60,7 @@ export default async function RootLayout({
               <NuqsAdapter>
                 <TooltipProvider>{children}</TooltipProvider>
               </NuqsAdapter>
+              <AppToaster />
             </ConvexClientProvider>
           </ThemeProvider>
         </ClerkProvider>
