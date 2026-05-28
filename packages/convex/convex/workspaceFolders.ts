@@ -6,6 +6,7 @@ import {
   assertWorkspaceOwner,
   normalizeName,
 } from "./workspaceAccess";
+import { syncArtifactWorkspaceMove } from "./workspaceMoveModel";
 
 export const list = query({
   args: { workspaceId: v.id("workspaces") },
@@ -68,6 +69,68 @@ export const rename = mutation({
       name: normalizeName(args.name, "Folder name"),
       updatedAt: Date.now(),
     });
+    return { ok: true };
+  },
+});
+
+export const move = mutation({
+  args: {
+    folderId: v.id("workspaceFolders"),
+    targetWorkspaceId: v.id("workspaces"),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    const folder = await assertFolderOwner(ctx, args.folderId, user._id);
+    await assertWorkspaceOwner(ctx, folder.workspaceId, user._id, { requireActive: true });
+    await assertWorkspaceOwner(ctx, args.targetWorkspaceId, user._id, { requireActive: true });
+    if (folder.workspaceId === args.targetWorkspaceId) {
+      return { ok: true };
+    }
+
+    const duplicate = await ctx.db
+      .query("workspaceFolders")
+      .withIndex("by_owner_workspace_name", (q) =>
+        q
+          .eq("ownerUserId", user._id)
+          .eq("workspaceId", args.targetWorkspaceId)
+          .eq("name", folder.name),
+      )
+      .first();
+    if (duplicate?.status === "active") {
+      throw new ConvexError("Folder name already exists in target workspace");
+    }
+
+    const now = Date.now();
+    const artifacts = await ctx.db
+      .query("artifacts")
+      .withIndex("by_owner_workspace_folder_status_updated", (q) =>
+        q
+          .eq("ownerUserId", user._id)
+          .eq("workspaceId", folder.workspaceId)
+          .eq("folderId", args.folderId)
+          .eq("status", "active"),
+      )
+      .collect();
+
+    await ctx.db.patch("workspaceFolders", args.folderId, {
+      workspaceId: args.targetWorkspaceId,
+      updatedAt: now,
+    });
+
+    for (const artifact of artifacts) {
+      await ctx.db.patch("artifacts", artifact._id, {
+        workspaceId: args.targetWorkspaceId,
+        updatedAt: now,
+      });
+      await syncArtifactWorkspaceMove(ctx, {
+        ownerUserId: user._id,
+        artifactId: artifact._id,
+        previousWorkspaceId: folder.workspaceId,
+        targetWorkspaceId: args.targetWorkspaceId,
+        updatedAt: now,
+      });
+    }
+
     return { ok: true };
   },
 });

@@ -95,8 +95,11 @@ async function patchUserFromIdentity(ctx: MutationCtx, user: UserDoc, identity: 
 function userPatchFromIdentity(user: UserDoc, identity: Identity) {
   return {
     clerkUserId: identity.subject,
-    email: identity.email,
-    emailVerified: identity.emailVerified === true,
+    email: typeof identity.email === "string" ? identity.email : user.email ?? null,
+    emailVerified:
+      typeof identity.emailVerified === "boolean"
+        ? identity.emailVerified
+        : user.emailVerified ?? false,
     name: user.name ?? null,
     image: user.image ?? null,
     updatedAt: Date.now(),

@@ -28,6 +28,11 @@ export type MoveTargetOption = {
   label: string;
 };
 
+export type WorkspaceMoveTargetOption = {
+  value: string;
+  label: string;
+};
+
 export type FolderSummary = WorkspaceFolder & {
   artifactCount: number;
 };
@@ -108,6 +113,19 @@ export function getMoveTargetOptions(folders: WorkspaceFolder[]): MoveTargetOpti
   ];
 }
 
+export function getWorkspaceMoveTargetOptions(
+  workspaces: Array<{ _id: string; name: string }>,
+  currentWorkspaceId: string,
+): WorkspaceMoveTargetOption[] {
+  return workspaces
+    .filter((workspace) => workspace._id !== currentWorkspaceId)
+    .map((workspace) => ({ value: workspace._id, label: workspace.name }));
+}
+
+export function getUploadTargetFolderId(activeFolderId: "root" | string) {
+  return activeFolderId === "root" ? undefined : activeFolderId;
+}
+
 export function resolveActiveFolderId({
   activeFolderId,
   groups,
@@ -177,4 +195,3 @@ export function expectArtifactsReturnToRootAfterFolderDelete({
     .filter((artifact) => movedIds.has(artifact._id))
     .every((artifact) => artifact.folderId === undefined);
 }
-

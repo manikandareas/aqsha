@@ -3,6 +3,8 @@ import {
   expectArtifactsReturnToRootAfterFolderDelete,
   getFolderView,
   getMoveTargetOptions,
+  getUploadTargetFolderId,
+  getWorkspaceMoveTargetOptions,
   groupArtifactsByFolder,
   resolveActiveFolderId,
   ROOT_FOLDER_LABEL,
@@ -64,6 +66,23 @@ describe("workspace library model", () => {
       { value: "folder-a", label: "Drafts" },
       { value: "folder-b", label: "Reading" },
     ]);
+  });
+
+  it("excludes the active workspace from workspace move targets", () => {
+    expect(
+      getWorkspaceMoveTargetOptions(
+        [
+          { _id: "workspace-a", name: "Current" },
+          { _id: "workspace-b", name: "Target" },
+        ],
+        "workspace-a",
+      ),
+    ).toEqual([{ value: "workspace-b", label: "Target" }]);
+  });
+
+  it("resolves upload target folder for root and folder views", () => {
+    expect(getUploadTargetFolderId("root")).toBeUndefined();
+    expect(getUploadTargetFolderId("folder-a")).toBe("folder-a");
   });
 
   it("builds root folder view with folders and root artifacts", () => {

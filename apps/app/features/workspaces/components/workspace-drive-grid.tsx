@@ -1,22 +1,15 @@
 "use client";
 
-import { FolderIcon, MoreHorizontalIcon, PenLineIcon, Trash2Icon } from "lucide-react";
+import { FolderIcon } from "lucide-react";
 import { DriveArtifactCard } from "@/components/drive-artifact-card";
 import { useDriveItemClick } from "../hooks/use-drive-item-click";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { driveArtifactGridClass } from "@/lib/drive-grid";
 import { cn } from "@/lib/utils";
+import {
+  ArtifactContextMenuContent,
+  FolderContextMenuContent,
+} from "./workspace-drive-context-menus";
 import type {
   FolderSummary,
   MoveTargetOption,
@@ -27,6 +20,8 @@ import type {
 export function WorkspaceDriveGrid({
   folders,
   artifacts,
+  workspaceId,
+  workspaces,
   moveTargets,
   dragArtifactId,
   isArtifactSelected,
@@ -35,15 +30,19 @@ export function WorkspaceDriveGrid({
   onOpenArtifact,
   onRenameFolder,
   onDeleteFolder,
+  onMoveFolderToWorkspace,
   onRenameArtifact,
   onDeleteArtifact,
   onMoveArtifact,
+  onMoveArtifactToWorkspace,
   onDragArtifactStart,
   onDragArtifactEnd,
   onDropArtifactOnFolder,
 }: {
   folders: FolderSummary[];
   artifacts: WorkspaceArtifact[];
+  workspaceId: string;
+  workspaces: Array<{ _id: string; name: string }>;
   moveTargets: MoveTargetOption[];
   dragArtifactId: string | null;
   isArtifactSelected: (artifactId: string) => boolean;
@@ -52,9 +51,11 @@ export function WorkspaceDriveGrid({
   onOpenArtifact: (artifactId: string) => void;
   onRenameFolder: (folder: WorkspaceFolder) => void;
   onDeleteFolder: (folder: WorkspaceFolder) => void;
+  onMoveFolderToWorkspace: (folderId: string, targetWorkspaceId: string) => Promise<void>;
   onRenameArtifact: (artifact: WorkspaceArtifact) => void;
   onDeleteArtifact: (artifact: WorkspaceArtifact) => void;
   onMoveArtifact: (artifactId: string, target: string) => Promise<void>;
+  onMoveArtifactToWorkspace: (artifactId: string, targetWorkspaceId: string) => Promise<void>;
   onDragArtifactStart: (artifactId: string) => void;
   onDragArtifactEnd: () => void;
   onDropArtifactOnFolder: (folderId: string) => void;
@@ -71,7 +72,11 @@ export function WorkspaceDriveGrid({
               onOpen={() => onOpenFolder(folder._id)}
               onRename={() => onRenameFolder(folder)}
               onDelete={() => onDeleteFolder(folder)}
+              onMoveToWorkspace={(targetWorkspaceId) =>
+                onMoveFolderToWorkspace(folder._id, targetWorkspaceId)
+              }
               onDrop={() => onDropArtifactOnFolder(folder._id)}
+              workspaces={workspaces}
             />
           ))}
         </div>
@@ -82,6 +87,7 @@ export function WorkspaceDriveGrid({
             <ArtifactTile
               key={artifact._id}
               artifact={artifact}
+              workspaceId={workspaceId}
               moveTargets={moveTargets}
               isDragging={dragArtifactId === artifact._id}
               isSelected={isArtifactSelected(artifact._id)}
@@ -90,8 +96,12 @@ export function WorkspaceDriveGrid({
               onRename={() => onRenameArtifact(artifact)}
               onDelete={() => onDeleteArtifact(artifact)}
               onMove={(target) => onMoveArtifact(artifact._id, target)}
+              onMoveToWorkspace={(targetWorkspaceId) =>
+                onMoveArtifactToWorkspace(artifact._id, targetWorkspaceId)
+              }
               onDragStart={() => onDragArtifactStart(artifact._id)}
               onDragEnd={onDragArtifactEnd}
+              workspaces={workspaces}
             />
           ))}
         </div>
@@ -106,75 +116,65 @@ function FolderTile({
   onOpen,
   onRename,
   onDelete,
+  onMoveToWorkspace,
   onDrop,
+  workspaces,
 }: {
   folder: FolderSummary;
   isDropTarget: boolean;
   onOpen: () => void;
   onRename: () => void;
   onDelete: () => void;
+  onMoveToWorkspace: (targetWorkspaceId: string) => void;
   onDrop: () => void;
+  workspaces: Array<{ _id: string; name: string }>;
 }) {
   return (
-    <div
-      className={cn(
-        "group relative inline-flex max-w-full items-center rounded-lg transition-colors hover:bg-muted/50",
-        isDropTarget && "ring-2 ring-primary/30",
-      )}
-      onDragOver={(event) => {
-        if (!isDropTarget) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = "move";
-      }}
-      onDrop={(event) => {
-        event.preventDefault();
-        onDrop();
-      }}
-    >
-      <button
-        type="button"
-        onDoubleClick={onOpen}
-        className="inline-flex min-w-0 items-center gap-2.5 py-2 pl-2.5 pr-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-        aria-label={`Folder ${folder.name}. Klik dua kali untuk membuka.`}
-      >
-        <FolderIcon
-          className="size-5 shrink-0 fill-lemon text-lemon"
-          strokeWidth={1.25}
-        />
-        <span className="truncate text-[13px] font-medium text-foreground">{folder.name}</span>
-      </button>
-      <div className="shrink-0 pr-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="size-7"
-              aria-label={`Aksi folder ${folder.name}`}
-              onClick={(event) => event.stopPropagation()}
-            >
-              <MoreHorizontalIcon className="size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-36">
-            <DropdownMenuItem onClick={onRename}>
-              <PenLineIcon className="size-4" />
-              Rename
-            </DropdownMenuItem>
-            <DropdownMenuItem variant="destructive" onClick={onDelete}>
-              <Trash2Icon className="size-4" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </div>
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          className={cn(
+            "group relative inline-flex max-w-full items-center rounded-lg transition-colors hover:bg-muted/50",
+            isDropTarget && "ring-2 ring-primary/30",
+          )}
+          onDragOver={(event) => {
+            if (!isDropTarget) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            onDrop();
+          }}
+        >
+          <button
+            type="button"
+            onDoubleClick={onOpen}
+            className="inline-flex min-w-0 items-center gap-2.5 py-2 pl-2.5 pr-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            aria-label={`Folder ${folder.name}. Klik dua kali untuk membuka.`}
+          >
+            <FolderIcon
+              className="size-5 shrink-0 fill-lemon text-lemon"
+              strokeWidth={1.25}
+            />
+            <span className="truncate text-[13px] font-medium text-foreground">{folder.name}</span>
+          </button>
+        </div>
+      </ContextMenuTrigger>
+      <FolderContextMenuContent
+        workspaces={workspaces}
+        onOpen={onOpen}
+        onRename={onRename}
+        onDelete={onDelete}
+        onMoveToWorkspace={onMoveToWorkspace}
+      />
+    </ContextMenu>
   );
 }
 
 function ArtifactTile({
   artifact,
+  workspaceId,
   moveTargets,
   isDragging,
   isSelected,
@@ -183,11 +183,15 @@ function ArtifactTile({
   onRename,
   onDelete,
   onMove,
+  onMoveToWorkspace,
   onDragStart,
   onDragEnd,
+  workspaces,
 }: {
   artifact: WorkspaceArtifact;
+  workspaceId: string;
   moveTargets: MoveTargetOption[];
+  workspaces: Array<{ _id: string; name: string }>;
   isDragging: boolean;
   isSelected: boolean;
   onSelect: () => void;
@@ -195,6 +199,7 @@ function ArtifactTile({
   onRename: () => void;
   onDelete: () => void;
   onMove: (target: string) => void;
+  onMoveToWorkspace: (targetWorkspaceId: string) => void;
   onDragStart: () => void;
   onDragEnd: () => void;
 }) {
@@ -204,79 +209,40 @@ function ArtifactTile({
   });
 
   return (
-    <div
-      className={cn("group relative", isDragging && "opacity-50")}
-      draggable
-      onDragStart={(event) => {
-        event.dataTransfer.effectAllowed = "move";
-        event.dataTransfer.setData("text/plain", artifact._id);
-        onDragStart();
-      }}
-      onDragEnd={onDragEnd}
-    >
-      <DriveArtifactCard
-        title={artifact.title}
-        kind={artifact.kind}
-        plainTextPreview={artifact.plainTextPreview}
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          className={cn("group relative", isDragging && "opacity-50")}
+          draggable
+          onDragStart={(event) => {
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", artifact._id);
+            onDragStart();
+          }}
+          onDragEnd={onDragEnd}
+        >
+          <DriveArtifactCard
+            title={artifact.title}
+            kind={artifact.kind}
+            plainTextPreview={artifact.plainTextPreview}
+            isSelected={isSelected}
+            onClick={handleClick}
+            onDoubleClick={handleDoubleClick}
+          />
+        </div>
+      </ContextMenuTrigger>
+      <ArtifactContextMenuContent
+        moveTargets={moveTargets}
+        workspaces={workspaces}
+        artifactHref={`/workspaces/${workspaceId}/artifacts/${artifact._id}`}
         isSelected={isSelected}
-        onClick={handleClick}
-        onDoubleClick={handleDoubleClick}
+        onSelect={onSelect}
+        onOpen={onOpen}
+        onRename={onRename}
+        onDelete={onDelete}
+        onMove={onMove}
+        onMoveToWorkspace={onMoveToWorkspace}
       />
-      <div className="absolute right-1.5 top-1.5 z-10 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-        <ArtifactActionsMenu
-          moveTargets={moveTargets}
-          onRename={onRename}
-          onDelete={onDelete}
-          onMove={onMove}
-        />
-      </div>
-    </div>
-  );
-}
-
-function ArtifactActionsMenu({
-  moveTargets,
-  onRename,
-  onDelete,
-  onMove,
-}: {
-  moveTargets: MoveTargetOption[];
-  onRename: () => void;
-  onDelete: () => void;
-  onMove: (target: string) => void;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button type="button" variant="ghost" size="icon-sm" className="size-7" aria-label="Aksi artifact">
-          <MoreHorizontalIcon className="size-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
-        <DropdownMenuLabel>Artifact</DropdownMenuLabel>
-        <DropdownMenuItem onClick={onRename}>
-          <PenLineIcon className="size-4" />
-          Rename
-        </DropdownMenuItem>
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            <FolderIcon className="size-4" />
-            Pindah ke
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            {moveTargets.map((target) => (
-              <DropdownMenuItem key={target.value} onClick={() => onMove(target.value)}>
-                {target.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" onClick={onDelete}>
-          <Trash2Icon className="size-4" />
-          Delete
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    </ContextMenu>
   );
 }

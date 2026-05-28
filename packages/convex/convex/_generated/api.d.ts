@@ -76,6 +76,7 @@ import type * as limits from "../limits.js";
 import type * as workspaceAccess from "../workspaceAccess.js";
 import type * as workspaceDefaults from "../workspaceDefaults.js";
 import type * as workspaceFolders from "../workspaceFolders.js";
+import type * as workspaceMoveModel from "../workspaceMoveModel.js";
 import type * as workspaces from "../workspaces.js";
 
 import type {
@@ -153,6 +154,7 @@ declare const fullApi: ApiFromModules<{
   workspaceAccess: typeof workspaceAccess;
   workspaceDefaults: typeof workspaceDefaults;
   workspaceFolders: typeof workspaceFolders;
+  workspaceMoveModel: typeof workspaceMoveModel;
   workspaces: typeof workspaces;
 }>;
 

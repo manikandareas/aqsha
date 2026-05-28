@@ -2,10 +2,11 @@
 
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { toArtifactId, toWorkspaceFolderId } from "@/lib/convex-refs";
+import { toArtifactId, toWorkspaceFolderId, toWorkspaceId } from "@/lib/convex-refs";
 import { useCloseRightPanel } from "@/hooks/use-close-right-panel";
 import type { WorkspaceDriveData } from "../api/use-workspaces-data";
 import type { useWorkspaceLibraryDialogState } from "../hooks/use-workspace-library-dialogs";
+import { uploadWorkspaceFiles } from "../utils/workspace-file-upload";
 import { WorkspaceDriveLibrary } from "./workspace-drive-library";
 import { WorkspaceLibraryDialogsStack } from "./workspace-library-dialogs-stack";
 
@@ -15,12 +16,16 @@ type LibraryDriveProps = Pick<
   WorkspaceDriveData,
   "folders" | "artifacts" | "moveArtifact" | "workspace"
 > & {
+  workspaces: WorkspaceDriveData["workspaces"];
   renameWorkspace: WorkspaceDriveData["renameWorkspace"];
   archiveWorkspace: WorkspaceDriveData["archiveWorkspace"];
   createFolder: WorkspaceDriveData["createFolder"];
+  moveFolder: WorkspaceDriveData["moveFolder"];
   createDocument: WorkspaceDriveData["createDocument"];
   createUrl: WorkspaceDriveData["createUrl"];
   renameFolder: WorkspaceDriveData["renameFolder"];
+  generateUploadUrl: WorkspaceDriveData["generateUploadUrl"];
+  createUploadedArtifact: WorkspaceDriveData["createUploadedArtifact"];
   renameArtifact: WorkspaceDriveData["renameArtifact"];
   removeFolder: WorkspaceDriveData["removeFolder"];
   removeArtifact: WorkspaceDriveData["removeArtifact"];
@@ -84,10 +89,13 @@ export function WorkspaceLibrarySurface({
     <>
       <WorkspaceDriveLibrary
         workspaceName={workspaceName}
+        workspaceId={workspaceId}
         titleSlot={titleSlot}
         onActiveFolderChange={onActiveFolderChange}
         folders={drive.folders}
         artifacts={drive.artifacts}
+        workspaces={drive.workspaces}
+        {...dialogState.libraryHandlers}
         isArtifactSelected={isArtifactSelected}
         onToggleArtifactContext={onToggleArtifactContext}
         onOpenArtifact={(artifactId) =>
@@ -99,6 +107,27 @@ export function WorkspaceLibrarySurface({
             folderId: target === "root" ? undefined : toWorkspaceFolderId(target),
           });
         }}
+        onMoveArtifactToWorkspace={async (artifactId, targetWorkspaceId) => {
+          await drive.moveArtifact({
+            artifactId: toArtifactId(artifactId),
+            targetWorkspaceId: toWorkspaceId(targetWorkspaceId),
+          });
+        }}
+        onMoveFolderToWorkspace={async (folderId, targetWorkspaceId) => {
+          await drive.moveFolder({
+            folderId: toWorkspaceFolderId(folderId),
+            targetWorkspaceId: toWorkspaceId(targetWorkspaceId),
+          });
+        }}
+        onUploadFiles={async (files, folderId) => {
+          await uploadWorkspaceFiles({
+            files,
+            workspaceId,
+            folderId,
+            generateUploadUrl: drive.generateUploadUrl,
+            createUploadedArtifact: drive.createUploadedArtifact,
+          });
+        }}
         chatPanelOpen={chatPanelOpen}
         onToggleChatPanel={onToggleChatPanel}
         onClosePanel={panelCloseHandler}
@@ -106,7 +135,6 @@ export function WorkspaceLibrarySurface({
         onToggleLeftSidebar={onToggleLeftSidebar}
         showCreateActions={showCreateActions}
         showWorkspaceSettings={showWorkspaceSettings}
-        {...dialogState.libraryHandlers}
       />
       <WorkspaceLibraryDialogsStack
         workspaceId={workspaceId}

@@ -502,19 +502,20 @@ export async function ensureCreditPeriod(
 
   if (existing) {
     if (
-      isMutationCtx(ctx) &&
       (existing.planKey !== args.planKey ||
         existing.creditsLimit !== plan.monthlyCredits ||
         existing.spendCeilingCents !== plan.providerSpendCeilingCents ||
         existing.status !== args.status)
     ) {
-      await ctx.db.patch("billingCreditPeriods", existing._id, {
-        planKey: args.planKey,
-        status: args.status,
-        creditsLimit: plan.monthlyCredits,
-        spendCeilingCents: plan.providerSpendCeilingCents,
-        updatedAt: Date.now(),
-      });
+      if (isMutationCtx(ctx)) {
+        await ctx.db.patch("billingCreditPeriods", existing._id, {
+          planKey: args.planKey,
+          status: args.status,
+          creditsLimit: plan.monthlyCredits,
+          spendCeilingCents: plan.providerSpendCeilingCents,
+          updatedAt: Date.now(),
+        });
+      }
       return {
         ...existing,
         planKey: args.planKey,

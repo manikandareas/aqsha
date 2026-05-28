@@ -46,6 +46,12 @@ export function useWorkspaceDriveData(workspaceId: string | WorkspaceId) {
       ? { workspaceId: convexWorkspaceId }
       : "skip";
   const workspace = useQuery(api.workspaces.get, workspaceArgs);
+  const workspacesPage = useQuery(
+    api.workspaces.list,
+    isAuthenticated
+      ? { paginationOpts: { cursor: null, numItems: workspacePageSize } }
+      : "skip",
+  );
   const folders = useQuery(api.workspaceFolders.list, workspaceArgs);
   const artifactsPage = useQuery(
     api.artifacts.listByWorkspace,
@@ -59,15 +65,22 @@ export function useWorkspaceDriveData(workspaceId: string | WorkspaceId) {
 
   return {
     workspace,
+    workspaces: workspacesPage?.page ?? [],
     folders: folders ?? [],
     artifacts: artifactsPage?.page ?? [],
     isLoading:
-      workspace === undefined || folders === undefined || artifactsPage === undefined,
+      workspace === undefined ||
+      workspacesPage === undefined ||
+      folders === undefined ||
+      artifactsPage === undefined,
     renameWorkspace: useMutation(api.workspaces.rename),
     archiveWorkspace: useMutation(api.workspaces.archive),
     createFolder: useMutation(api.workspaceFolders.create),
     renameFolder: useMutation(api.workspaceFolders.rename),
+    moveFolder: useMutation(api.workspaceFolders.move),
     removeFolder: useMutation(api.workspaceFolders.remove),
+    generateUploadUrl: useMutation(api.artifacts.generateUploadUrl),
+    createUploadedArtifact: useAction(api.artifactUploads.createFromStorage),
     createDocument: useMutation(api.artifacts.createDocument),
     createUrl: useMutation(api.artifacts.createUrl),
     renameArtifact: useMutation(api.artifacts.rename),
@@ -80,12 +93,6 @@ export function useWorkspaceDetailData(workspaceId: string) {
   const { isAuthenticated } = useConvexAuth();
   const drive = useWorkspaceDriveData(workspaceId);
   const viewer = useQuery(api.auth.getCurrentUser, isAuthenticated ? {} : "skip");
-  const workspacesPage = useQuery(
-    api.workspaces.list,
-    isAuthenticated
-      ? { paginationOpts: { cursor: null, numItems: workspacePageSize } }
-      : "skip",
-  );
   const threadPage = useQuery(
     api.agent.threads.list,
     isAuthenticated
@@ -110,7 +117,7 @@ export function useWorkspaceDetailData(workspaceId: string) {
     isAuthenticated,
     viewer,
     workspace: drive.workspace,
-    workspaces: workspacesPage?.page ?? [],
+    workspaces: drive.workspaces,
     folders: drive.folders,
     artifacts: drive.artifacts,
     threads: threadPage?.page ?? [],
@@ -122,7 +129,10 @@ export function useWorkspaceDetailData(workspaceId: string) {
     archiveWorkspace: drive.archiveWorkspace,
     createFolder: drive.createFolder,
     renameFolder: drive.renameFolder,
+    moveFolder: drive.moveFolder,
     removeFolder: drive.removeFolder,
+    generateUploadUrl: drive.generateUploadUrl,
+    createUploadedArtifact: drive.createUploadedArtifact,
     createDocument: drive.createDocument,
     createUrl: drive.createUrl,
     renameArtifact: drive.renameArtifact,

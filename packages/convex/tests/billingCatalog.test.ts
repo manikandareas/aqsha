@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   billingStatusAllowsUsage,
   currentMonthPeriod,
@@ -9,9 +9,20 @@ import {
   PUBLIC_PLAN_KEYS,
   planForProductKey,
 } from "../convex/billing/catalog";
-import { parseAdminEmails } from "../convex/billing/admin";
+import {
+  isAdminClerkUserId,
+  isAdminEmail,
+  isAdminOwnerUserId,
+  isAdminUserDocumentId,
+  parseAdminEmails,
+  parseAdminIdentifiers,
+} from "../convex/billing/admin";
 
 describe("billing catalog", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("defines Free, Starter, Plus, and internal Admin credit limits", () => {
     expect(PLAN_CATALOG.free.monthlyCredits).toBe(50);
     expect(PLAN_CATALOG.starter.monthlyCredits).toBe(500);
@@ -55,6 +66,25 @@ describe("billing catalog", () => {
   it("parses admin emails case-insensitively", () => {
     const emails = parseAdminEmails(" VitoAndareas15@gmail.com,other@example.com ");
     expect(emails.has("vitoandareas15@gmail.com")).toBe(true);
+  });
+
+  it("parses admin identifiers without changing case", () => {
+    const identifiers = parseAdminIdentifiers(" owner|User_A, user_ABC ");
+    expect(identifiers.has("owner|User_A")).toBe(true);
+    expect(identifiers.has("user_ABC")).toBe(true);
+    expect(identifiers.has("user_abc")).toBe(false);
+  });
+
+  it("recognizes admin identities from deployment env", () => {
+    vi.stubEnv("AQSHA_ADMIN_EMAILS", " VitoAndareas15@gmail.com ");
+    vi.stubEnv("AQSHA_ADMIN_OWNER_USER_IDS", " https://issuer.example|user_admin ");
+    vi.stubEnv("AQSHA_ADMIN_CLERK_USER_IDS", " user_3ELP9RQ5jR7WOgMuEpjQdCDOdND ");
+    vi.stubEnv("AQSHA_ADMIN_USER_IDS", " q173f4c9rnbxbk1y3gzt00v9fh87kzm6 ");
+
+    expect(isAdminEmail(" VitoAndareas15@gmail.com ")).toBe(true);
+    expect(isAdminOwnerUserId(" https://issuer.example|user_admin ")).toBe(true);
+    expect(isAdminClerkUserId(" user_3ELP9RQ5jR7WOgMuEpjQdCDOdND ")).toBe(true);
+    expect(isAdminUserDocumentId(" q173f4c9rnbxbk1y3gzt00v9fh87kzm6 ")).toBe(true);
   });
 
   it("converts token and provider usage into credits and estimated cost", () => {

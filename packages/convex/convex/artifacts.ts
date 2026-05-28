@@ -31,6 +31,7 @@ import {
   assertWorkspaceOwner,
   normalizeName,
 } from "./workspaceAccess";
+import { syncArtifactWorkspaceMove } from "./workspaceMoveModel";
 import { assertThreadOwner } from "./agent/threads";
 import {
   readWithExaContents,
@@ -425,6 +426,7 @@ export const rename = mutation({
 export const move = mutation({
   args: {
     artifactId: v.id("artifacts"),
+    targetWorkspaceId: v.optional(v.id("workspaces")),
     folderId: v.optional(v.id("workspaceFolders")),
   },
   handler: async (ctx, args) => {
@@ -433,12 +435,23 @@ export const move = mutation({
       requireActive: true,
     });
     await assertWorkspaceOwner(ctx, artifact.workspaceId, user._id, { requireActive: true });
+    const targetWorkspaceId = args.targetWorkspaceId ?? artifact.workspaceId;
+    await assertWorkspaceOwner(ctx, targetWorkspaceId, user._id, { requireActive: true });
     if (args.folderId) {
-      await assertFolderOwner(ctx, args.folderId, user._id, artifact.workspaceId);
+      await assertFolderOwner(ctx, args.folderId, user._id, targetWorkspaceId);
     }
+    const now = Date.now();
     await ctx.db.patch("artifacts", args.artifactId, {
+      workspaceId: targetWorkspaceId,
       folderId: args.folderId,
-      updatedAt: Date.now(),
+      updatedAt: now,
+    });
+    await syncArtifactWorkspaceMove(ctx, {
+      ownerUserId: user._id,
+      artifactId: args.artifactId,
+      previousWorkspaceId: artifact.workspaceId,
+      targetWorkspaceId,
+      updatedAt: now,
     });
     return { ok: true };
   },

@@ -18,19 +18,25 @@ export function WorkspacePickerDialog({
   open,
   onOpenChange,
   onSelect,
+  currentWorkspaceId,
   title = "Simpan ke workspace",
   description = "Pilih workspace tujuan untuk menyimpan dokumen ini.",
+  submitLabel = "Simpan",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelect: (workspaceId: string) => void | Promise<void>;
+  currentWorkspaceId?: string;
   title?: string;
   description?: string;
+  submitLabel?: string;
 }) {
   const workspacePage = useQuery(api.workspaces.list, {
     paginationOpts: { cursor: null, numItems: 50 },
   });
-  const workspaces = workspacePage?.page ?? [];
+  const workspaces = (workspacePage?.page ?? []).filter(
+    (workspace) => workspace._id !== currentWorkspaceId,
+  );
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -71,6 +77,11 @@ export function WorkspacePickerDialog({
               {workspace.name}
             </button>
           ))}
+          {workspaces.length === 0 ? (
+            <p className="rounded-[10px] border border-dashed border-border/80 px-3 py-4 text-center text-[12px] font-medium text-muted-foreground">
+              Tidak ada workspace tujuan.
+            </p>
+          ) : null}
         </div>
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
@@ -81,7 +92,7 @@ export function WorkspacePickerDialog({
             disabled={!selectedWorkspaceId || isSubmitting}
             onClick={() => void handleSave()}
           >
-            Simpan
+            {submitLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

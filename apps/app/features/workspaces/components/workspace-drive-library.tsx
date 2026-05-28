@@ -1,11 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@aqsha/convex/artifact-upload-limits";
+import { FileTextIcon, FolderIcon, LinkIcon, UploadIcon } from "lucide-react";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
 import { useWorkspaceFolderNav } from "../hooks/use-workspace-folder-nav";
 import {
   getFolderView,
   getMoveTargetOptions,
+  getUploadTargetFolderId,
+  getWorkspaceMoveTargetOptions,
   groupArtifactsByFolder,
   type WorkspaceArtifact,
   type WorkspaceFolder,
@@ -17,9 +28,11 @@ import { WorkspaceDriveGrid } from "./workspace-drive-grid";
 
 export function WorkspaceDriveLibrary({
   workspaceName,
+  workspaceId,
   titleSlot,
   folders,
   artifacts,
+  workspaces,
   isArtifactSelected,
   onToggleArtifactContext,
   onOpenArtifact,
@@ -28,6 +41,9 @@ export function WorkspaceDriveLibrary({
   onRenameArtifact,
   onDeleteArtifact,
   onMoveArtifact,
+  onMoveArtifactToWorkspace,
+  onMoveFolderToWorkspace,
+  onUploadFiles,
   onCreateFolder,
   onCreateDocument,
   onCreateUrl,
@@ -43,9 +59,11 @@ export function WorkspaceDriveLibrary({
   showWorkspaceSettings,
 }: {
   workspaceName: string;
+  workspaceId: string;
   titleSlot?: ReactNode;
   folders: WorkspaceFolder[];
   artifacts: WorkspaceArtifact[];
+  workspaces: Array<{ _id: string; name: string }>;
   isArtifactSelected: (artifactId: string) => boolean;
   onToggleArtifactContext: (artifactId: string) => void;
   onOpenArtifact: (artifactId: string) => void;
@@ -54,6 +72,9 @@ export function WorkspaceDriveLibrary({
   onRenameArtifact: (artifact: WorkspaceArtifact) => void;
   onDeleteArtifact: (artifact: WorkspaceArtifact) => void;
   onMoveArtifact: (artifactId: string, target: string) => Promise<void>;
+  onMoveArtifactToWorkspace: (artifactId: string, targetWorkspaceId: string) => Promise<void>;
+  onMoveFolderToWorkspace: (folderId: string, targetWorkspaceId: string) => Promise<void>;
+  onUploadFiles: (files: File[], folderId: "root" | string) => Promise<void>;
   onCreateFolder: () => void;
   onCreateDocument: () => void;
   onCreateUrl: () => void;
@@ -83,7 +104,19 @@ export function WorkspaceDriveLibrary({
     [activeFolderId, groups],
   );
   const moveTargets = useMemo(() => getMoveTargetOptions(folders), [folders]);
+  const workspaceMoveTargets = useMemo(
+    () =>
+      getWorkspaceMoveTargetOptions(workspaces, workspaceId).map((target) => ({
+        _id: target.value,
+        name: target.label,
+      })),
+    [workspaceId, workspaces],
+  );
   const [dragArtifactId, setDragArtifactId] = useState<string | null>(null);
+  const [isUploadDragOver, setIsUploadDragOver] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const isEmpty =
     folderView.folders.length === 0 && folderView.artifacts.length === 0;
@@ -94,8 +127,42 @@ export function WorkspaceDriveLibrary({
     setDragArtifactId(null);
   };
 
+  const uploadToActiveFolder = async (fileList: FileList | File[]) => {
+    const files = [...fileList];
+    if (files.length === 0 || isUploading) return;
+    const oversized = files.find((file) => file.size > MAX_UPLOAD_BYTES);
+    if (oversized) {
+      setUploadError(`${oversized.name} melebihi batas ${MAX_UPLOAD_MB} MB.`);
+      return;
+    }
+    setUploadError(null);
+    setIsUploading(true);
+    try {
+      await onUploadFiles(files, getUploadTargetFolderId(folderView.activeFolderId) ?? "root");
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Upload gagal.");
+    } finally {
+      setIsUploading(false);
+      setIsUploadDragOver(false);
+    }
+  };
+
+  const openUploadPicker = () => fileInputRef.current?.click();
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="sr-only"
+        onChange={(event) => {
+          if (event.currentTarget.files) {
+            void uploadToActiveFolder(event.currentTarget.files);
+          }
+          event.currentTarget.value = "";
+        }}
+      />
       <WorkspaceBoardToolbar
         workspaceName={workspaceName}
         titleSlot={titleSlot}
@@ -114,35 +181,100 @@ export function WorkspaceDriveLibrary({
         showCreateActions={showCreateActions}
         showWorkspaceSettings={showWorkspaceSettings}
       />
-      <div className={cn("min-h-0 flex-1 overflow-y-auto bg-background", panelBodyPaddingClass)}>
-        {isEmpty ? (
-          <WorkspaceDriveEmpty
-              variant={folderView.activeFolderId === "root" ? "root" : "folder"}
-              onCreateFolder={onCreateFolder}
-              onCreateDocument={onCreateDocument}
-              onCreateUrl={onCreateUrl}
-            />
-        ) : (
-          <WorkspaceDriveGrid
-            folders={folderView.folders}
-            artifacts={folderView.artifacts}
-            moveTargets={moveTargets}
-            dragArtifactId={dragArtifactId}
-            isArtifactSelected={isArtifactSelected}
-            onToggleArtifactContext={onToggleArtifactContext}
-            onOpenFolder={openFolder}
-            onOpenArtifact={onOpenArtifact}
-            onRenameFolder={onRenameFolder}
-            onDeleteFolder={onDeleteFolder}
-            onRenameArtifact={onRenameArtifact}
-            onDeleteArtifact={onDeleteArtifact}
-            onMoveArtifact={onMoveArtifact}
-            onDragArtifactStart={setDragArtifactId}
-            onDragArtifactEnd={() => setDragArtifactId(null)}
-            onDropArtifactOnFolder={(folderId) => void handleDropOnFolder(folderId)}
-          />
-        )}
-      </div>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div
+            className={cn(
+              "relative min-h-0 flex-1 overflow-y-auto bg-background",
+              panelBodyPaddingClass,
+              isUploadDragOver && "bg-muted/25 ring-2 ring-inset ring-primary/30",
+            )}
+            onDragEnter={(event) => {
+              if (event.dataTransfer.types.includes("Files")) {
+                event.preventDefault();
+                setIsUploadDragOver(true);
+              }
+            }}
+            onDragOver={(event) => {
+              if (event.dataTransfer.types.includes("Files")) {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "copy";
+              }
+            }}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                setIsUploadDragOver(false);
+              }
+            }}
+            onDrop={(event) => {
+              if (!event.dataTransfer.types.includes("Files")) return;
+              event.preventDefault();
+              void uploadToActiveFolder(event.dataTransfer.files);
+            }}
+          >
+            {uploadError ? (
+              <div className="mb-3 rounded-lg border border-coral-soft-border bg-coral-soft px-3 py-2 text-[12px] font-medium text-coral-foreground">
+                {uploadError}
+              </div>
+            ) : null}
+            {isUploading ? (
+              <div className="mb-3 rounded-lg border border-mint-soft-border bg-mint-soft px-3 py-2 text-[12px] font-medium text-mint-foreground">
+                Mengupload file...
+              </div>
+            ) : null}
+            {isEmpty ? (
+              <WorkspaceDriveEmpty
+                variant={folderView.activeFolderId === "root" ? "root" : "folder"}
+                onCreateFolder={onCreateFolder}
+                onCreateDocument={onCreateDocument}
+                onCreateUrl={onCreateUrl}
+              />
+            ) : (
+              <WorkspaceDriveGrid
+                folders={folderView.folders}
+                artifacts={folderView.artifacts}
+                workspaceId={workspaceId}
+                workspaces={workspaceMoveTargets}
+                moveTargets={moveTargets}
+                dragArtifactId={dragArtifactId}
+                isArtifactSelected={isArtifactSelected}
+                onToggleArtifactContext={onToggleArtifactContext}
+                onOpenFolder={openFolder}
+                onOpenArtifact={onOpenArtifact}
+                onRenameFolder={onRenameFolder}
+                onDeleteFolder={onDeleteFolder}
+                onMoveFolderToWorkspace={onMoveFolderToWorkspace}
+                onRenameArtifact={onRenameArtifact}
+                onDeleteArtifact={onDeleteArtifact}
+                onMoveArtifact={onMoveArtifact}
+                onMoveArtifactToWorkspace={onMoveArtifactToWorkspace}
+                onDragArtifactStart={setDragArtifactId}
+                onDragArtifactEnd={() => setDragArtifactId(null)}
+                onDropArtifactOnFolder={(folderId) => void handleDropOnFolder(folderId)}
+              />
+            )}
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent className="w-48">
+          <ContextMenuItem onSelect={openUploadPicker}>
+            <UploadIcon className="size-4" />
+            Upload file
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem onSelect={onCreateFolder}>
+            <FolderIcon className="size-4" />
+            Folder baru
+          </ContextMenuItem>
+          <ContextMenuItem onSelect={onCreateDocument}>
+            <FileTextIcon className="size-4" />
+            Dokumen baru
+          </ContextMenuItem>
+          <ContextMenuItem onSelect={onCreateUrl}>
+            <LinkIcon className="size-4" />
+            Simpan URL
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
     </div>
   );
 }
