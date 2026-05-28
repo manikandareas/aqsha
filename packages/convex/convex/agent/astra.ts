@@ -1,14 +1,14 @@
 import { v } from "convex/values";
 import { action } from "../_generated/server";
 import { astra } from "./runtime";
-import { authComponent } from "../auth";
+import { requireCurrentUser } from "../auth";
 
 export const sendPrompt = action({
   args: {
     prompt: v.string(),
   },
   handler: async (ctx, { prompt }) => {
-    const user = await authComponent.getAuthUser(ctx);
+    const user = await requireCurrentUser(ctx);
     const { threadId } = await astra.createThread(ctx, {
       userId: user._id,
       title: "Astra smoke test",

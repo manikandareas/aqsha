@@ -1,5 +1,6 @@
 "use client";
 
+import { useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -27,7 +28,6 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { authClient } from "@/lib/auth-client";
 
 type Viewer = {
   name: string | null;
@@ -37,13 +37,14 @@ type Viewer = {
 
 export function NavUser({ user }: { user: Viewer | undefined }) {
   const router = useRouter();
+  const { signOut: clerkSignOut } = useClerk();
   const { isMobile } = useSidebar();
   const name = user?.name || "Aqsha user";
   const email = user?.email || "Signed in";
   const initials = getInitials(name, email);
 
   const signOut = async () => {
-    await authClient.signOut();
+    await clerkSignOut({ redirectUrl: "/sign-in" });
     router.replace("/sign-in");
     router.refresh();
   };

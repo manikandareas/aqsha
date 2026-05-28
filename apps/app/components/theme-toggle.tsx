@@ -1,9 +1,9 @@
 "use client";
 
 import { CheckIcon, MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
+import { useTheme } from "next-themes";
 import type { ComponentProps } from "react";
 import { Button } from "@/components/ui/button";
-import { useAccountThemePreference } from "@/lib/account-theme";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,7 +31,7 @@ const themeMenuItemClass =
   "h-9 gap-2 rounded-[8px] px-2 text-[13px] font-medium text-popover-foreground [&_svg]:size-4 [&_svg]:text-muted-foreground";
 
 export function ThemeMenuSub({ className }: { className?: string }) {
-  const { theme, setThemePreference } = useAccountThemePreference();
+  const { theme, setTheme } = useTheme();
   const current = (theme ?? "system") as ThemeKey;
   const CurrentIcon = getThemeOption(current).icon;
 
@@ -57,7 +57,7 @@ export function ThemeMenuSub({ className }: { className?: string }) {
             <DropdownMenuItem
               key={option.key}
               onSelect={() => {
-                void setThemePreference(option.key);
+                setTheme(option.key);
               }}
               className={themeMenuItemClass}
             >
@@ -83,7 +83,7 @@ export function ThemeToggle({
   variant?: ComponentProps<typeof Button>["variant"];
   size?: ComponentProps<typeof Button>["size"];
 }) {
-  const { setThemePreference } = useAccountThemePreference();
+  const { setTheme } = useTheme();
 
   return (
     <DropdownMenu>
@@ -95,13 +95,13 @@ export function ThemeToggle({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" side="right">
-        <DropdownMenuItem onClick={() => void setThemePreference("light")}>
+        <DropdownMenuItem onClick={() => setTheme("light")}>
           Light
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => void setThemePreference("dark")}>
+        <DropdownMenuItem onClick={() => setTheme("dark")}>
           Dark
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => void setThemePreference("system")}>
+        <DropdownMenuItem onClick={() => setTheme("system")}>
           System
         </DropdownMenuItem>
       </DropdownMenuContent>

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ClerkProvider } from "@clerk/nextjs";
 import { Caveat, Inter, JetBrains_Mono, Nunito } from "next/font/google";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -40,29 +41,28 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const { getToken } = await import("@/lib/auth-server");
-  const initialToken = await getToken();
-
   return (
-    <html
-      lang="en"
-      suppressHydrationWarning
-      className={`${inter.variable} ${nunito.variable} ${jetbrainsMono.variable} ${caveat.variable} h-full antialiased`}
-    >
-      <body className="min-h-full">
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <ConvexClientProvider initialToken={initialToken}>
-            <NuqsAdapter>
-              <TooltipProvider>{children}</TooltipProvider>
-            </NuqsAdapter>
-          </ConvexClientProvider>
-        </ThemeProvider>
-      </body>
-    </html>
+    <ClerkProvider>
+      <html
+        lang="en"
+        suppressHydrationWarning
+        className={`${inter.variable} ${nunito.variable} ${jetbrainsMono.variable} ${caveat.variable} h-full antialiased`}
+      >
+        <body className="min-h-full">
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <ConvexClientProvider>
+              <NuqsAdapter>
+                <TooltipProvider>{children}</TooltipProvider>
+              </NuqsAdapter>
+            </ConvexClientProvider>
+          </ThemeProvider>
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }
