@@ -5,7 +5,7 @@ import type { MutationCtx } from "./_generated/server";
 import { buildApprovedArtifactExecutionPrompt } from "./agent/hitlContinuations";
 import { parseApprovedCardPayload } from "./agent/hitlPayloads";
 import { formatAnswersForPrompt, parseAnswersJson } from "./hitlSessionLogic";
-import { assertDocumentWorkspaceArtifact } from "./hitlWorkspace";
+import { assertManageableWorkspaceArtifact } from "./hitlWorkspace";
 import { executeWorkspaceManagement } from "./hitlWorkspaceExecution";
 
 export type ApprovedCardContext = {
@@ -96,8 +96,8 @@ async function executeArtifactDelete(
   },
 ) {
   const artifactId = args.payload.artifactId as Id<"artifacts">;
-  await assertDocumentWorkspaceArtifact(ctx, args.userId, artifactId);
-  await ctx.runMutation(internal.artifacts.deleteDocumentFromAgentInternal, {
+  await assertManageableWorkspaceArtifact(ctx, args.userId, artifactId);
+  await ctx.runMutation(internal.artifacts.deleteArtifactFromAgentInternal, {
     ownerUserId: args.userId,
     artifactId,
   });

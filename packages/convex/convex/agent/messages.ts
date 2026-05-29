@@ -263,7 +263,7 @@ async function savePromptAndScheduleRun(
     contextArtifactSnapshot?: Array<{
       artifactId: Id<"artifacts">;
       title: string;
-      kind?: "document" | "url";
+      artifactType?: string;
       source?: "upload" | "workspace";
     }>;
     deferGeneration?: boolean;
@@ -400,7 +400,7 @@ const contextArtifactSnapshotValidator = v.array(
   v.object({
     artifactId: v.id("artifacts"),
     title: v.string(),
-    kind: v.optional(v.union(v.literal("document"), v.literal("url"))),
+    artifactType: v.optional(v.string()),
     source: v.optional(v.union(v.literal("upload"), v.literal("workspace"))),
   }),
 );
@@ -673,7 +673,7 @@ export const list = query({
     const contextByMessageId = new Map<string, Array<{
       artifactId: string;
       title: string;
-      kind?: "document" | "url";
+      artifactType?: string;
       source?: "upload" | "workspace";
       savedWorkspaceId?: string;
       savedWorkspaceName?: string;
@@ -711,7 +711,7 @@ export const list = query({
         existing.push({
           artifactId: row.artifactId,
           title: row.title,
-          kind: row.kind,
+          artifactType: row.artifactType,
           source: row.source,
           ...(savedWorkspaceId
             ? {

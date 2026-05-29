@@ -63,7 +63,6 @@ export async function cleanupOwnerArtifacts(
     addStorage(storageIds, document.storageId);
     addStorage(storageIds, document.blocksStorageId);
     addStorage(storageIds, document.markdownStorageId);
-    addStorage(storageIds, document.uploadStorageId);
   }
   for (const url of artifactUrls) {
     addStorage(storageIds, url.storageId);

@@ -156,6 +156,7 @@ export function WorkspaceDriveLibrary({
         ref={fileInputRef}
         type="file"
         multiple
+        accept=".pdf,.docx,.txt,.md,.markdown,.csv,.json,.html,.htm,.svg,.mmd,.mermaid,.js,.jsx,.ts,.tsx,.css,.py,.java,.go,.rs,.sql,.sh,.yml,.yaml,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv,text/html,application/json,image/svg+xml,text/javascript,application/javascript,text/css,text/yaml,application/x-yaml"
         className="sr-only"
         onChange={(event) => {
           if (event.currentTarget.files) {

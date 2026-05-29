@@ -11,7 +11,7 @@ export type ArtifactRagMetadata = {
   artifactId: string;
   workspaceId: string;
   ownerUserId: string;
-  source: "upload" | "document" | "url";
+  source: "upload" | "artifact" | "url";
 };
 
 export const ARTIFACT_RAG_EMBEDDING_MODEL =

@@ -1,10 +1,13 @@
 "use client";
 
 import {
+  DownloadIcon,
   ExternalLinkIcon,
+  FileIcon,
   Loader2Icon,
   RotateCcwIcon,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import {
   useEffect,
   useReducer,
@@ -22,12 +25,60 @@ import { useArtifactDetailData } from "../api/use-workspaces-data";
 import { ArtifactDetailHeader } from "../components/artifact-detail-header";
 import { BlockNoteEditorLoader } from "../components/blocknote-editor-loader";
 import type { DocumentEditorContent } from "../components/blocknote-document-editor";
+import { MermaidArtifactViewer } from "../components/mermaid-artifact-viewer";
 import { WorkspaceShell } from "../components/workspace-shell";
 import {
   autosaveReducer,
   type AutosaveState,
 } from "../utils/artifact-editor-model";
 import { urlArtifactDisplayModel } from "../utils/url-artifact-model";
+
+const PdfArtifactViewer = dynamic(
+  () =>
+    import("../components/pdf-artifact-viewer").then((module) => module.PdfArtifactViewer),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex min-h-[420px] items-center justify-center gap-2 text-[13px] font-medium text-muted-foreground">
+        <Loader2Icon className="size-4 animate-spin" />
+        Memuat PDF...
+      </div>
+    ),
+  },
+);
+
+type ArtifactRenderPayload =
+  | {
+      artifactType: "markdown";
+      blocksJson: string;
+      markdown: string;
+      plainText: string;
+    }
+  | {
+      artifactType: "pdf" | "docx";
+      fileName: string;
+      mimeType: string;
+      byteSize: number;
+      url: string;
+      indexingStatus: "not_indexed" | "pending" | "ready" | "failed";
+      indexingFailureReason?: string;
+    }
+  | {
+      artifactType: "url";
+      originalUrl: string;
+      normalizedUrl: string;
+      status: "pending" | "ready" | "failed";
+      title?: string;
+      description?: string;
+      siteName?: string;
+      failureReason?: string;
+      readableText: string;
+    }
+  | {
+      artifactType: "plain_text" | "html" | "svg" | "mermaid" | "json" | "csv" | "code";
+      source: string;
+      language?: string;
+    };
 
 const initialAutosaveState: AutosaveState = {
   status: "idle",
@@ -44,13 +95,10 @@ export function ArtifactDetailPage({
   artifactId: string;
 }) {
   const data = useArtifactDetailData(artifactId);
-  const getFullContent = data.getFullContent;
-  const [fullContent, setFullContent] = useState<{
+  const getRenderPayload = data.getRenderPayload;
+  const [renderPayload, setRenderPayload] = useState<{
     artifactId: string;
-    blocksJson: string;
-    markdown: string;
-    plainText: string;
-    readableText: string;
+    payload: ArtifactRenderPayload;
   } | null>(null);
   const [contentError, setContentError] = useState<{
     artifactId: string;
@@ -65,10 +113,10 @@ export function ArtifactDetailPage({
 
     loadedContentArtifactIdRef.current = artifactId;
     let cancelled = false;
-    void getFullContent({ artifactId: artifactId as never })
-      .then((content) => {
+    void getRenderPayload({ artifactId: artifactId as never })
+      .then((payload) => {
         if (!cancelled) {
-          setFullContent(content ? { artifactId, ...content } : null);
+          setRenderPayload(payload ? { artifactId, payload: payload as ArtifactRenderPayload } : null);
           setContentError(null);
         }
       })
@@ -84,10 +132,10 @@ export function ArtifactDetailPage({
     return () => {
       cancelled = true;
     };
-  }, [artifactId, data.artifact, getFullContent]);
+  }, [artifactId, data.artifact, getRenderPayload]);
 
   const detail = data.artifact;
-  const activeFullContent = fullContent?.artifactId === artifactId ? fullContent : null;
+  const activeRenderPayload = renderPayload?.artifactId === artifactId ? renderPayload.payload : null;
   const activeContentError = contentError?.artifactId === artifactId ? contentError.message : null;
   const workspaceMismatch =
     detail?.artifact.workspaceId && detail.artifact.workspaceId !== workspaceId;
@@ -115,30 +163,35 @@ export function ArtifactDetailPage({
               workspaceId={workspaceId}
               workspaceName={workspaceName}
               artifactTitle={detail.artifact.title}
-              trailing={detail.document ? <SaveStatus state={documentSaveState} /> : null}
+              trailing={
+                detail.artifact.artifactType === "markdown"
+                  ? <SaveStatus state={documentSaveState} />
+                  : null
+              }
             />
             <section className={cn("min-h-0 overflow-y-auto", panelBodyPaddingClass)}>
               {activeContentError ? (
                 <p className="text-[13px] font-medium text-destructive">{activeContentError}</p>
-              ) : !activeFullContent ? (
+              ) : !activeRenderPayload ? (
                 <ArtifactLoading />
-              ) : detail.artifact.kind === "url" && detail.url ? (
+              ) : activeRenderPayload.artifactType === "url" ? (
                 <UrlArtifactDetail
                   artifactId={artifactId}
-                  url={detail.url}
-                  readableText={activeFullContent.readableText}
+                  url={activeRenderPayload}
                   retryUrlExtraction={data.retryUrlExtraction}
                 />
-              ) : detail.document ? (
+              ) : activeRenderPayload.artifactType === "markdown" ? (
                 <DocumentArtifactDetail
                   key={artifactId}
                   artifactId={artifactId}
-                  initialBlocksJson={activeFullContent.blocksJson}
-                  initialMarkdown={activeFullContent.markdown}
+                  initialBlocksJson={activeRenderPayload.blocksJson}
+                  initialMarkdown={activeRenderPayload.markdown}
                   updateDocument={data.updateDocument}
                   onSaveStateChange={setDocumentSaveState}
                 />
-              ) : null}
+              ) : (
+                <TypedArtifactDetail payload={activeRenderPayload} title={detail.artifact.title} />
+              )}
             </section>
           </>
         )}
@@ -303,10 +356,209 @@ function SaveStatus({ state }: { state: AutosaveState }) {
   return <span className="text-[12px] font-medium text-muted-foreground">Idle</span>;
 }
 
+function TypedArtifactDetail({
+  payload,
+  title,
+}: {
+  payload: Exclude<ArtifactRenderPayload, { artifactType: "markdown" | "url" }>;
+  title: string;
+}) {
+  if (payload.artifactType === "pdf") {
+    return (
+      <div className="mx-auto grid max-w-5xl gap-4">
+        <FileArtifactToolbar payload={payload} />
+        <PdfArtifactViewer url={payload.url} fileName={payload.fileName} />
+      </div>
+    );
+  }
+
+  if (payload.artifactType === "docx") {
+    return (
+      <div className="mx-auto grid max-w-3xl gap-4">
+        <FileArtifactToolbar payload={payload} />
+        <div className="grid place-items-center gap-3 rounded-[8px] border border-border bg-card p-8 text-center">
+          <FileIcon className="size-10 text-muted-foreground" />
+          <div className="grid gap-1">
+            <p className="text-[14px] font-semibold text-foreground">{title}</p>
+            <p className="text-[12px] font-medium text-muted-foreground">
+              {payload.fileName} / {formatByteSize(payload.byteSize)}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (payload.artifactType === "html") {
+    return (
+      <PreviewWithSource
+        title="HTML preview"
+        source={payload.source}
+        srcDoc={buildSandboxedHtmlDocument(payload.source)}
+        language={payload.language ?? "html"}
+      />
+    );
+  }
+
+  if (payload.artifactType === "svg") {
+    return (
+      <PreviewWithSource
+        title="SVG preview"
+        source={payload.source}
+        srcDoc={payload.source}
+        language={payload.language ?? "svg"}
+      />
+    );
+  }
+
+  if (payload.artifactType === "mermaid") {
+    return (
+      <div className="mx-auto grid max-w-5xl gap-3">
+        <MermaidArtifactViewer source={payload.source} />
+      </div>
+    );
+  }
+
+  if (payload.artifactType === "json") {
+    return <JsonArtifactDetail source={payload.source} />;
+  }
+
+  if (!("source" in payload)) {
+    return null;
+  }
+
+  return (
+    <SourceArtifactDetail
+      source={payload.source}
+      language={payload.language ?? payload.artifactType}
+    />
+  );
+}
+
+function FileArtifactToolbar({
+  payload,
+}: {
+  payload: Extract<ArtifactRenderPayload, { artifactType: "pdf" | "docx" }>;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-border bg-card px-3 py-2">
+      <div className="min-w-0">
+        <p className="truncate text-[12px] font-semibold text-foreground">
+          {payload.fileName}
+        </p>
+        <p className="text-[11px] font-medium text-muted-foreground">
+          {payload.mimeType} / {formatByteSize(payload.byteSize)}
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
+        <IndexingStatusBadge
+          status={payload.indexingStatus}
+          failureReason={payload.indexingFailureReason}
+        />
+        <Button asChild variant="outline" size="sm">
+          <a href={payload.url} target="_blank" rel="noreferrer">
+            <ExternalLinkIcon className="size-4" />
+            Open
+          </a>
+        </Button>
+        <Button asChild variant="outline" size="sm">
+          <a href={payload.url} download={payload.fileName}>
+            <DownloadIcon className="size-4" />
+            Download
+          </a>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function IndexingStatusBadge({
+  status,
+  failureReason,
+}: {
+  status: "not_indexed" | "pending" | "ready" | "failed";
+  failureReason?: string;
+}) {
+  const label =
+    status === "ready"
+      ? "Indexed"
+      : status === "pending"
+        ? "Indexing"
+        : status === "failed"
+          ? "Indexing failed"
+          : "Not indexed";
+  return (
+    <Badge
+      variant={status === "failed" ? "destructive" : "outline"}
+      title={failureReason}
+    >
+      {label}
+    </Badge>
+  );
+}
+
+function PreviewWithSource({
+  title,
+  source,
+  srcDoc,
+  language,
+}: {
+  title: string;
+  source: string;
+  srcDoc: string;
+  language: string;
+}) {
+  return (
+    <div className="mx-auto grid max-w-5xl gap-4">
+      <iframe
+        title={title}
+        sandbox=""
+        srcDoc={srcDoc}
+        className="h-[520px] w-full rounded-[8px] border border-border bg-background"
+      />
+      <SourceArtifactDetail source={source} language={language} />
+    </div>
+  );
+}
+
+function JsonArtifactDetail({ source }: { source: string }) {
+  const parsed = parseJsonSource(source);
+  return (
+    <div className="mx-auto grid max-w-5xl gap-3">
+      {parsed.error ? (
+        <p className="rounded-[8px] border border-destructive/30 bg-destructive/5 p-3 text-[13px] font-medium text-destructive">
+          {parsed.error}
+        </p>
+      ) : null}
+      <SourceArtifactDetail source={parsed.pretty} language="json" />
+    </div>
+  );
+}
+
+function SourceArtifactDetail({
+  source,
+  language,
+}: {
+  source: string;
+  language: string;
+}) {
+  return (
+    <div className="mx-auto grid max-w-5xl gap-2">
+      <div className="flex items-center justify-between rounded-t-[8px] border border-border bg-muted/35 px-3 py-2">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+          {language}
+        </span>
+      </div>
+      <pre className="min-h-[220px] overflow-auto rounded-b-[8px] border-x border-b border-border bg-background p-4 text-[12px] leading-6 text-foreground">
+        {source || "No source content."}
+      </pre>
+    </div>
+  );
+}
+
 function UrlArtifactDetail({
   artifactId,
   url,
-  readableText,
   retryUrlExtraction,
 }: {
   artifactId: string;
@@ -318,11 +570,11 @@ function UrlArtifactDetail({
     description?: string;
     siteName?: string;
     failureReason?: string;
+    readableText: string;
   };
-  readableText: string;
   retryUrlExtraction: (args: { artifactId: never }) => Promise<unknown>;
 }) {
-  const model = urlArtifactDisplayModel({ ...url, readableText });
+  const model = urlArtifactDisplayModel(url);
   return (
     <div className="mx-auto grid max-w-4xl gap-5">
       <div className="grid gap-3 border-b border-border/70 pb-4">
@@ -378,11 +630,54 @@ function UrlArtifactDetail({
         </p>
       ) : (
         <article className="artifact-prose whitespace-pre-wrap rounded-[8px] border border-border bg-background p-4">
-          {readableText || "No readable text was extracted."}
+          {url.readableText || "No readable text was extracted."}
         </article>
       )}
     </div>
   );
+}
+
+function parseJsonSource(source: string) {
+  try {
+    return {
+      pretty: JSON.stringify(JSON.parse(source), null, 2),
+      error: null,
+    };
+  } catch (error: unknown) {
+    return {
+      pretty: source,
+      error: error instanceof Error ? error.message : "JSON tidak valid.",
+    };
+  }
+}
+
+function buildSandboxedHtmlDocument(source: string) {
+  const csp =
+    '<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; img-src data: blob: https:; style-src &#39;unsafe-inline&#39;; font-src data:; script-src &#39;none&#39;; connect-src &#39;none&#39;; frame-src &#39;none&#39;; base-uri &#39;none&#39;; form-action &#39;none&#39;">';
+  const base = '<base target="_blank">';
+
+  if (/<html[\s>]/i.test(source)) {
+    if (/<head[\s>]/i.test(source)) {
+      return source.replace(/<head([^>]*)>/i, `<head$1>${csp}${base}`);
+    }
+    return source.replace(/<html([^>]*)>/i, `<html$1><head>${csp}${base}</head>`);
+  }
+
+  return `<!doctype html><html><head>${csp}${base}</head><body>${source}</body></html>`;
+}
+
+function formatByteSize(size: number) {
+  if (!Number.isFinite(size) || size <= 0) {
+    return "Unknown size";
+  }
+  const units = ["B", "KB", "MB", "GB"];
+  let value = size;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
 function ArtifactLoading() {

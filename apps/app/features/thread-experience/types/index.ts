@@ -38,7 +38,7 @@ export type PromptCommandMetadata = {
 export type MessageContextArtifactMetadata = {
   artifactId: string;
   title: string;
-  kind?: "document" | "url";
+  artifactType?: string;
   source?: "upload" | "workspace";
   savedWorkspaceId?: string;
   savedWorkspaceName?: string;
@@ -129,15 +129,18 @@ export type ResearchRun = {
 export type ResearchArtifact = {
   _id: string;
   runId?: string;
-  type:
-    | "research_report"
-    | "markdown_report"
-    | "research_document"
-    | "document"
-    | "code"
+  artifactType?:
+    | "markdown"
+    | "plain_text"
+    | "pdf"
+    | "docx"
     | "html"
+    | "svg"
+    | "mermaid"
     | "json"
-    | "plain_text";
+    | "csv"
+    | "code"
+    | "url";
   title: string;
   currentVersionId?: string;
   version?: {

@@ -6,6 +6,14 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "../_generated/server";
+import {
+  artifactFamilyForType,
+  contextFromText,
+  defaultLanguageForArtifactType,
+  plainTextFromMarkdown,
+  previewFromText,
+  type ArtifactType,
+} from "../artifactModel";
 import { requireCurrentUser } from "../auth";
 import { tryAssertThreadOwner } from "./threads";
 
@@ -38,7 +46,7 @@ const relationValidator = v.union(
   v.literal("referenced"),
 );
 
-type ArtifactType =
+type LegacyArtifactType =
   | "research_report"
   | "markdown_report"
   | "research_document"
@@ -203,12 +211,23 @@ export const createVersionFromAgent = internalMutation({
       await assertRunOwner(ctx, args.runId, args.ownerUserId);
     }
     const now = Date.now();
+    const artifactType = artifactTypeFromVersionArgs(args.contentFormat, args.type);
+    const plainText =
+      artifactType === "markdown" ? plainTextFromMarkdown(args.body) : args.body;
     const artifactId = await ctx.db.insert("artifacts", {
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
       runId: args.runId,
-      type: args.type,
+      artifactType,
+      artifactFamily: artifactFamilyForType(artifactType),
+      source: "agent",
       title: args.title,
+      language: defaultLanguageForArtifactType(artifactType),
+      indexingStatus: "not_indexed",
+      body: args.body.length <= ARTIFACT_INLINE_LIMIT ? args.body : undefined,
+      plainTextPreview: previewFromText(plainText),
+      contextText: contextFromText(plainText),
+      status: "active",
       createdAt: now,
       updatedAt: now,
     });
@@ -255,6 +274,12 @@ export const updateVersionFromAgent = internalMutation({
     );
     const now = Date.now();
     const title = args.title ?? artifact.title;
+    const artifactType = artifactTypeFromVersionArgs(
+      args.contentFormat,
+      legacyTypeFromArtifactType(artifact.artifactType),
+    );
+    const plainText =
+      artifactType === "markdown" ? plainTextFromMarkdown(args.body) : args.body;
     if (!artifact.threadId) {
       throw new ConvexError("Artifact thread not found");
     }
@@ -273,6 +298,13 @@ export const updateVersionFromAgent = internalMutation({
     });
     await ctx.db.patch("artifacts", artifact._id, {
       title,
+      artifactType,
+      artifactFamily: artifactFamilyForType(artifactType),
+      language: defaultLanguageForArtifactType(artifactType),
+      indexingStatus: "not_indexed",
+      body: args.body.length <= ARTIFACT_INLINE_LIMIT ? args.body : undefined,
+      plainTextPreview: previewFromText(plainText),
+      contextText: contextFromText(plainText),
       currentVersionId: versionId,
       updatedAt: now,
     });
@@ -341,7 +373,7 @@ async function createArtifactVersion(
     ownerUserId: string;
     threadId: string;
     runId?: Id<"agentRuns">;
-    type: ArtifactType;
+    type: LegacyArtifactType;
     title: string;
     contentFormat: ContentFormat;
     body: string;
@@ -353,12 +385,23 @@ async function createArtifactVersion(
     await assertRunOwner(ctx, args.runId, args.ownerUserId);
   }
   const now = Date.now();
+  const artifactType = artifactTypeFromVersionArgs(args.contentFormat, args.type);
+  const plainText =
+    artifactType === "markdown" ? plainTextFromMarkdown(args.body) : args.body;
   const artifactId = await ctx.db.insert("artifacts", {
     ownerUserId: args.ownerUserId,
     threadId: args.threadId,
     runId: args.runId,
-    type: args.type,
+    artifactType,
+    artifactFamily: artifactFamilyForType(artifactType),
+    source: "agent",
     title: args.title,
+    language: defaultLanguageForArtifactType(artifactType),
+    indexingStatus: "not_indexed",
+    body: args.body.length <= ARTIFACT_INLINE_LIMIT ? args.body : undefined,
+    plainTextPreview: previewFromText(plainText),
+    contextText: contextFromText(plainText),
+    status: "active",
     createdAt: now,
     updatedAt: now,
   });
@@ -432,4 +475,50 @@ async function assertRunOwner(
     throw new ConvexError("Run not found");
   }
   return run;
+}
+
+function artifactTypeFromVersionArgs(
+  contentFormat: ContentFormat,
+  legacyType: LegacyArtifactType,
+): ArtifactType {
+  if (legacyType === "code") {
+    return "code";
+  }
+  if (legacyType === "html") {
+    return "html";
+  }
+  if (legacyType === "json") {
+    return "json";
+  }
+  if (legacyType === "plain_text") {
+    return "plain_text";
+  }
+
+  switch (contentFormat) {
+    case "html":
+      return "html";
+    case "code":
+      return "code";
+    case "json":
+      return "json";
+    case "plain":
+      return "plain_text";
+    case "markdown":
+      return "markdown";
+  }
+}
+
+function legacyTypeFromArtifactType(artifactType: ArtifactType | undefined): LegacyArtifactType {
+  switch (artifactType) {
+    case "code":
+      return "code";
+    case "html":
+      return "html";
+    case "json":
+      return "json";
+    case "plain_text":
+      return "plain_text";
+    default:
+      return "document";
+  }
 }

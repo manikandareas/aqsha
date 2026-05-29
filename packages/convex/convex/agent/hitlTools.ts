@@ -4,7 +4,7 @@ import { z } from "zod";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
-import { plainTextFromMarkdown } from "../artifactModel";
+import { artifactTypeFromAgentInput, plainTextFromMarkdown } from "../artifactModel";
 import {
   artifactPayloadSchema,
   workspaceManagementPayloadSchema,
@@ -110,12 +110,15 @@ export function createHitlTools(args: {
     askHuman,
     presentPlan: createTool({
       description:
-        "REQUIRED to propose create/update workspace documents for user approval (Review Plan card). Call when intent is clear. Include planBullets but NO final markdown body.",
+        "REQUIRED to propose create/update workspace artifacts for user approval (Review Plan card). Call when intent is clear. Include planBullets but NO final body.",
       inputSchema: z.object({
         title: z.string().min(1).max(160),
         summary: z.string().min(1).max(1000),
         planBullets: z.array(z.string().max(240)).min(1).max(8),
         action: z.enum(["create", "update"]),
+        artifactType: z
+          .enum(["markdown", "plain_text", "html", "svg", "mermaid", "json", "csv", "code"])
+          .default("markdown"),
         artifactId: z.string().optional(),
         workspaceId: z.string().optional(),
         changeSummary: z.string().max(500).optional(),
@@ -126,6 +129,7 @@ export function createHitlTools(args: {
         const payload = {
           action: input.action,
           title: input.title,
+          artifactType: input.artifactType,
           artifactId: isLikelyConvexId(input.artifactId) ? input.artifactId : undefined,
           workspaceId: isLikelyConvexId(input.workspaceId) ? input.workspaceId : undefined,
           changeSummary: input.changeSummary,
@@ -149,7 +153,7 @@ export function createHitlTools(args: {
     }),
     confirmAction: createTool({
       description:
-        "Request user confirmation for a simple or destructive action such as deleting a workspace document. Does not execute until confirmed.",
+        "Request user confirmation for a simple or destructive action such as deleting a workspace artifact. Does not execute until confirmed.",
       inputSchema: z.object({
         title: z.string().min(1).max(160),
         message: z.string().min(1).max(500),
@@ -197,11 +201,15 @@ export function createWorkspaceExecutionTools(args: {
   return {
     executeWorkspaceArtifact: createTool({
       description:
-        "Execute an approved workspace document action. Call once with complete Markdown for create/update.",
+        "Execute an approved workspace artifact action. Call once with complete content for create/update.",
       inputSchema: z.object({
         action: z.enum(["create", "update"]),
         title: z.string().min(1).max(160),
-        markdown: z.string().min(1).max(200_000),
+        artifactType: z
+          .enum(["markdown", "plain_text", "html", "svg", "mermaid", "json", "csv", "code"])
+          .default("markdown"),
+        content: z.string().min(1).max(200_000),
+        language: z.string().max(40).optional(),
         artifactId: z.string().optional(),
       }),
       execute: async (ctx, input) => {
@@ -215,32 +223,42 @@ export function createWorkspaceExecutionTools(args: {
           : isLikelyConvexId(basePayload?.artifactId)
             ? (basePayload!.artifactId as Id<"artifacts">)
             : undefined;
-        const plainText = plainTextFromMarkdown(input.markdown);
+        const artifactType = artifactTypeFromAgentInput(
+          input.artifactType ?? basePayload?.artifactType ?? "markdown",
+        );
+        const plainText =
+          artifactType === "markdown"
+            ? plainTextFromMarkdown(input.content)
+            : input.content;
         let resultArtifactId: Id<"artifacts">;
         if (input.action === "create") {
           if (!args.workspaceId) {
             throw new Error("Workspace is required to create an artifact");
           }
           resultArtifactId = await ctx.runMutation(
-            internal.artifacts.createDocumentFromAgentInternal,
+            internal.artifacts.createArtifactFromAgentInternal,
             {
               ownerUserId,
               workspaceId: args.workspaceId,
               title: input.title,
-              markdown: input.markdown,
+              artifactType,
+              content: input.content,
               plainText,
+              language: input.language,
             },
           );
         } else {
           if (!artifactId) {
             throw new Error("artifactId is required for update");
           }
-          await ctx.runMutation(internal.artifacts.updateDocumentFromAgentInternal, {
+          await ctx.runMutation(internal.artifacts.updateArtifactFromAgentInternal, {
             ownerUserId,
             artifactId,
             title: input.title,
-            markdown: input.markdown,
+            artifactType,
+            content: input.content,
             plainText,
+            language: input.language,
           });
           resultArtifactId = artifactId;
         }

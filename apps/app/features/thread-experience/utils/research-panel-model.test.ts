@@ -12,7 +12,7 @@ import type { ResearchArtifact, ResearchRun, ResearchSource } from "../types";
 function artifact(id: string): ResearchArtifact {
   return {
     _id: id,
-    type: "research_report",
+    artifactType: "markdown",
     title: "Report",
     createdAt: 1,
   };

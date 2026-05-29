@@ -2,6 +2,10 @@ import { ConvexError } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
+  artifactTypeForLegacyArtifact,
+  isAgentWritableArtifactType,
+} from "./artifactModel";
+import {
   assertWorkspaceArtifactOwner,
   assertWorkspaceOwner,
 } from "./workspaceAccess";
@@ -44,7 +48,7 @@ export async function resolveWorkspaceTarget(
   };
 }
 
-export async function assertDocumentWorkspaceArtifact(
+export async function assertManageableWorkspaceArtifact(
   ctx: QueryCtx | MutationCtx,
   ownerUserId: string,
   artifactId: Id<"artifacts">,
@@ -52,8 +56,8 @@ export async function assertDocumentWorkspaceArtifact(
   const artifact = await assertWorkspaceArtifactOwner(ctx, artifactId, ownerUserId, {
     requireActive: true,
   });
-  if (artifact.kind !== "document") {
-    throw new ConvexError("Only document artifacts can be managed with /artifact");
+  if (!isAgentWritableArtifactType(artifactTypeForLegacyArtifact(artifact))) {
+    throw new ConvexError("This artifact type cannot be overwritten by /artifact");
   }
   return artifact;
 }
