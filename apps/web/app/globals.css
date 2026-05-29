@@ -1,10 +1,12 @@
 @import "tailwindcss";
+@import "@aqsha/ui/styles/selia.css";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@blocknote/react/style.css";
 @import "@blocknote/shadcn/style.css";
 @import "./styles/blocknote-aqsha.css";
 
+@source "../../../packages/ui/src/selia";
 @source "../node_modules/@blocknote/shadcn";
 
 @custom-variant dark (&:is(.dark *));
