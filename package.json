@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "bun@1.3.10",
   "workspaces": [
-    "apps/app",
+    "apps/web",
     "apps/www",
     "packages/convex",
     "packages/ui"

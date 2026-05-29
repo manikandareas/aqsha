@@ -6,7 +6,7 @@
 ## Monorepo Boundaries
 | Package | Path | Runtime | Key Tech |
 |---|---|---|---|
-| `@aqsha/app` | `apps/app` | Next.js 16 (App Router) | React 19, Tailwind v4, Convex client |
+| `@aqsha/app` | `apps/web` | Next.js 16 (App Router) | React 19, Tailwind v4, Convex client |
 | `@aqsha/www` | `apps/www` | Astro | React islands, Tailwind v4, marketing pages |
 | `@aqsha/convex` | `packages/convex` | Convex | Convex functions/components, Clerk Auth, Agent/Workflow, internal provenance |
 | `@aqsha/ui` | `packages/ui` | shared | React UI primitives and shared token CSS |
@@ -31,8 +31,8 @@ bun run build
 ```
 
 ## App-Specific Instructions
-- **App**: UI rules and Next.js 16 caveats live in `apps/app/AGENTS.md` and `apps/app/DESIGN.md`. Read those before touching product UI.
-- **Detail/panel parity**: Thread detail and workspace detail each have a main view and an embedded side panel of the other surface. See `apps/app/AGENTS.md` → **Detail / Panel Parity** before changing either.
+- **App**: UI rules and Next.js 16 caveats live in `apps/web/AGENTS.md`. Read that before touching product UI.
+- **Detail/panel parity**: Thread detail and workspace detail each have a main view and an embedded side panel of the other surface. See `apps/web/AGENTS.md` → **Detail / Panel Parity** before changing either.
 - **Convex**: Convex rules live in `packages/convex/AGENTS.md`. Read `packages/convex/convex/_generated/ai/guidelines.md` before editing Convex functions.
 - **www**: Marketing site uses `@aqsha/ui` primitives and shared styles from `packages/ui`.
 
@@ -47,10 +47,10 @@ bun run --filter '@aqsha/convex' test
 
 ## TypeScript
 - Base config: `tsconfig.base.json` (ES2022, Bundler resolution, strict, noEmit).
-- `apps/app/tsconfig.json` and `apps/www/tsconfig.json` are app-specific.
+- `apps/web/tsconfig.json` and `apps/www/tsconfig.json` are app-specific.
 - `packages/convex/tsconfig.json` and `packages/ui/tsconfig.json` own their package checks.
 
 ## Notable Defaults
-- `apps/app` consumes generated Convex exports through `@aqsha/convex/api` and `@aqsha/convex/server`.
-- `apps/app` and `apps/www` both consume `@aqsha/ui`.
+- `apps/web` consumes generated Convex exports through `@aqsha/convex/api` and `@aqsha/convex/server`.
+- `apps/web` and `apps/www` both consume `@aqsha/ui`.
 - Only `packages/convex` has a test runner configured (`vitest`).

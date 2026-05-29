@@ -69,7 +69,7 @@ bun run --filter '@aqsha/convex' test
 
 ## Development Notes
 
-- `apps/app` imports generated Convex bindings from `@aqsha/convex/api` and `@aqsha/convex/server`.
-- `apps/app` and `apps/www` both consume shared UI from `@aqsha/ui`.
+- `apps/web` imports generated Convex bindings from `@aqsha/convex/api` and `@aqsha/convex/server`.
+- `apps/web` and `apps/www` both consume shared UI from `@aqsha/ui`.
 - Convex environment is managed by `convex dev` and the Convex dashboard.
 - Only `packages/convex` has a test runner configured.

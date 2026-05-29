@@ -5,8 +5,7 @@ This file provides guidance to Claude Code when working with this repository.
 ## Companion Docs
 
 - `AGENTS.md` — current monorepo boundaries and exact commands.
-- `apps/app/AGENTS.md` — Next.js app-specific guidance.
-- `apps/app/DESIGN.md` — product UI design source of truth.
+- `apps/web/AGENTS.md` — Next.js app-specific guidance.
 - `packages/convex/AGENTS.md` — Convex-specific rules.
 - `packages/convex/convex/_generated/ai/guidelines.md` — read before editing Convex functions.
 - `BRAND-IDENTITY.md` — brand voice and palette source of truth.
@@ -17,7 +16,7 @@ Next.js in this repo is 16.x. Before writing frontend code that depends on frame
 
 Aqsha now keeps the Convex-backed pivot surface only:
 
-- `apps/app`: authenticated Next.js product app.
+- `apps/web`: Next.js public landing plus authenticated product app.
 - `packages/convex`: Convex functions, schema, components, agent runtime, rate limiter, workflow, internal provenance storage, and tests.
 - `apps/www`: Astro marketing site.
 - `packages/ui`: shared React UI primitives and token CSS.
@@ -53,7 +52,7 @@ Single Convex test: `bun run --filter '@aqsha/convex' test -- <path>`.
 
 ## Repo Notes
 
-- `apps/app` consumes generated Convex exports through `@aqsha/convex/api` and `@aqsha/convex/server`.
-- `apps/app` and `apps/www` both consume `@aqsha/ui`.
+- `apps/web` consumes generated Convex exports through `@aqsha/convex/api` and `@aqsha/convex/server`.
+- `apps/web` and `apps/www` both consume `@aqsha/ui`.
 - Only `packages/convex` has a test runner configured.
 - Convex environment is managed through `convex dev` and the Convex dashboard.
