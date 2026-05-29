@@ -8,6 +8,7 @@ import {
 } from "../_generated/server";
 import {
   artifactFamilyForType,
+  artifactTypeForLegacyArtifact,
   contextFromText,
   defaultLanguageForArtifactType,
   plainTextFromMarkdown,
@@ -276,7 +277,7 @@ export const updateVersionFromAgent = internalMutation({
     const title = args.title ?? artifact.title;
     const artifactType = artifactTypeFromVersionArgs(
       args.contentFormat,
-      legacyTypeFromArtifactType(artifact.artifactType),
+      legacyTypeFromArtifactType(artifactTypeForLegacyArtifact(artifact)),
     );
     const plainText =
       artifactType === "markdown" ? plainTextFromMarkdown(args.body) : args.body;

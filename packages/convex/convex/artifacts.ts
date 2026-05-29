@@ -514,7 +514,7 @@ export const retryUrlExtraction = mutation({
       requireActive: true,
     });
     await assertWorkspaceOwner(ctx, artifact.workspaceId, user._id, { requireActive: true });
-    if (artifact.artifactType !== "url") {
+    if (artifactTypeForLegacyArtifact(artifact) !== "url") {
       throw new ConvexError("Artifact is not a URL");
     }
     const row = await getUrlRow(ctx, args.artifactId, user._id);
@@ -670,7 +670,7 @@ export const updateMarkdownInternal = internalMutation({
       requireActive: true,
     });
     await assertWorkspaceOwner(ctx, artifact.workspaceId, args.ownerUserId, { requireActive: true });
-    if (artifact.artifactType !== "markdown") {
+    if (artifactTypeForLegacyArtifact(artifact) !== "markdown") {
       throw new ConvexError("Artifact is not editable Markdown");
     }
     const row = await getContentRow(ctx, args.artifactId, args.ownerUserId);
@@ -1029,9 +1029,10 @@ export const getContentTarget = internalQuery({
     ) {
       return null;
     }
+    const artifactType = artifactTypeForLegacyArtifact(artifact);
     const [content, url] = await Promise.all([
       getContentRowOrNull(ctx, artifact._id, args.ownerUserId),
-      artifact.artifactType === "url"
+      artifactType === "url"
         ? getUrlRowOrNull(ctx, artifact._id, args.ownerUserId)
         : Promise.resolve(null),
     ]);
@@ -1043,7 +1044,10 @@ export const getUrlExtractionTarget = internalQuery({
   args: { artifactId: v.id("artifacts") },
   handler: async (ctx, args) => {
     const artifact = await ctx.db.get("artifacts", args.artifactId);
-    if (!artifact || !artifact.workspaceId || artifact.status !== "active" || artifact.artifactType !== "url") {
+    if (!artifact || !artifact.workspaceId || artifact.status !== "active") {
+      return null;
+    }
+    if (artifactTypeForLegacyArtifact(artifact) !== "url") {
       return null;
     }
     const row = await getUrlRow(ctx, args.artifactId, artifact.ownerUserId);
@@ -1142,9 +1146,8 @@ export const createArtifactFromAgentInternal = internalMutation({
     const artifactType = artifactTypeFromAgentInput(args.artifactType);
     const now = Date.now();
     const title = normalizeName(args.title, "Artifact title");
-    const sourceStorageId = await maybeStoreGeneratedSource(ctx, args.content, artifactType);
-    const inlineSource = args.content.length <= ARTIFACT_BODY_INLINE_LIMIT ? args.content : undefined;
     const plainText = normalizeGeneratedPlainText(artifactType, args.content, args.plainText);
+    assertGeneratedArtifactFitsInline(args.content, plainText);
     const artifactId = await ctx.db.insert("artifacts", {
       ownerUserId: args.ownerUserId,
       workspaceId: args.workspaceId,
@@ -1155,8 +1158,7 @@ export const createArtifactFromAgentInternal = internalMutation({
       title,
       language: args.language ?? defaultLanguageForArtifactType(artifactType),
       indexingStatus: "ready",
-      body: inlineSource,
-      storageId: sourceStorageId,
+      body: args.content,
       plainTextPreview: previewFromText(plainText || args.content),
       contextText: contextFromText(plainText || args.content),
       status: "active",
@@ -1168,11 +1170,8 @@ export const createArtifactFromAgentInternal = internalMutation({
       workspaceId: args.workspaceId,
       artifactId,
       blocksJson: "",
-      markdown: artifactType === "markdown" && inlineSource ? inlineSource : "",
-      plainText: plainText.length <= ARTIFACT_BODY_INLINE_LIMIT ? plainText : undefined,
-      storageId: plainText.length > ARTIFACT_BODY_INLINE_LIMIT
-        ? await storeTextInMutation(ctx, plainText, "text/plain")
-        : undefined,
+      markdown: artifactType === "markdown" ? args.content : "",
+      plainText,
       createdAt: now,
       updatedAt: now,
     });
@@ -1202,16 +1201,15 @@ export const updateArtifactFromAgentInternal = internalMutation({
     const row = await getContentRow(ctx, args.artifactId, args.ownerUserId);
     const now = Date.now();
     const title = args.title ? normalizeName(args.title, "Artifact title") : artifact.title;
-    const sourceStorageId = await maybeStoreGeneratedSource(ctx, args.content, artifactType);
-    const inlineSource = args.content.length <= ARTIFACT_BODY_INLINE_LIMIT ? args.content : undefined;
     const plainText = normalizeGeneratedPlainText(artifactType, args.content, args.plainText);
+    assertGeneratedArtifactFitsInline(args.content, plainText);
     await ctx.db.patch("artifacts", artifact._id, {
       artifactType,
       artifactFamily: artifactFamilyForType(artifactType),
       title,
       language: args.language ?? defaultLanguageForArtifactType(artifactType),
-      body: inlineSource,
-      storageId: sourceStorageId,
+      body: args.content,
+      storageId: undefined,
       plainTextPreview: previewFromText(plainText || args.content),
       contextText: contextFromText(plainText || args.content),
       indexingStatus: "ready",
@@ -1219,11 +1217,9 @@ export const updateArtifactFromAgentInternal = internalMutation({
     });
     await ctx.db.patch("artifactDocuments", row._id, {
       blocksJson: artifactType === "markdown" ? "" : undefined,
-      markdown: artifactType === "markdown" && inlineSource ? inlineSource : "",
-      plainText: plainText.length <= ARTIFACT_BODY_INLINE_LIMIT ? plainText : undefined,
-      storageId: plainText.length > ARTIFACT_BODY_INLINE_LIMIT
-        ? await storeTextInMutation(ctx, plainText, "text/plain")
-        : undefined,
+      markdown: artifactType === "markdown" ? args.content : "",
+      plainText,
+      storageId: undefined,
       markdownStorageId: undefined,
       blocksStorageId: undefined,
       updatedAt: now,
@@ -1362,45 +1358,6 @@ async function readStorageText(ctx: ActionCtx, storageId: Id<"_storage">) {
   return blob ? await blob.text() : "";
 }
 
-async function storeTextInMutation(
-  ctx: MutationCtx,
-  value: string,
-  type: string,
-) {
-  void ctx;
-  void value;
-  void type;
-  return undefined;
-}
-
-async function maybeStoreGeneratedSource(
-  ctx: MutationCtx,
-  value: string,
-  artifactType: ArtifactType,
-) {
-  if (value.length <= ARTIFACT_BODY_INLINE_LIMIT) {
-    return undefined;
-  }
-  return await storeTextInMutation(ctx, value, mimeTypeForGeneratedSource(artifactType));
-}
-
-function mimeTypeForGeneratedSource(artifactType: ArtifactType) {
-  switch (artifactType) {
-    case "markdown":
-      return "text/markdown";
-    case "html":
-      return "text/html";
-    case "svg":
-      return "image/svg+xml";
-    case "json":
-      return "application/json";
-    case "csv":
-      return "text/csv";
-    default:
-      return "text/plain";
-  }
-}
-
 function normalizeGeneratedPlainText(
   artifactType: ArtifactType,
   content: string,
@@ -1413,4 +1370,13 @@ function normalizeGeneratedPlainText(
     return plainTextFromMarkdown(content);
   }
   return content;
+}
+
+function assertGeneratedArtifactFitsInline(content: string, plainText: string) {
+  if (
+    content.length > ARTIFACT_BODY_INLINE_LIMIT ||
+    plainText.length > ARTIFACT_BODY_INLINE_LIMIT
+  ) {
+    throw new ConvexError("Generated artifact is too large to save inline");
+  }
 }

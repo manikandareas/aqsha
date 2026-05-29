@@ -98,33 +98,49 @@ export function ArtifactDetailPage({
   const getRenderPayload = data.getRenderPayload;
   const [renderPayload, setRenderPayload] = useState<{
     artifactId: string;
+    versionKey: string;
     payload: ArtifactRenderPayload;
   } | null>(null);
   const [contentError, setContentError] = useState<{
     artifactId: string;
+    versionKey: string;
     message: string;
   } | null>(null);
 
-  const loadedContentArtifactIdRef = useRef<string | null>(null);
+  const detail = data.artifact;
+  const renderPayloadVersionKey = detail
+    ? [
+        artifactId,
+        detail.artifact.updatedAt,
+        detail.content?.updatedAt ?? "no-content",
+        detail.url?.updatedAt ?? "no-url",
+      ].join(":")
+    : null;
 
   useEffect(() => {
-    if (!data.artifact) return;
-    if (loadedContentArtifactIdRef.current === artifactId) return;
+    if (!renderPayloadVersionKey) return;
 
-    loadedContentArtifactIdRef.current = artifactId;
     let cancelled = false;
     void getRenderPayload({ artifactId: artifactId as never })
       .then((payload) => {
         if (!cancelled) {
-          setRenderPayload(payload ? { artifactId, payload: payload as ArtifactRenderPayload } : null);
+          setRenderPayload(
+            payload
+              ? {
+                  artifactId,
+                  versionKey: renderPayloadVersionKey,
+                  payload: payload as ArtifactRenderPayload,
+                }
+              : null,
+          );
           setContentError(null);
         }
       })
       .catch((error: unknown) => {
         if (!cancelled) {
-          loadedContentArtifactIdRef.current = null;
           setContentError({
             artifactId,
+            versionKey: renderPayloadVersionKey,
             message: error instanceof Error ? error.message : "Content gagal dimuat.",
           });
         }
@@ -132,11 +148,18 @@ export function ArtifactDetailPage({
     return () => {
       cancelled = true;
     };
-  }, [artifactId, data.artifact, getRenderPayload]);
+  }, [artifactId, getRenderPayload, renderPayloadVersionKey]);
 
-  const detail = data.artifact;
-  const activeRenderPayload = renderPayload?.artifactId === artifactId ? renderPayload.payload : null;
-  const activeContentError = contentError?.artifactId === artifactId ? contentError.message : null;
+  const activeRenderPayload =
+    renderPayload?.artifactId === artifactId &&
+    renderPayload.versionKey === renderPayloadVersionKey
+      ? renderPayload.payload
+      : null;
+  const activeContentError =
+    contentError?.artifactId === artifactId &&
+    contentError.versionKey === renderPayloadVersionKey
+      ? contentError.message
+      : null;
   const workspaceMismatch =
     detail?.artifact.workspaceId && detail.artifact.workspaceId !== workspaceId;
   const workspaceName =
