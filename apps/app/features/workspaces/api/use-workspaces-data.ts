@@ -172,7 +172,7 @@ export function useArtifactDetailData(artifactId: string) {
     threads: threadPage?.page ?? [],
     artifact,
     isLoading: artifact === undefined,
-    getFullContent: useAction(api.artifacts.getFullContent),
+    getRenderPayload: useAction(api.artifacts.getRenderPayload),
     updateDocument: useAction(api.artifacts.updateDocument),
     retryUrlExtraction: useMutation(api.artifacts.retryUrlExtraction),
     renameArtifact: useMutation(api.artifacts.rename),

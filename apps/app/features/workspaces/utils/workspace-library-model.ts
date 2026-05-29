@@ -8,8 +8,20 @@ export type WorkspaceFolder = {
 export type WorkspaceArtifact = {
   _id: string;
   folderId?: string;
-  kind?: "document" | "url";
-  type?: string;
+  artifactType?:
+    | "markdown"
+    | "plain_text"
+    | "pdf"
+    | "docx"
+    | "html"
+    | "svg"
+    | "mermaid"
+    | "json"
+    | "csv"
+    | "code"
+    | "url";
+  artifactFamily?: "text" | "file" | "interactive" | "visual" | "data" | "link";
+  source?: "manual" | "upload" | "agent" | "url";
   title: string;
   plainTextPreview?: string;
   status?: "active" | "deleted";

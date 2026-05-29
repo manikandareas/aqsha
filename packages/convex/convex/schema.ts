@@ -3,6 +3,43 @@ import { v } from "convex/values";
 
 const runId = v.union(v.id("agentRuns"), v.id("researchRuns"));
 
+const artifactTypeValidator = v.union(
+  v.literal("markdown"),
+  v.literal("plain_text"),
+  v.literal("pdf"),
+  v.literal("docx"),
+  v.literal("html"),
+  v.literal("svg"),
+  v.literal("mermaid"),
+  v.literal("json"),
+  v.literal("csv"),
+  v.literal("code"),
+  v.literal("url"),
+);
+
+const artifactFamilyValidator = v.union(
+  v.literal("text"),
+  v.literal("file"),
+  v.literal("interactive"),
+  v.literal("visual"),
+  v.literal("data"),
+  v.literal("link"),
+);
+
+const artifactSourceValidator = v.union(
+  v.literal("manual"),
+  v.literal("upload"),
+  v.literal("agent"),
+  v.literal("url"),
+);
+
+const indexingStatusValidator = v.union(
+  v.literal("not_indexed"),
+  v.literal("pending"),
+  v.literal("ready"),
+  v.literal("failed"),
+);
+
 export default defineSchema(
   {
     users: defineTable({
@@ -280,8 +317,9 @@ export default defineSchema(
       messageId: v.string(),
       artifactId: v.id("artifacts"),
       title: v.string(),
-      kind: v.optional(v.union(v.literal("document"), v.literal("url"))),
+      artifactType: v.optional(artifactTypeValidator),
       source: v.optional(v.union(v.literal("upload"), v.literal("workspace"))),
+      kind: v.optional(v.union(v.literal("document"), v.literal("url"))),
       createdAt: v.number(),
     }).index("by_owner_message", ["ownerUserId", "messageId"]),
     agentRuns: defineTable({
@@ -427,28 +465,21 @@ export default defineSchema(
       folderId: v.optional(v.id("workspaceFolders")),
       threadId: v.optional(v.string()),
       runId: v.optional(runId),
-      type: v.optional(v.union(
-        v.literal("research_report"),
-        v.literal("markdown_report"),
-        v.literal("research_document"),
-        v.literal("source_bundle"),
-        v.literal("citation_evidence_view"),
-        v.literal("document"),
-        v.literal("code"),
-        v.literal("html"),
-        v.literal("json"),
-        v.literal("plain_text"),
-      )),
+      artifactType: v.optional(artifactTypeValidator),
+      artifactFamily: v.optional(artifactFamilyValidator),
+      source: v.optional(artifactSourceValidator),
       kind: v.optional(v.union(v.literal("document"), v.literal("url"))),
+      type: v.optional(v.string()),
+      contentFormat: v.optional(v.string()),
       title: v.string(),
-      contentFormat: v.optional(v.union(
-        v.literal("blocks_json"),
-        v.literal("markdown"),
-        v.literal("html"),
-        v.literal("plain"),
-        v.literal("code"),
-        v.literal("json"),
-      )),
+      language: v.optional(v.string()),
+      mimeType: v.optional(v.string()),
+      fileName: v.optional(v.string()),
+      byteSize: v.optional(v.number()),
+      indexingStatus: v.optional(indexingStatusValidator),
+      indexingFailureReason: v.optional(v.string()),
+      ragEntryId: v.optional(v.string()),
+      indexedAt: v.optional(v.number()),
       body: v.optional(v.string()),
       storageId: v.optional(v.id("_storage")),
       plainTextPreview: v.optional(v.string()),
@@ -490,9 +521,11 @@ export default defineSchema(
       uploadFileName: v.optional(v.string()),
       uploadMimeType: v.optional(v.string()),
       uploadSize: v.optional(v.number()),
-      ingestionStatus: v.optional(
-        v.union(v.literal("pending"), v.literal("ready"), v.literal("failed")),
-      ),
+      ingestionStatus: v.optional(v.union(
+        v.literal("pending"),
+        v.literal("ready"),
+        v.literal("failed"),
+      )),
       ingestionFailureReason: v.optional(v.string()),
       ragEntryId: v.optional(v.string()),
       indexedAt: v.optional(v.number()),

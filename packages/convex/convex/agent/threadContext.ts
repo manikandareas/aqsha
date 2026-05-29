@@ -8,6 +8,10 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "../_generated/server";
+import {
+  artifactTypeForLegacyArtifact,
+  isAgentWritableArtifactType,
+} from "../artifactModel";
 import { requireCurrentUser } from "../auth";
 import { assertWorkspaceArtifactOwner } from "../workspaceAccess";
 
@@ -23,7 +27,7 @@ type PromptContextArtifact = {
   artifactId?: string;
   workspaceId?: string;
   title: string;
-  kind: "document" | "url" | "unknown";
+  artifactType: string;
   url?: {
     normalizedUrl: string;
     status: "pending" | "ready" | "failed";
@@ -40,16 +44,17 @@ const selectedContextValidator = v.object({
   createdAt: v.number(),
   artifact: v.object({
     title: v.string(),
-    kind: v.optional(v.union(v.literal("document"), v.literal("url"))),
-    type: v.optional(v.string()),
+    artifactType: v.string(),
     plainTextPreview: v.optional(v.string()),
     updatedAt: v.number(),
   }),
-  url: v.optional(v.object({
-    normalizedUrl: v.string(),
-    status: v.union(v.literal("pending"), v.literal("ready"), v.literal("failed")),
-    failureReason: v.optional(v.string()),
-  })),
+  url: v.optional(
+    v.object({
+      normalizedUrl: v.string(),
+      status: v.union(v.literal("pending"), v.literal("ready"), v.literal("failed")),
+      failureReason: v.optional(v.string()),
+    }),
+  ),
 });
 
 const contextMutationResultValidator = v.object({
@@ -170,7 +175,8 @@ async function selectedRowToSummary(
   ) {
     return null;
   }
-  const url = artifact.kind === "url"
+  const artifactType = artifactTypeForLegacyArtifact(artifact);
+  const url = artifactType === "url"
     ? await getArtifactUrl(ctx, { ownerUserId, artifactId: artifact._id })
     : null;
 
@@ -182,8 +188,7 @@ async function selectedRowToSummary(
     createdAt: row.createdAt,
     artifact: {
       title: artifact.title,
-      kind: artifact.kind,
-      type: artifact.type,
+      artifactType,
       plainTextPreview: artifact.plainTextPreview,
       updatedAt: artifact.updatedAt,
     },
@@ -229,7 +234,7 @@ function buildContextBlock(artifacts: PromptContextArtifact[]) {
       lines.push(`Workspace ID: ${artifact.workspaceId}`);
     }
     lines.push(`Title: ${artifact.title}`);
-    lines.push(`Type: ${artifact.kind}`);
+    lines.push(`Type: ${artifact.artifactType}`);
     if (artifact.url) {
       lines.push(`URL: ${artifact.url.normalizedUrl}`);
       lines.push(`URL status: ${artifact.url.status}`);
@@ -280,8 +285,9 @@ async function getPromptContextArtifactById(
     return null;
   }
 
-  const [document, url] = await Promise.all([
-    artifact.kind === "document"
+  const artifactType = artifactTypeForLegacyArtifact(artifact);
+  const [contentRow, url] = await Promise.all([
+    artifactType !== "url"
       ? ctx.db
           .query("artifactDocuments")
           .withIndex("by_owner_artifact", (q) =>
@@ -289,15 +295,15 @@ async function getPromptContextArtifactById(
           )
           .unique()
       : Promise.resolve(null),
-    artifact.kind === "url"
+    artifactType === "url"
       ? getArtifactUrl(ctx, { ownerUserId, artifactId: artifact._id })
       : Promise.resolve(null),
   ]);
 
   const rawContent =
     artifact.contextText ??
-    document?.plainText ??
-    document?.markdown ??
+    contentRow?.plainText ??
+    contentRow?.markdown ??
     url?.readableText ??
     artifact.body ??
     "";
@@ -307,7 +313,7 @@ async function getPromptContextArtifactById(
     artifactId: String(artifact._id),
     workspaceId: artifact.workspaceId ? String(artifact.workspaceId) : undefined,
     title: artifact.title,
-    kind: artifact.kind ?? "unknown",
+    artifactType,
     url: url
       ? {
           normalizedUrl: url.normalizedUrl,
@@ -339,8 +345,9 @@ async function getPromptContextArtifact(
     return null;
   }
 
-  const [document, url] = await Promise.all([
-    artifact.kind === "document"
+  const artifactType = artifactTypeForLegacyArtifact(artifact);
+  const [contentRow, url] = await Promise.all([
+    artifactType !== "url"
       ? ctx.db
           .query("artifactDocuments")
           .withIndex("by_owner_artifact", (q) =>
@@ -348,15 +355,15 @@ async function getPromptContextArtifact(
           )
           .unique()
       : Promise.resolve(null),
-    artifact.kind === "url"
+    artifactType === "url"
       ? getArtifactUrl(ctx, { ownerUserId, artifactId: artifact._id })
       : Promise.resolve(null),
   ]);
 
   const rawContent =
     artifact.contextText ??
-    document?.plainText ??
-    document?.markdown ??
+    contentRow?.plainText ??
+    contentRow?.markdown ??
     url?.readableText ??
     artifact.body ??
     "";
@@ -366,7 +373,7 @@ async function getPromptContextArtifact(
     artifactId: String(artifact._id),
     workspaceId: String(artifact.workspaceId),
     title: artifact.title,
-    kind: artifact.kind ?? "unknown",
+    artifactType,
     url: url
       ? {
           normalizedUrl: url.normalizedUrl,
@@ -394,7 +401,7 @@ export async function listSelectedWorkspaceDocuments(
       !artifact ||
       artifact.ownerUserId !== args.ownerUserId ||
       artifact.status !== "active" ||
-      artifact.kind !== "document" ||
+      !isAgentWritableArtifactType(artifactTypeForLegacyArtifact(artifact)) ||
       !artifact.workspaceId
     ) {
       continue;
@@ -519,11 +526,12 @@ export const listRagTargetsForThread = internalQuery({
     for (const row of rows) {
       targetIds.add(String(row.artifactId));
       const artifact = await ctx.db.get("artifacts", row.artifactId);
+      const artifactType = artifact ? artifactTypeForLegacyArtifact(artifact) : undefined;
       if (
         !artifact ||
         artifact.ownerUserId !== args.ownerUserId ||
         artifact.status !== "active" ||
-        artifact.kind !== "document"
+        artifactType === "url"
       ) {
         continue;
       }
@@ -534,18 +542,12 @@ export const listRagTargetsForThread = internalQuery({
       } else if (artifact.threadId !== args.threadId) {
         continue;
       }
-      const document = await ctx.db
-        .query("artifactDocuments")
-        .withIndex("by_owner_artifact", (q) =>
-          q.eq("ownerUserId", args.ownerUserId).eq("artifactId", artifact._id),
-        )
-        .unique();
-      if (document?.ragEntryId && document.ingestionStatus === "ready") {
+      if (artifact.ragEntryId && artifact.indexingStatus === "ready") {
         targets.push({
           artifactId: artifact._id,
           workspaceId: artifact.workspaceId,
           title: artifact.title,
-          ragEntryId: document.ragEntryId,
+          ragEntryId: artifact.ragEntryId,
         });
       }
     }
@@ -555,11 +557,12 @@ export const listRagTargetsForThread = internalQuery({
         continue;
       }
       const artifact = await ctx.db.get("artifacts", artifactId);
+      const artifactType = artifact ? artifactTypeForLegacyArtifact(artifact) : undefined;
       if (
         !artifact ||
         artifact.ownerUserId !== args.ownerUserId ||
         artifact.status !== "active" ||
-        artifact.kind !== "document"
+        artifactType === "url"
       ) {
         continue;
       }
@@ -570,18 +573,12 @@ export const listRagTargetsForThread = internalQuery({
       } else if (artifact.threadId !== args.threadId) {
         continue;
       }
-      const document = await ctx.db
-        .query("artifactDocuments")
-        .withIndex("by_owner_artifact", (q) =>
-          q.eq("ownerUserId", args.ownerUserId).eq("artifactId", artifact._id),
-        )
-        .unique();
-      if (document?.ragEntryId && document.ingestionStatus === "ready") {
+      if (artifact.ragEntryId && artifact.indexingStatus === "ready") {
         targets.push({
           artifactId: artifact._id,
           workspaceId: artifact.workspaceId,
           title: artifact.title,
-          ragEntryId: document.ragEntryId,
+          ragEntryId: artifact.ragEntryId,
         });
       }
     }
@@ -691,7 +688,7 @@ export async function persistMessageContextArtifacts(
     snapshot?: Array<{
       artifactId: Id<"artifacts">;
       title: string;
-      kind?: "document" | "url";
+      artifactType?: string;
       source?: "upload" | "workspace";
     }>;
   },
@@ -710,13 +707,14 @@ export async function persistMessageContextArtifacts(
     if (!artifact || artifact.ownerUserId !== args.ownerUserId) {
       continue;
     }
+    const artifactType = artifactTypeForLegacyArtifact(artifact);
     await ctx.db.insert("messageContextArtifacts", {
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
       messageId: args.messageId,
       artifactId: item.artifactId,
       title: item.title || artifact.title,
-      kind: item.kind ?? artifact.kind,
+      artifactType,
       source: item.source ?? (artifact.threadId ? "upload" : "workspace"),
       createdAt,
     });

@@ -11,6 +11,7 @@ import {
   artifactRagNamespace,
   type ArtifactRagMetadata,
 } from "./agent/rag";
+import { artifactTypeFromUpload } from "./artifactModel";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "./artifactUploadLimits";
 const MAX_INDEXED_TEXT_CHARS = 300_000;
 
@@ -37,6 +38,7 @@ type ExtractedDocument = {
 type ProcessedAttachment = {
   artifactId: Id<"artifacts">;
   title: string;
+  artifactType: string;
 };
 
 export const createFromStorage = action({
@@ -56,18 +58,23 @@ export const createFromStorage = action({
     const user = await requireCurrentUser(ctx);
     validateUpload(args);
     const title = titleFromFileName(args.fileName);
+    const artifactType = artifactTypeFromUpload({
+      fileName: args.fileName,
+      mimeType: args.mimeType || "application/octet-stream",
+    });
     const artifactId: Id<"artifacts"> = await ctx.runMutation(
-      internal.artifacts.createUploadedDocumentInternal,
+      internal.artifacts.createUploadedArtifactInternal,
       {
         ownerUserId: user._id,
         ownerEmail: user.email ?? undefined,
         workspaceId: args.workspaceId,
         folderId: args.folderId,
         title,
-        uploadStorageId: args.storageId,
-        uploadFileName: args.fileName,
-        uploadMimeType: args.mimeType || "application/octet-stream",
-        uploadSize: args.size,
+        artifactType,
+        storageId: args.storageId,
+        fileName: args.fileName,
+        mimeType: args.mimeType || "application/octet-stream",
+        byteSize: args.size,
       },
     );
 
@@ -99,16 +106,21 @@ export const createThreadAttachmentFromStorage = action({
     const user = await requireCurrentUser(ctx);
     validateUpload(args);
     const title = titleFromFileName(args.fileName);
+    const artifactType = artifactTypeFromUpload({
+      fileName: args.fileName,
+      mimeType: args.mimeType || "application/octet-stream",
+    });
     const artifactId: Id<"artifacts"> = await ctx.runMutation(
       internal.artifacts.createThreadAttachmentInternal,
       {
         ownerUserId: user._id,
         threadId: args.threadId,
         title,
-        uploadStorageId: args.storageId,
-        uploadFileName: args.fileName,
-        uploadMimeType: args.mimeType || "application/octet-stream",
-        uploadSize: args.size,
+        artifactType,
+        storageId: args.storageId,
+        fileName: args.fileName,
+        mimeType: args.mimeType || "application/octet-stream",
+        byteSize: args.size,
       },
     );
 
@@ -142,7 +154,7 @@ export const processPendingAttachmentsAndStart = internalAction({
         v.object({
           artifactId: v.id("artifacts"),
           title: v.string(),
-          kind: v.optional(v.union(v.literal("document"), v.literal("url"))),
+          artifactType: v.optional(v.string()),
           source: v.optional(v.union(v.literal("upload"), v.literal("workspace"))),
         }),
       ),
@@ -153,16 +165,21 @@ export const processPendingAttachmentsAndStart = internalAction({
     for (const pending of args.pendingAttachments) {
       validateUpload(pending);
       const title = titleFromFileName(pending.fileName);
+      const artifactType = artifactTypeFromUpload({
+        fileName: pending.fileName,
+        mimeType: pending.mimeType || "application/octet-stream",
+      });
       const artifactId: Id<"artifacts"> = await ctx.runMutation(
         internal.artifacts.createThreadAttachmentInternal,
         {
           ownerUserId: args.ownerUserId,
           threadId: args.threadId,
           title,
-          uploadStorageId: pending.storageId,
-          uploadFileName: pending.fileName,
-          uploadMimeType: pending.mimeType || "application/octet-stream",
-          uploadSize: pending.size,
+          artifactType,
+          storageId: pending.storageId,
+          fileName: pending.fileName,
+          mimeType: pending.mimeType || "application/octet-stream",
+          byteSize: pending.size,
         },
       );
       await finalizeUploadedDocument(ctx, {
@@ -174,7 +191,7 @@ export const processPendingAttachmentsAndStart = internalAction({
         mimeType: pending.mimeType,
         threadId: args.threadId,
       });
-      processed.push({ artifactId, title });
+      processed.push({ artifactId, title, artifactType });
     }
 
     const uploadedIds = processed.map((item) => item.artifactId);
@@ -226,7 +243,7 @@ export const reindexPromotedAttachment = internalAction({
           source: "upload",
         } satisfies ArtifactRagMetadata,
       });
-      await ctx.runMutation(internal.artifacts.patchUploadedDocumentReady, {
+      await ctx.runMutation(internal.artifacts.patchUploadedArtifactIndexed, {
         ownerUserId: args.ownerUserId,
         artifactId: args.artifactId,
         markdown: args.plainText,
@@ -244,14 +261,14 @@ function buildAttachmentSnapshot(
   existing?: Array<{
     artifactId: Id<"artifacts">;
     title: string;
-    kind?: "document" | "url";
+    artifactType?: string;
     source?: "upload" | "workspace";
   }>,
 ) {
   const uploadedSnapshot = processed.map((item) => ({
     artifactId: item.artifactId,
     title: item.title,
-    kind: "document" as const,
+    artifactType: item.artifactType,
     source: "upload" as const,
   }));
   const merged = [...(existing ?? []), ...uploadedSnapshot];
@@ -289,10 +306,10 @@ async function finalizeUploadedDocument(
       mimeType: args.mimeType,
     });
     if (!extracted.plainText.trim()) {
-      throw new ConvexError("No readable text was found in this document");
+      throw new ConvexError("No readable text was found in this file");
     }
 
-    const [storageId, markdownStorageId] = await Promise.all([
+    const [indexedTextStorageId, markdownStorageId] = await Promise.all([
       maybeStoreText(ctx, extracted.plainText, "text/plain"),
       maybeStoreText(ctx, extracted.markdown, "text/markdown"),
     ]);
@@ -305,12 +322,12 @@ async function finalizeUploadedDocument(
       plainText: extracted.plainText,
     });
 
-    await ctx.runMutation(internal.artifacts.patchUploadedDocumentReady, {
+    await ctx.runMutation(internal.artifacts.patchUploadedArtifactIndexed, {
       ownerUserId: args.ownerUserId,
       artifactId: args.artifactId,
       markdown: extracted.markdown,
       plainText: extracted.plainText,
-      storageId,
+      indexedTextStorageId,
       markdownStorageId,
       ragEntryId,
     });
@@ -318,13 +335,13 @@ async function finalizeUploadedDocument(
     return { artifactId: args.artifactId, title: args.title, indexed: Boolean(ragEntryId) };
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Document extraction failed";
-    await ctx.runMutation(internal.artifacts.patchUploadedDocumentFailed, {
+      error instanceof Error ? error.message : "File indexing failed";
+    await ctx.runMutation(internal.artifacts.patchUploadedArtifactIndexingFailed, {
       ownerUserId: args.ownerUserId,
       artifactId: args.artifactId,
       failureReason: message,
     });
-    throw new ConvexError(message);
+    return { artifactId: args.artifactId, title: args.title, indexed: false };
   }
 }
 
@@ -344,7 +361,7 @@ function validateUpload(args: {
   }
   if (!isSupportedDocument(args.fileName, args.mimeType)) {
     throw new ConvexError(
-      "Unsupported file type. Upload PDF, DOCX, TXT, Markdown, CSV, JSON, or HTML.",
+      "Unsupported file type. Upload PDF, DOCX, TXT, Markdown, CSV, JSON, HTML, SVG, Mermaid, or code files.",
     );
   }
 }
@@ -378,7 +395,11 @@ async function extractStoredDocument(
     const text = normalizeExtractedText(result.value);
     return { markdown: text, plainText: text };
   }
-  if (textLikeMimeTypes.has(mimeType) || isTextLikeName(lowerName)) {
+  if (
+    textLikeMimeTypes.has(mimeType) ||
+    mimeType === "image/svg+xml" ||
+    isTextExtractableName(lowerName)
+  ) {
     const text = normalizeExtractedText(buffer.toString("utf8"));
     const plainText = lowerName.endsWith(".html") || mimeType === "text/html"
       ? normalizeExtractedText(stripHtml(text))
@@ -448,7 +469,7 @@ async function indexUploadedDocument(
     });
     return String(result.entryId);
   } catch (error) {
-    console.warn("Failed to index uploaded document in RAG", error);
+    console.warn("Failed to index uploaded file in RAG", error);
     return undefined;
   }
 }
@@ -460,9 +481,14 @@ function isSupportedDocument(fileName: string, mimeType: string) {
     lowerType === "application/pdf" ||
     lowerType ===
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    lowerType === "image/svg+xml" ||
     textLikeMimeTypes.has(lowerType) ||
     lowerName.endsWith(".pdf") ||
     lowerName.endsWith(".docx") ||
+    lowerName.endsWith(".svg") ||
+    lowerName.endsWith(".mmd") ||
+    lowerName.endsWith(".mermaid") ||
+    isCodeLikeName(lowerName) ||
     isTextLikeName(lowerName)
   );
 }
@@ -473,10 +499,38 @@ function isTextLikeName(lowerName: string) {
   );
 }
 
+function isTextExtractableName(lowerName: string) {
+  return (
+    isTextLikeName(lowerName) ||
+    lowerName.endsWith(".svg") ||
+    lowerName.endsWith(".mmd") ||
+    lowerName.endsWith(".mermaid") ||
+    isCodeLikeName(lowerName)
+  );
+}
+
+function isCodeLikeName(lowerName: string) {
+  return [
+    ".js",
+    ".jsx",
+    ".ts",
+    ".tsx",
+    ".css",
+    ".py",
+    ".java",
+    ".go",
+    ".rs",
+    ".sql",
+    ".sh",
+    ".yml",
+    ".yaml",
+  ].some((extension) => lowerName.endsWith(extension));
+}
+
 function titleFromFileName(fileName: string) {
   const cleaned = fileName.replace(/\s+/g, " ").trim();
   const withoutExtension = cleaned.replace(/\.[^.]+$/, "");
-  return (withoutExtension || cleaned || "Uploaded document").slice(0, 120);
+  return (withoutExtension || cleaned || "Uploaded artifact").slice(0, 120);
 }
 
 function normalizeExtractedText(value: string) {

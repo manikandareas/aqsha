@@ -3,12 +3,18 @@
 import { api } from "@aqsha/convex/api";
 import { useMutation, useQuery } from "convex/react";
 import {
+  BracesIcon,
+  Code2Icon,
+  FileIcon,
   FileTextIcon,
   FolderTreeIcon,
+  GitBranchIcon,
+  ImageIcon,
   LayoutGridIcon,
   Link2Icon,
   LinkIcon,
   Loader2Icon,
+  TableIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -156,7 +162,7 @@ function UserMessageContextArtifactCard({
   const canSave =
     artifact.source === "upload" &&
     !savedState &&
-    artifact.kind !== "url";
+    artifact.artifactType !== "url";
   const requiresPicker = canSave && !threadWorkspaceId && workspaceCount > 1;
 
   const handleSave = async (workspaceId?: string) => {
@@ -262,7 +268,7 @@ function UserMessageContextArtifactCard({
 }
 
 function getContextArtifactPresentation(artifact: MessageContextArtifactMetadata) {
-  if (artifact.kind === "url") {
+  if (artifact.artifactType === "url") {
     return {
       Icon: LinkIcon,
       label: "Tautan tersimpan",
@@ -273,22 +279,117 @@ function getContextArtifactPresentation(artifact: MessageContextArtifactMetadata
   }
 
   if (artifact.source === "upload") {
+    const uploadPresentation = getArtifactTypePresentation(artifact.artifactType);
     return {
-      Icon: FileTextIcon,
+      Icon: uploadPresentation.Icon,
       label: "Lampiran chat",
-      surfaceClass: "bg-mint-soft",
-      iconClass: "text-mint-foreground",
-      borderClass: "border-mint-soft-border/80",
+      surfaceClass: uploadPresentation.surfaceClass,
+      iconClass: uploadPresentation.iconClass,
+      borderClass: uploadPresentation.borderClass,
     };
   }
 
+  const workspacePresentation = getArtifactTypePresentation(artifact.artifactType);
   return {
-    Icon: LayoutGridIcon,
-    label: "Artifact workspace",
-    surfaceClass: "bg-muted/45",
-    iconClass: "text-muted-foreground",
-    borderClass: "border-border/80",
+    Icon: workspacePresentation.Icon,
+    label: workspacePresentation.label,
+    surfaceClass: workspacePresentation.surfaceClass,
+    iconClass: workspacePresentation.iconClass,
+    borderClass: workspacePresentation.borderClass,
   };
+}
+
+function getArtifactTypePresentation(artifactType: string | undefined) {
+  switch (artifactType) {
+    case "pdf":
+      return {
+        Icon: FileTextIcon,
+        label: "PDF",
+        surfaceClass: "bg-lavender-soft",
+        iconClass: "text-lavender-foreground",
+        borderClass: "border-lavender-soft-border/80",
+      };
+    case "docx":
+      return {
+        Icon: FileIcon,
+        label: "DOCX",
+        surfaceClass: "bg-mint-soft",
+        iconClass: "text-mint-foreground",
+        borderClass: "border-mint-soft-border/80",
+      };
+    case "html":
+      return {
+        Icon: Code2Icon,
+        label: "HTML",
+        surfaceClass: "bg-lemon-soft",
+        iconClass: "text-lemon-foreground",
+        borderClass: "border-lemon-soft-border/80",
+      };
+    case "svg":
+      return {
+        Icon: ImageIcon,
+        label: "SVG",
+        surfaceClass: "bg-lavender-soft",
+        iconClass: "text-lavender-foreground",
+        borderClass: "border-lavender-soft-border/80",
+      };
+    case "mermaid":
+      return {
+        Icon: GitBranchIcon,
+        label: "Mermaid",
+        surfaceClass: "bg-sky-soft",
+        iconClass: "text-sky-foreground",
+        borderClass: "border-sky-soft-border/80",
+      };
+    case "json":
+      return {
+        Icon: BracesIcon,
+        label: "JSON",
+        surfaceClass: "bg-muted/45",
+        iconClass: "text-muted-foreground",
+        borderClass: "border-border/80",
+      };
+    case "csv":
+      return {
+        Icon: TableIcon,
+        label: "CSV",
+        surfaceClass: "bg-muted/45",
+        iconClass: "text-muted-foreground",
+        borderClass: "border-border/80",
+      };
+    case "code":
+      return {
+        Icon: Code2Icon,
+        label: "Code",
+        surfaceClass: "bg-muted/45",
+        iconClass: "text-muted-foreground",
+        borderClass: "border-border/80",
+      };
+    case "plain_text":
+      return {
+        Icon: FileTextIcon,
+        label: "Text",
+        surfaceClass: "bg-mint-soft",
+        iconClass: "text-mint-foreground",
+        borderClass: "border-mint-soft-border/80",
+      };
+    case "markdown":
+      return {
+        Icon: FileTextIcon,
+        label: "Markdown",
+        surfaceClass: "bg-mint-soft",
+        iconClass: "text-mint-foreground",
+        borderClass: "border-mint-soft-border/80",
+      };
+    default:
+      return {
+        Icon: LayoutGridIcon,
+        label: "Artifact workspace",
+        surfaceClass: "bg-muted/45",
+        iconClass: "text-muted-foreground",
+        borderClass: "border-border/80",
+      };
+  }
 }
 
 function MessageArtifacts({ links }: { links: MessageArtifactLink[] }) {
@@ -300,6 +401,8 @@ function MessageArtifacts({ links }: { links: MessageArtifactLink[] }) {
       {links.map((link) => {
         const workspaceId = link.artifact.workspaceId;
         const canOpen = Boolean(workspaceId) && link.relation !== "deleted";
+        const presentation = getArtifactTypePresentation(link.artifact.artifactType);
+        const Icon = presentation.Icon;
 
         return (
           <button
@@ -315,7 +418,7 @@ function MessageArtifacts({ links }: { links: MessageArtifactLink[] }) {
               canOpen ? "hover:bg-lavender-soft" : "cursor-default bg-muted text-muted-foreground",
             )}
           >
-            <FileTextIcon className="size-4 shrink-0" />
+            <Icon className="size-4 shrink-0" />
             <span className="min-w-0 flex-1">
               <span className="block truncate font-semibold">
                 {link.artifact.title}

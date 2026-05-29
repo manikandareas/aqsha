@@ -59,7 +59,7 @@ export type SendMessage = (args: {
 export type ContextCandidateArtifact = {
   _id: ArtifactId;
   workspaceId?: string;
-  kind?: "document" | "url";
+  artifactType?: string;
   title: string;
   plainTextPreview?: string;
   updatedAt: number;
@@ -69,7 +69,7 @@ export type SelectedContextArtifact = {
   artifactId: ArtifactId;
   artifact: {
     title: string;
-    kind?: "document" | "url";
+    artifactType?: string;
     plainTextPreview?: string;
     updatedAt: number;
   };

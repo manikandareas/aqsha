@@ -28,12 +28,9 @@ const querySchema = z.object({
 const artifactContentSchema = z.object({
   title: z.string().min(1).max(160),
   body: z.string().min(1).max(200_000),
-  contentFormat: z
-    .enum(["markdown", "html", "plain", "code", "json"])
+  artifactType: z
+    .enum(["markdown", "plain_text", "html", "svg", "mermaid", "json", "csv", "code"])
     .default("markdown"),
-  type: z
-    .enum(["document", "code", "html", "json", "plain_text", "markdown_report"])
-    .default("document"),
   changeSummary: z.string().max(500).optional(),
 });
 
@@ -45,6 +42,8 @@ const updateArtifactSchema = artifactContentSchema.extend({
       "Exact existing Convex artifact id from an artifact card/tool result. Do not use a title or slug.",
     ),
 });
+
+type GeneratedArtifactType = z.infer<typeof artifactContentSchema>["artifactType"];
 
 type ArtifactToolResult = {
   artifactId: Id<"artifacts">;
@@ -133,9 +132,9 @@ export const researchTools: ToolSet = {
           ownerUserId,
           threadId,
           runId: ctx.runId,
-          type: input.type,
+          type: legacyTypeForArtifactType(input.artifactType),
           title: input.title,
-          contentFormat: input.contentFormat,
+          contentFormat: contentFormatForArtifactType(input.artifactType),
           body: input.body,
           changeSummary: input.changeSummary,
         },
@@ -172,7 +171,7 @@ export const researchTools: ToolSet = {
           artifactId: input.artifactId as Id<"artifacts">,
           runId: ctx.runId,
           title: input.title,
-          contentFormat: input.contentFormat,
+          contentFormat: contentFormatForArtifactType(input.artifactType),
           body: input.body,
           changeSummary: input.changeSummary,
         },
@@ -235,6 +234,42 @@ function requireCitationCounter(ctx: AqshaToolCtx) {
 export function createCitationCounter(start = 1) {
   let current = start;
   return { next: () => current++ };
+}
+
+function contentFormatForArtifactType(artifactType: GeneratedArtifactType) {
+  switch (artifactType) {
+    case "html":
+      return "html" as const;
+    case "json":
+      return "json" as const;
+    case "code":
+    case "svg":
+    case "mermaid":
+    case "csv":
+      return "code" as const;
+    case "plain_text":
+      return "plain" as const;
+    case "markdown":
+      return "markdown" as const;
+  }
+}
+
+function legacyTypeForArtifactType(artifactType: GeneratedArtifactType) {
+  switch (artifactType) {
+    case "html":
+      return "html" as const;
+    case "json":
+      return "json" as const;
+    case "code":
+    case "svg":
+    case "mermaid":
+    case "csv":
+      return "code" as const;
+    case "plain_text":
+      return "plain_text" as const;
+    case "markdown":
+      return "document" as const;
+  }
 }
 
 function isLikelyConvexId(value: string) {

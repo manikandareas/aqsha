@@ -3,6 +3,9 @@ import { z } from "zod";
 export const artifactPayloadSchema = z.object({
   action: z.enum(["create", "update", "delete"]),
   title: z.string().min(1).max(160),
+  artifactType: z
+    .enum(["markdown", "plain_text", "html", "svg", "mermaid", "json", "csv", "code"])
+    .optional(),
   artifactId: z.string().optional(),
   workspaceId: z.string().optional(),
   changeSummary: z.string().max(500).optional(),
@@ -25,6 +28,9 @@ export const approvedCardPayloadSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.enum(["create", "update"]),
     title: z.string().min(1).max(160),
+    artifactType: z
+      .enum(["markdown", "plain_text", "html", "svg", "mermaid", "json", "csv", "code"])
+      .optional(),
     artifactId: z.string().optional(),
     workspaceId: z.string().optional(),
     changeSummary: z.string().max(500).optional(),

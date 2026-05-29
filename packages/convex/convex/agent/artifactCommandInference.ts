@@ -90,7 +90,7 @@ export function buildAutoArtifactRoutingHint(
   intent: WorkspaceArtifactMutationIntent,
 ) {
   const lines = [
-    "The user selected workspace document context and asked to mutate it (auto-routed to /artifact).",
+    "The user selected workspace artifact context and asked to mutate it (auto-routed to /artifact).",
     `Detected intent: ${intent}.`,
   ];
 
@@ -103,23 +103,23 @@ export function buildAutoArtifactRoutingHint(
     );
     if (intent === "update") {
       lines.push(
-        "Call presentPlan with action=update and include the artifactId and workspaceId above unless the user clearly targets a different document.",
+        "Call presentPlan with action=update and include the artifactId and workspaceId above unless the user clearly targets a different artifact.",
       );
     }
     if (intent === "delete") {
       lines.push(
-        "Call confirmAction with action=delete and include the artifactId above unless the user clearly targets a different document.",
+        "Call confirmAction with action=delete and include the artifactId above unless the user clearly targets a different artifact.",
       );
     }
     return lines.join("\n");
   }
 
-  lines.push("Multiple workspace documents are selected:");
+  lines.push("Multiple workspace artifacts are selected:");
   for (const [index, doc] of selectedWorkspaceDocuments.entries()) {
     lines.push(
       `${index + 1}. "${doc.title}" (artifactId: ${doc.artifactId}, workspaceId: ${doc.workspaceId})`,
     );
   }
-  lines.push("Use askHuman if the target document is ambiguous.");
+  lines.push("Use askHuman if the target artifact is ambiguous.");
   return lines.join("\n");
 }

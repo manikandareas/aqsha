@@ -390,7 +390,7 @@ function ArtifactTile({
         >
           <DriveArtifactCard
             title={artifact.title}
-            kind={artifact.kind}
+            artifactType={artifact.artifactType}
             plainTextPreview={artifact.plainTextPreview}
             isSelected={isSelected}
             onClick={handleClick}

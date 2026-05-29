@@ -39,7 +39,7 @@ export function buildApprovedArtifactExecutionPrompt(args: {
       ? `Steps:\n${args.planBullets.map((bullet) => `- ${bullet}`).join("\n")}`
       : "",
     "",
-    "Generate the full Markdown content and call executeWorkspaceArtifact exactly once.",
+    "Generate the complete artifact content and call executeWorkspaceArtifact exactly once. Match the approved artifactType; use Markdown only when artifactType is markdown or unspecified.",
   ]
     .filter(Boolean)
     .join("\n");

@@ -233,7 +233,7 @@ export function Composer(props: ComposerProps) {
       const fallbackContent =
         (uploadedArtifacts.length > 0 || pendingAttachments.length > 0) &&
         content.trim().length === 0
-          ? `Use the attached document${uploadedArtifacts.length + pendingAttachments.length > 1 ? "s" : ""} as context: ${[
+          ? `Use the attached artifact${uploadedArtifacts.length + pendingAttachments.length > 1 ? "s" : ""} as context: ${[
               ...uploadedArtifacts.map((artifact) => artifact.title),
               ...pendingAttachments.map((attachment) => attachment.fileName.replace(/\.[^.]+$/, "") || attachment.fileName),
             ].join(", ")}.`
@@ -393,7 +393,7 @@ export function Composer(props: ComposerProps) {
         transition={shellTransition}
       >
         <PromptInput
-          accept=".pdf,.docx,.txt,.md,.markdown,.csv,.json,.html,.htm,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv,text/html,application/json"
+          accept=".pdf,.docx,.txt,.md,.markdown,.csv,.json,.html,.htm,.svg,.mmd,.mermaid,.js,.jsx,.ts,.tsx,.css,.py,.java,.go,.rs,.sql,.sh,.yml,.yaml,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv,text/html,application/json,image/svg+xml,text/javascript,application/javascript,text/css,text/yaml,application/x-yaml"
           multiple
           maxFiles={4}
           maxFileSize={MAX_UPLOAD_BYTES}
@@ -602,8 +602,8 @@ function ComposerUploadButton({
       disabled={disabled}
       onClick={() => attachments.openFileDialog()}
       className="aqsha-composer-toolbar-btn flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-all duration-150 hover:bg-muted/30 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-      title="Upload document"
-      aria-label="Upload document"
+      title="Upload artifact"
+      aria-label="Upload artifact"
     >
       <PaperclipIcon className="size-3.5" />
     </button>

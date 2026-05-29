@@ -39,7 +39,7 @@ export function toMutationContextSnapshot(
   return snapshot.map((item) => ({
     artifactId: item.artifactId as ArtifactId,
     title: item.title,
-    kind: item.kind,
+    artifactType: item.artifactType,
     source: item.source,
   }));
 }

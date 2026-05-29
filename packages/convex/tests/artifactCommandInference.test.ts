@@ -25,7 +25,7 @@ describe("artifact command inference", () => {
     expect(detectWorkspaceArtifactMutationIntent("Ringkas cerita ini")).toBeNull();
   });
 
-  it("ignores workspace management prompts even with selected documents", () => {
+  it("ignores workspace management prompts even with selected artifacts", () => {
     expect(detectWorkspaceArtifactMutationIntent("Buat workspace baru untuk tesis")).toBeNull();
     expect(
       shouldAutoRouteArtifactCommand({
@@ -45,7 +45,7 @@ describe("artifact command inference", () => {
     expect(findExplicitPromptCommandInContent("/summarize cerita ini")).not.toBeNull();
   });
 
-  it("auto-routes selected workspace documents with edit intent", () => {
+  it("auto-routes selected workspace artifacts with edit intent", () => {
     expect(
       shouldAutoRouteArtifactCommand({
         prompt: "Tambahkan paragraf penutup yang lebih kuat",

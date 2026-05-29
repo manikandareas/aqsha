@@ -1,6 +1,9 @@
 import { ConvexError } from "convex/values";
 import { describe, expect, it } from "vitest";
 import {
+  artifactFamilyForType,
+  artifactTypeFromAgentInput,
+  artifactTypeFromUpload,
   contextFromText,
   normalizeUrl,
   previewFromText,
@@ -36,5 +39,33 @@ describe("workspace artifact model helpers", () => {
   it("derives a compact site name from URLs", () => {
     expect(siteNameFromUrl("https://www.example.com/research")).toBe("example.com");
     expect(siteNameFromUrl("https://docs.example.org/page")).toBe("docs.example.org");
+  });
+
+  it("detects upload artifact type from MIME type and extension", () => {
+    expect(artifactTypeFromUpload({ fileName: "paper.pdf", mimeType: "" })).toBe("pdf");
+    expect(artifactTypeFromUpload({ fileName: "paper", mimeType: "application/pdf" })).toBe("pdf");
+    expect(
+      artifactTypeFromUpload({
+        fileName: "draft.docx",
+        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      }),
+    ).toBe("docx");
+    expect(artifactTypeFromUpload({ fileName: "diagram.mermaid", mimeType: "" })).toBe("mermaid");
+    expect(artifactTypeFromUpload({ fileName: "component.tsx", mimeType: "" })).toBe("code");
+  });
+
+  it("maps artifact types to families", () => {
+    expect(artifactFamilyForType("markdown")).toBe("text");
+    expect(artifactFamilyForType("pdf")).toBe("file");
+    expect(artifactFamilyForType("html")).toBe("interactive");
+    expect(artifactFamilyForType("svg")).toBe("visual");
+    expect(artifactFamilyForType("json")).toBe("data");
+    expect(artifactFamilyForType("url")).toBe("link");
+  });
+
+  it("rejects non-writable agent artifact types", () => {
+    expect(artifactTypeFromAgentInput("html")).toBe("html");
+    expect(() => artifactTypeFromAgentInput("pdf")).toThrow(ConvexError);
+    expect(() => artifactTypeFromAgentInput("url")).toThrow(ConvexError);
   });
 });

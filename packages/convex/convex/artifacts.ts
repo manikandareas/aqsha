@@ -11,14 +11,23 @@ import {
   query,
   type ActionCtx,
   type MutationCtx,
+  type QueryCtx,
 } from "./_generated/server";
 import { requireCurrentUser } from "./auth";
 import { PLAN_CATALOG } from "./billing/catalog";
 import { getBillingSnapshot } from "./billing/entitlements";
 import {
   ARTIFACT_BODY_INLINE_LIMIT,
+  type ArtifactType,
+  artifactFamilyForType,
+  artifactTypeForLegacyArtifact,
+  artifactTypeFromAgentInput,
   contextFromText,
+  defaultLanguageForArtifactType,
+  indexingStatusForLegacy,
+  isAgentWritableArtifactType,
   normalizeUrl,
+  plainTextFromMarkdown,
   previewFromText,
   siteNameFromUrl,
   titleFromUrl,
@@ -39,14 +48,114 @@ import {
   type JinaReadResult,
 } from "./agent/externalProviders";
 
-const documentTitleFallback = "Untitled document";
+const markdownTitleFallback = "Untitled markdown";
 
-type ArtifactFullContent = {
-  blocksJson: string;
-  markdown: string;
-  plainText: string;
-  readableText: string;
+const artifactTypeValidator = v.union(
+  v.literal("markdown"),
+  v.literal("plain_text"),
+  v.literal("pdf"),
+  v.literal("docx"),
+  v.literal("html"),
+  v.literal("svg"),
+  v.literal("mermaid"),
+  v.literal("json"),
+  v.literal("csv"),
+  v.literal("code"),
+  v.literal("url"),
+);
+
+const generatedArtifactTypeValidator = v.union(
+  v.literal("markdown"),
+  v.literal("plain_text"),
+  v.literal("html"),
+  v.literal("svg"),
+  v.literal("mermaid"),
+  v.literal("json"),
+  v.literal("csv"),
+  v.literal("code"),
+);
+
+type ArtifactRenderPayload =
+  | {
+      artifactType: "markdown";
+      blocksJson: string;
+      markdown: string;
+      plainText: string;
+    }
+  | {
+      artifactType: "pdf" | "docx";
+      fileName: string;
+      mimeType: string;
+      byteSize: number;
+      url: string;
+      indexingStatus: "not_indexed" | "pending" | "ready" | "failed";
+      indexingFailureReason?: string;
+    }
+  | {
+      artifactType: "url";
+      originalUrl: string;
+      normalizedUrl: string;
+      status: "pending" | "ready" | "failed";
+      title?: string;
+      description?: string;
+      siteName?: string;
+      failureReason?: string;
+      readableText: string;
+    }
+  | {
+      artifactType: "plain_text" | "html" | "svg" | "mermaid" | "json" | "csv" | "code";
+      source: string;
+      language?: string;
+    };
+
+type ArtifactReadModelInput = {
+  artifactType?: ArtifactType;
+  artifactFamily?: string;
+  source?: string;
+  indexingStatus?: "not_indexed" | "pending" | "ready" | "failed";
+  kind?: string;
+  type?: string;
+  contentFormat?: string;
+  mimeType?: string;
+  fileName?: string;
+  storageId?: Id<"_storage">;
+  runId?: string;
 };
+
+function sourceForLegacyArtifact(
+  artifact: ArtifactReadModelInput,
+  artifactType: ArtifactType,
+) {
+  if (
+    artifact.source === "manual" ||
+    artifact.source === "upload" ||
+    artifact.source === "agent" ||
+    artifact.source === "url"
+  ) {
+    return artifact.source;
+  }
+  if (artifactType === "url") {
+    return "url";
+  }
+  if (artifact.storageId) {
+    return "upload";
+  }
+  if (artifact.runId) {
+    return "agent";
+  }
+  return "manual";
+}
+
+function normalizeArtifactReadModel<T extends ArtifactReadModelInput>(artifact: T) {
+  const artifactType = artifactTypeForLegacyArtifact(artifact);
+  return {
+    ...artifact,
+    artifactType,
+    artifactFamily: artifact.artifactFamily ?? artifactFamilyForType(artifactType),
+    source: sourceForLegacyArtifact(artifact, artifactType),
+    indexingStatus: indexingStatusForLegacy(artifact.indexingStatus),
+  };
+}
 
 export const listByWorkspace = query({
   args: {
@@ -59,7 +168,7 @@ export const listByWorkspace = query({
     await assertWorkspaceOwner(ctx, args.workspaceId, user._id);
     if (args.folderId) {
       await assertFolderOwner(ctx, args.folderId, user._id, args.workspaceId);
-      return await ctx.db
+      const result = await ctx.db
         .query("artifacts")
         .withIndex("by_owner_workspace_folder_status_updated", (q) =>
           q
@@ -70,8 +179,12 @@ export const listByWorkspace = query({
         )
         .order("desc")
         .paginate(args.paginationOpts);
+      return {
+        ...result,
+        page: result.page.map(normalizeArtifactReadModel),
+      };
     }
-    return await ctx.db
+    const result = await ctx.db
       .query("artifacts")
       .withIndex("by_owner_workspace_status_updated", (q) =>
         q
@@ -81,6 +194,10 @@ export const listByWorkspace = query({
       )
       .order("desc")
       .paginate(args.paginationOpts);
+    return {
+      ...result,
+      page: result.page.map(normalizeArtifactReadModel),
+    };
   },
 });
 
@@ -92,7 +209,7 @@ export const listForContextPicker = query({
     const user = await requireCurrentUser(ctx);
     if (args.workspaceId) {
       await assertWorkspaceOwner(ctx, args.workspaceId, user._id);
-      return await ctx.db
+      const artifacts = await ctx.db
         .query("artifacts")
         .withIndex("by_owner_workspace_status_updated", (q) =>
           q
@@ -102,6 +219,7 @@ export const listForContextPicker = query({
         )
         .order("desc")
         .take(50);
+      return artifacts.map(normalizeArtifactReadModel);
     }
 
     return (await ctx.db
@@ -111,7 +229,8 @@ export const listForContextPicker = query({
       )
       .order("desc")
       .take(50))
-      .filter((artifact) => artifact.workspaceId != null);
+      .filter((artifact) => artifact.workspaceId != null)
+      .map(normalizeArtifactReadModel);
   },
 });
 
@@ -123,21 +242,14 @@ export const get = query({
     if (!artifact || artifact.ownerUserId !== user._id || !artifact.workspaceId) {
       return null;
     }
-    const [document, url] = await Promise.all([
-      ctx.db
-        .query("artifactDocuments")
-        .withIndex("by_owner_artifact", (q) =>
-          q.eq("ownerUserId", user._id).eq("artifactId", artifact._id),
-        )
-        .unique(),
-      ctx.db
-        .query("artifactUrls")
-        .withIndex("by_owner_artifact", (q) =>
-          q.eq("ownerUserId", user._id).eq("artifactId", artifact._id),
-        )
-        .unique(),
+    const artifactType = artifactTypeForLegacyArtifact(artifact);
+    const [content, url] = await Promise.all([
+      getContentRowOrNull(ctx, artifact._id, user._id),
+      artifactType === "url"
+        ? getUrlRowOrNull(ctx, artifact._id, user._id)
+        : Promise.resolve(null),
     ]);
-    return { artifact, document, url };
+    return { artifact: normalizeArtifactReadModel(artifact), content, url };
   },
 });
 
@@ -155,15 +267,17 @@ export const createDocument = mutation({
     }
     await assertLibraryCapacity(ctx, user._id);
     const now = Date.now();
-    const title = args.title ? normalizeName(args.title, "Artifact title") : documentTitleFallback;
+    const title = args.title ? normalizeName(args.title, "Artifact title") : markdownTitleFallback;
     const artifactId = await ctx.db.insert("artifacts", {
       ownerUserId: user._id,
       workspaceId: args.workspaceId,
       folderId: args.folderId,
-      kind: "document",
-      type: "document",
+      artifactType: "markdown",
+      artifactFamily: artifactFamilyForType("markdown"),
+      source: "manual",
       title,
-      contentFormat: "blocks_json",
+      language: "markdown",
+      indexingStatus: "ready",
       body: "",
       plainTextPreview: "",
       contextText: "",
@@ -218,7 +332,7 @@ export const updateDocument = action({
     const markdownStorageId = args.markdown
       ? await storeOversizedText(ctx, args.markdown, "text/markdown")
       : undefined;
-    await ctx.runMutation(internal.artifacts.updateDocumentInternal, {
+    await ctx.runMutation(internal.artifacts.updateMarkdownInternal, {
       ownerUserId: user._id,
       artifactId: args.artifactId,
       title: args.title,
@@ -233,61 +347,94 @@ export const updateDocument = action({
   },
 });
 
-export const getFullContent = action({
+export const getRenderPayload = action({
   args: { artifactId: v.id("artifacts") },
-  handler: async (ctx, args): Promise<ArtifactFullContent | null> => {
+  handler: async (ctx, args): Promise<ArtifactRenderPayload | null> => {
     const user = await requireCurrentUser(ctx);
-    const target: {
-      artifact: {
-        kind?: "document" | "url";
-        body?: string;
-        storageId?: Id<"_storage">;
-      };
-      document?: {
-        blocksJson?: string;
-        markdown?: string;
-        plainText?: string;
-        storageId?: Id<"_storage">;
-        blocksStorageId?: Id<"_storage">;
-        markdownStorageId?: Id<"_storage">;
-      } | null;
-      url?: {
-        readableText?: string;
-        storageId?: Id<"_storage">;
-      } | null;
-    } | null = await ctx.runQuery(internal.artifacts.getContentTarget, {
+    const target = await ctx.runQuery(internal.artifacts.getContentTarget, {
       ownerUserId: user._id,
       artifactId: args.artifactId,
     });
     if (!target) {
       return null;
     }
-    const blocksJson: string | undefined =
-      target.document?.blocksJson ??
-      (target.document?.blocksStorageId
-        ? await readStorageText(ctx, target.document.blocksStorageId)
-        : undefined);
-    const markdown: string | undefined =
-      target.document?.markdown ??
-      (target.document?.markdownStorageId
-        ? await readStorageText(ctx, target.document.markdownStorageId)
-        : undefined);
-    const plainText: string | undefined =
-      target.document?.plainText ??
-      (target.document?.storageId
-        ? await readStorageText(ctx, target.document.storageId)
-        : target.artifact.body ??
-          (target.artifact.storageId
-            ? await readStorageText(ctx, target.artifact.storageId)
-            : undefined));
-    const readableText: string | undefined =
-      target.url?.readableText ??
-      (target.url?.storageId ? await readStorageText(ctx, target.url.storageId) : undefined);
+
+    const { artifact, content, url } = target;
+    const artifactType = artifactTypeForLegacyArtifact(artifact);
+
+    if (artifactType === "url") {
+      if (!url) return null;
+      const readableText =
+        url.readableText ??
+        (url.storageId ? await readStorageText(ctx, url.storageId) : "");
+      return {
+        artifactType: "url",
+        originalUrl: url.originalUrl,
+        normalizedUrl: url.normalizedUrl,
+        status: url.status,
+        title: url.title,
+        description: url.description,
+        siteName: url.siteName,
+        failureReason: url.failureReason,
+        readableText,
+      };
+    }
+
+    if (artifactType === "pdf" || artifactType === "docx") {
+      if (!artifact.storageId) {
+        return null;
+      }
+      const url = await ctx.storage.getUrl(artifact.storageId);
+      if (!url) {
+        return null;
+      }
+      return {
+        artifactType,
+        fileName: artifact.fileName ?? artifact.title,
+        mimeType: artifact.mimeType ?? "application/octet-stream",
+        byteSize: artifact.byteSize ?? 0,
+        url,
+        indexingStatus: indexingStatusForLegacy(artifact.indexingStatus),
+        indexingFailureReason: artifact.indexingFailureReason,
+      };
+    }
+
+    if (artifactType === "markdown") {
+      const blocksJson =
+        content?.blocksJson ??
+        (content?.blocksStorageId ? await readStorageText(ctx, content.blocksStorageId) : "");
+      const markdown =
+        content?.markdown ??
+        (content?.markdownStorageId ? await readStorageText(ctx, content.markdownStorageId) : "");
+      const plainText =
+        content?.plainText ??
+        (content?.storageId ? await readStorageText(ctx, content.storageId) : artifact.body ?? "");
+      return {
+        artifactType: "markdown",
+        blocksJson,
+        markdown,
+        plainText,
+      };
+    }
+
+    const source =
+      artifact.body ??
+      (artifact.storageId ? await readStorageText(ctx, artifact.storageId) : "");
+    if (
+      artifactType !== "plain_text" &&
+      artifactType !== "html" &&
+      artifactType !== "svg" &&
+      artifactType !== "mermaid" &&
+      artifactType !== "json" &&
+      artifactType !== "csv" &&
+      artifactType !== "code"
+    ) {
+      return null;
+    }
     return {
-      blocksJson: blocksJson ?? "",
-      markdown: markdown ?? "",
-      plainText: plainText ?? "",
-      readableText: readableText ?? "",
+      artifactType,
+      source,
+      language: artifact.language,
     };
   },
 });
@@ -329,10 +476,13 @@ export const createUrl = mutation({
       ownerUserId: user._id,
       workspaceId: args.workspaceId,
       folderId: args.folderId,
-      kind: "url",
-      type: "plain_text",
+      artifactType: "url",
+      artifactFamily: artifactFamilyForType("url"),
+      source: "url",
       title,
-      contentFormat: "plain",
+      language: "url",
+      mimeType: "text/uri-list",
+      indexingStatus: "pending",
       plainTextPreview: normalizedUrl,
       contextText: normalizedUrl,
       status: "active",
@@ -356,32 +506,6 @@ export const createUrl = mutation({
   },
 });
 
-async function assertLibraryCapacity(ctx: MutationCtx, ownerUserId: string) {
-  const user = await requireCurrentUser(ctx);
-  await assertLibraryCapacityForOwner(ctx, ownerUserId, user.email);
-}
-
-async function assertLibraryCapacityForOwner(
-  ctx: MutationCtx,
-  ownerUserId: string,
-  ownerEmail?: string | null,
-) {
-  const snapshot = await getBillingSnapshot(ctx, ownerUserId, ownerEmail);
-  const limit = PLAN_CATALOG[snapshot.planKey].libraryItemLimit;
-  if (limit === Number.MAX_SAFE_INTEGER) {
-    return;
-  }
-  const activeArtifacts = await ctx.db
-    .query("artifacts")
-    .withIndex("by_owner_status_updated", (q) =>
-      q.eq("ownerUserId", ownerUserId).eq("status", "active"),
-    )
-    .collect();
-  if (activeArtifacts.length >= limit) {
-    throw new ConvexError("Library item limit reached for current plan");
-  }
-}
-
 export const retryUrlExtraction = mutation({
   args: { artifactId: v.id("artifacts") },
   handler: async (ctx, args) => {
@@ -390,10 +514,15 @@ export const retryUrlExtraction = mutation({
       requireActive: true,
     });
     await assertWorkspaceOwner(ctx, artifact.workspaceId, user._id, { requireActive: true });
-    if (artifact.kind !== "url") {
+    if (artifact.artifactType !== "url") {
       throw new ConvexError("Artifact is not a URL");
     }
     const row = await getUrlRow(ctx, args.artifactId, user._id);
+    await ctx.db.patch("artifacts", args.artifactId, {
+      indexingStatus: "pending",
+      indexingFailureReason: undefined,
+      updatedAt: Date.now(),
+    });
     await ctx.db.patch("artifactUrls", row._id, {
       status: "pending",
       failureReason: undefined,
@@ -478,13 +607,7 @@ export const remove = mutation({
 export const extractUrl = internalAction({
   args: { artifactId: v.id("artifacts") },
   handler: async (ctx, args): Promise<{ ok: boolean; reason?: string }> => {
-    const target: {
-      ownerUserId: string;
-      artifactId: Id<"artifacts">;
-      title: string;
-      normalizedUrl: string;
-      siteName: string;
-    } | null = await ctx.runQuery(internal.artifacts.getUrlExtractionTarget, {
+    const target = await ctx.runQuery(internal.artifacts.getUrlExtractionTarget, {
       artifactId: args.artifactId,
     });
     if (!target) {
@@ -530,7 +653,7 @@ export const extractUrl = internalAction({
   },
 });
 
-export const updateDocumentInternal = internalMutation({
+export const updateMarkdownInternal = internalMutation({
   args: {
     ownerUserId: v.string(),
     artifactId: v.id("artifacts"),
@@ -547,10 +670,10 @@ export const updateDocumentInternal = internalMutation({
       requireActive: true,
     });
     await assertWorkspaceOwner(ctx, artifact.workspaceId, args.ownerUserId, { requireActive: true });
-    if (artifact.kind !== "document") {
-      throw new ConvexError("Artifact is not a document");
+    if (artifact.artifactType !== "markdown") {
+      throw new ConvexError("Artifact is not editable Markdown");
     }
-    const row = await getDocumentRow(ctx, args.artifactId, args.ownerUserId);
+    const row = await getContentRow(ctx, args.artifactId, args.ownerUserId);
     const now = Date.now();
     const title = args.title ? normalizeName(args.title, "Artifact title") : artifact.title;
     const inlinePlainText =
@@ -566,9 +689,9 @@ export const updateDocumentInternal = internalMutation({
     await ctx.db.patch("artifacts", args.artifactId, {
       title,
       body: inlinePlainText,
-      storageId: args.storageId,
       plainTextPreview: previewFromText(args.plainText),
       contextText: contextFromText(args.plainText),
+      indexingStatus: "ready",
       updatedAt: now,
     });
     await ctx.db.patch("artifactDocuments", row._id, {
@@ -588,10 +711,11 @@ export const createThreadAttachmentInternal = internalMutation({
     ownerUserId: v.string(),
     threadId: v.string(),
     title: v.string(),
-    uploadStorageId: v.id("_storage"),
-    uploadFileName: v.string(),
-    uploadMimeType: v.string(),
-    uploadSize: v.number(),
+    artifactType: artifactTypeValidator,
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    mimeType: v.string(),
+    byteSize: v.number(),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -599,13 +723,17 @@ export const createThreadAttachmentInternal = internalMutation({
     const artifactId = await ctx.db.insert("artifacts", {
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
-      kind: "document",
-      type: "document",
+      artifactType: args.artifactType,
+      artifactFamily: artifactFamilyForType(args.artifactType),
+      source: "upload",
       title,
-      contentFormat: "plain",
-      body: "",
-      storageId: undefined,
-      plainTextPreview: "Extraction is running.",
+      language: defaultLanguageForArtifactType(args.artifactType),
+      mimeType: args.mimeType,
+      fileName: args.fileName,
+      byteSize: args.byteSize,
+      indexingStatus: "pending",
+      storageId: args.storageId,
+      plainTextPreview: "Indexing is running.",
       contextText: "",
       status: "active",
       createdAt: now,
@@ -618,11 +746,6 @@ export const createThreadAttachmentInternal = internalMutation({
       blocksJson: "",
       markdown: "",
       plainText: "",
-      uploadStorageId: args.uploadStorageId,
-      uploadFileName: args.uploadFileName,
-      uploadMimeType: args.uploadMimeType,
-      uploadSize: args.uploadSize,
-      ingestionStatus: "pending",
       createdAt: now,
       updatedAt: now,
     });
@@ -645,7 +768,7 @@ export const promoteAttachmentToWorkspaceInternal = internalMutation({
       requireActive: true,
     });
     await assertLibraryCapacityForOwner(ctx, args.ownerUserId, args.ownerEmail);
-    const row = await getDocumentRow(ctx, args.artifactId, args.ownerUserId);
+    const row = await getContentRow(ctx, args.artifactId, args.ownerUserId);
     const artifactBeforePromote = await ctx.db.get("artifacts", args.artifactId);
     const now = Date.now();
     await ctx.db.patch("artifacts", args.artifactId, {
@@ -663,8 +786,8 @@ export const promoteAttachmentToWorkspaceInternal = internalMutation({
       workspaceId: args.workspaceId,
       artifactId: args.artifactId,
       workspaceName: workspace?.name ?? "Workspace",
-      ragEntryId: row.ragEntryId,
-      title: artifactBeforePromote?.title ?? "Document",
+      ragEntryId: artifactBeforePromote?.ragEntryId,
+      title: artifactBeforePromote?.title ?? "Artifact",
       plainText: row.plainText ?? artifactBeforePromote?.contextText ?? "",
     };
   },
@@ -755,14 +878,16 @@ export const saveAttachmentToWorkspace = mutation({
       plainText: string;
     };
 
-    await ctx.scheduler.runAfter(0, internal.artifactUploads.reindexPromotedAttachment, {
-      ownerUserId: user._id,
-      artifactId: promoted.artifactId,
-      workspaceId: promoted.workspaceId,
-      title: promoted.title,
-      plainText: promoted.plainText,
-      previousRagEntryId: promoted.ragEntryId,
-    });
+    if (promoted.plainText.trim()) {
+      await ctx.scheduler.runAfter(0, internal.artifactUploads.reindexPromotedAttachment, {
+        ownerUserId: user._id,
+        artifactId: promoted.artifactId,
+        workspaceId: promoted.workspaceId,
+        title: promoted.title,
+        plainText: promoted.plainText,
+        previousRagEntryId: promoted.ragEntryId,
+      });
+    }
 
     return {
       workspaceId: promoted.workspaceId,
@@ -772,35 +897,18 @@ export const saveAttachmentToWorkspace = mutation({
   },
 });
 
-async function assertWorkspaceCapacity(ctx: MutationCtx, ownerUserId: string) {
-  const user = await requireCurrentUser(ctx);
-  const snapshot = await getBillingSnapshot(ctx, ownerUserId, user.email);
-  const limit = PLAN_CATALOG[snapshot.planKey].workspaceLimit;
-  if (limit === Number.MAX_SAFE_INTEGER) {
-    return;
-  }
-  const activeWorkspaces = await ctx.db
-    .query("workspaces")
-    .withIndex("by_owner_status_updated", (q) =>
-      q.eq("ownerUserId", ownerUserId).eq("status", "active"),
-    )
-    .collect();
-  if (activeWorkspaces.length >= limit) {
-    throw new ConvexError("Workspace limit reached for current plan");
-  }
-}
-
-export const createUploadedDocumentInternal = internalMutation({
+export const createUploadedArtifactInternal = internalMutation({
   args: {
     ownerUserId: v.string(),
     ownerEmail: v.optional(v.string()),
     workspaceId: v.id("workspaces"),
     folderId: v.optional(v.id("workspaceFolders")),
     title: v.string(),
-    uploadStorageId: v.id("_storage"),
-    uploadFileName: v.string(),
-    uploadMimeType: v.string(),
-    uploadSize: v.number(),
+    artifactType: artifactTypeValidator,
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    mimeType: v.string(),
+    byteSize: v.number(),
   },
   handler: async (ctx, args) => {
     await assertWorkspaceOwner(ctx, args.workspaceId, args.ownerUserId, {
@@ -816,13 +924,17 @@ export const createUploadedDocumentInternal = internalMutation({
       ownerUserId: args.ownerUserId,
       workspaceId: args.workspaceId,
       folderId: args.folderId,
-      kind: "document",
-      type: "document",
+      artifactType: args.artifactType,
+      artifactFamily: artifactFamilyForType(args.artifactType),
+      source: "upload",
       title,
-      contentFormat: "plain",
-      body: "",
-      storageId: undefined,
-      plainTextPreview: "Extraction is running.",
+      language: defaultLanguageForArtifactType(args.artifactType),
+      mimeType: args.mimeType,
+      fileName: args.fileName,
+      byteSize: args.byteSize,
+      indexingStatus: "pending",
+      storageId: args.storageId,
+      plainTextPreview: "Indexing is running.",
       contextText: "",
       status: "active",
       createdAt: now,
@@ -835,11 +947,6 @@ export const createUploadedDocumentInternal = internalMutation({
       blocksJson: "",
       markdown: "",
       plainText: "",
-      uploadStorageId: args.uploadStorageId,
-      uploadFileName: args.uploadFileName,
-      uploadMimeType: args.uploadMimeType,
-      uploadSize: args.uploadSize,
-      ingestionStatus: "pending",
       createdAt: now,
       updatedAt: now,
     });
@@ -847,13 +954,13 @@ export const createUploadedDocumentInternal = internalMutation({
   },
 });
 
-export const patchUploadedDocumentReady = internalMutation({
+export const patchUploadedArtifactIndexed = internalMutation({
   args: {
     ownerUserId: v.string(),
     artifactId: v.id("artifacts"),
     markdown: v.string(),
     plainText: v.string(),
-    storageId: v.optional(v.id("_storage")),
+    indexedTextStorageId: v.optional(v.id("_storage")),
     markdownStorageId: v.optional(v.id("_storage")),
     ragEntryId: v.optional(v.string()),
   },
@@ -861,34 +968,32 @@ export const patchUploadedDocumentReady = internalMutation({
     const artifact = await assertUploadedArtifactOwner(ctx, args.artifactId, args.ownerUserId, {
       requireActive: true,
     });
-    const row = await getDocumentRow(ctx, args.artifactId, args.ownerUserId);
+    const row = await getContentRow(ctx, args.artifactId, args.ownerUserId);
     const now = Date.now();
     const inlinePlainText =
       args.plainText.length <= ARTIFACT_BODY_INLINE_LIMIT ? args.plainText : undefined;
     const inlineMarkdown =
       args.markdown.length <= ARTIFACT_BODY_INLINE_LIMIT ? args.markdown : undefined;
     await ctx.db.patch("artifacts", artifact._id, {
-      body: inlinePlainText,
-      storageId: args.storageId,
       plainTextPreview: previewFromText(args.plainText),
       contextText: contextFromText(args.plainText),
+      indexingStatus: "ready",
+      indexingFailureReason: undefined,
+      ragEntryId: args.ragEntryId,
+      indexedAt: args.ragEntryId ? now : undefined,
       updatedAt: now,
     });
     await ctx.db.patch("artifactDocuments", row._id, {
       markdown: inlineMarkdown,
       plainText: inlinePlainText,
-      storageId: args.storageId,
+      storageId: args.indexedTextStorageId,
       markdownStorageId: args.markdownStorageId,
-      ingestionStatus: "ready",
-      ingestionFailureReason: undefined,
-      ragEntryId: args.ragEntryId,
-      indexedAt: args.ragEntryId ? now : undefined,
       updatedAt: now,
     });
   },
 });
 
-export const patchUploadedDocumentFailed = internalMutation({
+export const patchUploadedArtifactIndexingFailed = internalMutation({
   args: {
     ownerUserId: v.string(),
     artifactId: v.id("artifacts"),
@@ -898,18 +1003,13 @@ export const patchUploadedDocumentFailed = internalMutation({
     await assertUploadedArtifactOwner(ctx, args.artifactId, args.ownerUserId, {
       requireActive: true,
     });
-    const row = await getDocumentRow(ctx, args.artifactId, args.ownerUserId);
     const reason = previewFromText(args.failureReason, 500);
-    const now = Date.now();
     await ctx.db.patch("artifacts", args.artifactId, {
       plainTextPreview: reason,
       contextText: "",
-      updatedAt: now,
-    });
-    await ctx.db.patch("artifactDocuments", row._id, {
-      ingestionStatus: "failed",
-      ingestionFailureReason: reason,
-      updatedAt: now,
+      indexingStatus: "failed",
+      indexingFailureReason: reason,
+      updatedAt: Date.now(),
     });
   },
 });
@@ -929,21 +1029,13 @@ export const getContentTarget = internalQuery({
     ) {
       return null;
     }
-    const [document, url] = await Promise.all([
-      ctx.db
-        .query("artifactDocuments")
-        .withIndex("by_owner_artifact", (q) =>
-          q.eq("ownerUserId", args.ownerUserId).eq("artifactId", artifact._id),
-        )
-        .unique(),
-      ctx.db
-        .query("artifactUrls")
-        .withIndex("by_owner_artifact", (q) =>
-          q.eq("ownerUserId", args.ownerUserId).eq("artifactId", artifact._id),
-        )
-        .unique(),
+    const [content, url] = await Promise.all([
+      getContentRowOrNull(ctx, artifact._id, args.ownerUserId),
+      artifact.artifactType === "url"
+        ? getUrlRowOrNull(ctx, artifact._id, args.ownerUserId)
+        : Promise.resolve(null),
     ]);
-    return { artifact, document, url };
+    return { artifact, content, url };
   },
 });
 
@@ -951,7 +1043,7 @@ export const getUrlExtractionTarget = internalQuery({
   args: { artifactId: v.id("artifacts") },
   handler: async (ctx, args) => {
     const artifact = await ctx.db.get("artifacts", args.artifactId);
-    if (!artifact || !artifact.workspaceId || artifact.status !== "active" || artifact.kind !== "url") {
+    if (!artifact || !artifact.workspaceId || artifact.status !== "active" || artifact.artifactType !== "url") {
       return null;
     }
     const row = await getUrlRow(ctx, args.artifactId, artifact.ownerUserId);
@@ -985,10 +1077,10 @@ export const patchUrlExtractionReady = internalMutation({
       args.readableText.length <= ARTIFACT_BODY_INLINE_LIMIT ? args.readableText : undefined;
     await ctx.db.patch("artifacts", artifact._id, {
       title: args.title || artifact.title,
-      body: inlineText,
-      storageId: args.storageId,
       plainTextPreview: previewFromText(args.readableText),
       contextText: contextFromText(args.readableText),
+      indexingStatus: "ready",
+      indexingFailureReason: undefined,
       updatedAt: now,
     });
     await ctx.db.patch("artifactUrls", row._id, {
@@ -1016,72 +1108,30 @@ export const patchUrlExtractionFailed = internalMutation({
       requireActive: true,
     });
     const row = await getUrlRow(ctx, args.artifactId, args.ownerUserId);
+    const reason = previewFromText(args.failureReason, 500);
+    await ctx.db.patch("artifacts", args.artifactId, {
+      indexingStatus: "failed",
+      indexingFailureReason: reason,
+      updatedAt: Date.now(),
+    });
     await ctx.db.patch("artifactUrls", row._id, {
       status: "failed",
-      failureReason: previewFromText(args.failureReason, 500),
+      failureReason: reason,
       updatedAt: Date.now(),
     });
   },
 });
 
-async function getDocumentRow(
-  ctx: Parameters<typeof assertWorkspaceArtifactOwner>[0],
-  artifactId: Id<"artifacts">,
-  ownerUserId: string,
-) {
-  const row = await ctx.db
-    .query("artifactDocuments")
-    .withIndex("by_owner_artifact", (q) =>
-      q.eq("ownerUserId", ownerUserId).eq("artifactId", artifactId),
-    )
-    .unique();
-  if (!row) {
-    throw new ConvexError("Document artifact not found");
-  }
-  return row;
-}
-
-async function getUrlRow(
-  ctx: Parameters<typeof assertWorkspaceArtifactOwner>[0],
-  artifactId: Id<"artifacts">,
-  ownerUserId: string,
-) {
-  const row = await ctx.db
-    .query("artifactUrls")
-    .withIndex("by_owner_artifact", (q) =>
-      q.eq("ownerUserId", ownerUserId).eq("artifactId", artifactId),
-    )
-    .unique();
-  if (!row) {
-    throw new ConvexError("URL artifact not found");
-  }
-  return row;
-}
-
-async function storeOversizedText(
-  ctx: ActionCtx,
-  value: string,
-  type: string,
-) {
-  if (value.length <= ARTIFACT_BODY_INLINE_LIMIT) {
-    return undefined;
-  }
-  return await ctx.storage.store(new Blob([value], { type }));
-}
-
-async function readStorageText(ctx: ActionCtx, storageId: Id<"_storage">) {
-  const blob = await ctx.storage.get(storageId);
-  return blob ? await blob.text() : "";
-}
-
-export const createDocumentFromAgentInternal = internalMutation({
+export const createArtifactFromAgentInternal = internalMutation({
   args: {
     ownerUserId: v.string(),
     workspaceId: v.id("workspaces"),
     folderId: v.optional(v.id("workspaceFolders")),
     title: v.string(),
-    markdown: v.string(),
+    artifactType: generatedArtifactTypeValidator,
+    content: v.string(),
     plainText: v.string(),
+    language: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await assertWorkspaceOwner(ctx, args.workspaceId, args.ownerUserId, { requireActive: true });
@@ -1089,23 +1139,26 @@ export const createDocumentFromAgentInternal = internalMutation({
       await assertFolderOwner(ctx, args.folderId, args.ownerUserId, args.workspaceId);
     }
     await assertLibraryCapacityForOwner(ctx, args.ownerUserId);
+    const artifactType = artifactTypeFromAgentInput(args.artifactType);
     const now = Date.now();
     const title = normalizeName(args.title, "Artifact title");
-    const inlinePlainText =
-      args.plainText.length <= ARTIFACT_BODY_INLINE_LIMIT ? args.plainText : undefined;
-    const inlineMarkdown =
-      args.markdown.length <= ARTIFACT_BODY_INLINE_LIMIT ? args.markdown : undefined;
+    const sourceStorageId = await maybeStoreGeneratedSource(ctx, args.content, artifactType);
+    const inlineSource = args.content.length <= ARTIFACT_BODY_INLINE_LIMIT ? args.content : undefined;
+    const plainText = normalizeGeneratedPlainText(artifactType, args.content, args.plainText);
     const artifactId = await ctx.db.insert("artifacts", {
       ownerUserId: args.ownerUserId,
       workspaceId: args.workspaceId,
       folderId: args.folderId,
-      kind: "document",
-      type: "document",
+      artifactType,
+      artifactFamily: artifactFamilyForType(artifactType),
+      source: "agent",
       title,
-      contentFormat: "markdown",
-      body: inlinePlainText,
-      plainTextPreview: previewFromText(args.plainText),
-      contextText: contextFromText(args.plainText),
+      language: args.language ?? defaultLanguageForArtifactType(artifactType),
+      indexingStatus: "ready",
+      body: inlineSource,
+      storageId: sourceStorageId,
+      plainTextPreview: previewFromText(plainText || args.content),
+      contextText: contextFromText(plainText || args.content),
       status: "active",
       createdAt: now,
       updatedAt: now,
@@ -1115,8 +1168,11 @@ export const createDocumentFromAgentInternal = internalMutation({
       workspaceId: args.workspaceId,
       artifactId,
       blocksJson: "",
-      markdown: inlineMarkdown,
-      plainText: inlinePlainText,
+      markdown: artifactType === "markdown" && inlineSource ? inlineSource : "",
+      plainText: plainText.length <= ARTIFACT_BODY_INLINE_LIMIT ? plainText : undefined,
+      storageId: plainText.length > ARTIFACT_BODY_INLINE_LIMIT
+        ? await storeTextInMutation(ctx, plainText, "text/plain")
+        : undefined,
       createdAt: now,
       updatedAt: now,
     });
@@ -1124,28 +1180,59 @@ export const createDocumentFromAgentInternal = internalMutation({
   },
 });
 
-export const updateDocumentFromAgentInternal = internalMutation({
+export const updateArtifactFromAgentInternal = internalMutation({
   args: {
     ownerUserId: v.string(),
     artifactId: v.id("artifacts"),
     title: v.optional(v.string()),
-    markdown: v.string(),
+    artifactType: generatedArtifactTypeValidator,
+    content: v.string(),
     plainText: v.string(),
+    language: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await ctx.runMutation(internal.artifacts.updateDocumentInternal, {
-      ownerUserId: args.ownerUserId,
-      artifactId: args.artifactId,
-      title: args.title,
-      blocksJson: "",
-      markdown: args.markdown,
-      plainText: args.plainText,
+    const artifact = await assertWorkspaceArtifactOwner(ctx, args.artifactId, args.ownerUserId, {
+      requireActive: true,
+    });
+    await assertWorkspaceOwner(ctx, artifact.workspaceId, args.ownerUserId, { requireActive: true });
+    const artifactType = artifactTypeFromAgentInput(args.artifactType);
+    if (!isAgentWritableArtifactType(artifactTypeForLegacyArtifact(artifact))) {
+      throw new ConvexError("Uploaded file artifacts cannot be overwritten by generated text");
+    }
+    const row = await getContentRow(ctx, args.artifactId, args.ownerUserId);
+    const now = Date.now();
+    const title = args.title ? normalizeName(args.title, "Artifact title") : artifact.title;
+    const sourceStorageId = await maybeStoreGeneratedSource(ctx, args.content, artifactType);
+    const inlineSource = args.content.length <= ARTIFACT_BODY_INLINE_LIMIT ? args.content : undefined;
+    const plainText = normalizeGeneratedPlainText(artifactType, args.content, args.plainText);
+    await ctx.db.patch("artifacts", artifact._id, {
+      artifactType,
+      artifactFamily: artifactFamilyForType(artifactType),
+      title,
+      language: args.language ?? defaultLanguageForArtifactType(artifactType),
+      body: inlineSource,
+      storageId: sourceStorageId,
+      plainTextPreview: previewFromText(plainText || args.content),
+      contextText: contextFromText(plainText || args.content),
+      indexingStatus: "ready",
+      updatedAt: now,
+    });
+    await ctx.db.patch("artifactDocuments", row._id, {
+      blocksJson: artifactType === "markdown" ? "" : undefined,
+      markdown: artifactType === "markdown" && inlineSource ? inlineSource : "",
+      plainText: plainText.length <= ARTIFACT_BODY_INLINE_LIMIT ? plainText : undefined,
+      storageId: plainText.length > ARTIFACT_BODY_INLINE_LIMIT
+        ? await storeTextInMutation(ctx, plainText, "text/plain")
+        : undefined,
+      markdownStorageId: undefined,
+      blocksStorageId: undefined,
+      updatedAt: now,
     });
     return { ok: true as const };
   },
 });
 
-export const deleteDocumentFromAgentInternal = internalMutation({
+export const deleteArtifactFromAgentInternal = internalMutation({
   args: {
     ownerUserId: v.string(),
     artifactId: v.id("artifacts"),
@@ -1164,3 +1251,166 @@ export const deleteDocumentFromAgentInternal = internalMutation({
     return { ok: true as const };
   },
 });
+
+async function assertLibraryCapacity(ctx: MutationCtx, ownerUserId: string) {
+  const user = await requireCurrentUser(ctx);
+  await assertLibraryCapacityForOwner(ctx, ownerUserId, user.email);
+}
+
+async function assertLibraryCapacityForOwner(
+  ctx: MutationCtx,
+  ownerUserId: string,
+  ownerEmail?: string | null,
+) {
+  const snapshot = await getBillingSnapshot(ctx, ownerUserId, ownerEmail);
+  const limit = PLAN_CATALOG[snapshot.planKey].libraryItemLimit;
+  if (limit === Number.MAX_SAFE_INTEGER) {
+    return;
+  }
+  const activeArtifacts = await ctx.db
+    .query("artifacts")
+    .withIndex("by_owner_status_updated", (q) =>
+      q.eq("ownerUserId", ownerUserId).eq("status", "active"),
+    )
+    .collect();
+  if (activeArtifacts.length >= limit) {
+    throw new ConvexError("Library item limit reached for current plan");
+  }
+}
+
+async function assertWorkspaceCapacity(ctx: MutationCtx, ownerUserId: string) {
+  const user = await requireCurrentUser(ctx);
+  const snapshot = await getBillingSnapshot(ctx, ownerUserId, user.email);
+  const limit = PLAN_CATALOG[snapshot.planKey].workspaceLimit;
+  if (limit === Number.MAX_SAFE_INTEGER) {
+    return;
+  }
+  const activeWorkspaces = await ctx.db
+    .query("workspaces")
+    .withIndex("by_owner_status_updated", (q) =>
+      q.eq("ownerUserId", ownerUserId).eq("status", "active"),
+    )
+    .collect();
+  if (activeWorkspaces.length >= limit) {
+    throw new ConvexError("Workspace limit reached for current plan");
+  }
+}
+
+async function getContentRow(
+  ctx: QueryCtx | MutationCtx,
+  artifactId: Id<"artifacts">,
+  ownerUserId: string,
+) {
+  const row = await getContentRowOrNull(ctx, artifactId, ownerUserId);
+  if (!row) {
+    throw new ConvexError("Artifact content not found");
+  }
+  return row;
+}
+
+async function getContentRowOrNull(
+  ctx: QueryCtx | MutationCtx,
+  artifactId: Id<"artifacts">,
+  ownerUserId: string,
+) {
+  return await ctx.db
+    .query("artifactDocuments")
+    .withIndex("by_owner_artifact", (q) =>
+      q.eq("ownerUserId", ownerUserId).eq("artifactId", artifactId),
+    )
+    .unique();
+}
+
+async function getUrlRow(
+  ctx: QueryCtx | MutationCtx,
+  artifactId: Id<"artifacts">,
+  ownerUserId: string,
+) {
+  const row = await getUrlRowOrNull(ctx, artifactId, ownerUserId);
+  if (!row) {
+    throw new ConvexError("URL artifact not found");
+  }
+  return row;
+}
+
+async function getUrlRowOrNull(
+  ctx: QueryCtx | MutationCtx,
+  artifactId: Id<"artifacts">,
+  ownerUserId: string,
+) {
+  return await ctx.db
+    .query("artifactUrls")
+    .withIndex("by_owner_artifact", (q) =>
+      q.eq("ownerUserId", ownerUserId).eq("artifactId", artifactId),
+    )
+    .unique();
+}
+
+async function storeOversizedText(
+  ctx: ActionCtx,
+  value: string,
+  type: string,
+) {
+  if (value.length <= ARTIFACT_BODY_INLINE_LIMIT) {
+    return undefined;
+  }
+  return await ctx.storage.store(new Blob([value], { type }));
+}
+
+async function readStorageText(ctx: ActionCtx, storageId: Id<"_storage">) {
+  const blob = await ctx.storage.get(storageId);
+  return blob ? await blob.text() : "";
+}
+
+async function storeTextInMutation(
+  ctx: MutationCtx,
+  value: string,
+  type: string,
+) {
+  void ctx;
+  void value;
+  void type;
+  return undefined;
+}
+
+async function maybeStoreGeneratedSource(
+  ctx: MutationCtx,
+  value: string,
+  artifactType: ArtifactType,
+) {
+  if (value.length <= ARTIFACT_BODY_INLINE_LIMIT) {
+    return undefined;
+  }
+  return await storeTextInMutation(ctx, value, mimeTypeForGeneratedSource(artifactType));
+}
+
+function mimeTypeForGeneratedSource(artifactType: ArtifactType) {
+  switch (artifactType) {
+    case "markdown":
+      return "text/markdown";
+    case "html":
+      return "text/html";
+    case "svg":
+      return "image/svg+xml";
+    case "json":
+      return "application/json";
+    case "csv":
+      return "text/csv";
+    default:
+      return "text/plain";
+  }
+}
+
+function normalizeGeneratedPlainText(
+  artifactType: ArtifactType,
+  content: string,
+  plainText: string,
+) {
+  if (plainText.trim()) {
+    return plainText;
+  }
+  if (artifactType === "markdown") {
+    return plainTextFromMarkdown(content);
+  }
+  return content;
+}
