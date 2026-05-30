@@ -29,6 +29,32 @@ export type WorkspaceArtifact = {
   createdAt: number;
 };
 
+export const workspaceArtifactTypes = [
+  "markdown",
+  "plain_text",
+  "pdf",
+  "docx",
+  "html",
+  "svg",
+  "mermaid",
+  "json",
+  "csv",
+  "code",
+  "url",
+] as const;
+
+export type WorkspaceArtifactType = (typeof workspaceArtifactTypes)[number];
+
+export type WorkspaceArtifactSort =
+  | "updated-desc"
+  | "updated-asc"
+  | "created-desc"
+  | "created-asc"
+  | "title-asc"
+  | "title-desc";
+
+export const defaultWorkspaceArtifactSort = "updated-desc" satisfies WorkspaceArtifactSort;
+
 export type ArtifactGroup = {
   id: "root" | string;
   folder: WorkspaceFolder | null;
@@ -70,19 +96,74 @@ function sortFolders(folders: WorkspaceFolder[]) {
   });
 }
 
-function sortArtifacts(artifacts: WorkspaceArtifact[]) {
+export function sortWorkspaceArtifacts(
+  artifacts: WorkspaceArtifact[],
+  sort: WorkspaceArtifactSort,
+) {
   return [...artifacts].sort((a, b) => {
-    if (b.updatedAt !== a.updatedAt) return b.updatedAt - a.updatedAt;
-    return a.title.localeCompare(b.title, undefined, { sensitivity: "base" });
+    switch (sort) {
+      case "updated-asc":
+        return a.updatedAt - b.updatedAt || compareArtifactTitles(a, b);
+      case "created-desc":
+        return b.createdAt - a.createdAt || compareArtifactTitles(a, b);
+      case "created-asc":
+        return a.createdAt - b.createdAt || compareArtifactTitles(a, b);
+      case "title-asc":
+        return compareArtifactTitles(a, b) || b.updatedAt - a.updatedAt;
+      case "title-desc":
+        return compareArtifactTitles(b, a) || b.updatedAt - a.updatedAt;
+      case "updated-desc":
+        return b.updatedAt - a.updatedAt || compareArtifactTitles(a, b);
+    }
   });
+}
+
+function compareArtifactTitles(a: WorkspaceArtifact, b: WorkspaceArtifact) {
+  return a.title.localeCompare(b.title, undefined, { sensitivity: "base" });
+}
+
+export function applyWorkspaceArtifactControls({
+  artifacts,
+  query,
+  types,
+  sort,
+}: {
+  artifacts: WorkspaceArtifact[];
+  query: string;
+  types: WorkspaceArtifactType[];
+  sort: WorkspaceArtifactSort;
+}) {
+  const typeSet = new Set(types);
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const filtered =
+    typeSet.size === 0 && normalizedQuery.length === 0
+      ? artifacts
+      : artifacts.filter(
+          (artifact): artifact is WorkspaceArtifact & { artifactType: WorkspaceArtifactType } => {
+            const matchesType =
+              typeSet.size === 0 ||
+              (artifact.artifactType !== undefined && typeSet.has(artifact.artifactType));
+            const matchesQuery =
+              normalizedQuery.length === 0 ||
+              [artifact.title, artifact.plainTextPreview, artifact.artifactType]
+                .filter(Boolean)
+                .some((value) => value!.toLocaleLowerCase().includes(normalizedQuery));
+
+            return matchesType && matchesQuery;
+          },
+        );
+
+  return sortWorkspaceArtifacts(filtered, sort);
 }
 
 export function groupArtifactsByFolder({
   folders,
   artifacts,
+  sort = defaultWorkspaceArtifactSort,
 }: {
   folders: WorkspaceFolder[];
   artifacts: WorkspaceArtifact[];
+  sort?: WorkspaceArtifactSort;
 }): ArtifactGroup[] {
   const activeFolders = sortFolders(folders.filter((folder) => folder.status !== "deleted"));
   const activeFolderIds = new Set(activeFolders.map((folder) => folder._id));
@@ -105,12 +186,12 @@ export function groupArtifactsByFolder({
     {
       id: "root",
       folder: null,
-      artifacts: sortArtifacts(rootArtifacts),
+      artifacts: sortWorkspaceArtifacts(rootArtifacts, sort),
     },
     ...activeFolders.map((folder) => ({
       id: folder._id,
       folder,
-      artifacts: sortArtifacts(folderArtifacts.get(folder._id) ?? []),
+      artifacts: sortWorkspaceArtifacts(folderArtifacts.get(folder._id) ?? [], sort),
     })),
   ];
 }

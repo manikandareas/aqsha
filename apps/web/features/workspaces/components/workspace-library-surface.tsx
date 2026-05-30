@@ -2,15 +2,42 @@
 
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import {
+  parseAsArrayOf,
+  parseAsString,
+  parseAsStringLiteral,
+  useQueryStates,
+} from "nuqs";
 import { toArtifactId, toWorkspaceFolderId, toWorkspaceId } from "@/lib/convex-refs";
 import { useCloseRightPanel } from "@/hooks/use-close-right-panel";
 import type { WorkspaceLibraryData } from "../api/use-workspaces-data";
 import type { useWorkspaceLibraryDialogState } from "../hooks/use-workspace-library-dialogs";
+import {
+  defaultWorkspaceArtifactSort,
+  workspaceArtifactTypes,
+  type WorkspaceArtifactSort,
+  type WorkspaceArtifactType,
+} from "../utils/workspace-library-model";
 import { uploadWorkspaceFiles } from "../utils/workspace-file-upload";
 import { WorkspaceLibraryBoard } from "./workspace-library-board";
 import { WorkspaceLibraryDialogsStack } from "./workspace-library-dialogs-stack";
 
 type DialogState = ReturnType<typeof useWorkspaceLibraryDialogState>;
+
+const workspaceArtifactSortOptions = [
+  "updated-desc",
+  "updated-asc",
+  "created-desc",
+  "created-asc",
+  "title-asc",
+  "title-desc",
+] as const satisfies readonly WorkspaceArtifactSort[];
+
+const workspaceLibraryQueryParsers = {
+  q: parseAsString.withDefault(""),
+  type: parseAsArrayOf(parseAsStringLiteral(workspaceArtifactTypes)).withDefault([]),
+  sort: parseAsStringLiteral(workspaceArtifactSortOptions).withDefault(defaultWorkspaceArtifactSort),
+};
 
 type LibraryDataProps = Pick<
   WorkspaceLibraryData,
@@ -72,6 +99,10 @@ export function WorkspaceLibrarySurface({
 }) {
   const router = useRouter();
   const closePanel = useCloseRightPanel();
+  const [libraryControls, setLibraryControls] = useQueryStates(
+    workspaceLibraryQueryParsers,
+    { history: "replace" },
+  );
   // Main board uses Chat toggle; side-panel embeds use close only (mutually exclusive in toolbar).
   const panelCloseHandler = onToggleChatPanel ? undefined : (onClosePanel ?? closePanel);
 
@@ -96,6 +127,22 @@ export function WorkspaceLibrarySurface({
         onActiveFolderChange={onActiveFolderChange}
         folders={libraryData.folders}
         artifacts={libraryData.artifacts}
+        searchQuery={libraryControls.q}
+        selectedTypes={dedupeArtifactTypes(libraryControls.type)}
+        sort={libraryControls.sort}
+        onSearchQueryChange={(query) => {
+          void setLibraryControls({ q: query });
+        }}
+        onToggleType={(type) => {
+          const current = dedupeArtifactTypes(libraryControls.type);
+          const next = current.includes(type)
+            ? current.filter((item) => item !== type)
+            : [...current, type];
+          void setLibraryControls({ type: next });
+        }}
+        onSortChange={(sort) => {
+          void setLibraryControls({ sort });
+        }}
         workspaces={libraryData.workspaces}
         {...dialogState.libraryHandlers}
         isArtifactSelected={isArtifactSelected}
@@ -150,4 +197,8 @@ export function WorkspaceLibrarySurface({
       />
     </>
   );
+}
+
+function dedupeArtifactTypes(types: WorkspaceArtifactType[]) {
+  return workspaceArtifactTypes.filter((type) => types.includes(type));
 }

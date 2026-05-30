@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyWorkspaceArtifactControls,
   expectArtifactsReturnToRootAfterFolderDelete,
   getFolderView,
   getMoveTargetOptions,
@@ -99,6 +100,20 @@ describe("workspace library model", () => {
     expect(view.breadcrumb).toEqual([{ id: "root", label: ROOT_FOLDER_LABEL }]);
   });
 
+  it("keeps the selected artifact sort inside folder groups", () => {
+    const groups = groupArtifactsByFolder({
+      folders,
+      artifacts,
+      sort: "title-asc",
+    });
+    const view = getFolderView({ groups, activeFolderId: "root" });
+
+    expect(view.artifacts.map((artifact) => artifact._id)).toEqual([
+      "artifact-orphan",
+      "artifact-root",
+    ]);
+  });
+
   it("builds active folder view with breadcrumb", () => {
     const groups = groupArtifactsByFolder({ folders, artifacts });
     const view = getFolderView({ groups, activeFolderId: "folder-a" });
@@ -142,5 +157,64 @@ describe("workspace library model", () => {
 
     expect(global.map((thread) => thread.threadId)).toEqual(["global"]);
     expect(workspaceBound.map((thread) => thread.threadId)).toEqual(["workspace"]);
+  });
+
+  it("filters artifacts by document type", () => {
+    const result = applyWorkspaceArtifactControls({
+      artifacts,
+      query: "",
+      types: ["url"],
+      sort: "updated-desc",
+    });
+
+    expect(result.map((artifact) => artifact._id)).toEqual(["artifact-orphan"]);
+  });
+
+  it("sorts artifacts by title and dates", () => {
+    const titleSorted = applyWorkspaceArtifactControls({
+      artifacts,
+      query: "",
+      types: [],
+      sort: "title-asc",
+    });
+    const createdSorted = applyWorkspaceArtifactControls({
+      artifacts,
+      query: "",
+      types: [],
+      sort: "created-asc",
+    });
+
+    expect(titleSorted.map((artifact) => artifact._id)).toEqual([
+      "artifact-folder",
+      "artifact-orphan",
+      "artifact-root",
+    ]);
+    expect(createdSorted.map((artifact) => artifact._id)).toEqual([
+      "artifact-root",
+      "artifact-folder",
+      "artifact-orphan",
+    ]);
+  });
+
+  it("searches artifacts by title and preview text", () => {
+    const result = applyWorkspaceArtifactControls({
+      artifacts: [
+        ...artifacts,
+        {
+          _id: "artifact-preview",
+          title: "Untitled",
+          plainTextPreview: "Cognitive load and multimedia notes",
+          artifactType: "plain_text",
+          status: "active",
+          createdAt: 4,
+          updatedAt: 5,
+        },
+      ],
+      query: "cognitive",
+      types: [],
+      sort: "updated-desc",
+    });
+
+    expect(result.map((artifact) => artifact._id)).toEqual(["artifact-preview"]);
   });
 });

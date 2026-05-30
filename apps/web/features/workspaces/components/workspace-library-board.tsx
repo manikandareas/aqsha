@@ -12,11 +12,14 @@ import {
 import { cn } from "@/lib/utils";
 import { useWorkspaceFolderNav } from "../hooks/use-workspace-folder-nav";
 import {
+  applyWorkspaceArtifactControls,
   getFolderView,
   getMoveTargetOptions,
   getUploadTargetFolderId,
   getWorkspaceMoveTargetOptions,
   groupArtifactsByFolder,
+  type WorkspaceArtifactSort,
+  type WorkspaceArtifactType,
   type WorkspaceArtifact,
   type WorkspaceFolder,
 } from "../utils/workspace-library-model";
@@ -26,6 +29,7 @@ import {
   type WorkspaceUploadResult,
 } from "../utils/workspace-file-upload";
 import { WorkspaceBoardToolbar } from "./workspace-board-toolbar";
+import { WorkspaceLibraryControls } from "./workspace-library-controls";
 import { WorkspaceLibraryEmpty } from "./workspace-library-empty";
 import { WorkspaceLibraryGrid } from "./workspace-library-grid";
 import { useWorkspaceUploadToast } from "./workspace-upload-toast";
@@ -36,6 +40,12 @@ export function WorkspaceLibraryBoard({
   titleSlot,
   folders,
   artifacts,
+  searchQuery,
+  selectedTypes,
+  sort,
+  onSearchQueryChange,
+  onToggleType,
+  onSortChange,
   workspaces,
   isArtifactSelected,
   onToggleArtifactContext,
@@ -68,6 +78,12 @@ export function WorkspaceLibraryBoard({
   titleSlot?: ReactNode;
   folders: WorkspaceFolder[];
   artifacts: WorkspaceArtifact[];
+  searchQuery: string;
+  selectedTypes: WorkspaceArtifactType[];
+  sort: WorkspaceArtifactSort;
+  onSearchQueryChange: (query: string) => void;
+  onToggleType: (type: WorkspaceArtifactType) => void;
+  onSortChange: (sort: WorkspaceArtifactSort) => void;
   workspaces: Array<{ _id: string; name: string }>;
   isArtifactSelected: (artifactId: string) => boolean;
   onToggleArtifactContext: (artifactId: string) => void;
@@ -101,7 +117,17 @@ export function WorkspaceLibraryBoard({
   showCreateActions?: boolean;
   showWorkspaceSettings?: boolean;
 }) {
-  const groups = groupArtifactsByFolder({ folders, artifacts });
+  const filteredArtifacts = applyWorkspaceArtifactControls({
+    artifacts,
+    query: searchQuery,
+    types: selectedTypes,
+    sort,
+  });
+  const groups = groupArtifactsByFolder({
+    folders,
+    artifacts: filteredArtifacts,
+    sort,
+  });
   const { activeFolderId, openFolder, navigateTo } = useWorkspaceFolderNav(groups);
 
   useEffect(() => {
@@ -121,6 +147,19 @@ export function WorkspaceLibraryBoard({
 
   const isEmpty =
     folderView.folders.length === 0 && folderView.artifacts.length === 0;
+  const isFilteredEmpty =
+    isEmpty && (searchQuery.trim().length > 0 || selectedTypes.length > 0) && artifacts.length > 0;
+  const libraryControls = (
+    <WorkspaceLibraryControls
+      query={searchQuery}
+      selectedTypes={selectedTypes}
+      sort={sort}
+      className="w-full sm:w-auto sm:justify-end"
+      onQueryChange={onSearchQueryChange}
+      onToggleType={onToggleType}
+      onSortChange={onSortChange}
+    />
+  );
 
   const handleDropOnFolder = async (folderId: string) => {
     if (!dragArtifactId) return;
@@ -205,12 +244,37 @@ export function WorkspaceLibraryBoard({
             }}
           >
             {isEmpty ? (
-              <WorkspaceLibraryEmpty
-                variant={folderView.activeFolderId === "root" ? "root" : "folder"}
-                onCreateFolder={onCreateFolder}
-                onCreateDocument={onCreateDocument}
-                onCreateUrl={onCreateUrl}
-              />
+              isFilteredEmpty ? (
+                <div className="flex flex-col gap-5">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 flex-1 items-center gap-5">
+                      <h2 className="shrink-0 text-[15px] font-semibold leading-none text-foreground">
+                        All items (0)
+                      </h2>
+                      <div className="h-px min-w-0 flex-1 bg-border/70" />
+                    </div>
+                    <div className="flex shrink-0 justify-start sm:justify-end">
+                      {libraryControls}
+                    </div>
+                  </div>
+                  <WorkspaceLibraryEmpty
+                    variant={folderView.activeFolderId === "root" ? "root" : "folder"}
+                    title="Tidak ada dokumen yang cocok"
+                    description="Ubah filter tipe dokumen atau reset filter untuk melihat item lain."
+                    showActions={false}
+                    onCreateFolder={onCreateFolder}
+                    onCreateDocument={onCreateDocument}
+                    onCreateUrl={onCreateUrl}
+                  />
+                </div>
+              ) : (
+                <WorkspaceLibraryEmpty
+                  variant={folderView.activeFolderId === "root" ? "root" : "folder"}
+                  onCreateFolder={onCreateFolder}
+                  onCreateDocument={onCreateDocument}
+                  onCreateUrl={onCreateUrl}
+                />
+              )
             ) : (
               <WorkspaceLibraryGrid
                 folders={folderView.folders}
@@ -234,6 +298,7 @@ export function WorkspaceLibraryBoard({
                 onDragArtifactStart={setDragArtifactId}
                 onDragArtifactEnd={() => setDragArtifactId(null)}
                 onDropArtifactOnFolder={(folderId) => void handleDropOnFolder(folderId)}
+                controls={libraryControls}
               />
             )}
           </div>

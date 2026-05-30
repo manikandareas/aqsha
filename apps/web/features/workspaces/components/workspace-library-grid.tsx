@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { FolderIcon } from "lucide-react";
 import { LibraryArtifactCard } from "@/components/library-artifact-card";
 import { useLibraryItemClick } from "../hooks/use-library-item-click";
@@ -49,6 +49,7 @@ export function WorkspaceLibraryGrid({
   onDragArtifactStart,
   onDragArtifactEnd,
   onDropArtifactOnFolder,
+  controls,
 }: {
   folders: FolderSummary[];
   artifacts: WorkspaceArtifact[];
@@ -71,6 +72,7 @@ export function WorkspaceLibraryGrid({
   onDragArtifactStart: (artifactId: string) => void;
   onDragArtifactEnd: () => void;
   onDropArtifactOnFolder: (folderId: string) => void;
+  controls?: ReactNode;
 }) {
   const gridRef = useRef<HTMLDivElement | null>(null);
   const tileRefs = useRef(new Map<string, HTMLDivElement>());
@@ -146,7 +148,10 @@ export function WorkspaceLibraryGrid({
         </section>
       ) : null}
       <section className="flex flex-col gap-5">
-        <LibrarySectionHeader title={`All items (${artifacts.length})`} />
+        <LibrarySectionHeader
+          title={`All items (${artifacts.length})`}
+          controls={controls}
+        />
         {artifacts.length > 0 ? (
           <div className="relative">
             {selectedArtifactIds.length > 0 || marquee ? (
@@ -252,13 +257,26 @@ export function WorkspaceLibraryGrid({
   );
 }
 
-function LibrarySectionHeader({ title }: { title: string }) {
+function LibrarySectionHeader({
+  title,
+  controls,
+}: {
+  title: string;
+  controls?: ReactNode;
+}) {
   return (
-    <div className="flex items-center gap-5">
-      <h2 className="shrink-0 text-[15px] font-semibold leading-none text-foreground">
-        {title}
-      </h2>
-      <div className="h-px min-w-0 flex-1 bg-border/70" />
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 flex-1 items-center gap-5">
+        <h2 className="shrink-0 text-[15px] font-semibold leading-none text-foreground">
+          {title}
+        </h2>
+        <div className="h-px min-w-0 flex-1 bg-border/70" />
+      </div>
+      {controls ? (
+        <div className="flex shrink-0 justify-start sm:justify-end">
+          {controls}
+        </div>
+      ) : null}
     </div>
   );
 }
