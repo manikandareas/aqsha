@@ -58,9 +58,7 @@ export default async function RootLayout({
           >
             <ConvexClientProvider>
               <NuqsAdapter>
-                <TooltipProvider>
-                  <div className="root">{children}</div>
-                </TooltipProvider>
+                <TooltipProvider>{children}</TooltipProvider>
               </NuqsAdapter>
               <AppToaster />
             </ConvexClientProvider>
