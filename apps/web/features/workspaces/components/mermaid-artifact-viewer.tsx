@@ -48,7 +48,7 @@ export function MermaidArtifactViewer({ source }: { source: string }) {
 
   if (!activeRender) {
     return (
-      <div className="flex min-h-[240px] items-center justify-center gap-2 rounded-[8px] border border-border bg-muted/25 text-[13px] font-medium text-muted-foreground">
+      <div className="flex min-h-[420px] w-full items-center justify-center gap-2 text-[13px] font-medium text-muted-foreground">
         <Loader2Icon className="size-4 animate-spin" />
         Merender diagram…
       </div>
@@ -57,26 +57,16 @@ export function MermaidArtifactViewer({ source }: { source: string }) {
 
   if (activeRender.error) {
     return (
-      <div className="grid gap-3">
-        <p className="rounded-[8px] border border-destructive/30 bg-destructive/5 p-3 text-[13px] font-medium text-destructive">
-          {activeRender.error}
-        </p>
-        <pre className="overflow-auto rounded-[8px] border border-border bg-muted/35 p-4 text-[12px] leading-6">
-          {source}
-        </pre>
-      </div>
+      <p className="rounded-[8px] border border-destructive/30 bg-destructive/5 p-3 text-[13px] font-medium text-destructive">
+        {activeRender.error}
+      </p>
     );
   }
 
   return (
-    <div className="grid gap-3">
-      <div
-        className="overflow-auto rounded-[8px] border border-border bg-background p-4"
-        dangerouslySetInnerHTML={{ __html: activeRender.svg }}
-      />
-      <pre className="overflow-auto rounded-[8px] border border-border bg-muted/35 p-4 text-[12px] leading-6">
-        {source}
-      </pre>
-    </div>
+    <div
+      className="mermaid-artifact-canvas flex h-full min-h-[420px] w-full items-center justify-center overflow-auto p-4 [&_svg]:h-full [&_svg]:max-h-full [&_svg]:max-w-full [&_svg]:w-full"
+      dangerouslySetInnerHTML={{ __html: activeRender.svg }}
+    />
   );
 }

@@ -13,7 +13,6 @@ import {
 import { toArtifactId, type ArtifactId } from "@/lib/convex-refs";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
 import { useConvexActionQueryWithKey } from "@/lib/convex-query";
-import { panelBodyPaddingClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
 import { useArtifactDetailData } from "../api/use-workspaces-data";
 import { ArtifactDetailHeader } from "../components/artifact-detail-header";
@@ -27,6 +26,7 @@ import {
 } from "../components/artifact-render-panels";
 import { BlockNoteEditorLoader } from "../components/blocknote-editor-loader";
 import type { DocumentEditorContent } from "../components/blocknote-document-editor";
+import { NameDialog } from "../components/workspace-dialogs";
 import { WorkspaceShell } from "../components/workspace-shell";
 import {
   autosaveReducer,
@@ -75,6 +75,7 @@ export function ArtifactDetailPage({
   const workspaceName =
     data.workspaces.find((workspace) => workspace._id === workspaceId)?.name ?? "Workspace";
   const [documentSaveState, setDocumentSaveState] = useState<AutosaveState>(initialAutosaveState);
+  const [renameOpen, setRenameOpen] = useState(false);
 
   return (
     <WorkspaceShell
@@ -85,7 +86,7 @@ export function ArtifactDetailPage({
       createWorkspace={data.createWorkspace}
       removeThread={data.removeThread}
     >
-      <main className="grid h-svh min-h-0 grid-rows-[auto_1fr] overflow-hidden">
+      <main className="grid h-svh min-h-0 grid-rows-[auto_1fr] overflow-hidden bg-background">
         {data.isLoading ? (
           <ArtifactLoading />
         ) : !detail || workspaceMismatch ? (
@@ -96,15 +97,18 @@ export function ArtifactDetailPage({
               workspaceId={workspaceId}
               workspaceName={workspaceName}
               artifactTitle={detail.artifact.title}
+              onRename={() => setRenameOpen(true)}
               trailing={
                 detail.artifact.artifactType === "markdown"
                   ? <SaveStatus state={documentSaveState} />
                   : null
               }
             />
-            <section className={cn("min-h-0 overflow-y-auto", panelBodyPaddingClass)}>
+            <section className={cn("h-full min-h-0 overflow-y-auto overflow-x-hidden px-5 pb-0 sm:px-7")}>
               {activeContentError ? (
-                <p className="text-[13px] font-medium text-destructive">{activeContentError}</p>
+                <p className="rounded-[8px] border border-destructive/30 bg-destructive/5 p-3 text-[13px] font-medium text-destructive">
+                  {activeContentError}
+                </p>
               ) : !activeRenderPayload ? (
                 <ArtifactLoading />
               ) : activeRenderPayload.artifactType === "url" ? (
@@ -132,6 +136,20 @@ export function ArtifactDetailPage({
                 />
               )}
             </section>
+            <NameDialog
+              open={renameOpen}
+              title="Rename artifact"
+              description="Update nama artifact yang tampil di workspace ini."
+              submitLabel="Simpan"
+              initialName={detail.artifact.title}
+              onOpenChange={setRenameOpen}
+              onSubmit={async ({ name }) => {
+                await data.renameArtifact({
+                  artifactId: toArtifactId(artifactId),
+                  title: name,
+                });
+              }}
+            />
           </>
         )}
       </main>
@@ -188,7 +206,7 @@ function DocumentArtifactDetail({
   }, [artifactId, state.pendingJson, state.status, updateDocument]);
 
   return (
-    <div className="mx-auto grid max-w-5xl gap-3">
+    <div className="grid w-full gap-3">
       <BlockNoteEditorLoader
         initialBlocksJson={initialBlocksJson}
         initialMarkdown={initialMarkdown}
@@ -294,4 +312,3 @@ function SaveStatus({ state }: { state: AutosaveState }) {
   }
   return <span className="text-[12px] font-medium text-muted-foreground">Idle</span>;
 }
-

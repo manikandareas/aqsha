@@ -3,6 +3,8 @@
 @import "shadcn/tailwind.css";
 @import "@blocknote/react/style.css";
 @import "@blocknote/shadcn/style.css";
+@import "@react-pdf-viewer/core/lib/styles/index.css";
+@import "@react-pdf-viewer/default-layout/lib/styles/index.css";
 @import "./styles/blocknote-aqsha.css";
 
 @source "../node_modules/@blocknote/shadcn";
