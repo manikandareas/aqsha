@@ -62,6 +62,11 @@ type ComposerVariant = "hero" | "docked";
 const COMPOSER_EASE_OUT = [0.23, 1, 0.32, 1] as const;
 const COMPOSER_COLLAPSED_RADIUS = 23;
 const COMPOSER_EXPANDED_RADIUS = 24;
+const COMPOSER_START_ITEM_TRANSFORM = "translateY(0px) scale(1)";
+const COMPOSER_START_ITEM_ANIMATE = {
+  opacity: 1,
+  transform: COMPOSER_START_ITEM_TRANSFORM,
+};
 
 function composerShellTransition(
   isExpanded: boolean,
@@ -552,18 +557,42 @@ function ComposerStartPanel({
   onSelectSuggestion: (prompt: string) => void;
 }) {
   const recentThreads = threads.toSorted((a, b) => b.lastActivityAt - a.lastActivityAt).slice(0, 4);
+  const shouldReduceMotion = useReducedMotion();
+  const startItemInitial = shouldReduceMotion
+    ? { opacity: 0 }
+    : { opacity: 0, transform: "translateY(6px) scale(0.985)" };
+  const startItemHover = shouldReduceMotion
+    ? undefined
+    : {
+        transform: "translateY(-1px) scale(1)",
+        transition: { duration: 0.12, ease: COMPOSER_EASE_OUT },
+      };
+  const startItemTap = shouldReduceMotion
+    ? undefined
+    : {
+        transform: "translateY(0px) scale(0.985)",
+        transition: { duration: 0.1, ease: COMPOSER_EASE_OUT },
+      };
 
   return (
     <div className="grid gap-4 sm:grid-cols-[1.05fr_0.95fr]">
       <ComposerStartColumn title="Thread terbaru">
         {recentThreads.length > 0 ? (
           recentThreads.map((thread, index) => (
-            <button
+            <motion.button
               key={thread.threadId}
               type="button"
               onClick={() => onSelectThread(thread.threadId)}
-              className="group grid min-h-8 animate-in grid-cols-[auto_1fr_auto] items-center gap-2 rounded-lg bg-background/45 px-2.5 text-left fade-in slide-in-from-bottom-1 transition-all duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-card active:-translate-y-px"
-              style={{ animationDelay: `${index * 35}ms` }}
+              className="group grid min-h-8 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-lg bg-background/45 px-2.5 text-left transition-colors duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-card"
+              initial={startItemInitial}
+              animate={COMPOSER_START_ITEM_ANIMATE}
+              whileHover={startItemHover}
+              whileTap={startItemTap}
+              transition={{
+                duration: shouldReduceMotion ? 0.12 : 0.18,
+                delay: shouldReduceMotion ? 0 : index * 0.035,
+                ease: COMPOSER_EASE_OUT,
+              }}
             >
               <MessageSquareIcon
                 className="size-3.5 shrink-0 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground"
@@ -576,10 +605,10 @@ function ComposerStartPanel({
                 className="size-3.5 shrink-0 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground"
                 aria-hidden
               />
-            </button>
+            </motion.button>
           ))
         ) : (
-          <p className="rounded-xl bg-background/45 px-3 py-3 text-[12px] leading-5 text-muted-foreground">
+          <p className="rounded-xl bg-background/45 p-3 text-[12px] leading-5 text-muted-foreground">
             Belum ada thread terbaru.
           </p>
         )}
@@ -587,12 +616,20 @@ function ComposerStartPanel({
 
       <ComposerStartColumn title="Suggestion">
         {composerSuggestions.map((item, index) => (
-          <button
+          <motion.button
             key={item.label}
             type="button"
             onClick={() => onSelectSuggestion(item.prompt)}
-            className="group flex min-h-8 animate-in items-center gap-2 rounded-lg bg-background/45 px-2.5 text-left text-[12px] font-medium text-muted-foreground fade-in slide-in-from-bottom-1 transition-all duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-card hover:text-foreground active:-translate-y-px"
-            style={{ animationDelay: `${(index + recentThreads.length) * 35}ms` }}
+            className="group flex min-h-8 items-center gap-2 rounded-lg bg-background/45 px-2.5 text-left text-[12px] font-medium text-muted-foreground transition-colors duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-card hover:text-foreground"
+            initial={startItemInitial}
+            animate={COMPOSER_START_ITEM_ANIMATE}
+            whileHover={startItemHover}
+            whileTap={startItemTap}
+            transition={{
+              duration: shouldReduceMotion ? 0.12 : 0.18,
+              delay: shouldReduceMotion ? 0 : (index + recentThreads.length) * 0.035,
+              ease: COMPOSER_EASE_OUT,
+            }}
             aria-label={`Gunakan suggestion: ${item.label}`}
           >
             <span
@@ -602,7 +639,7 @@ function ComposerStartPanel({
               {item.emoji}
             </span>
             <span className="min-w-0 truncate">{item.label}</span>
-          </button>
+          </motion.button>
         ))}
       </ComposerStartColumn>
     </div>

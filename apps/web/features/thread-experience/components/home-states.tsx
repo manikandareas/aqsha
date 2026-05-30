@@ -5,10 +5,13 @@ import {
   threadTranscriptColumnClass,
 } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
+import { motion, useReducedMotion } from "motion/react";
 import type { RateStatus } from "../types";
 import type { DraftContextArtifact, StartThread, ThreadSummary } from "./component-types";
 import { ComposerHeroState } from "./composer-hero-state";
 import { Composer } from "./composer";
+
+const HOME_EASE_OUT = [0.23, 1, 0.32, 1] as const;
 
 export function HomeStartState({
   rateStatus,
@@ -23,10 +26,21 @@ export function HomeStartState({
   contextArtifacts?: DraftContextArtifact[];
   onRemoveContextArtifact?: (artifactId: string) => void;
 }) {
+  const shouldReduceMotion = useReducedMotion();
+
   return (
     <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden bg-background">
       <div className="mx-auto flex w-full max-w-5xl flex-1 items-center justify-center px-4 py-10 sm:px-8">
-        <div className="w-full max-w-2xl">
+        <motion.div
+          className="w-full max-w-2xl"
+          initial={
+            shouldReduceMotion
+              ? { opacity: 0 }
+              : { opacity: 0, transform: "translateY(10px) scale(0.985)" }
+          }
+          animate={{ opacity: 1, transform: "translateY(0px) scale(1)" }}
+          transition={{ duration: shouldReduceMotion ? 0.14 : 0.24, ease: HOME_EASE_OUT }}
+        >
           <ComposerHeroState
             headerClassName="mb-8 gap-2.5"
             logoClassName="size-8 text-mint"
@@ -44,7 +58,7 @@ export function HomeStartState({
               showSuggestions
             />
           </ComposerHeroState>
-        </div>
+        </motion.div>
       </div>
     </main>
   );
