@@ -307,8 +307,6 @@ Tasks:
   - avoid duplicate `clsx`, `tailwind-merge`, and `class-variance-authority` entries where already present.
 - Update `packages/ui/package.json` exports for Selia components and styles.
 - Update `apps/web/app/globals.css` to import shared package styles instead of app-local Selia CSS.
-- Cut over app-level theme tokens so `--primary`, `--ring`, shadcn compatibility colors, and `--sidebar-*` resolve to Selia's default theme instead of reintroducing the old Aqsha green/teal palette.
-- Keep legacy utility token names such as `mint`, `sky`, `lavender`, `lemon`, and `coral` only as temporary compatibility aliases mapped to Selia/status tokens while unmigrated surfaces still reference them.
 - Confirm Tailwind v4 sees package classes from `packages/ui`; add `@source` entries if generated package classes are not included.
 - Add the `.root` wrapper required by Selia in `apps/web/app/layout.tsx` around `children`, but confirm it does not affect Clerk, Convex, Nuqs, theme provider, or toaster behavior.
 - Add a `packages/ui/src/selia/README.md` documenting which generated components were curated.
@@ -318,8 +316,7 @@ Acceptance:
 - `bun run --filter '@aqsha/ui' typecheck` passes.
 - `bun run --filter '@aqsha/app' typecheck` passes or only shows known unrelated blockers.
 - `bun run --filter '@aqsha/app' lint` passes or only shows known unrelated blockers.
-- App shell remains structurally unchanged before feature-level import migration.
-- App shell and sidebar no longer display the previous green/teal primary palette unless a color is an explicit Selia/status token.
+- App renders unchanged before feature-level import migration.
 - No `@/components/ui` imports have been deleted yet.
 
 ### Phase 3 - shadcn Compatibility Layer in `packages/ui`
@@ -406,11 +403,9 @@ Acceptance:
 - `bun run --filter '@aqsha/app' typecheck` passes.
 - Existing thread rendering still compiles without rewriting the chat feature.
 
-### Phase 5 - Skipped: Keep Current App Shell, Navigation, and Layout
+### Phase 5 - App Shell, Navigation, and Layout
 
-Status: skipped by product decision.
-
-Purpose: keep the current shadcn-based layout and sidebar because this shell is the preferred product baseline.
+Purpose: migrate the highest-risk layout layer before feature pages.
 
 Targets:
 
@@ -426,9 +421,9 @@ Targets:
 
 Tasks:
 
-- Do not migrate the main app shell, primary sidebar, or layout providers to Selia.
-- Keep the current shadcn sidebar primitives, `SidebarProvider` behavior, desktop layout, mobile off-canvas behavior, cookie state, and route styling.
-- Keep detail split layouts and responsive side panels on their current implementation unless a future non-Selia layout task explicitly changes them.
+- Replace current sidebar primitives with Selia `Sidebar` parts where they fit.
+- Keep Aqsha's local `SidebarProvider` behavior if Selia sidebar does not provide off-canvas state, cookie state, or mobile layout behavior.
+- Rebuild nav rows using Selia `Item` and `Button` patterns where useful.
 - Preserve:
   - sidebar close/search controls;
   - workspace section visible when there is a create affordance;
@@ -440,10 +435,10 @@ Tasks:
 
 Acceptance:
 
-- Current shadcn left sidebar remains visible and usable on desktop and mobile.
-- Thread detail and workspace detail keep the same split-panel behavior.
-- Settings rail keeps routing to all settings pages.
-- Navigation keeps the current product information architecture.
+- Left sidebar works on desktop and mobile.
+- Thread detail and workspace detail still share the same split-panel behavior.
+- Settings rail still routes to all settings pages.
+- Navigation still reflects the current product information architecture.
 
 ### Phase 6 - Settings Redesign/Refactor
 
