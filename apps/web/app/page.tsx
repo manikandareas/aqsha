@@ -1,6 +1,12 @@
 import Link from "next/link";
+import { createPageMetadata } from "@/lib/metadata";
 
 import { Button } from "@/components/ui/button";
+
+export const metadata = createPageMetadata({
+  title: "Research workspace",
+  description: "Aqsha helps researchers organize inquiry, threads, and workspace knowledge.",
+});
 
 export default function PublicLandingPage() {
   return (

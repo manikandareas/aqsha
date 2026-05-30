@@ -1,6 +1,12 @@
 import { SignUp } from "@clerk/nextjs";
 import { redirect } from "next/navigation";
 import { isAuthenticated } from "@/lib/auth-server";
+import { createPageMetadata } from "@/lib/metadata";
+
+export const metadata = createPageMetadata({
+  title: "Create account",
+  description: "Create an Aqsha account to start building research workspaces.",
+});
 
 export default async function SignUpPage() {
   if (await isAuthenticated()) {

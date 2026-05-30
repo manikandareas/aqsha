@@ -5,6 +5,7 @@ import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppToaster } from "@/components/app-toaster";
+import { siteName } from "@/lib/metadata";
 import { ConvexClientProvider } from "./convex-client-provider";
 import "./globals.css";
 
@@ -27,8 +28,12 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Aqsha",
-  description: "Aqsha research thread app powered by Convex",
+  applicationName: siteName,
+  title: {
+    default: siteName,
+    template: `%s | ${siteName}`,
+  },
+  description: "Aqsha is a research workspace for focused inquiry, threads, and curated knowledge.",
 };
 
 export default async function RootLayout({

@@ -1,6 +1,12 @@
 import { SignIn } from "@clerk/nextjs";
 import { redirect } from "next/navigation";
 import { isAuthenticated } from "@/lib/auth-server";
+import { createPageMetadata } from "@/lib/metadata";
+
+export const metadata = createPageMetadata({
+  title: "Sign in",
+  description: "Sign in to continue researching with Aqsha.",
+});
 
 export default async function SignInPage() {
   if (await isAuthenticated()) {
