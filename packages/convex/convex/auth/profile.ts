@@ -6,6 +6,7 @@ import {
   deleteAvatarStorageIfPresent,
   resolveUserImage,
 } from "../lib/userImage";
+import { throwAppError } from "../lib/appError";
 import { ensureCurrentUser, findUserByOwnerUserId, requireCurrentUser } from "./userRepository";
 
 const maxDisplayNameLength = 120;
@@ -31,10 +32,18 @@ export async function updateDisplayName(ctx: MutationCtx, nameInput: string) {
   const user = await requireCurrentUser(ctx);
   const name = nameInput.trim();
   if (!name) {
-    throw new Error("Nama tampilan tidak boleh kosong.");
+    throwAppError({
+      code: "display_name_required",
+      message: "Nama tampilan tidak boleh kosong.",
+      field: "name",
+    });
   }
   if (name.length > maxDisplayNameLength) {
-    throw new Error(`Nama tampilan maksimal ${maxDisplayNameLength} karakter.`);
+    throwAppError({
+      code: "display_name_too_long",
+      message: `Nama tampilan maksimal ${maxDisplayNameLength} karakter.`,
+      field: "name",
+    });
   }
 
   const row = await findUserByOwnerUserId(ctx, user._id);
@@ -68,4 +77,3 @@ export async function syncCurrentUser(ctx: MutationCtx) {
     clerkUserId: user.clerkUserId,
   };
 }
-

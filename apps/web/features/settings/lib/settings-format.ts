@@ -1,3 +1,5 @@
+import { readableConvexError } from "@/lib/convex-error";
+
 const idrFormatter = new Intl.NumberFormat("id-ID", {
   style: "currency",
   currency: "IDR",
@@ -27,7 +29,13 @@ export function getInitials(name: string, email: string) {
 }
 
 export function readableBillingError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
+  const { message, code } = readableConvexError(error, "Billing action belum bisa dibuat.");
+  if (code === "billing_email_invalid") {
+    return "Polar menolak email demo/reserved. Gunakan email asli lalu ulangi checkout.";
+  }
+  if (code === "billing_product_not_configured") {
+    return "Product Polar belum dikonfigurasi di Convex env.";
+  }
   if (message.includes("real email domain") || message.includes("valid email")) {
     return "Polar menolak email demo/reserved. Gunakan email asli lalu ulangi checkout.";
   }

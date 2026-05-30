@@ -1,7 +1,6 @@
 "use client";
 
 import { api } from "@aqsha/convex/api";
-import { useQuery } from "convex/react";
 import {
   Select,
   SelectContent,
@@ -9,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useConvexQueryData } from "@/lib/convex-query";
 import { cn } from "@/lib/utils";
 
 export function WorkspacePickerInline({
@@ -22,7 +22,7 @@ export function WorkspacePickerInline({
   className?: string;
   variant?: "default" | "compact";
 }) {
-  const workspacePage = useQuery(api.workspaces.list, {
+  const workspacePage = useConvexQueryData(api.workspaces.list, {
     paginationOpts: { cursor: null, numItems: 50 },
   });
   const workspaces = workspacePage?.page ?? [];

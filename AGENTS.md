@@ -36,6 +36,26 @@ bun run build
 - **Convex**: Convex rules live in `packages/convex/AGENTS.md`. Read `packages/convex/convex/_generated/ai/guidelines.md` before editing Convex functions.
 - **www**: Marketing site uses `@aqsha/ui` primitives and shared styles from `packages/ui`.
 
+## Convex Client State
+- `apps/web` uses TanStack Query through `@convex-dev/react-query` for Convex client state.
+- Prefer shared helpers from `apps/web/lib/convex-query.ts`:
+  - `useConvexQueryData` for reactive Convex queries.
+  - `useConvexMutationState` / `useConvexMutationFn` for Convex mutations.
+  - `useConvexActionState` / `useConvexActionFn` for Convex actions that are submit/side-effect operations.
+- Do not add new direct `convex/react` `useQuery`, `useMutation`, or `useAction` usage in `apps/web`.
+- Direct `convex/react` imports are still acceptable for provider/client setup and Convex utilities that do not have a TanStack adapter equivalent.
+- Keep UI-only state local with React state: dialog open/close, form drafts, selected rows/folders, composer text, and upload progress.
+- Server-state loading/error/success should come from TanStack Query mutation/query state unless there is a deliberate local UX state, such as a persistent notice.
+
+## Error Handling
+- Client-side Convex errors should be normalized through `apps/web/lib/convex-error.ts`.
+- Prefer `readableConvexErrorMessage(error, fallback)` or `readableConvexError(error, fallback)` instead of exposing generic `error.message` directly in UI.
+- Plain `Error` from backend/system failures should fall back to a safe user-facing message.
+- For new or touched Convex functions, use structured application errors from `packages/convex/convex/lib/appError.ts`:
+  - `{ message: string; code: string; severity?: "info" | "warning" | "error"; field?: string }`
+- Preserve return-union flows when failure is part of normal product behavior, such as rate-limit/blocking results from message send.
+- Existing string `ConvexError` values are still valid, but structured errors are preferred for new/touched code.
+
 ## Convex Commands
 Run from the repo root with a workspace filter:
 ```bash

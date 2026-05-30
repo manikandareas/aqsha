@@ -59,6 +59,11 @@ const extractionStatusValidator = v.union(
   v.literal("failed"),
 );
 
+const paperAuthorValidator = v.object({
+  name: v.string(),
+  affiliation: v.optional(v.string()),
+});
+
 const artifactContentFields = {
   ownerUserId: v.string(),
   workspaceId: v.optional(v.id("workspaces")),
@@ -591,12 +596,12 @@ export default defineSchema(
       title: v.optional(v.string()),
       abstract: v.optional(v.string()),
       doi: v.optional(v.string()),
-      authorsJson: v.optional(v.string()),
-      affiliationsJson: v.optional(v.string()),
+      authors: v.optional(v.array(paperAuthorValidator)),
+      affiliations: v.optional(v.array(v.string())),
       journal: v.optional(v.string()),
       publisher: v.optional(v.string()),
       publishedYear: v.optional(v.number()),
-      keywordsJson: v.optional(v.string()),
+      keywords: v.optional(v.array(v.string())),
       referencesStorageId: v.optional(v.id("_storage")),
       sectionsStorageId: v.optional(v.id("_storage")),
       teiStorageId: v.optional(v.id("_storage")),

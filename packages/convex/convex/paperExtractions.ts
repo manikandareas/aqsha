@@ -15,7 +15,12 @@ import {
   artifactRagNamespace,
   type ArtifactRagMetadata,
 } from "./agent/rag";
-import { artifactTypeForLegacyArtifact } from "./artifactModel";
+import {
+  ARTIFACT_BODY_INLINE_LIMIT,
+  artifactTypeForLegacyArtifact,
+  contextFromText,
+  previewFromText,
+} from "./artifactModel";
 import { requireCurrentUser } from "./auth";
 import { assertWorkspaceArtifactOwner } from "./workspaceAccess";
 import {
@@ -29,18 +34,51 @@ import {
 
 const MAX_INDEXED_TEXT_CHARS = 300_000;
 
+const parsedPaperAuthorValidator = v.object({
+  name: v.string(),
+  affiliation: v.optional(v.string()),
+});
+
+const parsedPaperSectionValidator = v.object({
+  title: v.optional(v.string()),
+  text: v.string(),
+});
+
+const parsedPaperReferenceValidator = v.object({
+  title: v.optional(v.string()),
+  authors: v.optional(v.array(v.string())),
+  doi: v.optional(v.string()),
+  year: v.optional(v.number()),
+});
+
+const parsedPaperMetadataValidator = v.object({
+  title: v.optional(v.string()),
+  abstract: v.optional(v.string()),
+  doi: v.optional(v.string()),
+  authors: v.array(parsedPaperAuthorValidator),
+  affiliations: v.array(v.string()),
+  journal: v.optional(v.string()),
+  publisher: v.optional(v.string()),
+  publishedYear: v.optional(v.number()),
+  keywords: v.array(v.string()),
+  sections: v.array(parsedPaperSectionValidator),
+  references: v.array(parsedPaperReferenceValidator),
+  plainText: v.string(),
+  confidence: v.number(),
+});
+
 const paperMetadataReturnValidator = v.union(
   v.null(),
   v.object({
     title: v.optional(v.string()),
     abstract: v.optional(v.string()),
     doi: v.optional(v.string()),
-    authorsJson: v.optional(v.string()),
-    affiliationsJson: v.optional(v.string()),
+    authors: v.array(parsedPaperAuthorValidator),
+    affiliations: v.array(v.string()),
     journal: v.optional(v.string()),
     publisher: v.optional(v.string()),
     publishedYear: v.optional(v.number()),
-    keywordsJson: v.optional(v.string()),
+    keywords: v.array(v.string()),
     metadataSource: v.union(
       v.literal("grobid"),
       v.literal("crossref"),
@@ -117,12 +155,12 @@ export const getStatus = query({
             title: metadata.title,
             abstract: metadata.abstract,
             doi: metadata.doi,
-            authorsJson: metadata.authorsJson,
-            affiliationsJson: metadata.affiliationsJson,
+            authors: metadata.authors ?? [],
+            affiliations: metadata.affiliations ?? [],
             journal: metadata.journal,
             publisher: metadata.publisher,
             publishedYear: metadata.publishedYear,
-            keywordsJson: metadata.keywordsJson,
+            keywords: metadata.keywords ?? [],
             metadataSource: metadata.metadataSource,
             confidence: metadata.confidence,
             updatedAt: metadata.updatedAt,
@@ -359,7 +397,7 @@ export const markGrobidReady = internalMutation({
     teiStorageId: v.id("_storage"),
     sectionsStorageId: v.id("_storage"),
     referencesStorageId: v.id("_storage"),
-    parsed: v.any(),
+    parsed: parsedPaperMetadataValidator,
     plainTextStorageId: v.optional(v.id("_storage")),
     markdownStorageId: v.optional(v.id("_storage")),
     ragEntryId: v.optional(v.string()),
@@ -369,21 +407,27 @@ export const markGrobidReady = internalMutation({
     if (!artifact || artifact.ownerUserId !== args.ownerUserId || !artifact.workspaceId) {
       throw new ConvexError("Artifact not found");
     }
-    const parsed = args.parsed as ParsedPaperMetadata;
+    const parsed = args.parsed;
     const now = Date.now();
     const scholarly = isLikelyScholarlyPaper(parsed);
     const extraction = await getGrobidExtraction(ctx, args);
     if (!extraction) {
       return;
     }
-    await ctx.db.patch("artifactExtractions", extraction._id, {
-      status: "ready",
-      outputStorageId: args.teiStorageId,
-      outputMimeType: "application/xml",
-      failureReason: undefined,
-      completedAt: now,
-      updatedAt: now,
-    });
+    const row = await ctx.db
+      .query("artifactContents")
+      .withIndex("by_owner_artifact", (q) =>
+        q.eq("ownerUserId", args.ownerUserId).eq("artifactId", args.artifactId),
+      )
+      .unique();
+    if (!row) {
+      throw new ConvexError("Artifact content not found");
+    }
+    const inlinePlainText =
+      parsed.plainText.length <= ARTIFACT_BODY_INLINE_LIMIT ? parsed.plainText : undefined;
+    const inlineMarkdown =
+      parsed.plainText.length <= ARTIFACT_BODY_INLINE_LIMIT ? parsed.plainText : undefined;
+
     await upsertPaperMetadataRow(ctx, {
       ownerUserId: args.ownerUserId,
       artifactId: args.artifactId,
@@ -395,20 +439,33 @@ export const markGrobidReady = internalMutation({
       now,
     });
     if (parsed.plainText.trim()) {
-      await ctx.runMutation(internal.artifacts.patchUploadedArtifactIndexed, {
-        ownerUserId: args.ownerUserId,
-        artifactId: args.artifactId,
-        markdown: parsed.plainText,
-        plainText: parsed.plainText,
-        indexedTextStorageId: args.plainTextStorageId,
-        markdownStorageId: args.markdownStorageId,
-        ragEntryId: args.ragEntryId,
+      await ctx.db.patch("artifacts", artifact._id, {
         title: parsed.title,
         detectedDocumentKind: scholarly ? "scholarly_paper" : "generic",
-        contextText: parsed.plainText.slice(0, 24_000),
-        plainTextPreview: parsed.abstract,
+        plainTextPreview: parsed.abstract ?? previewFromText(parsed.plainText),
+        contextText: contextFromText(parsed.plainText),
+        indexingStatus: "ready",
+        indexingFailureReason: undefined,
+        ragEntryId: args.ragEntryId ?? artifact.ragEntryId,
+        indexedAt: args.ragEntryId ? now : artifact.indexedAt,
+        updatedAt: now,
+      });
+      await ctx.db.patch("artifactContents", row._id, {
+        markdown: inlineMarkdown,
+        plainText: inlinePlainText,
+        storageId: args.plainTextStorageId,
+        markdownStorageId: args.markdownStorageId,
+        updatedAt: now,
       });
     }
+    await ctx.db.patch("artifactExtractions", extraction._id, {
+      status: "ready",
+      outputStorageId: args.teiStorageId,
+      outputMimeType: "application/xml",
+      failureReason: undefined,
+      completedAt: now,
+      updatedAt: now,
+    });
   },
 });
 
@@ -439,7 +496,7 @@ export const upsertPaperMetadata = internalMutation({
     ownerUserId: v.string(),
     artifactId: v.id("artifacts"),
     workspaceId: v.id("workspaces"),
-    parsed: v.any(),
+    parsed: parsedPaperMetadataValidator,
     teiStorageId: v.id("_storage"),
     sectionsStorageId: v.id("_storage"),
     referencesStorageId: v.id("_storage"),
@@ -447,7 +504,6 @@ export const upsertPaperMetadata = internalMutation({
   handler: async (ctx, args) => {
     await upsertPaperMetadataRow(ctx, {
       ...args,
-      parsed: args.parsed as ParsedPaperMetadata,
       now: Date.now(),
     });
   },
@@ -493,12 +549,12 @@ async function upsertPaperMetadataRow(
     title: args.parsed.title,
     abstract: args.parsed.abstract,
     doi: args.parsed.doi,
-    authorsJson: JSON.stringify(args.parsed.authors),
-    affiliationsJson: JSON.stringify(args.parsed.affiliations),
+    authors: args.parsed.authors,
+    affiliations: args.parsed.affiliations,
     journal: args.parsed.journal,
     publisher: args.parsed.publisher,
     publishedYear: args.parsed.publishedYear,
-    keywordsJson: JSON.stringify(args.parsed.keywords),
+    keywords: args.parsed.keywords,
     referencesStorageId: args.referencesStorageId,
     sectionsStorageId: args.sectionsStorageId,
     teiStorageId: args.teiStorageId,

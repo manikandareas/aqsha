@@ -1,7 +1,6 @@
 "use client";
 
 import { api } from "@aqsha/convex/api";
-import { useMutation, useQuery } from "convex/react";
 import {
   BracesIcon,
   Code2Icon,
@@ -30,6 +29,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { toArtifactId, toWorkspaceId } from "@/lib/convex-refs";
+import {
+  useConvexMutationFn,
+  useConvexQueryData,
+} from "@/lib/convex-query";
 import { cn } from "@/lib/utils";
 import { WorkspacePickerDialog } from "@/features/workspaces/components/workspace-picker-dialog";
 import type {
@@ -54,11 +57,11 @@ export function MessageRow({
   const isStreaming = message.status === "streaming";
   const text = getMessageText(message);
   const hasText = Boolean(text.trim());
-  const messageArtifacts = useQuery(
+  const messageArtifacts = useConvexQueryData(
     api.agent.artifacts.listForMessage,
     !isUser && message.id ? { messageId: message.id } : "skip",
   ) as MessageArtifactLink[] | undefined;
-  const workspaceActions = useQuery(
+  const workspaceActions = useConvexQueryData(
     api.workspaces.listActionsForMessage,
     isUser && message.id ? { messageId: message.id } : "skip",
   );
@@ -140,8 +143,8 @@ function UserMessageContextArtifactCard({
   threadWorkspaceId?: string;
 }) {
   const router = useRouter();
-  const saveAttachment = useMutation(api.artifacts.saveAttachmentToWorkspace);
-  const workspacePage = useQuery(api.workspaces.list, {
+  const saveAttachment = useConvexMutationFn(api.artifacts.saveAttachmentToWorkspace);
+  const workspacePage = useConvexQueryData(api.workspaces.list, {
     paginationOpts: { cursor: null, numItems: 50 },
   });
   const [isSaving, setIsSaving] = useState(false);

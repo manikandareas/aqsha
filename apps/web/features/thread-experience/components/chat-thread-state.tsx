@@ -2,7 +2,8 @@
 
 import { useUIMessages } from "@convex-dev/agent/react";
 import { api } from "@aqsha/convex/api";
-import { useConvexAuth, useQuery } from "convex/react";import {
+import { useConvexAuth, useConvexQueryData } from "@/lib/convex-query";
+import {
   Conversation,
   ConversationContent,
   ConversationEmptyState,
@@ -78,7 +79,7 @@ export function ChatThreadState({
   threadWorkspaceId?: string;
 }) {
   const { isAuthenticated } = useConvexAuth();
-  const hitlSession = useQuery(
+  const hitlSession = useConvexQueryData(
     api.hitlSessions.getActiveForThread,
     isAuthenticated && threadId ? { threadId } : "skip",
   );

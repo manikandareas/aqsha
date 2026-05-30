@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { toWorkspaceId } from "@/lib/convex-refs";
 import { useWorkspaceIndexData } from "../api/use-workspaces-data";
 import { WorkspaceShell } from "../components/workspace-shell";
 import { NameDialog } from "../components/workspace-dialogs";
@@ -134,7 +135,7 @@ export function WorkspacesIndexPage() {
         confirmLabel="Archive"
         onConfirm={async () => {
           if (archiveTarget) {
-            await archiveWorkspace({ workspaceId: archiveTarget._id as never });
+            await archiveWorkspace({ workspaceId: toWorkspaceId(archiveTarget._id) });
           }
         }}
       />

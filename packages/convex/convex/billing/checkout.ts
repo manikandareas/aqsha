@@ -1,5 +1,6 @@
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 import { action } from "../_generated/server";
+import { throwAppError } from "../lib/appError";
 import { PRODUCT_CATALOG } from "./catalog";
 import { configuredProductId, getPolarUserInfo, polar } from "./polar";
 
@@ -20,18 +21,27 @@ export const create = action({
   handler: async (ctx, args): Promise<{ url: string }> => {
     const product = PRODUCT_CATALOG[args.productKey];
     if (!product) {
-      throw new ConvexError("Unknown billing product");
+      throwAppError({
+        code: "billing_product_unknown",
+        message: "Unknown billing product",
+      });
     }
     const productId = configuredProductId(args.productKey);
     if (!productId) {
-      throw new ConvexError("Polar product is not configured");
+      throwAppError({
+        code: "billing_product_not_configured",
+        message: "Polar product is not configured",
+      });
     }
 
     const { userId, email } = await getPolarUserInfo(ctx);
     if (isReservedEmail(email)) {
-      throw new ConvexError(
-        "Polar checkout requires a real email domain. Update your account email before subscribing.",
-      );
+      throwAppError({
+        code: "billing_email_invalid",
+        message:
+          "Polar checkout requires a real email domain. Update your account email before subscribing.",
+        field: "email",
+      });
     }
     const checkout: { url: string } = await polar.createCheckoutSession(ctx, {
       productIds: [productId],

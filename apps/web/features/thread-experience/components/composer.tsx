@@ -14,7 +14,6 @@ import {
   XIcon,
 } from "lucide-react";
 import { api } from "@aqsha/convex/api";
-import { useAction, useMutation } from "convex/react";
 import { LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -35,6 +34,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { toArtifactId, toStorageId, type ArtifactId, type StorageId } from "@/lib/convex-refs";
+import {
+  useConvexActionFn,
+  useConvexMutationFn,
+} from "@/lib/convex-query";
 import type { RateStatus, ResearchRun, SendResult } from "../types";
 import { formatDate } from "../utils/datetime";
 import {
@@ -138,8 +141,8 @@ export function Composer(props: ComposerProps) {
   const [editorHeight, setEditorHeight] = useState(24);
   const [attachmentFiles, setAttachmentFiles] = useState<PromptInputFile[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const generateUploadUrl = useMutation(api.artifacts.generateUploadUrl);
-  const createThreadAttachment = useAction(api.artifactUploads.createThreadAttachmentFromStorage);
+  const generateUploadUrl = useConvexMutationFn(api.artifacts.generateUploadUrl);
+  const createThreadAttachment = useConvexActionFn(api.artifactUploads.createThreadAttachmentFromStorage);
 
   const retryAt = localRetryAt ?? rateStatus?.retryAt ?? null;
   const retrySeconds =

@@ -1,10 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useMutation } from "convex/react";
 import { CameraIcon, Loader2Icon } from "lucide-react";
 import { api } from "@aqsha/convex/api";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { readableConvexErrorMessage } from "@/lib/convex-error";
+import { useConvexMutationState } from "@/lib/convex-query";
 import { cn } from "@/lib/utils";
 import { getInitials } from "../lib/settings-format";
 
@@ -21,8 +22,8 @@ export function ProfileAvatarPicker({
   image: string | null;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const generateUploadUrl = useMutation(api.auth.generateAvatarUploadUrl);
-  const setAvatarFromStorage = useMutation(api.auth.setAvatarFromStorage);
+  const generateUploadUrl = useConvexMutationState(api.auth.generateAvatarUploadUrl);
+  const setAvatarFromStorage = useConvexMutationState(api.auth.setAvatarFromStorage);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,7 +51,7 @@ export function ProfileAvatarPicker({
 
     setUploading(true);
     try {
-      const uploadUrl = await generateUploadUrl({});
+      const uploadUrl = await generateUploadUrl.mutateAsync({});
       const response = await fetch(uploadUrl, {
         method: "POST",
         headers: { "Content-Type": file.type },
@@ -70,12 +71,10 @@ export function ProfileAvatarPicker({
         return;
       }
 
-      await setAvatarFromStorage({ storageId: body.storageId as never });
+      await setAvatarFromStorage.mutateAsync({ storageId: body.storageId as never });
       setUploading(false);
     } catch (uploadError) {
-      const message =
-        uploadError instanceof Error ? uploadError.message : "Gagal memperbarui avatar.";
-      setError(message);
+      setError(readableConvexErrorMessage(uploadError, "Gagal memperbarui avatar."));
       setUploading(false);
     }
   };

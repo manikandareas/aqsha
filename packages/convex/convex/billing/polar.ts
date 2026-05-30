@@ -3,6 +3,7 @@ import { api, components } from "../_generated/api";
 import type { DataModel } from "../_generated/dataModel";
 import type { ActionCtx, MutationCtx, QueryCtx } from "../_generated/server";
 import { requireCurrentUser } from "../auth";
+import { throwAppError } from "../lib/appError";
 import { PRODUCT_KEYS, type ProductKey } from "./catalog";
 
 const productIds = Object.fromEntries(
@@ -14,7 +15,11 @@ export async function getPolarUserInfo(
 ): Promise<{ userId: string; email: string }> {
   const user = await requireCurrentUser(ctx);
   if (!user.email) {
-    throw new Error("A verified email is required for billing");
+    throwAppError({
+      code: "billing_email_required",
+      message: "A verified email is required for billing",
+      field: "email",
+    });
   }
   return {
     userId: user._id,
@@ -32,7 +37,11 @@ export const polar: Polar<DataModel, Record<ProductKey, string>> = new Polar<
       {},
     );
     if (!user.email) {
-      throw new Error("A verified email is required for billing");
+      throwAppError({
+        code: "billing_email_required",
+        message: "A verified email is required for billing",
+        field: "email",
+      });
     }
     return {
       userId: user.id,

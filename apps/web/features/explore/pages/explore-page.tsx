@@ -2,7 +2,6 @@
 
 import { api } from "@aqsha/convex/api";
 import type { ExplorePaper, ExploreSearchResponse } from "@aqsha/convex/explore";
-import { useAction, useMutation } from "convex/react";
 import {
   ArrowUpRightIcon,
   BookOpenIcon,
@@ -22,6 +21,11 @@ import { WorkspacePickerDialog } from "@/features/workspaces/components/workspac
 import { WorkspaceShell } from "@/features/workspaces/components/workspace-shell";
 import { useWorkspaceIndexData } from "@/features/workspaces/api/use-workspaces-data";
 import { toWorkspaceId } from "@/lib/convex-refs";
+import { readableConvexErrorMessage } from "@/lib/convex-error";
+import {
+  useConvexActionState,
+  useConvexMutationState,
+} from "@/lib/convex-query";
 import { cn } from "@/lib/utils";
 
 const suggestedQueries = [
@@ -38,8 +42,8 @@ export function ExplorePage() {
     createWorkspace,
     removeThread,
   } = useWorkspaceIndexData();
-  const searchPapers = useAction(api.explore.searchPapers);
-  const createUrl = useMutation(api.artifacts.createUrl);
+  const searchPapers = useConvexActionState(api.explore.searchPapers);
+  const createUrl = useConvexMutationState(api.artifacts.createUrl);
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [response, setResponse] = useState<ExploreSearchResponse | null>(null);
@@ -58,7 +62,7 @@ export function ExplorePage() {
     setIsLoading(true);
     setError(null);
     try {
-      const result: ExploreSearchResponse = await searchPapers({
+      const result: ExploreSearchResponse = await searchPapers.mutateAsync({
         query: nextQuery || undefined,
         mode: nextQuery ? "search" : "recommendations",
         limit: 12,
@@ -67,7 +71,7 @@ export function ExplorePage() {
       setSubmittedQuery(nextQuery);
       setIsLoading(false);
     } catch (searchError) {
-      setError(searchError instanceof Error ? searchError.message : "Gagal mencari paper.");
+      setError(readableConvexErrorMessage(searchError, "Gagal mencari paper."));
       setIsLoading(false);
     }
   };
@@ -78,7 +82,7 @@ export function ExplorePage() {
         setIsLoading(true);
         setError(null);
         try {
-          const result: ExploreSearchResponse = await searchPapers({
+          const result: ExploreSearchResponse = await searchPapers.mutateAsync({
             query: undefined,
             mode: "recommendations",
             limit: 12,
@@ -87,7 +91,7 @@ export function ExplorePage() {
           setSubmittedQuery("");
           setIsLoading(false);
         } catch (searchError) {
-          setError(searchError instanceof Error ? searchError.message : "Gagal mencari paper.");
+          setError(readableConvexErrorMessage(searchError, "Gagal mencari paper."));
           setIsLoading(false);
         }
       })();
@@ -102,7 +106,7 @@ export function ExplorePage() {
 
   const handleSave = async (workspaceId: string) => {
     if (!selectedPaper) return;
-    await createUrl({
+    await createUrl.mutateAsync({
       workspaceId: toWorkspaceId(workspaceId),
       url: selectedPaper.url,
       title: selectedPaper.title,

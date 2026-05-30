@@ -2,7 +2,12 @@
 
 import { api } from "@aqsha/convex/api";
 import { toAgentRunId } from "@/lib/convex-refs";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import {
+  useConvexAuth,
+  useConvexMutationFn,
+  useConvexOptimisticMutationState,
+  useConvexQueryData,
+} from "@/lib/convex-query";
 import {
   optimisticallyInsertUserMessage,
   promptCommandMetadataForContent,
@@ -11,8 +16,8 @@ import type { ResearchArtifact, ResearchRun, ResearchSource } from "../types";
 
 export function useThreadExperienceData(threadId?: string) {
   const { isAuthenticated } = useConvexAuth();
-  const viewer = useQuery(api.auth.getCurrentUser, isAuthenticated ? {} : "skip");
-  const threadPage = useQuery(
+  const viewer = useConvexQueryData(api.auth.getCurrentUser, isAuthenticated ? {} : "skip");
+  const threadPage = useConvexQueryData(
     api.agent.threads.list,
     isAuthenticated
       ? {
@@ -20,7 +25,7 @@ export function useThreadExperienceData(threadId?: string) {
         }
       : "skip",
   );
-  const workspacePage = useQuery(
+  const workspacePage = useConvexQueryData(
     api.workspaces.list,
     isAuthenticated
       ? {
@@ -28,7 +33,7 @@ export function useThreadExperienceData(threadId?: string) {
         }
       : "skip",
   );
-  const selectedThread = useQuery(
+  const selectedThread = useConvexQueryData(
     api.agent.threads.get,
     isAuthenticated && threadId ? { threadId } : "skip",
   );
@@ -36,17 +41,18 @@ export function useThreadExperienceData(threadId?: string) {
   const shouldLoadGlobalContextCandidates = Boolean(
     isAuthenticated && (!threadId || (threadQueriesEnabled && !selectedThread?.workspaceId)),
   );
-  const selectedContextArtifacts = useQuery(
+  const selectedContextArtifacts = useConvexQueryData(
     api.agent.threadContext.listForThread,
     threadQueriesEnabled ? { threadId: threadId! } : "skip",
   );
-  const contextCandidateArtifacts = useQuery(
+  const contextCandidateArtifacts = useConvexQueryData(
     api.artifacts.listForContextPicker,
     shouldLoadGlobalContextCandidates ? { workspaceId: undefined } : "skip",
   );
-  const createWorkspace = useMutation(api.workspaces.create);
-  const startThread = useMutation(api.agent.messages.startThread);
-  const sendMessage = useMutation(api.agent.messages.send).withOptimisticUpdate(
+  const createWorkspace = useConvexMutationFn(api.workspaces.create);
+  const startThread = useConvexMutationFn(api.agent.messages.startThread);
+  const sendMessage = useConvexOptimisticMutationState(
+    api.agent.messages.send,
     (store, args) => {
       optimisticallyInsertUserMessage(store, {
         threadId: args.threadId,
@@ -56,25 +62,25 @@ export function useThreadExperienceData(threadId?: string) {
       });
     },
   );
-  const rateStatus = useQuery(
+  const rateStatus = useConvexQueryData(
     api.agent.rateLimits.getSendStatus,
     isAuthenticated ? {} : "skip",
   );
-  const runs = useQuery(
+  const runs = useConvexQueryData(
     api.agent.deepResearch.listForThread,
     threadQueriesEnabled ? { threadId: threadId! } : "skip",
   ) as ResearchRun[] | undefined;
-  const artifacts = useQuery(
+  const artifacts = useConvexQueryData(
     api.agent.artifacts.list,
     threadQueriesEnabled ? { threadId: threadId! } : "skip",
   ) as ResearchArtifact[] | undefined;
-  const sources = useQuery(
+  const sources = useConvexQueryData(
     api.agent.sources.listForThread,
     threadQueriesEnabled ? { threadId: threadId! } : "skip",
   ) as ResearchSource[] | undefined;
-  const cancelRunMutation = useMutation(api.agent.deepResearch.cancel);
-  const retryRun = useMutation(api.agent.deepResearch.retry);
-  const removeThread = useMutation(api.agent.threads.remove);
+  const cancelRunMutation = useConvexMutationFn(api.agent.deepResearch.cancel);
+  const retryRun = useConvexMutationFn(api.agent.deepResearch.retry);
+  const removeThread = useConvexMutationFn(api.agent.threads.remove);
 
   const cancelRun = async (runId: string) => {
     try {
@@ -95,7 +101,7 @@ export function useThreadExperienceData(threadId?: string) {
     contextCandidateArtifacts: contextCandidateArtifacts ?? [],
     createWorkspace,
     startThread,
-    sendMessage,
+    sendMessage: sendMessage.mutateAsync,
     rateStatus,
     runs: runs ?? [],
     artifacts: artifacts ?? [],

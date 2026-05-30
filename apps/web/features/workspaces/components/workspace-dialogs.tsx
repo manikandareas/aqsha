@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { readableConvexErrorMessage } from "@/lib/convex-error";
 
 export function NameDialog({
   open,
@@ -188,5 +189,5 @@ export function UrlDialog({
 }
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Aksi gagal.";
+  return readableConvexErrorMessage(error, "Aksi gagal.");
 }

@@ -2,7 +2,12 @@
 
 import { api } from "@aqsha/convex/api";
 import { toArtifactId, toWorkspaceId, type WorkspaceId } from "@/lib/convex-refs";
-import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
+import {
+  useConvexActionFn,
+  useConvexAuth,
+  useConvexMutationFn,
+  useConvexQueryData,
+} from "@/lib/convex-query";
 
 const workspacePageSize = 50;
 const artifactPageSize = 100;
@@ -10,14 +15,14 @@ const threadPageSize = 30;
 
 export function useWorkspaceIndexData() {
   const { isAuthenticated } = useConvexAuth();
-  const viewer = useQuery(api.auth.getCurrentUser, isAuthenticated ? {} : "skip");
-  const workspacePage = useQuery(
+  const viewer = useConvexQueryData(api.auth.getCurrentUser, isAuthenticated ? {} : "skip");
+  const workspacePage = useConvexQueryData(
     api.workspaces.list,
     isAuthenticated
       ? { paginationOpts: { cursor: null, numItems: workspacePageSize } }
       : "skip",
   );
-  const threadPage = useQuery(
+  const threadPage = useConvexQueryData(
     api.agent.threads.list,
     isAuthenticated
       ? { paginationOpts: { cursor: null, numItems: threadPageSize } }
@@ -30,9 +35,9 @@ export function useWorkspaceIndexData() {
     workspaces: workspacePage?.page ?? [],
     threads: threadPage?.page ?? [],
     isLoadingWorkspaces: workspacePage === undefined,
-    createWorkspace: useMutation(api.workspaces.create),
-    archiveWorkspace: useMutation(api.workspaces.archive),
-    removeThread: useMutation(api.agent.threads.remove),
+    createWorkspace: useConvexMutationFn(api.workspaces.create),
+    archiveWorkspace: useConvexMutationFn(api.workspaces.archive),
+    removeThread: useConvexMutationFn(api.agent.threads.remove),
   };
 }
 
@@ -45,15 +50,15 @@ export function useWorkspaceLibraryData(workspaceId: string | WorkspaceId) {
     isAuthenticated && convexWorkspaceId
       ? { workspaceId: convexWorkspaceId }
       : "skip";
-  const workspace = useQuery(api.workspaces.get, workspaceArgs);
-  const workspacesPage = useQuery(
+  const workspace = useConvexQueryData(api.workspaces.get, workspaceArgs);
+  const workspacesPage = useConvexQueryData(
     api.workspaces.list,
     isAuthenticated
       ? { paginationOpts: { cursor: null, numItems: workspacePageSize } }
       : "skip",
   );
-  const folders = useQuery(api.workspaceFolders.list, workspaceArgs);
-  const artifactsPage = useQuery(
+  const folders = useConvexQueryData(api.workspaceFolders.list, workspaceArgs);
+  const artifactsPage = useConvexQueryData(
     api.artifacts.listByWorkspace,
     isAuthenticated && convexWorkspaceId
       ? {
@@ -73,33 +78,33 @@ export function useWorkspaceLibraryData(workspaceId: string | WorkspaceId) {
       workspacesPage === undefined ||
       folders === undefined ||
       artifactsPage === undefined,
-    renameWorkspace: useMutation(api.workspaces.rename),
-    archiveWorkspace: useMutation(api.workspaces.archive),
-    createFolder: useMutation(api.workspaceFolders.create),
-    renameFolder: useMutation(api.workspaceFolders.rename),
-    moveFolder: useMutation(api.workspaceFolders.move),
-    removeFolder: useMutation(api.workspaceFolders.remove),
-    generateUploadUrl: useMutation(api.artifacts.generateUploadUrl),
-    createUploadedArtifact: useAction(api.artifactUploads.createFromStorage),
-    createDocument: useMutation(api.artifacts.createDocument),
-    createUrl: useMutation(api.artifacts.createUrl),
-    renameArtifact: useMutation(api.artifacts.rename),
-    moveArtifact: useMutation(api.artifacts.move),
-    removeArtifact: useMutation(api.artifacts.remove),
+    renameWorkspace: useConvexMutationFn(api.workspaces.rename),
+    archiveWorkspace: useConvexMutationFn(api.workspaces.archive),
+    createFolder: useConvexMutationFn(api.workspaceFolders.create),
+    renameFolder: useConvexMutationFn(api.workspaceFolders.rename),
+    moveFolder: useConvexMutationFn(api.workspaceFolders.move),
+    removeFolder: useConvexMutationFn(api.workspaceFolders.remove),
+    generateUploadUrl: useConvexMutationFn(api.artifacts.generateUploadUrl),
+    createUploadedArtifact: useConvexActionFn(api.artifactUploads.createFromStorage),
+    createDocument: useConvexMutationFn(api.artifacts.createDocument),
+    createUrl: useConvexMutationFn(api.artifacts.createUrl),
+    renameArtifact: useConvexMutationFn(api.artifacts.rename),
+    moveArtifact: useConvexMutationFn(api.artifacts.move),
+    removeArtifact: useConvexMutationFn(api.artifacts.remove),
   };
 }
 
 export function useWorkspaceDetailData(workspaceId: string) {
   const { isAuthenticated } = useConvexAuth();
   const libraryData = useWorkspaceLibraryData(workspaceId);
-  const viewer = useQuery(api.auth.getCurrentUser, isAuthenticated ? {} : "skip");
-  const threadPage = useQuery(
+  const viewer = useConvexQueryData(api.auth.getCurrentUser, isAuthenticated ? {} : "skip");
+  const threadPage = useConvexQueryData(
     api.agent.threads.list,
     isAuthenticated
       ? { paginationOpts: { cursor: null, numItems: threadPageSize } }
       : "skip",
   );
-  const workspaceThreadPage = useQuery(
+  const workspaceThreadPage = useConvexQueryData(
     api.agent.threads.listByWorkspace,
     isAuthenticated && workspaceId
       ? {
@@ -108,7 +113,7 @@ export function useWorkspaceDetailData(workspaceId: string) {
         }
       : "skip",
   );
-  const rateStatus = useQuery(
+  const rateStatus = useConvexQueryData(
     api.agent.rateLimits.getSendStatus,
     isAuthenticated ? {} : "skip",
   );
@@ -124,7 +129,7 @@ export function useWorkspaceDetailData(workspaceId: string) {
     workspaceThreads: workspaceThreadPage?.page ?? [],
     rateStatus,
     isLoading: libraryData.isLoading || workspaceThreadPage === undefined,
-    createWorkspace: useMutation(api.workspaces.create),
+    createWorkspace: useConvexMutationFn(api.workspaces.create),
     renameWorkspace: libraryData.renameWorkspace,
     archiveWorkspace: libraryData.archiveWorkspace,
     createFolder: libraryData.createFolder,
@@ -138,9 +143,9 @@ export function useWorkspaceDetailData(workspaceId: string) {
     renameArtifact: libraryData.renameArtifact,
     moveArtifact: libraryData.moveArtifact,
     removeArtifact: libraryData.removeArtifact,
-    startThread: useMutation(api.agent.messages.startThread),
-    addThreadContextArtifacts: useMutation(api.agent.threadContext.addMany),
-    removeThread: useMutation(api.agent.threads.remove),
+    startThread: useConvexMutationFn(api.agent.messages.startThread),
+    addThreadContextArtifacts: useConvexMutationFn(api.agent.threadContext.addMany),
+    removeThread: useConvexMutationFn(api.agent.threads.remove),
   };
 }
 
@@ -150,21 +155,21 @@ export function useArtifactDetailData(artifactId: string) {
     isAuthenticated && artifactId
       ? { artifactId: toArtifactId(artifactId) }
       : "skip";
-  const viewer = useQuery(api.auth.getCurrentUser, isAuthenticated ? {} : "skip");
-  const workspacesPage = useQuery(
+  const viewer = useConvexQueryData(api.auth.getCurrentUser, isAuthenticated ? {} : "skip");
+  const workspacesPage = useConvexQueryData(
     api.workspaces.list,
     isAuthenticated
       ? { paginationOpts: { cursor: null, numItems: workspacePageSize } }
       : "skip",
   );
-  const threadPage = useQuery(
+  const threadPage = useConvexQueryData(
     api.agent.threads.list,
     isAuthenticated
       ? { paginationOpts: { cursor: null, numItems: threadPageSize } }
       : "skip",
   );
-  const artifact = useQuery(api.artifacts.get, artifactArgs);
-  const paperExtraction = useQuery(api.paperExtractions.getStatus, artifactArgs);
+  const artifact = useConvexQueryData(api.artifacts.get, artifactArgs);
+  const paperExtraction = useConvexQueryData(api.paperExtractions.getStatus, artifactArgs);
 
   return {
     isAuthenticated,
@@ -174,14 +179,13 @@ export function useArtifactDetailData(artifactId: string) {
     artifact,
     paperExtraction,
     isLoading: artifact === undefined,
-    getRenderPayload: useAction(api.artifacts.getRenderPayload),
-    updateDocument: useAction(api.artifacts.updateDocument),
-    retryUrlExtraction: useMutation(api.artifacts.retryUrlExtraction),
-    retryGrobidExtraction: useMutation(api.paperExtractions.retryGrobidExtraction),
-    renameArtifact: useMutation(api.artifacts.rename),
-    moveArtifact: useMutation(api.artifacts.move),
-    removeArtifact: useMutation(api.artifacts.remove),
-    createWorkspace: useMutation(api.workspaces.create),
-    removeThread: useMutation(api.agent.threads.remove),
+    updateDocument: useConvexActionFn(api.artifacts.updateDocument),
+    retryUrlExtraction: useConvexMutationFn(api.artifacts.retryUrlExtraction),
+    retryGrobidExtraction: useConvexMutationFn(api.paperExtractions.retryGrobidExtraction),
+    renameArtifact: useConvexMutationFn(api.artifacts.rename),
+    moveArtifact: useConvexMutationFn(api.artifacts.move),
+    removeArtifact: useConvexMutationFn(api.artifacts.remove),
+    createWorkspace: useConvexMutationFn(api.workspaces.create),
+    removeThread: useConvexMutationFn(api.agent.threads.remove),
   };
 }

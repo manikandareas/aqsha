@@ -6,6 +6,7 @@ import {
   type WorkspaceFolderId,
   type WorkspaceId,
 } from "@/lib/convex-refs";
+import { readableConvexErrorMessage } from "@/lib/convex-error";
 
 export const MAX_WORKSPACE_UPLOAD_FILES = 20;
 export const WORKSPACE_UPLOAD_CONCURRENCY = 3;
@@ -169,7 +170,7 @@ export async function uploadWorkspaceFiles({
         onFileChange?.({ file, index, status: "complete", progress: 100 });
         results[index] = { ok: true, file, index };
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Upload gagal.";
+        const message = readableConvexErrorMessage(error, "Upload gagal.");
         onFileChange?.({
           file,
           index,

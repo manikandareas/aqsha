@@ -71,6 +71,7 @@ import type * as hitlSessions from "../hitlSessions.js";
 import type * as hitlWorkspace from "../hitlWorkspace.js";
 import type * as hitlWorkspaceExecution from "../hitlWorkspaceExecution.js";
 import type * as http from "../http.js";
+import type * as lib_appError from "../lib/appError.js";
 import type * as lib_userImage from "../lib/userImage.js";
 import type * as limits from "../limits.js";
 import type * as paperExtraction_grobidClient from "../paperExtraction/grobidClient.js";
@@ -152,6 +153,7 @@ declare const fullApi: ApiFromModules<{
   hitlWorkspace: typeof hitlWorkspace;
   hitlWorkspaceExecution: typeof hitlWorkspaceExecution;
   http: typeof http;
+  "lib/appError": typeof lib_appError;
   "lib/userImage": typeof lib_userImage;
   limits: typeof limits;
   "paperExtraction/grobidClient": typeof paperExtraction_grobidClient;

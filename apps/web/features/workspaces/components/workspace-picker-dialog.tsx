@@ -1,7 +1,6 @@
 "use client";
 
 import { api } from "@aqsha/convex/api";
-import { useQuery } from "convex/react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useConvexQueryData } from "@/lib/convex-query";
 import { cn } from "@/lib/utils";
 
 export function WorkspacePickerDialog({
@@ -31,7 +31,7 @@ export function WorkspacePickerDialog({
   description?: string;
   submitLabel?: string;
 }) {
-  const workspacePage = useQuery(api.workspaces.list, {
+  const workspacePage = useConvexQueryData(api.workspaces.list, {
     paginationOpts: { cursor: null, numItems: 50 },
   });
   const workspaces = (workspacePage?.page ?? []).filter(

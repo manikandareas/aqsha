@@ -2,9 +2,10 @@
 
 import { api } from "@aqsha/convex/api";
 import type { FunctionReturnType } from "convex/server";
-import { useMutation } from "convex/react";
 import { useState } from "react";
 import { type WorkspaceId, toWorkspaceId } from "@/lib/convex-refs";
+import { readableConvexErrorMessage } from "@/lib/convex-error";
+import { useConvexMutationFn } from "@/lib/convex-query";
 import { HitlConfirmCard } from "./hitl-confirm-card";
 import { HitlPlanReviewCard } from "./hitl-plan-review-card";
 import { HitlQuestionCard } from "./hitl-question-card";
@@ -30,10 +31,10 @@ export function HitlDock({
   session: HitlSession;
   threadWorkspaceId?: WorkspaceId;
 }) {
-  const answerQuestion = useMutation(api.hitlSessions.answerQuestion);
-  const goBackToPreviousQuestion = useMutation(api.hitlSessions.goBackToPreviousQuestion);
-  const approveCard = useMutation(api.hitlSessions.approveCard);
-  const rejectSession = useMutation(api.hitlSessions.rejectSession);
+  const answerQuestion = useConvexMutationFn(api.hitlSessions.answerQuestion);
+  const goBackToPreviousQuestion = useConvexMutationFn(api.hitlSessions.goBackToPreviousQuestion);
+  const approveCard = useConvexMutationFn(api.hitlSessions.approveCard);
+  const rejectSession = useConvexMutationFn(api.hitlSessions.rejectSession);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -48,7 +49,7 @@ export function HitlDock({
         await action();
         setIsSubmitting(false);
       } catch (mutationError) {
-        setError(mutationError instanceof Error ? mutationError.message : fallbackMessage);
+        setError(readableConvexErrorMessage(mutationError, fallbackMessage));
         setIsSubmitting(false);
       }
     };

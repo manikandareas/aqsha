@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation } from "convex/react";
 import { Loader2Icon, SaveIcon } from "lucide-react";
 import { api } from "@aqsha/convex/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { readableConvexErrorMessage } from "@/lib/convex-error";
+import { useConvexMutationState } from "@/lib/convex-query";
 import { useDraftField } from "../lib/use-draft-field";
 import {
   SettingsField,
@@ -14,28 +15,32 @@ import {
 } from "./settings-card";
 
 export function useDisplayNameEditor(savedName: string | null) {
-  const updateDisplayName = useMutation(api.auth.updateDisplayName);
+  const updateDisplayName = useConvexMutationState(api.auth.updateDisplayName);
   const { saved, draft, setDraft } = useDraftField(savedName);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const trimmedDraft = draft.trim();
   const isDirty = trimmedDraft !== saved;
+  const saving = updateDisplayName.isPending;
+  const error = localError ?? (updateDisplayName.error
+    ? readableConvexErrorMessage(
+        updateDisplayName.error,
+        "Gagal menyimpan nama tampilan.",
+      )
+    : null);
   const canSave = isDirty && trimmedDraft.length > 0 && !saving;
 
   const save = async () => {
     if (!canSave) return;
 
-    setSaving(true);
-    setError(null);
+    setLocalError(null);
+    updateDisplayName.reset();
     try {
-      await updateDisplayName({ name: trimmedDraft });
-      setSaving(false);
+      await updateDisplayName.mutateAsync({ name: trimmedDraft });
     } catch (saveError) {
-      const message =
-        saveError instanceof Error ? saveError.message : "Gagal menyimpan nama tampilan.";
-      setError(message);
-      setSaving(false);
+      setLocalError(
+        readableConvexErrorMessage(saveError, "Gagal menyimpan nama tampilan."),
+      );
     }
   };
 
@@ -44,7 +49,7 @@ export function useDisplayNameEditor(savedName: string | null) {
     setDraft,
     saving,
     error,
-    setError,
+    setError: setLocalError,
     isDirty,
     canSave,
     save,

@@ -2,10 +2,16 @@
 "use no memo";
 
 import { useAuth } from "@clerk/nextjs";
-import { ConvexReactClient, useConvexAuth, useMutation } from "convex/react";
+import { ConvexQueryClient } from "@convex-dev/react-query";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ConvexReactClient } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
-import { type ReactNode, useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { api } from "@aqsha/convex/api";
+import {
+  useConvexAuth,
+  useConvexMutationState,
+} from "@/lib/convex-query";
 
 export function ConvexClientProvider({
   children,
@@ -15,9 +21,26 @@ export function ConvexClientProvider({
   "use no memo";
 
   const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
-  const convex = (convexUrl ? new ConvexReactClient(convexUrl) : null);
+  const [clients] = useState(() => {
+    if (!convexUrl) return null;
 
-  if (!convex) {
+    const convex = new ConvexReactClient(convexUrl);
+    const convexQueryClient = new ConvexQueryClient(convex);
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          gcTime: 30_000,
+          queryFn: convexQueryClient.queryFn(),
+          queryKeyHashFn: convexQueryClient.hashFn(),
+        },
+      },
+    });
+    convexQueryClient.connect(queryClient);
+
+    return { convex, queryClient };
+  });
+
+  if (!clients) {
     return (
       <main className="min-h-screen bg-background px-6 py-10 text-foreground">
         <section className="mx-auto grid max-w-3xl gap-3 rounded-[18px] border bg-card p-6 shadow-aqsha">
@@ -34,9 +57,10 @@ export function ConvexClientProvider({
   }
 
   return (
-     
-    <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
-      <AuthenticatedUserSync>{children}</AuthenticatedUserSync>
+    <ConvexProviderWithClerk client={clients.convex} useAuth={useAuth}>
+      <QueryClientProvider client={clients.queryClient}>
+        <AuthenticatedUserSync>{children}</AuthenticatedUserSync>
+      </QueryClientProvider>
     </ConvexProviderWithClerk>
   );
 }
@@ -45,7 +69,8 @@ function AuthenticatedUserSync({ children }: { children: ReactNode }) {
   const { isAuthenticated: isConvexAuthenticated, isLoading: isConvexLoading } =
     useConvexAuth();
   const { isLoaded: isClerkLoaded, isSignedIn, userId } = useAuth();
-  const syncCurrentUser = useMutation(api.auth.syncCurrentUser);
+  const syncCurrentUser = useConvexMutationState(api.auth.syncCurrentUser);
+  const syncCurrentUserAsync = syncCurrentUser.mutateAsync;
   const syncedUserId = useRef<string | null>(null);
   const syncingUserId = useRef<string | null>(null);
 
@@ -59,7 +84,7 @@ function AuthenticatedUserSync({ children }: { children: ReactNode }) {
     if (syncedUserId.current === userId || syncingUserId.current === userId) return;
 
     syncingUserId.current = userId;
-    void syncCurrentUser({})
+    void syncCurrentUserAsync({})
       .then(() => {
         syncedUserId.current = userId;
       })
@@ -76,7 +101,7 @@ function AuthenticatedUserSync({ children }: { children: ReactNode }) {
     isConvexAuthenticated,
     isConvexLoading,
     isSignedIn,
-    syncCurrentUser,
+    syncCurrentUserAsync,
     userId,
   ]);
 
