@@ -38,5 +38,3 @@ Both shells use `components/layout/detail-split-layout.tsx` and `components/layo
 - [ ] Draft context scopes are correct: `threadContextScopeKey(threadId)` vs `workspaceContextScopeKey(workspaceId)` (`use-workspace-draft-context.ts`)
 - [ ] Panel chrome uses `lib/panel-surface.ts` tokens; `compact` prop respected in `ChatThreadState`
 - [ ] Mobile side-panel open/close still syncs via `DetailSplitLayout` / `useCloseRightPanel`
-
-The removed `DESIGN.md` is no longer the UI source of truth for the Selia migration; keep the parity rules above as the behavioral contract.
