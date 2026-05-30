@@ -26,11 +26,11 @@ import {
   type WorkspaceUploadResult,
 } from "../utils/workspace-file-upload";
 import { WorkspaceBoardToolbar } from "./workspace-board-toolbar";
-import { WorkspaceDriveEmpty } from "./workspace-drive-empty";
-import { WorkspaceDriveGrid } from "./workspace-drive-grid";
+import { WorkspaceLibraryEmpty } from "./workspace-library-empty";
+import { WorkspaceLibraryGrid } from "./workspace-library-grid";
 import { useWorkspaceUploadToast } from "./workspace-upload-toast";
 
-export function WorkspaceDriveLibrary({
+export function WorkspaceLibraryBoard({
   workspaceName,
   workspaceId,
   titleSlot,
@@ -215,14 +215,14 @@ export function WorkspaceDriveLibrary({
             }}
           >
             {isEmpty ? (
-              <WorkspaceDriveEmpty
+              <WorkspaceLibraryEmpty
                 variant={folderView.activeFolderId === "root" ? "root" : "folder"}
                 onCreateFolder={onCreateFolder}
                 onCreateDocument={onCreateDocument}
                 onCreateUrl={onCreateUrl}
               />
             ) : (
-              <WorkspaceDriveGrid
+              <WorkspaceLibraryGrid
                 folders={folderView.folders}
                 artifacts={folderView.artifacts}
                 workspaceId={workspaceId}

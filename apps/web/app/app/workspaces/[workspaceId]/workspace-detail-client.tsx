@@ -14,7 +14,7 @@ import {
 } from "@/features/thread-experience/utils/message-context";
 import {
   useWorkspaceDetailData,
-  type WorkspaceDriveData,
+  type WorkspaceLibraryData,
 } from "@/features/workspaces/api/use-workspaces-data";
 import {
   WorkspaceChatSidePanel,
@@ -109,7 +109,7 @@ function WorkspaceDetailMain({
     ? leftSidebar.openMobile
     : leftSidebar.open;
 
-  const drive: WorkspaceDriveData = data;
+  const libraryData: WorkspaceLibraryData = data;
 
   return (
     <main className="flex h-svh min-h-0 flex-col overflow-hidden bg-background">
@@ -125,7 +125,7 @@ function WorkspaceDetailMain({
             <WorkspaceLibrarySurface
               workspaceId={workspaceId}
               workspaceName={data.workspace.name}
-              drive={drive}
+              libraryData={libraryData}
               dialogState={dialogState}
               activeFolderId={activeFolderId}
               onActiveFolderChange={setActiveFolderId}

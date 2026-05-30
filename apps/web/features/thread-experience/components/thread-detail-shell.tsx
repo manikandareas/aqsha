@@ -20,7 +20,7 @@ import {
 } from "@/lib/thread-context-draft-store";
 import { cn } from "@/lib/utils";
 import {
-  useWorkspaceDriveData,
+  useWorkspaceLibraryData,
 } from "@/features/workspaces/api/use-workspaces-data";
 import { WorkspaceLibrarySurface } from "@/features/workspaces/components/workspace-library-surface";
 import { WorkspaceBoardToolbar } from "@/features/workspaces/components/workspace-board-toolbar";
@@ -67,7 +67,7 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
     threadId && selectedContextArtifactsLoaded ? persistedContextIds : undefined,
   );
   const panelWorkspaceId = selectedThread?.workspaceId;
-  const workspaceDrive = useWorkspaceDriveData(panelWorkspaceId ?? "");
+  const workspaceLibrary = useWorkspaceLibraryData(panelWorkspaceId ?? "");
   const title = threadId
     ? (selectedThread?.title ?? "Thread tidak ditemukan")
     : "Thread baru";
@@ -87,11 +87,11 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
     for (const artifact of contextCandidateArtifacts) {
       titles.set(artifact._id, artifact.title);
     }
-    for (const artifact of workspaceDrive.artifacts) {
+    for (const artifact of workspaceLibrary.artifacts) {
       titles.set(artifact._id, artifact.title);
     }
     return titles;
-  }, [contextCandidateArtifacts, selectedContextArtifacts, workspaceDrive.artifacts]);
+  }, [contextCandidateArtifacts, selectedContextArtifacts, workspaceLibrary.artifacts]);
   const draftContextArtifacts = useMemo(
     () =>
       draftContext.selectedIds.map((artifactId) => ({
@@ -246,11 +246,11 @@ function ThreadWorkspaceLibraryPanel({
   titleSlot?: ReactNode;
 }) {
   const router = useRouter();
-  const drive = useWorkspaceDriveData(workspaceId);
+  const libraryData = useWorkspaceLibraryData(workspaceId);
   const dialogState = useWorkspaceLibraryDialogState();
   const [activeFolderId, setActiveFolderId] = useState<"root" | string>("root");
 
-  if (drive.isLoading) {
+  if (libraryData.isLoading) {
     return (
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
         <div className={cn("grid gap-3", panelBodyPaddingClass)}>
@@ -267,7 +267,7 @@ function ThreadWorkspaceLibraryPanel({
       workspaceId={workspaceId}
       workspaceName={workspaceName}
       titleSlot={titleSlot}
-      drive={drive}
+      libraryData={libraryData}
       dialogState={dialogState}
       activeFolderId={activeFolderId}
       onActiveFolderChange={setActiveFolderId}

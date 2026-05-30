@@ -36,9 +36,9 @@ export function useWorkspaceIndexData() {
   };
 }
 
-export type WorkspaceDriveData = ReturnType<typeof useWorkspaceDriveData>;
+export type WorkspaceLibraryData = ReturnType<typeof useWorkspaceLibraryData>;
 
-export function useWorkspaceDriveData(workspaceId: string | WorkspaceId) {
+export function useWorkspaceLibraryData(workspaceId: string | WorkspaceId) {
   const { isAuthenticated } = useConvexAuth();
   const convexWorkspaceId = workspaceId ? toWorkspaceId(workspaceId) : null;
   const workspaceArgs =
@@ -91,7 +91,7 @@ export function useWorkspaceDriveData(workspaceId: string | WorkspaceId) {
 
 export function useWorkspaceDetailData(workspaceId: string) {
   const { isAuthenticated } = useConvexAuth();
-  const drive = useWorkspaceDriveData(workspaceId);
+  const libraryData = useWorkspaceLibraryData(workspaceId);
   const viewer = useQuery(api.auth.getCurrentUser, isAuthenticated ? {} : "skip");
   const threadPage = useQuery(
     api.agent.threads.list,
@@ -116,28 +116,28 @@ export function useWorkspaceDetailData(workspaceId: string) {
   return {
     isAuthenticated,
     viewer,
-    workspace: drive.workspace,
-    workspaces: drive.workspaces,
-    folders: drive.folders,
-    artifacts: drive.artifacts,
+    workspace: libraryData.workspace,
+    workspaces: libraryData.workspaces,
+    folders: libraryData.folders,
+    artifacts: libraryData.artifacts,
     threads: threadPage?.page ?? [],
     workspaceThreads: workspaceThreadPage?.page ?? [],
     rateStatus,
-    isLoading: drive.isLoading || workspaceThreadPage === undefined,
+    isLoading: libraryData.isLoading || workspaceThreadPage === undefined,
     createWorkspace: useMutation(api.workspaces.create),
-    renameWorkspace: drive.renameWorkspace,
-    archiveWorkspace: drive.archiveWorkspace,
-    createFolder: drive.createFolder,
-    renameFolder: drive.renameFolder,
-    moveFolder: drive.moveFolder,
-    removeFolder: drive.removeFolder,
-    generateUploadUrl: drive.generateUploadUrl,
-    createUploadedArtifact: drive.createUploadedArtifact,
-    createDocument: drive.createDocument,
-    createUrl: drive.createUrl,
-    renameArtifact: drive.renameArtifact,
-    moveArtifact: drive.moveArtifact,
-    removeArtifact: drive.removeArtifact,
+    renameWorkspace: libraryData.renameWorkspace,
+    archiveWorkspace: libraryData.archiveWorkspace,
+    createFolder: libraryData.createFolder,
+    renameFolder: libraryData.renameFolder,
+    moveFolder: libraryData.moveFolder,
+    removeFolder: libraryData.removeFolder,
+    generateUploadUrl: libraryData.generateUploadUrl,
+    createUploadedArtifact: libraryData.createUploadedArtifact,
+    createDocument: libraryData.createDocument,
+    createUrl: libraryData.createUrl,
+    renameArtifact: libraryData.renameArtifact,
+    moveArtifact: libraryData.moveArtifact,
+    removeArtifact: libraryData.removeArtifact,
     startThread: useMutation(api.agent.messages.startThread),
     addThreadContextArtifacts: useMutation(api.agent.threadContext.addMany),
     removeThread: useMutation(api.agent.threads.remove),

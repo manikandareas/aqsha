@@ -4,38 +4,38 @@ import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { toArtifactId, toWorkspaceFolderId, toWorkspaceId } from "@/lib/convex-refs";
 import { useCloseRightPanel } from "@/hooks/use-close-right-panel";
-import type { WorkspaceDriveData } from "../api/use-workspaces-data";
+import type { WorkspaceLibraryData } from "../api/use-workspaces-data";
 import type { useWorkspaceLibraryDialogState } from "../hooks/use-workspace-library-dialogs";
 import { uploadWorkspaceFiles } from "../utils/workspace-file-upload";
-import { WorkspaceDriveLibrary } from "./workspace-drive-library";
+import { WorkspaceLibraryBoard } from "./workspace-library-board";
 import { WorkspaceLibraryDialogsStack } from "./workspace-library-dialogs-stack";
 
 type DialogState = ReturnType<typeof useWorkspaceLibraryDialogState>;
 
-type LibraryDriveProps = Pick<
-  WorkspaceDriveData,
+type LibraryDataProps = Pick<
+  WorkspaceLibraryData,
   "folders" | "artifacts" | "moveArtifact" | "workspace"
 > & {
-  workspaces: WorkspaceDriveData["workspaces"];
-  renameWorkspace: WorkspaceDriveData["renameWorkspace"];
-  archiveWorkspace: WorkspaceDriveData["archiveWorkspace"];
-  createFolder: WorkspaceDriveData["createFolder"];
-  moveFolder: WorkspaceDriveData["moveFolder"];
-  createDocument: WorkspaceDriveData["createDocument"];
-  createUrl: WorkspaceDriveData["createUrl"];
-  renameFolder: WorkspaceDriveData["renameFolder"];
-  generateUploadUrl: WorkspaceDriveData["generateUploadUrl"];
-  createUploadedArtifact: WorkspaceDriveData["createUploadedArtifact"];
-  renameArtifact: WorkspaceDriveData["renameArtifact"];
-  removeFolder: WorkspaceDriveData["removeFolder"];
-  removeArtifact: WorkspaceDriveData["removeArtifact"];
+  workspaces: WorkspaceLibraryData["workspaces"];
+  renameWorkspace: WorkspaceLibraryData["renameWorkspace"];
+  archiveWorkspace: WorkspaceLibraryData["archiveWorkspace"];
+  createFolder: WorkspaceLibraryData["createFolder"];
+  moveFolder: WorkspaceLibraryData["moveFolder"];
+  createDocument: WorkspaceLibraryData["createDocument"];
+  createUrl: WorkspaceLibraryData["createUrl"];
+  renameFolder: WorkspaceLibraryData["renameFolder"];
+  generateUploadUrl: WorkspaceLibraryData["generateUploadUrl"];
+  createUploadedArtifact: WorkspaceLibraryData["createUploadedArtifact"];
+  renameArtifact: WorkspaceLibraryData["renameArtifact"];
+  removeFolder: WorkspaceLibraryData["removeFolder"];
+  removeArtifact: WorkspaceLibraryData["removeArtifact"];
 };
 
 export function WorkspaceLibrarySurface({
   workspaceId,
   workspaceName,
   titleSlot,
-  drive,
+  libraryData,
   dialogState,
   activeFolderId,
   onActiveFolderChange,
@@ -54,7 +54,7 @@ export function WorkspaceLibrarySurface({
   workspaceId: string;
   workspaceName: string;
   titleSlot?: ReactNode;
-  drive: LibraryDriveProps;
+  libraryData: LibraryDataProps;
   dialogState: DialogState;
   activeFolderId: "root" | string;
   onActiveFolderChange: (folderId: "root" | string) => void;
@@ -76,27 +76,27 @@ export function WorkspaceLibrarySurface({
   const panelCloseHandler = onToggleChatPanel ? undefined : (onClosePanel ?? closePanel);
 
   const libraryMutations = {
-    renameWorkspace: drive.renameWorkspace,
-    archiveWorkspace: drive.archiveWorkspace,
-    createFolder: drive.createFolder,
-    createDocument: drive.createDocument,
-    createUrl: drive.createUrl,
-    renameFolder: drive.renameFolder,
-    renameArtifact: drive.renameArtifact,
-    removeFolder: drive.removeFolder,
-    removeArtifact: drive.removeArtifact,
+    renameWorkspace: libraryData.renameWorkspace,
+    archiveWorkspace: libraryData.archiveWorkspace,
+    createFolder: libraryData.createFolder,
+    createDocument: libraryData.createDocument,
+    createUrl: libraryData.createUrl,
+    renameFolder: libraryData.renameFolder,
+    renameArtifact: libraryData.renameArtifact,
+    removeFolder: libraryData.removeFolder,
+    removeArtifact: libraryData.removeArtifact,
   };
 
   return (
     <>
-      <WorkspaceDriveLibrary
+      <WorkspaceLibraryBoard
         workspaceName={workspaceName}
         workspaceId={workspaceId}
         titleSlot={titleSlot}
         onActiveFolderChange={onActiveFolderChange}
-        folders={drive.folders}
-        artifacts={drive.artifacts}
-        workspaces={drive.workspaces}
+        folders={libraryData.folders}
+        artifacts={libraryData.artifacts}
+        workspaces={libraryData.workspaces}
         {...dialogState.libraryHandlers}
         isArtifactSelected={isArtifactSelected}
         onToggleArtifactContext={onToggleArtifactContext}
@@ -105,19 +105,19 @@ export function WorkspaceLibrarySurface({
           router.push(`/app/workspaces/${workspaceId}/artifacts/${artifactId}`)
         }
         onMoveArtifact={async (artifactId, target) => {
-          await drive.moveArtifact({
+          await libraryData.moveArtifact({
             artifactId: toArtifactId(artifactId),
             folderId: target === "root" ? undefined : toWorkspaceFolderId(target),
           });
         }}
         onMoveArtifactToWorkspace={async (artifactId, targetWorkspaceId) => {
-          await drive.moveArtifact({
+          await libraryData.moveArtifact({
             artifactId: toArtifactId(artifactId),
             targetWorkspaceId: toWorkspaceId(targetWorkspaceId),
           });
         }}
         onMoveFolderToWorkspace={async (folderId, targetWorkspaceId) => {
-          await drive.moveFolder({
+          await libraryData.moveFolder({
             folderId: toWorkspaceFolderId(folderId),
             targetWorkspaceId: toWorkspaceId(targetWorkspaceId),
           });
@@ -127,8 +127,8 @@ export function WorkspaceLibrarySurface({
             files,
             workspaceId,
             folderId,
-            generateUploadUrl: drive.generateUploadUrl,
-            createUploadedArtifact: drive.createUploadedArtifact,
+            generateUploadUrl: libraryData.generateUploadUrl,
+            createUploadedArtifact: libraryData.createUploadedArtifact,
             onFileChange: options?.onFileChange,
           });
         }}
@@ -142,7 +142,7 @@ export function WorkspaceLibrarySurface({
       />
       <WorkspaceLibraryDialogsStack
         workspaceId={workspaceId}
-        workspaceName={drive.workspace?.name ?? workspaceName}
+        workspaceName={libraryData.workspace?.name ?? workspaceName}
         activeFolderId={activeFolderId}
         mutations={libraryMutations}
         dialogState={dialogState}

@@ -2,15 +2,15 @@
 
 import { useMemo, useRef, useState } from "react";
 import { FolderIcon } from "lucide-react";
-import { DriveArtifactCard } from "@/components/drive-artifact-card";
-import { useDriveItemClick } from "../hooks/use-drive-item-click";
+import { LibraryArtifactCard } from "@/components/library-artifact-card";
+import { useLibraryItemClick } from "../hooks/use-library-item-click";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
-import { driveArtifactGridClass } from "@/lib/drive-grid";
+import { libraryArtifactGridClass } from "@/lib/library-grid";
 import { cn } from "@/lib/utils";
 import {
   ArtifactContextMenuContent,
   FolderContextMenuContent,
-} from "./workspace-drive-context-menus";
+} from "./workspace-library-context-menus";
 import type {
   FolderSummary,
   MoveTargetOption,
@@ -27,7 +27,7 @@ import {
 
 const MIN_MARQUEE_SIZE = 6;
 
-export function WorkspaceDriveGrid({
+export function WorkspaceLibraryGrid({
   folders,
   artifacts,
   workspaceId,
@@ -128,122 +128,143 @@ export function WorkspaceDriveGrid({
   };
 
   return (
-    <div className="flex flex-col gap-4 sm:gap-5">
+    <div className="flex flex-col gap-9">
       {folders.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          {folders.map((folder) => (
-            <FolderTile
-              key={folder._id}
-              folder={folder}
-              isDropTarget={dragArtifactId !== null}
-              onOpen={() => onOpenFolder(folder._id)}
-              onRename={() => onRenameFolder(folder)}
-              onDelete={() => onDeleteFolder(folder)}
-              onMoveToWorkspace={(targetWorkspaceId) =>
-                onMoveFolderToWorkspace(folder._id, targetWorkspaceId)
-              }
-              onDrop={() => onDropArtifactOnFolder(folder._id)}
-              workspaces={workspaces}
-            />
-          ))}
-        </div>
-      ) : null}
-      {artifacts.length > 0 ? (
-        <div className="relative">
-          {selectedArtifactIds.length > 0 || marquee ? (
-            <div className="pointer-events-none absolute right-0 top-0 z-10 flex translate-y-[-calc(100%+0.5rem)] items-center gap-2 rounded-lg border border-border bg-card/95 px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground shadow-sm">
-              <span>{selectionCountLabel(marquee ? previewIds.length : selectedArtifactIds.length)}</span>
-              {selectedArtifactIds.length > 0 ? (
-                <button
-                  type="button"
-                  className="pointer-events-auto rounded-md px-1.5 py-0.5 text-foreground transition-colors hover:bg-muted"
-                  onClick={() => onSetArtifactContextSelection([])}
-                >
-                  Bersihkan
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-          <div
-            ref={gridRef}
-            className={cn(driveArtifactGridClass, "relative")}
-            onPointerDown={(event) => {
-              if (event.button !== 0 || event.target !== event.currentTarget) return;
-              event.preventDefault();
-              event.currentTarget.setPointerCapture(event.pointerId);
-              const point = { x: event.clientX, y: event.clientY };
-              setMarquee({
-                start: point,
-                current: point,
-                mode: event.metaKey || event.ctrlKey ? "toggle" : "add",
-              });
-              setLocalSelectionRect(
-                toLocalRect(
-                  normalizeMarqueeRect(point, point),
-                  event.currentTarget.getBoundingClientRect(),
-                ),
-              );
-              setPreviewIds([]);
-            }}
-            onPointerMove={(event) => {
-              if (!marquee) return;
-              const current = { x: event.clientX, y: event.clientY };
-              const rect = normalizeMarqueeRect(marquee.start, current);
-              setMarquee((state) => state ? { ...state, current } : state);
-              setLocalSelectionRect(
-                toLocalRect(rect, event.currentTarget.getBoundingClientRect()),
-              );
-              updatePreview(rect);
-            }}
-            onPointerUp={endMarquee}
-            onPointerCancel={endMarquee}
-          >
-            {artifacts.map((artifact) => (
-              <ArtifactTile
-                key={artifact._id}
-                refCallback={(element) => {
-                  if (element) {
-                    tileRefs.current.set(artifact._id, element);
-                  } else {
-                    tileRefs.current.delete(artifact._id);
-                  }
-                }}
-                artifact={artifact}
-                workspaceId={workspaceId}
-                moveTargets={moveTargets}
-                isDragging={dragArtifactId === artifact._id}
-                isSelected={getPreviewSelectedState({
-                  selected: isArtifactSelected(artifact._id),
-                  previewed: previewIdSet.has(artifact._id),
-                  mode: marquee?.mode ?? "add",
-                })}
-                onSelect={() => onToggleArtifactContext(artifact._id)}
-                onOpen={() => onOpenArtifact(artifact._id)}
-                onRename={() => onRenameArtifact(artifact)}
-                onDelete={() => onDeleteArtifact(artifact)}
-                onMove={(target) => onMoveArtifact(artifact._id, target)}
+        <section className="flex flex-col gap-5">
+          <LibrarySectionHeader title="Folders" />
+          <div className="flex flex-wrap gap-2">
+            {folders.map((folder) => (
+              <FolderTile
+                key={folder._id}
+                folder={folder}
+                isDropTarget={dragArtifactId !== null}
+                onOpen={() => onOpenFolder(folder._id)}
+                onRename={() => onRenameFolder(folder)}
+                onDelete={() => onDeleteFolder(folder)}
                 onMoveToWorkspace={(targetWorkspaceId) =>
-                  onMoveArtifactToWorkspace(artifact._id, targetWorkspaceId)
+                  onMoveFolderToWorkspace(folder._id, targetWorkspaceId)
                 }
-                onDragStart={() => onDragArtifactStart(artifact._id)}
-                onDragEnd={onDragArtifactEnd}
+                onDrop={() => onDropArtifactOnFolder(folder._id)}
                 workspaces={workspaces}
               />
             ))}
-            {localSelectionRect ? (
-              <div
-                className="pointer-events-none absolute z-20 rounded-md border border-primary/60 bg-primary/10"
-                style={{
-                  left: localSelectionRect.left,
-                  top: localSelectionRect.top,
-                  width: localSelectionRect.width,
-                  height: localSelectionRect.height,
-                }}
-              />
-            ) : null}
           </div>
-        </div>
+        </section>
       ) : null}
+      <section className="flex flex-col gap-5">
+        <LibrarySectionHeader title={`All items (${artifacts.length})`} />
+        {artifacts.length > 0 ? (
+          <div className="relative">
+            {selectedArtifactIds.length > 0 || marquee ? (
+              <div className="pointer-events-none absolute right-0 top-0 z-10 flex translate-y-[-calc(100%+0.5rem)] items-center gap-2 rounded-lg border border-border bg-card/95 px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground shadow-sm">
+                <span>
+                  {selectionCountLabel(
+                    marquee ? previewIds.length : selectedArtifactIds.length,
+                  )}
+                </span>
+                {selectedArtifactIds.length > 0 ? (
+                  <button
+                    type="button"
+                    className="pointer-events-auto rounded-md px-1.5 py-0.5 text-foreground transition-colors hover:bg-muted"
+                    onClick={() => onSetArtifactContextSelection([])}
+                  >
+                    Bersihkan
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+            <div
+              ref={gridRef}
+              className={cn(libraryArtifactGridClass, "relative")}
+              onPointerDown={(event) => {
+                if (event.button !== 0 || event.target !== event.currentTarget) return;
+                event.preventDefault();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                const point = { x: event.clientX, y: event.clientY };
+                setMarquee({
+                  start: point,
+                  current: point,
+                  mode: event.metaKey || event.ctrlKey ? "toggle" : "add",
+                });
+                setLocalSelectionRect(
+                  toLocalRect(
+                    normalizeMarqueeRect(point, point),
+                    event.currentTarget.getBoundingClientRect(),
+                  ),
+                );
+                setPreviewIds([]);
+              }}
+              onPointerMove={(event) => {
+                if (!marquee) return;
+                const current = { x: event.clientX, y: event.clientY };
+                const rect = normalizeMarqueeRect(marquee.start, current);
+                setMarquee((state) => state ? { ...state, current } : state);
+                setLocalSelectionRect(
+                  toLocalRect(rect, event.currentTarget.getBoundingClientRect()),
+                );
+                updatePreview(rect);
+              }}
+              onPointerUp={endMarquee}
+              onPointerCancel={endMarquee}
+            >
+              {artifacts.map((artifact) => (
+                <ArtifactTile
+                  key={artifact._id}
+                  refCallback={(element) => {
+                    if (element) {
+                      tileRefs.current.set(artifact._id, element);
+                    } else {
+                      tileRefs.current.delete(artifact._id);
+                    }
+                  }}
+                  artifact={artifact}
+                  workspaceId={workspaceId}
+                  moveTargets={moveTargets}
+                  isDragging={dragArtifactId === artifact._id}
+                  isSelected={getPreviewSelectedState({
+                    selected: isArtifactSelected(artifact._id),
+                    previewed: previewIdSet.has(artifact._id),
+                    mode: marquee?.mode ?? "add",
+                  })}
+                  onSelect={() => onToggleArtifactContext(artifact._id)}
+                  onOpen={() => onOpenArtifact(artifact._id)}
+                  onRename={() => onRenameArtifact(artifact)}
+                  onDelete={() => onDeleteArtifact(artifact)}
+                  onMove={(target) => onMoveArtifact(artifact._id, target)}
+                  onMoveToWorkspace={(targetWorkspaceId) =>
+                    onMoveArtifactToWorkspace(artifact._id, targetWorkspaceId)
+                  }
+                  onDragStart={() => onDragArtifactStart(artifact._id)}
+                  onDragEnd={onDragArtifactEnd}
+                  workspaces={workspaces}
+                />
+              ))}
+              {localSelectionRect ? (
+                <div
+                  className="pointer-events-none absolute z-20 rounded-md border border-primary/60 bg-primary/10"
+                  style={{
+                    left: localSelectionRect.left,
+                    top: localSelectionRect.top,
+                    width: localSelectionRect.width,
+                    height: localSelectionRect.height,
+                  }}
+                />
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </section>
+    </div>
+  );
+}
+
+function LibrarySectionHeader({ title }: { title: string }) {
+  return (
+    <div className="flex items-center gap-5">
+      <h2 className="shrink-0 text-[15px] font-semibold leading-none text-foreground">
+        {title}
+      </h2>
+      <div className="h-px min-w-0 flex-1 bg-border/70" />
     </div>
   );
 }
@@ -369,7 +390,7 @@ function ArtifactTile({
   onDragStart: () => void;
   onDragEnd: () => void;
 }) {
-  const { handleClick, handleDoubleClick } = useDriveItemClick({
+  const { handleClick, handleDoubleClick } = useLibraryItemClick({
     onSingleClick: onSelect,
     onDoubleClick: onOpen,
   });
@@ -388,10 +409,10 @@ function ArtifactTile({
           }}
           onDragEnd={onDragEnd}
         >
-          <DriveArtifactCard
+          <LibraryArtifactCard
             title={artifact.title}
             artifactType={artifact.artifactType}
-            plainTextPreview={artifact.plainTextPreview}
+            createdAt={artifact.createdAt}
             isSelected={isSelected}
             onClick={handleClick}
             onDoubleClick={handleDoubleClick}

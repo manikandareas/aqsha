@@ -3,7 +3,7 @@
 import { FileTextIcon, FolderIcon, LinkIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export function WorkspaceDriveEmpty({
+export function WorkspaceLibraryEmpty({
   variant,
   title,
   description,

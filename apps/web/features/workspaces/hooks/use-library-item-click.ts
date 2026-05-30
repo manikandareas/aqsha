@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 
 const CLICK_DELAY_MS = 250;
 
-export function useDriveItemClick({
+export function useLibraryItemClick({
   onSingleClick,
   onDoubleClick,
 }: {
