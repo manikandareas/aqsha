@@ -36,6 +36,7 @@ import type {
   DraftContextArtifact,
   SendMessage,
   StartThread,
+  ThreadSummary,
 } from "./component-types";
 import { Composer } from "./composer";
 import { HitlDock } from "./hitl-dock";
@@ -62,6 +63,7 @@ export function ChatThreadState({
   contextArtifacts = emptyContextArtifacts,
   onRemoveContextArtifact,
   threadWorkspaceId,
+  threads = [],
 }: {
   threadId?: string;
   isLoading: boolean;
@@ -77,6 +79,7 @@ export function ChatThreadState({
   contextArtifacts?: DraftContextArtifact[];
   onRemoveContextArtifact?: (artifactId: string) => void;
   threadWorkspaceId?: string;
+  threads?: ThreadSummary[];
 }) {
   const { isAuthenticated } = useConvexAuth();
   const hitlSession = useConvexQueryData(
@@ -100,6 +103,7 @@ export function ChatThreadState({
       <HomeStartState
         rateStatus={rateStatus}
         startThread={startThread}
+        threads={threads}
         contextArtifacts={contextArtifacts}
         onRemoveContextArtifact={onRemoveContextArtifact}
       />

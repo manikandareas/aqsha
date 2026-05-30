@@ -3,10 +3,12 @@
 import {
   AlertCircleIcon,
   ArrowUpIcon,
+  ArrowUpRightIcon,
   ChevronDownIcon,
   FileTextIcon,
   LayoutGridIcon,
   Loader2Icon,
+  MessageSquareIcon,
   MicIcon,
   PaperclipIcon,
   SparklesIcon,
@@ -16,6 +18,7 @@ import {
 import { api } from "@aqsha/convex/api";
 import { LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { useRouter } from "next/navigation";
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { MAX_UPLOAD_BYTES } from "@aqsha/convex/artifact-upload-limits";
 import type { PromptCommand } from "@aqsha/convex/prompt-commands";
@@ -50,6 +53,7 @@ import type {
   DraftContextArtifact,
   SendMessage,
   StartThread,
+  ThreadSummary,
 } from "./component-types";
 import { TokenizedPromptInput } from "./composer-token-input";
 
@@ -85,6 +89,8 @@ type ComposerSharedProps = {
   activeRun?: ResearchRun;
   onCancelRun?: (runId: string) => Promise<unknown>;
   hitlBlocking?: boolean;
+  showSuggestions?: boolean;
+  threads?: ThreadSummary[];
 };
 
 export type ComposerProps = ComposerSharedProps &
@@ -119,12 +125,13 @@ export function Composer(props: ComposerProps) {
     onThreadCreated,
     contextArtifacts = [],
     onRemoveContextArtifact,
-    variant = "docked",
     contextLabel,
     showVoiceInput = false,
     activeRun,
     onCancelRun,
     hitlBlocking = false,
+    showSuggestions = false,
+    threads = [],
   } = props;
 
   const threadId = props.mode === "thread" ? props.threadId : undefined;
@@ -372,15 +379,17 @@ export function Composer(props: ComposerProps) {
     }
   };
 
+  const handleSuggestionSelect = (prompt: string) => {
+    setInlineCommands([]);
+    setContent(prompt);
+  };
+
   return (
-    <div className="flex w-full flex-col">
+    <div className="flex w-full flex-col gap-8">
       <motion.div
         initial={false}
         layout
-        className={cn(
-          "w-full overflow-hidden border border-border/85 bg-card/95 text-foreground shadow-sm",
-          variant === "hero" && "shadow-aqsha",
-        )}
+        className="w-full overflow-hidden border border-border/85 bg-card/95 text-foreground"
         animate={{
           borderRadius: shellExpanded ? COMPOSER_EXPANDED_RADIUS : COMPOSER_COLLAPSED_RADIUS,
         }}
@@ -499,7 +508,121 @@ export function Composer(props: ComposerProps) {
           </LayoutGroup>
         </PromptInput>
       </motion.div>
+      {showSuggestions && !disabled ? (
+        <ComposerStartPanel
+          threads={threads}
+          onSelectSuggestion={handleSuggestionSelect}
+          onSelectThread={(selectedThreadId) => router.push(`/app/threads/${selectedThreadId}`)}
+        />
+      ) : null}
     </div>
+  );
+}
+
+const composerSuggestions = [
+  {
+    emoji: "🔎",
+    label: "Cari sumber akademik",
+    prompt: "Cari sumber akademik terbaru tentang dampak AI pada pembelajaran mandiri.",
+  },
+  {
+    emoji: "🧭",
+    label: "Buat peta riset",
+    prompt: "Buat peta riset awal untuk topik literasi digital siswa SMA.",
+  },
+  {
+    emoji: "🧪",
+    label: "Susun metodologi",
+    prompt: "Susun rancangan metodologi penelitian kualitatif untuk evaluasi chatbot belajar.",
+  },
+  {
+    emoji: "📝",
+    label: "Buat outline tulisan",
+    prompt: "Buat outline artikel ilmiah tentang penggunaan AI sebagai tutor personal.",
+  },
+] as const;
+
+function ComposerStartPanel({
+  threads,
+  onSelectThread,
+  onSelectSuggestion,
+}: {
+  threads: ThreadSummary[];
+  onSelectThread: (threadId: string) => void;
+  onSelectSuggestion: (prompt: string) => void;
+}) {
+  const recentThreads = threads.toSorted((a, b) => b.lastActivityAt - a.lastActivityAt).slice(0, 4);
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-[1.05fr_0.95fr]">
+      <ComposerStartColumn title="Thread terbaru">
+        {recentThreads.length > 0 ? (
+          recentThreads.map((thread, index) => (
+            <button
+              key={thread.threadId}
+              type="button"
+              onClick={() => onSelectThread(thread.threadId)}
+              className="group grid min-h-8 animate-in grid-cols-[auto_1fr_auto] items-center gap-2 rounded-lg bg-background/45 px-2.5 text-left fade-in slide-in-from-bottom-1 transition-all duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-card active:-translate-y-px"
+              style={{ animationDelay: `${index * 35}ms` }}
+            >
+              <MessageSquareIcon
+                className="size-3.5 shrink-0 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground"
+                aria-hidden
+              />
+              <span className="min-w-0 truncate text-[12px] font-medium text-muted-foreground transition-colors group-hover:text-foreground">
+                {thread.title}
+              </span>
+              <ArrowUpRightIcon
+                className="size-3.5 shrink-0 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground"
+                aria-hidden
+              />
+            </button>
+          ))
+        ) : (
+          <p className="rounded-xl bg-background/45 px-3 py-3 text-[12px] leading-5 text-muted-foreground">
+            Belum ada thread terbaru.
+          </p>
+        )}
+      </ComposerStartColumn>
+
+      <ComposerStartColumn title="Suggestion">
+        {composerSuggestions.map((item, index) => (
+          <button
+            key={item.label}
+            type="button"
+            onClick={() => onSelectSuggestion(item.prompt)}
+            className="group flex min-h-8 animate-in items-center gap-2 rounded-lg bg-background/45 px-2.5 text-left text-[12px] font-medium text-muted-foreground fade-in slide-in-from-bottom-1 transition-all duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-card hover:text-foreground active:-translate-y-px"
+            style={{ animationDelay: `${(index + recentThreads.length) * 35}ms` }}
+            aria-label={`Gunakan suggestion: ${item.label}`}
+          >
+            <span
+              className="grid size-5 shrink-0 place-items-center rounded-md bg-muted/55 text-[12px] transition-colors group-hover:bg-muted"
+              aria-hidden
+            >
+              {item.emoji}
+            </span>
+            <span className="min-w-0 truncate">{item.label}</span>
+          </button>
+        ))}
+      </ComposerStartColumn>
+    </div>
+  );
+}
+
+function ComposerStartColumn({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="grid min-w-0 gap-2">
+      <h2 className="px-1 text-left text-[12px] font-semibold tracking-normal text-foreground/72">
+        {title}
+      </h2>
+      <div className="grid gap-1.5">{children}</div>
+    </section>
   );
 }
 

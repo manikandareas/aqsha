@@ -1,28 +1,25 @@
 "use client";
 
 import {
-  Suggestion,
-  Suggestions,
-} from "@/components/ai-elements/suggestion";
-import {
   panelComposerPaddingClass,
   threadTranscriptColumnClass,
 } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
 import type { RateStatus } from "../types";
-import type { DraftContextArtifact, StartThread } from "./component-types";
+import type { DraftContextArtifact, StartThread, ThreadSummary } from "./component-types";
 import { ComposerHeroState } from "./composer-hero-state";
 import { Composer } from "./composer";
-import { applySuggestion } from "./shared";
 
 export function HomeStartState({
   rateStatus,
   startThread,
+  threads,
   contextArtifacts,
   onRemoveContextArtifact,
 }: {
   rateStatus: RateStatus | undefined;
   startThread: StartThread;
+  threads: ThreadSummary[];
   contextArtifacts?: DraftContextArtifact[];
   onRemoveContextArtifact?: (artifactId: string) => void;
 }) {
@@ -33,7 +30,7 @@ export function HomeStartState({
           <ComposerHeroState
             headerClassName="mb-8 gap-2.5"
             logoClassName="size-8 text-mint"
-            titleClassName="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl leading-none"
+            titleClassName="font-sans text-2xl font-bold tracking-tight text-foreground sm:text-3xl leading-none"
           >
             <Composer
               mode="draft"
@@ -41,8 +38,10 @@ export function HomeStartState({
               disabled={false}
               rateStatus={rateStatus}
               onStartThread={startThread}
+              threads={threads}
               contextArtifacts={contextArtifacts}
               onRemoveContextArtifact={onRemoveContextArtifact}
+              showSuggestions
             />
           </ComposerHeroState>
         </div>
@@ -67,29 +66,6 @@ export function EmptyThreadCopy({ title }: { title?: string }) {
             dan menjaga riset tetap rapi.
           </p>
         </div>
-        <Suggestions className="mx-auto max-w-full justify-center">
-          <Suggestion
-            suggestion="Cari sumber tentang dampak AI pada pembelajaran mandiri."
-            onClick={applySuggestion}
-            className="border-mint-soft-border bg-mint-soft text-mint-foreground hover:bg-mint-soft"
-          >
-            Cari sumber tentang…
-          </Suggestion>
-          <Suggestion
-            suggestion="Buat ringkasan literatur tentang retrieval augmented generation untuk pendidikan."
-            onClick={applySuggestion}
-            className="border-sky-soft-border bg-sky-soft text-sky-foreground hover:bg-sky-soft"
-          >
-            Buat ringkasan literatur…
-          </Suggestion>
-          <Suggestion
-            suggestion="Bandingkan dua teori belajar konstruktivisme dan connectivism dengan sumber akademik."
-            onClick={applySuggestion}
-            className="border-lavender-soft-border bg-lavender-soft text-lavender-foreground hover:bg-lavender-soft"
-          >
-            Bandingkan dua teori…
-          </Suggestion>
-        </Suggestions>
       </div>
     </div>
   );

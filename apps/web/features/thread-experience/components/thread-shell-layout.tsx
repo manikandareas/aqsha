@@ -87,6 +87,7 @@ export function ThreadShellLayout({
                     runs={runs}
                     artifacts={artifacts}
                     sources={sources}
+                    threads={threads}
                     onCancelRun={onCancelRun}
                     contextArtifacts={contextArtifacts}
                     onRemoveContextArtifact={onRemoveContextArtifact}
