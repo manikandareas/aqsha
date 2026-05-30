@@ -73,21 +73,21 @@ export function EmptyThreadCopy({ title }: { title?: string }) {
             onClick={applySuggestion}
             className="border-mint-soft-border bg-mint-soft text-mint-foreground hover:bg-mint-soft"
           >
-            Cari sumber tentang...
+            Cari sumber tentang…
           </Suggestion>
           <Suggestion
             suggestion="Buat ringkasan literatur tentang retrieval augmented generation untuk pendidikan."
             onClick={applySuggestion}
             className="border-sky-soft-border bg-sky-soft text-sky-foreground hover:bg-sky-soft"
           >
-            Buat ringkasan literatur...
+            Buat ringkasan literatur…
           </Suggestion>
           <Suggestion
             suggestion="Bandingkan dua teori belajar konstruktivisme dan connectivism dengan sumber akademik."
             onClick={applySuggestion}
             className="border-lavender-soft-border bg-lavender-soft text-lavender-foreground hover:bg-lavender-soft"
           >
-            Bandingkan dua teori...
+            Bandingkan dua teori…
           </Suggestion>
         </Suggestions>
       </div>

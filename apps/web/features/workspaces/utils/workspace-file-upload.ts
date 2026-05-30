@@ -79,7 +79,7 @@ export async function runLimitedConcurrency<T>(
   );
 }
 
-export async function uploadWorkspaceFile({
+async function uploadWorkspaceFile({
   file,
   workspaceId,
   folderId,
@@ -185,7 +185,7 @@ export async function uploadWorkspaceFiles({
   return results;
 }
 
-export function uploadFileToStorage({
+function uploadFileToStorage({
   file,
   uploadUrl,
   onProgress,

@@ -9,9 +9,7 @@ import {
   ImageIcon,
   LinkIcon,
   TableIcon,
-} from "lucide-react";
-import { memo } from "react";
-import { cn } from "@/lib/utils";
+} from "lucide-react";import { cn } from "@/lib/utils";
 
 function LibraryArtifactCardComponent({
   title,
@@ -45,7 +43,7 @@ function LibraryArtifactCardComponent({
         onDoubleClick={onDoubleClick}
         aria-pressed={isSelected}
         aria-label={`${title}. Klik untuk ${isSelected ? "hapus dari" : "tambah ke"} konteks.`}
-        className="flex min-h-0 flex-1 flex-col px-5 py-5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        className="flex min-h-0 flex-1 flex-col p-5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
         <div className="flex items-center">
           <span className="inline-flex h-7 shrink-0 items-center justify-center rounded-[8px] bg-muted px-2 text-[12px] font-semibold leading-none text-muted-foreground">
@@ -68,7 +66,7 @@ function LibraryArtifactCardComponent({
   );
 }
 
-export const LibraryArtifactCard = memo(LibraryArtifactCardComponent);
+export const LibraryArtifactCard = LibraryArtifactCardComponent;
 
 function formatYear(timestamp: number) {
   const year = new Date(timestamp).getFullYear();

@@ -1,8 +1,6 @@
 "use client";
 
-import { parseAsString, useQueryState } from "nuqs";
-import { useMemo } from "react";
-import { resolveActiveFolderId, type ArtifactGroup } from "../utils/workspace-library-model";
+import { parseAsString, useQueryState } from "nuqs";import { resolveActiveFolderId, type ArtifactGroup } from "../utils/workspace-library-model";
 
 export function useWorkspaceFolderNav(groups: ArtifactGroup[]) {
   const [folderParam, setFolderParam] = useQueryState(
@@ -13,10 +11,7 @@ export function useWorkspaceFolderNav(groups: ArtifactGroup[]) {
     }),
   );
 
-  const activeFolderId = useMemo(
-    () => resolveActiveFolderId({ activeFolderId: folderParam, groups }),
-    [folderParam, groups],
-  );
+  const activeFolderId = resolveActiveFolderId({ activeFolderId: folderParam, groups });
 
   const openFolder = (folderId: string) => {
     void setFolderParam(folderId);

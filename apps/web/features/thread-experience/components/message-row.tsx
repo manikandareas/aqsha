@@ -88,7 +88,7 @@ export function MessageRow({
 
   return (
     <Message from="assistant" className="min-w-0 overflow-x-hidden">
-      <MessageContent className="w-full min-w-0 overflow-hidden bg-transparent px-0 py-0 text-[13px] leading-[1.55] text-ink-soft">
+      <MessageContent className="w-full min-w-0 overflow-hidden bg-transparent p-0 text-[13px] leading-[1.55] text-ink-soft">
         {hasText ? (
           <MessageResponse className="aqsha-prose aqsha-prose-message">
             {text}
@@ -176,8 +176,10 @@ function UserMessageContextArtifactCard({
         workspaceId: String(result.workspaceId),
         workspaceName: result.workspaceName,
       });
-    } finally {
       setIsSaving(false);
+    } catch (error) {
+      setIsSaving(false);
+      throw error;
     }
   };
 

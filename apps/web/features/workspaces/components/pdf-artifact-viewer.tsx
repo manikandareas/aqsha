@@ -60,7 +60,7 @@ export function PdfArtifactViewer({
           loading={
             <span className="inline-flex items-center gap-2 text-[13px] font-medium text-muted-foreground">
               <Loader2Icon className="size-4 animate-spin" />
-              Memuat PDF...
+              Memuat PDF…
             </span>
           }
           error={

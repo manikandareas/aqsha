@@ -30,11 +30,11 @@ export function useDisplayNameEditor(savedName: string | null) {
     setError(null);
     try {
       await updateDisplayName({ name: trimmedDraft });
+      setSaving(false);
     } catch (saveError) {
       const message =
         saveError instanceof Error ? saveError.message : "Gagal menyimpan nama tampilan.";
       setError(message);
-    } finally {
       setSaving(false);
     }
   };

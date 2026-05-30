@@ -63,14 +63,14 @@ export type FolderView = {
 
 export const ROOT_FOLDER_LABEL = "Semua file";
 
-export function sortFolders(folders: WorkspaceFolder[]) {
+function sortFolders(folders: WorkspaceFolder[]) {
   return [...folders].sort((a, b) => {
     const byName = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
     return byName || b.updatedAt - a.updatedAt;
   });
 }
 
-export function sortArtifacts(artifacts: WorkspaceArtifact[]) {
+function sortArtifacts(artifacts: WorkspaceArtifact[]) {
   return [...artifacts].sort((a, b) => {
     if (b.updatedAt !== a.updatedAt) return b.updatedAt - a.updatedAt;
     return a.title.localeCompare(b.title, undefined, { sensitivity: "base" });

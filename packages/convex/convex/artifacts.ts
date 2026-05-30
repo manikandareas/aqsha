@@ -64,6 +64,11 @@ const artifactTypeValidator = v.union(
   v.literal("url"),
 );
 
+const detectedDocumentKindValidator = v.union(
+  v.literal("generic"),
+  v.literal("scholarly_paper"),
+);
+
 const generatedArtifactTypeValidator = v.union(
   v.literal("markdown"),
   v.literal("plain_text"),
@@ -285,7 +290,7 @@ export const createDocument = mutation({
       createdAt: now,
       updatedAt: now,
     });
-    await ctx.db.insert("artifactDocuments", {
+    await ctx.db.insert("artifactContents", {
       ownerUserId: user._id,
       workspaceId: args.workspaceId,
       artifactId,
@@ -694,7 +699,7 @@ export const updateMarkdownInternal = internalMutation({
       indexingStatus: "ready",
       updatedAt: now,
     });
-    await ctx.db.patch("artifactDocuments", row._id, {
+    await ctx.db.patch("artifactContents", row._id, {
       blocksJson: inlineBlocksJson,
       markdown: inlineMarkdown,
       plainText: inlinePlainText,
@@ -739,7 +744,7 @@ export const createThreadAttachmentInternal = internalMutation({
       createdAt: now,
       updatedAt: now,
     });
-    await ctx.db.insert("artifactDocuments", {
+    await ctx.db.insert("artifactContents", {
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
       artifactId,
@@ -776,7 +781,7 @@ export const promoteAttachmentToWorkspaceInternal = internalMutation({
       threadId: undefined,
       updatedAt: now,
     });
-    await ctx.db.patch("artifactDocuments", row._id, {
+    await ctx.db.patch("artifactContents", row._id, {
       workspaceId: args.workspaceId,
       threadId: undefined,
       updatedAt: now,
@@ -940,7 +945,7 @@ export const createUploadedArtifactInternal = internalMutation({
       createdAt: now,
       updatedAt: now,
     });
-    await ctx.db.insert("artifactDocuments", {
+    await ctx.db.insert("artifactContents", {
       ownerUserId: args.ownerUserId,
       workspaceId: args.workspaceId,
       artifactId,
@@ -963,6 +968,10 @@ export const patchUploadedArtifactIndexed = internalMutation({
     indexedTextStorageId: v.optional(v.id("_storage")),
     markdownStorageId: v.optional(v.id("_storage")),
     ragEntryId: v.optional(v.string()),
+    title: v.optional(v.string()),
+    detectedDocumentKind: v.optional(detectedDocumentKindValidator),
+    plainTextPreview: v.optional(v.string()),
+    contextText: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const artifact = await assertUploadedArtifactOwner(ctx, args.artifactId, args.ownerUserId, {
@@ -975,15 +984,17 @@ export const patchUploadedArtifactIndexed = internalMutation({
     const inlineMarkdown =
       args.markdown.length <= ARTIFACT_BODY_INLINE_LIMIT ? args.markdown : undefined;
     await ctx.db.patch("artifacts", artifact._id, {
-      plainTextPreview: previewFromText(args.plainText),
-      contextText: contextFromText(args.plainText),
+      title: args.title ?? artifact.title,
+      detectedDocumentKind: args.detectedDocumentKind,
+      plainTextPreview: args.plainTextPreview ?? previewFromText(args.plainText),
+      contextText: args.contextText ?? contextFromText(args.plainText),
       indexingStatus: "ready",
       indexingFailureReason: undefined,
-      ragEntryId: args.ragEntryId,
-      indexedAt: args.ragEntryId ? now : undefined,
+      ragEntryId: args.ragEntryId ?? artifact.ragEntryId,
+      indexedAt: args.ragEntryId ? now : artifact.indexedAt,
       updatedAt: now,
     });
-    await ctx.db.patch("artifactDocuments", row._id, {
+    await ctx.db.patch("artifactContents", row._id, {
       markdown: inlineMarkdown,
       plainText: inlinePlainText,
       storageId: args.indexedTextStorageId,
@@ -1165,7 +1176,7 @@ export const createArtifactFromAgentInternal = internalMutation({
       createdAt: now,
       updatedAt: now,
     });
-    await ctx.db.insert("artifactDocuments", {
+    await ctx.db.insert("artifactContents", {
       ownerUserId: args.ownerUserId,
       workspaceId: args.workspaceId,
       artifactId,
@@ -1215,7 +1226,7 @@ export const updateArtifactFromAgentInternal = internalMutation({
       indexingStatus: "ready",
       updatedAt: now,
     });
-    await ctx.db.patch("artifactDocuments", row._id, {
+    await ctx.db.patch("artifactContents", row._id, {
       blocksJson: artifactType === "markdown" ? "" : undefined,
       markdown: artifactType === "markdown" ? args.content : "",
       plainText,
@@ -1310,7 +1321,7 @@ async function getContentRowOrNull(
   ownerUserId: string,
 ) {
   return await ctx.db
-    .query("artifactDocuments")
+    .query("artifactContents")
     .withIndex("by_owner_artifact", (q) =>
       q.eq("ownerUserId", ownerUserId).eq("artifactId", artifactId),
     )

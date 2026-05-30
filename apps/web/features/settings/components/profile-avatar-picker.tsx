@@ -58,20 +58,24 @@ export function ProfileAvatarPicker({
       });
 
       if (!response.ok) {
-        throw new Error("Upload gagal. Coba lagi.");
+        setError("Upload gagal. Coba lagi.");
+        setUploading(false);
+        return;
       }
 
       const body = (await response.json()) as { storageId?: string };
       if (!body.storageId) {
-        throw new Error("ID penyimpanan tidak tersedia.");
+        setError("ID penyimpanan tidak tersedia.");
+        setUploading(false);
+        return;
       }
 
       await setAvatarFromStorage({ storageId: body.storageId as never });
+      setUploading(false);
     } catch (uploadError) {
       const message =
         uploadError instanceof Error ? uploadError.message : "Gagal memperbarui avatar.";
       setError(message);
-    } finally {
       setUploading(false);
     }
   };

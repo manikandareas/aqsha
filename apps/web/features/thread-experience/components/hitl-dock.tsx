@@ -3,7 +3,7 @@
 import { api } from "@aqsha/convex/api";
 import type { FunctionReturnType } from "convex/server";
 import { useMutation } from "convex/react";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { type WorkspaceId, toWorkspaceId } from "@/lib/convex-refs";
 import { HitlConfirmCard } from "./hitl-confirm-card";
 import { HitlPlanReviewCard } from "./hitl-plan-review-card";
@@ -41,20 +41,17 @@ export function HitlDock({
     ? session.cards.find((card) => card._id === session.activeCardId)
     : undefined;
 
-  const runMutation = useCallback(
-    async (action: () => Promise<unknown>, fallbackMessage: string) => {
+  const runMutation = async (action: () => Promise<unknown>, fallbackMessage: string) => {
       setError(null);
       setIsSubmitting(true);
       try {
         await action();
+        setIsSubmitting(false);
       } catch (mutationError) {
         setError(mutationError instanceof Error ? mutationError.message : fallbackMessage);
-      } finally {
         setIsSubmitting(false);
       }
-    },
-    [],
-  );
+    };
 
   if (!activeCard) {
     return null;

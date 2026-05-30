@@ -61,9 +61,9 @@ export function NavUser({ user }: { user: Viewer | undefined }) {
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
-              className="h-10 min-w-0 rounded-[8px] border border-sidebar-border/70 bg-muted/15 px-2.5 py-2.5 text-muted-foreground transition-[background-color,border-color,color] duration-150 ease-out hover:border-primary/20 hover:bg-primary/5 hover:text-foreground data-[state=open]:border-primary/25 data-[state=open]:bg-primary/8 data-[state=open]:text-foreground"
+              className="h-10 min-w-0 rounded-[8px] border border-sidebar-border/70 bg-muted/15 p-2.5 text-muted-foreground transition-[background-color,border-color,color] duration-150 ease-out hover:border-primary/20 hover:bg-primary/5 hover:text-foreground data-[state=open]:border-primary/25 data-[state=open]:bg-primary/8 data-[state=open]:text-foreground"
             >
-              <Avatar className="h-6 w-6 shrink-0 rounded-full ring-1 ring-sky-soft-border">
+              <Avatar className="size-6 shrink-0 rounded-full ring-1 ring-sky-soft-border">
                 {image ? <AvatarImage src={image} alt={name} /> : null}
                 <AvatarFallback className="rounded-full bg-sky-soft text-[10px] font-semibold text-sky-foreground">
                   {initials}
@@ -83,7 +83,7 @@ export function NavUser({ user }: { user: Viewer | undefined }) {
           >
             <DropdownMenuLabel className="p-2 font-normal">
               <div className="flex min-w-0 items-center gap-2">
-                <Avatar className="h-8 w-8 rounded-full ring-1 ring-sky-soft-border">
+                <Avatar className="size-8 rounded-full ring-1 ring-sky-soft-border">
                   {image ? <AvatarImage src={image} alt={name} /> : null}
                   <AvatarFallback className="rounded-full bg-sky-soft text-xs font-semibold text-sky-foreground">
                     {initials}

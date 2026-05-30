@@ -49,8 +49,10 @@ export function WorkspacePickerDialog({
       await onSelect(selectedWorkspaceId);
       onOpenChange(false);
       setSelectedWorkspaceId(null);
-    } finally {
       setIsSubmitting(false);
+    } catch (error) {
+      setIsSubmitting(false);
+      throw error;
     }
   };
 

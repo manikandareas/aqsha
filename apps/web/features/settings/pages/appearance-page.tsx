@@ -15,6 +15,11 @@ import { SettingsHeader } from "../components/settings-header";
 const subscribeToMount = () => () => {};
 const clientSnapshot = () => true;
 const serverSnapshot = () => false;
+const themeOptions = [
+  { key: "light", label: "Terang", icon: SunIcon },
+  { key: "dark", label: "Gelap", icon: MoonIcon },
+  { key: "system", label: "Sistem", icon: MonitorIcon },
+] as const;
 
 function useIsMounted() {
   return useSyncExternalStore(subscribeToMount, clientSnapshot, serverSnapshot);
@@ -24,11 +29,6 @@ export function SettingsAppearancePage() {
   const { theme, resolvedTheme, setTheme } = useTheme();
   const mounted = useIsMounted();
 
-  const options = [
-    { key: "light", label: "Terang", icon: SunIcon },
-    { key: "dark", label: "Gelap", icon: MoonIcon },
-    { key: "system", label: "Sistem", icon: MonitorIcon },
-  ] as const;
   const activeTheme = mounted ? theme ?? "system" : "system";
 
   return (
@@ -42,7 +42,7 @@ export function SettingsAppearancePage() {
         />
         <SettingsPanelBody>
           <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-border/60 bg-muted/50 p-1.5">
-            {options.map((option) => {
+            {themeOptions.map((option) => {
               const Icon = option.icon;
               const active = activeTheme === option.key;
               return (

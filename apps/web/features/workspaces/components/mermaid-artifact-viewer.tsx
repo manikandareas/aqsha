@@ -2,7 +2,7 @@
 
 import mermaid from "mermaid";
 import { Loader2Icon } from "lucide-react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 mermaid.initialize({
   startOnLoad: false,
@@ -12,10 +12,7 @@ mermaid.initialize({
 
 export function MermaidArtifactViewer({ source }: { source: string }) {
   const reactId = useId();
-  const diagramId = useMemo(
-    () => `artifact-mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`,
-    [reactId],
-  );
+  const diagramId = `artifact-mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const [rendered, setRendered] = useState<{
     source: string;
     svg: string;
@@ -53,7 +50,7 @@ export function MermaidArtifactViewer({ source }: { source: string }) {
     return (
       <div className="flex min-h-[240px] items-center justify-center gap-2 rounded-[8px] border border-border bg-muted/25 text-[13px] font-medium text-muted-foreground">
         <Loader2Icon className="size-4 animate-spin" />
-        Merender diagram...
+        Merender diagram…
       </div>
     );
   }

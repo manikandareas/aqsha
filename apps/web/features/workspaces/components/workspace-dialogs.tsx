@@ -74,9 +74,9 @@ function NameDialogContent({
     try {
       await onSubmit({ name: name.trim() });
       onOpenChange(false);
+      setIsSubmitting(false);
     } catch (submitError) {
       setError(errorMessage(submitError));
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -139,9 +139,9 @@ export function UrlDialog({
       setUrl("");
       setTitle("");
       onOpenChange(false);
+      setIsSubmitting(false);
     } catch (submitError) {
       setError(errorMessage(submitError));
-    } finally {
       setIsSubmitting(false);
     }
   };

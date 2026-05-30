@@ -331,6 +331,12 @@ async function finalizeUploadedDocument(
       markdownStorageId,
       ragEntryId,
     });
+    if (args.workspaceId && isPdfFile(args.fileName, args.mimeType)) {
+      await ctx.runMutation(internal.paperExtractions.queueGrobidExtraction, {
+        ownerUserId: args.ownerUserId,
+        artifactId: args.artifactId,
+      });
+    }
 
     return { artifactId: args.artifactId, title: args.title, indexed: Boolean(ragEntryId) };
   } catch (error) {
@@ -491,6 +497,10 @@ function isSupportedDocument(fileName: string, mimeType: string) {
     isCodeLikeName(lowerName) ||
     isTextLikeName(lowerName)
   );
+}
+
+function isPdfFile(fileName: string, mimeType: string) {
+  return mimeType.toLowerCase() === "application/pdf" || fileName.toLowerCase().endsWith(".pdf");
 }
 
 function isTextLikeName(lowerName: string) {

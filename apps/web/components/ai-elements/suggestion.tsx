@@ -7,8 +7,6 @@ import {
 } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import type { ComponentProps } from "react";
-import { useCallback } from "react";
-
 export type SuggestionsProps = ComponentProps<typeof ScrollArea>;
 
 export const Suggestions = ({
@@ -38,9 +36,9 @@ export const Suggestion = ({
   children,
   ...props
 }: SuggestionProps) => {
-  const handleClick = useCallback(() => {
+  const handleClick = () => {
     onClick?.(suggestion);
-  }, [onClick, suggestion]);
+  };
 
   return (
     <Button

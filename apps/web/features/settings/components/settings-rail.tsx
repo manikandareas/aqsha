@@ -61,7 +61,7 @@ export function SettingsRail({ viewer }: { viewer: Viewer | undefined }) {
         </div>
       </SidebarContent>
 
-      <SidebarFooter className="mt-auto px-3 py-3">
+      <SidebarFooter className="mt-auto p-3">
         <NavUser user={viewer} />
       </SidebarFooter>
     </Sidebar>

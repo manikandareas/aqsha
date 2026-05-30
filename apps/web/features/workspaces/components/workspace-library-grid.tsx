@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { FolderIcon } from "lucide-react";
 import { LibraryArtifactCard } from "@/components/library-artifact-card";
 import { useLibraryItemClick } from "../hooks/use-library-item-click";
@@ -87,15 +87,9 @@ export function WorkspaceLibraryGrid({
     height: number;
   } | null>(null);
 
-  const selectedArtifactIds = useMemo(
-    () => artifacts.filter((artifact) => isArtifactSelected(artifact._id)).map((artifact) => artifact._id),
-    [artifacts, isArtifactSelected],
-  );
-  const visibleArtifactIds = useMemo(
-    () => artifacts.map((artifact) => artifact._id),
-    [artifacts],
-  );
-  const previewIdSet = useMemo(() => new Set(previewIds), [previewIds]);
+  const selectedArtifactIds = artifacts.filter((artifact) => isArtifactSelected(artifact._id)).map((artifact) => artifact._id);
+  const visibleArtifactIds = artifacts.map((artifact) => artifact._id);
+  const previewIdSet = new Set(previewIds);
   const updatePreview = (rect: MarqueeRect) => {
     const targets = artifacts.map((artifact) => {
       const element = tileRefs.current.get(artifact._id);

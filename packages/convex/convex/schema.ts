@@ -40,6 +40,52 @@ const indexingStatusValidator = v.union(
   v.literal("failed"),
 );
 
+const detectedDocumentKindValidator = v.union(
+  v.literal("generic"),
+  v.literal("scholarly_paper"),
+);
+
+const artifactExtractorValidator = v.union(
+  v.literal("pdf_text"),
+  v.literal("docx_text"),
+  v.literal("url_reader"),
+  v.literal("grobid"),
+);
+
+const extractionStatusValidator = v.union(
+  v.literal("pending"),
+  v.literal("running"),
+  v.literal("ready"),
+  v.literal("failed"),
+);
+
+const artifactContentFields = {
+  ownerUserId: v.string(),
+  workspaceId: v.optional(v.id("workspaces")),
+  threadId: v.optional(v.string()),
+  artifactId: v.id("artifacts"),
+  blocksJson: v.optional(v.string()),
+  markdown: v.optional(v.string()),
+  plainText: v.optional(v.string()),
+  storageId: v.optional(v.id("_storage")),
+  blocksStorageId: v.optional(v.id("_storage")),
+  markdownStorageId: v.optional(v.id("_storage")),
+  uploadStorageId: v.optional(v.id("_storage")),
+  uploadFileName: v.optional(v.string()),
+  uploadMimeType: v.optional(v.string()),
+  uploadSize: v.optional(v.number()),
+  ingestionStatus: v.optional(v.union(
+    v.literal("pending"),
+    v.literal("ready"),
+    v.literal("failed"),
+  )),
+  ingestionFailureReason: v.optional(v.string()),
+  ragEntryId: v.optional(v.string()),
+  indexedAt: v.optional(v.number()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+};
+
 export default defineSchema(
   {
     users: defineTable({
@@ -478,6 +524,7 @@ export default defineSchema(
       byteSize: v.optional(v.number()),
       indexingStatus: v.optional(indexingStatusValidator),
       indexingFailureReason: v.optional(v.string()),
+      detectedDocumentKind: v.optional(detectedDocumentKindValidator),
       ragEntryId: v.optional(v.string()),
       indexedAt: v.optional(v.number()),
       body: v.optional(v.string()),
@@ -506,35 +553,67 @@ export default defineSchema(
         "status",
         "updatedAt",
       ]),
-    artifactDocuments: defineTable({
+    artifactContents: defineTable(artifactContentFields)
+      .index("by_owner_artifact", ["ownerUserId", "artifactId"])
+      .index("by_owner_thread", ["ownerUserId", "threadId"])
+      .index("by_owner_workspace_updated", ["ownerUserId", "workspaceId", "updatedAt"]),
+    artifactExtractions: defineTable({
       ownerUserId: v.string(),
-      workspaceId: v.optional(v.id("workspaces")),
-      threadId: v.optional(v.string()),
       artifactId: v.id("artifacts"),
-      blocksJson: v.optional(v.string()),
-      markdown: v.optional(v.string()),
-      plainText: v.optional(v.string()),
-      storageId: v.optional(v.id("_storage")),
-      blocksStorageId: v.optional(v.id("_storage")),
-      markdownStorageId: v.optional(v.id("_storage")),
-      uploadStorageId: v.optional(v.id("_storage")),
-      uploadFileName: v.optional(v.string()),
-      uploadMimeType: v.optional(v.string()),
-      uploadSize: v.optional(v.number()),
-      ingestionStatus: v.optional(v.union(
-        v.literal("pending"),
-        v.literal("ready"),
-        v.literal("failed"),
-      )),
-      ingestionFailureReason: v.optional(v.string()),
-      ragEntryId: v.optional(v.string()),
-      indexedAt: v.optional(v.number()),
+      workspaceId: v.optional(v.id("workspaces")),
+      extractor: artifactExtractorValidator,
+      status: extractionStatusValidator,
+      attemptId: v.optional(v.string()),
+      inputStorageId: v.optional(v.id("_storage")),
+      outputStorageId: v.optional(v.id("_storage")),
+      outputMimeType: v.optional(v.string()),
+      failureReason: v.optional(v.string()),
+      startedAt: v.optional(v.number()),
+      completedAt: v.optional(v.number()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_owner_artifact_extractor", [
+        "ownerUserId",
+        "artifactId",
+        "extractor",
+      ])
+      .index("by_owner_workspace_status_updated", [
+        "ownerUserId",
+        "workspaceId",
+        "status",
+        "updatedAt",
+      ]),
+    artifactPaperMetadata: defineTable({
+      ownerUserId: v.string(),
+      artifactId: v.id("artifacts"),
+      workspaceId: v.id("workspaces"),
+      title: v.optional(v.string()),
+      abstract: v.optional(v.string()),
+      doi: v.optional(v.string()),
+      authorsJson: v.optional(v.string()),
+      affiliationsJson: v.optional(v.string()),
+      journal: v.optional(v.string()),
+      publisher: v.optional(v.string()),
+      publishedYear: v.optional(v.number()),
+      keywordsJson: v.optional(v.string()),
+      referencesStorageId: v.optional(v.id("_storage")),
+      sectionsStorageId: v.optional(v.id("_storage")),
+      teiStorageId: v.optional(v.id("_storage")),
+      metadataSource: v.union(
+        v.literal("grobid"),
+        v.literal("crossref"),
+        v.literal("openalex"),
+        v.literal("manual"),
+        v.literal("llm"),
+      ),
+      confidence: v.optional(v.number()),
       createdAt: v.number(),
       updatedAt: v.number(),
     })
       .index("by_owner_artifact", ["ownerUserId", "artifactId"])
-      .index("by_owner_thread", ["ownerUserId", "threadId"])
-      .index("by_owner_workspace_updated", ["ownerUserId", "workspaceId", "updatedAt"]),
+      .index("by_owner_workspace_updated", ["ownerUserId", "workspaceId", "updatedAt"])
+      .index("by_owner_doi", ["ownerUserId", "doi"]),
     artifactUrls: defineTable({
       ownerUserId: v.string(),
       workspaceId: v.id("workspaces"),

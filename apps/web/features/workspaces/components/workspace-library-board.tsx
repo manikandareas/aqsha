@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FileTextIcon, FolderIcon, LinkIcon, UploadIcon } from "lucide-react";
 import {
   ContextMenu,
@@ -101,29 +101,19 @@ export function WorkspaceLibraryBoard({
   showCreateActions?: boolean;
   showWorkspaceSettings?: boolean;
 }) {
-  const groups = useMemo(
-    () => groupArtifactsByFolder({ folders, artifacts }),
-    [artifacts, folders],
-  );
+  const groups = groupArtifactsByFolder({ folders, artifacts });
   const { activeFolderId, openFolder, navigateTo } = useWorkspaceFolderNav(groups);
 
   useEffect(() => {
     onActiveFolderChange?.(activeFolderId);
   }, [activeFolderId, onActiveFolderChange]);
 
-  const folderView = useMemo(
-    () => getFolderView({ groups, activeFolderId }),
-    [activeFolderId, groups],
-  );
-  const moveTargets = useMemo(() => getMoveTargetOptions(folders), [folders]);
-  const workspaceMoveTargets = useMemo(
-    () =>
-      getWorkspaceMoveTargetOptions(workspaces, workspaceId).map((target) => ({
+  const folderView = getFolderView({ groups, activeFolderId });
+  const moveTargets = getMoveTargetOptions(folders);
+  const workspaceMoveTargets = getWorkspaceMoveTargetOptions(workspaces, workspaceId).map((target) => ({
         _id: target.value,
         name: target.label,
-      })),
-    [workspaceId, workspaces],
-  );
+      }));
   const [dragArtifactId, setDragArtifactId] = useState<string | null>(null);
   const [isUploadDragOver, setIsUploadDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);

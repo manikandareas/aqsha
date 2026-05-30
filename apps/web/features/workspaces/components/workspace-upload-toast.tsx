@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertCircleIcon,
   ChevronDownIcon,
@@ -54,30 +54,20 @@ export function useWorkspaceUploadToast({
   const activeRef = useRef(false);
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const clearDismissTimer = useCallback(() => {
+  const clearDismissTimer = () => {
     if (dismissTimerRef.current) {
       clearTimeout(dismissTimerRef.current);
       dismissTimerRef.current = null;
     }
-  }, []);
+  };
 
-  const dismiss = useCallback(() => {
-    clearDismissTimer();
-    setItems([]);
-    setIsUploadActive(false);
-    setIsCollapsed(false);
-    activeRef.current = false;
-    toast.dismiss(toastId);
-  }, [clearDismissTimer]);
-
-  const updateItem = useCallback((id: string, patch: Partial<UploadQueueItem>) => {
+  const updateItem = (id: string, patch: Partial<UploadQueueItem>) => {
     setItems((current) =>
       current.map((item) => (item.id === id ? { ...item, ...patch } : item)),
     );
-  }, []);
+  };
 
-  const runUpload = useCallback(
-    async (queueItems: UploadQueueItem[]) => {
+  const runUpload = async (queueItems: UploadQueueItem[]) => {
       if (queueItems.length === 0) return;
 
       activeRef.current = true;
@@ -103,12 +93,9 @@ export function useWorkspaceUploadToast({
 
       activeRef.current = false;
       setIsUploadActive(false);
-    },
-    [clearDismissTimer, onUploadFiles, updateItem],
-  );
+    };
 
-  const enqueue = useCallback(
-    (files: File[], folderId: "root" | string) => {
+  const enqueue = (files: File[], folderId: "root" | string) => {
       if (files.length === 0) return;
       if (activeRef.current) {
         toast.error("Tunggu upload berjalan selesai sebelum menambahkan file lagi.");
@@ -137,33 +124,7 @@ export function useWorkspaceUploadToast({
 
       const uploadable = queueItems.filter((item) => item.status !== "failed");
       void runUpload(uploadable);
-    },
-    [runUpload],
-  );
-
-  const retryFailed = useCallback(() => {
-    if (activeRef.current) return;
-    const failed = items.filter(
-      (item) => item.status === "failed" && item.file.size <= MAX_UPLOAD_BYTES,
-    );
-    if (failed.length === 0) return;
-
-    setItems((current) =>
-      current.map((item) =>
-        item.status === "failed" && item.file.size <= MAX_UPLOAD_BYTES
-          ? { ...item, status: "queued", progress: 0, error: undefined }
-          : item,
-      ),
-    );
-    void runUpload(
-      failed.map((item) => ({
-        ...item,
-        status: "queued",
-        progress: 0,
-        error: undefined,
-      })),
-    );
-  }, [items, runUpload]);
+    };
 
   const hasItems = items.length > 0;
   const hasFailed = items.some((item) => item.status === "failed");
@@ -172,15 +133,81 @@ export function useWorkspaceUploadToast({
   useEffect(() => {
     if (!hasItems) return;
 
+    const dismissToast = () => {
+      if (dismissTimerRef.current) {
+        clearTimeout(dismissTimerRef.current);
+        dismissTimerRef.current = null;
+      }
+      setItems([]);
+      setIsUploadActive(false);
+      setIsCollapsed(false);
+      activeRef.current = false;
+      toast.dismiss(toastId);
+    };
+
+    const retryFailedUploads = () => {
+      if (activeRef.current) return;
+      const failed = items.filter(
+        (item) => item.status === "failed" && item.file.size <= MAX_UPLOAD_BYTES,
+      );
+      if (failed.length === 0) return;
+
+      setItems((current) =>
+        current.map((item) =>
+          item.status === "failed" && item.file.size <= MAX_UPLOAD_BYTES
+            ? { ...item, status: "queued", progress: 0, error: undefined }
+            : item,
+        ),
+      );
+      const queueItems = failed.map((item) => ({
+        ...item,
+        status: "queued" as const,
+        progress: 0,
+        error: undefined,
+      }));
+      const ids = queueItems.map((item) => item.id);
+      activeRef.current = true;
+      setIsUploadActive(true);
+      if (dismissTimerRef.current) {
+        clearTimeout(dismissTimerRef.current);
+        dismissTimerRef.current = null;
+      }
+      void onUploadFiles(
+        queueItems.map((item) => item.file),
+        queueItems[0]?.folderId ?? "root",
+        {
+          onFileChange: (event) => {
+            const id = ids[event.index];
+            if (!id) return;
+            setItems((current) =>
+              current.map((item) =>
+                item.id === id
+                  ? {
+                      ...item,
+                      status: event.status,
+                      progress: event.progress,
+                      error: event.error,
+                    }
+                  : item,
+              ),
+            );
+          },
+        },
+      ).finally(() => {
+        activeRef.current = false;
+        setIsUploadActive(false);
+      });
+    };
+
     toast.custom(
       () => (
         <WorkspaceUploadToast
           items={items}
           isUploadActive={isUploadActive}
           isCollapsed={isCollapsed}
-          onDismiss={dismiss}
+          onDismiss={dismissToast}
           onToggleCollapsed={() => setIsCollapsed((collapsed) => !collapsed)}
-          onRetryFailed={retryFailed}
+          onRetryFailed={retryFailedUploads}
         />
       ),
       {
@@ -191,15 +218,29 @@ export function useWorkspaceUploadToast({
         dismissible: false,
       },
     );
-  }, [dismiss, hasItems, isCollapsed, isUploadActive, items, retryFailed]);
+  }, [hasItems, isCollapsed, isUploadActive, items, onUploadFiles]);
 
   useEffect(() => {
-    clearDismissTimer();
+    if (dismissTimerRef.current) {
+      clearTimeout(dismissTimerRef.current);
+      dismissTimerRef.current = null;
+    }
     if (!allComplete || hasFailed) return;
 
-    dismissTimerRef.current = setTimeout(dismiss, completeDismissDelayMs);
-    return clearDismissTimer;
-  }, [allComplete, clearDismissTimer, dismiss, hasFailed]);
+    dismissTimerRef.current = setTimeout(() => {
+      setItems([]);
+      setIsUploadActive(false);
+      setIsCollapsed(false);
+      activeRef.current = false;
+      toast.dismiss(toastId);
+    }, completeDismissDelayMs);
+    return () => {
+      if (dismissTimerRef.current) {
+        clearTimeout(dismissTimerRef.current);
+        dismissTimerRef.current = null;
+      }
+    };
+  }, [allComplete, hasFailed]);
 
   return {
     enqueue,
@@ -222,7 +263,7 @@ function WorkspaceUploadToast({
   onToggleCollapsed: () => void;
   onRetryFailed: () => void;
 }) {
-  const summary = useMemo(() => getUploadSummary(items), [items]);
+  const summary = getUploadSummary(items);
   const failedCount = items.filter((item) => item.status === "failed").length;
   const retryableCount = items.filter(
     (item) => item.status === "failed" && item.file.size <= MAX_UPLOAD_BYTES,
@@ -275,7 +316,7 @@ function WorkspaceUploadToast({
         </div>
       ) : (
         <>
-          <div className="max-h-72 overflow-y-auto px-2 py-2">
+          <div className="max-h-72 overflow-y-auto p-2">
             {items.map((item) => (
               <UploadQueueRow key={item.id} item={item} />
             ))}
@@ -312,7 +353,7 @@ function UploadQueueRow({ item }: { item: UploadQueueItem }) {
   const statusText = getStatusText(item);
 
   return (
-    <div className="grid gap-1.5 rounded-lg px-2 py-2">
+    <div className="grid gap-1.5 rounded-lg p-2">
       <div className="flex min-w-0 items-center gap-2">
         <StatusIcon status={item.status} />
         <div className="min-w-0 flex-1">

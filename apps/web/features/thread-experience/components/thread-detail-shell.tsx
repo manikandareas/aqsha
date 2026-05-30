@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { ResponsiveSidePanel } from "@/components/layout/responsive-side-panel";
 import { PanelBoardTitleDropdownTrigger } from "@/components/panel-title-dropdown-trigger";
@@ -58,10 +58,7 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
     removeThread,
   } = useThreadExperienceData(threadId);
   const [contextPanelOpen, setContextPanelOpen] = useState(false);
-  const persistedContextIds = useMemo(
-    () => selectedContextArtifacts.map((item) => String(item.artifactId)),
-    [selectedContextArtifacts],
-  );
+  const persistedContextIds = selectedContextArtifacts.map((item) => String(item.artifactId));
   const draftContext = useDraftContextSelection(
     threadId ? threadContextScopeKey(threadId) : "thread:new",
     threadId && selectedContextArtifactsLoaded ? persistedContextIds : undefined,
@@ -72,14 +69,11 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
     ? (selectedThread?.title ?? "Thread tidak ditemukan")
     : "Thread baru";
 
-  const workspaceNameById = useMemo(
-    () => new Map(workspaces.map((workspace) => [workspace._id, workspace.name])),
-    [workspaces],
-  );
+  const workspaceNameById = new Map(workspaces.map((workspace) => [workspace._id, workspace.name]));
   const workspaceName = panelWorkspaceId
     ? (workspaceNameById.get(panelWorkspaceId) ?? "Workspace")
     : undefined;
-  const contextArtifactTitleById = useMemo(() => {
+  const contextArtifactTitleById = (() => {
     const titles = new Map<string, string>();
     for (const item of selectedContextArtifacts) {
       titles.set(String(item.artifactId), item.artifact.title);
@@ -91,15 +85,11 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
       titles.set(artifact._id, artifact.title);
     }
     return titles;
-  }, [contextCandidateArtifacts, selectedContextArtifacts, workspaceLibrary.artifacts]);
-  const draftContextArtifacts = useMemo(
-    () =>
-      draftContext.selectedIds.map((artifactId) => ({
+  })();
+  const draftContextArtifacts = draftContext.selectedIds.map((artifactId) => ({
         artifactId,
         title: contextArtifactTitleById.get(artifactId) ?? "Artifact",
-      })),
-    [contextArtifactTitleById, draftContext.selectedIds],
-  );
+      }));
 
   const sendMessageWithDraftContext: SendMessage = async (args) => {
     const shouldReplaceContext = draftContext.isDirty;

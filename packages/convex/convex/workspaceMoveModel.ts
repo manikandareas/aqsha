@@ -37,13 +37,13 @@ async function patchArtifactWorkspaceRows(
   },
 ) {
   const document = await ctx.db
-    .query("artifactDocuments")
+    .query("artifactContents")
     .withIndex("by_owner_artifact", (q) =>
       q.eq("ownerUserId", args.ownerUserId).eq("artifactId", args.artifactId),
     )
     .unique();
   if (document) {
-    await ctx.db.patch("artifactDocuments", document._id, {
+    await ctx.db.patch("artifactContents", document._id, {
       workspaceId: args.workspaceId,
       updatedAt: args.updatedAt,
     });
@@ -57,6 +57,32 @@ async function patchArtifactWorkspaceRows(
     .unique();
   if (url) {
     await ctx.db.patch("artifactUrls", url._id, {
+      workspaceId: args.workspaceId,
+      updatedAt: args.updatedAt,
+    });
+  }
+
+  const paperMetadata = await ctx.db
+    .query("artifactPaperMetadata")
+    .withIndex("by_owner_artifact", (q) =>
+      q.eq("ownerUserId", args.ownerUserId).eq("artifactId", args.artifactId),
+    )
+    .unique();
+  if (paperMetadata) {
+    await ctx.db.patch("artifactPaperMetadata", paperMetadata._id, {
+      workspaceId: args.workspaceId,
+      updatedAt: args.updatedAt,
+    });
+  }
+
+  const extractions = await ctx.db
+    .query("artifactExtractions")
+    .withIndex("by_owner_artifact_extractor", (q) =>
+      q.eq("ownerUserId", args.ownerUserId).eq("artifactId", args.artifactId),
+    )
+    .collect();
+  for (const extraction of extractions) {
+    await ctx.db.patch("artifactExtractions", extraction._id, {
       workspaceId: args.workspaceId,
       updatedAt: args.updatedAt,
     });

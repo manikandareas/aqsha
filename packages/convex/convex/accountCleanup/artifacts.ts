@@ -27,10 +27,10 @@ export async function cleanupOwnerArtifacts(
       .withIndex("by_owner_message", (q) => q.eq("ownerUserId", ownerUserId))
       .take(501),
   );
-  const artifactDocuments = withinOwnerCleanupLimit(
-    "artifactDocuments",
+  const artifactContents = withinOwnerCleanupLimit(
+    "artifactContents",
     await ctx.db
-      .query("artifactDocuments")
+      .query("artifactContents")
       .withIndex("by_owner_artifact", (q) => q.eq("ownerUserId", ownerUserId))
       .take(501),
   );
@@ -38,6 +38,20 @@ export async function cleanupOwnerArtifacts(
     "artifactUrls",
     await ctx.db
       .query("artifactUrls")
+      .withIndex("by_owner_artifact", (q) => q.eq("ownerUserId", ownerUserId))
+      .take(501),
+  );
+  const artifactExtractions = withinOwnerCleanupLimit(
+    "artifactExtractions",
+    await ctx.db
+      .query("artifactExtractions")
+      .withIndex("by_owner_artifact_extractor", (q) => q.eq("ownerUserId", ownerUserId))
+      .take(501),
+  );
+  const artifactPaperMetadata = withinOwnerCleanupLimit(
+    "artifactPaperMetadata",
+    await ctx.db
+      .query("artifactPaperMetadata")
       .withIndex("by_owner_artifact", (q) => q.eq("ownerUserId", ownerUserId))
       .take(501),
   );
@@ -59,7 +73,7 @@ export async function cleanupOwnerArtifacts(
   for (const artifact of artifacts) {
     addStorage(storageIds, artifact.storageId);
   }
-  for (const document of artifactDocuments) {
+  for (const document of artifactContents) {
     addStorage(storageIds, document.storageId);
     addStorage(storageIds, document.blocksStorageId);
     addStorage(storageIds, document.markdownStorageId);
@@ -67,14 +81,25 @@ export async function cleanupOwnerArtifacts(
   for (const url of artifactUrls) {
     addStorage(storageIds, url.storageId);
   }
+  for (const extraction of artifactExtractions) {
+    addStorage(storageIds, extraction.inputStorageId);
+    addStorage(storageIds, extraction.outputStorageId);
+  }
+  for (const metadata of artifactPaperMetadata) {
+    addStorage(storageIds, metadata.referencesStorageId);
+    addStorage(storageIds, metadata.sectionsStorageId);
+    addStorage(storageIds, metadata.teiStorageId);
+  }
   for (const version of artifactVersions) {
     addStorage(storageIds, version.storageId);
   }
 
   deletedRows += await deleteRows(ctx, "messageContextArtifacts", messageContextArtifacts);
   deletedRows += await deleteRows(ctx, "messageArtifacts", messageArtifacts);
-  deletedRows += await deleteRows(ctx, "artifactDocuments", artifactDocuments);
+  deletedRows += await deleteRows(ctx, "artifactContents", artifactContents);
   deletedRows += await deleteRows(ctx, "artifactUrls", artifactUrls);
+  deletedRows += await deleteRows(ctx, "artifactExtractions", artifactExtractions);
+  deletedRows += await deleteRows(ctx, "artifactPaperMetadata", artifactPaperMetadata);
   deletedRows += await deleteRows(ctx, "artifactVersions", artifactVersions);
   deletedRows += await deleteRows(ctx, "artifacts", artifacts);
 

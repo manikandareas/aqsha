@@ -3,7 +3,7 @@
 import type { PartialBlock } from "@blocknote/core";
 import { useCreateBlockNote, useEditorChange } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/shadcn";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { blockNotePlainText, parseBlockNoteJson } from "../utils/artifact-editor-model";
 
 export type DocumentEditorContent = {
@@ -25,10 +25,7 @@ export function BlockNoteDocumentEditor({
     () => parseBlockNoteJson(initialBlocksJson) as PartialBlock[],
   );
   const [initialMarkdownSnapshot] = useState(initialMarkdown);
-  const initialEditorOptions = useMemo(
-    () => (initialContent.length > 0 ? { initialContent } : undefined),
-    [initialContent],
-  );
+  const initialEditorOptions = (initialContent.length > 0 ? { initialContent } : undefined);
   const editor = useCreateBlockNote(initialEditorOptions, []);
   const hydratedFromMarkdown = useRef(false);
 

@@ -8,9 +8,11 @@ import type { ThreadShellLayoutProps } from "./component-types";
 import { AccessDeniedState } from "./home-states";
 import { ThreadHeader } from "./thread-header";
 
+const emptyWorkspaces: ThreadShellLayoutProps["workspaces"] = [];
+
 export function ThreadShellLayout({
   viewer,
-  workspaces = [],
+  workspaces = emptyWorkspaces,
   threads,
   selectedThreadId,
   onCreateThread,

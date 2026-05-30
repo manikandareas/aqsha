@@ -289,7 +289,7 @@ async function getPromptContextArtifactById(
   const [contentRow, url] = await Promise.all([
     artifactType !== "url"
       ? ctx.db
-          .query("artifactDocuments")
+          .query("artifactContents")
           .withIndex("by_owner_artifact", (q) =>
             q.eq("ownerUserId", ownerUserId).eq("artifactId", artifact._id),
           )
@@ -349,7 +349,7 @@ async function getPromptContextArtifact(
   const [contentRow, url] = await Promise.all([
     artifactType !== "url"
       ? ctx.db
-          .query("artifactDocuments")
+          .query("artifactContents")
           .withIndex("by_owner_artifact", (q) =>
             q.eq("ownerUserId", ownerUserId).eq("artifactId", artifact._id),
           )

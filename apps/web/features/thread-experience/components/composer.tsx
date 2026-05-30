@@ -17,7 +17,7 @@ import { api } from "@aqsha/convex/api";
 import { useAction, useMutation } from "convex/react";
 import { LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { MAX_UPLOAD_BYTES } from "@aqsha/convex/artifact-upload-limits";
 import type { PromptCommand } from "@aqsha/convex/prompt-commands";
 import {
@@ -108,6 +108,8 @@ export type ComposerProps = ComposerSharedProps &
   );
 
 export function Composer(props: ComposerProps) {
+  "use no memo";
+
   const {
     disabled,
     rateStatus,
@@ -134,7 +136,6 @@ export function Composer(props: ComposerProps) {
   const [billingBlock, setBillingBlock] = useState<SendResult & { ok: false } | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [editorHeight, setEditorHeight] = useState(24);
-  const [isExpanded, setIsExpanded] = useState(false);
   const [attachmentFiles, setAttachmentFiles] = useState<PromptInputFile[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const generateUploadUrl = useMutation(api.artifacts.generateUploadUrl);
@@ -162,30 +163,17 @@ export function Composer(props: ComposerProps) {
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
   const isContentEmpty = content.trim().length === 0 && inlineCommands.length === 0;
-  const shellExpanded =
-    isExpanded ||
+  const hasComposerContext =
     attachmentFiles.length > 0 ||
     contextArtifacts.length > 0 ||
     Boolean(contextLabel);
+  const isExpanded =
+    hasComposerContext ||
+    (!isContentEmpty &&
+      (content.includes("\n") || editorHeight > 34 || inlineCommands.length > 0));
+  const shellExpanded = isExpanded;
 
-  // Sticky expand: once multiline, stay expanded until empty. Prevents reflow
-  // oscillation when collapsed (narrow) vs expanded (wide) widths flip line count.
-  useLayoutEffect(() => {
-    if (isContentEmpty) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- this state is a sticky layout latch driven by measured editor height.
-      setIsExpanded(false);
-      return;
-    }
-
-    if (content.includes("\n") || editorHeight > 34 || inlineCommands.length > 0) {
-      setIsExpanded(true);
-    }
-  }, [isContentEmpty, content, editorHeight, inlineCommands.length]);
-
-  const shellTransition = useMemo(
-    () => composerShellTransition(shellExpanded, shouldReduceMotion),
-    [shellExpanded, shouldReduceMotion],
-  );
+  const shellTransition = composerShellTransition(shellExpanded, shouldReduceMotion);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(timer);
@@ -275,6 +263,7 @@ export function Composer(props: ComposerProps) {
           setBillingBlock(result);
         }
         setContent(restoreComposerContentAfterBlockedSend(submission.content));
+        setIsSending(false);
         return;
       }
       setBillingBlock(null);
@@ -285,8 +274,10 @@ export function Composer(props: ComposerProps) {
           router.push(`/app/threads/${result.threadId}`);
         }
       }
-    } finally {
       setIsSending(false);
+    } catch (error) {
+      setIsSending(false);
+      throw error;
     }
   };
 

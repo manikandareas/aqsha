@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 
 const CLICK_DELAY_MS = 250;
 
@@ -19,21 +19,21 @@ export function useLibraryItemClick({
     };
   }, []);
 
-  const handleClick = useCallback(() => {
+  const handleClick = () => {
     if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
     clickTimerRef.current = setTimeout(() => {
       onSingleClick();
       clickTimerRef.current = null;
     }, CLICK_DELAY_MS);
-  }, [onSingleClick]);
+  };
 
-  const handleDoubleClick = useCallback(() => {
+  const handleDoubleClick = () => {
     if (clickTimerRef.current) {
       clearTimeout(clickTimerRef.current);
       clickTimerRef.current = null;
     }
     onDoubleClick();
-  }, [onDoubleClick]);
+  };
 
   return { handleClick, handleDoubleClick };
 }

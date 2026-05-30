@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { DetailSplitLayout } from "@/components/layout/detail-split-layout";
 import { ResponsiveSidePanel } from "@/components/layout/responsive-side-panel";
@@ -58,13 +58,9 @@ function WorkspaceDetailMain({
   const [panelThreadId, setPanelThreadId] = useState<string | null>(null);
   const [activeFolderId, setActiveFolderId] = useState<"root" | string>("root");
 
-  const contextArtifacts = useMemo(
-    () =>
-      data.artifacts
+  const contextArtifacts = data.artifacts
         .filter((artifact) => draftContext.selectedIdSet.has(artifact._id))
-        .map((artifact) => ({ artifactId: artifact._id, title: artifact.title })),
-    [data.artifacts, draftContext.selectedIdSet],
-  );
+        .map((artifact) => ({ artifactId: artifact._id, title: artifact.title }));
 
   const handleStartThread: StartThread = async (args) => {
     const shouldIncludeContext = draftContext.isDirty;

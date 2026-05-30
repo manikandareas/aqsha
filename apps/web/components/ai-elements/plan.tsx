@@ -18,7 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ChevronsUpDownIcon } from "lucide-react";
 import type { ComponentProps } from "react";
-import { createContext, useContext, useMemo } from "react";
+import { createContext, use } from "react";
 
 import { Shimmer } from "./shimmer";
 
@@ -29,7 +29,7 @@ interface PlanContextValue {
 const PlanContext = createContext<PlanContextValue | null>(null);
 
 const usePlan = () => {
-  const context = useContext(PlanContext);
+  const context = use(PlanContext);
   if (!context) {
     throw new Error("Plan components must be used within Plan");
   }
@@ -46,7 +46,7 @@ export const Plan = ({
   children,
   ...props
 }: PlanProps) => {
-  const contextValue = useMemo(() => ({ isStreaming }), [isStreaming]);
+  const contextValue = ({ isStreaming });
 
   return (
     <PlanContext.Provider value={contextValue}>

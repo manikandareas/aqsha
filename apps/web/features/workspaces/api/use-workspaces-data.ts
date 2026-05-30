@@ -164,6 +164,7 @@ export function useArtifactDetailData(artifactId: string) {
       : "skip",
   );
   const artifact = useQuery(api.artifacts.get, artifactArgs);
+  const paperExtraction = useQuery(api.paperExtractions.getStatus, artifactArgs);
 
   return {
     isAuthenticated,
@@ -171,10 +172,12 @@ export function useArtifactDetailData(artifactId: string) {
     workspaces: workspacesPage?.page ?? [],
     threads: threadPage?.page ?? [],
     artifact,
+    paperExtraction,
     isLoading: artifact === undefined,
     getRenderPayload: useAction(api.artifacts.getRenderPayload),
     updateDocument: useAction(api.artifacts.updateDocument),
     retryUrlExtraction: useMutation(api.artifacts.retryUrlExtraction),
+    retryGrobidExtraction: useMutation(api.paperExtractions.retryGrobidExtraction),
     renameArtifact: useMutation(api.artifacts.rename),
     moveArtifact: useMutation(api.artifacts.move),
     removeArtifact: useMutation(api.artifacts.remove),

@@ -1,7 +1,4 @@
-"use client";
-
-import { useMemo } from "react";
-import { PanelTitleDropdownTrigger } from "@/components/panel-title-dropdown-trigger";
+"use client";import { PanelTitleDropdownTrigger } from "@/components/panel-title-dropdown-trigger";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,10 +22,7 @@ export function ThreadRecentSwitcher({
   newLabel: string;
   emptyLabel: string;
 }) {
-  const recentThreads = useMemo(
-    () => threads.toSorted((a, b) => b.lastActivityAt - a.lastActivityAt).slice(0, 4),
-    [threads],
-  );
+  const recentThreads = threads.toSorted((a, b) => b.lastActivityAt - a.lastActivityAt).slice(0, 4);
 
   return (
     <DropdownMenu>

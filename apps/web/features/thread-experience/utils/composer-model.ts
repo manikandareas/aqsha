@@ -1,9 +1,7 @@
 import { promptCommands, type PromptCommand } from "@aqsha/convex/prompt-commands";
 import type {
-  ComposerCommand,
   ComposerSubmission,
   ResearchRun,
-  SendResult,
 } from "../types";
 import { isRunActive } from "./transcript-model";
 
@@ -39,7 +37,7 @@ export function filterPromptCommandsBySlashQuery(query: string) {
   });
 }
 
-export function findPromptCommandInContent(content: string) {
+function findPromptCommandInContent(content: string) {
   const trimmed = content.trim();
   return (
     promptCommands.find((command) =>
@@ -59,7 +57,7 @@ export function previewFromComposerContent(content: string, command: PromptComma
   return singleLine.length > 140 ? `${singleLine.slice(0, 137)}...` : singleLine;
 }
 
-export function stripCommandFromContent(content: string, command: PromptCommand) {
+function stripCommandFromContent(content: string, command: PromptCommand) {
   const trimmed = content.trim();
   const slugs = [command.slug, ...command.aliases].sort((a, b) => b.length - a.length);
   for (const slug of slugs) {
@@ -92,13 +90,6 @@ export function createVisibleComposerContent(content: string) {
   return content;
 }
 
-export function stripCommandFromSubmittedContent(
-  content: string,
-  command: ComposerCommand,
-) {
-  return command ? stripCommandFromContent(content, command) : content;
-}
-
 export function buildComposerSubmission({
   visibleContent,
   commands,
@@ -128,7 +119,7 @@ export function restoreComposerContentAfterBlockedSend(submittedContent: string)
   return submittedContent;
 }
 
-export function shouldShowStopForActiveRun(activeRun: ResearchRun | undefined) {
+function shouldShowStopForActiveRun(activeRun: ResearchRun | undefined) {
   return Boolean(activeRun && activeRun.mode === "deep" && isRunActive(activeRun));
 }
 
@@ -161,13 +152,4 @@ export function getComposerAvailability({
       !hitlBlocking,
     stopRunId: isDeepActive ? activeRun?._id : undefined,
   };
-}
-
-export function isSendBlockedByBilling(result: SendResult) {
-  return (
-    !result.ok &&
-    (result.reason === "quota_exceeded" ||
-      result.reason === "subscription_required" ||
-      result.reason === "billing_inactive")
-  );
 }

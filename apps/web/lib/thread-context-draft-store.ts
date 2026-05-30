@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { MAX_CONTEXT_ARTIFACTS } from "@/lib/context-selection";
@@ -29,7 +29,7 @@ export function threadContextScopeKey(threadId: string) {
   return `thread:${threadId}`;
 }
 
-export const useThreadContextDraftStore = create<DraftContextState>()(
+const useThreadContextDraftStore = create<DraftContextState>()(
   persist(
     (set) => ({
       selections: {},
@@ -132,24 +132,12 @@ export function useDraftContextSelection(
     setInitialSelection(scopeKey, initialArtifactIds);
   }, [initialArtifactIds, scopeKey, setInitialSelection]);
 
-  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
-  const isSelected = useCallback(
-    (artifactId: string) => selectedIdSet.has(artifactId),
-    [selectedIdSet],
-  );
-  const toggleArtifact = useCallback(
-    (artifactId: string) => toggle(scopeKey, artifactId),
-    [scopeKey, toggle],
-  );
-  const setSelectedArtifacts = useCallback(
-    (artifactIds: string[]) => setSelection(scopeKey, artifactIds),
-    [scopeKey, setSelection],
-  );
-  const clear = useCallback(() => clearSelection(scopeKey), [clearSelection, scopeKey]);
-  const markSelectionPersisted = useCallback(
-    (artifactIds: string[]) => markPersisted(scopeKey, artifactIds),
-    [markPersisted, scopeKey],
-  );
+  const selectedIdSet = new Set(selectedIds);
+  const isSelected = (artifactId: string) => selectedIdSet.has(artifactId);
+  const toggleArtifact = (artifactId: string) => toggle(scopeKey, artifactId);
+  const setSelectedArtifacts = (artifactIds: string[]) => setSelection(scopeKey, artifactIds);
+  const clear = () => clearSelection(scopeKey);
+  const markSelectionPersisted = (artifactIds: string[]) => markPersisted(scopeKey, artifactIds);
 
   return {
     selectedIds,

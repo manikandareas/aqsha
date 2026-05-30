@@ -1,6 +1,6 @@
 "use client";
 
-import { type KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from "react";
 import { type PromptCommand } from "@aqsha/convex/prompt-commands";
 import {
   Command,
@@ -68,18 +68,12 @@ export function TokenizedPromptInput({
   });
   const paletteDismissed =
     paletteDismissal.value === value && paletteDismissal.dismissed;
-  const setPaletteDismissed = useCallback(
-    (dismissed: boolean) => setPaletteDismissal({ value, dismissed }),
-    [value],
-  );
+  const setPaletteDismissed = (dismissed: boolean) => setPaletteDismissal({ value, dismissed });
   const [slashFilterQuery, setSlashFilterQuery] = useState<string | null>(null);
   const [isEditorEmpty, setIsEditorEmpty] = useState(true);
 
   const commandOpen = slashFilterQuery !== null;
-  const filteredCommands = useMemo(
-    () => (slashFilterQuery === null ? [] : filterPromptCommandsBySlashQuery(slashFilterQuery)),
-    [slashFilterQuery],
-  );
+  const filteredCommands = (slashFilterQuery === null ? [] : filterPromptCommandsBySlashQuery(slashFilterQuery));
   const highlightKey = `${slashFilterQuery ?? ""}:${filteredCommands.length}`;
   const [highlightedState, setHighlightedState] = useState({
     key: highlightKey,
@@ -89,19 +83,16 @@ export function TokenizedPromptInput({
     highlightedState.key === highlightKey
       ? Math.min(highlightedState.index, Math.max(filteredCommands.length - 1, 0))
       : 0;
-  const setHighlightedIndex = useCallback(
-    (nextIndex: number | ((currentIndex: number) => number)) => {
+  const setHighlightedIndex = (nextIndex: number | ((currentIndex: number) => number)) => {
       setHighlightedState((current) => {
         const baseIndex = current.key === highlightKey ? current.index : 0;
         const index =
           typeof nextIndex === "function" ? nextIndex(baseIndex) : nextIndex;
         return { key: highlightKey, index };
       });
-    },
-    [highlightKey],
-  );
+    };
 
-  const syncEditorState = useCallback(() => {
+  const syncEditorState = () => {
     const editor = editorRef.current;
     if (!editor) {
       return;
@@ -125,7 +116,7 @@ export function TokenizedPromptInput({
     } else {
       setSlashFilterQuery(null);
     }
-  }, [onCommandsChange, onHeightChange, onValueChange, paletteDismissed, value]);
+  };
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -149,17 +140,16 @@ export function TokenizedPromptInput({
     }
   }, [onCommandsChange, onHeightChange, value]);
 
-  const focusEditor = useCallback(() => {
+  const focusEditor = () => {
     window.requestAnimationFrame(() => {
       const editor = editorRef.current;
       if (!editor) return;
       editor.focus();
       moveCaretToEnd(editor);
     });
-  }, []);
+  };
 
-  const handleSelectCommand = useCallback(
-    (selected: PromptCommand) => {
+  const handleSelectCommand = (selected: PromptCommand) => {
       const editor = editorRef.current;
       if (!editor) {
         return;
@@ -169,11 +159,9 @@ export function TokenizedPromptInput({
       setPaletteDismissed(false);
       syncEditorState();
       focusEditor();
-    },
-    [focusEditor, setPaletteDismissed, syncEditorState],
-  );
+    };
 
-  const handleInput = useCallback(() => {
+  const handleInput = () => {
     const editor = editorRef.current;
     if (!editor) {
       return;
@@ -184,10 +172,9 @@ export function TokenizedPromptInput({
       moveCaretToEnd(editor);
     }
     syncEditorState();
-  }, [maxLength, syncEditorState]);
+  };
 
-  const handleKeyDown = useCallback(
-    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
       if (event.nativeEvent.isComposing) {
         return;
       }
@@ -243,22 +230,9 @@ export function TokenizedPromptInput({
         setSlashFilterQuery(null);
         focusEditor();
       }
-    },
-    [
-      commandOpen,
-      filteredCommands,
-      focusEditor,
-      handleSelectCommand,
-      highlightedIndex,
-      onSubmit,
-      setHighlightedIndex,
-      setPaletteDismissed,
-      syncEditorState,
-    ],
-  );
+    };
 
-  const handleChipClick = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
+  const handleChipClick = (event: React.MouseEvent<HTMLDivElement>) => {
       const target = event.target;
       if (!(target instanceof HTMLElement)) {
         return;
@@ -271,9 +245,7 @@ export function TokenizedPromptInput({
       chip.remove();
       syncEditorState();
       focusEditor();
-    },
-    [focusEditor, syncEditorState],
-  );
+    };
 
   const showPlaceholder = isEditorEmpty;
 

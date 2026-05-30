@@ -38,9 +38,9 @@ export function ConfirmDialog({
     try {
       await onConfirm();
       onOpenChange(false);
+      setIsSubmitting(false);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Aksi gagal.");
-    } finally {
       setIsSubmitting(false);
     }
   };

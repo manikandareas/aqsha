@@ -77,7 +77,7 @@ export function WorkspacesIndexPage() {
             {workspaces.map((workspace) => (
               <div
                 key={workspace._id}
-                className="grid min-w-0 grid-cols-[1fr_auto] items-center gap-3 border-b border-border/70 px-3 py-3 last:border-b-0"
+                className="grid min-w-0 grid-cols-[1fr_auto] items-center gap-3 border-b border-border/70 p-3 last:border-b-0"
               >
                 <Link
                   href={`/app/workspaces/${workspace._id}`}

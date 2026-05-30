@@ -39,9 +39,9 @@ export function useSettingsUsageBillingData() {
         successUrl: `${origin}/app/settings/usage-billing?checkout=success`,
       });
       window.location.assign(url);
+      setPendingKey(null);
     } catch (error) {
       setBillingError(readableBillingError(error));
-    } finally {
       setPendingKey(null);
     }
   };
@@ -53,9 +53,9 @@ export function useSettingsUsageBillingData() {
     try {
       await changeSubscription({ productKey });
       setBillingNotice("Perubahan paket dikirim ke Polar. Status akan diperbarui setelah webhook diterima.");
+      setPendingKey(null);
     } catch (error) {
       setBillingError(readableBillingError(error));
-    } finally {
       setPendingKey(null);
     }
   };
@@ -67,9 +67,9 @@ export function useSettingsUsageBillingData() {
     try {
       await cancelSubscription({ revokeImmediately: false });
       setBillingNotice("Langganan akan dibatalkan di akhir periode berjalan.");
+      setPendingKey(null);
     } catch (error) {
       setBillingError(readableBillingError(error));
-    } finally {
       setPendingKey(null);
     }
   };
@@ -81,9 +81,9 @@ export function useSettingsUsageBillingData() {
     try {
       const { url } = await createPortal({ returnUrl: window.location.href });
       window.location.assign(url);
+      setPendingKey(null);
     } catch (error) {
       setBillingError(readableBillingError(error));
-    } finally {
       setPendingKey(null);
     }
   };

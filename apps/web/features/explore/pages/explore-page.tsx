@@ -14,7 +14,7 @@ import {
   SearchIcon,
   SparklesIcon,
 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -48,16 +48,13 @@ export function ExplorePage() {
   const [selectedPaper, setSelectedPaper] = useState<ExplorePaper | null>(null);
   const [savedKeys, setSavedKeys] = useState<Set<string>>(() => new Set());
 
-  const providerWarning = useMemo(() => {
-    const statuses = response?.providerStatus ?? [];
-    return statuses.find(
+  const providerWarning = (response?.providerStatus ?? []).find(
       (status) =>
         status.provider === "OpenAlex" &&
         (status.status === "error" || status.status === "fallback"),
     );
-  }, [response]);
 
-  const runSearch = useCallback(async (nextQuery: string) => {
+  const runSearch = async (nextQuery: string) => {
     setIsLoading(true);
     setError(null);
     try {
@@ -68,19 +65,35 @@ export function ExplorePage() {
       });
       setResponse(result);
       setSubmittedQuery(nextQuery);
+      setIsLoading(false);
     } catch (searchError) {
       setError(searchError instanceof Error ? searchError.message : "Gagal mencari paper.");
-    } finally {
       setIsLoading(false);
     }
-  }, [searchPapers]);
+  };
 
   useEffect(() => {
     const task = window.setTimeout(() => {
-      void runSearch("");
+      void (async () => {
+        setIsLoading(true);
+        setError(null);
+        try {
+          const result: ExploreSearchResponse = await searchPapers({
+            query: undefined,
+            mode: "recommendations",
+            limit: 12,
+          });
+          setResponse(result);
+          setSubmittedQuery("");
+          setIsLoading(false);
+        } catch (searchError) {
+          setError(searchError instanceof Error ? searchError.message : "Gagal mencari paper.");
+          setIsLoading(false);
+        }
+      })();
     }, 0);
     return () => window.clearTimeout(task);
-  }, [runSearch]);
+  }, [searchPapers]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -245,7 +258,7 @@ function PaperCard({
             </p>
           </div>
 
-          <div className="grid min-h-[98px] content-start rounded-[8px] border border-border/70 bg-background/70 px-3 py-3">
+          <div className="grid min-h-[98px] content-start rounded-[8px] border border-border/70 bg-background/70 p-3">
             <p className="line-clamp-4 text-[13px] leading-6 text-ink-soft">
               {paper.snippet}
             </p>

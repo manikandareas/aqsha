@@ -2,9 +2,7 @@
 
 import { useUIMessages } from "@convex-dev/agent/react";
 import { api } from "@aqsha/convex/api";
-import { useConvexAuth, useQuery } from "convex/react";
-import { useMemo } from "react";
-import {
+import { useConvexAuth, useQuery } from "convex/react";import {
   Conversation,
   ConversationContent,
   ConversationEmptyState,
@@ -46,6 +44,8 @@ import { MessageRow } from "./message-row";
 import { AgentRunBlock } from "./run-progress";
 import { CenteredLoading } from "./shared";
 
+const emptyContextArtifacts: DraftContextArtifact[] = [];
+
 export function ChatThreadState({
   threadId,
   isLoading,
@@ -58,7 +58,7 @@ export function ChatThreadState({
   sources,
   onCancelRun,
   compact = false,
-  contextArtifacts = [],
+  contextArtifacts = emptyContextArtifacts,
   onRemoveContextArtifact,
   threadWorkspaceId,
 }: {
@@ -88,17 +88,11 @@ export function ChatThreadState({
     isAuthenticated && threadId ? { threadId } : "skip",
     { initialNumItems: 30, stream: true },
   );
-  const sortedMessages = useMemo(
-    () => sortTranscriptMessages(messages.results as unknown as ChatMessage[]),
-    [messages.results],
-  );
+  const sortedMessages = sortTranscriptMessages(messages.results as unknown as ChatMessage[]);
   const hasMessages = sortedMessages.length > 0;
-  const activeRun = useMemo(() => runs.find(isRunActive), [runs]);
-  const interleavedEntries = useMemo(
-    () => interleaveRunsWithMessages(sortedMessages, runs),
-    [sortedMessages, runs],
-  );
-  const sourceCounts = useMemo(() => getSourceCountsByOwner(sources), [sources]);
+  const activeRun = runs.find(isRunActive);
+  const interleavedEntries = interleaveRunsWithMessages(sortedMessages, runs);
+  const sourceCounts = getSourceCountsByOwner(sources);
 
   if (!threadId && !hasMessages && runs.length === 0) {
     return (

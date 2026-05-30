@@ -38,13 +38,7 @@ import type {
   RemoveThread,
   ThreadSummary,
 } from "@/features/thread-experience/components/component-types";
-import {
-  type ComponentProps,
-  type ReactNode,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { type ComponentProps, type ReactNode, useEffect, useState } from "react";
 
 type Viewer = {
   name: string | null;
@@ -58,6 +52,7 @@ type WorkspaceSummary = {
   updatedAt?: number;
 };
 
+const emptyWorkspaces: WorkspaceSummary[] = [];
 const sidebarItemBaseClass =
   "h-8 gap-2 rounded-[8px] px-2.5 py-0 text-[12px] font-medium transition-[background-color,color,box-shadow] duration-150 ease-out hover:bg-muted/60 data-active:bg-primary/10 data-active:font-medium data-active:text-foreground data-active:shadow-none data-active:[&_svg]:text-primary hover:text-foreground active:bg-muted active:text-foreground [&_svg]:size-3.5";
 
@@ -72,7 +67,7 @@ function sidebarItemClass(active?: boolean) {
 
 export function AppSidebar({
   viewer,
-  workspaces = [],
+  workspaces = emptyWorkspaces,
   selectedWorkspaceId,
   threads,
   selectedThreadId,
@@ -95,19 +90,11 @@ export function AppSidebar({
   const [commandOpen, setCommandOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const { isMobile, setOpen, setOpenMobile } = useSidebar();
-  const sortedWorkspaces = useMemo(
-    () =>
-      [...workspaces].sort(
-        (left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0),
-      ),
-    [workspaces],
+  const sortedWorkspaces = workspaces.toSorted(
+    (left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0),
   );
-  const sortedThreads = useMemo(
-    () =>
-      [...threads].sort(
-        (left, right) => right.lastActivityAt - left.lastActivityAt,
-      ),
-    [threads],
+  const sortedThreads = threads.toSorted(
+    (left, right) => right.lastActivityAt - left.lastActivityAt,
   );
   const isHomeActive = pathname === "/app" && !selectedThreadId;
   const isWorkspaceRoute = pathname.startsWith("/app/workspaces");
@@ -277,7 +264,7 @@ export function AppSidebar({
           </ScrollArea>
         </SidebarContent>
 
-        <SidebarFooter className="mt-auto px-3 py-3">
+        <SidebarFooter className="mt-auto p-3">
           <NavUser user={viewer} />
         </SidebarFooter>
       </Sidebar>

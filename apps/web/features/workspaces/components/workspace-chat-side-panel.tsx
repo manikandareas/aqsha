@@ -1,8 +1,6 @@
 "use client";
 
-import { MessageSquarePlusIcon, PanelLeftIcon } from "lucide-react";
-import { useMemo } from "react";
-import { Button } from "@/components/ui/button";
+import { MessageSquarePlusIcon, PanelLeftIcon } from "lucide-react";import { Button } from "@/components/ui/button";
 import { SidebarContent, SidebarHeader } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCloseRightPanel } from "@/hooks/use-close-right-panel";
@@ -59,17 +57,14 @@ export function WorkspaceChatSidePanel({
   const threadExperience = useThreadExperienceData(activeThreadId ?? undefined);
   const activeThread = activeThreadId ? threadExperience.selectedThread : undefined;
   const headerLabel = activeThread?.title ?? "Chat baru";
-  const persistedThreadContextIds = useMemo(
-    () => threadExperience.selectedContextArtifacts.map((item) => String(item.artifactId)),
-    [threadExperience.selectedContextArtifacts],
-  );
+  const persistedThreadContextIds = threadExperience.selectedContextArtifacts.map((item) => String(item.artifactId));
   const threadDraftContext = useDraftContextSelection(
     activeThreadId ? threadContextScopeKey(activeThreadId) : "workspace-panel:none",
     activeThreadId && threadExperience.selectedContextArtifactsLoaded
       ? persistedThreadContextIds
       : undefined,
   );
-  const threadContextTitleById = useMemo(() => {
+  const threadContextTitleById = (() => {
     const titles = new Map<string, string>();
     for (const item of threadExperience.selectedContextArtifacts) {
       titles.set(String(item.artifactId), item.artifact.title);
@@ -78,7 +73,7 @@ export function WorkspaceChatSidePanel({
       titles.set(artifact.artifactId, artifact.title);
     }
     return titles;
-  }, [contextArtifacts, threadExperience.selectedContextArtifacts]);
+  })();
   const activeContextArtifacts = activeThreadId
     ? threadDraftContext.selectedIds.map((artifactId) => ({
         artifactId,
@@ -241,7 +236,7 @@ function WorkspacePanelDraftView({
 export function WorkspaceLoading() {
   return (
     <div className={cn("grid gap-4", panelBodyPaddingClass)}>
-      <p className="text-[12px] font-medium text-muted-foreground">Memuat workspace...</p>
+      <p className="text-[12px] font-medium text-muted-foreground">Memuat workspace…</p>
       <Skeleton className="h-12 rounded-xl" />
       <Skeleton className="h-48 rounded-xl" />
       <Skeleton className="h-48 rounded-xl" />

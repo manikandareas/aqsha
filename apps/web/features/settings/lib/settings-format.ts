@@ -1,10 +1,12 @@
+const idrFormatter = new Intl.NumberFormat("id-ID", {
+  style: "currency",
+  currency: "IDR",
+  maximumFractionDigits: 0,
+});
+
 export function formatIdr(value: number) {
   if (value === 0) return "Rp0";
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(value);
+  return idrFormatter.format(value);
 }
 
 export function formatShortDate(value: number) {

@@ -41,7 +41,7 @@ const PdfArtifactViewer = dynamic(
     loading: () => (
       <div className="flex min-h-[420px] items-center justify-center gap-2 text-[13px] font-medium text-muted-foreground">
         <Loader2Icon className="size-4 animate-spin" />
-        Memuat PDF...
+        Memuat PDF…
       </div>
     ),
   },
@@ -79,6 +79,24 @@ type ArtifactRenderPayload =
       source: string;
       language?: string;
     };
+
+type PaperExtractionStatus = {
+  extraction: {
+    status: "pending" | "running" | "ready" | "failed";
+    failureReason?: string;
+    updatedAt: number;
+  } | null;
+  metadata: {
+    title?: string;
+    abstract?: string;
+    doi?: string;
+    authorsJson?: string;
+    journal?: string;
+    publisher?: string;
+    publishedYear?: number;
+    confidence?: number;
+  } | null;
+} | undefined;
 
 const initialAutosaveState: AutosaveState = {
   status: "idle",
@@ -213,7 +231,13 @@ export function ArtifactDetailPage({
                   onSaveStateChange={setDocumentSaveState}
                 />
               ) : (
-                <TypedArtifactDetail payload={activeRenderPayload} title={detail.artifact.title} />
+                <TypedArtifactDetail
+                  payload={activeRenderPayload}
+                  title={detail.artifact.title}
+                  paperExtraction={data.paperExtraction as PaperExtractionStatus}
+                  retryGrobidExtraction={data.retryGrobidExtraction}
+                  artifactId={artifactId}
+                />
               )}
             </section>
           </>
@@ -382,14 +406,26 @@ function SaveStatus({ state }: { state: AutosaveState }) {
 function TypedArtifactDetail({
   payload,
   title,
+  paperExtraction,
+  retryGrobidExtraction,
+  artifactId,
 }: {
   payload: Exclude<ArtifactRenderPayload, { artifactType: "markdown" | "url" }>;
   title: string;
+  paperExtraction: PaperExtractionStatus;
+  retryGrobidExtraction: (args: { artifactId: never }) => Promise<unknown>;
+  artifactId: string;
 }) {
   if (payload.artifactType === "pdf") {
     return (
       <div className="mx-auto grid max-w-5xl gap-4">
-        <FileArtifactToolbar payload={payload} />
+        <FileArtifactToolbar
+          payload={payload}
+          paperExtraction={paperExtraction}
+          retryGrobidExtraction={retryGrobidExtraction}
+          artifactId={artifactId}
+        />
+        <PaperMetadataPanel paperExtraction={paperExtraction} />
         <PdfArtifactViewer url={payload.url} fileName={payload.fileName} />
       </div>
     );
@@ -460,9 +496,20 @@ function TypedArtifactDetail({
 
 function FileArtifactToolbar({
   payload,
+  paperExtraction,
+  retryGrobidExtraction,
+  artifactId,
 }: {
   payload: Extract<ArtifactRenderPayload, { artifactType: "pdf" | "docx" }>;
+  paperExtraction?: PaperExtractionStatus;
+  retryGrobidExtraction?: (args: { artifactId: never }) => Promise<unknown>;
+  artifactId?: string;
 }) {
+  const canRetryPaperParsing =
+    payload.artifactType === "pdf" &&
+    paperExtraction?.extraction?.status === "failed" &&
+    retryGrobidExtraction &&
+    artifactId;
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-border bg-card px-3 py-2">
       <div className="min-w-0">
@@ -478,6 +525,20 @@ function FileArtifactToolbar({
           status={payload.indexingStatus}
           failureReason={payload.indexingFailureReason}
         />
+        {payload.artifactType === "pdf" ? (
+          <PaperParsingBadge paperExtraction={paperExtraction} />
+        ) : null}
+        {canRetryPaperParsing ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void retryGrobidExtraction({ artifactId: artifactId as never })}
+          >
+            <RotateCcwIcon className="size-4" />
+            Retry parser
+          </Button>
+        ) : null}
         <Button asChild variant="outline" size="sm">
           <a href={payload.url} target="_blank" rel="noreferrer">
             <ExternalLinkIcon className="size-4" />
@@ -493,6 +554,88 @@ function FileArtifactToolbar({
       </div>
     </div>
   );
+}
+
+function PaperParsingBadge({
+  paperExtraction,
+}: {
+  paperExtraction: PaperExtractionStatus;
+}) {
+  const status = paperExtraction?.extraction?.status;
+  if (!status) {
+    return <Badge variant="outline">Paper parser idle</Badge>;
+  }
+  if (status === "running" || status === "pending") {
+    return (
+      <Badge variant="outline" className="gap-1.5">
+        <Loader2Icon className="size-3 animate-spin" />
+        Paper parsing
+      </Badge>
+    );
+  }
+  if (status === "failed") {
+    return (
+      <Badge variant="destructive" title={paperExtraction?.extraction?.failureReason}>
+        Paper parsing failed
+      </Badge>
+    );
+  }
+  return <Badge variant="outline">Paper metadata ready</Badge>;
+}
+
+function PaperMetadataPanel({
+  paperExtraction,
+}: {
+  paperExtraction: PaperExtractionStatus;
+}) {
+  const metadata = paperExtraction?.metadata;
+  if (!metadata) {
+    return null;
+  }
+  const authors = parsePaperAuthors(metadata.authorsJson);
+  return (
+    <section className="grid gap-3 rounded-[8px] border border-border bg-card p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="grid min-w-0 gap-1">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+            Paper metadata
+          </p>
+          <h2 className="text-[16px] font-semibold leading-6 text-foreground">
+            {metadata.title ?? "Untitled paper"}
+          </h2>
+        </div>
+        {typeof metadata.confidence === "number" ? (
+          <Badge variant="outline">{Math.round(metadata.confidence * 100)}%</Badge>
+        ) : null}
+      </div>
+      <div className="grid gap-1 text-[13px] text-muted-foreground">
+        {authors.length > 0 ? <p>{authors.join(", ")}</p> : null}
+        <p>
+          {[metadata.journal, metadata.publisher, metadata.publishedYear]
+            .filter(Boolean)
+            .join(" / ")}
+        </p>
+        {metadata.doi ? <p>DOI: {metadata.doi}</p> : null}
+      </div>
+      {metadata.abstract ? (
+        <p className="max-w-4xl text-[13px] leading-6 text-foreground/85">
+          {metadata.abstract}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function parsePaperAuthors(authorsJson?: string) {
+  if (!authorsJson) {
+    return [];
+  }
+  try {
+    const authors = JSON.parse(authorsJson) as Array<{ name?: string }>;
+    return authors.map((author) => author.name).filter((name): name is string => Boolean(name));
+  } catch {
+    return [];
+  }
 }
 
 function IndexingStatusBadge({
@@ -706,7 +849,7 @@ function formatByteSize(size: number) {
 function ArtifactLoading() {
   return (
     <div className={cn("grid gap-4", panelBodyPaddingClass)}>
-      <p className="text-[12px] font-medium text-muted-foreground">Memuat artifact...</p>
+      <p className="text-[12px] font-medium text-muted-foreground">Memuat artifact…</p>
       <Skeleton className="h-12 rounded-[8px]" />
       <Skeleton className="h-64 rounded-[8px]" />
     </div>
