@@ -116,7 +116,7 @@ export function DrawerPopup({
   ...props
 }: React.ComponentProps<typeof BaseDrawer.Popup> &
   VariantProps<typeof drawerPopupVariants> & {
-    portalContainer?: HTMLElement | ShadowRoot | null;
+    portalContainer?: Element | null;
     backdrop?: boolean;
   }) {
   const inlined = portalContainer !== undefined;
