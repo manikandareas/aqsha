@@ -13,8 +13,7 @@ import {
   SearchIcon,
   SparklesIcon,
 } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
-import { Badge } from "@/components/ui/badge";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WorkspacePickerDialog } from "@/features/workspaces/components/workspace-picker-dialog";
@@ -26,7 +25,7 @@ import {
   useConvexActionState,
   useConvexMutationState,
 } from "@/lib/convex-query";
-import { cn } from "@/lib/utils";
+import { libraryArtifactGridClass } from "@/lib/library-grid";
 
 const suggestedQueries = [
   "AI tutoring formative assessment",
@@ -44,6 +43,7 @@ export function ExplorePage() {
   } = useWorkspaceIndexData();
   const searchPapers = useConvexActionState(api.explore.searchPapers);
   const createUrl = useConvexMutationState(api.artifacts.createUrl);
+  const initialRecommendationsStarted = useRef(false);
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [response, setResponse] = useState<ExploreSearchResponse | null>(null);
@@ -77,6 +77,10 @@ export function ExplorePage() {
   };
 
   useEffect(() => {
+    if (initialRecommendationsStarted.current) {
+      return;
+    }
+    initialRecommendationsStarted.current = true;
     const task = window.setTimeout(() => {
       void (async () => {
         setIsLoading(true);
@@ -191,12 +195,11 @@ export function ExplorePage() {
           {isLoading ? (
             <ExploreSkeletonGrid />
           ) : response?.items.length ? (
-            <section className="grid auto-rows-fr gap-3 md:grid-cols-2 lg:grid-cols-12">
-              {response.items.map((paper, index) => (
+            <section className={libraryArtifactGridClass}>
+              {response.items.map((paper) => (
                 <PaperCard
                   key={paper.key}
                   paper={paper}
-                  index={index}
                   saved={savedKeys.has(paper.key)}
                   onSave={() => setSelectedPaper(paper)}
                 />
@@ -223,53 +226,57 @@ export function ExplorePage() {
 
 function PaperCard({
   paper,
-  index,
   saved,
   onSave,
 }: {
   paper: ExplorePaper;
-  index: number;
   saved: boolean;
   onSave: () => void;
 }) {
-  const accent = accentForKey(paper.key);
-  const wide = index % 5 === 0 || index % 7 === 3;
+  const year = paper.year ? String(paper.year) : "Paper";
+  const authors = paper.authors.length > 0 ? paper.authors.join(", ") : paper.sourceLabel;
+  const detailItems = [
+    paper.venue,
+    typeof paper.citedByCount === "number"
+      ? `${paper.citedByCount.toLocaleString()} citation`
+      : null,
+    paper.isOpenAccess ? "Open access" : null,
+  ].filter((item): item is string => Boolean(item));
+
   return (
     <article
-      className={cn(
-        "group relative grid min-h-[300px] overflow-hidden rounded-[10px] border border-border/80 bg-card shadow-sm transition-[border-color,transform] hover:-translate-y-0.5 hover:border-primary/25",
-        wide ? "lg:col-span-7" : "lg:col-span-5",
-      )}
+      className="group relative flex aspect-[8/9] min-h-[300px] flex-col overflow-hidden rounded-[20px] border border-border bg-card shadow-aqsha transition-[border-color,box-shadow,transform] duration-150 ease-out hover:-translate-y-0.5 hover:shadow-[var(--shadow-soft-card)]"
     >
-      <div className={cn("absolute inset-y-0 left-0 w-1.5", accent)} aria-hidden />
-      <div className="grid h-full content-between gap-5 p-4 pl-5">
-        <div className="grid gap-4">
-          <div className="flex min-w-0 items-start justify-between gap-3">
-            <Badge variant="outline" className="rounded-[6px] px-2 py-0.5 text-[10px]">
-              {paper.provider}
-            </Badge>
-            <span className="shrink-0 text-[11px] font-semibold text-muted-foreground">
-              {paper.year ?? "Paper"}
+      <div className="flex min-h-0 flex-1 flex-col p-5">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex h-7 shrink-0 items-center justify-center rounded-[8px] bg-muted px-2 text-[12px] font-semibold leading-none text-muted-foreground">
+            {year}
+          </span>
+          <span className="min-w-0 truncate text-[12px] font-semibold leading-none text-muted-foreground">
+            {paper.provider}
+          </span>
+          {paper.score ? (
+            <span className="ml-auto shrink-0 text-[11px] font-semibold leading-none text-muted-foreground">
+              {Math.round(paper.score)} score
             </span>
-          </div>
+          ) : null}
+        </div>
 
-          <div className="grid gap-2">
-            <h2 className="line-clamp-3 font-heading text-xl font-semibold leading-tight tracking-normal">
-              {paper.title}
-            </h2>
-            <p className="line-clamp-1 text-[12px] font-medium text-muted-foreground">
-              {paper.authors.length > 0 ? paper.authors.join(", ") : paper.sourceLabel}
-            </p>
-          </div>
+        <h2 className="mt-5 line-clamp-4 text-[20px] font-semibold leading-[1.22] text-foreground">
+          {paper.title}
+        </h2>
 
-          <div className="grid min-h-[98px] content-start rounded-[8px] border border-border/70 bg-background/70 p-3">
-            <p className="line-clamp-4 text-[13px] leading-6 text-ink-soft">
-              {paper.snippet}
-            </p>
-          </div>
+        <p className="mt-2 line-clamp-1 text-[12px] font-medium text-muted-foreground">
+          {authors}
+        </p>
 
-          <div className="flex flex-wrap gap-1.5">
-            {paper.topics.slice(0, 4).map((topic) => (
+        <p className="mt-4 line-clamp-5 text-[13px] leading-6 text-ink-soft">
+          {paper.snippet}
+        </p>
+
+        {paper.topics.length > 0 ? (
+          <div className="mt-4 flex flex-wrap gap-1.5">
+            {paper.topics.slice(0, 3).map((topic) => (
               <span
                 key={topic}
                 className="rounded-full bg-muted px-2 py-1 text-[10px] font-semibold text-muted-foreground"
@@ -278,22 +285,33 @@ function PaperCard({
               </span>
             ))}
           </div>
-        </div>
+        ) : null}
 
-        <div className="grid gap-3">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-medium text-muted-foreground">
-            {paper.venue ? <span className="line-clamp-1">{paper.venue}</span> : null}
-            {typeof paper.citedByCount === "number" ? (
-              <span>{paper.citedByCount.toLocaleString()} citation</span>
-            ) : null}
-            {paper.isOpenAccess ? <span>Open access</span> : null}
-          </div>
-
-          {paper.doi || paper.arxivId ? (
-            <p className="truncate font-mono text-[10px] text-muted-foreground">
-              {paper.doi ? `doi:${paper.doi}` : `arxiv:${paper.arxivId}`}
-            </p>
+        <div className="mt-auto grid gap-3 pt-6">
+          {detailItems.length > 0 ? (
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-medium text-muted-foreground">
+              {detailItems.map((item) => (
+                <span key={item} className="line-clamp-1">
+                  {item}
+                </span>
+              ))}
+            </div>
           ) : null}
+
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <span className="relative inline-flex size-4 shrink-0 items-end justify-end">
+              <span className="absolute left-0 top-0.5 size-3 rotate-[-14deg] rounded-[4px] bg-muted-foreground/45" />
+              <span className="relative size-3.5 rounded-[4px] border border-card bg-muted-foreground/70" />
+            </span>
+            <span className="min-w-0 truncate text-[12px] font-semibold leading-none">
+              {paper.doi
+                ? `doi:${paper.doi}`
+                : paper.arxivId
+                  ? `arxiv:${paper.arxivId}`
+                  : "Research paper"}
+            </span>
+            <ExternalLinkIcon className="ml-auto size-3.5 text-muted-foreground" />
+          </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <Button asChild size="sm" className="h-8">
@@ -330,17 +348,14 @@ function PaperCard({
 
 function ExploreSkeletonGrid() {
   return (
-    <section className="grid gap-3 md:grid-cols-2 lg:grid-cols-12">
+    <section className={libraryArtifactGridClass}>
       {Array.from({ length: 6 }).map((_, index) => (
         <div
           key={index}
-          className={cn(
-            "grid min-h-[300px] gap-4 rounded-[10px] border border-border/80 bg-card p-4",
-            index % 3 === 0 ? "lg:col-span-7" : "lg:col-span-5",
-          )}
+          className="grid aspect-[8/9] min-h-[300px] gap-4 rounded-[20px] border border-border bg-card p-5 shadow-aqsha"
         >
           <div className="flex justify-between">
-            <Skeleton className="h-5 w-20 rounded-[6px]" />
+            <Skeleton className="h-7 w-20 rounded-[8px]" />
             <Skeleton className="h-4 w-12" />
           </div>
           <Skeleton className="h-16 w-full" />
@@ -390,16 +405,4 @@ function ExploreEmptyState({
       </div>
     </section>
   );
-}
-
-function accentForKey(key: string) {
-  const accents = [
-    "bg-primary",
-    "bg-mint-foreground",
-    "bg-sky-foreground",
-    "bg-lemon-foreground",
-    "bg-lavender-foreground",
-  ];
-  const code = [...key].reduce((total, char) => total + char.charCodeAt(0), 0);
-  return accents[code % accents.length];
 }
