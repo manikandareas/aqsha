@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
  * when closed, main is full-bleed (`p-0`). Inner header/body tokens stay the same.
  */
 const panelSurfaceFramedClass =
-  "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-background shadow-sm";
+  "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-background shadow-none";
 
 const panelSurfaceFullBleedClass =
   "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-none border-0 bg-background shadow-none";
