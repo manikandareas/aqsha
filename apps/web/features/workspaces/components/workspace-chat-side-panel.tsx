@@ -239,7 +239,6 @@ function WorkspacePanelDraftView({
     >
       <ComposerHeroState
         logoClassName="size-12 sm:size-18"
-        // titleClassName="font-sans text-2xl font-bold tracking-tight text-foreground sm:text-3xl leading-none"
         titleClassName="font-sans text-xl font-bold tracking-tight text-foreground leading-none"
         hint="Pilih item di board (klik sekali) atau ketik / untuk perintah riset"
       >

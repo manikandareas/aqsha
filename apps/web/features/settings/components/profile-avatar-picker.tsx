@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { CameraIcon, Loader2Icon } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "@aqsha/convex/api";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
@@ -25,7 +26,6 @@ export function ProfileAvatarPicker({
   const generateUploadUrl = useConvexMutationState(api.auth.generateAvatarUploadUrl);
   const setAvatarFromStorage = useConvexMutationState(api.auth.setAvatarFromStorage);
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const pickFile = () => {
     if (uploading) return;
@@ -37,15 +37,13 @@ export function ProfileAvatarPicker({
     event.target.value = "";
     if (!file) return;
 
-    setError(null);
-
     if (!acceptedTypes.has(file.type)) {
-      setError("Pilih file JPG, PNG, WebP, atau GIF.");
+      toast.error("Pilih file gambar dengan format JPG, PNG, WebP, atau GIF.");
       return;
     }
 
     if (file.size > maxBytes) {
-      setError("Ukuran file maksimal 5 MB.");
+      toast.error("Ukuran foto maksimal 5 MB.");
       return;
     }
 
@@ -59,14 +57,14 @@ export function ProfileAvatarPicker({
       });
 
       if (!response.ok) {
-        setError("Upload gagal. Coba lagi.");
+        toast.error("Foto belum bisa diunggah. Coba lagi sebentar.");
         setUploading(false);
         return;
       }
 
       const body = (await response.json()) as { storageId?: string };
       if (!body.storageId) {
-        setError("ID penyimpanan tidak tersedia.");
+        toast.error("Foto belum bisa disimpan. Coba unggah ulang.");
         setUploading(false);
         return;
       }
@@ -74,7 +72,7 @@ export function ProfileAvatarPicker({
       await setAvatarFromStorage.mutateAsync({ storageId: body.storageId as never });
       setUploading(false);
     } catch (uploadError) {
-      setError(readableConvexErrorMessage(uploadError, "Gagal memperbarui avatar."));
+      toast.error(readableConvexErrorMessage(uploadError, "Foto profil belum bisa diperbarui. Coba lagi."));
       setUploading(false);
     }
   };
@@ -123,8 +121,6 @@ export function ProfileAvatarPicker({
           onChange={onFileChange}
         />
       </button>
-
-      {error ? <p className="text-[12px] text-coral-foreground">{error}</p> : null}
     </div>
   );
 }

@@ -36,7 +36,7 @@ export function SettingsRail({ viewer }: { viewer: Viewer | undefined }) {
   return (
     <Sidebar
       collapsible="offcanvas"
-      className="border-r border-sidebar-border/80 bg-sidebar [&_[data-slot=sidebar-inner]]:bg-sidebar"
+      variant="flush"
     >
       <SidebarHeader className="gap-3 px-3 pb-3 pt-3.5">
         <SidebarMenu>

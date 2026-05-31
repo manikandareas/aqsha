@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Loader2Icon, SaveIcon } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "@aqsha/convex/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,9 +39,9 @@ export function useDisplayNameEditor(savedName: string | null) {
     try {
       await updateDisplayName.mutateAsync({ name: trimmedDraft });
     } catch (saveError) {
-      setLocalError(
-        readableConvexErrorMessage(saveError, "Gagal menyimpan nama tampilan."),
-      );
+      const message = readableConvexErrorMessage(saveError, "Nama tampilan belum bisa disimpan. Coba lagi.");
+      setLocalError(message);
+      toast.error(message);
     }
   };
 
@@ -59,7 +60,7 @@ export function useDisplayNameEditor(savedName: string | null) {
 type DisplayNameEditor = ReturnType<typeof useDisplayNameEditor>;
 
 function DisplayNameInput({ editor }: { editor: DisplayNameEditor }) {
-  const { draft, setDraft, setError, saving, error, save } = editor;
+  const { draft, setDraft, setError, saving, save } = editor;
 
   return (
     <div className="grid gap-2">
@@ -80,8 +81,6 @@ function DisplayNameInput({ editor }: { editor: DisplayNameEditor }) {
         autoComplete="name"
         className="h-[42px] rounded-lg border-input bg-muted/40 px-3.5 text-[13px] shadow-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
       />
-
-      {error ? <p className="text-[12px] text-coral-foreground">{error}</p> : null}
     </div>
   );
 }

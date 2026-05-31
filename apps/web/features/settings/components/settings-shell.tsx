@@ -20,7 +20,7 @@ export function SettingsShell({ children }: { children: ReactNode }) {
       }
     >
       <SettingsRail viewer={viewer} />
-      <SidebarInset className="min-h-svh bg-muted/30 text-foreground">
+      <SidebarInset className="min-h-svh bg-background text-foreground">
         <main className="mx-auto w-full max-w-2xl px-4 py-8 sm:px-6 sm:py-10">
           <div className="grid gap-6">{children}</div>
         </main>

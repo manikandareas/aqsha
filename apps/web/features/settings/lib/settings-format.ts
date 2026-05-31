@@ -31,16 +31,16 @@ export function getInitials(name: string, email: string) {
 export function readableBillingError(error: unknown) {
   const { message, code } = readableConvexError(error, "Billing action belum bisa dibuat.");
   if (code === "billing_email_invalid") {
-    return "Polar menolak email demo/reserved. Gunakan email asli lalu ulangi checkout.";
+    return "Email ini belum bisa dipakai untuk pembayaran. Gunakan email aktif lain lalu coba lagi.";
   }
   if (code === "billing_product_not_configured") {
-    return "Product Polar belum dikonfigurasi di Convex env.";
+    return "Pembayaran belum bisa dibuka saat ini. Coba lagi sebentar.";
   }
   if (message.includes("real email domain") || message.includes("valid email")) {
-    return "Polar menolak email demo/reserved. Gunakan email asli lalu ulangi checkout.";
+    return "Email ini belum bisa dipakai untuk pembayaran. Gunakan email aktif lain lalu coba lagi.";
   }
   if (message.includes("not configured")) {
-    return "Product Polar belum dikonfigurasi di Convex env.";
+    return "Pembayaran belum bisa dibuka saat ini. Coba lagi sebentar.";
   }
-  return "Billing action belum bisa dibuat. Cek konfigurasi Polar dan coba lagi.";
+  return "Permintaan pembayaran belum bisa diproses. Coba lagi sebentar.";
 }

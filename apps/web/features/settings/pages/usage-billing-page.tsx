@@ -1,7 +1,8 @@
 "use client";
 
 import { Loader2Icon, XCircleIcon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useSettingsUsageBillingData } from "../api/use-settings-usage-billing-data";
 import {
@@ -9,7 +10,6 @@ import {
   PlanIntervalSelector,
   type BillingInterval,
 } from "../components/billing-plan-controls";
-import { BillingErrorBanner, BillingNoticeBanner } from "../components/billing-error-banner";
 import { LoadingSettingsPage } from "../components/loading-settings-page";
 import {
   CreditsUsageSection,
@@ -33,21 +33,30 @@ export function SettingsUsageBillingPage({
   const current = data.current;
   const plans = data.plans;
   const activity = data.activity;
-  if (!current || !plans || !activity) return <LoadingSettingsPage />;
-
-  const usagePercent = usagePercentage(current);
   const checkoutNotice =
     checkoutStatus === "success"
       ? "Checkout berhasil dikembalikan. Status langganan diperbarui setelah webhook Polar diterima."
       : null;
   const checkoutError =
     checkoutStatus === "error" ? "Checkout dibatalkan atau gagal diproses." : null;
+  const billingNoticeMessage = data.billingNotice ?? checkoutNotice;
+  const billingErrorMessage = data.billingError ?? checkoutError;
+
+  useEffect(() => {
+    if (billingNoticeMessage) toast.success(billingNoticeMessage);
+  }, [billingNoticeMessage]);
+
+  useEffect(() => {
+    if (billingErrorMessage) toast.error(billingErrorMessage);
+  }, [billingErrorMessage]);
+
+  if (!current || !plans || !activity) return <LoadingSettingsPage />;
+
+  const usagePercent = usagePercentage(current);
 
   return (
     <>
       <SettingsHeader section="usage-billing" title="Penggunaan & tagihan" />
-      <BillingNoticeBanner message={data.billingNotice ?? checkoutNotice} />
-      <BillingErrorBanner message={data.billingError ?? checkoutError} />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <SettingsSummaryCard label="Paket saat ini">
