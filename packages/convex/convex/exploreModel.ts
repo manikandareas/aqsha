@@ -15,6 +15,7 @@ export type ExplorePaper = {
   key: string;
   title: string;
   snippet: string;
+  abstract?: string;
   url: string;
   pdfUrl?: string;
   doi?: string;
@@ -126,6 +127,7 @@ export function candidateToExplorePaper(candidate: ExternalCandidate): ExplorePa
     key,
     title,
     snippet: trimForSnippet(candidate.snippet, 1_200) || "Metadata result.",
+    abstract: collapse(candidate.snippet) || undefined,
     url,
     pdfUrl: metadata.pdfUrl,
     doi: doi || undefined,

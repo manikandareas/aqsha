@@ -17,6 +17,7 @@ import {
   StarIcon,
   TrendingUpIcon,
 } from "lucide-react";
+import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WorkspacePickerDialog } from "@/features/workspaces/components/workspace-picker-dialog";
@@ -29,6 +30,7 @@ import {
   useConvexMutationState,
 } from "@/lib/convex-query";
 import { cn } from "@/lib/utils";
+import { encodePaperRef } from "../utils/paper-ref";
 
 type ExploreTab = "trending" | "browse";
 type TimeRange = "all" | "week" | "month" | "year";
@@ -419,6 +421,7 @@ function PaperListItem({
   const topic = paper.topics[0] ?? paper.venue ?? paper.provider;
   const metrics = paperMetrics(paper, index);
   const layout = thumbnailLayouts[index % thumbnailLayouts.length];
+  const detailHref = `/app/explore/${encodePaperRef(paper.key)}`;
 
   return (
     <article
@@ -427,15 +430,13 @@ function PaperListItem({
         variant === "browse" && "sm:grid-cols-[76px_minmax(0,1fr)_72px]",
       )}
     >
-      <a
-        href={paper.url}
-        target="_blank"
-        rel="noreferrer"
+      <Link
+        href={detailHref}
         className="mt-0.5 block"
-        aria-label={`Open ${paper.title}`}
+        aria-label={`View ${paper.title}`}
       >
         <PaperThumbnail layout={layout} />
-      </a>
+      </Link>
 
       <div className="min-w-0">
         <div className="flex min-w-0 items-start gap-2">
@@ -445,9 +446,9 @@ function PaperListItem({
               variant === "browse" && "sm:text-[16px]",
             )}
           >
-            <a href={paper.url} target="_blank" rel="noreferrer" className="focus:outline-none">
+            <Link href={detailHref} className="focus:outline-none">
               {paper.title}
-            </a>
+            </Link>
           </h2>
         </div>
 

@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppToaster } from "@/components/app-toaster";
 import { siteName } from "@/lib/metadata";
 import { ConvexClientProvider } from "./convex-client-provider";
+import { shadcn } from "@clerk/themes";
 import "./globals.css";
 
 const inter = Inter({
@@ -33,7 +34,8 @@ export const metadata: Metadata = {
     default: siteName,
     template: `%s | ${siteName}`,
   },
-  description: "Aqsha is a research workspace for focused inquiry, threads, and curated knowledge.",
+  description:
+    "Aqsha is a research workspace for focused inquiry, threads, and curated knowledge.",
 };
 
 export default async function RootLayout({
@@ -48,7 +50,7 @@ export default async function RootLayout({
       className={`${inter.variable} ${playfairDisplay.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full">
-        <ClerkProvider>
+        <ClerkProvider appearance={{ baseTheme: shadcn }}>
           <ThemeProvider
             attribute="class"
             defaultTheme="system"

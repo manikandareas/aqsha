@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
-import { action, type ActionCtx } from "./_generated/server";
+import { action, internalMutation, query, type ActionCtx } from "./_generated/server";
 import { requireCurrentUser } from "./auth";
 import {
   lookupDoiProvider,
@@ -16,6 +16,7 @@ import {
   exploreCacheKey,
   normalizeExploreQuery,
   type ExploreMode,
+  type ExplorePaper,
   type ExploreProvider,
   type ExploreProviderStatus,
   type ExploreSearchResponse,
@@ -23,6 +24,36 @@ import {
 
 const defaultRecommendationQuery = "education research learning assessment artificial intelligence";
 const minFallbackResults = 5;
+
+const exploreProviderValidator = v.union(
+  v.literal("OpenAlex"),
+  v.literal("arXiv"),
+  v.literal("Exa"),
+  v.literal("Jina"),
+  v.literal("Crossref"),
+);
+
+const explorePaperValidator = v.object({
+  key: v.string(),
+  title: v.string(),
+  snippet: v.string(),
+  abstract: v.optional(v.string()),
+  url: v.string(),
+  pdfUrl: v.optional(v.string()),
+  doi: v.optional(v.string()),
+  arxivId: v.optional(v.string()),
+  openalexId: v.optional(v.string()),
+  provider: exploreProviderValidator,
+  sourceLabel: v.string(),
+  authors: v.array(v.string()),
+  year: v.optional(v.number()),
+  publicationDate: v.optional(v.string()),
+  venue: v.optional(v.string()),
+  citedByCount: v.optional(v.number()),
+  isOpenAccess: v.optional(v.boolean()),
+  topics: v.array(v.string()),
+  score: v.optional(v.number()),
+});
 
 type ProviderResult = {
   items: ExternalCandidate[];
@@ -44,6 +75,7 @@ export const searchPapers = action({
     const cacheKey = exploreCacheKey({ mode, query, limit });
     const cached = await readExploreCache(ctx, cacheKey);
     if (cached) {
+      await persistExplorePapers(ctx, user._id, cached.items);
       return { ...cached, cached: true };
     }
 
@@ -123,7 +155,61 @@ export const searchPapers = action({
       cached: false,
     };
     await writeExploreCache(ctx, cacheKey, response);
+    await persistExplorePapers(ctx, user._id, response.items);
     return response;
+  },
+});
+
+export const getPaper = query({
+  args: {
+    key: v.string(),
+  },
+  handler: async (ctx, args): Promise<(ExplorePaper & { lastSeenAt: number }) | null> => {
+    const user = await requireCurrentUser(ctx);
+    const paper = await ctx.db
+      .query("explorePapers")
+      .withIndex("by_owner_key", (q) => q.eq("ownerUserId", user._id).eq("key", args.key))
+      .unique();
+
+    if (!paper) {
+      return null;
+    }
+
+    const { ownerUserId: _ownerUserId, _id, _creationTime, ...detail } = paper;
+    void _ownerUserId;
+    void _id;
+    void _creationTime;
+    return detail;
+  },
+});
+
+export const upsertPapersForOwner = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    papers: v.array(explorePaperValidator),
+    lastSeenAt: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    for (const paper of args.papers) {
+      const existing = await ctx.db
+        .query("explorePapers")
+        .withIndex("by_owner_key", (q) => q.eq("ownerUserId", args.ownerUserId).eq("key", paper.key))
+        .unique();
+
+      const nextPaper = {
+        ...paper,
+        ownerUserId: args.ownerUserId,
+        lastSeenAt: args.lastSeenAt,
+      };
+
+      if (existing) {
+        await ctx.db.replace("explorePapers", existing._id, nextPaper);
+      } else {
+        await ctx.db.insert("explorePapers", nextPaper);
+      }
+    }
+    return null;
   },
 });
 
@@ -201,6 +287,21 @@ async function writeExploreCache(
     cacheKey,
     status: response.items.length > 0 ? "ready" : "empty",
     valueJson: JSON.stringify(response),
+  });
+}
+
+async function persistExplorePapers(
+  ctx: ActionCtx,
+  ownerUserId: string,
+  papers: ExplorePaper[],
+) {
+  if (papers.length === 0) {
+    return;
+  }
+  await ctx.runMutation(internal.explore.upsertPapersForOwner, {
+    ownerUserId,
+    papers,
+    lastSeenAt: Date.now(),
   });
 }
 

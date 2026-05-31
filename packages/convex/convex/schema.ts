@@ -59,6 +59,14 @@ const extractionStatusValidator = v.union(
   v.literal("failed"),
 );
 
+const exploreProviderValidator = v.union(
+  v.literal("OpenAlex"),
+  v.literal("arXiv"),
+  v.literal("Exa"),
+  v.literal("Jina"),
+  v.literal("Crossref"),
+);
+
 const paperAuthorValidator = v.object({
   name: v.string(),
   affiliation: v.optional(v.string()),
@@ -811,6 +819,30 @@ export default defineSchema(
       updatedAt: v.number(),
       expiresAt: v.number(),
     }).index("by_provider_key", ["provider", "cacheKey"]),
+
+    explorePapers: defineTable({
+      ownerUserId: v.string(),
+      key: v.string(),
+      title: v.string(),
+      snippet: v.string(),
+      abstract: v.optional(v.string()),
+      url: v.string(),
+      pdfUrl: v.optional(v.string()),
+      doi: v.optional(v.string()),
+      arxivId: v.optional(v.string()),
+      openalexId: v.optional(v.string()),
+      provider: exploreProviderValidator,
+      sourceLabel: v.string(),
+      authors: v.array(v.string()),
+      year: v.optional(v.number()),
+      publicationDate: v.optional(v.string()),
+      venue: v.optional(v.string()),
+      citedByCount: v.optional(v.number()),
+      isOpenAccess: v.optional(v.boolean()),
+      topics: v.array(v.string()),
+      score: v.optional(v.number()),
+      lastSeenAt: v.number(),
+    }).index("by_owner_key", ["ownerUserId", "key"]),
 
     domainReliability: defineTable({
       domain: v.string(),
