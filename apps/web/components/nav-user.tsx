@@ -7,7 +7,7 @@ import {
   LogOutIcon,
   MoreVerticalIcon,
   SettingsIcon,
-} from "lucide-react";
+} from "@aqsha/ui/icons";
 import { ThemeMenuSub } from "@/components/theme-toggle";
 import {
   Avatar,

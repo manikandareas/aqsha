@@ -47,6 +47,7 @@ import { AgentRunBlock } from "./run-progress";
 import { CenteredLoading } from "./shared";
 
 const emptyContextArtifacts: DraftContextArtifact[] = [];
+const emptyThreadSummaries: ThreadSummary[] = [];
 
 export function ChatThreadState({
   threadId,
@@ -63,7 +64,7 @@ export function ChatThreadState({
   contextArtifacts = emptyContextArtifacts,
   onRemoveContextArtifact,
   threadWorkspaceId,
-  threads = [],
+  threads = emptyThreadSummaries,
 }: {
   threadId?: string;
   isLoading: boolean;

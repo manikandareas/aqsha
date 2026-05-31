@@ -20,9 +20,16 @@ export function usagePercentage(
 }
 
 export function findUpgradePlan(plans: Plan[], currentKey: BillingCurrent["planKey"]) {
-  return plans
-    .filter((plan) => planOrder[plan.key] > planOrder[currentKey])
-    .sort((a, b) => planOrder[a.key] - planOrder[b.key])[0];
+  let upgradePlan: Plan | undefined;
+  for (const plan of plans) {
+    if (planOrder[plan.key] <= planOrder[currentKey]) {
+      continue;
+    }
+    if (!upgradePlan || planOrder[plan.key] < planOrder[upgradePlan.key]) {
+      upgradePlan = plan;
+    }
+  }
+  return upgradePlan;
 }
 
 export function formatPlanPrice(plans: Plan[], planKey: BillingCurrent["planKey"]) {

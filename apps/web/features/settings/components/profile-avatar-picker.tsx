@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { CameraIcon, Loader2Icon } from "lucide-react";
+import { CameraIcon, Loader2Icon } from "@aqsha/ui/icons";
 import { toast } from "sonner";
 import { api } from "@aqsha/convex/api";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -116,6 +116,7 @@ export function ProfileAvatarPicker({
         <input
           ref={inputRef}
           type="file"
+          aria-label="Pilih foto profil"
           accept="image/jpeg,image/png,image/webp,image/gif"
           className="sr-only"
           onChange={onFileChange}

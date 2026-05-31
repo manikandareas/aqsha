@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CheckIcon } from "lucide-react";
+import { CheckIcon } from "@aqsha/ui/icons";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useSettingsOverviewData } from "../api/use-settings-overview-data";

@@ -49,7 +49,7 @@ import {
   PlusIcon,
   SquareIcon,
   XIcon,
-} from "lucide-react";
+} from "@aqsha/ui/icons";
 import { nanoid } from "nanoid";
 import type {
   ChangeEvent,
@@ -239,7 +239,7 @@ export type PromptInputProviderProps = PropsWithChildren<{
  * Optional global provider that lifts PromptInput state outside of PromptInput.
  * If you don't use it, PromptInput stays fully self-managed.
  */
-const PromptInputProvider = ({
+export const PromptInputProvider = ({
   initialInput: initialTextInput = "",
   children,
 }: PromptInputProviderProps) => {
@@ -479,7 +479,6 @@ export type PromptInputProps = Omit<
   maxFiles?: number;
   // bytes
   maxFileSize?: number;
-  onFilesChange?: (files: PromptInputFile[]) => void;
   onError?: (err: {
     code: "max_files" | "max_file_size" | "accept";
     message: string;
@@ -498,7 +497,6 @@ export const PromptInput = ({
   syncHiddenInput,
   maxFiles,
   maxFileSize,
-  onFilesChange,
   onError,
   onSubmit,
   children,
@@ -539,8 +537,10 @@ export const PromptInput = ({
 
       const patterns = accept
         .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
+        .flatMap((s) => {
+          const pattern = s.trim();
+          return pattern ? [pattern] : [];
+        });
 
       return patterns.some((pattern) => {
         if (pattern.endsWith("/*")) {
@@ -763,7 +763,7 @@ export const PromptInput = ({
     [usingProvider]
   );
 
-  const handleChange: ChangeEventHandler<HTMLInputElement> = (event) => {
+  const addFilesFromPicker: ChangeEventHandler<HTMLInputElement> = (event) => {
       if (event.currentTarget.files) {
         add(event.currentTarget.files);
       }
@@ -779,10 +779,6 @@ export const PromptInput = ({
       openFileDialog,
       remove,
     });
-
-  useEffect(() => {
-    onFilesChange?.(files.map((item) => ({ ...item, id: item.id })));
-  }, [files, onFilesChange]);
 
   const refsCtx = ({
       add: (incoming: SourceDocumentUIPart[] | SourceDocumentUIPart) => {
@@ -865,7 +861,7 @@ export const PromptInput = ({
         aria-label="Upload files"
         className="hidden"
         multiple={multiple}
-        onChange={handleChange}
+        onChange={addFilesFromPicker}
         ref={inputRef}
         title="Upload files"
         type="file"
@@ -919,7 +915,7 @@ const PromptInputTextarea = ({
 }: PromptInputTextareaProps) => {
   const controller = useOptionalPromptInputController();
   const attachments = usePromptInputAttachments();
-  const [isComposing, setIsComposing] = useState(false);
+  const isComposingRef = useRef(false);
 
   const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
       // Call the external onKeyDown handler first
@@ -931,7 +927,7 @@ const PromptInputTextarea = ({
       }
 
       if (e.key === "Enter") {
-        if (isComposing || e.nativeEvent.isComposing) {
+        if (isComposingRef.current || e.nativeEvent.isComposing) {
           return;
         }
         if (e.shiftKey) {
@@ -989,8 +985,12 @@ const PromptInputTextarea = ({
       }
     };
 
-  const handleCompositionEnd = () => setIsComposing(false);
-  const handleCompositionStart = () => setIsComposing(true);
+  const handleCompositionEnd = () => {
+    isComposingRef.current = false;
+  };
+  const handleCompositionStart = () => {
+    isComposingRef.current = true;
+  };
 
   const controlledProps = controller
     ? {
@@ -1186,7 +1186,7 @@ export const PromptInputSubmit = ({
     Icon = <XIcon className="size-4" />;
   }
 
-  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+  const submitOrStopGeneration = (e: React.MouseEvent<HTMLButtonElement>) => {
       if (isGenerating && onStop) {
         e.preventDefault();
         onStop();
@@ -1199,7 +1199,7 @@ export const PromptInputSubmit = ({
     <InputGroupButton
       aria-label={isGenerating ? "Stop" : "Submit"}
       className={cn(className)}
-      onClick={handleClick}
+      onClick={submitOrStopGeneration}
       size={size}
       type={isGenerating && onStop ? "button" : "submit"}
       variant={variant}
@@ -1310,17 +1310,18 @@ export type PromptInputTabLabelProps = HTMLAttributes<HTMLHeadingElement>;
 
 const PromptInputTabLabel = ({
   className,
+  children,
   ...props
 }: PromptInputTabLabelProps) => (
-  // Content provided via children in props
-  // oxlint-disable-next-line eslint-plugin-jsx-a11y(heading-has-content)
   <h3
     className={cn(
       "mb-2 px-3 font-medium text-muted-foreground text-xs",
       className
     )}
     {...props}
-  />
+  >
+    {children}
+  </h3>
 );
 
 export type PromptInputTabBodyProps = HTMLAttributes<HTMLDivElement>;

@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { CompassIcon } from "lucide-react";
+import { CompassIcon } from "@aqsha/ui/icons";
 import {
   panelComposerPaddingClass,
   threadTranscriptColumnClass,
 } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
-import { motion, useReducedMotion } from "motion/react";
+import { m, useReducedMotion } from "motion/react";
 import type { RateStatus } from "../types";
 import type {
   DraftContextArtifact,
@@ -37,7 +37,7 @@ export function HomeStartState({
   return (
     <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden bg-background">
       <div className="mx-auto flex w-full max-w-5xl flex-1 items-center justify-center px-4 py-10 sm:px-8">
-        <motion.div
+        <m.div
           className="w-full max-w-2xl"
           initial={
             shouldReduceMotion
@@ -67,7 +67,7 @@ export function HomeStartState({
               showSuggestions
             />
           </ComposerHeroState>
-        </motion.div>
+        </m.div>
       </div>
       <ExploreDockLink />
     </main>
@@ -78,7 +78,7 @@ function ExploreDockLink() {
   const shouldReduceMotion = useReducedMotion();
 
   return (
-    <motion.div
+    <m.div
       className="sticky bottom-4 z-30 mx-auto flex w-full max-w-5xl justify-center px-4 pb-4 sm:bottom-5 sm:px-8 sm:pb-5"
       initial={
         shouldReduceMotion
@@ -119,7 +119,7 @@ function ExploreDockLink() {
           Temukan Inspirasi
           <span className="absolute -bottom-0.5 left-0 h-px w-full origin-left scale-x-[0.7] bg-muted-foreground opacity-35 transition-transform duration-300 ease-out group-hover:scale-x-100 group-hover:opacity-55 group-focus-visible:scale-x-100 group-focus-visible:opacity-55" />
         </span>
-        <motion.span
+        <m.span
           aria-hidden="true"
           className="grid size-3.5 place-items-center text-muted-foreground"
           animate={shouldReduceMotion ? undefined : { rotate: [0, -8, 8, 0] }}
@@ -131,9 +131,9 @@ function ExploreDockLink() {
           }}
         >
           <CompassIcon className="size-3.5" strokeWidth={2.25} />
-        </motion.span>
+        </m.span>
       </Link>
-    </motion.div>
+    </m.div>
   );
 }
 

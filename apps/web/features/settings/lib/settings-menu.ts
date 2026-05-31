@@ -4,7 +4,7 @@ import {
   PaletteIcon,
   ShieldIcon,
   UserRoundIcon,
-} from "lucide-react";
+} from "@aqsha/ui/icons";
 
 export type SettingsKey =
   | "overview"

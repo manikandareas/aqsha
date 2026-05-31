@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderTreeIcon } from "lucide-react";
+import { FolderTreeIcon } from "@aqsha/ui/icons";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 

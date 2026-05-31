@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarRangeIcon, CreditCardIcon, Loader2Icon } from "lucide-react";
+import { CalendarRangeIcon, CreditCardIcon, Loader2Icon } from "@aqsha/ui/icons";
 import { Button } from "@/components/ui/button";
 import type { PendingKey } from "../api/use-settings-usage-billing-data";
 import { formatIdr } from "../lib/settings-format";

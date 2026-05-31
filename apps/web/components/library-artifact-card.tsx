@@ -9,7 +9,7 @@ import {
   ImageIcon,
   LinkIcon,
   TableIcon,
-} from "lucide-react";
+} from "@aqsha/ui/icons";
 import { LibraryCardFrame } from "@/components/library-card-frame";
 
 function LibraryArtifactCardComponent({

@@ -1,6 +1,6 @@
 "use client";
 
-import { LayersIcon, PanelLeftIcon } from "lucide-react";
+import { LayersIcon, PanelLeftIcon } from "@aqsha/ui/icons";
 import { PanelTitleLabel } from "@/components/panel-title-dropdown-trigger";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";

@@ -1,9 +1,7 @@
 "use client";
 
 import {
-  convexAction,
   convexQuery,
-  ConvexQueryClient,
   useConvexAction,
   useConvexAuth,
   useConvexMutation,
@@ -21,36 +19,20 @@ import type {
   FunctionReturnType,
 } from "convex/server";
 
-export { ConvexQueryClient, convexAction, convexQuery, useConvexAuth, useQuery };
+export { useConvexAuth };
 
 export function useConvexQuery<
   ConvexQueryReference extends FunctionReference<"query">,
 >(
   funcRef: ConvexQueryReference,
-  ...argsOrSkip: unknown[]
+  argsOrSkip: FunctionArgs<ConvexQueryReference> | "skip",
 ) {
-  const options = (convexQuery as unknown as (...args: unknown[]) => ReturnType<typeof convexQuery>)(
+  const options = convexQuery(
     funcRef,
-    ...argsOrSkip,
+    argsOrSkip,
   );
   return useQuery(options) as UseQueryResult<
     FunctionReturnType<ConvexQueryReference>,
-    Error
-  >;
-}
-
-export function useConvexActionQuery<
-  ConvexActionReference extends FunctionReference<"action">,
->(
-  funcRef: ConvexActionReference,
-  ...argsOrSkip: unknown[]
-) {
-  const options = (convexAction as unknown as (...args: unknown[]) => ReturnType<typeof convexAction>)(
-    funcRef,
-    ...argsOrSkip,
-  );
-  return useQuery(options) as UseQueryResult<
-    FunctionReturnType<ConvexActionReference>,
     Error
   >;
 }
@@ -78,9 +60,9 @@ export function useConvexQueryData<
   ConvexQueryReference extends FunctionReference<"query">,
 >(
   funcRef: ConvexQueryReference,
-  ...argsOrSkip: unknown[]
+  argsOrSkip: FunctionArgs<ConvexQueryReference> | "skip",
 ) {
-  return useConvexQuery(funcRef, ...argsOrSkip).data;
+  return useConvexQuery(funcRef, argsOrSkip).data;
 }
 
 export function useConvexMutationState<

@@ -1,16 +1,16 @@
 "use client";
 
-import { CheckIcon, CopyIcon } from "lucide-react";
+import { CheckIcon, CopyIcon } from "@aqsha/ui/icons";
 import {
   createContext,
-  useContext,
+  use,
   useEffect,
-  useMemo,
+  useRef,
   useState,
   type HTMLAttributes,
   type ReactNode,
 } from "react";
-import { codeToHtml, type BundledLanguage } from "shiki";
+import { codeToTokens, type BundledLanguage } from "shiki";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -21,12 +21,28 @@ type CodeBlockContextValue = {
 const CodeBlockContext = createContext<CodeBlockContextValue | null>(null);
 
 function useCodeBlockContext() {
-  const context = useContext(CodeBlockContext);
+  const context = use(CodeBlockContext);
   if (!context) {
     throw new Error("CodeBlock subcomponents must be used within CodeBlock.");
   }
   return context;
 }
+
+type HighlightToken = {
+  content: string;
+  offset: number;
+  color?: string;
+};
+
+type HighlightState =
+  | {
+      tokens: HighlightToken[][];
+      error: null;
+    }
+  | {
+      tokens: null;
+      error: string | null;
+    };
 
 type CodeBlockProps = HTMLAttributes<HTMLDivElement> & {
   code: string;
@@ -43,26 +59,32 @@ export function CodeBlock({
   className,
   ...props
 }: CodeBlockProps) {
-  const [html, setHtml] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const contextValue = useMemo(() => ({ code }), [code]);
+  const [highlight, setHighlight] = useState<HighlightState>({
+    tokens: null,
+    error: null,
+  });
+  const contextValue = { code };
 
   useEffect(() => {
     let mounted = true;
 
-    void codeToHtml(code || " ", {
+    void codeToTokens(code || " ", {
       lang: language,
       theme: "github-light",
     })
       .then((result) => {
         if (!mounted) return;
-        setHtml(result);
-        setError(null);
+        setHighlight({ tokens: result.tokens, error: null });
       })
       .catch((highlightError: unknown) => {
         if (!mounted) return;
-        setHtml("");
-        setError(highlightError instanceof Error ? highlightError.message : "Syntax highlighting failed.");
+        setHighlight({
+          tokens: null,
+          error:
+            highlightError instanceof Error
+              ? highlightError.message
+              : "Syntax highlighting failed.",
+        });
       });
 
     return () => {
@@ -78,21 +100,41 @@ export function CodeBlock({
         {...props}
       >
         {children}
-        {error ? (
+        {highlight.error ? (
           <p className="border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-[12px] font-medium text-destructive">
-            {error}
+            {highlight.error}
           </p>
         ) : null}
-        {html ? (
-          <div
+        {highlight.tokens ? (
+          <pre
             className={cn(
-              "code-block-content overflow-auto text-[12px] leading-6",
-              showLineNumbers ? "[&_code]:counter-reset:line [&_span.line]:before:mr-4 [&_span.line]:before:inline-block [&_span.line]:before:w-6 [&_span.line]:before:text-right [&_span.line]:before:text-muted-foreground/70 [&_span.line]:before:content-[counter(line)] [&_span.line]:counter-increment:line" : null,
-              "[&_pre]:m-0 [&_pre]:min-h-[360px] [&_pre]:bg-transparent! [&_pre]:p-4",
+              "code-block-content m-0 min-h-[360px] overflow-auto bg-transparent p-4 text-[12px] leading-6",
+              showLineNumbers && "[counter-reset:line]",
             )}
-            // Shiki returns escaped, syntax-highlighted HTML.
-            dangerouslySetInnerHTML={{ __html: html }}
-          />
+          >
+            <code>
+              {highlight.tokens.map((line, lineIndex) => (
+                <span
+                  key={highlightLineKey(line, lineIndex)}
+                  className={cn(
+                    "block min-h-6 whitespace-pre",
+                    showLineNumbers &&
+                      "[counter-increment:line] before:mr-4 before:inline-block before:w-6 before:text-right before:text-muted-foreground/70 before:content-[counter(line)]",
+                  )}
+                >
+                  {line.map((token) => (
+                    <span
+                      key={`${token.offset}:${token.content}`}
+                      style={{ color: token.color }}
+                    >
+                      {token.content}
+                    </span>
+                  ))}
+                  {line.length === 0 ? " " : null}
+                </span>
+              ))}
+            </code>
+          </pre>
         ) : (
           <pre className="min-h-[360px] overflow-auto p-4 text-[12px] leading-6 text-foreground">
             {code || "No source content."}
@@ -101,6 +143,11 @@ export function CodeBlock({
       </div>
     </CodeBlockContext.Provider>
   );
+}
+
+function highlightLineKey(line: HighlightToken[], lineIndex: number) {
+  const content = line.map((token) => token.content).join("");
+  return content ? `line:${content}` : `line:${lineIndex + 1}`;
 }
 
 export function CodeBlockHeader({
@@ -114,32 +161,6 @@ export function CodeBlockHeader({
         "flex min-h-9 items-center justify-between gap-3 border-b border-border bg-muted/35 px-3",
         className,
       )}
-      {...props}
-    />
-  );
-}
-
-export function CodeBlockTitle({
-  className,
-  ...props
-}: HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      data-slot="code-block-title"
-      className={cn("flex min-w-0 items-center gap-2 text-muted-foreground", className)}
-      {...props}
-    />
-  );
-}
-
-export function CodeBlockFilename({
-  className,
-  ...props
-}: HTMLAttributes<HTMLSpanElement>) {
-  return (
-    <span
-      data-slot="code-block-filename"
-      className={cn("truncate font-mono text-[11px] font-semibold uppercase tracking-[0.08em]", className)}
       {...props}
     />
   );
@@ -171,12 +192,20 @@ export function CodeBlockCopyButton({
 }) {
   const { code } = useCodeBlockContext();
   const [copied, setCopied] = useState(false);
+  const copiedResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
-  useEffect(() => {
-    if (!copied) return;
-    const timeoutId = window.setTimeout(() => setCopied(false), timeout);
-    return () => window.clearTimeout(timeoutId);
-  }, [copied, timeout]);
+  const showCopiedConfirmation = () => {
+    if (copiedResetTimerRef.current) {
+      clearTimeout(copiedResetTimerRef.current);
+    }
+    setCopied(true);
+    copiedResetTimerRef.current = setTimeout(() => {
+      setCopied(false);
+      copiedResetTimerRef.current = null;
+    }, timeout);
+  };
 
   return (
     <Button
@@ -188,7 +217,7 @@ export function CodeBlockCopyButton({
       onClick={async () => {
         try {
           await navigator.clipboard.writeText(code);
-          setCopied(true);
+          showCopiedConfirmation();
           onCopy?.();
         } catch (copyError: unknown) {
           onError?.(copyError instanceof Error ? copyError : new Error("Copy failed."));

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeftIcon } from "lucide-react";
+import { ArrowLeftIcon } from "@aqsha/ui/icons";
 import { NavUser } from "@/components/nav-user";
 import {
   Sidebar,
@@ -81,11 +81,17 @@ function SettingsNavGroup({
         <span className="text-[11px] font-medium tracking-[-0.01em] text-primary/75">{label}</span>
       </div>
       <SidebarMenu className="min-w-0 gap-1 overflow-hidden">
-        {settingsMenu
-          .filter((item) => item.group === label)
-          .map((item) => (
-            <SettingsNavRow key={item.key} item={item} active={active === item.key} />
-          ))}
+        {settingsMenu.flatMap((item) =>
+          item.group === label
+            ? [
+                <SettingsNavRow
+                  key={item.key}
+                  item={item}
+                  active={active === item.key}
+                />,
+              ]
+            : [],
+        )}
       </SidebarMenu>
     </div>
   );

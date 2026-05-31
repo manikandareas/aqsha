@@ -261,7 +261,7 @@ function ThreadWorkspaceLibraryPanel({
       dialogState={dialogState}
       activeFolderId={activeFolderId}
       onActiveFolderChange={setActiveFolderId}
-      isArtifactSelected={(artifactId) => selectedIds.has(artifactId)}
+      getArtifactSelected={(artifactId) => selectedIds.has(artifactId)}
       onToggleArtifactContext={onToggle}
       onSetArtifactContextSelection={onSetSelection}
       onAfterArchive={() => router.push("/app/workspaces")}
@@ -362,7 +362,8 @@ function ThreadGlobalContextPanel({
         onCreateFolder={() => {}}
         onCreateDocument={() => {}}
         onCreateUrl={() => {}}
-        onRenameWorkspace={() => {}}
+        onRenameWorkspace={async () => {}}
+        onUpdateWorkspaceEmoji={async () => {}}
         onArchiveWorkspace={() => {}}
         onClosePanel={closePanel}
         showCreateActions={false}

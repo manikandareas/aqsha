@@ -1,7 +1,7 @@
 import type { ChatMessage, ResearchRun, TranscriptEntry } from "../types";
 
 export function sortTranscriptMessages(messages: ChatMessage[]) {
-  return [...messages].sort(
+  return Array.from(messages).sort(
     (a, b) => a.order - b.order || a.stepOrder - b.stepOrder,
   );
 }

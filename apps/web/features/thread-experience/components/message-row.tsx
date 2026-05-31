@@ -14,7 +14,7 @@ import {
   LinkIcon,
   Loader2Icon,
   TableIcon,
-} from "lucide-react";
+} from "@aqsha/ui/icons";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -486,8 +486,7 @@ function stripVisibleCommandText(text: string, command: PromptCommandMetadata) {
 
 function getMessageText(message: ChatMessage) {
   const partText = message.parts
-    ?.map((part) => (part.type === "text" ? part.text : ""))
-    .filter(Boolean)
+    ?.flatMap((part) => (part.type === "text" && part.text ? [part.text] : []))
     .join("");
   return partText || message.text || "";
 }

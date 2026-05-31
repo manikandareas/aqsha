@@ -4,7 +4,7 @@ import {
   ChevronDownIcon,
   FileTextIcon,
   FolderTreeIcon,
-} from "lucide-react";
+} from "@aqsha/ui/icons";
 import { useState } from "react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { cn } from "@/lib/utils";

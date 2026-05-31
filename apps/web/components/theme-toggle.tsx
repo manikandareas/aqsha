@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckIcon, MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
+import { CheckIcon, MonitorIcon, MoonIcon, SunIcon } from "@aqsha/ui/icons";
 import { useTheme } from "next-themes";
 import {  DropdownMenuItem,
   DropdownMenuSub,

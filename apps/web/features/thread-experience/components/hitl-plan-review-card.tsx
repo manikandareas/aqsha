@@ -1,6 +1,6 @@
 "use client";
 
-import { CornerDownLeftIcon, Loader2Icon, XIcon } from "lucide-react";
+import { CornerDownLeftIcon, Loader2Icon, XIcon } from "@aqsha/ui/icons";
 import { useState } from "react";
 import {
   Plan,

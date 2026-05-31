@@ -71,9 +71,12 @@ function FeatureBreakdown({ rows }: { rows: ActivityRow[] }) {
     },
   );
 
-  const entries = (Object.keys(featureLabels) as Array<keyof ActivityRow["featureCounts"]>)
-    .map((key) => ({ key, label: featureLabels[key], value: totals[key] }))
-    .filter((entry) => entry.value > 0);
+  const entries = (
+    Object.keys(featureLabels) as Array<keyof ActivityRow["featureCounts"]>
+  ).flatMap((key) => {
+    const value = totals[key];
+    return value > 0 ? [{ key, label: featureLabels[key], value }] : [];
+  });
 
   if (entries.length === 0) return null;
 

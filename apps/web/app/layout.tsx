@@ -5,6 +5,7 @@ import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppToaster } from "@/components/app-toaster";
+import { MotionProvider } from "@/components/motion-provider";
 import { siteName } from "@/lib/metadata";
 import { ConvexClientProvider } from "./convex-client-provider";
 import { shadcn } from "@clerk/themes";
@@ -59,7 +60,9 @@ export default async function RootLayout({
           >
             <ConvexClientProvider>
               <NuqsAdapter>
-                <TooltipProvider>{children}</TooltipProvider>
+                <MotionProvider>
+                  <TooltipProvider>{children}</TooltipProvider>
+                </MotionProvider>
               </NuqsAdapter>
               <AppToaster />
             </ConvexClientProvider>

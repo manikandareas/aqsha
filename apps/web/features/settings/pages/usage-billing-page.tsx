@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2Icon, XCircleIcon } from "lucide-react";
+import { Loader2Icon, XCircleIcon } from "@aqsha/ui/icons";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";

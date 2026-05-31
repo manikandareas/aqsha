@@ -62,30 +62,6 @@ export function SettingsPanelFooter({
   );
 }
 
-export function SettingsPanelList({
-  className,
-  children,
-}: {
-  className?: string;
-  children: ReactNode;
-}) {
-  return <SettingsPanelBody className={cn("grid gap-2", className)}>{children}</SettingsPanelBody>;
-}
-
-export function SettingsRow({
-  className,
-  children,
-}: {
-  className?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className={cn("rounded-lg border border-border/70 bg-muted/25 px-3.5 py-3", className)}>
-      {children}
-    </div>
-  );
-}
-
 export function SettingsSegmentedControl({
   className,
   children,

@@ -1,6 +1,6 @@
 "use client";
 
-import { CornerDownLeftIcon } from "lucide-react";
+import { CornerDownLeftIcon } from "@aqsha/ui/icons";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
@@ -116,15 +116,14 @@ export function HitlQuestionCard({
       <CardContent className={hitlCardBodyClass}>
         <p className="text-[12px] font-semibold leading-snug text-foreground">{prompt}</p>
         {presetOptions.length > 0 ? (
-          <ul className="mt-2 space-y-1" role="listbox">
+          <ul className="mt-2 space-y-1">
             {presetOptions.map((option, index) => {
               const selected = selectedIds.includes(option.id);
               return (
                 <li key={option.id}>
                   <button
                     type="button"
-                    role="option"
-                    aria-selected={selected}
+                    aria-pressed={selected}
                     disabled={disabled}
                     onClick={() => handlePresetClick(option.id)}
                     className={cn(
@@ -188,10 +187,11 @@ export function HitlQuestionCard({
         {showLegacyCustomInput ? (
           <input
             type="text"
-            value={customAnswer}
-            disabled={disabled}
-            onChange={(event) => setCustomAnswer(event.target.value)}
-            placeholder="Jelaskan…"
+          value={customAnswer}
+          disabled={disabled}
+          onChange={(event) => setCustomAnswer(event.target.value)}
+          aria-label="Jawaban lain"
+          placeholder="Jelaskan…"
             className={cn("mt-1.5 w-full px-1", hitlQuestionCustomInputClass)}
           />
         ) : null}

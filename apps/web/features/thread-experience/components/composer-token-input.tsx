@@ -62,13 +62,16 @@ export function TokenizedPromptInput({
   isCollapsed?: boolean;
 }) {
   const editorRef = useRef<HTMLDivElement | null>(null);
-  const [paletteDismissal, setPaletteDismissal] = useState({
+  const paletteDismissalRef = useRef({
     value,
     dismissed: false,
   });
-  const paletteDismissed =
-    paletteDismissal.value === value && paletteDismissal.dismissed;
-  const setPaletteDismissed = (dismissed: boolean) => setPaletteDismissal({ value, dismissed });
+  const isPaletteDismissed = () =>
+    paletteDismissalRef.current.value === value &&
+    paletteDismissalRef.current.dismissed;
+  const setPaletteDismissed = (dismissed: boolean) => {
+    paletteDismissalRef.current = { value, dismissed };
+  };
   const [slashFilterQuery, setSlashFilterQuery] = useState<string | null>(null);
   const [isEditorEmpty, setIsEditorEmpty] = useState(true);
 
@@ -111,7 +114,7 @@ export function TokenizedPromptInput({
       );
     }
     setIsEditorEmpty(serialized.trim().length === 0 && !editorHasCommandChips(editor));
-    if (!paletteDismissed) {
+    if (!isPaletteDismissed()) {
       setSlashFilterQuery(getSlashFilterQueryBeforeCursor(getTextBeforeCursor(editor)));
     } else {
       setSlashFilterQuery(null);
@@ -161,7 +164,7 @@ export function TokenizedPromptInput({
       focusEditor();
     };
 
-  const handleInput = () => {
+  const updateEditorFromInput = () => {
     const editor = editorRef.current;
     if (!editor) {
       return;
@@ -284,10 +287,11 @@ export function TokenizedPromptInput({
               "max-h-36 w-full overflow-y-auto whitespace-pre-wrap break-words text-foreground caret-primary outline-none disabled:opacity-100",
               isCollapsed ? "min-h-8 py-[7px] leading-[18px]" : "min-h-6 py-1",
             )}
-            onInput={handleInput}
+            onInput={updateEditorFromInput}
             onBlur={syncEditorState}
             onKeyDown={handleKeyDown}
             onClick={handleChipClick}
+            tabIndex={0}
             suppressContentEditableWarning
           />
         </div>

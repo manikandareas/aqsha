@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2Icon, SaveIcon } from "lucide-react";
+import { Loader2Icon, SaveIcon } from "@aqsha/ui/icons";
 import { toast } from "sonner";
 import { api } from "@aqsha/convex/api";
 import { Button } from "@/components/ui/button";

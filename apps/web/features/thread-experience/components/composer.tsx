@@ -14,9 +14,10 @@ import {
   SparklesIcon,
   SquareIcon,
   XIcon,
-} from "lucide-react";
+} from "@aqsha/ui/icons";
 import { api } from "@aqsha/convex/api";
-import { LayoutGroup, motion, useReducedMotion } from "motion/react";
+import { LayoutGroup, m, useReducedMotion } from "motion/react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
@@ -24,8 +25,8 @@ import { MAX_UPLOAD_BYTES } from "@aqsha/convex/artifact-upload-limits";
 import type { PromptCommand } from "@aqsha/convex/prompt-commands";
 import {
   PromptInput,
-  type PromptInputFile,
   type PromptInputMessage,
+  PromptInputProvider,
   PromptInputSubmit,
   usePromptInputAttachments,
 } from "@/components/ai-elements/prompt-input";
@@ -122,6 +123,14 @@ export type ComposerProps = ComposerSharedProps &
   );
 
 export function Composer(props: ComposerProps) {
+  return (
+    <PromptInputProvider>
+      <ComposerContent {...props} />
+    </PromptInputProvider>
+  );
+}
+
+function ComposerContent(props: ComposerProps) {
   "use no memo";
 
   const {
@@ -151,7 +160,8 @@ export function Composer(props: ComposerProps) {
   const [billingBlock, setBillingBlock] = useState<SendResult & { ok: false } | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [editorHeight, setEditorHeight] = useState(24);
-  const [attachmentFiles, setAttachmentFiles] = useState<PromptInputFile[]>([]);
+  const attachments = usePromptInputAttachments();
+  const attachmentFiles = attachments.files;
   const [uploadError, setUploadError] = useState<string | null>(null);
   const generateUploadUrl = useConvexMutationFn(api.artifacts.generateUploadUrl);
   const createThreadAttachment = useConvexActionFn(api.artifactUploads.createThreadAttachmentFromStorage);
@@ -311,15 +321,7 @@ export function Composer(props: ComposerProps) {
       return { attachments: [], pendingAttachments: [] };
     }
 
-    const attachments: Array<{ artifactId: ArtifactId; title: string }> = [];
-    const pendingAttachments: Array<{
-      storageId: StorageId;
-      fileName: string;
-      mimeType: string;
-      size: number;
-    }> = [];
-
-    for (const filePart of files) {
+    const uploadedFiles = await Promise.all(files.map(async (filePart) => {
       const file = filePart.file;
       if (!file) {
         const message = "File attachment tidak bisa dibaca. Pilih ulang file tersebut.";
@@ -354,19 +356,40 @@ export function Composer(props: ComposerProps) {
           mimeType: file.type || filePart.mediaType || "application/octet-stream",
           size: file.size,
         });
-        attachments.push({
+        return {
+          kind: "artifact" as const,
           artifactId: toArtifactId(String(artifact.artifactId)),
           title: artifact.title,
-        });
-      } else {
-        pendingAttachments.push({
-          storageId: toStorageId(body.storageId),
-          fileName: file.name,
-          mimeType: file.type || filePart.mediaType || "application/octet-stream",
-          size: file.size,
-        });
+        };
       }
-    }
+
+      return {
+        kind: "pending" as const,
+        storageId: toStorageId(body.storageId),
+        fileName: file.name,
+        mimeType: file.type || filePart.mediaType || "application/octet-stream",
+        size: file.size,
+      };
+    }));
+
+    const attachments = uploadedFiles.flatMap((file) =>
+      file.kind === "artifact"
+        ? [{ artifactId: file.artifactId, title: file.title }]
+        : [],
+    );
+    const pendingAttachments = uploadedFiles.flatMap((file) =>
+      file.kind === "pending"
+        ? [
+            {
+              storageId: file.storageId,
+              fileName: file.fileName,
+              mimeType: file.mimeType,
+              size: file.size,
+            },
+          ]
+        : [],
+    );
+
     return { attachments, pendingAttachments };
   };
 
@@ -391,7 +414,7 @@ export function Composer(props: ComposerProps) {
 
   return (
     <div className="flex w-full flex-col gap-8">
-      <motion.div
+      <m.div
         initial={false}
         layout
         className="w-full overflow-hidden border border-border/85 bg-card/95 text-foreground"
@@ -405,7 +428,6 @@ export function Composer(props: ComposerProps) {
           multiple
           maxFiles={4}
           maxFileSize={MAX_UPLOAD_BYTES}
-          onFilesChange={setAttachmentFiles}
           onError={(error) => setUploadError(error.message)}
           onSubmit={(message) => handleSubmit(message)}
           className="flex flex-col justify-between overflow-hidden bg-transparent text-left has-disabled:opacity-100"
@@ -424,9 +446,9 @@ export function Composer(props: ComposerProps) {
                     : billingBlock.reason === "subscription_required"
                       ? `Butuh plan ${billingBlock.requiredPlan ?? "berbayar"} untuk mode ini.`
                       : "Billing belum aktif. Periksa subscription di halaman Billing."}{" "}
-                  <a href="/app/settings/usage-billing" className="font-semibold underline underline-offset-2">
+                  <Link href="/app/settings/usage-billing" className="font-semibold underline underline-offset-2">
                     Buka Billing
-                  </a>
+                  </Link>
                 </div>
               ) : null}
             </div>
@@ -512,7 +534,7 @@ export function Composer(props: ComposerProps) {
             </div>
           </LayoutGroup>
         </PromptInput>
-      </motion.div>
+      </m.div>
       {showSuggestions && !disabled ? (
         <ComposerStartPanel
           threads={threads}
@@ -579,7 +601,7 @@ function ComposerStartPanel({
       <ComposerStartColumn title="Thread terbaru">
         {recentThreads.length > 0 ? (
           recentThreads.map((thread, index) => (
-            <motion.button
+            <m.button
               key={thread.threadId}
               type="button"
               onClick={() => onSelectThread(thread.threadId)}
@@ -605,7 +627,7 @@ function ComposerStartPanel({
                 className="size-3.5 shrink-0 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground"
                 aria-hidden
               />
-            </motion.button>
+            </m.button>
           ))
         ) : (
           <p className="rounded-xl bg-background/45 p-3 text-[12px] leading-5 text-muted-foreground">
@@ -616,7 +638,7 @@ function ComposerStartPanel({
 
       <ComposerStartColumn title="Suggestion">
         {composerSuggestions.map((item, index) => (
-          <motion.button
+          <m.button
             key={item.label}
             type="button"
             onClick={() => onSelectSuggestion(item.prompt)}
@@ -639,7 +661,7 @@ function ComposerStartPanel({
               {item.emoji}
             </span>
             <span className="min-w-0 truncate">{item.label}</span>
-          </motion.button>
+          </m.button>
         ))}
       </ComposerStartColumn>
     </div>

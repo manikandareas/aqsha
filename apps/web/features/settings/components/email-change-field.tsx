@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ShieldCheckIcon } from "lucide-react";
+import { ShieldCheckIcon } from "@aqsha/ui/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useDraftField } from "../lib/use-draft-field";

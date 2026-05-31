@@ -1,6 +1,6 @@
 "use client";
 
-import { MoreHorizontalIcon, MoreVerticalIcon, Trash2Icon } from "lucide-react";
+import { MoreHorizontalIcon, MoreVerticalIcon, Trash2Icon } from "@aqsha/ui/icons";
 import { useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";

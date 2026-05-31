@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2Icon } from "lucide-react";
+import { Loader2Icon } from "@aqsha/ui/icons";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { cn } from "@/lib/utils";
 
@@ -12,8 +12,7 @@ export function ThreadActivityIndicator({
   className?: string;
 }) {
   return (
-    <div
-      role="status"
+    <output
       aria-live="polite"
       className={cn(
         "flex min-w-0 items-center gap-2 text-[13px] leading-5 text-muted-foreground",
@@ -25,7 +24,7 @@ export function ThreadActivityIndicator({
         aria-hidden
       />
       <Shimmer className="font-medium">{label}</Shimmer>
-    </div>
+    </output>
   );
 }
 
@@ -35,8 +34,4 @@ export function CenteredLoading({ label }: { label: string }) {
       <ThreadActivityIndicator label={label} />
     </div>
   );
-}
-
-export function applySuggestion(suggestion: string) {
-  window.dispatchEvent(new CustomEvent("aqsha:suggestion", { detail: suggestion }));
 }

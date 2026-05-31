@@ -29,7 +29,7 @@ import {
   PlusIcon,
   SearchIcon,
   TrendingUpIcon,
-} from "lucide-react";
+} from "@aqsha/ui/icons";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { NameDialog } from "@/features/workspaces/components/workspace-dialogs";
@@ -54,6 +54,7 @@ type Viewer = {
 type WorkspaceSummary = {
   _id: string;
   name: string;
+  emoji?: string;
   updatedAt?: number;
 };
 
@@ -315,7 +316,7 @@ export function AppSidebar({
                       asChild
                     >
                       <Link href={`/app/workspaces/${workspace._id}`}>
-                        <LayoutGridIcon className="size-4" />
+                        <WorkspaceEmojiGlyph emoji={workspace.emoji} />
                         <span className="truncate">{workspace.name}</span>
                       </Link>
                     </CommandItem>
@@ -526,13 +527,33 @@ function RecentWorkspaceRow({
           href={`/app/workspaces/${workspace._id}`}
           className="flex min-w-0 max-w-full items-center gap-2 overflow-hidden"
         >
-          <LayoutGridIcon className="size-3.5 shrink-0" />
+          <WorkspaceEmojiGlyph emoji={workspace.emoji} active={active} />
           <span className="min-w-0 flex-1 truncate font-normal">
             {workspace.name}
           </span>
         </Link>
       </SidebarMenuButton>
     </SidebarMenuItem>
+  );
+}
+
+function WorkspaceEmojiGlyph({
+  emoji,
+  active,
+}: {
+  emoji?: string;
+  active?: boolean;
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "flex size-4 shrink-0 items-center justify-center rounded-[5px] text-[13px] leading-none",
+        active ? "bg-background/70" : "bg-muted/35",
+      )}
+    >
+      {emoji?.trim() || "📚"}
+    </span>
   );
 }
 
