@@ -1,10 +1,14 @@
 "use client";
 
-import { MessageSquarePlusIcon, PanelLeftIcon } from "lucide-react";import { Button } from "@/components/ui/button";
+import { MessageSquarePlusIcon, PanelLeftIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { SidebarContent, SidebarHeader } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCloseRightPanel } from "@/hooks/use-close-right-panel";
-import { panelBodyPaddingClass, panelHeaderPaddingClass } from "@/lib/panel-surface";
+import {
+  panelBodyPaddingClass,
+  panelHeaderPaddingClass,
+} from "@/lib/panel-surface";
 import {
   threadContextScopeKey,
   useDraftContextSelection,
@@ -55,11 +59,18 @@ export function WorkspaceChatSidePanel({
 }) {
   const closePanel = useCloseRightPanel();
   const threadExperience = useThreadExperienceData(activeThreadId ?? undefined);
-  const activeThread = activeThreadId ? threadExperience.selectedThread : undefined;
+  const activeThread = activeThreadId
+    ? threadExperience.selectedThread
+    : undefined;
   const headerLabel = activeThread?.title ?? "Chat baru";
-  const persistedThreadContextIds = threadExperience.selectedContextArtifacts.map((item) => String(item.artifactId));
+  const persistedThreadContextIds =
+    threadExperience.selectedContextArtifacts.map((item) =>
+      String(item.artifactId),
+    );
   const threadDraftContext = useDraftContextSelection(
-    activeThreadId ? threadContextScopeKey(activeThreadId) : "workspace-panel:none",
+    activeThreadId
+      ? threadContextScopeKey(activeThreadId)
+      : "workspace-panel:none",
     activeThreadId && threadExperience.selectedContextArtifactsLoaded
       ? persistedThreadContextIds
       : undefined,
@@ -82,7 +93,8 @@ export function WorkspaceChatSidePanel({
     : contextArtifacts;
   const sendWithDraftContext: SendMessage = async (args) => {
     const shouldReplaceContext = threadDraftContext.isDirty;
-    const messageAttachmentIds = args.messageAttachmentArtifactIds?.map(String) ?? [];
+    const messageAttachmentIds =
+      args.messageAttachmentArtifactIds?.map(String) ?? [];
     const panelIds = shouldReplaceContext
       ? threadDraftContext.selectedIds
       : persistedThreadContextIds;
@@ -101,7 +113,9 @@ export function WorkspaceChatSidePanel({
     const result = await threadExperience.sendMessage({
       ...args,
       selectedContextArtifactIds: toSelectedContextArtifactIds(panelSnapshot),
-      contextArtifactSnapshot: toMutationContextSnapshot(contextArtifactSnapshot),
+      contextArtifactSnapshot: toMutationContextSnapshot(
+        contextArtifactSnapshot,
+      ),
     });
     if (result.ok && shouldReplaceContext) {
       threadDraftContext.markSelectionPersisted(threadDraftContext.selectedIds);
@@ -111,7 +125,12 @@ export function WorkspaceChatSidePanel({
 
   return (
     <>
-      <SidebarHeader className={cn("gap-0 border-b-0 bg-background p-0", panelHeaderPaddingClass)}>
+      <SidebarHeader
+        className={cn(
+          "gap-0 border-b-0 bg-background p-0",
+          panelHeaderPaddingClass,
+        )}
+      >
         <div className="flex min-w-0 items-center justify-between gap-3">
           <ThreadRecentSwitcher
             title={headerLabel}
@@ -155,7 +174,12 @@ export function WorkspaceChatSidePanel({
       <SidebarContent className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden bg-background p-0">
         {activeThreadId ? (
           activeThread === null ? (
-            <div className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto", panelBodyPaddingClass)}>
+            <div
+              className={cn(
+                "flex min-h-0 flex-1 flex-col overflow-y-auto",
+                panelBodyPaddingClass,
+              )}
+            >
               <AccessDeniedState />
             </div>
           ) : (
@@ -214,8 +238,9 @@ function WorkspacePanelDraftView({
       )}
     >
       <ComposerHeroState
-        logoClassName="size-6 text-mint"
-        titleClassName="font-heading text-xl font-bold tracking-tight text-foreground leading-none"
+        logoClassName="size-12 sm:size-18"
+        // titleClassName="font-sans text-2xl font-bold tracking-tight text-foreground sm:text-3xl leading-none"
+        titleClassName="font-sans text-xl font-bold tracking-tight text-foreground leading-none"
         hint="Pilih item di board (klik sekali) atau ketik / untuk perintah riset"
       >
         <Composer
@@ -236,7 +261,9 @@ function WorkspacePanelDraftView({
 export function WorkspaceLoading() {
   return (
     <div className={cn("grid gap-4", panelBodyPaddingClass)}>
-      <p className="text-[12px] font-medium text-muted-foreground">Memuat workspace…</p>
+      <p className="text-[12px] font-medium text-muted-foreground">
+        Memuat workspace…
+      </p>
       <Skeleton className="h-12 rounded-xl" />
       <Skeleton className="h-48 rounded-xl" />
       <Skeleton className="h-48 rounded-xl" />
@@ -248,7 +275,9 @@ export function WorkspaceMissing() {
   return (
     <div className="grid min-h-svh place-items-center px-4 text-center">
       <div className="grid gap-3">
-        <h1 className="font-heading text-2xl font-semibold">Workspace tidak tersedia.</h1>
+        <h1 className="font-heading text-2xl font-semibold">
+          Workspace tidak tersedia.
+        </h1>
         <p className="text-[13px] font-medium text-muted-foreground">
           Workspace ini tidak ditemukan untuk akun yang sedang masuk.
         </p>

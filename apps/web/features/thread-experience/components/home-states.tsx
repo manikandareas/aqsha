@@ -7,7 +7,11 @@ import {
 import { cn } from "@/lib/utils";
 import { motion, useReducedMotion } from "motion/react";
 import type { RateStatus } from "../types";
-import type { DraftContextArtifact, StartThread, ThreadSummary } from "./component-types";
+import type {
+  DraftContextArtifact,
+  StartThread,
+  ThreadSummary,
+} from "./component-types";
 import { ComposerHeroState } from "./composer-hero-state";
 import { Composer } from "./composer";
 
@@ -39,11 +43,14 @@ export function HomeStartState({
               : { opacity: 0, transform: "translateY(10px) scale(0.985)" }
           }
           animate={{ opacity: 1, transform: "translateY(0px) scale(1)" }}
-          transition={{ duration: shouldReduceMotion ? 0.14 : 0.24, ease: HOME_EASE_OUT }}
+          transition={{
+            duration: shouldReduceMotion ? 0.14 : 0.24,
+            ease: HOME_EASE_OUT,
+          }}
         >
           <ComposerHeroState
             headerClassName="mb-8 gap-2.5"
-            logoClassName="size-8 text-mint"
+            logoClassName="size-12 sm:size-22"
             titleClassName="font-sans text-2xl font-bold tracking-tight text-foreground sm:text-3xl leading-none"
           >
             <Composer
@@ -98,7 +105,9 @@ export function AccessDeniedState() {
           </p>
         </div>
       </div>
-      <div className={cn("border-t bg-background/85", panelComposerPaddingClass)}>
+      <div
+        className={cn("border-t bg-background/85", panelComposerPaddingClass)}
+      >
         <div className={threadTranscriptColumnClass}>
           <Composer mode="disabled" disabled rateStatus={undefined} />
         </div>

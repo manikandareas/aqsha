@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 export function ComposerHeroState({
   title = "Apa yang ingin kita teliti?",
-  logoClassName = "size-8 text-mint",
+  logoClassName = "size-12 sm:size-14",
   titleClassName = "font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl leading-none",
   headerClassName,
   children,
@@ -25,14 +25,16 @@ export function ComposerHeroState({
           headerClassName,
         )}
       >
-        <div className="flex items-center justify-center gap-2.5">
+        <div className="flex items-center justify-center">
           <BrandLogoIcon className={logoClassName} />
           <h1 className={titleClassName}>{title}</h1>
         </div>
       </header>
       <div className="w-full">{children}</div>
       {hint ? (
-        <p className="max-w-sm text-[11px] leading-5 text-muted-foreground">{hint}</p>
+        <p className="max-w-sm text-[11px] leading-5 text-muted-foreground">
+          {hint}
+        </p>
       ) : null}
     </div>
   );
