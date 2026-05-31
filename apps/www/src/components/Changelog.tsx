@@ -1,5 +1,5 @@
 import { Button } from "@aqsha/ui/components/button";
-import { Play } from "lucide-react";
+import { Play } from "@aqsha/ui/icons";
 import { Badge } from "@aqsha/ui/components/badge";
 import { MotionSection } from "@/components/motion-reveal";
 

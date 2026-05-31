@@ -1,5 +1,5 @@
 import { Button } from "@aqsha/ui/components/button";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight } from "@aqsha/ui/icons";
 import type { ReactNode } from "react";
 import { Card } from "@aqsha/ui/components/card";
 import { signInUrl } from "@/lib/urls";

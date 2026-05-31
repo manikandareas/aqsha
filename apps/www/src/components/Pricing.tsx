@@ -1,5 +1,5 @@
 import { Button } from "@aqsha/ui/components/button";
-import { ArrowRight, Check } from "lucide-react";
+import { ArrowRight, Check } from "@aqsha/ui/icons";
 import { signInUrl } from "@/lib/urls";
 import { MotionItem, MotionSection } from "@/components/motion-reveal";
 
