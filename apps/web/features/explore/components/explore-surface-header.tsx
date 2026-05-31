@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRightIcon, PanelLeftIcon } from "lucide-react";
+import { ChevronRightIcon, PanelLeftIcon } from "@aqsha/ui/icons";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { useSidebar } from "@/components/ui/sidebar";

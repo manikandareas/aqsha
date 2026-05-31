@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { ExternalCandidate } from "../convex/agent/externalProviders";
 import {
+  buildOpenAlexWorksUrl,
   openAlexWorkToCandidate,
   reconstructOpenAlexAbstract,
+  searchOpenAlexWorks,
 } from "../convex/agent/openalexProvider";
 import {
   candidatesToExplorePapers,
@@ -77,6 +79,66 @@ describe("explore paper model", () => {
     ).toBe("Hello world again");
   });
 
+  it("builds valid OpenAlex sort parameters", () => {
+    const searchUrl = buildOpenAlexWorksUrl({
+      apiKey: "test-key",
+      query: "AI tutoring formative assessment",
+      limit: 12,
+    });
+
+    expect(searchUrl.searchParams.get("search")).toBe("AI tutoring formative assessment");
+    expect(searchUrl.searchParams.get("sort")).toBe("relevance_score:desc");
+    expect(searchUrl.searchParams.get("sort")).not.toMatch(/^-/);
+
+    const recommendationsUrl = buildOpenAlexWorksUrl({
+      apiKey: "test-key",
+      query: "",
+      limit: 12,
+    });
+
+    expect(recommendationsUrl.searchParams.get("sort")).toBe("cited_by_count:desc");
+    expect(recommendationsUrl.searchParams.get("filter")).toBe(
+      "is_retracted:false,is_paratext:false,from_publication_date:2021-01-01",
+    );
+    expect(recommendationsUrl.searchParams.get("sort")).not.toMatch(/^-/);
+  });
+
+  it("returns cached OpenAlex results before API key, billing, rate limit, or fetch", async () => {
+    const cachedCandidates: ExternalCandidate[] = [
+      candidate({
+        provider: "openalex",
+        title: "Cached OpenAlex result",
+        url: "https://openalex.org/W1",
+      }),
+    ];
+    const previousApiKey = process.env.OPENALEX_API_KEY;
+    delete process.env.OPENALEX_API_KEY;
+
+    const ctx = {
+      runQuery: async () => ({ valueJson: JSON.stringify(cachedCandidates) }),
+      runMutation: async () => {
+        throw new Error("OpenAlex cache hit should not consume billing or rate limits.");
+      },
+    } as unknown as Parameters<typeof searchOpenAlexWorks>[0];
+
+    try {
+      await expect(
+        searchOpenAlexWorks(ctx, {
+          ownerUserId: "user",
+          query: "AI tutoring formative assessment",
+          limit: 12,
+          mode: "search",
+        }),
+      ).resolves.toEqual(cachedCandidates);
+    } finally {
+      if (previousApiKey === undefined) {
+        delete process.env.OPENALEX_API_KEY;
+      } else {
+        process.env.OPENALEX_API_KEY = previousApiKey;
+      }
+    }
+  });
+
   it("dedupes by DOI, arXiv id, and normalized URL using the canonical source key", () => {
     const candidates: ExternalCandidate[] = [
       candidate({
@@ -129,7 +191,7 @@ describe("explore paper model", () => {
         limit: 12,
         now: Date.UTC(2026, 4, 27, 3),
       }),
-    ).toBe("explore:v1:recommendations::12:2026-05-27");
+    ).toBe("explore:v2:recommendations::12:2026-05-27");
   });
 });
 

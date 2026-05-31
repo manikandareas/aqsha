@@ -10,7 +10,7 @@ import {
   ExternalLinkIcon,
   FileTextIcon,
   LinkIcon,
-} from "lucide-react";
+} from "@aqsha/ui/icons";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";

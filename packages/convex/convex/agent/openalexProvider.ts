@@ -66,12 +66,6 @@ export async function searchOpenAlexWorks(
     mode?: "recommendations" | "search";
   },
 ): Promise<ExternalCandidate[]> {
-  const apiKey = process.env.OPENALEX_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENALEX_API_KEY is not configured");
-  }
-  await limitOpenAlex(ctx, args.ownerUserId);
-
   const query = args.query.trim();
   const mode = args.mode ?? (query ? "search" : "recommendations");
   const limit = Math.min(args.limit ?? 8, 25);
@@ -81,27 +75,24 @@ export async function searchOpenAlexWorks(
     return cached;
   }
 
-  const url = new URL(OPENALEX_ENDPOINT);
-  url.searchParams.set("api_key", apiKey);
-  url.searchParams.set("per_page", String(limit));
-  url.searchParams.set("select", openAlexSelectFields.join(","));
-  url.searchParams.set("filter", "is_retracted:false,is_paratext:false");
-  if (query) {
-    url.searchParams.set("search", query);
-    url.searchParams.set("sort", "-relevance_score");
-  } else {
-    url.searchParams.set("sort", "-cited_by_count");
-    url.searchParams.set(
-      "filter",
-      "is_retracted:false,is_paratext:false,from_publication_date:2021-01-01",
-    );
+  const apiKey = process.env.OPENALEX_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENALEX_API_KEY is not configured");
   }
+  await limitOpenAlex(ctx, args.ownerUserId);
+
+  const url = buildOpenAlexWorksUrl({ apiKey, query, limit });
 
   const response = await fetch(url, {
     headers: { Accept: "application/json", "User-Agent": userAgent() },
   });
   if (!response.ok) {
-    throw new Error(`OpenAlex returned ${response.status}`);
+    const message = await openAlexErrorMessage(response);
+    throw new Error(
+      message
+        ? `OpenAlex returned ${response.status}: ${message}`
+        : `OpenAlex returned ${response.status}`,
+    );
   }
 
   const json = (await response.json()) as { results?: OpenAlexWork[] };
@@ -167,6 +158,30 @@ export function openAlexWorkToCandidate(work: OpenAlexWork): ExternalCandidate |
       "OpenAlex metadata result.",
     metadataJson: JSON.stringify(metadata),
   };
+}
+
+export function buildOpenAlexWorksUrl(args: {
+  apiKey: string;
+  query: string;
+  limit: number;
+}) {
+  const query = args.query.trim();
+  const url = new URL(OPENALEX_ENDPOINT);
+  url.searchParams.set("api_key", args.apiKey);
+  url.searchParams.set("per_page", String(args.limit));
+  url.searchParams.set("select", openAlexSelectFields.join(","));
+  url.searchParams.set("filter", "is_retracted:false,is_paratext:false");
+  if (query) {
+    url.searchParams.set("search", query);
+    url.searchParams.set("sort", "relevance_score:desc");
+  } else {
+    url.searchParams.set("sort", "cited_by_count:desc");
+    url.searchParams.set(
+      "filter",
+      "is_retracted:false,is_paratext:false,from_publication_date:2021-01-01",
+    );
+  }
+  return url;
 }
 
 export function reconstructOpenAlexAbstract(
@@ -259,6 +274,21 @@ async function writeCachedOpenAlex(
 function userAgent() {
   const mailto = process.env.CROSSREF_MAILTO;
   return mailto ? `${USER_AGENT}; mailto:${mailto}` : USER_AGENT;
+}
+
+async function openAlexErrorMessage(response: Response) {
+  try {
+    const body = (await response.json()) as { message?: unknown; error?: unknown };
+    return collapse(
+      typeof body.message === "string"
+        ? body.message
+        : typeof body.error === "string"
+          ? body.error
+          : "",
+    );
+  } catch {
+    return "";
+  }
 }
 
 function normalizeDoi(value: string) {

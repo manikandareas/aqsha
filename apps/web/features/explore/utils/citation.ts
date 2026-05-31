@@ -12,7 +12,7 @@ export function formatCitation(paper: ExplorePaper, format: CitationFormat) {
   return formatPlainCitation(paper);
 }
 
-export function formatPlainCitation(paper: ExplorePaper) {
+function formatPlainCitation(paper: ExplorePaper) {
   const authors = formatAuthors(paper.authors);
   const year = paper.year ? ` (${paper.year}).` : ".";
   const venue = paper.venue ? ` ${paper.venue}.` : "";
@@ -20,14 +20,14 @@ export function formatPlainCitation(paper: ExplorePaper) {
   return `${authors}${year} ${paper.title}.${venue}${locator}`.replace(/\s+/g, " ").trim();
 }
 
-export function formatMarkdownCitation(paper: ExplorePaper) {
+function formatMarkdownCitation(paper: ExplorePaper) {
   const authors = formatAuthors(paper.authors);
   const year = paper.year ? ` (${paper.year})` : "";
   const venue = paper.venue ? `, ${paper.venue}` : "";
   return `${authors}${year}. [${paper.title}](${paper.url})${venue}.`;
 }
 
-export function formatBibtexCitation(paper: ExplorePaper) {
+function formatBibtexCitation(paper: ExplorePaper) {
   const key = bibtexKey(paper);
   const fields = [
     ["title", paper.title],

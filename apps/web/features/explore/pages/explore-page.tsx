@@ -7,12 +7,18 @@ import {
   CheckIcon,
   ExternalLinkIcon,
   FileDownIcon,
+  FilterIcon,
   LayoutGridIcon,
   Loader2Icon,
   SearchIcon,
-} from "lucide-react";
+} from "@aqsha/ui/icons";
 import Link from "next/link";
-import { FormEvent, useEffect, useReducer, useRef } from "react";
+import { FormEvent, useEffect, useReducer, useRef, useState } from "react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ExploreSurfaceHeader } from "@/features/explore/components/explore-surface-header";
 import { WorkspacePickerDialog } from "@/features/workspaces/components/workspace-picker-dialog";
@@ -28,6 +34,7 @@ import { cn } from "@/lib/utils";
 import { encodePaperRef } from "../utils/paper-ref";
 
 type ExploreTab = "recommended" | "browse";
+type ExploreTimeRange = "all" | "week" | "month" | "year" | "threeYears" | "fiveYears";
 
 type ExplorePageState = {
   query: string;
@@ -38,6 +45,7 @@ type ExplorePageState = {
   selectedPaper: ExplorePaper | null;
   savedKeys: Set<string>;
   activeTab: ExploreTab;
+  activeTimeRange: ExploreTimeRange;
   searchOpen: boolean;
 };
 
@@ -45,6 +53,7 @@ type ExplorePageAction =
   | { type: "queryChanged"; query: string }
   | { type: "searchOpenChanged"; searchOpen: boolean }
   | { type: "activeTabChanged"; activeTab: ExploreTab }
+  | { type: "activeTimeRangeChanged"; activeTimeRange: ExploreTimeRange }
   | { type: "selectedPaperChanged"; paper: ExplorePaper | null }
   | { type: "paperSaved"; key: string }
   | { type: "started" }
@@ -65,6 +74,20 @@ const thumbnailLayouts = [
   "dense",
 ] as const;
 
+const exploreModes: Array<{ value: ExploreTab; label: string }> = [
+  { value: "recommended", label: "Trending" },
+  { value: "browse", label: "Browse all" },
+];
+
+const exploreTimeRanges: Array<{ value: ExploreTimeRange; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "week", label: "This week" },
+  { value: "month", label: "This month" },
+  { value: "year", label: "This year" },
+  { value: "threeYears", label: "Last 3 years" },
+  { value: "fiveYears", label: "Last 5 years" },
+];
+
 const emptyExplorePapers: ExplorePaper[] = [];
 
 const paperDateFormatter = new Intl.DateTimeFormat("en", {
@@ -82,6 +105,7 @@ const initialExplorePageState: ExplorePageState = {
   selectedPaper: null,
   savedKeys: new Set(),
   activeTab: "recommended",
+  activeTimeRange: "all",
   searchOpen: false,
 };
 
@@ -96,7 +120,10 @@ export function ExplorePage() {
   const searchPapers = useConvexActionState(api.explore.searchPapers);
   const createUrl = useConvexMutationState(api.artifacts.createUrl);
   const initialRecommendationsStarted = useRef(false);
+  const searchFormRef = useRef<HTMLFormElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [state, dispatch] = useReducer(explorePageReducer, initialExplorePageState);
+  const [timeRangeOpen, setTimeRangeOpen] = useState(false);
   const {
     query,
     submittedQuery,
@@ -106,6 +133,7 @@ export function ExplorePage() {
     selectedPaper,
     savedKeys,
     activeTab,
+    activeTimeRange,
     searchOpen,
   } = state;
 
@@ -131,29 +159,51 @@ export function ExplorePage() {
       return;
     }
     initialRecommendationsStarted.current = true;
-    const task = window.setTimeout(() => {
-      void (async () => {
-        dispatch({ type: "started" });
-        try {
-          const result: ExploreSearchResponse = await searchPapers.mutateAsync({
-            query: undefined,
-            mode: "recommendations",
-            limit: 12,
-          });
-          dispatch({ type: "succeeded", response: result, submittedQuery: "" });
-        } catch (searchError) {
-          dispatch({
-            type: "failed",
-            error: readableConvexErrorMessage(searchError, "Gagal mencari paper."),
-          });
-        }
-      })();
-    }, 0);
-    return () => window.clearTimeout(task);
+    void (async () => {
+      dispatch({ type: "started" });
+      try {
+        const result: ExploreSearchResponse = await searchPapers.mutateAsync({
+          query: undefined,
+          mode: "recommendations",
+          limit: 12,
+        });
+        dispatch({ type: "succeeded", response: result, submittedQuery: "" });
+      } catch (searchError) {
+        dispatch({
+          type: "failed",
+          error: readableConvexErrorMessage(searchError, "Gagal mencari paper."),
+        });
+      }
+    })();
   }, [searchPapers]);
 
+  useEffect(() => {
+    if (!searchOpen) {
+      return;
+    }
+
+    searchInputRef.current?.focus();
+
+    const closeSearchOnOutsidePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node) || searchFormRef.current?.contains(target)) {
+        return;
+      }
+
+      dispatch({ type: "searchOpenChanged", searchOpen: false });
+    };
+
+    document.addEventListener("pointerdown", closeSearchOnOutsidePointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", closeSearchOnOutsidePointerDown);
+    };
+  }, [searchOpen]);
+
   const papers = response?.items ?? emptyExplorePapers;
-  const topTopics = deriveTopTopics(papers);
+  const visiblePapers = filterPapersByTimeRange(papers, activeTimeRange);
+  const topTopics = deriveTopTopics(visiblePapers);
+  const activeTimeRangeLabel =
+    exploreTimeRanges.find((range) => range.value === activeTimeRange)?.label ?? "All";
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -190,66 +240,120 @@ export function ExplorePage() {
             </p>
           </header>
 
-          <section className="mt-8">
-            <div className="inline-flex rounded-[8px] border border-border/80 bg-card/30 p-1">
-              <ExploreTabButton
-                active={activeTab === "recommended"}
-                onClick={() => dispatch({ type: "activeTabChanged", activeTab: "recommended" })}
+          <section className="mt-8 border-b border-border/80">
+            <div className="flex min-h-12 items-end justify-between gap-3">
+              <div
+                className="flex min-w-0 flex-1 items-end gap-2.5 overflow-x-auto overflow-y-hidden"
+                aria-label="Explore mode"
               >
-                Recommended
-              </ExploreTabButton>
-              <ExploreTabButton
-                active={activeTab === "browse"}
-                onClick={() => dispatch({ type: "activeTabChanged", activeTab: "browse" })}
-              >
-                Compact
-              </ExploreTabButton>
-            </div>
-          </section>
-
-          <section className="mt-6 border-b border-border/80">
-            <div className="flex min-h-11 items-center gap-3">
-              <form
-                onSubmit={handleSubmit}
-                className={cn(
-                  "ml-auto flex h-9 items-center justify-end rounded-[8px] transition-all",
-                  searchOpen
-                    ? "w-[220px] border border-border/80 bg-card/50 px-2 sm:w-[300px]"
-                    : "w-9",
-                )}
-              >
-                {searchOpen ? (
-                  <label htmlFor="explore-search" className="sr-only">
-                    Search papers
-                  </label>
-                ) : null}
-                <input
-                  id="explore-search"
-                  value={query}
-                  onChange={(event) => dispatch({ type: "queryChanged", query: event.target.value })}
-                  placeholder="Search papers..."
-                  className={cn(
-                    "h-8 min-w-0 flex-1 bg-transparent text-[13px] font-medium text-foreground outline-none placeholder:text-muted-foreground",
-                    !searchOpen && "sr-only",
-                  )}
-                />
-                <button
-                  type={searchOpen ? "submit" : "button"}
-                  onClick={() => {
-                    if (!searchOpen) {
-                      dispatch({ type: "searchOpenChanged", searchOpen: true });
+                {exploreModes.map((mode) => (
+                  <ExploreModeButton
+                    key={mode.value}
+                    active={activeTab === mode.value}
+                    onClick={() =>
+                      dispatch({
+                        type: "activeTabChanged",
+                        activeTab: mode.value,
+                      })
                     }
-                  }}
-                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  aria-label={searchOpen ? "Search papers" : "Open search"}
-                >
-                  {isLoading && searchOpen ? (
-                    <Loader2Icon className="size-4 animate-spin" />
-                  ) : (
-                    <SearchIcon className="size-5" strokeWidth={2} />
+                  >
+                    {mode.label}
+                  </ExploreModeButton>
+                ))}
+              </div>
+              <div className="mb-1.5 flex shrink-0 items-center justify-end gap-1.5">
+                <form
+                  ref={searchFormRef}
+                  onSubmit={handleSubmit}
+                  className={cn(
+                    "flex h-9 items-center justify-end rounded-[8px] transition-all",
+                    searchOpen
+                      ? "w-[220px] border border-border/80 bg-card/50 px-2 sm:w-[300px]"
+                      : "w-9",
                   )}
-                </button>
-              </form>
+                >
+                  {searchOpen ? (
+                    <label htmlFor="explore-search" className="sr-only">
+                      Search papers
+                    </label>
+                  ) : null}
+                  <input
+                    ref={searchInputRef}
+                    id="explore-search"
+                    value={query}
+                    onChange={(event) => dispatch({ type: "queryChanged", query: event.target.value })}
+                    placeholder="Contoh: agile. Enter untuk mencari"
+                    className={cn(
+                      "h-8 min-w-0 flex-1 bg-transparent text-[13px] font-medium text-foreground outline-none placeholder:text-muted-foreground",
+                      !searchOpen && "sr-only",
+                    )}
+                  />
+                  {searchOpen ? (
+                    <span
+                      className="inline-flex size-9 shrink-0 items-center justify-center rounded-[8px] text-muted-foreground"
+                      aria-hidden="true"
+                    >
+                      {isLoading ? (
+                        <Loader2Icon className="size-4 animate-spin" />
+                      ) : (
+                        <SearchIcon className="size-5" strokeWidth={2} />
+                      )}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        dispatch({ type: "searchOpenChanged", searchOpen: true });
+                      }}
+                      className="inline-flex size-9 shrink-0 items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      aria-label="Open search"
+                    >
+                      <SearchIcon className="size-5" strokeWidth={2} />
+                    </button>
+                  )}
+                </form>
+                <Popover open={timeRangeOpen} onOpenChange={setTimeRangeOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className={cn(
+                        "relative inline-flex size-9 shrink-0 items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                        activeTimeRange !== "all" && "bg-muted text-foreground",
+                      )}
+                      aria-label={`Filter papers by date: ${activeTimeRangeLabel}`}
+                    >
+                      <FilterIcon className="size-4.5" strokeWidth={2} />
+                      {activeTimeRange !== "all" ? (
+                        <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-foreground" />
+                      ) : null}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-52 p-1.5">
+                    <div className="px-2 py-1.5">
+                      <p className="text-[12px] font-semibold text-muted-foreground">
+                        Date Range
+                      </p>
+                    </div>
+                    <div className="grid gap-1">
+                      {exploreTimeRanges.map((range) => (
+                        <TimeRangeOptionButton
+                          key={range.value}
+                          active={activeTimeRange === range.value}
+                          onClick={() => {
+                            dispatch({
+                              type: "activeTimeRangeChanged",
+                              activeTimeRange: range.value,
+                            });
+                            setTimeRangeOpen(false);
+                          }}
+                        >
+                          {range.label}
+                        </TimeRangeOptionButton>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
             </div>
           </section>
 
@@ -261,11 +365,11 @@ export function ExplorePage() {
 
           {isLoading ? (
             <ExploreSkeletonList activeTab={activeTab} />
-          ) : papers.length ? (
+          ) : visiblePapers.length ? (
             activeTab === "recommended" ? (
               <section className="grid gap-10 pt-7 lg:grid-cols-[minmax(0,1fr)_260px] lg:gap-10">
                 <div className="min-w-0 divide-y divide-border/60">
-                  {papers.map((paper, index) => (
+                  {visiblePapers.map((paper, index) => (
                     <PaperListItem
                       key={paper.key}
                       index={index}
@@ -281,7 +385,7 @@ export function ExplorePage() {
             ) : (
               <section className="pt-7">
                 <div className="divide-y divide-border/60">
-                  {papers.map((paper, index) => (
+                  {visiblePapers.map((paper, index) => (
                     <PaperListItem
                       key={paper.key}
                       index={index}
@@ -314,7 +418,7 @@ export function ExplorePage() {
   );
 }
 
-function ExploreTabButton({
+function ExploreModeButton({
   active,
   children,
   onClick,
@@ -328,11 +432,35 @@ function ExploreTabButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "rounded-[6px] px-3 py-1.5 text-[13px] font-semibold leading-none text-muted-foreground transition-colors hover:text-foreground sm:text-[14px]",
-        active && "bg-muted text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]",
+        "relative h-9 shrink-0 whitespace-nowrap rounded-[7px] px-3 text-[12px] font-semibold leading-none text-muted-foreground transition-colors hover:text-foreground sm:px-4 sm:text-[13px]",
+        active && "bg-muted text-foreground after:absolute after:-bottom-px after:left-0 after:h-[2px] after:w-full after:bg-foreground",
       )}
     >
       {children}
+    </button>
+  );
+}
+
+function TimeRangeOptionButton({
+  active,
+  children,
+  onClick,
+}: {
+  active: boolean;
+  children: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex h-8 w-full items-center justify-between rounded-[7px] px-2.5 text-left text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+        active && "bg-muted text-foreground",
+      )}
+    >
+      <span>{children}</span>
+      {active ? <span className="size-1.5 rounded-full bg-foreground" /> : null}
     </button>
   );
 }
@@ -361,7 +489,7 @@ function PaperListItem({
     <article
       className={cn(
         "group grid grid-cols-[72px_minmax(0,1fr)] gap-4 py-4 sm:grid-cols-[76px_minmax(0,1fr)_110px] sm:gap-5",
-        variant === "browse" && "sm:grid-cols-[76px_minmax(0,1fr)_72px]",
+        variant === "browse" && "sm:grid-cols-[76px_minmax(0,1fr)_96px]",
       )}
     >
       <Link
@@ -372,7 +500,7 @@ function PaperListItem({
         <PaperThumbnail layout={layout} />
       </Link>
 
-      <div className="min-w-0">
+      <div className="min-w-0 overflow-hidden">
         <div className="flex min-w-0 items-start gap-2">
           <h2
             className={cn(
@@ -382,7 +510,7 @@ function PaperListItem({
           >
             <Link
               href={detailHref}
-              className="underline-offset-3 focus:outline-none hover:underline focus-visible:underline"
+              className="line-clamp-2 break-words underline-offset-3 focus:outline-none hover:underline focus-visible:underline"
             >
               {paper.title}
             </Link>
@@ -396,7 +524,7 @@ function PaperListItem({
 
         <p
           className={cn(
-            "mt-2.5 max-w-[860px] text-[13px] font-medium leading-5 text-ink-soft",
+            "mt-2.5 max-w-[860px] break-words text-[13px] font-medium leading-5 text-ink-soft",
             "line-clamp-2",
           )}
         >
@@ -430,11 +558,13 @@ function PaperListItem({
 
       <div
         className={cn(
-          "col-start-2 flex items-center justify-between gap-2 text-ink-soft sm:col-start-auto sm:items-end sm:justify-end",
-          variant === "recommended" ? "sm:flex-col" : "sm:self-center",
+          "col-start-2 flex min-w-0 items-center justify-between gap-2 text-ink-soft sm:col-start-auto sm:items-end sm:justify-end",
+          variant === "recommended"
+            ? "sm:flex-col"
+            : "sm:min-w-[96px] sm:flex-col sm:justify-center sm:self-center",
         )}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
             onClick={onSave}
@@ -458,7 +588,7 @@ function PaperListItem({
           </a>
         </div>
 
-        <p className="whitespace-nowrap text-[12px] font-semibold text-muted-foreground">
+        <p className="max-w-full truncate whitespace-nowrap text-[12px] font-semibold text-muted-foreground">
           {citationLabel ?? paper.sourceLabel}
         </p>
       </div>
@@ -633,6 +763,8 @@ function explorePageReducer(
       return { ...state, searchOpen: action.searchOpen };
     case "activeTabChanged":
       return { ...state, activeTab: action.activeTab };
+    case "activeTimeRangeChanged":
+      return { ...state, activeTimeRange: action.activeTimeRange };
     case "selectedPaperChanged":
       return { ...state, selectedPaper: action.paper };
     case "paperSaved":
@@ -668,6 +800,46 @@ function deriveTopTopics(papers: ExplorePaper[]) {
     .toSorted((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
     .slice(0, 12)
     .map(([name, count]) => ({ name, count }));
+}
+
+function filterPapersByTimeRange(papers: ExplorePaper[], range: ExploreTimeRange) {
+  if (range === "all") {
+    return papers;
+  }
+
+  const now = Date.now();
+  const rangeStart = startOfExploreTimeRange(range, now);
+  return papers.filter((paper) => {
+    const timestamp = paperTimestamp(paper);
+    return timestamp !== null && timestamp >= rangeStart;
+  });
+}
+
+function startOfExploreTimeRange(range: Exclude<ExploreTimeRange, "all">, now: number) {
+  const date = new Date(now);
+  if (range === "week") {
+    date.setDate(date.getDate() - 7);
+  } else if (range === "month") {
+    date.setMonth(date.getMonth() - 1);
+  } else if (range === "year") {
+    date.setFullYear(date.getFullYear() - 1);
+  } else if (range === "threeYears") {
+    date.setFullYear(date.getFullYear() - 3);
+  } else {
+    date.setFullYear(date.getFullYear() - 5);
+  }
+  return date.getTime();
+}
+
+function paperTimestamp(paper: ExplorePaper) {
+  if (paper.publicationDate) {
+    const timestamp = new Date(paper.publicationDate).getTime();
+    if (!Number.isNaN(timestamp)) {
+      return timestamp;
+    }
+  }
+
+  return paper.year ? new Date(paper.year, 0, 1).getTime() : null;
 }
 
 function formatPaperDate(paper: ExplorePaper) {

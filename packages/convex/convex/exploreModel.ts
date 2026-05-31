@@ -81,7 +81,7 @@ export function exploreCacheKey(args: {
   now?: number;
 }) {
   const dateBucket = new Date(args.now ?? Date.now()).toISOString().slice(0, 10);
-  return `explore:v1:${args.mode}:${normalizeExploreQuery(args.query).toLowerCase()}:${args.limit}:${dateBucket}`;
+  return `explore:v2:${args.mode}:${normalizeExploreQuery(args.query).toLowerCase()}:${args.limit}:${dateBucket}`;
 }
 
 export function candidatesToExplorePapers(
