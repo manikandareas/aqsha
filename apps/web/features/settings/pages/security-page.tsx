@@ -13,7 +13,7 @@ import {
   SmartphoneIcon,
   UnlinkIcon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,10 @@ import { LoadingSettingsPage } from "../components/loading-settings-page";
 import {
   SettingsPanel,
   SettingsPanelBody,
+  SettingsPanelFooter,
   SettingsPanelHeader,
+  SettingsPanelList,
+  SettingsRow,
 } from "../components/settings-card";
 import { SettingsHeader } from "../components/settings-header";
 import { useSettingsSecurityData } from "../api/use-settings-security-data";
@@ -48,7 +51,7 @@ type SessionLike = {
 };
 
 const actionButtonClass =
-  "transition-[transform,background-color,border-color,color,box-shadow] duration-150 ease-out active:scale-[0.98]";
+  "transition-[transform,background-color,border-color,color] duration-150 ease-out active:scale-[0.98]";
 
 function readableClerkError(error: unknown, fallback: string) {
   if (
@@ -150,7 +153,7 @@ function SecurityRow({
   children?: ReactNode;
 }) {
   return (
-    <div className="grid gap-3 border-b border-border/60 px-5 py-4 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-6">
+    <SettingsRow className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div className="flex min-w-0 gap-3">
         <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted/25 text-muted-foreground">
           {icon}
@@ -168,7 +171,7 @@ function SecurityRow({
         </div>
       </div>
       {children ? <div className="flex flex-wrap gap-2 sm:justify-end">{children}</div> : null}
-    </div>
+    </SettingsRow>
   );
 }
 
@@ -229,7 +232,7 @@ function PasswordSection({
   }
 
   return (
-    <>
+    <div className="grid gap-2">
       <SecurityRow
         icon={<KeyRoundIcon className="size-4" />}
         title="Proteksi utama"
@@ -253,7 +256,7 @@ function PasswordSection({
       </SecurityRow>
 
       {open ? (
-        <div className="grid gap-3 border-b border-border/60 bg-muted/15 px-5 py-5 sm:px-6">
+        <SettingsRow className="grid gap-3 bg-muted/15">
           <div className="grid gap-3 sm:grid-cols-3">
             {passwordEnabled ? (
               <Input
@@ -297,9 +300,9 @@ function PasswordSection({
               Simpan kata sandi
             </Button>
           </div>
-        </div>
+        </SettingsRow>
       ) : null}
-    </>
+    </div>
   );
 }
 
@@ -378,7 +381,7 @@ function MfaSection({
   }
 
   return (
-    <>
+    <div className="grid gap-2">
       <SecurityRow
         icon={<ShieldCheckIcon className="size-4" />}
         title="Authenticator app"
@@ -417,7 +420,7 @@ function MfaSection({
       </SecurityRow>
 
       {setup ? (
-        <div className="grid gap-4 border-b border-border/60 bg-muted/15 px-5 py-5 sm:px-6">
+        <SettingsRow className="grid gap-4 bg-muted/15">
           <div className="grid gap-2">
             <p className="text-[13px] font-semibold text-foreground">Hubungkan authenticator app</p>
             <p className="text-[12px] leading-relaxed text-muted-foreground">
@@ -452,9 +455,9 @@ function MfaSection({
               Verifikasi
             </Button>
           </div>
-        </div>
+        </SettingsRow>
       ) : null}
-    </>
+    </div>
   );
 }
 
@@ -516,33 +519,13 @@ function ConnectedAccountsSection({
   }
 
   return (
-    <div>
-      {!hasGoogle ? (
-        <div className="flex justify-end border-b border-border/60 px-5 py-4 sm:px-6">
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            disabled={busyAction === "provider"}
-            className={actionButtonClass}
-            onClick={() => void connectGoogle()}
-          >
-            {busyAction === "provider" ? (
-              <Loader2Icon className="size-3.5 animate-spin text-primary" />
-            ) : (
-              <ProviderIcon provider="google" />
-            )}
-            Tambah Google
-          </Button>
-        </div>
-      ) : null}
-
-      <div className="grid gap-2 px-5 py-5 sm:px-6">
+    <>
+      <SettingsPanelList>
         {accounts.length > 0 ? (
           accounts.map((account) => (
-            <div
+            <SettingsRow
               key={account.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 bg-muted/25 px-3.5 py-3"
+              className="flex flex-wrap items-center justify-between gap-3"
             >
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-background/80 text-muted-foreground">
@@ -568,15 +551,34 @@ function ConnectedAccountsSection({
                 <UnlinkIcon className="size-3.5" />
                 Lepas
               </Button>
-            </div>
+            </SettingsRow>
           ))
         ) : (
           <p className="rounded-lg border border-dashed border-border/70 px-3.5 py-3 text-[13px] text-muted-foreground">
             Belum ada provider sosial yang tersambung.
           </p>
         )}
-      </div>
-    </div>
+      </SettingsPanelList>
+      {!hasGoogle ? (
+        <SettingsPanelFooter className="justify-end">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={busyAction === "provider"}
+            className={actionButtonClass}
+            onClick={() => void connectGoogle()}
+          >
+            {busyAction === "provider" ? (
+              <Loader2Icon className="size-3.5 animate-spin text-primary" />
+            ) : (
+              <ProviderIcon provider="google" />
+            )}
+            Tambah Google
+          </Button>
+        </SettingsPanelFooter>
+      ) : null}
+    </>
   );
 }
 
@@ -610,7 +612,7 @@ function ActiveSessionsSection({
   const [sessions, setSessions] = useState<SessionLike[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(true);
 
-  async function loadSessions() {
+  const loadSessions = useCallback(async () => {
     setLoadingSessions(true);
     try {
       const nextSessions = await user.getSessions();
@@ -620,13 +622,14 @@ function ActiveSessionsSection({
     } finally {
       setLoadingSessions(false);
     }
-  }
+  }, [setError, user]);
 
   useEffect(() => {
-    void loadSessions();
-    // Clerk user identity is stable for this page; load once per signed-in user.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user.id]);
+    const timeout = window.setTimeout(() => {
+      void loadSessions();
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [loadSessions]);
 
   async function revokeSession(session: SessionLike) {
     if (!session.id || session.id === currentSessionId || !session.revoke) return;
@@ -646,65 +649,67 @@ function ActiveSessionsSection({
   }
 
   return (
-    <div>
-      <div className="grid gap-2 px-5 py-5 sm:px-6">
-        {loadingSessions ? (
-          <div className="flex items-center gap-2 rounded-lg border border-border/70 bg-muted/25 px-3.5 py-3 text-[13px] text-muted-foreground">
-            <Loader2Icon className="size-3.5 animate-spin" />
-            Memuat sesi aktif...
-          </div>
-        ) : sessions.length > 0 ? (
-          sessions.map((session) => {
-            const isCurrent = session.id === currentSessionId;
-            return (
-              <div
-                key={session.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 bg-muted/25 px-3.5 py-3"
-              >
-                <div className="flex min-w-0 gap-3">
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-background/80 text-muted-foreground">
-                    {session.latestActivity?.isMobile ? (
-                      <SmartphoneIcon className="size-4" />
-                    ) : (
-                      <LaptopIcon className="size-4" />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-[13px] font-semibold text-foreground">{sessionLabel(session)}</p>
-                      {isCurrent ? (
-                        <span className="rounded-full border border-mint-soft-border bg-mint-soft px-2 py-0.5 text-[11px] font-medium text-mint-foreground">
-                          Sesi ini
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="mt-0.5 text-[12px] text-muted-foreground">{sessionLocation(session)}</p>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">
-                      Terakhir aktif {formatSecurityDate(session.lastActiveAt)}
-                    </p>
-                  </div>
+    <SettingsPanelList>
+      {loadingSessions ? (
+        <div className="flex items-center gap-2 rounded-lg border border-border/70 bg-muted/25 px-3.5 py-3 text-[13px] text-muted-foreground">
+          <Loader2Icon className="size-3.5 animate-spin" />
+          Memuat sesi aktif...
+        </div>
+      ) : sessions.length > 0 ? (
+        sessions.map((session) => {
+          const isCurrent = session.id === currentSessionId;
+          return (
+            <SettingsRow
+              key={session.id}
+              className="flex flex-wrap items-center justify-between gap-3"
+            >
+              <div className="flex min-w-0 gap-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-background/80 text-muted-foreground">
+                  {session.latestActivity?.isMobile ? (
+                    <SmartphoneIcon className="size-4" />
+                  ) : (
+                    <LaptopIcon className="size-4" />
+                  )}
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={isCurrent || busyAction === "session"}
-                  className={cn(actionButtonClass, "text-muted-foreground")}
-                  onClick={() => void revokeSession(session)}
-                >
-                  <LogOutIcon className="size-3.5" />
-                  Keluar
-                </Button>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[13px] font-semibold text-foreground">
+                      {sessionLabel(session)}
+                    </p>
+                    {isCurrent ? (
+                      <span className="rounded-full border border-mint-soft-border bg-mint-soft px-2 py-0.5 text-[11px] font-medium text-mint-foreground">
+                        Sesi ini
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-0.5 text-[12px] text-muted-foreground">
+                    {sessionLocation(session)}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    Terakhir aktif {formatSecurityDate(session.lastActiveAt)}
+                  </p>
+                </div>
               </div>
-            );
-          })
-        ) : (
-          <p className="rounded-lg border border-dashed border-border/70 px-3.5 py-3 text-[13px] text-muted-foreground">
-            Tidak ada sesi aktif yang bisa ditampilkan.
-          </p>
-        )}
-      </div>
-    </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={isCurrent || busyAction === "session"}
+                className={cn(actionButtonClass, "text-muted-foreground")}
+                onClick={() => void revokeSession(session)}
+              >
+                <LogOutIcon className="size-3.5" />
+                Keluar
+              </Button>
+            </SettingsRow>
+          );
+        })
+      ) : (
+        <p className="rounded-lg border border-dashed border-border/70 px-3.5 py-3 text-[13px] text-muted-foreground">
+          Tidak ada sesi aktif yang bisa ditampilkan.
+        </p>
+      )}
+    </SettingsPanelList>
   );
 }
 
@@ -759,20 +764,22 @@ function ClerkSecurityControls() {
           title="Keamanan masuk"
           description="Kelola kata sandi dan verifikasi tambahan untuk akun kamu."
         />
-        <PasswordSection
-          user={user}
-          busyAction={busyAction}
-          setBusyAction={setBusyAction}
-          setNotice={setNotice}
-          setError={setError}
-        />
-        <MfaSection
-          user={user}
-          busyAction={busyAction}
-          setBusyAction={setBusyAction}
-          setNotice={setNotice}
-          setError={setError}
-        />
+        <SettingsPanelList>
+          <PasswordSection
+            user={user}
+            busyAction={busyAction}
+            setBusyAction={setBusyAction}
+            setNotice={setNotice}
+            setError={setError}
+          />
+          <MfaSection
+            user={user}
+            busyAction={busyAction}
+            setBusyAction={setBusyAction}
+            setNotice={setNotice}
+            setError={setError}
+          />
+        </SettingsPanelList>
       </SettingsPanel>
 
       <SettingsPanel>

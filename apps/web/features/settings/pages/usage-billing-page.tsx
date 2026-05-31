@@ -16,6 +16,7 @@ import {
   SettingsPanel,
   SettingsPanelBody,
   SettingsPanelHeader,
+  SettingsSegmentedControl,
   SettingsSummaryCard,
 } from "../components/settings-card";
 import { SettingsHeader } from "../components/settings-header";
@@ -59,7 +60,24 @@ export function SettingsUsageBillingPage({
       <SettingsHeader section="usage-billing" title="Penggunaan & tagihan" />
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <SettingsSummaryCard label="Paket saat ini">
+        <SettingsSummaryCard
+          label="Paket saat ini"
+          footer={
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={data.openPortal}
+              disabled={!current.billingPortalAvailable || data.pendingKey === "portal"}
+              className="h-9 w-fit rounded-lg text-[13px]"
+            >
+              {data.pendingKey === "portal" ? (
+                <Loader2Icon className="size-3.5 animate-spin" />
+              ) : null}
+              {current.isAdmin ? "Kelola langganan" : "Sesuaikan paket"}
+            </Button>
+          }
+        >
           <div>
             <div className="flex flex-wrap items-baseline gap-2">
               <h3 className="text-base font-semibold tracking-tight text-foreground">
@@ -78,22 +96,30 @@ export function SettingsUsageBillingPage({
               </p>
             ) : null}
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={data.openPortal}
-            disabled={!current.billingPortalAvailable || data.pendingKey === "portal"}
-            className="h-9 w-fit rounded-lg text-[13px]"
-          >
-            {data.pendingKey === "portal" ? (
-              <Loader2Icon className="size-3.5 animate-spin" />
-            ) : null}
-            {current.isAdmin ? "Kelola langganan" : "Sesuaikan paket"}
-          </Button>
         </SettingsSummaryCard>
 
-        <SettingsSummaryCard label="Status langganan">
+        <SettingsSummaryCard
+          label="Status langganan"
+          footer={
+            current.canCancelSubscription ? (
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={data.cancelPlan}
+                disabled={data.pendingKey === "cancel"}
+                className="h-9 w-fit rounded-lg text-[13px]"
+              >
+                {data.pendingKey === "cancel" ? (
+                  <Loader2Icon className="size-3.5 animate-spin" />
+                ) : (
+                  <XCircleIcon className="size-3.5" />
+                )}
+                Batalkan perpanjangan
+              </Button>
+            ) : null
+          }
+        >
           <div>
             <h3 className="text-base font-semibold tracking-tight text-foreground">
               {current.cancelAtPeriodEnd
@@ -108,23 +134,6 @@ export function SettingsUsageBillingPage({
                   : "Belum ada langganan aktif."}
             </p>
           </div>
-          {current.canCancelSubscription ? (
-            <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              onClick={data.cancelPlan}
-              disabled={data.pendingKey === "cancel"}
-              className="h-9 w-fit rounded-lg text-[13px]"
-            >
-              {data.pendingKey === "cancel" ? (
-                <Loader2Icon className="size-3.5 animate-spin" />
-              ) : (
-                <XCircleIcon className="size-3.5" />
-              )}
-              Batalkan perpanjangan
-            </Button>
-          ) : null}
         </SettingsSummaryCard>
       </div>
 
@@ -193,22 +202,22 @@ export function SettingsUsageBillingPage({
       <SettingsPanel>
         <SettingsPanelHeader title="Aktivitas" />
         <SettingsPanelBody className="grid gap-4">
-          <div className="flex flex-wrap gap-1 rounded-xl border border-border/60 bg-muted/50 p-1 sm:w-fit">
+          <SettingsSegmentedControl>
             {([30, 90, 365] as const).map((days) => (
               <button
                 key={days}
                 type="button"
                 onClick={() => data.setUsageRangeDays(days)}
-                className={`rounded-lg px-3 py-1.5 text-[12px] font-medium ${
+                className={`rounded-md px-3 py-1.5 text-[12px] font-medium ${
                   data.usageRangeDays === days
-                    ? "bg-card text-foreground shadow-sm"
+                    ? "bg-card text-foreground"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {days} hari
               </button>
             ))}
-          </div>
+          </SettingsSegmentedControl>
           <UsageHeatmap rows={activity} />
         </SettingsPanelBody>
       </SettingsPanel>

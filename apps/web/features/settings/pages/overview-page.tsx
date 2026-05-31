@@ -36,7 +36,14 @@ export function SettingsOverviewPage() {
       <SettingsHeader section="overview" title="Pengaturan" />
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <SettingsSummaryCard label="Paket saat ini">
+        <SettingsSummaryCard
+          label="Paket saat ini"
+          footer={
+            <Button asChild variant="outline" size="sm" className="h-9 w-fit rounded-lg text-[13px]">
+              <Link href="/app/settings/usage-billing">Kelola paket</Link>
+            </Button>
+          }
+        >
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-base font-semibold tracking-tight text-foreground">
@@ -48,12 +55,16 @@ export function SettingsOverviewPage() {
               Reset {formatShortDate(data.current.resetAt)}
             </p>
           </div>
-          <Button asChild variant="outline" size="sm" className="h-9 w-fit rounded-lg text-[13px]">
-            <Link href="/app/settings/usage-billing">Kelola paket</Link>
-          </Button>
         </SettingsSummaryCard>
 
-        <SettingsSummaryCard label="Mulai riset">
+        <SettingsSummaryCard
+          label="Mulai riset"
+          footer={
+            <Button asChild size="sm" className="h-9 w-fit rounded-lg text-[13px]">
+              <Link href="/app">Mulai riset</Link>
+            </Button>
+          }
+        >
           <div>
             <h3 className="text-base font-semibold tracking-tight text-foreground">
               {setup.completedCount}/{setup.totalCount} selesai
@@ -62,9 +73,6 @@ export function SettingsOverviewPage() {
               Thread dan kredit menentukan kesiapan riset di Aqsha.
             </p>
           </div>
-          <Button asChild size="sm" className="h-9 w-fit rounded-lg text-[13px]">
-            <Link href="/app">Mulai riset</Link>
-          </Button>
         </SettingsSummaryCard>
       </div>
 

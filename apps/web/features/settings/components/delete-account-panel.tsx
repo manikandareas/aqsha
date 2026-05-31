@@ -18,6 +18,7 @@ import {
   SettingsField,
   SettingsPanel,
   SettingsPanelBody,
+  SettingsPanelFooter,
   SettingsPanelHeader,
 } from "./settings-card";
 
@@ -43,10 +44,12 @@ export function DeleteAccountPanel({
         title="Hapus akun"
         description="Aqsha membersihkan data Convex yang dimiliki akun ini sebelum menghapus user Clerk."
       />
-      <SettingsPanelBody className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <SettingsPanelBody>
         <p className="max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
           Tindakan ini permanen. Semua data akun yang terkait akan dibersihkan sebelum akun dihapus.
         </p>
+      </SettingsPanelBody>
+      <SettingsPanelFooter className="justify-end">
         <Dialog open={open} onOpenChange={handleOpenChange}>
           <DialogTrigger asChild>
             <Button
@@ -99,7 +102,7 @@ export function DeleteAccountPanel({
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </SettingsPanelBody>
+      </SettingsPanelFooter>
     </SettingsPanel>
   );
 }

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 const panelClass =
-  "overflow-hidden rounded-xl border border-border bg-card shadow-[0_1px_2px_rgba(0,0,0,0.03)]";
+  "overflow-hidden rounded-xl border border-border bg-card";
 
 export function SettingsPanel({
   className,
@@ -62,6 +62,49 @@ export function SettingsPanelFooter({
   );
 }
 
+export function SettingsPanelList({
+  className,
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}) {
+  return <SettingsPanelBody className={cn("grid gap-2", className)}>{children}</SettingsPanelBody>;
+}
+
+export function SettingsRow({
+  className,
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className={cn("rounded-lg border border-border/70 bg-muted/25 px-3.5 py-3", className)}>
+      {children}
+    </div>
+  );
+}
+
+export function SettingsSegmentedControl({
+  className,
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "inline-flex flex-wrap gap-1 rounded-lg border border-border/60 bg-muted/30 p-1",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function SettingsField({
   label,
   description,
@@ -87,17 +130,20 @@ export function SettingsField({
 }
 export function SettingsSummaryCard({
   label,
+  description,
+  footer,
   children,
 }: {
   label: string;
+  description?: string;
+  footer?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <SettingsPanel>
-      <SettingsPanelHeader title={label} />
-      <SettingsPanelBody className="flex min-h-[120px] flex-col justify-between gap-4">
-        {children}
-      </SettingsPanelBody>
+      <SettingsPanelHeader title={label} description={description} />
+      <SettingsPanelBody className="min-h-[108px]">{children}</SettingsPanelBody>
+      {footer ? <SettingsPanelFooter>{footer}</SettingsPanelFooter> : null}
     </SettingsPanel>
   );
 }

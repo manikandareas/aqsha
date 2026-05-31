@@ -9,6 +9,7 @@ import {
   SettingsPanelBody,
   SettingsPanelFooter,
   SettingsPanelHeader,
+  SettingsSegmentedControl,
 } from "../components/settings-card";
 import { SettingsHeader } from "../components/settings-header";
 
@@ -41,7 +42,7 @@ export function SettingsAppearancePage() {
           description={`Tema aktif sekarang: ${mounted ? resolvedTheme ?? "sistem" : "memuat"}.`}
         />
         <SettingsPanelBody>
-          <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-border/60 bg-muted/50 p-1.5">
+          <SettingsSegmentedControl className="grid grid-cols-3">
             {themeOptions.map((option) => {
               const Icon = option.icon;
               const active = activeTheme === option.key;
@@ -54,9 +55,9 @@ export function SettingsAppearancePage() {
                   }}
                   disabled={!mounted}
                   className={cn(
-                    "flex cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2.5 py-2.5 text-[12px] font-medium transition-[background-color,color,transform] duration-150 ease-out active:scale-[0.98] disabled:cursor-default disabled:opacity-70",
+                    "flex cursor-pointer items-center justify-center gap-1.5 rounded-md px-2.5 py-2.5 text-[12px] font-medium transition-[background-color,color,transform] duration-150 ease-out active:scale-[0.98] disabled:cursor-default disabled:opacity-70",
                     active
-                      ? "border border-border/40 bg-card text-foreground shadow-sm"
+                      ? "border border-border/40 bg-card text-foreground"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -70,7 +71,7 @@ export function SettingsAppearancePage() {
                 </button>
               );
             })}
-          </div>
+          </SettingsSegmentedControl>
         </SettingsPanelBody>
         <SettingsPanelFooter>
           <p className="text-[12px] text-muted-foreground">

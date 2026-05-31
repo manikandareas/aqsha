@@ -6,6 +6,7 @@ import type { PendingKey } from "../api/use-settings-usage-billing-data";
 import { formatIdr } from "../lib/settings-format";
 import type { BillingCurrent, Plan, ProductKey } from "../lib/types";
 import { getPlanBillingAction } from "../utils/settings-summary";
+import { SettingsSegmentedControl } from "./settings-card";
 
 export type BillingInterval = "month" | "year";
 
@@ -17,22 +18,22 @@ export function PlanIntervalSelector({
   onChange: (interval: BillingInterval) => void;
 }) {
   return (
-    <div className="flex w-fit gap-1 rounded-xl border border-border/60 bg-muted/50 p-1">
+    <SettingsSegmentedControl>
       {(["month", "year"] as const).map((interval) => (
         <button
           key={interval}
           type="button"
           onClick={() => onChange(interval)}
-          className={`rounded-lg px-3 py-1.5 text-[12px] font-medium ${
+          className={`rounded-md px-3 py-1.5 text-[12px] font-medium ${
             value === interval
-              ? "bg-card text-foreground shadow-sm"
+              ? "bg-card text-foreground"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
           {interval === "month" ? "Bulanan" : "Tahunan"}
         </button>
       ))}
-    </div>
+    </SettingsSegmentedControl>
   );
 }
 

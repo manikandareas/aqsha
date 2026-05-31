@@ -85,7 +85,7 @@ export function ProfileAvatarPicker({
         disabled={uploading}
         aria-label="Ganti foto profil"
         className={cn(
-          "group relative size-14 shrink-0 rounded-full outline-none transition-[transform,box-shadow] duration-150 ease-out",
+          "group relative size-14 shrink-0 rounded-full outline-none transition-transform duration-150 ease-out",
           "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
           uploading ? "cursor-wait" : "cursor-pointer hover:scale-[1.02]",
         )}
