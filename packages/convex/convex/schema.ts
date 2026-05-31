@@ -821,7 +821,6 @@ export default defineSchema(
     }).index("by_provider_key", ["provider", "cacheKey"]),
 
     explorePapers: defineTable({
-      ownerUserId: v.string(),
       key: v.string(),
       title: v.string(),
       snippet: v.string(),
@@ -842,7 +841,7 @@ export default defineSchema(
       topics: v.array(v.string()),
       score: v.optional(v.number()),
       lastSeenAt: v.number(),
-    }).index("by_owner_key", ["ownerUserId", "key"]),
+    }).index("by_key", ["key"]),
 
     domainReliability: defineTable({
       domain: v.string(),

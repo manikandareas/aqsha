@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 export function BrandLogoIcon({ className }: { className?: string }) {
   return (
     <Image
-      src="/logo-light.png"
+      src="/logo.svg"
       alt="Aqsha"
       width={1254}
       height={1254}

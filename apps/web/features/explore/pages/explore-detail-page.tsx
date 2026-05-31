@@ -10,10 +10,9 @@ import {
   ExternalLinkIcon,
   FileTextIcon,
   LinkIcon,
-  StarIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -33,13 +32,7 @@ const citationFormats: Array<{ value: CitationFormat; label: string }> = [
 
 export function ExploreDetailPage({ paperRef }: { paperRef: string }) {
   const shellData = useWorkspaceIndexData();
-  const paperKey = useMemo(() => {
-    try {
-      return decodePaperRef(paperRef);
-    } catch {
-      return "";
-    }
-  }, [paperRef]);
+  const paperKey = safeDecodePaperRef(paperRef);
   const paperQuery = useConvexQuery(
     api.explore.getPaper,
     paperKey ? { key: paperKey } : "skip",
@@ -90,17 +83,12 @@ function ExploreDetailContent({ paper }: { paper: ExplorePaper & { lastSeenAt?: 
     <>
       <section className="min-w-0">
         <div className="mb-4 flex items-center justify-end gap-4">
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon-sm" className="text-muted-foreground" aria-label="Favorite paper">
-              <StarIcon className="size-3.5" />
-            </Button>
-            <Button asChild variant="outline" size="sm" className="h-8 px-2.5 text-sm text-muted-foreground">
-              <a href={paper.url} target="_blank" rel="noreferrer">
-                Open
-                <ExternalLinkIcon className="size-3" />
-              </a>
-            </Button>
-          </div>
+          <Button asChild variant="outline" size="sm" className="h-8 px-2.5 text-sm text-muted-foreground">
+            <a href={paper.url} target="_blank" rel="noreferrer">
+              Open
+              <ExternalLinkIcon className="size-3" />
+            </a>
+          </Button>
         </div>
 
         <header className="min-w-0">
@@ -163,8 +151,6 @@ function ExploreDetailContent({ paper }: { paper: ExplorePaper & { lastSeenAt?: 
 }
 
 function ExploreDetailSidebar({ paper }: { paper: ExplorePaper & { lastSeenAt?: number } }) {
-  const metrics = paperMetrics(paper);
-
   return (
     <aside className="space-y-6 pt-2 lg:sticky lg:top-6 lg:self-start">
       <section>
@@ -178,7 +164,7 @@ function ExploreDetailSidebar({ paper }: { paper: ExplorePaper & { lastSeenAt?: 
           {paper.doi ? <PropertyLink label="DOI" value={paper.doi} href={`https://doi.org/${paper.doi}`} /> : null}
           {paper.openalexId ? <PropertyLink label="OpenAlex" value={shortenLocator(paper.openalexId)} href={paper.openalexId} /> : null}
           <PropertyLink label="URL" value={shortenLocator(paper.url)} href={paper.url} />
-          <PropertyRow label="Stars" value={metrics.stars} icon={<StarIcon className="size-4 fill-lemon text-lemon" />} />
+          <PropertyRow label="Citations" value={formatCitationCount(paper.citedByCount)} />
           <PropertyRow label="Authors" value={String(paper.authors.length || 1)} />
           <PropertyRow
             label="Hosting"
@@ -273,6 +259,7 @@ function PdfPanel({ paper }: { paper: ExplorePaper }) {
       <iframe
         src={paper.pdfUrl}
         title={`${paper.title} PDF`}
+        sandbox="allow-downloads"
         className="h-[60svh] min-h-[380px] w-full bg-background"
       />
     </section>
@@ -284,7 +271,7 @@ function ExploreDetailSkeleton() {
     <>
       <section className="min-w-0">
         <div className="mb-4 flex items-center justify-between">
-          <Skeleton className="h-7 w-7 rounded-md bg-muted" />
+          <Skeleton className="size-7 rounded-md bg-muted" />
           <Skeleton className="h-8 w-28 rounded-md bg-muted" />
         </div>
         <Skeleton className="h-16 w-[76%] rounded-md bg-muted" />
@@ -388,16 +375,19 @@ function PropertyLink({
   );
 }
 
-function paperMetrics(paper: ExplorePaper) {
-  const citations = paper.citedByCount ?? Math.round((paper.score ?? 1) * 10);
-  const stars =
-    citations >= 1_000
-      ? `${Number(citations / 1_000).toLocaleString("en", { maximumFractionDigits: 1 })}k`
-      : citations.toLocaleString("en");
-  return {
-    citations: citations.toLocaleString("en"),
-    stars: `${stars} stars`,
-  };
+function formatCitationCount(value: number | undefined) {
+  if (value === undefined) {
+    return "Unknown";
+  }
+  return value.toLocaleString("en");
+}
+
+function safeDecodePaperRef(paperRef: string) {
+  try {
+    return decodePaperRef(paperRef);
+  } catch {
+    return "";
+  }
 }
 
 function shortenLocator(value: string) {

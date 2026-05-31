@@ -75,7 +75,7 @@ export const searchPapers = action({
     const cacheKey = exploreCacheKey({ mode, query, limit });
     const cached = await readExploreCache(ctx, cacheKey);
     if (cached) {
-      await persistExplorePapers(ctx, user._id, cached.items);
+      await cacheExplorePapers(ctx, cached.items);
       return { ...cached, cached: true };
     }
 
@@ -155,7 +155,7 @@ export const searchPapers = action({
       cached: false,
     };
     await writeExploreCache(ctx, cacheKey, response);
-    await persistExplorePapers(ctx, user._id, response.items);
+    await cacheExplorePapers(ctx, response.items);
     return response;
   },
 });
@@ -165,27 +165,25 @@ export const getPaper = query({
     key: v.string(),
   },
   handler: async (ctx, args): Promise<(ExplorePaper & { lastSeenAt: number }) | null> => {
-    const user = await requireCurrentUser(ctx);
+    await requireCurrentUser(ctx);
     const paper = await ctx.db
       .query("explorePapers")
-      .withIndex("by_owner_key", (q) => q.eq("ownerUserId", user._id).eq("key", args.key))
+      .withIndex("by_key", (q) => q.eq("key", args.key))
       .unique();
 
     if (!paper) {
       return null;
     }
 
-    const { ownerUserId: _ownerUserId, _id, _creationTime, ...detail } = paper;
-    void _ownerUserId;
+    const { _id, _creationTime, ...detail } = paper;
     void _id;
     void _creationTime;
     return detail;
   },
 });
 
-export const upsertPapersForOwner = internalMutation({
+export const upsertPaperCache = internalMutation({
   args: {
-    ownerUserId: v.string(),
     papers: v.array(explorePaperValidator),
     lastSeenAt: v.number(),
   },
@@ -194,12 +192,11 @@ export const upsertPapersForOwner = internalMutation({
     for (const paper of args.papers) {
       const existing = await ctx.db
         .query("explorePapers")
-        .withIndex("by_owner_key", (q) => q.eq("ownerUserId", args.ownerUserId).eq("key", paper.key))
+        .withIndex("by_key", (q) => q.eq("key", paper.key))
         .unique();
 
       const nextPaper = {
         ...paper,
-        ownerUserId: args.ownerUserId,
         lastSeenAt: args.lastSeenAt,
       };
 
@@ -218,8 +215,8 @@ async function collectProvider(
   candidates: ExternalCandidate[],
   provider: ExploreProvider,
   args: {
-  run: () => Promise<ExternalCandidate[]>;
-},
+    run: () => Promise<ExternalCandidate[]>;
+  },
 ) {
   const result = await runProvider(args.run);
   candidates.push(...result.items);
@@ -290,16 +287,11 @@ async function writeExploreCache(
   });
 }
 
-async function persistExplorePapers(
-  ctx: ActionCtx,
-  ownerUserId: string,
-  papers: ExplorePaper[],
-) {
+async function cacheExplorePapers(ctx: ActionCtx, papers: ExplorePaper[]) {
   if (papers.length === 0) {
     return;
   }
-  await ctx.runMutation(internal.explore.upsertPapersForOwner, {
-    ownerUserId,
+  await ctx.runMutation(internal.explore.upsertPaperCache, {
     papers,
     lastSeenAt: Date.now(),
   });

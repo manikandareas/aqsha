@@ -3,22 +3,16 @@
 import { api } from "@aqsha/convex/api";
 import type { ExplorePaper, ExploreSearchResponse } from "@aqsha/convex/explore";
 import {
-  ArrowDownUpIcon,
   BookmarkIcon,
   CheckIcon,
-  Columns2Icon,
   ExternalLinkIcon,
   FileDownIcon,
-  Grid2X2Icon,
   LayoutGridIcon,
   Loader2Icon,
   SearchIcon,
-  SlidersHorizontalIcon,
-  StarIcon,
-  TrendingUpIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useReducer, useRef } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ExploreSurfaceHeader } from "@/features/explore/components/explore-surface-header";
 import { WorkspacePickerDialog } from "@/features/workspaces/components/workspace-picker-dialog";
@@ -33,20 +27,34 @@ import {
 import { cn } from "@/lib/utils";
 import { encodePaperRef } from "../utils/paper-ref";
 
-type ExploreTab = "trending" | "browse";
-type TimeRange = "all" | "week" | "month" | "year";
+type ExploreTab = "recommended" | "browse";
+
+type ExplorePageState = {
+  query: string;
+  submittedQuery: string;
+  response: ExploreSearchResponse | null;
+  isLoading: boolean;
+  error: string | null;
+  selectedPaper: ExplorePaper | null;
+  savedKeys: Set<string>;
+  activeTab: ExploreTab;
+  searchOpen: boolean;
+};
+
+type ExplorePageAction =
+  | { type: "queryChanged"; query: string }
+  | { type: "searchOpenChanged"; searchOpen: boolean }
+  | { type: "activeTabChanged"; activeTab: ExploreTab }
+  | { type: "selectedPaperChanged"; paper: ExplorePaper | null }
+  | { type: "paperSaved"; key: string }
+  | { type: "started" }
+  | { type: "succeeded"; response: ExploreSearchResponse; submittedQuery: string }
+  | { type: "failed"; error: string };
 
 const suggestedQueries = [
   "AI tutoring formative assessment",
   "retrieval augmented generation education",
   "student motivation learning analytics",
-];
-
-const timeRanges: Array<{ value: TimeRange; label: string }> = [
-  { value: "all", label: "All" },
-  { value: "week", label: "This week" },
-  { value: "month", label: "This month" },
-  { value: "year", label: "This year" },
 ];
 
 const thumbnailLayouts = [
@@ -57,18 +65,25 @@ const thumbnailLayouts = [
   "dense",
 ] as const;
 
-const pdfWorkerUrl = new URL(
-  "pdfjs-dist/build/pdf.worker.min.js",
-  import.meta.url,
-).toString();
-const pdfPreviewCache = new Map<string, string | null>();
-const pdfPreviewWidth = 76;
+const emptyExplorePapers: ExplorePaper[] = [];
 
-type PdfPreviewState =
-  | { status: "idle"; previewUrl: null }
-  | { status: "loading"; previewUrl: null }
-  | { status: "ready"; previewUrl: string }
-  | { status: "failed"; previewUrl: null };
+const paperDateFormatter = new Intl.DateTimeFormat("en", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+
+const initialExplorePageState: ExplorePageState = {
+  query: "",
+  submittedQuery: "",
+  response: null,
+  isLoading: true,
+  error: null,
+  selectedPaper: null,
+  savedKeys: new Set(),
+  activeTab: "recommended",
+  searchOpen: false,
+};
 
 export function ExplorePage() {
   const {
@@ -81,32 +96,33 @@ export function ExplorePage() {
   const searchPapers = useConvexActionState(api.explore.searchPapers);
   const createUrl = useConvexMutationState(api.artifacts.createUrl);
   const initialRecommendationsStarted = useRef(false);
-  const [query, setQuery] = useState("");
-  const [submittedQuery, setSubmittedQuery] = useState("");
-  const [response, setResponse] = useState<ExploreSearchResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedPaper, setSelectedPaper] = useState<ExplorePaper | null>(null);
-  const [savedKeys, setSavedKeys] = useState<Set<string>>(() => new Set());
-  const [activeTab, setActiveTab] = useState<ExploreTab>("trending");
-  const [activeRange, setActiveRange] = useState<TimeRange>("all");
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [state, dispatch] = useReducer(explorePageReducer, initialExplorePageState);
+  const {
+    query,
+    submittedQuery,
+    response,
+    isLoading,
+    error,
+    selectedPaper,
+    savedKeys,
+    activeTab,
+    searchOpen,
+  } = state;
 
-  const runSearch = async (nextQuery: string, nextTab = activeTab) => {
-    setIsLoading(true);
-    setError(null);
+  const runSearch = async (nextQuery: string) => {
+    dispatch({ type: "started" });
     try {
       const result: ExploreSearchResponse = await searchPapers.mutateAsync({
         query: nextQuery || undefined,
-        mode: nextQuery || nextTab === "browse" ? "search" : "recommendations",
-        limit: nextTab === "browse" ? 16 : 12,
+        mode: nextQuery ? "search" : "recommendations",
+        limit: 12,
       });
-      setResponse(result);
-      setSubmittedQuery(nextQuery);
-      setIsLoading(false);
+      dispatch({ type: "succeeded", response: result, submittedQuery: nextQuery });
     } catch (searchError) {
-      setError(readableConvexErrorMessage(searchError, "Gagal mencari paper."));
-      setIsLoading(false);
+      dispatch({
+        type: "failed",
+        error: readableConvexErrorMessage(searchError, "Gagal mencari paper."),
+      });
     }
   };
 
@@ -117,63 +133,31 @@ export function ExplorePage() {
     initialRecommendationsStarted.current = true;
     const task = window.setTimeout(() => {
       void (async () => {
-        setIsLoading(true);
-        setError(null);
+        dispatch({ type: "started" });
         try {
           const result: ExploreSearchResponse = await searchPapers.mutateAsync({
             query: undefined,
             mode: "recommendations",
             limit: 12,
           });
-          setResponse(result);
-          setSubmittedQuery("");
-          setIsLoading(false);
+          dispatch({ type: "succeeded", response: result, submittedQuery: "" });
         } catch (searchError) {
-          setError(readableConvexErrorMessage(searchError, "Gagal mencari paper."));
-          setIsLoading(false);
+          dispatch({
+            type: "failed",
+            error: readableConvexErrorMessage(searchError, "Gagal mencari paper."),
+          });
         }
       })();
     }, 0);
     return () => window.clearTimeout(task);
   }, [searchPapers]);
 
-  const filteredPapers = useMemo(() => {
-    const items = response?.items ?? [];
-    if (activeRange === "all") {
-      return items;
-    }
-
-    const now = response?.generatedAt ?? 0;
-    const rangeMs =
-      activeRange === "week"
-        ? 7 * 24 * 60 * 60 * 1_000
-        : activeRange === "month"
-          ? 31 * 24 * 60 * 60 * 1_000
-          : 366 * 24 * 60 * 60 * 1_000;
-
-    const scoped = items.filter((paper) => {
-      const date = paper.publicationDate
-        ? Date.parse(paper.publicationDate)
-        : paper.year
-          ? Date.parse(`${paper.year}-01-01`)
-          : Number.NaN;
-      return Number.isFinite(date) && now - date <= rangeMs;
-    });
-
-    return scoped.length > 0 ? scoped : items;
-  }, [activeRange, response?.generatedAt, response?.items]);
-
-  const topDomains = useMemo(() => deriveTopDomains(filteredPapers), [filteredPapers]);
+  const papers = response?.items ?? emptyExplorePapers;
+  const topTopics = deriveTopTopics(papers);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     void runSearch(query.trim());
-  };
-
-  const handleTabChange = (nextTab: ExploreTab) => {
-    setActiveTab(nextTab);
-    const nextQuery = nextTab === "browse" && !query.trim() ? "research paper" : query.trim();
-    void runSearch(nextQuery, nextTab);
   };
 
   const handleSave = async (workspaceId: string) => {
@@ -183,7 +167,7 @@ export function ExplorePage() {
       url: selectedPaper.url,
       title: selectedPaper.title,
     });
-    setSavedKeys((keys) => new Set(keys).add(selectedPaper.key));
+    dispatch({ type: "paperSaved", key: selectedPaper.key });
   };
 
   return (
@@ -202,55 +186,29 @@ export function ExplorePage() {
               Papers
             </h1>
             <p className="mt-4 max-w-[680px] text-[14px] font-medium leading-6 text-muted-foreground sm:text-[15px]">
-              Trending research and the full catalog - each paper linked to the benchmarks, methods, and models it introduces.
+              Recommended research and searchable papers from Aqsha&apos;s academic providers.
             </p>
           </header>
 
           <section className="mt-8">
             <div className="inline-flex rounded-[8px] border border-border/80 bg-card/30 p-1">
               <ExploreTabButton
-                active={activeTab === "trending"}
-                onClick={() => handleTabChange("trending")}
+                active={activeTab === "recommended"}
+                onClick={() => dispatch({ type: "activeTabChanged", activeTab: "recommended" })}
               >
-                Trending
+                Recommended
               </ExploreTabButton>
               <ExploreTabButton
                 active={activeTab === "browse"}
-                onClick={() => handleTabChange("browse")}
+                onClick={() => dispatch({ type: "activeTabChanged", activeTab: "browse" })}
               >
-                Browse all
+                Compact
               </ExploreTabButton>
             </div>
           </section>
 
           <section className="mt-6 border-b border-border/80">
             <div className="flex min-h-11 items-center gap-3">
-              <nav className="flex min-w-0 flex-1 items-center gap-3 overflow-x-auto overflow-y-hidden sm:gap-5">
-                {timeRanges.map((range) => (
-                  <button
-                    key={range.value}
-                    type="button"
-                    onClick={() => setActiveRange(range.value)}
-                    className={cn(
-                      "relative h-11 shrink-0 px-2.5 text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground sm:px-3 sm:text-[14px]",
-                      activeRange === range.value && "text-foreground",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "rounded-[7px] px-0 py-2",
-                        activeRange === range.value && "bg-muted px-2.5",
-                      )}
-                    >
-                      {range.label}
-                    </span>
-                    {activeRange === range.value ? (
-                      <span className="absolute bottom-0 left-0 h-[2px] w-full bg-foreground" />
-                    ) : null}
-                  </button>
-                ))}
-              </nav>
-
               <form
                 onSubmit={handleSubmit}
                 className={cn(
@@ -268,7 +226,7 @@ export function ExplorePage() {
                 <input
                   id="explore-search"
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => dispatch({ type: "queryChanged", query: event.target.value })}
                   placeholder="Search papers..."
                   className={cn(
                     "h-8 min-w-0 flex-1 bg-transparent text-[13px] font-medium text-foreground outline-none placeholder:text-muted-foreground",
@@ -279,7 +237,7 @@ export function ExplorePage() {
                   type={searchOpen ? "submit" : "button"}
                   onClick={() => {
                     if (!searchOpen) {
-                      setSearchOpen(true);
+                      dispatch({ type: "searchOpenChanged", searchOpen: true });
                     }
                   }}
                   className="inline-flex size-9 shrink-0 items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -292,8 +250,6 @@ export function ExplorePage() {
                   )}
                 </button>
               </form>
-
-              {activeTab === "browse" ? <BrowseToolbar /> : null}
             </div>
           </section>
 
@@ -305,34 +261,34 @@ export function ExplorePage() {
 
           {isLoading ? (
             <ExploreSkeletonList activeTab={activeTab} />
-          ) : filteredPapers.length ? (
-            activeTab === "trending" ? (
+          ) : papers.length ? (
+            activeTab === "recommended" ? (
               <section className="grid gap-10 pt-7 lg:grid-cols-[minmax(0,1fr)_260px] lg:gap-10">
                 <div className="min-w-0 divide-y divide-border/60">
-                  {filteredPapers.map((paper, index) => (
+                  {papers.map((paper, index) => (
                     <PaperListItem
                       key={paper.key}
                       index={index}
                       paper={paper}
                       saved={savedKeys.has(paper.key)}
-                      variant="trending"
-                      onSave={() => setSelectedPaper(paper)}
+                      variant="recommended"
+                      onSave={() => dispatch({ type: "selectedPaperChanged", paper })}
                     />
                   ))}
                 </div>
-                <TopDomains domains={topDomains} />
+                <TopTopics topics={topTopics} />
               </section>
             ) : (
               <section className="pt-7">
                 <div className="divide-y divide-border/60">
-                  {filteredPapers.map((paper, index) => (
+                  {papers.map((paper, index) => (
                     <PaperListItem
                       key={paper.key}
                       index={index}
                       paper={paper}
                       saved={savedKeys.has(paper.key)}
                       variant="browse"
-                      onSave={() => setSelectedPaper(paper)}
+                      onSave={() => dispatch({ type: "selectedPaperChanged", paper })}
                     />
                   ))}
                 </div>
@@ -340,8 +296,8 @@ export function ExplorePage() {
             )
           ) : (
             <ExploreEmptyState query={submittedQuery} onPick={(suggestion) => {
-              setQuery(suggestion);
-              setSearchOpen(true);
+              dispatch({ type: "queryChanged", query: suggestion });
+              dispatch({ type: "searchOpenChanged", searchOpen: true });
               void runSearch(suggestion);
             }} />
           )}
@@ -349,7 +305,7 @@ export function ExplorePage() {
       </main>
       <WorkspacePickerDialog
         open={Boolean(selectedPaper)}
-        onOpenChange={(open) => !open && setSelectedPaper(null)}
+        onOpenChange={(open) => !open && dispatch({ type: "selectedPaperChanged", paper: null })}
         title="Simpan paper"
         description="Pilih workspace tujuan untuk menyimpan paper sebagai URL artifact."
         onSelect={handleSave}
@@ -381,43 +337,6 @@ function ExploreTabButton({
   );
 }
 
-function BrowseToolbar() {
-  return (
-    <div className="hidden items-center gap-2 text-muted-foreground sm:flex">
-      <button
-        type="button"
-        className="inline-flex size-8 items-center justify-center rounded-[7px] transition-colors hover:bg-muted hover:text-foreground"
-        aria-label="Filter papers"
-      >
-        <SlidersHorizontalIcon className="size-4" strokeWidth={2} />
-      </button>
-      <button
-        type="button"
-        className="inline-flex size-8 items-center justify-center rounded-[7px] transition-colors hover:bg-muted hover:text-foreground"
-        aria-label="Sort papers"
-      >
-        <ArrowDownUpIcon className="size-4" strokeWidth={2} />
-      </button>
-      <div className="inline-flex rounded-[8px] border border-border/80 bg-card/40 p-1">
-        <button
-          type="button"
-          className="inline-flex size-8 items-center justify-center rounded-[6px] text-muted-foreground transition-colors hover:text-foreground"
-          aria-label="Compact view"
-        >
-          <Columns2Icon className="size-4" />
-        </button>
-        <button
-          type="button"
-          className="inline-flex size-8 items-center justify-center rounded-[6px] bg-muted text-foreground"
-          aria-label="Grid view"
-        >
-          <Grid2X2Icon className="size-4" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function PaperListItem({
   paper,
   saved,
@@ -428,15 +347,15 @@ function PaperListItem({
   paper: ExplorePaper;
   saved: boolean;
   index: number;
-  variant: "trending" | "browse";
+  variant: "recommended" | "browse";
   onSave: () => void;
 }) {
   const authors = paper.authors.length > 0 ? paper.authors.join(", ") : paper.sourceLabel;
   const date = formatPaperDate(paper);
   const topic = paper.topics[0] ?? paper.venue ?? paper.provider;
-  const metrics = paperMetrics(paper, index);
   const layout = thumbnailLayouts[index % thumbnailLayouts.length];
   const detailHref = `/app/explore/${encodePaperRef(paper.key)}`;
+  const citationLabel = formatCitationCount(paper.citedByCount);
 
   return (
     <article
@@ -450,11 +369,7 @@ function PaperListItem({
         className="mt-0.5 block"
         aria-label={`View ${paper.title}`}
       >
-        <PaperPreviewThumbnail
-          key={paper.pdfUrl ?? "synthetic-thumbnail"}
-          pdfUrl={paper.pdfUrl}
-          layout={layout}
-        />
+        <PaperThumbnail layout={layout} />
       </Link>
 
       <div className="min-w-0">
@@ -482,13 +397,13 @@ function PaperListItem({
         <p
           className={cn(
             "mt-2.5 max-w-[860px] text-[13px] font-medium leading-5 text-ink-soft",
-            variant === "trending" ? "line-clamp-2" : "line-clamp-2 sm:line-clamp-2",
+            "line-clamp-2",
           )}
         >
           {paper.snippet}
         </p>
 
-        {variant === "trending" ? (
+        {variant === "recommended" ? (
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
             <span
               className={cn(
@@ -516,7 +431,7 @@ function PaperListItem({
       <div
         className={cn(
           "col-start-2 flex items-center justify-between gap-2 text-ink-soft sm:col-start-auto sm:items-end sm:justify-end",
-          variant === "trending" ? "sm:flex-col" : "sm:self-center",
+          variant === "recommended" ? "sm:flex-col" : "sm:self-center",
         )}
       >
         <div className="flex items-center gap-2">
@@ -543,157 +458,11 @@ function PaperListItem({
           </a>
         </div>
 
-        <div className="flex items-center gap-1.5 whitespace-nowrap text-[12px] font-semibold text-muted-foreground">
-          <StarIcon className="size-3.5 fill-lemon text-lemon" />
-          <span>{metrics.stars}</span>
-          {variant === "trending" ? (
-            <span className="hidden items-center gap-1 text-muted-foreground/70 sm:inline-flex">
-              <TrendingUpIcon className="size-3" />
-              {metrics.velocity}
-            </span>
-          ) : null}
-        </div>
+        <p className="whitespace-nowrap text-[12px] font-semibold text-muted-foreground">
+          {citationLabel ?? paper.sourceLabel}
+        </p>
       </div>
     </article>
-  );
-}
-
-function PaperPreviewThumbnail({
-  pdfUrl,
-  layout,
-}: {
-  pdfUrl: string | undefined;
-  layout: (typeof thumbnailLayouts)[number];
-}) {
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  const cachedPreview = pdfUrl ? pdfPreviewCache.get(pdfUrl) : undefined;
-  const [previewState, setPreviewState] = useState<PdfPreviewState>(() =>
-    cachedPreview
-      ? { status: "ready", previewUrl: cachedPreview }
-      : { status: "idle", previewUrl: null },
-  );
-
-  useEffect(() => {
-    if (!pdfUrl) {
-      return;
-    }
-
-    const cached = pdfPreviewCache.get(pdfUrl);
-    if (cached) {
-      return;
-    }
-
-    const root = rootRef.current;
-    if (!root) {
-      return;
-    }
-
-    let cancelled = false;
-    const abortController = new AbortController();
-    let loadingTask: import("pdfjs-dist").PDFDocumentLoadingTask | null = null;
-
-    const renderPreview = async () => {
-      try {
-        setPreviewState({ status: "loading", previewUrl: null });
-        const response = await fetch(pdfUrl, {
-          mode: "cors",
-          signal: abortController.signal,
-        });
-        if (!response.ok) {
-          throw new Error(`PDF request failed with ${response.status}`);
-        }
-        const buffer = await response.arrayBuffer();
-        if (cancelled) {
-          return;
-        }
-
-        const pdfjs = await import("pdfjs-dist");
-        pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
-        loadingTask = pdfjs.getDocument({
-          data: new Uint8Array(buffer),
-          disableFontFace: true,
-          isEvalSupported: false,
-          useSystemFonts: true,
-        });
-        const pdf = await loadingTask.promise;
-        if (cancelled) {
-          await pdf.destroy();
-          return;
-        }
-
-        const page = await pdf.getPage(1);
-        const baseViewport = page.getViewport({ scale: 1 });
-        const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-        const scale = (pdfPreviewWidth * pixelRatio) / baseViewport.width;
-        const viewport = page.getViewport({ scale });
-        const canvas = document.createElement("canvas");
-        const context = canvas.getContext("2d", { alpha: false });
-        if (!context) {
-          throw new Error("Canvas context unavailable.");
-        }
-        canvas.width = Math.ceil(viewport.width);
-        canvas.height = Math.ceil(viewport.height);
-        context.fillStyle = "white";
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        await page.render({ canvasContext: context, viewport }).promise;
-        await pdf.destroy();
-
-        if (cancelled) {
-          return;
-        }
-        const nextPreviewUrl = canvas.toDataURL("image/jpeg", 0.82);
-        pdfPreviewCache.set(pdfUrl, nextPreviewUrl);
-        setPreviewState({ status: "ready", previewUrl: nextPreviewUrl });
-      } catch (error) {
-        if (!cancelled && !abortController.signal.aborted) {
-          if (process.env.NODE_ENV === "development") {
-            console.warn("[Explore PDF preview]", pdfUrl, error);
-          }
-          setPreviewState({ status: "failed", previewUrl: null });
-        }
-      }
-    };
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry?.isIntersecting) {
-          return;
-        }
-        observer.disconnect();
-        void renderPreview();
-      },
-      { rootMargin: "240px" },
-    );
-    observer.observe(root);
-
-    return () => {
-      cancelled = true;
-      abortController.abort();
-      observer.disconnect();
-      void loadingTask?.destroy();
-    };
-  }, [pdfUrl]);
-
-  if (!pdfUrl || previewState.status !== "ready") {
-    return (
-      <div ref={rootRef}>
-        <PaperThumbnail layout={layout} />
-      </div>
-    );
-  }
-
-  return (
-    <div
-      ref={rootRef}
-      className="h-[98px] w-[72px] overflow-hidden rounded-[6px] border border-border bg-card shadow-sm sm:h-[104px] sm:w-[76px]"
-      style={{
-        backgroundImage: `url(${previewState.previewUrl})`,
-        backgroundPosition: "top center",
-        backgroundRepeat: "no-repeat",
-        backgroundSize: "cover",
-      }}
-      aria-hidden="true"
-    />
   );
 }
 
@@ -754,21 +523,21 @@ function PaperLines({ count }: { count: number }) {
   );
 }
 
-function TopDomains({ domains }: { domains: Array<{ name: string; count: number }> }) {
-  if (domains.length === 0) {
+function TopTopics({ topics }: { topics: Array<{ name: string; count: number }> }) {
+  if (topics.length === 0) {
     return null;
   }
 
   return (
     <aside className="hidden pt-1 lg:block">
       <h2 className="mb-4 text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">
-        Top domains
+        Top topics
       </h2>
       <ol className="space-y-4">
-        {domains.map((domain) => (
-          <li key={domain.name} className="flex items-center justify-between gap-5 text-[13px] font-medium">
-            <span className="truncate text-muted-foreground">{domain.name}</span>
-            <span className="font-mono text-[11px] text-muted-foreground/80">{domain.count}</span>
+        {topics.map((topic) => (
+          <li key={topic.name} className="flex items-center justify-between gap-5 text-[13px] font-medium">
+            <span className="truncate text-muted-foreground">{topic.name}</span>
+            <span className="font-mono text-[11px] text-muted-foreground/80">{topic.count}</span>
           </li>
         ))}
       </ol>
@@ -781,7 +550,7 @@ function ExploreSkeletonList({ activeTab }: { activeTab: ExploreTab }) {
     <section
       className={cn(
         "grid gap-10 pt-7",
-        activeTab === "trending" && "lg:grid-cols-[minmax(0,1fr)_260px] lg:gap-10",
+        activeTab === "recommended" && "lg:grid-cols-[minmax(0,1fr)_260px] lg:gap-10",
       )}
     >
       <div className="divide-y divide-border/60">
@@ -804,7 +573,7 @@ function ExploreSkeletonList({ activeTab }: { activeTab: ExploreTab }) {
           </div>
         ))}
       </div>
-      {activeTab === "trending" ? (
+      {activeTab === "recommended" ? (
         <div className="hidden space-y-5 lg:block">
           <Skeleton className="h-4 w-28 rounded-[4px] bg-muted/50" />
           {Array.from({ length: 10 }).map((_, index) => (
@@ -853,7 +622,37 @@ function ExploreEmptyState({
   );
 }
 
-function deriveTopDomains(papers: ExplorePaper[]) {
+function explorePageReducer(
+  state: ExplorePageState,
+  action: ExplorePageAction,
+): ExplorePageState {
+  switch (action.type) {
+    case "queryChanged":
+      return { ...state, query: action.query };
+    case "searchOpenChanged":
+      return { ...state, searchOpen: action.searchOpen };
+    case "activeTabChanged":
+      return { ...state, activeTab: action.activeTab };
+    case "selectedPaperChanged":
+      return { ...state, selectedPaper: action.paper };
+    case "paperSaved":
+      return { ...state, savedKeys: new Set(state.savedKeys).add(action.key) };
+    case "started":
+      return { ...state, isLoading: true, error: null };
+    case "succeeded":
+      return {
+        ...state,
+        response: action.response,
+        submittedQuery: action.submittedQuery,
+        isLoading: false,
+        error: null,
+      };
+    case "failed":
+      return { ...state, isLoading: false, error: action.error };
+  }
+}
+
+function deriveTopTopics(papers: ExplorePaper[]) {
   const counts = new Map<string, number>();
   for (const paper of papers) {
     const topics = paper.topics.length > 0 ? paper.topics : [paper.venue, paper.provider];
@@ -865,8 +664,8 @@ function deriveTopDomains(papers: ExplorePaper[]) {
     }
   }
 
-  return [...counts.entries()]
-    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+  return Array.from(counts.entries())
+    .toSorted((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
     .slice(0, 12)
     .map(([name, count]) => ({ name, count }));
 }
@@ -875,27 +674,22 @@ function formatPaperDate(paper: ExplorePaper) {
   if (paper.publicationDate) {
     const date = new Date(paper.publicationDate);
     if (!Number.isNaN(date.getTime())) {
-      return new Intl.DateTimeFormat("en", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      }).format(date);
+      return paperDateFormatter.format(date);
     }
   }
 
   return paper.year ? String(paper.year) : "";
 }
 
-function paperMetrics(paper: ExplorePaper, index: number) {
-  const citationBase = paper.citedByCount ?? Math.round((paper.score ?? 1) * 10) + index;
-  const stars =
-    citationBase >= 1_000
-      ? `${Number(citationBase / 1_000).toLocaleString("en", { maximumFractionDigits: 1 })}k`
-      : citationBase.toLocaleString("en");
-  const velocitySeed = Math.max(0.1, (paper.score ?? citationBase / 100) / 8);
-  const velocity = `${velocitySeed.toLocaleString("en", { maximumFractionDigits: 1 })}/h`;
-
-  return { stars, velocity };
+function formatCitationCount(value: number | undefined) {
+  if (value === undefined) {
+    return null;
+  }
+  const count =
+    value >= 1_000
+      ? `${(value / 1_000).toLocaleString("en", { maximumFractionDigits: 1 })}k`
+      : value.toLocaleString("en");
+  return `${count} citations`;
 }
 
 function topicBadgeClass(topic: string) {
