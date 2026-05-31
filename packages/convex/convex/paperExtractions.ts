@@ -443,7 +443,6 @@ export const markGrobidReady = internalMutation({
         title: parsed.title,
         detectedDocumentKind: scholarly ? "scholarly_paper" : "generic",
         plainTextPreview: parsed.abstract ?? previewFromText(parsed.plainText),
-        contextText: contextFromText(parsed.plainText),
         indexingStatus: "ready",
         indexingFailureReason: undefined,
         ragEntryId: args.ragEntryId ?? artifact.ragEntryId,
@@ -453,6 +452,7 @@ export const markGrobidReady = internalMutation({
       await ctx.db.patch("artifactContents", row._id, {
         markdown: inlineMarkdown,
         plainText: inlinePlainText,
+        contextText: contextFromText(parsed.plainText),
         storageId: args.plainTextStorageId,
         markdownStorageId: args.markdownStorageId,
         updatedAt: now,

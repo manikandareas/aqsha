@@ -38,7 +38,12 @@ import type {
   RemoveThread,
   ThreadSummary,
 } from "@/features/thread-experience/components/component-types";
-import { type ComponentProps, type ReactNode, useEffect, useState } from "react";
+import {
+  type ComponentProps,
+  type ReactNode,
+  useEffect,
+  useState,
+} from "react";
 
 type Viewer = {
   name: string | null;
@@ -53,6 +58,7 @@ type WorkspaceSummary = {
 };
 
 const emptyWorkspaces: WorkspaceSummary[] = [];
+const MOBILE_THREAD_TITLE_MAX_CHARS = 42;
 const sidebarItemBaseClass =
   "h-8 gap-2 rounded-[8px] px-2.5 py-0 text-[12px] font-medium transition-[background-color,color,box-shadow] duration-150 ease-out hover:bg-muted/60 data-active:bg-primary/10 data-active:font-medium data-active:text-foreground data-active:shadow-none data-active:[&_svg]:text-primary hover:text-foreground active:bg-muted active:text-foreground [&_svg]:size-3.5";
 
@@ -99,7 +105,8 @@ export function AppSidebar({
   const isHomeActive = pathname === "/app" && !selectedThreadId;
   const isWorkspaceRoute = pathname.startsWith("/app/workspaces");
   const isExploreActive = pathname.startsWith("/app/explore");
-  const showWorkspaceSection = sortedWorkspaces.length > 0 || Boolean(createWorkspace);
+  const showWorkspaceSection =
+    sortedWorkspaces.length > 0 || Boolean(createWorkspace);
   const showThreadSection = sortedThreads.length > 0 || Boolean(onCreateThread);
   const hasSidebarItems = showWorkspaceSection || showThreadSection;
   const workspaceSectionAction = createWorkspace ? (
@@ -217,7 +224,11 @@ export function AppSidebar({
               ) : (
                 <>
                   {showWorkspaceSection ? (
-                    <SidebarSection label="Workspaces" first action={workspaceSectionAction}>
+                    <SidebarSection
+                      label="Workspaces"
+                      first
+                      action={workspaceSectionAction}
+                    >
                       {sortedWorkspaces.length > 0 ? (
                         <SidebarMenu className="min-w-0 gap-1 overflow-hidden">
                           {sortedWorkspaces.map((workspace) => (
@@ -232,12 +243,19 @@ export function AppSidebar({
                           ))}
                         </SidebarMenu>
                       ) : (
-                        <EmptyWorkspaceRow onCreate={createWorkspace ? runCreateWorkspace : undefined} />
+                        <EmptyWorkspaceRow
+                          onCreate={
+                            createWorkspace ? runCreateWorkspace : undefined
+                          }
+                        />
                       )}
                     </SidebarSection>
                   ) : null}
                   {showThreadSection ? (
-                    <SidebarSection label="Threads" action={threadSectionAction}>
+                    <SidebarSection
+                      label="Threads"
+                      action={threadSectionAction}
+                    >
                       {sortedThreads.length > 0 ? (
                         <SidebarMenu className="min-w-0 gap-1 overflow-hidden">
                           {sortedThreads.map((thread) => (
@@ -272,56 +290,56 @@ export function AppSidebar({
       <CommandDialog open={commandOpen} onOpenChange={setCommandOpen}>
         {commandOpen ? (
           <>
-        <CommandInput placeholder="Cari atau buat..." />
-        <CommandList>
-          <CommandEmpty>Tidak ada hasil.</CommandEmpty>
-          <CommandGroup heading="Buat">
-            <CommandItem onSelect={runCreateThread}>
-              <MessageSquareIcon className="size-4" />
-              Chat baru
-            </CommandItem>
-            {createWorkspace ? (
-              <CommandItem onSelect={runCreateWorkspace}>
-                <LayoutGridIcon className="size-4" />
-                Workspace baru
-              </CommandItem>
-            ) : null}
-          </CommandGroup>
-          {sortedWorkspaces.length > 0 ? (
-            <CommandGroup heading="Workspaces">
-              {sortedWorkspaces.map((workspace) => (
-                <CommandItem
-                  key={workspace._id}
-                  value={`workspace-${workspace.name}`}
-                  onSelect={() => setCommandOpen(false)}
-                  asChild
-                >
-                  <Link href={`/app/workspaces/${workspace._id}`}>
+            <CommandInput placeholder="Cari atau buat..." />
+            <CommandList>
+              <CommandEmpty>Tidak ada hasil.</CommandEmpty>
+              <CommandGroup heading="Buat">
+                <CommandItem onSelect={runCreateThread}>
+                  <MessageSquareIcon className="size-4" />
+                  Chat baru
+                </CommandItem>
+                {createWorkspace ? (
+                  <CommandItem onSelect={runCreateWorkspace}>
                     <LayoutGridIcon className="size-4" />
-                    <span className="truncate">{workspace.name}</span>
-                  </Link>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          ) : null}
-          {sortedThreads.length > 0 ? (
-            <CommandGroup heading="Threads">
-              {sortedThreads.map((thread) => (
-                <CommandItem
-                  key={thread.threadId}
-                  value={`thread-${thread.title}`}
-                  onSelect={() => setCommandOpen(false)}
-                  asChild
-                >
-                  <Link href={`/app/threads/${thread.threadId}`}>
-                    <MessageSquareIcon className="size-4" />
-                    <span className="truncate">{thread.title}</span>
-                  </Link>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          ) : null}
-        </CommandList>
+                    Workspace baru
+                  </CommandItem>
+                ) : null}
+              </CommandGroup>
+              {sortedWorkspaces.length > 0 ? (
+                <CommandGroup heading="Workspaces">
+                  {sortedWorkspaces.map((workspace) => (
+                    <CommandItem
+                      key={workspace._id}
+                      value={`workspace-${workspace.name}`}
+                      onSelect={() => setCommandOpen(false)}
+                      asChild
+                    >
+                      <Link href={`/app/workspaces/${workspace._id}`}>
+                        <LayoutGridIcon className="size-4" />
+                        <span className="truncate">{workspace.name}</span>
+                      </Link>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ) : null}
+              {sortedThreads.length > 0 ? (
+                <CommandGroup heading="Threads">
+                  {sortedThreads.map((thread) => (
+                    <CommandItem
+                      key={thread.threadId}
+                      value={`thread-${thread.title}`}
+                      onSelect={() => setCommandOpen(false)}
+                      asChild
+                    >
+                      <Link href={`/app/threads/${thread.threadId}`}>
+                        <MessageSquareIcon className="size-4" />
+                        <span className="truncate">{thread.title}</span>
+                      </Link>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ) : null}
+            </CommandList>
           </>
         ) : null}
       </CommandDialog>
@@ -329,9 +347,9 @@ export function AppSidebar({
         <NameDialog
           open={createDialogOpen}
           onOpenChange={setCreateDialogOpen}
-        title="Workspace baru"
-        description="Buat area riset personal."
-        submitLabel="Buat"
+          title="Workspace baru"
+          description="Buat area riset personal."
+          submitLabel="Buat"
           onSubmit={async ({ name }) => {
             const workspaceId = await createWorkspace({ name });
             router.push(`/app/workspaces/${String(workspaceId)}`);
@@ -421,15 +439,18 @@ function RecentThreadRow({
         className={cn(
           sidebarItemClass(active),
           "w-full min-w-0 max-w-full overflow-hidden",
+          onDelete ? "pr-8" : undefined,
         )}
       >
         <Link
           href={`/app/threads/${thread.threadId}`}
+          aria-label={thread.title}
+          title={thread.title}
           className="flex min-w-0 max-w-full items-center gap-2 overflow-hidden"
         >
           <MessageSquareIcon className="size-3.5 shrink-0" />
           <span className="min-w-0 flex-1 truncate font-normal">
-            {truncateWords(thread.title, 18)}
+            {truncateCharacters(thread.title, MOBILE_THREAD_TITLE_MAX_CHARS)}
           </span>
           {thread.status === "streaming" ? (
             <span className="ml-auto inline-flex size-1.5 shrink-0 rounded-full bg-primary" />
@@ -515,8 +536,8 @@ function RecentWorkspaceRow({
   );
 }
 
-function truncateWords(value: string, maxWords: number) {
-  const words = value.trim().split(/\s+/).filter(Boolean);
-  if (words.length <= maxWords) return value;
-  return `${words.slice(0, maxWords).join(" ")}...`;
+function truncateCharacters(value: string, maxLength: number) {
+  const trimmed = value.trim();
+  if (trimmed.length <= maxLength) return trimmed;
+  return `${trimmed.slice(0, maxLength - 1).trimEnd()}...`;
 }

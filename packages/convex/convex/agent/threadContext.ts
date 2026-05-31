@@ -301,11 +301,11 @@ async function getPromptContextArtifactById(
   ]);
 
   const rawContent =
-    artifact.contextText ??
+    contentRow?.contextText ??
     contentRow?.plainText ??
     contentRow?.markdown ??
+    url?.contextText ??
     url?.readableText ??
-    artifact.body ??
     "";
   const content = clipText(rawContent, Math.min(PROMPT_CONTEXT_ARTIFACT_LIMIT, remainingBudget));
 
@@ -361,11 +361,11 @@ async function getPromptContextArtifact(
   ]);
 
   const rawContent =
-    artifact.contextText ??
+    contentRow?.contextText ??
     contentRow?.plainText ??
     contentRow?.markdown ??
+    url?.contextText ??
     url?.readableText ??
-    artifact.body ??
     "";
   const content = clipText(rawContent, Math.min(PROMPT_CONTEXT_ARTIFACT_LIMIT, remainingBudget));
 

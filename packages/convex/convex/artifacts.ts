@@ -1,7 +1,7 @@
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   action,
   internalAction,
@@ -162,6 +162,30 @@ function normalizeArtifactReadModel<T extends ArtifactReadModelInput>(artifact: 
   };
 }
 
+function toArtifactListItem(artifact: Doc<"artifacts">) {
+  const normalized = normalizeArtifactReadModel(artifact);
+  return {
+    _id: artifact._id,
+    workspaceId: artifact.workspaceId,
+    folderId: artifact.folderId,
+    artifactType: normalized.artifactType,
+    artifactFamily: normalized.artifactFamily,
+    source: normalized.source,
+    title: artifact.title,
+    language: artifact.language,
+    mimeType: artifact.mimeType,
+    fileName: artifact.fileName,
+    byteSize: artifact.byteSize,
+    indexingStatus: normalized.indexingStatus,
+    indexingFailureReason: artifact.indexingFailureReason,
+    detectedDocumentKind: artifact.detectedDocumentKind,
+    plainTextPreview: artifact.plainTextPreview,
+    status: artifact.status,
+    createdAt: artifact.createdAt,
+    updatedAt: artifact.updatedAt,
+  };
+}
+
 export const listByWorkspace = query({
   args: {
     workspaceId: v.id("workspaces"),
@@ -186,7 +210,7 @@ export const listByWorkspace = query({
         .paginate(args.paginationOpts);
       return {
         ...result,
-        page: result.page.map(normalizeArtifactReadModel),
+        page: result.page.map(toArtifactListItem),
       };
     }
     const result = await ctx.db
@@ -201,7 +225,7 @@ export const listByWorkspace = query({
       .paginate(args.paginationOpts);
     return {
       ...result,
-      page: result.page.map(normalizeArtifactReadModel),
+      page: result.page.map(toArtifactListItem),
     };
   },
 });
@@ -224,7 +248,7 @@ export const listForContextPicker = query({
         )
         .order("desc")
         .take(50);
-      return artifacts.map(normalizeArtifactReadModel);
+      return artifacts.map(toArtifactListItem);
     }
 
     return (await ctx.db
@@ -235,7 +259,7 @@ export const listForContextPicker = query({
       .order("desc")
       .take(50))
       .filter((artifact) => artifact.workspaceId != null)
-      .map(normalizeArtifactReadModel);
+      .map(toArtifactListItem);
   },
 });
 
@@ -283,9 +307,7 @@ export const createDocument = mutation({
       title,
       language: "markdown",
       indexingStatus: "ready",
-      body: "",
       plainTextPreview: "",
-      contextText: "",
       status: "active",
       createdAt: now,
       updatedAt: now,
@@ -297,6 +319,7 @@ export const createDocument = mutation({
       blocksJson: "",
       markdown: "",
       plainText: "",
+      contextText: "",
       createdAt: now,
       updatedAt: now,
     });
@@ -413,7 +436,7 @@ export const getRenderPayload = action({
         (content?.markdownStorageId ? await readStorageText(ctx, content.markdownStorageId) : "");
       const plainText =
         content?.plainText ??
-        (content?.storageId ? await readStorageText(ctx, content.storageId) : artifact.body ?? "");
+        (content?.storageId ? await readStorageText(ctx, content.storageId) : "");
       return {
         artifactType: "markdown",
         blocksJson,
@@ -423,7 +446,9 @@ export const getRenderPayload = action({
     }
 
     const source =
-      artifact.body ??
+      content?.plainText ??
+      content?.markdown ??
+      (content?.storageId ? await readStorageText(ctx, content.storageId) : undefined) ??
       (artifact.storageId ? await readStorageText(ctx, artifact.storageId) : "");
     if (
       artifactType !== "plain_text" &&
@@ -489,7 +514,6 @@ export const createUrl = mutation({
       mimeType: "text/uri-list",
       indexingStatus: "pending",
       plainTextPreview: normalizedUrl,
-      contextText: normalizedUrl,
       status: "active",
       createdAt: now,
       updatedAt: now,
@@ -503,6 +527,7 @@ export const createUrl = mutation({
       status: "pending",
       title,
       siteName: siteNameFromUrl(normalizedUrl),
+      contextText: normalizedUrl,
       createdAt: now,
       updatedAt: now,
     });
@@ -693,9 +718,7 @@ export const updateMarkdownInternal = internalMutation({
         : undefined;
     await ctx.db.patch("artifacts", args.artifactId, {
       title,
-      body: inlinePlainText,
       plainTextPreview: previewFromText(args.plainText),
-      contextText: contextFromText(args.plainText),
       indexingStatus: "ready",
       updatedAt: now,
     });
@@ -703,6 +726,7 @@ export const updateMarkdownInternal = internalMutation({
       blocksJson: inlineBlocksJson,
       markdown: inlineMarkdown,
       plainText: inlinePlainText,
+      contextText: contextFromText(args.plainText),
       storageId: args.storageId,
       blocksStorageId: args.blocksStorageId,
       markdownStorageId: args.markdownStorageId,
@@ -739,7 +763,6 @@ export const createThreadAttachmentInternal = internalMutation({
       indexingStatus: "pending",
       storageId: args.storageId,
       plainTextPreview: "Indexing is running.",
-      contextText: "",
       status: "active",
       createdAt: now,
       updatedAt: now,
@@ -751,6 +774,7 @@ export const createThreadAttachmentInternal = internalMutation({
       blocksJson: "",
       markdown: "",
       plainText: "",
+      contextText: "",
       createdAt: now,
       updatedAt: now,
     });
@@ -793,7 +817,7 @@ export const promoteAttachmentToWorkspaceInternal = internalMutation({
       workspaceName: workspace?.name ?? "Workspace",
       ragEntryId: artifactBeforePromote?.ragEntryId,
       title: artifactBeforePromote?.title ?? "Artifact",
-      plainText: row.plainText ?? artifactBeforePromote?.contextText ?? "",
+      plainText: row.plainText ?? row.contextText ?? "",
     };
   },
 });
@@ -940,7 +964,6 @@ export const createUploadedArtifactInternal = internalMutation({
       indexingStatus: "pending",
       storageId: args.storageId,
       plainTextPreview: "Indexing is running.",
-      contextText: "",
       status: "active",
       createdAt: now,
       updatedAt: now,
@@ -952,6 +975,7 @@ export const createUploadedArtifactInternal = internalMutation({
       blocksJson: "",
       markdown: "",
       plainText: "",
+      contextText: "",
       createdAt: now,
       updatedAt: now,
     });
@@ -987,7 +1011,6 @@ export const patchUploadedArtifactIndexed = internalMutation({
       title: args.title ?? artifact.title,
       detectedDocumentKind: args.detectedDocumentKind,
       plainTextPreview: args.plainTextPreview ?? previewFromText(args.plainText),
-      contextText: args.contextText ?? contextFromText(args.plainText),
       indexingStatus: "ready",
       indexingFailureReason: undefined,
       ragEntryId: args.ragEntryId ?? artifact.ragEntryId,
@@ -997,6 +1020,7 @@ export const patchUploadedArtifactIndexed = internalMutation({
     await ctx.db.patch("artifactContents", row._id, {
       markdown: inlineMarkdown,
       plainText: inlinePlainText,
+      contextText: args.contextText ?? contextFromText(args.plainText),
       storageId: args.indexedTextStorageId,
       markdownStorageId: args.markdownStorageId,
       updatedAt: now,
@@ -1017,7 +1041,6 @@ export const patchUploadedArtifactIndexingFailed = internalMutation({
     const reason = previewFromText(args.failureReason, 500);
     await ctx.db.patch("artifacts", args.artifactId, {
       plainTextPreview: reason,
-      contextText: "",
       indexingStatus: "failed",
       indexingFailureReason: reason,
       updatedAt: Date.now(),
@@ -1093,7 +1116,6 @@ export const patchUrlExtractionReady = internalMutation({
     await ctx.db.patch("artifacts", artifact._id, {
       title: args.title || artifact.title,
       plainTextPreview: previewFromText(args.readableText),
-      contextText: contextFromText(args.readableText),
       indexingStatus: "ready",
       indexingFailureReason: undefined,
       updatedAt: now,
@@ -1104,6 +1126,7 @@ export const patchUrlExtractionReady = internalMutation({
       description: args.description,
       siteName: args.siteName ?? siteNameFromUrl(row.normalizedUrl),
       readableText: inlineText,
+      contextText: contextFromText(args.readableText),
       storageId: args.storageId,
       failureReason: undefined,
       extractedAt: now,
@@ -1169,9 +1192,7 @@ export const createArtifactFromAgentInternal = internalMutation({
       title,
       language: args.language ?? defaultLanguageForArtifactType(artifactType),
       indexingStatus: "ready",
-      body: args.content,
       plainTextPreview: previewFromText(plainText || args.content),
-      contextText: contextFromText(plainText || args.content),
       status: "active",
       createdAt: now,
       updatedAt: now,
@@ -1183,6 +1204,7 @@ export const createArtifactFromAgentInternal = internalMutation({
       blocksJson: "",
       markdown: artifactType === "markdown" ? args.content : "",
       plainText,
+      contextText: contextFromText(plainText || args.content),
       createdAt: now,
       updatedAt: now,
     });
@@ -1219,10 +1241,8 @@ export const updateArtifactFromAgentInternal = internalMutation({
       artifactFamily: artifactFamilyForType(artifactType),
       title,
       language: args.language ?? defaultLanguageForArtifactType(artifactType),
-      body: args.content,
       storageId: undefined,
       plainTextPreview: previewFromText(plainText || args.content),
-      contextText: contextFromText(plainText || args.content),
       indexingStatus: "ready",
       updatedAt: now,
     });
@@ -1230,6 +1250,7 @@ export const updateArtifactFromAgentInternal = internalMutation({
       blocksJson: artifactType === "markdown" ? "" : undefined,
       markdown: artifactType === "markdown" ? args.content : "",
       plainText,
+      contextText: contextFromText(plainText || args.content),
       storageId: undefined,
       markdownStorageId: undefined,
       blocksStorageId: undefined,
