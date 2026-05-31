@@ -20,6 +20,7 @@ import {
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ExploreSurfaceHeader } from "@/features/explore/components/explore-surface-header";
 import { WorkspacePickerDialog } from "@/features/workspaces/components/workspace-picker-dialog";
 import { WorkspaceShell } from "@/features/workspaces/components/workspace-shell";
 import { useWorkspaceIndexData } from "@/features/workspaces/api/use-workspaces-data";
@@ -55,6 +56,19 @@ const thumbnailLayouts = [
   "columns",
   "dense",
 ] as const;
+
+const pdfWorkerUrl = new URL(
+  "pdfjs-dist/build/pdf.worker.min.js",
+  import.meta.url,
+).toString();
+const pdfPreviewCache = new Map<string, string | null>();
+const pdfPreviewWidth = 76;
+
+type PdfPreviewState =
+  | { status: "idle"; previewUrl: null }
+  | { status: "loading"; previewUrl: null }
+  | { status: "ready"; previewUrl: string }
+  | { status: "failed"; previewUrl: null };
 
 export function ExplorePage() {
   const {
@@ -181,7 +195,8 @@ export function ExplorePage() {
       removeThread={removeThread}
     >
       <main className="min-h-svh bg-background text-foreground">
-        <div className="mx-auto w-full max-w-[1080px] px-5 pb-12 pt-6 sm:px-10 md:pt-10 xl:px-14">
+        <ExploreSurfaceHeader breadcrumbs={[{ label: "Explore" }]} />
+        <div className="mx-auto w-full max-w-[1080px] px-5 pb-12 pt-4 sm:px-10 md:pt-6 xl:px-14">
           <header className="max-w-[680px]">
             <h1 className="text-[30px] font-semibold leading-none tracking-normal text-foreground sm:text-[34px]">
               Papers
@@ -210,7 +225,7 @@ export function ExplorePage() {
 
           <section className="mt-6 border-b border-border/80">
             <div className="flex min-h-11 items-center gap-3">
-              <nav className="flex min-w-0 flex-1 items-center gap-3 overflow-x-auto sm:gap-5">
+              <nav className="flex min-w-0 flex-1 items-center gap-3 overflow-x-auto overflow-y-hidden sm:gap-5">
                 {timeRanges.map((range) => (
                   <button
                     key={range.value}
@@ -230,7 +245,7 @@ export function ExplorePage() {
                       {range.label}
                     </span>
                     {activeRange === range.value ? (
-                      <span className="absolute bottom-[-1px] left-0 h-[2px] w-full bg-foreground" />
+                      <span className="absolute bottom-0 left-0 h-[2px] w-full bg-foreground" />
                     ) : null}
                   </button>
                 ))}
@@ -426,7 +441,7 @@ function PaperListItem({
   return (
     <article
       className={cn(
-        "group grid grid-cols-[72px_minmax(0,1fr)] gap-4 py-4 transition-colors hover:bg-muted/15 sm:grid-cols-[76px_minmax(0,1fr)_110px] sm:gap-5",
+        "group grid grid-cols-[72px_minmax(0,1fr)] gap-4 py-4 sm:grid-cols-[76px_minmax(0,1fr)_110px] sm:gap-5",
         variant === "browse" && "sm:grid-cols-[76px_minmax(0,1fr)_72px]",
       )}
     >
@@ -435,7 +450,11 @@ function PaperListItem({
         className="mt-0.5 block"
         aria-label={`View ${paper.title}`}
       >
-        <PaperThumbnail layout={layout} />
+        <PaperPreviewThumbnail
+          key={paper.pdfUrl ?? "synthetic-thumbnail"}
+          pdfUrl={paper.pdfUrl}
+          layout={layout}
+        />
       </Link>
 
       <div className="min-w-0">
@@ -446,7 +465,10 @@ function PaperListItem({
               variant === "browse" && "sm:text-[16px]",
             )}
           >
-            <Link href={detailHref} className="focus:outline-none">
+            <Link
+              href={detailHref}
+              className="underline-offset-3 focus:outline-none hover:underline focus-visible:underline"
+            >
               {paper.title}
             </Link>
           </h2>
@@ -533,6 +555,145 @@ function PaperListItem({
         </div>
       </div>
     </article>
+  );
+}
+
+function PaperPreviewThumbnail({
+  pdfUrl,
+  layout,
+}: {
+  pdfUrl: string | undefined;
+  layout: (typeof thumbnailLayouts)[number];
+}) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const cachedPreview = pdfUrl ? pdfPreviewCache.get(pdfUrl) : undefined;
+  const [previewState, setPreviewState] = useState<PdfPreviewState>(() =>
+    cachedPreview
+      ? { status: "ready", previewUrl: cachedPreview }
+      : { status: "idle", previewUrl: null },
+  );
+
+  useEffect(() => {
+    if (!pdfUrl) {
+      return;
+    }
+
+    const cached = pdfPreviewCache.get(pdfUrl);
+    if (cached) {
+      return;
+    }
+
+    const root = rootRef.current;
+    if (!root) {
+      return;
+    }
+
+    let cancelled = false;
+    const abortController = new AbortController();
+    let loadingTask: import("pdfjs-dist").PDFDocumentLoadingTask | null = null;
+
+    const renderPreview = async () => {
+      try {
+        setPreviewState({ status: "loading", previewUrl: null });
+        const response = await fetch(pdfUrl, {
+          mode: "cors",
+          signal: abortController.signal,
+        });
+        if (!response.ok) {
+          throw new Error(`PDF request failed with ${response.status}`);
+        }
+        const buffer = await response.arrayBuffer();
+        if (cancelled) {
+          return;
+        }
+
+        const pdfjs = await import("pdfjs-dist");
+        pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+        loadingTask = pdfjs.getDocument({
+          data: new Uint8Array(buffer),
+          disableFontFace: true,
+          isEvalSupported: false,
+          useSystemFonts: true,
+        });
+        const pdf = await loadingTask.promise;
+        if (cancelled) {
+          await pdf.destroy();
+          return;
+        }
+
+        const page = await pdf.getPage(1);
+        const baseViewport = page.getViewport({ scale: 1 });
+        const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+        const scale = (pdfPreviewWidth * pixelRatio) / baseViewport.width;
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d", { alpha: false });
+        if (!context) {
+          throw new Error("Canvas context unavailable.");
+        }
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        context.fillStyle = "white";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: context, viewport }).promise;
+        await pdf.destroy();
+
+        if (cancelled) {
+          return;
+        }
+        const nextPreviewUrl = canvas.toDataURL("image/jpeg", 0.82);
+        pdfPreviewCache.set(pdfUrl, nextPreviewUrl);
+        setPreviewState({ status: "ready", previewUrl: nextPreviewUrl });
+      } catch (error) {
+        if (!cancelled && !abortController.signal.aborted) {
+          if (process.env.NODE_ENV === "development") {
+            console.warn("[Explore PDF preview]", pdfUrl, error);
+          }
+          setPreviewState({ status: "failed", previewUrl: null });
+        }
+      }
+    };
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) {
+          return;
+        }
+        observer.disconnect();
+        void renderPreview();
+      },
+      { rootMargin: "240px" },
+    );
+    observer.observe(root);
+
+    return () => {
+      cancelled = true;
+      abortController.abort();
+      observer.disconnect();
+      void loadingTask?.destroy();
+    };
+  }, [pdfUrl]);
+
+  if (!pdfUrl || previewState.status !== "ready") {
+    return (
+      <div ref={rootRef}>
+        <PaperThumbnail layout={layout} />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={rootRef}
+      className="h-[98px] w-[72px] overflow-hidden rounded-[6px] border border-border bg-card shadow-sm sm:h-[104px] sm:w-[76px]"
+      style={{
+        backgroundImage: `url(${previewState.previewUrl})`,
+        backgroundPosition: "top center",
+        backgroundRepeat: "no-repeat",
+        backgroundSize: "cover",
+      }}
+      aria-hidden="true"
+    />
   );
 }
 

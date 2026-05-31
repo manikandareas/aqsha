@@ -17,6 +17,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ExploreSurfaceHeader } from "@/features/explore/components/explore-surface-header";
 import { WorkspaceShell } from "@/features/workspaces/components/workspace-shell";
 import { useWorkspaceIndexData } from "@/features/workspaces/api/use-workspaces-data";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
@@ -53,7 +54,13 @@ export function ExploreDetailPage({ paperRef }: { paperRef: string }) {
       removeThread={shellData.removeThread}
     >
       <main className="min-h-svh bg-background text-foreground">
-        <div className="mx-auto grid w-full max-w-[1180px] gap-8 px-5 pb-14 pt-7 sm:px-8 lg:grid-cols-[minmax(0,760px)_280px] lg:gap-16 lg:px-10">
+        <ExploreSurfaceHeader
+          breadcrumbs={[
+            { label: "Explore", href: "/app/explore" },
+            { label: "Paper" },
+          ]}
+        />
+        <div className="mx-auto grid w-full max-w-[1080px] gap-8 px-5 pb-12 pt-4 sm:px-8 lg:grid-cols-[minmax(0,700px)_260px] lg:gap-10 lg:px-10">
           {paperQuery.isLoading ? (
             <ExploreDetailSkeleton />
           ) : paperQuery.error ? (
@@ -82,12 +89,7 @@ function ExploreDetailContent({ paper }: { paper: ExplorePaper & { lastSeenAt?: 
   return (
     <>
       <section className="min-w-0">
-        <div className="mb-5 flex items-center justify-between gap-4">
-          <Button asChild variant="ghost" size="icon-sm" className="-ml-2 text-muted-foreground">
-            <Link href="/app/explore">
-              <ArrowLeftIcon className="size-3.5" />
-            </Link>
-          </Button>
+        <div className="mb-4 flex items-center justify-end gap-4">
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon-sm" className="text-muted-foreground" aria-label="Favorite paper">
               <StarIcon className="size-3.5" />
@@ -102,35 +104,35 @@ function ExploreDetailContent({ paper }: { paper: ExplorePaper & { lastSeenAt?: 
         </div>
 
         <header className="min-w-0">
-          <h1 className="max-w-[760px] text-3xl font-semibold leading-tight tracking-normal text-foreground sm:text-4xl">
+          <h1 className="max-w-[700px] text-2xl font-semibold leading-tight tracking-normal text-foreground sm:text-3xl">
             {paper.title}
           </h1>
-          <p className="mt-4 max-w-[720px] text-base font-medium leading-7 text-muted-foreground">
+          <p className="mt-3 max-w-[660px] text-[14px] font-medium leading-6 text-muted-foreground">
             {summary}
           </p>
         </header>
 
-        <Tabs defaultValue="overview" className="mt-9 gap-0">
-          <TabsList className="h-11 w-full justify-start gap-5 rounded-none border-0 border-b border-border bg-transparent p-0">
+        <Tabs defaultValue="overview" className="mt-8 gap-0">
+          <TabsList className="h-10 w-full justify-start gap-5 rounded-none border-0 border-b border-border bg-transparent p-0">
             <TabsTrigger
               value="overview"
-              className="h-11 min-w-0 rounded-none border-b-2 border-transparent bg-transparent px-0 text-sm font-semibold text-muted-foreground shadow-none data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+              className="h-10 min-w-0 rounded-none border-b-2 border-transparent bg-transparent px-0 text-[13px] font-semibold text-muted-foreground shadow-none data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
             >
               Overview
             </TabsTrigger>
             <TabsTrigger
               value="pdf"
-              className="h-11 min-w-0 rounded-none border-b-2 border-transparent bg-transparent px-0 text-sm font-semibold text-muted-foreground shadow-none data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+              className="h-10 min-w-0 rounded-none border-b-2 border-transparent bg-transparent px-0 text-[13px] font-semibold text-muted-foreground shadow-none data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
             >
               PDF
             </TabsTrigger>
           </TabsList>
-          <TabsContent value="overview" className="pt-7">
+          <TabsContent value="overview" className="pt-6">
             <section>
-              <h2 className="text-base font-semibold text-foreground">
+              <h2 className="text-[15px] font-semibold text-foreground">
                 Topics <span className="ml-2 font-medium text-muted-foreground">{paper.topics.length}</span>
               </h2>
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-3 flex flex-wrap gap-2">
                 {(paper.topics.length > 0 ? paper.topics : [paper.provider]).slice(0, 8).map((topic) => (
                   <span
                     key={topic}
@@ -142,9 +144,9 @@ function ExploreDetailContent({ paper }: { paper: ExplorePaper & { lastSeenAt?: 
               </div>
             </section>
 
-            <section className="mt-10">
-              <h2 className="text-base font-semibold text-foreground">Abstract</h2>
-              <p className="mt-5 max-w-[760px] text-base font-medium leading-7 text-foreground">
+            <section className="mt-8">
+              <h2 className="text-[15px] font-semibold text-foreground">Abstract</h2>
+              <p className="mt-4 max-w-[700px] text-[14px] font-medium leading-6 text-foreground">
                 {abstract}
               </p>
             </section>
@@ -164,10 +166,10 @@ function ExploreDetailSidebar({ paper }: { paper: ExplorePaper & { lastSeenAt?: 
   const metrics = paperMetrics(paper);
 
   return (
-    <aside className="space-y-7 pt-2 lg:sticky lg:top-7 lg:self-start">
+    <aside className="space-y-6 pt-2 lg:sticky lg:top-6 lg:self-start">
       <section>
-        <h2 className="mb-5 text-xs font-semibold text-muted-foreground">Properties</h2>
-        <div className="space-y-5">
+        <h2 className="mb-4 text-[12px] font-semibold text-muted-foreground">Properties</h2>
+        <div className="space-y-4">
           <PropertyRow label="Year" value={paper.year ? String(paper.year) : "Unknown"} />
           <PropertyRow label="Venue" value={paper.venue ?? paper.sourceLabel} badge />
           {paper.arxivId ? (
@@ -188,7 +190,7 @@ function ExploreDetailSidebar({ paper }: { paper: ExplorePaper & { lastSeenAt?: 
       </section>
 
       <section>
-        <h2 className="mb-3 text-xs font-semibold text-muted-foreground">Cite</h2>
+        <h2 className="mb-3 text-[12px] font-semibold text-muted-foreground">Cite</h2>
         <div className="space-y-2">
           {citationFormats.map((format) => (
             <CopyCitationButton key={format.value} paper={paper} format={format.value}>
@@ -198,9 +200,9 @@ function ExploreDetailSidebar({ paper }: { paper: ExplorePaper & { lastSeenAt?: 
         </div>
       </section>
 
-      <section className="border-t border-border pt-6">
-        <h2 className="mb-4 text-xs font-semibold text-muted-foreground">Attribution</h2>
-        <p className="text-sm font-medium text-muted-foreground">
+      <section className="border-t border-border pt-5">
+        <h2 className="mb-3 text-[12px] font-semibold text-muted-foreground">Attribution</h2>
+        <p className="text-[13px] font-medium text-muted-foreground">
           {paper.pdfUrl ? "Abstract & full text" : "Abstract"}
         </p>
       </section>
@@ -228,7 +230,7 @@ function CopyCitationButton({
           window.setTimeout(() => setCopied(false), 1_200);
         });
       }}
-      className="flex h-9 w-full items-center justify-between rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted active:scale-[0.99]"
+      className="flex h-8 w-full items-center justify-between rounded-md border border-border bg-background px-3 text-[13px] font-medium text-foreground transition-colors hover:bg-muted active:scale-[0.99]"
     >
       <span>{children}</span>
       {copied ? <CheckIcon className="size-3.5 text-mint-foreground" /> : <CopyIcon className="size-3.5" />}
@@ -239,10 +241,10 @@ function CopyCitationButton({
 function PdfPanel({ paper }: { paper: ExplorePaper }) {
   if (!paper.pdfUrl) {
     return (
-      <section className="mt-7 grid min-h-[300px] place-items-center border border-border bg-card p-5 text-center">
+      <section className="mt-6 grid min-h-[260px] place-items-center border border-border bg-card p-5 text-center">
         <div>
           <FileTextIcon className="mx-auto size-7 text-muted-foreground" />
-          <h2 className="mt-3 text-base font-semibold text-foreground">Abstract only</h2>
+          <h2 className="mt-3 text-[15px] font-semibold text-foreground">Abstract only</h2>
           <p className="mt-2 max-w-xs text-sm font-medium leading-5 text-muted-foreground">
             No hosted PDF was returned for this result.
           </p>
@@ -258,8 +260,8 @@ function PdfPanel({ paper }: { paper: ExplorePaper }) {
   }
 
   return (
-    <section className="mt-7 overflow-hidden border border-border bg-card">
-      <div className="flex min-h-10 items-center justify-between gap-3 border-b border-border px-3">
+    <section className="mt-6 overflow-hidden border border-border bg-card">
+      <div className="flex min-h-9 items-center justify-between gap-3 border-b border-border px-3">
         <span className="truncate text-xs font-semibold text-muted-foreground">{shortenLocator(paper.pdfUrl)}</span>
         <Button asChild variant="ghost" size="sm" className="h-8">
           <a href={paper.pdfUrl} target="_blank" rel="noreferrer">
@@ -271,7 +273,7 @@ function PdfPanel({ paper }: { paper: ExplorePaper }) {
       <iframe
         src={paper.pdfUrl}
         title={`${paper.title} PDF`}
-        className="h-[64svh] min-h-[420px] w-full bg-background"
+        className="h-[60svh] min-h-[380px] w-full bg-background"
       />
     </section>
   );
@@ -281,17 +283,17 @@ function ExploreDetailSkeleton() {
   return (
     <>
       <section className="min-w-0">
-        <div className="mb-5 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between">
           <Skeleton className="h-7 w-7 rounded-md bg-muted" />
           <Skeleton className="h-8 w-28 rounded-md bg-muted" />
         </div>
-        <Skeleton className="h-20 w-[78%] rounded-md bg-muted" />
-        <Skeleton className="mt-5 h-16 w-[72%] rounded-md bg-muted/70" />
-        <Skeleton className="mt-9 h-11 w-full rounded-none bg-muted/50" />
-        <Skeleton className="mt-7 h-7 w-28 rounded-md bg-muted" />
-        <Skeleton className="mt-5 h-44 w-full rounded-md bg-muted/60" />
+        <Skeleton className="h-16 w-[76%] rounded-md bg-muted" />
+        <Skeleton className="mt-4 h-14 w-[70%] rounded-md bg-muted/70" />
+        <Skeleton className="mt-8 h-10 w-full rounded-none bg-muted/50" />
+        <Skeleton className="mt-6 h-6 w-24 rounded-md bg-muted" />
+        <Skeleton className="mt-4 h-40 w-full rounded-md bg-muted/60" />
       </section>
-      <aside className="space-y-5 pt-2">
+      <aside className="space-y-4 pt-2">
         <Skeleton className="h-4 w-20 rounded-md bg-muted" />
         {Array.from({ length: 8 }).map((_, index) => (
           <Skeleton key={index} className="h-8 w-full rounded-md bg-muted/60" />
@@ -338,11 +340,11 @@ function PropertyRow({
 }) {
   return (
     <div>
-      <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
-      <dd className="mt-1.5 flex min-w-0 items-center gap-1.5 text-sm font-medium text-foreground" title={value}>
+      <dt className="text-[12px] font-medium text-muted-foreground">{label}</dt>
+      <dd className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[13px] font-medium text-foreground" title={value}>
         {icon}
         {badge ? (
-          <span className="min-w-0 truncate rounded-md bg-muted px-2 py-0.5 text-sm font-semibold">
+          <span className="min-w-0 truncate rounded-md bg-muted px-2 py-0.5 text-[13px] font-semibold">
             {value}
           </span>
         ) : (
@@ -369,13 +371,13 @@ function PropertyLink({
 }) {
   return (
     <div>
-      <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
+      <dt className="text-[12px] font-medium text-muted-foreground">{label}</dt>
       <dd className="mt-1.5 min-w-0">
         <a
           href={href}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex max-w-full items-center gap-1 text-sm font-medium text-sky-foreground hover:underline"
+          className="inline-flex max-w-full items-center gap-1 text-[13px] font-medium text-sky-foreground hover:underline"
           title={value}
         >
           <span className="truncate">{value}</span>
