@@ -36,6 +36,12 @@ bun run build
 - **Convex**: Convex rules live in `packages/convex/AGENTS.md`. Read `packages/convex/convex/_generated/ai/guidelines.md` before editing Convex functions.
 - **www**: Marketing site uses `@aqsha/ui` primitives and shared styles from `packages/ui`.
 
+## Icons
+- Use `@aqsha/ui/icons` for all app and marketing icon imports in `apps/web` and `apps/www`.
+- Use the local `packages/ui/src/icons.tsx` adapter for shared UI package icons, with relative imports such as `../icons`.
+- Do not add direct `lucide-react` imports or direct `lucide-react` package dependencies in Aqsha code. `lucide-react` may still appear transitively when required by third-party packages such as BlockNote.
+- When a needed icon name is missing, add a Lucide-compatible export to `packages/ui/src/icons.tsx` backed by the official Hugeicons packages (`@hugeicons/react` and `@hugeicons/core-free-icons`).
+
 ## Convex Client State
 - `apps/web` uses TanStack Query through `@convex-dev/react-query` for Convex client state.
 - Prefer shared helpers from `apps/web/lib/convex-query.ts`:

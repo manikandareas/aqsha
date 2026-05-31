@@ -57,6 +57,13 @@ Single Convex test: `bun run --filter '@aqsha/convex' test -- <path>`.
 - Only `packages/convex` has a test runner configured.
 - Convex environment is managed through `convex dev` and the Convex dashboard.
 
+## Icons
+
+- Use `@aqsha/ui/icons` for all app and marketing icon imports in `apps/web` and `apps/www`.
+- Use the local `packages/ui/src/icons.tsx` adapter for shared UI package icons, with relative imports such as `../icons`.
+- Do not add direct `lucide-react` imports or direct `lucide-react` package dependencies in Aqsha code. `lucide-react` may still appear transitively when required by third-party packages such as BlockNote.
+- When a needed icon name is missing, add a Lucide-compatible export to `packages/ui/src/icons.tsx` backed by the official Hugeicons packages (`@hugeicons/react` and `@hugeicons/core-free-icons`).
+
 ## Convex Client State
 
 `apps/web` manages Convex client state with TanStack Query via `@convex-dev/react-query`.
