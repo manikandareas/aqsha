@@ -14,6 +14,7 @@ import {
   SparklesIcon,
 } from "lucide-react";
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { LibraryCardFrame } from "@/components/library-card-frame";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WorkspacePickerDialog } from "@/features/workspaces/components/workspace-picker-dialog";
@@ -244,9 +245,7 @@ function PaperCard({
   ].filter((item): item is string => Boolean(item));
 
   return (
-    <article
-      className="group relative flex aspect-[8/9] min-h-[300px] flex-col overflow-hidden rounded-[20px] border border-border bg-card shadow-aqsha transition-[border-color,box-shadow,transform] duration-150 ease-out hover:-translate-y-0.5 hover:shadow-[var(--shadow-soft-card)]"
-    >
+    <LibraryCardFrame as="article">
       <div className="flex min-h-0 flex-1 flex-col p-5">
         <div className="flex items-center gap-2">
           <span className="inline-flex h-7 shrink-0 items-center justify-center rounded-[8px] bg-muted px-2 text-[12px] font-semibold leading-none text-muted-foreground">
@@ -342,7 +341,7 @@ function PaperCard({
           </div>
         </div>
       </div>
-    </article>
+    </LibraryCardFrame>
   );
 }
 

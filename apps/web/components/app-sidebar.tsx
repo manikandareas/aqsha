@@ -175,7 +175,7 @@ export function AppSidebar({
     <>
       <Sidebar
         collapsible="offcanvas"
-        className="border-r border-sidebar-border/80 bg-sidebar [&_[data-slot=sidebar-inner]]:bg-sidebar"
+        variant="flush"
         {...props}
       >
         <SidebarHeader className="gap-3 px-3 pb-3 pt-3.5">

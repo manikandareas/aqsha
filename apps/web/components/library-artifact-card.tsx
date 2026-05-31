@@ -9,7 +9,8 @@ import {
   ImageIcon,
   LinkIcon,
   TableIcon,
-} from "lucide-react";import { cn } from "@/lib/utils";
+} from "lucide-react";
+import { LibraryCardFrame } from "@/components/library-card-frame";
 
 function LibraryArtifactCardComponent({
   title,
@@ -31,19 +32,14 @@ function LibraryArtifactCardComponent({
   const year = formatYear(createdAt);
 
   return (
-    <div
-      className={cn(
-        "group relative flex aspect-[8/9] min-h-[300px] flex-col overflow-hidden rounded-[20px] border bg-card shadow-aqsha transition-[border-color,box-shadow,transform] duration-150 ease-out hover:-translate-y-0.5 hover:shadow-[var(--shadow-soft-card)]",
-        isSelected ? "border-primary/50 ring-2 ring-primary/25" : "border-border",
-      )}
-    >
+    <LibraryCardFrame selected={isSelected}>
       <button
         type="button"
         onClick={onClick}
         onDoubleClick={onDoubleClick}
         aria-pressed={isSelected}
         aria-label={`${title}. Klik untuk ${isSelected ? "hapus dari" : "tambah ke"} konteks.`}
-        className="flex min-h-0 flex-1 flex-col p-5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        className="flex size-full min-h-0 flex-col p-5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
         <div className="flex items-center">
           <span className="inline-flex h-7 shrink-0 items-center justify-center rounded-[8px] bg-muted px-2 text-[12px] font-semibold leading-none text-muted-foreground">
@@ -62,7 +58,7 @@ function LibraryArtifactCardComponent({
           <Icon className="ml-auto size-3.5 text-muted-foreground" />
         </div>
       </button>
-    </div>
+    </LibraryCardFrame>
   );
 }
 

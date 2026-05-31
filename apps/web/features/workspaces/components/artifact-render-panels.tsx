@@ -565,7 +565,6 @@ function JsonArtifactDetail({ source }: { source: string }) {
 function SourceArtifactDetail({
   source,
   language,
-  filename,
 }: {
   source: string;
   language: string;
