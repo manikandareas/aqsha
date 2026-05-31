@@ -274,6 +274,57 @@
   box-shadow: var(--shadow-soft-card);
 }
 
+.aqsha-error-state-page {
+  animation: aqsha-error-state-enter 210ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.aqsha-error-state-action {
+  transition-duration: 180ms;
+  transition-property: background-color, border-color, color, box-shadow, transform;
+  transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.aqsha-error-state-action:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+@keyframes aqsha-error-state-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aqsha-error-state-page {
+    animation-duration: 180ms;
+    animation-name: aqsha-error-state-fade;
+  }
+
+  .aqsha-error-state-action {
+    transition-property: background-color, border-color, color, box-shadow;
+  }
+
+  .aqsha-error-state-action:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+@keyframes aqsha-error-state-fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
 :where(.aqsha-prose, .artifact-prose) {
   color: var(--foreground);
   font-size: 16px;
