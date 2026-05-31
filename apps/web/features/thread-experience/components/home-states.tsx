@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { CompassIcon } from "lucide-react";
 import {
   panelComposerPaddingClass,
   threadTranscriptColumnClass,
@@ -49,7 +51,7 @@ export function HomeStartState({
           }}
         >
           <ComposerHeroState
-            headerClassName="mb-8 gap-2.5"
+            headerClassName="mb-5 gap-2"
             logoClassName="size-12 sm:size-22"
             titleClassName="font-sans text-2xl font-bold tracking-tight text-foreground sm:text-3xl leading-none"
           >
@@ -67,7 +69,71 @@ export function HomeStartState({
           </ComposerHeroState>
         </motion.div>
       </div>
+      <ExploreDockLink />
     </main>
+  );
+}
+
+function ExploreDockLink() {
+  const shouldReduceMotion = useReducedMotion();
+
+  return (
+    <motion.div
+      className="sticky bottom-4 z-30 mx-auto flex w-full max-w-5xl justify-center px-4 pb-4 sm:bottom-5 sm:px-8 sm:pb-5"
+      initial={
+        shouldReduceMotion
+          ? { opacity: 0 }
+          : { opacity: 0, y: 8, scale: 0.98 }
+      }
+      animate={
+        shouldReduceMotion
+          ? { opacity: 1 }
+          : { opacity: 1, y: [0, -3, 0], scale: [1, 1.012, 1] }
+      }
+      transition={
+        shouldReduceMotion
+          ? { duration: 0.14, ease: HOME_EASE_OUT }
+          : {
+              opacity: { duration: 0.18, ease: HOME_EASE_OUT },
+              scale: {
+                duration: 2.8,
+                ease: "easeInOut",
+                repeat: Infinity,
+                repeatDelay: 0.35,
+              },
+              y: {
+                duration: 2.8,
+                ease: "easeInOut",
+                repeat: Infinity,
+                repeatDelay: 0.35,
+              },
+            }
+      }
+    >
+      <Link
+        href="/app/explore"
+        className="group inline-flex items-center gap-1.5 whitespace-nowrap px-1.5 py-0.5 font-sans text-[11px] font-medium text-muted-foreground outline-none drop-shadow-[0_0_10px_color-mix(in_oklch,var(--muted-foreground)_24%,transparent)] transition-colors hover:text-foreground focus-visible:text-foreground"
+        aria-label="Buka Explore"
+      >
+        <span className="relative">
+          Temukan Inspirasi
+          <span className="absolute -bottom-0.5 left-0 h-px w-full origin-left scale-x-[0.7] bg-muted-foreground opacity-35 transition-transform duration-300 ease-out group-hover:scale-x-100 group-hover:opacity-55 group-focus-visible:scale-x-100 group-focus-visible:opacity-55" />
+        </span>
+        <motion.span
+          aria-hidden="true"
+          className="grid size-3.5 place-items-center text-muted-foreground"
+          animate={shouldReduceMotion ? undefined : { rotate: [0, -8, 8, 0] }}
+          transition={{
+            duration: 3.1,
+            ease: "easeInOut",
+            repeat: Infinity,
+            repeatDelay: 0.45,
+          }}
+        >
+          <CompassIcon className="size-3.5" strokeWidth={2.25} />
+        </motion.span>
+      </Link>
+    </motion.div>
   );
 }
 
