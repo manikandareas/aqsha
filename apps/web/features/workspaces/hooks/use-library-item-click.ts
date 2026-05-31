@@ -1,8 +1,17 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 
 const CLICK_DELAY_MS = 250;
+
+function clearClickTimer(
+  clickTimerRef: RefObject<ReturnType<typeof setTimeout> | null>,
+) {
+  if (clickTimerRef.current) {
+    clearTimeout(clickTimerRef.current);
+    clickTimerRef.current = null;
+  }
+}
 
 export function useLibraryItemClick({
   onSingleClick,
@@ -14,26 +23,21 @@ export function useLibraryItemClick({
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    return () => {
-      if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
-    };
+    return () => clearClickTimer(clickTimerRef);
   }, []);
 
-  const handleClick = () => {
-    if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+  const selectLibraryItem = () => {
+    clearClickTimer(clickTimerRef);
     clickTimerRef.current = setTimeout(() => {
       onSingleClick();
       clickTimerRef.current = null;
     }, CLICK_DELAY_MS);
   };
 
-  const handleDoubleClick = () => {
-    if (clickTimerRef.current) {
-      clearTimeout(clickTimerRef.current);
-      clickTimerRef.current = null;
-    }
+  const openLibraryItem = () => {
+    clearClickTimer(clickTimerRef);
     onDoubleClick();
   };
 
-  return { handleClick, handleDoubleClick };
+  return { selectLibraryItem, openLibraryItem };
 }

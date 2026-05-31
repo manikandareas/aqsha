@@ -1,6 +1,6 @@
 "use client";
 
-import { ArchiveIcon, FolderIcon, MoreHorizontalIcon, PlusIcon } from "lucide-react";
+import { ArchiveIcon, FolderIcon, MoreHorizontalIcon, PlusIcon } from "@aqsha/ui/icons";
 import Link from "next/link";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";

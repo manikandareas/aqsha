@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2Icon } from "lucide-react";
+import { Loader2Icon } from "@aqsha/ui/icons";
 import { api } from "@aqsha/convex/api";
 import {
   useEffect,

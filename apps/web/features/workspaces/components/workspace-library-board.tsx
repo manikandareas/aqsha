@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { FileTextIcon, FolderIcon, LinkIcon, UploadIcon } from "lucide-react";
+import { FileTextIcon, FolderIcon, LinkIcon, UploadIcon } from "@aqsha/ui/icons";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -36,6 +36,7 @@ import { useWorkspaceUploadToast } from "./workspace-upload-toast";
 
 export function WorkspaceLibraryBoard({
   workspaceName,
+  workspaceEmoji,
   workspaceId,
   titleSlot,
   folders,
@@ -47,7 +48,7 @@ export function WorkspaceLibraryBoard({
   onToggleType,
   onSortChange,
   workspaces,
-  isArtifactSelected,
+  getArtifactSelected,
   onToggleArtifactContext,
   onSetArtifactContextSelection,
   onOpenArtifact,
@@ -63,6 +64,7 @@ export function WorkspaceLibraryBoard({
   onCreateDocument,
   onCreateUrl,
   onRenameWorkspace,
+  onUpdateWorkspaceEmoji,
   onArchiveWorkspace,
   chatPanelOpen,
   onToggleChatPanel,
@@ -74,6 +76,7 @@ export function WorkspaceLibraryBoard({
   showWorkspaceSettings,
 }: {
   workspaceName: string;
+  workspaceEmoji?: string;
   workspaceId: string;
   titleSlot?: ReactNode;
   folders: WorkspaceFolder[];
@@ -85,7 +88,7 @@ export function WorkspaceLibraryBoard({
   onToggleType: (type: WorkspaceArtifactType) => void;
   onSortChange: (sort: WorkspaceArtifactSort) => void;
   workspaces: Array<{ _id: string; name: string }>;
-  isArtifactSelected: (artifactId: string) => boolean;
+  getArtifactSelected: (artifactId: string) => boolean;
   onToggleArtifactContext: (artifactId: string) => void;
   onSetArtifactContextSelection: (artifactIds: string[]) => void;
   onOpenArtifact: (artifactId: string) => void;
@@ -106,7 +109,8 @@ export function WorkspaceLibraryBoard({
   onCreateFolder: () => void;
   onCreateDocument: () => void;
   onCreateUrl: () => void;
-  onRenameWorkspace: () => void;
+  onRenameWorkspace: (name: string) => Promise<unknown>;
+  onUpdateWorkspaceEmoji: (emoji: string) => Promise<unknown>;
   onArchiveWorkspace: () => void;
   chatPanelOpen?: boolean;
   onToggleChatPanel?: () => void;
@@ -184,6 +188,7 @@ export function WorkspaceLibraryBoard({
       <input
         ref={fileInputRef}
         type="file"
+        aria-label="Pilih file untuk workspace"
         multiple
         accept=".pdf,.docx,.txt,.md,.markdown,.csv,.json,.html,.htm,.svg,.mmd,.mermaid,.js,.jsx,.ts,.tsx,.css,.py,.java,.go,.rs,.sql,.sh,.yml,.yaml,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv,text/html,application/json,image/svg+xml,text/javascript,application/javascript,text/css,text/yaml,application/x-yaml"
         className="sr-only"
@@ -196,6 +201,7 @@ export function WorkspaceLibraryBoard({
       />
       <WorkspaceBoardToolbar
         workspaceName={workspaceName}
+        workspaceEmoji={workspaceEmoji}
         titleSlot={titleSlot}
         breadcrumb={folderView.breadcrumb}
         onNavigate={navigateTo}
@@ -203,6 +209,7 @@ export function WorkspaceLibraryBoard({
         onCreateDocument={onCreateDocument}
         onCreateUrl={onCreateUrl}
         onRenameWorkspace={onRenameWorkspace}
+        onUpdateWorkspaceEmoji={onUpdateWorkspaceEmoji}
         onArchiveWorkspace={onArchiveWorkspace}
         onToggleChat={onToggleChatPanel}
         chatOpen={chatPanelOpen}
@@ -283,7 +290,7 @@ export function WorkspaceLibraryBoard({
                 workspaces={workspaceMoveTargets}
                 moveTargets={moveTargets}
                 dragArtifactId={dragArtifactId}
-                isArtifactSelected={isArtifactSelected}
+                getArtifactSelected={getArtifactSelected}
                 onToggleArtifactContext={onToggleArtifactContext}
                 onSetArtifactContextSelection={onSetArtifactContextSelection}
                 onOpenFolder={openFolder}

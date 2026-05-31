@@ -16,10 +16,6 @@ import type { useWorkspaceLibraryDialogState } from "../hooks/use-workspace-libr
 type DialogState = ReturnType<typeof useWorkspaceLibraryDialogState>;
 
 type WorkspaceLibraryMutations = {
-  renameWorkspace: (args: {
-    workspaceId: WorkspaceId;
-    name: string;
-  }) => Promise<unknown>;
   archiveWorkspace: (args: { workspaceId: WorkspaceId }) => Promise<unknown>;
   createFolder: (args: { workspaceId: WorkspaceId; name: string }) => Promise<unknown>;
   createDocument: (args: {
@@ -41,14 +37,12 @@ type WorkspaceLibraryMutations = {
 
 export function WorkspaceLibraryDialogsStack({
   workspaceId,
-  workspaceName,
   activeFolderId,
   mutations,
   dialogState,
   onAfterArchive,
 }: {
   workspaceId: string;
-  workspaceName?: string;
   activeFolderId: "root" | string;
   mutations: WorkspaceLibraryMutations;
   dialogState: DialogState;
@@ -59,8 +53,6 @@ export function WorkspaceLibraryDialogsStack({
     activeFolderId === "root" ? undefined : toWorkspaceFolderId(activeFolderId);
   const convexWorkspaceId = toWorkspaceId(workspaceId);
   const {
-    renameWorkspaceOpen,
-    setRenameWorkspaceOpen,
     archiveWorkspaceOpen,
     setArchiveWorkspaceOpen,
     createFolderOpen,
@@ -85,17 +77,6 @@ export function WorkspaceLibraryDialogsStack({
 
   return (
     <>
-      <NameDialog
-        open={renameWorkspaceOpen}
-        onOpenChange={setRenameWorkspaceOpen}
-        title="Rename workspace"
-        description="Perbarui nama workspace."
-        submitLabel="Simpan"
-        initialName={workspaceName}
-        onSubmit={async ({ name }) => {
-          await mutations.renameWorkspace({ workspaceId: convexWorkspaceId, name });
-        }}
-      />
       <NameDialog
         open={createFolderOpen}
         onOpenChange={setCreateFolderOpen}

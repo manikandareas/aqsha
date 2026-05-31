@@ -40,6 +40,7 @@ import {
   assertWorkspaceOwner,
   normalizeName,
 } from "./workspaceAccess";
+import { workspaceEmojiForNewWorkspace } from "./workspaceEmoji";
 import { syncArtifactWorkspaceMove } from "./workspaceMoveModel";
 import { assertThreadOwner } from "./agent/threads";
 import {
@@ -875,6 +876,11 @@ export const saveAttachmentToWorkspace = mutation({
         targetWorkspaceId = await ctx.db.insert("workspaces", {
           ownerUserId: user._id,
           name: normalizeName(artifact.title, "Workspace name"),
+          emoji: workspaceEmojiForNewWorkspace({
+            ownerUserId: user._id,
+            name: artifact.title,
+            now,
+          }),
           status: "active",
           createdAt: now,
           updatedAt: now,

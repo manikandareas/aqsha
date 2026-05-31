@@ -1,5 +1,6 @@
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
+import { workspaceEmojiForNewWorkspace } from "./workspaceEmoji";
 
 const DEFAULT_WORKSPACE_NAME = "Workspace Saya";
 
@@ -20,6 +21,11 @@ export async function ensureDefaultWorkspaceForOwner(
   return await ctx.db.insert("workspaces", {
     ownerUserId,
     name: DEFAULT_WORKSPACE_NAME,
+    emoji: workspaceEmojiForNewWorkspace({
+      ownerUserId,
+      name: DEFAULT_WORKSPACE_NAME,
+      now,
+    }),
     status: "active",
     createdAt: now,
     updatedAt: now,

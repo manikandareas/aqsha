@@ -45,6 +45,7 @@ type LibraryDataProps = Pick<
 > & {
   workspaces: WorkspaceLibraryData["workspaces"];
   renameWorkspace: WorkspaceLibraryData["renameWorkspace"];
+  updateWorkspaceEmoji: WorkspaceLibraryData["updateWorkspaceEmoji"];
   archiveWorkspace: WorkspaceLibraryData["archiveWorkspace"];
   createFolder: WorkspaceLibraryData["createFolder"];
   moveFolder: WorkspaceLibraryData["moveFolder"];
@@ -66,7 +67,7 @@ export function WorkspaceLibrarySurface({
   dialogState,
   activeFolderId,
   onActiveFolderChange,
-  isArtifactSelected,
+  getArtifactSelected,
   onToggleArtifactContext,
   onSetArtifactContextSelection,
   onAfterArchive,
@@ -85,7 +86,7 @@ export function WorkspaceLibrarySurface({
   dialogState: DialogState;
   activeFolderId: "root" | string;
   onActiveFolderChange: (folderId: "root" | string) => void;
-  isArtifactSelected: (artifactId: string) => boolean;
+  getArtifactSelected: (artifactId: string) => boolean;
   onToggleArtifactContext: (artifactId: string) => void;
   onSetArtifactContextSelection: (artifactIds: string[]) => void;
   onAfterArchive: () => void;
@@ -105,9 +106,10 @@ export function WorkspaceLibrarySurface({
   );
   // Main board uses Chat toggle; side-panel embeds use close only (mutually exclusive in toolbar).
   const panelCloseHandler = onToggleChatPanel ? undefined : (onClosePanel ?? closePanel);
+  const currentWorkspaceName = libraryData.workspace?.name ?? workspaceName;
+  const currentWorkspaceEmoji = libraryData.workspace?.emoji;
 
   const libraryMutations = {
-    renameWorkspace: libraryData.renameWorkspace,
     archiveWorkspace: libraryData.archiveWorkspace,
     createFolder: libraryData.createFolder,
     createDocument: libraryData.createDocument,
@@ -121,7 +123,8 @@ export function WorkspaceLibrarySurface({
   return (
     <>
       <WorkspaceLibraryBoard
-        workspaceName={workspaceName}
+        workspaceName={currentWorkspaceName}
+        workspaceEmoji={currentWorkspaceEmoji}
         workspaceId={workspaceId}
         titleSlot={titleSlot}
         onActiveFolderChange={onActiveFolderChange}
@@ -145,7 +148,19 @@ export function WorkspaceLibrarySurface({
         }}
         workspaces={libraryData.workspaces}
         {...dialogState.libraryHandlers}
-        isArtifactSelected={isArtifactSelected}
+        onRenameWorkspace={async (name) => {
+          await libraryData.renameWorkspace({
+            workspaceId: toWorkspaceId(workspaceId),
+            name,
+          });
+        }}
+        onUpdateWorkspaceEmoji={async (emoji) => {
+          await libraryData.updateWorkspaceEmoji({
+            workspaceId: toWorkspaceId(workspaceId),
+            emoji,
+          });
+        }}
+        getArtifactSelected={getArtifactSelected}
         onToggleArtifactContext={onToggleArtifactContext}
         onSetArtifactContextSelection={onSetArtifactContextSelection}
         onOpenArtifact={(artifactId) =>
@@ -189,7 +204,6 @@ export function WorkspaceLibrarySurface({
       />
       <WorkspaceLibraryDialogsStack
         workspaceId={workspaceId}
-        workspaceName={libraryData.workspace?.name ?? workspaceName}
         activeFolderId={activeFolderId}
         mutations={libraryMutations}
         dialogState={dialogState}

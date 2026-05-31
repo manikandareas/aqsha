@@ -1,7 +1,7 @@
 "use client";
 
 import mermaid from "mermaid";
-import { Loader2Icon } from "lucide-react";
+import { Loader2Icon } from "@aqsha/ui/icons";
 import { useEffect, useId, useState } from "react";
 
 mermaid.initialize({
@@ -15,24 +15,28 @@ export function MermaidArtifactViewer({ source }: { source: string }) {
   const diagramId = `artifact-mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const [rendered, setRendered] = useState<{
     source: string;
-    svg: string;
+    svgUrl: string;
     error: string | null;
   } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    let svgUrl: string | null = null;
 
     void mermaid
       .render(diagramId, source)
       .then((result) => {
         if (cancelled) return;
-        setRendered({ source, svg: result.svg, error: null });
+        svgUrl = URL.createObjectURL(
+          new Blob([result.svg], { type: "image/svg+xml" }),
+        );
+        setRendered({ source, svgUrl, error: null });
       })
       .catch((renderError: unknown) => {
         if (cancelled) return;
         setRendered({
           source,
-          svg: "",
+          svgUrl: "",
           error: renderError instanceof Error
             ? renderError.message
             : "Diagram Mermaid tidak bisa dirender.",
@@ -41,6 +45,9 @@ export function MermaidArtifactViewer({ source }: { source: string }) {
 
     return () => {
       cancelled = true;
+      if (svgUrl) {
+        URL.revokeObjectURL(svgUrl);
+      }
     };
   }, [diagramId, source]);
 
@@ -64,9 +71,13 @@ export function MermaidArtifactViewer({ source }: { source: string }) {
   }
 
   return (
-    <div
-      className="mermaid-artifact-canvas flex h-full min-h-[420px] w-full items-center justify-center overflow-auto p-4 [&_svg]:h-full [&_svg]:max-h-full [&_svg]:max-w-full [&_svg]:w-full"
-      dangerouslySetInnerHTML={{ __html: activeRender.svg }}
-    />
+    <div className="mermaid-artifact-canvas flex h-full min-h-[420px] w-full items-center justify-center overflow-auto p-4">
+      <object
+        data={activeRender.svgUrl}
+        type="image/svg+xml"
+        aria-label="Diagram Mermaid"
+        className="h-full max-h-full w-full max-w-full"
+      />
+    </div>
   );
 }

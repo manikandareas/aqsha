@@ -1,6 +1,6 @@
 "use client";
 
-import { MessageSquarePlusIcon, PanelLeftIcon } from "lucide-react";
+import { MessageSquarePlusIcon, PanelLeftIcon } from "@aqsha/ui/icons";
 import { Button } from "@/components/ui/button";
 import { SidebarContent, SidebarHeader } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";

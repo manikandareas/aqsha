@@ -13,7 +13,7 @@ import {
   MoreHorizontalIcon,
   FileTextIcon,
   RotateCcwIcon,
-} from "lucide-react";
+} from "@aqsha/ui/icons";
 import {
   CodeBlock,
   CodeBlockActions,
@@ -50,7 +50,7 @@ const PdfArtifactViewer = dynamic(
     loading: () => (
       <div className="flex min-h-[420px] items-center justify-center gap-2 text-[13px] font-medium text-muted-foreground">
         <Loader2Icon className="size-4 animate-spin" />
-        Memuat PDF...
+        Memuat PDF…
       </div>
     ),
   },
@@ -383,7 +383,9 @@ function PaperMetadataPanel({
   if (!metadata) {
     return null;
   }
-  const authors = metadata.authors.map((author) => author.name).filter(Boolean);
+  const authors = metadata.authors.flatMap((author) =>
+    author.name ? [author.name] : [],
+  );
   return (
     <section className="grid gap-3 border-t border-border/70 pt-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -742,18 +744,18 @@ function CsvArtifactViewer({ source }: { source: string }) {
         <table className="w-full min-w-[640px] border-collapse text-left text-[12px]">
           <thead className="bg-muted/35 text-muted-foreground">
             <tr>
-              {header.map((cell, index) => (
-                <th key={`${cell}-${index}`} className="border-b border-border px-3 py-2 font-semibold">
-                  {cell || `Column ${index + 1}`}
+              {header.map((cell, columnIndex) => (
+                <th key={csvColumnKey(cell, columnIndex)} className="border-b border-border px-3 py-2 font-semibold">
+                  {cell || `Column ${columnIndex + 1}`}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {body.map((row, rowIndex) => (
-              <tr key={rowIndex} className="border-b border-border/60 last:border-b-0">
+              <tr key={csvRowKey(row, rowIndex)} className="border-b border-border/60 last:border-b-0">
                 {header.map((_, cellIndex) => (
-                  <td key={cellIndex} className="max-w-72 truncate px-3 py-2 text-foreground">
+                  <td key={csvColumnKey(header[cellIndex], cellIndex)} className="max-w-72 truncate px-3 py-2 text-foreground">
                     {row[cellIndex] ?? ""}
                   </td>
                 ))}
@@ -764,6 +766,15 @@ function CsvArtifactViewer({ source }: { source: string }) {
       </div>
     </div>
   );
+}
+
+function csvColumnKey(cell: string | undefined, columnIndex: number) {
+  return cell ? `column:${cell}` : `column:${columnIndex + 1}`;
+}
+
+function csvRowKey(row: string[], rowIndex: number) {
+  const content = row.join("\u001f");
+  return content ? `row:${content}` : `row:${rowIndex + 1}`;
 }
 
 function UrlArtifactToolbar({
@@ -1111,7 +1122,7 @@ function formatByteSize(size: number) {
 export function ArtifactLoading() {
   return (
     <div className={cn("grid gap-4", panelBodyPaddingClass)}>
-      <p className="text-[12px] font-medium text-muted-foreground">Memuat artifact...</p>
+      <p className="text-[12px] font-medium text-muted-foreground">Memuat artifact…</p>
       <Skeleton className="h-12 rounded-[8px]" />
       <Skeleton className="h-64 rounded-[8px]" />
     </div>

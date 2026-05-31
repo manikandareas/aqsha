@@ -8,7 +8,6 @@ import {
 } from "@react-pdf-viewer/core";
 import { defaultLayoutPlugin } from "@react-pdf-viewer/default-layout";
 import { useTheme } from "next-themes";
-import { useMemo } from "react";
 
 const pdfWorkerUrl = new URL(
   "pdfjs-dist/build/pdf.worker.min.js",
@@ -23,17 +22,13 @@ export function PdfArtifactViewer({
   fileName: string;
 }) {
   const { resolvedTheme } = useTheme();
-  const defaultLayoutPluginInstance = useMemo(
-    () =>
-      defaultLayoutPlugin({
-        toolbarPlugin: {
-          getFilePlugin: {
-            fileNameGenerator: () => fileName,
-          },
-        },
-      }),
-    [fileName],
-  );
+  const defaultLayoutPluginInstance = defaultLayoutPlugin({
+    toolbarPlugin: {
+      getFilePlugin: {
+        fileNameGenerator: () => fileName,
+      },
+    },
+  });
 
   return (
     <div className="h-full min-h-[640px] w-full overflow-hidden">

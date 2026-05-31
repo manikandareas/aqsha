@@ -65,6 +65,7 @@ import type * as billing_usage from "../billing/usage.js";
 import type * as billing_validators from "../billing/validators.js";
 import type * as explore from "../explore.js";
 import type * as exploreModel from "../exploreModel.js";
+import type * as exploreValidators from "../exploreValidators.js";
 import type * as hitlCardApproval from "../hitlCardApproval.js";
 import type * as hitlSessionLogic from "../hitlSessionLogic.js";
 import type * as hitlSessions from "../hitlSessions.js";
@@ -79,6 +80,7 @@ import type * as paperExtraction_teiParser from "../paperExtraction/teiParser.js
 import type * as paperExtractions from "../paperExtractions.js";
 import type * as workspaceAccess from "../workspaceAccess.js";
 import type * as workspaceDefaults from "../workspaceDefaults.js";
+import type * as workspaceEmoji from "../workspaceEmoji.js";
 import type * as workspaceFolders from "../workspaceFolders.js";
 import type * as workspaceMoveModel from "../workspaceMoveModel.js";
 import type * as workspaces from "../workspaces.js";
@@ -147,6 +149,7 @@ declare const fullApi: ApiFromModules<{
   "billing/validators": typeof billing_validators;
   explore: typeof explore;
   exploreModel: typeof exploreModel;
+  exploreValidators: typeof exploreValidators;
   hitlCardApproval: typeof hitlCardApproval;
   hitlSessionLogic: typeof hitlSessionLogic;
   hitlSessions: typeof hitlSessions;
@@ -161,6 +164,7 @@ declare const fullApi: ApiFromModules<{
   paperExtractions: typeof paperExtractions;
   workspaceAccess: typeof workspaceAccess;
   workspaceDefaults: typeof workspaceDefaults;
+  workspaceEmoji: typeof workspaceEmoji;
   workspaceFolders: typeof workspaceFolders;
   workspaceMoveModel: typeof workspaceMoveModel;
   workspaces: typeof workspaces;

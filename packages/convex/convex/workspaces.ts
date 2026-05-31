@@ -1,11 +1,17 @@
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
+import { internal } from "./_generated/api";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireCurrentUser } from "./auth";
 import { assertWorkspaceOwner, normalizeName } from "./workspaceAccess";
 import { PLAN_CATALOG } from "./billing/catalog";
 import { getBillingSnapshot } from "./billing/entitlements";
+import {
+  isValidStoredWorkspaceEmoji,
+  normalizeWorkspaceEmoji,
+  workspaceEmojiForNewWorkspace,
+} from "./workspaceEmoji";
 
 export const list = query({
   args: {
@@ -112,6 +118,22 @@ export const rename = mutation({
   },
 });
 
+export const updateEmoji = mutation({
+  args: {
+    workspaceId: v.id("workspaces"),
+    emoji: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    await assertWorkspaceOwner(ctx, args.workspaceId, user._id);
+    await ctx.db.patch("workspaces", args.workspaceId, {
+      emoji: normalizeWorkspaceEmoji(args.emoji),
+      updatedAt: Date.now(),
+    });
+    return { ok: true };
+  },
+});
+
 export const renameFromAgentInternal = internalMutation({
   args: {
     ownerUserId: v.string(),
@@ -142,6 +164,47 @@ export const archive = mutation({
   },
 });
 
+export const backfillMissingWorkspaceEmojis = internalMutation({
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+  },
+  returns: v.object({
+    patched: v.number(),
+    hasMore: v.boolean(),
+    continueCursor: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, args) => {
+    const page = await ctx.db.query("workspaces").paginate({
+      cursor: args.cursor ?? null,
+      numItems: 100,
+    });
+    let patched = 0;
+    for (const workspace of page.page) {
+      if (isValidStoredWorkspaceEmoji(workspace.emoji)) {
+        continue;
+      }
+      await ctx.db.patch("workspaces", workspace._id, {
+        emoji: workspaceEmojiForNewWorkspace({
+          ownerUserId: workspace.ownerUserId,
+          name: workspace.name,
+          now: workspace.createdAt,
+        }),
+      });
+      patched += 1;
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.workspaces.backfillMissingWorkspaceEmojis, {
+        cursor: page.continueCursor,
+      });
+    }
+    return {
+      patched,
+      hasMore: !page.isDone,
+      continueCursor: page.isDone ? null : page.continueCursor,
+    };
+  },
+});
+
 async function createWorkspaceForOwner(
   ctx: MutationCtx,
   args: {
@@ -155,6 +218,11 @@ async function createWorkspaceForOwner(
   return await ctx.db.insert("workspaces", {
     ownerUserId: args.ownerUserId,
     name: normalizeName(args.name, "Workspace name"),
+    emoji: workspaceEmojiForNewWorkspace({
+      ownerUserId: args.ownerUserId,
+      name: args.name,
+      now,
+    }),
     status: "active",
     createdAt: now,
     updatedAt: now,

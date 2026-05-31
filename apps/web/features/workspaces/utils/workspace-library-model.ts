@@ -90,17 +90,17 @@ export type FolderView = {
 export const ROOT_FOLDER_LABEL = "Semua file";
 
 function sortFolders(folders: WorkspaceFolder[]) {
-  return [...folders].sort((a, b) => {
+  return Array.from(folders).sort((a, b) => {
     const byName = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
     return byName || b.updatedAt - a.updatedAt;
   });
 }
 
-export function sortWorkspaceArtifacts(
+function sortWorkspaceArtifacts(
   artifacts: WorkspaceArtifact[],
   sort: WorkspaceArtifactSort,
 ) {
-  return [...artifacts].sort((a, b) => {
+  return Array.from(artifacts).sort((a, b) => {
     switch (sort) {
       case "updated-asc":
         return a.updatedAt - b.updatedAt || compareArtifactTitles(a, b);
@@ -197,9 +197,13 @@ export function groupArtifactsByFolder({
 }
 
 export function getMoveTargetOptions(folders: WorkspaceFolder[]): MoveTargetOption[] {
+  const activeFolders = folders.flatMap((folder) =>
+    folder.status === "deleted" ? [] : [folder],
+  );
+
   return [
     { value: "root", label: ROOT_FOLDER_LABEL },
-    ...sortFolders(folders.filter((folder) => folder.status !== "deleted")).map((folder) => ({
+    ...sortFolders(activeFolders).map((folder) => ({
       value: folder._id,
       label: folder.name,
     })),
@@ -210,9 +214,11 @@ export function getWorkspaceMoveTargetOptions(
   workspaces: Array<{ _id: string; name: string }>,
   currentWorkspaceId: string,
 ): WorkspaceMoveTargetOption[] {
-  return workspaces
-    .filter((workspace) => workspace._id !== currentWorkspaceId)
-    .map((workspace) => ({ value: workspace._id, label: workspace.name }));
+  return workspaces.flatMap((workspace) =>
+    workspace._id === currentWorkspaceId
+      ? []
+      : [{ value: workspace._id, label: workspace.name }],
+  );
 }
 
 export function getUploadTargetFolderId(activeFolderId: "root" | string) {
@@ -279,9 +285,11 @@ export function expectArtifactsReturnToRootAfterFolderDelete({
   deletedFolderId: string;
 }) {
   const movedIds = new Set(
-    before
-      .filter((artifact) => artifact.folderId === deletedFolderId && artifact.status !== "deleted")
-      .map((artifact) => artifact._id),
+    before.flatMap((artifact) =>
+      artifact.folderId === deletedFolderId && artifact.status !== "deleted"
+        ? [artifact._id]
+        : [],
+    ),
   );
 
   return after

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, type ReactNode } from "react";
-import { FolderIcon } from "lucide-react";
+import { FolderIcon } from "@aqsha/ui/icons";
 import { LibraryArtifactCard } from "@/components/library-artifact-card";
 import { useLibraryItemClick } from "../hooks/use-library-item-click";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
@@ -34,7 +34,7 @@ export function WorkspaceLibraryGrid({
   workspaces,
   moveTargets,
   dragArtifactId,
-  isArtifactSelected,
+  getArtifactSelected,
   onToggleArtifactContext,
   onSetArtifactContextSelection,
   onOpenFolder,
@@ -57,7 +57,7 @@ export function WorkspaceLibraryGrid({
   workspaces: Array<{ _id: string; name: string }>;
   moveTargets: MoveTargetOption[];
   dragArtifactId: string | null;
-  isArtifactSelected: (artifactId: string) => boolean;
+  getArtifactSelected: (artifactId: string) => boolean;
   onToggleArtifactContext: (artifactId: string) => void;
   onSetArtifactContextSelection: (artifactIds: string[]) => void;
   onOpenFolder: (folderId: string) => void;
@@ -75,7 +75,11 @@ export function WorkspaceLibraryGrid({
   controls?: ReactNode;
 }) {
   const gridRef = useRef<HTMLDivElement | null>(null);
-  const tileRefs = useRef(new Map<string, HTMLDivElement>());
+  const tileRefs = useRef<Map<string, HTMLDivElement> | null>(null);
+  if (tileRefs.current === null) {
+    tileRefs.current = new Map();
+  }
+  const tileElementRefs = tileRefs.current;
   const [marquee, setMarquee] = useState<{
     start: MarqueePoint;
     current: MarqueePoint;
@@ -89,16 +93,18 @@ export function WorkspaceLibraryGrid({
     height: number;
   } | null>(null);
 
-  const selectedArtifactIds = artifacts.filter((artifact) => isArtifactSelected(artifact._id)).map((artifact) => artifact._id);
+  const selectedArtifactIds = artifacts.flatMap((artifact) =>
+    getArtifactSelected(artifact._id) ? [artifact._id] : [],
+  );
   const visibleArtifactIds = artifacts.map((artifact) => artifact._id);
   const previewIdSet = new Set(previewIds);
   const updatePreview = (rect: MarqueeRect) => {
-    const targets = artifacts.map((artifact) => {
-      const element = tileRefs.current.get(artifact._id);
-      if (!element) return null;
-      return { id: artifact._id, rect: element.getBoundingClientRect() };
+    const targets = artifacts.flatMap((artifact) => {
+      const element = tileElementRefs.get(artifact._id);
+      if (!element) return [];
+      return [{ id: artifact._id, rect: element.getBoundingClientRect() }];
     });
-    setPreviewIds(intersectingTargetIds(rect, targets.filter((target) => target !== null)));
+    setPreviewIds(intersectingTargetIds(rect, targets));
   };
 
   const endMarquee = () => {
@@ -211,9 +217,9 @@ export function WorkspaceLibraryGrid({
                   key={artifact._id}
                   refCallback={(element) => {
                     if (element) {
-                      tileRefs.current.set(artifact._id, element);
+                      tileElementRefs.set(artifact._id, element);
                     } else {
-                      tileRefs.current.delete(artifact._id);
+                      tileElementRefs.delete(artifact._id);
                     }
                   }}
                   artifact={artifact}
@@ -221,7 +227,7 @@ export function WorkspaceLibraryGrid({
                   moveTargets={moveTargets}
                   isDragging={dragArtifactId === artifact._id}
                   isSelected={getPreviewSelectedState({
-                    selected: isArtifactSelected(artifact._id),
+                    selected: getArtifactSelected(artifact._id),
                     previewed: previewIdSet.has(artifact._id),
                     mode: marquee?.mode ?? "add",
                   })}
@@ -402,7 +408,7 @@ function ArtifactTile({
   onDragStart: () => void;
   onDragEnd: () => void;
 }) {
-  const { handleClick, handleDoubleClick } = useLibraryItemClick({
+  const { selectLibraryItem, openLibraryItem } = useLibraryItemClick({
     onSingleClick: onSelect,
     onDoubleClick: onOpen,
   });
@@ -426,8 +432,8 @@ function ArtifactTile({
             artifactType={artifact.artifactType}
             createdAt={artifact.createdAt}
             isSelected={isSelected}
-            onClick={handleClick}
-            onDoubleClick={handleDoubleClick}
+            onClick={selectLibraryItem}
+            onDoubleClick={openLibraryItem}
           />
         </div>
       </ContextMenuTrigger>

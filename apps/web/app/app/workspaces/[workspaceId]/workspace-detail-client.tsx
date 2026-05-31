@@ -58,9 +58,11 @@ function WorkspaceDetailMain({
   const [panelThreadId, setPanelThreadId] = useState<string | null>(null);
   const [activeFolderId, setActiveFolderId] = useState<"root" | string>("root");
 
-  const contextArtifacts = data.artifacts
-        .filter((artifact) => draftContext.selectedIdSet.has(artifact._id))
-        .map((artifact) => ({ artifactId: artifact._id, title: artifact.title }));
+  const contextArtifacts = data.artifacts.flatMap((artifact) =>
+    draftContext.selectedIdSet.has(artifact._id)
+      ? [{ artifactId: artifact._id, title: artifact.title }]
+      : [],
+  );
 
   const handleStartThread: StartThread = async (args) => {
     const shouldIncludeContext = draftContext.isDirty;
@@ -125,7 +127,7 @@ function WorkspaceDetailMain({
               dialogState={dialogState}
               activeFolderId={activeFolderId}
               onActiveFolderChange={setActiveFolderId}
-              isArtifactSelected={draftContext.isSelected}
+              getArtifactSelected={draftContext.isSelected}
               onToggleArtifactContext={draftContext.toggleArtifact}
               onSetArtifactContextSelection={draftContext.setSelectedArtifacts}
               onAfterArchive={() => router.push("/app/workspaces")}

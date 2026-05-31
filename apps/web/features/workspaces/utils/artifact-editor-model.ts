@@ -33,8 +33,10 @@ export function parseBlockNoteJson(value: string | undefined | null): BlockNoteB
 
 export function blockNotePlainText(blocks: BlockNoteBlockLike[]) {
   return blocks
-    .map(blockPlainText)
-    .filter(Boolean)
+    .flatMap((block) => {
+      const text = blockPlainText(block);
+      return text ? [text] : [];
+    })
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -65,8 +67,13 @@ export function autosaveReducer(state: AutosaveState, event: AutosaveEvent): Aut
 
 function blockPlainText(block: BlockNoteBlockLike): string {
   const ownText = contentText(block.content);
-  const childText = (block.children ?? []).map(blockPlainText).filter(Boolean).join("\n");
-  return [ownText, childText].filter(Boolean).join("\n");
+  const childText = (block.children ?? [])
+    .flatMap((child) => {
+      const text = blockPlainText(child);
+      return text ? [text] : [];
+    })
+    .join("\n");
+  return [ownText, childText].flatMap((text) => (text ? [text] : [])).join("\n");
 }
 
 function contentText(content: unknown): string {

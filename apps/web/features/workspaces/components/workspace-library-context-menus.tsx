@@ -7,7 +7,7 @@ import {
   LinkIcon,
   PenLineIcon,
   Trash2Icon,
-} from "lucide-react";
+} from "@aqsha/ui/icons";
 import {
   ContextMenuContent,
   ContextMenuItem,

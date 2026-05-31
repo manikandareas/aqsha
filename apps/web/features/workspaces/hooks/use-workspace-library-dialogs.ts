@@ -4,7 +4,6 @@ import { useState } from "react";
 import type { WorkspaceArtifact, WorkspaceFolder } from "../utils/workspace-library-model";
 
 export function useWorkspaceLibraryDialogState() {
-  const [renameWorkspaceOpen, setRenameWorkspaceOpen] = useState(false);
   const [archiveWorkspaceOpen, setArchiveWorkspaceOpen] = useState(false);
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [createDocumentOpen, setCreateDocumentOpen] = useState(false);
@@ -15,8 +14,6 @@ export function useWorkspaceLibraryDialogState() {
   const [deleteArtifact, setDeleteArtifact] = useState<WorkspaceArtifact | null>(null);
 
   return {
-    renameWorkspaceOpen,
-    setRenameWorkspaceOpen,
     archiveWorkspaceOpen,
     setArchiveWorkspaceOpen,
     createFolderOpen,
@@ -41,7 +38,6 @@ export function useWorkspaceLibraryDialogState() {
       onCreateFolder: () => setCreateFolderOpen(true),
       onCreateDocument: () => setCreateDocumentOpen(true),
       onCreateUrl: () => setCreateUrlOpen(true),
-      onRenameWorkspace: () => setRenameWorkspaceOpen(true),
       onArchiveWorkspace: () => setArchiveWorkspaceOpen(true),
     },
   };

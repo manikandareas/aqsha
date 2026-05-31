@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRightIcon, PencilIcon } from "lucide-react";
+import { ChevronRightIcon, PencilIcon } from "@aqsha/ui/icons";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";

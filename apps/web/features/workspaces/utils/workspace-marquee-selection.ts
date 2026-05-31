@@ -49,9 +49,9 @@ export function intersectingTargetIds(
   selectionRect: Pick<MarqueeRect, "left" | "right" | "top" | "bottom">,
   targets: MarqueeTarget[],
 ) {
-  return targets
-    .filter((target) => rectsIntersect(selectionRect, target.rect))
-    .map((target) => target.id);
+  return targets.flatMap((target) =>
+    rectsIntersect(selectionRect, target.rect) ? [target.id] : [],
+  );
 }
 
 export function applyMarqueeSelection({

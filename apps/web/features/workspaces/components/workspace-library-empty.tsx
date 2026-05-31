@@ -1,6 +1,6 @@
 "use client";
 
-import { FileTextIcon, FolderIcon, LinkIcon } from "lucide-react";
+import { FileTextIcon, FolderIcon, LinkIcon } from "@aqsha/ui/icons";
 import { Button } from "@/components/ui/button";
 
 export function WorkspaceLibraryEmpty({

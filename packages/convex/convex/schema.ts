@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { explorePaperFields } from "./exploreValidators";
 
 const runId = v.union(v.id("agentRuns"), v.id("researchRuns"));
 
@@ -57,14 +58,6 @@ const extractionStatusValidator = v.union(
   v.literal("running"),
   v.literal("ready"),
   v.literal("failed"),
-);
-
-const exploreProviderValidator = v.union(
-  v.literal("OpenAlex"),
-  v.literal("arXiv"),
-  v.literal("Exa"),
-  v.literal("Jina"),
-  v.literal("Crossref"),
 );
 
 const paperAuthorValidator = v.object({
@@ -157,6 +150,7 @@ export default defineSchema(
     workspaces: defineTable({
       ownerUserId: v.string(),
       name: v.string(),
+      emoji: v.optional(v.string()),
       description: v.optional(v.string()),
       status: v.union(v.literal("active"), v.literal("archived")),
       archivedAt: v.optional(v.number()),
@@ -821,25 +815,7 @@ export default defineSchema(
     }).index("by_provider_key", ["provider", "cacheKey"]),
 
     explorePapers: defineTable({
-      key: v.string(),
-      title: v.string(),
-      snippet: v.string(),
-      abstract: v.optional(v.string()),
-      url: v.string(),
-      pdfUrl: v.optional(v.string()),
-      doi: v.optional(v.string()),
-      arxivId: v.optional(v.string()),
-      openalexId: v.optional(v.string()),
-      provider: exploreProviderValidator,
-      sourceLabel: v.string(),
-      authors: v.array(v.string()),
-      year: v.optional(v.number()),
-      publicationDate: v.optional(v.string()),
-      venue: v.optional(v.string()),
-      citedByCount: v.optional(v.number()),
-      isOpenAccess: v.optional(v.boolean()),
-      topics: v.array(v.string()),
-      score: v.optional(v.number()),
+      ...explorePaperFields,
       lastSeenAt: v.number(),
     }).index("by_key", ["key"]),
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownAZIcon, FilterIcon, SearchIcon } from "lucide-react";
+import { ArrowDownAZIcon, FilterIcon, SearchIcon } from "@aqsha/ui/icons";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -23,7 +23,7 @@ import type {
   WorkspaceArtifactType,
 } from "../utils/workspace-library-model";
 
-export const workspaceArtifactTypeOptions = [
+const workspaceArtifactTypeOptions = [
   { value: "pdf", label: "PDF" },
   { value: "plain_text", label: "TXT" },
   { value: "docx", label: "DOCX" },
@@ -79,7 +79,7 @@ export function WorkspaceLibraryControls({
         <InputGroupInput
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="Cari dokumen..."
+          placeholder="Cari dokumen…"
           className="h-8 text-[12px]"
           aria-label="Cari dokumen"
         />

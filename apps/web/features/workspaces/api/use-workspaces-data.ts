@@ -79,6 +79,7 @@ export function useWorkspaceLibraryData(workspaceId: string | WorkspaceId) {
       folders === undefined ||
       artifactsPage === undefined,
     renameWorkspace: useConvexMutationFn(api.workspaces.rename),
+    updateWorkspaceEmoji: useConvexMutationFn(api.workspaces.updateEmoji),
     archiveWorkspace: useConvexMutationFn(api.workspaces.archive),
     createFolder: useConvexMutationFn(api.workspaceFolders.create),
     renameFolder: useConvexMutationFn(api.workspaceFolders.rename),
@@ -131,6 +132,7 @@ export function useWorkspaceDetailData(workspaceId: string) {
     isLoading: libraryData.isLoading || workspaceThreadPage === undefined,
     createWorkspace: useConvexMutationFn(api.workspaces.create),
     renameWorkspace: libraryData.renameWorkspace,
+    updateWorkspaceEmoji: libraryData.updateWorkspaceEmoji,
     archiveWorkspace: libraryData.archiveWorkspace,
     createFolder: libraryData.createFolder,
     renameFolder: libraryData.renameFolder,
