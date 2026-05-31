@@ -35,7 +35,7 @@ export function LibraryCardFrame({
       <div className="pointer-events-none absolute inset-y-3 left-4 right-0 rounded-[16px] border border-border/65 bg-background opacity-0 motion-safe:transition-[opacity,transform] motion-safe:duration-200 motion-safe:ease-out motion-safe:group-hover:translate-x-4 motion-safe:group-hover:opacity-100" />
       <motion.div
         className={cn(
-          "relative z-[1] flex size-full min-h-0 flex-col overflow-hidden rounded-[20px] border bg-card shadow-aqsha transition-[border-color,box-shadow] duration-150 ease-out",
+          "relative z-[1] flex size-full min-h-0 flex-col overflow-hidden rounded-[20px] border bg-card shadow-none transition-[border-color,box-shadow] duration-150 ease-out",
           selected ? "border-primary/50" : "border-border",
           contentClassName,
         )}
