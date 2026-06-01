@@ -194,6 +194,7 @@ export function WorkspaceChatSidePanel({
               artifacts={threadExperience.artifacts}
               sources={threadExperience.sources}
               onCancelRun={threadExperience.cancelRun}
+              onRetryRun={threadExperience.retryRun}
               contextArtifacts={activeContextArtifacts}
               onRemoveContextArtifact={threadDraftContext.toggleArtifact}
               threadWorkspaceId={workspaceId}

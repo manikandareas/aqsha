@@ -41,7 +41,7 @@ import type {
 import { Composer } from "./composer";
 import { HitlDock } from "./hitl-dock";
 import { EmptyThreadCopy, HomeStartState } from "./home-states";
-import { toWorkspaceId } from "@/lib/convex-refs";
+import { toWorkspaceId, type AgentRunId } from "@/lib/convex-refs";
 import { MessageRow } from "./message-row";
 import { AgentRunBlock } from "./run-progress";
 import { CenteredLoading } from "./shared";
@@ -60,6 +60,7 @@ export function ChatThreadState({
   artifacts,
   sources,
   onCancelRun,
+  onRetryRun,
   compact = false,
   contextArtifacts = emptyContextArtifacts,
   onRemoveContextArtifact,
@@ -76,6 +77,7 @@ export function ChatThreadState({
   artifacts: ResearchArtifact[];
   sources: ResearchSource[];
   onCancelRun: (runId: string) => Promise<unknown>;
+  onRetryRun?: (args: { runId: AgentRunId }) => Promise<unknown>;
   compact?: boolean;
   contextArtifacts?: DraftContextArtifact[];
   onRemoveContextArtifact?: (artifactId: string) => void;
@@ -144,6 +146,8 @@ export function ChatThreadState({
                       ) : (
                         <MessageRow
                           message={entry.message}
+                          assistantRun={entry.assistantRun}
+                          onRetryRun={onRetryRun}
                           sourceCount={sourceCounts.byMessageId.get(entry.message.id) ?? 0}
                           threadWorkspaceId={threadWorkspaceId}
                         />

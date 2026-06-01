@@ -33,16 +33,23 @@ export function interleaveRunsWithMessages(
 
   const entries: TranscriptEntry[] = [];
   let pendingRuns: ResearchRun[] = [];
+  const pendingAssistantRuns: ResearchRun[] = [];
 
   for (const message of messages) {
     if (message.role !== "user" && pendingRuns.length > 0) {
       for (const run of pendingRuns) {
         entries.push({ kind: "run", run });
       }
+      pendingAssistantRuns.push(...pendingRuns);
       pendingRuns = [];
     }
 
-    entries.push({ kind: "message", message });
+    entries.push({
+      kind: "message",
+      message,
+      assistantRun:
+        message.role === "assistant" ? pendingAssistantRuns.shift() : undefined,
+    });
 
     if (message.role === "user") {
       const bucket = runsByPrompt.get(message.id) ?? [];

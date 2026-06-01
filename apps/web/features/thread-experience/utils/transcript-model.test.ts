@@ -58,6 +58,29 @@ describe("thread transcript model", () => {
     ]);
   });
 
+  it("associates retried runs with their matching assistant responses", () => {
+    const entries = interleaveRunsWithMessages(
+      [
+        message({ id: "prompt", key: "prompt", role: "user", order: 0 }),
+        message({ id: "answer-1", key: "answer-1", role: "assistant", order: 1 }),
+        message({ id: "answer-2", key: "answer-2", role: "assistant", order: 2 }),
+      ],
+      [
+        run({ _id: "original-run", promptMessageId: "prompt" }),
+        run({ _id: "retry-run", promptMessageId: "prompt" }),
+      ],
+    );
+
+    const assistantEntries = entries.filter(
+      (entry) => entry.kind === "message" && entry.message.role === "assistant",
+    );
+
+    expect(assistantEntries.map((entry) => entry.kind === "message" ? entry.assistantRun?._id : undefined)).toEqual([
+      "original-run",
+      "retry-run",
+    ]);
+  });
+
   it("keeps orphaned runs renderable", () => {
     const entries = interleaveRunsWithMessages(
       [message({ id: "answer", key: "answer", role: "assistant", order: 1 })],

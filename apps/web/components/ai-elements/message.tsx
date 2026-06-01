@@ -6,8 +6,18 @@ import { code } from "@streamdown/code";
 import { math } from "@streamdown/math";
 import { mermaid } from "@streamdown/mermaid";
 import type { UIMessage } from "ai";
-import type { ComponentProps, HTMLAttributes } from "react";
+import type {
+  ButtonHTMLAttributes,
+  ComponentProps,
+  HTMLAttributes,
+  ReactNode,
+} from "react";
 import { Streamdown } from "streamdown";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
@@ -60,3 +70,93 @@ export const MessageResponse = ({ className, ...props }: MessageResponseProps) =
   );
 
 MessageResponse.displayName = "MessageResponse";
+
+export type MessageToolbarProps = HTMLAttributes<HTMLDivElement>;
+
+export const MessageToolbar = ({
+  children,
+  className,
+  ...props
+}: MessageToolbarProps) => (
+  <div
+    className={cn(
+      "flex w-full min-w-0 items-center justify-between gap-2",
+      className,
+    )}
+    {...props}
+  >
+    {children}
+  </div>
+);
+
+export type MessageActionsProps = HTMLAttributes<HTMLDivElement>;
+
+export const MessageActions = ({
+  children,
+  className,
+  ...props
+}: MessageActionsProps) => (
+  <div
+    className={cn(
+      "flex min-w-0 items-center gap-1 text-muted-foreground",
+      className,
+    )}
+    {...props}
+  >
+    {children}
+  </div>
+);
+
+export type MessageActionProps = Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  "aria-label"
+> & {
+  label: string;
+  tooltip?: ReactNode;
+};
+
+export const MessageAction = ({
+  children,
+  className,
+  disabled,
+  label,
+  tooltip,
+  type = "button",
+  ...props
+}: MessageActionProps) => {
+  const button = (
+    <button
+      aria-label={label}
+      className={cn(
+        "inline-flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground",
+        className,
+      )}
+      disabled={disabled}
+      type={type}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+
+  if (!tooltip) {
+    return button;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {disabled ? (
+          <span className="inline-flex cursor-not-allowed">{button}</span>
+        ) : (
+          button
+        )}
+      </TooltipTrigger>
+      <TooltipContent side="top">{tooltip}</TooltipContent>
+    </Tooltip>
+  );
+};
+
+MessageToolbar.displayName = "MessageToolbar";
+MessageActions.displayName = "MessageActions";
+MessageAction.displayName = "MessageAction";

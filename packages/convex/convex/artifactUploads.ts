@@ -11,6 +11,7 @@ import {
   artifactRagNamespace,
   type ArtifactRagMetadata,
 } from "./agent/rag";
+import { embeddingProviderConfig } from "./agent/providers";
 import { artifactTypeFromUpload } from "./artifactModel";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "./artifactUploadLimits";
 const MAX_INDEXED_TEXT_CHARS = 300_000;
@@ -223,7 +224,7 @@ export const reindexPromotedAttachment = internalAction({
     previousRagEntryId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    if (!process.env.OPENAI_API_KEY || !args.plainText.trim()) {
+    if (!embeddingProviderConfig.enabled || !args.plainText.trim()) {
       return;
     }
     try {
@@ -447,7 +448,7 @@ async function indexUploadedDocument(
   },
 ) {
   const indexedText = args.plainText.slice(0, MAX_INDEXED_TEXT_CHARS);
-  if (!indexedText.trim() || !process.env.OPENAI_API_KEY) {
+  if (!indexedText.trim() || !embeddingProviderConfig.enabled) {
     return undefined;
   }
 

@@ -3,7 +3,9 @@
 import { api } from "@aqsha/convex/api";
 import {
   BracesIcon,
+  CheckIcon,
   Code2Icon,
+  CopyIcon,
   FileIcon,
   FileTextIcon,
   FolderTreeIcon,
@@ -13,13 +15,19 @@ import {
   Link2Icon,
   LinkIcon,
   Loader2Icon,
+  RotateCcwIcon,
   TableIcon,
+  ThumbsDownIcon,
+  ThumbsUpIcon,
 } from "@aqsha/ui/icons";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   Message,
+  MessageAction,
+  MessageActions,
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message";
@@ -28,7 +36,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { toArtifactId, toWorkspaceId } from "@/lib/convex-refs";
+import {
+  toAgentRunId,
+  toArtifactId,
+  toWorkspaceId,
+  type AgentRunId,
+} from "@/lib/convex-refs";
+import { readableConvexErrorMessage } from "@/lib/convex-error";
 import {
   useConvexMutationFn,
   useConvexQueryData,
@@ -40,16 +54,21 @@ import type {
   MessageContextArtifactMetadata,
   PromptCommandMetadata,
   ResearchArtifact,
+  ResearchRun,
 } from "../types";
 import { ThreadActivityIndicator } from "./shared";
 import { MessageWorkspaceActions } from "./message-workspace-actions";
 
 export function MessageRow({
   message,
+  assistantRun,
+  onRetryRun,
   sourceCount = 0,
   threadWorkspaceId,
 }: {
   message: ChatMessage;
+  assistantRun?: ResearchRun;
+  onRetryRun?: (args: { runId: AgentRunId }) => Promise<unknown>;
   sourceCount?: number;
   threadWorkspaceId?: string;
 }) {
@@ -102,7 +121,100 @@ export function MessageRow({
       </MessageContent>
       <MessageArtifacts links={messageArtifacts ?? []} />
       <MessageSourceCount sourceCount={sourceCount} />
+      {hasText ? (
+        <AssistantMessageActions
+          assistantRun={assistantRun}
+          text={text}
+          onRetryRun={onRetryRun}
+        />
+      ) : null}
     </Message>
+  );
+}
+
+function AssistantMessageActions({
+  assistantRun,
+  text,
+  onRetryRun,
+}: {
+  assistantRun?: ResearchRun;
+  text: string;
+  onRetryRun?: (args: { runId: AgentRunId }) => Promise<unknown>;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const copiedResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const canRetry =
+    Boolean(onRetryRun && assistantRun?.retryable) &&
+    (assistantRun?.status === "failed" || assistantRun?.status === "completed");
+
+  useEffect(() => {
+    return () => {
+      if (copiedResetTimer.current) {
+        clearTimeout(copiedResetTimer.current);
+      }
+    };
+  }, []);
+
+  const handleCopy = async () => {
+    await copyTextToClipboard(text);
+    if (copiedResetTimer.current) {
+      clearTimeout(copiedResetTimer.current);
+    }
+    setCopied(true);
+    copiedResetTimer.current = setTimeout(() => {
+      setCopied(false);
+      copiedResetTimer.current = null;
+    }, 1200);
+  };
+
+  const handleRetry = async () => {
+    if (!assistantRun || !onRetryRun || !canRetry) return;
+    setIsRetrying(true);
+    try {
+      await onRetryRun({ runId: toAgentRunId(assistantRun._id) });
+    } catch (error) {
+      toast.error(
+        readableConvexErrorMessage(error, "Respons belum bisa dicoba ulang."),
+      );
+    } finally {
+      setIsRetrying(false);
+    }
+  };
+
+  return (
+    <MessageActions className="mt-1">
+      <MessageAction
+        disabled={!canRetry || isRetrying}
+        label="Retry"
+        onClick={() => void handleRetry()}
+        tooltip="Coba ulang respons"
+      >
+        {isRetrying ? (
+          <Loader2Icon className="size-3.5 animate-spin" />
+        ) : (
+          <RotateCcwIcon className="size-3.5" />
+        )}
+      </MessageAction>
+      <MessageAction disabled label="Like" tooltip="Like">
+        <ThumbsUpIcon className="size-3.5" />
+      </MessageAction>
+      <MessageAction disabled label="Dislike" tooltip="Dislike">
+        <ThumbsDownIcon className="size-3.5" />
+      </MessageAction>
+      <MessageAction
+        disabled={!text.trim()}
+        label="Copy"
+        onClick={() => void handleCopy()}
+        tooltip="Salin respons"
+      >
+        {copied ? (
+          <CheckIcon className="size-3.5" />
+        ) : (
+          <CopyIcon className="size-3.5" />
+        )}
+      </MessageAction>
+    </MessageActions>
   );
 }
 
@@ -489,4 +601,35 @@ function getMessageText(message: ChatMessage) {
     ?.flatMap((part) => (part.type === "text" && part.text ? [part.text] : []))
     .join("");
   return partText || message.text || "";
+}
+
+async function copyTextToClipboard(text: string) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      copyTextWithSelection(text);
+      return;
+    }
+  }
+
+  copyTextWithSelection(text);
+}
+
+function copyTextWithSelection(text: string) {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.top = "-1000px";
+  textarea.style.left = "-1000px";
+  document.body.appendChild(textarea);
+  textarea.select();
+
+  try {
+    document.execCommand("copy");
+  } finally {
+    textarea.remove();
+  }
 }

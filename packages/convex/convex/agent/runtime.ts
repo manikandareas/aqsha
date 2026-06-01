@@ -1,12 +1,12 @@
 import { Agent, stepCountIs, type UsageHandler } from "@convex-dev/agent";
-import { openai } from "@ai-sdk/openai";
 import { components, internal } from "../_generated/api";
+import { chatProvider } from "./providers";
 
 export const NORMAL_MODEL = process.env.AQSHA_NORMAL_MODEL ?? "gpt-5.4-mini";
 
 export const astra = new Agent(components.agent, {
   name: "Astra",
-  languageModel: openai.chat(NORMAL_MODEL),
+  languageModel: chatProvider.chat(NORMAL_MODEL),
   instructions:
     [
       "You are Astra, Aqsha's product research assistant in Normal mode.",

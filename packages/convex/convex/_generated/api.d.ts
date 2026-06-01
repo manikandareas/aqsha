@@ -29,6 +29,7 @@ import type * as agent_promptCommandParsing from "../agent/promptCommandParsing.
 import type * as agent_promptCommands from "../agent/promptCommands.js";
 import type * as agent_promptPayload from "../agent/promptPayload.js";
 import type * as agent_promptRouting from "../agent/promptRouting.js";
+import type * as agent_providers from "../agent/providers.js";
 import type * as agent_rag from "../agent/rag.js";
 import type * as agent_ragContext from "../agent/ragContext.js";
 import type * as agent_rateLimits from "../agent/rateLimits.js";
@@ -113,6 +114,7 @@ declare const fullApi: ApiFromModules<{
   "agent/promptCommands": typeof agent_promptCommands;
   "agent/promptPayload": typeof agent_promptPayload;
   "agent/promptRouting": typeof agent_promptRouting;
+  "agent/providers": typeof agent_providers;
   "agent/rag": typeof agent_rag;
   "agent/ragContext": typeof agent_ragContext;
   "agent/rateLimits": typeof agent_rateLimits;

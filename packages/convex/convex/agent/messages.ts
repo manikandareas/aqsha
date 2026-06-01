@@ -4,7 +4,6 @@ import {
   syncStreams,
   vStreamArgs,
 } from "@convex-dev/agent";
-import { openai } from "@ai-sdk/openai";
 import { generateObject } from "ai";
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
@@ -48,6 +47,7 @@ import {
   prependPromptContext,
   replaceContextArtifactsForThread,
 } from "./threadContext";
+import { CHAT_PROVIDER_NAME, chatProvider } from "./providers";
 
 const MAX_CONTENT_LENGTH = 8_000;
 const FAILURE_TEXT =
@@ -211,7 +211,7 @@ async function checkAndConsumeSendQuota(
     ownerUserId: args.ownerUserId,
     ownerEmail: args.ownerEmail,
     feature: args.mode === "deep" ? "deep_research" : "normal_chat",
-    provider: "openai",
+    provider: CHAT_PROVIDER_NAME,
     model: args.mode === "deep" ? process.env.AQSHA_DEEP_MODEL ?? "gpt-5.5" : NORMAL_MODEL,
     inputTokens: estimatedTokens,
     totalTokens: estimatedTokens,
@@ -943,7 +943,7 @@ export const generateThreadTitle = internalAction({
     }
 
     const result = await generateObject({
-      model: openai.chat(NORMAL_MODEL),
+      model: chatProvider.chat(NORMAL_MODEL),
       maxOutputTokens: 80,
       schema: z.object({
         title: z

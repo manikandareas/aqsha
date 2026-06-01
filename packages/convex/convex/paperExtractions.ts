@@ -15,6 +15,7 @@ import {
   artifactRagNamespace,
   type ArtifactRagMetadata,
 } from "./agent/rag";
+import { embeddingProviderConfig } from "./agent/providers";
 import {
   ARTIFACT_BODY_INLINE_LIMIT,
   artifactTypeForLegacyArtifact,
@@ -608,7 +609,7 @@ async function reindexPaperText(
   },
 ) {
   const indexedText = args.plainText.slice(0, MAX_INDEXED_TEXT_CHARS);
-  if (!indexedText.trim() || !process.env.OPENAI_API_KEY) {
+  if (!indexedText.trim() || !embeddingProviderConfig.enabled) {
     return undefined;
   }
   try {

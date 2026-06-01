@@ -181,7 +181,7 @@ export type SourceFocus =
   | { type: "run"; runId: string };
 
 export type TranscriptEntry =
-  | { kind: "message"; message: ChatMessage }
+  | { kind: "message"; message: ChatMessage; assistantRun?: ResearchRun }
   | { kind: "run"; run: ResearchRun };
 
 export type ResearchPanelState = {

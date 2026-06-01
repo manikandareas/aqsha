@@ -1,5 +1,10 @@
 import type { ReactNode } from "react";
-import type { ArtifactId, StorageId, WorkspaceId } from "@/lib/convex-refs";
+import type {
+  AgentRunId,
+  ArtifactId,
+  StorageId,
+  WorkspaceId,
+} from "@/lib/convex-refs";
 import type {
   RateStatus,
   ResearchArtifact,
@@ -113,6 +118,7 @@ export type ThreadShellLayoutProps = {
   rightPanelOpen: boolean;
   onRightPanelOpenChange: (open: boolean) => void;
   onCancelRun: (runId: string) => Promise<unknown>;
+  onRetryRun?: (args: { runId: AgentRunId }) => Promise<unknown>;
   onDeleteThread?: () => Promise<void>;
   removeThread?: (args: { threadId: string }) => Promise<{ ok: true }>;
   sidePanel?: ReactNode;

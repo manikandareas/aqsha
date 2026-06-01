@@ -4,6 +4,7 @@ import { LandingDemoSection } from "@/features/marketing/components/landing-demo
 import { LandingFooter } from "@/features/marketing/components/landing-footer";
 import { LandingHeader } from "@/features/marketing/components/landing-header";
 import { LandingHeroSection } from "@/features/marketing/components/landing-hero-section";
+import { PricingSection } from "@/features/marketing/components/pricing-section";
 import { WorkflowSection } from "@/features/marketing/components/workflow-section";
 
 /**
@@ -18,6 +19,7 @@ export function LandingPage() {
       <IntegrationHarnessSection />
       <LandingDemoSection />
       <WorkflowSection />
+      <PricingSection />
       <BottomCtaSection />
       <LandingFooter />
     </>

@@ -1,5 +1,4 @@
 import { generateObject, generateText, Output } from "ai";
-import { openai } from "@ai-sdk/openai";
 import type { WorkflowId } from "@convex-dev/workflow";
 import { ConvexError, v } from "convex/values";
 import { z } from "zod";
@@ -36,6 +35,7 @@ import {
 } from "./sourceQuality";
 import { assertThreadOwner, tryAssertThreadOwner } from "./threads";
 import { researchWorkflow } from "./workflow";
+import { CHAT_PROVIDER_NAME, chatProvider } from "./providers";
 
 const DEEP_MODEL = process.env.AQSHA_DEEP_MODEL ?? "gpt-5.5";
 const DEEP_LITE_MODEL = process.env.AQSHA_DEEP_LITE_MODEL ?? "gpt-5.4-mini";
@@ -355,7 +355,7 @@ export const retry = mutation({
       ownerEmail: user.email,
       threadId: run.threadId,
       feature: "deep_research",
-      provider: "openai",
+      provider: CHAT_PROVIDER_NAME,
       model: DEEP_MODEL,
       inputTokens: estimateTokens(prompt),
       totalTokens: estimateTokens(prompt),
@@ -488,7 +488,7 @@ export const planResearch = internalAction({
       status: "running",
     });
     const object = await generateObject({
-      model: openai.chat(DEEP_MODEL),
+      model: chatProvider.chat(DEEP_MODEL),
       schema: z.object({
         title: z.string(),
         questions: z.array(z.string()).min(1).max(5),
@@ -1050,7 +1050,7 @@ export const synthesize = internalAction({
       .join("\n");
     const readiness = assessEvidenceReadiness(args.sources, normalizeExtracts(args.extracts));
     const result = await generateText({
-      model: openai.chat(DEEP_MODEL),
+      model: chatProvider.chat(DEEP_MODEL),
       system:
         readiness.ready
           ? "Write a source-grounded markdown research report. Cite every factual claim with persisted source numbers. Prefer accepted evidence extracts over snippets. If evidence is insufficient, keep that limitation visible and do not overstate certainty. Also produce a concise chat summary (2-4 natural paragraphs, no implementation details) for the user."
@@ -1809,7 +1809,7 @@ async function chooseNextQuery(
     return args.plan.initialQueries[0] || args.prompt;
   }
   const object = await generateObject({
-    model: openai.chat(DEEP_LITE_MODEL),
+    model: chatProvider.chat(DEEP_LITE_MODEL),
     schema: z.object({
       query: z.string().min(1).max(500),
       rationale: z.string(),
@@ -1830,7 +1830,7 @@ async function planSourceBuckets(_ctx: ActionCtx, prompt: string, plan: Research
   const fallback = defaultSourceBuckets(prompt, plan);
   try {
     const object = await generateObject({
-      model: openai.chat(DEEP_LITE_MODEL),
+      model: chatProvider.chat(DEEP_LITE_MODEL),
       schema: z.object({
         buckets: z.array(z.object({
           name: z.enum([
@@ -2153,7 +2153,7 @@ async function chooseExpansionQueries(
 ) {
   try {
     const object = await generateObject({
-      model: openai.chat(DEEP_LITE_MODEL),
+      model: chatProvider.chat(DEEP_LITE_MODEL),
       schema: z.object({
         expansions: z.array(z.object({
           bucketName: z.string().min(2).max(80),
@@ -2602,7 +2602,7 @@ async function assessSufficiency(
 ) {
   const readiness = assessEvidenceReadiness(args.sources, args.extracts);
   const object = await generateObject({
-    model: openai.chat(DEEP_LITE_MODEL),
+    model: chatProvider.chat(DEEP_LITE_MODEL),
     schema: z.object({
       sufficiencyStatus: z.enum(["insufficient", "partial", "sufficient"]),
       gapAssessment: z.string(),
@@ -2790,7 +2790,7 @@ function normalizeExtracts(value: unknown): ResearchExtract[] {
 
 async function extractVerifiableClaims(markdown: string): Promise<string[]> {
   const object = await generateObject({
-    model: openai.chat(DEEP_LITE_MODEL),
+    model: chatProvider.chat(DEEP_LITE_MODEL),
     schema: z.object({
       claims: z.array(z.string().min(20).max(500)).max(16),
     }),
@@ -2846,7 +2846,7 @@ async function verifyClaimsSemantically(
     }
     try {
       const result = await generateObject({
-        model: openai.chat(DEEP_LITE_MODEL),
+        model: chatProvider.chat(DEEP_LITE_MODEL),
         schema: z.object({
           support: z.enum(["supported", "partially_supported", "contradicted", "unsupported"]),
           confidence: z.number().min(0).max(1),
@@ -2925,7 +2925,7 @@ async function reviseUnsupportedMarkdown(markdown: string, checks: CitationCheck
     return markdown;
   }
   const result = await generateText({
-    model: openai.chat(DEEP_MODEL),
+    model: chatProvider.chat(DEEP_MODEL),
     system: [
       "Revise the markdown report to remove, soften, or explicitly caveat contradicted and unsupported factual claims.",
       "Keep supported claims and citations intact. Keep the Evidence Limits section when any uncertainty remains.",
@@ -3013,7 +3013,7 @@ export async function shouldRunCounterEvidencePass(args: {
 }): Promise<boolean> {
   if (args.acceptedSourceCount < 3) return false;
   const object = await generateObject({
-    model: openai.chat(DEEP_LITE_MODEL),
+    model: chatProvider.chat(DEEP_LITE_MODEL),
     schema: z.object({
       needsCounterEvidence: z.boolean(),
       rationale: z.string(),

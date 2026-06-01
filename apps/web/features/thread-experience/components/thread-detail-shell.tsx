@@ -55,6 +55,7 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
     artifacts,
     sources,
     cancelRun,
+    retryRun,
     removeThread,
   } = useThreadExperienceData(threadId);
   const [contextPanelOpen, setContextPanelOpen] = useState(false);
@@ -210,6 +211,7 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
         rightPanelOpen={contextPanelOpen}
         onRightPanelOpenChange={setContextPanelOpen}
         onCancelRun={cancelRun}
+        onRetryRun={retryRun}
         onDeleteThread={threadId ? handleDeleteThread : undefined}
         removeThread={removeThread}
         sidePanel={sidePanel}

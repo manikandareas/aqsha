@@ -1,6 +1,14 @@
 import { promptCommands, type PromptCommand } from "@aqsha/convex/prompt-commands";
 
 const CHIP_SELECTOR = '[data-chip="command"]';
+const COMMAND_CHIP_CLASS =
+  "inline-flex cursor-pointer select-none items-center rounded-[5px] bg-primary/8 px-0.5 font-semibold leading-[18px] text-primary underline decoration-primary/60 decoration-2 underline-offset-4 transition-[background-color,text-decoration-color] duration-150 hover:bg-primary/12 hover:decoration-primary";
+const DEEP_COMMAND_CHIP_CLASS =
+  "inline-flex cursor-pointer select-none items-center rounded-[5px] bg-lavender-soft px-0.5 font-semibold leading-[18px] text-lavender-foreground underline decoration-lavender-foreground/55 decoration-2 underline-offset-4 transition-[background-color,text-decoration-color] duration-150 hover:bg-lavender-soft hover:decoration-lavender-foreground";
+
+export function promptCommandDisplayLabel(command: Pick<PromptCommand, "slug">) {
+  return command.slug.startsWith("/") ? command.slug.slice(1) : command.slug;
+}
 
 export function getTextBeforeCursor(root: HTMLElement) {
   const selection = window.getSelection();
@@ -78,11 +86,8 @@ export function createCommandChipElement(command: PromptCommand) {
   span.dataset.commandId = command.id;
   span.dataset.slug = command.slug;
   span.dataset.mode = command.mode;
-  span.className =
-    command.mode === "deep"
-      ? "cursor-pointer select-none font-semibold text-lavender-foreground"
-      : "cursor-pointer select-none font-semibold text-sky-foreground";
-  span.textContent = command.slug;
+  span.className = command.mode === "deep" ? DEEP_COMMAND_CHIP_CLASS : COMMAND_CHIP_CLASS;
+  span.textContent = promptCommandDisplayLabel(command);
   return span;
 }
 

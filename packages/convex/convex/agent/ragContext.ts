@@ -3,6 +3,7 @@
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { internalAction } from "../_generated/server";
+import { embeddingProviderConfig } from "./providers";
 import { artifactRag, artifactRagNamespace } from "./rag";
 
 const RAG_CONTEXT_LIMIT = 6_000;
@@ -15,7 +16,7 @@ export const buildRagContextForThread = internalAction({
     messageAttachmentArtifactIds: v.optional(v.array(v.id("artifacts"))),
   },
   handler: async (ctx, args): Promise<string> => {
-    if (!process.env.OPENAI_API_KEY || !args.query.trim()) {
+    if (!embeddingProviderConfig.enabled || !args.query.trim()) {
       return "";
     }
     const targets: Array<{

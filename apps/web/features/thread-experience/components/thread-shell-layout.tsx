@@ -30,6 +30,7 @@ export function ThreadShellLayout({
   rightPanelOpen,
   onRightPanelOpenChange,
   onCancelRun,
+  onRetryRun,
   onDeleteThread,
   removeThread,
   sidePanel,
@@ -89,6 +90,7 @@ export function ThreadShellLayout({
                     sources={sources}
                     threads={threads}
                     onCancelRun={onCancelRun}
+                    onRetryRun={onRetryRun}
                     contextArtifacts={contextArtifacts}
                     onRemoveContextArtifact={onRemoveContextArtifact}
                     threadWorkspaceId={selectedThread?.workspaceId}
