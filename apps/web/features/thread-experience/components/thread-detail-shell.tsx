@@ -240,7 +240,6 @@ function ThreadWorkspaceLibraryPanel({
   const router = useRouter();
   const libraryData = useWorkspaceLibraryData(workspaceId);
   const dialogState = useWorkspaceLibraryDialogState();
-  const [activeFolderId, setActiveFolderId] = useState<"root" | string>("root");
 
   if (libraryData.isLoading) {
     return (
@@ -261,8 +260,6 @@ function ThreadWorkspaceLibraryPanel({
       titleSlot={titleSlot}
       libraryData={libraryData}
       dialogState={dialogState}
-      activeFolderId={activeFolderId}
-      onActiveFolderChange={setActiveFolderId}
       getArtifactSelected={(artifactId) => selectedIds.has(artifactId)}
       onToggleArtifactContext={onToggle}
       onSetArtifactContextSelection={onSetSelection}

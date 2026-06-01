@@ -56,7 +56,6 @@ function WorkspaceDetailMain({
   const leftSidebar = useSidebar();
   const [chatPanelOpen, setChatPanelOpen] = useState(false);
   const [panelThreadId, setPanelThreadId] = useState<string | null>(null);
-  const [activeFolderId, setActiveFolderId] = useState<"root" | string>("root");
 
   const contextArtifacts = data.artifacts.flatMap((artifact) =>
     draftContext.selectedIdSet.has(artifact._id)
@@ -125,8 +124,6 @@ function WorkspaceDetailMain({
               workspaceName={data.workspace.name}
               libraryData={libraryData}
               dialogState={dialogState}
-              activeFolderId={activeFolderId}
-              onActiveFolderChange={setActiveFolderId}
               getArtifactSelected={draftContext.isSelected}
               onToggleArtifactContext={draftContext.toggleArtifact}
               onSetArtifactContextSelection={draftContext.setSelectedArtifacts}

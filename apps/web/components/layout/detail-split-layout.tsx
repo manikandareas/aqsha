@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
-import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar";
+import type { ReactNode } from "react";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { detailSplitMainSurfaceClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
 
@@ -31,10 +31,6 @@ export function DetailSplitLayout({
           sideOpen ? "grid-cols-1 md:grid-cols-2 gap-3" : "grid-cols-1 gap-0",
         )}
       >
-        <MobileSidePanelOpenSync
-          open={sideOpen}
-          onOpenChange={onSideOpenChange}
-        />
         <SidebarInset className={detailSplitMainSurfaceClass(sideOpen)}>
           {main}
         </SidebarInset>
@@ -42,26 +38,4 @@ export function DetailSplitLayout({
       </div>
     </SidebarProvider>
   );
-}
-
-function MobileSidePanelOpenSync({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const { isMobile, openMobile, setOpenMobile } = useSidebar();
-
-  useEffect(() => {
-    if (!isMobile || openMobile === open) return;
-    setOpenMobile(open);
-  }, [isMobile, open, openMobile, setOpenMobile]);
-
-  useEffect(() => {
-    if (!isMobile || openMobile || !open) return;
-    onOpenChange(false);
-  }, [isMobile, onOpenChange, open, openMobile]);
-
-  return null;
 }

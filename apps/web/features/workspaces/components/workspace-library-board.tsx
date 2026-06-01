@@ -1,7 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { FileTextIcon, FolderIcon, LinkIcon, UploadIcon } from "@aqsha/ui/icons";
+import { useRef, useState, type ReactNode } from "react";
+import {
+  FileTextIcon,
+  FolderIcon,
+  LinkIcon,
+  UploadIcon,
+} from "@aqsha/ui/icons";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -71,7 +76,7 @@ export function WorkspaceLibraryBoard({
   onClosePanel,
   showLeftSidebarTrigger,
   onToggleLeftSidebar,
-  onActiveFolderChange,
+  renderDialogs,
   showCreateActions,
   showWorkspaceSettings,
 }: {
@@ -97,8 +102,14 @@ export function WorkspaceLibraryBoard({
   onRenameArtifact: (artifact: WorkspaceArtifact) => void;
   onDeleteArtifact: (artifact: WorkspaceArtifact) => void;
   onMoveArtifact: (artifactId: string, target: string) => Promise<void>;
-  onMoveArtifactToWorkspace: (artifactId: string, targetWorkspaceId: string) => Promise<void>;
-  onMoveFolderToWorkspace: (folderId: string, targetWorkspaceId: string) => Promise<void>;
+  onMoveArtifactToWorkspace: (
+    artifactId: string,
+    targetWorkspaceId: string,
+  ) => Promise<void>;
+  onMoveFolderToWorkspace: (
+    folderId: string,
+    targetWorkspaceId: string,
+  ) => Promise<void>;
   onUploadFiles: (
     files: File[],
     folderId: "root" | string,
@@ -117,7 +128,7 @@ export function WorkspaceLibraryBoard({
   onClosePanel?: () => void;
   showLeftSidebarTrigger?: boolean;
   onToggleLeftSidebar?: () => void;
-  onActiveFolderChange?: (folderId: "root" | string) => void;
+  renderDialogs?: (activeFolderId: "root" | string) => ReactNode;
   showCreateActions?: boolean;
   showWorkspaceSettings?: boolean;
 }) {
@@ -132,18 +143,18 @@ export function WorkspaceLibraryBoard({
     artifacts: filteredArtifacts,
     sort,
   });
-  const { activeFolderId, openFolder, navigateTo } = useWorkspaceFolderNav(groups);
-
-  useEffect(() => {
-    onActiveFolderChange?.(activeFolderId);
-  }, [activeFolderId, onActiveFolderChange]);
+  const { activeFolderId, openFolder, navigateTo } =
+    useWorkspaceFolderNav(groups);
 
   const folderView = getFolderView({ groups, activeFolderId });
   const moveTargets = getMoveTargetOptions(folders);
-  const workspaceMoveTargets = getWorkspaceMoveTargetOptions(workspaces, workspaceId).map((target) => ({
-        _id: target.value,
-        name: target.label,
-      }));
+  const workspaceMoveTargets = getWorkspaceMoveTargetOptions(
+    workspaces,
+    workspaceId,
+  ).map((target) => ({
+    _id: target.value,
+    name: target.label,
+  }));
   const [dragArtifactId, setDragArtifactId] = useState<string | null>(null);
   const [isUploadDragOver, setIsUploadDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -152,7 +163,9 @@ export function WorkspaceLibraryBoard({
   const isEmpty =
     folderView.folders.length === 0 && folderView.artifacts.length === 0;
   const isFilteredEmpty =
-    isEmpty && (searchQuery.trim().length > 0 || selectedTypes.length > 0) && artifacts.length > 0;
+    isEmpty &&
+    (searchQuery.trim().length > 0 || selectedTypes.length > 0) &&
+    artifacts.length > 0;
   const libraryControls = (
     <WorkspaceLibraryControls
       query={searchQuery}
@@ -184,152 +197,166 @@ export function WorkspaceLibraryBoard({
   const openUploadPicker = () => fileInputRef.current?.click();
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      <input
-        ref={fileInputRef}
-        type="file"
-        aria-label="Pilih file untuk workspace"
-        multiple
-        accept=".pdf,.docx,.txt,.md,.markdown,.csv,.json,.html,.htm,.svg,.mmd,.mermaid,.js,.jsx,.ts,.tsx,.css,.py,.java,.go,.rs,.sql,.sh,.yml,.yaml,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv,text/html,application/json,image/svg+xml,text/javascript,application/javascript,text/css,text/yaml,application/x-yaml"
-        className="sr-only"
-        onChange={(event) => {
-          if (event.currentTarget.files) {
-            void uploadToActiveFolder(event.currentTarget.files);
-          }
-          event.currentTarget.value = "";
-        }}
-      />
-      <WorkspaceBoardToolbar
-        workspaceName={workspaceName}
-        workspaceEmoji={workspaceEmoji}
-        titleSlot={titleSlot}
-        breadcrumb={folderView.breadcrumb}
-        onNavigate={navigateTo}
-        onCreateFolder={onCreateFolder}
-        onCreateDocument={onCreateDocument}
-        onCreateUrl={onCreateUrl}
-        onRenameWorkspace={onRenameWorkspace}
-        onUpdateWorkspaceEmoji={onUpdateWorkspaceEmoji}
-        onArchiveWorkspace={onArchiveWorkspace}
-        onToggleChat={onToggleChatPanel}
-        chatOpen={chatPanelOpen}
-        onClosePanel={onClosePanel}
-        showLeftSidebarTrigger={showLeftSidebarTrigger}
-        onToggleLeftSidebar={onToggleLeftSidebar}
-        showCreateActions={showCreateActions}
-        showWorkspaceSettings={showWorkspaceSettings}
-      />
-      <ContextMenu>
-        <ContextMenuTrigger asChild>
-          <div
-            className={cn(
-              "relative min-h-0 flex-1 overflow-y-auto bg-background",
-              panelBodyPaddingClass,
-              isUploadDragOver && "bg-muted/25 ring-2 ring-inset ring-primary/30",
-            )}
-            onDragEnter={(event) => {
-              if (event.dataTransfer.types.includes("Files")) {
+    <>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+        <input
+          ref={fileInputRef}
+          type="file"
+          aria-label="Pilih file untuk workspace"
+          multiple
+          accept=".pdf,.docx,.txt,.md,.markdown,.csv,.json,.html,.htm,.svg,.mmd,.mermaid,.js,.jsx,.ts,.tsx,.css,.py,.java,.go,.rs,.sql,.sh,.yml,.yaml,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv,text/html,application/json,image/svg+xml,text/javascript,application/javascript,text/css,text/yaml,application/x-yaml"
+          className="sr-only"
+          onChange={(event) => {
+            if (event.currentTarget.files) {
+              void uploadToActiveFolder(event.currentTarget.files);
+            }
+            event.currentTarget.value = "";
+          }}
+        />
+        <WorkspaceBoardToolbar
+          workspaceName={workspaceName}
+          workspaceEmoji={workspaceEmoji}
+          titleSlot={titleSlot}
+          breadcrumb={folderView.breadcrumb}
+          onNavigate={navigateTo}
+          onCreateFolder={onCreateFolder}
+          onCreateDocument={onCreateDocument}
+          onCreateUrl={onCreateUrl}
+          onRenameWorkspace={onRenameWorkspace}
+          onUpdateWorkspaceEmoji={onUpdateWorkspaceEmoji}
+          onArchiveWorkspace={onArchiveWorkspace}
+          onToggleChat={onToggleChatPanel}
+          chatOpen={chatPanelOpen}
+          onClosePanel={onClosePanel}
+          showLeftSidebarTrigger={showLeftSidebarTrigger}
+          onToggleLeftSidebar={onToggleLeftSidebar}
+          showCreateActions={showCreateActions}
+          showWorkspaceSettings={showWorkspaceSettings}
+        />
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            <div
+              className={cn(
+                "relative min-h-0 flex-1 overflow-y-auto bg-background",
+                panelBodyPaddingClass,
+                isUploadDragOver &&
+                  "bg-muted/25 ring-2 ring-inset ring-primary/30",
+              )}
+              onDragEnter={(event) => {
+                if (event.dataTransfer.types.includes("Files")) {
+                  event.preventDefault();
+                  setIsUploadDragOver(true);
+                }
+              }}
+              onDragOver={(event) => {
+                if (event.dataTransfer.types.includes("Files")) {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "copy";
+                }
+              }}
+              onDragLeave={(event) => {
+                if (
+                  !event.currentTarget.contains(
+                    event.relatedTarget as Node | null,
+                  )
+                ) {
+                  setIsUploadDragOver(false);
+                }
+              }}
+              onDrop={(event) => {
+                if (!event.dataTransfer.types.includes("Files")) return;
                 event.preventDefault();
-                setIsUploadDragOver(true);
-              }
-            }}
-            onDragOver={(event) => {
-              if (event.dataTransfer.types.includes("Files")) {
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "copy";
-              }
-            }}
-            onDragLeave={(event) => {
-              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-                setIsUploadDragOver(false);
-              }
-            }}
-            onDrop={(event) => {
-              if (!event.dataTransfer.types.includes("Files")) return;
-              event.preventDefault();
-              void uploadToActiveFolder(event.dataTransfer.files);
-            }}
-          >
-            {isEmpty ? (
-              isFilteredEmpty ? (
-                <div className="flex flex-col gap-5">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex min-w-0 flex-1 items-center gap-5">
-                      <h2 className="shrink-0 text-[15px] font-semibold leading-none text-foreground">
-                        All items (0)
-                      </h2>
-                      <div className="h-px min-w-0 flex-1 bg-border/70" />
+                void uploadToActiveFolder(event.dataTransfer.files);
+              }}
+            >
+              {isEmpty ? (
+                isFilteredEmpty ? (
+                  <div className="flex flex-col gap-5">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex min-w-0 flex-1 items-center gap-5">
+                        <h2 className="shrink-0 text-[15px] font-semibold leading-none text-foreground">
+                          All items (0)
+                        </h2>
+                        <div className="h-px min-w-0 flex-1 bg-border/70" />
+                      </div>
+                      <div className="flex shrink-0 justify-start sm:justify-end">
+                        {libraryControls}
+                      </div>
                     </div>
-                    <div className="flex shrink-0 justify-start sm:justify-end">
-                      {libraryControls}
-                    </div>
+                    <WorkspaceLibraryEmpty
+                      variant={
+                        folderView.activeFolderId === "root" ? "root" : "folder"
+                      }
+                      title="Tidak ada dokumen yang cocok"
+                      description="Ubah filter tipe dokumen atau reset filter untuk melihat item lain."
+                      showActions={false}
+                      onCreateFolder={onCreateFolder}
+                      onCreateDocument={onCreateDocument}
+                      onCreateUrl={onCreateUrl}
+                    />
                   </div>
+                ) : (
                   <WorkspaceLibraryEmpty
-                    variant={folderView.activeFolderId === "root" ? "root" : "folder"}
-                    title="Tidak ada dokumen yang cocok"
-                    description="Ubah filter tipe dokumen atau reset filter untuk melihat item lain."
-                    showActions={false}
+                    variant={
+                      folderView.activeFolderId === "root" ? "root" : "folder"
+                    }
                     onCreateFolder={onCreateFolder}
                     onCreateDocument={onCreateDocument}
                     onCreateUrl={onCreateUrl}
                   />
-                </div>
+                )
               ) : (
-                <WorkspaceLibraryEmpty
-                  variant={folderView.activeFolderId === "root" ? "root" : "folder"}
-                  onCreateFolder={onCreateFolder}
-                  onCreateDocument={onCreateDocument}
-                  onCreateUrl={onCreateUrl}
+                <WorkspaceLibraryGrid
+                  folders={folderView.folders}
+                  artifacts={folderView.artifacts}
+                  workspaceId={workspaceId}
+                  workspaces={workspaceMoveTargets}
+                  moveTargets={moveTargets}
+                  dragArtifactId={dragArtifactId}
+                  getArtifactSelected={getArtifactSelected}
+                  onToggleArtifactContext={onToggleArtifactContext}
+                  onSetArtifactContextSelection={onSetArtifactContextSelection}
+                  onOpenFolder={openFolder}
+                  onOpenArtifact={onOpenArtifact}
+                  onRenameFolder={onRenameFolder}
+                  onDeleteFolder={onDeleteFolder}
+                  onMoveFolderToWorkspace={onMoveFolderToWorkspace}
+                  onRenameArtifact={onRenameArtifact}
+                  onDeleteArtifact={onDeleteArtifact}
+                  onMoveArtifact={onMoveArtifact}
+                  onMoveArtifactToWorkspace={onMoveArtifactToWorkspace}
+                  onDragArtifactStart={setDragArtifactId}
+                  onDragArtifactEnd={() => setDragArtifactId(null)}
+                  onDropArtifactOnFolder={(folderId) =>
+                    void handleDropOnFolder(folderId)
+                  }
+                  controls={libraryControls}
                 />
-              )
-            ) : (
-              <WorkspaceLibraryGrid
-                folders={folderView.folders}
-                artifacts={folderView.artifacts}
-                workspaceId={workspaceId}
-                workspaces={workspaceMoveTargets}
-                moveTargets={moveTargets}
-                dragArtifactId={dragArtifactId}
-                getArtifactSelected={getArtifactSelected}
-                onToggleArtifactContext={onToggleArtifactContext}
-                onSetArtifactContextSelection={onSetArtifactContextSelection}
-                onOpenFolder={openFolder}
-                onOpenArtifact={onOpenArtifact}
-                onRenameFolder={onRenameFolder}
-                onDeleteFolder={onDeleteFolder}
-                onMoveFolderToWorkspace={onMoveFolderToWorkspace}
-                onRenameArtifact={onRenameArtifact}
-                onDeleteArtifact={onDeleteArtifact}
-                onMoveArtifact={onMoveArtifact}
-                onMoveArtifactToWorkspace={onMoveArtifactToWorkspace}
-                onDragArtifactStart={setDragArtifactId}
-                onDragArtifactEnd={() => setDragArtifactId(null)}
-                onDropArtifactOnFolder={(folderId) => void handleDropOnFolder(folderId)}
-                controls={libraryControls}
-              />
-            )}
-          </div>
-        </ContextMenuTrigger>
-        <ContextMenuContent className="w-48">
-          <ContextMenuItem onSelect={openUploadPicker}>
-            <UploadIcon className="size-4" />
-            Upload file
-          </ContextMenuItem>
-          <ContextMenuSeparator />
-          <ContextMenuItem onSelect={onCreateFolder}>
-            <FolderIcon className="size-4" />
-            Folder baru
-          </ContextMenuItem>
-          <ContextMenuItem onSelect={onCreateDocument}>
-            <FileTextIcon className="size-4" />
-            Dokumen baru
-          </ContextMenuItem>
-          <ContextMenuItem onSelect={onCreateUrl}>
-            <LinkIcon className="size-4" />
-            Simpan URL
-          </ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
-    </div>
+              )}
+            </div>
+          </ContextMenuTrigger>
+          <ContextMenuContent className="w-48">
+            <ContextMenuItem onSelect={openUploadPicker}>
+              <UploadIcon className="size-4" />
+              Upload file
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem onSelect={onCreateFolder}>
+              <FolderIcon className="size-4" />
+              Folder baru
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={onCreateDocument}>
+              <FileTextIcon className="size-4" />
+              Dokumen baru
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={onCreateUrl}>
+              <LinkIcon className="size-4" />
+              Simpan URL
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
+      </div>
+      {renderDialogs?.(activeFolderId)}
+    </>
   );
 }

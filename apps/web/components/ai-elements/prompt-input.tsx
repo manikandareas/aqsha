@@ -486,8 +486,102 @@ export type PromptInputProps = Omit<
   onSubmit: (
     message: PromptInputMessage,
     event: FormEvent<HTMLFormElement>
-  ) => void | Promise<void>;
-};
+	  ) => void | Promise<void>;
+	};
+
+type PromptInputFileError = NonNullable<PromptInputProps["onError"]>;
+
+function getAcceptedPromptFiles(
+  fileList: File[] | FileList,
+  {
+    accept,
+    currentCount,
+    maxFileSize,
+    maxFiles,
+    onError,
+  }: {
+    accept?: string;
+    currentCount: number;
+    maxFileSize?: number;
+    maxFiles?: number;
+    onError?: PromptInputFileError;
+  },
+) {
+  const incoming = [...fileList];
+  const accepted = incoming.filter((file) => matchesPromptAccept(file, accept));
+  if (incoming.length && accepted.length === 0) {
+    onError?.({ code: "accept", message: "No files match the accepted types." });
+    return [];
+  }
+  const sized = accepted.filter((file) =>
+    maxFileSize ? file.size <= maxFileSize : true,
+  );
+  if (accepted.length > 0 && sized.length === 0) {
+    onError?.({
+      code: "max_file_size",
+      message: "All files exceed the maximum size.",
+    });
+    return [];
+  }
+
+  const capacity =
+    typeof maxFiles === "number" ? Math.max(0, maxFiles - currentCount) : undefined;
+  const capped = typeof capacity === "number" ? sized.slice(0, capacity) : sized;
+  if (typeof capacity === "number" && sized.length > capacity) {
+    onError?.({
+      code: "max_files",
+      message: "Too many files. Some were not added.",
+    });
+  }
+  return capped;
+}
+
+function matchesPromptAccept(file: File, accept?: string) {
+  if (!accept || accept.trim() === "") {
+    return true;
+  }
+
+  const patterns = accept
+    .split(",")
+    .flatMap((value) => {
+      const pattern = value.trim();
+      return pattern ? [pattern] : [];
+    });
+
+  return patterns.some((pattern) => {
+    if (pattern.endsWith("/*")) {
+      const prefix = pattern.slice(0, -1);
+      return file.type.startsWith(prefix);
+    }
+    return file.type === pattern;
+  });
+}
+
+function toPromptInputFiles(files: File[]) {
+  return files.map((file): PromptInputFile => ({
+    filename: file.name,
+    file,
+    id: nanoid(),
+    mediaType: file.type,
+    type: "file",
+    url: URL.createObjectURL(file),
+  }));
+}
+
+async function convertPromptInputFilesForSubmit(files: PromptInputFile[]) {
+  return await Promise.all(
+    files.map(async ({ id: _id, ...item }) => {
+      if (item.url?.startsWith("blob:")) {
+        const dataUrl = await convertBlobUrlToDataUrl(item.url);
+        return {
+          ...item,
+          url: dataUrl ?? item.url,
+        };
+      }
+      return item;
+    }),
+  );
+}
 
 export const PromptInput = ({
   className,
@@ -530,74 +624,17 @@ export const PromptInput = ({
     inputRef.current?.click();
   };
 
-  const matchesAccept = (f: File) => {
-      if (!accept || accept.trim() === "") {
-        return true;
-      }
-
-      const patterns = accept
-        .split(",")
-        .flatMap((s) => {
-          const pattern = s.trim();
-          return pattern ? [pattern] : [];
-        });
-
-      return patterns.some((pattern) => {
-        if (pattern.endsWith("/*")) {
-          // e.g: image/* -> image/
-          const prefix = pattern.slice(0, -1);
-          return f.type.startsWith(prefix);
-        }
-        return f.type === pattern;
-      });
-    };
-
   const addLocal = (fileList: File[] | FileList) => {
-      const incoming = [...fileList];
-      const accepted = incoming.filter((f) => matchesAccept(f));
-      if (incoming.length && accepted.length === 0) {
-        onError?.({
-          code: "accept",
-          message: "No files match the accepted types.",
-        });
-        return;
-      }
-      const withinSize = (f: File) =>
-        maxFileSize ? f.size <= maxFileSize : true;
-      const sized = accepted.filter(withinSize);
-      if (accepted.length > 0 && sized.length === 0) {
-        onError?.({
-          code: "max_file_size",
-          message: "All files exceed the maximum size.",
-        });
-        return;
-      }
-
+      const accepted = getAcceptedPromptFiles(fileList, {
+        accept,
+        currentCount: items.length,
+        maxFileSize,
+        maxFiles,
+        onError,
+      });
+      if (accepted.length === 0) return;
       setItems((prev) => {
-        const capacity =
-          typeof maxFiles === "number"
-            ? Math.max(0, maxFiles - prev.length)
-            : undefined;
-        const capped =
-          typeof capacity === "number" ? sized.slice(0, capacity) : sized;
-        if (typeof capacity === "number" && sized.length > capacity) {
-          onError?.({
-            code: "max_files",
-            message: "Too many files. Some were not added.",
-          });
-        }
-        const next: PromptInputFile[] = [];
-        for (const file of capped) {
-          next.push({
-            filename: file.name,
-            file,
-            id: nanoid(),
-            mediaType: file.type,
-            type: "file",
-            url: URL.createObjectURL(file),
-          });
-        }
-        return [...prev, ...next];
+        return [...prev, ...toPromptInputFiles(accepted)];
       });
     };
 
@@ -612,42 +649,15 @@ export const PromptInput = ({
 
   // Wrapper that validates files before calling provider's add
   const addWithProviderValidation = (fileList: File[] | FileList) => {
-      const incoming = [...fileList];
-      const accepted = incoming.filter((f) => matchesAccept(f));
-      if (incoming.length && accepted.length === 0) {
-        onError?.({
-          code: "accept",
-          message: "No files match the accepted types.",
-        });
-        return;
-      }
-      const withinSize = (f: File) =>
-        maxFileSize ? f.size <= maxFileSize : true;
-      const sized = accepted.filter(withinSize);
-      if (accepted.length > 0 && sized.length === 0) {
-        onError?.({
-          code: "max_file_size",
-          message: "All files exceed the maximum size.",
-        });
-        return;
-      }
-
-      const currentCount = files.length;
-      const capacity =
-        typeof maxFiles === "number"
-          ? Math.max(0, maxFiles - currentCount)
-          : undefined;
-      const capped =
-        typeof capacity === "number" ? sized.slice(0, capacity) : sized;
-      if (typeof capacity === "number" && sized.length > capacity) {
-        onError?.({
-          code: "max_files",
-          message: "Too many files. Some were not added.",
-        });
-      }
-
-      if (capped.length > 0) {
-        controller?.attachments.add(capped);
+      const accepted = getAcceptedPromptFiles(fileList, {
+        accept,
+        currentCount: files.length,
+        maxFileSize,
+        maxFiles,
+        onError,
+      });
+      if (accepted.length > 0) {
+        controller?.attachments.add(accepted);
       }
     };
 
@@ -813,20 +823,7 @@ export const PromptInput = ({
       }
 
       try {
-        // Convert blob URLs to data URLs asynchronously
-        const convertedFiles: Array<FileUIPart & { file?: File }> = await Promise.all(
-          files.map(async ({ id: _id, ...item }) => {
-            if (item.url?.startsWith("blob:")) {
-              const dataUrl = await convertBlobUrlToDataUrl(item.url);
-              // If conversion failed, keep the original blob URL
-              return {
-                ...item,
-                url: dataUrl ?? item.url,
-              };
-            }
-            return item;
-          })
-        );
+        const convertedFiles = await convertPromptInputFilesForSubmit(files);
 
         const result = onSubmit({ files: convertedFiles, text }, event);
 
@@ -853,22 +850,76 @@ export const PromptInput = ({
       }
     };
 
-  // Render with or without local provider
-  const inner = (
+  return (
+    <PromptInputProviders attachments={attachmentsCtx} references={refsCtx}>
+      <PromptInputShell
+        accept={accept}
+        className={className}
+        fileInputRef={inputRef}
+        formRef={formRef}
+        multiple={multiple}
+        onFileChange={addFilesFromPicker}
+        onSubmit={handleSubmit}
+        {...props}
+      >
+        {children}
+      </PromptInputShell>
+    </PromptInputProviders>
+  );
+};
+
+function PromptInputProviders({
+  attachments,
+  children,
+  references,
+}: PropsWithChildren<{
+  attachments: AttachmentsContext;
+  references: ReferencedSourcesContext;
+}>) {
+  return (
+    <LocalAttachmentsContext.Provider value={attachments}>
+      <LocalReferencedSourcesContext.Provider value={references}>
+        {children}
+      </LocalReferencedSourcesContext.Provider>
+    </LocalAttachmentsContext.Provider>
+  );
+}
+
+function PromptInputShell({
+  accept,
+  children,
+  className,
+  fileInputRef,
+  formRef,
+  multiple,
+  onFileChange,
+  onSubmit,
+  ...props
+}: PropsWithChildren<
+  HTMLAttributes<HTMLFormElement> & {
+    accept?: string;
+    fileInputRef: RefObject<HTMLInputElement | null>;
+    formRef: RefObject<HTMLFormElement | null>;
+    multiple?: boolean;
+    onFileChange: ChangeEventHandler<HTMLInputElement>;
+    onSubmit: FormEventHandler<HTMLFormElement>;
+  }
+>) {
+  return (
     <>
       <input
         accept={accept}
         aria-label="Upload files"
         className="hidden"
         multiple={multiple}
-        onChange={addFilesFromPicker}
-        ref={inputRef}
+        onChange={onFileChange}
+        ref={fileInputRef}
         title="Upload files"
         type="file"
       />
       <form
         className={cn("w-full", className)}
-        onSubmit={handleSubmit}
+        onSubmit={onSubmit}
         ref={formRef}
         {...props}
       >
@@ -878,20 +929,7 @@ export const PromptInput = ({
       </form>
     </>
   );
-
-  const withReferencedSources = (
-    <LocalReferencedSourcesContext.Provider value={refsCtx}>
-      {inner}
-    </LocalReferencedSourcesContext.Provider>
-  );
-
-  // Always provide LocalAttachmentsContext so children get validated add function
-  return (
-    <LocalAttachmentsContext.Provider value={attachmentsCtx}>
-      {withReferencedSources}
-    </LocalAttachmentsContext.Provider>
-  );
-};
+}
 
 export type PromptInputBodyProps = HTMLAttributes<HTMLDivElement>;
 

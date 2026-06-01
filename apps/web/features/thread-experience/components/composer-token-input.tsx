@@ -252,8 +252,6 @@ export function TokenizedPromptInput({
 
   const showPlaceholder = isEditorEmpty;
 
-  let flatIndex = 0;
-
   return (
     <Popover open={commandOpen} modal={false}>
       <PopoverAnchor asChild>
@@ -308,62 +306,85 @@ export function TokenizedPromptInput({
           focusEditor();
         }}
       >
-        <Command shouldFilter={false} className="rounded-lg p-0">
-          <CommandList id="composer-slash-commands" className="max-h-[17rem] py-1">
-            {filteredCommands.length === 0 ? (
-              <p className="px-3 py-2 text-[11px] text-muted-foreground">
-                Tidak ada perintah yang cocok.
-              </p>
-            ) : (
-              promptCommandGroups.map((group) => {
-                const groupCommands = filteredCommands.filter((item) => item.group === group);
-                if (groupCommands.length === 0) {
-                  return null;
-                }
-                return (
-                  <CommandGroup
-                    key={group}
-                    heading={group}
-                    className="border-b border-border/70 p-1 last:border-b-0 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pb-0.5 [&_[cmdk-group-heading]]:pt-0 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:leading-3"
-                  >
-                    {groupCommands.map((item) => {
-                      const itemIndex = flatIndex;
-                      flatIndex += 1;
-                      const isHighlighted = itemIndex === highlightedIndex;
-                      return (
-                        <CommandItem
-                          key={item.id}
-                          value={item.id}
-                          onSelect={() => handleSelectCommand(item)}
-                          onMouseEnter={() => setHighlightedIndex(itemIndex)}
-                          className={cn(
-                            "min-h-9 items-start gap-2 rounded-md px-2 py-1.5 text-[13px]",
-                            isHighlighted && "bg-accent text-accent-foreground",
-                          )}
-                        >
-                          <span className="min-w-0 flex-1 space-y-1">
-                            <span className="block truncate font-medium leading-4">
-                              {item.slug}
-                            </span>
-                            <span className="block whitespace-normal text-[10px] leading-3 text-muted-foreground">
-                              {item.description}
-                            </span>
-                          </span>
-                          {item.mode === "deep" ? (
-                            <span className="shrink-0 rounded-full bg-lavender-soft px-1.5 py-0.5 text-[10px] font-semibold text-lavender-foreground">
-                              Deep
-                            </span>
-                          ) : null}
-                        </CommandItem>
-                      );
-                    })}
-                  </CommandGroup>
-                );
-              })
-            )}
-          </CommandList>
-        </Command>
+        <SlashCommandPalette
+          commands={filteredCommands}
+          highlightedIndex={highlightedIndex}
+          onHighlight={setHighlightedIndex}
+          onSelect={handleSelectCommand}
+        />
       </PopoverContent>
     </Popover>
+  );
+}
+
+function SlashCommandPalette({
+  commands,
+  highlightedIndex,
+  onHighlight,
+  onSelect,
+}: {
+  commands: PromptCommand[];
+  highlightedIndex: number;
+  onHighlight: (index: number) => void;
+  onSelect: (command: PromptCommand) => void;
+}) {
+  let flatIndex = 0;
+
+  return (
+    <Command shouldFilter={false} className="rounded-lg p-0">
+      <CommandList id="composer-slash-commands" className="max-h-[17rem] py-1">
+        {commands.length === 0 ? (
+          <p className="px-3 py-2 text-[11px] text-muted-foreground">
+            Tidak ada perintah yang cocok.
+          </p>
+        ) : (
+          promptCommandGroups.map((group) => {
+            const groupCommands = commands.filter((item) => item.group === group);
+            if (groupCommands.length === 0) {
+              return null;
+            }
+            return (
+              <CommandGroup
+                key={group}
+                heading={group}
+                className="border-b border-border/70 p-1 last:border-b-0 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pb-0.5 [&_[cmdk-group-heading]]:pt-0 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:leading-3"
+              >
+                {groupCommands.map((item) => {
+                  const itemIndex = flatIndex;
+                  flatIndex += 1;
+                  const isHighlighted = itemIndex === highlightedIndex;
+                  return (
+                    <CommandItem
+                      key={item.id}
+                      value={item.id}
+                      onSelect={() => onSelect(item)}
+                      onMouseEnter={() => onHighlight(itemIndex)}
+                      className={cn(
+                        "min-h-9 items-start gap-2 rounded-md px-2 py-1.5 text-[13px]",
+                        isHighlighted && "bg-accent text-accent-foreground",
+                      )}
+                    >
+                      <span className="min-w-0 flex-1 space-y-1">
+                        <span className="block truncate font-medium leading-4">
+                          {item.slug}
+                        </span>
+                        <span className="block whitespace-normal text-[10px] leading-3 text-muted-foreground">
+                          {item.description}
+                        </span>
+                      </span>
+                      {item.mode === "deep" ? (
+                        <span className="shrink-0 rounded-full bg-lavender-soft px-1.5 py-0.5 text-[10px] font-semibold text-lavender-foreground">
+                          Deep
+                        </span>
+                      ) : null}
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            );
+          })
+        )}
+      </CommandList>
+    </Command>
   );
 }

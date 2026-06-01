@@ -65,8 +65,6 @@ export function WorkspaceLibrarySurface({
   titleSlot,
   libraryData,
   dialogState,
-  activeFolderId,
-  onActiveFolderChange,
   getArtifactSelected,
   onToggleArtifactContext,
   onSetArtifactContextSelection,
@@ -84,8 +82,6 @@ export function WorkspaceLibrarySurface({
   titleSlot?: ReactNode;
   libraryData: LibraryDataProps;
   dialogState: DialogState;
-  activeFolderId: "root" | string;
-  onActiveFolderChange: (folderId: "root" | string) => void;
   getArtifactSelected: (artifactId: string) => boolean;
   onToggleArtifactContext: (artifactId: string) => void;
   onSetArtifactContextSelection: (artifactIds: string[]) => void;
@@ -127,7 +123,6 @@ export function WorkspaceLibrarySurface({
         workspaceEmoji={currentWorkspaceEmoji}
         workspaceId={workspaceId}
         titleSlot={titleSlot}
-        onActiveFolderChange={onActiveFolderChange}
         folders={libraryData.folders}
         artifacts={libraryData.artifacts}
         searchQuery={libraryControls.q}
@@ -201,13 +196,15 @@ export function WorkspaceLibrarySurface({
         onToggleLeftSidebar={onToggleLeftSidebar}
         showCreateActions={showCreateActions}
         showWorkspaceSettings={showWorkspaceSettings}
-      />
-      <WorkspaceLibraryDialogsStack
-        workspaceId={workspaceId}
-        activeFolderId={activeFolderId}
-        mutations={libraryMutations}
-        dialogState={dialogState}
-        onAfterArchive={onAfterArchive}
+        renderDialogs={(activeFolderId) => (
+          <WorkspaceLibraryDialogsStack
+            workspaceId={workspaceId}
+            activeFolderId={activeFolderId}
+            mutations={libraryMutations}
+            dialogState={dialogState}
+            onAfterArchive={onAfterArchive}
+          />
+        )}
       />
     </>
   );

@@ -13,7 +13,15 @@ import {
   SearchIcon,
 } from "@aqsha/ui/icons";
 import Link from "next/link";
-import { FormEvent, useEffect, useReducer, useRef, useState } from "react";
+import {
+  type Dispatch,
+  type FormEvent,
+  type RefObject,
+  useEffect,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import {
   Popover,
   PopoverContent,
@@ -59,6 +67,8 @@ type ExplorePageAction =
   | { type: "started" }
   | { type: "succeeded"; response: ExploreSearchResponse; submittedQuery: string }
   | { type: "failed"; error: string };
+
+type ExplorePageDispatch = Dispatch<ExplorePageAction>;
 
 const suggestedQueries = [
   "AI tutoring formative assessment",
@@ -240,122 +250,20 @@ export function ExplorePage() {
             </p>
           </header>
 
-          <section className="mt-8 border-b border-border/80">
-            <div className="flex min-h-12 items-end justify-between gap-3">
-              <div
-                className="flex min-w-0 flex-1 items-end gap-2.5 overflow-x-auto overflow-y-hidden"
-                aria-label="Explore mode"
-              >
-                {exploreModes.map((mode) => (
-                  <ExploreModeButton
-                    key={mode.value}
-                    active={activeTab === mode.value}
-                    onClick={() =>
-                      dispatch({
-                        type: "activeTabChanged",
-                        activeTab: mode.value,
-                      })
-                    }
-                  >
-                    {mode.label}
-                  </ExploreModeButton>
-                ))}
-              </div>
-              <div className="mb-1.5 flex shrink-0 items-center justify-end gap-1.5">
-                <form
-                  ref={searchFormRef}
-                  onSubmit={handleSubmit}
-                  className={cn(
-                    "flex h-9 items-center justify-end rounded-[8px] transition-all",
-                    searchOpen
-                      ? "w-[220px] border border-border/80 bg-card/50 px-2 sm:w-[300px]"
-                      : "w-9",
-                  )}
-                >
-                  {searchOpen ? (
-                    <label htmlFor="explore-search" className="sr-only">
-                      Search papers
-                    </label>
-                  ) : null}
-                  <input
-                    ref={searchInputRef}
-                    id="explore-search"
-                    value={query}
-                    onChange={(event) => dispatch({ type: "queryChanged", query: event.target.value })}
-                    placeholder="Contoh: agile. Enter untuk mencari"
-                    className={cn(
-                      "h-8 min-w-0 flex-1 bg-transparent text-[13px] font-medium text-foreground outline-none placeholder:text-muted-foreground",
-                      !searchOpen && "sr-only",
-                    )}
-                  />
-                  {searchOpen ? (
-                    <span
-                      className="inline-flex size-9 shrink-0 items-center justify-center rounded-[8px] text-muted-foreground"
-                      aria-hidden="true"
-                    >
-                      {isLoading ? (
-                        <Loader2Icon className="size-4 animate-spin" />
-                      ) : (
-                        <SearchIcon className="size-5" strokeWidth={2} />
-                      )}
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        dispatch({ type: "searchOpenChanged", searchOpen: true });
-                      }}
-                      className="inline-flex size-9 shrink-0 items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                      aria-label="Open search"
-                    >
-                      <SearchIcon className="size-5" strokeWidth={2} />
-                    </button>
-                  )}
-                </form>
-                <Popover open={timeRangeOpen} onOpenChange={setTimeRangeOpen}>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className={cn(
-                        "relative inline-flex size-9 shrink-0 items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-                        activeTimeRange !== "all" && "bg-muted text-foreground",
-                      )}
-                      aria-label={`Filter papers by date: ${activeTimeRangeLabel}`}
-                    >
-                      <FilterIcon className="size-4.5" strokeWidth={2} />
-                      {activeTimeRange !== "all" ? (
-                        <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-foreground" />
-                      ) : null}
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent align="end" className="w-52 p-1.5">
-                    <div className="px-2 py-1.5">
-                      <p className="text-[12px] font-semibold text-muted-foreground">
-                        Date Range
-                      </p>
-                    </div>
-                    <div className="grid gap-1">
-                      {exploreTimeRanges.map((range) => (
-                        <TimeRangeOptionButton
-                          key={range.value}
-                          active={activeTimeRange === range.value}
-                          onClick={() => {
-                            dispatch({
-                              type: "activeTimeRangeChanged",
-                              activeTimeRange: range.value,
-                            });
-                            setTimeRangeOpen(false);
-                          }}
-                        >
-                          {range.label}
-                        </TimeRangeOptionButton>
-                      ))}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </div>
-          </section>
+          <ExploreToolbar
+            activeTab={activeTab}
+            activeTimeRange={activeTimeRange}
+            activeTimeRangeLabel={activeTimeRangeLabel}
+            dispatch={dispatch}
+            isLoading={isLoading}
+            query={query}
+            searchFormRef={searchFormRef}
+            searchInputRef={searchInputRef}
+            searchOpen={searchOpen}
+            timeRangeOpen={timeRangeOpen}
+            onSubmit={handleSubmit}
+            onTimeRangeOpenChange={setTimeRangeOpen}
+          />
 
           {error ? (
             <div className="mt-5 max-w-[760px] rounded-[7px] border border-destructive/20 bg-destructive/10 px-4 py-3 text-[13px] font-medium text-destructive">
@@ -363,48 +271,22 @@ export function ExplorePage() {
             </div>
           ) : null}
 
-          {isLoading ? (
-            <ExploreSkeletonList activeTab={activeTab} />
-          ) : visiblePapers.length ? (
-            activeTab === "recommended" ? (
-              <section className="grid gap-10 pt-7 lg:grid-cols-[minmax(0,1fr)_260px] lg:gap-10">
-                <div className="min-w-0 divide-y divide-border/60">
-                  {visiblePapers.map((paper, index) => (
-                    <PaperListItem
-                      key={paper.key}
-                      index={index}
-                      paper={paper}
-                      saved={savedKeys.has(paper.key)}
-                      variant="recommended"
-                      onSave={() => dispatch({ type: "selectedPaperChanged", paper })}
-                    />
-                  ))}
-                </div>
-                <TopTopics topics={topTopics} />
-              </section>
-            ) : (
-              <section className="pt-7">
-                <div className="divide-y divide-border/60">
-                  {visiblePapers.map((paper, index) => (
-                    <PaperListItem
-                      key={paper.key}
-                      index={index}
-                      paper={paper}
-                      saved={savedKeys.has(paper.key)}
-                      variant="browse"
-                      onSave={() => dispatch({ type: "selectedPaperChanged", paper })}
-                    />
-                  ))}
-                </div>
-              </section>
-            )
-          ) : (
-            <ExploreEmptyState query={submittedQuery} onPick={(suggestion) => {
+          <ExploreResults
+            activeTab={activeTab}
+            isLoading={isLoading}
+            papers={visiblePapers}
+            savedKeys={savedKeys}
+            submittedQuery={submittedQuery}
+            topTopics={topTopics}
+            onPickSuggestion={(suggestion) => {
               dispatch({ type: "queryChanged", query: suggestion });
               dispatch({ type: "searchOpenChanged", searchOpen: true });
               void runSearch(suggestion);
-            }} />
-          )}
+            }}
+            onSelectPaper={(paper) => {
+              dispatch({ type: "selectedPaperChanged", paper });
+            }}
+          />
         </div>
       </main>
       <WorkspacePickerDialog
@@ -438,6 +320,289 @@ function ExploreModeButton({
     >
       {children}
     </button>
+  );
+}
+
+function ExploreToolbar({
+  activeTab,
+  activeTimeRange,
+  activeTimeRangeLabel,
+  dispatch,
+  isLoading,
+  query,
+  searchFormRef,
+  searchInputRef,
+  searchOpen,
+  timeRangeOpen,
+  onSubmit,
+  onTimeRangeOpenChange,
+}: {
+  activeTab: ExploreTab;
+  activeTimeRange: ExploreTimeRange;
+  activeTimeRangeLabel: string;
+  dispatch: ExplorePageDispatch;
+  isLoading: boolean;
+  query: string;
+  searchFormRef: RefObject<HTMLFormElement | null>;
+  searchInputRef: RefObject<HTMLInputElement | null>;
+  searchOpen: boolean;
+  timeRangeOpen: boolean;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onTimeRangeOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <section className="mt-8 border-b border-border/80">
+      <div className="flex min-h-12 items-end justify-between gap-3">
+        <div
+          className="flex min-w-0 flex-1 items-end gap-2.5 overflow-x-auto overflow-y-hidden"
+          aria-label="Explore mode"
+        >
+          {exploreModes.map((mode) => (
+            <ExploreModeButton
+              key={mode.value}
+              active={activeTab === mode.value}
+              onClick={() =>
+                dispatch({
+                  type: "activeTabChanged",
+                  activeTab: mode.value,
+                })
+              }
+            >
+              {mode.label}
+            </ExploreModeButton>
+          ))}
+        </div>
+        <div className="mb-1.5 flex shrink-0 items-center justify-end gap-1.5">
+          <ExploreSearchForm
+            dispatch={dispatch}
+            formRef={searchFormRef}
+            inputRef={searchInputRef}
+            isLoading={isLoading}
+            open={searchOpen}
+            query={query}
+            onSubmit={onSubmit}
+          />
+          <ExploreTimeRangePopover
+            activeTimeRange={activeTimeRange}
+            activeTimeRangeLabel={activeTimeRangeLabel}
+            dispatch={dispatch}
+            open={timeRangeOpen}
+            onOpenChange={onTimeRangeOpenChange}
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ExploreSearchForm({
+  dispatch,
+  formRef,
+  inputRef,
+  isLoading,
+  open,
+  query,
+  onSubmit,
+}: {
+  dispatch: ExplorePageDispatch;
+  formRef: RefObject<HTMLFormElement | null>;
+  inputRef: RefObject<HTMLInputElement | null>;
+  isLoading: boolean;
+  open: boolean;
+  query: string;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form
+      ref={formRef}
+      onSubmit={onSubmit}
+      className={cn(
+        "flex h-9 items-center justify-end rounded-[8px] transition-all",
+        open
+          ? "w-[220px] border border-border/80 bg-card/50 px-2 sm:w-[300px]"
+          : "w-9",
+      )}
+    >
+      {open ? (
+        <label htmlFor="explore-search" className="sr-only">
+          Search papers
+        </label>
+      ) : null}
+      <input
+        ref={inputRef}
+        id="explore-search"
+        value={query}
+        onChange={(event) =>
+          dispatch({ type: "queryChanged", query: event.target.value })
+        }
+        placeholder="Contoh: agile. Enter untuk mencari"
+        className={cn(
+          "h-8 min-w-0 flex-1 bg-transparent text-[13px] font-medium text-foreground outline-none placeholder:text-muted-foreground",
+          !open && "sr-only",
+        )}
+      />
+      {open ? (
+        <span
+          className="inline-flex size-9 shrink-0 items-center justify-center rounded-[8px] text-muted-foreground"
+          aria-hidden="true"
+        >
+          {isLoading ? (
+            <Loader2Icon className="size-4 animate-spin" />
+          ) : (
+            <SearchIcon className="size-5" strokeWidth={2} />
+          )}
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            dispatch({ type: "searchOpenChanged", searchOpen: true });
+          }}
+          className="inline-flex size-9 shrink-0 items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label="Open search"
+        >
+          <SearchIcon className="size-5" strokeWidth={2} />
+        </button>
+      )}
+    </form>
+  );
+}
+
+function ExploreTimeRangePopover({
+  activeTimeRange,
+  activeTimeRangeLabel,
+  dispatch,
+  open,
+  onOpenChange,
+}: {
+  activeTimeRange: ExploreTimeRange;
+  activeTimeRangeLabel: string;
+  dispatch: ExplorePageDispatch;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "relative inline-flex size-9 shrink-0 items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+            activeTimeRange !== "all" && "bg-muted text-foreground",
+          )}
+          aria-label={`Filter papers by date: ${activeTimeRangeLabel}`}
+        >
+          <FilterIcon className="size-4.5" strokeWidth={2} />
+          {activeTimeRange !== "all" ? (
+            <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-foreground" />
+          ) : null}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-52 p-1.5">
+        <div className="px-2 py-1.5">
+          <p className="text-[12px] font-semibold text-muted-foreground">
+            Date Range
+          </p>
+        </div>
+        <div className="grid gap-1">
+          {exploreTimeRanges.map((range) => (
+            <TimeRangeOptionButton
+              key={range.value}
+              active={activeTimeRange === range.value}
+              onClick={() => {
+                dispatch({
+                  type: "activeTimeRangeChanged",
+                  activeTimeRange: range.value,
+                });
+                onOpenChange(false);
+              }}
+            >
+              {range.label}
+            </TimeRangeOptionButton>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function ExploreResults({
+  activeTab,
+  isLoading,
+  papers,
+  savedKeys,
+  submittedQuery,
+  topTopics,
+  onPickSuggestion,
+  onSelectPaper,
+}: {
+  activeTab: ExploreTab;
+  isLoading: boolean;
+  papers: ExplorePaper[];
+  savedKeys: Set<string>;
+  submittedQuery: string;
+  topTopics: Array<{ name: string; count: number }>;
+  onPickSuggestion: (suggestion: string) => void;
+  onSelectPaper: (paper: ExplorePaper) => void;
+}) {
+  if (isLoading) {
+    return <ExploreSkeletonList activeTab={activeTab} />;
+  }
+
+  if (papers.length === 0) {
+    return <ExploreEmptyState query={submittedQuery} onPick={onPickSuggestion} />;
+  }
+
+  if (activeTab === "recommended") {
+    return (
+      <section className="grid gap-10 pt-7 lg:grid-cols-[minmax(0,1fr)_260px] lg:gap-10">
+        <ExplorePaperList
+          papers={papers}
+          savedKeys={savedKeys}
+          variant="recommended"
+          onSelectPaper={onSelectPaper}
+        />
+        <TopTopics topics={topTopics} />
+      </section>
+    );
+  }
+
+  return (
+    <section className="pt-7">
+      <ExplorePaperList
+        papers={papers}
+        savedKeys={savedKeys}
+        variant="browse"
+        onSelectPaper={onSelectPaper}
+      />
+    </section>
+  );
+}
+
+function ExplorePaperList({
+  papers,
+  savedKeys,
+  variant,
+  onSelectPaper,
+}: {
+  papers: ExplorePaper[];
+  savedKeys: Set<string>;
+  variant: "recommended" | "browse";
+  onSelectPaper: (paper: ExplorePaper) => void;
+}) {
+  return (
+    <div className="min-w-0 divide-y divide-border/60">
+      {papers.map((paper, index) => (
+        <PaperListItem
+          key={paper.key}
+          index={index}
+          paper={paper}
+          saved={savedKeys.has(paper.key)}
+          variant={variant}
+          onSave={() => onSelectPaper(paper)}
+        />
+      ))}
+    </div>
   );
 }
 

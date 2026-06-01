@@ -65,12 +65,13 @@ function SidebarProvider({
   onOpenChange?: (open: boolean) => void;
 }) {
   const isMobile = useIsMobile();
-  const [openMobile, setOpenMobile] = React.useState(false);
+  const [_openMobile, _setOpenMobile] = React.useState(false);
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
   const [_open, _setOpen] = React.useState(defaultOpen);
   const open = openProp ?? _open;
+  const openMobile = openProp ?? _openMobile;
   const setOpen = (value: boolean | ((value: boolean) => boolean)) => {
     const openState = typeof value === "function" ? value(open) : value;
     if (setOpenProp) {
@@ -82,6 +83,14 @@ function SidebarProvider({
     // This sets the cookie to keep the sidebar state.
     document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
   };
+  const setOpenMobile = (value: boolean | ((value: boolean) => boolean)) => {
+    const openState = typeof value === "function" ? value(openMobile) : value;
+    if (setOpenProp) {
+      setOpenProp(openState);
+    } else {
+      _setOpenMobile(openState);
+    }
+  };
 
   // Helper to toggle the sidebar.
   const toggleSidebar = () => {
@@ -89,30 +98,34 @@ function SidebarProvider({
   };
 
   // Adds a keyboard shortcut to toggle the sidebar.
+  const handleSidebarShortcut = React.useEffectEvent((event: KeyboardEvent) => {
+    if (
+      event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
+      (event.metaKey || event.ctrlKey)
+    ) {
+      event.preventDefault();
+      if (isMobile) {
+        setOpenMobile((open) => !open);
+        return;
+      }
+      const openState = !open;
+      if (setOpenProp) {
+        setOpenProp(openState);
+      } else {
+        _setOpen(openState);
+      }
+      document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
+    }
+  });
+
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (
-        event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
-        (event.metaKey || event.ctrlKey)
-      ) {
-        event.preventDefault();
-        if (isMobile) {
-          setOpenMobile((open) => !open);
-          return;
-        }
-        const openState = !open;
-        if (setOpenProp) {
-          setOpenProp(openState);
-        } else {
-          _setOpen(openState);
-        }
-        document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
-      }
+      handleSidebarShortcut(event);
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isMobile, open, setOpenProp]);
+  }, []);
 
   // We add a state so that we can do data-state="expanded" or "collapsed".
   // This makes it easier to style the sidebar with Tailwind classes.

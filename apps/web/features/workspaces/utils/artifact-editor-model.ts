@@ -14,6 +14,7 @@ export type AutosaveState = {
 };
 
 export type AutosaveEvent =
+  | { type: "reset"; json: string }
   | { type: "changed"; json: string }
   | { type: "saving" }
   | { type: "saved"; json: string }
@@ -44,6 +45,13 @@ export function blockNotePlainText(blocks: BlockNoteBlockLike[]) {
 
 export function autosaveReducer(state: AutosaveState, event: AutosaveEvent): AutosaveState {
   switch (event.type) {
+    case "reset":
+      return {
+        status: "idle",
+        lastSavedJson: event.json,
+        pendingJson: event.json,
+        error: null,
+      };
     case "changed":
       if (event.json === state.lastSavedJson) {
         return { ...state, status: "saved", pendingJson: event.json, error: null };

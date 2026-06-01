@@ -74,8 +74,17 @@ export function ArtifactDetailPage({
     detail?.artifact.workspaceId && detail.artifact.workspaceId !== workspaceId;
   const workspaceName =
     data.workspaces.find((workspace) => workspace._id === workspaceId)?.name ?? "Workspace";
-  const [documentSaveState, setDocumentSaveState] = useState<AutosaveState>(initialAutosaveState);
+  const [documentSaveState, dispatchDocumentSave] = useReducer(autosaveReducer, initialAutosaveState);
   const [renameOpen, setRenameOpen] = useState(false);
+  const markdownBlocksJson =
+    activeRenderPayload?.artifactType === "markdown"
+      ? activeRenderPayload.blocksJson
+      : null;
+
+  useEffect(() => {
+    if (markdownBlocksJson === null) return;
+    dispatchDocumentSave({ type: "reset", json: markdownBlocksJson });
+  }, [artifactId, markdownBlocksJson]);
 
   return (
     <WorkspaceShell
@@ -124,7 +133,8 @@ export function ArtifactDetailPage({
                   initialBlocksJson={activeRenderPayload.blocksJson}
                   initialMarkdown={activeRenderPayload.markdown}
                   updateDocument={data.updateDocument}
-                  onSaveStateChange={setDocumentSaveState}
+                  saveState={documentSaveState}
+                  dispatchSaveState={dispatchDocumentSave}
                 />
               ) : (
                 <TypedArtifactDetail
@@ -162,7 +172,8 @@ function DocumentArtifactDetail({
   initialBlocksJson,
   initialMarkdown,
   updateDocument,
-  onSaveStateChange,
+  saveState,
+  dispatchSaveState,
 }: {
   artifactId: string;
   initialBlocksJson: string;
@@ -173,24 +184,15 @@ function DocumentArtifactDetail({
     markdown: string;
     plainText: string;
   }) => Promise<unknown>;
-  onSaveStateChange: (state: AutosaveState) => void;
+  saveState: AutosaveState;
+  dispatchSaveState: AutosaveDispatch;
 }) {
   const latestContent = useRef<DocumentEditorContent | null>(null);
   const lastSavedJsonRef = useRef(initialBlocksJson);
   const saveInFlightRef = useRef(false);
   const queuedSaveRef = useRef(false);
-  const [state, dispatch] = useReducer(autosaveReducer, {
-    ...initialAutosaveState,
-    lastSavedJson: initialBlocksJson,
-    pendingJson: initialBlocksJson,
-  });
-
   useEffect(() => {
-    onSaveStateChange(state);
-  }, [onSaveStateChange, state]);
-
-  useEffect(() => {
-    if (state.status !== "dirty") return;
+    if (saveState.status !== "dirty") return;
     const timeout = window.setTimeout(() => {
       void saveLatestDocumentContent({
         artifactId,
@@ -198,12 +200,18 @@ function DocumentArtifactDetail({
         lastSavedJsonRef,
         saveInFlightRef,
         queuedSaveRef,
-        dispatch,
+        dispatch: dispatchSaveState,
         updateDocument,
       });
     }, 700);
     return () => window.clearTimeout(timeout);
-  }, [artifactId, state.pendingJson, state.status, updateDocument]);
+  }, [
+    artifactId,
+    dispatchSaveState,
+    saveState.pendingJson,
+    saveState.status,
+    updateDocument,
+  ]);
 
   return (
     <div className="grid w-full gap-3">
@@ -212,7 +220,7 @@ function DocumentArtifactDetail({
         initialMarkdown={initialMarkdown}
         onContentChange={(content) => {
           latestContent.current = content;
-          dispatch({ type: "changed", json: content.blocksJson });
+          dispatchSaveState({ type: "changed", json: content.blocksJson });
         }}
       />
     </div>

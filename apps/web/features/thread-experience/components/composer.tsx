@@ -240,9 +240,14 @@ function ComposerContent(props: ComposerProps) {
     setIsSending(true);
     const submittedCommands = inlineCommands;
     try {
-      const { attachments: uploadedArtifacts, pendingAttachments } = await uploadAttachments(
-        message?.files ?? [],
-      );
+      const { attachments: uploadedArtifacts, pendingAttachments } =
+        await uploadComposerAttachments({
+          createThreadAttachment,
+          files: message?.files ?? [],
+          generateUploadUrl,
+          setUploadError,
+          threadId,
+        });
       const fallbackContent =
         (uploadedArtifacts.length > 0 || pendingAttachments.length > 0) &&
         content.trim().length === 0
@@ -306,93 +311,6 @@ function ComposerContent(props: ComposerProps) {
     }
   };
 
-  const uploadAttachments = async (
-    files: Array<PromptInputMessage["files"][number]>,
-  ): Promise<{
-    attachments: Array<{ artifactId: ArtifactId; title: string }>;
-    pendingAttachments: Array<{
-      storageId: StorageId;
-      fileName: string;
-      mimeType: string;
-      size: number;
-    }>;
-  }> => {
-    if (files.length === 0) {
-      return { attachments: [], pendingAttachments: [] };
-    }
-
-    const uploadedFiles = await Promise.all(files.map(async (filePart) => {
-      const file = filePart.file;
-      if (!file) {
-        const message = "File attachment tidak bisa dibaca. Pilih ulang file tersebut.";
-        setUploadError(message);
-        throw new Error(message);
-      }
-      const uploadUrl = await generateUploadUrl(
-        threadId ? { threadId } : {},
-      );
-      const response = await fetch(uploadUrl, {
-        method: "POST",
-        headers: { "Content-Type": file.type || "application/octet-stream" },
-        body: file,
-      });
-      if (!response.ok) {
-        const message = `Upload gagal untuk ${file.name}.`;
-        setUploadError(message);
-        throw new Error(message);
-      }
-      const body = (await response.json()) as { storageId?: string };
-      if (!body.storageId) {
-        const message = `Storage ID tidak tersedia untuk ${file.name}.`;
-        setUploadError(message);
-        throw new Error(message);
-      }
-
-      if (threadId) {
-        const artifact = await createThreadAttachment({
-          threadId,
-          storageId: body.storageId as never,
-          fileName: file.name,
-          mimeType: file.type || filePart.mediaType || "application/octet-stream",
-          size: file.size,
-        });
-        return {
-          kind: "artifact" as const,
-          artifactId: toArtifactId(String(artifact.artifactId)),
-          title: artifact.title,
-        };
-      }
-
-      return {
-        kind: "pending" as const,
-        storageId: toStorageId(body.storageId),
-        fileName: file.name,
-        mimeType: file.type || filePart.mediaType || "application/octet-stream",
-        size: file.size,
-      };
-    }));
-
-    const attachments = uploadedFiles.flatMap((file) =>
-      file.kind === "artifact"
-        ? [{ artifactId: file.artifactId, title: file.title }]
-        : [],
-    );
-    const pendingAttachments = uploadedFiles.flatMap((file) =>
-      file.kind === "pending"
-        ? [
-            {
-              storageId: file.storageId,
-              fileName: file.fileName,
-              mimeType: file.mimeType,
-              size: file.size,
-            },
-          ]
-        : [],
-    );
-
-    return { attachments, pendingAttachments };
-  };
-
   const requestFormSubmit = () => {
     if (canSend) {
       const activeElement = document.activeElement;
@@ -432,107 +350,38 @@ function ComposerContent(props: ComposerProps) {
           onSubmit={(message) => handleSubmit(message)}
           className="flex flex-col justify-between overflow-hidden bg-transparent text-left has-disabled:opacity-100"
         >
-          {isRateLimited || billingBlock ? (
-            <div className="grid gap-2 border-b border-border/60 px-4 py-2.5">
-              {isRateLimited ? (
-                <div className="rounded-lg border border-lemon-soft-border bg-lemon-soft px-2.5 py-2 text-[11px] font-medium leading-5 text-lemon-foreground animate-in slide-in-from-top-2 duration-200">
-                  Perlu istirahat sebentar. Coba lagi dalam {retrySeconds || 1} detik.
-                </div>
-              ) : null}
-              {billingBlock ? (
-                <div className="rounded-lg border border-coral-soft-border bg-coral-soft px-2.5 py-2 text-[11px] font-medium leading-5 text-coral-foreground animate-in slide-in-from-top-2 duration-200">
-                  {billingBlock.reason === "quota_exceeded"
-                    ? `Credits habis. Reset ${billingBlock.resetAt ? formatDate(billingBlock.resetAt) : "periode berikutnya"}.`
-                    : billingBlock.reason === "subscription_required"
-                      ? `Butuh plan ${billingBlock.requiredPlan ?? "berbayar"} untuk mode ini.`
-                      : "Billing belum aktif. Periksa subscription di halaman Billing."}{" "}
-                  <Link href="/app/settings/usage-billing" className="font-semibold underline underline-offset-2">
-                    Buka Billing
-                  </Link>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          <LayoutGroup id="composer-prompt">
-            <ComposerChipRow
-              contextLabel={contextLabel}
-              contextArtifacts={contextArtifacts}
-              onRemoveContextArtifact={onRemoveContextArtifact}
-              uploadError={uploadError}
-              isSending={isSending}
-            />
-            <div
-              className={cn(
-                "flex w-full min-h-0 transition-[padding,gap] duration-[180ms] ease-[cubic-bezier(0.23,1,0.32,1)]",
-                isExpanded
-                  ? "flex-col gap-3 p-3.5 pb-2.5 pt-2"
-                  : shellExpanded
-                    ? "min-h-[46px] flex-row items-center gap-2 p-2 pl-2.5 pr-1.5"
-                    : "min-h-[46px] flex-row items-center gap-2 py-1 pl-2 pr-1.5",
-              )}
-            >
-              <div
-                className={cn(
-                  "flex min-w-0 flex-1",
-                  isExpanded ? "w-full items-start px-1" : "items-center gap-2",
-                )}
-              >
-                {!isExpanded ? (
-                  <ComposerUploadButton
-                    disabled={disabled || isInteractionLocked || isSending}
-                  />
-                ) : null}
-                <div className="min-w-0 flex-1">
-                  <TokenizedPromptInput
-                    value={content}
-                    onValueChange={setContent}
-                    onCommandsChange={(commands) => {
-                      setInlineCommands(commands);
-                      if (commands.some((command) => command.mode === "deep")) {
-                        setMode("deep");
-                      }
-                    }}
-                    onHeightChange={setEditorHeight}
-                    onSubmit={requestFormSubmit}
-                    disabled={disabled || isInteractionLocked}
-                    maxLength={8000}
-                    isCollapsed={!isExpanded}
-                    placeholder={
-                      hitlBlocking
-                        ? "Selesaikan langkah di atas terlebih dahulu…"
-                        : "Select board items, or / for voices..."
-                    }
-                    className={isExpanded ? "py-0.5" : undefined}
-                  />
-                </div>
-              </div>
-
-              <div
-                className={cn(
-                  "flex shrink-0 items-center gap-1",
-                  isExpanded ? "w-full justify-between pt-1" : "",
-                )}
-              >
-                {isExpanded ? (
-                  <ComposerUploadButton
-                    disabled={disabled || isInteractionLocked || isSending}
-                  />
-                ) : null}
-                <div className="flex shrink-0 items-center gap-1">
-                  <ModeSelector mode={mode} setMode={setMode} disabled={isInteractionLocked} />
-                  {showVoiceInput ? <MicButton disabled={disabled || isInteractionLocked} /> : null}
-                  <ComposerSubmitButton
-                    canSend={canSend}
-                    isSending={isSending}
-                    isDeepActive={isDeepActive}
-                    activeRun={activeRun}
-                    onCancelRun={onCancelRun}
-                  />
-                </div>
-              </div>
-            </div>
-          </LayoutGroup>
+          <ComposerPromptInputContent
+            activeRun={activeRun}
+            billingBlock={billingBlock}
+            canSend={canSend}
+            content={content}
+            contextArtifacts={contextArtifacts}
+            contextLabel={contextLabel}
+            disabled={disabled}
+            hitlBlocking={hitlBlocking}
+            isDeepActive={isDeepActive}
+            isExpanded={isExpanded}
+            isInteractionLocked={isInteractionLocked}
+            isRateLimited={isRateLimited}
+            isSending={isSending}
+            mode={mode}
+            retrySeconds={retrySeconds}
+            shellExpanded={shellExpanded}
+            showVoiceInput={showVoiceInput}
+            uploadError={uploadError}
+            onCancelRun={onCancelRun}
+            onCommandsChange={(commands) => {
+              setInlineCommands(commands);
+              if (commands.some((command) => command.mode === "deep")) {
+                setMode("deep");
+              }
+            }}
+            onHeightChange={setEditorHeight}
+            onRemoveContextArtifact={onRemoveContextArtifact}
+            onSubmit={requestFormSubmit}
+            onValueChange={setContent}
+            setMode={setMode}
+          />
         </PromptInput>
       </m.div>
       {showSuggestions && !disabled ? (
@@ -568,6 +417,279 @@ const composerSuggestions = [
     prompt: "Buat outline artikel ilmiah tentang penggunaan AI sebagai tutor personal.",
   },
 ] as const;
+
+async function uploadComposerAttachments({
+  createThreadAttachment,
+  files,
+  generateUploadUrl,
+  setUploadError,
+  threadId,
+}: {
+  createThreadAttachment: (args: {
+    threadId: string;
+    storageId: never;
+    fileName: string;
+    mimeType: string;
+    size: number;
+  }) => Promise<{ artifactId: unknown; title: string }>;
+  files: Array<PromptInputMessage["files"][number]>;
+  generateUploadUrl: (args: { threadId?: string }) => Promise<string>;
+  setUploadError: (message: string) => void;
+  threadId?: string;
+}): Promise<{
+  attachments: Array<{ artifactId: ArtifactId; title: string }>;
+  pendingAttachments: Array<{
+    storageId: StorageId;
+    fileName: string;
+    mimeType: string;
+    size: number;
+  }>;
+}> {
+  if (files.length === 0) {
+    return { attachments: [], pendingAttachments: [] };
+  }
+
+  const uploadedFiles = await Promise.all(files.map(async (filePart) => {
+    const file = filePart.file;
+    if (!file) {
+      const message = "File attachment tidak bisa dibaca. Pilih ulang file tersebut.";
+      setUploadError(message);
+      throw new Error(message);
+    }
+    const uploadUrl = await generateUploadUrl(threadId ? { threadId } : {});
+    const response = await fetch(uploadUrl, {
+      method: "POST",
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      body: file,
+    });
+    if (!response.ok) {
+      const message = `Upload gagal untuk ${file.name}.`;
+      setUploadError(message);
+      throw new Error(message);
+    }
+    const body = (await response.json()) as { storageId?: string };
+    if (!body.storageId) {
+      const message = `Storage ID tidak tersedia untuk ${file.name}.`;
+      setUploadError(message);
+      throw new Error(message);
+    }
+
+    if (threadId) {
+      const artifact = await createThreadAttachment({
+        threadId,
+        storageId: body.storageId as never,
+        fileName: file.name,
+        mimeType: file.type || filePart.mediaType || "application/octet-stream",
+        size: file.size,
+      });
+      return {
+        kind: "artifact" as const,
+        artifactId: toArtifactId(String(artifact.artifactId)),
+        title: artifact.title,
+      };
+    }
+
+    return {
+      kind: "pending" as const,
+      storageId: toStorageId(body.storageId),
+      fileName: file.name,
+      mimeType: file.type || filePart.mediaType || "application/octet-stream",
+      size: file.size,
+    };
+  }));
+
+  const attachments = uploadedFiles.flatMap((file) =>
+    file.kind === "artifact"
+      ? [{ artifactId: file.artifactId, title: file.title }]
+      : [],
+  );
+  const pendingAttachments = uploadedFiles.flatMap((file) =>
+    file.kind === "pending"
+      ? [
+          {
+            storageId: file.storageId,
+            fileName: file.fileName,
+            mimeType: file.mimeType,
+            size: file.size,
+          },
+        ]
+      : [],
+  );
+
+  return { attachments, pendingAttachments };
+}
+
+function ComposerPromptInputContent({
+  activeRun,
+  billingBlock,
+  canSend,
+  content,
+  contextArtifacts,
+  contextLabel,
+  disabled,
+  hitlBlocking,
+  isDeepActive,
+  isExpanded,
+  isInteractionLocked,
+  isRateLimited,
+  isSending,
+  mode,
+  retrySeconds,
+  shellExpanded,
+  showVoiceInput,
+  uploadError,
+  onCancelRun,
+  onCommandsChange,
+  onHeightChange,
+  onRemoveContextArtifact,
+  onSubmit,
+  onValueChange,
+  setMode,
+}: {
+  activeRun?: ResearchRun;
+  billingBlock: (SendResult & { ok: false }) | null;
+  canSend: boolean;
+  content: string;
+  contextArtifacts: DraftContextArtifact[];
+  contextLabel?: string;
+  disabled: boolean;
+  hitlBlocking: boolean;
+  isDeepActive: boolean;
+  isExpanded: boolean;
+  isInteractionLocked: boolean;
+  isRateLimited: boolean;
+  isSending: boolean;
+  mode: "normal" | "deep";
+  retrySeconds: number;
+  shellExpanded: boolean;
+  showVoiceInput: boolean;
+  uploadError: string | null;
+  onCancelRun?: (runId: string) => Promise<unknown>;
+  onCommandsChange: (commands: PromptCommand[]) => void;
+  onHeightChange: (height: number) => void;
+  onRemoveContextArtifact?: (artifactId: string) => void;
+  onSubmit: () => void;
+  onValueChange: (value: string) => void;
+  setMode: (mode: "normal" | "deep") => void;
+}) {
+  return (
+    <>
+      {isRateLimited || billingBlock ? (
+        <ComposerBlockingNotice
+          billingBlock={billingBlock}
+          isRateLimited={isRateLimited}
+          retrySeconds={retrySeconds}
+        />
+      ) : null}
+      <LayoutGroup id="composer-prompt">
+        <ComposerChipRow
+          contextLabel={contextLabel}
+          contextArtifacts={contextArtifacts}
+          onRemoveContextArtifact={onRemoveContextArtifact}
+          uploadError={uploadError}
+          isSending={isSending}
+        />
+        <div
+          className={cn(
+            "flex w-full min-h-0 transition-[padding,gap] duration-[180ms] ease-[cubic-bezier(0.23,1,0.32,1)]",
+            isExpanded
+              ? "flex-col gap-3 p-3.5 pb-2.5 pt-2"
+              : shellExpanded
+                ? "min-h-[46px] flex-row items-center gap-2 p-2 pl-2.5 pr-1.5"
+                : "min-h-[46px] flex-row items-center gap-2 py-1 pl-2 pr-1.5",
+          )}
+        >
+          <div
+            className={cn(
+              "flex min-w-0 flex-1",
+              isExpanded ? "w-full items-start px-1" : "items-center gap-2",
+            )}
+          >
+            {!isExpanded ? (
+              <ComposerUploadButton
+                disabled={disabled || isInteractionLocked || isSending}
+              />
+            ) : null}
+            <div className="min-w-0 flex-1">
+              <TokenizedPromptInput
+                value={content}
+                onValueChange={onValueChange}
+                onCommandsChange={onCommandsChange}
+                onHeightChange={onHeightChange}
+                onSubmit={onSubmit}
+                disabled={disabled || isInteractionLocked}
+                maxLength={8000}
+                isCollapsed={!isExpanded}
+                placeholder={
+                  hitlBlocking
+                    ? "Selesaikan langkah di atas terlebih dahulu…"
+                    : "Select board items, or / for voices..."
+                }
+                className={isExpanded ? "py-0.5" : undefined}
+              />
+            </div>
+          </div>
+
+          <div
+            className={cn(
+              "flex shrink-0 items-center gap-1",
+              isExpanded ? "w-full justify-between pt-1" : "",
+            )}
+          >
+            {isExpanded ? (
+              <ComposerUploadButton
+                disabled={disabled || isInteractionLocked || isSending}
+              />
+            ) : null}
+            <div className="flex shrink-0 items-center gap-1">
+              <ModeSelector mode={mode} setMode={setMode} disabled={isInteractionLocked} />
+              {showVoiceInput ? <MicButton disabled={disabled || isInteractionLocked} /> : null}
+              <ComposerSubmitButton
+                canSend={canSend}
+                isSending={isSending}
+                isDeepActive={isDeepActive}
+                activeRun={activeRun}
+                onCancelRun={onCancelRun}
+              />
+            </div>
+          </div>
+        </div>
+      </LayoutGroup>
+    </>
+  );
+}
+
+function ComposerBlockingNotice({
+  billingBlock,
+  isRateLimited,
+  retrySeconds,
+}: {
+  billingBlock: (SendResult & { ok: false }) | null;
+  isRateLimited: boolean;
+  retrySeconds: number;
+}) {
+  return (
+    <div className="grid gap-2 border-b border-border/60 px-4 py-2.5">
+      {isRateLimited ? (
+        <div className="rounded-lg border border-lemon-soft-border bg-lemon-soft px-2.5 py-2 text-[11px] font-medium leading-5 text-lemon-foreground animate-in slide-in-from-top-2 duration-200">
+          Perlu istirahat sebentar. Coba lagi dalam {retrySeconds || 1} detik.
+        </div>
+      ) : null}
+      {billingBlock ? (
+        <div className="rounded-lg border border-coral-soft-border bg-coral-soft px-2.5 py-2 text-[11px] font-medium leading-5 text-coral-foreground animate-in slide-in-from-top-2 duration-200">
+          {billingBlock.reason === "quota_exceeded"
+            ? `Credits habis. Reset ${billingBlock.resetAt ? formatDate(billingBlock.resetAt) : "periode berikutnya"}.`
+            : billingBlock.reason === "subscription_required"
+              ? `Butuh plan ${billingBlock.requiredPlan ?? "berbayar"} untuk mode ini.`
+              : "Billing belum aktif. Periksa subscription di halaman Billing."}{" "}
+          <Link href="/app/settings/usage-billing" className="font-semibold underline underline-offset-2">
+            Buka Billing
+          </Link>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function ComposerStartPanel({
   threads,

@@ -85,13 +85,14 @@ const idrFormatter = new Intl.NumberFormat("id-ID", {
   maximumFractionDigits: 0,
   style: "currency",
 });
+const idCountFormatter = new Intl.NumberFormat("id-ID");
 
 function formatIdr(value: number) {
   return idrFormatter.format(value).replace(/\s+/g, "");
 }
 
 function formatCount(value: number) {
-  return new Intl.NumberFormat("id-ID").format(value);
+  return idCountFormatter.format(value);
 }
 
 function planFeatureRows(planKey: PublicPlanKey) {
