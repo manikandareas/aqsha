@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { CompassIcon } from "@aqsha/ui/icons";
 import {
+  panelBodyPaddingClass,
   panelComposerPaddingClass,
   threadTranscriptColumnClass,
 } from "@/lib/panel-surface";
@@ -25,20 +26,33 @@ export function HomeStartState({
   threads,
   contextArtifacts,
   onRemoveContextArtifact,
+  onThreadCreated,
+  contextLabel,
+  compact = false,
 }: {
   rateStatus: RateStatus | undefined;
   startThread: StartThread;
   threads: ThreadSummary[];
   contextArtifacts?: DraftContextArtifact[];
   onRemoveContextArtifact?: (artifactId: string) => void;
+  onThreadCreated?: (threadId: string) => void;
+  contextLabel?: string;
+  compact?: boolean;
 }) {
   const shouldReduceMotion = useReducedMotion();
 
   return (
     <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden bg-background">
-      <div className="mx-auto flex w-full max-w-5xl flex-1 items-center justify-center px-4 py-10 sm:px-8">
+      <div
+        className={cn(
+          "mx-auto flex w-full flex-1 items-center justify-center",
+          compact
+            ? cn("max-w-none", panelBodyPaddingClass)
+            : "max-w-5xl px-4 py-10 sm:px-8",
+        )}
+      >
         <m.div
-          className="w-full max-w-2xl"
+          className={cn("w-full", compact ? "max-w-none" : "max-w-2xl")}
           initial={
             shouldReduceMotion
               ? { opacity: 0 }
@@ -52,8 +66,11 @@ export function HomeStartState({
         >
           <ComposerHeroState
             headerClassName="mb-5 gap-2"
-            logoClassName="size-12 sm:size-22"
-            titleClassName="font-sans text-2xl font-bold tracking-tight text-foreground sm:text-3xl leading-none"
+            logoClassName={compact ? "size-12 sm:size-18" : "size-12 sm:size-22"}
+            titleClassName={cn(
+              "font-sans font-bold tracking-tight text-foreground leading-none",
+              compact ? "text-xl" : "text-2xl sm:text-3xl",
+            )}
           >
             <Composer
               mode="draft"
@@ -61,15 +78,17 @@ export function HomeStartState({
               disabled={false}
               rateStatus={rateStatus}
               onStartThread={startThread}
+              onThreadCreated={onThreadCreated}
               threads={threads}
               contextArtifacts={contextArtifacts}
               onRemoveContextArtifact={onRemoveContextArtifact}
+              contextLabel={contextLabel}
               showSuggestions
             />
           </ComposerHeroState>
         </m.div>
       </div>
-      <ExploreDockLink />
+      {compact ? null : <ExploreDockLink />}
     </main>
   );
 }

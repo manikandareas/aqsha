@@ -5,25 +5,20 @@ import { Button } from "@/components/ui/button";
 import { SidebarContent, SidebarHeader } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCloseRightPanel } from "@/hooks/use-close-right-panel";
-import {
-  panelBodyPaddingClass,
-  panelHeaderPaddingClass,
-} from "@/lib/panel-surface";
+import { panelBodyPaddingClass, panelHeaderPaddingClass } from "@/lib/panel-surface";
 import {
   threadContextScopeKey,
   useDraftContextSelection,
 } from "@/lib/thread-context-draft-store";
 import { cn } from "@/lib/utils";
 import { useThreadExperienceData } from "@/features/thread-experience/api/use-thread-experience-data";
-import { ChatThreadState } from "@/features/thread-experience/components/chat-thread-state";
+import { ThreadChatSurface } from "@/features/thread-experience/components/chat-thread-state";
 import type {
   RemoveThread,
   SendMessage,
   StartThread,
   ThreadSummary,
 } from "@/features/thread-experience/components/component-types";
-import { ComposerHeroState } from "@/features/thread-experience/components/composer-hero-state";
-import { Composer } from "@/features/thread-experience/components/composer";
 import { AccessDeniedState } from "@/features/thread-experience/components/home-states";
 import { ThreadDeleteActions } from "@/features/thread-experience/components/thread-actions-menu";
 import { ThreadRecentSwitcher } from "@/features/thread-experience/components/thread-recent-switcher";
@@ -183,7 +178,7 @@ export function WorkspaceChatSidePanel({
               <AccessDeniedState />
             </div>
           ) : (
-            <ChatThreadState
+            <ThreadChatSurface
               threadId={activeThreadId}
               isLoading={activeThread === undefined}
               title={activeThread?.title}
@@ -202,59 +197,21 @@ export function WorkspaceChatSidePanel({
             />
           )
         ) : (
-          <WorkspacePanelDraftView
-            workspaceName={workspaceName}
-            contextArtifacts={contextArtifacts}
-            onRemoveContextArtifact={onRemoveContextArtifact}
+          <ThreadChatSurface
+            isLoading={false}
             rateStatus={rateStatus}
             startThread={startThread}
+            threads={threads}
+            contextArtifacts={contextArtifacts}
+            onRemoveContextArtifact={onRemoveContextArtifact}
             onThreadCreated={onActiveThreadIdChange}
+            draftContextLabel={workspaceName}
+            threadWorkspaceId={workspaceId}
+            compact
           />
         )}
       </SidebarContent>
     </>
-  );
-}
-
-function WorkspacePanelDraftView({
-  workspaceName,
-  contextArtifacts,
-  onRemoveContextArtifact,
-  rateStatus,
-  startThread,
-  onThreadCreated,
-}: {
-  workspaceName: string;
-  contextArtifacts: Array<{ artifactId: string; title: string }>;
-  onRemoveContextArtifact: (artifactId: string) => void;
-  rateStatus: RateStatus | undefined;
-  startThread: StartThread;
-  onThreadCreated: (threadId: string) => void;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex min-h-0 flex-1 flex-col justify-center overflow-y-auto",
-        panelBodyPaddingClass,
-      )}
-    >
-      <ComposerHeroState
-        logoClassName="size-12 sm:size-18"
-        titleClassName="font-sans text-xl font-bold tracking-tight text-foreground leading-none"
-        hint="Pilih item di board (klik sekali) atau ketik / untuk perintah riset"
-      >
-        <Composer
-          variant="docked"
-          contextLabel={workspaceName}
-          disabled={false}
-          rateStatus={rateStatus}
-          onStartThread={startThread}
-          onThreadCreated={onThreadCreated}
-          contextArtifacts={contextArtifacts}
-          onRemoveContextArtifact={onRemoveContextArtifact}
-        />
-      </ComposerHeroState>
-    </div>
   );
 }
 

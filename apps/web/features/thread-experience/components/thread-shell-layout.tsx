@@ -3,7 +3,7 @@
 import { AppSidebar } from "@/components/app-sidebar";
 import { DetailSplitLayout } from "@/components/layout/detail-split-layout";
 import { useSidebar } from "@/components/ui/sidebar";
-import { ChatThreadState } from "./chat-thread-state";
+import { ThreadChatSurface } from "./chat-thread-state";
 import type { ThreadShellLayoutProps } from "./component-types";
 import { AccessDeniedState } from "./home-states";
 import { ThreadHeader } from "./thread-header";
@@ -78,7 +78,7 @@ export function ThreadShellLayout({
                 {threadId && selectedThread === null ? (
                   <AccessDeniedState />
                 ) : (
-                  <ChatThreadState
+                  <ThreadChatSurface
                     threadId={threadId}
                     isLoading={threadId ? selectedThread === undefined : false}
                     title={threadId ? selectedThread?.title : undefined}

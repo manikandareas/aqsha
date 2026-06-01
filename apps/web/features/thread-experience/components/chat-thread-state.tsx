@@ -48,41 +48,49 @@ import { CenteredLoading } from "./shared";
 
 const emptyContextArtifacts: DraftContextArtifact[] = [];
 const emptyThreadSummaries: ThreadSummary[] = [];
+const emptyRuns: ResearchRun[] = [];
+const emptyArtifacts: ResearchArtifact[] = [];
+const emptySources: ResearchSource[] = [];
+const cancelNoop = async () => undefined;
 
-export function ChatThreadState({
+export function ThreadChatSurface({
   threadId,
   isLoading,
   title,
   rateStatus,
   startThread,
   onSend,
-  runs,
-  artifacts,
-  sources,
-  onCancelRun,
+  runs = emptyRuns,
+  artifacts = emptyArtifacts,
+  sources = emptySources,
+  onCancelRun = cancelNoop,
   onRetryRun,
   compact = false,
   contextArtifacts = emptyContextArtifacts,
   onRemoveContextArtifact,
   threadWorkspaceId,
   threads = emptyThreadSummaries,
+  onThreadCreated,
+  draftContextLabel,
 }: {
   threadId?: string;
   isLoading: boolean;
   title?: string;
   rateStatus: RateStatus | undefined;
   startThread: StartThread;
-  onSend: SendMessage;
-  runs: ResearchRun[];
-  artifacts: ResearchArtifact[];
-  sources: ResearchSource[];
-  onCancelRun: (runId: string) => Promise<unknown>;
+  onSend?: SendMessage;
+  runs?: ResearchRun[];
+  artifacts?: ResearchArtifact[];
+  sources?: ResearchSource[];
+  onCancelRun?: (runId: string) => Promise<unknown>;
   onRetryRun?: (args: { runId: AgentRunId }) => Promise<unknown>;
   compact?: boolean;
   contextArtifacts?: DraftContextArtifact[];
   onRemoveContextArtifact?: (artifactId: string) => void;
   threadWorkspaceId?: string;
   threads?: ThreadSummary[];
+  onThreadCreated?: (threadId: string) => void;
+  draftContextLabel?: string;
 }) {
   const { isAuthenticated } = useConvexAuth();
   const hitlSession = useConvexQueryData(
@@ -109,6 +117,9 @@ export function ChatThreadState({
         threads={threads}
         contextArtifacts={contextArtifacts}
         onRemoveContextArtifact={onRemoveContextArtifact}
+        onThreadCreated={onThreadCreated}
+        contextLabel={draftContextLabel}
+        compact={compact}
       />
     );
   }
@@ -182,7 +193,7 @@ export function ChatThreadState({
               }
             />
           ) : null}
-          {threadId ? (
+          {threadId && onSend ? (
             <Composer
               mode="thread"
               variant="docked"
