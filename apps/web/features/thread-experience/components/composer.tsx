@@ -11,12 +11,12 @@ import {
   MessageSquareIcon,
   MicIcon,
   PaperclipIcon,
-  SparklesIcon,
   SquareIcon,
   XIcon,
 } from "@aqsha/ui/icons";
 import { api } from "@aqsha/convex/api";
 import { LayoutGroup, m, useReducedMotion } from "motion/react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
@@ -917,6 +917,8 @@ function ModeSelector({
   setMode: (mode: "normal" | "deep") => void;
   disabled?: boolean;
 }) {
+  const activeMode = getModeSelectorPresentation(mode);
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -925,21 +927,66 @@ function ModeSelector({
           disabled={disabled}
           className="aqsha-composer-toolbar-btn inline-flex h-8 items-center gap-1 rounded-full bg-muted/20 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-all duration-150 cursor-pointer disabled:opacity-50"
         >
-          <span className="capitalize">{mode}</span>
+          <ModeSelectorImage src={activeMode.src} alt="" />
+          <span>{activeMode.shortLabel}</span>
           <ChevronDownIcon className="size-3 text-muted-foreground/60" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-36">
-        <DropdownMenuItem onClick={() => setMode("normal")} className="gap-2">
-          <SparklesIcon className="size-3.5 shrink-0 text-primary" />
-          <span className="font-semibold text-[11px]">Normal Mode</span>
+        <DropdownMenuItem
+          onClick={() => setMode("normal")}
+          className={cn(
+            "gap-2 data-highlighted:bg-muted/60 data-highlighted:text-foreground",
+            mode === "normal" && "bg-muted/60 font-medium text-foreground",
+          )}
+        >
+          <ModeSelectorImage src="/general-agent.png" alt="" />
+          <span className="font-semibold text-[11px]">
+            Normal Mode
+          </span>
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setMode("deep")} className="gap-2">
-          <SparklesIcon className="size-3.5 shrink-0 text-lavender" />
-          <span className="font-semibold text-[11px] text-lavender">Deep Mode</span>
+        <DropdownMenuItem
+          onClick={() => setMode("deep")}
+          className={cn(
+            "gap-2 data-highlighted:bg-muted/60 data-highlighted:text-foreground",
+            mode === "deep" && "bg-muted/60 font-medium text-foreground",
+          )}
+        >
+          <ModeSelectorImage src="/pro-agent.png" alt="" />
+          <span className="font-semibold text-[11px]">
+            Deep Mode
+          </span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function getModeSelectorPresentation(mode: "normal" | "deep") {
+  return mode === "deep"
+    ? { shortLabel: "Deep", src: "/pro-agent.png" }
+    : { shortLabel: "Normal", src: "/general-agent.png" };
+}
+
+function ModeSelectorImage({
+  src,
+  alt,
+}: {
+  src: string;
+  alt: string;
+}) {
+  return (
+    <span className="grid size-5 shrink-0 place-items-center overflow-hidden rounded-full bg-background">
+      <Image
+        src={src}
+        alt={alt}
+        width={20}
+        height={20}
+        className="size-5 object-contain"
+        draggable={false}
+        unoptimized
+      />
+    </span>
   );
 }
 
