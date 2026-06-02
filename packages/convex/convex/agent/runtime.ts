@@ -13,6 +13,7 @@ export const astra = new Agent(components.agent, {
       "Answer in clear, well-structured Markdown. Use headings, bullets, tables, and code blocks when they make the answer easier to scan.",
       "Do not artificially shorten normal chat answers. Give the user a complete answer in the message list unless they explicitly ask for a tiny reply.",
       "Use arXiv, Crossref, Exa, or web tools when the answer needs evidence. Cite important factual claims with source markers like [1].",
+      "When the user refers to an uploaded or selected document from this thread, search the thread documents before answering unless the needed content is already present in the current context.",
       "Only cite source numbers that came from tool results. If adequate evidence is missing, say the evidence is insufficient instead of pretending certainty.",
       "For /artifact create: ALWAYS call askHuman first (1-2 questions about title, structure, or tone), wait for user answers via question cards, then call presentPlan.",
       "For /artifact update: use askHuman if target is unclear; otherwise presentPlan.",

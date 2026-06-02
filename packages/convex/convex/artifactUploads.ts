@@ -137,6 +137,53 @@ export const createThreadAttachmentFromStorage = action({
   },
 });
 
+export const reindexCurrentUserUpload = action({
+  args: {
+    artifactId: v.id("artifacts"),
+  },
+  handler: async (ctx, args): Promise<{ indexed: boolean; ragEntryId?: string }> => {
+    const user = await requireCurrentUser(ctx);
+    const artifact = await ctx.runQuery(internal.artifacts.getOwnedArtifactForReindex, {
+      ownerUserId: user._id,
+      artifactId: args.artifactId,
+    });
+    if (!artifact) {
+      throw new ConvexError("Artifact not found");
+    }
+    if (artifact.source !== "upload") {
+      throw new ConvexError("Only uploaded artifacts can be reindexed");
+    }
+
+    const content = await ctx.runQuery(internal.artifacts.getArtifactContentForReindex, {
+      ownerUserId: user._id,
+      artifactId: args.artifactId,
+    });
+    const plainText = content?.plainText ?? content?.contextText ?? content?.markdown ?? "";
+    if (!plainText.trim()) {
+      throw new ConvexError("No readable text was found for this artifact");
+    }
+
+    const ragEntryId = await indexUploadedDocument(ctx, {
+      ownerUserId: user._id,
+      workspaceId: artifact.workspaceId,
+      threadId: artifact.threadId,
+      artifactId: artifact._id,
+      title: artifact.title,
+      plainText,
+    });
+
+    await ctx.runMutation(internal.artifacts.patchUploadedArtifactIndexed, {
+      ownerUserId: user._id,
+      artifactId: artifact._id,
+      markdown: content?.markdown ?? plainText,
+      plainText,
+      ragEntryId,
+    });
+
+    return { indexed: Boolean(ragEntryId), ragEntryId };
+  },
+});
+
 export const processPendingAttachmentsAndStart = internalAction({
   args: {
     ownerUserId: v.string(),
@@ -454,6 +501,7 @@ async function indexUploadedDocument(
 
   const filterValues: Array<{ name: "artifactId" | "workspaceId"; value: string }> = [
     { name: "artifactId", value: String(args.artifactId) },
+    { name: "workspaceId", value: args.workspaceId ? String(args.workspaceId) : "" },
   ];
   const metadata: ArtifactRagMetadata = {
     artifactId: String(args.artifactId),
@@ -461,9 +509,6 @@ async function indexUploadedDocument(
     ownerUserId: args.ownerUserId,
     source: "upload",
   };
-  if (args.workspaceId) {
-    filterValues.push({ name: "workspaceId", value: String(args.workspaceId) });
-  }
 
   try {
     const result = await artifactRag.add(ctx, {

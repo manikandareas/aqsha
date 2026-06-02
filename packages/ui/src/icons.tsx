@@ -36,6 +36,7 @@ import {
   Delete02Icon,
   Dollar01Icon,
   Download01Icon,
+  ExpandParagraphIcon as HugeExpandParagraphIcon,
   ExternalLinkIcon as HugeExternalLinkIcon,
   File01Icon,
   FileDownloadIcon,
@@ -47,6 +48,7 @@ import {
   GaugeIcon as HugeGaugeIcon,
   GitBranchIcon as HugeGitBranchIcon,
   HandshakeIcon as HugeHandshakeIcon,
+  HelpCircleIcon as HugeHelpCircleIcon,
   Home01Icon,
   Image01Icon,
   InformationCircleIcon,
@@ -64,6 +66,7 @@ import {
   Moon02Icon,
   MoreHorizontalIcon as HugeMoreHorizontalIcon,
   MoreVerticalIcon as HugeMoreVerticalIcon,
+  NotebookIcon as HugeNotebookIcon,
   PaintBoardIcon,
   PanelLeftIcon as HugePanelLeftIcon,
   PencilEdit01Icon,
@@ -142,6 +145,7 @@ export const CreditCardIcon = createIcon(HugeCreditCardIcon);
 export const DollarSign = createIcon(Dollar01Icon);
 export const DownloadIcon = createIcon(Download01Icon);
 export const ExternalLinkIcon = createIcon(HugeExternalLinkIcon);
+export const ExpandParagraphIcon = createIcon(HugeExpandParagraphIcon);
 export const FileDownIcon = createIcon(FileDownloadIcon);
 export const FileIcon = createIcon(File01Icon);
 export const FileText = createIcon(FileScriptIcon);
@@ -154,6 +158,7 @@ export const GaugeIcon = createIcon(HugeGaugeIcon);
 export const GitBranch = createIcon(HugeGitBranchIcon);
 export const GitBranchIcon = createIcon(HugeGitBranchIcon);
 export const Handshake = createIcon(HugeHandshakeIcon);
+export const HelpCircleIcon = createIcon(HugeHelpCircleIcon);
 export const HomeIcon = createIcon(Home01Icon);
 export const ImageIcon = createIcon(Image01Icon);
 export const InfoIcon = createIcon(InformationCircleIcon);
@@ -175,6 +180,7 @@ export const Moon = createIcon(Moon02Icon);
 export const MoonIcon = createIcon(Moon02Icon);
 export const MoreHorizontalIcon = createIcon(HugeMoreHorizontalIcon);
 export const MoreVerticalIcon = createIcon(HugeMoreVerticalIcon);
+export const NotebookIcon = createIcon(HugeNotebookIcon);
 export const PaletteIcon = createIcon(PaintBoardIcon);
 export const PaperclipIcon = createIcon(Attachment01Icon);
 export const PanelLeftIcon = createIcon(HugePanelLeftIcon);

@@ -17,6 +17,8 @@ import { assertWorkspaceArtifactOwner } from "../workspaceAccess";
 
 const PROMPT_CONTEXT_TOTAL_LIMIT = 16_000;
 const PROMPT_CONTEXT_ARTIFACT_LIMIT = 4_000;
+const PROMPT_CONTEXT_THREAD_DOCUMENT_LIMIT = 4;
+const THREAD_DOCUMENT_ARTIFACT_SCAN_LIMIT = 24;
 const MAX_SELECTED_CONTEXT_ARTIFACTS = 12;
 
 type ThreadContextCtx = QueryCtx | MutationCtx;
@@ -149,6 +151,28 @@ async function listSelectedRows(ctx: ThreadContextCtx, args: {
     .take(MAX_SELECTED_CONTEXT_ARTIFACTS);
 }
 
+async function listThreadDocumentArtifacts(ctx: ThreadContextCtx, args: {
+  ownerUserId: string;
+  threadId: string;
+}) {
+  const artifacts = await ctx.db
+    .query("artifacts")
+    .withIndex("by_owner_thread_created", (q) =>
+      q.eq("ownerUserId", args.ownerUserId).eq("threadId", args.threadId),
+    )
+    .order("desc")
+    .take(THREAD_DOCUMENT_ARTIFACT_SCAN_LIMIT);
+
+  return artifacts.filter((artifact) => {
+    const artifactType = artifactTypeForLegacyArtifact(artifact);
+    return (
+      artifact.status === "active" &&
+      artifact.source === "upload" &&
+      artifactType !== "url"
+    );
+  });
+}
+
 async function getArtifactUrl(ctx: ThreadContextCtx, args: {
   ownerUserId: string;
   artifactId: Id<"artifacts">;
@@ -220,8 +244,8 @@ function buildContextBlock(artifacts: PromptContextArtifact[]) {
   }
 
   const lines = [
-    "<selected_workspace_context>",
-    "The user selected these workspace artifacts as context. Use them when relevant. If they conflict with the user's message, explain the conflict.",
+    "<thread_document_context>",
+    "These artifacts are active context for this chat thread, including pinned workspace artifacts and uploaded thread documents. Use them when relevant. If they conflict with the user's message, explain the conflict.",
     "",
   ];
 
@@ -251,7 +275,7 @@ function buildContextBlock(artifacts: PromptContextArtifact[]) {
     lines.push("");
   }
 
-  lines.push("</selected_workspace_context>");
+  lines.push("</thread_document_context>");
   return lines.join("\n").trim();
 }
 
@@ -430,6 +454,13 @@ export async function buildPromptContextForThread(
   const messageAttachmentIds = (args.messageAttachmentArtifactIds ?? []).filter(
     (artifactId) => !selectedIds.has(String(artifactId)),
   );
+  const currentIds = new Set([
+    ...selectedIds,
+    ...messageAttachmentIds.map((artifactId) => String(artifactId)),
+  ]);
+  const threadDocumentArtifacts = (await listThreadDocumentArtifacts(ctx, args))
+    .filter((artifact) => !currentIds.has(String(artifact._id)))
+    .slice(0, PROMPT_CONTEXT_THREAD_DOCUMENT_LIMIT);
 
   const resolved = await Promise.all([
     ...rows.map((row) =>
@@ -445,6 +476,15 @@ export async function buildPromptContextForThread(
         ctx,
         args.ownerUserId,
         artifactId,
+        args.threadId,
+        PROMPT_CONTEXT_ARTIFACT_LIMIT,
+      ),
+    ),
+    ...threadDocumentArtifacts.map((artifact) =>
+      getPromptContextArtifactById(
+        ctx,
+        args.ownerUserId,
+        artifact._id,
         args.threadId,
         PROMPT_CONTEXT_ARTIFACT_LIMIT,
       ),
@@ -542,6 +582,21 @@ export const listRagTargetsForThread = internalQuery({
       } else if (artifact.threadId !== args.threadId) {
         continue;
       }
+      if (artifact.ragEntryId && artifact.indexingStatus === "ready") {
+        targets.push({
+          artifactId: artifact._id,
+          workspaceId: artifact.workspaceId,
+          title: artifact.title,
+          ragEntryId: artifact.ragEntryId,
+        });
+      }
+    }
+
+    for (const artifact of await listThreadDocumentArtifacts(ctx, args)) {
+      if (targetIds.has(String(artifact._id))) {
+        continue;
+      }
+      targetIds.add(String(artifact._id));
       if (artifact.ragEntryId && artifact.indexingStatus === "ready") {
         targets.push({
           artifactId: artifact._id,

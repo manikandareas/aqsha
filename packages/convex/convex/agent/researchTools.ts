@@ -25,6 +25,14 @@ const querySchema = z.object({
   limit: z.number().int().min(1).max(5).optional().describe("Maximum results"),
 });
 
+const threadDocumentSearchSchema = z.object({
+  query: z
+    .string()
+    .min(1)
+    .max(500)
+    .describe("Question or search phrase to look up in documents uploaded or selected in this chat thread."),
+});
+
 const artifactContentSchema = z.object({
   title: z.string().min(1).max(160),
   body: z.string().min(1).max(200_000),
@@ -186,6 +194,25 @@ export const researchTools: ToolSet = {
 };
 
 export const normalChatTools: ToolSet = {
+  searchThreadDocuments: createTool<
+    typeof threadDocumentSearchSchema._output,
+    string,
+    AqshaToolCtx
+  >({
+    description:
+      "Search documents that the user uploaded or selected in this chat thread. Use this before answering follow-up questions that refer to a previous file, document, paper, journal, artifact, or 'that/this document'.",
+    inputSchema: threadDocumentSearchSchema,
+    execute: async (ctx, input): Promise<string> => {
+      const ownerUserId = requireToolUser(ctx);
+      const threadId = requireToolThread(ctx);
+      const context = await ctx.runAction(internal.agent.ragContext.searchThreadDocuments, {
+        ownerUserId,
+        threadId,
+        query: input.query,
+      });
+      return context || "No relevant uploaded or selected thread document context was found.";
+    },
+  }),
   searchWeb: researchTools.searchWeb,
   searchArxiv: researchTools.searchArxiv,
   lookupDoi: researchTools.lookupDoi,
