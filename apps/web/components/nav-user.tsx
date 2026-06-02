@@ -1,31 +1,22 @@
 "use client";
 
-import React from "react";
+import { useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
-import { useTheme } from "next-themes";
+import Link from "next/link";
 import {
-  ChevronDownIcon,
-  Loader2Icon,
   LogOutIcon,
-  MoonIcon,
-  SunIcon,
-  UserIcon,
-} from "lucide-react";
-
+  MoreVerticalIcon,
+  SettingsIcon,
+} from "@aqsha/ui/icons";
+import { ThemeMenuSub } from "@/components/theme-toggle";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -37,140 +28,93 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { authClient } from "@/lib/auth-client";
+import { useViewerDisplay } from "@/lib/use-viewer-identity";
 
-function getDiceBearAvatarUrl(name: string): string {
-  return `https://api.dicebear.com/9.x/adventurer-neutral/svg?seed=${encodeURIComponent(name)}`;
-}
+type Viewer = {
+  name: string | null;
+  email: string | null;
+  image: string | null;
+};
 
-export function NavUser() {
+export function NavUser({ user }: { user: Viewer | undefined }) {
   const router = useRouter();
+  const { signOut: clerkSignOut } = useClerk();
   const { isMobile } = useSidebar();
-  const { setTheme, theme } = useTheme();
-  const { data: session, isPending } = authClient.useSession();
-  const [isSignOutAlertOpen, setIsSignOutAlertOpen] = React.useState(false);
-  const [isSigningOut, setIsSigningOut] = React.useState(false);
-  const user = session?.user;
-  const name = user?.name ?? "User";
-  const email = user?.email ?? "";
-  const avatarUrl = user?.image ?? getDiceBearAvatarUrl(name);
+  const { name, email, image, initials } = useViewerDisplay(user, {
+    name: "Aqsha user",
+    email: "Signed in",
+  });
 
-  async function handleSignOut() {
-    setIsSigningOut(true);
-    await authClient.signOut();
-    router.push("/signin");
+  const signOut = async () => {
+    await clerkSignOut({ redirectUrl: "/sign-in" });
+    router.replace("/sign-in");
     router.refresh();
-  }
+  };
+
+  const menuItemClass =
+    "h-9 gap-2 rounded-[8px] px-2 text-[13px] font-medium text-popover-foreground [&_svg]:size-4 [&_svg]:text-muted-foreground";
 
   return (
-    <>
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <SidebarMenuButton
-                  size="lg"
-                  tooltip={name}
-                  className="h-12 rounded-[12px] bg-sidebar-accent/25 p-2 text-sidebar-foreground hover:bg-sidebar-accent/55 focus-visible:ring-sidebar-ring data-[state=open]:bg-sidebar-accent/60 data-[state=open]:text-sidebar-foreground group-data-[collapsible=icon]:size-9 group-data-[collapsible=icon]:bg-transparent"
-                />
-              }
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <SidebarMenuButton
+              size="lg"
+              className="h-10 min-w-0 rounded-[8px] border border-sidebar-border/70 bg-muted/15 p-2.5 text-muted-foreground transition-[background-color,border-color,color] duration-150 ease-out hover:border-primary/20 hover:bg-primary/5 hover:text-foreground data-[state=open]:border-primary/25 data-[state=open]:bg-primary/8 data-[state=open]:text-foreground"
             >
-              <div className="relative shrink-0">
-                <img
-                  src={avatarUrl}
-                  alt={name}
-                  className="size-9 select-none rounded-[10px] object-cover"
-                />
-                <span className="absolute -bottom-0.5 -right-0.5 block size-2 rounded-full bg-sidebar-foreground/30 ring-2 ring-sidebar" />
-              </div>
-              <div className="ml-1 grid min-w-0 flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
-                <span className="truncate text-[13px] font-bold text-sidebar-foreground">
-                  {isPending ? "Loading..." : name}
-                </span>
-                <span className="truncate text-[11px] font-medium text-sidebar-foreground/50">
-                  {email || "Free plan"}
-                </span>
-              </div>
-              <ChevronDownIcon className="ml-auto h-4 w-4 shrink-0 text-sidebar-foreground/45 group-data-[collapsible=icon]:hidden" />
-            </DropdownMenuTrigger>
-
-            <DropdownMenuContent
-              className="w-56 rounded-lg"
-              side={isMobile ? "bottom" : "right"}
-              align="end"
-              sideOffset={4}
-            >
-              <DropdownMenuLabel className="p-0 font-normal">
-                <div className="flex items-center gap-2 px-2 py-1.5">
-                  <img
-                    src={avatarUrl}
-                    alt={name}
-                    className="h-8 w-8 shrink-0 select-none rounded-[9px] object-cover"
-                  />
-                  <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-medium">{name}</span>
-                    <span className="truncate text-[12px] text-muted-foreground">
-                      {email}
-                    </span>
-                  </div>
+              <Avatar className="size-6 shrink-0 rounded-full ring-1 ring-sky-soft-border">
+                {image ? <AvatarImage src={image} alt={name} /> : null}
+                <AvatarFallback className="rounded-full bg-sky-soft text-[10px] font-semibold text-sky-foreground">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <span className="min-w-0 flex-1 truncate text-left text-[12px] font-medium">
+                {name}
+              </span>
+              <MoreVerticalIcon className="size-3.5 shrink-0 text-muted-foreground" />
+            </SidebarMenuButton>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            className="w-(--radix-dropdown-menu-trigger-width) min-w-64 rounded-[12px] p-1.5"
+            side={isMobile ? "bottom" : "right"}
+            align="end"
+            sideOffset={4}
+          >
+            <DropdownMenuLabel className="p-2 font-normal">
+              <div className="flex min-w-0 items-center gap-2">
+                <Avatar className="size-8 rounded-full ring-1 ring-sky-soft-border">
+                  {image ? <AvatarImage src={image} alt={name} /> : null}
+                  <AvatarFallback className="rounded-full bg-sky-soft text-xs font-semibold text-sky-foreground">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="grid min-w-0 gap-0.5">
+                  <span className="truncate text-[13px] font-semibold text-popover-foreground">
+                    {name}
+                  </span>
+                  <span className="truncate text-[11px] font-medium text-muted-foreground">
+                    {email}
+                  </span>
                 </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuItem>
-                  <UserIcon className="text-muted-foreground" />
-                  <span>Profile</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                >
-                  <SunIcon className="text-muted-foreground dark:hidden" />
-                  <MoonIcon className="hidden text-muted-foreground dark:block" />
-                  <span>Toggle theme</span>
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={() => setIsSignOutAlertOpen(true)}
-              >
-                <LogOutIcon />
-                <span>Sign out</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </SidebarMenuItem>
-      </SidebarMenu>
-
-      <AlertDialog
-        open={isSignOutAlertOpen}
-        onOpenChange={(open) => {
-          if (!isSigningOut) {
-            setIsSignOutAlertOpen(open);
-          }
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Sign out?</AlertDialogTitle>
-            <AlertDialogDescription>
-              You&apos;ll need to sign in again to access your account.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isSigningOut}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={isSigningOut}
-              onClick={handleSignOut}
-            >
-              {isSigningOut ? <Loader2Icon className="animate-spin" /> : null}
-              Sign out
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+              </div>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild className={menuItemClass}>
+              <Link href="/app/settings/overview">
+                <SettingsIcon />
+                <span className="truncate">Pengaturan</span>
+              </Link>
+            </DropdownMenuItem>
+            <ThemeMenuSub />
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={signOut} className={menuItemClass}>
+              <LogOutIcon />
+              <span className="truncate">Sign out</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </SidebarMenuItem>
+    </SidebarMenu>
   );
 }

@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Moon, Sun } from "lucide-react"
+import { Moon, Sun } from "@aqsha/ui/icons"
 import { Button } from "@aqsha/ui/components/button"
 import {
   DropdownMenu,

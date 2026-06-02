@@ -1,59 +1,162 @@
 "use client";
 
-import type { ComponentProps, HTMLAttributes } from "react";
-import { Streamdown } from "streamdown";
-
 import { cn } from "@/lib/utils";
+import { cjk } from "@streamdown/cjk";
+import { code } from "@streamdown/code";
+import { math } from "@streamdown/math";
+import { mermaid } from "@streamdown/mermaid";
+import type { UIMessage } from "ai";
+import type {
+  ButtonHTMLAttributes,
+  ComponentProps,
+  HTMLAttributes,
+  ReactNode,
+} from "react";
+import { Streamdown } from "streamdown";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
-  from: "system" | "user" | "assistant";
+  from: UIMessage["role"];
 };
 
-export function Message({ className, from, ...props }: MessageProps) {
-  return (
-    <div
-      className={cn(
-        "group flex w-full max-w-[95%] flex-col gap-2",
-        from === "user" ? "is-user ml-auto items-end" : "is-assistant",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
+export const Message = ({ className, from, ...props }: MessageProps) => (
+  <div
+    className={cn(
+      "group mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-2 overflow-x-hidden",
+      from === "user" ? "is-user justify-end" : "is-assistant",
+      className
+    )}
+    {...props}
+  />
+);
 
-export type MessageContentProps = ComponentProps<"div">;
+export type MessageContentProps = HTMLAttributes<HTMLDivElement>;
 
-export function MessageContent({
+export const MessageContent = ({
+  children,
   className,
   ...props
-}: MessageContentProps) {
-  return (
-    <div
-      className={cn(
-        "flex w-fit min-w-0 max-w-full flex-col gap-2 overflow-hidden text-sm",
-        "group-[.is-user]:rounded-3xl group-[.is-user]:rounded-tr-sm group-[.is-user]:bg-primary group-[.is-user]:px-5 group-[.is-user]:py-3.5 group-[.is-user]:font-medium group-[.is-user]:text-primary-foreground",
-        "group-[.is-assistant]:text-foreground",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
+}: MessageContentProps) => (
+  <div
+    className={cn(
+      "is-user:dark flex w-fit min-w-0 max-w-full flex-col gap-2 overflow-hidden text-sm",
+      "group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-secondary group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground",
+      "group-[.is-assistant]:text-foreground",
+      className
+    )}
+    {...props}
+  >
+    {children}
+  </div>
+);
 
 export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
-export function MessageResponse({
-  className,
-  ...props
-}: MessageResponseProps) {
-  return (
+const streamdownPlugins = { cjk, code, math, mermaid };
+
+export const MessageResponse = ({ className, ...props }: MessageResponseProps) => (
     <Streamdown
       className={cn(
-        "prose prose-neutral max-w-none text-[15px] leading-relaxed dark:prose-invert prose-p:my-3 prose-headings:font-bold prose-li:my-1",
-        className,
+        "size-full min-w-0 max-w-full overflow-x-hidden break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
+        className
       )}
+      plugins={streamdownPlugins}
       {...props}
     />
   );
-}
+
+MessageResponse.displayName = "MessageResponse";
+
+export type MessageToolbarProps = HTMLAttributes<HTMLDivElement>;
+
+export const MessageToolbar = ({
+  children,
+  className,
+  ...props
+}: MessageToolbarProps) => (
+  <div
+    className={cn(
+      "flex w-full min-w-0 items-center justify-between gap-2",
+      className,
+    )}
+    {...props}
+  >
+    {children}
+  </div>
+);
+
+export type MessageActionsProps = HTMLAttributes<HTMLDivElement>;
+
+export const MessageActions = ({
+  children,
+  className,
+  ...props
+}: MessageActionsProps) => (
+  <div
+    className={cn(
+      "flex min-w-0 items-center gap-1 text-muted-foreground",
+      className,
+    )}
+    {...props}
+  >
+    {children}
+  </div>
+);
+
+export type MessageActionProps = Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  "aria-label"
+> & {
+  label: string;
+  tooltip?: ReactNode;
+};
+
+export const MessageAction = ({
+  children,
+  className,
+  disabled,
+  label,
+  tooltip,
+  type = "button",
+  ...props
+}: MessageActionProps) => {
+  const button = (
+    <button
+      aria-label={label}
+      className={cn(
+        "inline-flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground",
+        className,
+      )}
+      disabled={disabled}
+      type={type}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+
+  if (!tooltip) {
+    return button;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {disabled ? (
+          <span className="inline-flex cursor-not-allowed">{button}</span>
+        ) : (
+          button
+        )}
+      </TooltipTrigger>
+      <TooltipContent side="top">{tooltip}</TooltipContent>
+    </Tooltip>
+  );
+};
+
+MessageToolbar.displayName = "MessageToolbar";
+MessageActions.displayName = "MessageActions";
+MessageAction.displayName = "MessageAction";

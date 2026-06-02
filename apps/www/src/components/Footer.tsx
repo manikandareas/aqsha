@@ -6,7 +6,7 @@ import {
   Handshake,
   Scale,
   Shield,
-} from "lucide-react";
+} from "@aqsha/ui/icons";
 import { FooterUI } from "@/components/ui/footer";
 import { signInUrl } from "@/lib/urls";
 

@@ -1,0 +1,13 @@
+.git
+.next
+.turbo
+.vercel
+node_modules
+**/node_modules
+**/.next
+**/dist
+**/.env
+**/.env.*
+.astra-artifacts
+.astra
+coverage

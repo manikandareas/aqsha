@@ -15,7 +15,7 @@ import {
   InputGroup,
   InputGroupAddon,
 } from "@/components/ui/input-group"
-import { SearchIcon, CheckIcon } from "lucide-react"
+import { SearchIcon, CheckIcon } from "@aqsha/ui/icons"
 
 function Command({
   className,
@@ -40,12 +40,11 @@ function CommandDialog({
   className,
   showCloseButton = false,
   ...props
-}: Omit<React.ComponentProps<typeof Dialog>, "children"> & {
+}: React.ComponentProps<typeof Dialog> & {
   title?: string
   description?: string
   className?: string
   showCloseButton?: boolean
-  children: React.ReactNode
 }) {
   return (
     <Dialog {...props}>
@@ -60,7 +59,9 @@ function CommandDialog({
         )}
         showCloseButton={showCloseButton}
       >
-        {children}
+        <Command className="rounded-none border-0 bg-transparent shadow-none">
+          {children}
+        </Command>
       </DialogContent>
     </Dialog>
   )

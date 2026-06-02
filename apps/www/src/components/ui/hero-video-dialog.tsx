@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { Play, XIcon } from "lucide-react"
+import { Play, XIcon } from "@aqsha/ui/icons"
 
 import { cn } from "@/lib/utils"
 

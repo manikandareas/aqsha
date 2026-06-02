@@ -6,55 +6,77 @@
 ## Monorepo Boundaries
 | Package | Path | Runtime | Key Tech |
 |---|---|---|---|
-| `@aqsha/web` | `apps/web` | Next.js 16 (App Router) | React 19, Tailwind v4, shadcn base-nova, no `src/` dir |
-| `@aqsha/api` | `apps/api` | Bun | Elysia 1.4, Drizzle ORM, PostgreSQL, Better Auth |
-| `@aqsha/db` | `packages/db` | shared | Drizzle schema / types / model |
-| `@aqsha/shared` | `packages/shared` | shared | Types and helpers |
+| `@aqsha/app` | `apps/web` | Next.js 16 (App Router) | React 19, Tailwind v4, Convex client |
+| `@aqsha/www` | `apps/www` | Astro | React islands, Tailwind v4, marketing pages |
+| `@aqsha/convex` | `packages/convex` | Convex | Convex functions/components, Clerk Auth, Agent/Workflow, internal provenance |
+| `@aqsha/ui` | `packages/ui` | shared | React UI primitives and shared token CSS |
 
 ## Exact Dev Commands
 ```bash
-# Run everything in parallel
+# Run active app, Convex backend, and marketing site in parallel
 bun dev
 
-# Run one workspace
-bun run dev:web      # Next.js dev server (Turbopack)
-bun run dev:api      # Elysia with --watch
+# Run the pivot product only
+bun run dev:pivot
 
-# Verification (runs in parallel across workspaces)
-bun run lint         # includes @aqsha/web, @aqsha/api, @aqsha/shared, @aqsha/db
-bun run typecheck    # same scope as lint
-bun run build        # builds web + api only
+# Run one workspace
+bun run dev:app
+bun run dev:convex
+bun run dev:www
+
+# Verification
+bun run lint
+bun run typecheck
+bun run build
 ```
 
 ## App-Specific Instructions
-- **Web**: UI rules, design tokens, and Next.js 16 caveats live in `apps/web/AGENTS.md` and `apps/web/DESIGN.md`. Read those before touching any frontend code.
-- **API**: Env is loaded via `dotenv/config` in `apps/api/src/config.ts`. Required vars: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `WEB_ORIGIN`. Example at `apps/api/.env.example`.
+- **App**: UI rules and Next.js 16 caveats live in `apps/web/AGENTS.md`. Read that before touching product UI.
+- **Detail/panel parity**: Thread detail and workspace detail each have a main view and an embedded side panel of the other surface. See `apps/web/AGENTS.md` → **Detail / Panel Parity** before changing either.
+- **Convex**: Convex rules live in `packages/convex/AGENTS.md`. Read `packages/convex/convex/_generated/ai/guidelines.md` before editing Convex functions.
+- **www**: Marketing site uses `@aqsha/ui` primitives and shared styles from `packages/ui`.
 
-## Database / ORM
-- Schema source of truth: `packages/db/src/schema.ts`
-- Drizzle config lives in `apps/api/drizzle.config.ts` and points at `../../packages/db/src/schema.ts`
-- Migrations output to `apps/api/drizzle/`
-- Commands (run from `apps/api`):
-  ```bash
-  bun run db:generate
-  bun run db:migrate
-  bun run db:studio
-  ```
+## Icons
+- Use `@aqsha/ui/icons` for all app and marketing icon imports in `apps/web` and `apps/www`.
+- Use the local `packages/ui/src/icons.tsx` adapter for shared UI package icons, with relative imports such as `../icons`.
+- Do not add direct `lucide-react` imports or direct `lucide-react` package dependencies in Aqsha code. `lucide-react` may still appear transitively when required by third-party packages such as BlockNote.
+- When a needed icon name is missing, add a Lucide-compatible export to `packages/ui/src/icons.tsx` backed by the official Hugeicons packages (`@hugeicons/react` and `@hugeicons/core-free-icons`).
 
-## Linting Quirks
-- Root `eslint.config.mjs` **ignores `apps/web/**`** completely; web maintains its own `eslint.config.mjs` using `eslint-config-next`.
-- Root lint/typecheck filters include `@aqsha/db` even though `build` does not.
+## Convex Client State
+- `apps/web` uses TanStack Query through `@convex-dev/react-query` for Convex client state.
+- Prefer shared helpers from `apps/web/lib/convex-query.ts`:
+  - `useConvexQueryData` for reactive Convex queries.
+  - `useConvexMutationState` / `useConvexMutationFn` for Convex mutations.
+  - `useConvexActionState` / `useConvexActionFn` for Convex actions that are submit/side-effect operations.
+- Do not add new direct `convex/react` `useQuery`, `useMutation`, or `useAction` usage in `apps/web`.
+- Direct `convex/react` imports are still acceptable for provider/client setup and Convex utilities that do not have a TanStack adapter equivalent.
+- Keep UI-only state local with React state: dialog open/close, form drafts, selected rows/folders, composer text, and upload progress.
+- Server-state loading/error/success should come from TanStack Query mutation/query state unless there is a deliberate local UX state, such as a persistent notice.
+
+## Error Handling
+- Client-side Convex errors should be normalized through `apps/web/lib/convex-error.ts`.
+- Prefer `readableConvexErrorMessage(error, fallback)` or `readableConvexError(error, fallback)` instead of exposing generic `error.message` directly in UI.
+- Plain `Error` from backend/system failures should fall back to a safe user-facing message.
+- For new or touched Convex functions, use structured application errors from `packages/convex/convex/lib/appError.ts`:
+  - `{ message: string; code: string; severity?: "info" | "warning" | "error"; field?: string }`
+- Preserve return-union flows when failure is part of normal product behavior, such as rate-limit/blocking results from message send.
+- Existing string `ConvexError` values are still valid, but structured errors are preferred for new/touched code.
+
+## Convex Commands
+Run from the repo root with a workspace filter:
+```bash
+bun run --filter '@aqsha/convex' codegen
+bun run --filter '@aqsha/convex' deploy
+bun run --filter '@aqsha/convex' logs
+bun run --filter '@aqsha/convex' test
+```
 
 ## TypeScript
-- Base config: `tsconfig.base.json` (ES2022, Bundler resolution, strict, noEmit)
-- `apps/web/tsconfig.json` is independent (does not extend base); uses `target: ES2017`, `jsx: react-jsx`, Next.js incremental.
-- `apps/api/tsconfig.json`, `packages/db/tsconfig.json`, and `packages/shared/tsconfig.json` all extend the base.
+- Base config: `tsconfig.base.json` (ES2022, Bundler resolution, strict, noEmit).
+- `apps/web/tsconfig.json` and `apps/www/tsconfig.json` are app-specific.
+- `packages/convex/tsconfig.json` and `packages/ui/tsconfig.json` own their package checks.
 
 ## Notable Defaults
-- No test runner is configured yet (no Vitest, Jest, or Playwright configs found).
-- No CI / GitHub Actions, pre-commit hooks, or task runners (Turborepo, etc.).
-- Next.js config enables `reactCompiler: true` and sets `turbopack.root` to the repo root.
-
-## Cross-Package Imports
-- `@aqsha/db` exposes subpath exports: `schema`, `types`, `model` (see `packages/db/package.json`).
-- `@aqsha/api` exposes `app` and `eden` for type-safe client consumption.
+- `apps/web` consumes generated Convex exports through `@aqsha/convex/api` and `@aqsha/convex/server`.
+- `apps/web` and `apps/www` both consume `@aqsha/ui`.
+- Only `packages/convex` has a test runner configured (`vitest`).

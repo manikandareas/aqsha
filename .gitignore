@@ -7,3 +7,6 @@ coverage
 *.log
 apps/api/.env
 apps/api/.env.local
+apps/app/.env.local
+packages/convex/.env.local
+packages/convex/.convex/

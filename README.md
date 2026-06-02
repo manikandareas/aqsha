@@ -1,47 +1,28 @@
 # Aqsha
 
-Aqsha is an open-source monorepo for AI-assisted writing and journaling. It combines a modern web app, a type-safe Bun API, shared UI primitives, and a PostgreSQL-backed domain model for user-owned journals, chat threads, authentication, and API-owned agent streaming.
+Aqsha is a Convex-backed personal research chatbot with a Next.js product app and an Astro marketing site.
 
-## What is inside?
-
-- **AI chat**: persisted chat threads and streamed assistant responses through the API-owned Astra agent runtime.
-- **Journaling system**: journal CRUD, content saves, outlines, archive/restore flows, and version history.
-- **Authentication**: Better Auth integration with API-side session handling.
-- **Type-safe API client**: Elysia + Eden Treaty wiring between the frontend and backend.
-- **Shared packages**: reusable database schema, shared helpers, and UI components for apps in the workspace.
-- **Marketing site**: Astro-powered public website alongside the authenticated app.
-
-## Monorepo structure
+## Monorepo Structure
 
 ```txt
 apps/
-  api/      Bun + Elysia API service and Astra agent runtime
-  web/      Next.js authenticated product app
+  app/      Next.js authenticated product app
   www/      Astro marketing website
 packages/
-  db/       Drizzle schema, database types, and model helpers
-  shared/   Shared TypeScript helpers
+  convex/   Convex functions, schema, components, and tests
   ui/       Shared React UI primitives and styles
 ```
 
-## Tech stack
+## Tech Stack
 
 - **Runtime and package manager**: Bun
-- **Frontend app**: Next.js 16, React 19, Tailwind CSS 4, TanStack Query
-- **Marketing site**: Astro, React, Tailwind CSS
-- **API**: Elysia, Eden Treaty, OpenAPI, Zod
-- **Auth**: Better Auth
-- **Database**: PostgreSQL, Drizzle ORM, Drizzle Kit
-- **AI**: Vercel AI SDK `ToolLoopAgent`, AI SDK UI message streams, OpenAI provider, optional Exa MCP tools, and API-owned skills
-- **UI/editor**: Radix UI, shadcn-style primitives, Plate editor components
+- **Product app**: Next.js 16, React 19, Tailwind CSS 4
+- **Marketing site**: Astro, React islands, Tailwind CSS 4
+- **Backend**: Convex, Clerk Auth, `@convex-dev/agent`, rate limiting, workflow, internal provenance storage
+- **AI**: AI SDK with OpenAI-compatible chat and embedding providers through Convex functions
+- **Shared UI**: Radix primitives and shadcn-style components in `packages/ui`
 
-## Requirements
-
-- Bun `1.3.10` or newer
-- PostgreSQL database
-- OpenAI-compatible model access for Astra chat streaming
-
-## Getting started
+## Getting Started
 
 Install dependencies from the repository root:
 
@@ -49,99 +30,49 @@ Install dependencies from the repository root:
 bun install
 ```
 
-Create the API environment file:
-
-```bash
-cp apps/api/.env.example apps/api/.env
-```
-
-If there is no example file in your checkout, create `apps/api/.env` with:
-
-```bash
-API_PORT=3001
-WEB_ORIGIN=http://localhost:3000
-BETTER_AUTH_URL=http://localhost:3001
-BETTER_AUTH_SECRET=replace-with-at-least-32-characters
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/aqsha
-ASTRA_MODEL=gpt-5.2
-ASTRA_ALLOWED_MODELS=gpt-5.2,gpt-5.2-pro,gpt-5.4,gpt-5.4-pro,gpt-5.4-mini,o3,o4-mini
-ASTRA_SKILLS_ROOTS=./skills
-ASTRA_ENABLE_SKILL_SCRIPTS=false
-OPENAI_API_KEY=replace-with-openai-api-key
-```
-
-Optionally create `apps/web/.env.local` to point the web app at a different API URL:
-
-```bash
-NEXT_PUBLIC_API_URL=http://localhost:3001
-```
-
-Run database migrations:
-
-```bash
-bun run --filter '@aqsha/api' db:migrate
-```
-
-Start all apps:
+Run the active product app, Convex backend, and marketing site together:
 
 ```bash
 bun dev
 ```
 
+Run only the product app and Convex backend:
+
+```bash
+bun run dev:pivot
+```
+
 Or run a single workspace:
 
 ```bash
-bun run dev:web
+bun run dev:app
+bun run dev:convex
 bun run dev:www
-bun run dev:api
 ```
-
-Default local services:
-
-- Web app: `http://localhost:3000`
-- API: `http://localhost:3001`
-- API OpenAPI docs: `http://localhost:3001/openapi`
-- Marketing site: Astro's local dev URL
 
 ## Scripts
 
-From the repository root:
-
 ```bash
-bun run build       # Build web, www, and api
-bun run lint        # Lint app and package workspaces
-bun run typecheck   # Type-check app and package workspaces
+bun run build       # Build app and www
+bun run lint        # Lint app and Convex package
+bun run typecheck   # Type-check app, www, Convex, and UI package
 ```
 
-API database scripts:
+Convex workspace commands:
 
 ```bash
-bun run --filter '@aqsha/api' db:generate
-bun run --filter '@aqsha/api' db:migrate
-bun run --filter '@aqsha/api' db:studio
-bun run --filter '@aqsha/api' db:check
+bun run --filter '@aqsha/convex' codegen
+bun run --filter '@aqsha/convex' deploy
+bun run --filter '@aqsha/convex' logs
+bun run --filter '@aqsha/convex' test
 ```
 
-## Development notes
+## Development Notes
 
-- The API reads environment variables from `apps/api/.env` through `@t3-oss/env-core`.
-- Astra agent implementation lives under `apps/api/src/agents` and is exposed to chat routes through `AgentsService`.
-- Skills are discovered from `apps/api/skills` by default. Skill scripts are disabled unless `ASTRA_ENABLE_SKILL_SCRIPTS=true`.
-- Exa MCP tools are loaded when `ASTRA_EXA_API_KEY` is configured and closed after streaming.
-- The web app reads `NEXT_PUBLIC_API_URL` and defaults to `http://localhost:3001`.
-- API routes are composed as Elysia modules under `apps/api/src/modules`.
-- Shared database schema and types live in `packages/db`.
-- Shared UI primitives live in `packages/ui` and are consumed by the apps.
-
-## Contributing
-
-Contributions are welcome. For local changes, prefer small focused pull requests that include:
-
-1. A clear description of the change.
-2. Any relevant screenshots or API examples.
-3. Passing `bun run lint` and `bun run typecheck`.
-4. Database migrations when schema changes are introduced.
-
-## License
-
-No license has been specified yet. Add one before publishing or distributing this project as open source.
+- `apps/web` imports generated Convex bindings from `@aqsha/convex/api` and `@aqsha/convex/server`.
+- `apps/web` and `apps/www` both consume shared UI from `@aqsha/ui`.
+- Convex environment is managed by `convex dev` and the Convex dashboard.
+- Convex AI chat env can be routed independently with `AQSHA_CHAT_API_KEY`, `AQSHA_CHAT_BASE_URL`, and `AQSHA_CHAT_PROVIDER_NAME`.
+- Convex RAG embedding env can be routed independently with `AQSHA_EMBEDDING_API_KEY`, `AQSHA_EMBEDDING_BASE_URL`, `AQSHA_EMBEDDING_PROVIDER_NAME`, `AQSHA_RAG_EMBEDDING_MODEL`, and `AQSHA_RAG_EMBEDDING_DIMENSION`.
+- Legacy `OPENAI_API_KEY` and `OPENAI_BASE_URL` still work as fallback values, but provider-specific routing should use the `AQSHA_*` namespaced env vars.
+- Only `packages/convex` has a test runner configured.

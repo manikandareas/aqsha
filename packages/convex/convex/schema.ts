@@ -1,0 +1,832 @@
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
+import { explorePaperFields } from "./exploreValidators";
+
+const runId = v.union(v.id("agentRuns"), v.id("researchRuns"));
+
+const artifactTypeValidator = v.union(
+  v.literal("markdown"),
+  v.literal("plain_text"),
+  v.literal("pdf"),
+  v.literal("docx"),
+  v.literal("html"),
+  v.literal("svg"),
+  v.literal("mermaid"),
+  v.literal("json"),
+  v.literal("csv"),
+  v.literal("code"),
+  v.literal("url"),
+);
+
+const artifactFamilyValidator = v.union(
+  v.literal("text"),
+  v.literal("file"),
+  v.literal("interactive"),
+  v.literal("visual"),
+  v.literal("data"),
+  v.literal("link"),
+);
+
+const artifactSourceValidator = v.union(
+  v.literal("manual"),
+  v.literal("upload"),
+  v.literal("agent"),
+  v.literal("url"),
+);
+
+const indexingStatusValidator = v.union(
+  v.literal("not_indexed"),
+  v.literal("pending"),
+  v.literal("ready"),
+  v.literal("failed"),
+);
+
+const detectedDocumentKindValidator = v.union(
+  v.literal("generic"),
+  v.literal("scholarly_paper"),
+);
+
+const artifactExtractorValidator = v.union(
+  v.literal("pdf_text"),
+  v.literal("docx_text"),
+  v.literal("url_reader"),
+  v.literal("grobid"),
+);
+
+const extractionStatusValidator = v.union(
+  v.literal("pending"),
+  v.literal("running"),
+  v.literal("ready"),
+  v.literal("failed"),
+);
+
+const paperAuthorValidator = v.object({
+  name: v.string(),
+  affiliation: v.optional(v.string()),
+});
+
+const artifactContentFields = {
+  ownerUserId: v.string(),
+  workspaceId: v.optional(v.id("workspaces")),
+  threadId: v.optional(v.string()),
+  artifactId: v.id("artifacts"),
+  blocksJson: v.optional(v.string()),
+  markdown: v.optional(v.string()),
+  plainText: v.optional(v.string()),
+  contextText: v.optional(v.string()),
+  storageId: v.optional(v.id("_storage")),
+  blocksStorageId: v.optional(v.id("_storage")),
+  markdownStorageId: v.optional(v.id("_storage")),
+  uploadStorageId: v.optional(v.id("_storage")),
+  uploadFileName: v.optional(v.string()),
+  uploadMimeType: v.optional(v.string()),
+  uploadSize: v.optional(v.number()),
+  ingestionStatus: v.optional(v.union(
+    v.literal("pending"),
+    v.literal("ready"),
+    v.literal("failed"),
+  )),
+  ingestionFailureReason: v.optional(v.string()),
+  ragEntryId: v.optional(v.string()),
+  indexedAt: v.optional(v.number()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+};
+
+export default defineSchema(
+  {
+    users: defineTable({
+      ownerUserId: v.string(),
+      clerkUserId: v.string(),
+      email: v.optional(v.union(v.string(), v.null())),
+      emailVerified: v.optional(v.boolean()),
+      name: v.optional(v.union(v.string(), v.null())),
+      image: v.optional(v.union(v.string(), v.null())),
+      deletedAt: v.optional(v.number()),
+      deletionStatus: v.optional(
+        v.union(
+          v.literal("deleting"),
+          v.literal("deleted"),
+          v.literal("failed"),
+        ),
+      ),
+      deletionRequestedAt: v.optional(v.number()),
+      deletionCompletedAt: v.optional(v.number()),
+      deletionFailedAt: v.optional(v.number()),
+      deletionFailureReason: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_owner_user_id", ["ownerUserId"])
+      .index("by_clerk_user_id", ["clerkUserId"]),
+    authEvents: defineTable({
+      eventKey: v.string(),
+      eventType: v.string(),
+      clerkUserId: v.optional(v.string()),
+      processedAt: v.number(),
+    }).index("by_event_key", ["eventKey"]),
+    threadMetadata: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      workspaceId: v.optional(v.id("workspaces")),
+      lastActivityAt: v.number(),
+      lastMessagePreview: v.string(),
+      messageCount: v.number(),
+      status: v.union(v.literal("idle"), v.literal("streaming"), v.literal("failed")),
+    })
+      .index("by_thread", ["threadId"])
+      .index("by_owner_activity", ["ownerUserId", "lastActivityAt"])
+      .index("by_owner_workspace_activity", ["ownerUserId", "workspaceId", "lastActivityAt"]),
+    threadContextArtifacts: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      workspaceId: v.optional(v.id("workspaces")),
+      artifactId: v.id("artifacts"),
+      createdAt: v.number(),
+    })
+      .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"])
+      .index("by_owner_thread_artifact", ["ownerUserId", "threadId", "artifactId"])
+      .index("by_owner_workspace_artifact", ["ownerUserId", "workspaceId", "artifactId"]),
+    workspaces: defineTable({
+      ownerUserId: v.string(),
+      name: v.string(),
+      emoji: v.optional(v.string()),
+      description: v.optional(v.string()),
+      status: v.union(v.literal("active"), v.literal("archived")),
+      archivedAt: v.optional(v.number()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_owner_status_updated", ["ownerUserId", "status", "updatedAt"])
+      .index("by_owner_updated", ["ownerUserId", "updatedAt"]),
+    workspaceFolders: defineTable({
+      ownerUserId: v.string(),
+      workspaceId: v.id("workspaces"),
+      name: v.string(),
+      status: v.union(v.literal("active"), v.literal("deleted")),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+      deletedAt: v.optional(v.number()),
+    })
+      .index("by_owner_workspace_status_updated", [
+        "ownerUserId",
+        "workspaceId",
+        "status",
+        "updatedAt",
+      ])
+      .index("by_owner_workspace_name", ["ownerUserId", "workspaceId", "name"]),
+    usageLedger: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      messageId: v.optional(v.string()),
+      provider: v.string(),
+      model: v.string(),
+      inputTokens: v.number(),
+      outputTokens: v.number(),
+      totalTokens: v.number(),
+      createdAt: v.number(),
+    })
+      .index("by_owner_created", ["ownerUserId", "createdAt"])
+      .index("by_thread_created", ["threadId", "createdAt"]),
+    billingSubscriptions: defineTable({
+      ownerUserId: v.string(),
+      polarSubscriptionId: v.string(),
+      polarProductId: v.string(),
+      productKey: v.optional(v.string()),
+      planKey: v.union(v.literal("starter"), v.literal("plus")),
+      billingInterval: v.union(v.literal("month"), v.literal("year")),
+      status: v.string(),
+      currentPeriodStart: v.optional(v.number()),
+      currentPeriodEnd: v.optional(v.number()),
+      cancelAtPeriodEnd: v.optional(v.boolean()),
+      canceledAt: v.optional(v.number()),
+      rawJson: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_owner_updated", ["ownerUserId", "updatedAt"])
+      .index("by_subscription", ["polarSubscriptionId"]),
+    billingEvents: defineTable({
+      eventKey: v.string(),
+      eventType: v.string(),
+      processedAt: v.number(),
+    }).index("by_event_key", ["eventKey"]),
+    adminEntitlements: defineTable({
+      ownerUserId: v.string(),
+      email: v.string(),
+      enabled: v.boolean(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_owner", ["ownerUserId"])
+      .index("by_email", ["email"]),
+    billingCreditPeriods: defineTable({
+      ownerUserId: v.string(),
+      periodKey: v.string(),
+      planKey: v.union(
+        v.literal("free"),
+        v.literal("starter"),
+        v.literal("plus"),
+        v.literal("admin"),
+      ),
+      status: v.string(),
+      creditsLimit: v.number(),
+      creditsUsed: v.number(),
+      estimatedCostCents: v.number(),
+      spendCeilingCents: v.number(),
+      startedAt: v.number(),
+      resetAt: v.number(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }).index("by_owner_period", ["ownerUserId", "periodKey"]),
+    providerUsageLedger: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.optional(v.string()),
+      runId: v.optional(runId),
+      feature: v.union(
+        v.literal("normal_chat"),
+        v.literal("cited_answer"),
+        v.literal("deep_research"),
+        v.literal("external_search"),
+      ),
+      provider: v.string(),
+      model: v.optional(v.string()),
+      inputTokens: v.optional(v.number()),
+      outputTokens: v.optional(v.number()),
+      totalTokens: v.optional(v.number()),
+      credits: v.number(),
+      estimatedCostCents: v.number(),
+      metadataJson: v.optional(v.string()),
+      createdAt: v.number(),
+    })
+      .index("by_owner_created", ["ownerUserId", "createdAt"])
+      .index("by_owner_feature_created", ["ownerUserId", "feature", "createdAt"]),
+    messageCommands: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      messageId: v.string(),
+      commandId: v.string(),
+      commandLabel: v.string(),
+      commandSlug: v.string(),
+      mode: v.union(v.literal("normal"), v.literal("deep")),
+      argumentPreview: v.string(),
+      expandedPromptSnapshot: v.string(),
+      createdAt: v.number(),
+    })
+      .index("by_owner_message", ["ownerUserId", "messageId"])
+      .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"]),
+    hitlSessions: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      promptMessageId: v.string(),
+      assistantMessageId: v.optional(v.string()),
+      runId: v.optional(v.id("agentRuns")),
+      sourceKind: v.union(
+        v.literal("artifact"),
+        v.literal("deep_research"),
+        v.literal("generic"),
+      ),
+      phase: v.union(
+        v.literal("clarifying"),
+        v.literal("plan_review"),
+        v.literal("executing"),
+        v.literal("completed"),
+        v.literal("cancelled"),
+      ),
+      commandId: v.optional(v.string()),
+      answersJson: v.optional(v.string()),
+      executionPayloadJson: v.optional(v.string()),
+      createdAt: v.number(),
+      resolvedAt: v.optional(v.number()),
+    })
+      .index("by_owner_thread_phase_created", [
+        "ownerUserId",
+        "threadId",
+        "phase",
+        "createdAt",
+      ])
+      .index("by_owner_message", ["ownerUserId", "promptMessageId"]),
+    hitlCards: defineTable({
+      sessionId: v.id("hitlSessions"),
+      ownerUserId: v.string(),
+      order: v.number(),
+      kind: v.union(
+        v.literal("question"),
+        v.literal("plan_review"),
+        v.literal("confirmation"),
+      ),
+      status: v.union(
+        v.literal("pending"),
+        v.literal("answered"),
+        v.literal("skipped"),
+        v.literal("approved"),
+        v.literal("rejected"),
+      ),
+      prompt: v.optional(v.string()),
+      optionsJson: v.optional(v.string()),
+      selectedOptionIds: v.optional(v.array(v.string())),
+      customAnswer: v.optional(v.string()),
+      allowCustom: v.optional(v.boolean()),
+      title: v.optional(v.string()),
+      summary: v.optional(v.string()),
+      planBullets: v.optional(v.array(v.string())),
+      message: v.optional(v.string()),
+      destructive: v.optional(v.boolean()),
+      payloadJson: v.optional(v.string()),
+      requiresWorkspacePick: v.optional(v.boolean()),
+      workspaceId: v.optional(v.id("workspaces")),
+      createdAt: v.number(),
+    })
+      .index("by_session_order", ["sessionId", "order"])
+      .index("by_owner_session", ["ownerUserId", "sessionId"]),
+    messageWorkspaceArtifacts: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      messageId: v.string(),
+      artifactId: v.id("artifacts"),
+      relation: v.union(
+        v.literal("created"),
+        v.literal("updated"),
+        v.literal("deleted"),
+        v.literal("referenced"),
+      ),
+      createdAt: v.number(),
+    })
+      .index("by_owner_message", ["ownerUserId", "messageId"])
+      .index("by_owner_artifact", ["ownerUserId", "artifactId"])
+      .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"]),
+    messageWorkspaceActions: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      messageId: v.string(),
+      workspaceId: v.id("workspaces"),
+      action: v.union(v.literal("created"), v.literal("renamed")),
+      createdAt: v.number(),
+    })
+      .index("by_owner_message", ["ownerUserId", "messageId"])
+      .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"]),
+    messageContextArtifacts: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      messageId: v.string(),
+      artifactId: v.id("artifacts"),
+      title: v.string(),
+      artifactType: v.optional(artifactTypeValidator),
+      source: v.optional(v.union(v.literal("upload"), v.literal("workspace"))),
+      kind: v.optional(v.union(v.literal("document"), v.literal("url"))),
+      createdAt: v.number(),
+    }).index("by_owner_message", ["ownerUserId", "messageId"]),
+    agentRuns: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      promptMessageId: v.string(),
+      mode: v.union(v.literal("normal"), v.literal("deep")),
+      executionKind: v.union(v.literal("inline"), v.literal("workflow")),
+      workflowId: v.optional(v.string()),
+      promptSnapshot: v.optional(v.string()),
+      commandId: v.optional(v.string()),
+      status: v.union(
+        v.literal("queued"),
+        v.literal("running"),
+        v.literal("waiting"),
+        v.literal("completed"),
+        v.literal("failed"),
+        v.literal("canceled"),
+      ),
+      currentStep: v.optional(v.string()),
+      failedStep: v.optional(v.string()),
+      roundCount: v.optional(v.number()),
+      maxRounds: v.optional(v.number()),
+      sufficiencyStatus: v.optional(
+        v.union(
+          v.literal("unknown"),
+          v.literal("insufficient"),
+          v.literal("partial"),
+          v.literal("sufficient"),
+          v.literal("budget_exhausted"),
+        ),
+      ),
+      verificationStatus: v.optional(
+        v.union(
+          v.literal("not_started"),
+          v.literal("checking"),
+          v.literal("passed"),
+          v.literal("revised"),
+          v.literal("partial"),
+          v.literal("failed"),
+        ),
+      ),
+      budgetJson: v.optional(v.string()),
+      activeArtifactId: v.optional(v.id("artifacts")),
+      artifactCount: v.number(),
+      sourceCount: v.number(),
+      citationCheckCount: v.number(),
+      retryOfRunId: v.optional(runId),
+      retryable: v.boolean(),
+      canceledAt: v.optional(v.number()),
+      errorCode: v.optional(v.string()),
+      errorMessage: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+      completedAt: v.optional(v.number()),
+    })
+      .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"])
+      .index("by_owner_status", ["ownerUserId", "status"])
+      .index("by_workflow", ["workflowId"]),
+    agentRunSteps: defineTable({
+      ownerUserId: v.string(),
+      runId,
+      stepKey: v.string(),
+      label: v.string(),
+      order: v.number(),
+      status: v.union(
+        v.literal("pending"),
+        v.literal("running"),
+        v.literal("completed"),
+        v.literal("failed"),
+        v.literal("canceled"),
+      ),
+      summary: v.optional(v.string()),
+      sourceCount: v.optional(v.number()),
+      artifactCount: v.optional(v.number()),
+      failureReason: v.optional(v.string()),
+      startedAt: v.optional(v.number()),
+      completedAt: v.optional(v.number()),
+      updatedAt: v.number(),
+    })
+      .index("by_run_order", ["runId", "order"])
+      .index("by_owner_run", ["ownerUserId", "runId"])
+      .index("by_owner_run_and_step", ["ownerUserId", "runId", "stepKey"]),
+    agentRunEvents: defineTable({
+      ownerUserId: v.string(),
+      runId,
+      threadId: v.string(),
+      stepKey: v.optional(v.string()),
+      eventType: v.union(
+        v.literal("plan"),
+        v.literal("gap"),
+        v.literal("query"),
+        v.literal("search"),
+        v.literal("read"),
+        v.literal("rerank"),
+        v.literal("audit"),
+        v.literal("tool"),
+        v.literal("artifact"),
+        v.literal("status"),
+        v.literal("failure"),
+      ),
+      round: v.optional(v.number()),
+      title: v.string(),
+      summary: v.string(),
+      metadataJson: v.optional(v.string()),
+      createdAt: v.number(),
+    })
+      .index("by_owner_run_created", ["ownerUserId", "runId", "createdAt"])
+      .index("by_run_created", ["runId", "createdAt"]),
+    researchRoundStates: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      runId,
+      round: v.number(),
+      status: v.union(
+        v.literal("planned"),
+        v.literal("discovering"),
+        v.literal("reading"),
+        v.literal("assessing"),
+        v.literal("completed"),
+        v.literal("failed"),
+      ),
+      query: v.string(),
+      gapAssessment: v.string(),
+      sufficiencyStatus: v.union(
+        v.literal("unknown"),
+        v.literal("insufficient"),
+        v.literal("partial"),
+        v.literal("sufficient"),
+        v.literal("budget_exhausted"),
+      ),
+      sourceCount: v.number(),
+      extractCount: v.number(),
+      stateJson: v.string(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_owner_run_round", ["ownerUserId", "runId", "round"])
+      .index("by_run_round", ["runId", "round"]),
+    artifacts: defineTable({
+      ownerUserId: v.string(),
+      workspaceId: v.optional(v.id("workspaces")),
+      folderId: v.optional(v.id("workspaceFolders")),
+      threadId: v.optional(v.string()),
+      runId: v.optional(runId),
+      artifactType: v.optional(artifactTypeValidator),
+      artifactFamily: v.optional(artifactFamilyValidator),
+      source: v.optional(artifactSourceValidator),
+      kind: v.optional(v.union(v.literal("document"), v.literal("url"))),
+      type: v.optional(v.string()),
+      contentFormat: v.optional(v.string()),
+      title: v.string(),
+      language: v.optional(v.string()),
+      mimeType: v.optional(v.string()),
+      fileName: v.optional(v.string()),
+      byteSize: v.optional(v.number()),
+      indexingStatus: v.optional(indexingStatusValidator),
+      indexingFailureReason: v.optional(v.string()),
+      detectedDocumentKind: v.optional(detectedDocumentKindValidator),
+      ragEntryId: v.optional(v.string()),
+      indexedAt: v.optional(v.number()),
+      storageId: v.optional(v.id("_storage")),
+      plainTextPreview: v.optional(v.string()),
+      status: v.optional(v.union(v.literal("active"), v.literal("deleted"))),
+      deletedAt: v.optional(v.number()),
+      currentVersionId: v.optional(v.id("artifactVersions")),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"])
+      .index("by_owner_run", ["ownerUserId", "runId"])
+      .index("by_owner_status_updated", ["ownerUserId", "status", "updatedAt"])
+      .index("by_owner_workspace_status_updated", [
+        "ownerUserId",
+        "workspaceId",
+        "status",
+        "updatedAt",
+      ])
+      .index("by_owner_workspace_folder_status_updated", [
+        "ownerUserId",
+        "workspaceId",
+        "folderId",
+        "status",
+        "updatedAt",
+      ]),
+    artifactContents: defineTable(artifactContentFields)
+      .index("by_owner_artifact", ["ownerUserId", "artifactId"])
+      .index("by_owner_thread", ["ownerUserId", "threadId"])
+      .index("by_owner_workspace_updated", ["ownerUserId", "workspaceId", "updatedAt"]),
+    artifactExtractions: defineTable({
+      ownerUserId: v.string(),
+      artifactId: v.id("artifacts"),
+      workspaceId: v.optional(v.id("workspaces")),
+      extractor: artifactExtractorValidator,
+      status: extractionStatusValidator,
+      attemptId: v.optional(v.string()),
+      inputStorageId: v.optional(v.id("_storage")),
+      outputStorageId: v.optional(v.id("_storage")),
+      outputMimeType: v.optional(v.string()),
+      failureReason: v.optional(v.string()),
+      startedAt: v.optional(v.number()),
+      completedAt: v.optional(v.number()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_owner_artifact_extractor", [
+        "ownerUserId",
+        "artifactId",
+        "extractor",
+      ])
+      .index("by_owner_workspace_status_updated", [
+        "ownerUserId",
+        "workspaceId",
+        "status",
+        "updatedAt",
+      ]),
+    artifactPaperMetadata: defineTable({
+      ownerUserId: v.string(),
+      artifactId: v.id("artifacts"),
+      workspaceId: v.id("workspaces"),
+      title: v.optional(v.string()),
+      abstract: v.optional(v.string()),
+      doi: v.optional(v.string()),
+      authors: v.optional(v.array(paperAuthorValidator)),
+      affiliations: v.optional(v.array(v.string())),
+      journal: v.optional(v.string()),
+      publisher: v.optional(v.string()),
+      publishedYear: v.optional(v.number()),
+      keywords: v.optional(v.array(v.string())),
+      referencesStorageId: v.optional(v.id("_storage")),
+      sectionsStorageId: v.optional(v.id("_storage")),
+      teiStorageId: v.optional(v.id("_storage")),
+      metadataSource: v.union(
+        v.literal("grobid"),
+        v.literal("crossref"),
+        v.literal("openalex"),
+        v.literal("manual"),
+        v.literal("llm"),
+      ),
+      confidence: v.optional(v.number()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_owner_artifact", ["ownerUserId", "artifactId"])
+      .index("by_owner_workspace_updated", ["ownerUserId", "workspaceId", "updatedAt"])
+      .index("by_owner_doi", ["ownerUserId", "doi"]),
+    artifactUrls: defineTable({
+      ownerUserId: v.string(),
+      workspaceId: v.id("workspaces"),
+      artifactId: v.id("artifacts"),
+      originalUrl: v.string(),
+      normalizedUrl: v.string(),
+      status: v.union(v.literal("pending"), v.literal("ready"), v.literal("failed")),
+      title: v.optional(v.string()),
+      description: v.optional(v.string()),
+      siteName: v.optional(v.string()),
+      readableText: v.optional(v.string()),
+      contextText: v.optional(v.string()),
+      storageId: v.optional(v.id("_storage")),
+      failureReason: v.optional(v.string()),
+      extractedAt: v.optional(v.number()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_owner_artifact", ["ownerUserId", "artifactId"])
+      .index("by_owner_workspace_normalized_url", [
+        "ownerUserId",
+        "workspaceId",
+        "normalizedUrl",
+      ])
+      .index("by_owner_workspace_status_updated", [
+        "ownerUserId",
+        "workspaceId",
+        "status",
+        "updatedAt",
+      ]),
+    artifactVersions: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      artifactId: v.id("artifacts"),
+      runId: v.optional(runId),
+      versionNumber: v.number(),
+      contentFormat: v.union(
+        v.literal("markdown"),
+        v.literal("html"),
+        v.literal("plain"),
+        v.literal("code"),
+        v.literal("json"),
+      ),
+      title: v.string(),
+      body: v.optional(v.string()),
+      storageId: v.optional(v.id("_storage")),
+      createdByMessageId: v.optional(v.string()),
+      changeSummary: v.optional(v.string()),
+      createdAt: v.number(),
+    })
+      .index("by_owner_artifact_version", ["ownerUserId", "artifactId", "versionNumber"])
+      .index("by_owner_artifact_created", ["ownerUserId", "artifactId", "createdAt"]),
+    messageArtifacts: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      messageId: v.string(),
+      artifactId: v.id("artifacts"),
+      versionId: v.id("artifactVersions"),
+      relation: v.union(
+        v.literal("created"),
+        v.literal("updated"),
+        v.literal("referenced"),
+      ),
+      createdAt: v.number(),
+    })
+      .index("by_owner_message", ["ownerUserId", "messageId"])
+      .index("by_owner_artifact", ["ownerUserId", "artifactId"])
+      .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"]),
+    citationChecks: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      runId,
+      artifactId: v.id("artifacts"),
+      artifactVersionId: v.id("artifactVersions"),
+      claim: v.string(),
+      support: v.union(
+        v.literal("supported"),
+        v.literal("partially_supported"),
+        v.literal("contradicted"),
+        v.literal("partial"),
+        v.literal("unsupported"),
+      ),
+      sourceIds: v.array(v.id("researchSources")),
+      verifierModel: v.optional(v.string()),
+      confidence: v.optional(v.number()),
+      failureReason: v.optional(v.string()),
+      extractIds: v.optional(v.array(v.id("researchExtracts"))),
+      revisionAction: v.optional(
+        v.union(
+          v.literal("none"),
+          v.literal("caveated"),
+          v.literal("removed_or_rewritten"),
+        ),
+      ),
+      evidence: v.string(),
+      createdAt: v.number(),
+    })
+      .index("by_owner_artifact", ["ownerUserId", "artifactId"])
+      .index("by_owner_run", ["ownerUserId", "runId"]),
+    researchSources: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      messageId: v.optional(v.string()),
+      runId: v.optional(runId),
+      artifactId: v.optional(v.id("artifacts")),
+      artifactVersionId: v.optional(v.id("artifactVersions")),
+      sourceKey: v.optional(v.string()),
+      usage: v.optional(
+        v.union(
+          v.literal("candidate"),
+          v.literal("cited"),
+          v.literal("accepted"),
+          v.literal("rejected"),
+        ),
+      ),
+      citationNumber: v.number(),
+      origin: v.union(
+        v.literal("web"),
+        v.literal("arxiv"),
+        v.literal("doi"),
+      ),
+      provider: v.optional(v.string()),
+      providerRequestId: v.optional(v.string()),
+      evidenceStrength: v.union(
+        v.literal("strong"),
+        v.literal("medium"),
+        v.literal("weak"),
+      ),
+      title: v.string(),
+      locator: v.string(),
+      url: v.optional(v.string()),
+      doi: v.optional(v.string()),
+      arxivId: v.optional(v.string()),
+      snippet: v.string(),
+      readStatus: v.optional(
+        v.union(
+          v.literal("not_needed"),
+          v.literal("ready"),
+          v.literal("failed"),
+        ),
+      ),
+      readError: v.optional(v.string()),
+      qualityReason: v.optional(v.string()),
+      bucketName: v.optional(v.string()),
+      discoveryQuery: v.optional(v.string()),
+      rerankScore: v.optional(v.number()),
+      metadataJson: v.optional(v.string()),
+      createdAt: v.number(),
+      lastSeenAt: v.optional(v.number()),
+    })
+      .index("by_owner_thread", ["ownerUserId", "threadId"])
+      .index("by_owner_message", ["ownerUserId", "messageId"])
+      .index("by_owner_run", ["ownerUserId", "runId"])
+      .index("by_owner_run_source_key", ["ownerUserId", "runId", "sourceKey"])
+      .index("by_owner_artifact", ["ownerUserId", "artifactId"]),
+    researchExtracts: defineTable({
+      ownerUserId: v.string(),
+      runId,
+      threadId: v.string(),
+      sourceKey: v.string(),
+      citationNumber: v.number(),
+      title: v.string(),
+      locator: v.string(),
+      quote: v.string(),
+      relevance: v.union(
+        v.literal("high"),
+        v.literal("medium"),
+        v.literal("low"),
+      ),
+      notes: v.optional(v.string()),
+      createdAt: v.number(),
+    })
+      .index("by_owner_run", ["ownerUserId", "runId"])
+      .index("by_run_citation", ["runId", "citationNumber"]),
+    externalLookupCache: defineTable({
+      provider: v.union(
+        v.literal("openalex"),
+        v.literal("crossref"),
+        v.literal("arxiv"),
+        v.literal("exa"),
+        v.literal("jina_search"),
+        v.literal("jina_read"),
+        v.literal("jina_rerank"),
+        v.literal("explore"),
+      ),
+      cacheKey: v.string(),
+      status: v.union(v.literal("ready"), v.literal("empty"), v.literal("failed")),
+      valueJson: v.string(),
+      failureReason: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+      expiresAt: v.number(),
+    }).index("by_provider_key", ["provider", "cacheKey"]),
+
+    explorePapers: defineTable({
+      ...explorePaperFields,
+      lastSeenAt: v.number(),
+    }).index("by_key", ["key"]),
+
+    domainReliability: defineTable({
+      domain: v.string(),
+      successCount: v.number(),
+      failureCount: v.number(),
+      lastFailureReason: v.optional(v.string()),
+      lastSeenAt: v.number(),
+      updatedAt: v.number(),
+    }).index("by_domain", ["domain"]),
+  },
+  { schemaValidation: true },
+);

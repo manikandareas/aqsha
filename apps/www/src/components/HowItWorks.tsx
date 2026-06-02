@@ -1,5 +1,6 @@
 import { Button } from "@aqsha/ui/components/button";
-import { ArrowRight, FileText, Wand2, BarChart3 } from "lucide-react";
+import { ArrowRight } from "@aqsha/ui/icons";
+import type { ReactNode } from "react";
 import { Card } from "@aqsha/ui/components/card";
 import { signInUrl } from "@/lib/urls";
 import { MotionItem, MotionSection } from "@/components/motion-reveal";
@@ -12,7 +13,7 @@ const StepCard = ({
   showArrow = true,
 }: {
   number: number;
-  visual: React.ReactNode | string;
+  visual: ReactNode | string;
   title: string;
   description: string;
   showArrow?: boolean;

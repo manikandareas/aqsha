@@ -1,0 +1,10 @@
+{
+  "ignore": {
+    "overrides": [
+      {
+        "files": ["app/convex-client-provider.tsx"],
+        "rules": ["react-hooks-js/hooks"]
+      }
+    ]
+  }
+}

@@ -1,28 +1,42 @@
 import type { Metadata } from "next";
-import { Fuzzy_Bubbles, Geist_Mono, Nunito } from "next/font/google";
+import { ClerkProvider } from "@clerk/nextjs";
+import { Inter, JetBrains_Mono, Playfair_Display } from "next/font/google";
+import { NuqsAdapter } from "nuqs/adapters/next/app";
+import { ThemeProvider } from "@/components/theme-provider";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { AppToaster } from "@/components/app-toaster";
+import { MotionProvider } from "@/components/motion-provider";
+import { siteName } from "@/lib/metadata";
+import { ConvexClientProvider } from "./convex-client-provider";
+import { shadcn } from "@clerk/themes";
 import "./globals.css";
-import { Providers } from "./providers";
 
-const aqshaDisplay = Nunito({
-  variable: "--font-aqsha-display-loaded",
+const inter = Inter({
+  variable: "--font-sans",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
-const aqshaHandwriting = Fuzzy_Bubbles({
-  variable: "--font-aqsha-handwriting-loaded",
+const playfairDisplay = Playfair_Display({
+  variable: "--font-serif",
   subsets: ["latin"],
-  weight: ["400", "700"],
+  weight: ["700", "800"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-mono",
   subsets: ["latin"],
+  weight: ["400", "500"],
 });
 
 export const metadata: Metadata = {
-  title: "Aqsha Web",
+  applicationName: siteName,
+  title: {
+    default: siteName,
+    template: `%s | ${siteName}`,
+  },
   description:
-    "Next.js 16 app wired to the Bun API.",
+    "Aqsha is a research workspace for focused inquiry, threads, and curated knowledge.",
 };
 
 export default async function RootLayout({
@@ -33,11 +47,27 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`${aqshaDisplay.variable} ${aqshaHandwriting.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
+      className={`${inter.variable} ${playfairDisplay.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <body className={`${aqshaDisplay.className} min-h-full flex flex-col`}>
-        <Providers>{children}</Providers>
+      <body className="min-h-full">
+        <ClerkProvider appearance={{ baseTheme: shadcn }}>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <ConvexClientProvider>
+              <NuqsAdapter>
+                <MotionProvider>
+                  <TooltipProvider>{children}</TooltipProvider>
+                </MotionProvider>
+              </NuqsAdapter>
+              <AppToaster />
+            </ConvexClientProvider>
+          </ThemeProvider>
+        </ClerkProvider>
       </body>
     </html>
   );

@@ -1,5 +1,5 @@
 import { Card } from "@aqsha/ui/components/card";
-import { Quote } from "lucide-react";
+import { Quote } from "@aqsha/ui/icons";
 import { MotionSection } from "@/components/motion-reveal";
 
 interface TestimonialProps {
