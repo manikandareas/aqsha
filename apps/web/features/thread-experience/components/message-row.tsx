@@ -2,6 +2,7 @@
 
 import { api } from "@aqsha/convex/api";
 import {
+  AlertCircleIcon,
   BracesIcon,
   CheckIcon,
   Code2Icon,
@@ -74,6 +75,7 @@ export function MessageRow({
 }) {
   const isUser = message.role === "user";
   const isStreaming = message.status === "streaming";
+  const isFailed = message.status === "failed";
   const text = getMessageText(message);
   const hasText = Boolean(text.trim());
   const messageArtifacts = useConvexQueryData(
@@ -111,7 +113,16 @@ export function MessageRow({
   return (
     <Message from="assistant" className="min-w-0 overflow-x-hidden">
       <MessageContent className="w-full min-w-0 overflow-hidden bg-transparent p-0 text-[13px] leading-[1.55] text-ink-soft">
-        {hasText ? (
+        {isFailed ? (
+          <div className="flex items-start gap-2 rounded-[10px] border border-coral-soft-border bg-coral-soft px-3 py-2.5 text-[13px] font-medium leading-[1.55] text-coral-foreground">
+            <AlertCircleIcon className="mt-0.5 size-4 shrink-0" />
+            <span>
+              {hasText
+                ? text
+                : "Astra belum bisa menjawab pesan ini. Coba kirim ulang sebentar lagi."}
+            </span>
+          </div>
+        ) : hasText ? (
           <MessageResponse className="aqsha-prose aqsha-prose-message">
             {text}
           </MessageResponse>

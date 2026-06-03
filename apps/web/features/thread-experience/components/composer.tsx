@@ -21,6 +21,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { MAX_UPLOAD_BYTES } from "@aqsha/convex/artifact-upload-limits";
 import type { PromptCommand } from "@aqsha/convex/prompt-commands";
 import {
@@ -95,6 +96,7 @@ type ComposerSharedProps = {
   activeRun?: ResearchRun;
   onCancelRun?: (runId: string) => Promise<unknown>;
   hitlBlocking?: boolean;
+  isGenerating?: boolean;
   showSuggestions?: boolean;
   threads?: ThreadSummary[];
 };
@@ -144,6 +146,7 @@ function ComposerContent(props: ComposerProps) {
     activeRun,
     onCancelRun,
     hitlBlocking = false,
+    isGenerating = false,
     showSuggestions = false,
     threads = [],
   } = props;
@@ -183,6 +186,7 @@ function ComposerContent(props: ComposerProps) {
     isRateLimited,
     activeRun,
     hitlBlocking,
+    isGenerating,
   });
   const isInteractionLocked = isDeepActive || hitlBlocking;
   const router = useRouter();
@@ -289,6 +293,9 @@ function ComposerContent(props: ComposerProps) {
         if (result.reason === "rate_limited" && result.retryAt) {
           setLocalRetryAt(result.retryAt);
           setBillingBlock(null);
+        } else if (result.reason === "reply_in_progress") {
+          toast.info("Astra masih menjawab pesan sebelumnya. Tunggu sebentar ya.");
+          setBillingBlock(null);
         } else {
           setBillingBlock(result);
         }
@@ -364,6 +371,7 @@ function ComposerContent(props: ComposerProps) {
             isInteractionLocked={isInteractionLocked}
             isRateLimited={isRateLimited}
             isSending={isSending}
+            isGenerating={isGenerating}
             mode={mode}
             retrySeconds={retrySeconds}
             shellExpanded={shellExpanded}
@@ -427,7 +435,7 @@ async function uploadComposerAttachments({
 }: {
   createThreadAttachment: (args: {
     threadId: string;
-    storageId: never;
+    storageId: StorageId;
     fileName: string;
     mimeType: string;
     size: number;
@@ -477,7 +485,7 @@ async function uploadComposerAttachments({
     if (threadId) {
       const artifact = await createThreadAttachment({
         threadId,
-        storageId: body.storageId as never,
+        storageId: toStorageId(body.storageId),
         fileName: file.name,
         mimeType: file.type || filePart.mediaType || "application/octet-stream",
         size: file.size,
@@ -533,6 +541,7 @@ function ComposerPromptInputContent({
   isInteractionLocked,
   isRateLimited,
   isSending,
+  isGenerating,
   mode,
   retrySeconds,
   shellExpanded,
@@ -559,6 +568,7 @@ function ComposerPromptInputContent({
   isInteractionLocked: boolean;
   isRateLimited: boolean;
   isSending: boolean;
+  isGenerating: boolean;
   mode: "normal" | "deep";
   retrySeconds: number;
   shellExpanded: boolean;
@@ -646,7 +656,7 @@ function ComposerPromptInputContent({
               {showVoiceInput ? <MicButton disabled={disabled || isInteractionLocked} /> : null}
               <ComposerSubmitButton
                 canSend={canSend}
-                isSending={isSending}
+                isSending={isSending || isGenerating}
                 isDeepActive={isDeepActive}
                 activeRun={activeRun}
                 onCancelRun={onCancelRun}

@@ -14,7 +14,8 @@ export type SendResult =
         | "rate_limited"
         | "quota_exceeded"
         | "subscription_required"
-        | "billing_inactive";
+        | "billing_inactive"
+        | "reply_in_progress";
       retryAt?: number;
       resetAt?: number;
       requiredPlan?: "free" | "starter" | "plus";

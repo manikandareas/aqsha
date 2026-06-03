@@ -34,6 +34,7 @@ import type * as agent_rag from "../agent/rag.js";
 import type * as agent_ragContext from "../agent/ragContext.js";
 import type * as agent_rateLimits from "../agent/rateLimits.js";
 import type * as agent_researchTools from "../agent/researchTools.js";
+import type * as agent_runLifecycle from "../agent/runLifecycle.js";
 import type * as agent_runtime from "../agent/runtime.js";
 import type * as agent_sourceCandidates from "../agent/sourceCandidates.js";
 import type * as agent_sourceQuality from "../agent/sourceQuality.js";
@@ -119,6 +120,7 @@ declare const fullApi: ApiFromModules<{
   "agent/ragContext": typeof agent_ragContext;
   "agent/rateLimits": typeof agent_rateLimits;
   "agent/researchTools": typeof agent_researchTools;
+  "agent/runLifecycle": typeof agent_runLifecycle;
   "agent/runtime": typeof agent_runtime;
   "agent/sourceCandidates": typeof agent_sourceCandidates;
   "agent/sourceQuality": typeof agent_sourceQuality;

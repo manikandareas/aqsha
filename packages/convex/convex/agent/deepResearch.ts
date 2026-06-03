@@ -36,6 +36,7 @@ import {
 import { assertThreadOwner, tryAssertThreadOwner } from "./threads";
 import { researchWorkflow } from "./workflow";
 import { CHAT_PROVIDER_NAME, chatProvider } from "./providers";
+import { markThreadStatusAfterTerminalRun } from "./runLifecycle";
 
 const DEEP_MODEL = process.env.AQSHA_DEEP_MODEL ?? "gpt-5.5";
 const DEEP_LITE_MODEL = process.env.AQSHA_DEEP_LITE_MODEL ?? "gpt-5.4-mini";
@@ -1702,6 +1703,7 @@ function estimateTokens(content: string) {
 
 async function markCanceled(ctx: MutationCtx, runId: Id<"agentRuns">, ownerUserId: string) {
   const now = Date.now();
+  const run = await ctx.db.get("agentRuns", runId);
   await ctx.db.patch("agentRuns", runId, {
     status: "canceled",
     canceledAt: now,
@@ -1719,6 +1721,15 @@ async function markCanceled(ctx: MutationCtx, runId: Id<"agentRuns">, ownerUserI
         ctx.db.patch("agentRunSteps", step._id, { status: "canceled", completedAt: now, updatedAt: now }),
       ),
   );
+  if (run) {
+    await markThreadStatusAfterTerminalRun(ctx, {
+      ownerUserId,
+      threadId: run.threadId,
+      runId,
+      status: "idle",
+      now,
+    });
+  }
 }
 
 async function failRun(
@@ -1738,6 +1749,7 @@ async function failRun(
     status: "failed",
     failureReason: args.message,
   });
+  const run = await ctx.db.get("agentRuns", args.runId);
   await ctx.db.patch("agentRuns", args.runId, {
     status: "failed",
     failedStep: args.stepKey,
@@ -1746,6 +1758,14 @@ async function failRun(
     errorMessage: args.message,
     updatedAt: Date.now(),
   });
+  if (run) {
+    await markThreadStatusAfterTerminalRun(ctx, {
+      ownerUserId: args.ownerUserId,
+      threadId: run.threadId,
+      runId: args.runId,
+      status: "failed",
+    });
+  }
 }
 
 async function ensureNotCanceled(

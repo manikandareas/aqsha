@@ -544,6 +544,13 @@ export default defineSchema(
       updatedAt: v.number(),
     })
       .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"])
+      .index("by_owner_thread_source_status_created", [
+        "ownerUserId",
+        "threadId",
+        "source",
+        "status",
+        "createdAt",
+      ])
       .index("by_owner_run", ["ownerUserId", "runId"])
       .index("by_owner_status_updated", ["ownerUserId", "status", "updatedAt"])
       .index("by_owner_workspace_status_updated", [

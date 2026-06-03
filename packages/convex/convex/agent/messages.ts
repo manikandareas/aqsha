@@ -48,6 +48,7 @@ import {
   replaceContextArtifactsForThread,
 } from "./threadContext";
 import { CHAT_PROVIDER_NAME, chatProvider } from "./providers";
+import { hasActiveReplyRun, hasOtherActiveReplyRun } from "./runLifecycle";
 
 const MAX_CONTENT_LENGTH = 8_000;
 const FAILURE_TEXT =
@@ -68,6 +69,7 @@ const sendResultValidator = v.union(
       v.literal("quota_exceeded"),
       v.literal("subscription_required"),
       v.literal("billing_inactive"),
+      v.literal("reply_in_progress"),
     ),
     retryAt: v.optional(v.number()),
     resetAt: v.optional(v.number()),
@@ -86,7 +88,12 @@ type SendResult =
     }
   | {
       ok: false;
-      reason: "rate_limited" | "quota_exceeded" | "subscription_required" | "billing_inactive";
+      reason:
+        | "rate_limited"
+        | "quota_exceeded"
+        | "subscription_required"
+        | "billing_inactive"
+        | "reply_in_progress";
       retryAt?: number;
       resetAt?: number;
       requiredPlan?: "free" | "starter" | "plus";
@@ -228,10 +235,6 @@ async function checkAndConsumeSendQuota(
   const rateChecks = await Promise.all([
     rateLimiter.check(ctx, "sendMessage", { key: args.ownerUserId }),
     rateLimiter.check(ctx, "globalSendMessage"),
-    rateLimiter.check(ctx, "tokenUsagePerUser", {
-      key: args.ownerUserId,
-      count: estimatedTokens,
-    }),
     rateLimiter.check(ctx, "globalTokenUsage", { count: estimatedTokens }),
   ]);
   const blocked = rateChecks.find((status) => !status.ok);
@@ -586,6 +589,9 @@ export const send = mutation({
     const user = await requireCurrentUser(ctx);
     const content = validateContent(args.content);
     const thread = await assertThreadOwner(ctx, args.threadId);
+    if (await hasActiveReplyRun(ctx, { ownerUserId: user._id, threadId: args.threadId })) {
+      return { ok: false as const, reason: "reply_in_progress" as const };
+    }
     const quota = await checkAndConsumeSendQuota(ctx, {
       ownerUserId: user._id,
       ownerEmail: user.email,
@@ -880,6 +886,7 @@ export const generateReply = internalAction({
       await ctx.runMutation(internal.agent.messages.markThreadIdle, {
         ownerUserId: args.userId,
         threadId: args.threadId,
+        runId: args.runId,
         preview: previewFromContent(text),
         incrementMessageCount: true,
       });
@@ -915,6 +922,7 @@ export const generateReply = internalAction({
       await ctx.runMutation(internal.agent.messages.markThreadFailed, {
         ownerUserId: args.userId,
         threadId: args.threadId,
+        runId: args.runId,
         preview: FAILURE_TEXT,
       });
       throw error;
@@ -1392,10 +1400,21 @@ export const markThreadIdle = internalMutation({
   args: {
     ownerUserId: v.string(),
     threadId: v.string(),
+    runId: v.optional(v.id("agentRuns")),
     preview: v.string(),
     incrementMessageCount: v.boolean(),
   },
   handler: async (ctx, args) => {
+    if (
+      args.runId &&
+      (await hasOtherActiveReplyRun(ctx, {
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+        runId: args.runId,
+      }))
+    ) {
+      return;
+    }
     await upsertThreadMetadata(ctx, {
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
@@ -1410,9 +1429,20 @@ export const markThreadFailed = internalMutation({
   args: {
     ownerUserId: v.string(),
     threadId: v.string(),
+    runId: v.optional(v.id("agentRuns")),
     preview: v.string(),
   },
   handler: async (ctx, args) => {
+    if (
+      args.runId &&
+      (await hasOtherActiveReplyRun(ctx, {
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+        runId: args.runId,
+      }))
+    ) {
+      return;
+    }
     await upsertThreadMetadata(ctx, {
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
@@ -1459,13 +1489,29 @@ export const recordUsage = internalMutation({
     totalTokens: v.number(),
   },
   handler: async (ctx, args) => {
-    await Promise.all([
-      rateLimiter.limit(ctx, "tokenUsagePerUser", {
-        key: args.ownerUserId,
+    // Observe-only: record global token throughput so the pre-send check can act
+    // as a system-wide safety valve, but NEVER throw here. This mutation runs in
+    // the usage handler AFTER the reply is already generated; throwing would crash
+    // a completed reply. `throws: false` covers normal over-limit; the try/catch
+    // covers the hard "count exceeds capacity" error the component raises when a
+    // single turn's tokens exceed the bucket capacity.
+    try {
+      const globalStatus = await rateLimiter.limit(ctx, "globalTokenUsage", {
         count: args.totalTokens,
-      }),
-      rateLimiter.limit(ctx, "globalTokenUsage", { count: args.totalTokens }),
-    ]);
+        throws: false,
+      });
+      if (!globalStatus.ok) {
+        console.warn("globalTokenUsage soft limit reached", {
+          totalTokens: args.totalTokens,
+          retryAfter: globalStatus.retryAfter,
+        });
+      }
+    } catch (error) {
+      console.warn("globalTokenUsage recording skipped", {
+        totalTokens: args.totalTokens,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     await ctx.db.insert("usageLedger", {
       ...args,
       model: args.model || NORMAL_MODEL,

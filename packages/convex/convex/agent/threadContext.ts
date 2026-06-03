@@ -18,12 +18,16 @@ import { assertWorkspaceArtifactOwner } from "../workspaceAccess";
 const PROMPT_CONTEXT_TOTAL_LIMIT = 16_000;
 const PROMPT_CONTEXT_ARTIFACT_LIMIT = 4_000;
 const PROMPT_CONTEXT_THREAD_DOCUMENT_LIMIT = 4;
-const THREAD_DOCUMENT_ARTIFACT_SCAN_LIMIT = 24;
+const THREAD_DOCUMENT_ARTIFACT_SCAN_LIMIT = 12;
 const MAX_SELECTED_CONTEXT_ARTIFACTS = 12;
 
 type ThreadContextCtx = QueryCtx | MutationCtx;
 
 type SelectedArtifactRow = Doc<"threadContextArtifacts">;
+type ContextArtifactTarget = {
+  artifact: Doc<"artifacts">;
+  source: "selected" | "message_attachment" | "thread_upload";
+};
 
 type PromptContextArtifact = {
   artifactId?: string;
@@ -157,20 +161,111 @@ async function listThreadDocumentArtifacts(ctx: ThreadContextCtx, args: {
 }) {
   const artifacts = await ctx.db
     .query("artifacts")
-    .withIndex("by_owner_thread_created", (q) =>
-      q.eq("ownerUserId", args.ownerUserId).eq("threadId", args.threadId),
+    .withIndex("by_owner_thread_source_status_created", (q) =>
+      q
+        .eq("ownerUserId", args.ownerUserId)
+        .eq("threadId", args.threadId)
+        .eq("source", "upload")
+        .eq("status", "active"),
     )
     .order("desc")
     .take(THREAD_DOCUMENT_ARTIFACT_SCAN_LIMIT);
 
   return artifacts.filter((artifact) => {
     const artifactType = artifactTypeForLegacyArtifact(artifact);
-    return (
-      artifact.status === "active" &&
-      artifact.source === "upload" &&
-      artifactType !== "url"
-    );
+    return artifactType !== "url";
   });
+}
+
+async function getContextArtifactTargetById(
+  ctx: ThreadContextCtx,
+  args: {
+    ownerUserId: string;
+    threadId: string;
+    artifactId: Id<"artifacts">;
+    source: ContextArtifactTarget["source"];
+    threadWorkspaceId?: Id<"workspaces">;
+  },
+): Promise<ContextArtifactTarget | null> {
+  const artifact = await ctx.db.get("artifacts", args.artifactId);
+  if (
+    !artifact ||
+    artifact.ownerUserId !== args.ownerUserId ||
+    artifact.status !== "active"
+  ) {
+    return null;
+  }
+  if (artifact.workspaceId) {
+    if (args.threadWorkspaceId && artifact.workspaceId !== args.threadWorkspaceId) {
+      return null;
+    }
+  } else if (artifact.threadId !== args.threadId) {
+    return null;
+  }
+  return { artifact, source: args.source };
+}
+
+async function listContextArtifactTargets(
+  ctx: ThreadContextCtx,
+  args: {
+    ownerUserId: string;
+    threadId: string;
+    messageAttachmentArtifactIds?: Id<"artifacts">[];
+  },
+) {
+  const [rows, threadWorkspaceId] = await Promise.all([
+    listSelectedRows(ctx, args),
+    getThreadWorkspaceId(ctx, args),
+  ]);
+  const seen = new Set<string>();
+  const targets: ContextArtifactTarget[] = [];
+
+  const appendById = async (
+    artifactId: Id<"artifacts">,
+    source: ContextArtifactTarget["source"],
+  ) => {
+    const key = String(artifactId);
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    const target = await getContextArtifactTargetById(ctx, {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      artifactId,
+      source,
+      threadWorkspaceId,
+    });
+    if (target) {
+      targets.push(target);
+    }
+  };
+
+  for (const row of rows) {
+    await appendById(row.artifactId, "selected");
+  }
+  for (const artifactId of args.messageAttachmentArtifactIds ?? []) {
+    await appendById(artifactId, "message_attachment");
+  }
+  const remainingThreadUploadSlots = Math.max(
+    0,
+    PROMPT_CONTEXT_THREAD_DOCUMENT_LIMIT,
+  );
+  if (remainingThreadUploadSlots > 0) {
+    let threadUploadCount = 0;
+    for (const artifact of await listThreadDocumentArtifacts(ctx, args)) {
+      if (threadUploadCount >= remainingThreadUploadSlots) {
+        break;
+      }
+      const beforeCount = targets.length;
+      await appendById(artifact._id, "thread_upload");
+      if (targets.length > beforeCount) {
+        threadUploadCount += 1;
+      }
+    }
+  }
+
+  return targets;
 }
 
 async function getArtifactUrl(ctx: ThreadContextCtx, args: {
@@ -279,36 +374,17 @@ function buildContextBlock(artifacts: PromptContextArtifact[]) {
   return lines.join("\n").trim();
 }
 
-async function getPromptContextArtifactById(
+async function getPromptContextArtifact(
   ctx: ThreadContextCtx,
   ownerUserId: string,
-  artifactId: Id<"artifacts">,
-  threadId: string,
+  target: ContextArtifactTarget,
   remainingBudget: number,
 ): Promise<PromptContextArtifact | null> {
   if (remainingBudget <= 0) {
     return null;
   }
 
-  const artifact = await ctx.db.get("artifacts", artifactId);
-  if (
-    !artifact ||
-    artifact.ownerUserId !== ownerUserId ||
-    artifact.status !== "active"
-  ) {
-    return null;
-  }
-
-  if (artifact.workspaceId) {
-    await assertArtifactAvailableForThread(ctx, {
-      ownerUserId,
-      threadId,
-      artifactWorkspaceId: artifact.workspaceId,
-    });
-  } else if (artifact.threadId !== threadId) {
-    return null;
-  }
-
+  const artifact = target.artifact;
   const artifactType = artifactTypeForLegacyArtifact(artifact);
   const [contentRow, url] = await Promise.all([
     artifactType !== "url"
@@ -336,66 +412,6 @@ async function getPromptContextArtifactById(
   return {
     artifactId: String(artifact._id),
     workspaceId: artifact.workspaceId ? String(artifact.workspaceId) : undefined,
-    title: artifact.title,
-    artifactType,
-    url: url
-      ? {
-          normalizedUrl: url.normalizedUrl,
-          status: url.status,
-          failureReason: url.failureReason,
-        }
-      : undefined,
-    content,
-  };
-}
-
-async function getPromptContextArtifact(
-  ctx: ThreadContextCtx,
-  ownerUserId: string,
-  row: SelectedArtifactRow,
-  remainingBudget: number,
-): Promise<PromptContextArtifact | null> {
-  if (remainingBudget <= 0) {
-    return null;
-  }
-
-  const artifact = await ctx.db.get("artifacts", row.artifactId);
-  if (
-    !artifact ||
-    artifact.ownerUserId !== ownerUserId ||
-    artifact.status !== "active" ||
-    !artifact.workspaceId
-  ) {
-    return null;
-  }
-
-  const artifactType = artifactTypeForLegacyArtifact(artifact);
-  const [contentRow, url] = await Promise.all([
-    artifactType !== "url"
-      ? ctx.db
-          .query("artifactContents")
-          .withIndex("by_owner_artifact", (q) =>
-            q.eq("ownerUserId", ownerUserId).eq("artifactId", artifact._id),
-          )
-          .unique()
-      : Promise.resolve(null),
-    artifactType === "url"
-      ? getArtifactUrl(ctx, { ownerUserId, artifactId: artifact._id })
-      : Promise.resolve(null),
-  ]);
-
-  const rawContent =
-    contentRow?.contextText ??
-    contentRow?.plainText ??
-    contentRow?.markdown ??
-    url?.contextText ??
-    url?.readableText ??
-    "";
-  const content = clipText(rawContent, Math.min(PROMPT_CONTEXT_ARTIFACT_LIMIT, remainingBudget));
-
-  return {
-    artifactId: String(artifact._id),
-    workspaceId: String(artifact.workspaceId),
     title: artifact.title,
     artifactType,
     url: url
@@ -449,43 +465,14 @@ export async function buildPromptContextForThread(
   },
 ) {
   await assertOwnedThread(ctx, args);
-  const rows = await listSelectedRows(ctx, args);
-  const selectedIds = new Set(rows.map((row) => String(row.artifactId)));
-  const messageAttachmentIds = (args.messageAttachmentArtifactIds ?? []).filter(
-    (artifactId) => !selectedIds.has(String(artifactId)),
-  );
-  const currentIds = new Set([
-    ...selectedIds,
-    ...messageAttachmentIds.map((artifactId) => String(artifactId)),
-  ]);
-  const threadDocumentArtifacts = (await listThreadDocumentArtifacts(ctx, args))
-    .filter((artifact) => !currentIds.has(String(artifact._id)))
-    .slice(0, PROMPT_CONTEXT_THREAD_DOCUMENT_LIMIT);
+  const targets = await listContextArtifactTargets(ctx, args);
 
   const resolved = await Promise.all([
-    ...rows.map((row) =>
+    ...targets.map((target) =>
       getPromptContextArtifact(
         ctx,
         args.ownerUserId,
-        row,
-        PROMPT_CONTEXT_ARTIFACT_LIMIT,
-      ),
-    ),
-    ...messageAttachmentIds.map((artifactId) =>
-      getPromptContextArtifactById(
-        ctx,
-        args.ownerUserId,
-        artifactId,
-        args.threadId,
-        PROMPT_CONTEXT_ARTIFACT_LIMIT,
-      ),
-    ),
-    ...threadDocumentArtifacts.map((artifact) =>
-      getPromptContextArtifactById(
-        ctx,
-        args.ownerUserId,
-        artifact._id,
-        args.threadId,
+        target,
         PROMPT_CONTEXT_ARTIFACT_LIMIT,
       ),
     ),
@@ -558,77 +545,16 @@ export const listRagTargetsForThread = internalQuery({
     if (!(await isOwnedThread(ctx, args))) {
       return [];
     }
-    const rows = await listSelectedRows(ctx, args);
-    const threadWorkspaceId = await getThreadWorkspaceId(ctx, args);
-    const targetIds = new Set<string>();
+    const contextTargets = await listContextArtifactTargets(ctx, args);
     const targets = [];
 
-    for (const row of rows) {
-      targetIds.add(String(row.artifactId));
-      const artifact = await ctx.db.get("artifacts", row.artifactId);
-      const artifactType = artifact ? artifactTypeForLegacyArtifact(artifact) : undefined;
+    for (const { artifact } of contextTargets) {
+      const artifactType = artifactTypeForLegacyArtifact(artifact);
       if (
-        !artifact ||
-        artifact.ownerUserId !== args.ownerUserId ||
-        artifact.status !== "active" ||
-        artifactType === "url"
+        artifactType !== "url" &&
+        artifact.ragEntryId &&
+        artifact.indexingStatus === "ready"
       ) {
-        continue;
-      }
-      if (artifact.workspaceId) {
-        if (threadWorkspaceId && artifact.workspaceId !== threadWorkspaceId) {
-          continue;
-        }
-      } else if (artifact.threadId !== args.threadId) {
-        continue;
-      }
-      if (artifact.ragEntryId && artifact.indexingStatus === "ready") {
-        targets.push({
-          artifactId: artifact._id,
-          workspaceId: artifact.workspaceId,
-          title: artifact.title,
-          ragEntryId: artifact.ragEntryId,
-        });
-      }
-    }
-
-    for (const artifact of await listThreadDocumentArtifacts(ctx, args)) {
-      if (targetIds.has(String(artifact._id))) {
-        continue;
-      }
-      targetIds.add(String(artifact._id));
-      if (artifact.ragEntryId && artifact.indexingStatus === "ready") {
-        targets.push({
-          artifactId: artifact._id,
-          workspaceId: artifact.workspaceId,
-          title: artifact.title,
-          ragEntryId: artifact.ragEntryId,
-        });
-      }
-    }
-
-    for (const artifactId of args.messageAttachmentArtifactIds ?? []) {
-      if (targetIds.has(String(artifactId))) {
-        continue;
-      }
-      const artifact = await ctx.db.get("artifacts", artifactId);
-      const artifactType = artifact ? artifactTypeForLegacyArtifact(artifact) : undefined;
-      if (
-        !artifact ||
-        artifact.ownerUserId !== args.ownerUserId ||
-        artifact.status !== "active" ||
-        artifactType === "url"
-      ) {
-        continue;
-      }
-      if (artifact.workspaceId) {
-        if (threadWorkspaceId && artifact.workspaceId !== threadWorkspaceId) {
-          continue;
-        }
-      } else if (artifact.threadId !== args.threadId) {
-        continue;
-      }
-      if (artifact.ragEntryId && artifact.indexingStatus === "ready") {
         targets.push({
           artifactId: artifact._id,
           workspaceId: artifact.workspaceId,

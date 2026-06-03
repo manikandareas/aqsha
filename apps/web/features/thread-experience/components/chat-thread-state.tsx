@@ -1,6 +1,7 @@
 "use client";
 
 import { useUIMessages } from "@convex-dev/agent/react";
+import { AlertCircleIcon } from "@aqsha/ui/icons";
 import { api } from "@aqsha/convex/api";
 import { useConvexAuth, useConvexQueryData } from "@/lib/convex-query";
 import {
@@ -98,6 +99,14 @@ export function ThreadChatSurface({
     isAuthenticated && threadId ? { threadId } : "skip",
   );
   const hitlBlocking = hitlSession?.blocksComposer ?? false;
+  const threadStatus = useConvexQueryData(
+    api.agent.threads.get,
+    isAuthenticated && threadId ? { threadId } : "skip",
+  );
+  // Lock the composer while a reply is still being generated for this thread.
+  // `send` only schedules generation and returns immediately, so `isSending`
+  // alone re-opens the composer before the agent finishes streaming.
+  const isGenerating = threadStatus?.status === "streaming";
   const messages = useUIMessages(
     api.agent.messages.list,
     isAuthenticated && threadId ? { threadId } : "skip",
@@ -185,6 +194,12 @@ export function ThreadChatSurface({
         )}
       >
         <div className={cn(compact ? "mx-auto w-full max-w-none" : threadTranscriptColumnClass)}>
+          {threadId && threadStatus?.status === "failed" ? (
+            <div className="mb-2 flex items-start gap-2 rounded-[10px] border border-coral-soft-border bg-coral-soft px-3 py-2.5 text-[12px] font-medium leading-5 text-coral-foreground">
+              <AlertCircleIcon className="mt-0.5 size-4 shrink-0" />
+              <span>Respons terakhir gagal diproses. Coba kirim pesan lagi.</span>
+            </div>
+          ) : null}
           {threadId && hitlSession ? (
             <HitlDock
               session={hitlSession}
@@ -207,6 +222,7 @@ export function ThreadChatSurface({
               contextArtifacts={contextArtifacts}
               onRemoveContextArtifact={onRemoveContextArtifact}
               hitlBlocking={hitlBlocking}
+              isGenerating={isGenerating}
             />
           ) : (
             <Composer

@@ -1034,50 +1034,6 @@ export const patchUploadedArtifactIndexed = internalMutation({
   },
 });
 
-export const getOwnedArtifactForReindex = internalQuery({
-  args: {
-    ownerUserId: v.string(),
-    artifactId: v.id("artifacts"),
-  },
-  handler: async (ctx, args) => {
-    const artifact = await ctx.db.get("artifacts", args.artifactId);
-    if (!artifact || artifact.ownerUserId !== args.ownerUserId || artifact.status !== "active") {
-      return null;
-    }
-    return {
-      _id: artifact._id,
-      ownerUserId: artifact.ownerUserId,
-      workspaceId: artifact.workspaceId,
-      threadId: artifact.threadId,
-      source: artifact.source,
-      title: artifact.title,
-    };
-  },
-});
-
-export const getArtifactContentForReindex = internalQuery({
-  args: {
-    ownerUserId: v.string(),
-    artifactId: v.id("artifacts"),
-  },
-  handler: async (ctx, args) => {
-    const row = await ctx.db
-      .query("artifactContents")
-      .withIndex("by_owner_artifact", (q) =>
-        q.eq("ownerUserId", args.ownerUserId).eq("artifactId", args.artifactId),
-      )
-      .unique();
-    if (!row) {
-      return null;
-    }
-    return {
-      markdown: row.markdown,
-      plainText: row.plainText,
-      contextText: row.contextText,
-    };
-  },
-});
-
 export const patchUploadedArtifactIndexingFailed = internalMutation({
   args: {
     ownerUserId: v.string(),

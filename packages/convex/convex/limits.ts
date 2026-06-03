@@ -17,12 +17,9 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
     period: MINUTE,
     capacity: 1_000,
   },
-  tokenUsagePerUser: {
-    kind: "token bucket",
-    rate: 2_000,
-    period: MINUTE,
-    capacity: 10_000,
-  },
+  // Global token-throughput safety valve. Plan-based monthly credits
+  // (see billing/catalog.ts) are the real per-user quota; this only guards the
+  // whole system against provider TPM / cost spikes. Never enforced per user.
   globalTokenUsage: {
     kind: "token bucket",
     rate: 100_000,
