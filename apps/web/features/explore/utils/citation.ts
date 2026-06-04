@@ -1,8 +1,15 @@
-import type { ExplorePaper } from "@aqsha/convex/explore";
-
 export type CitationFormat = "bibtex" | "markdown" | "plain";
 
-export function formatCitation(paper: ExplorePaper, format: CitationFormat) {
+export type CitationInput = {
+  title: string;
+  authors: string[];
+  url: string;
+  doi?: string;
+  year?: number;
+  venue?: string;
+};
+
+export function formatCitation(paper: CitationInput, format: CitationFormat) {
   if (format === "bibtex") {
     return formatBibtexCitation(paper);
   }
@@ -12,7 +19,7 @@ export function formatCitation(paper: ExplorePaper, format: CitationFormat) {
   return formatPlainCitation(paper);
 }
 
-function formatPlainCitation(paper: ExplorePaper) {
+function formatPlainCitation(paper: CitationInput) {
   const authors = formatAuthors(paper.authors);
   const year = paper.year ? ` (${paper.year}).` : ".";
   const venue = paper.venue ? ` ${paper.venue}.` : "";
@@ -20,14 +27,14 @@ function formatPlainCitation(paper: ExplorePaper) {
   return `${authors}${year} ${paper.title}.${venue}${locator}`.replace(/\s+/g, " ").trim();
 }
 
-function formatMarkdownCitation(paper: ExplorePaper) {
+function formatMarkdownCitation(paper: CitationInput) {
   const authors = formatAuthors(paper.authors);
   const year = paper.year ? ` (${paper.year})` : "";
   const venue = paper.venue ? `, ${paper.venue}` : "";
   return `${authors}${year}. [${paper.title}](${paper.url})${venue}.`;
 }
 
-function formatBibtexCitation(paper: ExplorePaper) {
+function formatBibtexCitation(paper: CitationInput) {
   const key = bibtexKey(paper);
   const fields = [
     ["title", paper.title],
@@ -58,7 +65,7 @@ function formatAuthors(authors: string[]) {
   return `${authors[0]} et al.`;
 }
 
-function bibtexKey(paper: ExplorePaper) {
+function bibtexKey(paper: CitationInput) {
   const author = paper.authors[0]?.split(/\s+/).at(-1) ?? "paper";
   const year = paper.year ?? "nd";
   const titleWord = paper.title.match(/[a-z0-9]+/i)?.[0] ?? "work";

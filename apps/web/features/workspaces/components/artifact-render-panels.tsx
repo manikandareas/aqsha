@@ -1,18 +1,17 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import type { ReactNode } from "react";
 import type { BundledLanguage } from "shiki";
 import {
-  Code2Icon,
+  ArrowLeftIcon,
   DownloadIcon,
   ExternalLinkIcon,
   FileIcon,
-  InfoIcon,
   Loader2Icon,
   MoreHorizontalIcon,
-  FileTextIcon,
-  RotateCcwIcon,
+  Trash2Icon,
 } from "@aqsha/ui/icons";
 import {
   CodeBlock,
@@ -20,7 +19,6 @@ import {
   CodeBlockCopyButton,
   CodeBlockHeader,
 } from "@/components/ai-elements/code-block";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -36,40 +34,27 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { ArtifactId } from "@/lib/convex-refs";
-import { toArtifactId } from "@/lib/convex-refs";
-import { panelBodyPaddingClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
 import { MermaidArtifactViewer } from "./mermaid-artifact-viewer";
-import { urlArtifactDisplayModel } from "../utils/url-artifact-model";
 
 const PdfArtifactViewer = dynamic(
   () => import("./pdf-artifact-viewer").then((module) => module.PdfArtifactViewer),
   {
     ssr: false,
     loading: () => (
-      <div className="flex min-h-[420px] items-center justify-center gap-2 text-[13px] font-medium text-muted-foreground">
+      <div className="flex min-h-[640px] items-center justify-center gap-2 text-[13px] font-medium text-muted-foreground">
         <Loader2Icon className="size-4 animate-spin" />
-        Memuat PDF…
+        Loading PDF…
       </div>
     ),
   },
 );
 
-const artifactTabsRootClass =
-  "relative h-full min-h-0 w-full gap-0 overflow-visible before:absolute before:left-0 before:top-11 before:bottom-0 before:w-px before:bg-border/80 before:content-[''] after:absolute after:left-0 after:right-[-1.25rem] after:top-11 after:h-px after:bg-border/80 after:content-[''] sm:after:right-[-1.75rem]";
-const artifactTabsListClass =
-  "relative z-[1] h-11 rounded-none border-0 bg-transparent p-0 text-muted-foreground";
-const artifactTabsTriggerClass =
-  "relative -mb-px h-11 min-w-28 gap-2 rounded-t-[16px] border border-border/80 border-b-0 bg-card/40 px-4 text-[13px] font-semibold shadow-none transition-colors hover:bg-card/70 data-[state=active]:z-[2] data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-none [&+button]:-ml-px";
-const artifactTabsContentClass =
-  "relative z-0 h-0 min-h-0 flex-1 overflow-auto px-5 pb-6 pt-4 sm:px-6";
-const artifactTabsFlushContentClass =
-  "relative z-0 h-0 min-h-0 flex-1 overflow-hidden p-0";
-const artifactVisualViewerClass =
-  "flex h-full min-h-[520px] w-full items-center justify-center overflow-auto";
-const artifactInsetSurfaceClass =
-  "rounded-[8px] border border-border/80 bg-card/40";
+const tabsListClass =
+  "h-10 w-full justify-start gap-5 rounded-none border-0 border-b border-border bg-transparent p-0";
+const tabsTriggerClass =
+  "h-10 min-w-0 gap-2 rounded-none border-b-2 border-transparent bg-transparent px-0 text-[13px] font-semibold text-muted-foreground shadow-none data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none";
+const insetSurfaceClass = "rounded-[8px] border border-border/80 bg-card/40";
 
 export type ArtifactRenderPayload =
   | {
@@ -124,457 +109,206 @@ export type PaperExtractionStatus = {
   } | null;
 } | undefined;
 
-export function TypedArtifactDetail({
+type NonMarkdownPayload = Exclude<ArtifactRenderPayload, { artifactType: "markdown" }>;
+
+export function ArtifactReadingColumn({
   payload,
   title,
   paperExtraction,
-  retryGrobidExtraction,
-  artifactId,
 }: {
-  payload: Exclude<ArtifactRenderPayload, { artifactType: "markdown" | "url" }>;
+  payload: NonMarkdownPayload;
   title: string;
-  paperExtraction: PaperExtractionStatus;
-  retryGrobidExtraction: (args: { artifactId: ArtifactId }) => Promise<unknown>;
-  artifactId: string;
+  paperExtraction?: PaperExtractionStatus;
 }) {
+  if (payload.artifactType === "url") {
+    return <UrlReadingColumn url={payload} />;
+  }
+
   if (payload.artifactType === "pdf") {
+    const abstract = paperExtraction?.metadata?.abstract;
     return (
-      <Tabs defaultValue="viewer" className={artifactTabsRootClass}>
-        <ArtifactDetailControls>
-          <TabsList className={artifactTabsListClass}>
-            <TabsTrigger value="viewer" className={artifactTabsTriggerClass}>
-              <FileTextIcon className="size-4" />
-              Viewer
-            </TabsTrigger>
-            <TabsTrigger value="details" className={artifactTabsTriggerClass}>
-              <InfoIcon className="size-4" />
-              Details
-            </TabsTrigger>
-          </TabsList>
-          <FileArtifactToolbar
-            payload={payload}
-            paperExtraction={paperExtraction}
-            retryGrobidExtraction={retryGrobidExtraction}
-            artifactId={artifactId}
-          />
-        </ArtifactDetailControls>
-        <TabsContent value="viewer" className={artifactTabsFlushContentClass}>
+      <div className="space-y-8">
+        <div className={cn("h-[78svh] min-h-[640px] overflow-hidden", insetSurfaceClass)}>
           <PdfArtifactViewer url={payload.url} fileName={payload.fileName} />
-        </TabsContent>
-        <TabsContent value="details" className={artifactTabsContentClass}>
-          <FileArtifactDetails payload={payload} paperExtraction={paperExtraction} title={title} />
-        </TabsContent>
-      </Tabs>
+        </div>
+        {abstract ? <AbstractSection abstract={abstract} /> : null}
+      </div>
     );
   }
 
   if (payload.artifactType === "docx") {
     return (
-      <Tabs defaultValue="viewer" className={artifactTabsRootClass}>
-        <ArtifactDetailControls>
-          <TabsList className={artifactTabsListClass}>
-            <TabsTrigger value="viewer" className={artifactTabsTriggerClass}>
-              <FileTextIcon className="size-4" />
-              Viewer
-            </TabsTrigger>
-            <TabsTrigger value="source" className={artifactTabsTriggerClass}>
-              <Code2Icon className="size-4" />
-              Source
-            </TabsTrigger>
-          </TabsList>
-          <FileArtifactToolbar payload={payload} />
-        </ArtifactDetailControls>
-        <TabsContent value="viewer" className={artifactTabsContentClass}>
-          <div className={cn("grid min-h-[360px] place-items-center gap-3 p-8 text-center", artifactInsetSurfaceClass)}>
-            <FileIcon className="size-10 text-muted-foreground" />
-            <div className="grid gap-1">
-              <p className="text-[14px] font-semibold text-foreground">{title}</p>
-              <p className="text-[12px] font-medium text-muted-foreground">
-                {payload.fileName} / {formatByteSize(payload.byteSize)}
-              </p>
-            </div>
-          </div>
-        </TabsContent>
-        <TabsContent value="source" className={artifactTabsContentClass}>
-          <SourceArtifactDetail
-            source={fileArtifactSource(payload)}
-            language="json"
-            filename={`${payload.fileName}.source.json`}
-          />
-        </TabsContent>
-      </Tabs>
+      <div className={cn("grid min-h-[420px] place-items-center gap-3 p-8 text-center", insetSurfaceClass)}>
+        <FileIcon className="size-10 text-muted-foreground" />
+        <div className="grid gap-1">
+          <p className="text-[14px] font-semibold text-foreground">{title}</p>
+          <p className="text-[12px] font-medium text-muted-foreground">
+            {payload.fileName} / {formatByteSize(payload.byteSize)}
+          </p>
+          <p className="text-[12px] font-medium text-muted-foreground">
+            Open or download this document from the actions above.
+          </p>
+        </div>
+      </div>
     );
-  }
-
-  if (payload.artifactType === "html") {
-    return (
-      <PreviewWithSource
-        title="HTML preview"
-        source={payload.source}
-        srcDoc={buildSandboxedHtmlDocument(payload.source)}
-        language={payload.language ?? "html"}
-      />
-    );
-  }
-
-  if (payload.artifactType === "svg") {
-    return (
-      <PreviewWithSource
-        title="SVG preview"
-        source={payload.source}
-        srcDoc={buildSandboxedSvgDocument(payload.source)}
-        language={payload.language ?? "svg"}
-      />
-    );
-  }
-
-  if (payload.artifactType === "mermaid") {
-    return (
-      <ViewerSourceTabs
-        viewer={<MermaidArtifactViewer source={payload.source} />}
-        source={payload.source}
-        language={payload.language ?? "mermaid"}
-        filename="artifact.mermaid"
-        visual
-      />
-    );
-  }
-
-  if (payload.artifactType === "json") {
-    return <JsonArtifactDetail source={payload.source} />;
   }
 
   if (!("source" in payload)) {
     return null;
   }
 
-  return <SourceOnlyArtifactDetail payload={payload} />;
-}
-
-function FileArtifactToolbar({
-  payload,
-  paperExtraction,
-  retryGrobidExtraction,
-  artifactId,
-}: {
-  payload: Extract<ArtifactRenderPayload, { artifactType: "pdf" | "docx" }>;
-  paperExtraction?: PaperExtractionStatus;
-  retryGrobidExtraction?: (args: { artifactId: ArtifactId }) => Promise<unknown>;
-  artifactId?: string;
-}) {
-  const canRetryPaperParsing =
-    payload.artifactType === "pdf" &&
-    paperExtraction?.extraction?.status === "failed" &&
-    retryGrobidExtraction &&
-    artifactId;
-  return (
-    <TooltipProvider>
-      <div className="flex items-center gap-1">
-        <StatusDot
-          label={indexingStatusLabel(payload.indexingStatus)}
-          tone={payload.indexingStatus === "failed" ? "destructive" : payload.indexingStatus === "ready" ? "success" : "muted"}
-          title={payload.indexingFailureReason}
-        />
-        {payload.artifactType === "pdf" ? (
-          <StatusDot
-            label={paperParsingLabel(paperExtraction)}
-            tone={paperExtraction?.extraction?.status === "failed" ? "destructive" : paperExtraction?.extraction?.status === "ready" ? "success" : "muted"}
-            title={paperExtraction?.extraction?.failureReason}
-          />
-        ) : null}
-        {canRetryPaperParsing ? (
-          <IconButtonTooltip label="Retry parser">
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-sm"
-              onClick={() => void retryGrobidExtraction({ artifactId: toArtifactId(artifactId) })}
-            >
-              <RotateCcwIcon className="size-4" />
-            </Button>
-          </IconButtonTooltip>
-        ) : null}
-        <IconButtonTooltip label="Open file">
-          <Button asChild variant="outline" size="icon-sm">
-            <a href={payload.url} target="_blank" rel="noreferrer" aria-label="Open file">
-              <ExternalLinkIcon className="size-4" />
-            </a>
-          </Button>
-        </IconButtonTooltip>
-        <IconButtonTooltip label="Download file">
-          <Button asChild variant="outline" size="icon-sm">
-            <a href={payload.url} download={payload.fileName} aria-label="Download file">
-              <DownloadIcon className="size-4" />
-            </a>
-          </Button>
-        </IconButtonTooltip>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button type="button" variant="ghost" size="icon-sm" aria-label="File details">
-              <MoreHorizontalIcon className="size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-72">
-            <DropdownMenuItem className="flex-col items-start gap-0.5">
-              <span className="max-w-full truncate font-medium text-foreground">
-                {payload.fileName}
-              </span>
-              <span>{payload.mimeType} / {formatByteSize(payload.byteSize)}</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </TooltipProvider>
-  );
-}
-
-function ArtifactDetailControls({ children }: { children: ReactNode }) {
-  return (
-    <div className="relative z-[2] flex min-h-11 flex-wrap items-end justify-between gap-3">
-      {children}
-    </div>
-  );
-}
-
-function FileArtifactDetails({
-  payload,
-  paperExtraction,
-  title,
-}: {
-  payload: Extract<ArtifactRenderPayload, { artifactType: "pdf" | "docx" }>;
-  paperExtraction?: PaperExtractionStatus;
-  title: string;
-}) {
-  return (
-    <div className="grid gap-5">
-      <section className="grid gap-3">
-        <h2 className="text-[14px] font-semibold text-foreground">{title}</h2>
-        <dl className="grid gap-2 text-[13px] sm:grid-cols-2">
-          <MetadataItem label="File" value={payload.fileName} />
-          <MetadataItem label="Type" value={payload.mimeType} />
-          <MetadataItem label="Size" value={formatByteSize(payload.byteSize)} />
-          <MetadataItem
-            label="Indexing"
-            value={indexingStatusLabel(payload.indexingStatus)}
-            description={payload.indexingFailureReason}
-          />
-          {payload.artifactType === "pdf" ? (
-            <MetadataItem
-              label="Paper parser"
-              value={paperParsingLabel(paperExtraction)}
-              description={paperExtraction?.extraction?.failureReason}
-            />
-          ) : null}
-        </dl>
-      </section>
-      {payload.artifactType === "pdf" ? (
-        <PaperMetadataPanel paperExtraction={paperExtraction} />
-      ) : null}
-    </div>
-  );
-}
-
-function PaperMetadataPanel({
-  paperExtraction,
-}: {
-  paperExtraction: PaperExtractionStatus;
-}) {
-  const metadata = paperExtraction?.metadata;
-  if (!metadata) {
-    return null;
+  if (payload.artifactType === "html") {
+    return (
+      <SandboxFrame
+        title="HTML preview"
+        srcDoc={buildSandboxedHtmlDocument(payload.source)}
+        heightClass="h-[60svh] min-h-[480px]"
+      />
+    );
   }
-  const authors = metadata.authors.flatMap((author) =>
-    author.name ? [author.name] : [],
-  );
+
+  if (payload.artifactType === "svg") {
+    return (
+      <SandboxFrame
+        title="SVG preview"
+        srcDoc={buildSandboxedSvgDocument(payload.source)}
+        heightClass="h-[52svh] min-h-[420px]"
+      />
+    );
+  }
+
+  if (payload.artifactType === "mermaid") {
+    return (
+      <div className={cn("h-[52svh] min-h-[420px] overflow-hidden", insetSurfaceClass)}>
+        <MermaidArtifactViewer source={payload.source} />
+      </div>
+    );
+  }
+
+  if (payload.artifactType === "json") {
+    return (
+      <ViewerSourceTabs
+        viewer={<JsonStructuredViewer source={payload.source} />}
+        source={payload.source}
+        language="json"
+      />
+    );
+  }
+
+  if (payload.artifactType === "csv") {
+    return (
+      <ViewerSourceTabs
+        viewer={<CsvArtifactViewer source={payload.source} />}
+        source={payload.source}
+        language="csv"
+      />
+    );
+  }
+
+  if (payload.artifactType === "plain_text") {
+    return (
+      <article className={cn("artifact-prose min-h-[360px] whitespace-pre-wrap p-4", insetSurfaceClass)}>
+        {payload.source || "No text content."}
+      </article>
+    );
+  }
+
+  // code
+  return <SourceBlock source={payload.source} language={payload.language ?? "code"} />;
+}
+
+function UrlReadingColumn({
+  url,
+}: {
+  url: Extract<ArtifactRenderPayload, { artifactType: "url" }>;
+}) {
+  if (url.status === "pending") {
+    return (
+      <div className="flex min-h-[360px] items-center justify-center gap-2 text-[13px] font-medium text-muted-foreground">
+        <Loader2Icon className="size-4 animate-spin" />
+        Reading this page…
+      </div>
+    );
+  }
+  if (url.status === "failed") {
+    return (
+      <p className="rounded-[8px] border border-destructive/30 bg-destructive/5 p-3 text-[13px] font-medium text-destructive">
+        {url.failureReason ?? "We couldn't read this page."}
+      </p>
+    );
+  }
   return (
-    <section className="grid gap-3 border-t border-border/70 pt-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="grid min-w-0 gap-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-            Paper metadata
-          </p>
-          <h2 className="text-[16px] font-semibold leading-6 text-foreground">
-            {metadata.title ?? "Untitled paper"}
-          </h2>
-        </div>
-        {typeof metadata.confidence === "number" ? (
-          <Badge variant="outline">{Math.round(metadata.confidence * 100)}%</Badge>
-        ) : null}
-      </div>
-      <div className="grid gap-1 text-[13px] text-muted-foreground">
-        {authors.length > 0 ? <p>{authors.join(", ")}</p> : null}
-        <p>
-          {[metadata.journal, metadata.publisher, metadata.publishedYear]
-            .filter(Boolean)
-            .join(" / ")}
-        </p>
-        {metadata.doi ? <p>DOI: {metadata.doi}</p> : null}
-      </div>
-      {metadata.abstract ? (
-        <p className="max-w-4xl text-[13px] leading-6 text-foreground/85">
-          {metadata.abstract}
-        </p>
-      ) : null}
+    <article className={cn("artifact-prose min-h-[420px] whitespace-pre-wrap p-4", insetSurfaceClass)}>
+      {url.readableText || "No readable text was extracted."}
+    </article>
+  );
+}
+
+function AbstractSection({ abstract }: { abstract: string }) {
+  return (
+    <section>
+      <h2 className="text-[15px] font-semibold text-foreground">Abstract</h2>
+      <p className="mt-4 max-w-[700px] text-[14px] font-medium leading-6 text-foreground">
+        {abstract}
+      </p>
     </section>
   );
 }
 
-function MetadataItem({
-  label,
-  value,
-  description,
-}: {
-  label: string;
-  value: string;
-  description?: string;
-}) {
-  return (
-    <div className="min-w-0 border-t border-border/60 pt-2">
-      <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-        {label}
-      </dt>
-      <dd className="mt-1 truncate font-medium text-foreground">{value}</dd>
-      {description ? (
-        <dd className="mt-1 text-[12px] leading-5 text-muted-foreground">{description}</dd>
-      ) : null}
-    </div>
-  );
-}
-
-function IconButtonTooltip({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-function StatusDot({
-  label,
-  tone,
-  title,
-}: {
-  label: string;
-  tone: "success" | "destructive" | "muted";
-  title?: string;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          aria-label={label}
-          title={title}
-          className={cn(
-            "inline-flex size-8 items-center justify-center rounded-[8px] border border-border bg-card/60",
-            tone === "success" ? "text-emerald-700" : null,
-            tone === "destructive" ? "text-destructive" : null,
-            tone === "muted" ? "text-muted-foreground" : null,
-          )}
-        >
-          <span className="size-1.5 rounded-full bg-current" />
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>{title ? `${label}: ${title}` : label}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-function indexingStatusLabel(status: "not_indexed" | "pending" | "ready" | "failed") {
-  if (status === "ready") return "Indexed";
-  if (status === "pending") return "Indexing";
-  if (status === "failed") return "Indexing failed";
-  return "Not indexed";
-}
-
-function paperParsingLabel(paperExtraction: PaperExtractionStatus) {
-  const status = paperExtraction?.extraction?.status;
-  if (!status) return "Paper parser idle";
-  if (status === "running" || status === "pending") return "Paper parsing";
-  if (status === "failed") return "Paper parsing failed";
-  return "Paper metadata ready";
-}
-
-function PreviewWithSource({
-  title,
+function ViewerSourceTabs({
+  viewer,
   source,
-  srcDoc,
   language,
 }: {
-  title: string;
+  viewer: ReactNode;
   source: string;
-  srcDoc: string;
   language: string;
 }) {
   return (
-    <Tabs defaultValue="viewer" className={artifactTabsRootClass}>
-      <ArtifactDetailControls>
-        <TabsList className={artifactTabsListClass}>
-          <TabsTrigger value="viewer" className={artifactTabsTriggerClass}>
-            <FileTextIcon className="size-4" />
-            Viewer
-          </TabsTrigger>
-          <TabsTrigger value="source" className={artifactTabsTriggerClass}>
-            <Code2Icon className="size-4" />
-            Source
-          </TabsTrigger>
-        </TabsList>
-      </ArtifactDetailControls>
-      <TabsContent value="viewer" className={artifactTabsContentClass}>
-        <div className={artifactVisualViewerClass}>
-          <iframe
-            title={title}
-            sandbox=""
-            srcDoc={srcDoc}
-            className="h-full min-h-[520px] w-full border-0 bg-background"
-          />
-        </div>
+    <Tabs defaultValue="viewer" className="gap-0">
+      <TabsList className={tabsListClass}>
+        <TabsTrigger value="viewer" className={tabsTriggerClass}>
+          Viewer
+        </TabsTrigger>
+        <TabsTrigger value="source" className={tabsTriggerClass}>
+          Source
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="viewer" className="pt-6">
+        {viewer}
       </TabsContent>
-      <TabsContent value="source" className={artifactTabsContentClass}>
-        <SourceArtifactDetail source={source} language={language} filename={`artifact.${language}`} />
+      <TabsContent value="source" className="pt-6">
+        <SourceBlock source={source} language={language} />
       </TabsContent>
     </Tabs>
   );
 }
 
-function JsonArtifactDetail({ source }: { source: string }) {
-  const parsed = parseJsonSource(source);
+function SandboxFrame({
+  title,
+  srcDoc,
+  heightClass,
+}: {
+  title: string;
+  srcDoc: string;
+  heightClass: string;
+}) {
   return (
-    <ViewerSourceTabs
-      viewer={
-        <div className="grid gap-3">
-          {parsed.error ? (
-            <p className="rounded-[8px] border border-destructive/30 bg-destructive/5 p-3 text-[13px] font-medium text-destructive">
-              {parsed.error}
-            </p>
-          ) : null}
-          <JsonStructuredViewer source={source} />
-        </div>
-      }
-      source={source}
-      language="json"
-      filename="source.json"
-    />
+    <div className={cn("overflow-hidden", insetSurfaceClass)}>
+      <iframe
+        title={title}
+        sandbox=""
+        srcDoc={srcDoc}
+        className={cn("w-full border-0 bg-background", heightClass)}
+      />
+    </div>
   );
 }
 
-function SourceArtifactDetail({
-  source,
-  language,
-}: {
-  source: string;
-  language: string;
-  filename?: string;
-}) {
+function SourceBlock({ source, language }: { source: string; language: string }) {
   const normalizedLanguage = normalizeCodeBlockLanguage(language);
   return (
-    <div className="h-full min-h-[520px] w-full">
+    <div className={cn("h-[60svh] min-h-[420px] overflow-hidden", insetSurfaceClass)}>
       <CodeBlock
         code={source || "No source content."}
         language={normalizedLanguage}
@@ -582,10 +316,10 @@ function SourceArtifactDetail({
           "relative flex h-full min-h-0 flex-col rounded-none border-0 bg-transparent shadow-none",
           "[&_.code-block-content]:min-h-0 [&_.code-block-content]:flex-1",
           "[&_.code-block-content_pre]:min-h-full [&_.code-block-content_pre]:bg-transparent!",
-          "[&_.code-block-content_pre]:px-0 [&_.code-block-content_pre]:pb-4 [&_.code-block-content_pre]:pt-1",
+          "[&_.code-block-content_pre]:px-3 [&_.code-block-content_pre]:py-3",
         )}
       >
-        <CodeBlockHeader className="pointer-events-none absolute right-0 top-0 z-[1] min-h-0 border-b-0 bg-transparent px-0">
+        <CodeBlockHeader className="pointer-events-none absolute right-1 top-1 z-[1] min-h-0 border-b-0 bg-transparent px-0">
           <CodeBlockActions>
             <CodeBlockCopyButton className="pointer-events-auto" />
           </CodeBlockActions>
@@ -595,105 +329,12 @@ function SourceArtifactDetail({
   );
 }
 
-function ViewerSourceTabs({
-  viewer,
-  source,
-  language,
-  filename,
-  visual = false,
-}: {
-  viewer: ReactNode;
-  source: string;
-  language: string;
-  filename?: string;
-  visual?: boolean;
-}) {
-  return (
-    <Tabs defaultValue="viewer" className={artifactTabsRootClass}>
-      <ArtifactDetailControls>
-        <TabsList className={artifactTabsListClass}>
-          <TabsTrigger value="viewer" className={artifactTabsTriggerClass}>
-            <FileTextIcon className="size-4" />
-            Viewer
-          </TabsTrigger>
-          <TabsTrigger value="source" className={artifactTabsTriggerClass}>
-            <Code2Icon className="size-4" />
-            Source
-          </TabsTrigger>
-        </TabsList>
-      </ArtifactDetailControls>
-      <TabsContent value="viewer" className={artifactTabsContentClass}>
-        {visual ? (
-          <div className={artifactVisualViewerClass}>{viewer}</div>
-        ) : (
-          viewer
-        )}
-      </TabsContent>
-      <TabsContent value="source" className={artifactTabsContentClass}>
-        <SourceArtifactDetail source={source} language={language} filename={filename} />
-      </TabsContent>
-    </Tabs>
-  );
-}
-
-function SourceOnlyArtifactDetail({
-  payload,
-}: {
-  payload: Extract<ArtifactRenderPayload, { source: string }>;
-}) {
-  const language = payload.language ?? payload.artifactType;
-  return (
-    <ViewerSourceTabs
-      viewer={<SourceArtifactViewerPreview payload={payload} language={language} />}
-      source={payload.source}
-      language={language}
-      filename={`source.${sourceFileExtension(language)}`}
-    />
-  );
-}
-
-function SourceArtifactViewerPreview({
-  payload,
-  language,
-}: {
-  payload: Extract<ArtifactRenderPayload, { source: string }>;
-  language: string;
-}) {
-  if (payload.artifactType === "csv") {
-    return <CsvArtifactViewer source={payload.source} />;
-  }
-
-  if (payload.artifactType === "plain_text") {
-    return (
-      <article className={cn("artifact-prose min-h-[360px] whitespace-pre-wrap p-4", artifactInsetSurfaceClass)}>
-        {payload.source || "No text content."}
-      </article>
-    );
-  }
-
-  return (
-    <section className={cn("grid min-h-[320px] place-items-center p-8 text-center", artifactInsetSurfaceClass)}>
-      <div className="grid max-w-sm gap-3">
-        <FileIcon className="mx-auto size-9 text-muted-foreground" />
-        <div className="grid gap-1">
-          <h2 className="text-[14px] font-semibold text-foreground">
-            {artifactTypeLabel(payload.artifactType)}
-          </h2>
-          <p className="text-[12px] leading-5 text-muted-foreground">
-            {sourceLineCount(payload.source)} lines / {formatByteSize(new Blob([payload.source]).size)} / {language}
-          </p>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function JsonStructuredViewer({ source }: { source: string }) {
   const parsed = parseJsonSource(source);
 
   if (parsed.error) {
     return (
-      <section className={cn("grid min-h-[260px] place-items-center p-8 text-center", artifactInsetSurfaceClass)}>
+      <section className={cn("grid min-h-[260px] place-items-center p-8 text-center", insetSurfaceClass)}>
         <div className="grid max-w-sm gap-2">
           <h2 className="text-[14px] font-semibold text-foreground">JSON preview unavailable</h2>
           <p className="text-[12px] leading-5 text-muted-foreground">
@@ -708,7 +349,7 @@ function JsonStructuredViewer({ source }: { source: string }) {
   const rows = jsonPreviewRows(value).slice(0, 24);
 
   return (
-    <section className={cn("overflow-hidden", artifactInsetSurfaceClass)}>
+    <section className={cn("overflow-hidden", insetSurfaceClass)}>
       <div className="flex items-center justify-between border-b border-border/70 px-3 py-2">
         <h2 className="text-[13px] font-semibold text-foreground">JSON viewer</h2>
         <span className="text-[11px] font-medium text-muted-foreground">
@@ -717,7 +358,10 @@ function JsonStructuredViewer({ source }: { source: string }) {
       </div>
       <div className="divide-y divide-border/60">
         {rows.map((row) => (
-          <div key={row.path} className="grid gap-1 px-3 py-2 sm:grid-cols-[minmax(0,0.45fr)_minmax(0,0.55fr)] sm:gap-4">
+          <div
+            key={row.path}
+            className="grid gap-1 px-3 py-2 sm:grid-cols-[minmax(0,0.45fr)_minmax(0,0.55fr)] sm:gap-4"
+          >
             <span className="truncate font-mono text-[12px] text-muted-foreground">{row.path}</span>
             <span className="truncate text-[12px] font-medium text-foreground">{row.value}</span>
           </div>
@@ -733,7 +377,7 @@ function CsvArtifactViewer({ source }: { source: string }) {
   const body = rows.slice(1, 11);
 
   return (
-    <div className={cn("overflow-hidden", artifactInsetSurfaceClass)}>
+    <div className={cn("overflow-hidden", insetSurfaceClass)}>
       <div className="flex items-center justify-between border-b border-border/70 px-3 py-2">
         <h2 className="text-[13px] font-semibold text-foreground">CSV viewer</h2>
         <span className="text-[11px] font-medium text-muted-foreground">
@@ -745,7 +389,10 @@ function CsvArtifactViewer({ source }: { source: string }) {
           <thead className="bg-muted/35 text-muted-foreground">
             <tr>
               {header.map((cell, columnIndex) => (
-                <th key={csvColumnKey(cell, columnIndex)} className="border-b border-border px-3 py-2 font-semibold">
+                <th
+                  key={csvColumnKey(cell, columnIndex)}
+                  className="border-b border-border px-3 py-2 font-semibold"
+                >
                   {cell || `Column ${columnIndex + 1}`}
                 </th>
               ))}
@@ -755,7 +402,10 @@ function CsvArtifactViewer({ source }: { source: string }) {
             {body.map((row, rowIndex) => (
               <tr key={csvRowKey(row, rowIndex)} className="border-b border-border/60 last:border-b-0">
                 {header.map((_, cellIndex) => (
-                  <td key={csvColumnKey(header[cellIndex], cellIndex)} className="max-w-72 truncate px-3 py-2 text-foreground">
+                  <td
+                    key={csvColumnKey(header[cellIndex], cellIndex)}
+                    className="max-w-72 truncate px-3 py-2 text-foreground"
+                  >
                     {row[cellIndex] ?? ""}
                   </td>
                 ))}
@@ -773,154 +423,189 @@ function csvColumnKey(cell: string | undefined, columnIndex: number) {
 }
 
 function csvRowKey(row: string[], rowIndex: number) {
-  const content = row.join("\u001f");
+  const content = row.join("");
   return content ? `row:${content}` : `row:${rowIndex + 1}`;
 }
 
-function UrlArtifactToolbar({
-  artifactId,
-  url,
-  label,
-  tone,
-  canRetry,
-  retryUrlExtraction,
+export function ArtifactHeaderActions({
+  payload,
+  indexingStatus,
+  indexingFailureReason,
+  onDelete,
 }: {
-  artifactId: string;
-  url: Extract<ArtifactRenderPayload, { artifactType: "url" }>;
-  label: string;
-  tone: "ready" | "destructive" | "muted";
-  canRetry: boolean;
-  retryUrlExtraction: (args: { artifactId: ArtifactId }) => Promise<unknown>;
+  payload: ArtifactRenderPayload;
+  indexingStatus?: "not_indexed" | "pending" | "ready" | "failed";
+  indexingFailureReason?: string;
+  onDelete: () => void;
 }) {
+  const isFile = payload.artifactType === "pdf" || payload.artifactType === "docx";
+  const isUrl = payload.artifactType === "url";
+
   return (
     <TooltipProvider>
       <div className="flex items-center gap-1">
-        <StatusDot
-          label={label}
-          tone={tone === "destructive" ? "destructive" : tone === "ready" ? "success" : "muted"}
-          title={url.failureReason}
-        />
-        {canRetry ? (
-          <IconButtonTooltip label="Retry extraction">
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-sm"
-              onClick={() => void retryUrlExtraction({ artifactId: toArtifactId(artifactId) })}
-            >
-              <RotateCcwIcon className="size-4" />
-            </Button>
-          </IconButtonTooltip>
+        {isUrl ? (
+          <HeaderLinkButton label="Open link" href={payload.normalizedUrl}>
+            <ExternalLinkIcon className="size-4" />
+          </HeaderLinkButton>
         ) : null}
-        <IconButtonTooltip label="Open URL">
-          <Button asChild variant="outline" size="icon-sm">
-            <a href={url.normalizedUrl} target="_blank" rel="noreferrer" aria-label="Open URL">
+        {isFile ? (
+          <>
+            <HeaderLinkButton label="Open file" href={payload.url}>
               <ExternalLinkIcon className="size-4" />
-            </a>
-          </Button>
-        </IconButtonTooltip>
+            </HeaderLinkButton>
+            <HeaderLinkButton label="Download" href={payload.url} download={payload.fileName}>
+              <DownloadIcon className="size-4" />
+            </HeaderLinkButton>
+          </>
+        ) : null}
+        <IndexingStatusBadge status={indexingStatus} reason={indexingFailureReason} />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" variant="ghost" size="icon-sm" aria-label="More actions">
+              <MoreHorizontalIcon className="size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-64">
+            {isFile ? (
+              <DropdownMenuItem className="pointer-events-none flex-col items-start gap-0.5">
+                <span className="max-w-full truncate font-medium text-foreground">
+                  {payload.fileName}
+                </span>
+                <span className="text-muted-foreground">
+                  {payload.mimeType} / {formatByteSize(payload.byteSize)}
+                </span>
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuItem
+              onClick={onDelete}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2Icon className="size-4" />
+              Delete artifact
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </TooltipProvider>
   );
 }
 
-function UrlArtifactDetails({
-  url,
-  label,
-  tone,
+function IndexingStatusBadge({
+  status,
+  reason,
 }: {
-  url: Extract<ArtifactRenderPayload, { artifactType: "url" }>;
+  status?: "not_indexed" | "pending" | "ready" | "failed";
+  reason?: string;
+}) {
+  const dotTone =
+    status === "ready"
+      ? "bg-mint-foreground"
+      : status === "pending"
+        ? "bg-lemon-foreground"
+        : status === "failed"
+          ? "bg-destructive"
+          : "bg-muted-foreground/50";
+  const label =
+    status === "ready"
+      ? "Indexed"
+      : status === "pending"
+        ? "Indexing"
+        : status === "failed"
+          ? "Indexing failed"
+          : "Not indexed";
+
+  const badge = (
+    <span className="inline-flex items-center gap-1.5 px-1 text-[12px] font-medium text-muted-foreground">
+      {status === "pending" ? (
+        <Loader2Icon className="size-3 animate-spin" />
+      ) : (
+        <span className={cn("size-1.5 rounded-full", dotTone)} />
+      )}
+      {label}
+    </span>
+  );
+
+  if (status === "failed" && reason) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{badge}</TooltipTrigger>
+        <TooltipContent>{reason}</TooltipContent>
+      </Tooltip>
+    );
+  }
+  return badge;
+}
+
+function HeaderLinkButton({
+  label,
+  href,
+  download,
+  children,
+}: {
   label: string;
-  tone: "ready" | "destructive" | "muted";
+  href: string;
+  download?: string;
+  children: ReactNode;
 }) {
   return (
-    <div className="grid gap-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge variant={tone === "destructive" ? "destructive" : "outline"}>{label}</Badge>
-        {url.siteName ? (
-          <span className="text-[12px] font-medium text-muted-foreground">{url.siteName}</span>
-        ) : null}
-      </div>
-      <dl className="grid gap-2 text-[13px]">
-        <MetadataItem label="URL" value={url.normalizedUrl} />
-        {url.originalUrl !== url.normalizedUrl ? (
-          <MetadataItem label="Original URL" value={url.originalUrl} />
-        ) : null}
-        {url.title ? <MetadataItem label="Title" value={url.title} /> : null}
-      </dl>
-      {url.description ? (
-        <p className="max-w-3xl text-[13px] leading-6 text-muted-foreground">
-          {url.description}
-        </p>
-      ) : null}
-      {url.failureReason ? (
-        <p className="rounded-[8px] border border-destructive/30 bg-destructive/5 p-3 text-[13px] font-medium text-destructive">
-          {url.failureReason}
-        </p>
-      ) : null}
-    </div>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button asChild variant="outline" size="icon-sm">
+          <a
+            href={href}
+            target={download ? undefined : "_blank"}
+            rel="noreferrer"
+            download={download}
+            aria-label={label}
+          >
+            {children}
+          </a>
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }
 
-export function UrlArtifactDetail({
-  artifactId,
-  url,
-  retryUrlExtraction,
-}: {
-  artifactId: string;
-  url: Extract<ArtifactRenderPayload, { artifactType: "url" }>;
-  retryUrlExtraction: (args: { artifactId: ArtifactId }) => Promise<unknown>;
-}) {
-  const model = urlArtifactDisplayModel(url);
+export function ArtifactDetailSkeleton() {
   return (
-    <Tabs defaultValue="viewer" className={artifactTabsRootClass}>
-      <ArtifactDetailControls>
-        <TabsList className={artifactTabsListClass}>
-          <TabsTrigger value="viewer" className={artifactTabsTriggerClass}>
-            <FileTextIcon className="size-4" />
-            Viewer
-          </TabsTrigger>
-          <TabsTrigger value="source" className={artifactTabsTriggerClass}>
-            <Code2Icon className="size-4" />
-            Source
-          </TabsTrigger>
-          <TabsTrigger value="details" className={artifactTabsTriggerClass}>
-            <InfoIcon className="size-4" />
-            Details
-          </TabsTrigger>
-        </TabsList>
-        <UrlArtifactToolbar
-          artifactId={artifactId}
-          url={url}
-          label={model.label}
-          tone={model.tone}
-          canRetry={model.canRetry}
-          retryUrlExtraction={retryUrlExtraction}
-        />
-      </ArtifactDetailControls>
-      <TabsContent value="viewer" className={artifactTabsContentClass}>
-        {url.status === "pending" ? (
-          <div className="flex min-h-[260px] items-center justify-center gap-2 text-[13px] font-medium text-muted-foreground">
-            <Loader2Icon className="size-4 animate-spin" />
-            Extraction is running.
-          </div>
-        ) : url.status === "failed" ? (
-          <p className="rounded-[8px] border border-destructive/30 bg-destructive/5 p-3 text-[13px] font-medium text-destructive">
-            {url.failureReason ?? "Extraction failed."}
+    <>
+      <section className="min-w-0">
+        <Skeleton className="h-10 w-full rounded-none bg-muted/50" />
+        <Skeleton className="mt-6 h-[60svh] min-h-[360px] w-full rounded-[8px] bg-muted/60" />
+      </section>
+      <aside className="space-y-4 pt-2">
+        <Skeleton className="h-4 w-20 rounded-md bg-muted" />
+        {Array.from({ length: 8 }).map((_, index) => (
+          <Skeleton key={index} className="h-8 w-full rounded-md bg-muted/60" />
+        ))}
+      </aside>
+    </>
+  );
+}
+
+export function ArtifactMissingState({ workspaceId }: { workspaceId: string }) {
+  return (
+    <section className="lg:col-span-2">
+      <Button asChild variant="ghost" size="sm" className="-ml-2 mb-5 text-muted-foreground">
+        <Link href={`/app/workspaces/${workspaceId}`}>
+          <ArrowLeftIcon className="size-4" />
+          Back to workspace
+        </Link>
+      </Button>
+      <div className="grid min-h-[48svh] place-items-center rounded-[8px] border border-border/80 bg-card/30 p-6 text-center">
+        <div>
+          <FileIcon className="mx-auto size-8 text-muted-foreground" />
+          <h1 className="mt-4 text-xl font-semibold text-foreground">
+            This artifact isn&apos;t available.
+          </h1>
+          <p className="mt-2 max-w-md text-[14px] font-medium leading-6 text-muted-foreground">
+            We couldn&apos;t find this artifact in the workspace you have open.
           </p>
-        ) : (
-          <article className={cn("artifact-prose min-h-[420px] whitespace-pre-wrap p-4", artifactInsetSurfaceClass)}>
-            {url.readableText || "No readable text was extracted."}
-          </article>
-        )}
-      </TabsContent>
-      <TabsContent value="source" className={artifactTabsContentClass}>
-        <SourceArtifactDetail source={urlArtifactSource(url)} language="json" filename="url.source.json" />
-      </TabsContent>
-      <TabsContent value="details" className={artifactTabsContentClass}>
-        <UrlArtifactDetails url={url} label={model.label} tone={model.tone} />
-      </TabsContent>
-    </Tabs>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -933,7 +618,7 @@ function parseJsonSource(source: string) {
   } catch (error: unknown) {
     return {
       pretty: source,
-      error: error instanceof Error ? error.message : "JSON tidak valid.",
+      error: error instanceof Error ? error.message : "Invalid JSON.",
     };
   }
 }
@@ -969,53 +654,6 @@ function buildSandboxedSvgDocument(source: string) {
   );
 
   return `<!doctype html><html><head>${csp}<style>html,body{height:100%;margin:0;}body{display:grid;place-items:center;overflow:auto;background:transparent;}svg{display:block;max-width:100%;max-height:100%;}</style></head><body>${svgSource}</body></html>`;
-}
-
-function fileArtifactSource(
-  payload: Extract<ArtifactRenderPayload, { artifactType: "pdf" | "docx" }>,
-) {
-  return JSON.stringify(
-    {
-      artifactType: payload.artifactType,
-      fileName: payload.fileName,
-      mimeType: payload.mimeType,
-      byteSize: payload.byteSize,
-      url: payload.url,
-      indexingStatus: payload.indexingStatus,
-      indexingFailureReason: payload.indexingFailureReason ?? null,
-    },
-    null,
-    2,
-  );
-}
-
-function urlArtifactSource(url: Extract<ArtifactRenderPayload, { artifactType: "url" }>) {
-  return JSON.stringify(
-    {
-      artifactType: url.artifactType,
-      originalUrl: url.originalUrl,
-      normalizedUrl: url.normalizedUrl,
-      status: url.status,
-      title: url.title ?? null,
-      description: url.description ?? null,
-      siteName: url.siteName ?? null,
-      failureReason: url.failureReason ?? null,
-      readableText: url.readableText,
-    },
-    null,
-    2,
-  );
-}
-
-function artifactTypeLabel(artifactType: string) {
-  if (artifactType === "plain_text") return "Text artifact";
-  if (artifactType === "html") return "HTML artifact";
-  if (artifactType === "svg") return "SVG artifact";
-  if (artifactType === "mermaid") return "Mermaid diagram";
-  if (artifactType === "json") return "JSON artifact";
-  if (artifactType === "csv") return "CSV artifact";
-  if (artifactType === "code") return "Code artifact";
-  return "Artifact";
 }
 
 function sourceLineCount(source: string) {
@@ -1096,15 +734,6 @@ function normalizeCodeBlockLanguage(language: string): BundledLanguage {
   return "log";
 }
 
-function sourceFileExtension(language: string) {
-  const normalized = language.toLowerCase();
-  if (normalized === "plain_text") return "txt";
-  if (normalized === "javascript") return "js";
-  if (normalized === "typescript") return "ts";
-  if (normalized === "markdown") return "md";
-  return normalized.replace(/[^a-z0-9]+/g, "-") || "txt";
-}
-
 function formatByteSize(size: number) {
   if (!Number.isFinite(size) || size <= 0) {
     return "Unknown size";
@@ -1117,27 +746,4 @@ function formatByteSize(size: number) {
     unitIndex += 1;
   }
   return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
-}
-
-export function ArtifactLoading() {
-  return (
-    <div className={cn("grid gap-4", panelBodyPaddingClass)}>
-      <p className="text-[12px] font-medium text-muted-foreground">Memuat artifact…</p>
-      <Skeleton className="h-12 rounded-[8px]" />
-      <Skeleton className="h-64 rounded-[8px]" />
-    </div>
-  );
-}
-
-export function ArtifactMissing() {
-  return (
-    <div className="grid min-h-svh place-items-center px-4 text-center">
-      <div className="grid gap-3">
-        <h1 className="font-heading text-2xl font-semibold">Artifact tidak tersedia.</h1>
-        <p className="text-[13px] font-medium text-muted-foreground">
-          Artifact ini tidak ditemukan untuk workspace yang sedang dibuka.
-        </p>
-      </div>
-    </div>
-  );
 }

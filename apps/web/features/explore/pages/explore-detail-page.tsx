@@ -5,14 +5,13 @@ import type { ExplorePaper } from "@aqsha/convex/explore";
 import {
   ArrowLeftIcon,
   BookOpenIcon,
-  CheckIcon,
-  CopyIcon,
   ExternalLinkIcon,
   FileTextIcon,
   LinkIcon,
 } from "@aqsha/ui/icons";
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { CopyCitationButton } from "@/components/citation/copy-citation-button";
+import { PropertyLink, PropertyRow } from "@/components/detail/property-list";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -179,7 +178,7 @@ function ExploreDetailSidebar({ paper }: { paper: ExplorePaper & { lastSeenAt?: 
         <h2 className="mb-3 text-[12px] font-semibold text-muted-foreground">Cite</h2>
         <div className="space-y-2">
           {citationFormats.map((format) => (
-            <CopyCitationButton key={format.value} paper={paper} format={format.value}>
+            <CopyCitationButton key={format.value} value={formatCitation(paper, format.value)}>
               {format.label}
             </CopyCitationButton>
           ))}
@@ -193,34 +192,6 @@ function ExploreDetailSidebar({ paper }: { paper: ExplorePaper & { lastSeenAt?: 
         </p>
       </section>
     </aside>
-  );
-}
-
-function CopyCitationButton({
-  paper,
-  format,
-  children,
-}: {
-  paper: ExplorePaper;
-  format: CitationFormat;
-  children: string;
-}) {
-  const [copied, setCopied] = useState(false);
-
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        void navigator.clipboard.writeText(formatCitation(paper, format)).then(() => {
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1_200);
-        });
-      }}
-      className="flex h-8 w-full items-center justify-between rounded-md border border-border bg-background px-3 text-[13px] font-medium text-foreground transition-colors hover:bg-muted active:scale-[0.99]"
-    >
-      <span>{children}</span>
-      {copied ? <CheckIcon className="size-3.5 text-mint-foreground" /> : <CopyIcon className="size-3.5" />}
-    </button>
   );
 }
 
@@ -309,69 +280,6 @@ function ExploreDetailState({ title, message }: { title: string; message: string
         </div>
       </div>
     </section>
-  );
-}
-
-function PropertyRow({
-  label,
-  value,
-  badge,
-  mutedValue,
-  icon,
-}: {
-  label: string;
-  value: string;
-  badge?: boolean;
-  mutedValue?: string;
-  icon?: ReactNode;
-}) {
-  return (
-    <div>
-      <dt className="text-[12px] font-medium text-muted-foreground">{label}</dt>
-      <dd className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[13px] font-medium text-foreground" title={value}>
-        {icon}
-        {badge ? (
-          <span className="min-w-0 truncate rounded-md bg-muted px-2 py-0.5 text-[13px] font-semibold">
-            {value}
-          </span>
-        ) : (
-          <span className="min-w-0 truncate">{value}</span>
-        )}
-        {mutedValue ? (
-          <span className="min-w-0 truncate text-xs font-semibold uppercase text-muted-foreground">
-            {mutedValue}
-          </span>
-        ) : null}
-      </dd>
-    </div>
-  );
-}
-
-function PropertyLink({
-  label,
-  value,
-  href,
-}: {
-  label: string;
-  value: string;
-  href: string;
-}) {
-  return (
-    <div>
-      <dt className="text-[12px] font-medium text-muted-foreground">{label}</dt>
-      <dd className="mt-1.5 min-w-0">
-        <a
-          href={href}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex max-w-full items-center gap-1 text-[13px] font-medium text-sky-foreground hover:underline"
-          title={value}
-        >
-          <span className="truncate">{value}</span>
-          <ExternalLinkIcon className="size-3.5 shrink-0" />
-        </a>
-      </dd>
-    </div>
   );
 }
 

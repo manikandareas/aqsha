@@ -1,7 +1,8 @@
 "use client";
 
-import { Loader2Icon } from "@aqsha/ui/icons";
+import { InfoIcon, Loader2Icon } from "@aqsha/ui/icons";
 import { api } from "@aqsha/convex/api";
+import { useRouter } from "next/navigation";
 import {
   useEffect,
   useReducer,
@@ -10,23 +11,37 @@ import {
   type Dispatch,
   type RefObject,
 } from "react";
+import { PropertyRow } from "@/components/detail/property-list";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toArtifactId, type ArtifactId } from "@/lib/convex-refs";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
 import { useConvexActionQueryWithKey } from "@/lib/convex-query";
-import { cn } from "@/lib/utils";
 import { useArtifactDetailData } from "../api/use-workspaces-data";
 import { ArtifactDetailHeader } from "../components/artifact-detail-header";
 import {
-  ArtifactLoading,
-  ArtifactMissing,
-  TypedArtifactDetail,
-  UrlArtifactDetail,
+  ArtifactDetailSidebar,
+  type ArtifactSidebarRecord,
+} from "../components/artifact-detail-sidebar";
+import {
+  ArtifactDetailSkeleton,
+  ArtifactHeaderActions,
+  ArtifactMissingState,
+  ArtifactReadingColumn,
   type ArtifactRenderPayload,
   type PaperExtractionStatus,
 } from "../components/artifact-render-panels";
 import { BlockNoteEditorLoader } from "../components/blocknote-editor-loader";
 import type { DocumentEditorContent } from "../components/blocknote-document-editor";
-import { NameDialog } from "../components/workspace-dialogs";
 import { WorkspaceShell } from "../components/workspace-shell";
 import {
   autosaveReducer,
@@ -40,6 +55,11 @@ const initialAutosaveState: AutosaveState = {
   error: null,
 };
 
+const twoColumnGridClass =
+  "mx-auto grid w-full max-w-[1080px] gap-8 px-5 pb-12 pt-4 sm:px-8 lg:grid-cols-[minmax(0,700px)_260px] lg:gap-10 lg:px-10";
+const singleColumnGridClass =
+  "mx-auto w-full max-w-[1080px] px-5 pb-12 pt-4 sm:px-8 lg:px-10";
+
 export function ArtifactDetailPage({
   workspaceId,
   artifactId,
@@ -48,6 +68,7 @@ export function ArtifactDetailPage({
   artifactId: string;
 }) {
   const data = useArtifactDetailData(artifactId);
+  const router = useRouter();
 
   const detail = data.artifact;
   const renderPayloadVersionKey = detail
@@ -68,14 +89,12 @@ export function ArtifactDetailPage({
 
   const activeRenderPayload = (renderPayloadQuery.data ?? null) as ArtifactRenderPayload | null;
   const activeContentError = renderPayloadQuery.error
-    ? readableConvexErrorMessage(renderPayloadQuery.error, "Content gagal dimuat.")
+    ? readableConvexErrorMessage(renderPayloadQuery.error, "We couldn't load this content.")
     : null;
   const workspaceMismatch =
     detail?.artifact.workspaceId && detail.artifact.workspaceId !== workspaceId;
-  const workspaceName =
-    data.workspaces.find((workspace) => workspace._id === workspaceId)?.name ?? "Workspace";
   const [documentSaveState, dispatchDocumentSave] = useReducer(autosaveReducer, initialAutosaveState);
-  const [renameOpen, setRenameOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const markdownBlocksJson =
     activeRenderPayload?.artifactType === "markdown"
       ? activeRenderPayload.blocksJson
@@ -86,6 +105,19 @@ export function ArtifactDetailPage({
     dispatchDocumentSave({ type: "reset", json: markdownBlocksJson });
   }, [artifactId, markdownBlocksJson]);
 
+  const ready = Boolean(detail) && !workspaceMismatch;
+  const isMarkdown = detail?.artifact.artifactType === "markdown";
+
+  const headerActions =
+    ready && detail && activeRenderPayload ? (
+      <ArtifactHeaderActions
+        payload={activeRenderPayload}
+        indexingStatus={detail.artifact.indexingStatus}
+        indexingFailureReason={detail.artifact.indexingFailureReason}
+        onDelete={() => setDeleteOpen(true)}
+      />
+    ) : null;
+
   return (
     <WorkspaceShell
       viewer={data.viewer}
@@ -95,75 +127,168 @@ export function ArtifactDetailPage({
       createWorkspace={data.createWorkspace}
       removeThread={data.removeThread}
     >
-      <main className="grid h-svh min-h-0 grid-rows-[auto_1fr] overflow-hidden bg-background">
-        {data.isLoading ? (
-          <ArtifactLoading />
-        ) : !detail || workspaceMismatch ? (
-          <ArtifactMissing />
-        ) : (
-          <>
-            <ArtifactDetailHeader
-              workspaceId={workspaceId}
-              workspaceName={workspaceName}
-              artifactTitle={detail.artifact.title}
-              onRename={() => setRenameOpen(true)}
-              trailing={
-                detail.artifact.artifactType === "markdown"
-                  ? <SaveStatus state={documentSaveState} />
-                  : null
-              }
-            />
-            <section className={cn("h-full min-h-0 overflow-y-auto overflow-x-hidden px-5 pb-0 sm:px-7")}>
-              {activeContentError ? (
-                <p className="rounded-[8px] border border-destructive/30 bg-destructive/5 p-3 text-[13px] font-medium text-destructive">
-                  {activeContentError}
-                </p>
-              ) : !activeRenderPayload ? (
-                <ArtifactLoading />
-              ) : activeRenderPayload.artifactType === "url" ? (
-                <UrlArtifactDetail
-                  artifactId={artifactId}
-                  url={activeRenderPayload}
-                  retryUrlExtraction={data.retryUrlExtraction}
-                />
-              ) : activeRenderPayload.artifactType === "markdown" ? (
-                <DocumentArtifactDetail
-                  key={artifactId}
-                  artifactId={artifactId}
-                  initialBlocksJson={activeRenderPayload.blocksJson}
-                  initialMarkdown={activeRenderPayload.markdown}
-                  updateDocument={data.updateDocument}
-                  saveState={documentSaveState}
-                  dispatchSaveState={dispatchDocumentSave}
-                />
-              ) : (
-                <TypedArtifactDetail
+      <main className="min-h-svh bg-background text-foreground">
+        {ready && detail ? (
+          <ArtifactDetailHeader
+            artifactTitle={detail.artifact.title}
+            onRenameArtifact={(name) =>
+              data.renameArtifact({ artifactId: toArtifactId(artifactId), title: name })
+            }
+            trailing={
+              isMarkdown || headerActions ? (
+                <div className="flex items-center gap-2">
+                  {isMarkdown ? <SaveStatus state={documentSaveState} /> : null}
+                  {headerActions}
+                </div>
+              ) : null
+            }
+          />
+        ) : null}
+
+        <div className={isMarkdown ? singleColumnGridClass : twoColumnGridClass}>
+          {data.isLoading ? (
+            <ArtifactDetailSkeleton />
+          ) : !ready || !detail ? (
+            <ArtifactMissingState workspaceId={workspaceId} />
+          ) : activeContentError ? (
+            <div className="lg:col-span-2">
+              <p className="rounded-[8px] border border-destructive/30 bg-destructive/5 p-3 text-[13px] font-medium text-destructive">
+                {activeContentError}
+              </p>
+            </div>
+          ) : !activeRenderPayload ? (
+            <ArtifactDetailSkeleton />
+          ) : activeRenderPayload.artifactType === "markdown" ? (
+            <div className="mx-auto w-full max-w-[820px]">
+              <div className="mb-4 flex items-center justify-end">
+                <MarkdownDetails artifact={detail.artifact} />
+              </div>
+              <DocumentArtifactDetail
+                key={artifactId}
+                artifactId={artifactId}
+                initialBlocksJson={activeRenderPayload.blocksJson}
+                initialMarkdown={activeRenderPayload.markdown}
+                updateDocument={data.updateDocument}
+                saveState={documentSaveState}
+                dispatchSaveState={dispatchDocumentSave}
+              />
+            </div>
+          ) : (
+            <>
+              <section className="min-w-0">
+                <ArtifactReadingColumn
                   payload={activeRenderPayload}
                   title={detail.artifact.title}
                   paperExtraction={data.paperExtraction as PaperExtractionStatus}
-                  retryGrobidExtraction={data.retryGrobidExtraction}
-                  artifactId={artifactId}
                 />
-              )}
-            </section>
-            <NameDialog
-              open={renameOpen}
-              title="Rename artifact"
-              description="Update nama artifact yang tampil di workspace ini."
-              submitLabel="Simpan"
-              initialName={detail.artifact.title}
-              onOpenChange={setRenameOpen}
-              onSubmit={async ({ name }) => {
-                await data.renameArtifact({
-                  artifactId: toArtifactId(artifactId),
-                  title: name,
-                });
-              }}
-            />
-          </>
-        )}
+              </section>
+              <ArtifactDetailSidebar
+                artifact={detail.artifact}
+                payload={activeRenderPayload}
+                title={detail.artifact.title}
+                paperExtraction={data.paperExtraction as PaperExtractionStatus}
+                artifactId={artifactId}
+                retryGrobidExtraction={data.retryGrobidExtraction}
+                retryUrlExtraction={data.retryUrlExtraction}
+              />
+            </>
+          )}
+        </div>
+
+        {ready && detail ? (
+          <DeleteArtifactDialog
+            open={deleteOpen}
+            title={detail.artifact.title}
+            onOpenChange={setDeleteOpen}
+            onConfirm={async () => {
+              await data.removeArtifact({ artifactId: toArtifactId(artifactId) });
+              router.push(`/app/workspaces/${workspaceId}`);
+            }}
+          />
+        ) : null}
       </main>
     </WorkspaceShell>
+  );
+}
+
+function MarkdownDetails({ artifact }: { artifact: ArtifactSidebarRecord }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-1.5 text-muted-foreground"
+        >
+          <InfoIcon className="size-3.5" />
+          Details
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-64 space-y-4">
+        <PropertyRow label="Type" value="Markdown" badge />
+        <PropertyRow label="Source" value={markdownSourceLabel(artifact.source)} />
+        <PropertyRow label="Created" value={formatArtifactDate(artifact.createdAt)} />
+        <PropertyRow label="Updated" value={formatArtifactDate(artifact.updatedAt)} />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function DeleteArtifactDialog({
+  open,
+  title,
+  onOpenChange,
+  onConfirm,
+}: {
+  open: boolean;
+  title: string;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => Promise<unknown>;
+}) {
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="gap-4 sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Delete artifact</DialogTitle>
+          <DialogDescription>
+            “{title}” will be permanently removed from this workspace. This can&apos;t be undone.
+          </DialogDescription>
+        </DialogHeader>
+        {error ? (
+          <p className="text-[12px] font-medium text-destructive">{error}</p>
+        ) : null}
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="outline" disabled={isDeleting}>
+              Cancel
+            </Button>
+          </DialogClose>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={isDeleting}
+            onClick={async () => {
+              setIsDeleting(true);
+              setError(null);
+              try {
+                await onConfirm();
+              } catch (deleteError) {
+                setError(
+                  readableConvexErrorMessage(deleteError, "We couldn't delete this artifact."),
+                );
+                setIsDeleting(false);
+              }
+            }}
+          >
+            Delete
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -280,7 +405,7 @@ async function saveLatestDocumentContent({
   } catch (error: unknown) {
     dispatch({
       type: "failed",
-      message: readableConvexErrorMessage(error, "Autosave gagal."),
+      message: readableConvexErrorMessage(error, "We couldn't save your changes."),
     });
   } finally {
     saveInFlightRef.current = false;
@@ -309,14 +434,25 @@ function SaveStatus({ state }: { state: AutosaveState }) {
     );
   }
   if (state.status === "failed") {
-    return (
-      <span className="text-[12px] font-medium text-destructive">
-        Failed{state.error ? ` / ${state.error}` : ""}
-      </span>
-    );
+    return <span className="text-[12px] font-medium text-destructive">Couldn&apos;t save</span>;
   }
   if (state.status === "saved") {
     return <span className="text-[12px] font-medium text-muted-foreground">Saved</span>;
   }
-  return <span className="text-[12px] font-medium text-muted-foreground">Idle</span>;
+  return null;
+}
+
+function formatArtifactDate(timestamp: number) {
+  return new Date(timestamp).toLocaleDateString("en", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function markdownSourceLabel(source: string | undefined) {
+  if (source === "upload") return "Uploaded";
+  if (source === "agent") return "From the agent";
+  if (source === "url") return "Saved link";
+  return "Created here";
 }
