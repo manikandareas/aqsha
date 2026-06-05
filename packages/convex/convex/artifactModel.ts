@@ -1,4 +1,8 @@
 import { ConvexError } from "convex/values";
+import {
+  normalizeUploadMimeType,
+  UPLOAD_REJECTED_MESSAGE,
+} from "./artifactUploadPolicy";
 
 export const ARTIFACT_BODY_INLINE_LIMIT = 700_000;
 export const ARTIFACT_CONTEXT_LIMIT = 24_000;
@@ -56,6 +60,26 @@ export const agentWritableArtifactTypes = [
 ] as const satisfies readonly ArtifactType[];
 
 export type AgentWritableArtifactType = (typeof agentWritableArtifactTypes)[number];
+
+// Tipe yang boleh DI-UPLOAD user sebagai bahan riset (Pustaka). Sengaja sempit:
+// dokumen + data tabular. Tipe visual/kode (html/svg/mermaid/code) tetap bisa
+// DIHASILKAN agent — itu jalur terpisah (agentWritableArtifactTypes), bukan upload.
+export const uploadAllowedArtifactTypes = [
+  "pdf",
+  "docx",
+  "markdown",
+  "plain_text",
+  "csv",
+  "json",
+] as const satisfies readonly ArtifactType[];
+
+export type UploadAllowedArtifactType = (typeof uploadAllowedArtifactTypes)[number];
+
+export function isUploadAllowedArtifactType(
+  artifactType: ArtifactType,
+): artifactType is UploadAllowedArtifactType {
+  return (uploadAllowedArtifactTypes as readonly string[]).includes(artifactType);
+}
 
 const extensionTypeMap: Array<{ extensions: string[]; artifactType: ArtifactType }> = [
   { extensions: [".pdf"], artifactType: "pdf" },
@@ -229,7 +253,7 @@ export function artifactTypeFromUpload(args: {
   fileName: string;
   mimeType: string;
 }): ArtifactType {
-  const lowerType = args.mimeType.toLowerCase();
+  const lowerType = normalizeUploadMimeType(args.mimeType);
   const byMime = mimeTypeMap.get(lowerType);
   if (byMime) {
     return byMime;
@@ -242,9 +266,22 @@ export function artifactTypeFromUpload(args: {
     }
   }
 
-  throw new ConvexError(
-    "Unsupported file type. Upload PDF, DOCX, TXT, Markdown, CSV, JSON, HTML, SVG, Mermaid, or code files.",
-  );
+  throw new ConvexError(UPLOAD_REJECTED_MESSAGE);
+}
+
+// Detect + enforce the upload allow-list in one place. Use this at upload
+// entry points (workspace + thread attachment) instead of artifactTypeFromUpload,
+// so a detectable-but-disallowed type (e.g. .svg/.html/.py) is rejected clearly
+// while artifactTypeFromUpload stays available for legacy detection/rendering.
+export function uploadArtifactType(args: {
+  fileName: string;
+  mimeType: string;
+}): UploadAllowedArtifactType {
+  const artifactType = artifactTypeFromUpload(args);
+  if (!isUploadAllowedArtifactType(artifactType)) {
+    throw new ConvexError(UPLOAD_REJECTED_MESSAGE);
+  }
+  return artifactType;
 }
 
 export function artifactTypeFromAgentInput(value: string): AgentWritableArtifactType {

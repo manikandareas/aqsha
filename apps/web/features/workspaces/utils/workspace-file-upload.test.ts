@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_WORKSPACE_UPLOAD_FILES,
+  UPLOAD_REJECTED_MESSAGE,
   WORKSPACE_UPLOAD_CONCURRENCY,
   getFailedWorkspaceUploadFiles,
+  isAllowedWorkspaceUploadFile,
   runLimitedConcurrency,
   uploadWorkspaceFiles,
   validateWorkspaceUploadBatch,
@@ -10,6 +12,10 @@ import {
 
 function makeFile(name: string, content = "content") {
   return new File([content], name, { type: "text/plain" });
+}
+
+function makeTypedFile(name: string, type: string) {
+  return new File(["content"], name, { type });
 }
 
 describe("workspace file upload", () => {
@@ -92,6 +98,45 @@ describe("workspace file upload", () => {
     expect(getFailedWorkspaceUploadFiles(results).map((file) => file.name)).toEqual([
       "bad.txt",
     ]);
+  });
+
+  it("allows research document types and rejects non-research types", () => {
+    expect(isAllowedWorkspaceUploadFile(makeFile("paper.pdf"))).toBe(true);
+    expect(isAllowedWorkspaceUploadFile(makeFile("notes.md"))).toBe(true);
+    expect(isAllowedWorkspaceUploadFile(makeFile("data.csv"))).toBe(true);
+    expect(isAllowedWorkspaceUploadFile(makeFile("data.json"))).toBe(true);
+    // Allowed by MIME even with an unfamiliar extension.
+    expect(
+      isAllowedWorkspaceUploadFile(makeTypedFile("export", "application/json")),
+    ).toBe(true);
+    // Non-research types are rejected (these are agent-generated, not uploads).
+    expect(isAllowedWorkspaceUploadFile(makeTypedFile("logo.svg", "image/svg+xml"))).toBe(false);
+    expect(isAllowedWorkspaceUploadFile(makeTypedFile("page.html", "text/html"))).toBe(false);
+    expect(isAllowedWorkspaceUploadFile(makeTypedFile("script.py", "text/x-python"))).toBe(false);
+  });
+
+  it("fails disallowed files without hitting storage", async () => {
+    const uploaded: string[] = [];
+    const results = await uploadWorkspaceFiles({
+      files: [makeFile("ok.pdf"), makeTypedFile("logo.svg", "image/svg+xml")],
+      workspaceId: "workspace-a",
+      folderId: "root",
+      generateUploadUrl: async () => "https://upload.example",
+      createUploadedArtifact: async () => undefined,
+      uploadToStorage: async ({ file }) => {
+        uploaded.push(file.name);
+        return `${file.name}-storage` as never;
+      },
+    });
+
+    expect(results.map((result) => result.ok)).toEqual([true, false]);
+    expect(getFailedWorkspaceUploadFiles(results).map((file) => file.name)).toEqual([
+      "logo.svg",
+    ]);
+    const rejected = results[1];
+    expect(rejected.ok === false && rejected.error).toBe(UPLOAD_REJECTED_MESSAGE);
+    // Disallowed file never reaches storage upload.
+    expect(uploaded).toEqual(["ok.pdf"]);
   });
 
   it("selects only failed files for retry", () => {

@@ -118,7 +118,7 @@ export function WorkspaceBoardToolbar({
               onRenameWorkspace={onRenameWorkspace}
             />
           ) : (
-            <h1 className="self-center truncate font-heading text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">
+            <h1 className="self-center truncate font-sans text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">
               {workspaceName}
             </h1>
           ))}
@@ -337,7 +337,7 @@ function WorkspaceTitlePopover({
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
-      <h1 className="min-w-0 self-center font-heading text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">
+      <h1 className="min-w-0 self-center font-sans text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">
         <PopoverTrigger asChild>
           <button
             type="button"

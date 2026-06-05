@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   applyWorkspaceArtifactControls,
+  artifactCategory,
   expectArtifactsReturnToRootAfterFolderDelete,
   getFolderView,
   getMoveTargetOptions,
   getUploadTargetFolderId,
   getWorkspaceMoveTargetOptions,
   groupArtifactsByFolder,
+  partitionArtifactsByCategory,
   resolveActiveFolderId,
   ROOT_FOLDER_LABEL,
   type WorkspaceArtifact,
@@ -216,5 +218,29 @@ describe("workspace library model", () => {
     });
 
     expect(result.map((artifact) => artifact._id)).toEqual(["artifact-preview"]);
+  });
+});
+
+describe("artifact category split (Pustaka vs Artifact)", () => {
+  const categorized: WorkspaceArtifact[] = [
+    { _id: "u", title: "Upload", source: "upload", createdAt: 1, updatedAt: 1 },
+    { _id: "l", title: "Url", source: "url", createdAt: 2, updatedAt: 2 },
+    { _id: "a", title: "Agent", source: "agent", createdAt: 3, updatedAt: 3 },
+    { _id: "m", title: "Manual", source: "manual", createdAt: 4, updatedAt: 4 },
+    { _id: "x", title: "Legacy", createdAt: 5, updatedAt: 5 },
+  ];
+
+  it("treats only agent artifacts as output; user uploads, urls, manual docs, and legacy are library", () => {
+    expect(artifactCategory("upload")).toBe("library");
+    expect(artifactCategory("url")).toBe("library");
+    expect(artifactCategory("manual")).toBe("library");
+    expect(artifactCategory(undefined)).toBe("library");
+    expect(artifactCategory("agent")).toBe("output");
+  });
+
+  it("partitions while preserving incoming order", () => {
+    const { library, output } = partitionArtifactsByCategory(categorized);
+    expect(library.map((artifact) => artifact._id)).toEqual(["u", "l", "m", "x"]);
+    expect(output.map((artifact) => artifact._id)).toEqual(["a"]);
   });
 });

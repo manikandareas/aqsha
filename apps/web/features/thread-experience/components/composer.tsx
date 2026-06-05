@@ -23,6 +23,11 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { MAX_UPLOAD_BYTES } from "@aqsha/convex/artifact-upload-limits";
+import {
+  isAllowedWorkspaceUploadFile,
+  UPLOAD_REJECTED_MESSAGE,
+  WORKSPACE_UPLOAD_ACCEPT,
+} from "@aqsha/convex/artifact-upload-policy";
 import type { PromptCommand } from "@aqsha/convex/prompt-commands";
 import {
   PromptInput,
@@ -349,7 +354,7 @@ function ComposerContent(props: ComposerProps) {
         transition={shellTransition}
       >
         <PromptInput
-          accept=".pdf,.docx,.txt,.md,.markdown,.csv,.json,.html,.htm,.svg,.mmd,.mermaid,.js,.jsx,.ts,.tsx,.css,.py,.java,.go,.rs,.sql,.sh,.yml,.yaml,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv,text/html,application/json,image/svg+xml,text/javascript,application/javascript,text/css,text/yaml,application/x-yaml"
+          accept={WORKSPACE_UPLOAD_ACCEPT}
           multiple
           maxFiles={4}
           maxFileSize={MAX_UPLOAD_BYTES}
@@ -463,6 +468,10 @@ async function uploadComposerAttachments({
       const message = "File attachment tidak bisa dibaca. Pilih ulang file tersebut.";
       setUploadError(message);
       throw new Error(message);
+    }
+    if (!isAllowedWorkspaceUploadFile(file)) {
+      setUploadError(UPLOAD_REJECTED_MESSAGE);
+      throw new Error(UPLOAD_REJECTED_MESSAGE);
     }
     const uploadUrl = await generateUploadUrl(threadId ? { threadId } : {});
     const response = await fetch(uploadUrl, {

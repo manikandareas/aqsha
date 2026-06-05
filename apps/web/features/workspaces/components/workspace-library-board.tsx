@@ -30,6 +30,7 @@ import {
 } from "../utils/workspace-library-model";
 import { panelBodyPaddingClass } from "@/lib/panel-surface";
 import {
+  WORKSPACE_UPLOAD_ACCEPT,
   type WorkspaceUploadProgressEvent,
   type WorkspaceUploadResult,
 } from "../utils/workspace-file-upload";
@@ -204,7 +205,7 @@ export function WorkspaceLibraryBoard({
           type="file"
           aria-label="Pilih file untuk workspace"
           multiple
-          accept=".pdf,.docx,.txt,.md,.markdown,.csv,.json,.html,.htm,.svg,.mmd,.mermaid,.js,.jsx,.ts,.tsx,.css,.py,.java,.go,.rs,.sql,.sh,.yml,.yaml,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv,text/html,application/json,image/svg+xml,text/javascript,application/javascript,text/css,text/yaml,application/x-yaml"
+          accept={WORKSPACE_UPLOAD_ACCEPT}
           className="sr-only"
           onChange={(event) => {
             if (event.currentTarget.files) {

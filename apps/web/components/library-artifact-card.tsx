@@ -15,6 +15,7 @@ import { LibraryCardFrame } from "@/components/library-card-frame";
 function LibraryArtifactCardComponent({
   title,
   artifactType,
+  source,
   createdAt,
   isSelected,
   onClick,
@@ -22,6 +23,7 @@ function LibraryArtifactCardComponent({
 }: {
   title: string;
   artifactType?: string;
+  source?: "manual" | "upload" | "agent" | "url";
   createdAt: number;
   isSelected: boolean;
   onClick: () => void;
@@ -30,6 +32,7 @@ function LibraryArtifactCardComponent({
   const presentation = getArtifactCardPresentation(artifactType);
   const Icon = presentation.Icon;
   const year = formatYear(createdAt);
+  const provenance = provenanceLabel(source);
 
   return (
     <LibraryCardFrame selected={isSelected}>
@@ -41,10 +44,15 @@ function LibraryArtifactCardComponent({
         aria-label={`${title}. Klik untuk ${isSelected ? "hapus dari" : "tambah ke"} konteks.`}
         className="flex size-full min-h-0 flex-col p-5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
-        <div className="flex items-center">
+        <div className="flex items-center gap-2">
           <span className="inline-flex h-7 shrink-0 items-center justify-center rounded-[8px] bg-muted px-2 text-[12px] font-semibold leading-none text-muted-foreground">
             {year}
           </span>
+          {provenance ? (
+            <span className="inline-flex h-7 shrink-0 items-center justify-center rounded-[8px] border border-border px-2 text-[11px] font-medium leading-none text-muted-foreground">
+              {provenance}
+            </span>
+          ) : null}
         </div>
         <h3 className="mt-5 line-clamp-7 text-[20px] font-semibold leading-[1.22] text-foreground">
           {title}
@@ -67,6 +75,14 @@ export const LibraryArtifactCard = LibraryArtifactCardComponent;
 function formatYear(timestamp: number) {
   const year = new Date(timestamp).getFullYear();
   return Number.isFinite(year) ? String(year) : "----";
+}
+
+// Provenance marker only for outputs, where origin is otherwise ambiguous.
+// Sources (upload/url) are already conveyed by the type label (PDF/URL/...).
+function provenanceLabel(source?: "manual" | "upload" | "agent" | "url") {
+  if (source === "agent") return "Agent";
+  if (source === "manual") return "Catatan";
+  return null;
 }
 
 function getArtifactCardPresentation(artifactType: string | undefined) {

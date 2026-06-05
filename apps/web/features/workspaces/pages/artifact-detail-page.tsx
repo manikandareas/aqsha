@@ -1,6 +1,6 @@
 "use client";
 
-import { InfoIcon, Loader2Icon } from "@aqsha/ui/icons";
+import { Loader2Icon } from "@aqsha/ui/icons";
 import { api } from "@aqsha/convex/api";
 import { useRouter } from "next/navigation";
 import {
@@ -11,26 +11,15 @@ import {
   type Dispatch,
   type RefObject,
 } from "react";
-import { PropertyRow } from "@/components/detail/property-list";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toArtifactId, type ArtifactId } from "@/lib/convex-refs";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
 import { useConvexActionQueryWithKey } from "@/lib/convex-query";
 import { useArtifactDetailData } from "../api/use-workspaces-data";
+import { DeleteArtifactDialog } from "../components/artifact-delete-dialog";
 import { ArtifactDetailHeader } from "../components/artifact-detail-header";
 import {
   ArtifactDetailSidebar,
-  type ArtifactSidebarRecord,
+  MarkdownArtifactDetails,
 } from "../components/artifact-detail-sidebar";
 import {
   ArtifactDetailSkeleton,
@@ -161,7 +150,7 @@ export function ArtifactDetailPage({
           ) : activeRenderPayload.artifactType === "markdown" ? (
             <div className="mx-auto w-full max-w-[820px]">
               <div className="mb-4 flex items-center justify-end">
-                <MarkdownDetails artifact={detail.artifact} />
+                <MarkdownArtifactDetails artifact={detail.artifact} />
               </div>
               <DocumentArtifactDetail
                 key={artifactId}
@@ -208,87 +197,6 @@ export function ArtifactDetailPage({
         ) : null}
       </main>
     </WorkspaceShell>
-  );
-}
-
-function MarkdownDetails({ artifact }: { artifact: ArtifactSidebarRecord }) {
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="gap-1.5 text-muted-foreground"
-        >
-          <InfoIcon className="size-3.5" />
-          Details
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-64 space-y-4">
-        <PropertyRow label="Type" value="Markdown" badge />
-        <PropertyRow label="Source" value={markdownSourceLabel(artifact.source)} />
-        <PropertyRow label="Created" value={formatArtifactDate(artifact.createdAt)} />
-        <PropertyRow label="Updated" value={formatArtifactDate(artifact.updatedAt)} />
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-function DeleteArtifactDialog({
-  open,
-  title,
-  onOpenChange,
-  onConfirm,
-}: {
-  open: boolean;
-  title: string;
-  onOpenChange: (open: boolean) => void;
-  onConfirm: () => Promise<unknown>;
-}) {
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-4 sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Delete artifact</DialogTitle>
-          <DialogDescription>
-            “{title}” will be permanently removed from this workspace. This can&apos;t be undone.
-          </DialogDescription>
-        </DialogHeader>
-        {error ? (
-          <p className="text-[12px] font-medium text-destructive">{error}</p>
-        ) : null}
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button type="button" variant="outline" disabled={isDeleting}>
-              Cancel
-            </Button>
-          </DialogClose>
-          <Button
-            type="button"
-            variant="destructive"
-            disabled={isDeleting}
-            onClick={async () => {
-              setIsDeleting(true);
-              setError(null);
-              try {
-                await onConfirm();
-              } catch (deleteError) {
-                setError(
-                  readableConvexErrorMessage(deleteError, "We couldn't delete this artifact."),
-                );
-                setIsDeleting(false);
-              }
-            }}
-          >
-            Delete
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -440,19 +348,4 @@ function SaveStatus({ state }: { state: AutosaveState }) {
     return <span className="text-[12px] font-medium text-muted-foreground">Saved</span>;
   }
   return null;
-}
-
-function formatArtifactDate(timestamp: number) {
-  return new Date(timestamp).toLocaleDateString("en", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function markdownSourceLabel(source: string | undefined) {
-  if (source === "upload") return "Uploaded";
-  if (source === "agent") return "From the agent";
-  if (source === "url") return "Saved link";
-  return "Created here";
 }

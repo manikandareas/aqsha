@@ -46,6 +46,7 @@ import type * as agent_workflow from "../agent/workflow.js";
 import type * as agent_workspaceCommandInference from "../agent/workspaceCommandInference.js";
 import type * as artifactModel from "../artifactModel.js";
 import type * as artifactUploadLimits from "../artifactUploadLimits.js";
+import type * as artifactUploadPolicy from "../artifactUploadPolicy.js";
 import type * as artifactUploads from "../artifactUploads.js";
 import type * as artifacts from "../artifacts.js";
 import type * as auth from "../auth.js";
@@ -132,6 +133,7 @@ declare const fullApi: ApiFromModules<{
   "agent/workspaceCommandInference": typeof agent_workspaceCommandInference;
   artifactModel: typeof artifactModel;
   artifactUploadLimits: typeof artifactUploadLimits;
+  artifactUploadPolicy: typeof artifactUploadPolicy;
   artifactUploads: typeof artifactUploads;
   artifacts: typeof artifacts;
   auth: typeof auth;

@@ -12,7 +12,7 @@ import {
   type ArtifactRagMetadata,
 } from "./agent/rag";
 import { embeddingProviderConfig } from "./agent/providers";
-import { artifactTypeFromUpload } from "./artifactModel";
+import { uploadArtifactType } from "./artifactModel";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "./artifactUploadLimits";
 const MAX_INDEXED_TEXT_CHARS = 300_000;
 
@@ -59,7 +59,7 @@ export const createFromStorage = action({
     const user = await requireCurrentUser(ctx);
     validateUpload(args);
     const title = titleFromFileName(args.fileName);
-    const artifactType = artifactTypeFromUpload({
+    const artifactType = uploadArtifactType({
       fileName: args.fileName,
       mimeType: args.mimeType || "application/octet-stream",
     });
@@ -107,7 +107,7 @@ export const createThreadAttachmentFromStorage = action({
     const user = await requireCurrentUser(ctx);
     validateUpload(args);
     const title = titleFromFileName(args.fileName);
-    const artifactType = artifactTypeFromUpload({
+    const artifactType = uploadArtifactType({
       fileName: args.fileName,
       mimeType: args.mimeType || "application/octet-stream",
     });
@@ -166,7 +166,7 @@ export const processPendingAttachmentsAndStart = internalAction({
     for (const pending of args.pendingAttachments) {
       validateUpload(pending);
       const title = titleFromFileName(pending.fileName);
-      const artifactType = artifactTypeFromUpload({
+      const artifactType = uploadArtifactType({
         fileName: pending.fileName,
         mimeType: pending.mimeType || "application/octet-stream",
       });

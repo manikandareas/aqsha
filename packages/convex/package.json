@@ -20,6 +20,10 @@
       "types": "./convex/artifactUploadLimits.ts",
       "default": "./convex/artifactUploadLimits.ts"
     },
+    "./artifact-upload-policy": {
+      "types": "./convex/artifactUploadPolicy.ts",
+      "default": "./convex/artifactUploadPolicy.ts"
+    },
     "./billing-catalog": {
       "types": "./convex/billing/catalog.ts",
       "default": "./convex/billing/catalog.ts"

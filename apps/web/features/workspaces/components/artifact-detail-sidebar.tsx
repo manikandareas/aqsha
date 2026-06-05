@@ -1,10 +1,16 @@
 "use client";
 
-import { AlertCircleIcon, ChevronRightIcon, RotateCcwIcon } from "@aqsha/ui/icons";
+import {
+  AlertCircleIcon,
+  ChevronRightIcon,
+  InfoIcon,
+  RotateCcwIcon,
+} from "@aqsha/ui/icons";
 import { useState } from "react";
 import { CopyCitationButton } from "@/components/citation/copy-citation-button";
 import { PropertyLink, PropertyRow } from "@/components/detail/property-list";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { ArtifactId } from "@/lib/convex-refs";
 import { toArtifactId } from "@/lib/convex-refs";
 import { cn } from "@/lib/utils";
@@ -211,6 +217,30 @@ export function ArtifactDetailSidebar({
   );
 }
 
+export function MarkdownArtifactDetails({ artifact }: { artifact: ArtifactSidebarRecord }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-1.5 text-muted-foreground"
+        >
+          <InfoIcon className="size-3.5" />
+          Details
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-64 space-y-4">
+        <PropertyRow label="Type" value="Markdown" badge />
+        <PropertyRow label="Source" value={markdownSourceLabel(artifact.source)} />
+        <PropertyRow label="Created" value={formatDate(artifact.createdAt)} />
+        <PropertyRow label="Updated" value={formatDate(artifact.updatedAt)} />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function SidebarFailure({
   message,
   onRetry,
@@ -301,6 +331,13 @@ function addedLabel(source: string | undefined, createdAt: number) {
           ? "Saved"
           : "Created";
   return `${verb} · ${formatDate(createdAt)}`;
+}
+
+function markdownSourceLabel(source: string | undefined) {
+  if (source === "upload") return "Uploaded";
+  if (source === "agent") return "From the agent";
+  if (source === "url") return "Saved link";
+  return "Created here";
 }
 
 function formatDate(timestamp: number) {

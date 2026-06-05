@@ -7,6 +7,17 @@ import {
   type WorkspaceId,
 } from "@/lib/convex-refs";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
+import {
+  isAllowedWorkspaceUploadFile,
+  UPLOAD_REJECTED_MESSAGE,
+  WORKSPACE_UPLOAD_ACCEPT,
+} from "@aqsha/convex/artifact-upload-policy";
+
+export {
+  isAllowedWorkspaceUploadFile,
+  UPLOAD_REJECTED_MESSAGE,
+  WORKSPACE_UPLOAD_ACCEPT,
+};
 
 export const MAX_WORKSPACE_UPLOAD_FILES = 20;
 export const WORKSPACE_UPLOAD_CONCURRENCY = 3;
@@ -152,6 +163,17 @@ export async function uploadWorkspaceFiles({
     files,
     WORKSPACE_UPLOAD_CONCURRENCY,
     async (file, index) => {
+      if (!isAllowedWorkspaceUploadFile(file)) {
+        onFileChange?.({
+          file,
+          index,
+          status: "failed",
+          progress: 0,
+          error: UPLOAD_REJECTED_MESSAGE,
+        });
+        results[index] = { ok: false, file, index, error: UPLOAD_REJECTED_MESSAGE };
+        return;
+      }
       try {
         onFileChange?.({ file, index, status: "uploading", progress: 0 });
         await uploadWorkspaceFile({
