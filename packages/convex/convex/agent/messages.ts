@@ -18,7 +18,14 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "../_generated/server";
-import { astra, NORMAL_MODEL, recordUsage as handleUsage } from "./runtime";
+import {
+  agentForKind,
+  astra,
+  NORMAL_MODEL,
+  PRO_MODEL,
+  recordUsage as handleUsage,
+  type AgentKind,
+} from "./runtime";
 import { requireCurrentUser } from "../auth";
 import { estimateCredits } from "../billing/catalog";
 import {
@@ -39,7 +46,10 @@ import {
 } from "./threadTitles";
 import { assertThreadOwner, tryAssertThreadOwner } from "./threads";
 import { resolvePromptPayload } from "./promptRouting";
-import type { PromptPayload } from "./promptPayload";
+import {
+  promptExecutionKindForCommand,
+  type PromptPayload,
+} from "./promptPayload";
 import { assertWorkspaceOwner } from "../workspaceAccess";
 import {
   buildPromptContextForThread,
@@ -116,6 +126,16 @@ function estimateTokens(content: string) {
   return Math.max(1, Math.ceil(content.length / 4));
 }
 
+// Deep Research is now activated only by the /deep-research slash command, not
+// by the agent selector. This is the single source of truth for the deep path.
+// Model used for the deep-research heavy tasks (planning/synthesis), mirrored
+// for the upfront billing estimate. Lite-deep runs entirely on the lite model.
+function deepModelForAgent(agentKind: AgentKind) {
+  return agentKind === "pro"
+    ? process.env.AQSHA_DEEP_MODEL ?? "gpt-5.5"
+    : process.env.AQSHA_DEEP_LITE_MODEL ?? NORMAL_MODEL;
+}
+
 async function getThreadMetadata(ctx: QueryCtx | MutationCtx, threadId: string) {
   return await ctx.db
     .query("threadMetadata")
@@ -132,6 +152,7 @@ async function upsertThreadMetadata(
     status: "idle" | "streaming" | "failed";
     incrementMessageCount?: boolean;
     workspaceId?: Id<"workspaces">;
+    lastAgentKind?: AgentKind;
   },
 ) {
   const now = Date.now();
@@ -143,6 +164,7 @@ async function upsertThreadMetadata(
       messageCount: existing.messageCount + (args.incrementMessageCount ? 1 : 0),
       status: args.status,
       workspaceId: existing.workspaceId ?? args.workspaceId,
+      ...(args.lastAgentKind !== undefined ? { lastAgentKind: args.lastAgentKind } : {}),
     });
     return;
   }
@@ -159,6 +181,7 @@ async function upsertThreadMetadata(
     lastMessagePreview: args.preview,
     messageCount: args.incrementMessageCount ? 1 : 0,
     status: args.status,
+    ...(args.lastAgentKind !== undefined ? { lastAgentKind: args.lastAgentKind } : {}),
   });
 }
 
@@ -207,27 +230,49 @@ async function checkAndConsumeSendQuota(
     ownerUserId: string;
     ownerEmail?: string | null;
     content: string;
-    mode: "normal" | "deep";
+    agentKind: AgentKind;
+    isDeep: boolean;
   },
 ): Promise<
   | { ok: true }
   | { ok: false; retryAt?: number; entitlement?: Extract<EntitlementResult, { ok: false }> }
 > {
   const estimatedTokens = estimateTokens(args.content);
+  // Deep runs go through the deep_research feature (governed by the monthly
+  // deepResearchRuns quota). Lite-deep is allowed on Free (requiredPlan "free");
+  // Pro-deep and Pro chat require a paid plan.
+  const feature = args.isDeep
+    ? "deep_research"
+    : args.agentKind === "pro"
+      ? "pro_chat"
+      : "normal_chat";
+  const model = args.isDeep
+    ? deepModelForAgent(args.agentKind)
+    : args.agentKind === "pro"
+      ? PRO_MODEL
+      : NORMAL_MODEL;
+  const requiredPlan = args.isDeep
+    ? args.agentKind === "pro"
+      ? ("starter" as const)
+      : ("free" as const)
+    : args.agentKind === "pro"
+      ? ("starter" as const)
+      : ("free" as const);
   const entitlement = await consumeCredits(ctx, {
     ownerUserId: args.ownerUserId,
     ownerEmail: args.ownerEmail,
-    feature: args.mode === "deep" ? "deep_research" : "normal_chat",
+    feature,
     provider: CHAT_PROVIDER_NAME,
-    model: args.mode === "deep" ? process.env.AQSHA_DEEP_MODEL ?? "gpt-5.5" : NORMAL_MODEL,
+    model,
     inputTokens: estimatedTokens,
     totalTokens: estimatedTokens,
     credits: estimateCredits({
-      feature: args.mode === "deep" ? "deep_research" : "normal_chat",
+      feature,
       inputTokens: estimatedTokens,
       totalTokens: estimatedTokens,
+      agentKind: args.agentKind,
     }),
-    requiredPlan: args.mode === "deep" ? "starter" : "free",
+    requiredPlan,
   });
   if (!entitlement.ok) {
     return { ok: false, entitlement };
@@ -258,7 +303,7 @@ async function savePromptAndScheduleRun(
     threadId: string;
     threadTitle?: string;
     content: string;
-    mode: "normal" | "deep";
+    agentKind: AgentKind;
     commandId?: string;
     workspaceId?: Id<"workspaces">;
     selectedContextArtifactIds?: Id<"artifacts">[];
@@ -284,7 +329,6 @@ async function savePromptAndScheduleRun(
     ownerUserId: args.ownerUserId,
     threadId: args.threadId,
     content: args.content,
-    mode: args.mode,
     commandId: args.commandId,
   });
 
@@ -303,6 +347,7 @@ async function savePromptAndScheduleRun(
       threadId: args.threadId,
       messageId,
       ...promptPayload.commandMetadata,
+      agentKind: args.agentKind,
       createdAt: Date.now(),
     });
   }
@@ -321,6 +366,7 @@ async function savePromptAndScheduleRun(
     status: args.deferGeneration ? "idle" : "streaming",
     incrementMessageCount: true,
     workspaceId: args.workspaceId,
+    lastAgentKind: args.agentKind,
   });
 
   await updateThreadTitleFromPrompt(ctx, {
@@ -337,7 +383,7 @@ async function savePromptAndScheduleRun(
     ownerUserId: args.ownerUserId,
     threadId: args.threadId,
     messageId,
-    mode: args.mode,
+    agentKind: args.agentKind,
     promptPayload,
     messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
   });
@@ -349,7 +395,7 @@ async function scheduleGenerationForMessage(
     ownerUserId: string;
     threadId: string;
     messageId: string;
-    mode: "normal" | "deep";
+    agentKind: AgentKind;
     promptPayload: PromptPayload;
     messageAttachmentArtifactIds?: Id<"artifacts">[];
   },
@@ -364,7 +410,8 @@ async function scheduleGenerationForMessage(
     contextBlock,
   });
 
-  if (args.mode === "deep") {
+  const commandId = args.promptPayload.commandMetadata?.commandId;
+  if (args.promptPayload.executionKind === "deep_research") {
     const run: {
       runId: import("../_generated/dataModel").Id<"agentRuns">;
       workflowId: string;
@@ -373,7 +420,8 @@ async function scheduleGenerationForMessage(
       threadId: args.threadId,
       promptMessageId: args.messageId,
       prompt: generationPrompt,
-      commandId: args.promptPayload.commandMetadata?.commandId,
+      commandId,
+      agentKind: args.agentKind,
     });
 
     return { ok: true as const, messageId: args.messageId, ...run };
@@ -384,6 +432,7 @@ async function scheduleGenerationForMessage(
     threadId: args.threadId,
     promptMessageId: args.messageId,
     prompt: generationPrompt,
+    agentKind: args.agentKind,
   });
   await ctx.scheduler.runAfter(0, internal.agent.messages.generateReply, {
     threadId: args.threadId,
@@ -392,7 +441,8 @@ async function scheduleGenerationForMessage(
     prompt: generationPrompt,
     visiblePrompt: args.promptPayload.visibleContent,
     runId,
-    commandId: args.promptPayload.commandMetadata?.commandId,
+    commandId,
+    agentKind: args.agentKind,
     messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
   });
 
@@ -422,7 +472,7 @@ export const completeThreadStartAfterAttachments = internalMutation({
     messageId: v.string(),
     threadTitle: v.optional(v.string()),
     content: v.string(),
-    mode: v.union(v.literal("normal"), v.literal("deep")),
+    agentKind: v.union(v.literal("lite"), v.literal("pro")),
     commandId: v.optional(v.string()),
     workspaceId: v.optional(v.id("workspaces")),
     selectedContextArtifactIds: v.optional(v.array(v.id("artifacts"))),
@@ -466,7 +516,6 @@ export const completeThreadStartAfterAttachments = internalMutation({
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
       content: args.content,
-      mode: args.mode,
       commandId: args.commandId,
     });
 
@@ -474,7 +523,7 @@ export const completeThreadStartAfterAttachments = internalMutation({
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
       messageId: args.messageId,
-      mode: args.mode,
+      agentKind: args.agentKind,
       promptPayload,
       messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
     });
@@ -484,7 +533,7 @@ export const completeThreadStartAfterAttachments = internalMutation({
 export const startThread = mutation({
   args: {
     content: v.string(),
-    mode: v.union(v.literal("normal"), v.literal("deep")),
+    agentKind: v.union(v.literal("lite"), v.literal("pro")),
     commandId: v.optional(v.string()),
     workspaceId: v.optional(v.id("workspaces")),
     selectedContextArtifactIds: v.optional(v.array(v.id("artifacts"))),
@@ -503,7 +552,8 @@ export const startThread = mutation({
       ownerUserId: user._id,
       ownerEmail: user.email,
       content,
-      mode: args.mode,
+      agentKind: args.agentKind,
+      isDeep: promptExecutionKindForCommand(args.commandId) === "deep_research",
     });
     if (!quota.ok) {
       return quota.entitlement
@@ -526,7 +576,7 @@ export const startThread = mutation({
         threadId,
         threadTitle: threadTitleFromPrompt(content),
         content,
-        mode: args.mode,
+        agentKind: args.agentKind,
         commandId: args.commandId,
         workspaceId: args.workspaceId,
         selectedContextArtifactIds: args.selectedContextArtifactIds,
@@ -546,7 +596,7 @@ export const startThread = mutation({
           messageId: deferred.messageId,
           threadTitle: threadTitleFromPrompt(content),
           content,
-          mode: args.mode,
+          agentKind: args.agentKind,
           commandId: args.commandId,
           workspaceId: args.workspaceId,
           pendingAttachments: args.pendingAttachments,
@@ -562,7 +612,7 @@ export const startThread = mutation({
       threadId,
       threadTitle: threadTitleFromPrompt(content),
       content,
-      mode: args.mode,
+      agentKind: args.agentKind,
       commandId: args.commandId,
       workspaceId: args.workspaceId,
       selectedContextArtifactIds: args.selectedContextArtifactIds,
@@ -578,7 +628,7 @@ export const send = mutation({
   args: {
     threadId: v.string(),
     content: v.string(),
-    mode: v.union(v.literal("normal"), v.literal("deep")),
+    agentKind: v.union(v.literal("lite"), v.literal("pro")),
     commandId: v.optional(v.string()),
     selectedContextArtifactIds: v.optional(v.array(v.id("artifacts"))),
     messageAttachmentArtifactIds: v.optional(v.array(v.id("artifacts"))),
@@ -596,7 +646,8 @@ export const send = mutation({
       ownerUserId: user._id,
       ownerEmail: user.email,
       content,
-      mode: args.mode,
+      agentKind: args.agentKind,
+      isDeep: promptExecutionKindForCommand(args.commandId) === "deep_research",
     });
     if (!quota.ok) {
       return quota.entitlement
@@ -612,7 +663,7 @@ export const send = mutation({
       threadId: args.threadId,
       threadTitle: thread.title,
       content,
-      mode: args.mode,
+      agentKind: args.agentKind,
       commandId: args.commandId,
       selectedContextArtifactIds: args.selectedContextArtifactIds,
       messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
@@ -673,6 +724,7 @@ export const list = query({
         commandLabel: row.commandLabel,
         commandSlug: row.commandSlug,
         mode: row.mode,
+        agentKind: row.agentKind,
         argumentPreview: row.argumentPreview,
       });
     }
@@ -801,6 +853,9 @@ export const generateReply = internalAction({
     visiblePrompt: v.string(),
     runId: v.optional(v.id("agentRuns")),
     commandId: v.optional(v.string()),
+    // Optional for legacy/in-flight scheduled jobs queued before this field
+    // existed; defaults to "lite".
+    agentKind: v.optional(v.union(v.literal("lite"), v.literal("pro"))),
     messageAttachmentArtifactIds: v.optional(v.array(v.id("artifacts"))),
     hitlExecute: v.optional(v.boolean()),
     hitlSessionId: v.optional(v.id("hitlSessions")),
@@ -829,7 +884,8 @@ export const generateReply = internalAction({
         ? [ragContext, "", args.prompt].join("\n")
         : args.prompt;
       const tools = resolveGenerationTools(args);
-      const result = await astra.streamText(
+      const agent = agentForKind(args.agentKind ?? "lite");
+      const result = await agent.streamText(
         ctx,
         { threadId: args.threadId, userId: args.userId },
         { promptMessageId: args.promptMessageId, prompt, tools },
@@ -996,6 +1052,7 @@ export const startInlineRun = internalMutation({
     threadId: v.string(),
     promptMessageId: v.string(),
     prompt: v.string(),
+    agentKind: v.union(v.literal("lite"), v.literal("pro")),
   },
   handler: async (ctx, args): Promise<Id<"agentRuns">> => {
     const now = Date.now();
@@ -1004,6 +1061,7 @@ export const startInlineRun = internalMutation({
       threadId: args.threadId,
       promptMessageId: args.promptMessageId,
       mode: "normal",
+      agentKind: args.agentKind,
       executionKind: "inline",
       promptSnapshot: args.prompt,
       status: "running",
@@ -1512,6 +1570,9 @@ export const recordUsage = internalMutation({
         error: error instanceof Error ? error.message : String(error),
       });
     }
+    // The chat usage handler does not receive agentKind, so derive the billed
+    // feature from the model that actually ran (Astra Pro uses PRO_MODEL).
+    const feature = args.model === PRO_MODEL ? "pro_chat" : "normal_chat";
     await ctx.db.insert("usageLedger", {
       ...args,
       model: args.model || NORMAL_MODEL,
@@ -1520,14 +1581,14 @@ export const recordUsage = internalMutation({
     await recordProviderUsage(ctx, {
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
-      feature: "normal_chat",
+      feature,
       provider: args.provider,
       model: args.model || NORMAL_MODEL,
       inputTokens: args.inputTokens,
       outputTokens: args.outputTokens,
       totalTokens: args.totalTokens,
       credits: estimateCredits({
-        feature: "normal_chat",
+        feature,
         inputTokens: args.inputTokens,
         outputTokens: args.outputTokens,
         totalTokens: args.totalTokens,

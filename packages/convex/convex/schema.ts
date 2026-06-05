@@ -133,6 +133,9 @@ export default defineSchema(
       lastMessagePreview: v.string(),
       messageCount: v.number(),
       status: v.union(v.literal("idle"), v.literal("streaming"), v.literal("failed")),
+      // Sticky per-thread selected agent for the composer. Optional for legacy
+      // rows; defaults to "lite" at read time.
+      lastAgentKind: v.optional(v.union(v.literal("lite"), v.literal("pro"))),
     })
       .index("by_thread", ["threadId"])
       .index("by_owner_activity", ["ownerUserId", "lastActivityAt"])
@@ -245,6 +248,7 @@ export default defineSchema(
       runId: v.optional(runId),
       feature: v.union(
         v.literal("normal_chat"),
+        v.literal("pro_chat"),
         v.literal("cited_answer"),
         v.literal("deep_research"),
         v.literal("external_search"),
@@ -268,7 +272,10 @@ export default defineSchema(
       commandId: v.string(),
       commandLabel: v.string(),
       commandSlug: v.string(),
+      // Legacy execution mode; retained for read tolerance of existing rows.
       mode: v.union(v.literal("normal"), v.literal("deep")),
+      // Which agent produced this command run. Optional for legacy rows.
+      agentKind: v.optional(v.union(v.literal("lite"), v.literal("pro"))),
       argumentPreview: v.string(),
       expandedPromptSnapshot: v.string(),
       createdAt: v.number(),
@@ -380,7 +387,12 @@ export default defineSchema(
       ownerUserId: v.string(),
       threadId: v.string(),
       promptMessageId: v.string(),
+      // Legacy execution mode; retained for read tolerance of existing rows.
       mode: v.union(v.literal("normal"), v.literal("deep")),
+      // Selected agent for this run (modulates chat model/steps and deep
+      // research model/round cap). Optional for legacy rows; defaults at read
+      // time to mode === "deep" ? "pro" : "lite".
+      agentKind: v.optional(v.union(v.literal("lite"), v.literal("pro"))),
       executionKind: v.union(v.literal("inline"), v.literal("workflow")),
       workflowId: v.optional(v.string()),
       promptSnapshot: v.optional(v.string()),

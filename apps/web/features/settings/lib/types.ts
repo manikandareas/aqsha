@@ -59,6 +59,7 @@ export type ActivityRow = {
   eventCount: number;
   featureCounts: {
     normal_chat: number;
+    pro_chat: number;
     cited_answer: number;
     deep_research: number;
     external_search: number;

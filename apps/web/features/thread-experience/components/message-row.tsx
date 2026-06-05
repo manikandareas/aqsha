@@ -38,6 +38,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   toAgentRunId,
   toArtifactId,
   toWorkspaceId,
@@ -522,50 +529,92 @@ function getArtifactTypePresentation(artifactType: string | undefined) {
 
 function MessageArtifacts({ links }: { links: MessageArtifactLink[] }) {
   const router = useRouter();
+  const [reportLink, setReportLink] = useState<MessageArtifactLink | null>(null);
   if (links.length === 0) return null;
 
   return (
-    <div className="mt-3 grid gap-2">
-      {links.map((link) => {
-        const workspaceId = link.artifact.workspaceId;
-        const canOpen = Boolean(workspaceId) && link.relation !== "deleted";
-        const presentation = getArtifactTypePresentation(link.artifact.artifactType);
-        const Icon = presentation.Icon;
+    <>
+      <div className="mt-3 grid gap-2">
+        {links.map((link) => {
+          const workspaceId = link.artifact.workspaceId;
+          const reportBody = link.version?.body;
+          // Workspace artifacts open in the workspace detail page; thread-only
+          // artifacts (e.g. Deep Research reports, which have no workspace) open
+          // inline in a dialog from their markdown body.
+          const canOpenWorkspace =
+            Boolean(workspaceId) && link.relation !== "deleted";
+          const canOpenReport =
+            !canOpenWorkspace && Boolean(reportBody) && link.relation !== "deleted";
+          const canOpen = canOpenWorkspace || canOpenReport;
+          const presentation = getArtifactTypePresentation(link.artifact.artifactType);
+          const Icon = presentation.Icon;
 
-        return (
-          <button
-            key={`${link.artifactId}-${link.versionId ?? "workspace"}`}
-            type="button"
-            disabled={!canOpen}
-            onClick={() => {
-              if (!workspaceId) return;
-              router.push(`/app/workspaces/${workspaceId}/artifacts/${link.artifactId}`);
-            }}
-            className={cn(
-              "flex max-w-xl items-center gap-3 rounded-[10px] border border-lavender-soft-border bg-lavender-soft px-3 py-2 text-left text-[13px] text-lavender-foreground transition-colors",
-              canOpen ? "hover:bg-lavender-soft" : "cursor-default bg-muted text-muted-foreground",
-            )}
-          >
-            <Icon className="size-4 shrink-0" />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate font-semibold">
-                {link.artifact.title}
+          return (
+            <button
+              key={`${link.artifactId}-${link.versionId ?? "workspace"}`}
+              type="button"
+              disabled={!canOpen}
+              onClick={() => {
+                if (canOpenWorkspace && workspaceId) {
+                  router.push(`/app/workspaces/${workspaceId}/artifacts/${link.artifactId}`);
+                  return;
+                }
+                if (canOpenReport) {
+                  setReportLink(link);
+                }
+              }}
+              className={cn(
+                "flex max-w-xl items-center gap-3 rounded-[10px] border border-lavender-soft-border bg-lavender-soft px-3 py-2 text-left text-[13px] text-lavender-foreground transition-colors",
+                canOpen ? "hover:bg-lavender-soft" : "cursor-default bg-muted text-muted-foreground",
+              )}
+            >
+              <Icon className="size-4 shrink-0" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-semibold">
+                  {link.artifact.title}
+                </span>
+                <span className="block text-[11px] font-medium text-muted-foreground">
+                  {link.relation === "deleted"
+                    ? "Dihapus dari workspace"
+                    : link.relation === "updated"
+                      ? "Diperbarui di workspace"
+                      : link.linkKind === "workspace" || workspaceId
+                        ? "Artefak workspace"
+                        : "Ketuk untuk membuka"}
+                  {link.version ? ` · v${link.version.versionNumber}` : ""}
+                </span>
               </span>
-              <span className="block text-[11px] font-medium text-muted-foreground">
-                {link.relation === "deleted"
-                  ? "Dihapus dari workspace"
-                  : link.relation === "updated"
-                    ? "Diperbarui di workspace"
-                    : link.linkKind === "workspace" || workspaceId
-                      ? "Artefak workspace"
-                      : "Artefak"}
-                {link.version ? ` · v${link.version.versionNumber}` : ""}
-              </span>
-            </span>
-          </button>
-        );
-      })}
-    </div>
+            </button>
+          );
+        })}
+      </div>
+      <Dialog
+        open={reportLink !== null}
+        onOpenChange={(open) => {
+          if (!open) setReportLink(null);
+        }}
+      >
+        <DialogContent className="flex max-h-[85svh] w-[min(92vw,820px)] max-w-none flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="border-b border-border/60 px-5 py-3.5 text-left">
+            <DialogTitle className="text-[15px]">
+              {reportLink?.artifact.title ?? "Artefak"}
+            </DialogTitle>
+            <DialogDescription className="text-[12px]">
+              {reportLink?.version
+                ? `Laporan riset · v${reportLink.version.versionNumber}`
+                : "Laporan riset"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+            {reportLink?.version?.body ? (
+              <MessageResponse className="aqsha-prose aqsha-prose-message">
+                {reportLink.version.body}
+              </MessageResponse>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

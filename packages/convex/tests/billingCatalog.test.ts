@@ -31,7 +31,9 @@ describe("billing catalog", () => {
   });
 
   it("keeps Deep Research as a simple monthly run quota", () => {
-    expect(PLAN_CATALOG.free.deepResearchRuns).toBe(0);
+    // Free now gets a small taste of Deep Research (Lite); Pro-deep still
+    // requires the Astra Pro agent (paid plan).
+    expect(PLAN_CATALOG.free.deepResearchRuns).toBe(2);
     expect(PLAN_CATALOG.starter.deepResearchRuns).toBe(3);
     expect(PLAN_CATALOG.plus.deepResearchRuns).toBe(12);
     expect(PLAN_CATALOG.admin.deepResearchRuns).toBe(Number.MAX_SAFE_INTEGER);

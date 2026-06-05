@@ -158,7 +158,7 @@ export const promptCommands = [
     id: "deep-research",
     slug: "/deep-research",
     label: "Riset mendalam",
-    description: "Jalankan Deep mode untuk laporan berbasis sumber dan sitasi.",
+    description: "Jalankan riset mendalam berbasis sumber dan sitasi.",
     group: "Riset Mendalam",
     aliases: ["/deep"],
     keywords: ["deep research", "riset mendalam", "laporan", "sumber", "citation"],

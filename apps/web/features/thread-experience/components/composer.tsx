@@ -4,7 +4,6 @@ import {
   AlertCircleIcon,
   ArrowUpIcon,
   ArrowUpRightIcon,
-  ChevronDownIcon,
   FileTextIcon,
   LayoutGridIcon,
   Loader2Icon,
@@ -16,7 +15,6 @@ import {
 } from "@aqsha/ui/icons";
 import { api } from "@aqsha/convex/api";
 import { LayoutGroup, m, useReducedMotion } from "motion/react";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
@@ -36,12 +34,6 @@ import {
   PromptInputSubmit,
   usePromptInputAttachments,
 } from "@/components/ai-elements/prompt-input";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { toArtifactId, toStorageId, type ArtifactId, type StorageId } from "@/lib/convex-refs";
 import {
@@ -62,6 +54,11 @@ import type {
   StartThread,
   ThreadSummary,
 } from "./component-types";
+import {
+  AgentSelector,
+  useComposerAgentSelection,
+  type ComposerAgentKind,
+} from "./composer-agent-selector";
 import { TokenizedPromptInput } from "./composer-token-input";
 
 type ComposerVariant = "hero" | "docked";
@@ -104,6 +101,10 @@ type ComposerSharedProps = {
   isGenerating?: boolean;
   showSuggestions?: boolean;
   threads?: ThreadSummary[];
+  /** Invoked when a Free user taps the locked Astra Pro option. */
+  onUpgrade?: () => void;
+  /** Sticky per-thread agent selection to initialize the selector. */
+  initialAgentKind?: ComposerAgentKind;
 };
 
 export type ComposerProps = ComposerSharedProps &
@@ -154,6 +155,8 @@ function ComposerContent(props: ComposerProps) {
     isGenerating = false,
     showSuggestions = false,
     threads = [],
+    onUpgrade,
+    initialAgentKind,
   } = props;
 
   const threadId = props.mode === "thread" ? props.threadId : undefined;
@@ -162,7 +165,8 @@ function ComposerContent(props: ComposerProps) {
 
   const [content, setContent] = useState("");
   const [inlineCommands, setInlineCommands] = useState<PromptCommand[]>([]);
-  const [mode, setMode] = useState<"normal" | "deep">("normal");
+  const { agentKind, canUsePro, setAgentKind, handleUpgrade } =
+    useComposerAgentSelection({ initialAgentKind, onUpgrade });
   const [isSending, setIsSending] = useState(false);
   const [localRetryAt, setLocalRetryAt] = useState<number | null>(null);
   const [billingBlock, setBillingBlock] = useState<SendResult & { ok: false } | null>(null);
@@ -181,8 +185,6 @@ function ComposerContent(props: ComposerProps) {
       : 0;
   const isRateLimited = retrySeconds > 0;
   const visibleContent = createVisibleComposerContent(content);
-  const hasDeepInlineCommand = inlineCommands.some((command) => command.mode === "deep");
-  const effectiveMode = hasDeepInlineCommand ? "deep" : mode;
   const { canSend, isDeepActive } = getComposerAvailability({
     visibleContent,
     hasAttachments: attachmentFiles.length > 0,
@@ -269,7 +271,7 @@ function ComposerContent(props: ComposerProps) {
       const submission = buildComposerSubmission({
         visibleContent: fallbackContent,
         commands: submittedCommands,
-        mode: effectiveMode,
+        agentKind,
       });
       setContent("");
       setInlineCommands([]);
@@ -284,13 +286,13 @@ function ComposerContent(props: ComposerProps) {
         ? await onSend({
             threadId,
             content: submission.content,
-            mode: submission.mode,
+            agentKind: submission.agentKind,
             commandId: submission.commandId,
             ...attachmentArgs,
           })
         : await onStartThread!({
             content: submission.content,
-            mode: submission.mode,
+            agentKind: submission.agentKind,
             commandId: submission.commandId,
             ...attachmentArgs,
           });
@@ -377,23 +379,20 @@ function ComposerContent(props: ComposerProps) {
             isRateLimited={isRateLimited}
             isSending={isSending}
             isGenerating={isGenerating}
-            mode={mode}
+            agentKind={agentKind}
+            canUsePro={canUsePro}
+            onUpgrade={handleUpgrade}
             retrySeconds={retrySeconds}
             shellExpanded={shellExpanded}
             showVoiceInput={showVoiceInput}
             uploadError={uploadError}
             onCancelRun={onCancelRun}
-            onCommandsChange={(commands) => {
-              setInlineCommands(commands);
-              if (commands.some((command) => command.mode === "deep")) {
-                setMode("deep");
-              }
-            }}
+            onCommandsChange={setInlineCommands}
             onHeightChange={setEditorHeight}
             onRemoveContextArtifact={onRemoveContextArtifact}
             onSubmit={requestFormSubmit}
             onValueChange={setContent}
-            setMode={setMode}
+            setAgentKind={setAgentKind}
           />
         </PromptInput>
       </m.div>
@@ -551,7 +550,9 @@ function ComposerPromptInputContent({
   isRateLimited,
   isSending,
   isGenerating,
-  mode,
+  agentKind,
+  canUsePro,
+  onUpgrade,
   retrySeconds,
   shellExpanded,
   showVoiceInput,
@@ -562,7 +563,7 @@ function ComposerPromptInputContent({
   onRemoveContextArtifact,
   onSubmit,
   onValueChange,
-  setMode,
+  setAgentKind,
 }: {
   activeRun?: ResearchRun;
   billingBlock: (SendResult & { ok: false }) | null;
@@ -578,7 +579,9 @@ function ComposerPromptInputContent({
   isRateLimited: boolean;
   isSending: boolean;
   isGenerating: boolean;
-  mode: "normal" | "deep";
+  agentKind: "lite" | "pro";
+  canUsePro: boolean;
+  onUpgrade?: () => void;
   retrySeconds: number;
   shellExpanded: boolean;
   showVoiceInput: boolean;
@@ -589,7 +592,7 @@ function ComposerPromptInputContent({
   onRemoveContextArtifact?: (artifactId: string) => void;
   onSubmit: () => void;
   onValueChange: (value: string) => void;
-  setMode: (mode: "normal" | "deep") => void;
+  setAgentKind: (agentKind: ComposerAgentKind) => void;
 }) {
   return (
     <>
@@ -661,7 +664,13 @@ function ComposerPromptInputContent({
               />
             ) : null}
             <div className="flex shrink-0 items-center gap-1">
-              <ModeSelector mode={mode} setMode={setMode} disabled={isInteractionLocked} />
+              <AgentSelector
+                agentKind={agentKind}
+                setAgentKind={setAgentKind}
+                canUsePro={canUsePro}
+                onUpgrade={onUpgrade}
+                disabled={isInteractionLocked}
+              />
               {showVoiceInput ? <MicButton disabled={disabled || isInteractionLocked} /> : null}
               <ComposerSubmitButton
                 canSend={canSend}
@@ -924,88 +933,6 @@ function ComposerUploadButton({
     >
       <PaperclipIcon className="size-3.5" />
     </button>
-  );
-}
-
-function ModeSelector({
-  mode,
-  setMode,
-  disabled,
-}: {
-  mode: "normal" | "deep";
-  setMode: (mode: "normal" | "deep") => void;
-  disabled?: boolean;
-}) {
-  const activeMode = getModeSelectorPresentation(mode);
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          disabled={disabled}
-          className="aqsha-composer-toolbar-btn inline-flex h-8 items-center gap-1 rounded-full bg-muted/20 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-all duration-150 cursor-pointer disabled:opacity-50"
-        >
-          <ModeSelectorImage src={activeMode.src} alt="" />
-          <span>{activeMode.shortLabel}</span>
-          <ChevronDownIcon className="size-3 text-muted-foreground/60" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-36">
-        <DropdownMenuItem
-          onClick={() => setMode("normal")}
-          className={cn(
-            "gap-2 data-highlighted:bg-muted/60 data-highlighted:text-foreground",
-            mode === "normal" && "bg-muted/60 font-medium text-foreground",
-          )}
-        >
-          <ModeSelectorImage src="/general-agent.png" alt="" />
-          <span className="font-semibold text-[11px]">
-            Normal Mode
-          </span>
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => setMode("deep")}
-          className={cn(
-            "gap-2 data-highlighted:bg-muted/60 data-highlighted:text-foreground",
-            mode === "deep" && "bg-muted/60 font-medium text-foreground",
-          )}
-        >
-          <ModeSelectorImage src="/pro-agent.png" alt="" />
-          <span className="font-semibold text-[11px]">
-            Deep Mode
-          </span>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function getModeSelectorPresentation(mode: "normal" | "deep") {
-  return mode === "deep"
-    ? { shortLabel: "Deep", src: "/pro-agent.png" }
-    : { shortLabel: "Normal", src: "/general-agent.png" };
-}
-
-function ModeSelectorImage({
-  src,
-  alt,
-}: {
-  src: string;
-  alt: string;
-}) {
-  return (
-    <span className="grid size-5 shrink-0 place-items-center overflow-hidden rounded-full bg-background">
-      <Image
-        src={src}
-        alt={alt}
-        width={20}
-        height={20}
-        className="size-5 object-contain"
-        draggable={false}
-        unoptimized
-      />
-    </span>
   );
 }
 

@@ -104,21 +104,22 @@ async function applyDoiMetadata(
 ): Promise<void> {
   if (!paper.doi) return;
 
-  const openalex = await openAlexByDoi(ctx, paper.doi);
+  const [openalex, crossref, datacite, unpaywall] = await Promise.all([
+    openAlexByDoi(ctx, paper.doi),
+    crossrefByDoi(ctx, paper.doi),
+    dataCiteByDoi(paper.doi),
+    unpaywallByDoi(ctx, paper.doi),
+  ]);
+
   if (openalex) {
     applyPartial(paper, openalex, { preferMeta: true });
     pushPdfCandidates(paper, openalex.pdfCandidates);
   }
 
-  const crossref = await crossrefByDoi(ctx, paper.doi);
   if (crossref) applyPartial(paper, crossref);
 
-  if (needsBibliographicBackfill(paper)) {
-    const datacite = await dataCiteByDoi(paper.doi);
-    if (datacite) applyPartial(paper, datacite);
-  }
+  if (datacite && needsBibliographicBackfill(paper)) applyPartial(paper, datacite);
 
-  const unpaywall = await unpaywallByDoi(ctx, paper.doi);
   if (unpaywall?.pdfUrl) paper.pdfCandidates.unshift(unpaywall.pdfUrl);
   if (unpaywall?.oaStatus && !paper.oaStatus) {
     paper.oaStatus = unpaywall.oaStatus;

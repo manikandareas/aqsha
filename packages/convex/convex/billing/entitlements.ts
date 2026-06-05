@@ -27,10 +27,13 @@ import { polar } from "./polar";
 
 const featureValidator = v.union(
   v.literal("normal_chat"),
+  v.literal("pro_chat"),
   v.literal("cited_answer"),
   v.literal("deep_research"),
   v.literal("external_search"),
 );
+
+const agentKindValidator = v.union(v.literal("lite"), v.literal("pro"));
 
 const runIdValidator = v.id("agentRuns");
 
@@ -376,6 +379,7 @@ export const consumeCreditsInternal = internalMutation({
     estimatedCostCents: v.optional(v.number()),
     metadataJson: v.optional(v.string()),
     requiredPlan: v.optional(v.union(v.literal("free"), v.literal("starter"), v.literal("plus"))),
+    agentKind: v.optional(agentKindValidator),
   },
   handler: async (ctx, args): Promise<EntitlementResult> => {
     return await consumeCredits(ctx, {
@@ -388,6 +392,7 @@ export const consumeCreditsInternal = internalMutation({
           inputTokens: args.inputTokens,
           outputTokens: args.outputTokens,
           totalTokens: args.totalTokens,
+          agentKind: args.agentKind,
         }),
     });
   },

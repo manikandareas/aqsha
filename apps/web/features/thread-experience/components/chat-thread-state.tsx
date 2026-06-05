@@ -223,6 +223,7 @@ export function ThreadChatSurface({
               onRemoveContextArtifact={onRemoveContextArtifact}
               hitlBlocking={hitlBlocking}
               isGenerating={isGenerating}
+              initialAgentKind={threadStatus?.lastAgentKind}
             />
           ) : (
             <Composer

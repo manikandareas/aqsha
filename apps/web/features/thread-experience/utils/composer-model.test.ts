@@ -23,16 +23,16 @@ function activeDeepRun(): ResearchRun {
 }
 
 describe("thread composer model", () => {
-  it("turns the /deep command into a Deep submission", () => {
+  it("passes the selected agent through and resolves the /deep command id", () => {
     const submission = buildComposerSubmission({
       visibleContent: "/deep Bandingkan bukti",
       commands: [],
-      mode: "normal",
+      agentKind: "lite",
     });
 
     expect(submission).toEqual({
       content: "/deep Bandingkan bukti",
-      mode: "deep",
+      agentKind: "lite",
       commandId: "deep-research",
     });
   });
@@ -43,19 +43,19 @@ describe("thread composer model", () => {
     );
   });
 
-  it("turns the /artifact command into a normal submission with artifact command id", () => {
+  it("turns the /artifact command into a submission with the artifact command id", () => {
     const artifact = promptCommands.find((command) => command.id === "artifact");
     expect(artifact).toBeTruthy();
 
     const submission = buildComposerSubmission({
       visibleContent: "/artifact cerita rakyat",
       commands: artifact ? [artifact] : [],
-      mode: "deep",
+      agentKind: "pro",
     });
 
     expect(submission).toEqual({
       content: "/artifact cerita rakyat",
-      mode: "normal",
+      agentKind: "pro",
       commandId: "artifact",
     });
   });
@@ -71,11 +71,11 @@ describe("thread composer model", () => {
     const submission = buildComposerSubmission({
       visibleContent: `${outline.slug} ringkas ${expand.slug} detail`,
       commands: [outline, expand],
-      mode: "normal",
+      agentKind: "lite",
     });
 
     expect(submission.commandId).toBeUndefined();
-    expect(submission.mode).toBe("normal");
+    expect(submission.agentKind).toBe("lite");
     expect(submission.content).toContain(outline.slug);
     expect(submission.content).toContain(expand.slug);
   });

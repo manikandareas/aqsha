@@ -12,7 +12,7 @@ const plans = [
     credits: "50 credits/bulan",
     cta: "Mulai gratis",
     href: signInUrl,
-    features: ["Normal chat", "Cited answer terbatas", "Deep Lite trial terbatas"],
+    features: ["Astra Lite", "2 Deep Research (Lite) per bulan", "Cited answer terbatas"],
   },
   {
     name: "Starter",
@@ -24,8 +24,8 @@ const plans = [
     href: `${signInUrl}?plan=starter`,
     highlighted: true,
     features: [
-      "Normal chat dan cited answer",
-      "Beberapa Deep Research kecil",
+      "Astra Lite + Astra Pro",
+      "Deep Research (Lite & Pro)",
       "Provider cost guard sekitar $1.25/bulan",
     ],
   },
@@ -38,9 +38,9 @@ const plans = [
     cta: "Pilih Plus",
     href: `${signInUrl}?plan=plus`,
     features: [
+      "Astra Lite + Astra Pro",
       "Deep Research lebih longgar",
       "Source reading lebih banyak",
-      "Provider cost guard sekitar $4/bulan",
     ],
   },
 ];

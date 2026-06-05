@@ -58,6 +58,7 @@ import {
   Link01Icon,
   Link02Icon,
   Loading03Icon,
+  LockIcon as HugeLockIcon,
   Login01Icon,
   Logout01Icon,
   Message01Icon,
@@ -167,6 +168,7 @@ export const LayoutGridIcon = createIcon(HugeLayoutGridIcon);
 export const Library = createIcon(LibraryIcon);
 export const Link2Icon = createIcon(Link02Icon);
 export const LinkIcon = createIcon(Link01Icon);
+export const LockIcon = createIcon(HugeLockIcon);
 export const LogIn = createIcon(Login01Icon);
 export const LogOutIcon = createIcon(Logout01Icon);
 export const Loader2Icon = createIcon(Loading03Icon);

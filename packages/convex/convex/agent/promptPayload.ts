@@ -1,6 +1,15 @@
 import { ConvexError } from "convex/values";
 import { buildPromptCommandPrompt, getPromptCommand, type PromptCommandMode } from "./promptCommands";
 
+export type PromptExecutionKind = "inline" | "deep_research";
+
+export function promptExecutionKindForCommand(
+  commandId: string | undefined | null,
+): PromptExecutionKind {
+  const command = getPromptCommand(commandId);
+  return command?.mode === "deep" ? "deep_research" : "inline";
+}
+
 function previewFromContent(content: string) {
   const singleLine = content.replace(/\s+/g, " ").trim();
   return singleLine.length > 140 ? `${singleLine.slice(0, 137)}...` : singleLine;
@@ -23,7 +32,7 @@ function stripCommandSlug(content: string, command: NonNullable<ReturnType<typeo
 export type PromptPayload = {
   visibleContent: string;
   expandedPrompt: string;
-  mode: "normal" | "deep";
+  executionKind: PromptExecutionKind;
   commandMetadata: {
     commandId: string;
     commandLabel: string;
@@ -36,7 +45,6 @@ export type PromptPayload = {
 
 export function promptPayloadFromCommand(args: {
   content: string;
-  mode: "normal" | "deep";
   commandId?: string;
   autoRouted?: boolean;
 }): PromptPayload {
@@ -44,7 +52,7 @@ export function promptPayloadFromCommand(args: {
     return {
       visibleContent: args.content,
       expandedPrompt: args.content,
-      mode: args.mode,
+      executionKind: "inline",
       commandMetadata: null,
     };
   }
@@ -68,7 +76,7 @@ export function promptPayloadFromCommand(args: {
   return {
     visibleContent,
     expandedPrompt: compiled.expandedPrompt,
-    mode: command.mode === "deep" ? ("deep" as const) : args.mode,
+    executionKind: promptExecutionKindForCommand(command.id),
     commandMetadata: {
       commandId: command.id,
       commandLabel: command.label,

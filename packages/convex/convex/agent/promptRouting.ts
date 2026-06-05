@@ -70,7 +70,6 @@ export async function resolvePromptPayload(
     ownerUserId: string;
     threadId: string;
     content: string;
-    mode: "normal" | "deep";
     commandId?: string;
   },
 ): Promise<PromptPayload> {
@@ -82,7 +81,6 @@ export async function resolvePromptPayload(
   if (autoRoute) {
     const basePayload = promptPayloadFromCommand({
       content: args.content,
-      mode: args.mode,
       commandId: autoRoute.commandId,
       autoRouted: true,
     });

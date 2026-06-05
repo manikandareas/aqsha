@@ -206,7 +206,7 @@ export type ThreadExperienceAction =
 
 export type ComposerSubmission = {
   content: string;
-  mode: "normal" | "deep";
+  agentKind: "lite" | "pro";
   commandId?: string;
 };
 

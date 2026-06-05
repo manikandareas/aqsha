@@ -37,10 +37,23 @@ import { assertThreadOwner, tryAssertThreadOwner } from "./threads";
 import { researchWorkflow } from "./workflow";
 import { CHAT_PROVIDER_NAME, chatProvider } from "./providers";
 import { markThreadStatusAfterTerminalRun } from "./runLifecycle";
+import type { AgentKind } from "./runtime";
 
 const DEEP_MODEL = process.env.AQSHA_DEEP_MODEL ?? "gpt-5.5";
 const DEEP_LITE_MODEL = process.env.AQSHA_DEEP_LITE_MODEL ?? "gpt-5.4-mini";
-const DEFAULT_MAX_ROUNDS = Number(process.env.AQSHA_DEEP_MAX_ROUNDS ?? 3);
+
+const agentKindValidator = v.union(v.literal("lite"), v.literal("pro"));
+
+// Deep Research is modulated by the selected agent. Astra Lite runs the lite
+// model for every task with a tight round cap; Astra Pro uses the heavy model
+// for planning/synthesis and a larger round cap. Legacy/in-flight runs without
+// an agentKind behave like Pro (the previous default), preserving old behavior.
+function heavyModelForAgent(agentKind: AgentKind | undefined) {
+  return (agentKind ?? "pro") === "pro" ? DEEP_MODEL : DEEP_LITE_MODEL;
+}
+function roundCapForAgent(agentKind: AgentKind | undefined) {
+  return (agentKind ?? "pro") === "pro" ? 4 : 2;
+}
 const MAX_SOURCES_PER_RUN = 14;
 const MAX_EXTRACTS_PER_RUN = 24;
 const DISCOVERY_TARGET_PER_RUN = 60;
@@ -191,9 +204,10 @@ export const deepResearchExecuteWorkflow = researchWorkflow.define({
     promptMessageId: v.string(),
     prompt: v.string(),
     plan: v.any(),
+    agentKind: v.optional(agentKindValidator),
   },
   handler: async (step, args): Promise<void> => {
-    const plan = normalizePlan(args.plan);
+    const plan = normalizePlan(args.plan, args.agentKind);
     const loop = await step.runAction(internal.agent.deepResearch.researchLoop, {
       ...args,
       plan,
@@ -259,6 +273,7 @@ export const deepResearchWorkflow = researchWorkflow.define({
     threadId: v.string(),
     promptMessageId: v.string(),
     prompt: v.string(),
+    agentKind: v.optional(agentKindValidator),
   },
   handler: async (step, args): Promise<void> => {
     await step.runAction(internal.agent.deepResearch.prepareDeepResearchHitl, args, {
@@ -351,21 +366,24 @@ export const retry = mutation({
       throw new ConvexError("Run is not retryable");
     }
     const prompt = run.promptSnapshot || await readPromptMessage(ctx, run.promptMessageId);
+    // Legacy deep runs have no agentKind; treat them as Pro (the old default).
+    const agentKind: AgentKind = run.agentKind ?? "pro";
     const billing = await consumeCredits(ctx, {
       ownerUserId: user._id,
       ownerEmail: user.email,
       threadId: run.threadId,
       feature: "deep_research",
       provider: CHAT_PROVIDER_NAME,
-      model: DEEP_MODEL,
+      model: heavyModelForAgent(agentKind),
       inputTokens: estimateTokens(prompt),
       totalTokens: estimateTokens(prompt),
       credits: estimateCredits({
         feature: "deep_research",
         inputTokens: estimateTokens(prompt),
         totalTokens: estimateTokens(prompt),
+        agentKind,
       }),
-      requiredPlan: "starter",
+      requiredPlan: agentKind === "pro" ? "starter" : "free",
     });
     if (!billing.ok) {
       throw new ConvexError(billing.reason);
@@ -376,6 +394,7 @@ export const retry = mutation({
       promptMessageId: run.promptMessageId,
       prompt,
       retryOfRunId: run._id,
+      agentKind,
     });
     const workflowId = await researchWorkflow.start(
       ctx,
@@ -386,6 +405,7 @@ export const retry = mutation({
         threadId: run.threadId,
         promptMessageId: run.promptMessageId,
         prompt,
+        agentKind,
       },
       {
         onComplete: internal.agent.deepResearch.handleWorkflowComplete,
@@ -461,13 +481,24 @@ export const startForMessage = internalMutation({
     promptMessageId: v.string(),
     prompt: v.string(),
     commandId: v.optional(v.string()),
+    agentKind: agentKindValidator,
   },
   handler: async (ctx, args): Promise<{ runId: Id<"agentRuns">; workflowId: string }> => {
     const runId = await createRun(ctx, args);
+    // Pass only the fields the workflow declares. `commandId` is persisted on
+    // the run via createRun but is NOT a workflow arg — spreading it here makes
+    // the workflow's arg validator reject the start ("Expected nothing").
     const workflowId = await researchWorkflow.start(
       ctx,
       internal.agent.deepResearch.deepResearchWorkflow,
-      { runId, ...args },
+      {
+        runId,
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+        promptMessageId: args.promptMessageId,
+        prompt: args.prompt,
+        agentKind: args.agentKind,
+      },
       {
         onComplete: internal.agent.deepResearch.handleWorkflowComplete,
         context: { runId, ownerUserId: args.ownerUserId },
@@ -488,8 +519,9 @@ export const planResearch = internalAction({
       stepKey: "planRound",
       status: "running",
     });
+    const maxRoundCap = roundCapForAgent(args.agentKind);
     const object = await generateObject({
-      model: chatProvider.chat(DEEP_MODEL),
+      model: chatProvider.chat(heavyModelForAgent(args.agentKind)),
       schema: z.object({
         title: z.string(),
         questions: z.array(z.string()).min(1).max(5),
@@ -497,27 +529,28 @@ export const planResearch = internalAction({
         reportIntent: z.string(),
         sufficiencyCriteria: z.array(z.string()).min(1).max(6),
         initialQueries: z.array(z.string()).min(1).max(5),
-        maxRounds: z.number().int().min(1).max(3),
+        maxRounds: z.number().int().min(1).max(maxRoundCap),
       }),
       prompt: [
         "Create a concise autonomous research plan for this prompt.",
         "The plan must include research questions, a source strategy, the intended report shape, concrete sufficiency criteria, and initial search queries.",
-        "Keep maxRounds between 1 and 3. Describe the evidence mix needed; the server will safely execute academic and web providers.",
+        `Keep maxRounds between 1 and ${maxRoundCap}. Describe the evidence mix needed; the server will safely execute academic and web providers.`,
         "",
         args.prompt,
       ].join("\n"),
     });
-    const plan = normalizePlan(object.object);
+    const plan = normalizePlan(object.object, args.agentKind);
     await ctx.runMutation(internal.agent.deepResearch.updateRunPlan, {
       runId: args.runId,
       ownerUserId: args.ownerUserId,
       promptSnapshot: args.prompt,
       maxRounds: plan.maxRounds,
+      agentKind: args.agentKind,
       budgetJson: JSON.stringify({
         maxRounds: plan.maxRounds,
         maxSources: MAX_SOURCES_PER_RUN,
         maxExtracts: MAX_EXTRACTS_PER_RUN,
-        model: DEEP_MODEL,
+        model: heavyModelForAgent(args.agentKind),
         providers: ["exa_search", "exa_contents", "jina_search", "jina_reader", "jina_rerank", "arxiv", "crossref"],
       }),
     });
@@ -597,6 +630,7 @@ export const startExecuteWorkflow = internalMutation({
         promptMessageId: run.promptMessageId,
         prompt,
         plan: payload.plan,
+        agentKind: run.agentKind ?? "pro",
       },
       {
         onComplete: internal.agent.deepResearch.handleWorkflowComplete,
@@ -619,8 +653,9 @@ export const researchLoop = internalAction({
     extracts: ResearchExtract[];
     roundState: ResearchRoundState[];
   }> => {
-    const plan = normalizePlan(args.plan);
-    const maxRounds = Math.min(plan.maxRounds || DEFAULT_MAX_ROUNDS, DEFAULT_MAX_ROUNDS);
+    const plan = normalizePlan(args.plan, args.agentKind);
+    const roundCap = roundCapForAgent(args.agentKind);
+    const maxRounds = Math.min(plan.maxRounds || roundCap, roundCap);
     const candidatePool = new Map<string, DiscoveryCandidate>();
     const acceptedByKey = new Map<string, AcceptedSource>();
     const extractsByKey = new Map<string, ResearchExtract>();
@@ -1051,14 +1086,14 @@ export const synthesize = internalAction({
       .join("\n");
     const readiness = assessEvidenceReadiness(args.sources, normalizeExtracts(args.extracts));
     const result = await generateText({
-      model: chatProvider.chat(DEEP_MODEL),
+      model: chatProvider.chat(heavyModelForAgent(args.agentKind)),
       system:
         readiness.ready
           ? "Write a source-grounded markdown research report. Cite every factual claim with persisted source numbers. Prefer accepted evidence extracts over snippets. If evidence is insufficient, keep that limitation visible and do not overstate certainty. Also produce a concise chat summary (2-4 natural paragraphs, no implementation details) for the user."
           : "Write a partial source-grounded markdown research artifact, not a full final recommendation report. State up front that accepted readable evidence did not meet the Deep Research target, cite only persisted source numbers, and ask for retry/expanded search before strong conclusions. Also produce a concise chat summary for the user.",
       prompt: [
         `Prompt:\n${args.prompt}`,
-        `Research plan:\n${JSON.stringify(normalizePlan(args.plan), null, 2)}`,
+        `Research plan:\n${JSON.stringify(normalizePlan(args.plan, args.agentKind), null, 2)}`,
         `Evidence readiness:\n${JSON.stringify(readiness, null, 2)}`,
         `Round trace:\n${JSON.stringify(args.roundState, null, 2)}`,
         `Accepted evidence extracts:\n${extractBlock || "No extracted evidence beyond snippets."}`,
@@ -1091,6 +1126,9 @@ export const synthesize = internalAction({
 export const auditClaims = internalAction({
   args: {
     ...workflowArgs(),
+    // The execute workflow spreads its full arg set (which includes `plan`)
+    // into this action; accept it even though it is unused here.
+    plan: v.optional(v.any()),
     sources: v.array(sourceRuntimeValidator()),
     extracts: v.any(),
     markdown: v.string(),
@@ -1142,7 +1180,7 @@ export const auditClaims = internalAction({
         stepKey: "reviseUnsupportedClaims",
         status: "running",
       });
-      markdown = await reviseUnsupportedMarkdown(args.markdown, checks).catch(() => markdown);
+      markdown = await reviseUnsupportedMarkdown(args.markdown, checks, args.agentKind).catch(() => markdown);
       verificationStatus = "revised";
       for (const check of checks) {
         if (check.support === "contradicted" || check.support === "unsupported") {
@@ -1177,6 +1215,7 @@ export const auditClaims = internalAction({
 export const persistArtifact = internalMutation({
   args: {
     ...workflowArgs(),
+    plan: v.optional(v.any()),
     sources: v.array(sourceRuntimeValidator()),
     extracts: v.any(),
     markdown: v.string(),
@@ -1274,6 +1313,7 @@ export const persistArtifact = internalMutation({
 export const finalizeThread = internalMutation({
   args: {
     ...workflowArgs(),
+    plan: v.optional(v.any()),
     artifactId: v.id("artifacts"),
     responseSummary: v.string(),
   },
@@ -1349,7 +1389,10 @@ export const handleWorkflowComplete = internalMutation({
       await markCanceled(ctx, runId, ownerUserId);
       return;
     }
-    if (args.result?.kind === "error") {
+    // @convex-dev/workflow reports failures as kind "failed" (there is no
+    // "error" kind). Without this, a failed workflow silently falls through to
+    // the success path below and the run is mis-marked "completed".
+    if (args.result?.kind === "failed") {
       await failRun(ctx, {
         runId,
         ownerUserId,
@@ -1390,12 +1433,13 @@ export const updateRunPlan = internalMutation({
     promptSnapshot: v.string(),
     maxRounds: v.number(),
     budgetJson: v.string(),
+    agentKind: v.optional(agentKindValidator),
   },
   handler: async (ctx, args) => {
     await assertRunOwner(ctx, args.runId, args.ownerUserId);
     await ctx.db.patch("agentRuns", args.runId, {
       promptSnapshot: args.promptSnapshot,
-      maxRounds: Math.min(Math.max(1, args.maxRounds), DEFAULT_MAX_ROUNDS),
+      maxRounds: Math.min(Math.max(1, args.maxRounds), roundCapForAgent(args.agentKind)),
       budgetJson: args.budgetJson,
       updatedAt: Date.now(),
     });
@@ -1558,24 +1602,27 @@ async function createRun(
     prompt?: string;
     commandId?: string;
     retryOfRunId?: Id<"agentRuns">;
+    agentKind: AgentKind;
   },
 ) {
   const now = Date.now();
+  const maxRounds = roundCapForAgent(args.agentKind);
   const runId = await ctx.db.insert("agentRuns", {
     ownerUserId: args.ownerUserId,
     threadId: args.threadId,
     promptMessageId: args.promptMessageId,
     mode: "deep",
+    agentKind: args.agentKind,
     executionKind: "workflow",
     promptSnapshot: args.prompt ?? "",
     commandId: args.commandId,
     status: "queued",
     roundCount: 0,
-    maxRounds: DEFAULT_MAX_ROUNDS,
+    maxRounds,
     sufficiencyStatus: "unknown",
     verificationStatus: "not_started",
     budgetJson: JSON.stringify({
-      maxRounds: DEFAULT_MAX_ROUNDS,
+      maxRounds,
       maxSources: MAX_SOURCES_PER_RUN,
       maxExtracts: MAX_EXTRACTS_PER_RUN,
     }),
@@ -1794,6 +1841,9 @@ function workflowArgs() {
     threadId: v.string(),
     promptMessageId: v.string(),
     prompt: v.string(),
+    // Optional so legacy/in-flight workflow runs (started before this field
+    // existed) still validate; handlers default to Pro behavior.
+    agentKind: v.optional(agentKindValidator),
   };
 }
 
@@ -1801,7 +1851,7 @@ function sourceRuntimeValidator() {
   return sourceCandidateValidator;
 }
 
-function normalizePlan(value: unknown): ResearchPlan {
+function normalizePlan(value: unknown, agentKind?: AgentKind): ResearchPlan {
   const plan = isRecord(value) ? value : {};
   return {
     title: stringValue(plan.title) || "Deep Research Report",
@@ -1810,7 +1860,7 @@ function normalizePlan(value: unknown): ResearchPlan {
     reportIntent: stringValue(plan.reportIntent) || "Produce a cited research report.",
     sufficiencyCriteria: stringArray(plan.sufficiencyCriteria).slice(0, 6),
     initialQueries: stringArray(plan.initialQueries).slice(0, 5),
-    maxRounds: clampRoundCount(numberValue(plan.maxRounds) ?? DEFAULT_MAX_ROUNDS),
+    maxRounds: clampRoundCount(numberValue(plan.maxRounds) ?? roundCapForAgent(agentKind), agentKind),
   };
 }
 
@@ -2939,13 +2989,17 @@ function withEvidenceLimits(markdown: string, checks: CitationCheckDraft[]) {
   return `${markdown.trim()}\n${limits}`;
 }
 
-async function reviseUnsupportedMarkdown(markdown: string, checks: CitationCheckDraft[]) {
+async function reviseUnsupportedMarkdown(
+  markdown: string,
+  checks: CitationCheckDraft[],
+  agentKind?: AgentKind,
+) {
   const weak = checks.filter((check) => check.support === "unsupported" || check.support === "contradicted");
   if (weak.length === 0) {
     return markdown;
   }
   const result = await generateText({
-    model: chatProvider.chat(DEEP_MODEL),
+    model: chatProvider.chat(heavyModelForAgent(agentKind)),
     system: [
       "Revise the markdown report to remove, soften, or explicitly caveat contradicted and unsupported factual claims.",
       "Keep supported claims and citations intact. Keep the Evidence Limits section when any uncertainty remains.",
@@ -3020,8 +3074,8 @@ function numberValue(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-function clampRoundCount(value: number) {
-  return Math.min(Math.max(1, Math.floor(value)), DEFAULT_MAX_ROUNDS);
+function clampRoundCount(value: number, agentKind?: AgentKind) {
+  return Math.min(Math.max(1, Math.floor(value)), roundCapForAgent(agentKind));
 }
 
 export async function shouldRunCounterEvidencePass(args: {

@@ -17,6 +17,7 @@ const threadSummaryValidator = v.object({
   lastMessagePreview: v.string(),
   messageCount: v.number(),
   status: v.union(v.literal("idle"), v.literal("streaming"), v.literal("failed")),
+  lastAgentKind: v.optional(v.union(v.literal("lite"), v.literal("pro"))),
 });
 
 const threadPageValidator = v.object({
@@ -55,6 +56,7 @@ async function summarizeThread(ctx: QueryCtx, thread: {
     lastMessagePreview: metadata?.lastMessagePreview ?? "",
     messageCount: metadata?.messageCount ?? 0,
     status: metadata?.status ?? "idle",
+    lastAgentKind: metadata?.lastAgentKind,
   };
 }
 

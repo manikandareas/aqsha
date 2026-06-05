@@ -25,6 +25,7 @@ export type ThreadSummary = {
   lastMessagePreview: string;
   messageCount: number;
   status: "idle" | "streaming" | "failed";
+  lastAgentKind?: "lite" | "pro";
 };
 
 export type ViewerSummary =
@@ -37,7 +38,7 @@ export type ViewerSummary =
 
 export type StartThread = (args: {
   content: string;
-  mode: "normal" | "deep";
+  agentKind: "lite" | "pro";
   commandId?: string;
   workspaceId?: WorkspaceId;
   selectedContextArtifactIds?: ArtifactId[];
@@ -54,7 +55,7 @@ export type StartThread = (args: {
 export type SendMessage = (args: {
   threadId: string;
   content: string;
-  mode: "normal" | "deep";
+  agentKind: "lite" | "pro";
   commandId?: string;
   selectedContextArtifactIds?: ArtifactId[];
   messageAttachmentArtifactIds?: ArtifactId[];

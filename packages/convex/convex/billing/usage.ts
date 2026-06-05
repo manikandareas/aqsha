@@ -5,6 +5,7 @@ import { ensureCreditPeriod, getBillingSnapshot } from "./entitlements";
 
 const featureCountValidator = v.object({
   normal_chat: v.number(),
+  pro_chat: v.number(),
   cited_answer: v.number(),
   deep_research: v.number(),
   external_search: v.number(),
@@ -12,6 +13,7 @@ const featureCountValidator = v.object({
 
 const emptyFeatureCounts = () => ({
   normal_chat: 0,
+  pro_chat: 0,
   cited_answer: 0,
   deep_research: 0,
   external_search: 0,
