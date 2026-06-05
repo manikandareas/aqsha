@@ -68,13 +68,28 @@ export function ArtifactDetailSidebar({
   const [showDetails, setShowDetails] = useState(false);
 
   const isPdf = payload.artifactType === "pdf";
-  const isScholarly = isPdf && artifact.detectedDocumentKind === "scholarly_paper";
+  // A paper artifact can be a downloaded PDF (uploaded or ingested from a URL)
+  // or a URL kept as metadata-only when no open-access PDF was available.
+  const hasPaperMetadata = Boolean(paperExtraction?.metadata);
+  const isScholarly =
+    artifact.detectedDocumentKind === "scholarly_paper" &&
+    (isPdf || hasPaperMetadata);
   const metadata = isScholarly ? paperExtraction?.metadata ?? null : null;
   const urlPayload = payload.artifactType === "url" ? payload : null;
   const filePayload =
     payload.artifactType === "pdf" || payload.artifactType === "docx" ? payload : null;
 
-  const paperFailed = isPdf && paperExtraction?.extraction?.status === "failed";
+  // Bibliographic metadata can be resolved (DOI/arXiv → DataCite/OpenAlex)
+  // independently of GROBID. A failed GROBID pass only means the richer
+  // full-text extraction didn't finish — it is NOT a failure to read the
+  // paper when we already have usable metadata, so don't alarm the user.
+  const hasUsablePaperMetadata = Boolean(
+    metadata && (metadata.title || metadata.abstract || metadata.authors.length > 0),
+  );
+  const paperFailed =
+    isPdf &&
+    paperExtraction?.extraction?.status === "failed" &&
+    !hasUsablePaperMetadata;
   const urlFailed = urlPayload?.status === "failed";
 
   const authors = metadata

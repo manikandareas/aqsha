@@ -91,6 +91,37 @@ export const createFromStorage = action({
   },
 });
 
+/**
+ * Re-run the shared upload extraction pipeline (text extraction → RAG index →
+ * GROBID queue) for an artifact whose stored file was produced server-side
+ * (e.g. an open-access PDF downloaded from a DOI/arXiv URL). Mirrors what
+ * `createFromStorage` does after insertion, but for an already-existing
+ * artifact + storage blob. Runs in the Node runtime for `unpdf`.
+ */
+export const finalizeStoredArtifact = internalAction({
+  args: {
+    ownerUserId: v.string(),
+    artifactId: v.id("artifacts"),
+    title: v.string(),
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    mimeType: v.string(),
+    workspaceId: v.id("workspaces"),
+  },
+  handler: async (ctx, args): Promise<{ indexed: boolean }> => {
+    const result = await finalizeUploadedDocument(ctx, {
+      ownerUserId: args.ownerUserId,
+      artifactId: args.artifactId,
+      title: args.title,
+      storageId: args.storageId,
+      fileName: args.fileName,
+      mimeType: args.mimeType,
+      workspaceId: args.workspaceId,
+    });
+    return { indexed: result.indexed };
+  },
+});
+
 export const createThreadAttachmentFromStorage = action({
   args: {
     threadId: v.string(),

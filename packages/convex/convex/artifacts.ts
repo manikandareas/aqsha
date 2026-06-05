@@ -4,7 +4,6 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   action,
-  internalAction,
   internalMutation,
   internalQuery,
   mutation,
@@ -43,11 +42,6 @@ import {
 import { workspaceEmojiForNewWorkspace } from "./workspaceEmoji";
 import { syncArtifactWorkspaceMove } from "./workspaceMoveModel";
 import { assertThreadOwner } from "./agent/threads";
-import {
-  readWithExaContents,
-  readWithJinaReader,
-  type JinaReadResult,
-} from "./agent/externalProviders";
 
 const markdownTitleFallback = "Untitled markdown";
 
@@ -532,7 +526,9 @@ export const createUrl = mutation({
       createdAt: now,
       updatedAt: now,
     });
-    await ctx.scheduler.runAfter(0, internal.artifacts.extractUrl, { artifactId });
+    await ctx.scheduler.runAfter(0, internal.paperIngest.ingest.ingestUrl, {
+      artifactId,
+    });
     return artifactId;
   },
 });
@@ -559,7 +555,9 @@ export const retryUrlExtraction = mutation({
       failureReason: undefined,
       updatedAt: Date.now(),
     });
-    await ctx.scheduler.runAfter(0, internal.artifacts.extractUrl, { artifactId: args.artifactId });
+    await ctx.scheduler.runAfter(0, internal.paperIngest.ingest.ingestUrl, {
+      artifactId: args.artifactId,
+    });
     return { ok: true };
   },
 });
@@ -630,55 +628,6 @@ export const remove = mutation({
       status: "deleted",
       deletedAt: now,
       updatedAt: now,
-    });
-    return { ok: true };
-  },
-});
-
-export const extractUrl = internalAction({
-  args: { artifactId: v.id("artifacts") },
-  handler: async (ctx, args): Promise<{ ok: boolean; reason?: string }> => {
-    const target = await ctx.runQuery(internal.artifacts.getUrlExtractionTarget, {
-      artifactId: args.artifactId,
-    });
-    if (!target) {
-      return { ok: false, reason: "not_found" };
-    }
-
-    const exa: JinaReadResult | null = process.env.EXA_API_KEY
-      ? await readWithExaContents(ctx, {
-          ownerUserId: target.ownerUserId,
-          url: target.normalizedUrl,
-        })
-      : null;
-    const read: JinaReadResult = exa?.ok
-      ? exa
-      : await readWithJinaReader(ctx, {
-          ownerUserId: target.ownerUserId,
-          url: target.normalizedUrl,
-        });
-
-    if (!read.ok) {
-      await ctx.runMutation(internal.artifacts.patchUrlExtractionFailed, {
-        artifactId: args.artifactId,
-        ownerUserId: target.ownerUserId,
-        failureReason: read.failureReason ?? "URL extraction failed",
-      });
-      return { ok: false, reason: read.failureReason ?? "URL extraction failed" };
-    }
-
-    const storageId =
-      read.markdown.length > ARTIFACT_BODY_INLINE_LIMIT
-        ? await ctx.storage.store(new Blob([read.markdown], { type: "text/markdown" }))
-        : undefined;
-    await ctx.runMutation(internal.artifacts.patchUrlExtractionReady, {
-      artifactId: args.artifactId,
-      ownerUserId: target.ownerUserId,
-      title: read.title || target.title,
-      description: read.snippet || undefined,
-      siteName: target.siteName,
-      readableText: read.markdown,
-      storageId,
     });
     return { ok: true };
   },
@@ -1015,7 +964,9 @@ export const patchUploadedArtifactIndexed = internalMutation({
       args.markdown.length <= ARTIFACT_BODY_INLINE_LIMIT ? args.markdown : undefined;
     await ctx.db.patch("artifacts", artifact._id, {
       title: args.title ?? artifact.title,
-      detectedDocumentKind: args.detectedDocumentKind,
+      // Preserve an existing classification (e.g. set during URL→PDF convert)
+      // when the caller doesn't provide one, instead of clearing it.
+      detectedDocumentKind: args.detectedDocumentKind ?? artifact.detectedDocumentKind,
       plainTextPreview: args.plainTextPreview ?? previewFromText(args.plainText),
       indexingStatus: "ready",
       indexingFailureReason: undefined,
@@ -1094,7 +1045,9 @@ export const getUrlExtractionTarget = internalQuery({
     return {
       ownerUserId: artifact.ownerUserId,
       artifactId: artifact._id,
+      workspaceId: artifact.workspaceId,
       title: artifact.title,
+      originalUrl: row.originalUrl,
       normalizedUrl: row.normalizedUrl,
       siteName: row.siteName ?? siteNameFromUrl(row.normalizedUrl),
     };
@@ -1163,6 +1116,121 @@ export const patchUrlExtractionFailed = internalMutation({
       failureReason: reason,
       updatedAt: Date.now(),
     });
+  },
+});
+
+/**
+ * Convert a `url` artifact into a `pdf` artifact after an open-access PDF has
+ * been downloaded for it (academic ingestion path). The artifact then flows
+ * through the SAME extraction/GROBID pipeline as an uploaded PDF. The original
+ * `artifactUrls` row is kept (marked ready) so URL-level dedupe still works.
+ */
+export const convertUrlArtifactToPdf = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    artifactId: v.id("artifacts"),
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    byteSize: v.number(),
+    title: v.optional(v.string()),
+  },
+  returns: v.object({ ok: v.boolean() }),
+  handler: async (ctx, args) => {
+    const artifact = await assertUploadedArtifactOwner(ctx, args.artifactId, args.ownerUserId, {
+      requireActive: true,
+    });
+    if (!artifact.workspaceId) {
+      return { ok: false };
+    }
+    const now = Date.now();
+    await ctx.db.patch("artifacts", args.artifactId, {
+      artifactType: "pdf",
+      artifactFamily: artifactFamilyForType("pdf"),
+      mimeType: "application/pdf",
+      fileName: args.fileName,
+      byteSize: args.byteSize,
+      storageId: args.storageId,
+      language: defaultLanguageForArtifactType("pdf"),
+      detectedDocumentKind: "scholarly_paper",
+      indexingStatus: "pending",
+      indexingFailureReason: undefined,
+      plainTextPreview: "Indexing is running.",
+      title: args.title ? normalizeName(args.title, "Artifact title") : artifact.title,
+      updatedAt: now,
+    });
+    // URL artifacts don't create a content row; the upload pipeline needs one.
+    const existingContent = await getContentRowOrNull(ctx, args.artifactId, args.ownerUserId);
+    if (!existingContent) {
+      await ctx.db.insert("artifactContents", {
+        ownerUserId: args.ownerUserId,
+        workspaceId: artifact.workspaceId,
+        artifactId: args.artifactId,
+        blocksJson: "",
+        markdown: "",
+        plainText: "",
+        contextText: "",
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    const urlRow = await getUrlRowOrNull(ctx, args.artifactId, args.ownerUserId);
+    if (urlRow) {
+      await ctx.db.patch("artifactUrls", urlRow._id, {
+        status: "ready",
+        failureReason: undefined,
+        extractedAt: now,
+        updatedAt: now,
+      });
+    }
+    return { ok: true };
+  },
+});
+
+/**
+ * Mark a `url` artifact as a scholarly paper for which no open-access PDF could
+ * be downloaded. Keeps it a `url` artifact but flips `detectedDocumentKind` so
+ * the resolved metadata (abstract/authors/DOI) renders in the paper sidebar.
+ */
+export const markUrlPaperMetadataOnly = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    artifactId: v.id("artifacts"),
+    title: v.string(),
+    abstract: v.optional(v.string()),
+    siteName: v.optional(v.string()),
+  },
+  returns: v.object({ ok: v.boolean() }),
+  handler: async (ctx, args) => {
+    const artifact = await assertUploadedArtifactOwner(ctx, args.artifactId, args.ownerUserId, {
+      requireActive: true,
+    });
+    const now = Date.now();
+    const readable = args.abstract ?? "";
+    await ctx.db.patch("artifacts", artifact._id, {
+      title: args.title || artifact.title,
+      detectedDocumentKind: "scholarly_paper",
+      indexingStatus: "ready",
+      indexingFailureReason: undefined,
+      plainTextPreview: previewFromText(readable || artifact.title),
+      updatedAt: now,
+    });
+    const row = await getUrlRowOrNull(ctx, args.artifactId, args.ownerUserId);
+    if (row) {
+      const inline =
+        readable.length <= ARTIFACT_BODY_INLINE_LIMIT ? readable : undefined;
+      await ctx.db.patch("artifactUrls", row._id, {
+        status: "ready",
+        title: args.title,
+        description: args.abstract ? previewFromText(args.abstract, 280) : undefined,
+        siteName: args.siteName ?? row.siteName,
+        readableText: inline,
+        contextText: contextFromText(readable),
+        failureReason: undefined,
+        extractedAt: now,
+        updatedAt: now,
+      });
+    }
+    return { ok: true };
   },
 });
 

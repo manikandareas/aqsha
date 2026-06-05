@@ -3,6 +3,7 @@ import { components } from "./_generated/api";
 
 const FIVE_SECONDS = 5_000;
 const THREE_SECONDS = 3_000;
+const ONE_SECOND = 1_000;
 
 export const rateLimiter = new RateLimiter(components.rateLimiter, {
   sendMessage: {
@@ -73,5 +74,32 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
     rate: 30,
     period: MINUTE,
     capacity: 30,
+  },
+  // Per-user gate on the "add a paper / URL to library" ingestion pipeline.
+  paperIngestPerUser: {
+    kind: "token bucket",
+    rate: 12,
+    period: MINUTE,
+    capacity: 12,
+  },
+  // Per-user gate on downloading open-access PDFs (bandwidth/cost guard).
+  paperPdfDownloadPerUser: {
+    kind: "token bucket",
+    rate: 12,
+    period: MINUTE,
+    capacity: 12,
+  },
+  // Politeness throttle for Unpaywall (100k/day shared) and Semantic Scholar.
+  unpaywallGlobal: {
+    kind: "token bucket",
+    rate: 60,
+    period: MINUTE,
+    capacity: 60,
+  },
+  semanticScholarGlobal: {
+    kind: "fixed window",
+    rate: 1,
+    period: ONE_SECOND,
+    capacity: 1,
   },
 });

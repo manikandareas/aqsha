@@ -35,6 +35,18 @@ import {
 
 const MAX_INDEXED_TEXT_CHARS = 300_000;
 
+// The GROBID server is frequently transiently overloaded (502 / gateway
+// timeouts). Re-queue a few times with backoff before giving up so a single
+// busy moment doesn't permanently lose a paper's structured metadata.
+const MAX_GROBID_ATTEMPTS = 3;
+const GROBID_RETRY_BASE_DELAY_MS = 20_000;
+
+function isTransientGrobidError(reason: string): boolean {
+  return /abort|timed?\s*out|timeout|50\d|bad gateway|gateway time|network|fetch failed|econn|socket/i.test(
+    reason,
+  );
+}
+
 const parsedPaperAuthorValidator = v.object({
   name: v.string(),
   affiliation: v.optional(v.string()),
@@ -84,8 +96,17 @@ const paperMetadataReturnValidator = v.union(
       v.literal("grobid"),
       v.literal("crossref"),
       v.literal("openalex"),
+      v.literal("arxiv"),
+      v.literal("datacite"),
+      v.literal("semantic_scholar"),
       v.literal("manual"),
       v.literal("llm"),
+    ),
+    arxivId: v.optional(v.string()),
+    sourceUrl: v.optional(v.string()),
+    oaStatus: v.optional(v.string()),
+    pdfStatus: v.optional(
+      v.union(v.literal("downloaded"), v.literal("no_oa_available")),
     ),
     confidence: v.optional(v.number()),
     updatedAt: v.number(),
@@ -163,6 +184,10 @@ export const getStatus = query({
             publishedYear: metadata.publishedYear,
             keywords: metadata.keywords ?? [],
             metadataSource: metadata.metadataSource,
+            arxivId: metadata.arxivId,
+            sourceUrl: metadata.sourceUrl,
+            oaStatus: metadata.oaStatus,
+            pdfStatus: metadata.pdfStatus,
             confidence: metadata.confidence,
             updatedAt: metadata.updatedAt,
           }
@@ -190,10 +215,102 @@ export const retryGrobidExtraction = mutation({
   },
 });
 
+const resolvedMetadataSourceValidator = v.union(
+  v.literal("crossref"),
+  v.literal("openalex"),
+  v.literal("arxiv"),
+  v.literal("datacite"),
+  v.literal("semantic_scholar"),
+);
+
+/**
+ * Persist DOI/identifier-derived paper metadata for a URL/Explore-sourced
+ * artifact. Runs BEFORE (and independently of) GROBID so the paper sidebar
+ * works even when GROBID is disabled or no PDF is available; GROBID later
+ * upserts the same row with richer, structured data.
+ */
+export const upsertResolvedPaperMetadata = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    artifactId: v.id("artifacts"),
+    metadataSource: resolvedMetadataSourceValidator,
+    title: v.optional(v.string()),
+    abstract: v.optional(v.string()),
+    doi: v.optional(v.string()),
+    arxivId: v.optional(v.string()),
+    authors: v.optional(v.array(parsedPaperAuthorValidator)),
+    affiliations: v.optional(v.array(v.string())),
+    journal: v.optional(v.string()),
+    publisher: v.optional(v.string()),
+    publishedYear: v.optional(v.number()),
+    keywords: v.optional(v.array(v.string())),
+    sourceUrl: v.optional(v.string()),
+    oaStatus: v.optional(v.string()),
+    pdfStatus: v.optional(
+      v.union(v.literal("downloaded"), v.literal("no_oa_available")),
+    ),
+    confidence: v.optional(v.number()),
+  },
+  returns: v.object({ ok: v.boolean() }),
+  handler: async (ctx, args) => {
+    const artifact = await ctx.db.get("artifacts", args.artifactId);
+    if (
+      !artifact ||
+      artifact.ownerUserId !== args.ownerUserId ||
+      artifact.status !== "active" ||
+      !artifact.workspaceId
+    ) {
+      return { ok: false };
+    }
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("artifactPaperMetadata")
+      .withIndex("by_owner_artifact", (q) =>
+        q.eq("ownerUserId", args.ownerUserId).eq("artifactId", args.artifactId),
+      )
+      .unique();
+    // Never downgrade richer GROBID metadata back to a resolver source.
+    if (existing && existing.metadataSource === "grobid") {
+      return { ok: true };
+    }
+    const patch = {
+      workspaceId: artifact.workspaceId,
+      title: args.title,
+      abstract: args.abstract,
+      doi: args.doi,
+      arxivId: args.arxivId,
+      authors: args.authors ?? [],
+      affiliations: args.affiliations ?? [],
+      journal: args.journal,
+      publisher: args.publisher,
+      publishedYear: args.publishedYear,
+      keywords: args.keywords ?? [],
+      metadataSource: args.metadataSource,
+      sourceUrl: args.sourceUrl,
+      oaStatus: args.oaStatus,
+      pdfStatus: args.pdfStatus,
+      confidence: args.confidence,
+      updatedAt: now,
+    };
+    if (existing) {
+      await ctx.db.patch("artifactPaperMetadata", existing._id, patch);
+    } else {
+      await ctx.db.insert("artifactPaperMetadata", {
+        ownerUserId: args.ownerUserId,
+        artifactId: args.artifactId,
+        createdAt: now,
+        ...patch,
+      });
+    }
+    return { ok: true };
+  },
+});
+
 export const queueGrobidExtraction = internalMutation({
   args: {
     ownerUserId: v.string(),
     artifactId: v.id("artifacts"),
+    attempt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     if (!isGrobidEnabled()) {
@@ -247,6 +364,7 @@ export const queueGrobidExtraction = internalMutation({
     await ctx.scheduler.runAfter(0, internal.paperExtractions.runGrobidExtraction, {
       artifactId: args.artifactId,
       attemptId,
+      attempt: args.attempt ?? 1,
     });
     return { queued: true, attemptId };
   },
@@ -256,6 +374,7 @@ export const runGrobidExtraction = internalAction({
   args: {
     artifactId: v.id("artifacts"),
     attemptId: v.string(),
+    attempt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const target = await ctx.runQuery(internal.paperExtractions.getGrobidTarget, {
@@ -313,6 +432,21 @@ export const runGrobidExtraction = internalAction({
       return { ok: true, durationMs: result.durationMs };
     } catch (error) {
       const failureReason = extractionFailureMessage(error);
+      const attempt = args.attempt ?? 1;
+      // Re-queue transient GROBID failures (overloaded server / gateway
+      // timeouts) with backoff before marking the extraction failed.
+      if (isTransientGrobidError(failureReason) && attempt < MAX_GROBID_ATTEMPTS) {
+        await ctx.scheduler.runAfter(
+          GROBID_RETRY_BASE_DELAY_MS * attempt,
+          internal.paperExtractions.queueGrobidExtraction,
+          {
+            ownerUserId: target.ownerUserId,
+            artifactId: args.artifactId,
+            attempt: attempt + 1,
+          },
+        );
+        return { ok: false, reason: failureReason, retrying: true };
+      }
       await ctx.runMutation(internal.paperExtractions.markGrobidFailed, {
         ownerUserId: target.ownerUserId,
         artifactId: args.artifactId,

@@ -40,6 +40,7 @@ import {
 } from "@/lib/convex-query";
 import { cn } from "@/lib/utils";
 import { encodePaperRef } from "../utils/paper-ref";
+import { bestPaperIngestUrl } from "../utils/paper-ingest";
 
 type ExploreTab = "recommended" | "browse";
 type ExploreTimeRange = "all" | "week" | "month" | "year" | "threeYears" | "fiveYears";
@@ -224,7 +225,7 @@ export function ExplorePage() {
     if (!selectedPaper) return;
     await createUrl.mutateAsync({
       workspaceId: toWorkspaceId(workspaceId),
-      url: selectedPaper.url,
+      url: bestPaperIngestUrl(selectedPaper),
       title: selectedPaper.title,
     });
     dispatch({ type: "paperSaved", key: selectedPaper.key });
@@ -293,7 +294,7 @@ export function ExplorePage() {
         open={Boolean(selectedPaper)}
         onOpenChange={(open) => !open && dispatch({ type: "selectedPaperChanged", paper: null })}
         title="Simpan paper"
-        description="Pilih workspace tujuan untuk menyimpan paper sebagai URL artifact."
+        description="Pilih workspace tujuan. Paper akan otomatis diunduh dan metadatanya diekstrak."
         onSelect={handleSave}
       />
     </WorkspaceShell>

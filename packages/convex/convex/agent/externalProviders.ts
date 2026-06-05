@@ -84,6 +84,7 @@ const providerValidator = v.union(
   v.literal("jina_read"),
   v.literal("jina_rerank"),
   v.literal("explore"),
+  v.literal("paper_ingest"),
 );
 
 export const getCache = internalQuery({

@@ -115,17 +115,42 @@ function NameDialogContent({
 
 export function UrlDialog({
   open,
+  folderName,
   onOpenChange,
   onSubmit,
 }: {
   open: boolean;
+  folderName?: string;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (value: { url: string; title?: string }) => Promise<unknown>;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {open ? (
+        <UrlDialogContent
+          folderName={folderName}
+          onOpenChange={onOpenChange}
+          onSubmit={onSubmit}
+        />
+      ) : null}
+    </Dialog>
+  );
+}
+
+function UrlDialogContent({
+  folderName,
+  onOpenChange,
+  onSubmit,
+}: {
+  folderName?: string;
   onOpenChange: (open: boolean) => void;
   onSubmit: (value: { url: string; title?: string }) => Promise<unknown>;
 }) {
   const [url, setUrl] = useState("");
-  const [title, setTitle] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const destination = folderName?.trim() || "Uncategorized";
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -133,12 +158,8 @@ export function UrlDialog({
     setIsSubmitting(true);
     setError(null);
     try {
-      await onSubmit({
-        url: url.trim(),
-        title: title.trim() || undefined,
-      });
+      await onSubmit({ url: url.trim() });
       setUrl("");
-      setTitle("");
       onOpenChange(false);
       setIsSubmitting(false);
     } catch (submitError) {
@@ -148,43 +169,34 @@ export function UrlDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-4 sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Simpan URL</DialogTitle>
-          <DialogDescription>
-            Tambahkan URL sebagai artifact workspace.
-          </DialogDescription>
-        </DialogHeader>
-        <form className="grid gap-3" onSubmit={handleSubmit}>
+    <DialogContent className="gap-4 sm:max-w-md">
+      <DialogHeader>
+        <DialogTitle>Adds item to {destination}</DialogTitle>
+        <DialogDescription>
+          At the moment you can add research as .PDFs or webpages. Links from
+          popular research sharing sites are automatically downloaded as PDFs.
+        </DialogDescription>
+      </DialogHeader>
+      <form className="grid gap-3" onSubmit={handleSubmit}>
+        <div className="flex items-center gap-2">
           <Input
             autoFocus
             value={url}
             onChange={(event) => setUrl(event.target.value)}
-            placeholder="https://..."
+            placeholder="https://arxiv.org/abs/1304.0445"
             type="url"
+            inputMode="url"
+            className="flex-1"
           />
-          <Input
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder="Judul opsional"
-          />
-          {error ? (
-            <p className="text-[12px] font-medium text-destructive">{error}</p>
-          ) : null}
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button type="button" variant="outline" disabled={isSubmitting}>
-                Batal
-              </Button>
-            </DialogClose>
-            <Button type="submit" disabled={!url.trim() || isSubmitting}>
-              Simpan
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+          <Button type="submit" disabled={!url.trim() || isSubmitting}>
+            {isSubmitting ? "Adding…" : "Add link"}
+          </Button>
+        </div>
+        {error ? (
+          <p className="text-[12px] font-medium text-destructive">{error}</p>
+        ) : null}
+      </form>
+    </DialogContent>
   );
 }
 

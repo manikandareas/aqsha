@@ -617,8 +617,22 @@ export default defineSchema(
         v.literal("grobid"),
         v.literal("crossref"),
         v.literal("openalex"),
+        v.literal("arxiv"),
+        v.literal("datacite"),
+        v.literal("semantic_scholar"),
         v.literal("manual"),
         v.literal("llm"),
+      ),
+      // Provenance for URL/identifier-sourced papers (vs. uploaded PDFs).
+      // When set, the artifact was ingested from a DOI/arXiv/URL.
+      arxivId: v.optional(v.string()),
+      sourceUrl: v.optional(v.string()),
+      oaStatus: v.optional(v.string()),
+      pdfStatus: v.optional(
+        v.union(
+          v.literal("downloaded"),
+          v.literal("no_oa_available"),
+        ),
       ),
       confidence: v.optional(v.number()),
       createdAt: v.number(),
@@ -811,6 +825,7 @@ export default defineSchema(
         v.literal("jina_read"),
         v.literal("jina_rerank"),
         v.literal("explore"),
+        v.literal("paper_ingest"),
       ),
       cacheKey: v.string(),
       status: v.union(v.literal("ready"), v.literal("empty"), v.literal("failed")),

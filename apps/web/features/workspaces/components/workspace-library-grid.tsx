@@ -521,14 +521,24 @@ function ArtifactTile({
     onDoubleClick: onOpen,
   });
 
+  // While ingestion runs (or fails) the card is shown in a non-interactive
+  // loading state; it "matures" into a normal clickable card once ready.
+  const isProcessing =
+    artifact.indexingStatus === "pending" || artifact.indexingStatus === "failed";
+  const processingFailed = artifact.indexingStatus === "failed";
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
           ref={refCallback}
           className={cn("group relative", isDragging && "opacity-50")}
-          draggable
+          draggable={!isProcessing}
           onDragStart={(event) => {
+            if (isProcessing) {
+              event.preventDefault();
+              return;
+            }
             event.dataTransfer.effectAllowed = "move";
             event.dataTransfer.setData("text/plain", artifact._id);
             onDragStart();
@@ -541,6 +551,8 @@ function ArtifactTile({
             source={artifact.source}
             createdAt={artifact.createdAt}
             isSelected={isSelected}
+            isProcessing={isProcessing}
+            processingFailed={processingFailed}
             onClick={selectLibraryItem}
             onDoubleClick={openLibraryItem}
           />

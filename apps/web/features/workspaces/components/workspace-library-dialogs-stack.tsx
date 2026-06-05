@@ -27,7 +27,7 @@ type WorkspaceLibraryMutations = {
     workspaceId: WorkspaceId;
     folderId?: WorkspaceFolderId;
     url: string;
-    title: string;
+    title?: string;
   }) => Promise<unknown>;
   renameFolder: (args: { folderId: WorkspaceFolderId; name: string }) => Promise<unknown>;
   renameArtifact: (args: { artifactId: ArtifactId; title: string }) => Promise<unknown>;
@@ -38,12 +38,14 @@ type WorkspaceLibraryMutations = {
 export function WorkspaceLibraryDialogsStack({
   workspaceId,
   activeFolderId,
+  activeFolderName,
   mutations,
   dialogState,
   onAfterArchive,
 }: {
   workspaceId: string;
   activeFolderId: "root" | string;
+  activeFolderName?: string;
   mutations: WorkspaceLibraryMutations;
   dialogState: DialogState;
   onAfterArchive?: () => void;
@@ -104,15 +106,17 @@ export function WorkspaceLibraryDialogsStack({
       />
       <UrlDialog
         open={createUrlOpen}
+        folderName={activeFolderName}
         onOpenChange={setCreateUrlOpen}
         onSubmit={async ({ url, title }) => {
-          const artifactId = await mutations.createUrl({
+          // Stay on the workspace board: the new card appears immediately in a
+          // loading state and "matures" in place once ingestion completes.
+          await mutations.createUrl({
             workspaceId: convexWorkspaceId,
             folderId: folderIdForCreate,
             url,
-            title: title?.trim() || url,
+            title: title?.trim() || undefined,
           });
-          openCreatedArtifact(artifactId);
         }}
       />
       <NameDialog

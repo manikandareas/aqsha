@@ -24,6 +24,8 @@ export type WorkspaceArtifact = {
   source?: "manual" | "upload" | "agent" | "url";
   title: string;
   plainTextPreview?: string;
+  indexingStatus?: "not_indexed" | "pending" | "ready" | "failed";
+  indexingFailureReason?: string;
   status?: "active" | "deleted";
   updatedAt: number;
   createdAt: number;

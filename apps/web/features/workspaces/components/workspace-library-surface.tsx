@@ -196,10 +196,11 @@ export function WorkspaceLibrarySurface({
         onToggleLeftSidebar={onToggleLeftSidebar}
         showCreateActions={showCreateActions}
         showWorkspaceSettings={showWorkspaceSettings}
-        renderDialogs={(activeFolderId) => (
+        renderDialogs={(activeFolderId, activeFolderName) => (
           <WorkspaceLibraryDialogsStack
             workspaceId={workspaceId}
             activeFolderId={activeFolderId}
+            activeFolderName={activeFolderName}
             mutations={libraryMutations}
             dialogState={dialogState}
             onAfterArchive={onAfterArchive}

@@ -129,7 +129,7 @@ export function WorkspaceLibraryBoard({
   onClosePanel?: () => void;
   showLeftSidebarTrigger?: boolean;
   onToggleLeftSidebar?: () => void;
-  renderDialogs?: (activeFolderId: "root" | string) => ReactNode;
+  renderDialogs?: (activeFolderId: "root" | string, activeFolderName: string) => ReactNode;
   showCreateActions?: boolean;
   showWorkspaceSettings?: boolean;
 }) {
@@ -357,7 +357,12 @@ export function WorkspaceLibraryBoard({
           </ContextMenuContent>
         </ContextMenu>
       </div>
-      {renderDialogs?.(activeFolderId)}
+      {renderDialogs?.(
+        activeFolderId,
+        folderView.activeFolderId === "root"
+          ? ""
+          : (folderView.breadcrumb.at(-1)?.label ?? ""),
+      )}
     </>
   );
 }

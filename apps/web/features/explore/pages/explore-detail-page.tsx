@@ -8,20 +8,25 @@ import {
   ExternalLinkIcon,
   FileTextIcon,
   LinkIcon,
+  PlusIcon,
 } from "@aqsha/ui/icons";
 import Link from "next/link";
+import { useState } from "react";
 import { CopyCitationButton } from "@/components/citation/copy-citation-button";
 import { PropertyLink, PropertyRow } from "@/components/detail/property-list";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ExploreSurfaceHeader } from "@/features/explore/components/explore-surface-header";
+import { WorkspacePickerDialog } from "@/features/workspaces/components/workspace-picker-dialog";
 import { WorkspaceShell } from "@/features/workspaces/components/workspace-shell";
 import { useWorkspaceIndexData } from "@/features/workspaces/api/use-workspaces-data";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
-import { useConvexQuery } from "@/lib/convex-query";
+import { useConvexMutationState, useConvexQuery } from "@/lib/convex-query";
+import { toWorkspaceId } from "@/lib/convex-refs";
 import { formatCitation, type CitationFormat } from "../utils/citation";
 import { decodePaperRef } from "../utils/paper-ref";
+import { bestPaperIngestUrl } from "../utils/paper-ingest";
 
 const citationFormats: Array<{ value: CitationFormat; label: string }> = [
   { value: "bibtex", label: "BibTeX" },
@@ -77,16 +82,38 @@ export function ExploreDetailPage({ paperRef }: { paperRef: string }) {
 function ExploreDetailContent({ paper }: { paper: ExplorePaper & { lastSeenAt?: number } }) {
   const abstract = paper.abstract ?? paper.snippet;
   const summary = summarizeAbstract(abstract);
+  const createUrl = useConvexMutationState(api.artifacts.createUrl);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = async (workspaceId: string) => {
+    await createUrl.mutateAsync({
+      workspaceId: toWorkspaceId(workspaceId),
+      url: bestPaperIngestUrl(paper),
+      title: paper.title,
+    });
+    setSaved(true);
+  };
 
   return (
     <>
       <section className="min-w-0">
-        <div className="mb-4 flex items-center justify-end gap-4">
+        <div className="mb-4 flex items-center justify-end gap-2">
           <Button asChild variant="outline" size="sm" className="h-8 px-2.5 text-sm text-muted-foreground">
             <a href={paper.url} target="_blank" rel="noreferrer">
               Open
               <ExternalLinkIcon className="size-3" />
             </a>
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="h-8 px-2.5 text-sm"
+            disabled={saved}
+            onClick={() => setPickerOpen(true)}
+          >
+            <PlusIcon className="size-3.5" />
+            {saved ? "Added to library" : "Add to library"}
           </Button>
         </div>
 
@@ -145,6 +172,14 @@ function ExploreDetailContent({ paper }: { paper: ExplorePaper & { lastSeenAt?: 
       </section>
 
       <ExploreDetailSidebar paper={paper} />
+
+      <WorkspacePickerDialog
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        title="Simpan paper"
+        description="Pilih workspace tujuan. Paper akan otomatis diunduh dan metadatanya diekstrak."
+        onSelect={handleSave}
+      />
     </>
   );
 }
