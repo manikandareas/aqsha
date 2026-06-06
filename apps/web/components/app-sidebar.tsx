@@ -28,6 +28,7 @@ import {
   PanelLeftIcon,
   PlusIcon,
   SearchIcon,
+  SparklesIcon,
   TrendingUpIcon,
 } from "@aqsha/ui/icons";
 import Link from "next/link";
@@ -106,6 +107,7 @@ export function AppSidebar({
   const isHomeActive = pathname === "/app" && !selectedThreadId;
   const isWorkspaceRoute = pathname.startsWith("/app/workspaces");
   const isExploreActive = pathname.startsWith("/app/explore");
+  const isFeedActive = pathname.startsWith("/app/feed");
   const showWorkspaceSection =
     sortedWorkspaces.length > 0 || Boolean(createWorkspace);
   const showThreadSection = sortedThreads.length > 0 || Boolean(onCreateThread);
@@ -211,6 +213,12 @@ export function AppSidebar({
               icon={TrendingUpIcon}
               label="Jelajahi"
               active={isExploreActive}
+            />
+            <PrimaryNavLink
+              href="/app/feed"
+              icon={SparklesIcon}
+              label="Feed"
+              active={isFeedActive}
             />
           </SidebarMenu>
         </SidebarHeader>
