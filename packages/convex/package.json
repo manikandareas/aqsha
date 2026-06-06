@@ -31,6 +31,10 @@
     "./explore": {
       "types": "./convex/exploreModel.ts",
       "default": "./convex/exploreModel.ts"
+    },
+    "./feed": {
+      "types": "./convex/feedModel.ts",
+      "default": "./convex/feedModel.ts"
     }
   },
   "scripts": {

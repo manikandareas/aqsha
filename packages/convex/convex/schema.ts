@@ -1,6 +1,11 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { explorePaperFields } from "./exploreValidators";
+import {
+  feedItemFields,
+  feedProviderValidator,
+  feedVerdictValidator,
+} from "./feedValidators";
 
 const runId = v.union(v.id("agentRuns"), v.id("researchRuns"));
 
@@ -774,6 +779,8 @@ export default defineSchema(
         v.literal("jina_rerank"),
         v.literal("explore"),
         v.literal("paper_ingest"),
+        v.literal("google_factcheck"),
+        v.literal("gdelt"),
       ),
       cacheKey: v.string(),
       status: v.union(v.literal("ready"), v.literal("empty"), v.literal("failed")),
@@ -797,6 +804,107 @@ export default defineSchema(
       lastSeenAt: v.number(),
       updatedAt: v.number(),
     }).index("by_domain", ["domain"]),
+
+    // ── Feed surface ──────────────────────────────────────────────────────
+    feedItems: defineTable({
+      ...feedItemFields,
+    })
+      .index("by_dedupe_key", ["dedupeKey"])
+      .index("by_kind_trend", ["kind", "trendScore"])
+      .index("by_kind_published", ["kind", "publishedAt"]),
+    feedItemClaims: defineTable({
+      feedItemId: v.id("feedItems"),
+      claim: v.string(),
+      verdict: feedVerdictValidator,
+      // "mafindo" | "google_factcheck" | "aqsha_ai" | ...
+      verdictSource: v.string(),
+      verdictBy: v.union(v.literal("human"), v.literal("ai")),
+      // Original publisher rating string, e.g. "Hoaks" / "Misleading".
+      verdictLabelRaw: v.string(),
+      publisher: v.optional(v.string()),
+      reviewUrl: v.optional(v.string()),
+      reviewedAt: v.optional(v.number()),
+      evidence: v.optional(v.string()),
+      confidence: v.optional(v.number()),
+      severity: v.optional(
+        v.union(v.literal("info"), v.literal("warning"), v.literal("high")),
+      ),
+      claimReviewJson: v.optional(v.string()),
+      // Bounded list of explorePapers keys (supporting academic papers).
+      supportingPaperKeys: v.optional(v.array(v.string())),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }).index("by_feed_item", ["feedItemId"]),
+    feedSources: defineTable({
+      provider: feedProviderValidator,
+      label: v.string(),
+      enabled: v.boolean(),
+      cadenceMinutes: v.number(),
+      queryParamsJson: v.optional(v.string()),
+      lastRunAt: v.optional(v.number()),
+      lastStatus: v.optional(
+        v.union(v.literal("ready"), v.literal("empty"), v.literal("failed")),
+      ),
+      lastFailureReason: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }).index("by_provider", ["provider"]),
+    feedCollections: defineTable({
+      ownerUserId: v.string(),
+      name: v.string(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }).index("by_owner_updated", ["ownerUserId", "updatedAt"]),
+    savedFeedItems: defineTable({
+      ownerUserId: v.string(),
+      feedItemId: v.id("feedItems"),
+      collectionId: v.optional(v.id("feedCollections")),
+      createdAt: v.number(),
+    })
+      .index("by_owner_created", ["ownerUserId", "createdAt"])
+      .index("by_owner_item", ["ownerUserId", "feedItemId"]),
+    userFeedInterests: defineTable({
+      ownerUserId: v.string(),
+      topic: v.string(),
+      // Signed active-learning weight (+ save, − hide/not-relevant).
+      weight: v.number(),
+      updatedAt: v.number(),
+    }).index("by_owner_topic", ["ownerUserId", "topic"]),
+    hiddenFeedItems: defineTable({
+      ownerUserId: v.string(),
+      feedItemId: v.id("feedItems"),
+      createdAt: v.number(),
+    })
+      .index("by_owner_item", ["ownerUserId", "feedItemId"])
+      .index("by_owner_created", ["ownerUserId", "createdAt"]),
+    feedInteractions: defineTable({
+      ownerUserId: v.string(),
+      feedItemId: v.id("feedItems"),
+      kind: v.union(
+        v.literal("save"),
+        v.literal("hide"),
+        v.literal("research"),
+        v.literal("open_evidence"),
+      ),
+      createdAt: v.number(),
+    })
+      .index("by_owner_item_kind", ["ownerUserId", "feedItemId", "kind"])
+      .index("by_owner_created", ["ownerUserId", "createdAt"]),
+    // Cached consensus-meter results for yes/no science questions. Keyed by a
+    // normalized question hash so the (expensive) OpenAlex + stance-classify
+    // pass is shared across users and re-used until it expires.
+    feedConsensus: defineTable({
+      questionKey: v.string(),
+      question: v.string(),
+      yes: v.number(),
+      no: v.number(),
+      possibly: v.number(),
+      total: v.number(),
+      // JSON array of { key, title, stance, year?, url, sourceLabel } papers.
+      papersJson: v.string(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }).index("by_question_key", ["questionKey"]),
   },
   { schemaValidation: true },
 );

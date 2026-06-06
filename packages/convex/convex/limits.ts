@@ -75,6 +75,27 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
     period: MINUTE,
     capacity: 30,
   },
+  // Feed service-path buckets (cron, no authenticated user). Mirror the
+  // openAlexSearchGlobal pattern: global throttles that protect the providers
+  // without consuming per-user credits.
+  exaSearchGlobal: {
+    kind: "token bucket",
+    rate: 6,
+    period: MINUTE,
+    capacity: 6,
+  },
+  googleFactCheckGlobal: {
+    kind: "token bucket",
+    rate: 30,
+    period: MINUTE,
+    capacity: 30,
+  },
+  gdeltGlobal: {
+    kind: "token bucket",
+    rate: 12,
+    period: MINUTE,
+    capacity: 12,
+  },
   // Per-user gate on the "add a paper / URL to library" ingestion pipeline.
   paperIngestPerUser: {
     kind: "token bucket",

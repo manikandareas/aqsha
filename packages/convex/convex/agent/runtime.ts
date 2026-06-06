@@ -1,9 +1,7 @@
 import { Agent, stepCountIs, type UsageHandler } from "@convex-dev/agent";
 import { components, internal } from "../_generated/api";
 import { chatProvider } from "./providers";
-
-export const NORMAL_MODEL = process.env.AQSHA_NORMAL_MODEL ?? "gpt-5.4-mini";
-export const PRO_MODEL = process.env.AQSHA_PRO_MODEL ?? "gpt-5.5";
+import { CHAT_LITE_MODEL, CHAT_PRO_MODEL } from "./models";
 
 export type AgentKind = "lite" | "pro";
 
@@ -42,14 +40,14 @@ const PRO_INSTRUCTIONS = [
 // differing only in model, step budget, and intro instructions.
 export const astraLite = new Agent(components.agent, {
   name: "Astra Lite",
-  languageModel: chatProvider.chat(NORMAL_MODEL),
+  languageModel: chatProvider.chat(CHAT_LITE_MODEL),
   instructions: LITE_INSTRUCTIONS,
   stopWhen: stepCountIs(5),
 });
 
 export const astraPro = new Agent(components.agent, {
   name: "Astra Pro",
-  languageModel: chatProvider.chat(PRO_MODEL),
+  languageModel: chatProvider.chat(CHAT_PRO_MODEL),
   instructions: PRO_INSTRUCTIONS,
   stopWhen: stepCountIs(10),
 });

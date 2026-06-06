@@ -16,6 +16,7 @@ export type OpenAlexWork = {
   publication_year?: number | null;
   publication_date?: string | null;
   cited_by_count?: number | null;
+  is_retracted?: boolean | null;
   abstract_inverted_index?: Record<string, number[]> | null;
   primary_location?: OpenAlexLocation | null;
   best_oa_location?: OpenAlexLocation | null;
@@ -164,13 +165,18 @@ export function buildOpenAlexWorksUrl(args: {
   apiKey: string;
   query: string;
   limit: number;
+  // When true, retracted works are kept in the result set so callers can
+  // surface a retraction flag (e.g. the Feed trending lane) instead of
+  // silently dropping them. Defaults to false (retracted works excluded).
+  includeRetracted?: boolean;
 }) {
   const query = args.query.trim();
+  const retractionFilter = args.includeRetracted ? "" : "is_retracted:false,";
   const url = new URL(OPENALEX_ENDPOINT);
   url.searchParams.set("api_key", args.apiKey);
   url.searchParams.set("per_page", String(args.limit));
   url.searchParams.set("select", openAlexSelectFields.join(","));
-  url.searchParams.set("filter", "is_retracted:false,is_paratext:false");
+  url.searchParams.set("filter", `${retractionFilter}is_paratext:false`);
   if (query) {
     url.searchParams.set("search", query);
     url.searchParams.set("sort", "relevance_score:desc");
@@ -178,7 +184,7 @@ export function buildOpenAlexWorksUrl(args: {
     url.searchParams.set("sort", "cited_by_count:desc");
     url.searchParams.set(
       "filter",
-      "is_retracted:false,is_paratext:false,from_publication_date:2021-01-01",
+      `${retractionFilter}is_paratext:false,from_publication_date:2021-01-01`,
     );
   }
   return url;
@@ -207,6 +213,7 @@ const openAlexSelectFields = [
   "publication_year",
   "publication_date",
   "cited_by_count",
+  "is_retracted",
   "abstract_inverted_index",
   "primary_location",
   "best_oa_location",

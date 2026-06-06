@@ -8,6 +8,7 @@ import {
   type ActionCtx,
 } from "../_generated/server";
 import { rateLimiter } from "../limits";
+import { providerValidator, type Provider } from "./providerCache";
 import type { SourceCandidate, SourceOrigin } from "./sourceCandidates";
 import { trimForSnippet } from "./sourceCandidates";
 export { searchOpenAlexWorks } from "./openalexProvider";
@@ -26,16 +27,6 @@ const xmlParser = new XMLParser({
   attributeNamePrefix: "@_",
   trimValues: true,
 });
-
-type Provider =
-  | "openalex"
-  | "crossref"
-  | "arxiv"
-  | "exa"
-  | "jina_search"
-  | "jina_read"
-  | "jina_rerank"
-  | "explore";
 
 export type ExternalCandidate = Omit<SourceCandidate, "citationNumber">;
 
@@ -74,18 +65,6 @@ export type SearchCandidateOptions = {
   language?: string;
   searchType?: "web" | "news";
 };
-
-const providerValidator = v.union(
-  v.literal("crossref"),
-  v.literal("openalex"),
-  v.literal("arxiv"),
-  v.literal("exa"),
-  v.literal("jina_search"),
-  v.literal("jina_read"),
-  v.literal("jina_rerank"),
-  v.literal("explore"),
-  v.literal("paper_ingest"),
-);
 
 export const getCache = internalQuery({
   args: {

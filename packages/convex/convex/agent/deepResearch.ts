@@ -38,19 +38,14 @@ import { researchWorkflow } from "./workflow";
 import { CHAT_PROVIDER_NAME, chatProvider } from "./providers";
 import { markThreadStatusAfterTerminalRun } from "./runLifecycle";
 import type { AgentKind } from "./runtime";
-
-const DEEP_MODEL = process.env.AQSHA_DEEP_MODEL ?? "gpt-5.5";
-const DEEP_LITE_MODEL = process.env.AQSHA_DEEP_LITE_MODEL ?? "gpt-5.4-mini";
+import { DEEP_LITE_MODEL, deepModelForAgent } from "./models";
 
 const agentKindValidator = v.union(v.literal("lite"), v.literal("pro"));
 
 // Deep Research is modulated by the selected agent. Astra Lite runs the lite
-// model for every task with a tight round cap; Astra Pro uses the heavy model
-// for planning/synthesis and a larger round cap. Legacy/in-flight runs without
-// an agentKind behave like Pro (the previous default), preserving old behavior.
-function heavyModelForAgent(agentKind: AgentKind | undefined) {
-  return (agentKind ?? "pro") === "pro" ? DEEP_MODEL : DEEP_LITE_MODEL;
-}
+// model for every task with a tight round cap; Astra Pro uses the heavier deep
+// model for planning/synthesis and a larger round cap. Legacy/in-flight runs
+// without an agentKind behave like Pro (the previous default).
 function roundCapForAgent(agentKind: AgentKind | undefined) {
   return (agentKind ?? "pro") === "pro" ? 4 : 2;
 }
@@ -358,7 +353,7 @@ export const retry = mutation({
       threadId: run.threadId,
       feature: "deep_research",
       provider: CHAT_PROVIDER_NAME,
-      model: heavyModelForAgent(agentKind),
+      model: deepModelForAgent(agentKind),
       inputTokens: estimateTokens(prompt),
       totalTokens: estimateTokens(prompt),
       credits: estimateCredits({
@@ -531,7 +526,7 @@ export const planResearch = internalAction({
     });
     const maxRoundCap = roundCapForAgent(args.agentKind);
     const object = await generateObject({
-      model: chatProvider.chat(heavyModelForAgent(args.agentKind)),
+      model: chatProvider.chat(deepModelForAgent(args.agentKind)),
       schema: z.object({
         title: z.string(),
         questions: z.array(z.string()).min(1).max(5),
@@ -560,7 +555,7 @@ export const planResearch = internalAction({
         maxRounds: plan.maxRounds,
         maxSources: MAX_SOURCES_PER_RUN,
         maxExtracts: MAX_EXTRACTS_PER_RUN,
-        model: heavyModelForAgent(args.agentKind),
+        model: deepModelForAgent(args.agentKind),
         providers: ["exa_search", "exa_contents", "jina_search", "jina_reader", "jina_rerank", "arxiv", "crossref"],
       }),
     });
@@ -1025,7 +1020,7 @@ export const synthesize = internalAction({
       .join("\n");
     const readiness = assessEvidenceReadiness(args.sources, normalizeExtracts(args.extracts));
     const result = await generateText({
-      model: chatProvider.chat(heavyModelForAgent(args.agentKind)),
+      model: chatProvider.chat(deepModelForAgent(args.agentKind)),
       system:
         readiness.ready
           ? "Write a source-grounded markdown research report. Cite every factual claim with persisted source numbers. Prefer accepted evidence extracts over snippets. If evidence is insufficient, keep that limitation visible and do not overstate certainty. Also produce a concise chat summary (2-4 natural paragraphs, no implementation details) for the user."
@@ -2931,7 +2926,7 @@ async function reviseUnsupportedMarkdown(
     return markdown;
   }
   const result = await generateText({
-    model: chatProvider.chat(heavyModelForAgent(agentKind)),
+    model: chatProvider.chat(deepModelForAgent(agentKind)),
     system: [
       "Revise the markdown report to remove, soften, or explicitly caveat contradicted and unsupported factual claims.",
       "Keep supported claims and citations intact. Keep the Evidence Limits section when any uncertainty remains.",

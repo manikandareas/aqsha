@@ -22,11 +22,15 @@ import {
 import {
   agentForKind,
   astra,
-  NORMAL_MODEL,
-  PRO_MODEL,
   recordUsage as handleUsage,
   type AgentKind,
 } from "./runtime";
+import {
+  CHAT_LITE_MODEL,
+  CHAT_PRO_MODEL,
+  chatModelForAgent,
+  deepModelForAgent,
+} from "./models";
 import { requireCurrentUser } from "../auth";
 import { estimateCredits } from "../billing/catalog";
 import {
@@ -125,16 +129,6 @@ function trimForTitleContext(content: string) {
 
 function estimateTokens(content: string) {
   return Math.max(1, Math.ceil(content.length / 4));
-}
-
-// Deep Research is now activated only by the /deep-research slash command, not
-// by the agent selector. This is the single source of truth for the deep path.
-// Model used for the deep-research heavy tasks (planning/synthesis), mirrored
-// for the upfront billing estimate. Lite-deep runs entirely on the lite model.
-function deepModelForAgent(agentKind: AgentKind) {
-  return agentKind === "pro"
-    ? process.env.AQSHA_DEEP_MODEL ?? "gpt-5.5"
-    : process.env.AQSHA_DEEP_LITE_MODEL ?? NORMAL_MODEL;
 }
 
 async function getThreadMetadata(ctx: QueryCtx | MutationCtx, threadId: string) {
@@ -249,9 +243,7 @@ async function checkAndConsumeSendQuota(
       : "normal_chat";
   const model = args.isDeep
     ? deepModelForAgent(args.agentKind)
-    : args.agentKind === "pro"
-      ? PRO_MODEL
-      : NORMAL_MODEL;
+    : chatModelForAgent(args.agentKind);
   const requiredPlan = args.isDeep
     ? args.agentKind === "pro"
       ? ("starter" as const)
@@ -1201,7 +1193,7 @@ export const generateThreadTitle = internalAction({
     }
 
     const result = await generateObject({
-      model: chatProvider.chat(NORMAL_MODEL),
+      model: chatProvider.chat(CHAT_LITE_MODEL),
       maxOutputTokens: 80,
       schema: z.object({
         title: z
@@ -1744,11 +1736,11 @@ export const recordUsage = internalMutation({
       });
     }
     // The chat usage handler does not receive agentKind, so derive the billed
-    // feature from the model that actually ran (Astra Pro uses PRO_MODEL).
-    const feature = args.model === PRO_MODEL ? "pro_chat" : "normal_chat";
+    // feature from the model that actually ran (Astra Pro uses CHAT_PRO_MODEL).
+    const feature = args.model === CHAT_PRO_MODEL ? "pro_chat" : "normal_chat";
     await ctx.db.insert("usageLedger", {
       ...args,
-      model: args.model || NORMAL_MODEL,
+      model: args.model || CHAT_LITE_MODEL,
       createdAt: Date.now(),
     });
     await recordProviderUsage(ctx, {
@@ -1756,7 +1748,7 @@ export const recordUsage = internalMutation({
       threadId: args.threadId,
       feature,
       provider: args.provider,
-      model: args.model || NORMAL_MODEL,
+      model: args.model || CHAT_LITE_MODEL,
       inputTokens: args.inputTokens,
       outputTokens: args.outputTokens,
       totalTokens: args.totalTokens,
