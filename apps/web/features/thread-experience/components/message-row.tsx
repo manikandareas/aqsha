@@ -66,6 +66,8 @@ import type {
 } from "../types";
 import { ThreadActivityIndicator } from "./shared";
 import { MessageWorkspaceActions } from "./message-workspace-actions";
+import { MessageHitlParts } from "./message-hitl-parts";
+import type { HitlActions } from "./use-hitl-resume";
 
 export function MessageRow({
   message,
@@ -73,12 +75,16 @@ export function MessageRow({
   onRetryRun,
   sourceCount = 0,
   threadWorkspaceId,
+  hitlActions,
+  hitlDisabled,
 }: {
   message: ChatMessage;
   assistantRun?: ResearchRun;
   onRetryRun?: (args: { runId: AgentRunId }) => Promise<unknown>;
   sourceCount?: number;
   threadWorkspaceId?: string;
+  hitlActions?: HitlActions;
+  hitlDisabled?: boolean;
 }) {
   const isUser = message.role === "user";
   const isStreaming = message.status === "streaming";
@@ -138,6 +144,13 @@ export function MessageRow({
         ) : null}
       </MessageContent>
       <MessageArtifacts links={messageArtifacts ?? []} />
+      {hitlActions ? (
+        <MessageHitlParts
+          message={message}
+          actions={hitlActions}
+          disabled={hitlDisabled}
+        />
+      ) : null}
       <MessageSourceCount sourceCount={sourceCount} />
       {hasText ? (
         <AssistantMessageActions

@@ -266,22 +266,6 @@ export const deepResearchExecuteWorkflow = researchWorkflow.define({
   },
 });
 
-export const deepResearchWorkflow = researchWorkflow.define({
-  args: {
-    runId: v.id("agentRuns"),
-    ownerUserId: v.string(),
-    threadId: v.string(),
-    promptMessageId: v.string(),
-    prompt: v.string(),
-    agentKind: v.optional(agentKindValidator),
-  },
-  handler: async (step, args): Promise<void> => {
-    await step.runAction(internal.agent.deepResearch.prepareDeepResearchHitl, args, {
-      retry: ACTION_RETRY,
-    });
-  },
-});
-
 export const getStatus = query({
   args: { runId: v.id("agentRuns") },
   handler: async (ctx, args) => {
@@ -396,25 +380,15 @@ export const retry = mutation({
       retryOfRunId: run._id,
       agentKind,
     });
-    const workflowId = await researchWorkflow.start(
-      ctx,
-      internal.agent.deepResearch.deepResearchWorkflow,
-      {
-        runId: newRunId,
-        ownerUserId: user._id,
-        threadId: run.threadId,
-        promptMessageId: run.promptMessageId,
-        prompt,
-        agentKind,
-      },
-      {
-        onComplete: internal.agent.deepResearch.handleWorkflowComplete,
-        context: { runId: newRunId, ownerUserId: user._id },
-      },
-    );
-    const workflowIdString = String(workflowId);
-    await ctx.db.patch("agentRuns", newRunId, { workflowId: workflowIdString, updatedAt: Date.now() });
-    return { ok: true as const, runId: newRunId, workflowId: workflowIdString };
+    await ctx.scheduler.runAfter(0, internal.agent.messages.generateDeepPlan, {
+      threadId: run.threadId,
+      userId: user._id,
+      promptMessageId: run.promptMessageId,
+      prompt,
+      runId: newRunId,
+      agentKind,
+    });
+    return { ok: true as const, runId: newRunId, workflowId: "" };
   },
 });
 
@@ -483,30 +457,66 @@ export const startForMessage = internalMutation({
     commandId: v.optional(v.string()),
     agentKind: agentKindValidator,
   },
-  handler: async (ctx, args): Promise<{ runId: Id<"agentRuns">; workflowId: string }> => {
+  handler: async (ctx, args): Promise<{ runId: Id<"agentRuns"> }> => {
     const runId = await createRun(ctx, args);
-    // Pass only the fields the workflow declares. `commandId` is persisted on
-    // the run via createRun but is NOT a workflow arg — spreading it here makes
-    // the workflow's arg validator reject the start ("Expected nothing").
+    // Deep research is now native: the model proposes the research plan via the
+    // startDeepResearch tool (needsApproval) in an inline planning generation,
+    // and the tool starts deepResearchExecuteWorkflow on approval.
+    await ctx.scheduler.runAfter(0, internal.agent.messages.generateDeepPlan, {
+      threadId: args.threadId,
+      userId: args.ownerUserId,
+      promptMessageId: args.promptMessageId,
+      prompt: args.prompt,
+      runId,
+      agentKind: args.agentKind,
+    });
+    return { runId };
+  },
+});
+
+// Start the durable research workflow from a model-proposed, user-approved plan
+// (called by the startDeepResearch tool's execute on approval). No hitlSessions
+// involvement — the run is completed by handleWorkflowComplete.
+export const startExecuteFromPlan = internalMutation({
+  args: {
+    runId: v.id("agentRuns"),
+    ownerUserId: v.string(),
+    threadId: v.string(),
+    promptMessageId: v.string(),
+    plan: v.any(),
+  },
+  handler: async (ctx, args): Promise<{ workflowId: string }> => {
+    const run = await ctx.db.get("agentRuns", args.runId);
+    if (!run || run.ownerUserId !== args.ownerUserId) {
+      throw new ConvexError("Run not found");
+    }
+    const prompt =
+      run.promptSnapshot || (await readPromptMessage(ctx, run.promptMessageId)) || "";
+    const agentKind: AgentKind = run.agentKind ?? "pro";
+    const plan = normalizePlan(args.plan, agentKind);
     const workflowId = await researchWorkflow.start(
       ctx,
-      internal.agent.deepResearch.deepResearchWorkflow,
+      internal.agent.deepResearch.deepResearchExecuteWorkflow,
       {
-        runId,
+        runId: args.runId,
         ownerUserId: args.ownerUserId,
         threadId: args.threadId,
         promptMessageId: args.promptMessageId,
-        prompt: args.prompt,
-        agentKind: args.agentKind,
+        prompt,
+        plan,
+        agentKind,
       },
       {
         onComplete: internal.agent.deepResearch.handleWorkflowComplete,
-        context: { runId, ownerUserId: args.ownerUserId },
+        context: { runId: args.runId, ownerUserId: args.ownerUserId },
       },
     );
-    const workflowIdString = String(workflowId);
-    await ctx.db.patch("agentRuns", runId, { workflowId: workflowIdString, updatedAt: Date.now() });
-    return { runId, workflowId: workflowIdString };
+    await ctx.db.patch("agentRuns", args.runId, {
+      workflowId: String(workflowId),
+      status: "running",
+      updatedAt: Date.now(),
+    });
+    return { workflowId: String(workflowId) };
   },
 });
 
@@ -572,77 +582,6 @@ export const planResearch = internalAction({
       summary: plan.title,
     });
     return plan;
-  },
-});
-
-export const prepareDeepResearchHitl = internalAction({
-  args: workflowArgs(),
-  handler: async (ctx, args) => {
-    const plan = await ctx.runAction(internal.agent.deepResearch.planResearch, args);
-    const planBullets = [
-      `Pertanyaan riset: ${plan.questions.join("; ")}`,
-      `Strategi sumber: ${plan.sourceStrategy}`,
-      `Bentuk laporan: ${plan.reportIntent}`,
-      `Maks. putaran: ${plan.maxRounds}`,
-      ...plan.sufficiencyCriteria.slice(0, 2).map((item: string) => `Kriteria: ${item}`),
-    ].slice(0, 8);
-    await ctx.runMutation(internal.hitlSessions.createDeepResearchPlanCardInternal, {
-      ownerUserId: args.ownerUserId,
-      threadId: args.threadId,
-      promptMessageId: args.promptMessageId,
-      runId: args.runId,
-      title: plan.title,
-      summary: plan.reportIntent,
-      planBullets,
-      payloadJson: JSON.stringify({ plan, prompt: args.prompt }),
-    });
-    return { ok: true as const };
-  },
-});
-
-export const startExecuteWorkflow = internalMutation({
-  args: {
-    runId: v.id("agentRuns"),
-    ownerUserId: v.string(),
-    sessionId: v.id("hitlSessions"),
-  },
-  handler: async (ctx, args): Promise<{ workflowId: string }> => {
-    const run = await ctx.db.get("agentRuns", args.runId);
-    if (!run || run.ownerUserId !== args.ownerUserId) {
-      throw new ConvexError("Run not found");
-    }
-    const session = await ctx.db.get("hitlSessions", args.sessionId);
-    if (!session || session.ownerUserId !== args.ownerUserId || !session.executionPayloadJson) {
-      throw new ConvexError("Missing approved research plan");
-    }
-    const payload = JSON.parse(session.executionPayloadJson) as {
-      plan: ResearchPlan;
-      prompt: string;
-    };
-    const prompt = payload.prompt || run.promptSnapshot || "";
-    const workflowId = await researchWorkflow.start(
-      ctx,
-      internal.agent.deepResearch.deepResearchExecuteWorkflow,
-      {
-        runId: args.runId,
-        ownerUserId: args.ownerUserId,
-        threadId: run.threadId,
-        promptMessageId: run.promptMessageId,
-        prompt,
-        plan: payload.plan,
-        agentKind: run.agentKind ?? "pro",
-      },
-      {
-        onComplete: internal.agent.deepResearch.handleWorkflowComplete,
-        context: { runId: args.runId, ownerUserId: args.ownerUserId, sessionId: args.sessionId },
-      },
-    );
-    await ctx.db.patch("agentRuns", args.runId, {
-      workflowId: String(workflowId),
-      status: "running",
-      updatedAt: Date.now(),
-    });
-    return { workflowId: String(workflowId) };
   },
 });
 
@@ -1401,13 +1340,6 @@ export const handleWorkflowComplete = internalMutation({
         message: String(args.result.error ?? "Deep research failed"),
       });
       return;
-    }
-    const sessionId = args.context?.sessionId as Id<"hitlSessions"> | undefined;
-    if (sessionId) {
-      await ctx.runMutation(internal.hitlSessions.completeSessionInternal, {
-        sessionId,
-        ownerUserId,
-      });
     }
   },
 });

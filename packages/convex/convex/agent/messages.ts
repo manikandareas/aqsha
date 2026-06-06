@@ -15,6 +15,7 @@ import {
   internalMutation,
   mutation,
   query,
+  type ActionCtx,
   type MutationCtx,
   type QueryCtx,
 } from "../_generated/server";
@@ -35,7 +36,7 @@ import {
 } from "../billing/entitlements";
 import { rateLimiter } from "../limits";
 import { normalChatTools } from "./researchTools";
-import { createHitlTools, createWorkspaceExecutionTools } from "./hitlTools";
+import { buildHitlTools, buildDeepResearchTools } from "./hitlTools";
 import type { ToolSet } from "ai";
 import type { SourceCandidate } from "./sourceCandidates";
 import {
@@ -414,7 +415,6 @@ async function scheduleGenerationForMessage(
   if (args.promptPayload.executionKind === "deep_research") {
     const run: {
       runId: import("../_generated/dataModel").Id<"agentRuns">;
-      workflowId: string;
     } = await ctx.runMutation(internal.agent.deepResearch.startForMessage, {
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
@@ -807,41 +807,244 @@ export const list = query({
   },
 });
 
-const HITL_COMMAND_PROFILES = {
-  artifact: "artifact",
-  workspace: "workspace",
-} as const;
+// Native HITL tool names. `executeArtifact` is intentionally excluded from the
+// initial-turn tool surface so the model cannot write an artifact without first
+// going through an approved `proposeArtifact` (it is only offered on resume).
+const HITL_TOOL_NAMES = [
+  "askUser",
+  "proposeArtifact",
+  "deleteArtifact",
+  "createWorkspace",
+  "renameWorkspace",
+] as const;
+const PENDING_HITL_TOOL_NAMES = new Set<string>([
+  ...HITL_TOOL_NAMES,
+  "executeArtifact",
+  "startDeepResearch",
+]);
 
-function resolveGenerationTools(args: {
-  hitlExecute?: boolean;
-  hitlSessionId?: Id<"hitlSessions">;
-  hitlWorkspaceId?: Id<"workspaces">;
-  hitlPayloadJson?: string;
-  commandId?: string;
-  promptMessageId: string;
-  runId?: Id<"agentRuns">;
-}): ToolSet {
-  if (args.hitlExecute && args.hitlSessionId) {
-    return createWorkspaceExecutionTools({
-      sessionId: args.hitlSessionId,
-      workspaceId: args.hitlWorkspaceId,
-      payloadJson: args.hitlPayloadJson,
-    });
+// A native HITL pause is an unsatisfied HITL tool call in this generation:
+// `askUser` (no execute) or a `needsApproval` action tool awaiting approval —
+// i.e. a tool call with no matching tool result.
+function hasPendingNativeHitl(
+  steps: Array<{
+    toolCalls?: Array<{ toolName?: string; toolCallId?: string }>;
+    toolResults?: Array<{ toolCallId?: string }>;
+  }>,
+): boolean {
+  const resolved = new Set<string>();
+  for (const step of steps) {
+    for (const result of step.toolResults ?? []) {
+      if (result.toolCallId) resolved.add(result.toolCallId);
+    }
   }
-  const profile =
-    args.commandId && args.commandId in HITL_COMMAND_PROFILES
-      ? HITL_COMMAND_PROFILES[args.commandId as keyof typeof HITL_COMMAND_PROFILES]
-      : null;
-  if (profile) {
-    return createHitlTools({
-      profile,
-      promptMessageId: args.promptMessageId,
+  for (const step of steps) {
+    for (const call of step.toolCalls ?? []) {
+      if (
+        call.toolCallId &&
+        PENDING_HITL_TOOL_NAMES.has(call.toolName ?? "") &&
+        !resolved.has(call.toolCallId)
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+// Count artifact create/update/delete side effects performed by native tools so
+// the run's artifactCount stays meaningful (the legacy collectArtifactResults
+// path only catches versionId-shaped results, which native tools do not emit).
+function countNativeArtifactMutations(
+  steps: Array<{ toolResults?: Array<{ output?: unknown }> }>,
+): number {
+  let count = 0;
+  for (const step of steps) {
+    for (const result of step.toolResults ?? []) {
+      const output = result.output as { status?: string } | undefined;
+      if (output?.status === "executed" || output?.status === "deleted") {
+        count += 1;
+      }
+    }
+  }
+  return count;
+}
+
+function buildGenerationTools(promptMessageId: string): ToolSet {
+  return { ...normalChatTools, ...buildHitlTools({ promptMessageId }) };
+}
+
+// Shared generation core for the initial turn (generateReply) and HITL resume
+// (resumeGeneration). On the initial turn executeArtifact is withheld via
+// activeTools; on resume the full HITL tool set is available so the model can
+// run an approved proposeArtifact and then call executeArtifact.
+async function runInlineGeneration(
+  ctx: ActionCtx,
+  args: {
+    threadId: string;
+    userId: string;
+    promptMessageId: string;
+    runId?: Id<"agentRuns">;
+    agentKind: AgentKind;
+    prompt?: string;
+    visiblePrompt?: string;
+    includeExecuteArtifact: boolean;
+    messageAttachmentArtifactIds?: Id<"artifacts">[];
+    scheduleTitle: boolean;
+    deep?: boolean;
+  },
+) {
+  try {
+    let prompt = args.prompt;
+    if (prompt && args.visiblePrompt) {
+      const ragContext = await ctx.runAction(
+        internal.agent.ragContext.buildRagContextForThread,
+        {
+          ownerUserId: args.userId,
+          threadId: args.threadId,
+          query: args.visiblePrompt,
+          messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
+        },
+      );
+      prompt = ragContext ? [ragContext, "", prompt].join("\n") : prompt;
+    }
+    const tools =
+      args.deep && args.runId
+        ? buildDeepResearchTools({
+            promptMessageId: args.promptMessageId,
+            runId: args.runId,
+          })
+        : buildGenerationTools(args.promptMessageId);
+    const activeTools = args.deep
+      ? ["startDeepResearch"]
+      : args.includeExecuteArtifact
+        ? undefined
+        : [...Object.keys(normalChatTools), ...HITL_TOOL_NAMES];
+    const agent = agentForKind(args.agentKind);
+    const result = await agent.streamText(
+      ctx,
+      { threadId: args.threadId, userId: args.userId },
+      {
+        promptMessageId: args.promptMessageId,
+        tools,
+        ...(prompt ? { prompt } : {}),
+        ...(activeTools ? { activeTools } : {}),
+      },
+      {
+        saveStreamDeltas: { chunking: "word", throttleMs: 100 },
+        usageHandler: handleUsage,
+      },
+    );
+    await result.consumeStream();
+    const text = await result.text;
+    const steps = await result.steps;
+    if (args.deep) {
+      // Deep research planning/resume: if the model started the research
+      // workflow (approved startDeepResearch), the workflow now owns the run +
+      // thread lifecycle. Otherwise this is a pause awaiting plan approval, or a
+      // plain text reply — patch the run status and release the composer.
+      const deepStarted = steps.some((step) =>
+        (step.toolResults ?? []).some(
+          (result) =>
+            (result.output as { status?: string } | undefined)?.status ===
+            "deep_research_started",
+        ),
+      );
+      if (!deepStarted) {
+        const pending = hasPendingNativeHitl(steps);
+        if (args.runId) {
+          await ctx.runMutation(internal.agent.messages.patchRunStatus, {
+            ownerUserId: args.userId,
+            threadId: args.threadId,
+            runId: args.runId,
+            status: pending ? "waiting" : "completed",
+          });
+        }
+        await ctx.runMutation(internal.agent.messages.markThreadIdle, {
+          ownerUserId: args.userId,
+          threadId: args.threadId,
+          runId: args.runId,
+          preview: previewFromContent(text),
+          incrementMessageCount: true,
+        });
+      }
+      return;
+    }
+    const sourceCandidates = collectSourceCandidates(steps);
+    const artifactResults = collectArtifactResults(steps);
+    const pendingHitl = hasPendingNativeHitl(steps);
+    const artifactCount = artifactResults.length + countNativeArtifactMutations(steps);
+    const assistantMessageId = getVisibleAssistantMessageId(result.savedMessages);
+    if (assistantMessageId) {
+      await ctx.runMutation(internal.agent.sources.persistCited, {
+        ownerUserId: args.userId,
+        threadId: args.threadId,
+        messageId: assistantMessageId,
+        candidates: sourceCandidates,
+        citedNumbers: extractCitationNumbers(text),
+      });
+      for (const artifact of artifactResults) {
+        await ctx.runMutation(internal.agent.artifacts.attachToMessage, {
+          ownerUserId: args.userId,
+          threadId: args.threadId,
+          messageId: assistantMessageId,
+          artifactId: artifact.artifactId,
+          versionId: artifact.versionId,
+          relation: artifact.relation,
+        });
+      }
+    }
+    if (args.runId) {
+      await ctx.runMutation(internal.agent.messages.completeInlineRun, {
+        ownerUserId: args.userId,
+        threadId: args.threadId,
+        runId: args.runId,
+        sourceCount: sourceCandidates.length,
+        artifactCount,
+        observations: collectToolObservations(steps),
+        keepWaiting: pendingHitl,
+      });
+    }
+    await ctx.runMutation(internal.agent.messages.markThreadIdle, {
+      ownerUserId: args.userId,
+      threadId: args.threadId,
       runId: args.runId,
-      commandId: args.commandId,
-      sourceKind: profile === "artifact" ? "artifact" : "generic",
+      preview: previewFromContent(text),
+      incrementMessageCount: true,
     });
+    if (args.scheduleTitle && args.visiblePrompt) {
+      await ctx.scheduler.runAfter(0, internal.agent.messages.generateThreadTitle, {
+        threadId: args.threadId,
+        userId: args.userId,
+        prompt: args.visiblePrompt,
+        assistantText: text,
+      });
+    }
+  } catch (error) {
+    if (args.runId) {
+      await ctx.runMutation(internal.agent.messages.failInlineRun, {
+        ownerUserId: args.userId,
+        threadId: args.threadId,
+        runId: args.runId,
+        errorMessage: readableError(error),
+      });
+    }
+    await astra.saveMessages(ctx, {
+      threadId: args.threadId,
+      userId: args.userId,
+      promptMessageId: args.promptMessageId,
+      messages: [{ role: "assistant", content: FAILURE_TEXT }],
+      failPendingSteps: true,
+      skipEmbeddings: true,
+    });
+    await ctx.runMutation(internal.agent.messages.markThreadFailed, {
+      ownerUserId: args.userId,
+      threadId: args.threadId,
+      runId: args.runId,
+      preview: FAILURE_TEXT,
+    });
+    throw error;
   }
-  return normalChatTools;
 }
 
 export const generateReply = internalAction({
@@ -857,10 +1060,6 @@ export const generateReply = internalAction({
     // existed; defaults to "lite".
     agentKind: v.optional(v.union(v.literal("lite"), v.literal("pro"))),
     messageAttachmentArtifactIds: v.optional(v.array(v.id("artifacts"))),
-    hitlExecute: v.optional(v.boolean()),
-    hitlSessionId: v.optional(v.id("hitlSessions")),
-    hitlWorkspaceId: v.optional(v.id("workspaces")),
-    hitlPayloadJson: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const thread = await ctx.runQuery(components.agent.threads.getThread, {
@@ -869,120 +1068,115 @@ export const generateReply = internalAction({
     if (!thread || thread.userId !== args.userId) {
       throw new ConvexError("Thread not found");
     }
+    await runInlineGeneration(ctx, {
+      threadId: args.threadId,
+      userId: args.userId,
+      promptMessageId: args.promptMessageId,
+      runId: args.runId,
+      agentKind: args.agentKind ?? "lite",
+      prompt: args.prompt,
+      visiblePrompt: args.visiblePrompt,
+      includeExecuteArtifact: false,
+      messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
+      scheduleTitle: true,
+    });
+  },
+});
 
-    try {
-      const ragContext = await ctx.runAction(
-        internal.agent.ragContext.buildRagContextForThread,
-        {
-          ownerUserId: args.userId,
-          threadId: args.threadId,
-          query: args.visiblePrompt,
-          messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
-        },
-      );
-      const prompt = ragContext
-        ? [ragContext, "", args.prompt].join("\n")
-        : args.prompt;
-      const tools = resolveGenerationTools(args);
-      const agent = agentForKind(args.agentKind ?? "lite");
-      const result = await agent.streamText(
-        ctx,
-        { threadId: args.threadId, userId: args.userId },
-        { promptMessageId: args.promptMessageId, prompt, tools },
-        {
-          saveStreamDeltas: { chunking: "word", throttleMs: 100 },
-          usageHandler: handleUsage,
-        },
-      );
-      await result.consumeStream();
-      const text = await result.text;
-      const steps = await result.steps;
-      const sourceCandidates = collectSourceCandidates(steps);
-      const artifactResults = collectArtifactResults(steps);
-      const hitlResults = collectHitlResults(steps);
-      const assistantMessageId = getVisibleAssistantMessageId(result.savedMessages);
-      if (assistantMessageId) {
-        await ctx.runMutation(internal.agent.sources.persistCited, {
-          ownerUserId: args.userId,
-          threadId: args.threadId,
-          messageId: assistantMessageId,
-          candidates: sourceCandidates,
-          citedNumbers: extractCitationNumbers(text),
-        });
-        for (const artifact of artifactResults) {
-          await ctx.runMutation(internal.agent.artifacts.attachToMessage, {
-            ownerUserId: args.userId,
-            threadId: args.threadId,
-            messageId: assistantMessageId,
-            artifactId: artifact.artifactId,
-            versionId: artifact.versionId,
-            relation: artifact.relation,
-          });
-        }
-        if (hitlResults.length > 0) {
-          await ctx.runMutation(internal.hitlSessions.attachAssistantMessageInternal, {
-            ownerUserId: args.userId,
-            threadId: args.threadId,
-            promptMessageId: args.promptMessageId,
-            assistantMessageId,
-          });
-        }
-      }
-      if (args.runId) {
-        await ctx.runMutation(internal.agent.messages.completeInlineRun, {
-          ownerUserId: args.userId,
-          threadId: args.threadId,
-          runId: args.runId,
-          sourceCount: sourceCandidates.length,
-          artifactCount: artifactResults.length,
-          observations: collectToolObservations(steps),
-          keepWaiting: hitlResults.length > 0 && !args.hitlExecute,
-        });
-      }
-      await ctx.runMutation(internal.agent.messages.markThreadIdle, {
-        ownerUserId: args.userId,
-        threadId: args.threadId,
-        runId: args.runId,
-        preview: previewFromContent(text),
-        incrementMessageCount: true,
-      });
-      await ctx.scheduler.runAfter(0, internal.agent.messages.generateThreadTitle, {
-        threadId: args.threadId,
-        userId: args.userId,
-        prompt: args.visiblePrompt,
-        assistantText: text,
-      });
-    } catch (error) {
-      if (args.hitlExecute && args.hitlSessionId) {
-        await ctx.runMutation(internal.hitlSessions.failSessionInternal, {
-          sessionId: args.hitlSessionId,
-          ownerUserId: args.userId,
-        });
-      }
-      if (args.runId) {
-        await ctx.runMutation(internal.agent.messages.failInlineRun, {
-          ownerUserId: args.userId,
-          threadId: args.threadId,
-          runId: args.runId,
-          errorMessage: readableError(error),
-        });
-      }
-      await astra.saveMessages(ctx, {
-        threadId: args.threadId,
-        userId: args.userId,
-        promptMessageId: args.promptMessageId,
-        messages: [{ role: "assistant", content: FAILURE_TEXT }],
-        failPendingSteps: true,
-        skipEmbeddings: true,
-      });
-      await ctx.runMutation(internal.agent.messages.markThreadFailed, {
-        ownerUserId: args.userId,
-        threadId: args.threadId,
-        runId: args.runId,
-        preview: FAILURE_TEXT,
-      });
-      throw error;
+// Resume generation after a native HITL pause is resolved: the user answered an
+// askUser question (tool-result saved) or approved/denied an action tool
+// (tool-approval-response saved). `promptMessageId` points at that saved
+// message so the model continues with the answer already in its context. The
+// full HITL tool set is available (incl. executeArtifact) so an approved
+// proposeArtifact can be followed by the actual write.
+export const resumeGeneration = internalAction({
+  args: {
+    threadId: v.string(),
+    userId: v.string(),
+    promptMessageId: v.string(),
+    runId: v.optional(v.id("agentRuns")),
+    agentKind: v.optional(v.union(v.literal("lite"), v.literal("pro"))),
+    // True when resuming a deep_research thread (the approved startDeepResearch
+    // tool must run, and the run lifecycle is owned by the research workflow).
+    deep: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const thread = await ctx.runQuery(components.agent.threads.getThread, {
+      threadId: args.threadId,
+    });
+    if (!thread || thread.userId !== args.userId) {
+      throw new ConvexError("Thread not found");
     }
+    await runInlineGeneration(ctx, {
+      threadId: args.threadId,
+      userId: args.userId,
+      promptMessageId: args.promptMessageId,
+      runId: args.runId,
+      agentKind: args.agentKind ?? "lite",
+      includeExecuteArtifact: true,
+      scheduleTitle: false,
+      deep: args.deep ?? false,
+    });
+  },
+});
+
+// Inline planning generation for /deep-research: the model proposes the
+// research plan by calling the startDeepResearch tool (needsApproval), which
+// pauses for the user. The actual research runs only after approval.
+export const generateDeepPlan = internalAction({
+  args: {
+    threadId: v.string(),
+    userId: v.string(),
+    promptMessageId: v.string(),
+    prompt: v.string(),
+    runId: v.id("agentRuns"),
+    agentKind: v.optional(v.union(v.literal("lite"), v.literal("pro"))),
+  },
+  handler: async (ctx, args) => {
+    const thread = await ctx.runQuery(components.agent.threads.getThread, {
+      threadId: args.threadId,
+    });
+    if (!thread || thread.userId !== args.userId) {
+      throw new ConvexError("Thread not found");
+    }
+    await runInlineGeneration(ctx, {
+      threadId: args.threadId,
+      userId: args.userId,
+      promptMessageId: args.promptMessageId,
+      runId: args.runId,
+      agentKind: args.agentKind ?? "pro",
+      prompt: args.prompt,
+      includeExecuteArtifact: false,
+      scheduleTitle: false,
+      deep: true,
+    });
+  },
+});
+
+// Minimal run status patch for deep research (whose runs use the workflow step
+// model, not inline observations — so completeInlineRun must not be used here).
+export const patchRunStatus = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    threadId: v.string(),
+    runId: v.id("agentRuns"),
+    status: v.union(
+      v.literal("running"),
+      v.literal("waiting"),
+      v.literal("completed"),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get("agentRuns", args.runId);
+    if (!run || run.ownerUserId !== args.ownerUserId || run.threadId !== args.threadId) {
+      return;
+    }
+    const now = Date.now();
+    await ctx.db.patch("agentRuns", args.runId, {
+      status: args.status,
+      updatedAt: now,
+      ...(args.status === "completed" ? { completedAt: now } : {}),
+    });
   },
 });
 
@@ -1238,27 +1432,6 @@ function collectArtifactResults(
     for (const result of step.toolResults ?? []) {
       if (isArtifactToolResult(result.output)) {
         results.push(result.output);
-      }
-    }
-  }
-  return results;
-}
-
-function collectHitlResults(
-  steps: Array<{ toolResults?: Array<{ output?: unknown; toolName?: string }> }>,
-) {
-  const results: Array<{ toolName: string; sessionId?: string }> = [];
-  for (const step of steps) {
-    for (const result of step.toolResults ?? []) {
-      const toolName = result.toolName ?? "";
-      if (
-        toolName === "askHuman" ||
-        toolName === "presentPlan" ||
-        toolName === "presentWorkspacePlan" ||
-        toolName === "confirmAction"
-      ) {
-        const output = result.output as { sessionId?: string } | undefined;
-        results.push({ toolName, sessionId: output?.sessionId });
       }
     }
   }

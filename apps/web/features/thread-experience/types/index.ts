@@ -53,7 +53,18 @@ export type ChatMessage = {
   order: number;
   stepOrder: number;
   text?: string;
-  parts?: Array<{ type: string; text?: string }>;
+  parts?: Array<{
+    type: string;
+    text?: string;
+    // AI SDK tool-part fields (present on `tool-<name>` / `dynamic-tool` parts).
+    toolCallId?: string;
+    toolName?: string;
+    state?: string;
+    input?: unknown;
+    output?: unknown;
+    errorText?: string;
+    approval?: { id: string; isAutomatic?: boolean; approved?: boolean; reason?: string };
+  }>;
   metadata?: {
     promptCommand?: PromptCommandMetadata;
     contextArtifacts?: MessageContextArtifactMetadata[];

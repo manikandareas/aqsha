@@ -5,17 +5,13 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
 import { artifactTypeFromAgentInput, plainTextFromMarkdown } from "../artifactModel";
-import {
-  artifactPayloadSchema,
-  workspaceManagementPayloadSchema,
-} from "./hitlPayloads";
+import { throwAppError } from "../lib/appError";
 
 type HitlToolCtx = ActionCtx & {
   userId?: string;
   threadId?: string;
+  messageId?: string;
 };
-
-export type HitlToolProfile = "artifact" | "workspace";
 
 const optionSchema = z.object({
   id: z.string().min(1).max(40),
@@ -28,218 +24,122 @@ const questionSchema = z.object({
   allowCustom: z.boolean().optional(),
 });
 
-export function createHitlTools(args: {
-  profile: HitlToolProfile;
-  promptMessageId: string;
-  runId?: Id<"agentRuns">;
-  commandId?: string;
-  sourceKind?: "artifact" | "deep_research" | "generic";
-}): ToolSet {
-  const sourceKind =
-    args.profile === "workspace" ? ("generic" as const) : (args.sourceKind ?? "artifact");
+const artifactTypeEnum = z.enum([
+  "markdown",
+  "plain_text",
+  "html",
+  "svg",
+  "mermaid",
+  "json",
+  "csv",
+  "code",
+]);
 
-  const askHuman = createTool({
-    description:
-      args.profile === "workspace"
-        ? "REQUIRED for clarification during /workspace. Shows interactive question cards in the UI. Never ask the same questions in chat text."
-        : "REQUIRED for any clarification during /artifact. Shows interactive question cards in the UI. Never ask the same questions in chat text. Each question needs 2-8 options with stable ids (e.g. create, update, delete, other).",
-    inputSchema: z.object({
-      questions: z.array(questionSchema).min(1).max(5),
-    }),
-    execute: async (ctx, input) => {
-      const ownerUserId = requireToolUser(ctx);
-      const threadId = requireToolThread(ctx);
-      return await ctx.runMutation(internal.hitlSessions.createQuestionCardsInternal, {
-        ownerUserId,
-        threadId,
-        promptMessageId: args.promptMessageId,
-        runId: args.runId,
-        commandId: args.commandId,
-        sourceKind,
-        questions: input.questions,
-      });
-    },
-  });
-
-  if (args.profile === "workspace") {
-    return {
-      askHuman,
-      presentWorkspacePlan: createTool({
-        description:
-          "REQUIRED to propose creating or renaming a workspace for user approval (Review Plan card). Include the final proposed workspace name in `name`.",
-        inputSchema: z.object({
-          action: z.enum(["create_workspace", "rename_workspace"]),
-          title: z.string().min(1).max(160),
-          summary: z.string().min(1).max(1000),
-          planBullets: z.array(z.string().max(240)).min(1).max(8),
-          name: z.string().min(1).max(160),
-          workspaceId: z.string().optional(),
-        }),
-        execute: async (ctx, input) => {
-          const ownerUserId = requireToolUser(ctx);
-          const threadId = requireToolThread(ctx);
-          const payload = workspaceManagementPayloadSchema.parse({
-            action: input.action,
-            name: input.name,
-            workspaceId: isLikelyConvexId(input.workspaceId) ? input.workspaceId : undefined,
-          });
-          if (input.action === "rename_workspace" && !payload.workspaceId) {
-            throw new Error("workspaceId is required for rename_workspace");
-          }
-          return await ctx.runMutation(internal.hitlSessions.createPlanReviewCardInternal, {
-            ownerUserId,
-            threadId,
-            promptMessageId: args.promptMessageId,
-            runId: args.runId,
-            commandId: args.commandId,
-            sourceKind,
-            title: input.title,
-            summary: input.summary,
-            planBullets: input.planBullets,
-            payloadJson: JSON.stringify(payload),
-            workspaceId: payload.workspaceId
-              ? (payload.workspaceId as Id<"workspaces">)
-              : undefined,
-          });
-        },
-      }),
-    };
-  }
-
+/**
+ * Native in-thread HITL tool set. The model triggers HITL by calling these
+ * tools in the ordinary course of generation:
+ *  - `askUser` has NO execute, so the AI SDK loop halts at the call and the
+ *    question rides in the thread as an orphaned tool-call awaiting a
+ *    tool-result (supplied by the user via api.agent.hitlResume.answerAskUser).
+ *  - the action tools carry `needsApproval`, so generation pauses with a
+ *    `tool-approval-request` part; the user approves/denies via
+ *    api.agent.hitlResume.approveTool / denyTool, then the component runs the
+ *    tool's own `execute` (approve) or synthesizes a denied result (deny).
+ *  - artifact create/update is two-step: `proposeArtifact` (needsApproval,
+ *    display-only) is approved first, then the model calls `executeArtifact`
+ *    with the final content. `executeArtifact` is gated to the post-approval
+ *    step via prepareStep in agent/messages.ts (it is not approval-gated).
+ */
+export function buildHitlTools(args: { promptMessageId: string }): ToolSet {
   return {
-    askHuman,
-    presentPlan: createTool({
+    askUser: createTool({
       description:
-        "REQUIRED to propose create/update workspace artifacts for user approval (Review Plan card). Call when intent is clear. Include planBullets but NO final body.",
+        "Ask the user one or more structured clarifying questions when you genuinely cannot proceed without information only the user has. Shown as interactive question cards in the UI. Each question needs 2-8 options with stable ids. Never repeat the questions in plain chat text.",
       inputSchema: z.object({
+        questions: z.array(questionSchema).min(1).max(5),
+      }),
+      // No execute handler: the loop halts at this call and waits for the user's
+      // answer, which is supplied out-of-band by api.agent.hitlResume.answerAskUser
+      // as a native tool-result. The component requires an outputSchema for
+      // no-execute tools so it knows the shape of that supplied result.
+      outputSchema: z.object({
+        answers: z.array(
+          z.object({
+            prompt: z.string(),
+            selectedOptionIds: z.array(z.string()).optional(),
+            customAnswer: z.string().optional(),
+            skipped: z.boolean().optional(),
+          }),
+        ),
+      }),
+    }),
+
+    proposeArtifact: createTool({
+      description:
+        "Propose creating or updating a workspace artifact for the user to approve (Review Plan card). Provide a title, a short summary, and 1-8 plan bullets describing what you will write. Do NOT include the final body here. After the user approves, call executeArtifact with the full content.",
+      inputSchema: z.object({
+        action: z.enum(["create", "update"]),
+        artifactId: z.string().optional(),
+        workspaceId: z.string().optional(),
         title: z.string().min(1).max(160),
+        artifactType: artifactTypeEnum.default("markdown"),
         summary: z.string().min(1).max(1000),
         planBullets: z.array(z.string().max(240)).min(1).max(8),
+      }),
+      needsApproval: true,
+      execute: async (_ctx, input) => ({
+        approved: true as const,
+        action: input.action,
+        title: input.title,
+        artifactType: input.artifactType,
+        artifactId: input.artifactId,
+        workspaceId: input.workspaceId,
+      }),
+    }),
+
+    executeArtifact: createTool({
+      description:
+        "Write the workspace artifact that the user just approved via proposeArtifact. Call exactly once with the complete final content.",
+      inputSchema: z.object({
         action: z.enum(["create", "update"]),
-        artifactType: z
-          .enum(["markdown", "plain_text", "html", "svg", "mermaid", "json", "csv", "code"])
-          .default("markdown"),
         artifactId: z.string().optional(),
         workspaceId: z.string().optional(),
-        changeSummary: z.string().max(500).optional(),
-      }),
-      execute: async (ctx, input) => {
-        const ownerUserId = requireToolUser(ctx);
-        const threadId = requireToolThread(ctx);
-        const payload = {
-          action: input.action,
-          title: input.title,
-          artifactType: input.artifactType,
-          artifactId: isLikelyConvexId(input.artifactId) ? input.artifactId : undefined,
-          workspaceId: isLikelyConvexId(input.workspaceId) ? input.workspaceId : undefined,
-          changeSummary: input.changeSummary,
-        };
-        return await ctx.runMutation(internal.hitlSessions.createPlanReviewCardInternal, {
-          ownerUserId,
-          threadId,
-          promptMessageId: args.promptMessageId,
-          runId: args.runId,
-          commandId: args.commandId,
-          sourceKind,
-          title: input.title,
-          summary: input.summary,
-          planBullets: input.planBullets,
-          payloadJson: JSON.stringify(payload),
-          workspaceId: isLikelyConvexId(input.workspaceId)
-            ? (input.workspaceId as Id<"workspaces">)
-            : undefined,
-        });
-      },
-    }),
-    confirmAction: createTool({
-      description:
-        "Request user confirmation for a simple or destructive action such as deleting a workspace artifact. Does not execute until confirmed.",
-      inputSchema: z.object({
         title: z.string().min(1).max(160),
-        message: z.string().min(1).max(500),
-        action: z.literal("delete"),
-        artifactId: z.string(),
-        workspaceId: z.string().optional(),
-      }),
-      execute: async (ctx, input) => {
-        const ownerUserId = requireToolUser(ctx);
-        const threadId = requireToolThread(ctx);
-        if (!isLikelyConvexId(input.artifactId)) {
-          throw new Error("artifactId is required for delete confirmation");
-        }
-        const payload = {
-          action: "delete" as const,
-          title: input.title,
-          artifactId: input.artifactId,
-          workspaceId: isLikelyConvexId(input.workspaceId) ? input.workspaceId : undefined,
-        };
-        return await ctx.runMutation(internal.hitlSessions.createConfirmationCardInternal, {
-          ownerUserId,
-          threadId,
-          promptMessageId: args.promptMessageId,
-          runId: args.runId,
-          commandId: args.commandId,
-          sourceKind,
-          title: input.title,
-          message: input.message,
-          destructive: true,
-          payloadJson: JSON.stringify(payload),
-          workspaceId: isLikelyConvexId(input.workspaceId)
-            ? (input.workspaceId as Id<"workspaces">)
-            : undefined,
-        });
-      },
-    }),
-  };
-}
-
-export function createWorkspaceExecutionTools(args: {
-  sessionId: Id<"hitlSessions">;
-  workspaceId?: Id<"workspaces">;
-  payloadJson?: string;
-}): ToolSet {
-  return {
-    executeWorkspaceArtifact: createTool({
-      description:
-        "Execute an approved workspace artifact action. Call once with complete content for create/update.",
-      inputSchema: z.object({
-        action: z.enum(["create", "update"]),
-        title: z.string().min(1).max(160),
-        artifactType: z
-          .enum(["markdown", "plain_text", "html", "svg", "mermaid", "json", "csv", "code"])
-          .default("markdown"),
+        artifactType: artifactTypeEnum.default("markdown"),
         content: z.string().min(1).max(200_000),
         language: z.string().max(40).optional(),
-        artifactId: z.string().optional(),
       }),
       execute: async (ctx, input) => {
         const ownerUserId = requireToolUser(ctx);
         const threadId = requireToolThread(ctx);
-        const basePayload = args.payloadJson
-          ? artifactPayloadSchema.parse(JSON.parse(args.payloadJson))
-          : null;
-        const artifactId = isLikelyConvexId(input.artifactId)
-          ? (input.artifactId as Id<"artifacts">)
-          : isLikelyConvexId(basePayload?.artifactId)
-            ? (basePayload!.artifactId as Id<"artifacts">)
-            : undefined;
-        const artifactType = artifactTypeFromAgentInput(
-          input.artifactType ?? basePayload?.artifactType ?? "markdown",
-        );
+        const messageId = requireToolMessageId(ctx, args.promptMessageId);
+        const artifactType = artifactTypeFromAgentInput(input.artifactType ?? "markdown");
         const plainText =
-          artifactType === "markdown"
-            ? plainTextFromMarkdown(input.content)
-            : input.content;
-        let resultArtifactId: Id<"artifacts">;
+          artifactType === "markdown" ? plainTextFromMarkdown(input.content) : input.content;
         if (input.action === "create") {
-          if (!args.workspaceId) {
-            throw new Error("Workspace is required to create an artifact");
+          const workspace = await ctx.runQuery(
+            internal.agent.hitlProvenance.resolveWorkspaceForCreate,
+            {
+              ownerUserId,
+              threadId,
+              workspaceId: isLikelyConvexId(input.workspaceId)
+                ? (input.workspaceId as Id<"workspaces">)
+                : undefined,
+            },
+          );
+          if (!workspace.workspaceId) {
+            throwAppError({
+              code: "workspace_required",
+              message: "Pilih workspace sebelum membuat artifact.",
+              severity: "warning",
+              field: "workspaceId",
+            });
           }
-          resultArtifactId = await ctx.runMutation(
+          const artifactId = await ctx.runMutation(
             internal.artifacts.createArtifactFromAgentInternal,
             {
               ownerUserId,
-              workspaceId: args.workspaceId,
+              workspaceId: workspace.workspaceId,
               title: input.title,
               artifactType,
               content: input.content,
@@ -247,32 +147,208 @@ export function createWorkspaceExecutionTools(args: {
               language: input.language,
             },
           );
-        } else {
-          if (!artifactId) {
-            throw new Error("artifactId is required for update");
-          }
-          await ctx.runMutation(internal.artifacts.updateArtifactFromAgentInternal, {
+          await ctx.runMutation(internal.agent.hitlProvenance.recordArtifactRelation, {
             ownerUserId,
+            threadId,
+            messageId,
             artifactId,
-            title: input.title,
-            artifactType,
-            content: input.content,
-            plainText,
-            language: input.language,
+            relation: "created",
           });
-          resultArtifactId = artifactId;
+          return { status: "executed" as const, artifactId, relation: "created" as const };
         }
-        await ctx.runMutation(internal.hitlSessions.completeSessionInternal, {
-          sessionId: args.sessionId,
+        const artifactId = isLikelyConvexId(input.artifactId)
+          ? (input.artifactId as Id<"artifacts">)
+          : undefined;
+        if (!artifactId) {
+          throwAppError({
+            code: "artifact_required",
+            message: "artifactId wajib untuk memperbarui artifact.",
+            severity: "error",
+            field: "artifactId",
+          });
+        }
+        await ctx.runQuery(internal.agent.hitlProvenance.assertManageable, {
           ownerUserId,
-          resultArtifactId,
-          relation: input.action === "create" ? "created" : "updated",
+          artifactId,
+        });
+        await ctx.runMutation(internal.artifacts.updateArtifactFromAgentInternal, {
+          ownerUserId,
+          artifactId,
+          title: input.title,
+          artifactType,
+          content: input.content,
+          plainText,
+          language: input.language,
+        });
+        await ctx.runMutation(internal.agent.hitlProvenance.recordArtifactRelation, {
+          ownerUserId,
+          threadId,
+          messageId,
+          artifactId,
+          relation: "updated",
+        });
+        return { status: "executed" as const, artifactId, relation: "updated" as const };
+      },
+    }),
+
+    deleteArtifact: createTool({
+      description:
+        "Delete a workspace artifact. Requires user confirmation before it runs. Provide the artifact id plus a short confirmation title and message.",
+      inputSchema: z.object({
+        artifactId: z.string(),
+        title: z.string().min(1).max(160),
+        message: z.string().min(1).max(500),
+      }),
+      needsApproval: true,
+      execute: async (ctx, input) => {
+        const ownerUserId = requireToolUser(ctx);
+        const threadId = requireToolThread(ctx);
+        const messageId = requireToolMessageId(ctx, args.promptMessageId);
+        if (!isLikelyConvexId(input.artifactId)) {
+          throwAppError({
+            code: "artifact_required",
+            message: "artifactId wajib untuk menghapus artifact.",
+            severity: "error",
+            field: "artifactId",
+          });
+        }
+        const artifactId = input.artifactId as Id<"artifacts">;
+        await ctx.runQuery(internal.agent.hitlProvenance.assertManageable, {
+          ownerUserId,
+          artifactId,
+        });
+        await ctx.runMutation(internal.artifacts.deleteArtifactFromAgentInternal, {
+          ownerUserId,
+          artifactId,
+        });
+        await ctx.runMutation(internal.agent.hitlProvenance.recordArtifactRelation, {
+          ownerUserId,
+          threadId,
+          messageId,
+          artifactId,
+          relation: "deleted",
+        });
+        return { status: "deleted" as const, artifactId };
+      },
+    }),
+
+    createWorkspace: createTool({
+      description:
+        "Create a new workspace. Requires user approval. Provide the final workspace name plus a short summary and plan bullets for the approval card.",
+      inputSchema: z.object({
+        name: z.string().min(1).max(160),
+        summary: z.string().min(1).max(1000),
+        planBullets: z.array(z.string().max(240)).min(1).max(8),
+      }),
+      needsApproval: true,
+      execute: async (ctx, input) => {
+        const ownerUserId = requireToolUser(ctx);
+        const threadId = requireToolThread(ctx);
+        const messageId = requireToolMessageId(ctx, args.promptMessageId);
+        const workspaceId = await ctx.runMutation(
+          internal.workspaces.createFromAgentInternal,
+          { ownerUserId, name: input.name },
+        );
+        await ctx.runMutation(internal.agent.hitlProvenance.recordWorkspaceAction, {
+          ownerUserId,
+          threadId,
+          messageId,
+          workspaceId,
+          action: "created",
         });
         return {
           status: "executed" as const,
-          artifactId: resultArtifactId,
-          action: input.action,
+          workspaceId,
+          action: "create_workspace" as const,
+        };
+      },
+    }),
+
+    renameWorkspace: createTool({
+      description:
+        "Rename an existing workspace. Requires user approval. Provide the workspace id and the final new name plus a short summary and plan bullets.",
+      inputSchema: z.object({
+        workspaceId: z.string(),
+        name: z.string().min(1).max(160),
+        summary: z.string().min(1).max(1000),
+        planBullets: z.array(z.string().max(240)).min(1).max(8),
+      }),
+      needsApproval: true,
+      execute: async (ctx, input) => {
+        const ownerUserId = requireToolUser(ctx);
+        const threadId = requireToolThread(ctx);
+        const messageId = requireToolMessageId(ctx, args.promptMessageId);
+        if (!isLikelyConvexId(input.workspaceId)) {
+          throwAppError({
+            code: "workspace_required",
+            message: "workspaceId wajib untuk mengganti nama workspace.",
+            severity: "error",
+            field: "workspaceId",
+          });
+        }
+        const workspaceId = input.workspaceId as Id<"workspaces">;
+        await ctx.runMutation(internal.workspaces.renameFromAgentInternal, {
+          ownerUserId,
+          workspaceId,
+          name: input.name,
+        });
+        await ctx.runMutation(internal.agent.hitlProvenance.recordWorkspaceAction, {
+          ownerUserId,
           threadId,
+          messageId,
+          workspaceId,
+          action: "renamed",
+        });
+        return {
+          status: "executed" as const,
+          workspaceId,
+          action: "rename_workspace" as const,
+        };
+      },
+    }),
+  };
+}
+
+/**
+ * Deep-research HITL tool. The model proposes an autonomous research plan via
+ * `startDeepResearch` (needsApproval); on approval the tool's execute kicks off
+ * the durable research workflow. Offered only on the /deep-research turn (and
+ * its resume) via activeTools, never in normal chat.
+ */
+export function buildDeepResearchTools(args: {
+  promptMessageId: string;
+  runId: Id<"agentRuns">;
+}): ToolSet {
+  return {
+    startDeepResearch: createTool({
+      description:
+        "Propose an autonomous deep-research plan for the user to approve. Provide research questions, a source strategy, the intended report shape, concrete sufficiency criteria, initial search queries, and a round budget. After the user approves, the research runs automatically and produces a cited report. Call this exactly once.",
+      inputSchema: z.object({
+        title: z.string().min(1).max(200),
+        questions: z.array(z.string().min(1).max(300)).min(1).max(5),
+        sourceStrategy: z.string().min(1).max(600),
+        reportIntent: z.string().min(1).max(600),
+        sufficiencyCriteria: z.array(z.string().min(1).max(300)).min(1).max(6),
+        initialQueries: z.array(z.string().min(1).max(300)).min(1).max(5),
+        maxRounds: z.number().int().min(1).max(8),
+      }),
+      needsApproval: true,
+      execute: async (ctx, input) => {
+        const ownerUserId = requireToolUser(ctx);
+        const threadId = requireToolThread(ctx);
+        const result = await ctx.runMutation(
+          internal.agent.deepResearch.startExecuteFromPlan,
+          {
+            runId: args.runId,
+            ownerUserId,
+            threadId,
+            promptMessageId: args.promptMessageId,
+            plan: input,
+          },
+        );
+        return {
+          status: "deep_research_started" as const,
+          workflowId: result.workflowId,
         };
       },
     }),
@@ -284,6 +360,10 @@ function requireToolUser(ctx: HitlToolCtx) {
     throw new Error("Tool call is missing user context");
   }
   return ctx.userId;
+}
+
+function requireToolMessageId(ctx: HitlToolCtx, fallback: string) {
+  return ctx.messageId ?? fallback;
 }
 
 function requireToolThread(ctx: HitlToolCtx) {

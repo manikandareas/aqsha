@@ -40,9 +40,10 @@ import type {
   ThreadSummary,
 } from "./component-types";
 import { Composer } from "./composer";
-import { HitlDock } from "./hitl-dock";
 import { EmptyThreadCopy, HomeStartState } from "./home-states";
-import { toWorkspaceId, type AgentRunId } from "@/lib/convex-refs";
+import { type AgentRunId } from "@/lib/convex-refs";
+import { hasPendingHitl } from "../utils/hitl-parts";
+import { useHitlResume } from "./use-hitl-resume";
 import { MessageRow } from "./message-row";
 import { AgentRunBlock } from "./run-progress";
 import { CenteredLoading } from "./shared";
@@ -94,11 +95,6 @@ export function ThreadChatSurface({
   draftContextLabel?: string;
 }) {
   const { isAuthenticated } = useConvexAuth();
-  const hitlSession = useConvexQueryData(
-    api.hitlSessions.getActiveForThread,
-    isAuthenticated && threadId ? { threadId } : "skip",
-  );
-  const hitlBlocking = hitlSession?.blocksComposer ?? false;
   const threadStatus = useConvexQueryData(
     api.agent.threads.get,
     isAuthenticated && threadId ? { threadId } : "skip",
@@ -113,6 +109,12 @@ export function ThreadChatSurface({
     { initialNumItems: 30, stream: true },
   );
   const sortedMessages = sortTranscriptMessages(messages.results as unknown as ChatMessage[]);
+  // HITL is now native in-thread: a pending tool part (askUser awaiting an
+  // answer, or an action awaiting approval) blocks the composer, and resolving
+  // it resumes generation. Derived entirely from the message stream.
+  const pendingHitl = hasPendingHitl(sortedMessages);
+  const hitlBlocking = pendingHitl;
+  const hitlActions = useHitlResume(threadId, pendingHitl);
   const hasMessages = sortedMessages.length > 0;
   const activeRun = runs.find(isRunActive);
   const interleavedEntries = interleaveRunsWithMessages(sortedMessages, runs);
@@ -170,6 +172,8 @@ export function ThreadChatSurface({
                           onRetryRun={onRetryRun}
                           sourceCount={sourceCounts.byMessageId.get(entry.message.id) ?? 0}
                           threadWorkspaceId={threadWorkspaceId}
+                          hitlActions={hitlActions}
+                          hitlDisabled={isGenerating}
                         />
                       )}
                     </div>
@@ -199,14 +203,6 @@ export function ThreadChatSurface({
               <AlertCircleIcon className="mt-0.5 size-4 shrink-0" />
               <span>Respons terakhir gagal diproses. Coba kirim pesan lagi.</span>
             </div>
-          ) : null}
-          {threadId && hitlSession ? (
-            <HitlDock
-              session={hitlSession}
-              threadWorkspaceId={
-                threadWorkspaceId ? toWorkspaceId(threadWorkspaceId) : undefined
-              }
-            />
           ) : null}
           {threadId && onSend ? (
             <Composer
