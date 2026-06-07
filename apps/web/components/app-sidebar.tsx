@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import {
+  ChevronRightIcon,
   HomeIcon,
   LayoutGridIcon,
   MessageSquareIcon,
@@ -42,8 +43,10 @@ import type {
 import {
   type ComponentProps,
   type ReactNode,
+  useCallback,
   useEffect,
   useState,
+  useSyncExternalStore,
 } from "react";
 
 type Viewer = {
@@ -61,6 +64,8 @@ type WorkspaceSummary = {
 
 const emptyWorkspaces: WorkspaceSummary[] = [];
 const MOBILE_THREAD_TITLE_MAX_CHARS = 42;
+const THREADS_COLLAPSED_STORAGE_KEY = "aqsha:sidebar:threads-collapsed";
+const SIDEBAR_SECTION_EVENT = "aqsha:sidebar-section-toggle";
 const sidebarItemBaseClass =
   "h-8 gap-2 rounded-[8px] px-2.5 py-0 text-[12px] font-medium transition-[background-color,color,box-shadow] duration-150 ease-out hover:bg-muted/60 data-active:bg-primary/10 data-active:font-medium data-active:text-foreground data-active:shadow-none data-active:[&_svg]:text-primary hover:text-foreground active:bg-muted active:text-foreground [&_svg]:size-3.5";
 
@@ -257,6 +262,8 @@ export function AppSidebar({
                     <SidebarSection
                       label="Threads"
                       action={threadSectionAction}
+                      collapsible
+                      storageKey={THREADS_COLLAPSED_STORAGE_KEY}
                     >
                       {sortedThreads.length > 0 ? (
                         <SidebarMenu className="min-w-0 gap-1 overflow-hidden">
@@ -422,17 +429,68 @@ function PrimaryNavLink({
   );
 }
 
+function usePersistentCollapse(storageKey: string | undefined) {
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => {
+      if (!storageKey) return () => {};
+      window.addEventListener("storage", onStoreChange);
+      window.addEventListener(SIDEBAR_SECTION_EVENT, onStoreChange);
+      return () => {
+        window.removeEventListener("storage", onStoreChange);
+        window.removeEventListener(SIDEBAR_SECTION_EVENT, onStoreChange);
+      };
+    },
+    [storageKey],
+  );
+
+  const collapsed = useSyncExternalStore(
+    subscribe,
+    () =>
+      storageKey ? window.localStorage.getItem(storageKey) === "1" : false,
+    () => false,
+  );
+
+  const toggle = useCallback(() => {
+    if (!storageKey) return;
+    const next = window.localStorage.getItem(storageKey) === "1" ? "0" : "1";
+    window.localStorage.setItem(storageKey, next);
+    window.dispatchEvent(new Event(SIDEBAR_SECTION_EVENT));
+  }, [storageKey]);
+
+  return [collapsed, toggle] as const;
+}
+
 function SidebarSection({
   label,
   children,
   first,
   action,
+  collapsible,
+  storageKey,
 }: {
   label: string;
   children: ReactNode;
   first?: boolean;
   action?: ReactNode;
+  collapsible?: boolean;
+  storageKey?: string;
 }) {
+  const [collapsed, toggleCollapsed] = usePersistentCollapse(
+    collapsible ? storageKey : undefined,
+  );
+  // Enable the open/close animation only after the first client frame so a
+  // restored-collapsed state appears instantly instead of animating on load.
+  const [animate, setAnimate] = useState(false);
+
+  useEffect(() => {
+    if (!collapsible) return;
+    const frame = requestAnimationFrame(() => setAnimate(true));
+    return () => cancelAnimationFrame(frame);
+  }, [collapsible]);
+
+  const labelClass =
+    "text-[11px] font-medium tracking-[-0.01em] text-primary/75";
+
   return (
     <div className="min-w-0 overflow-hidden">
       <div
@@ -441,12 +499,42 @@ function SidebarSection({
           first ? "pt-0" : "pt-1",
         )}
       >
-        <span className="text-[11px] font-medium tracking-[-0.01em] text-primary/75">
-          {label}
-        </span>
+        {collapsible ? (
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-expanded={!collapsed}
+            className="-ml-1 flex min-w-0 flex-1 items-center gap-1 rounded-[5px] px-1 py-0.5 text-left transition-[background-color] duration-150 ease-out hover:bg-muted/50"
+          >
+            <ChevronRightIcon
+              className={cn(
+                "size-3 shrink-0 text-primary/60",
+                animate ? "transition-transform duration-200 ease-out" : null,
+                collapsed ? "rotate-0" : "rotate-90",
+              )}
+            />
+            <span className={cn(labelClass, "truncate")}>{label}</span>
+          </button>
+        ) : (
+          <span className={labelClass}>{label}</span>
+        )}
         {action}
       </div>
-      {children}
+      {collapsible ? (
+        <div
+          className={cn(
+            "grid",
+            animate
+              ? "transition-[grid-template-rows] duration-200 ease-out"
+              : null,
+            collapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]",
+          )}
+        >
+          <div className="min-h-0 overflow-hidden">{children}</div>
+        </div>
+      ) : (
+        children
+      )}
     </div>
   );
 }
