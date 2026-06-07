@@ -62,6 +62,10 @@ export type FeedClaim = {
   evidence?: string;
   confidence?: number;
   severity?: FeedVerdictSeverity;
+  /** Who originally made the claim (from the ClaimReview `claimant`). */
+  claimant?: string;
+  /** When the claim was originally made, ms epoch (from `claimDate`). */
+  claimDate?: number;
   supportingPaperKeys?: string[];
 };
 
@@ -118,6 +122,8 @@ export type FeedItem = {
   tldrId?: string;
   url: string;
   imageUrl?: string;
+  /** Full reasoning text scraped from a claim's publisher review page. */
+  articleText?: string;
   provider: FeedProvider;
   sourceLabel: string;
   paperKey?: string;

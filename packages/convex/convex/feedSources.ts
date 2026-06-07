@@ -6,6 +6,7 @@ import {
   summarizeTimeline,
 } from "./agent/gdeltProvider";
 import { fetchScienceNews } from "./agent/newsProvider";
+import { fetchReviewPreview } from "./feedArticlePreview";
 
 const DAY_MS = 1000 * 60 * 60 * 24;
 
@@ -112,8 +113,13 @@ export const refreshScienceNews = internalAction({
       .slice(0, 10);
     const perSeed = Math.min(args.perSeed ?? NEWS_PER_SEED, 8);
 
+    // Gather deduped articles (capped) first so the body fetches can run
+    // concurrently afterwards.
     const seen = new Set<string>();
-    const items = [];
+    const collected: Array<{
+      article: Awaited<ReturnType<typeof fetchScienceNews>>[number];
+      topicLabel: string;
+    }> = [];
     for (const seed of NEWS_SEEDS) {
       const news = await fetchScienceNews(ctx, {
         query: seed.query,
@@ -124,30 +130,44 @@ export const refreshScienceNews = internalAction({
         const key = article.url.trim().toLowerCase();
         if (seen.has(key)) continue;
         seen.add(key);
-        items.push({
-          kind: "news" as const,
-          title: article.title,
-          summary: article.summary,
-          tldr: firstSentence(article.summary),
-          url: article.url,
-          imageUrl: article.imageUrl,
-          provider: "exa_news" as const,
-          sourceLabel: article.sourceLabel,
-          topics: [seed.label],
-          trendScore: 0,
-          publishedAt: article.publishedAt ?? now,
-          dedupeKey: `news:${article.url.slice(0, 200)}`,
-          lastSeenAt: now,
-          createdAt: now,
-        });
-        if (items.length >= NEWS_TOTAL_CAP) break;
+        collected.push({ article, topicLabel: seed.label });
+        if (collected.length >= NEWS_TOTAL_CAP) break;
       }
-      if (items.length >= NEWS_TOTAL_CAP) break;
+      if (collected.length >= NEWS_TOTAL_CAP) break;
     }
 
-    if (items.length === 0) {
+    if (collected.length === 0) {
       return { fetched: 0, inserted: 0, updated: 0 };
     }
+
+    // Read each article page for a clean full-text body (readability extractor),
+    // falling back to Exa's raw text when extraction yields too little.
+    const previews = await Promise.all(
+      collected.map(({ article }) => fetchReviewPreview(article.url)),
+    );
+
+    const items = collected.map(({ article, topicLabel }, index) => {
+      const preview = previews[index];
+      const articleText = preview.articleText ?? article.articleText;
+      return {
+        kind: "news" as const,
+        title: article.title,
+        summary: article.summary,
+        tldr: firstSentence(article.summary),
+        url: article.url,
+        imageUrl: article.imageUrl ?? preview.imageUrl,
+        ...(articleText ? { articleText } : {}),
+        provider: "exa_news" as const,
+        sourceLabel: article.sourceLabel,
+        topics: [topicLabel],
+        trendScore: 0,
+        publishedAt: article.publishedAt ?? now,
+        dedupeKey: `news:${article.url.slice(0, 200)}`,
+        lastSeenAt: now,
+        createdAt: now,
+      };
+    });
+
     const result: { inserted: number; updated: number } = await ctx.runMutation(
       internal.feed.upsertFeedItems,
       { items },

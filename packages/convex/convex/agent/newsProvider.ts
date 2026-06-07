@@ -1,6 +1,7 @@
 import Exa from "exa-js";
 import type { ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
+import { cleanPlainText } from "../feedArticlePreview";
 import { rateLimiter } from "../limits";
 
 // Exa news search on the SERVICE path (cron). Unlike `searchExaCandidates`,
@@ -11,6 +12,8 @@ export type ScienceNewsItem = {
   title: string;
   url: string;
   summary: string;
+  /** Full extracted article text for the news detail reader. */
+  articleText?: string;
   imageUrl?: string;
   publishedAt?: number;
   sourceLabel: string;
@@ -52,7 +55,7 @@ export async function fetchScienceNews(
       type: "auto",
       category: "news",
       startPublishedDate: args.startPublishedDate,
-      contents: { text: { maxCharacters: 1_200 }, summary: true },
+      contents: { text: { maxCharacters: 10_000 }, summary: true },
     });
     items = response.results
       .map((result): ScienceNewsItem | null => {
@@ -63,7 +66,8 @@ export async function fetchScienceNews(
         return {
           title: (result.title || url).trim(),
           url,
-          summary: summary.slice(0, 400),
+          summary: summary.slice(0, 1_200),
+          articleText: cleanPlainText(result.text ?? ""),
           imageUrl: result.image ?? undefined,
           publishedAt: result.publishedDate
             ? parseDateMs(result.publishedDate)

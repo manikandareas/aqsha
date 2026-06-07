@@ -37,6 +37,16 @@ const discoveryItemRefValidator = v.union(
   }),
 );
 
+// Shape a raw feedItems doc into the public FeedItem the frontend consumes:
+// strip the system `_creationTime` and surface the denormalized verdict as
+// `claim`. Shared by getFeed / getFeedItem / getRelatedFeedItems so every read
+// path returns an identically-shaped item.
+function shapeFeedItem(item: Doc<"feedItems">) {
+  const { _creationTime, ...rest } = item;
+  void _creationTime;
+  return { ...rest, claim: item.primaryClaim };
+}
+
 // ── Public: read the ranked, mixed-media feed ─────────────────────────────
 // Ranks across lanes with a recency + popularity + interest composite, joins
 // fact-check verdicts onto claim items, and annotates each item with a
@@ -108,11 +118,8 @@ export const getFeed = query({
 
     const result = [];
     for (const { item, interest } of ordered) {
-      const { _creationTime, ...rest } = item;
-      void _creationTime;
       result.push({
-        ...rest,
-        claim: item.primaryClaim,
+        ...shapeFeedItem(item),
         relevanceScore: Math.round(Math.min(1, interest.normalized) * 100),
         reason: reasonFor(item, interest, args.serendipity ?? false),
       });
@@ -143,6 +150,54 @@ export const getSavedItems = query({
       items.push({ ...rest, savedAt: row.createdAt });
     }
     return items;
+  },
+});
+
+// ── Public: a single feed item by id (powers the news/fact detail pages) ──
+// Returns null when missing; the detail page validates `kind` and renders an
+// empty state on mismatch.
+export const getFeedItem = query({
+  args: { feedItemId: v.string() },
+  handler: async (ctx, args) => {
+    await requireCurrentUser(ctx);
+    const id = ctx.db.normalizeId("feedItems", args.feedItemId);
+    if (!id) return null;
+    const item = await ctx.db.get("feedItems", id);
+    return item ? shapeFeedItem(item) : null;
+  },
+});
+
+// ── Public: same-kind related items for the detail-page "Discover more" rail ─
+// Ranks a recent same-kind pool by shared-topic overlap, then recency.
+export const getRelatedFeedItems = query({
+  args: { feedItemId: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    await requireCurrentUser(ctx);
+    const id = ctx.db.normalizeId("feedItems", args.feedItemId);
+    if (!id) return [];
+    const self = await ctx.db.get("feedItems", id);
+    if (!self) return [];
+    const limit = Math.min(args.limit ?? 6, 8);
+    const pool = await ctx.db
+      .query("feedItems")
+      .withIndex("by_kind_published", (q) => q.eq("kind", self.kind))
+      .order("desc")
+      .take(limit * 4);
+    const selfTopics = new Set(self.topics.map((topic) => topic.trim().toLowerCase()));
+    return pool
+      .filter((row) => row._id !== id)
+      .map((row) => ({
+        row,
+        overlap: row.topics.reduce(
+          (count, topic) =>
+            count + (selfTopics.has(topic.trim().toLowerCase()) ? 1 : 0),
+          0,
+        ),
+        recency: row.publishedAt ?? row.lastSeenAt,
+      }))
+      .sort((a, b) => b.overlap - a.overlap || b.recency - a.recency)
+      .slice(0, limit)
+      .map((entry) => shapeFeedItem(entry.row));
   },
 });
 

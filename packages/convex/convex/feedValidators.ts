@@ -47,6 +47,8 @@ export const feedClaimSummaryValidator = v.object({
   severity: v.optional(
     v.union(v.literal("info"), v.literal("warning"), v.literal("high")),
   ),
+  claimant: v.optional(v.string()),
+  claimDate: v.optional(v.number()),
   supportingPaperKeys: v.optional(v.array(v.string())),
 });
 
@@ -61,6 +63,9 @@ export const feedItemFields = {
   titleId: v.optional(v.string()),
   url: v.string(),
   imageUrl: v.optional(v.string()),
+  // Full reasoning text scraped from a claim's publisher review page (the
+  // fact-check API gives no body). Optional + additive; older rows omit it.
+  articleText: v.optional(v.string()),
   provider: feedProviderValidator,
   sourceLabel: v.string(),
   // Resolves to the shared `explorePapers` cache so feed papers reuse the

@@ -77,6 +77,7 @@ import type * as exploreModel from "../exploreModel.js";
 import type * as exploreValidators from "../exploreValidators.js";
 import type * as feed from "../feed.js";
 import type * as feedAi from "../feedAi.js";
+import type * as feedArticlePreview from "../feedArticlePreview.js";
 import type * as feedBahasa from "../feedBahasa.js";
 import type * as feedClaims from "../feedClaims.js";
 import type * as feedConsensus from "../feedConsensus.js";
@@ -183,6 +184,7 @@ declare const fullApi: ApiFromModules<{
   exploreValidators: typeof exploreValidators;
   feed: typeof feed;
   feedAi: typeof feedAi;
+  feedArticlePreview: typeof feedArticlePreview;
   feedBahasa: typeof feedBahasa;
   feedClaims: typeof feedClaims;
   feedConsensus: typeof feedConsensus;

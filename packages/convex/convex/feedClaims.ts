@@ -8,6 +8,7 @@ import {
 import { feedVerdictValidator } from "./feedValidators";
 import { candidatesToExplorePapers } from "./exploreModel";
 import { fetchOpenAlexWorksService } from "./feedOpenAlex";
+import { fetchReviewPreview, type ReviewPreview } from "./feedArticlePreview";
 import {
   deriveClaimTopics,
   searchFactCheckClaims,
@@ -26,6 +27,8 @@ const claimInputValidator = v.object({
   summary: v.string(),
   tldr: v.optional(v.string()),
   url: v.string(),
+  imageUrl: v.optional(v.string()),
+  articleText: v.optional(v.string()),
   sourceLabel: v.string(),
   topics: v.array(v.string()),
   trendScore: v.number(),
@@ -45,6 +48,8 @@ const claimInputValidator = v.object({
   severity: v.optional(
     v.union(v.literal("info"), v.literal("warning"), v.literal("high")),
   ),
+  claimant: v.optional(v.string()),
+  claimDate: v.optional(v.number()),
   claimReviewJson: v.optional(v.string()),
   supportingPaperKeys: v.optional(v.array(v.string())),
 });
@@ -76,6 +81,12 @@ export const upsertClaimItems = internalMutation({
         publishedAt: input.publishedAt,
         dedupeKey: input.dedupeKey,
         lastSeenAt: now,
+        // Only set when present so a transient fetch failure never wipes the
+        // thumbnail / article body captured on an earlier refresh.
+        ...(input.imageUrl !== undefined ? { imageUrl: input.imageUrl } : {}),
+        ...(input.articleText !== undefined
+          ? { articleText: input.articleText }
+          : {}),
       };
       const primaryClaim = {
         claim: input.claim,
@@ -89,6 +100,8 @@ export const upsertClaimItems = internalMutation({
         ...(input.evidence !== undefined ? { evidence: input.evidence } : {}),
         ...(input.confidence !== undefined ? { confidence: input.confidence } : {}),
         ...(input.severity !== undefined ? { severity: input.severity } : {}),
+        ...(input.claimant !== undefined ? { claimant: input.claimant } : {}),
+        ...(input.claimDate !== undefined ? { claimDate: input.claimDate } : {}),
         ...(input.supportingPaperKeys !== undefined
           ? { supportingPaperKeys: input.supportingPaperKeys }
           : {}),
@@ -162,6 +175,8 @@ export const refreshFactCheckClaims = internalAction({
     fetched: v.number(),
     inserted: v.number(),
     updated: v.number(),
+    withImage: v.number(),
+    withText: v.number(),
   }),
   handler: async (ctx, args) => {
     const maxAgeDays = args.maxAgeDays ?? 30;
@@ -188,8 +203,19 @@ export const refreshFactCheckClaims = internalAction({
     }
 
     if (claims.length === 0) {
-      return { fetched: 0, inserted: 0, updated: 0 };
+      return { fetched: 0, inserted: 0, updated: 0, withImage: 0, withText: 0 };
     }
+
+    // Read each publisher's review page once to derive both a thumbnail and the
+    // full reasoning text (the fact-check API gives neither). Concurrent +
+    // best-effort; misses fall back to the verdict panel / review-title.
+    const previews = await Promise.all(
+      claims.map((claim) =>
+        claim.reviewUrl
+          ? fetchReviewPreview(claim.reviewUrl)
+          : Promise.resolve({} as ReviewPreview),
+      ),
+    );
 
     // Ground a bounded subset against global academic literature so the
     // evidence drawer can show supporting papers next to the human verdict.
@@ -213,6 +239,8 @@ export const refreshFactCheckClaims = internalAction({
         summary: claim.reviewTitle ?? claim.text,
         tldr,
         url: reviewUrl,
+        imageUrl: previews[i].imageUrl,
+        articleText: previews[i].articleText,
         sourceLabel: claim.publisher ?? "Cek Fakta",
         topics: deriveClaimTopics(claim.text),
         // Claims are ranked by recency in getFeed; keep trendScore at 0.
@@ -229,6 +257,8 @@ export const refreshFactCheckClaims = internalAction({
         reviewedAt: claim.reviewedAt,
         evidence: claim.reviewTitle,
         severity: claim.severity,
+        claimant: claim.claimant,
+        claimDate: parseDateMs(claim.claimDate),
         claimReviewJson: claim.claimReviewJson,
         supportingPaperKeys,
       });
@@ -239,7 +269,9 @@ export const refreshFactCheckClaims = internalAction({
       { items: inputs },
     );
 
-    return { fetched: claims.length, ...result };
+    const withImage = previews.filter((preview) => preview.imageUrl).length;
+    const withText = previews.filter((preview) => preview.articleText).length;
+    return { fetched: claims.length, ...result, withImage, withText };
   },
 });
 
