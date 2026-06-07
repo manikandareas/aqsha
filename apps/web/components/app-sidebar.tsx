@@ -28,7 +28,7 @@ import {
   PanelLeftIcon,
   PlusIcon,
   SearchIcon,
-  SparklesIcon,
+  SettingsIcon,
   TrendingUpIcon,
 } from "@aqsha/ui/icons";
 import Link from "next/link";
@@ -107,7 +107,6 @@ export function AppSidebar({
   const isHomeActive = pathname === "/app" && !selectedThreadId;
   const isWorkspaceRoute = pathname.startsWith("/app/workspaces");
   const isExploreActive = pathname.startsWith("/app/explore");
-  const isFeedActive = pathname.startsWith("/app/feed");
   const showWorkspaceSection =
     sortedWorkspaces.length > 0 || Boolean(createWorkspace);
   const showThreadSection = sortedThreads.length > 0 || Boolean(onCreateThread);
@@ -214,12 +213,6 @@ export function AppSidebar({
               label="Jelajahi"
               active={isExploreActive}
             />
-            <PrimaryNavLink
-              href="/app/feed"
-              icon={SparklesIcon}
-              label="Feed"
-              active={isFeedActive}
-            />
           </SidebarMenu>
         </SidebarHeader>
 
@@ -313,6 +306,38 @@ export function AppSidebar({
                     Workspace baru
                   </CommandItem>
                 ) : null}
+              </CommandGroup>
+              <CommandGroup heading="Buka">
+                <CommandItem
+                  value="buka-beranda"
+                  onSelect={() => setCommandOpen(false)}
+                  asChild
+                >
+                  <Link href="/app">
+                    <HomeIcon className="size-4" />
+                    Beranda
+                  </Link>
+                </CommandItem>
+                <CommandItem
+                  value="buka-jelajahi"
+                  onSelect={() => setCommandOpen(false)}
+                  asChild
+                >
+                  <Link href="/app/explore">
+                    <TrendingUpIcon className="size-4" />
+                    Jelajahi
+                  </Link>
+                </CommandItem>
+                <CommandItem
+                  value="buka-pengaturan"
+                  onSelect={() => setCommandOpen(false)}
+                  asChild
+                >
+                  <Link href="/app/settings">
+                    <SettingsIcon className="size-4" />
+                    Pengaturan
+                  </Link>
+                </CommandItem>
               </CommandGroup>
               {sortedWorkspaces.length > 0 ? (
                 <CommandGroup heading="Workspaces">

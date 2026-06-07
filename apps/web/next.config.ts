@@ -12,6 +12,17 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       {
+        // Feed merged into the unified discovery surface (feed-first default).
+        source: "/app/feed",
+        destination: "/app/explore?view=brief",
+        permanent: false,
+      },
+      {
+        source: "/feed",
+        destination: "/app/explore?view=brief",
+        permanent: false,
+      },
+      {
         source: "/explore",
         destination: "/app/explore",
         permanent: false,
