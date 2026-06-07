@@ -2,13 +2,12 @@
 
 import { api } from "@aqsha/convex/api";
 import type { ExplorePaper } from "@aqsha/convex/explore";
-import type { FeedItem, FeedItemKind } from "@aqsha/convex/feed";
+import type { FeedItem } from "@aqsha/convex/feed";
 import { CheckCircle2Icon, SparklesIcon } from "@aqsha/ui/icons";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ExploreSurfaceHeader } from "@/features/explore/components/explore-surface-header";
-import { EvidenceDrawer } from "@/features/feed/components/evidence-drawer";
 import { IdeaDialog, type IdeaSeed } from "@/features/feed/components/idea-dialog";
 import { WorkspacePickerDialog } from "@/features/workspaces/components/workspace-picker-dialog";
 import { WorkspaceShell } from "@/features/workspaces/components/workspace-shell";
@@ -22,15 +21,19 @@ import {
   useConvexQueryData,
 } from "@/lib/convex-query";
 import {
+  DiscoveryClaimCard,
+  DiscoveryFeatureCard,
   DiscoveryHeroCard,
   DiscoveryStandardCard,
   type DiscoveryCardHandlers,
   type DiscoveryFeedItem,
 } from "../components/discovery-item-card";
+import { DiscoveryListItem } from "../components/discovery-list-item";
 import { DiscoveryAside } from "../components/discovery-aside";
 import { DiscoveryToolbar } from "../components/discovery-toolbar";
 import { VERDICT_STYLE } from "../components/discovery-visuals";
 import { useDiscoveryNav, rangeToFromYear } from "../hooks/use-discovery-nav";
+import { useStartResearch } from "../hooks/use-start-research";
 import { deriveTopTopics } from "../utils/discovery-format";
 
 const emptyPapers: ExplorePaper[] = [];
@@ -42,12 +45,11 @@ export function DiscoveryPage() {
 
   const [nav, setNav] = useDiscoveryNav();
 
-  // Feed (reactive) drives Brief + Cek fakta; Papers (action) is handled below.
+  // Feed (reactive) drives Brief (all kinds, incl. claims); Papers (action) below.
   const feedArgs = useMemo(() => {
     if (nav.view === "papers") return "skip" as const;
-    const base: { kinds?: FeedItemKind[]; serendipity?: boolean } = {};
-    if (nav.view === "cek-fakta") base.kinds = ["claim"];
-    if (nav.view === "brief" && nav.serendipity) base.serendipity = true;
+    const base: { serendipity?: boolean } = {};
+    if (nav.serendipity) base.serendipity = true;
     return base;
   }, [nav.view, nav.serendipity]);
 
@@ -68,7 +70,6 @@ export function DiscoveryPage() {
   );
 
   // Mutations / actions.
-  const startThread = useConvexMutationFn(api.agent.messages.startThread);
   const saveDiscoveryItem = useConvexMutationFn(api.feed.saveDiscoveryItem);
   const unsaveDiscoveryItem = useConvexMutationFn(api.feed.unsaveDiscoveryItem);
   const hideDiscoveryItem = useConvexMutationFn(api.feed.hideDiscoveryItem);
@@ -77,16 +78,18 @@ export function DiscoveryPage() {
   );
   const createUrl = useConvexMutationFn(api.artifacts.createUrl);
   const explainRelevance = useConvexActionFn(api.feedAi.explainRelevance);
+  const {
+    startResearch,
+    busyKey,
+    error: researchError,
+  } = useStartResearch();
 
   // Local UI state (keyed by the stable surrogate id `sid`).
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
   const [savedOverride, setSavedOverride] = useState<Map<string, boolean>>(new Map());
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [relevanceNotes, setRelevanceNotes] = useState<Map<string, string>>(new Map());
   const [whyLoading, setWhyLoading] = useState<Set<string>>(new Set());
-  const [evidenceItem, setEvidenceItem] = useState<DiscoveryFeedItem | null>(null);
-  const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [ideaSeed, setIdeaSeed] = useState<IdeaSeed | null>(null);
   const [ideaOpen, setIdeaOpen] = useState(false);
   const [workspaceItem, setWorkspaceItem] = useState<DiscoveryFeedItem | null>(null);
@@ -141,40 +144,6 @@ export function DiscoveryPage() {
     return recordDiscoveryInteraction({ itemRef: item.itemRef, kind });
   };
 
-  const startResearch = async (content: string, item?: DiscoveryFeedItem) => {
-    if (busyId) return;
-    setBusyId(item ? sid(item) : "idea");
-    setError(null);
-    try {
-      const result = await startThread({
-        content,
-        agentKind: "pro",
-        commandId: "deep-research",
-      });
-      if (item) {
-        void recordItemInteraction(item, "research").catch(() => {});
-      }
-      if (result?.ok && "threadId" in result && result.threadId) {
-        router.push(`/app/threads/${result.threadId}`);
-        return;
-      }
-      const rateLimited =
-        !!result &&
-        !result.ok &&
-        "reason" in result &&
-        result.reason === "rate_limited";
-      setError(
-        rateLimited
-          ? "Batas pengiriman tercapai. Coba lagi sebentar lagi."
-          : "Riset tidak bisa dimulai sekarang. Coba lagi nanti.",
-      );
-      setBusyId(null);
-    } catch (caught) {
-      setError(readableConvexErrorMessage(caught, "Gagal memulai riset."));
-      setBusyId(null);
-    }
-  };
-
   const handleSave = async (item: DiscoveryFeedItem) => {
     const id = sid(item);
     const next = !isSaved(item);
@@ -184,7 +153,7 @@ export function DiscoveryPage() {
       else await unsaveDiscoveryItem({ itemRef: item.itemRef });
     } catch (caught) {
       setSavedOverride((prev) => new Map(prev).set(id, !next));
-      setError(readableConvexErrorMessage(caught, "Gagal menyimpan. Coba lagi."));
+      setLocalError(readableConvexErrorMessage(caught, "Gagal menyimpan. Coba lagi."));
     }
   };
 
@@ -225,7 +194,13 @@ export function DiscoveryPage() {
   };
 
   const handlers: DiscoveryCardHandlers = {
-    onTeliti: (item) => void startResearch(buildSeed(item), item),
+    onTeliti: (item) =>
+      void startResearch(buildSeed(item), {
+        busyKey: sid(item),
+        onSuccess: async () => {
+          await recordItemInteraction(item, "research").catch(() => {});
+        },
+      }),
     onSave: (item) => void handleSave(item),
     onSaveToWorkspace: (item) => setWorkspaceItem(item),
     onHide: (item) => {
@@ -233,9 +208,9 @@ export function DiscoveryPage() {
       void hideDiscoveryItem({ itemRef: item.itemRef }).catch(() => {});
     },
     onOpenEvidence: (item) => {
-      setEvidenceItem(item);
-      setEvidenceOpen(true);
+      if (!item._id) return;
       void recordItemInteraction(item, "open_evidence").catch(() => {});
+      router.push(`/app/explore/f/${item._id}`);
     },
     onGenerateIdeas: (item) => {
       setIdeaSeed({
@@ -248,21 +223,30 @@ export function DiscoveryPage() {
     onWhyRelevant: (item) => void handleWhyRelevant(item),
   };
 
-  const renderStandard = (item: DiscoveryFeedItem) => (
-    <DiscoveryStandardCard
-      item={item}
-      lang={nav.lang}
-      saved={isSaved(item)}
-      busy={busyId === sid(item)}
-      relevanceNote={relevanceNotes.get(sid(item))}
-      whyLoading={whyLoading.has(sid(item))}
-      handlers={handlers}
-    />
-  );
+  const renderStandard = (item: DiscoveryFeedItem) => {
+    const shared = {
+      item,
+      lang: nav.lang,
+      saved: isSaved(item),
+      busy: busyKey === sid(item),
+      relevanceNote: relevanceNotes.get(sid(item)),
+      whyLoading: whyLoading.has(sid(item)),
+      handlers,
+    };
+    // Claim cards use a lean, verdict-forward layout in the Brief masonry.
+    return item.kind === "claim" ? (
+      <DiscoveryClaimCard {...shared} />
+    ) : (
+      <DiscoveryStandardCard {...shared} />
+    );
+  };
 
   const isBrief = nav.view === "brief";
   const hero = isBrief ? items[0] : undefined;
-  const masonryItems = isBrief ? items.slice(1) : items;
+  const briefRows = useMemo(
+    () => (isBrief ? buildBriefRows(items.slice(1)) : []),
+    [isBrief, items],
+  );
 
   return (
     <WorkspaceShell
@@ -299,9 +283,9 @@ export function DiscoveryPage() {
             isSearching={papersQuery.isFetching}
           />
 
-          {error || viewError ? (
+          {localError || researchError || viewError ? (
             <div className="mt-4 max-w-[760px] rounded-[7px] border border-destructive/20 bg-destructive/10 px-4 py-3 text-[13px] font-medium text-destructive">
-              {error ?? viewError}
+              {localError ?? researchError ?? viewError}
             </div>
           ) : null}
 
@@ -311,16 +295,44 @@ export function DiscoveryPage() {
                 <DiscoverySkeleton />
               ) : items.length === 0 ? (
                 <DiscoveryEmptyState view={nav.view} />
-              ) : (
-                <div className="space-y-4">
+              ) : isBrief ? (
+                <div className="space-y-8">
                   {hero ? renderHeroCard(hero) : null}
-                  {masonryItems.length > 0 ? (
-                    <div className="columns-1 gap-4 sm:columns-2 xl:columns-3 [&>*]:mb-4 [&>*]:break-inside-avoid">
-                      {masonryItems.map((item) => (
-                        <div key={sid(item)}>{renderStandard(item)}</div>
-                      ))}
-                    </div>
-                  ) : null}
+                  {briefRows.map((row) =>
+                    row.type === "grid" ? (
+                      <div
+                        key={row.key}
+                        className="grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-2 xl:grid-cols-3"
+                      >
+                        {row.items.map((item) => (
+                          <div key={sid(item)}>{renderStandard(item)}</div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div key={row.key} className="border-t border-border/60 pt-8">
+                        {renderFeatureCard(row.item, row.side)}
+                      </div>
+                    ),
+                  )}
+                  <CaughtUp />
+                </div>
+              ) : (
+                <div>
+                  <div className="divide-y divide-border/60">
+                    {items.map((item, index) => (
+                      <DiscoveryListItem
+                        key={sid(item)}
+                        item={item}
+                        index={index}
+                        lang={nav.lang}
+                        saved={isSaved(item)}
+                        busy={busyKey === sid(item)}
+                        relevanceNote={relevanceNotes.get(sid(item))}
+                        whyLoading={whyLoading.has(sid(item))}
+                        handlers={handlers}
+                      />
+                    ))}
+                  </div>
                   {nav.view !== "papers" ? <CaughtUp /> : null}
                 </div>
               )}
@@ -337,8 +349,7 @@ export function DiscoveryPage() {
                   setIdeaOpen(true);
                 }}
                 onOpenClaim={(item) => {
-                  setEvidenceItem(item);
-                  setEvidenceOpen(true);
+                  if (item._id) router.push(`/app/explore/f/${item._id}`);
                 }}
               />
             </aside>
@@ -346,27 +357,15 @@ export function DiscoveryPage() {
         </div>
       </main>
 
-      <EvidenceDrawer
-        item={toFeedItem(evidenceItem)}
-        open={evidenceOpen}
-        onOpenChange={setEvidenceOpen}
-        onTeliti={() => {
-          if (!evidenceItem) return;
-          setEvidenceOpen(false);
-          void startResearch(buildSeed(evidenceItem), evidenceItem);
-        }}
-        busyTeliti={evidenceItem ? busyId === sid(evidenceItem) : false}
-      />
-
       <IdeaDialog
         seed={ideaSeed}
         open={ideaOpen}
         onOpenChange={setIdeaOpen}
         onStartResearch={(questionText) => {
           setIdeaOpen(false);
-          void startResearch(questionText);
+          void startResearch(questionText, { busyKey: "idea" });
         }}
-        busy={busyId === "idea"}
+        busy={busyKey === "idea"}
       />
 
       <WorkspacePickerDialog
@@ -385,13 +384,71 @@ export function DiscoveryPage() {
         item={item}
         lang={nav.lang}
         saved={isSaved(item)}
-        busy={busyId === sid(item)}
+        busy={busyKey === sid(item)}
         relevanceNote={relevanceNotes.get(sid(item))}
         whyLoading={whyLoading.has(sid(item))}
         handlers={handlers}
       />
     );
   }
+
+  function renderFeatureCard(item: DiscoveryFeedItem, side: "left" | "right") {
+    return (
+      <DiscoveryFeatureCard
+        item={item}
+        imageSide={side}
+        lang={nav.lang}
+        saved={isSaved(item)}
+        busy={busyKey === sid(item)}
+        relevanceNote={relevanceNotes.get(sid(item))}
+        whyLoading={whyLoading.has(sid(item))}
+        handlers={handlers}
+      />
+    );
+  }
+}
+
+type BriefRow =
+  | { type: "grid"; key: string; items: DiscoveryFeedItem[] }
+  | {
+      type: "feature";
+      key: string;
+      item: DiscoveryFeedItem;
+      side: "left" | "right";
+    };
+
+// Lay the Brief feed out as an editorial mosaic: repeating units of a 3-up
+// standard grid followed by two full-width spotlights (alternating image side),
+// matching the magazine rhythm of the redesign reference.
+function buildBriefRows(items: DiscoveryFeedItem[]): BriefRow[] {
+  const rows: BriefRow[] = [];
+  let bucket: DiscoveryFeedItem[] = [];
+  let featureCount = 0;
+
+  const flush = () => {
+    if (bucket.length > 0) {
+      rows.push({ type: "grid", key: `grid-${sid(bucket[0])}`, items: bucket });
+      bucket = [];
+    }
+  };
+
+  items.forEach((item, index) => {
+    if (index % 5 < 3) {
+      bucket.push(item);
+    } else {
+      flush();
+      rows.push({
+        type: "feature",
+        key: `feature-${sid(item)}`,
+        item,
+        side: featureCount % 2 === 0 ? "right" : "left",
+      });
+      featureCount += 1;
+    }
+  });
+  flush();
+
+  return rows;
 }
 
 function sid(item: DiscoveryFeedItem): string {
@@ -432,15 +489,6 @@ function paperToDiscoveryItem(paper: ExplorePaper): DiscoveryFeedItem {
       : paper.year
         ? Date.UTC(paper.year, 0, 1)
         : undefined,
-  };
-}
-
-function toFeedItem(item: DiscoveryFeedItem | null): FeedItem | null {
-  if (!item) return null;
-  if (!item._id) return null;
-  return {
-    ...item,
-    _id: item._id,
   };
 }
 
@@ -499,16 +547,24 @@ function DiscoveryEmptyState({ view }: { view: string }) {
 
 function DiscoverySkeleton() {
   return (
-    <div className="space-y-4">
-      <Skeleton className="h-56 w-full rounded-[14px] bg-muted/60" />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {Array.from({ length: 3 }).map((_, index) => (
-          <Skeleton key={index} className="h-64 w-full rounded-[14px] bg-muted/50" />
-        ))}
+    <div className="space-y-8">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,40%)] lg:gap-7">
+        <div className="order-2 flex flex-col justify-center gap-3 lg:order-1">
+          <Skeleton className="h-3 w-28 rounded-full bg-muted/50" />
+          <Skeleton className="h-8 w-[90%] rounded-[8px] bg-muted/60" />
+          <Skeleton className="h-8 w-[70%] rounded-[8px] bg-muted/60" />
+          <Skeleton className="mt-1 h-4 w-full rounded-full bg-muted/40" />
+          <Skeleton className="h-4 w-[85%] rounded-full bg-muted/40" />
+        </div>
+        <Skeleton className="order-1 h-52 w-full rounded-[12px] bg-muted/60 sm:h-64 lg:order-2 lg:h-full" />
       </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {Array.from({ length: 2 }).map((_, index) => (
-          <Skeleton key={index} className="h-56 w-full rounded-[14px] bg-muted/40" />
+      <div className="grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div key={index} className="flex flex-col gap-3">
+            <Skeleton className="aspect-[16/10] w-full rounded-[12px] bg-muted/50" />
+            <Skeleton className="h-5 w-[88%] rounded-[6px] bg-muted/50" />
+            <Skeleton className="h-4 w-1/2 rounded-full bg-muted/40" />
+          </div>
         ))}
       </div>
     </div>

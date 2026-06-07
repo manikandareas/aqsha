@@ -21,7 +21,7 @@ type VerdictStyle = {
 
 export const VERDICT_STYLE: Record<FeedVerdict, VerdictStyle> = {
   supported: {
-    label: "Terbukti",
+    label: "Fakta",
     icon: CheckCircle2Icon,
     className: "bg-mint-soft text-mint-foreground border-mint-soft-border",
     accent: "bg-mint",
@@ -45,7 +45,7 @@ export const VERDICT_STYLE: Record<FeedVerdict, VerdictStyle> = {
     accent: "bg-muted-foreground/40",
   },
   contradicted: {
-    label: "Keliru / Hoaks",
+    label: "Hoaks",
     icon: XCircleIcon,
     className: "bg-destructive/10 text-destructive border-destructive/25",
     accent: "bg-destructive",

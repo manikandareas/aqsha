@@ -25,7 +25,6 @@ import {
 const VIEW_LABELS: Array<{ value: DiscoveryView; label: string }> = [
   { value: "brief", label: "Brief" },
   { value: "papers", label: "Papers" },
-  { value: "cek-fakta", label: "Cek fakta" },
 ];
 
 export function DiscoveryToolbar({

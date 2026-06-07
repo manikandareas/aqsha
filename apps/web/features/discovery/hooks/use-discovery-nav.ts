@@ -10,7 +10,7 @@ import {
 // One unified discovery surface. The view + filters live in the URL so they
 // are deep-linkable and back-button friendly (same nuqs idiom as the workspace
 // library). `brief` is the default → the feed shows first on entry.
-export const discoveryViews = ["brief", "papers", "cek-fakta"] as const;
+export const discoveryViews = ["brief", "papers"] as const;
 export type DiscoveryView = (typeof discoveryViews)[number];
 
 export const discoveryRanges = ["all", "year", "threeYears", "fiveYears"] as const;

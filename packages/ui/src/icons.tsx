@@ -38,6 +38,7 @@ import {
   Download01Icon,
   ExpandParagraphIcon as HugeExpandParagraphIcon,
   ExternalLinkIcon as HugeExternalLinkIcon,
+  FavouriteIcon,
   File01Icon,
   FileDownloadIcon,
   FileScriptIcon,
@@ -137,6 +138,7 @@ export const ChevronsUpDownIcon = createIcon(ChevronsDownUpIcon);
 export const Circle = createIcon(HugeCircleIcon);
 export const CircleIcon = createIcon(HugeCircleIcon);
 export const Clock3 = createIcon(Clock03Icon);
+export const ClockIcon = createIcon(Clock03Icon);
 export const CompassIcon = createIcon(HugeCompassIcon);
 export const Code2 = createIcon(CodeXmlIcon);
 export const Code2Icon = createIcon(CodeXmlIcon);
@@ -159,6 +161,7 @@ export const GaugeIcon = createIcon(HugeGaugeIcon);
 export const GitBranch = createIcon(HugeGitBranchIcon);
 export const GitBranchIcon = createIcon(HugeGitBranchIcon);
 export const Handshake = createIcon(HugeHandshakeIcon);
+export const HeartIcon = createIcon(FavouriteIcon);
 export const HelpCircleIcon = createIcon(HugeHelpCircleIcon);
 export const HomeIcon = createIcon(Home01Icon);
 export const ImageIcon = createIcon(Image01Icon);

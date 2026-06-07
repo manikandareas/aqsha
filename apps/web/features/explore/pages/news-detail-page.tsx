@@ -1,0 +1,157 @@
+"use client";
+
+import { api } from "@aqsha/convex/api";
+import type { FeedItem } from "@aqsha/convex/feed";
+import {
+  BookmarkIcon,
+  CheckIcon,
+  ClockIcon,
+  Loader2Icon,
+  SparklesIcon,
+} from "@aqsha/ui/icons";
+import { useState } from "react";
+import { topicBadgeClass } from "@/features/discovery/utils/discovery-format";
+import { useStartResearch } from "@/features/discovery/hooks/use-start-research";
+import { useConvexMutationFn, useConvexQueryData } from "@/lib/convex-query";
+import { cn } from "@/lib/utils";
+import {
+  ReaderArticleBody,
+  ReaderHeroMedia,
+  ReaderRelatedGrid,
+  ReaderSourceCard,
+} from "../components/reader-bits";
+import { relativeTime } from "../utils/reader-format";
+import {
+  ReaderDetailShell,
+  ReaderDetailSkeleton,
+  ReaderDetailState,
+} from "./reader-detail-shell";
+
+export function NewsDetailPage({ feedItemId }: { feedItemId: string }) {
+  const data = useConvexQueryData(
+    api.feed.getFeedItem,
+    feedItemId ? { feedItemId } : "skip",
+  );
+
+  return (
+    <ReaderDetailShell breadcrumbLabel="Berita">
+      {data === undefined ? (
+        <ReaderDetailSkeleton />
+      ) : !data || data.kind !== "news" ? (
+        <ReaderDetailState
+          title="Berita tidak tersedia."
+          message="Item ini tidak ditemukan atau bukan berita. Coba kembali ke Jelajahi."
+        />
+      ) : (
+        <NewsDetailContent item={data as FeedItem} />
+      )}
+    </ReaderDetailShell>
+  );
+}
+
+function NewsDetailContent({ item }: { item: FeedItem }) {
+  const title = item.titleId ?? item.title;
+  const lead = item.tldrId ?? item.tldr ?? item.summary;
+  const body = item.articleText ?? item.summary;
+  const showBody = Boolean(body) && body !== lead;
+  const time = relativeTime(item.publishedAt, "id");
+
+  const related = useConvexQueryData(api.feed.getRelatedFeedItems, {
+    feedItemId: item._id,
+    limit: 8,
+  });
+  const { startResearch, busy, error } = useStartResearch();
+  const saveItem = useConvexMutationFn(api.feed.saveItem);
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = async () => {
+    if (saved) return;
+    setSaved(true);
+    try {
+      await saveItem({ feedItemId: item._id });
+    } catch {
+      setSaved(false);
+    }
+  };
+
+  const seed = `${title}\n\n${body}\n\nSumber: ${item.url}`;
+
+  return (
+    <article className="min-w-0">
+      <h1 className="font-heading text-[28px] font-bold leading-[1.12] tracking-tight text-foreground sm:text-[36px]">
+        {title}
+      </h1>
+
+      {lead ? (
+        <p className="mt-4 text-[16px] leading-7 text-ink-soft">{lead}</p>
+      ) : null}
+
+      <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <ReaderSourceCard url={item.url} label={item.sourceLabel} />
+        {time ? (
+          <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
+            <ClockIcon className="size-3.5" /> Diterbitkan {time}
+          </span>
+        ) : null}
+      </div>
+
+      <ReaderHeroMedia
+        imageUrl={item.imageUrl}
+        title={title}
+        className="mt-6"
+      />
+
+      {showBody ? <ReaderArticleBody text={body} className="mt-7" /> : null}
+
+      {item.topics.length > 0 ? (
+        <div className="mt-6 flex flex-wrap gap-2">
+          {item.topics.slice(0, 6).map((topic) => (
+            <span
+              key={topic}
+              className={cn(
+                "inline-flex h-6 items-center rounded-[5px] px-2 text-[11px] font-semibold leading-none",
+                topicBadgeClass(topic),
+              )}
+            >
+              {topic}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="mt-7 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => void startResearch(seed)}
+          disabled={busy}
+          className="inline-flex h-9 items-center gap-1.5 rounded-full bg-primary px-4 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary-hover disabled:opacity-60"
+        >
+          {busy ? (
+            <Loader2Icon className="size-4 animate-spin" />
+          ) : (
+            <SparklesIcon className="size-4" />
+          )}
+          Teliti ini
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleSave()}
+          disabled={saved}
+          className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border px-4 text-[13px] font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-60"
+        >
+          {saved ? (
+            <CheckIcon className="size-4" />
+          ) : (
+            <BookmarkIcon className="size-4" />
+          )}
+          {saved ? "Tersimpan" : "Simpan"}
+        </button>
+      </div>
+      {error ? (
+        <p className="mt-2 text-[12.5px] font-medium text-destructive">{error}</p>
+      ) : null}
+
+      <ReaderRelatedGrid items={(related ?? []) as FeedItem[]} />
+    </article>
+  );
+}
