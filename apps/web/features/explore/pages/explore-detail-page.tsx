@@ -22,7 +22,10 @@ import { WorkspacePickerDialog } from "@/features/workspaces/components/workspac
 import { WorkspaceShell } from "@/features/workspaces/components/workspace-shell";
 import { useWorkspaceIndexData } from "@/features/workspaces/api/use-workspaces-data";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
-import { useConvexMutationState, useConvexQuery } from "@/lib/convex-query";
+import {
+  useConvexActionQueryWithKey,
+  useConvexMutationState,
+} from "@/lib/convex-query";
 import { toWorkspaceId } from "@/lib/convex-refs";
 import { formatCitation, type CitationFormat } from "../utils/citation";
 import { decodePaperRef } from "../utils/paper-ref";
@@ -37,10 +40,14 @@ const citationFormats: Array<{ value: CitationFormat; label: string }> = [
 export function ExploreDetailPage({ paperRef }: { paperRef: string }) {
   const shellData = useWorkspaceIndexData();
   const paperKey = safeDecodePaperRef(paperRef);
-  const paperQuery = useConvexQuery(
-    api.explore.getPaper,
+  const paperQuery = useConvexActionQueryWithKey(
+    api.explore.getOrFetchPaper,
+    ["explorePaperDetail", paperKey],
     paperKey ? { key: paperKey } : "skip",
   );
+  const paperError = paperQuery.error
+    ? readableConvexErrorMessage(paperQuery.error, "Paper gagal dimuat.")
+    : null;
 
   return (
     <WorkspaceShell
@@ -53,22 +60,22 @@ export function ExploreDetailPage({ paperRef }: { paperRef: string }) {
       <main className="min-h-svh bg-background text-foreground">
         <ExploreSurfaceHeader
           breadcrumbs={[
-            { label: "Explore", href: "/app/explore" },
+            { label: "Jelajahi", href: "/app/explore" },
             { label: "Paper" },
           ]}
         />
         <div className="mx-auto grid w-full max-w-[1080px] gap-8 px-5 pb-12 pt-4 sm:px-8 lg:grid-cols-[minmax(0,700px)_260px] lg:gap-10 lg:px-10">
           {paperQuery.isLoading ? (
             <ExploreDetailSkeleton />
-          ) : paperQuery.error ? (
+          ) : paperError ? (
             <ExploreDetailState
               title="Paper gagal dimuat."
-              message={readableConvexErrorMessage(paperQuery.error, "Paper gagal dimuat.")}
+              message={paperError}
             />
           ) : !paperKey || !paperQuery.data ? (
             <ExploreDetailState
               title="Paper tidak tersedia."
-              message="Buka paper dari Explore terlebih dahulu agar detail tersimpan untuk akun ini."
+              message="Paper ini tidak dapat ditemukan. Coba cari lewat Jelajahi."
             />
           ) : (
             <ExploreDetailContent paper={paperQuery.data} />

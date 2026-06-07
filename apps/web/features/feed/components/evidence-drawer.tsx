@@ -21,7 +21,7 @@ import { encodePaperRef } from "@/features/explore/utils/paper-ref";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
 import { useConvexActionFn, useConvexQueryData } from "@/lib/convex-query";
 import { cn } from "@/lib/utils";
-import { VerdictBadge } from "./feed-visuals";
+import { VerdictBadge } from "@/features/discovery/components/discovery-visuals";
 
 export function EvidenceDrawer({
   item,

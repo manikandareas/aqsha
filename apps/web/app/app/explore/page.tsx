@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
 import { isAuthenticated } from "@/lib/auth-server";
-import { ExplorePage } from "@/features/explore/pages/explore-page";
+import { DiscoveryPage } from "@/features/discovery/pages/discovery-page";
 import { createPageMetadata } from "@/lib/metadata";
 
 export const metadata = createPageMetadata({
-  title: "Explore",
-  description: "Discover research papers and start focused inquiry threads from Aqsha Explore.",
+  title: "Jelajahi",
+  description: "Feed riset, paper, dan cek fakta dalam satu tempat — lalu mulai meneliti dalam satu klik.",
 });
 
 export default async function ExploreRoute() {
@@ -13,5 +13,5 @@ export default async function ExploreRoute() {
     redirect("/sign-in");
   }
 
-  return <ExplorePage />;
+  return <DiscoveryPage />;
 }
