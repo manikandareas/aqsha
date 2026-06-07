@@ -19,6 +19,10 @@ export type FeedVerdict =
 
 export type FeedRetractionStatus = "none" | "concern" | "retracted";
 
+export type DiscoveryItemRef =
+  | { kind: "feed"; feedItemId: string }
+  | { kind: "paper"; paperKey: string };
+
 // Visual tone keys map onto @aqsha/ui soft tokens at the component layer.
 export type FeedVerdictTone =
   | "true"
@@ -118,6 +122,12 @@ export type FeedItem = {
   sourceLabel: string;
   paperKey?: string;
   doi?: string;
+  authors?: string[];
+  year?: number;
+  venue?: string;
+  pdfUrl?: string;
+  citedByCount?: number;
+  isOpenAccess?: boolean;
   topics: string[];
   trendScore: number;
   retractionStatus?: FeedRetractionStatus;

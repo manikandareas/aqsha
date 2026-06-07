@@ -18,6 +18,7 @@ import {
   workIdentifiers,
   normalizeDoiLoose,
 } from "./feedOpenAlex";
+import type { DiscoveryItemRef } from "./feedModel";
 
 const TRENDING_LIMIT = 24;
 const FEED_PAGE_LIMIT = 40;
@@ -25,6 +26,16 @@ const RECENCY_HALF_LIFE_DAYS = 21;
 const DAY_MS = 1000 * 60 * 60 * 24;
 
 const FEED_KINDS = ["paper", "news", "claim", "topic", "idea"] as const;
+const discoveryItemRefValidator = v.union(
+  v.object({
+    kind: v.literal("feed"),
+    feedItemId: v.string(),
+  }),
+  v.object({
+    kind: v.literal("paper"),
+    paperKey: v.string(),
+  }),
+);
 
 // ── Public: read the ranked, mixed-media feed ─────────────────────────────
 // Ranks across lanes with a recency + popularity + interest composite, joins
@@ -194,20 +205,7 @@ export const recordInteraction = mutation({
     const user = await requireCurrentUser(ctx);
     const feedItemId = ctx.db.normalizeId("feedItems", args.feedItemId);
     if (!feedItemId) return null;
-    await ctx.db.insert("feedInteractions", {
-      ownerUserId: user._id,
-      feedItemId,
-      kind: args.kind,
-      createdAt: Date.now(),
-    });
-    if (args.kind === "hide") {
-      await hideFeedItemForUser(ctx, user._id, feedItemId);
-    }
-    // "Teliti ini" is a strong positive signal for the interest model.
-    if (args.kind === "research") {
-      const item = await ctx.db.get("feedItems", feedItemId);
-      if (item) await bumpInterests(ctx, user._id, item.topics, 2);
-    }
+    await recordFeedInteractionForUser(ctx, user._id, feedItemId, args.kind);
     return null;
   },
 });
@@ -220,29 +218,7 @@ export const saveItem = mutation({
     const user = await requireCurrentUser(ctx);
     const feedItemId = ctx.db.normalizeId("feedItems", args.feedItemId);
     if (!feedItemId) return { saved: false };
-
-    const existing = await ctx.db
-      .query("savedFeedItems")
-      .withIndex("by_owner_item", (q) =>
-        q.eq("ownerUserId", user._id).eq("feedItemId", feedItemId),
-      )
-      .unique();
-    if (existing) return { saved: true };
-
-    const item = await ctx.db.get("feedItems", feedItemId);
-    await ctx.db.insert("savedFeedItems", {
-      ownerUserId: user._id,
-      feedItemId,
-      createdAt: Date.now(),
-    });
-    await ctx.db.insert("feedInteractions", {
-      ownerUserId: user._id,
-      feedItemId,
-      kind: "save",
-      createdAt: Date.now(),
-    });
-    if (item) await bumpInterests(ctx, user._id, item.topics, 1);
-    return { saved: true };
+    return { saved: await saveFeedItemForUser(ctx, user._id, feedItemId) };
   },
 });
 
@@ -253,13 +229,7 @@ export const unsaveItem = mutation({
     const user = await requireCurrentUser(ctx);
     const feedItemId = ctx.db.normalizeId("feedItems", args.feedItemId);
     if (!feedItemId) return { saved: false };
-    const existing = await ctx.db
-      .query("savedFeedItems")
-      .withIndex("by_owner_item", (q) =>
-        q.eq("ownerUserId", user._id).eq("feedItemId", feedItemId),
-      )
-      .unique();
-    if (existing) await ctx.db.delete("savedFeedItems", existing._id);
+    await removeSavedFeedItemForUser(ctx, user._id, feedItemId);
     return { saved: false };
   },
 });
@@ -271,15 +241,73 @@ export const hideItem = mutation({
     const user = await requireCurrentUser(ctx);
     const feedItemId = ctx.db.normalizeId("feedItems", args.feedItemId);
     if (!feedItemId) return null;
-    await hideFeedItemForUser(ctx, user._id, feedItemId);
-    await ctx.db.insert("feedInteractions", {
-      ownerUserId: user._id,
-      feedItemId,
-      kind: "hide",
-      createdAt: Date.now(),
+    await hideFeedItemFull(ctx, user._id, feedItemId);
+    return null;
+  },
+});
+
+// ── Public: unified Discovery item actions ────────────────────────────────
+// Discovery cards may point at an existing feedItems row or a live paper search
+// result. Keep that identity split at this boundary so the UI can issue one
+// action per intent without branching on storage details.
+export const saveDiscoveryItem = mutation({
+  args: { itemRef: discoveryItemRefValidator },
+  returns: v.object({ saved: v.boolean() }),
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    const feedItemId = await resolveDiscoveryFeedItem(ctx, args.itemRef, {
+      materializePaper: true,
     });
-    const item = await ctx.db.get("feedItems", feedItemId);
-    if (item) await bumpInterests(ctx, user._id, item.topics, -1);
+    if (!feedItemId) return { saved: false };
+    return { saved: await saveFeedItemForUser(ctx, user._id, feedItemId) };
+  },
+});
+
+export const unsaveDiscoveryItem = mutation({
+  args: { itemRef: discoveryItemRefValidator },
+  returns: v.object({ saved: v.boolean() }),
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    const feedItemId = await resolveDiscoveryFeedItem(ctx, args.itemRef, {
+      materializePaper: false,
+    });
+    if (feedItemId) await removeSavedFeedItemForUser(ctx, user._id, feedItemId);
+    return { saved: false };
+  },
+});
+
+export const hideDiscoveryItem = mutation({
+  args: { itemRef: discoveryItemRefValidator },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    const feedItemId = await resolveDiscoveryFeedItem(ctx, args.itemRef, {
+      materializePaper: true,
+    });
+    if (!feedItemId) return null;
+    await hideFeedItemFull(ctx, user._id, feedItemId);
+    return null;
+  },
+});
+
+export const recordDiscoveryInteraction = mutation({
+  args: {
+    itemRef: discoveryItemRefValidator,
+    kind: v.union(
+      v.literal("save"),
+      v.literal("hide"),
+      v.literal("research"),
+      v.literal("open_evidence"),
+    ),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    const feedItemId = await resolveDiscoveryFeedItem(ctx, args.itemRef, {
+      materializePaper: true,
+    });
+    if (!feedItemId) return null;
+    await recordFeedInteractionForUser(ctx, user._id, feedItemId, args.kind);
     return null;
   },
 });
@@ -405,6 +433,144 @@ async function hideFeedItemForUser(
     feedItemId,
     createdAt: Date.now(),
   });
+}
+
+// Persist a save + log the interaction + nudge interests. Idempotent.
+async function saveFeedItemForUser(
+  ctx: MutationCtx,
+  ownerUserId: string,
+  feedItemId: Doc<"feedItems">["_id"],
+): Promise<boolean> {
+  const existing = await ctx.db
+    .query("savedFeedItems")
+    .withIndex("by_owner_item", (q) =>
+      q.eq("ownerUserId", ownerUserId).eq("feedItemId", feedItemId),
+    )
+    .unique();
+  if (existing) return true;
+
+  const item = await ctx.db.get("feedItems", feedItemId);
+  await ctx.db.insert("savedFeedItems", {
+    ownerUserId,
+    feedItemId,
+    createdAt: Date.now(),
+  });
+  await ctx.db.insert("feedInteractions", {
+    ownerUserId,
+    feedItemId,
+    kind: "save",
+    createdAt: Date.now(),
+  });
+  if (item) await bumpInterests(ctx, ownerUserId, item.topics, 1);
+  return true;
+}
+
+async function removeSavedFeedItemForUser(
+  ctx: MutationCtx,
+  ownerUserId: string,
+  feedItemId: Doc<"feedItems">["_id"],
+): Promise<void> {
+  const existing = await ctx.db
+    .query("savedFeedItems")
+    .withIndex("by_owner_item", (q) =>
+      q.eq("ownerUserId", ownerUserId).eq("feedItemId", feedItemId),
+    )
+    .unique();
+  if (existing) await ctx.db.delete("savedFeedItems", existing._id);
+}
+
+// Hide + log the interaction + decay interests.
+async function hideFeedItemFull(
+  ctx: MutationCtx,
+  ownerUserId: string,
+  feedItemId: Doc<"feedItems">["_id"],
+): Promise<void> {
+  await hideFeedItemForUser(ctx, ownerUserId, feedItemId);
+  await ctx.db.insert("feedInteractions", {
+    ownerUserId,
+    feedItemId,
+    kind: "hide",
+    createdAt: Date.now(),
+  });
+  const item = await ctx.db.get("feedItems", feedItemId);
+  if (item) await bumpInterests(ctx, ownerUserId, item.topics, -1);
+}
+
+async function recordFeedInteractionForUser(
+  ctx: MutationCtx,
+  ownerUserId: string,
+  feedItemId: Doc<"feedItems">["_id"],
+  kind: "save" | "hide" | "research" | "open_evidence",
+): Promise<void> {
+  await ctx.db.insert("feedInteractions", {
+    ownerUserId,
+    feedItemId,
+    kind,
+    createdAt: Date.now(),
+  });
+  if (kind === "hide") {
+    await hideFeedItemForUser(ctx, ownerUserId, feedItemId);
+  }
+  // "Teliti ini" is a strong positive signal for the interest model.
+  if (kind === "research") {
+    const item = await ctx.db.get("feedItems", feedItemId);
+    if (item) await bumpInterests(ctx, ownerUserId, item.topics, 2);
+  }
+}
+
+// Resolve the feedItems row for a paper, materializing it from the shared
+// explorePapers cache on first save/hide if it isn't a cron-ingested item yet.
+async function ensureFeedItemForPaperKey(
+  ctx: MutationCtx,
+  paperKey: string,
+): Promise<Doc<"feedItems">["_id"] | null> {
+  const existing = await existingFeedItemForPaperKey(ctx, paperKey);
+  if (existing) return existing._id;
+
+  const paper = await ctx.db
+    .query("explorePapers")
+    .withIndex("by_key", (q) => q.eq("key", paperKey))
+    .unique();
+  if (!paper) return null;
+
+  const item = paperToFeedItem(
+    explorePaperDocToModel(paper),
+    Date.now(),
+    new Set<string>(),
+  );
+  return await ctx.db.insert("feedItems", item);
+}
+
+async function existingFeedItemForPaperKey(
+  ctx: MutationCtx,
+  paperKey: string,
+): Promise<Doc<"feedItems"> | null> {
+  return await ctx.db
+    .query("feedItems")
+    .withIndex("by_dedupe_key", (q) => q.eq("dedupeKey", `paper:${paperKey}`))
+    .unique();
+}
+
+async function resolveDiscoveryFeedItem(
+  ctx: MutationCtx,
+  itemRef: DiscoveryItemRef,
+  options: { materializePaper: boolean },
+): Promise<Doc<"feedItems">["_id"] | null> {
+  if (itemRef.kind === "feed") {
+    return ctx.db.normalizeId("feedItems", itemRef.feedItemId);
+  }
+  if (!options.materializePaper) {
+    return (await existingFeedItemForPaperKey(ctx, itemRef.paperKey))?._id ?? null;
+  }
+  return await ensureFeedItemForPaperKey(ctx, itemRef.paperKey);
+}
+
+function explorePaperDocToModel(paper: Doc<"explorePapers">): ExplorePaper {
+  const { _id, _creationTime, lastSeenAt, ...fields } = paper;
+  void _id;
+  void _creationTime;
+  void lastSeenAt;
+  return fields;
 }
 
 function interestMatch(
@@ -556,6 +722,12 @@ function paperToFeedItem(
     sourceLabel: paper.sourceLabel,
     paperKey: paper.key,
     doi: paper.doi,
+    authors: paper.authors.length > 0 ? paper.authors : undefined,
+    year: paper.year,
+    venue: paper.venue,
+    pdfUrl: paper.pdfUrl,
+    citedByCount: paper.citedByCount,
+    isOpenAccess: paper.isOpenAccess,
     topics: paper.topics,
     trendScore: paper.citedByCount ?? paper.score ?? 0,
     retractionStatus: retracted ? ("retracted" as const) : ("none" as const),

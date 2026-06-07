@@ -67,6 +67,15 @@ export const feedItemFields = {
   // existing detail page + getPaper path without duplicating rows.
   paperKey: v.optional(v.string()),
   doi: v.optional(v.string()),
+  // Academic metadata carried through for paper items so the unified
+  // discovery card can render authors/year/venue/citations/PDF without an
+  // extra getPaper read per card. All optional + additive (older rows omit).
+  authors: v.optional(v.array(v.string())),
+  year: v.optional(v.number()),
+  venue: v.optional(v.string()),
+  pdfUrl: v.optional(v.string()),
+  citedByCount: v.optional(v.number()),
+  isOpenAccess: v.optional(v.boolean()),
   topics: v.array(v.string()),
   trendScore: v.number(),
   // Credibility signals shown on paper cards.

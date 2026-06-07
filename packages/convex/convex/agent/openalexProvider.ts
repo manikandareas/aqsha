@@ -65,12 +65,17 @@ export async function searchOpenAlexWorks(
     query: string;
     limit?: number;
     mode?: "recommendations" | "search";
+    // Lower bound on publication year. When set, only works published on or
+    // after Jan 1 of this year are returned (server-side, so narrowing the
+    // range refetches instead of emptying a client-side filter).
+    fromYear?: number;
   },
 ): Promise<ExternalCandidate[]> {
   const query = args.query.trim();
   const mode = args.mode ?? (query ? "search" : "recommendations");
   const limit = Math.min(args.limit ?? 8, 25);
-  const cacheKey = normalizeKey(JSON.stringify({ mode, query, limit }));
+  const fromYear = normalizeFromYear(args.fromYear);
+  const cacheKey = normalizeKey(JSON.stringify({ mode, query, limit, fromYear }));
   const cached = await readCachedOpenAlex(ctx, cacheKey);
   if (cached) {
     return cached;
@@ -82,7 +87,7 @@ export async function searchOpenAlexWorks(
   }
   await limitOpenAlex(ctx, args.ownerUserId);
 
-  const url = buildOpenAlexWorksUrl({ apiKey, query, limit });
+  const url = buildOpenAlexWorksUrl({ apiKey, query, limit, fromYear });
 
   const response = await fetch(url, {
     headers: { Accept: "application/json", "User-Agent": userAgent() },
@@ -169,25 +174,42 @@ export function buildOpenAlexWorksUrl(args: {
   // surface a retraction flag (e.g. the Feed trending lane) instead of
   // silently dropping them. Defaults to false (retracted works excluded).
   includeRetracted?: boolean;
+  // Lower bound on publication year. For search it adds a date filter; for
+  // recommendations it replaces the default 2021 floor.
+  fromYear?: number;
 }) {
   const query = args.query.trim();
   const retractionFilter = args.includeRetracted ? "" : "is_retracted:false,";
+  const fromYear = normalizeFromYear(args.fromYear);
   const url = new URL(OPENALEX_ENDPOINT);
   url.searchParams.set("api_key", args.apiKey);
   url.searchParams.set("per_page", String(args.limit));
   url.searchParams.set("select", openAlexSelectFields.join(","));
-  url.searchParams.set("filter", `${retractionFilter}is_paratext:false`);
   if (query) {
+    const dateFilter = fromYear ? `,from_publication_date:${fromYear}-01-01` : "";
+    url.searchParams.set("filter", `${retractionFilter}is_paratext:false${dateFilter}`);
     url.searchParams.set("search", query);
     url.searchParams.set("sort", "relevance_score:desc");
   } else {
     url.searchParams.set("sort", "cited_by_count:desc");
     url.searchParams.set(
       "filter",
-      `${retractionFilter}is_paratext:false,from_publication_date:2021-01-01`,
+      `${retractionFilter}is_paratext:false,from_publication_date:${fromYear ?? 2021}-01-01`,
     );
   }
   return url;
+}
+
+function normalizeFromYear(value: number | undefined): number | undefined {
+  if (value === undefined || !Number.isFinite(value)) {
+    return undefined;
+  }
+  const year = Math.floor(value);
+  // Guard against nonsense values; OpenAlex coverage starts well before this.
+  if (year < 1900 || year > 2100) {
+    return undefined;
+  }
+  return year;
 }
 
 export function reconstructOpenAlexAbstract(
