@@ -2,6 +2,8 @@
 // (Brief / Papers / Cek fakta). Extracted from the former Explore + Feed pages
 // so both paper rows and feed items share one implementation.
 
+import type { DiscoveryItem, FeedVerdict } from "@aqsha/convex/feed";
+
 export type TopTopic = { name: string; count: number };
 
 type TopicSource = {
@@ -81,4 +83,99 @@ export function topicBadgeClass(topic: string): string {
     return "bg-sky-soft text-sky-foreground";
   }
   return "bg-lemon-soft text-lemon-foreground";
+}
+
+// ── Verdict distribution (fact-balance donut) ─────────────────────────────
+export type VerdictSegment = { verdict: FeedVerdict; count: number };
+export type VerdictBreakdown = { total: number; segments: VerdictSegment[] };
+
+// Stable taxonomy order — doubles as the tiebreak when two verdicts share a
+// count, so the donut/legend ordering never flickers across reactive refreshes.
+const VERDICT_ORDER: FeedVerdict[] = [
+  "supported",
+  "partially_supported",
+  "needs_context",
+  "unverified",
+  "contradicted",
+];
+
+/**
+ * Tally fact-check verdicts across the discovery items. Only `claim` items with
+ * a resolved `claim.verdict` count. Returns `total === 0` for verdict-less views
+ * (e.g. Papers) so the rail module can hide itself.
+ */
+export function deriveVerdictBreakdown(
+  items: DiscoveryItem[],
+): VerdictBreakdown {
+  const counts = new Map<FeedVerdict, number>();
+  for (const item of items) {
+    if (item.kind !== "claim" || !item.claim) continue;
+    counts.set(item.claim.verdict, (counts.get(item.claim.verdict) ?? 0) + 1);
+  }
+  const segments = Array.from(counts.entries())
+    .map(([verdict, count]) => ({ verdict, count }))
+    .toSorted(
+      (left, right) =>
+        right.count - left.count ||
+        VERDICT_ORDER.indexOf(left.verdict) - VERDICT_ORDER.indexOf(right.verdict),
+    );
+  const total = segments.reduce((sum, segment) => sum + segment.count, 0);
+  return { total, segments };
+}
+
+// ── Feed composition (content-mix bar) ────────────────────────────────────
+export type FeedKind = DiscoveryItem["kind"];
+export type KindCount = { kind: FeedKind; count: number };
+export type KindBreakdown = {
+  total: number;
+  segments: KindCount[];
+  distinctKinds: number;
+};
+
+// Fixed render order so the segmented bar + legend stay stable.
+const KIND_ORDER: FeedKind[] = ["paper", "news", "claim", "topic", "idea"];
+
+/**
+ * Group discovery items by `kind`. `distinctKinds < 2` means there is nothing to
+ * compare (e.g. an all-paper Papers view) and the module should hide.
+ */
+export function deriveKindBreakdown(items: DiscoveryItem[]): KindBreakdown {
+  const counts = new Map<FeedKind, number>();
+  for (const item of items) {
+    counts.set(item.kind, (counts.get(item.kind) ?? 0) + 1);
+  }
+  const segments = KIND_ORDER.filter((kind) => counts.has(kind)).map((kind) => ({
+    kind,
+    count: counts.get(kind) as number,
+  }));
+  const total = segments.reduce((sum, segment) => sum + segment.count, 0);
+  return { total, segments, distinctKinds: segments.length };
+}
+
+// ── Most-cited papers (ranked bars) ───────────────────────────────────────
+export type TopCitedPaper = { item: DiscoveryItem; count: number };
+
+/**
+ * Rank the most-cited papers in the current item set. Non-papers and papers
+ * without a positive `citedByCount` are excluded; an empty result hides the
+ * module. Ties break on title so the order is deterministic.
+ */
+export function deriveTopCited(
+  items: DiscoveryItem[],
+  limit = 4,
+): TopCitedPaper[] {
+  return items
+    .filter(
+      (item) =>
+        item.kind === "paper" &&
+        typeof item.citedByCount === "number" &&
+        item.citedByCount > 0,
+    )
+    .map((item) => ({ item, count: item.citedByCount as number }))
+    .toSorted(
+      (left, right) =>
+        right.count - left.count ||
+        left.item.title.localeCompare(right.item.title),
+    )
+    .slice(0, limit);
 }

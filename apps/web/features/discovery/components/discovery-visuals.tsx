@@ -52,6 +52,18 @@ export const VERDICT_STYLE: Record<FeedVerdict, VerdictStyle> = {
   },
 };
 
+// SVG stroke colors for the fact-balance donut. `VERDICT_STYLE[v].accent` is a
+// Tailwind `bg-*` class (fine for legend swatches), not a value usable as an SVG
+// stroke — so the donut maps verdicts to raw CSS-var colors instead. `unverified`
+// uses the full muted tone (not the /40 swatch) so the ring stays legible.
+export const VERDICT_FILL: Record<FeedVerdict, string> = {
+  supported: "var(--mint)",
+  partially_supported: "var(--lemon)",
+  needs_context: "var(--coral)",
+  unverified: "var(--muted-foreground)",
+  contradicted: "var(--destructive)",
+};
+
 export function VerdictBadge({
   verdict,
   className,
@@ -186,6 +198,118 @@ export function ScoreBar({
           style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
         />
       </div>
+    </div>
+  );
+}
+
+// ── Donut (segmented ring for small distributions) ────────────────────────
+// One <circle> per segment sharing the same geometry; each is a single dash of
+// length `fraction × circumference`, shifted by the cumulative offset. Rotated
+// -90° so segments begin at 12 o'clock. A faint track keeps it reading as a ring
+// even when nearly empty. Caller maps categories → CSS-var colors before passing.
+export function Donut({
+  segments,
+  total,
+  size = 96,
+  centerLabel,
+  centerCaption,
+}: {
+  segments: Array<{ color: string; count: number }>;
+  total: number;
+  size?: number;
+  centerLabel?: string;
+  centerCaption?: string;
+}) {
+  const stroke = 12;
+  const center = size / 2;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+
+  let consumed = 0; // cumulative fraction placed so far
+  const arcs =
+    total > 0
+      ? segments.map((segment) => {
+          const fraction = segment.count / total;
+          const arc = {
+            color: segment.color,
+            dash: fraction * circumference,
+            dashOffset: -(consumed * circumference),
+          };
+          consumed += fraction;
+          return arc;
+        })
+      : [];
+
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg viewBox={`0 0 ${size} ${size}`} className="size-full" aria-hidden>
+        <circle
+          cx={center}
+          cy={center}
+          r={radius}
+          fill="none"
+          stroke="var(--muted)"
+          strokeWidth={stroke}
+        />
+        {arcs.map((arc, index) => (
+          <circle
+            key={index}
+            cx={center}
+            cy={center}
+            r={radius}
+            fill="none"
+            stroke={arc.color}
+            strokeWidth={stroke}
+            strokeDasharray={`${arc.dash} ${circumference - arc.dash}`}
+            strokeDashoffset={arc.dashOffset}
+            transform={`rotate(-90 ${center} ${center})`}
+          />
+        ))}
+      </svg>
+      {centerLabel ? (
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="font-heading text-[20px] font-bold leading-none text-foreground">
+            {centerLabel}
+          </span>
+          {centerCaption ? (
+            <span className="mt-0.5 text-[10px] font-medium text-muted-foreground">
+              {centerCaption}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ── Composition bar (single-row segmented proportion) ─────────────────────
+export function CompositionBar({
+  segments,
+  className,
+}: {
+  segments: Array<{ color: string; count: number; label: string }>;
+  className?: string;
+}) {
+  const total = segments.reduce((sum, segment) => sum + segment.count, 0);
+  if (total <= 0) return null;
+  return (
+    <div
+      className={cn(
+        "flex h-2.5 w-full overflow-hidden rounded-full bg-muted",
+        className,
+      )}
+    >
+      {segments.map((segment) => (
+        <div
+          key={segment.label}
+          className="h-full"
+          style={{
+            width: `${(segment.count / total) * 100}%`,
+            backgroundColor: segment.color,
+          }}
+          title={`${segment.label}: ${segment.count}`}
+        />
+      ))}
     </div>
   );
 }

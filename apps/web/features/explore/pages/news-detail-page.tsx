@@ -2,18 +2,11 @@
 
 import { api } from "@aqsha/convex/api";
 import type { FeedItem } from "@aqsha/convex/feed";
-import {
-  BookmarkIcon,
-  CheckIcon,
-  ClockIcon,
-  Loader2Icon,
-  SparklesIcon,
-} from "@aqsha/ui/icons";
-import { useState } from "react";
+import { ClockIcon } from "@aqsha/ui/icons";
 import { topicBadgeClass } from "@/features/discovery/utils/discovery-format";
-import { useStartResearch } from "@/features/discovery/hooks/use-start-research";
-import { useConvexMutationFn, useConvexQueryData } from "@/lib/convex-query";
+import { useConvexQueryData } from "@/lib/convex-query";
 import { cn } from "@/lib/utils";
+import { ReaderActions } from "../components/reader-actions";
 import {
   ReaderArticleBody,
   ReaderHeroMedia,
@@ -60,19 +53,6 @@ function NewsDetailContent({ item }: { item: FeedItem }) {
     feedItemId: item._id,
     limit: 8,
   });
-  const { startResearch, busy, error } = useStartResearch();
-  const saveItem = useConvexMutationFn(api.feed.saveItem);
-  const [saved, setSaved] = useState(false);
-
-  const handleSave = async () => {
-    if (saved) return;
-    setSaved(true);
-    try {
-      await saveItem({ feedItemId: item._id });
-    } catch {
-      setSaved(false);
-    }
-  };
 
   const seed = `${title}\n\n${body}\n\nSumber: ${item.url}`;
 
@@ -119,37 +99,7 @@ function NewsDetailContent({ item }: { item: FeedItem }) {
         </div>
       ) : null}
 
-      <div className="mt-7 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => void startResearch(seed)}
-          disabled={busy}
-          className="inline-flex h-9 items-center gap-1.5 rounded-full bg-primary px-4 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary-hover disabled:opacity-60"
-        >
-          {busy ? (
-            <Loader2Icon className="size-4 animate-spin" />
-          ) : (
-            <SparklesIcon className="size-4" />
-          )}
-          Teliti ini
-        </button>
-        <button
-          type="button"
-          onClick={() => void handleSave()}
-          disabled={saved}
-          className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border px-4 text-[13px] font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-60"
-        >
-          {saved ? (
-            <CheckIcon className="size-4" />
-          ) : (
-            <BookmarkIcon className="size-4" />
-          )}
-          {saved ? "Tersimpan" : "Simpan"}
-        </button>
-      </div>
-      {error ? (
-        <p className="mt-2 text-[12.5px] font-medium text-destructive">{error}</p>
-      ) : null}
+      <ReaderActions item={item} researchLabel="Teliti ini" researchSeed={seed} />
 
       <ReaderRelatedGrid items={(related ?? []) as FeedItem[]} />
     </article>

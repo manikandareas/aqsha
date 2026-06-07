@@ -2,7 +2,15 @@
 
 import { api } from "@aqsha/convex/api";
 import type { ExplorePaper } from "@aqsha/convex/explore";
-import type { FeedItem } from "@aqsha/convex/feed";
+import {
+  discoveryItemKey,
+  feedItemToDiscoveryItem,
+  paperToDiscoveryItem,
+  savedRefKey,
+  type DiscoveryItem,
+  type DiscoverySavedRef,
+  type FeedItem,
+} from "@aqsha/convex/feed";
 import { CheckCircle2Icon, SparklesIcon } from "@aqsha/ui/icons";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -26,7 +34,6 @@ import {
   DiscoveryHeroCard,
   DiscoveryStandardCard,
   type DiscoveryCardHandlers,
-  type DiscoveryFeedItem,
 } from "../components/discovery-item-card";
 import { DiscoveryListItem } from "../components/discovery-list-item";
 import { DiscoveryAside } from "../components/discovery-aside";
@@ -34,7 +41,12 @@ import { DiscoveryToolbar } from "../components/discovery-toolbar";
 import { VERDICT_STYLE } from "../components/discovery-visuals";
 import { useDiscoveryNav, rangeToFromYear } from "../hooks/use-discovery-nav";
 import { useStartResearch } from "../hooks/use-start-research";
-import { deriveTopTopics } from "../utils/discovery-format";
+import {
+  deriveKindBreakdown,
+  deriveTopCited,
+  deriveTopTopics,
+  deriveVerdictBreakdown,
+} from "../utils/discovery-format";
 
 const emptyPapers: ExplorePaper[] = [];
 
@@ -54,7 +66,7 @@ export function DiscoveryPage() {
   }, [nav.view, nav.serendipity]);
 
   const feedData = useConvexQueryData(api.feed.getFeed, feedArgs);
-  const savedData = useConvexQueryData(api.feed.getSavedItems, {});
+  const savedRefsData = useConvexQueryData(api.feed.getSavedDiscoveryRefs, {});
 
   const papersQuery = useConvexActionQueryWithKey(
     api.explore.searchPapers,
@@ -92,36 +104,39 @@ export function DiscoveryPage() {
   const [whyLoading, setWhyLoading] = useState<Set<string>>(new Set());
   const [ideaSeed, setIdeaSeed] = useState<IdeaSeed | null>(null);
   const [ideaOpen, setIdeaOpen] = useState(false);
-  const [workspaceItem, setWorkspaceItem] = useState<DiscoveryFeedItem | null>(null);
+  const [workspaceItem, setWorkspaceItem] = useState<DiscoveryItem | null>(null);
 
-  const rawItems = useMemo<DiscoveryFeedItem[]>(() => {
+  const savedRefs = useMemo(() => {
+    const set = new Set<string>();
+    for (const ref of (savedRefsData ?? []) as DiscoverySavedRef[]) {
+      set.add(savedRefKey(ref));
+    }
+    return set;
+  }, [savedRefsData]);
+
+  const rawItems = useMemo<DiscoveryItem[]>(() => {
     if (nav.view === "papers") {
-      return (papersQuery.data?.items ?? emptyPapers).map(paperToDiscoveryItem);
+      return (papersQuery.data?.items ?? emptyPapers).map((paper) =>
+        paperToDiscoveryItem(paper, savedRefs),
+      );
     }
     return ((feedData ?? []) as FeedItem[]).map(feedItemToDiscoveryItem);
-  }, [nav.view, papersQuery.data, feedData]);
+  }, [nav.view, papersQuery.data, feedData, savedRefs]);
 
   const items = useMemo(
-    () => rawItems.filter((item) => !hiddenIds.has(sid(item))),
+    () => rawItems.filter((item) => !hiddenIds.has(discoveryItemKey(item))),
     [rawItems, hiddenIds],
   );
   const topTopics = useMemo(() => deriveTopTopics(rawItems, 8), [rawItems]);
-  const savedRows = useMemo(
-    () => (savedData ?? []) as Array<{ _id: string; title: string; paperKey?: string }>,
-    [savedData],
-  );
-  const baseSaved = useMemo(() => {
-    const set = new Set<string>();
-    for (const row of savedRows) {
-      set.add(row._id);
-      if (row.paperKey) set.add(`paper:${row.paperKey}`);
-    }
-    return set;
-  }, [savedRows]);
-  const latestClaim = useMemo(
-    () => rawItems.find((item) => item.kind === "claim" && item.claim),
+  // Right-rail aggregates — derived from the items already loaded (zero backend).
+  // Each derive returns an empty/zero result for views that lack the data, so the
+  // matching rail module hides itself.
+  const verdictBreakdown = useMemo(
+    () => deriveVerdictBreakdown(rawItems),
     [rawItems],
   );
+  const kindBreakdown = useMemo(() => deriveKindBreakdown(rawItems), [rawItems]);
+  const topCited = useMemo(() => deriveTopCited(rawItems, 4), [rawItems]);
 
   const isLoading =
     nav.view === "papers" ? papersQuery.isLoading : feedData === undefined;
@@ -130,22 +145,22 @@ export function DiscoveryPage() {
       ? readableConvexErrorMessage(papersQuery.error, "Gagal mencari paper.")
       : null;
 
-  const isSaved = (item: DiscoveryFeedItem) => {
-    const id = sid(item);
+  const isSaved = (item: DiscoveryItem) => {
+    const id = discoveryItemKey(item);
     return savedOverride.has(id)
       ? Boolean(savedOverride.get(id))
-      : baseSaved.has(id);
+      : item.saved;
   };
 
   const recordItemInteraction = (
-    item: DiscoveryFeedItem,
+    item: DiscoveryItem,
     kind: "save" | "hide" | "research" | "open_evidence",
   ) => {
     return recordDiscoveryInteraction({ itemRef: item.itemRef, kind });
   };
 
-  const handleSave = async (item: DiscoveryFeedItem) => {
-    const id = sid(item);
+  const handleSave = async (item: DiscoveryItem) => {
+    const id = discoveryItemKey(item);
     const next = !isSaved(item);
     setSavedOverride((prev) => new Map(prev).set(id, next));
     try {
@@ -157,8 +172,8 @@ export function DiscoveryPage() {
     }
   };
 
-  const handleWhyRelevant = async (item: DiscoveryFeedItem) => {
-    const id = sid(item);
+  const handleWhyRelevant = async (item: DiscoveryItem) => {
+    const id = discoveryItemKey(item);
     if (relevanceNotes.has(id) || whyLoading.has(id)) return;
     setWhyLoading((prev) => new Set(prev).add(id));
     try {
@@ -196,7 +211,7 @@ export function DiscoveryPage() {
   const handlers: DiscoveryCardHandlers = {
     onTeliti: (item) =>
       void startResearch(buildSeed(item), {
-        busyKey: sid(item),
+        busyKey: discoveryItemKey(item),
         onSuccess: async () => {
           await recordItemInteraction(item, "research").catch(() => {});
         },
@@ -204,7 +219,7 @@ export function DiscoveryPage() {
     onSave: (item) => void handleSave(item),
     onSaveToWorkspace: (item) => setWorkspaceItem(item),
     onHide: (item) => {
-      setHiddenIds((prev) => new Set(prev).add(sid(item)));
+      setHiddenIds((prev) => new Set(prev).add(discoveryItemKey(item)));
       void hideDiscoveryItem({ itemRef: item.itemRef }).catch(() => {});
     },
     onOpenEvidence: (item) => {
@@ -223,14 +238,14 @@ export function DiscoveryPage() {
     onWhyRelevant: (item) => void handleWhyRelevant(item),
   };
 
-  const renderStandard = (item: DiscoveryFeedItem) => {
+  const renderStandard = (item: DiscoveryItem) => {
     const shared = {
       item,
       lang: nav.lang,
       saved: isSaved(item),
-      busy: busyKey === sid(item),
-      relevanceNote: relevanceNotes.get(sid(item)),
-      whyLoading: whyLoading.has(sid(item)),
+      busy: busyKey === discoveryItemKey(item),
+      relevanceNote: relevanceNotes.get(discoveryItemKey(item)),
+      whyLoading: whyLoading.has(discoveryItemKey(item)),
       handlers,
     };
     // Claim cards use a lean, verdict-forward layout in the Brief masonry.
@@ -296,20 +311,20 @@ export function DiscoveryPage() {
               ) : items.length === 0 ? (
                 <DiscoveryEmptyState view={nav.view} />
               ) : isBrief ? (
-                <div className="space-y-8">
+                <div className="space-y-10">
                   {hero ? renderHeroCard(hero) : null}
                   {briefRows.map((row) =>
                     row.type === "grid" ? (
                       <div
                         key={row.key}
-                        className="grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-2 xl:grid-cols-3"
+                        className="grid grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 xl:grid-cols-3"
                       >
                         {row.items.map((item) => (
-                          <div key={sid(item)}>{renderStandard(item)}</div>
+                          <div key={discoveryItemKey(item)}>{renderStandard(item)}</div>
                         ))}
                       </div>
                     ) : (
-                      <div key={row.key} className="border-t border-border/60 pt-8">
+                      <div key={row.key} className="border-t border-border/60 pt-10">
                         {renderFeatureCard(row.item, row.side)}
                       </div>
                     ),
@@ -321,14 +336,14 @@ export function DiscoveryPage() {
                   <div className="divide-y divide-border/60">
                     {items.map((item, index) => (
                       <DiscoveryListItem
-                        key={sid(item)}
+                        key={discoveryItemKey(item)}
                         item={item}
                         index={index}
                         lang={nav.lang}
                         saved={isSaved(item)}
-                        busy={busyKey === sid(item)}
-                        relevanceNote={relevanceNotes.get(sid(item))}
-                        whyLoading={whyLoading.has(sid(item))}
+                        busy={busyKey === discoveryItemKey(item)}
+                        relevanceNote={relevanceNotes.get(discoveryItemKey(item))}
+                        whyLoading={whyLoading.has(discoveryItemKey(item))}
                         handlers={handlers}
                       />
                     ))}
@@ -340,17 +355,11 @@ export function DiscoveryPage() {
 
             <aside className="min-w-0 xl:sticky xl:top-6 xl:self-start">
               <DiscoveryAside
+                verdicts={verdictBreakdown}
+                kinds={kindBreakdown}
                 topTopics={topTopics}
-                saved={savedRows}
-                latestClaim={latestClaim}
-                lang={nav.lang}
-                onStartTopic={(topic) => {
-                  setIdeaSeed({ title: topic });
-                  setIdeaOpen(true);
-                }}
-                onOpenClaim={(item) => {
-                  if (item._id) router.push(`/app/explore/f/${item._id}`);
-                }}
+                topCited={topCited}
+                onSelectTopic={(name) => void setNav({ view: "papers", q: name })}
               />
             </aside>
           </section>
@@ -378,30 +387,30 @@ export function DiscoveryPage() {
     </WorkspaceShell>
   );
 
-  function renderHeroCard(item: DiscoveryFeedItem) {
+  function renderHeroCard(item: DiscoveryItem) {
     return (
       <DiscoveryHeroCard
         item={item}
         lang={nav.lang}
         saved={isSaved(item)}
-        busy={busyKey === sid(item)}
-        relevanceNote={relevanceNotes.get(sid(item))}
-        whyLoading={whyLoading.has(sid(item))}
+        busy={busyKey === discoveryItemKey(item)}
+        relevanceNote={relevanceNotes.get(discoveryItemKey(item))}
+        whyLoading={whyLoading.has(discoveryItemKey(item))}
         handlers={handlers}
       />
     );
   }
 
-  function renderFeatureCard(item: DiscoveryFeedItem, side: "left" | "right") {
+  function renderFeatureCard(item: DiscoveryItem, side: "left" | "right") {
     return (
       <DiscoveryFeatureCard
         item={item}
         imageSide={side}
         lang={nav.lang}
         saved={isSaved(item)}
-        busy={busyKey === sid(item)}
-        relevanceNote={relevanceNotes.get(sid(item))}
-        whyLoading={whyLoading.has(sid(item))}
+        busy={busyKey === discoveryItemKey(item)}
+        relevanceNote={relevanceNotes.get(discoveryItemKey(item))}
+        whyLoading={whyLoading.has(discoveryItemKey(item))}
         handlers={handlers}
       />
     );
@@ -409,25 +418,29 @@ export function DiscoveryPage() {
 }
 
 type BriefRow =
-  | { type: "grid"; key: string; items: DiscoveryFeedItem[] }
+  | { type: "grid"; key: string; items: DiscoveryItem[] }
   | {
       type: "feature";
       key: string;
-      item: DiscoveryFeedItem;
+      item: DiscoveryItem;
       side: "left" | "right";
     };
 
 // Lay the Brief feed out as an editorial mosaic: repeating units of a 3-up
 // standard grid followed by two full-width spotlights (alternating image side),
 // matching the magazine rhythm of the redesign reference.
-function buildBriefRows(items: DiscoveryFeedItem[]): BriefRow[] {
+function buildBriefRows(items: DiscoveryItem[]): BriefRow[] {
   const rows: BriefRow[] = [];
-  let bucket: DiscoveryFeedItem[] = [];
+  let bucket: DiscoveryItem[] = [];
   let featureCount = 0;
 
   const flush = () => {
     if (bucket.length > 0) {
-      rows.push({ type: "grid", key: `grid-${sid(bucket[0])}`, items: bucket });
+      rows.push({
+        type: "grid",
+        key: `grid-${discoveryItemKey(bucket[0])}`,
+        items: bucket,
+      });
       bucket = [];
     }
   };
@@ -439,7 +452,7 @@ function buildBriefRows(items: DiscoveryFeedItem[]): BriefRow[] {
       flush();
       rows.push({
         type: "feature",
-        key: `feature-${sid(item)}`,
+        key: `feature-${discoveryItemKey(item)}`,
         item,
         side: featureCount % 2 === 0 ? "right" : "left",
       });
@@ -451,53 +464,7 @@ function buildBriefRows(items: DiscoveryFeedItem[]): BriefRow[] {
   return rows;
 }
 
-function sid(item: DiscoveryFeedItem): string {
-  return item.itemRef.kind === "paper"
-    ? `paper:${item.itemRef.paperKey}`
-    : item.itemRef.feedItemId;
-}
-
-function feedItemToDiscoveryItem(item: FeedItem): DiscoveryFeedItem {
-  return {
-    ...item,
-    itemRef: { kind: "feed", feedItemId: item._id },
-  };
-}
-
-function paperToDiscoveryItem(paper: ExplorePaper): DiscoveryFeedItem {
-  return {
-    itemRef: { kind: "paper", paperKey: paper.key },
-    kind: "paper",
-    title: paper.title,
-    summary: paper.snippet,
-    tldr: paper.snippet,
-    url: paper.url,
-    provider: "openalex",
-    sourceLabel: paper.sourceLabel,
-    paperKey: paper.key,
-    doi: paper.doi,
-    authors: paper.authors,
-    year: paper.year,
-    venue: paper.venue,
-    pdfUrl: paper.pdfUrl,
-    citedByCount: paper.citedByCount,
-    isOpenAccess: paper.isOpenAccess,
-    topics: paper.topics,
-    trendScore: paper.citedByCount ?? paper.score ?? 0,
-    publishedAt: paper.publicationDate
-      ? parseDateMs(paper.publicationDate)
-      : paper.year
-        ? Date.UTC(paper.year, 0, 1)
-        : undefined,
-  };
-}
-
-function parseDateMs(value: string): number | undefined {
-  const ms = Date.parse(value);
-  return Number.isFinite(ms) ? ms : undefined;
-}
-
-function buildSeed(item: DiscoveryFeedItem): string {
+function buildSeed(item: DiscoveryItem): string {
   if (item.kind === "claim" && item.claim) {
     const verdict = VERDICT_STYLE[item.claim.verdict].label;
     const lines = [

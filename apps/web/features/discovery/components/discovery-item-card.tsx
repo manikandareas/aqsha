@@ -1,6 +1,6 @@
 "use client";
 
-import type { DiscoveryItemRef, FeedItem } from "@aqsha/convex/feed";
+import type { DiscoveryItem, FeedItem } from "@aqsha/convex/feed";
 import {
   AlertCircleIcon,
   ClockIcon,
@@ -41,23 +41,18 @@ import {
   VerdictBadge,
 } from "./discovery-visuals";
 
-export type DiscoveryFeedItem = Omit<FeedItem, "_id"> & {
-  _id?: string;
-  itemRef: DiscoveryItemRef;
-};
-
 export type DiscoveryCardHandlers = {
-  onTeliti: (item: DiscoveryFeedItem) => void;
-  onSave: (item: DiscoveryFeedItem) => void;
-  onSaveToWorkspace: (item: DiscoveryFeedItem) => void;
-  onHide: (item: DiscoveryFeedItem) => void;
-  onOpenEvidence: (item: DiscoveryFeedItem) => void;
-  onGenerateIdeas: (item: DiscoveryFeedItem) => void;
-  onWhyRelevant: (item: DiscoveryFeedItem) => void;
+  onTeliti: (item: DiscoveryItem) => void;
+  onSave: (item: DiscoveryItem) => void;
+  onSaveToWorkspace: (item: DiscoveryItem) => void;
+  onHide: (item: DiscoveryItem) => void;
+  onOpenEvidence: (item: DiscoveryItem) => void;
+  onGenerateIdeas: (item: DiscoveryItem) => void;
+  onWhyRelevant: (item: DiscoveryItem) => void;
 };
 
 export type CardProps = {
-  item: DiscoveryFeedItem;
+  item: DiscoveryItem;
   lang: "id" | "en";
   saved: boolean;
   busy: boolean;
@@ -399,7 +394,7 @@ function SourceRow({
   item,
   lang,
 }: {
-  item: DiscoveryFeedItem;
+  item: DiscoveryItem;
   lang: "id" | "en";
 }) {
   const citation = item.kind === "paper" ? formatCitationCount(item.citedByCount) : null;
@@ -417,7 +412,7 @@ function SourceRow({
   );
 }
 
-function SourceAvatar({ item }: { item: DiscoveryFeedItem }) {
+function SourceAvatar({ item }: { item: DiscoveryItem }) {
   if (item.kind === "claim" && item.claim) {
     const style = VERDICT_STYLE[item.claim.verdict];
     const Icon = style.icon;
@@ -459,7 +454,7 @@ function PublishedMeta({
   item,
   lang,
 }: {
-  item: DiscoveryFeedItem;
+  item: DiscoveryItem;
   lang: "id" | "en";
 }) {
   const rel =
@@ -473,7 +468,7 @@ function PublishedMeta({
   );
 }
 
-function SpotlightSignals({ item }: { item: DiscoveryFeedItem }) {
+function SpotlightSignals({ item }: { item: DiscoveryItem }) {
   const hasSparkline =
     item.kind === "topic" && item.sparkline && item.sparkline.length > 1;
   const hasStance =
@@ -508,7 +503,7 @@ function CardMedia({
   title,
   className,
 }: {
-  item: DiscoveryFeedItem;
+  item: DiscoveryItem;
   title: string;
   className?: string;
 }) {
@@ -558,7 +553,7 @@ function CardMedia({
 }
 
 // ── Shared sub-pieces ─────────────────────────────────────────────────────
-export function RetractionFlag({ item }: { item: DiscoveryFeedItem }) {
+export function RetractionFlag({ item }: { item: DiscoveryItem }) {
   if (item.retractionStatus === "retracted") {
     return (
       <p className="mt-2 inline-flex w-fit items-center gap-1 rounded-[5px] border border-destructive/25 bg-destructive/10 px-2 py-0.5 text-[11px] font-semibold text-destructive">
@@ -610,7 +605,7 @@ export function WhyRelevantTrigger({
 // Internal detail-page href for a feed item (paper → /[ref], news → /n/[id],
 // claim → /f/[id]); null when there is no internal surface (fall back to the
 // external source url). Feed-sourced items always carry `_id`.
-export function feedDetailHref(item: DiscoveryFeedItem): string | null {
+export function feedDetailHref(item: DiscoveryItem): string | null {
   if (item.kind === "paper" && item.paperKey) {
     return `/app/explore/${encodePaperRef(item.paperKey)}`;
   }
@@ -625,7 +620,7 @@ function CardLink({
   className,
   hidden,
 }: {
-  item: DiscoveryFeedItem;
+  item: DiscoveryItem;
   children: ReactNode;
   className?: string;
   hidden?: boolean;
@@ -719,7 +714,7 @@ function kindAvatarClass(kind: FeedItem["kind"]): string {
   }
 }
 
-export function buildSourceLine(item: DiscoveryFeedItem): string {
+export function buildSourceLine(item: DiscoveryItem): string {
   const parts: string[] = [];
   if (item.kind === "paper" && item.authors && item.authors.length > 0) {
     parts.push(item.authors.slice(0, 4).join(", "));
@@ -731,7 +726,7 @@ export function buildSourceLine(item: DiscoveryFeedItem): string {
   return parts.join(" · ");
 }
 
-function formatItemDate(item: DiscoveryFeedItem): string {
+function formatItemDate(item: DiscoveryItem): string {
   if (item.kind === "paper" && item.year && !item.publishedAt) {
     return String(item.year);
   }
@@ -748,13 +743,13 @@ function formatItemDate(item: DiscoveryFeedItem): string {
   return item.year ? String(item.year) : "";
 }
 
-function displayTitle(item: DiscoveryFeedItem, lang: "id" | "en"): string {
+function displayTitle(item: DiscoveryItem, lang: "id" | "en"): string {
   if (lang === "id" && item.titleId) return item.titleId;
   return item.title;
 }
 
 function displayTldr(
-  item: DiscoveryFeedItem,
+  item: DiscoveryItem,
   lang: "id" | "en",
 ): string | undefined {
   if (lang === "id") return item.tldrId ?? item.tldr ?? item.summary;

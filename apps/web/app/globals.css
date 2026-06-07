@@ -246,14 +246,17 @@
   html {
     @apply h-full bg-background font-sans;
     width: 100%;
-    overflow-x: hidden;
+    /* Use `clip`, not `hidden`: `hidden` makes html/body a scroll container
+       (overflow-y computes to auto), which silently breaks descendant
+       `position: sticky`. `clip` guards horizontal overflow without that. */
+    overflow-x: clip;
   }
 
   body {
     @apply min-h-full bg-background text-foreground;
     width: 100%;
     letter-spacing: var(--tracking-normal);
-    overflow-x: hidden;
+    overflow-x: clip;
   }
 
   button:not(:disabled),

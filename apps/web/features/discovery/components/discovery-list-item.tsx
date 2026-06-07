@@ -12,6 +12,7 @@ import {
   SparklesIcon,
   ThumbsDownIcon,
 } from "@aqsha/ui/icons";
+import type { DiscoveryItem } from "@aqsha/convex/feed";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { formatCitationCount, topicBadgeClass } from "../utils/discovery-format";
@@ -19,7 +20,6 @@ import { StanceTally, VERDICT_STYLE, VerdictBadge } from "./discovery-visuals";
 import {
   buildSourceLine,
   CardProps,
-  DiscoveryFeedItem,
   feedDetailHref,
   IconButton,
   kindLabel,
@@ -225,7 +225,7 @@ function ListThumbnail({
   item,
   index,
 }: {
-  item: DiscoveryFeedItem;
+  item: DiscoveryItem;
   index: number;
 }) {
   if (item.kind === "paper") {

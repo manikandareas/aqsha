@@ -3,12 +3,9 @@
 import { api } from "@aqsha/convex/api";
 import type { FeedConsensus, FeedItem } from "@aqsha/convex/feed";
 import {
-  BookmarkIcon,
-  CheckIcon,
   ClockIcon,
   GaugeIcon,
   Loader2Icon,
-  SparklesIcon,
 } from "@aqsha/ui/icons";
 import Link from "next/link";
 import { useState } from "react";
@@ -17,14 +14,13 @@ import {
   VERDICT_STYLE,
   VerdictBadge,
 } from "@/features/discovery/components/discovery-visuals";
-import { useStartResearch } from "@/features/discovery/hooks/use-start-research";
 import { encodePaperRef } from "@/features/explore/utils/paper-ref";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
 import {
   useConvexActionFn,
-  useConvexMutationFn,
   useConvexQueryData,
 } from "@/lib/convex-query";
+import { ReaderActions } from "../components/reader-actions";
 import {
   ReaderArticleBody,
   ReaderHeroMedia,
@@ -101,10 +97,6 @@ function FactDetailContent({
   const [consensusLoading, setConsensusLoading] = useState(false);
   const [consensusError, setConsensusError] = useState<string | null>(null);
 
-  const { startResearch, busy, error } = useStartResearch();
-  const saveItem = useConvexMutationFn(api.feed.saveItem);
-  const [saved, setSaved] = useState(false);
-
   const handleConsensus = async () => {
     if (consensusLoading) return;
     setConsensusLoading(true);
@@ -132,19 +124,9 @@ function FactDetailContent({
     }
   };
 
-  const handleSave = async () => {
-    if (saved) return;
-    setSaved(true);
-    try {
-      await saveItem({ feedItemId: item._id });
-    } catch {
-      setSaved(false);
-    }
-  };
-
-  const handleResearch = () => {
+  const researchSeed = (() => {
     const verdict = VERDICT_STYLE[claim.verdict].label;
-    const seed = [
+    return [
       `Klaim viral: ${claim.claim}`,
       `Verdict pemeriksa fakta: ${verdict}${claim.publisher ? ` (${claim.publisher})` : ""}`,
       "",
@@ -153,8 +135,7 @@ function FactDetailContent({
     ]
       .filter(Boolean)
       .join("\n");
-    void startResearch(seed);
-  };
+  })();
 
   return (
     <article className="min-w-0">
@@ -302,37 +283,11 @@ function FactDetailContent({
         {consensus ? <ConsensusMeter consensus={consensus} /> : null}
       </section>
 
-      <div className="mt-7 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={handleResearch}
-          disabled={busy}
-          className="inline-flex h-9 items-center gap-1.5 rounded-full bg-primary px-4 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary-hover disabled:opacity-60"
-        >
-          {busy ? (
-            <Loader2Icon className="size-4 animate-spin" />
-          ) : (
-            <SparklesIcon className="size-4" />
-          )}
-          Teliti klaim ini
-        </button>
-        <button
-          type="button"
-          onClick={() => void handleSave()}
-          disabled={saved}
-          className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border px-4 text-[13px] font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-60"
-        >
-          {saved ? (
-            <CheckIcon className="size-4" />
-          ) : (
-            <BookmarkIcon className="size-4" />
-          )}
-          {saved ? "Tersimpan" : "Simpan"}
-        </button>
-      </div>
-      {error ? (
-        <p className="mt-2 text-[12.5px] font-medium text-destructive">{error}</p>
-      ) : null}
+      <ReaderActions
+        item={item}
+        researchLabel="Teliti klaim ini"
+        researchSeed={researchSeed}
+      />
 
       <ReaderRelatedGrid items={(related ?? []) as FeedItem[]} />
     </article>
