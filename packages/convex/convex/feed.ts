@@ -41,10 +41,10 @@ const discoveryItemRefValidator = v.union(
 // strip the system `_creationTime` and surface the denormalized verdict as
 // `claim`. Shared by getFeed / getFeedItem / getRelatedFeedItems so every read
 // path returns an identically-shaped item.
-function shapeFeedItem(item: Doc<"feedItems">) {
+function shapeFeedItem(item: Doc<"feedItems">, options?: { saved?: boolean }) {
   const { _creationTime, ...rest } = item;
   void _creationTime;
-  return { ...rest, claim: item.primaryClaim };
+  return { ...rest, claim: item.primaryClaim, saved: Boolean(options?.saved) };
 }
 
 // ── Public: read the ranked, mixed-media feed ─────────────────────────────
@@ -93,6 +93,7 @@ export const getFeed = query({
     // User signals: interests (signed weights) + hidden items.
     const interests = await loadInterestWeights(ctx, user._id);
     const hidden = await loadHiddenItemIds(ctx, user._id);
+    const saved = await loadSavedItemIds(ctx, user._id);
 
     const scored = candidates
       .filter((item) => !hidden.has(item._id))
@@ -119,7 +120,7 @@ export const getFeed = query({
     const result = [];
     for (const { item, interest } of ordered) {
       result.push({
-        ...shapeFeedItem(item),
+        ...shapeFeedItem(item, { saved: saved.has(item._id) }),
         relevanceScore: Math.round(Math.min(1, interest.normalized) * 100),
         reason: reasonFor(item, interest, args.serendipity ?? false),
       });
@@ -145,11 +146,37 @@ export const getSavedItems = query({
     for (const row of saved) {
       const item = await ctx.db.get("feedItems", row.feedItemId);
       if (!item) continue;
-      const { _creationTime, ...rest } = item;
-      void _creationTime;
-      items.push({ ...rest, savedAt: row.createdAt });
+      items.push({ ...shapeFeedItem(item, { saved: true }), savedAt: row.createdAt });
     }
     return items;
+  },
+});
+
+// ── Public: saved Discovery refs ──────────────────────────────────────────
+// Search-result papers can be saved before they have a stable feed row in the
+// UI. This query returns both the row id and paper key identities so clients do
+// not need to infer saved state from loosely-shaped saved rows.
+export const getSavedDiscoveryRefs = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    const limit = Math.min(args.limit ?? 200, 500);
+    const saved = await ctx.db
+      .query("savedFeedItems")
+      .withIndex("by_owner_created", (q) => q.eq("ownerUserId", user._id))
+      .order("desc")
+      .take(limit);
+
+    const refs = [];
+    for (const row of saved) {
+      const item = await ctx.db.get("feedItems", row.feedItemId);
+      if (!item) continue;
+      refs.push({ kind: "feed" as const, feedItemId: item._id });
+      if (item.paperKey) {
+        refs.push({ kind: "paper" as const, paperKey: item.paperKey });
+      }
+    }
+    return refs;
   },
 });
 
@@ -159,11 +186,14 @@ export const getSavedItems = query({
 export const getFeedItem = query({
   args: { feedItemId: v.string() },
   handler: async (ctx, args) => {
-    await requireCurrentUser(ctx);
+    const user = await requireCurrentUser(ctx);
     const id = ctx.db.normalizeId("feedItems", args.feedItemId);
     if (!id) return null;
     const item = await ctx.db.get("feedItems", id);
-    return item ? shapeFeedItem(item) : null;
+    if (!item) return null;
+    return shapeFeedItem(item, {
+      saved: await isFeedItemSaved(ctx, user._id, id),
+    });
   },
 });
 
@@ -172,7 +202,7 @@ export const getFeedItem = query({
 export const getRelatedFeedItems = query({
   args: { feedItemId: v.string(), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    await requireCurrentUser(ctx);
+    const user = await requireCurrentUser(ctx);
     const id = ctx.db.normalizeId("feedItems", args.feedItemId);
     if (!id) return [];
     const self = await ctx.db.get("feedItems", id);
@@ -183,6 +213,7 @@ export const getRelatedFeedItems = query({
       .withIndex("by_kind_published", (q) => q.eq("kind", self.kind))
       .order("desc")
       .take(limit * 4);
+    const saved = await loadSavedItemIds(ctx, user._id);
     const selfTopics = new Set(self.topics.map((topic) => topic.trim().toLowerCase()));
     return pool
       .filter((row) => row._id !== id)
@@ -197,7 +228,11 @@ export const getRelatedFeedItems = query({
       }))
       .sort((a, b) => b.overlap - a.overlap || b.recency - a.recency)
       .slice(0, limit)
-      .map((entry) => shapeFeedItem(entry.row));
+      .map((entry) =>
+        shapeFeedItem(entry.row, {
+          saved: saved.has(entry.row._id),
+        }),
+      );
   },
 });
 
@@ -469,6 +504,31 @@ async function loadHiddenItemIds(
     .order("desc")
     .take(1_000);
   return new Set(hiddenRows.map((row) => row.feedItemId));
+}
+
+async function loadSavedItemIds(
+  ctx: QueryCtx,
+  ownerUserId: string,
+): Promise<Set<string>> {
+  const rows = await ctx.db
+    .query("savedFeedItems")
+    .withIndex("by_owner_created", (q) => q.eq("ownerUserId", ownerUserId))
+    .take(500);
+  return new Set(rows.map((row) => row.feedItemId));
+}
+
+async function isFeedItemSaved(
+  ctx: QueryCtx,
+  ownerUserId: string,
+  feedItemId: Doc<"feedItems">["_id"],
+): Promise<boolean> {
+  const existing = await ctx.db
+    .query("savedFeedItems")
+    .withIndex("by_owner_item", (q) =>
+      q.eq("ownerUserId", ownerUserId).eq("feedItemId", feedItemId),
+    )
+    .unique();
+  return Boolean(existing);
 }
 
 async function hideFeedItemForUser(

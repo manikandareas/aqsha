@@ -6,7 +6,7 @@ import {
   summarizeTimeline,
 } from "./agent/gdeltProvider";
 import { fetchScienceNews } from "./agent/newsProvider";
-import { fetchReviewPreview } from "./feedArticlePreview";
+import { fetchArticlePreview } from "./articlePreview";
 
 const DAY_MS = 1000 * 60 * 60 * 24;
 
@@ -143,7 +143,7 @@ export const refreshScienceNews = internalAction({
     // Read each article page for a clean full-text body (readability extractor),
     // falling back to Exa's raw text when extraction yields too little.
     const previews = await Promise.all(
-      collected.map(({ article }) => fetchReviewPreview(article.url)),
+      collected.map(({ article }) => fetchArticlePreview(article.url)),
     );
 
     const items = collected.map(({ article, topicLabel }, index) => {

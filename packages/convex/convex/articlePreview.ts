@@ -1,12 +1,8 @@
 import { fetchWithTimeout, userAgent } from "./paperIngest/http";
 
-// The Google Fact Check (ClaimReview) API returns no image and no article body
-// — only the claim text, a verdict, and a link to the publisher's review page.
-// To give claim detail pages real substance we fetch that review page once and
-// derive both a thumbnail (og:image / twitter:image / JSON-LD image) and the
-// full article text (the "what's the hoax + why" reasoning) from the same HTML.
-// Everything is best-effort: any failure yields an empty preview and the UI
-// falls back to the verdict panel / review-title.
+// Best-effort article preview extraction for feed ingestion. Fetching is kept
+// separate from the pure extraction helpers so news/fact refresh jobs can share
+// one boundary and tests can cover site-shape heuristics without network I/O.
 
 const FETCH_TIMEOUT_MS = 7_000;
 const MAX_HTML_CHARS = 400_000;
@@ -51,14 +47,14 @@ const META_IMAGE_PATTERNS: RegExp[] = [
   /<meta[^>]+content=["']([^"']+)["'][^>]*\s(?:property|name)=["']twitter:image(?::src)?["']/i,
 ];
 
-export type ReviewPreview = {
+export type ArticlePreview = {
   imageUrl?: string;
   articleText?: string;
 };
 
-export async function fetchReviewPreview(
+export async function fetchArticlePreview(
   pageUrl: string,
-): Promise<ReviewPreview> {
+): Promise<ArticlePreview> {
   let base: URL;
   try {
     base = new URL(pageUrl);
@@ -84,13 +80,21 @@ export async function fetchReviewPreview(
       return {};
     }
     const html = (await response.text()).slice(0, MAX_HTML_CHARS);
-    return {
-      imageUrl: resolveImage(html, base),
-      articleText: extractArticleText(html),
-    };
+    return extractArticlePreviewFromHtml(html, base);
   } catch {
     return {};
   }
+}
+
+export function extractArticlePreviewFromHtml(
+  html: string,
+  baseUrl: URL | string,
+): ArticlePreview {
+  const base = typeof baseUrl === "string" ? new URL(baseUrl) : baseUrl;
+  return {
+    imageUrl: resolveImage(html, base),
+    articleText: extractArticleTextFromHtml(html),
+  };
 }
 
 // ── Image ─────────────────────────────────────────────────────────────────
@@ -138,7 +142,7 @@ function extractJsonLdImage(html: string): string | undefined {
 // Lightweight readability: prefer the <article>/<main> block with the most
 // paragraphs, strip non-content tags, then collect <p>/<li> text and drop
 // boilerplate. Returns undefined when too little real text survives.
-function extractArticleText(html: string): string | undefined {
+export function extractArticleTextFromHtml(html: string): string | undefined {
   const scope = pickArticleScope(html);
   const cleaned = scope
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
@@ -170,6 +174,7 @@ export function cleanPlainText(text: string): string | undefined {
   const kept: string[] = [];
   for (const rawLine of text.split(/\n+/)) {
     const line = rawLine
+      .trim()
       .replace(/^#{1,6}\s*/, "")
       .replace(/^[-*+]\s+/, "")
       .trim();

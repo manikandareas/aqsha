@@ -1,7 +1,7 @@
 import Exa from "exa-js";
 import type { ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
-import { cleanPlainText } from "../feedArticlePreview";
+import { cleanPlainText } from "../articlePreview";
 import { rateLimiter } from "../limits";
 
 // Exa news search on the SERVICE path (cron). Unlike `searchExaCandidates`,

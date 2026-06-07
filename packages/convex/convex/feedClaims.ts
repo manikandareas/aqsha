@@ -8,7 +8,7 @@ import {
 import { feedVerdictValidator } from "./feedValidators";
 import { candidatesToExplorePapers } from "./exploreModel";
 import { fetchOpenAlexWorksService } from "./feedOpenAlex";
-import { fetchReviewPreview, type ReviewPreview } from "./feedArticlePreview";
+import { fetchArticlePreview, type ArticlePreview } from "./articlePreview";
 import {
   deriveClaimTopics,
   searchFactCheckClaims,
@@ -212,8 +212,8 @@ export const refreshFactCheckClaims = internalAction({
     const previews = await Promise.all(
       claims.map((claim) =>
         claim.reviewUrl
-          ? fetchReviewPreview(claim.reviewUrl)
-          : Promise.resolve({} as ReviewPreview),
+          ? fetchArticlePreview(claim.reviewUrl)
+          : Promise.resolve({} as ArticlePreview),
       ),
     );
 

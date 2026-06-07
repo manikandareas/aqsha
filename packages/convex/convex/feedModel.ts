@@ -23,6 +23,10 @@ export type DiscoveryItemRef =
   | { kind: "feed"; feedItemId: string }
   | { kind: "paper"; paperKey: string };
 
+export type DiscoverySavedRef =
+  | { kind: "feed"; feedItemId: string }
+  | { kind: "paper"; paperKey: string };
+
 // Visual tone keys map onto @aqsha/ui soft tokens at the component layer.
 export type FeedVerdictTone =
   | "true"
@@ -148,7 +152,89 @@ export type FeedItem = {
   relevanceScore?: number;
   /** Specific "why am I seeing this" reason, e.g. "Karena minat: Diabetes". */
   reason?: string;
+  /** Whether the current viewer has saved this feed item. */
+  saved?: boolean;
 };
+
+export type ExplorePaperLike = {
+  key: string;
+  title: string;
+  snippet: string;
+  url: string;
+  sourceLabel: string;
+  doi?: string;
+  authors: string[];
+  year?: number;
+  publicationDate?: string;
+  venue?: string;
+  pdfUrl?: string;
+  citedByCount?: number;
+  isOpenAccess?: boolean;
+  topics: string[];
+  score?: number;
+};
+
+export type DiscoveryItem = Omit<FeedItem, "_id"> & {
+  _id?: string;
+  itemRef: DiscoveryItemRef;
+  saved: boolean;
+};
+
+export function discoveryItemKey(item: Pick<DiscoveryItem, "itemRef">): string {
+  return item.itemRef.kind === "paper"
+    ? `paper:${item.itemRef.paperKey}`
+    : item.itemRef.feedItemId;
+}
+
+export function savedRefKey(ref: DiscoverySavedRef): string {
+  return ref.kind === "paper" ? `paper:${ref.paperKey}` : ref.feedItemId;
+}
+
+export function feedItemToDiscoveryItem(item: FeedItem): DiscoveryItem {
+  return {
+    ...item,
+    saved: Boolean(item.saved),
+    itemRef: { kind: "feed", feedItemId: item._id },
+  };
+}
+
+export function paperToDiscoveryItem(
+  paper: ExplorePaperLike,
+  savedRefs: ReadonlySet<string> = new Set(),
+): DiscoveryItem {
+  const itemRef: DiscoveryItemRef = { kind: "paper", paperKey: paper.key };
+  return {
+    itemRef,
+    saved: savedRefs.has(savedRefKey(itemRef)),
+    kind: "paper",
+    title: paper.title,
+    summary: paper.snippet,
+    tldr: paper.snippet,
+    url: paper.url,
+    provider: "openalex",
+    sourceLabel: paper.sourceLabel,
+    paperKey: paper.key,
+    doi: paper.doi,
+    authors: paper.authors,
+    year: paper.year,
+    venue: paper.venue,
+    pdfUrl: paper.pdfUrl,
+    citedByCount: paper.citedByCount,
+    isOpenAccess: paper.isOpenAccess,
+    topics: paper.topics,
+    trendScore: paper.citedByCount ?? paper.score ?? 0,
+    publishedAt: paper.publicationDate
+      ? parseDateMs(paper.publicationDate)
+      : paper.year
+        ? Date.UTC(paper.year, 0, 1)
+        : undefined,
+  };
+}
+
+function parseDateMs(value: string): number | undefined {
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : undefined;
+}
 
 // UI tone → soft-token family used by the verdict badge in the web app
 // (apps/web/app/globals.css). Kept here so the mapping is shared/auditable.
