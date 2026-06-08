@@ -7,22 +7,17 @@
 | Package | Path | Runtime | Key Tech |
 |---|---|---|---|
 | `@aqsha/app` | `apps/web` | Next.js 16 (App Router) | React 19, Tailwind v4, Convex client |
-| `@aqsha/www` | `apps/www` | Astro | React islands, Tailwind v4, marketing pages |
 | `@aqsha/convex` | `packages/convex` | Convex | Convex functions/components, Clerk Auth, Agent/Workflow, internal provenance |
 | `@aqsha/ui` | `packages/ui` | shared | React UI primitives and shared token CSS |
 
 ## Exact Dev Commands
 ```bash
-# Run active app, Convex backend, and marketing site in parallel
+# Run active app and Convex backend in parallel
 bun dev
-
-# Run the pivot product only
-bun run dev:pivot
 
 # Run one workspace
 bun run dev:app
 bun run dev:convex
-bun run dev:www
 
 # Verification
 bun run lint
@@ -34,10 +29,9 @@ bun run build
 - **App**: UI rules and Next.js 16 caveats live in `apps/web/AGENTS.md`. Read that before touching product UI.
 - **Detail/panel parity**: Thread detail and workspace detail each have a main view and an embedded side panel of the other surface. See `apps/web/AGENTS.md` → **Detail / Panel Parity** before changing either.
 - **Convex**: Convex rules live in `packages/convex/AGENTS.md`. Read `packages/convex/convex/_generated/ai/guidelines.md` before editing Convex functions.
-- **www**: Marketing site uses `@aqsha/ui` primitives and shared styles from `packages/ui`.
 
 ## Icons
-- Use `@aqsha/ui/icons` for all app and marketing icon imports in `apps/web` and `apps/www`.
+- Use `@aqsha/ui/icons` for all app icon imports in `apps/web`.
 - Use the local `packages/ui/src/icons.tsx` adapter for shared UI package icons, with relative imports such as `../icons`.
 - Do not add direct `lucide-react` imports or direct `lucide-react` package dependencies in Aqsha code. `lucide-react` may still appear transitively when required by third-party packages such as BlockNote.
 - When a needed icon name is missing, add a Lucide-compatible export to `packages/ui/src/icons.tsx` backed by the official Hugeicons packages (`@hugeicons/react` and `@hugeicons/core-free-icons`).
@@ -73,10 +67,10 @@ bun run --filter '@aqsha/convex' test
 
 ## TypeScript
 - Base config: `tsconfig.base.json` (ES2022, Bundler resolution, strict, noEmit).
-- `apps/web/tsconfig.json` and `apps/www/tsconfig.json` are app-specific.
+- `apps/web/tsconfig.json` is app-specific.
 - `packages/convex/tsconfig.json` and `packages/ui/tsconfig.json` own their package checks.
 
 ## Notable Defaults
 - `apps/web` consumes generated Convex exports through `@aqsha/convex/api` and `@aqsha/convex/server`.
-- `apps/web` and `apps/www` both consume `@aqsha/ui`.
+- `apps/web` consumes `@aqsha/ui`.
 - Only `packages/convex` has a test runner configured (`vitest`).

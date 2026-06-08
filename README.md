@@ -1,13 +1,12 @@
 # Aqsha
 
-Aqsha is a Convex-backed personal research chatbot with a Next.js product app and an Astro marketing site.
+Aqsha is a Convex-backed personal research chatbot with a Next.js product app.
 
 ## Monorepo Structure
 
 ```txt
 apps/
-  app/      Next.js authenticated product app
-  www/      Astro marketing website
+  web/      Next.js public landing and authenticated product app
 packages/
   convex/   Convex functions, schema, components, and tests
   ui/       Shared React UI primitives and styles
@@ -17,7 +16,6 @@ packages/
 
 - **Runtime and package manager**: Bun
 - **Product app**: Next.js 16, React 19, Tailwind CSS 4
-- **Marketing site**: Astro, React islands, Tailwind CSS 4
 - **Backend**: Convex, Clerk Auth, `@convex-dev/agent`, rate limiting, workflow, internal provenance storage
 - **AI**: AI SDK with OpenAI-compatible chat and embedding providers through Convex functions
 - **Shared UI**: Radix primitives and shadcn-style components in `packages/ui`
@@ -30,16 +28,10 @@ Install dependencies from the repository root:
 bun install
 ```
 
-Run the active product app, Convex backend, and marketing site together:
+Run the active product app and Convex backend together:
 
 ```bash
 bun dev
-```
-
-Run only the product app and Convex backend:
-
-```bash
-bun run dev:pivot
 ```
 
 Or run a single workspace:
@@ -47,15 +39,14 @@ Or run a single workspace:
 ```bash
 bun run dev:app
 bun run dev:convex
-bun run dev:www
 ```
 
 ## Scripts
 
 ```bash
-bun run build       # Build app and www
+bun run build       # Build app
 bun run lint        # Lint app and Convex package
-bun run typecheck   # Type-check app, www, Convex, and UI package
+bun run typecheck   # Type-check app, Convex, and UI package
 ```
 
 Convex workspace commands:
@@ -70,7 +61,7 @@ bun run --filter '@aqsha/convex' test
 ## Development Notes
 
 - `apps/web` imports generated Convex bindings from `@aqsha/convex/api` and `@aqsha/convex/server`.
-- `apps/web` and `apps/www` both consume shared UI from `@aqsha/ui`.
+- `apps/web` consumes shared UI from `@aqsha/ui`.
 - Convex environment is managed by `convex dev` and the Convex dashboard.
 - Convex AI chat env can be routed independently with `AQSHA_CHAT_API_KEY`, `AQSHA_CHAT_BASE_URL`, and `AQSHA_CHAT_PROVIDER_NAME`.
 - Convex RAG embedding env can be routed independently with `AQSHA_EMBEDDING_API_KEY`, `AQSHA_EMBEDDING_BASE_URL`, `AQSHA_EMBEDDING_PROVIDER_NAME`, `AQSHA_RAG_EMBEDDING_MODEL`, and `AQSHA_RAG_EMBEDDING_DIMENSION`.

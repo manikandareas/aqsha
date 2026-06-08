@@ -32,10 +32,9 @@ Do not restore:
 
 The active product surface is:
 
-- `apps/app`: Next.js 16 App Router app.
+- `apps/web`: Next.js 16 App Router app.
 - `packages/convex`: Convex backend, Agent, Workflow, Clerk Auth, billing, rate limits, research tools, and provenance.
 - `packages/ui`: shared UI primitives and token CSS.
-- `apps/www`: marketing site.
 
 Use Bun workspace commands from the repo root. Do not use npm, pnpm, or yarn.
 
