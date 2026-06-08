@@ -89,6 +89,10 @@ export function DiscoveryPage() {
     api.feed.getSavedDiscoveryRefs,
     nav.view === "papers" ? { itemRefs: paperItemRefs } : "skip",
   );
+  const hiddenRefsData = useConvexQueryData(
+    api.feed.getHiddenDiscoveryRefs,
+    nav.view === "papers" ? { itemRefs: paperItemRefs } : "skip",
+  );
 
   // Mutations / actions.
   const saveDiscoveryItem = useConvexMutationFn(api.feed.saveDiscoveryItem);
@@ -122,6 +126,13 @@ export function DiscoveryPage() {
     }
     return set;
   }, [savedRefsData]);
+  const hiddenRefs = useMemo(() => {
+    const set = new Set<string>();
+    for (const ref of (hiddenRefsData ?? []) as DiscoverySavedRef[]) {
+      set.add(savedRefKey(ref));
+    }
+    return set;
+  }, [hiddenRefsData]);
 
   const rawItems = useMemo<DiscoveryItem[]>(() => {
     if (nav.view === "papers") {
@@ -133,8 +144,12 @@ export function DiscoveryPage() {
   }, [nav.view, papersQuery.data, feedData, savedRefs]);
 
   const items = useMemo(
-    () => rawItems.filter((item) => !hiddenIds.has(discoveryItemKey(item))),
-    [rawItems, hiddenIds],
+    () =>
+      rawItems.filter((item) => {
+        const key = discoveryItemKey(item);
+        return !hiddenIds.has(key) && !hiddenRefs.has(key);
+      }),
+    [rawItems, hiddenIds, hiddenRefs],
   );
   const topTopics = useMemo(() => deriveTopTopics(rawItems, 8), [rawItems]);
   // Right-rail aggregates — derived from the items already loaded (zero backend).

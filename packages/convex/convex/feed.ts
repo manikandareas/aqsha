@@ -26,6 +26,10 @@ const RECENCY_HALF_LIFE_DAYS = 21;
 const DAY_MS = 1000 * 60 * 60 * 24;
 
 const FEED_KINDS = ["paper", "news", "claim", "topic", "idea"] as const;
+type DiscoveryResolvedRef =
+  | { kind: "feed"; feedItemId: Doc<"feedItems">["_id"] }
+  | { kind: "paper"; paperKey: string };
+
 const discoveryItemRefValidator = v.union(
   v.object({
     kind: v.literal("feed"),
@@ -164,15 +168,12 @@ export const getSavedDiscoveryRefs = query({
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     if (args.itemRefs) {
-      const refs = [];
+      const refs: DiscoveryResolvedRef[] = [];
       for (const itemRef of args.itemRefs.slice(0, 80)) {
         const item = await feedItemForDiscoveryRef(ctx, itemRef);
         if (!item) continue;
         if (!(await isFeedItemSaved(ctx, user._id, item._id))) continue;
-        refs.push({ kind: "feed" as const, feedItemId: item._id });
-        if (item.paperKey) {
-          refs.push({ kind: "paper" as const, paperKey: item.paperKey });
-        }
+        pushDiscoveryRefsForItem(refs, item);
       }
       return refs;
     }
@@ -184,14 +185,50 @@ export const getSavedDiscoveryRefs = query({
       .order("desc")
       .take(limit);
 
-    const refs = [];
+    const refs: DiscoveryResolvedRef[] = [];
     for (const row of saved) {
       const item = await ctx.db.get("feedItems", row.feedItemId);
       if (!item) continue;
-      refs.push({ kind: "feed" as const, feedItemId: item._id });
-      if (item.paperKey) {
-        refs.push({ kind: "paper" as const, paperKey: item.paperKey });
+      pushDiscoveryRefsForItem(refs, item);
+    }
+    return refs;
+  },
+});
+
+// ── Public: hidden Discovery refs ─────────────────────────────────────────
+// Mirrors getSavedDiscoveryRefs for Papers search results. Hide actions may
+// materialize a paper into feedItems, so the UI needs paper-key refs to filter
+// future search responses instead of only hiding the current in-memory list.
+export const getHiddenDiscoveryRefs = query({
+  args: {
+    itemRefs: v.optional(v.array(discoveryItemRefValidator)),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    if (args.itemRefs) {
+      const refs: DiscoveryResolvedRef[] = [];
+      for (const itemRef of args.itemRefs.slice(0, 80)) {
+        const item = await feedItemForDiscoveryRef(ctx, itemRef);
+        if (!item) continue;
+        if (!(await isFeedItemHidden(ctx, user._id, item._id))) continue;
+        pushDiscoveryRefsForItem(refs, item);
       }
+      return refs;
+    }
+
+    const limit = Math.min(args.limit ?? 200, 500);
+    const hidden = await ctx.db
+      .query("hiddenFeedItems")
+      .withIndex("by_owner_created", (q) => q.eq("ownerUserId", user._id))
+      .order("desc")
+      .take(limit);
+
+    const refs: DiscoveryResolvedRef[] = [];
+    for (const row of hidden) {
+      const item = await ctx.db.get("feedItems", row.feedItemId);
+      if (!item) continue;
+      pushDiscoveryRefsForItem(refs, item);
     }
     return refs;
   },
@@ -547,6 +584,30 @@ async function isFeedItemSaved(
     )
     .unique();
   return Boolean(existing);
+}
+
+async function isFeedItemHidden(
+  ctx: QueryCtx,
+  ownerUserId: string,
+  feedItemId: Doc<"feedItems">["_id"],
+): Promise<boolean> {
+  const existing = await ctx.db
+    .query("hiddenFeedItems")
+    .withIndex("by_owner_item", (q) =>
+      q.eq("ownerUserId", ownerUserId).eq("feedItemId", feedItemId),
+    )
+    .unique();
+  return Boolean(existing);
+}
+
+function pushDiscoveryRefsForItem(
+  refs: DiscoveryResolvedRef[],
+  item: Doc<"feedItems">,
+): void {
+  refs.push({ kind: "feed", feedItemId: item._id });
+  if (item.paperKey) {
+    refs.push({ kind: "paper", paperKey: item.paperKey });
+  }
 }
 
 async function hideFeedItemForUser(
