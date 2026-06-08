@@ -38,17 +38,6 @@ export function useThreadExperienceData(threadId?: string) {
     isAuthenticated && threadId ? { threadId } : "skip",
   );
   const threadQueriesEnabled = Boolean(isAuthenticated && threadId && selectedThread !== null);
-  const shouldLoadGlobalContextCandidates = Boolean(
-    isAuthenticated && (!threadId || (threadQueriesEnabled && !selectedThread?.workspaceId)),
-  );
-  const selectedContextArtifacts = useConvexQueryData(
-    api.agent.threadContext.listForThread,
-    threadQueriesEnabled ? { threadId: threadId! } : "skip",
-  );
-  const contextCandidateArtifacts = useConvexQueryData(
-    api.artifacts.listForContextPicker,
-    shouldLoadGlobalContextCandidates ? { workspaceId: undefined } : "skip",
-  );
   const createWorkspace = useConvexMutationFn(api.workspaces.create);
   const startThread = useConvexMutationFn(api.agent.messages.startThread);
   const sendMessage = useConvexOptimisticMutationState(
@@ -96,9 +85,6 @@ export function useThreadExperienceData(threadId?: string) {
     workspaces: workspacePage?.page ?? [],
     threads: threadPage?.page ?? [],
     selectedThread,
-    selectedContextArtifacts: selectedContextArtifacts ?? [],
-    selectedContextArtifactsLoaded: selectedContextArtifacts !== undefined,
-    contextCandidateArtifacts: contextCandidateArtifacts ?? [],
     createWorkspace,
     startThread,
     sendMessage: sendMessage.mutateAsync,

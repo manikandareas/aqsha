@@ -22,7 +22,8 @@ import {
   hitlCardShellClass,
 } from "./hitl-card-layout";
 
-/** UI for agent `presentPlan` tool — Review Plan card */
+/** Shared Review Plan card for the approval tools: `proposeArtifact`,
+ * `createWorkspace`, `renameWorkspace`, and `startDeepResearch`. */
 export function HitlPlanReviewCard({
   title,
   summary,
@@ -50,7 +51,7 @@ export function HitlPlanReviewCard({
     <Plan
       defaultOpen={!hasBullets}
       className={cn("border-border/70", hitlCardShellClass)}
-      data-hitl-tool="presentPlan"
+      data-hitl-tool="proposeArtifact"
     >
       <PlanHeader className={cn("flex-row items-center justify-between", hitlCardHeaderClass)}>
         <span className="text-[10px] font-medium text-muted-foreground">Review plan</span>

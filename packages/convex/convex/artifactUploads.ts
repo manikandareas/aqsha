@@ -181,6 +181,7 @@ export const processPendingAttachmentsAndStart = internalAction({
     workspaceId: v.optional(v.id("workspaces")),
     pendingAttachments: v.array(pendingAttachmentValidator),
     selectedContextArtifactIds: v.optional(v.array(v.id("artifacts"))),
+    selectedContextWorkspaceIds: v.optional(v.array(v.id("workspaces"))),
     contextArtifactSnapshot: v.optional(
       v.array(
         v.object({
@@ -239,6 +240,7 @@ export const processPendingAttachmentsAndStart = internalAction({
       commandId: args.commandId,
       workspaceId: args.workspaceId,
       selectedContextArtifactIds: args.selectedContextArtifactIds,
+      selectedContextWorkspaceIds: args.selectedContextWorkspaceIds,
       contextArtifactSnapshot: snapshot,
       messageAttachmentArtifactIds: uploadedIds,
     });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DetailSplitLayout } from "@/components/layout/detail-split-layout";
 import { ResponsiveSidePanel } from "@/components/layout/responsive-side-panel";
@@ -8,10 +8,10 @@ import { useSidebar } from "@/components/ui/sidebar";
 import { toWorkspaceId } from "@/lib/convex-refs";
 import type { StartThread } from "@/features/thread-experience/components/component-types";
 import {
-  buildContextArtifactSnapshot,
-  toMutationContextSnapshot,
-  toSelectedContextArtifactIds,
-} from "@/features/thread-experience/utils/message-context";
+  ComposerMentionsProvider,
+  usePanelContextSelection,
+} from "@/features/thread-experience/components/composer-context-mentions";
+import { toMutationContextSnapshot } from "@/features/thread-experience/utils/message-context";
 import {
   useWorkspaceDetailData,
   type WorkspaceLibraryData,
@@ -23,7 +23,6 @@ import {
 } from "@/features/workspaces/components/workspace-chat-side-panel";
 import { WorkspaceLibrarySurface } from "@/features/workspaces/components/workspace-library-surface";
 import { WorkspaceShell } from "@/features/workspaces/components/workspace-shell";
-import { useWorkspaceDraftContext } from "@/features/workspaces/hooks/use-workspace-draft-context";
 import { useWorkspaceLibraryDialogState } from "@/features/workspaces/hooks/use-workspace-library-dialogs";
 
 export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) {
@@ -51,49 +50,19 @@ function WorkspaceDetailMain({
   data: ReturnType<typeof useWorkspaceDetailData>;
 }) {
   const router = useRouter();
-  const dialogState = useWorkspaceLibraryDialogState();
-  const draftContext = useWorkspaceDraftContext(workspaceId);
   const leftSidebar = useSidebar();
   const [chatPanelOpen, setChatPanelOpen] = useState(false);
   const [panelThreadId, setPanelThreadId] = useState<string | null>(null);
 
-  const contextArtifacts = data.artifacts.flatMap((artifact) =>
-    draftContext.selectedIdSet.has(artifact._id)
-      ? [{ artifactId: artifact._id, title: artifact.title }]
-      : [],
-  );
-
-  const handleStartThread: StartThread = async (args) => {
-    const shouldIncludeContext = draftContext.isDirty;
-    const messageAttachmentIds = args.messageAttachmentArtifactIds?.map(String) ?? [];
-    const panelIds = shouldIncludeContext
-      ? [...new Set([...draftContext.selectedIds, ...messageAttachmentIds.map(String)])]
-      : messageAttachmentIds;
-    const titleById = new Map(
-      data.artifacts.map((artifact) => [artifact._id, artifact.title]),
-    );
-    const contextArtifactSnapshot = buildContextArtifactSnapshot(
-      panelIds,
-      titleById,
-      messageAttachmentIds,
-    );
-    const panelSnapshot = shouldIncludeContext
-      ? buildContextArtifactSnapshot(
-          draftContext.selectedIds,
-          titleById,
-        )
-      : undefined;
-    const result = await data.startThread({
+  // The thread is filed under this workspace ("disimpan di"); the workspace also
+  // pre-seeds as an inline context pill via the mention provider. The composer
+  // supplies the pinned context refs; we just brand the snapshot here.
+  const handleStartThread: StartThread = (args) =>
+    data.startThread({
       ...args,
       workspaceId: toWorkspaceId(workspaceId),
-      selectedContextArtifactIds: toSelectedContextArtifactIds(panelSnapshot),
-      contextArtifactSnapshot: toMutationContextSnapshot(contextArtifactSnapshot),
+      contextArtifactSnapshot: toMutationContextSnapshot(args.contextArtifactSnapshot),
     });
-    if (result.ok && result.threadId && shouldIncludeContext) {
-      draftContext.markSelectionPersisted(draftContext.selectedIds);
-    }
-    return result;
-  };
 
   const handlePanelThreadChange = (threadId: string | null) => {
     setPanelThreadId(threadId);
@@ -106,8 +75,6 @@ function WorkspaceDetailMain({
     ? leftSidebar.openMobile
     : leftSidebar.open;
 
-  const libraryData: WorkspaceLibraryData = data;
-
   return (
     <main className="flex h-svh min-h-0 flex-col overflow-hidden bg-background">
       {data.isLoading ? (
@@ -115,43 +82,92 @@ function WorkspaceDetailMain({
       ) : data.workspace === null ? (
         <WorkspaceMissing />
       ) : data.workspace ? (
-        <DetailSplitLayout
-          sideOpen={chatPanelOpen}
-          onSideOpenChange={setChatPanelOpen}
-          main={
-            <WorkspaceLibrarySurface
-              workspaceId={workspaceId}
-              workspaceName={data.workspace.name}
-              libraryData={libraryData}
-              dialogState={dialogState}
-              getArtifactSelected={draftContext.isSelected}
-              onToggleArtifactContext={draftContext.toggleArtifact}
-              onSetArtifactContextSelection={draftContext.setSelectedArtifacts}
-              onAfterArchive={() => router.push("/app/workspaces")}
-              chatPanelOpen={chatPanelOpen}
-              onToggleChatPanel={() => setChatPanelOpen((open) => !open)}
-              showLeftSidebarTrigger={!isLeftSidebarOpen}
-              onToggleLeftSidebar={leftSidebar.toggleSidebar}
-            />
-          }
-          side={
-            <ResponsiveSidePanel open={chatPanelOpen}>
-              <WorkspaceChatSidePanel
-                workspaceName={data.workspace.name}
+        <ComposerMentionsProvider
+          threadId={panelThreadId ?? undefined}
+          ambientWorkspaceId={workspaceId}
+        >
+          <DetailSplitLayout
+            sideOpen={chatPanelOpen}
+            onSideOpenChange={setChatPanelOpen}
+            main={
+              <WorkspaceLibraryMain
                 workspaceId={workspaceId}
-                activeThreadId={panelThreadId}
-                onActiveThreadIdChange={handlePanelThreadChange}
-                threads={data.workspaceThreads}
-                contextArtifacts={contextArtifacts}
-                onRemoveContextArtifact={draftContext.toggleArtifact}
-                rateStatus={data.rateStatus}
-                startThread={handleStartThread}
-                removeThread={data.removeThread}
+                workspaceName={data.workspace.name}
+                libraryData={data}
+                chatPanelOpen={chatPanelOpen}
+                onToggleChatPanel={() => setChatPanelOpen((open) => !open)}
+                showLeftSidebarTrigger={!isLeftSidebarOpen}
+                onToggleLeftSidebar={leftSidebar.toggleSidebar}
+                onAfterArchive={() => router.push("/app/workspaces")}
               />
-            </ResponsiveSidePanel>
-          }
-        />
+            }
+            side={
+              <ResponsiveSidePanel open={chatPanelOpen}>
+                <WorkspaceChatSidePanel
+                  workspaceId={workspaceId}
+                  activeThreadId={panelThreadId}
+                  onActiveThreadIdChange={handlePanelThreadChange}
+                  threads={data.workspaceThreads}
+                  rateStatus={data.rateStatus}
+                  startThread={handleStartThread}
+                  removeThread={data.removeThread}
+                />
+              </ResponsiveSidePanel>
+            }
+          />
+        </ComposerMentionsProvider>
       ) : null}
     </main>
+  );
+}
+
+function WorkspaceLibraryMain({
+  workspaceId,
+  workspaceName,
+  libraryData,
+  chatPanelOpen,
+  onToggleChatPanel,
+  showLeftSidebarTrigger,
+  onToggleLeftSidebar,
+  onAfterArchive,
+}: {
+  workspaceId: string;
+  workspaceName: string;
+  libraryData: WorkspaceLibraryData;
+  chatPanelOpen: boolean;
+  onToggleChatPanel: () => void;
+  showLeftSidebarTrigger: boolean;
+  onToggleLeftSidebar: () => void;
+  onAfterArchive: () => void;
+}) {
+  const dialogState = useWorkspaceLibraryDialogState();
+  const titleById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const artifact of libraryData.artifacts) {
+      map.set(artifact._id, artifact.title);
+    }
+    return map;
+  }, [libraryData.artifacts]);
+  const contextSelection = usePanelContextSelection({
+    workspaceId,
+    workspaceName,
+    titleById,
+  });
+
+  return (
+    <WorkspaceLibrarySurface
+      workspaceId={workspaceId}
+      workspaceName={workspaceName}
+      libraryData={libraryData}
+      dialogState={dialogState}
+      getArtifactSelected={contextSelection.getArtifactSelected}
+      onToggleArtifactContext={contextSelection.onToggleArtifactContext}
+      onSetArtifactContextSelection={contextSelection.onSetArtifactContextSelection}
+      onAfterArchive={onAfterArchive}
+      chatPanelOpen={chatPanelOpen}
+      onToggleChatPanel={onToggleChatPanel}
+      showLeftSidebarTrigger={showLeftSidebarTrigger}
+      onToggleLeftSidebar={onToggleLeftSidebar}
+    />
   );
 }

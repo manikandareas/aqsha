@@ -186,12 +186,12 @@ export const promptCommands = [
     buildPrompt: (argument) =>
       [
         "Jalankan perintah workspace artifact berikut menggunakan HITL tools — jangan tanya di chat biasa.",
-        "WAJIB: create → askHuman dulu (1-2 pertanyaan), setelah user jawab via kartu → presentPlan. Update → askHuman jika tidak jelas, else presentPlan. Delete → confirmAction.",
-        "Jangan tulis daftar pilihan (1/2/3) di chat. Jangan minta user membalas teks bebas — pakai askHuman.",
+        "WAJIB: create → askUser dulu (1-2 pertanyaan), setelah user jawab via kartu → proposeArtifact. Update → askUser jika tidak jelas, else proposeArtifact. Delete → deleteArtifact.",
+        "Jangan tulis daftar pilihan (1/2/3) di chat. Jangan minta user membalas teks bebas — pakai askUser.",
         "Inferensi intent: buat/bikin/tulis/create = create; perbarui/update = update; hapus/delete = delete.",
-        "Untuk create, meskipun instruksi sudah jelas (mis. 'buat cerita rakyat'), tetap askHuman dulu (judul, panjang, nada, atau struktur) sebelum presentPlan.",
-        "presentPlan: sertakan artifactType yang sesuai (markdown/plain_text/html/svg/mermaid/json/csv/code), dan planBullets (3-6 poin) tanpa isi final — isi artifact dibuat setelah user menekan Build.",
-        "Summary presentPlan: jelaskan apa yang akan dibuat (1-2 kalimat), jangan sebut UI/kartu/Build/tombol.",
+        "Untuk create, meskipun instruksi sudah jelas (mis. 'buat cerita rakyat'), tetap askUser dulu (judul, panjang, nada, atau struktur) sebelum proposeArtifact.",
+        "proposeArtifact: sertakan artifactType yang sesuai (markdown/plain_text/html/svg/mermaid/json/csv/code), dan planBullets (3-6 poin) tanpa isi final. Setelah user menyetujui kartu, panggil executeArtifact sekali dengan konten final.",
+        "Summary proposeArtifact: jelaskan apa yang akan dibuat (1-2 kalimat), jangan sebut UI/kartu/Build/tombol.",
         "Setelah memanggil tool HITL, balas maksimal satu kalimat singkat.",
         "",
         withInput(argument, "[Instruksi artifact belum diberikan]"),
@@ -210,10 +210,10 @@ export const promptCommands = [
     buildPrompt: (argument) =>
       [
         "Jalankan permintaan manajemen workspace berikut menggunakan HITL workspace tools — jangan tanya di chat biasa.",
-        "WAJIB: create_workspace → askHuman jika nama/konteks belum jelas, lalu presentWorkspacePlan. rename_workspace → askHuman jika target workspace tidak jelas, lalu presentWorkspacePlan.",
-        "Jangan tulis daftar pilihan (1/2/3) di chat. Gunakan askHuman untuk klarifikasi terstruktur.",
-        "presentWorkspacePlan wajib memuat action, name (nama akhir yang diusulkan), planBullets (2-5 poin), dan workspaceId untuk rename bila sudah diketahui.",
-        "Jangan eksekusi create/rename sebelum user menyetujui kartu Review plan.",
+        "WAJIB: buat workspace → askUser jika nama/konteks belum jelas, lalu createWorkspace. ganti nama workspace → askUser jika target workspace tidak jelas, lalu renameWorkspace.",
+        "Jangan tulis daftar pilihan (1/2/3) di chat. Gunakan askUser untuk klarifikasi terstruktur.",
+        "createWorkspace wajib memuat name (nama akhir), summary, dan planBullets (2-5 poin). renameWorkspace wajib memuat workspaceId, name (nama baru), summary, dan planBullets.",
+        "createWorkspace/renameWorkspace meminta persetujuan dulu (kartu Review plan) dan dieksekusi otomatis setelah user menyetujui — jangan minta konfirmasi tambahan di chat.",
         "Setelah memanggil tool HITL, balas maksimal satu kalimat singkat.",
         "",
         withInput(argument, "[Instruksi workspace belum diberikan]"),

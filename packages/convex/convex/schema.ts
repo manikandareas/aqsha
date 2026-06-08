@@ -1,11 +1,7 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { explorePaperFields } from "./exploreValidators";
-import {
-  feedItemFields,
-  feedProviderValidator,
-  feedVerdictValidator,
-} from "./feedValidators";
+import { feedItemFields, feedProviderValidator } from "./feedValidators";
 
 const runId = v.union(v.id("agentRuns"), v.id("researchRuns"));
 
@@ -155,6 +151,17 @@ export default defineSchema(
       .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"])
       .index("by_owner_thread_artifact", ["ownerUserId", "threadId", "artifactId"])
       .index("by_owner_workspace_artifact", ["ownerUserId", "workspaceId", "artifactId"]),
+    // Whole-workspace context references pinned to a thread. Additive to
+    // threadMetadata.workspaceId ("filed under"): a thread can reference many
+    // workspaces as RAG context sources. Mirrors threadContextArtifacts.
+    threadContextWorkspaces: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      workspaceId: v.id("workspaces"),
+      createdAt: v.number(),
+    })
+      .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"])
+      .index("by_owner_thread_workspace", ["ownerUserId", "threadId", "workspaceId"]),
     workspaces: defineTable({
       ownerUserId: v.string(),
       name: v.string(),
@@ -322,6 +329,27 @@ export default defineSchema(
       artifactType: v.optional(artifactTypeValidator),
       source: v.optional(v.union(v.literal("upload"), v.literal("workspace"))),
       kind: v.optional(v.union(v.literal("document"), v.literal("url"))),
+      createdAt: v.number(),
+    }).index("by_owner_message", ["ownerUserId", "messageId"]),
+    // Per-message snapshot of the workspaces that were active context when the
+    // message was sent (filed-under + @mentioned). Drives the message bubble's
+    // workspace badges.
+    messageContextWorkspaces: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      messageId: v.string(),
+      workspaceId: v.id("workspaces"),
+      name: v.string(),
+      createdAt: v.number(),
+    }).index("by_owner_message", ["ownerUserId", "messageId"]),
+    // The user message text WITH inline mention markers, kept separate from the
+    // agent message (which is stored clean) so the bubble can render mention
+    // pills at the exact position the user typed them.
+    messageRichContent: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      messageId: v.string(),
+      content: v.string(),
       createdAt: v.number(),
     }).index("by_owner_message", ["ownerUserId", "messageId"]),
     agentRuns: defineTable({
@@ -812,29 +840,6 @@ export default defineSchema(
       .index("by_dedupe_key", ["dedupeKey"])
       .index("by_kind_trend", ["kind", "trendScore"])
       .index("by_kind_published", ["kind", "publishedAt"]),
-    feedItemClaims: defineTable({
-      feedItemId: v.id("feedItems"),
-      claim: v.string(),
-      verdict: feedVerdictValidator,
-      // "mafindo" | "google_factcheck" | "aqsha_ai" | ...
-      verdictSource: v.string(),
-      verdictBy: v.union(v.literal("human"), v.literal("ai")),
-      // Original publisher rating string, e.g. "Hoaks" / "Misleading".
-      verdictLabelRaw: v.string(),
-      publisher: v.optional(v.string()),
-      reviewUrl: v.optional(v.string()),
-      reviewedAt: v.optional(v.number()),
-      evidence: v.optional(v.string()),
-      confidence: v.optional(v.number()),
-      severity: v.optional(
-        v.union(v.literal("info"), v.literal("warning"), v.literal("high")),
-      ),
-      claimReviewJson: v.optional(v.string()),
-      // Bounded list of explorePapers keys (supporting academic papers).
-      supportingPaperKeys: v.optional(v.array(v.string())),
-      createdAt: v.number(),
-      updatedAt: v.number(),
-    }).index("by_feed_item", ["feedItemId"]),
     feedSources: defineTable({
       provider: feedProviderValidator,
       label: v.string(),

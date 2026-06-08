@@ -11,7 +11,7 @@ import {
   hitlCardShellClass,
 } from "./hitl-card-layout";
 
-/** UI for agent `confirmAction` tool — Confirm card */
+/** UI for agent `deleteArtifact` tool — Confirm card */
 export function HitlConfirmCard({
   title,
   message,
@@ -34,7 +34,7 @@ export function HitlConfirmCard({
   return (
     <Card
       size="sm"
-      data-hitl-tool="confirmAction"
+      data-hitl-tool="deleteArtifact"
       className={cn("border-coral-soft-border/60", hitlCardShellClass)}
     >
       <CardHeader className={hitlCardHeaderClass}>

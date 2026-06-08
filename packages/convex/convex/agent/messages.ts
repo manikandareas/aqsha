@@ -57,11 +57,14 @@ import {
 } from "./promptPayload";
 import { assertWorkspaceOwner } from "../workspaceAccess";
 import {
+  addContextArtifactsForThread,
   buildPromptContextForThread,
   persistMessageContextArtifacts,
+  persistMessageContextWorkspaces,
   prependPromptContext,
-  replaceContextArtifactsForThread,
 } from "./threadContext";
+import { addContextWorkspacesForThread } from "./threadContextWorkspaces";
+import { stripMentionMarkers } from "./mentionMarkers";
 import { CHAT_PROVIDER_NAME, chatProvider } from "./providers";
 import { hasActiveReplyRun, hasOtherActiveReplyRun } from "./runLifecycle";
 
@@ -116,12 +119,12 @@ type SendResult =
     };
 
 function previewFromContent(content: string) {
-  const singleLine = content.replace(/\s+/g, " ").trim();
+  const singleLine = stripMentionMarkers(content).replace(/\s+/g, " ").trim();
   return singleLine.length > 140 ? `${singleLine.slice(0, 137)}...` : singleLine;
 }
 
 function trimForTitleContext(content: string) {
-  const singleLine = content.replace(/\s+/g, " ").trim();
+  const singleLine = stripMentionMarkers(content).replace(/\s+/g, " ").trim();
   return singleLine.length > 1_500
     ? `${singleLine.slice(0, 1_497).trimEnd()}...`
     : singleLine;
@@ -194,7 +197,7 @@ async function updateThreadTitleFromPrompt(
 
   await astra.updateThreadMetadata(ctx, {
     threadId: args.threadId,
-    patch: { title: threadTitleFromPrompt(args.prompt) },
+    patch: { title: threadTitleFromPrompt(stripMentionMarkers(args.prompt)) },
   });
 }
 
@@ -300,6 +303,7 @@ async function savePromptAndScheduleRun(
     commandId?: string;
     workspaceId?: Id<"workspaces">;
     selectedContextArtifactIds?: Id<"artifacts">[];
+    selectedContextWorkspaceIds?: Id<"workspaces">[];
     messageAttachmentArtifactIds?: Id<"artifacts">[];
     contextArtifactSnapshot?: Array<{
       artifactId: Id<"artifacts">;
@@ -310,18 +314,29 @@ async function savePromptAndScheduleRun(
     deferGeneration?: boolean;
   },
 ): Promise<SendResult> {
-  if (args.selectedContextArtifactIds) {
-    await replaceContextArtifactsForThread(ctx, {
+  if (args.selectedContextArtifactIds && args.selectedContextArtifactIds.length > 0) {
+    await addContextArtifactsForThread(ctx, {
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
       artifactIds: args.selectedContextArtifactIds,
     });
   }
+  if (args.selectedContextWorkspaceIds && args.selectedContextWorkspaceIds.length > 0) {
+    await addContextWorkspacesForThread(ctx, {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      workspaceIds: args.selectedContextWorkspaceIds,
+    });
+  }
 
+  // The composer sends the message WITH inline mention markers. Keep the agent
+  // message clean, and stash the marked text separately for the bubble renderer.
+  const markedContent = args.content;
+  const cleanContent = stripMentionMarkers(markedContent);
   const promptPayload = await resolvePromptPayload(ctx, {
     ownerUserId: args.ownerUserId,
     threadId: args.threadId,
-    content: args.content,
+    content: cleanContent,
     commandId: args.commandId,
   });
 
@@ -333,6 +348,16 @@ async function savePromptAndScheduleRun(
   });
   const messageId = saved.messages[0]._id;
   const preview = previewFromContent(promptPayload.visibleContent);
+
+  if (markedContent !== cleanContent) {
+    await ctx.db.insert("messageRichContent", {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      messageId,
+      content: markedContent,
+      createdAt: Date.now(),
+    });
+  }
 
   if (promptPayload.commandMetadata) {
     await ctx.db.insert("messageCommands", {
@@ -350,6 +375,11 @@ async function savePromptAndScheduleRun(
     threadId: args.threadId,
     messageId,
     snapshot: args.contextArtifactSnapshot,
+  });
+  await persistMessageContextWorkspaces(ctx, {
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+    messageId,
   });
 
   await upsertThreadMetadata(ctx, {
@@ -468,33 +498,39 @@ export const completeThreadStartAfterAttachments = internalMutation({
     commandId: v.optional(v.string()),
     workspaceId: v.optional(v.id("workspaces")),
     selectedContextArtifactIds: v.optional(v.array(v.id("artifacts"))),
+    selectedContextWorkspaceIds: v.optional(v.array(v.id("workspaces"))),
     contextArtifactSnapshot: v.optional(contextArtifactSnapshotValidator),
     messageAttachmentArtifactIds: v.array(v.id("artifacts")),
   },
   handler: async (ctx, args) => {
-    if (args.selectedContextArtifactIds) {
-      await replaceContextArtifactsForThread(ctx, {
+    if (args.selectedContextArtifactIds && args.selectedContextArtifactIds.length > 0) {
+      await addContextArtifactsForThread(ctx, {
         ownerUserId: args.ownerUserId,
         threadId: args.threadId,
         artifactIds: args.selectedContextArtifactIds,
       });
     }
-
-    const existingContextRows = await ctx.db
-      .query("messageContextArtifacts")
-      .withIndex("by_owner_message", (q) =>
-        q.eq("ownerUserId", args.ownerUserId).eq("messageId", args.messageId),
-      )
-      .collect();
-    for (const row of existingContextRows) {
-      await ctx.db.delete("messageContextArtifacts", row._id);
+    if (args.selectedContextWorkspaceIds && args.selectedContextWorkspaceIds.length > 0) {
+      await addContextWorkspacesForThread(ctx, {
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+        workspaceIds: args.selectedContextWorkspaceIds,
+      });
     }
 
+    // persistMessageContextArtifacts / persistMessageContextWorkspaces are
+    // idempotent by messageId (they clear prior rows first), so this two-phase
+    // completion path can re-run without duplicating context rows.
     await persistMessageContextArtifacts(ctx, {
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
       messageId: args.messageId,
       snapshot: args.contextArtifactSnapshot,
+    });
+    await persistMessageContextWorkspaces(ctx, {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      messageId: args.messageId,
     });
 
     await upsertThreadMetadata(ctx, {
@@ -529,6 +565,7 @@ export const startThread = mutation({
     commandId: v.optional(v.string()),
     workspaceId: v.optional(v.id("workspaces")),
     selectedContextArtifactIds: v.optional(v.array(v.id("artifacts"))),
+    selectedContextWorkspaceIds: v.optional(v.array(v.id("workspaces"))),
     messageAttachmentArtifactIds: v.optional(v.array(v.id("artifacts"))),
     pendingAttachments: v.optional(v.array(pendingAttachmentValidator)),
     contextArtifactSnapshot: v.optional(contextArtifactSnapshotValidator),
@@ -540,6 +577,11 @@ export const startThread = mutation({
     if (args.workspaceId) {
       await assertWorkspaceOwner(ctx, args.workspaceId, user._id, { requireActive: true });
     }
+    // A brand-new thread is "filed under" the explicit workspace if provided,
+    // else the first @mentioned workspace (decision: first @workspace from Home
+    // auto-files the thread). Ownership of the mentioned workspace is validated
+    // by replaceContextWorkspacesForThread.
+    const filedWorkspaceId = args.workspaceId ?? args.selectedContextWorkspaceIds?.[0];
     const quota = await checkAndConsumeSendQuota(ctx, {
       ownerUserId: user._id,
       ownerEmail: user.email,
@@ -570,8 +612,9 @@ export const startThread = mutation({
         content,
         agentKind: args.agentKind,
         commandId: args.commandId,
-        workspaceId: args.workspaceId,
+        workspaceId: filedWorkspaceId,
         selectedContextArtifactIds: args.selectedContextArtifactIds,
+        selectedContextWorkspaceIds: args.selectedContextWorkspaceIds,
         contextArtifactSnapshot: args.contextArtifactSnapshot,
         deferGeneration: true,
       });
@@ -590,9 +633,10 @@ export const startThread = mutation({
           content,
           agentKind: args.agentKind,
           commandId: args.commandId,
-          workspaceId: args.workspaceId,
+          workspaceId: filedWorkspaceId,
           pendingAttachments: args.pendingAttachments,
           selectedContextArtifactIds: args.selectedContextArtifactIds,
+          selectedContextWorkspaceIds: args.selectedContextWorkspaceIds,
           contextArtifactSnapshot: args.contextArtifactSnapshot,
         },
       );
@@ -606,8 +650,9 @@ export const startThread = mutation({
       content,
       agentKind: args.agentKind,
       commandId: args.commandId,
-      workspaceId: args.workspaceId,
+      workspaceId: filedWorkspaceId,
       selectedContextArtifactIds: args.selectedContextArtifactIds,
+      selectedContextWorkspaceIds: args.selectedContextWorkspaceIds,
       messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
       contextArtifactSnapshot: args.contextArtifactSnapshot,
     });
@@ -623,6 +668,7 @@ export const send = mutation({
     agentKind: v.union(v.literal("lite"), v.literal("pro")),
     commandId: v.optional(v.string()),
     selectedContextArtifactIds: v.optional(v.array(v.id("artifacts"))),
+    selectedContextWorkspaceIds: v.optional(v.array(v.id("workspaces"))),
     messageAttachmentArtifactIds: v.optional(v.array(v.id("artifacts"))),
     contextArtifactSnapshot: v.optional(contextArtifactSnapshotValidator),
   },
@@ -658,6 +704,7 @@ export const send = mutation({
       agentKind: args.agentKind,
       commandId: args.commandId,
       selectedContextArtifactIds: args.selectedContextArtifactIds,
+      selectedContextWorkspaceIds: args.selectedContextWorkspaceIds,
       messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
       contextArtifactSnapshot: args.contextArtifactSnapshot,
     });
@@ -706,6 +753,32 @@ export const list = query({
           .collect(),
       ),
     );
+    const workspaceContextRows = await Promise.all(
+      messageIds.map((messageId) =>
+        ctx.db
+          .query("messageContextWorkspaces")
+          .withIndex("by_owner_message", (q) =>
+            q.eq("ownerUserId", user._id).eq("messageId", messageId),
+          )
+          .collect(),
+      ),
+    );
+    const richContentRows = await Promise.all(
+      messageIds.map((messageId) =>
+        ctx.db
+          .query("messageRichContent")
+          .withIndex("by_owner_message", (q) =>
+            q.eq("ownerUserId", user._id).eq("messageId", messageId),
+          )
+          .unique(),
+      ),
+    );
+    const richContentByMessageId = new Map<string, string>();
+    for (const row of richContentRows) {
+      if (row && row.threadId === args.threadId) {
+        richContentByMessageId.set(row.messageId, row.content);
+      }
+    }
     const byMessageId = new Map();
     for (const row of commandRows) {
       if (!row || row.threadId !== args.threadId) {
@@ -774,12 +847,33 @@ export const list = query({
         contextByMessageId.set(row.messageId, existing);
       }
     }
+    const workspaceContextByMessageId = new Map<
+      string,
+      Array<{ workspaceId: string; name: string }>
+    >();
+    for (const rows of workspaceContextRows) {
+      for (const row of rows) {
+        if (row.threadId !== args.threadId) {
+          continue;
+        }
+        const existing = workspaceContextByMessageId.get(row.messageId) ?? [];
+        existing.push({ workspaceId: String(row.workspaceId), name: row.name });
+        workspaceContextByMessageId.set(row.messageId, existing);
+      }
+    }
     return {
       ...paginated,
       page: paginated.page.map((message) => {
         const promptCommand = byMessageId.get(message.id);
         const contextArtifacts = contextByMessageId.get(message.id);
-        if (!promptCommand && !contextArtifacts?.length) {
+        const contextWorkspaces = workspaceContextByMessageId.get(message.id);
+        const richContent = richContentByMessageId.get(message.id);
+        if (
+          !promptCommand &&
+          !contextArtifacts?.length &&
+          !contextWorkspaces?.length &&
+          !richContent
+        ) {
           return message;
         }
         const existingMetadata = (message as { metadata?: unknown }).metadata;
@@ -791,6 +885,8 @@ export const list = query({
               : {}),
             ...(promptCommand ? { promptCommand } : {}),
             ...(contextArtifacts?.length ? { contextArtifacts } : {}),
+            ...(contextWorkspaces?.length ? { contextWorkspaces } : {}),
+            ...(richContent ? { richContent } : {}),
           },
         };
       }),
@@ -1489,17 +1585,6 @@ function collectToolObservations(
         });
         continue;
       }
-      if (isHitlToolResult(output, toolName)) {
-        observations.push({
-          stepKey: "hitl",
-          label: "Menunggu konfirmasi",
-          summary: "Human-in-the-loop menunggu jawaban atau persetujuan",
-          eventType: "tool",
-          eventTitle: "HITL",
-          eventSummary: toolName,
-          metadataJson: JSON.stringify({ toolName, output }),
-        });
-      }
     }
   }
   return observations;
@@ -1512,23 +1597,7 @@ function inferToolName(output: unknown) {
   if (isArtifactToolResult(output)) {
     return output.relation === "updated" ? "updateArtifact" : "createArtifact";
   }
-  if (typeof output === "object" && output !== null && "sessionId" in output) {
-    return "presentPlan";
-  }
   return "tool";
-}
-
-function isHitlToolResult(output: unknown, toolName: string) {
-  return (
-    toolName === "askHuman" ||
-    toolName === "presentPlan" ||
-    toolName === "presentWorkspacePlan" ||
-    toolName === "confirmAction" ||
-    (typeof output === "object" &&
-      output !== null &&
-      "sessionId" in output &&
-      "cardId" in output)
-  );
 }
 
 function providerLabel(candidates: SourceCandidate[]) {

@@ -1,3 +1,5 @@
+import { stripMentionMarkers } from "./mentionMarkers";
+
 const MAX_THREAD_TITLE_LENGTH = 80;
 const BLOCKED_GENERATED_TITLES = new Set([
   "request for thread title generation",
@@ -7,7 +9,7 @@ const BLOCKED_GENERATED_TITLES = new Set([
 ]);
 
 export function threadTitleFromPrompt(content: string) {
-  const title = content.replace(/\s+/g, " ").trim();
+  const title = stripMentionMarkers(content).replace(/\s+/g, " ").trim();
   if (title.length <= MAX_THREAD_TITLE_LENGTH) {
     return title || "Thread baru";
   }

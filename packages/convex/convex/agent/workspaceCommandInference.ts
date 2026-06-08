@@ -82,11 +82,11 @@ export function buildAutoWorkspaceRoutingHint(
 
   if (intent === "rename") {
     lines.push(
-      "Use presentWorkspacePlan with action=rename_workspace. Include workspaceId when the target is clear; otherwise askHuman first.",
+      "Use renameWorkspace. Include workspaceId when the target is clear; otherwise askUser first.",
     );
   } else {
     lines.push(
-      "Use presentWorkspacePlan with action=create_workspace after any needed askHuman clarification.",
+      "Use createWorkspace after any needed askUser clarification.",
     );
   }
 

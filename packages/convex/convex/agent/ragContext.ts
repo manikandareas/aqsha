@@ -21,29 +21,48 @@ async function retrieveThreadDocumentContext(
   if (!embeddingProviderConfig.enabled || !args.query.trim()) {
     return "";
   }
-  const targets: Array<{
-    artifactId: string;
-    workspaceId?: string;
-    title: string;
-    ragEntryId?: string;
-  }> = await ctx.runQuery(internal.agent.threadContext.listRagTargetsForThread, {
-    ownerUserId: args.ownerUserId,
-    threadId: args.threadId,
-    messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
-  });
-  if (targets.length === 0) {
+  const [artifactTargets, workspaceTargets] = await Promise.all([
+    ctx.runQuery(internal.agent.threadContext.listRagTargetsForThread, {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
+    }),
+    ctx.runQuery(
+      internal.agent.threadContextWorkspaces.listWorkspaceRagTargetsForThread,
+      {
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+      },
+    ),
+  ]);
+  if (artifactTargets.length === 0 && workspaceTargets.length === 0) {
     return "";
   }
+
+  // Paper chips filter by artifactId; whole-workspace chips filter by
+  // workspaceId. The RAG search ORs all filter entries, so this retrieves
+  // chunks belonging to any pinned paper or any referenced workspace. Whole
+  // workspaces are retrieved (never full-stuffed) and bounded by RAG_CONTEXT_LIMIT.
+  const filters = [
+    ...artifactTargets.map((target) => ({
+      name: "artifactId" as const,
+      value: target.artifactId,
+    })),
+    ...workspaceTargets.map((target) => ({
+      name: "workspaceId" as const,
+      value: target.workspaceId,
+    })),
+  ];
 
   try {
     const search = await artifactRag.search(ctx, {
       namespace: artifactRagNamespace(args.ownerUserId),
       query: args.query,
-      filters: targets.map((target) => ({
-        name: "artifactId" as const,
-        value: target.artifactId,
-      })),
-      limit: Math.min(8, Math.max(3, targets.length * 2)),
+      filters,
+      limit: Math.min(
+        12,
+        Math.max(3, artifactTargets.length * 2 + workspaceTargets.length * 4),
+      ),
       chunkContext: { before: 1, after: 1 },
       vectorScoreThreshold: 0.35,
     });

@@ -103,12 +103,12 @@ export function buildAutoArtifactRoutingHint(
     );
     if (intent === "update") {
       lines.push(
-        "Call presentPlan with action=update and include the artifactId and workspaceId above unless the user clearly targets a different artifact.",
+        "Call proposeArtifact with action=update and include the artifactId and workspaceId above unless the user clearly targets a different artifact. After approval, call executeArtifact with the final content.",
       );
     }
     if (intent === "delete") {
       lines.push(
-        "Call confirmAction with action=delete and include the artifactId above unless the user clearly targets a different artifact.",
+        "Call deleteArtifact with the artifactId above unless the user clearly targets a different artifact.",
       );
     }
     return lines.join("\n");
@@ -120,6 +120,6 @@ export function buildAutoArtifactRoutingHint(
       `${index + 1}. "${doc.title}" (artifactId: ${doc.artifactId}, workspaceId: ${doc.workspaceId})`,
     );
   }
-  lines.push("Use askHuman if the target artifact is ambiguous.");
+  lines.push("Use askUser if the target artifact is ambiguous.");
   return lines.join("\n");
 }

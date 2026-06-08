@@ -2,6 +2,7 @@
 
 import { useThreadExperienceData } from "@/features/thread-experience/api/use-thread-experience-data";
 import { CompactThreadChatPanel } from "@/features/thread-experience/components/compact-thread-chat-panel";
+import { ComposerMentionsProvider } from "@/features/thread-experience/components/composer-context-mentions";
 import type {
   SendMessage,
   StartThread,
@@ -43,27 +44,29 @@ export function ExploreChatSidePanel({
     });
 
   return (
-    <CompactThreadChatPanel
-      activeThreadId={activeThreadId}
-      activeThread={activeThread}
-      threads={data.threads}
-      onActiveThreadIdChange={onActiveThreadIdChange}
-      deleteDescription="Thread dan pesannya akan dihapus permanen."
-      onDeleteThread={() =>
-        activeThreadId
-          ? data.removeThread({ threadId: activeThreadId })
-          : Promise.resolve()
-      }
-      rateStatus={data.rateStatus}
-      startThread={startThread}
-      onSend={sendMessage}
-      runs={data.runs}
-      artifacts={data.artifacts}
-      sources={data.sources}
-      onCancelRun={data.cancelRun}
-      onRetryRun={data.retryRun}
-      threadWorkspaceId={activeThread?.workspaceId}
-      seed={seed}
-    />
+    <ComposerMentionsProvider threadId={activeThreadId ?? undefined} ambientWorkspaceId={null}>
+      <CompactThreadChatPanel
+        activeThreadId={activeThreadId}
+        activeThread={activeThread}
+        threads={data.threads}
+        onActiveThreadIdChange={onActiveThreadIdChange}
+        deleteDescription="Thread dan pesannya akan dihapus permanen."
+        onDeleteThread={() =>
+          activeThreadId
+            ? data.removeThread({ threadId: activeThreadId })
+            : Promise.resolve()
+        }
+        rateStatus={data.rateStatus}
+        startThread={startThread}
+        onSend={sendMessage}
+        runs={data.runs}
+        artifacts={data.artifacts}
+        sources={data.sources}
+        onCancelRun={data.cancelRun}
+        onRetryRun={data.retryRun}
+        threadWorkspaceId={activeThread?.workspaceId}
+        seed={seed}
+      />
+    </ComposerMentionsProvider>
   );
 }

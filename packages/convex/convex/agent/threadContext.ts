@@ -20,6 +20,8 @@ const PROMPT_CONTEXT_ARTIFACT_LIMIT = 4_000;
 const PROMPT_CONTEXT_THREAD_DOCUMENT_LIMIT = 4;
 const THREAD_DOCUMENT_ARTIFACT_SCAN_LIMIT = 12;
 const MAX_SELECTED_CONTEXT_ARTIFACTS = 12;
+const WORKSPACE_MANIFEST_WORKSPACE_LIMIT = 5;
+const WORKSPACE_MANIFEST_ITEM_LIMIT = 40;
 
 type ThreadContextCtx = QueryCtx | MutationCtx;
 
@@ -78,7 +80,7 @@ async function getThreadOwner(ctx: ThreadContextCtx, threadId: string) {
   return thread.userId;
 }
 
-async function isOwnedThread(ctx: ThreadContextCtx, args: {
+export async function isOwnedThread(ctx: ThreadContextCtx, args: {
   threadId: string;
   ownerUserId: string;
 }) {
@@ -86,7 +88,7 @@ async function isOwnedThread(ctx: ThreadContextCtx, args: {
   return ownerUserId === args.ownerUserId;
 }
 
-async function assertOwnedThread(ctx: ThreadContextCtx, args: {
+export async function assertOwnedThread(ctx: ThreadContextCtx, args: {
   threadId: string;
   ownerUserId: string;
 }) {
@@ -109,37 +111,6 @@ async function getSelectedRow(ctx: ThreadContextCtx, args: {
         .eq("artifactId", args.artifactId),
     )
     .unique();
-}
-
-async function getThreadWorkspaceId(ctx: ThreadContextCtx, args: {
-  ownerUserId: string;
-  threadId: string;
-}) {
-  const metadata = await ctx.db
-    .query("threadMetadata")
-    .withIndex("by_thread", (q) => q.eq("threadId", args.threadId))
-    .unique();
-  if (!metadata || metadata.ownerUserId !== args.ownerUserId) {
-    return undefined;
-  }
-  return metadata.workspaceId;
-}
-
-async function assertArtifactAvailableForThread(
-  ctx: ThreadContextCtx,
-  args: {
-    ownerUserId: string;
-    threadId: string;
-    artifactWorkspaceId: Id<"workspaces">;
-  },
-) {
-  const threadWorkspaceId = await getThreadWorkspaceId(ctx, {
-    ownerUserId: args.ownerUserId,
-    threadId: args.threadId,
-  });
-  if (threadWorkspaceId && threadWorkspaceId !== args.artifactWorkspaceId) {
-    throw new ConvexError("Artifact not available for this thread");
-  }
 }
 
 async function listSelectedRows(ctx: ThreadContextCtx, args: {
@@ -184,7 +155,6 @@ async function getContextArtifactTargetById(
     threadId: string;
     artifactId: Id<"artifacts">;
     source: ContextArtifactTarget["source"];
-    threadWorkspaceId?: Id<"workspaces">;
   },
 ): Promise<ContextArtifactTarget | null> {
   const artifact = await ctx.db.get("artifacts", args.artifactId);
@@ -195,11 +165,10 @@ async function getContextArtifactTargetById(
   ) {
     return null;
   }
-  if (artifact.workspaceId) {
-    if (args.threadWorkspaceId && artifact.workspaceId !== args.threadWorkspaceId) {
-      return null;
-    }
-  } else if (artifact.threadId !== args.threadId) {
+  // Workspace artifacts are available regardless of which workspace they belong
+  // to (cross-workspace context is allowed); thread-only uploads must match the
+  // thread they were uploaded to.
+  if (!artifact.workspaceId && artifact.threadId !== args.threadId) {
     return null;
   }
   return { artifact, source: args.source };
@@ -213,10 +182,7 @@ async function listContextArtifactTargets(
     messageAttachmentArtifactIds?: Id<"artifacts">[];
   },
 ) {
-  const [rows, threadWorkspaceId] = await Promise.all([
-    listSelectedRows(ctx, args),
-    getThreadWorkspaceId(ctx, args),
-  ]);
+  const rows = await listSelectedRows(ctx, args);
   const seen = new Set<string>();
   const targets: ContextArtifactTarget[] = [];
 
@@ -234,7 +200,6 @@ async function listContextArtifactTargets(
       threadId: args.threadId,
       artifactId,
       source,
-      threadWorkspaceId,
     });
     if (target) {
       targets.push(target);
@@ -456,6 +421,109 @@ export async function listSelectedWorkspaceDocuments(
   return documents;
 }
 
+async function getThreadFiledWorkspaceId(ctx: ThreadContextCtx, args: {
+  ownerUserId: string;
+  threadId: string;
+}) {
+  const metadata = await ctx.db
+    .query("threadMetadata")
+    .withIndex("by_thread", (q) => q.eq("threadId", args.threadId))
+    .unique();
+  if (!metadata || metadata.ownerUserId !== args.ownerUserId) {
+    return undefined;
+  }
+  return metadata.workspaceId;
+}
+
+/**
+ * The workspaces that are active context for a thread: the workspace it is
+ * filed under (threadMetadata.workspaceId) plus any @mentioned workspaces
+ * (threadContextWorkspaces). Filed-under comes first.
+ */
+export async function listActiveWorkspaceIdsForThread(
+  ctx: ThreadContextCtx,
+  args: { ownerUserId: string; threadId: string },
+): Promise<Id<"workspaces">[]> {
+  const [filedWorkspaceId, rows] = await Promise.all([
+    getThreadFiledWorkspaceId(ctx, args),
+    ctx.db
+      .query("threadContextWorkspaces")
+      .withIndex("by_owner_thread_created", (q) =>
+        q.eq("ownerUserId", args.ownerUserId).eq("threadId", args.threadId),
+      )
+      .order("asc")
+      .take(WORKSPACE_MANIFEST_WORKSPACE_LIMIT),
+  ]);
+  const ids: Id<"workspaces">[] = [];
+  const seen = new Set<string>();
+  if (filedWorkspaceId) {
+    ids.push(filedWorkspaceId);
+    seen.add(String(filedWorkspaceId));
+  }
+  for (const row of rows) {
+    if (!seen.has(String(row.workspaceId))) {
+      seen.add(String(row.workspaceId));
+      ids.push(row.workspaceId);
+    }
+  }
+  return ids.slice(0, WORKSPACE_MANIFEST_WORKSPACE_LIMIT);
+}
+
+/**
+ * A compact manifest of each active workspace and its document titles, so the
+ * agent knows which workspaces are attached and can answer "what's in this
+ * workspace" directly. Document *content* still flows through RAG retrieval.
+ */
+async function buildWorkspaceManifestForThread(
+  ctx: ThreadContextCtx,
+  args: { ownerUserId: string; threadId: string },
+): Promise<string> {
+  const workspaceIds = await listActiveWorkspaceIdsForThread(ctx, args);
+  if (workspaceIds.length === 0) {
+    return "";
+  }
+  const lines = [
+    "<thread_workspace_context>",
+    "These workspaces are attached as context for this conversation. Each entry lists the workspace name and its document titles. When the user asks what is in a workspace, or to list/summarize its items, answer directly from this manifest. To use a document's full content, rely on the retrieved excerpts below or call searchThreadDocuments.",
+    "",
+  ];
+  for (const workspaceId of workspaceIds) {
+    const workspace = await ctx.db.get("workspaces", workspaceId);
+    if (
+      !workspace ||
+      workspace.ownerUserId !== args.ownerUserId ||
+      workspace.status !== "active"
+    ) {
+      continue;
+    }
+    const artifacts = await ctx.db
+      .query("artifacts")
+      .withIndex("by_owner_workspace_status_updated", (q) =>
+        q
+          .eq("ownerUserId", args.ownerUserId)
+          .eq("workspaceId", workspaceId)
+          .eq("status", "active"),
+      )
+      .order("desc")
+      .take(WORKSPACE_MANIFEST_ITEM_LIMIT);
+    lines.push(`[Workspace: ${workspace.name}]`);
+    lines.push(`Workspace ID: ${workspace._id}`);
+    lines.push(
+      `Items (${artifacts.length}${artifacts.length >= WORKSPACE_MANIFEST_ITEM_LIMIT ? "+" : ""}):`,
+    );
+    if (artifacts.length === 0) {
+      lines.push("- (empty — no documents yet)");
+    } else {
+      for (const artifact of artifacts) {
+        lines.push(`- ${artifact.title} (${artifactTypeForLegacyArtifact(artifact)})`);
+      }
+    }
+    lines.push("");
+  }
+  lines.push("</thread_workspace_context>");
+  return lines.join("\n").trim();
+}
+
 export async function buildPromptContextForThread(
   ctx: MutationCtx,
   args: {
@@ -465,7 +533,10 @@ export async function buildPromptContextForThread(
   },
 ) {
   await assertOwnedThread(ctx, args);
-  const targets = await listContextArtifactTargets(ctx, args);
+  const [targets, workspaceManifest] = await Promise.all([
+    listContextArtifactTargets(ctx, args),
+    buildWorkspaceManifestForThread(ctx, args),
+  ]);
 
   const resolved = await Promise.all([
     ...targets.map((target) =>
@@ -490,7 +561,8 @@ export async function buildPromptContextForThread(
     remainingBudget -= content.length;
   }
 
-  return buildContextBlock(artifacts);
+  const documentBlock = buildContextBlock(artifacts);
+  return [workspaceManifest, documentBlock].filter(Boolean).join("\n\n");
 }
 
 export function prependPromptContext(args: {
@@ -578,11 +650,6 @@ async function insertContextArtifact(
 ) {
   const artifact = await assertWorkspaceArtifactOwner(ctx, args.artifactId, args.ownerUserId, {
     requireActive: true,
-  });
-  await assertArtifactAvailableForThread(ctx, {
-    ownerUserId: args.ownerUserId,
-    threadId: args.threadId,
-    artifactWorkspaceId: artifact.workspaceId,
   });
   const existing = await getSelectedRow(ctx, {
     ownerUserId: args.ownerUserId,
@@ -674,6 +741,19 @@ export async function persistMessageContextArtifacts(
     }>;
   },
 ) {
+  // Idempotent by messageId: clear rows from any prior run for this message
+  // before re-persisting, so re-running (e.g. the deferred-attachments two-phase
+  // path) never leaves stale or duplicated context rows.
+  const existing = await ctx.db
+    .query("messageContextArtifacts")
+    .withIndex("by_owner_message", (q) =>
+      q.eq("ownerUserId", args.ownerUserId).eq("messageId", args.messageId),
+    )
+    .collect();
+  for (const row of existing) {
+    await ctx.db.delete("messageContextArtifacts", row._id);
+  }
+
   if (!args.snapshot?.length) {
     return;
   }
@@ -700,6 +780,81 @@ export async function persistMessageContextArtifacts(
       createdAt,
     });
     inserted.add(String(item.artifactId));
+  }
+}
+
+/**
+ * Per-message snapshot of the workspaces active when the message was sent
+ * (filed-under + @mentioned). Drives the message bubble's workspace badges.
+ */
+export async function persistMessageContextWorkspaces(
+  ctx: MutationCtx,
+  args: {
+    ownerUserId: string;
+    threadId: string;
+    messageId: string;
+  },
+) {
+  // Idempotent by messageId: clear rows from any prior run before re-inserting,
+  // so a re-run cannot duplicate workspace badge rows on the message bubble.
+  const existing = await ctx.db
+    .query("messageContextWorkspaces")
+    .withIndex("by_owner_message", (q) =>
+      q.eq("ownerUserId", args.ownerUserId).eq("messageId", args.messageId),
+    )
+    .collect();
+  for (const row of existing) {
+    await ctx.db.delete("messageContextWorkspaces", row._id);
+  }
+
+  const workspaceIds = await listActiveWorkspaceIdsForThread(ctx, args);
+  if (workspaceIds.length === 0) {
+    return;
+  }
+  const createdAt = Date.now();
+  for (const workspaceId of workspaceIds) {
+    const workspace = await ctx.db.get("workspaces", workspaceId);
+    if (
+      !workspace ||
+      workspace.ownerUserId !== args.ownerUserId ||
+      workspace.status !== "active"
+    ) {
+      continue;
+    }
+    await ctx.db.insert("messageContextWorkspaces", {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      messageId: args.messageId,
+      workspaceId,
+      name: workspace.name,
+      createdAt,
+    });
+  }
+}
+
+/**
+ * Add the given workspace artifacts to a thread's pinned context (idempotent,
+ * accumulating). Unlike replaceContextArtifactsForThread this never removes
+ * existing selections — the composer is add-only; removal happens elsewhere.
+ */
+export async function addContextArtifactsForThread(
+  ctx: MutationCtx,
+  args: {
+    ownerUserId: string;
+    threadId: string;
+    artifactIds: Id<"artifacts">[];
+  },
+) {
+  await assertOwnedThread(ctx, {
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+  });
+  for (const artifactId of [...new Set(args.artifactIds)]) {
+    await insertContextArtifact(ctx, {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      artifactId,
+    });
   }
 }
 
@@ -772,11 +927,6 @@ export const toggle = mutation({
 
     const artifact = await assertWorkspaceArtifactOwner(ctx, args.artifactId, user._id, {
       requireActive: true,
-    });
-    await assertArtifactAvailableForThread(ctx, {
-      ownerUserId: user._id,
-      threadId: args.threadId,
-      artifactWorkspaceId: artifact.workspaceId,
     });
     const selectedRows = await listSelectedRows(ctx, {
       ownerUserId: user._id,

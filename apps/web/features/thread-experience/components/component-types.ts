@@ -42,6 +42,7 @@ export type StartThread = (args: {
   commandId?: string;
   workspaceId?: WorkspaceId;
   selectedContextArtifactIds?: ArtifactId[];
+  selectedContextWorkspaceIds?: WorkspaceId[];
   messageAttachmentArtifactIds?: ArtifactId[];
   pendingAttachments?: Array<{
     storageId: StorageId;
@@ -58,6 +59,7 @@ export type SendMessage = (args: {
   agentKind: "lite" | "pro";
   commandId?: string;
   selectedContextArtifactIds?: ArtifactId[];
+  selectedContextWorkspaceIds?: WorkspaceId[];
   messageAttachmentArtifactIds?: ArtifactId[];
   contextArtifactSnapshot?: MessageContextArtifactMetadata[];
 }) => Promise<SendResult>;

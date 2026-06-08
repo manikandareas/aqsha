@@ -35,11 +35,19 @@ import {
   usePromptInputAttachments,
 } from "@/components/ai-elements/prompt-input";
 import { cn } from "@/lib/utils";
-import { toArtifactId, toStorageId, type ArtifactId, type StorageId } from "@/lib/convex-refs";
+import {
+  toArtifactId,
+  toStorageId,
+  toWorkspaceId,
+  type ArtifactId,
+  type StorageId,
+} from "@/lib/convex-refs";
+import { splitContextRefs, type ContextRef } from "@/lib/context-refs";
 import {
   useConvexActionFn,
   useConvexMutationFn,
 } from "@/lib/convex-query";
+import { useComposerMentions } from "./composer-context-mentions";
 import type { RateStatus, ResearchRun, SendResult } from "../types";
 import { formatDate } from "../utils/datetime";
 import {
@@ -62,6 +70,8 @@ import {
 import { TokenizedPromptInput } from "./composer-token-input";
 
 type ComposerVariant = "hero" | "docked";
+
+const EMPTY_CONTEXT_REFS: ContextRef[] = [];
 
 const COMPOSER_EASE_OUT = [0.23, 1, 0.32, 1] as const;
 const COMPOSER_COLLAPSED_RADIUS = 23;
@@ -166,7 +176,13 @@ function ComposerContent(props: ComposerProps) {
   const onSend = props.mode === "thread" ? props.onSend : undefined;
   const onStartThread = props.mode === "disabled" ? undefined : props.onStartThread;
 
+  const mentions = useComposerMentions();
+  const pinnedContextRefs = mentions?.pinnedContextRefs ?? EMPTY_CONTEXT_REFS;
+
   const [content, setContent] = useState(initialContent ?? "");
+  // Marked variant of `content` (mention pills kept as inline markers at their
+  // typed positions). Sent as the message so the bubble renders pills in place.
+  const [richContent, setRichContent] = useState("");
   const [inlineCommands, setInlineCommands] = useState<PromptCommand[]>([]);
   // Re-apply a pre-seed (e.g. an Explore detail item that loads after mount)
   // only while the user hasn't diverged from the previously seeded text.
@@ -216,6 +232,7 @@ function ComposerContent(props: ComposerProps) {
   const hasComposerContext =
     attachmentFiles.length > 0 ||
     contextArtifacts.length > 0 ||
+    pinnedContextRefs.length > 0 ||
     Boolean(contextLabel);
   const isExpanded =
     hasComposerContext ||
@@ -264,6 +281,7 @@ function ComposerContent(props: ComposerProps) {
     setUploadError(null);
     setIsSending(true);
     const submittedCommands = inlineCommands;
+    const draftRefs = pinnedContextRefs;
     try {
       const { attachments: uploadedArtifacts, pendingAttachments } =
         await uploadComposerAttachments({
@@ -287,8 +305,18 @@ function ComposerContent(props: ComposerProps) {
         commands: submittedCommands,
         agentKind,
       });
+      // Send the marked (rich) content when there are mention pills, so the
+      // message renders them inline at their typed positions. Fall back to the
+      // plain submission content (e.g. attachments-only synthetic text).
+      const richBody = richContent.trim();
+      const sentContent =
+        mentions && richBody.length > 0 ? richBody : submission.content;
       setContent("");
       setInlineCommands([]);
+      setRichContent("");
+      // Reset the draft pills optimistically so they clear together with the
+      // text (restored below if the send is blocked).
+      mentions?.setContextRefs([]);
 
       const attachmentArgs = {
         ...(messageAttachmentArtifactIds.length > 0
@@ -296,18 +324,43 @@ function ComposerContent(props: ComposerProps) {
           : {}),
         ...(pendingAttachments.length > 0 ? { pendingAttachments } : {}),
       };
+      // The inline pills are the source of truth for the context added this
+      // turn; the backend accumulates them onto the thread (add semantics).
+      const { workspaceIds: contextWorkspaceIds, artifactIds: contextPaperIds } =
+        splitContextRefs(draftRefs);
+      const contextArgs = mentions
+        ? {
+            selectedContextArtifactIds: contextPaperIds.map(toArtifactId),
+            selectedContextWorkspaceIds: contextWorkspaceIds.map(toWorkspaceId),
+            contextArtifactSnapshot: draftRefs.flatMap((ref) =>
+              ref.kind === "paper"
+                ? [
+                    {
+                      artifactId: ref.artifactId,
+                      title: ref.label.includes(":")
+                        ? ref.label.slice(ref.label.indexOf(":") + 1)
+                        : ref.label.replace(/^@/, ""),
+                      source: "workspace" as const,
+                    },
+                  ]
+                : [],
+            ),
+          }
+        : {};
       const result = threadId && onSend
         ? await onSend({
             threadId,
-            content: submission.content,
+            content: sentContent,
             agentKind: submission.agentKind,
             commandId: submission.commandId,
+            ...contextArgs,
             ...attachmentArgs,
           })
         : await onStartThread!({
-            content: submission.content,
+            content: sentContent,
             agentKind: submission.agentKind,
             commandId: submission.commandId,
+            ...contextArgs,
             ...attachmentArgs,
           });
       if (!result.ok) {
@@ -321,6 +374,8 @@ function ComposerContent(props: ComposerProps) {
           setBillingBlock(result);
         }
         setContent(restoreComposerContentAfterBlockedSend(submission.content));
+        // Restore the draft pills that were cleared optimistically.
+        mentions?.setContextRefs(draftRefs);
         setIsSending(false);
         return;
       }
@@ -406,6 +461,7 @@ function ComposerContent(props: ComposerProps) {
             onRemoveContextArtifact={onRemoveContextArtifact}
             onSubmit={requestFormSubmit}
             onValueChange={setContent}
+            onRichValueChange={setRichContent}
             setAgentKind={setAgentKind}
           />
         </PromptInput>
@@ -577,6 +633,7 @@ function ComposerPromptInputContent({
   onRemoveContextArtifact,
   onSubmit,
   onValueChange,
+  onRichValueChange,
   setAgentKind,
 }: {
   activeRun?: ResearchRun;
@@ -606,8 +663,10 @@ function ComposerPromptInputContent({
   onRemoveContextArtifact?: (artifactId: string) => void;
   onSubmit: () => void;
   onValueChange: (value: string) => void;
+  onRichValueChange: (rich: string) => void;
   setAgentKind: (agentKind: ComposerAgentKind) => void;
 }) {
+  const mentions = useComposerMentions();
   return (
     <>
       {isRateLimited || billingBlock ? (
@@ -650,6 +709,7 @@ function ComposerPromptInputContent({
               <TokenizedPromptInput
                 value={content}
                 onValueChange={onValueChange}
+                onRichValueChange={onRichValueChange}
                 onCommandsChange={onCommandsChange}
                 onHeightChange={onHeightChange}
                 onSubmit={onSubmit}
@@ -659,9 +719,16 @@ function ComposerPromptInputContent({
                 placeholder={
                   hitlBlocking
                     ? "Selesaikan langkah di atas terlebih dahulu…"
-                    : "Select board items, or / for voices..."
+                    : "Ketik @ untuk workspace, / untuk perintah…"
                 }
                 className={isExpanded ? "py-0.5" : undefined}
+                pinnedContextRefs={mentions?.pinnedContextRefs}
+                onContextRefsChange={mentions?.setContextRefs}
+                contextWorkspaces={mentions?.contextWorkspaces}
+                ambientWorkspaceId={mentions?.ambientWorkspaceId ?? null}
+                workspaceItems={mentions?.workspaceItems}
+                workspaceItemsLoading={mentions?.workspaceItemsLoading}
+                onRequestWorkspaceItems={mentions?.requestWorkspaceItems}
               />
             </div>
           </div>

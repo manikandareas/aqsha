@@ -45,6 +45,11 @@ export type MessageContextArtifactMetadata = {
   savedWorkspaceName?: string;
 };
 
+export type MessageContextWorkspaceMetadata = {
+  workspaceId: string;
+  name: string;
+};
+
 export type ChatMessage = {
   id: string;
   key: string;
@@ -68,6 +73,9 @@ export type ChatMessage = {
   metadata?: {
     promptCommand?: PromptCommandMetadata;
     contextArtifacts?: MessageContextArtifactMetadata[];
+    contextWorkspaces?: MessageContextWorkspaceMetadata[];
+    /** User message text with inline mention markers (pills in place). */
+    richContent?: string;
   };
 };
 

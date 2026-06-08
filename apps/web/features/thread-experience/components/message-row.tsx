@@ -23,7 +23,7 @@ import {
 } from "@aqsha/ui/icons";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Message,
@@ -50,6 +50,7 @@ import {
   toWorkspaceId,
   type AgentRunId,
 } from "@/lib/convex-refs";
+import { parseMentionSegments } from "@/lib/context-refs";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
 import {
   useConvexMutationFn,
@@ -103,20 +104,36 @@ export function MessageRow({
   if (isUser) {
     const promptCommand = message.metadata?.promptCommand;
     const contextArtifacts = message.metadata?.contextArtifacts ?? [];
+    // Uploaded files keep their card (they carry a save-to-workspace action).
+    // @mentions are encoded inline in the message text (markers) and render as
+    // pills at the exact position the user typed them.
+    const uploadedArtifacts = contextArtifacts.filter(
+      (artifact) => artifact.source === "upload",
+    );
+    // Prefer the marked rich content (mention pills in place); fall back to the
+    // plain message text (older messages, or no mentions).
+    const sourceText = message.metadata?.richContent ?? text;
     const displayText = promptCommand
-      ? stripVisibleCommandText(text, promptCommand)
-      : text;
+      ? stripVisibleCommandText(sourceText, promptCommand)
+      : sourceText;
+    const segments = parseMentionSegments(displayText);
     return (
       <div className="flex w-full min-w-0 flex-col items-end gap-2 overflow-x-hidden">
-        {contextArtifacts.length > 0 ? (
+        {uploadedArtifacts.length > 0 ? (
           <UserMessageContextArtifacts
-            artifacts={contextArtifacts}
+            artifacts={uploadedArtifacts}
             threadWorkspaceId={threadWorkspaceId}
           />
         ) : null}
         <div className="max-w-full whitespace-pre-wrap break-words rounded-[14px] border border-border/80 bg-card px-4 py-2.5 text-[13px] leading-[1.55] text-foreground sm:max-w-[560px]">
           {promptCommand ? <PromptCommandChip command={promptCommand} /> : null}
-          {displayText}
+          {segments.map((segment, index) =>
+            segment.type === "mention" ? (
+              <MessageMentionPill key={`m-${index}`} label={segment.label} />
+            ) : (
+              <Fragment key={`t-${index}`}>{segment.value}</Fragment>
+            ),
+          )}
         </div>
         <MessageWorkspaceActions actions={workspaceActions ?? []} align="end" />
       </div>
@@ -257,6 +274,30 @@ type MessageArtifactLink = {
   version: NonNullable<ResearchArtifact["version"]> | null;
   linkKind?: "versioned" | "workspace";
 };
+
+function messagePillClass(tone: "context" | "default" | "deep") {
+  const base =
+    "mr-1 inline-flex translate-y-[-1px] items-center rounded-[5px] px-1 align-middle font-semibold leading-[18px] underline decoration-2 underline-offset-4";
+  switch (tone) {
+    case "default":
+      return cn(base, "bg-primary/10 text-primary decoration-primary/55");
+    case "deep":
+      return cn(
+        base,
+        "bg-lavender-soft text-lavender-foreground decoration-lavender-foreground/55",
+      );
+    default:
+      return cn(base, "bg-foreground/8 text-foreground decoration-foreground/30");
+  }
+}
+
+function MessageMentionPill({ label }: { label: string }) {
+  return (
+    <span contentEditable={false} className={messagePillClass("context")}>
+      {label}
+    </span>
+  );
+}
 
 function UserMessageContextArtifacts({
   artifacts,
@@ -646,14 +687,9 @@ function PromptCommandChip({ command }: { command: PromptCommandMetadata }) {
   return (
     <span
       contentEditable={false}
-      className={cn(
-        "mr-1.5 inline-flex translate-y-[-1px] items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-none",
-        command.mode === "deep"
-          ? "border-lavender-soft-border bg-lavender-soft text-lavender-foreground"
-          : "border-sky-soft-border bg-sky-soft text-sky-foreground",
-      )}
+      className={messagePillClass(command.mode === "deep" ? "deep" : "default")}
     >
-      {command.commandSlug}
+      {command.commandSlug.replace(/^\//, "")}
     </span>
   );
 }
