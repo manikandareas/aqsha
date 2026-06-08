@@ -65,6 +65,7 @@ type WorkspaceSummary = {
 const emptyWorkspaces: WorkspaceSummary[] = [];
 const MOBILE_THREAD_TITLE_MAX_CHARS = 42;
 const THREADS_COLLAPSED_STORAGE_KEY = "aqsha:sidebar:threads-collapsed";
+const WORKSPACES_COLLAPSED_STORAGE_KEY = "aqsha:sidebar:workspaces-collapsed";
 const SIDEBAR_SECTION_EVENT = "aqsha:sidebar-section-toggle";
 const sidebarItemBaseClass =
   "h-8 gap-2 rounded-[8px] px-2.5 py-0 text-[12px] font-medium transition-[background-color,color,box-shadow] duration-150 ease-out hover:bg-muted/60 data-active:bg-primary/10 data-active:font-medium data-active:text-foreground data-active:shadow-none data-active:[&_svg]:text-primary hover:text-foreground active:bg-muted active:text-foreground [&_svg]:size-3.5";
@@ -235,6 +236,8 @@ export function AppSidebar({
                       label="Workspaces"
                       first
                       action={workspaceSectionAction}
+                      collapsible
+                      storageKey={WORKSPACES_COLLAPSED_STORAGE_KEY}
                     >
                       {sortedWorkspaces.length > 0 ? (
                         <SidebarMenu className="min-w-0 gap-1 overflow-hidden">
@@ -250,11 +253,7 @@ export function AppSidebar({
                           ))}
                         </SidebarMenu>
                       ) : (
-                        <EmptyWorkspaceRow
-                          onCreate={
-                            createWorkspace ? runCreateWorkspace : undefined
-                          }
-                        />
+                        <EmptyWorkspaceRow />
                       )}
                     </SidebarSection>
                   ) : null}
@@ -281,7 +280,7 @@ export function AppSidebar({
                           ))}
                         </SidebarMenu>
                       ) : (
-                        <EmptyThreadRow onCreate={runCreateThread} />
+                        <EmptyThreadRow />
                       )}
                     </SidebarSection>
                   ) : null}
@@ -590,21 +589,7 @@ function RecentThreadRow({
   );
 }
 
-function EmptyWorkspaceRow({ onCreate }: { onCreate?: () => void }) {
-  if (onCreate) {
-    return (
-      <button
-        type="button"
-        onClick={onCreate}
-        className="flex h-8 w-full min-w-0 items-center gap-2 rounded-[8px] px-2.5 text-left text-[12px] font-medium text-muted-foreground transition-[background-color,color] duration-150 ease-out hover:bg-muted/60 hover:text-foreground"
-      >
-        <LayoutGridIcon className="size-3.5 shrink-0 text-muted-foreground" />
-        <span className="min-w-0 flex-1 truncate">Buat workspace pertama</span>
-        <PlusIcon className="size-3 shrink-0 text-muted-foreground" />
-      </button>
-    );
-  }
-
+function EmptyWorkspaceRow() {
   return (
     <div className="rounded-[8px] border border-dashed border-border/70 px-2.5 py-2 text-[11px] font-medium leading-5 text-muted-foreground">
       Belum ada workspace.
@@ -612,17 +597,11 @@ function EmptyWorkspaceRow({ onCreate }: { onCreate?: () => void }) {
   );
 }
 
-function EmptyThreadRow({ onCreate }: { onCreate: () => void }) {
+function EmptyThreadRow() {
   return (
-    <button
-      type="button"
-      onClick={onCreate}
-      className="flex h-8 w-full min-w-0 items-center gap-2 rounded-[8px] px-2.5 text-left text-[12px] font-medium text-muted-foreground transition-[background-color,color] duration-150 ease-out hover:bg-muted/60 hover:text-foreground"
-    >
-      <MessageSquareIcon className="size-3.5 shrink-0 text-muted-foreground" />
-      <span className="min-w-0 flex-1 truncate">Buat thread baru</span>
-      <PlusIcon className="size-3 shrink-0 text-muted-foreground" />
-    </button>
+    <div className="rounded-[8px] border border-dashed border-border/70 px-2.5 py-2 text-[11px] font-medium leading-5 text-muted-foreground">
+      Belum ada thread.
+    </div>
   );
 }
 
