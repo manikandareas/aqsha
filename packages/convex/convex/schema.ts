@@ -870,6 +870,22 @@ export default defineSchema(
       weight: v.number(),
       updatedAt: v.number(),
     }).index("by_owner_topic", ["ownerUserId", "topic"]),
+    // First-run onboarding answers. Write-once stable profile data, keyed by
+    // ownerUserId (= identity.tokenIdentifier, same owner key as the feed
+    // tables). Presence of a row with `completedAt` gates the onboarding flow.
+    userOnboarding: defineTable({
+      ownerUserId: v.string(),
+      // Canonical id, e.g. "mahasiswa_s2" (see features/onboarding options).
+      background: v.string(),
+      // Snapshot of the interest field ids the user picked at onboarding.
+      interests: v.array(v.string()),
+      // Self-reported attribution source, e.g. "instagram".
+      heardAboutSource: v.string(),
+      heardAboutOther: v.optional(v.string()),
+      completedAt: v.number(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }).index("by_owner", ["ownerUserId"]),
     hiddenFeedItems: defineTable({
       ownerUserId: v.string(),
       feedItemId: v.id("feedItems"),
