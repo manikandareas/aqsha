@@ -320,8 +320,8 @@ export function DiscoveryPage() {
             </div>
           ) : null}
 
-          <section className="grid grid-cols-1 gap-8 pt-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:gap-10">
-            <div className="min-w-0">
+          <section className="grid grid-cols-1 gap-8 pt-6 @4xl/explore:grid-cols-[minmax(0,1fr)_340px] @4xl/explore:gap-10">
+            <div className="@container/feed min-w-0">
               {isLoading ? (
                 <DiscoverySkeleton />
               ) : items.length === 0 ? (
@@ -333,7 +333,7 @@ export function DiscoveryPage() {
                     row.type === "grid" ? (
                       <div
                         key={row.key}
-                        className="grid grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 xl:grid-cols-3"
+                        className="grid grid-cols-1 gap-x-6 gap-y-10 @md/feed:grid-cols-2 @3xl/feed:grid-cols-3"
                       >
                         {row.items.map((item) => (
                           <div key={discoveryItemKey(item)}>{renderStandard(item)}</div>
@@ -369,7 +369,7 @@ export function DiscoveryPage() {
               )}
             </div>
 
-            <aside className="min-w-0 xl:sticky xl:top-6 xl:self-start">
+            <aside className="min-w-0 @4xl/explore:sticky @4xl/explore:top-6 @4xl/explore:self-start">
               <DiscoveryAside
                 verdicts={verdictBreakdown}
                 kinds={kindBreakdown}
@@ -530,17 +530,17 @@ function DiscoveryEmptyState({ view }: { view: string }) {
 function DiscoverySkeleton() {
   return (
     <div className="space-y-8">
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,40%)] lg:gap-7">
-        <div className="order-2 flex flex-col justify-center gap-3 lg:order-1">
+      <div className="grid grid-cols-1 gap-5 @xl/feed:grid-cols-[minmax(0,1fr)_minmax(280px,40%)] @xl/feed:gap-7">
+        <div className="order-2 flex flex-col justify-center gap-3 @xl/feed:order-1">
           <Skeleton className="h-3 w-28 rounded-full bg-muted/50" />
           <Skeleton className="h-8 w-[90%] rounded-[8px] bg-muted/60" />
           <Skeleton className="h-8 w-[70%] rounded-[8px] bg-muted/60" />
           <Skeleton className="mt-1 h-4 w-full rounded-full bg-muted/40" />
           <Skeleton className="h-4 w-[85%] rounded-full bg-muted/40" />
         </div>
-        <Skeleton className="order-1 h-52 w-full rounded-[12px] bg-muted/60 sm:h-64 lg:order-2 lg:h-full" />
+        <Skeleton className="order-1 h-52 w-full rounded-[12px] bg-muted/60 sm:h-64 @xl/feed:order-2 @xl/feed:h-full" />
       </div>
-      <div className="grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-x-6 gap-y-8 @md/feed:grid-cols-2 @3xl/feed:grid-cols-3">
         {Array.from({ length: 3 }).map((_, index) => (
           <div key={index} className="flex flex-col gap-3">
             <Skeleton className="aspect-[16/10] w-full rounded-[12px] bg-muted/50" />

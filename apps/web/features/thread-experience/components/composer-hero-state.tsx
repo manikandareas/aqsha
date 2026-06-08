@@ -18,7 +18,7 @@ export function ComposerHeroState({
   hint?: ReactNode;
 }) {
   return (
-    <div className="flex w-full max-w-2xl flex-col items-center gap-4 text-center">
+    <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-4 text-center">
       <header
         className={cn(
           "mb-4 flex flex-col items-center justify-center gap-2 text-center",

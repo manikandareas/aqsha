@@ -78,22 +78,22 @@ function DiscoverySpotlightCard(props: SpotlightProps) {
       : "text-[21px] leading-[1.14] sm:text-[25px]";
   const mediaHeight =
     size === "hero"
-      ? "h-52 sm:h-64 lg:h-full lg:min-h-[300px]"
-      : "h-48 sm:h-56 lg:h-full lg:min-h-[224px]";
+      ? "h-52 sm:h-64 @xl/feed:h-full @xl/feed:min-h-[300px]"
+      : "h-48 sm:h-56 @xl/feed:h-full @xl/feed:min-h-[224px]";
   const columns =
     imageSide === "left"
-      ? "lg:grid-cols-[minmax(280px,40%)_minmax(0,1fr)]"
-      : "lg:grid-cols-[minmax(0,1fr)_minmax(280px,40%)]";
+      ? "@xl/feed:grid-cols-[minmax(260px,40%)_minmax(0,1fr)]"
+      : "@xl/feed:grid-cols-[minmax(0,1fr)_minmax(260px,40%)]";
 
   return (
     <article className="group">
-      <div className={cn("grid gap-5 lg:items-stretch lg:gap-7", columns)}>
+      <div className={cn("grid gap-5 @xl/feed:items-stretch @xl/feed:gap-7", columns)}>
         <CardLink
           item={item}
           hidden
           className={cn(
             "order-1 block",
-            imageSide === "left" ? "lg:order-1" : "lg:order-2",
+            imageSide === "left" ? "@xl/feed:order-1" : "@xl/feed:order-2",
           )}
         >
           <CardMedia
@@ -106,7 +106,7 @@ function DiscoverySpotlightCard(props: SpotlightProps) {
         <div
           className={cn(
             "order-2 flex min-w-0 flex-col justify-center",
-            imageSide === "left" ? "lg:order-2" : "lg:order-1",
+            imageSide === "left" ? "@xl/feed:order-2" : "@xl/feed:order-1",
           )}
         >
           {isClaim && item.claim ? (

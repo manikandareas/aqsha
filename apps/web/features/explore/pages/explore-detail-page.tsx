@@ -60,7 +60,7 @@ export function ExploreDetailPage({ paperRef }: { paperRef: string }) {
       ]}
       chatSeed={chatSeed}
     >
-      <div className="mx-auto grid w-full max-w-[1080px] gap-8 px-5 pb-12 pt-4 sm:px-8 lg:grid-cols-[minmax(0,700px)_260px] lg:gap-10 lg:px-10">
+      <div className="mx-auto grid w-full max-w-[1080px] gap-8 px-5 pb-12 pt-4 sm:px-8 @4xl/explore:grid-cols-[minmax(0,1fr)_260px] @4xl/explore:gap-10 @4xl/explore:px-10">
         {paperQuery.isLoading ? (
           <ExploreDetailSkeleton />
         ) : paperError ? (
@@ -188,7 +188,7 @@ function ExploreDetailContent({ paper }: { paper: ExplorePaper & { lastSeenAt?: 
 
 function ExploreDetailSidebar({ paper }: { paper: ExplorePaper & { lastSeenAt?: number } }) {
   return (
-    <aside className="space-y-6 pt-2 lg:sticky lg:top-6 lg:self-start">
+    <aside className="space-y-6 pt-2 @4xl/explore:sticky @4xl/explore:top-6 @4xl/explore:self-start">
       <section>
         <h2 className="mb-4 text-[12px] font-semibold text-muted-foreground">Properties</h2>
         <div className="space-y-4">
@@ -300,7 +300,7 @@ function ExploreDetailSkeleton() {
 
 function ExploreDetailState({ title, message }: { title: string; message: string }) {
   return (
-    <section className="lg:col-span-2">
+    <section className="@4xl/explore:col-span-2">
       <Button asChild variant="ghost" size="sm" className="-ml-2 mb-5 text-muted-foreground">
         <Link href="/app/explore">
           <ArrowLeftIcon className="size-4" />

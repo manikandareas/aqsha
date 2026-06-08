@@ -7,7 +7,6 @@ import {
 } from "@aqsha/ui/icons";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 
 export type ExploreBreadcrumb = {
@@ -19,16 +18,15 @@ export function ExploreSurfaceHeader({
   breadcrumbs,
   chatOpen,
   onToggleChat,
+  showLeftTrigger,
+  onToggleLeftSidebar,
 }: {
   breadcrumbs: ExploreBreadcrumb[];
   chatOpen?: boolean;
   onToggleChat?: () => void;
+  showLeftTrigger: boolean;
+  onToggleLeftSidebar: () => void;
 }) {
-  const leftSidebar = useSidebar();
-  const isLeftSidebarOpen = leftSidebar.isMobile
-    ? leftSidebar.openMobile
-    : leftSidebar.open;
-
   return (
     <header className="shrink-0 bg-background">
       <div
@@ -37,12 +35,12 @@ export function ExploreSurfaceHeader({
         )}
       >
         <div className="flex min-w-0 items-center gap-2">
-          {!isLeftSidebarOpen ? (
+          {showLeftTrigger ? (
             <Button
               type="button"
               variant="ghost"
               className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-              onClick={leftSidebar.toggleSidebar}
+              onClick={onToggleLeftSidebar}
               aria-label="Buka sidebar kiri"
             >
               <PanelLeftIcon className="size-3.5" />

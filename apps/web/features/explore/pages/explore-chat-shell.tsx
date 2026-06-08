@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { useSidebar } from "@/components/ui/sidebar";
 import { DetailSplitLayout } from "@/components/layout/detail-split-layout";
 import { ResponsiveSidePanel } from "@/components/layout/responsive-side-panel";
 import { ExploreChatSidePanel } from "@/features/explore/components/explore-chat-side-panel";
@@ -26,8 +27,6 @@ export function ExploreChatShell({
   children: ReactNode;
 }) {
   const shellData = useWorkspaceIndexData();
-  const [chatPanelOpen, setChatPanelOpen] = useState(false);
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
 
   return (
     <WorkspaceShell
@@ -37,33 +36,63 @@ export function ExploreChatShell({
       createWorkspace={shellData.createWorkspace}
       removeThread={shellData.removeThread}
     >
-      <main className="flex h-svh min-h-0 flex-col overflow-hidden bg-background">
-        <DetailSplitLayout
-          sideOpen={chatPanelOpen}
-          onSideOpenChange={setChatPanelOpen}
-          main={
-            <>
-              <ExploreSurfaceHeader
-                breadcrumbs={breadcrumbs}
-                chatOpen={chatPanelOpen}
-                onToggleChat={() => setChatPanelOpen((open) => !open)}
-              />
-              <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-                {children}
-              </div>
-            </>
-          }
-          side={
-            <ResponsiveSidePanel open={chatPanelOpen}>
-              <ExploreChatSidePanel
-                activeThreadId={activeThreadId}
-                onActiveThreadIdChange={setActiveThreadId}
-                seed={chatSeed}
-              />
-            </ResponsiveSidePanel>
-          }
-        />
-      </main>
+      <ExploreChatShellBody breadcrumbs={breadcrumbs} chatSeed={chatSeed}>
+        {children}
+      </ExploreChatShellBody>
     </WorkspaceShell>
+  );
+}
+
+// Rendered inside WorkspaceShell's SidebarProvider so `useSidebar()` resolves to
+// the LEFT sidebar context — not the inner right-panel provider created by
+// DetailSplitLayout. The breadcrumb header's left-sidebar trigger is wired from
+// here, mirroring ThreadShellLayout / WorkspaceDetailClient.
+function ExploreChatShellBody({
+  breadcrumbs,
+  chatSeed,
+  children,
+}: {
+  breadcrumbs: ExploreBreadcrumb[];
+  chatSeed?: string;
+  children: ReactNode;
+}) {
+  const [chatPanelOpen, setChatPanelOpen] = useState(false);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+
+  const leftSidebar = useSidebar();
+  const isLeftSidebarOpen = leftSidebar.isMobile
+    ? leftSidebar.openMobile
+    : leftSidebar.open;
+
+  return (
+    <main className="flex h-svh min-h-0 flex-col overflow-hidden bg-background">
+      <DetailSplitLayout
+        sideOpen={chatPanelOpen}
+        onSideOpenChange={setChatPanelOpen}
+        main={
+          <>
+            <ExploreSurfaceHeader
+              breadcrumbs={breadcrumbs}
+              chatOpen={chatPanelOpen}
+              onToggleChat={() => setChatPanelOpen((open) => !open)}
+              showLeftTrigger={!isLeftSidebarOpen}
+              onToggleLeftSidebar={leftSidebar.toggleSidebar}
+            />
+            <div className="@container/explore min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+              {children}
+            </div>
+          </>
+        }
+        side={
+          <ResponsiveSidePanel open={chatPanelOpen}>
+            <ExploreChatSidePanel
+              activeThreadId={activeThreadId}
+              onActiveThreadIdChange={setActiveThreadId}
+              seed={chatSeed}
+            />
+          </ResponsiveSidePanel>
+        }
+      />
+    </main>
   );
 }
