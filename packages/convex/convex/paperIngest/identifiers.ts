@@ -85,9 +85,23 @@ export function normalizeDoi(value: string): string {
 export function extractDoi(value: string): string | undefined {
   const match = value.match(DOI_RE);
   if (!match) return undefined;
-  // Cut URL query/fragment and trailing punctuation, but keep DOI-legal chars.
+  // Cut URL query/fragment, but keep DOI-legal chars. '(' and ')' are legal in
+  // DOIs (e.g. 10.1002/(SICI)1097-...), so only drop a trailing ')' when it is
+  // unbalanced — i.e. it was scraped from surrounding prose like "(… 10.x/y)".
+  // A balanced trailing ')' is preserved; other prose punctuation always goes.
   let doi = match[0].split(/[?#\s<>]/)[0];
-  doi = doi.replace(/[.,;:'")\]]+$/, "");
+  for (;;) {
+    const stripped = doi.replace(/[.,;:'"\]]+$/, "");
+    if (
+      stripped.endsWith(")") &&
+      (stripped.match(/\)/g) ?? []).length > (stripped.match(/\(/g) ?? []).length
+    ) {
+      doi = stripped.slice(0, -1);
+      continue;
+    }
+    doi = stripped;
+    break;
+  }
   return doi.toLowerCase();
 }
 

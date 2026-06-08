@@ -51,9 +51,10 @@ export const FEED_VERDICT_META: Record<FeedVerdict, FeedVerdictMeta> = {
 
 export type FeedVerdictSeverity = "info" | "warning" | "high";
 
-// A fact-check verdict attached to a `claim` feed item (one row of
-// `feedItemClaims`). Verdicts shown to users are human-sourced (ClaimReview);
-// AI-derived verdicts stay at `needs_context`/`unverified` per the guardrails.
+// A fact-check verdict attached to a `claim` feed item (stored denormalized as
+// `feedItems.primaryClaim`). Verdicts shown to users are human-sourced
+// (ClaimReview); AI-derived verdicts stay at `needs_context`/`unverified` per
+// the guardrails.
 export type FeedClaim = {
   claim: string;
   verdict: FeedVerdict;

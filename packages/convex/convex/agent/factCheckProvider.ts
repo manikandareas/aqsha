@@ -26,8 +26,6 @@ export type FactCheckClaim = {
   reviewedAt?: number;
   reviewTitle?: string;
   languageCode?: string;
-  /** Raw ClaimReview JSON, stored verbatim for the audit trail. */
-  claimReviewJson: string;
 };
 
 type GoogleClaimReview = {
@@ -269,12 +267,6 @@ function normalizeClaim(claim: GoogleClaim): FactCheckClaim | null {
     reviewedAt: parseDateMs(review.reviewDate),
     reviewTitle: review.title ?? undefined,
     languageCode: review.languageCode ?? undefined,
-    claimReviewJson: JSON.stringify({
-      text,
-      claimant: claim.claimant ?? null,
-      claimDate: claim.claimDate ?? null,
-      claimReview: review,
-    }),
   };
 }
 

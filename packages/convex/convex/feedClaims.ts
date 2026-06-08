@@ -50,7 +50,6 @@ const claimInputValidator = v.object({
   ),
   claimant: v.optional(v.string()),
   claimDate: v.optional(v.number()),
-  claimReviewJson: v.optional(v.string()),
   supportingPaperKeys: v.optional(v.array(v.string())),
 });
 
@@ -107,57 +106,19 @@ export const upsertClaimItems = internalMutation({
           : {}),
       };
 
-      let feedItemId;
       if (existing) {
         await ctx.db.patch("feedItems", existing._id, {
           ...itemFields,
           primaryClaim,
         });
-        feedItemId = existing._id;
         updated += 1;
       } else {
-        feedItemId = await ctx.db.insert("feedItems", {
+        await ctx.db.insert("feedItems", {
           ...itemFields,
           primaryClaim,
           createdAt: now,
         });
         inserted += 1;
-      }
-
-      // One primary verdict row per feed item (latest from this source wins).
-      const existingClaim = await ctx.db
-        .query("feedItemClaims")
-        .withIndex("by_feed_item", (q) => q.eq("feedItemId", feedItemId))
-        .first();
-
-      const claimFields = {
-        feedItemId,
-        claim: input.claim,
-        verdict: input.verdict,
-        verdictSource: input.verdictSource,
-        verdictBy: input.verdictBy,
-        verdictLabelRaw: input.verdictLabelRaw,
-        publisher: input.publisher,
-        reviewUrl: input.reviewUrl,
-        reviewedAt: input.reviewedAt,
-        evidence: input.evidence,
-        confidence: input.confidence,
-        severity: input.severity,
-        claimReviewJson: input.claimReviewJson,
-        supportingPaperKeys: input.supportingPaperKeys,
-        updatedAt: now,
-      };
-
-      if (existingClaim) {
-        await ctx.db.replace("feedItemClaims", existingClaim._id, {
-          ...claimFields,
-          createdAt: existingClaim.createdAt,
-        });
-      } else {
-        await ctx.db.insert("feedItemClaims", {
-          ...claimFields,
-          createdAt: now,
-        });
       }
     }
 
@@ -259,7 +220,6 @@ export const refreshFactCheckClaims = internalAction({
         severity: claim.severity,
         claimant: claim.claimant,
         claimDate: parseDateMs(claim.claimDate),
-        claimReviewJson: claim.claimReviewJson,
         supportingPaperKeys,
       });
     }
