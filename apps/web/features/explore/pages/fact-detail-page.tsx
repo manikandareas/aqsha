@@ -9,7 +9,7 @@ import {
 } from "@aqsha/ui/icons";
 import Link from "next/link";
 import { useState } from "react";
-import { ConsensusMeter } from "@/features/feed/components/consensus-meter";
+import { ConsensusMeter } from "@/features/explore/components/consensus-meter";
 import {
   VERDICT_STYLE,
   VerdictBadge,

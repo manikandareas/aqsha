@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
 import { useConvexActionFn } from "@/lib/convex-query";
-import { ScoreBar } from "@/features/discovery/components/discovery-visuals";
+import { ScoreBar } from "./discovery-visuals";
 
 export type IdeaSeed = {
   title: string;

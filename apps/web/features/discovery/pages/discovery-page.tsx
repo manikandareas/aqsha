@@ -17,7 +17,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ExploreChatShell } from "@/features/explore/pages/explore-chat-shell";
-import { IdeaDialog, type IdeaSeed } from "@/features/feed/components/idea-dialog";
+import { IdeaDialog, type IdeaSeed } from "@/features/discovery/components/idea-dialog";
 import { WorkspacePickerDialog } from "@/features/workspaces/components/workspace-picker-dialog";
 import { toWorkspaceId } from "@/lib/convex-refs";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
