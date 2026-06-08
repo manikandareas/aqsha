@@ -1,27 +1,20 @@
 "use client";
 
-import { MessageSquarePlusIcon, PanelLeftIcon } from "@aqsha/ui/icons";
-import { Button } from "@/components/ui/button";
-import { SidebarContent, SidebarHeader } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCloseRightPanel } from "@/hooks/use-close-right-panel";
-import { panelBodyPaddingClass, panelHeaderPaddingClass } from "@/lib/panel-surface";
+import { panelBodyPaddingClass } from "@/lib/panel-surface";
 import {
   threadContextScopeKey,
   useDraftContextSelection,
 } from "@/lib/thread-context-draft-store";
 import { cn } from "@/lib/utils";
 import { useThreadExperienceData } from "@/features/thread-experience/api/use-thread-experience-data";
-import { ThreadChatSurface } from "@/features/thread-experience/components/chat-thread-state";
+import { CompactThreadChatPanel } from "@/features/thread-experience/components/compact-thread-chat-panel";
 import type {
   RemoveThread,
   SendMessage,
   StartThread,
   ThreadSummary,
 } from "@/features/thread-experience/components/component-types";
-import { AccessDeniedState } from "@/features/thread-experience/components/home-states";
-import { ThreadDeleteActions } from "@/features/thread-experience/components/thread-actions-menu";
-import { ThreadRecentSwitcher } from "@/features/thread-experience/components/thread-recent-switcher";
 import type { RateStatus } from "@/features/thread-experience/types";
 import {
   buildContextArtifactSnapshot,
@@ -52,12 +45,10 @@ export function WorkspaceChatSidePanel({
   startThread: StartThread;
   removeThread: RemoveThread;
 }) {
-  const closePanel = useCloseRightPanel();
   const threadExperience = useThreadExperienceData(activeThreadId ?? undefined);
   const activeThread = activeThreadId
     ? threadExperience.selectedThread
     : undefined;
-  const headerLabel = activeThread?.title ?? "Chat baru";
   const persistedThreadContextIds =
     threadExperience.selectedContextArtifacts.map((item) =>
       String(item.artifactId),
@@ -119,99 +110,32 @@ export function WorkspaceChatSidePanel({
   };
 
   return (
-    <>
-      <SidebarHeader
-        className={cn(
-          "gap-0 border-b-0 bg-background p-0",
-          panelHeaderPaddingClass,
-        )}
-      >
-        <div className="flex min-w-0 items-center justify-between gap-3">
-          <ThreadRecentSwitcher
-            title={headerLabel}
-            threads={threads}
-            onSelectThread={onActiveThreadIdChange}
-            onNewThread={() => onActiveThreadIdChange(null)}
-            newLabel="Chat baru"
-            emptyLabel="Belum ada thread"
-          />
-          <div className="flex shrink-0 items-center gap-1">
-            {activeThreadId ? (
-              <ThreadDeleteActions
-                description="Thread dan pesannya akan dihapus permanen dari workspace ini."
-                onDelete={async () => {
-                  await removeThread({ threadId: activeThreadId });
-                  onActiveThreadIdChange(null);
-                }}
-              />
-            ) : null}
-            <Button
-              type="button"
-              variant="ghost"
-              className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-              aria-label="Chat baru"
-              onClick={() => onActiveThreadIdChange(null)}
-            >
-              <MessageSquarePlusIcon className="size-3.5" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-              onClick={closePanel}
-              aria-label="Tutup panel chat"
-            >
-              <PanelLeftIcon className="size-3.5 rotate-180" />
-            </Button>
-          </div>
-        </div>
-      </SidebarHeader>
-      <SidebarContent className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden bg-background p-0">
-        {activeThreadId ? (
-          activeThread === null ? (
-            <div
-              className={cn(
-                "flex min-h-0 flex-1 flex-col overflow-y-auto",
-                panelBodyPaddingClass,
-              )}
-            >
-              <AccessDeniedState />
-            </div>
-          ) : (
-            <ThreadChatSurface
-              threadId={activeThreadId}
-              isLoading={activeThread === undefined}
-              title={activeThread?.title}
-              rateStatus={rateStatus}
-              startThread={startThread}
-              onSend={sendWithDraftContext}
-              runs={threadExperience.runs}
-              artifacts={threadExperience.artifacts}
-              sources={threadExperience.sources}
-              onCancelRun={threadExperience.cancelRun}
-              onRetryRun={threadExperience.retryRun}
-              contextArtifacts={activeContextArtifacts}
-              onRemoveContextArtifact={threadDraftContext.toggleArtifact}
-              threadWorkspaceId={workspaceId}
-              compact
-            />
-          )
-        ) : (
-          <ThreadChatSurface
-            isLoading={false}
-            rateStatus={rateStatus}
-            startThread={startThread}
-            threads={threads}
-            contextArtifacts={contextArtifacts}
-            onRemoveContextArtifact={onRemoveContextArtifact}
-            onThreadCreated={onActiveThreadIdChange}
-            draftContextLabel={workspaceName}
-            threadWorkspaceId={workspaceId}
-            compact
-          />
-        )}
-      </SidebarContent>
-    </>
+    <CompactThreadChatPanel
+      activeThreadId={activeThreadId}
+      activeThread={activeThread}
+      threads={threads}
+      onActiveThreadIdChange={onActiveThreadIdChange}
+      deleteDescription="Thread dan pesannya akan dihapus permanen dari workspace ini."
+      onDeleteThread={() =>
+        activeThreadId
+          ? removeThread({ threadId: activeThreadId })
+          : Promise.resolve()
+      }
+      rateStatus={rateStatus}
+      startThread={startThread}
+      onSend={sendWithDraftContext}
+      runs={threadExperience.runs}
+      artifacts={threadExperience.artifacts}
+      sources={threadExperience.sources}
+      onCancelRun={threadExperience.cancelRun}
+      onRetryRun={threadExperience.retryRun}
+      contextArtifacts={activeContextArtifacts}
+      onRemoveContextArtifact={
+        activeThreadId ? threadDraftContext.toggleArtifact : onRemoveContextArtifact
+      }
+      threadWorkspaceId={workspaceId}
+      draftContextLabel={workspaceName}
+    />
   );
 }
 

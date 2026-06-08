@@ -74,6 +74,7 @@ export function ThreadChatSurface({
   threads = emptyThreadSummaries,
   onThreadCreated,
   draftContextLabel,
+  seed,
 }: {
   threadId?: string;
   isLoading: boolean;
@@ -93,6 +94,7 @@ export function ThreadChatSurface({
   threads?: ThreadSummary[];
   onThreadCreated?: (threadId: string) => void;
   draftContextLabel?: string;
+  seed?: string;
 }) {
   const { isAuthenticated } = useConvexAuth();
   const threadStatus = useConvexQueryData(
@@ -130,6 +132,7 @@ export function ThreadChatSurface({
         onRemoveContextArtifact={onRemoveContextArtifact}
         onThreadCreated={onThreadCreated}
         contextLabel={draftContextLabel}
+        seed={seed}
         compact={compact}
       />
     );

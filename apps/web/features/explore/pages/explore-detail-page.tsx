@@ -17,10 +17,7 @@ import { PropertyLink, PropertyRow } from "@/components/detail/property-list";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ExploreSurfaceHeader } from "@/features/explore/components/explore-surface-header";
 import { WorkspacePickerDialog } from "@/features/workspaces/components/workspace-picker-dialog";
-import { WorkspaceShell } from "@/features/workspaces/components/workspace-shell";
-import { useWorkspaceIndexData } from "@/features/workspaces/api/use-workspaces-data";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
 import {
   useConvexActionQueryWithKey,
@@ -30,6 +27,7 @@ import { toWorkspaceId } from "@/lib/convex-refs";
 import { formatCitation, type CitationFormat } from "../utils/citation";
 import { decodePaperRef } from "../utils/paper-ref";
 import { bestPaperIngestUrl } from "../utils/paper-ingest";
+import { ExploreChatShell } from "./explore-chat-shell";
 
 const citationFormats: Array<{ value: CitationFormat; label: string }> = [
   { value: "bibtex", label: "BibTeX" },
@@ -37,8 +35,12 @@ const citationFormats: Array<{ value: CitationFormat; label: string }> = [
   { value: "plain", label: "Plain text" },
 ];
 
+function buildPaperSeed(paper: ExplorePaper) {
+  const abstract = paper.abstract ?? paper.snippet;
+  return `${paper.title}\n\n${abstract}\n\nSumber: ${paper.url}`;
+}
+
 export function ExploreDetailPage({ paperRef }: { paperRef: string }) {
-  const shellData = useWorkspaceIndexData();
   const paperKey = safeDecodePaperRef(paperRef);
   const paperQuery = useConvexActionQueryWithKey(
     api.explore.getOrFetchPaper,
@@ -48,41 +50,34 @@ export function ExploreDetailPage({ paperRef }: { paperRef: string }) {
   const paperError = paperQuery.error
     ? readableConvexErrorMessage(paperQuery.error, "Paper gagal dimuat.")
     : null;
+  const chatSeed = paperQuery.data ? buildPaperSeed(paperQuery.data) : undefined;
 
   return (
-    <WorkspaceShell
-      viewer={shellData.viewer}
-      workspaces={shellData.workspaces}
-      threads={shellData.threads}
-      createWorkspace={shellData.createWorkspace}
-      removeThread={shellData.removeThread}
+    <ExploreChatShell
+      breadcrumbs={[
+        { label: "Jelajahi", href: "/app/explore" },
+        { label: "Paper" },
+      ]}
+      chatSeed={chatSeed}
     >
-      <main className="min-h-svh bg-background text-foreground">
-        <ExploreSurfaceHeader
-          breadcrumbs={[
-            { label: "Jelajahi", href: "/app/explore" },
-            { label: "Paper" },
-          ]}
-        />
-        <div className="mx-auto grid w-full max-w-[1080px] gap-8 px-5 pb-12 pt-4 sm:px-8 lg:grid-cols-[minmax(0,700px)_260px] lg:gap-10 lg:px-10">
-          {paperQuery.isLoading ? (
-            <ExploreDetailSkeleton />
-          ) : paperError ? (
-            <ExploreDetailState
-              title="Paper gagal dimuat."
-              message={paperError}
-            />
-          ) : !paperKey || !paperQuery.data ? (
-            <ExploreDetailState
-              title="Paper tidak tersedia."
-              message="Paper ini tidak dapat ditemukan. Coba cari lewat Jelajahi."
-            />
-          ) : (
-            <ExploreDetailContent paper={paperQuery.data} />
-          )}
-        </div>
-      </main>
-    </WorkspaceShell>
+      <div className="mx-auto grid w-full max-w-[1080px] gap-8 px-5 pb-12 pt-4 sm:px-8 lg:grid-cols-[minmax(0,700px)_260px] lg:gap-10 lg:px-10">
+        {paperQuery.isLoading ? (
+          <ExploreDetailSkeleton />
+        ) : paperError ? (
+          <ExploreDetailState
+            title="Paper gagal dimuat."
+            message={paperError}
+          />
+        ) : !paperKey || !paperQuery.data ? (
+          <ExploreDetailState
+            title="Paper tidak tersedia."
+            message="Paper ini tidak dapat ditemukan. Coba cari lewat Jelajahi."
+          />
+        ) : (
+          <ExploreDetailContent paper={paperQuery.data} />
+        )}
+      </div>
+    </ExploreChatShell>
   );
 }
 

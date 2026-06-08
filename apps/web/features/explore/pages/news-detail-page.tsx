@@ -20,14 +20,22 @@ import {
   ReaderDetailState,
 } from "./reader-detail-shell";
 
+function buildNewsSeed(item: FeedItem) {
+  const title = item.titleId ?? item.title;
+  const body = item.articleText ?? item.summary;
+  return `${title}\n\n${body}\n\nSumber: ${item.url}`;
+}
+
 export function NewsDetailPage({ feedItemId }: { feedItemId: string }) {
   const data = useConvexQueryData(
     api.feed.getFeedItem,
     feedItemId ? { feedItemId } : "skip",
   );
+  const chatSeed =
+    data && data.kind === "news" ? buildNewsSeed(data as FeedItem) : undefined;
 
   return (
-    <ReaderDetailShell breadcrumbLabel="Berita">
+    <ReaderDetailShell breadcrumbLabel="Berita" chatSeed={chatSeed}>
       {data === undefined ? (
         <ReaderDetailSkeleton />
       ) : !data || data.kind !== "news" ? (
@@ -54,7 +62,7 @@ function NewsDetailContent({ item }: { item: FeedItem }) {
     limit: 8,
   });
 
-  const seed = `${title}\n\n${body}\n\nSumber: ${item.url}`;
+  const seed = buildNewsSeed(item);
 
   return (
     <article className="min-w-0">

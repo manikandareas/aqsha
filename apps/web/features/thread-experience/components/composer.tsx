@@ -18,7 +18,7 @@ import { LayoutGroup, m, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { MAX_UPLOAD_BYTES } from "@aqsha/convex/artifact-upload-limits";
 import {
@@ -105,6 +105,8 @@ type ComposerSharedProps = {
   onUpgrade?: () => void;
   /** Sticky per-thread agent selection to initialize the selector. */
   initialAgentKind?: ComposerAgentKind;
+  /** Optional pre-seeded composer text (e.g. an Explore detail item). */
+  initialContent?: string;
 };
 
 export type ComposerProps = ComposerSharedProps &
@@ -157,14 +159,26 @@ function ComposerContent(props: ComposerProps) {
     threads = [],
     onUpgrade,
     initialAgentKind,
+    initialContent,
   } = props;
 
   const threadId = props.mode === "thread" ? props.threadId : undefined;
   const onSend = props.mode === "thread" ? props.onSend : undefined;
   const onStartThread = props.mode === "disabled" ? undefined : props.onStartThread;
 
-  const [content, setContent] = useState("");
+  const [content, setContent] = useState(initialContent ?? "");
   const [inlineCommands, setInlineCommands] = useState<PromptCommand[]>([]);
+  // Re-apply a pre-seed (e.g. an Explore detail item that loads after mount)
+  // only while the user hasn't diverged from the previously seeded text.
+  const lastSeedRef = useRef(initialContent ?? "");
+  useEffect(() => {
+    const nextSeed = initialContent ?? "";
+    if (nextSeed === lastSeedRef.current) return;
+    setContent((current) =>
+      current === lastSeedRef.current ? nextSeed : current,
+    );
+    lastSeedRef.current = nextSeed;
+  }, [initialContent]);
   const { agentKind, canUsePro, setAgentKind, handleUpgrade } =
     useComposerAgentSelection({ initialAgentKind, onUpgrade });
   const [isSending, setIsSending] = useState(false);

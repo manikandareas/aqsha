@@ -8,6 +8,7 @@ import {
   paperToDiscoveryItem,
   savedRefKey,
   type DiscoveryItem,
+  type DiscoveryItemRef,
   type DiscoverySavedRef,
   type FeedItem,
 } from "@aqsha/convex/feed";
@@ -15,11 +16,9 @@ import { CheckCircle2Icon, SparklesIcon } from "@aqsha/ui/icons";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ExploreSurfaceHeader } from "@/features/explore/components/explore-surface-header";
+import { ExploreChatShell } from "@/features/explore/pages/explore-chat-shell";
 import { IdeaDialog, type IdeaSeed } from "@/features/feed/components/idea-dialog";
 import { WorkspacePickerDialog } from "@/features/workspaces/components/workspace-picker-dialog";
-import { WorkspaceShell } from "@/features/workspaces/components/workspace-shell";
-import { useWorkspaceIndexData } from "@/features/workspaces/api/use-workspaces-data";
 import { toWorkspaceId } from "@/lib/convex-refs";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
 import {
@@ -51,8 +50,6 @@ import {
 const emptyPapers: ExplorePaper[] = [];
 
 export function DiscoveryPage() {
-  const { viewer, workspaces, threads, createWorkspace, removeThread } =
-    useWorkspaceIndexData();
   const router = useRouter();
 
   const [nav, setNav] = useDiscoveryNav();
@@ -66,8 +63,6 @@ export function DiscoveryPage() {
   }, [nav.view, nav.serendipity]);
 
   const feedData = useConvexQueryData(api.feed.getFeed, feedArgs);
-  const savedRefsData = useConvexQueryData(api.feed.getSavedDiscoveryRefs, {});
-
   const papersQuery = useConvexActionQueryWithKey(
     api.explore.searchPapers,
     ["discoveryPapers", nav.q, nav.range],
@@ -79,6 +74,20 @@ export function DiscoveryPage() {
           fromYear: rangeToFromYear(nav.range),
         }
       : "skip",
+  );
+  const paperItemRefs = useMemo<DiscoveryItemRef[]>(
+    () =>
+      nav.view === "papers"
+        ? (papersQuery.data?.items ?? emptyPapers).map((paper) => ({
+            kind: "paper" as const,
+            paperKey: paper.key,
+          }))
+        : [],
+    [nav.view, papersQuery.data],
+  );
+  const savedRefsData = useConvexQueryData(
+    api.feed.getSavedDiscoveryRefs,
+    nav.view === "papers" ? { itemRefs: paperItemRefs } : "skip",
   );
 
   // Mutations / actions.
@@ -264,16 +273,8 @@ export function DiscoveryPage() {
   );
 
   return (
-    <WorkspaceShell
-      viewer={viewer}
-      workspaces={workspaces}
-      threads={threads}
-      createWorkspace={createWorkspace}
-      removeThread={removeThread}
-    >
-      <main className="min-h-svh bg-background text-foreground">
-        <ExploreSurfaceHeader breadcrumbs={[{ label: "Jelajahi" }]} />
-        <div className="mx-auto w-full max-w-[1760px] px-5 pb-12 pt-4 sm:px-8 md:pt-6 xl:px-10">
+    <ExploreChatShell breadcrumbs={[{ label: "Jelajahi" }]}>
+      <div className="mx-auto w-full max-w-[1760px] px-5 pb-12 pt-4 sm:px-8 md:pt-6 xl:px-10">
           <header className="max-w-[680px]">
             <h1 className="text-[30px] font-semibold leading-none tracking-normal text-foreground sm:text-[34px]">
               Jelajahi
@@ -364,7 +365,6 @@ export function DiscoveryPage() {
             </aside>
           </section>
         </div>
-      </main>
 
       <IdeaDialog
         seed={ideaSeed}
@@ -384,7 +384,7 @@ export function DiscoveryPage() {
         description="Pilih workspace tujuan. Paper akan otomatis diunduh dan metadatanya diekstrak."
         onSelect={handleSaveToWorkspace}
       />
-    </WorkspaceShell>
+    </ExploreChatShell>
   );
 
   function renderHeroCard(item: DiscoveryItem) {

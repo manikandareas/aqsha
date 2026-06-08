@@ -36,14 +36,31 @@ import {
 
 type FactClaim = NonNullable<FeedItem["claim"]>;
 
+function buildFactSeed(claim: FactClaim) {
+  const verdict = VERDICT_STYLE[claim.verdict].label;
+  return [
+    `Klaim viral: ${claim.claim}`,
+    `Verdict pemeriksa fakta: ${verdict}${claim.publisher ? ` (${claim.publisher})` : ""}`,
+    "",
+    "Telaah bukti ilmiah di balik klaim ini: apa yang dikatakan literatur, seberapa kuat buktinya, dan konteks apa yang penting.",
+    claim.reviewUrl ? `Sumber pemeriksa: ${claim.reviewUrl}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 export function FactDetailPage({ feedItemId }: { feedItemId: string }) {
   const data = useConvexQueryData(
     api.feed.getFeedItem,
     feedItemId ? { feedItemId } : "skip",
   );
+  const chatSeed =
+    data && data.kind === "claim" && data.claim
+      ? buildFactSeed(data.claim)
+      : undefined;
 
   return (
-    <ReaderDetailShell breadcrumbLabel="Cek fakta">
+    <ReaderDetailShell breadcrumbLabel="Cek fakta" chatSeed={chatSeed}>
       {data === undefined ? (
         <ReaderDetailSkeleton />
       ) : !data || data.kind !== "claim" || !data.claim ? (
@@ -124,18 +141,7 @@ function FactDetailContent({
     }
   };
 
-  const researchSeed = (() => {
-    const verdict = VERDICT_STYLE[claim.verdict].label;
-    return [
-      `Klaim viral: ${claim.claim}`,
-      `Verdict pemeriksa fakta: ${verdict}${claim.publisher ? ` (${claim.publisher})` : ""}`,
-      "",
-      "Telaah bukti ilmiah di balik klaim ini: apa yang dikatakan literatur, seberapa kuat buktinya, dan konteks apa yang penting.",
-      claim.reviewUrl ? `Sumber pemeriksa: ${claim.reviewUrl}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
-  })();
+  const researchSeed = buildFactSeed(claim);
 
   return (
     <article className="min-w-0">

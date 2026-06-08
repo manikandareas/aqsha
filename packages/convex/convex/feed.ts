@@ -157,9 +157,26 @@ export const getSavedItems = query({
 // UI. This query returns both the row id and paper key identities so clients do
 // not need to infer saved state from loosely-shaped saved rows.
 export const getSavedDiscoveryRefs = query({
-  args: { limit: v.optional(v.number()) },
+  args: {
+    itemRefs: v.optional(v.array(discoveryItemRefValidator)),
+    limit: v.optional(v.number()),
+  },
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
+    if (args.itemRefs) {
+      const refs = [];
+      for (const itemRef of args.itemRefs.slice(0, 80)) {
+        const item = await feedItemForDiscoveryRef(ctx, itemRef);
+        if (!item) continue;
+        if (!(await isFeedItemSaved(ctx, user._id, item._id))) continue;
+        refs.push({ kind: "feed" as const, feedItemId: item._id });
+        if (item.paperKey) {
+          refs.push({ kind: "paper" as const, paperKey: item.paperKey });
+        }
+      }
+      return refs;
+    }
+
     const limit = Math.min(args.limit ?? 200, 500);
     const saved = await ctx.db
       .query("savedFeedItems")
@@ -213,10 +230,11 @@ export const getRelatedFeedItems = query({
       .withIndex("by_kind_published", (q) => q.eq("kind", self.kind))
       .order("desc")
       .take(limit * 4);
+    const hidden = await loadHiddenItemIds(ctx, user._id);
     const saved = await loadSavedItemIds(ctx, user._id);
     const selfTopics = new Set(self.topics.map((topic) => topic.trim().toLowerCase()));
     return pool
-      .filter((row) => row._id !== id)
+      .filter((row) => row._id !== id && !hidden.has(row._id))
       .map((row) => ({
         row,
         overlap: row.topics.reduce(
@@ -657,13 +675,24 @@ async function ensureFeedItemForPaperKey(
 }
 
 async function existingFeedItemForPaperKey(
-  ctx: MutationCtx,
+  ctx: QueryCtx | MutationCtx,
   paperKey: string,
 ): Promise<Doc<"feedItems"> | null> {
   return await ctx.db
     .query("feedItems")
     .withIndex("by_dedupe_key", (q) => q.eq("dedupeKey", `paper:${paperKey}`))
     .unique();
+}
+
+async function feedItemForDiscoveryRef(
+  ctx: QueryCtx | MutationCtx,
+  itemRef: DiscoveryItemRef,
+): Promise<Doc<"feedItems"> | null> {
+  if (itemRef.kind === "feed") {
+    const id = ctx.db.normalizeId("feedItems", itemRef.feedItemId);
+    return id ? await ctx.db.get("feedItems", id) : null;
+  }
+  return await existingFeedItemForPaperKey(ctx, itemRef.paperKey);
 }
 
 async function resolveDiscoveryFeedItem(

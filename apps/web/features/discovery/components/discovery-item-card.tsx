@@ -3,7 +3,6 @@
 import type { DiscoveryItem, FeedItem } from "@aqsha/convex/feed";
 import {
   AlertCircleIcon,
-  ClockIcon,
   CompassIcon,
   ExternalLinkIcon,
   FileDownIcon,
@@ -110,8 +109,6 @@ function DiscoverySpotlightCard(props: SpotlightProps) {
             imageSide === "left" ? "lg:order-2" : "lg:order-1",
           )}
         >
-          <PublishedMeta item={item} lang={lang} />
-
           {isClaim && item.claim ? (
             <div className="mb-2.5 flex flex-wrap items-center gap-2">
               <VerdictBadge verdict={item.claim.verdict} />
@@ -447,24 +444,6 @@ function SourceAvatar({ item }: { item: DiscoveryItem }) {
         />
       ) : null}
     </span>
-  );
-}
-
-function PublishedMeta({
-  item,
-  lang,
-}: {
-  item: DiscoveryItem;
-  lang: "id" | "en";
-}) {
-  const rel =
-    relativeTime(item.publishedAt, lang) ?? (item.year ? String(item.year) : null);
-  if (!rel) return null;
-  const prefix = lang === "en" ? "Published" : "Diterbitkan";
-  return (
-    <p className="mb-2.5 inline-flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
-      <ClockIcon className="size-3.5" /> {prefix} {rel}
-    </p>
   );
 }
 

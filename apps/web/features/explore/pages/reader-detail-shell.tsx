@@ -5,42 +5,34 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ExploreSurfaceHeader } from "@/features/explore/components/explore-surface-header";
-import { WorkspaceShell } from "@/features/workspaces/components/workspace-shell";
-import { useWorkspaceIndexData } from "@/features/workspaces/api/use-workspaces-data";
+import { ExploreChatShell } from "./explore-chat-shell";
 
 // Single-column reader scaffolding shared by the news + fact detail pages.
-// Reuses the same chrome as the paper detail page (WorkspaceShell +
-// ExploreSurfaceHeader) but a centered, sidebar-less column matching the
-// Perplexity-style reader.
+// Reuses the same chrome as the paper detail page (ExploreChatShell, including
+// the global chat side panel) but a centered, sidebar-less column matching the
+// Perplexity-style reader. `chatSeed` pre-fills the chat composer with the item
+// currently being read.
 export function ReaderDetailShell({
   breadcrumbLabel,
+  chatSeed,
   children,
 }: {
   breadcrumbLabel: string;
+  chatSeed?: string;
   children: ReactNode;
 }) {
-  const shellData = useWorkspaceIndexData();
   return (
-    <WorkspaceShell
-      viewer={shellData.viewer}
-      workspaces={shellData.workspaces}
-      threads={shellData.threads}
-      createWorkspace={shellData.createWorkspace}
-      removeThread={shellData.removeThread}
+    <ExploreChatShell
+      breadcrumbs={[
+        { label: "Jelajahi", href: "/app/explore" },
+        { label: breadcrumbLabel },
+      ]}
+      chatSeed={chatSeed}
     >
-      <main className="min-h-svh bg-background text-foreground">
-        <ExploreSurfaceHeader
-          breadcrumbs={[
-            { label: "Jelajahi", href: "/app/explore" },
-            { label: breadcrumbLabel },
-          ]}
-        />
-        <div className="mx-auto w-full max-w-[760px] px-5 pb-16 pt-4 sm:px-8">
-          {children}
-        </div>
-      </main>
-    </WorkspaceShell>
+      <div className="mx-auto w-full max-w-[760px] px-5 pb-16 pt-4 sm:px-8">
+        {children}
+      </div>
+    </ExploreChatShell>
   );
 }
 

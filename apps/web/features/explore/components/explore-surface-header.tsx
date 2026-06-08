@@ -1,20 +1,28 @@
 "use client";
 
-import { ChevronRightIcon, PanelLeftIcon } from "@aqsha/ui/icons";
+import {
+  ChevronRightIcon,
+  MessageSquareIcon,
+  PanelLeftIcon,
+} from "@aqsha/ui/icons";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 
-type ExploreBreadcrumb = {
+export type ExploreBreadcrumb = {
   label: string;
   href?: string;
 };
 
 export function ExploreSurfaceHeader({
   breadcrumbs,
+  chatOpen,
+  onToggleChat,
 }: {
   breadcrumbs: ExploreBreadcrumb[];
+  chatOpen?: boolean;
+  onToggleChat?: () => void;
 }) {
   const leftSidebar = useSidebar();
   const isLeftSidebarOpen = leftSidebar.isMobile
@@ -25,42 +33,60 @@ export function ExploreSurfaceHeader({
     <header className="shrink-0 bg-background">
       <div
         className={cn(
-          "flex min-h-14 w-full items-center gap-2 px-5 sm:px-8 lg:px-10",
+          "flex min-h-14 w-full items-center justify-between gap-2 px-5 sm:px-8 lg:px-10",
         )}
       >
-        {!isLeftSidebarOpen ? (
-          <Button
-            type="button"
-            variant="ghost"
-            className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-            onClick={leftSidebar.toggleSidebar}
-            aria-label="Buka sidebar kiri"
+        <div className="flex min-w-0 items-center gap-2">
+          {!isLeftSidebarOpen ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={leftSidebar.toggleSidebar}
+              aria-label="Buka sidebar kiri"
+            >
+              <PanelLeftIcon className="size-3.5" />
+            </Button>
+          ) : null}
+          <nav
+            aria-label="Breadcrumb"
+            className="flex min-w-0 items-center gap-1 text-[12px] font-medium text-muted-foreground"
           >
-            <PanelLeftIcon className="size-3.5" />
-          </Button>
+            {breadcrumbs.map((item, index) => {
+              const isLast = index === breadcrumbs.length - 1;
+              return (
+                <span key={`${item.label}-${index}`} className="flex min-w-0 items-center gap-1">
+                  {index > 0 ? <ChevronRightIcon className="size-3 shrink-0" /> : null}
+                  {item.href && !isLast ? (
+                    <Link href={item.href} className="truncate hover:text-foreground">
+                      {item.label}
+                    </Link>
+                  ) : (
+                    <span className={cn("truncate", isLast && "font-semibold text-foreground")}>
+                      {item.label}
+                    </span>
+                  )}
+                </span>
+              );
+            })}
+          </nav>
+        </div>
+        {onToggleChat ? (
+          <button
+            type="button"
+            onClick={onToggleChat}
+            className={cn(
+              "flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold transition-colors",
+              chatOpen
+                ? "bg-primary/15 text-primary"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+            aria-label="Toggle panel chat"
+          >
+            <MessageSquareIcon className="size-3.5" />
+            Chat
+          </button>
         ) : null}
-        <nav
-          aria-label="Breadcrumb"
-          className="flex min-w-0 items-center gap-1 text-[12px] font-medium text-muted-foreground"
-        >
-          {breadcrumbs.map((item, index) => {
-            const isLast = index === breadcrumbs.length - 1;
-            return (
-              <span key={`${item.label}-${index}`} className="flex min-w-0 items-center gap-1">
-                {index > 0 ? <ChevronRightIcon className="size-3 shrink-0" /> : null}
-                {item.href && !isLast ? (
-                  <Link href={item.href} className="truncate hover:text-foreground">
-                    {item.label}
-                  </Link>
-                ) : (
-                  <span className={cn("truncate", isLast && "font-semibold text-foreground")}>
-                    {item.label}
-                  </span>
-                )}
-              </span>
-            );
-          })}
-        </nav>
       </div>
     </header>
   );

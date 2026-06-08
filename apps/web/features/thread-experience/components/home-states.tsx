@@ -28,6 +28,7 @@ export function HomeStartState({
   onRemoveContextArtifact,
   onThreadCreated,
   contextLabel,
+  seed,
   compact = false,
 }: {
   rateStatus: RateStatus | undefined;
@@ -37,6 +38,7 @@ export function HomeStartState({
   onRemoveContextArtifact?: (artifactId: string) => void;
   onThreadCreated?: (threadId: string) => void;
   contextLabel?: string;
+  seed?: string;
   compact?: boolean;
 }) {
   const shouldReduceMotion = useReducedMotion();
@@ -83,6 +85,7 @@ export function HomeStartState({
               contextArtifacts={contextArtifacts}
               onRemoveContextArtifact={onRemoveContextArtifact}
               contextLabel={contextLabel}
+              initialContent={seed}
               showSuggestions
             />
           </ComposerHeroState>
