@@ -4,6 +4,7 @@ import {
   AlertCircleIcon,
   ChevronRightIcon,
   InfoIcon,
+  Loader2Icon,
   RotateCcwIcon,
 } from "@aqsha/ui/icons";
 import { useState } from "react";
@@ -23,6 +24,7 @@ import type {
   ArtifactRenderPayload,
   PaperExtractionStatus,
 } from "./artifact-render-panels";
+import { derivePaperMetadataView } from "../utils/paper-metadata-model";
 
 export type ArtifactSidebarRecord = {
   artifactType: string;
@@ -70,26 +72,16 @@ export function ArtifactDetailSidebar({
   const isPdf = payload.artifactType === "pdf";
   // A paper artifact can be a downloaded PDF (uploaded or ingested from a URL)
   // or a URL kept as metadata-only when no open-access PDF was available.
-  const hasPaperMetadata = Boolean(paperExtraction?.metadata);
-  const isScholarly =
-    artifact.detectedDocumentKind === "scholarly_paper" &&
-    (isPdf || hasPaperMetadata);
-  const metadata = isScholarly ? paperExtraction?.metadata ?? null : null;
+  // Surface whatever metadata is usable regardless of `detectedDocumentKind`,
+  // and show explicit pending/failed states instead of a silent empty sidebar.
+  const { metadata, paperPending, paperFailed } = derivePaperMetadataView({
+    isPdf,
+    paperExtraction,
+  });
   const urlPayload = payload.artifactType === "url" ? payload : null;
   const filePayload =
     payload.artifactType === "pdf" || payload.artifactType === "docx" ? payload : null;
 
-  // Bibliographic metadata can be resolved (DOI/arXiv → DataCite/OpenAlex)
-  // independently of GROBID. A failed GROBID pass only means the richer
-  // full-text extraction didn't finish — it is NOT a failure to read the
-  // paper when we already have usable metadata, so don't alarm the user.
-  const hasUsablePaperMetadata = Boolean(
-    metadata && (metadata.title || metadata.abstract || metadata.authors.length > 0),
-  );
-  const paperFailed =
-    isPdf &&
-    paperExtraction?.extraction?.status === "failed" &&
-    !hasUsablePaperMetadata;
   const urlFailed = urlPayload?.status === "failed";
 
   const authors = metadata
@@ -111,6 +103,7 @@ export function ArtifactDetailSidebar({
           onRetry={() => void retryUrlExtraction({ artifactId: toArtifactId(artifactId) })}
         />
       ) : null}
+      {paperPending ? <SidebarPending message="Reading paper details…" /> : null}
 
       <section>
         <h2 className="mb-4 text-[12px] font-semibold text-muted-foreground">About</h2>
@@ -172,7 +165,11 @@ export function ArtifactDetailSidebar({
               <CopyCitationButton
                 key={format.value}
                 value={formatCitation(
-                  paperCitationInput(metadata, title, filePayload?.url ?? ""),
+                  paperCitationInput(
+                    metadata,
+                    title,
+                    filePayload?.url ?? urlPayload?.normalizedUrl ?? "",
+                  ),
                   format.value,
                 )}
               >
@@ -253,6 +250,15 @@ export function MarkdownArtifactDetails({ artifact }: { artifact: ArtifactSideba
         <PropertyRow label="Updated" value={formatDate(artifact.updatedAt)} />
       </PopoverContent>
     </Popover>
+  );
+}
+
+function SidebarPending({ message }: { message: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-[8px] border border-border bg-muted/40 p-3 text-[12px] font-medium text-muted-foreground">
+      <Loader2Icon className="size-3.5 shrink-0 animate-spin" />
+      {message}
+    </div>
   );
 }
 

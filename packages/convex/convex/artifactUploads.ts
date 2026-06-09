@@ -16,6 +16,10 @@ import { uploadArtifactType } from "./artifactModel";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "./artifactUploadLimits";
 const MAX_INDEXED_TEXT_CHARS = 300_000;
 
+// Header (title/authors/abstract/DOI) lives in the first pages; this is the
+// text snippet handed to the identifier + LLM metadata enrichment step.
+const PAPER_ENRICHMENT_TEXT_CHARS = 8_000;
+
 const textLikeMimeTypes = new Set([
   "text/plain",
   "text/markdown",
@@ -333,6 +337,8 @@ async function finalizeUploadedDocument(
     threadId?: string;
   },
 ): Promise<{ artifactId: Id<"artifacts">; title: string; indexed: boolean }> {
+  let indexed = false;
+  let extractedText = "";
   try {
     const extracted = await extractStoredDocument(ctx, {
       storageId: args.storageId,
@@ -342,6 +348,7 @@ async function finalizeUploadedDocument(
     if (!extracted.plainText.trim()) {
       throw new ConvexError("No readable text was found in this file");
     }
+    extractedText = extracted.plainText;
 
     const [indexedTextStorageId, markdownStorageId] = await Promise.all([
       maybeStoreText(ctx, extracted.plainText, "text/plain"),
@@ -365,14 +372,7 @@ async function finalizeUploadedDocument(
       markdownStorageId,
       ragEntryId,
     });
-    if (args.workspaceId && isPdfFile(args.fileName, args.mimeType)) {
-      await ctx.runMutation(internal.paperExtractions.queueGrobidExtraction, {
-        ownerUserId: args.ownerUserId,
-        artifactId: args.artifactId,
-      });
-    }
-
-    return { artifactId: args.artifactId, title: args.title, indexed: Boolean(ragEntryId) };
+    indexed = Boolean(ragEntryId);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "File indexing failed";
@@ -381,7 +381,57 @@ async function finalizeUploadedDocument(
       artifactId: args.artifactId,
       failureReason: message,
     });
-    return { artifactId: args.artifactId, title: args.title, indexed: false };
+  }
+
+  // Paper enrichment is DECOUPLED from text-extraction success. A scanned or
+  // otherwise unreadable PDF (where `unpdf` yields no text) still gets GROBID,
+  // which reads the PDF bytes directly. The identifier/LLM resolver
+  // additionally runs whenever we extracted any text. Failures here must never
+  // fail the upload.
+  if (args.workspaceId && isPdfFile(args.fileName, args.mimeType)) {
+    await queuePaperEnrichment(ctx, {
+      ownerUserId: args.ownerUserId,
+      artifactId: args.artifactId,
+      text: extractedText,
+    });
+  }
+
+  return { artifactId: args.artifactId, title: args.title, indexed };
+}
+
+/**
+ * Kick off the two metadata enrichment paths for a workspace PDF, independently
+ * guarded so neither can fail the upload: GROBID structural extraction and the
+ * identifier-first / LLM metadata resolver (`enrichUploadedPaperMetadata`).
+ */
+async function queuePaperEnrichment(
+  ctx: ActionCtx,
+  args: { ownerUserId: string; artifactId: Id<"artifacts">; text: string },
+) {
+  try {
+    await ctx.runMutation(internal.paperExtractions.queueGrobidExtraction, {
+      ownerUserId: args.ownerUserId,
+      artifactId: args.artifactId,
+    });
+  } catch (error) {
+    console.error("Failed to queue GROBID extraction", error);
+  }
+  // The resolver/LLM path needs extracted text; skip it entirely for no-text
+  // (e.g. scanned) PDFs, where only GROBID can contribute.
+  if (args.text.trim()) {
+    try {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.paperMetadataEnrichment.enrichUploadedPaperMetadata,
+        {
+          ownerUserId: args.ownerUserId,
+          artifactId: args.artifactId,
+          text: args.text.slice(0, PAPER_ENRICHMENT_TEXT_CHARS),
+        },
+      );
+    } catch (error) {
+      console.error("Failed to schedule paper metadata enrichment", error);
+    }
   }
 }
 

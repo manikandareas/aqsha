@@ -221,7 +221,23 @@ const resolvedMetadataSourceValidator = v.union(
   v.literal("arxiv"),
   v.literal("datacite"),
   v.literal("semantic_scholar"),
+  // First-page LLM fallback for uploaded PDFs that carry no DOI/arXiv id.
+  v.literal("llm"),
 );
+
+// Relative quality of each metadata source. A weaker source must never
+// overwrite a row written by a stronger one (e.g. an LLM guess must not clobber
+// authoritative Crossref/GROBID data), regardless of arrival order.
+const METADATA_SOURCE_RANK: Record<string, number> = {
+  manual: 4,
+  grobid: 3,
+  crossref: 2,
+  openalex: 2,
+  arxiv: 2,
+  datacite: 2,
+  semantic_scholar: 2,
+  llm: 1,
+};
 
 /**
  * Persist DOI/identifier-derived paper metadata for a URL/Explore-sourced
@@ -269,28 +285,36 @@ export const upsertResolvedPaperMetadata = internalMutation({
         q.eq("ownerUserId", args.ownerUserId).eq("artifactId", args.artifactId),
       )
       .unique();
-    // Never downgrade richer GROBID metadata back to a resolver source.
-    if (existing && existing.metadataSource === "grobid") {
+    // Never downgrade a richer source (GROBID/Crossref) with a weaker one (LLM).
+    if (
+      existing &&
+      (METADATA_SOURCE_RANK[args.metadataSource] ?? 0) <
+        (METADATA_SOURCE_RANK[existing.metadataSource] ?? 0)
+    ) {
       return { ok: true };
     }
+    // Only overwrite fields the caller actually provided. A weaker/equal-rank
+    // re-run (e.g. the upload-enrichment resolver re-resolving a URL-sourced
+    // paper) must not clobber provenance an earlier pass persisted but this
+    // caller omits — `ctx.db.patch` deletes any key set to `undefined`.
     const patch = {
       workspaceId: artifact.workspaceId,
-      title: args.title,
-      abstract: args.abstract,
-      doi: args.doi,
-      arxivId: args.arxivId,
-      authors: args.authors ?? [],
-      affiliations: args.affiliations ?? [],
-      journal: args.journal,
-      publisher: args.publisher,
-      publishedYear: args.publishedYear,
-      keywords: args.keywords ?? [],
       metadataSource: args.metadataSource,
-      sourceUrl: args.sourceUrl,
-      oaStatus: args.oaStatus,
-      pdfStatus: args.pdfStatus,
-      confidence: args.confidence,
       updatedAt: now,
+      ...(args.title !== undefined ? { title: args.title } : {}),
+      ...(args.abstract !== undefined ? { abstract: args.abstract } : {}),
+      ...(args.doi !== undefined ? { doi: args.doi } : {}),
+      ...(args.arxivId !== undefined ? { arxivId: args.arxivId } : {}),
+      ...(args.authors !== undefined ? { authors: args.authors } : {}),
+      ...(args.affiliations !== undefined ? { affiliations: args.affiliations } : {}),
+      ...(args.journal !== undefined ? { journal: args.journal } : {}),
+      ...(args.publisher !== undefined ? { publisher: args.publisher } : {}),
+      ...(args.publishedYear !== undefined ? { publishedYear: args.publishedYear } : {}),
+      ...(args.keywords !== undefined ? { keywords: args.keywords } : {}),
+      ...(args.sourceUrl !== undefined ? { sourceUrl: args.sourceUrl } : {}),
+      ...(args.oaStatus !== undefined ? { oaStatus: args.oaStatus } : {}),
+      ...(args.pdfStatus !== undefined ? { pdfStatus: args.pdfStatus } : {}),
+      ...(args.confidence !== undefined ? { confidence: args.confidence } : {}),
     };
     if (existing) {
       await ctx.db.patch("artifactPaperMetadata", existing._id, patch);
@@ -299,9 +323,48 @@ export const upsertResolvedPaperMetadata = internalMutation({
         ownerUserId: args.ownerUserId,
         artifactId: args.artifactId,
         createdAt: now,
+        authors: args.authors ?? [],
+        affiliations: args.affiliations ?? [],
+        keywords: args.keywords ?? [],
         ...patch,
       });
     }
+    return { ok: true };
+  },
+});
+
+/**
+ * Classify an artifact's document kind on the `artifacts` row. Used by the
+ * upload-enrichment path so a paper whose metadata was resolved (DOI/arXiv or
+ * LLM) is marked `scholarly_paper` even when GROBID never runs or fails — the
+ * `artifacts` row is the source of truth the rest of the app reads from.
+ */
+export const setArtifactDetectedKind = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    artifactId: v.id("artifacts"),
+    detectedDocumentKind: v.union(
+      v.literal("generic"),
+      v.literal("scholarly_paper"),
+    ),
+  },
+  returns: v.object({ ok: v.boolean() }),
+  handler: async (ctx, args) => {
+    const artifact = await ctx.db.get("artifacts", args.artifactId);
+    if (
+      !artifact ||
+      artifact.ownerUserId !== args.ownerUserId ||
+      artifact.status !== "active"
+    ) {
+      return { ok: false };
+    }
+    if (artifact.detectedDocumentKind === args.detectedDocumentKind) {
+      return { ok: true };
+    }
+    await ctx.db.patch("artifacts", args.artifactId, {
+      detectedDocumentKind: args.detectedDocumentKind,
+      updatedAt: Date.now(),
+    });
     return { ok: true };
   },
 });
@@ -576,7 +639,13 @@ export const markGrobidReady = internalMutation({
     if (parsed.plainText.trim()) {
       await ctx.db.patch("artifacts", artifact._id, {
         title: parsed.title,
-        detectedDocumentKind: scholarly ? "scholarly_paper" : "generic",
+        // Never downgrade: a thin GROBID parse must not flip a paper already
+        // classified `scholarly_paper` (by an earlier GROBID pass or by the
+        // identifier/LLM enrichment path) back to `generic`.
+        detectedDocumentKind:
+          scholarly || artifact.detectedDocumentKind === "scholarly_paper"
+            ? "scholarly_paper"
+            : "generic",
         plainTextPreview: parsed.abstract ?? previewFromText(parsed.plainText),
         indexingStatus: "ready",
         indexingFailureReason: undefined,

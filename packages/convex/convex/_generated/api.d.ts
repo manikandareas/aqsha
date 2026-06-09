@@ -105,6 +105,8 @@ import type * as paperIngest_ingest from "../paperIngest/ingest.js";
 import type * as paperIngest_model from "../paperIngest/model.js";
 import type * as paperIngest_providers from "../paperIngest/providers.js";
 import type * as paperIngest_resolve from "../paperIngest/resolve.js";
+import type * as paperIngest_uploadIdentifiers from "../paperIngest/uploadIdentifiers.js";
+import type * as paperMetadataEnrichment from "../paperMetadataEnrichment.js";
 import type * as workspaceAccess from "../workspaceAccess.js";
 import type * as workspaceDefaults from "../workspaceDefaults.js";
 import type * as workspaceEmoji from "../workspaceEmoji.js";
@@ -216,6 +218,8 @@ declare const fullApi: ApiFromModules<{
   "paperIngest/model": typeof paperIngest_model;
   "paperIngest/providers": typeof paperIngest_providers;
   "paperIngest/resolve": typeof paperIngest_resolve;
+  "paperIngest/uploadIdentifiers": typeof paperIngest_uploadIdentifiers;
+  paperMetadataEnrichment: typeof paperMetadataEnrichment;
   workspaceAccess: typeof workspaceAccess;
   workspaceDefaults: typeof workspaceDefaults;
   workspaceEmoji: typeof workspaceEmoji;
