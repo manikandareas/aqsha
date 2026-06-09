@@ -114,29 +114,21 @@ type NonMarkdownPayload = Exclude<ArtifactRenderPayload, { artifactType: "markdo
 export function ArtifactReadingColumn({
   payload,
   title,
-  paperExtraction,
 }: {
   payload: NonMarkdownPayload;
   title: string;
-  paperExtraction?: PaperExtractionStatus;
 }) {
   if (payload.artifactType === "url") {
     return <UrlReadingColumn url={payload} />;
   }
 
   if (payload.artifactType === "pdf") {
-    const abstract = paperExtraction?.metadata?.abstract;
-    return (
-      <div className="space-y-8">
-        <PdfArtifactViewer url={payload.url} />
-        {abstract ? <AbstractSection abstract={abstract} /> : null}
-      </div>
-    );
+    return <PdfArtifactViewer url={payload.url} />;
   }
 
   if (payload.artifactType === "docx") {
     return (
-      <div className={cn("grid min-h-[420px] place-items-center gap-3 p-8 text-center", insetSurfaceClass)}>
+      <div className="grid min-h-[420px] place-items-center gap-3 p-8 text-center">
         <FileIcon className="size-10 text-muted-foreground" />
         <div className="grid gap-1">
           <p className="text-[14px] font-semibold text-foreground">{title}</p>
@@ -205,7 +197,7 @@ export function ArtifactReadingColumn({
 
   if (payload.artifactType === "plain_text") {
     return (
-      <article className={cn("artifact-prose min-h-[360px] whitespace-pre-wrap p-4", insetSurfaceClass)}>
+      <article className="artifact-prose min-h-[360px] whitespace-pre-wrap">
         {payload.source || "No text content."}
       </article>
     );
@@ -236,20 +228,9 @@ function UrlReadingColumn({
     );
   }
   return (
-    <article className={cn("artifact-prose min-h-[420px] whitespace-pre-wrap p-4", insetSurfaceClass)}>
+    <article className="artifact-prose min-h-[420px] whitespace-pre-wrap">
       {url.readableText || "No readable text was extracted."}
     </article>
-  );
-}
-
-function AbstractSection({ abstract }: { abstract: string }) {
-  return (
-    <section>
-      <h2 className="text-[15px] font-semibold text-foreground">Abstract</h2>
-      <p className="mt-4 max-w-[700px] text-[14px] font-medium leading-6 text-foreground">
-        {abstract}
-      </p>
-    </section>
   );
 }
 
@@ -568,24 +549,16 @@ function HeaderLinkButton({
 
 export function ArtifactDetailSkeleton() {
   return (
-    <>
-      <section className="min-w-0">
-        <Skeleton className="h-10 w-full rounded-none bg-muted/50" />
-        <Skeleton className="mt-6 h-[60svh] min-h-[360px] w-full rounded-[8px] bg-muted/60" />
-      </section>
-      <aside className="space-y-4 pt-2">
-        <Skeleton className="h-4 w-20 rounded-md bg-muted" />
-        {Array.from({ length: 8 }).map((_, index) => (
-          <Skeleton key={index} className="h-8 w-full rounded-md bg-muted/60" />
-        ))}
-      </aside>
-    </>
+    <div className="space-y-6">
+      <Skeleton className="h-8 w-1/2 rounded-md bg-muted/50" />
+      <Skeleton className="h-[70svh] min-h-[420px] w-full rounded-[8px] bg-muted/50" />
+    </div>
   );
 }
 
 export function ArtifactMissingState({ workspaceId }: { workspaceId: string }) {
   return (
-    <section className="lg:col-span-2">
+    <section>
       <Button asChild variant="ghost" size="sm" className="-ml-2 mb-5 text-muted-foreground">
         <Link href={`/app/workspaces/${workspaceId}`}>
           <ArrowLeftIcon className="size-4" />

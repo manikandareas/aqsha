@@ -42,7 +42,18 @@ export type ArtifactSidebarRecord = {
   updatedAt: number;
 };
 
+type NonMarkdownPayload = Exclude<ArtifactRenderPayload, { artifactType: "markdown" }>;
 type PaperMetadata = NonNullable<NonNullable<PaperExtractionStatus>["metadata"]>;
+
+type ArtifactMetadataProps = {
+  artifact: ArtifactSidebarRecord;
+  payload: NonMarkdownPayload;
+  title: string;
+  paperExtraction?: PaperExtractionStatus;
+  artifactId: string;
+  retryGrobidExtraction: (args: { artifactId: ArtifactId }) => Promise<unknown>;
+  retryUrlExtraction: (args: { artifactId: ArtifactId }) => Promise<unknown>;
+};
 
 const citationFormats: Array<{ value: CitationFormat; label: string }> = [
   { value: "bibtex", label: "BibTeX" },
@@ -50,7 +61,35 @@ const citationFormats: Array<{ value: CitationFormat; label: string }> = [
   { value: "plain", label: "Plain text" },
 ];
 
-export function ArtifactDetailSidebar({
+/**
+ * Trigger + popover that holds all of an artifact's metadata. Lives in the
+ * detail header so the reading column can stay flush and content-focused.
+ */
+export function ArtifactMetadataPopover(props: ArtifactMetadataProps) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-sm"
+          aria-label="Details"
+          title="Details"
+        >
+          <InfoIcon className="size-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        className="max-h-[72svh] w-[22rem] max-w-[calc(100vw-2rem)] overflow-y-auto p-4"
+      >
+        <ArtifactMetadataPanel {...props} />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function ArtifactMetadataPanel({
   artifact,
   payload,
   title,
@@ -58,31 +97,17 @@ export function ArtifactDetailSidebar({
   artifactId,
   retryGrobidExtraction,
   retryUrlExtraction,
-}: {
-  artifact: ArtifactSidebarRecord;
-  payload: Exclude<ArtifactRenderPayload, { artifactType: "markdown" }>;
-  title: string;
-  paperExtraction?: PaperExtractionStatus;
-  artifactId: string;
-  retryGrobidExtraction: (args: { artifactId: ArtifactId }) => Promise<unknown>;
-  retryUrlExtraction: (args: { artifactId: ArtifactId }) => Promise<unknown>;
-}) {
+}: ArtifactMetadataProps) {
   const [showDetails, setShowDetails] = useState(false);
 
   const isPdf = payload.artifactType === "pdf";
   // A paper artifact can be a downloaded PDF (uploaded or ingested from a URL)
   // or a URL kept as metadata-only when no open-access PDF was available.
-  // Surface whatever metadata is usable regardless of `detectedDocumentKind`,
-  // and show explicit pending/failed states instead of a silent empty sidebar.
-  const { metadata, paperPending, paperFailed } = derivePaperMetadataView({
-    isPdf,
-    paperExtraction,
-  });
+  // Surface whatever metadata is usable regardless of `detectedDocumentKind`.
+  const { metadata } = derivePaperMetadataView({ isPdf, paperExtraction });
   const urlPayload = payload.artifactType === "url" ? payload : null;
   const filePayload =
     payload.artifactType === "pdf" || payload.artifactType === "docx" ? payload : null;
-
-  const urlFailed = urlPayload?.status === "failed";
 
   const authors = metadata
     ? metadata.authors.flatMap((author) => (author.name ? [author.name] : []))
@@ -90,20 +115,14 @@ export function ArtifactDetailSidebar({
   const formatValue = artifact.mimeType ?? artifact.language;
 
   return (
-    <aside className="space-y-6 pt-2 lg:sticky lg:top-6 lg:self-start">
-      {paperFailed ? (
-        <SidebarFailure
-          message="We couldn't read this paper's details."
-          onRetry={() => void retryGrobidExtraction({ artifactId: toArtifactId(artifactId) })}
-        />
-      ) : null}
-      {urlFailed ? (
-        <SidebarFailure
-          message="We couldn't read this page."
-          onRetry={() => void retryUrlExtraction({ artifactId: toArtifactId(artifactId) })}
-        />
-      ) : null}
-      {paperPending ? <SidebarPending message="Reading paper details…" /> : null}
+    <div className="space-y-5">
+      <PaperStatusBanner
+        payload={payload}
+        paperExtraction={paperExtraction}
+        artifactId={artifactId}
+        retryGrobidExtraction={retryGrobidExtraction}
+        retryUrlExtraction={retryUrlExtraction}
+      />
 
       <section>
         <h2 className="mb-4 text-[12px] font-semibold text-muted-foreground">About</h2>
@@ -157,8 +176,10 @@ export function ArtifactDetailSidebar({
         ) : null}
       </section>
 
+      {metadata?.abstract ? <AbstractBlock abstract={metadata.abstract} /> : null}
+
       {metadata ? (
-        <section>
+        <section className="border-t border-border pt-4">
           <h2 className="mb-3 text-[12px] font-semibold text-muted-foreground">Cite</h2>
           <div className="space-y-2">
             {citationFormats.map((format) => (
@@ -180,7 +201,7 @@ export function ArtifactDetailSidebar({
         </section>
       ) : null}
 
-      <section className="border-t border-border pt-5">
+      <section className="border-t border-border pt-4">
         <button
           type="button"
           onClick={() => setShowDetails((value) => !value)}
@@ -225,7 +246,49 @@ export function ArtifactDetailSidebar({
           </div>
         ) : null}
       </section>
-    </aside>
+    </div>
+  );
+}
+
+/**
+ * Slim inline banner for paper/url extraction state. Rendered both above the
+ * reader (so it's visible without opening the popover) and inside the panel.
+ */
+export function PaperStatusBanner({
+  payload,
+  paperExtraction,
+  artifactId,
+  retryGrobidExtraction,
+  retryUrlExtraction,
+}: {
+  payload: NonMarkdownPayload;
+  paperExtraction?: PaperExtractionStatus;
+  artifactId: string;
+  retryGrobidExtraction: (args: { artifactId: ArtifactId }) => Promise<unknown>;
+  retryUrlExtraction: (args: { artifactId: ArtifactId }) => Promise<unknown>;
+}) {
+  const isPdf = payload.artifactType === "pdf";
+  const { paperPending, paperFailed } = derivePaperMetadataView({ isPdf, paperExtraction });
+  const urlFailed = payload.artifactType === "url" && payload.status === "failed";
+
+  if (!paperPending && !paperFailed && !urlFailed) return null;
+
+  return (
+    <div className="space-y-3">
+      {paperFailed ? (
+        <StatusFailure
+          message="We couldn't read this paper's details."
+          onRetry={() => void retryGrobidExtraction({ artifactId: toArtifactId(artifactId) })}
+        />
+      ) : null}
+      {urlFailed ? (
+        <StatusFailure
+          message="We couldn't read this page."
+          onRetry={() => void retryUrlExtraction({ artifactId: toArtifactId(artifactId) })}
+        />
+      ) : null}
+      {paperPending ? <StatusPending message="Reading paper details…" /> : null}
+    </div>
   );
 }
 
@@ -253,7 +316,35 @@ export function MarkdownArtifactDetails({ artifact }: { artifact: ArtifactSideba
   );
 }
 
-function SidebarPending({ message }: { message: string }) {
+function AbstractBlock({ abstract }: { abstract: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = abstract.length > 320;
+
+  return (
+    <section className="border-t border-border pt-4">
+      <h2 className="mb-2 text-[12px] font-semibold text-muted-foreground">Abstract</h2>
+      <p
+        className={cn(
+          "text-[13px] leading-6 text-foreground",
+          !expanded && isLong && "line-clamp-6",
+        )}
+      >
+        {abstract}
+      </p>
+      {isLong ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          className="mt-1.5 text-[12px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
+function StatusPending({ message }: { message: string }) {
   return (
     <div className="flex items-center gap-2 rounded-[8px] border border-border bg-muted/40 p-3 text-[12px] font-medium text-muted-foreground">
       <Loader2Icon className="size-3.5 shrink-0 animate-spin" />
@@ -262,7 +353,7 @@ function SidebarPending({ message }: { message: string }) {
   );
 }
 
-function SidebarFailure({
+function StatusFailure({
   message,
   onRetry,
 }: {

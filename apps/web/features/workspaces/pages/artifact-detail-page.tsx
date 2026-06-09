@@ -18,8 +18,9 @@ import { useArtifactDetailData } from "../api/use-workspaces-data";
 import { DeleteArtifactDialog } from "../components/artifact-delete-dialog";
 import { ArtifactDetailHeader } from "../components/artifact-detail-header";
 import {
-  ArtifactDetailSidebar,
+  ArtifactMetadataPopover,
   MarkdownArtifactDetails,
+  PaperStatusBanner,
 } from "../components/artifact-detail-sidebar";
 import {
   ArtifactDetailSkeleton,
@@ -44,8 +45,8 @@ const initialAutosaveState: AutosaveState = {
   error: null,
 };
 
-const twoColumnGridClass =
-  "mx-auto grid w-full max-w-[1080px] gap-8 px-5 pb-12 pt-4 sm:px-8 lg:grid-cols-[minmax(0,700px)_260px] lg:gap-10 lg:px-10";
+const readerColumnClass =
+  "mx-auto w-full max-w-[940px] px-4 pb-16 pt-2 sm:px-6";
 const singleColumnGridClass =
   "mx-auto w-full max-w-[1080px] px-5 pb-12 pt-4 sm:px-8 lg:px-10";
 
@@ -107,6 +108,19 @@ export function ArtifactDetailPage({
       />
     ) : null;
 
+  const metadataPopover =
+    ready && detail && activeRenderPayload && activeRenderPayload.artifactType !== "markdown" ? (
+      <ArtifactMetadataPopover
+        artifact={detail.artifact}
+        payload={activeRenderPayload}
+        title={detail.artifact.title}
+        paperExtraction={data.paperExtraction as PaperExtractionStatus}
+        artifactId={artifactId}
+        retryGrobidExtraction={data.retryGrobidExtraction}
+        retryUrlExtraction={data.retryUrlExtraction}
+      />
+    ) : null;
+
   return (
     <WorkspaceShell
       viewer={data.viewer}
@@ -124,9 +138,14 @@ export function ArtifactDetailPage({
               data.renameArtifact({ artifactId: toArtifactId(artifactId), title: name })
             }
             trailing={
-              isMarkdown || headerActions ? (
+              isMarkdown ? (
                 <div className="flex items-center gap-2">
-                  {isMarkdown ? <SaveStatus state={documentSaveState} /> : null}
+                  <SaveStatus state={documentSaveState} />
+                  {headerActions}
+                </div>
+              ) : metadataPopover || headerActions ? (
+                <div className="flex items-center gap-1">
+                  {metadataPopover}
                   {headerActions}
                 </div>
               ) : null
@@ -134,17 +153,15 @@ export function ArtifactDetailPage({
           />
         ) : null}
 
-        <div className={isMarkdown ? singleColumnGridClass : twoColumnGridClass}>
+        <div className={isMarkdown ? singleColumnGridClass : readerColumnClass}>
           {data.isLoading ? (
             <ArtifactDetailSkeleton />
           ) : !ready || !detail ? (
             <ArtifactMissingState workspaceId={workspaceId} />
           ) : activeContentError ? (
-            <div className="lg:col-span-2">
-              <p className="rounded-[8px] border border-destructive/30 bg-destructive/5 p-3 text-[13px] font-medium text-destructive">
-                {activeContentError}
-              </p>
-            </div>
+            <p className="rounded-[8px] border border-destructive/30 bg-destructive/5 p-3 text-[13px] font-medium text-destructive">
+              {activeContentError}
+            </p>
           ) : !activeRenderPayload ? (
             <ArtifactDetailSkeleton />
           ) : activeRenderPayload.artifactType === "markdown" ? (
@@ -163,24 +180,19 @@ export function ArtifactDetailPage({
               />
             </div>
           ) : (
-            <>
-              <section className="min-w-0">
-                <ArtifactReadingColumn
-                  payload={activeRenderPayload}
-                  title={detail.artifact.title}
-                  paperExtraction={data.paperExtraction as PaperExtractionStatus}
-                />
-              </section>
-              <ArtifactDetailSidebar
-                artifact={detail.artifact}
+            <section className="min-w-0 space-y-5">
+              <PaperStatusBanner
                 payload={activeRenderPayload}
-                title={detail.artifact.title}
                 paperExtraction={data.paperExtraction as PaperExtractionStatus}
                 artifactId={artifactId}
                 retryGrobidExtraction={data.retryGrobidExtraction}
                 retryUrlExtraction={data.retryUrlExtraction}
               />
-            </>
+              <ArtifactReadingColumn
+                payload={activeRenderPayload}
+                title={detail.artifact.title}
+              />
+            </section>
           )}
         </div>
 
