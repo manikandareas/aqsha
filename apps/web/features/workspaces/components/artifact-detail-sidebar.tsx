@@ -302,23 +302,31 @@ export function MarkdownArtifactDetails({ artifact }: { artifact: ArtifactSideba
       <PopoverTrigger asChild>
         <Button
           type="button"
-          variant="outline"
-          size="sm"
-          className="gap-1.5 text-muted-foreground"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Details"
+          title="Details"
         >
-          <InfoIcon className="size-3.5" />
-          Details
+          <InfoIcon className="size-4" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-64 space-y-4">
-        <PropertyRow label="Type" value="Markdown" badge />
-        <PropertyRow label="Source" value={markdownSourceLabel(artifact.source)} />
-        <IndexStatusRow
-          status={artifact.indexingStatus}
-          reason={artifact.indexingFailureReason}
-        />
-        <PropertyRow label="Created" value={formatDate(artifact.createdAt)} />
-        <PropertyRow label="Updated" value={formatDate(artifact.updatedAt)} />
+      <PopoverContent
+        align="end"
+        className="max-h-[72svh] w-[22rem] max-w-[calc(100vw-2rem)] overflow-y-auto p-4"
+      >
+        <section>
+          <h2 className="mb-4 text-[12px] font-semibold text-muted-foreground">About</h2>
+          <div className="space-y-4">
+            <PropertyRow label="Type" value="Document" badge />
+            <PropertyRow label="Source" value={markdownSourceLabel(artifact.source)} />
+            <IndexStatusRow
+              status={artifact.indexingStatus}
+              reason={artifact.indexingFailureReason}
+            />
+            <PropertyRow label="Created" value={formatDate(artifact.createdAt)} />
+            <PropertyRow label="Updated" value={formatDate(artifact.updatedAt)} />
+          </div>
+        </section>
       </PopoverContent>
     </Popover>
   );

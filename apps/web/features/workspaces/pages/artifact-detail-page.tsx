@@ -142,8 +142,9 @@ export function ArtifactDetailPage({
             }
             trailing={
               isMarkdown ? (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                   <SaveStatus state={documentSaveState} />
+                  <MarkdownArtifactDetails artifact={detail.artifact} />
                   {headerActions}
                 </div>
               ) : metadataPopover || headerActions ? (
@@ -169,9 +170,6 @@ export function ArtifactDetailPage({
             <ArtifactDetailSkeleton />
           ) : activeRenderPayload.artifactType === "markdown" ? (
             <div className="mx-auto w-full max-w-[820px]">
-              <div className="mb-4 flex items-center justify-end">
-                <MarkdownArtifactDetails artifact={detail.artifact} />
-              </div>
               <DocumentArtifactDetail
                 key={artifactId}
                 artifactId={artifactId}
