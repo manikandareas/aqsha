@@ -8,8 +8,8 @@ import { ConvexReactClient } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { Loader2Icon } from "@aqsha/ui/icons";
 import { api } from "@aqsha/convex/api";
+import { AppLoadingOverlay } from "@/components/app-loading-overlay";
 import {
   useConvexAuth,
   useConvexMutationState,
@@ -146,9 +146,10 @@ function OnboardingGate({ children }: { children: ReactNode }) {
   // behind the redirect.
   if (redirecting) {
     return (
-      <div className="flex min-h-svh w-full items-center justify-center text-muted-foreground">
-        <Loader2Icon className="size-5 animate-spin" />
-      </div>
+      <AppLoadingOverlay
+        label="Menyiapkan onboarding"
+        messages={["Mengarahkan kamu ke langkah berikutnya"]}
+      />
     );
   }
 

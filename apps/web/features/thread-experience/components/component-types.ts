@@ -96,9 +96,7 @@ export type ToggleThreadContextArtifact = (args: {
 export type RemoveThread = (args: { threadId: string }) => Promise<{ ok: true }>;
 
 export type ThreadShellLayoutProps = {
-  viewer: ViewerSummary;
   threads: ThreadSummary[];
-  selectedThreadId?: string;
   onCreateThread: () => void;
   onSelectThread?: (threadId: string) => void;
   title: string;
@@ -110,8 +108,6 @@ export type ThreadShellLayoutProps = {
       }
     | null
     | undefined;
-  workspaces?: Array<{ _id: string; name: string }>;
-  createWorkspace?: (args: { name: string }) => Promise<unknown>;
   rateStatus: RateStatus | undefined;
   startThread: StartThread;
   sendMessage: SendMessage;
@@ -123,7 +119,6 @@ export type ThreadShellLayoutProps = {
   onCancelRun: (runId: string) => Promise<unknown>;
   onRetryRun?: (args: { runId: AgentRunId }) => Promise<unknown>;
   onDeleteThread?: () => Promise<void>;
-  removeThread?: (args: { threadId: string }) => Promise<{ ok: true }>;
   sidePanel?: ReactNode;
   contextArtifacts?: DraftContextArtifact[];
   onRemoveContextArtifact?: (artifactId: string) => void;

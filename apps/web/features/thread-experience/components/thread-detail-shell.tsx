@@ -10,7 +10,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SidebarProvider } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCloseRightPanel } from "@/hooks/use-close-right-panel";
 import { panelBodyPaddingClass } from "@/lib/panel-surface";
@@ -33,11 +32,9 @@ import { toMutationContextSnapshot } from "../utils/message-context";
 export function ThreadDetailShell({ threadId }: { threadId?: string }) {
   const router = useRouter();
   const {
-    viewer,
     workspaces,
     threads,
     selectedThread,
-    createWorkspace,
     startThread,
     sendMessage,
     rateStatus,
@@ -100,38 +97,31 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
   ) : undefined;
 
   return (
-    <SidebarProvider className="min-h-svh overflow-hidden">
-      <ComposerMentionsProvider
+    <ComposerMentionsProvider
+      threadId={threadId}
+      ambientWorkspaceId={selectedThread?.workspaceId ?? null}
+    >
+      <ThreadShellLayout
+        threads={threads}
+        onCreateThread={() => router.push("/app")}
+        onSelectThread={(id) => router.push(`/app/threads/${id}`)}
+        title={title}
         threadId={threadId}
-        ambientWorkspaceId={selectedThread?.workspaceId ?? null}
-      >
-        <ThreadShellLayout
-          viewer={viewer}
-          workspaces={workspaces}
-          threads={threads}
-          selectedThreadId={threadId}
-          onCreateThread={() => router.push("/app")}
-          onSelectThread={(id) => router.push(`/app/threads/${id}`)}
-          createWorkspace={createWorkspace}
-          title={title}
-          threadId={threadId}
-          selectedThread={selectedThread}
-          rateStatus={rateStatus}
-          startThread={startThreadAdapter}
-          sendMessage={sendMessageAdapter}
-          runs={runs}
-          artifacts={artifacts}
-          sources={sources}
-          rightPanelOpen={contextPanelOpen}
-          onRightPanelOpenChange={setContextPanelOpen}
-          onCancelRun={cancelRun}
-          onRetryRun={retryRun}
-          onDeleteThread={threadId ? handleDeleteThread : undefined}
-          removeThread={removeThread}
-          sidePanel={sidePanel}
-        />
-      </ComposerMentionsProvider>
-    </SidebarProvider>
+        selectedThread={selectedThread}
+        rateStatus={rateStatus}
+        startThread={startThreadAdapter}
+        sendMessage={sendMessageAdapter}
+        runs={runs}
+        artifacts={artifacts}
+        sources={sources}
+        rightPanelOpen={contextPanelOpen}
+        onRightPanelOpenChange={setContextPanelOpen}
+        onCancelRun={cancelRun}
+        onRetryRun={retryRun}
+        onDeleteThread={threadId ? handleDeleteThread : undefined}
+        sidePanel={sidePanel}
+      />
+    </ComposerMentionsProvider>
   );
 }
 

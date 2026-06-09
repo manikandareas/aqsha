@@ -15,31 +15,21 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toWorkspaceId } from "@/lib/convex-refs";
 import { useWorkspaceIndexData } from "../api/use-workspaces-data";
-import { WorkspaceShell } from "../components/workspace-shell";
 import { NameDialog } from "../components/workspace-dialogs";
 
 export function WorkspacesIndexPage() {
   const {
-    viewer,
     workspaces,
-    threads,
     isLoadingWorkspaces,
     createWorkspace,
     archiveWorkspace,
-    removeThread,
   } = useWorkspaceIndexData();
   const [createOpen, setCreateOpen] = useState(false);
   const [archiveId, setArchiveId] = useState<string | null>(null);
   const archiveTarget = workspaces.find((workspace) => workspace._id === archiveId);
 
   return (
-    <WorkspaceShell
-      viewer={viewer}
-      workspaces={workspaces}
-      threads={threads}
-      createWorkspace={createWorkspace}
-      removeThread={removeThread}
-    >
+    <>
       <main className="mx-auto grid w-full max-w-5xl gap-5 px-4 py-5 sm:px-8 lg:py-7">
         <header className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-border/70 pb-4">
           <div className="min-w-0">
@@ -139,6 +129,6 @@ export function WorkspacesIndexPage() {
           }
         }}
       />
-    </WorkspaceShell>
+    </>
   );
 }

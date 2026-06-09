@@ -9,14 +9,14 @@ import {
   ExploreSurfaceHeader,
   type ExploreBreadcrumb,
 } from "@/features/explore/components/explore-surface-header";
-import { WorkspaceShell } from "@/features/workspaces/components/workspace-shell";
-import { useWorkspaceIndexData } from "@/features/workspaces/api/use-workspaces-data";
 
 // Shared chrome for every Explore surface (index + paper/news/fact detail).
 // Mirrors the workspace detail split layout: a full-page main column with the
 // breadcrumb header, and a toggleable right-hand global chat panel that stays
 // in feature parity with the thread detail chat. The body owns its own width
 // and padding; this shell only provides the height-bounded scroll container.
+// The left navigation is provided by the shared AppShell layout, so this only
+// renders the content split.
 export function ExploreChatShell({
   breadcrumbs,
   chatSeed,
@@ -26,27 +26,17 @@ export function ExploreChatShell({
   chatSeed?: string;
   children: ReactNode;
 }) {
-  const shellData = useWorkspaceIndexData();
-
   return (
-    <WorkspaceShell
-      viewer={shellData.viewer}
-      workspaces={shellData.workspaces}
-      threads={shellData.threads}
-      createWorkspace={shellData.createWorkspace}
-      removeThread={shellData.removeThread}
-    >
-      <ExploreChatShellBody breadcrumbs={breadcrumbs} chatSeed={chatSeed}>
-        {children}
-      </ExploreChatShellBody>
-    </WorkspaceShell>
+    <ExploreChatShellBody breadcrumbs={breadcrumbs} chatSeed={chatSeed}>
+      {children}
+    </ExploreChatShellBody>
   );
 }
 
-// Rendered inside WorkspaceShell's SidebarProvider so `useSidebar()` resolves to
-// the LEFT sidebar context — not the inner right-panel provider created by
-// DetailSplitLayout. The breadcrumb header's left-sidebar trigger is wired from
-// here, mirroring ThreadShellLayout / WorkspaceDetailClient.
+// `useSidebar()` resolves to the LEFT sidebar context from the AppShell layout —
+// it's read here, before DetailSplitLayout creates its inner right-panel
+// provider. The breadcrumb header's left-sidebar trigger is wired from here,
+// mirroring ThreadShellLayout / WorkspaceDetailClient.
 function ExploreChatShellBody({
   breadcrumbs,
   chatSeed,

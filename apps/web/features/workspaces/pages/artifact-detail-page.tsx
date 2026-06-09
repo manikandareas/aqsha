@@ -33,7 +33,6 @@ import {
 import { BlockNoteEditorLoader } from "../components/blocknote-editor-loader";
 import type { DocumentEditorContent } from "../components/blocknote-document-editor";
 import { DocumentTitleEditor } from "../components/document-title-editor";
-import { WorkspaceShell } from "../components/workspace-shell";
 import {
   autosaveReducer,
   type AutosaveState,
@@ -139,15 +138,7 @@ export function ArtifactDetailPage({
     ) : null;
 
   return (
-    <WorkspaceShell
-      viewer={data.viewer}
-      workspaces={data.workspaces}
-      selectedWorkspaceId={workspaceId}
-      threads={data.threads}
-      createWorkspace={data.createWorkspace}
-      removeThread={data.removeThread}
-    >
-      <main className="min-h-svh bg-background text-foreground">
+    <main className="min-h-svh bg-background text-foreground">
         {ready && detail ? (
           <ArtifactDetailHeader
             artifactTitle={detail.artifact.title}
@@ -228,8 +219,7 @@ export function ArtifactDetailPage({
             }}
           />
         ) : null}
-      </main>
-    </WorkspaceShell>
+    </main>
   );
 }
 

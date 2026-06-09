@@ -16,30 +16,18 @@ import {
   useWorkspaceDetailData,
   type WorkspaceLibraryData,
 } from "@/features/workspaces/api/use-workspaces-data";
+import { AppLoadingOverlay } from "@/components/app-loading-overlay";
 import {
   WorkspaceChatSidePanel,
-  WorkspaceLoading,
   WorkspaceMissing,
 } from "@/features/workspaces/components/workspace-chat-side-panel";
 import { WorkspaceLibrarySurface } from "@/features/workspaces/components/workspace-library-surface";
-import { WorkspaceShell } from "@/features/workspaces/components/workspace-shell";
 import { useWorkspaceLibraryDialogState } from "@/features/workspaces/hooks/use-workspace-library-dialogs";
 
 export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) {
   const data = useWorkspaceDetailData(workspaceId);
 
-  return (
-    <WorkspaceShell
-      viewer={data.viewer}
-      workspaces={data.workspaces}
-      selectedWorkspaceId={workspaceId}
-      threads={data.threads}
-      createWorkspace={data.createWorkspace}
-      removeThread={data.removeThread}
-    >
-      <WorkspaceDetailMain workspaceId={workspaceId} data={data} />
-    </WorkspaceShell>
-  );
+  return <WorkspaceDetailMain workspaceId={workspaceId} data={data} />;
 }
 
 function WorkspaceDetailMain({
@@ -78,7 +66,7 @@ function WorkspaceDetailMain({
   return (
     <main className="flex h-svh min-h-0 flex-col overflow-hidden bg-background">
       {data.isLoading ? (
-        <WorkspaceLoading />
+        <AppLoadingOverlay variant="absolute" />
       ) : data.workspace === null ? (
         <WorkspaceMissing />
       ) : data.workspace ? (
