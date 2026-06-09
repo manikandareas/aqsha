@@ -543,7 +543,7 @@ function HeaderLinkButton({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button asChild variant="outline" size="icon-sm">
+        <Button asChild variant="ghost" size="icon-sm">
           <a
             href={href}
             target={download ? undefined : "_blank"}

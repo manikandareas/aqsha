@@ -71,7 +71,7 @@ export function ArtifactMetadataPopover(props: ArtifactMetadataProps) {
       <PopoverTrigger asChild>
         <Button
           type="button"
-          variant="outline"
+          variant="ghost"
           size="icon-sm"
           aria-label="Details"
           title="Details"

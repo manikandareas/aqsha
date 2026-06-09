@@ -733,27 +733,23 @@
 }
 
 .aqsha-pdf-page {
-  position: relative;
-  overflow: hidden;
-  border-radius: 4px;
-  background: #ffffff;
-  box-shadow:
-    0 0 0 1px var(--border),
-    0 1px 3px hsl(0 0% 0% / 0.08);
+  background: var(--background);
 }
 
 .aqsha-pdf-page .react-pdf__Page {
   background: transparent !important;
 }
 
-/* Follow the app theme: in dark mode invert the rendered canvas only, so the
-   transparent text layer and the annotation (citation) layer stay correct. */
-.dark .aqsha-pdf-page {
-  background: var(--card);
-  box-shadow: 0 0 0 1px var(--border);
+/* Borderless, theme-merged pages. In light mode the white page is multiplied
+   into the container background so paper and container read as one surface; in
+   dark mode the canvas is inverted (page goes dark) and rendered normally. The
+   text and annotation (citation) layers sit above the canvas and stay untouched. */
+.aqsha-pdf-page .react-pdf__Page__canvas {
+  mix-blend-mode: multiply;
 }
 
-.dark .react-pdf__Page__canvas {
+.dark .aqsha-pdf-page .react-pdf__Page__canvas {
+  mix-blend-mode: normal;
   filter: invert(0.92) hue-rotate(180deg);
 }
 

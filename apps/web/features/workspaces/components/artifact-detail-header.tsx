@@ -23,21 +23,23 @@ export function ArtifactDetailHeader({
 }) {
   return (
     <header className="shrink-0 bg-background px-5 py-3 sm:px-7 sm:py-4">
-      <div className="flex min-w-0 items-center justify-between gap-4">
+      <div className="flex min-w-0 items-center justify-between gap-2 sm:gap-4">
         <nav
           aria-label="Breadcrumb"
           className="flex min-w-0 items-center gap-1.5 text-[13px]"
         >
           <Link
             href={`/app/workspaces/${workspaceId}`}
-            className="max-w-[40%] shrink-0 truncate font-medium text-muted-foreground transition-colors hover:text-foreground"
+            className="hidden max-w-[12rem] shrink-0 truncate font-medium text-muted-foreground transition-colors hover:text-foreground sm:block"
           >
             {workspaceName ?? "Workspace"}
           </Link>
-          <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
+          <ChevronRightIcon className="hidden size-3.5 shrink-0 text-muted-foreground/60 sm:block" />
           <ArtifactTitleBreadcrumb title={artifactTitle} onRename={onRenameArtifact} />
         </nav>
-        {trailing ? <div className="flex shrink-0 items-center gap-1">{trailing}</div> : null}
+        {trailing ? (
+          <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">{trailing}</div>
+        ) : null}
       </div>
     </header>
   );
@@ -87,7 +89,8 @@ function ArtifactTitleBreadcrumb({
         <button
           type="button"
           aria-current="page"
-          className="min-w-0 truncate rounded-[4px] text-left font-medium text-foreground outline-none transition-colors hover:text-foreground/70 focus-visible:ring-2 focus-visible:ring-ring/40"
+          title={title}
+          className="block min-w-0 max-w-[55ch] truncate rounded-[4px] text-left font-medium text-foreground outline-none transition-colors hover:text-foreground/70 focus-visible:ring-2 focus-visible:ring-ring/40"
           aria-label="Edit artifact name"
         >
           {title}
