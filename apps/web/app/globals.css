@@ -781,3 +781,16 @@
   pointer-events: auto;
   cursor: pointer;
 }
+
+/* Find-in-document highlight (translucent so the canvas text shows through). */
+.aqsha-search-hit {
+  border-radius: 2px;
+  background: color-mix(in oklch, var(--lemon) 45%, transparent);
+}
+
+/* Focus mode: the reader root fills the screen and scrolls on its own. */
+.aqsha-pdf-root:fullscreen {
+  overflow-y: auto;
+  background: var(--background);
+  padding: 1.5rem 1rem 6rem;
+}

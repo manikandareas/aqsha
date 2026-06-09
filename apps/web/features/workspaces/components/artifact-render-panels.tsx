@@ -473,7 +473,7 @@ export function ArtifactIndexingStatus({
   reason?: string;
 }) {
   return (
-    <div className="fixed bottom-5 right-5 z-30">
+    <div className="fixed bottom-5 right-5 z-30 max-sm:bottom-20">
       <TooltipProvider>
         <div className="rounded-full border border-border bg-card/80 px-3 py-1.5 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/70">
           <IndexingStatusBadge status={status} reason={reason} />

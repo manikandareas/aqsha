@@ -62,9 +62,12 @@ import {
   LockIcon as HugeLockIcon,
   Login01Icon,
   Logout01Icon,
+  Maximize01Icon,
   Message01Icon,
   MessageAdd01Icon,
   Mic01Icon,
+  Minimize01Icon,
+  MinusSignIcon,
   Moon02Icon,
   MoreHorizontalIcon as HugeMoreHorizontalIcon,
   MoreVerticalIcon as HugeMoreVerticalIcon,
@@ -179,6 +182,9 @@ export const MessageSquare = createIcon(Message01Icon);
 export const MessageSquareIcon = createIcon(Message01Icon);
 export const MessageSquarePlusIcon = createIcon(MessageAdd01Icon);
 export const MicIcon = createIcon(Mic01Icon);
+export const MaximizeIcon = createIcon(Maximize01Icon);
+export const MinimizeIcon = createIcon(Minimize01Icon);
+export const MinusIcon = createIcon(MinusSignIcon);
 export const Monitor = createIcon(ComputerIcon);
 export const MonitorIcon = createIcon(ComputerIcon);
 export const Moon = createIcon(Moon02Icon);
