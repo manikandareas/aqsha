@@ -740,16 +740,10 @@
   background: transparent !important;
 }
 
-/* Borderless, theme-merged pages. In light mode the white page is multiplied
-   into the container background so paper and container read as one surface; in
-   dark mode the canvas is inverted (page goes dark) and rendered normally. The
-   text and annotation (citation) layers sit above the canvas and stay untouched. */
-.aqsha-pdf-page .react-pdf__Page__canvas {
-  mix-blend-mode: multiply;
-}
-
+/* Borderless pages. Light mode keeps the native white page; dark mode inverts
+   the canvas so the page goes dark. The text and annotation (citation) layers
+   sit above the canvas and stay untouched. */
 .dark .aqsha-pdf-page .react-pdf__Page__canvas {
-  mix-blend-mode: normal;
   filter: invert(0.92) hue-rotate(180deg);
 }
 
