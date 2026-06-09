@@ -408,13 +408,9 @@ function csvRowKey(row: string[], rowIndex: number) {
 
 export function ArtifactHeaderActions({
   payload,
-  indexingStatus,
-  indexingFailureReason,
   onDelete,
 }: {
   payload: ArtifactRenderPayload;
-  indexingStatus?: "not_indexed" | "pending" | "ready" | "failed";
-  indexingFailureReason?: string;
   onDelete: () => void;
 }) {
   const isFile = payload.artifactType === "pdf" || payload.artifactType === "docx";
@@ -438,7 +434,6 @@ export function ArtifactHeaderActions({
             </HeaderLinkButton>
           </>
         ) : null}
-        <IndexingStatusBadge status={indexingStatus} reason={indexingFailureReason} />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button type="button" variant="ghost" size="icon-sm" aria-label="More actions">
@@ -467,6 +462,24 @@ export function ArtifactHeaderActions({
         </DropdownMenu>
       </div>
     </TooltipProvider>
+  );
+}
+
+export function ArtifactIndexingStatus({
+  status,
+  reason,
+}: {
+  status?: "not_indexed" | "pending" | "ready" | "failed";
+  reason?: string;
+}) {
+  return (
+    <div className="fixed bottom-5 right-5 z-30">
+      <TooltipProvider>
+        <div className="rounded-full border border-border bg-card/80 px-3 py-1.5 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/70">
+          <IndexingStatusBadge status={status} reason={reason} />
+        </div>
+      </TooltipProvider>
+    </div>
   );
 }
 

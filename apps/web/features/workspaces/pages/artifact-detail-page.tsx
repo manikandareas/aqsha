@@ -25,6 +25,7 @@ import {
 import {
   ArtifactDetailSkeleton,
   ArtifactHeaderActions,
+  ArtifactIndexingStatus,
   ArtifactMissingState,
   ArtifactReadingColumn,
   type ArtifactRenderPayload,
@@ -97,13 +98,14 @@ export function ArtifactDetailPage({
 
   const ready = Boolean(detail) && !workspaceMismatch;
   const isMarkdown = detail?.artifact.artifactType === "markdown";
+  const workspaceName = data.workspaces.find(
+    (workspace) => workspace._id === workspaceId,
+  )?.name;
 
   const headerActions =
     ready && detail && activeRenderPayload ? (
       <ArtifactHeaderActions
         payload={activeRenderPayload}
-        indexingStatus={detail.artifact.indexingStatus}
-        indexingFailureReason={detail.artifact.indexingFailureReason}
         onDelete={() => setDeleteOpen(true)}
       />
     ) : null;
@@ -134,6 +136,8 @@ export function ArtifactDetailPage({
         {ready && detail ? (
           <ArtifactDetailHeader
             artifactTitle={detail.artifact.title}
+            workspaceId={workspaceId}
+            workspaceName={workspaceName}
             onRenameArtifact={(name) =>
               data.renameArtifact({ artifactId: toArtifactId(artifactId), title: name })
             }
@@ -195,6 +199,13 @@ export function ArtifactDetailPage({
             </section>
           )}
         </div>
+
+        {ready && detail && activeRenderPayload ? (
+          <ArtifactIndexingStatus
+            status={detail.artifact.indexingStatus}
+            reason={detail.artifact.indexingFailureReason}
+          />
+        ) : null}
 
         {ready && detail ? (
           <DeleteArtifactDialog
