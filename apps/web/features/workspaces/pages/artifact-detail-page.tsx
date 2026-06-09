@@ -32,6 +32,7 @@ import {
 } from "../components/artifact-render-panels";
 import { BlockNoteEditorLoader } from "../components/blocknote-editor-loader";
 import type { DocumentEditorContent } from "../components/blocknote-document-editor";
+import { DocumentTitleEditor } from "../components/document-title-editor";
 import { WorkspaceShell } from "../components/workspace-shell";
 import {
   autosaveReducer,
@@ -61,14 +62,23 @@ export function ArtifactDetailPage({
   const router = useRouter();
 
   const detail = data.artifact;
-  const renderPayloadVersionKey = detail
-    ? [
-        artifactId,
-        detail.artifact.updatedAt,
-        detail.content?.updatedAt ?? "no-content",
-        detail.url?.updatedAt ?? "no-url",
-      ].join(":")
-    : null;
+  const detailIsMarkdown = detail?.artifact.artifactType === "markdown";
+  // For markdown the render payload is only the initial seed: once loaded, the
+  // BlockNote editor owns the content and autosave pushes to Convex. Keeping the
+  // key stable per-artifact stops our own saves (which bump content.updatedAt)
+  // from churning the query key, which would otherwise blank the payload and
+  // remount the editor on every keystroke-batch. Papers/URLs still track
+  // updatedAt so extraction retries refresh the reader.
+  const renderPayloadVersionKey = !detail
+    ? null
+    : detailIsMarkdown
+      ? `${artifactId}:markdown`
+      : [
+          artifactId,
+          detail.artifact.updatedAt,
+          detail.content?.updatedAt ?? "no-content",
+          detail.url?.updatedAt ?? "no-url",
+        ].join(":");
   const renderPayloadQuery = useConvexActionQueryWithKey(
     api.artifacts.getRenderPayload,
     ["artifactRenderPayload", artifactId, renderPayloadVersionKey],
@@ -90,13 +100,19 @@ export function ArtifactDetailPage({
       ? activeRenderPayload.blocksJson
       : null;
 
+  // Seed autosave state once per artifact, when its content first becomes
+  // available. Re-seeding on every payload change would let a DB round-trip
+  // clobber in-flight autosave state (dropping edits queued during a save).
+  const initializedArtifactRef = useRef<string | null>(null);
   useEffect(() => {
     if (markdownBlocksJson === null) return;
+    if (initializedArtifactRef.current === artifactId) return;
+    initializedArtifactRef.current = artifactId;
     dispatchDocumentSave({ type: "reset", json: markdownBlocksJson });
   }, [artifactId, markdownBlocksJson]);
 
   const ready = Boolean(detail) && !workspaceMismatch;
-  const isMarkdown = detail?.artifact.artifactType === "markdown";
+  const isMarkdown = detailIsMarkdown;
   const workspaceName = data.workspaces.find(
     (workspace) => workspace._id === workspaceId,
   )?.name;
@@ -173,6 +189,10 @@ export function ArtifactDetailPage({
               <DocumentArtifactDetail
                 key={artifactId}
                 artifactId={artifactId}
+                initialTitle={detail.artifact.title}
+                onRenameTitle={(title) =>
+                  data.renameArtifact({ artifactId: toArtifactId(artifactId), title })
+                }
                 initialBlocksJson={activeRenderPayload.blocksJson}
                 initialMarkdown={activeRenderPayload.markdown}
                 updateDocument={data.updateDocument}
@@ -215,6 +235,8 @@ export function ArtifactDetailPage({
 
 function DocumentArtifactDetail({
   artifactId,
+  initialTitle,
+  onRenameTitle,
   initialBlocksJson,
   initialMarkdown,
   updateDocument,
@@ -222,6 +244,8 @@ function DocumentArtifactDetail({
   dispatchSaveState,
 }: {
   artifactId: string;
+  initialTitle: string;
+  onRenameTitle: (title: string) => Promise<unknown>;
   initialBlocksJson: string;
   initialMarkdown: string;
   updateDocument: (args: {
@@ -260,7 +284,8 @@ function DocumentArtifactDetail({
   ]);
 
   return (
-    <div className="grid w-full gap-3">
+    <div className="grid w-full gap-1">
+      <DocumentTitleEditor initialTitle={initialTitle} onRename={onRenameTitle} />
       <BlockNoteEditorLoader
         initialBlocksJson={initialBlocksJson}
         initialMarkdown={initialMarkdown}
