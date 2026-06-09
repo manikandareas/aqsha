@@ -13,6 +13,7 @@ import type {
   ReactNode,
 } from "react";
 import { Streamdown } from "streamdown";
+import { TableBlock } from "./table-block";
 import {
   Tooltip,
   TooltipContent,
@@ -57,6 +58,7 @@ export const MessageContent = ({
 export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
 const streamdownPlugins = { cjk, code, math, mermaid };
+const streamdownComponents = { table: TableBlock };
 
 export const MessageResponse = ({ className, ...props }: MessageResponseProps) => (
     <Streamdown
@@ -65,6 +67,8 @@ export const MessageResponse = ({ className, ...props }: MessageResponseProps) =
         className
       )}
       plugins={streamdownPlugins}
+      components={streamdownComponents}
+      controls={{ table: false }}
       {...props}
     />
   );

@@ -684,6 +684,35 @@
   font-size: 11.5px;
 }
 
+/* ─── Streamdown table: flat design ─── */
+
+/* TableBlock owns the outer container; reset table's own spacing */
+.aqsha-prose [data-streamdown="table"] {
+  margin: 0 !important;
+  overflow-x: visible !important;
+}
+
+/* Strip cell grid borders */
+.aqsha-prose [data-streamdown="table"] th,
+.aqsha-prose [data-streamdown="table"] td {
+  border: none !important;
+}
+
+/* Header/body separator */
+.aqsha-prose [data-streamdown="table"] thead th {
+  border-bottom: 1px solid var(--border) !important;
+}
+
+/* Row separators */
+.aqsha-prose [data-streamdown="table"] td {
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 55%, transparent) !important;
+}
+
+/* No border on last row */
+.aqsha-prose [data-streamdown="table"] tbody tr:last-child td {
+  border-bottom: none !important;
+}
+
 .stream-caret {
   animation: stream-caret 1s steps(2, start) infinite;
 }
