@@ -22,7 +22,7 @@ export function ArtifactDetailHeader({
   trailing?: ReactNode;
 }) {
   return (
-    <header className="shrink-0 bg-background px-5 py-3 sm:px-7 sm:py-4">
+    <header className="sticky top-0 z-30 bg-background px-5 py-3 sm:px-7 sm:py-4">
       <div className="flex min-w-0 items-center justify-between gap-2 sm:gap-4">
         <nav
           aria-label="Breadcrumb"
