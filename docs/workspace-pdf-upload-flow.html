@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Aqsha — Alur Upload PDF Paper di Workspace Detail</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #161b22;
+    --panel-2: #1c232d;
+    --border: #283039;
+    --ink: #e7edf3;
+    --muted: #9aa7b4;
+    --faint: #6b7785;
+    --client: #5aa9e6;     /* biru — UI/Client */
+    --storage: #f0a868;    /* oranye — Convex Storage */
+    --fn: #7bd88f;         /* hijau — Convex Functions */
+    --ext: #c08cf0;        /* ungu — External Services */
+    --warn: #f2b8b5;
+    --ok: #7bd88f;
+    --pending: #f0c674;
+    --fail: #f2777a;
+    --code-bg: #0b0e13;
+    --radius: 12px;
+    font-synthesis: none;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: radial-gradient(1200px 700px at 80% -10%, #1a2330 0%, var(--bg) 55%) fixed;
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 48px 24px 96px; }
+
+  header.hero { margin-bottom: 36px; }
+  .eyebrow {
+    display: inline-block; font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--faint); border: 1px solid var(--border); padding: 5px 11px; border-radius: 999px;
+    background: var(--panel);
+  }
+  h1 { font-size: 30px; line-height: 1.2; margin: 18px 0 10px; letter-spacing: -.01em; }
+  .sub { color: var(--muted); font-size: 16px; max-width: 70ch; }
+  .meta-line { color: var(--faint); font-size: 13px; margin-top: 14px; }
+  .meta-line code { color: var(--client); }
+
+  /* Legend */
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 10px 18px; margin: 26px 0 8px;
+    padding: 16px 18px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  }
+  .legend .item { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--muted); }
+  .dot { width: 11px; height: 11px; border-radius: 50%; flex: none; box-shadow: 0 0 0 3px rgba(255,255,255,.03); }
+  .dot.client { background: var(--client); }
+  .dot.storage { background: var(--storage); }
+  .dot.fn { background: var(--fn); }
+  .dot.ext { background: var(--ext); }
+
+  /* Phase */
+  .phase { margin-top: 40px; }
+  .phase-head {
+    display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px;
+    border-bottom: 1px dashed var(--border); padding-bottom: 10px;
+  }
+  .phase-num {
+    font-variant-numeric: tabular-nums; font-size: 13px; color: var(--bg);
+    background: var(--ink); border-radius: 6px; padding: 2px 9px; font-weight: 700; flex: none;
+  }
+  .phase-title { font-size: 19px; font-weight: 650; letter-spacing: -.01em; }
+  .phase-desc { color: var(--muted); font-size: 14px; margin: 4px 0 18px; }
+
+  /* Steps */
+  .steps { position: relative; margin-left: 8px; padding-left: 28px; }
+  .steps::before {
+    content: ""; position: absolute; left: 6px; top: 6px; bottom: 6px; width: 2px;
+    background: linear-gradient(var(--border), transparent); border-radius: 2px;
+  }
+  .step { position: relative; margin-bottom: 16px; }
+  .step::before {
+    content: ""; position: absolute; left: -28px; top: 18px; width: 12px; height: 12px;
+    border-radius: 50%; background: var(--panel); border: 2px solid var(--lane, var(--border));
+    box-shadow: 0 0 0 4px var(--bg);
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-left: 3px solid var(--lane, var(--border));
+    border-radius: var(--radius); padding: 14px 16px;
+    transition: transform .12s ease, border-color .12s ease;
+  }
+  .card:hover { transform: translateX(2px); border-color: #3a444f; }
+  .card.client { --lane: var(--client); }
+  .card.storage { --lane: var(--storage); }
+  .card.fn { --lane: var(--fn); }
+  .card.ext { --lane: var(--ext); }
+
+  .step-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .lane-tag {
+    font-size: 11px; letter-spacing: .04em; text-transform: uppercase; font-weight: 600;
+    padding: 3px 8px; border-radius: 6px; flex: none;
+    background: color-mix(in srgb, var(--lane) 16%, transparent);
+    color: var(--lane); border: 1px solid color-mix(in srgb, var(--lane) 35%, transparent);
+  }
+  .step-title { font-size: 15.5px; font-weight: 600; }
+  .step-body { color: var(--muted); font-size: 14px; margin: 9px 0 0; }
+  .step-body strong { color: var(--ink); font-weight: 600; }
+  .ref {
+    display: inline-block; margin-top: 10px; font-size: 12.5px; color: var(--faint);
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 7px; padding: 3px 8px;
+  }
+  .ref b { color: var(--client); font-weight: 600; }
+  .ref + .ref { margin-left: 6px; }
+
+  pre {
+    margin: 11px 0 2px; background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 9px; padding: 12px 14px; overflow-x: auto; font-size: 12.5px;
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; color: #cdd6e0; line-height: 1.6;
+  }
+  pre .k { color: #c08cf0; }
+  pre .s { color: #7bd88f; }
+  pre .c { color: var(--faint); font-style: italic; }
+  pre .f { color: #5aa9e6; }
+
+  /* callouts */
+  .note {
+    margin-top: 11px; font-size: 13px; padding: 10px 13px; border-radius: 9px;
+    background: color-mix(in srgb, var(--pending) 9%, transparent);
+    border: 1px solid color-mix(in srgb, var(--pending) 30%, transparent); color: #e9d8a6;
+  }
+  .note.branch {
+    background: color-mix(in srgb, var(--ext) 10%, transparent);
+    border-color: color-mix(in srgb, var(--ext) 30%, transparent); color: #d9c2f5;
+  }
+
+  /* status pills */
+  .pill { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 2px 9px; border-radius: 999px; font-family: ui-monospace, monospace; }
+  .pill.pending { background: color-mix(in srgb, var(--pending) 18%, transparent); color: var(--pending); }
+  .pill.running { background: color-mix(in srgb, var(--client) 18%, transparent); color: var(--client); }
+  .pill.ready { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
+  .pill.failed { background: color-mix(in srgb, var(--fail) 16%, transparent); color: var(--fail); }
+
+  /* table */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 560px; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--faint); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; background: var(--panel-2); }
+  tr:last-child td { border-bottom: none; }
+  td code, th code { font-family: ui-monospace, monospace; font-size: 12.5px; color: var(--storage); }
+  td.where { font-family: ui-monospace, monospace; font-size: 12px; color: var(--faint); }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
+
+  .footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--faint); font-size: 13px; }
+  .footer code { color: var(--client); }
+  a.jump { color: var(--client); text-decoration: none; }
+  a.jump:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <span class="eyebrow">Audit Pipeline · Aqsha</span>
+    <h1>Bagaimana Sistem Memproses Upload PDF Paper<br/>di Halaman Workspace Detail</h1>
+    <p class="sub">
+      Visualisasi step-by-step dari momen user memilih file PDF, sampai paper ter-enrich penuh dan
+      siap di-query untuk RAG / konteks workspace. Mencakup jalur <strong>client → Convex storage →
+      ekstraksi teks → indexing RAG</strong>, lalu <strong>2 jalur enrichment paralel &amp; terpisah</strong>:
+      resolusi metadata berbasis identifier (DOI/arXiv → Crossref/OpenAlex) + fallback LLM, dan ekstraksi
+      struktural GROBID.
+    </p>
+    <p class="meta-line">
+      Route: <code>/app/workspaces/[workspaceId]</code> &nbsp;·&nbsp; Stack: Next.js 16 (apps/web) + Convex (packages/convex)
+      &nbsp;·&nbsp; Lompat ke: <a class="jump" href="#status">Tabel status</a> · <a class="jump" href="#files">Peta file</a>
+    </p>
+    <p class="meta-line">
+      Diperbarui 2026-06-09 untuk pipeline enrichment baru: GROBID + resolver di-<strong>decouple</strong> dari
+      sukses ekstraksi teks, resolver identifier + fallback LLM ditambahkan, dan gate metadata di UI dilonggarkan.
+    </p>
+  </header>
+
+  <div class="legend">
+    <div class="item"><span class="dot client"></span> Client / UI (browser, React)</div>
+    <div class="item"><span class="dot storage"></span> Convex File Storage (blob)</div>
+    <div class="item"><span class="dot fn"></span> Convex Functions (mutation / action / internal)</div>
+    <div class="item"><span class="dot ext"></span> External Services (GROBID, Crossref/OpenAlex, OpenAI embed + LLM)</div>
+  </div>
+
+  <!-- ===================== PHASE 1 ===================== -->
+  <section class="phase">
+    <div class="phase-head">
+      <span class="phase-num">01</span>
+      <span class="phase-title">User memilih file di workspace detail</span>
+    </div>
+    <p class="phase-desc">Interaksi UI murni. File belum menyentuh server — hanya divalidasi & dimasukkan ke antrian upload.</p>
+
+    <div class="steps">
+
+      <div class="step"><div class="card client">
+        <div class="step-top"><span class="lane-tag">Client</span><span class="step-title">User trigger upload (klik atau drag-drop)</span></div>
+        <p class="step-body">
+          Dua entry point: menu konteks <strong>“Upload file”</strong> yang menembak
+          <code>fileInputRef.current?.click()</code>, atau <strong>drag-drop zone</strong> di area library
+          (<code>onDragEnter/Over/Leave/Drop</code>). Keduanya memanggil <code>uploadToActiveFolder(files)</code>.
+          Input menerima <code>multiple</code> file dengan <code>accept={WORKSPACE_UPLOAD_ACCEPT}</code>.
+        </p>
+        <span class="ref"><b>workspace-library-board.tsx</b>:203–271, 340–343</span>
+      </div></div>
+
+      <div class="step"><div class="card client">
+        <div class="step-top"><span class="lane-tag">Client</span><span class="step-title">Validasi batch sisi-klien</span></div>
+        <p class="step-body">
+          <code>enqueue()</code> memeriksa: maksimum <strong>20 file</strong> per batch
+          (<code>MAX_WORKSPACE_UPLOAD_FILES</code>) dan ukuran <strong>≤ 50 MB</strong> per file
+          (<code>MAX_UPLOAD_BYTES</code>). File yang oversize langsung ditandai <span class="pill failed">failed</span>
+          (“… melebihi batas 50 MB.”) tanpa dikirim. Tipe file divalidasi per-file via
+          <code>isAllowedWorkspaceUploadFile()</code> tepat sebelum upload.
+        </p>
+        <span class="ref"><b>workspace-upload-toast.tsx</b>:135–163</span>
+        <span class="ref"><b>artifactUploadPolicy.ts</b> · <b>artifactUploadLimits.ts</b></span>
+      </div></div>
+
+      <div class="step"><div class="card client">
+        <div class="step-top"><span class="lane-tag">Client</span><span class="step-title">Antrian + state machine progress</span></div>
+        <p class="step-body">
+          Tiap file jadi <code>UploadQueueItem</code> dengan status awal <span class="pill pending">queued</span>.
+          State berpindah: <span class="pill pending">queued</span> → <span class="pill running">uploading</span> →
+          <span class="pill running">processing</span> → <span class="pill ready">complete</span> /
+          <span class="pill failed">failed</span>. Toast muncul seketika; upload jalan paralel maksimal
+          <strong>3 file</strong> (<code>WORKSPACE_UPLOAD_CONCURRENCY</code>), auto-dismiss 5 detik setelah selesai.
+        </p>
+        <span class="ref"><b>workspace-upload-toast-model.ts</b> · <b>workspace-file-upload.ts</b>:73–93</span>
+      </div></div>
+
+    </div>
+  </section>
+
+  <!-- ===================== PHASE 2 ===================== -->
+  <section class="phase">
+    <div class="phase-head">
+      <span class="phase-num">02</span>
+      <span class="phase-title">Handshake 3-langkah ke Convex Storage</span>
+    </div>
+    <p class="phase-desc">Untuk tiap file, <code>uploadWorkspaceFile()</code> menjalankan tiga panggilan backend berurutan. File mentah masuk storage dulu, baru dibuat record-nya.</p>
+
+    <div class="steps">
+
+      <div class="step"><div class="card fn">
+        <div class="step-top"><span class="lane-tag">Convex Fn</span><span class="step-title">A · Minta upload URL</span></div>
+        <p class="step-body">
+          Client memanggil mutation <code>api.artifacts.generateUploadUrl</code> (via
+          <code>useConvexMutationFn</code>). Backend memverifikasi user adalah <strong>owner workspace</strong>,
+          lalu mengembalikan <code>ctx.storage.generateUploadUrl()</code>.
+        </p>
+        <pre><span class="c">// frontend</span>
+<span class="k">const</span> uploadUrl = <span class="k">await</span> generateUploadUrl({ workspaceId });</pre>
+        <span class="ref"><b>artifacts.ts</b>:325–339</span>
+      </div></div>
+
+      <div class="step"><div class="card storage">
+        <div class="step-top"><span class="lane-tag">Storage</span><span class="step-title">B · Upload bytes PDF ke storage</span></div>
+        <p class="step-body">
+          <code>uploadFileToStorage()</code> melakukan <strong>POST via XMLHttpRequest</strong> ke upload URL.
+          <code>request.upload.onprogress</code> men-stream progress 0–100% ke toast. Respons JSON mengembalikan
+          <code>storageId</code>. Saat ini status berpindah ke <span class="pill running">processing</span>.
+        </p>
+        <span class="ref"><b>workspace-file-upload.ts</b>:212–256</span>
+      </div></div>
+
+      <div class="step"><div class="card fn">
+        <div class="step-top"><span class="lane-tag">Convex Fn</span><span class="step-title">C · Buat artifact dari storage</span></div>
+        <p class="step-body">
+          Client memanggil action <code>api.artifactUploads.createFromStorage</code> (via
+          <code>useConvexActionFn</code>) dengan <code>storageId</code>, <code>fileName</code>, <code>mimeType</code>,
+          <code>size</code>, <code>workspaceId</code>, <code>folderId</code>. Inilah pintu masuk ke seluruh
+          pipeline server-side.
+        </p>
+        <pre><span class="c">// frontend</span>
+<span class="k">await</span> createUploadedArtifact({
+  workspaceId, folderId, storageId,
+  fileName, mimeType, size,
+});</pre>
+        <span class="ref"><b>artifactUploads.ts</b>:45–92</span>
+      </div></div>
+
+    </div>
+  </section>
+
+  <!-- ===================== PHASE 3 ===================== -->
+  <section class="phase">
+    <div class="phase-head">
+      <span class="phase-num">03</span>
+      <span class="phase-title">Server-side: buat record + ekstraksi teks + indexing RAG</span>
+    </div>
+    <p class="phase-desc"><code>createFromStorage</code> (Node runtime) memvalidasi ulang, menyisipkan record DB, lalu memanggil <code>finalizeUploadedDocument()</code> yang mengurus ekstraksi teks dan vektorisasi.</p>
+
+    <div class="steps">
+
+      <div class="step"><div class="card fn">
+        <div class="step-top"><span class="lane-tag">Convex Fn</span><span class="step-title">Validasi ulang + insert record artifact</span></div>
+        <p class="step-body">
+          Server <code>validateUpload()</code> lagi (nama, size, tipe didukung), menentukan <code>artifactType</code>
+          (pdf/docx/…) dari nama+mime, lalu internal mutation <code>createUploadedArtifactInternal</code> menyisipkan:
+          baris <code>artifacts</code> dengan <code>source: "upload"</code> +
+          <span class="pill pending">indexingStatus: pending</span>, dan baris <code>artifactContents</code> kosong.
+        </p>
+        <span class="ref"><b>artifactUploads.ts</b>:59–80</span>
+        <span class="ref"><b>artifacts.ts</b>:884–939</span>
+      </div></div>
+
+      <div class="step"><div class="card fn">
+        <div class="step-top"><span class="lane-tag">Convex Fn</span><span class="step-title">Ekstraksi teks dari PDF</span></div>
+        <p class="step-body">
+          <code>extractStoredDocument()</code> mengambil blob dari storage. Untuk PDF dipakai library
+          <strong><code>unpdf</code></strong>: <code>getDocumentProxy()</code> + <code>extractText(pdf, {mergePages:true})</code>.
+          (DOCX → <code>mammoth</code>; teks/markdown/csv → UTF-8 langsung.) Hasil dinormalisasi (hapus null,
+          rapikan whitespace). Jika tak ada teks terbaca → <span class="pill failed">indexing failed</span> —
+          <strong>tapi kini ini tidak lagi membatalkan jalur enrichment</strong> (Fase 04 tetap jalan, lihat note di bawah).
+        </p>
+        <pre><span class="k">const</span> { extractText, getDocumentProxy } = <span class="k">await import</span>(<span class="s">"unpdf"</span>);
+<span class="k">const</span> pdf = <span class="k">await</span> getDocumentProxy(<span class="k">new</span> Uint8Array(buffer));
+<span class="k">const</span> { text } = <span class="k">await</span> extractText(pdf, { mergePages: <span class="k">true</span> });</pre>
+        <span class="ref"><b>artifactUploads.ts</b> · extractStoredDocument:459</span>
+      </div></div>
+
+      <div class="step"><div class="card storage">
+        <div class="step-top"><span class="lane-tag">Storage</span><span class="step-title">Simpan teks besar sebagai blob terpisah</span></div>
+        <p class="step-body">
+          Teks/markdown <strong>&gt; 900 KB</strong> tidak disimpan inline di DB, melainkan di-offload sebagai blob
+          via <code>maybeStoreText()</code> → menghasilkan <code>indexedTextStorageId</code> /
+          <code>markdownStorageId</code>. Yang ≤ 900 KB disimpan inline di <code>artifactContents</code>.
+        </p>
+        <span class="ref"><b>artifactUploads.ts</b>:346–349, 461–470</span>
+      </div></div>
+
+      <div class="step"><div class="card ext">
+        <div class="step-top"><span class="lane-tag">External</span><span class="step-title">Indexing RAG (embeddings)</span></div>
+        <p class="step-body">
+          <code>indexUploadedDocument()</code> mengambil <strong>≤ 300.000 char</strong> pertama dan memanggil
+          <code>artifactRag.add()</code>. Embedding model <strong>OpenAI <code>text-embedding-3-small</code></strong>
+          (1536-dim). Namespace <code>user:{ownerUserId}</code> → paper hanya bisa di-query oleh pemiliknya.
+          Filter: <code>artifactId</code>, <code>workspaceId</code>. Mengembalikan <code>ragEntryId</code>.
+        </p>
+        <span class="ref"><b>artifactUploads.ts</b> · indexUploadedDocument:522</span>
+        <span class="ref"><b>agent/rag.ts</b>:27–38</span>
+      </div></div>
+
+      <div class="step"><div class="card fn">
+        <div class="step-top"><span class="lane-tag">Convex Fn</span><span class="step-title">Tandai terindeks → ready</span></div>
+        <p class="step-body">
+          <code>patchUploadedArtifactIndexed</code> menyimpan markdown + plainText (atau storageId-nya),
+          <code>ragEntryId</code>, <code>indexedAt</code>, dan mengubah status menjadi
+          <span class="pill ready">indexingStatus: ready</span>. Pada titik ini paper <strong>sudah searchable</strong>
+          lewat RAG meskipun enrichment belum jalan.
+        </p>
+        <span class="ref"><b>artifactUploads.ts</b> · finalizeUploadedDocument:327</span>
+        <span class="ref"><b>artifacts.ts</b>:941–986</span>
+      </div></div>
+
+      <div class="note">
+        <strong>Return ke client + enrichment di-decouple.</strong> <code>createFromStorage</code> mengembalikan
+        <code>{ artifactId, title, indexed }</code> → toast <span class="pill ready">complete</span>.
+        Lalu, untuk PDF ber-<code>workspaceId</code>, <code>queuePaperEnrichment()</code> menjadwalkan
+        <strong>2 jalur enrichment paralel</strong> (Fase 04) secara <strong>asinkron</strong>. Kunci perubahan:
+        ini berada <strong>di luar</strong> blok try ekstraksi teks, jadi enrichment tetap jalan
+        <strong>walaupun ekstraksi teks gagal</strong> (PDF hasil scan). GROBID dijalankan selalu; resolver/LLM
+        hanya dijadwalkan jika ada teks (<code>args.text.trim()</code>).
+        <span class="ref"><b>artifactUploads.ts</b> · queuePaperEnrichment:407</span>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ===================== PHASE 4 ===================== -->
+  <section class="phase">
+    <div class="phase-head">
+      <span class="phase-num">04</span>
+      <span class="phase-title">Enrichment metadata: 2 jalur paralel &amp; terpisah</span>
+    </div>
+    <p class="phase-desc">
+      Untuk PDF ber-scope workspace, <code>queuePaperEnrichment</code> menjadwalkan <strong>dua jalur independen</strong>
+      yang berlomba mengisi <code>artifactPaperMetadata</code>: <strong>(4a)</strong> resolusi metadata berbasis
+      identifier + fallback LLM, dan <strong>(4b)</strong> ekstraksi struktural GROBID. Keduanya idempoten dan
+      digabung lewat aturan <em>rank</em> (lihat note merge). Filosofi baru: metadata paling konsisten datang dari
+      <strong>resolusi identifier ke database</strong>, bukan dari parsing PDF yang rapuh.
+    </p>
+
+    <!-- ---- 4a: identifier-first + LLM ---- -->
+    <p class="phase-desc" style="margin-top:6px;margin-bottom:10px;color:var(--ink);font-weight:650;">
+      4a · Resolusi identifier-first + fallback LLM <span style="color:var(--faint);font-weight:500;">— jalur baru, butuh teks</span>
+    </p>
+    <div class="steps">
+
+      <div class="step"><div class="card fn">
+        <div class="step-top"><span class="lane-tag">Convex Fn</span><span class="step-title">Cari DOI / arXiv di region header</span></div>
+        <p class="step-body">
+          <code>classifyPaperText()</code> mengekstrak identifier <strong>hanya dari region header</strong> paper —
+          potongan teks sebelum heading “References/Bibliography”, di-cap <strong>≤ 3.000 char</strong>
+          (<code>paperHeaderRegion</code>). Ini mencegah DOI dari daftar pustaka (paper yang <em>dikutip</em>) salah
+          dipakai sebagai identitas paper ini. arXiv dicek sebelum DOI (mengikuti precedence <code>classifyUrl</code>).
+        </p>
+        <span class="ref"><b>paperIngest/uploadIdentifiers.ts</b> · classifyPaperText:43, paperHeaderRegion:26</span>
+      </div></div>
+
+      <div class="step"><div class="card ext">
+        <div class="step-top"><span class="lane-tag">External</span><span class="step-title">Resolve metadata otoritatif</span></div>
+        <p class="step-body">
+          Jika ada identifier → <code>resolvePaper()</code> (di-reuse dari jalur URL) me-resolve dari
+          <strong>Crossref / OpenAlex / arXiv / DataCite / Semantic Scholar</strong> dengan cache provider.
+          Hasil bersih (judul/penulis/abstrak/DOI/jurnal/tahun) — tidak pernah “salah baca abstrak”.
+          Tidak menyentuh rate-limit <code>paperIngestPerUser</code> (itu hanya di wrapper <code>ingestUrl</code>).
+        </p>
+        <span class="ref"><b>paperMetadataEnrichment.ts</b> · enrichUploadedPaperMetadata:78</span>
+        <span class="ref"><b>paperIngest/resolve.ts</b>:22</span>
+      </div></div>
+
+      <div class="step"><div class="card ext">
+        <div class="step-top"><span class="lane-tag">External</span><span class="step-title">Fallback LLM (structured output)</span></div>
+        <p class="step-body">
+          Tidak ada identifier? → fallback <code>generateObject</code> (AI SDK, model
+          <code>CHAT_LITE_MODEL</code> ≈ <code>gpt-5.4-mini</code>) atas teks halaman pertama, dengan schema Zod
+          (title/authors/abstract/doi/journal/year + flag <code>isResearchPaper</code>). <strong>Env-gated</strong>
+          via <code>isLlmMetadataEnabled()</code> (<code>LLM_METADATA_ENABLED</code>, default on bila chat key terpasang).
+        </p>
+        <span class="ref"><b>paperMetadataEnrichment.ts</b> · isLlmMetadataEnabled:34</span>
+      </div></div>
+
+      <div class="step"><div class="card fn">
+        <div class="step-top"><span class="lane-tag">Convex Fn</span><span class="step-title">Tulis metadata + tandai scholarly</span></div>
+        <p class="step-body">
+          <code>upsertResolvedPaperMetadata</code> menulis <code>artifactPaperMetadata</code> dengan
+          <code>metadataSource</code> = <code>crossref/openalex/arxiv/datacite/semantic_scholar</code> atau
+          <code>llm</code>, plus <code>confidence</code> (resolver <strong>0.95</strong>, LLM <strong>0.4</strong>).
+          Lalu <code>setArtifactDetectedKind</code> menandai <code>detectedDocumentKind: "scholarly_paper"</code> —
+          jadi metadata tampil walau GROBID gagal/mati.
+        </p>
+        <span class="ref"><b>paperExtractions.ts</b> · upsertResolvedPaperMetadata:248, setArtifactDetectedKind:342</span>
+      </div></div>
+
+    </div>
+
+    <!-- ---- 4b: GROBID ---- -->
+    <p class="phase-desc" style="margin-top:22px;margin-bottom:10px;color:var(--ink);font-weight:650;">
+      4b · Ekstraksi struktural GROBID <span style="color:var(--faint);font-weight:500;">— baca byte PDF langsung, jalan walau teks kosong</span>
+    </p>
+    <div class="steps">
+
+      <div class="step"><div class="card fn">
+        <div class="step-top"><span class="lane-tag">Convex Fn</span><span class="step-title">Antrikan + jalankan GROBID</span></div>
+        <p class="step-body">
+          <code>queueGrobidExtraction</code> membuat baris <code>artifactExtractions</code>
+          (<code>extractor: "grobid"</code>, <span class="pill pending">pending</span>, <code>attemptId</code> dedup) lalu
+          <code>runGrobidExtraction</code> POST ke <code>${GROBID_BASE_URL}/api/processFulltextDocument</code>
+          (consolidate header/citations, timeout 90s) → <span class="pill running">running</span> → <strong>TEI XML</strong>.
+        </p>
+        <span class="ref"><b>paperExtractions.ts</b> · queueGrobidExtraction:372, runGrobidExtraction:436</span>
+        <span class="ref"><b>paperExtraction/grobidClient.ts</b>:14</span>
+      </div></div>
+
+      <div class="step"><div class="card fn">
+        <div class="step-top"><span class="lane-tag">Convex Fn</span><span class="step-title">Parse TEI → simpan + tandai siap</span></div>
+        <p class="step-body">
+          <code>parseGrobidTei()</code> mengekstrak judul/abstrak/DOI/penulis/afiliasi/jurnal/tahun/keywords/seksi/referensi
+          + <em>confidence</em>. TEI/sections/references disimpan sebagai blob, plain-text di-<strong>index ulang</strong>
+          ke RAG (lebih bersih dari unpdf). <code>markGrobidReady</code> meng-upsert <code>artifactPaperMetadata</code>
+          (<code>metadataSource: "grobid"</code>) + <code>artifactExtractions</code> → <span class="pill ready">ready</span>.
+        </p>
+        <span class="ref"><b>paperExtraction/teiParser.ts</b>:44</span>
+        <span class="ref"><b>paperExtractions.ts</b> · markGrobidReady:590</span>
+      </div></div>
+
+    </div>
+
+    <div class="note">
+      <strong>Merge &amp; rank (anti-clobber).</strong> <code>METADATA_SOURCE_RANK</code>:
+      <code>manual(4) &gt; grobid(3) &gt; resolver(2) &gt; llm(1)</code>. Sumber yang lebih lemah <strong>tidak pernah</strong>
+      menimpa yang lebih kuat, dan <code>db.patch</code> hanya menulis field yang benar-benar ada (tidak meng-clobber
+      <code>pdfStatus/sourceUrl/keywords</code> dari pass sebelumnya). <code>markGrobidReady</code> juga tidak pernah
+      menurunkan <code>scholarly_paper</code> → <code>generic</code>.
+      <span class="ref"><b>paperExtractions.ts</b> · METADATA_SOURCE_RANK + upsertResolvedPaperMetadata:248, isLikelyScholarlyPaper:781</span>
+    </div>
+
+    <div class="note">
+      <strong>Retry &amp; degradasi anggun.</strong> GROBID: error transien (50x / timeout) di-retry hingga <strong>3×</strong>,
+      lalu <code>markGrobidFailed</code> (<span class="pill failed">failed</span>). LLM/resolver: error ditangkap, best-effort.
+      Paper <strong>tetap searchable</strong> via teks dasar Fase 03; metadata kini punya <strong>2 sumber independen</strong>,
+      jadi kegagalan satu jalur tidak lagi berarti “tanpa metadata”.
+      <span class="ref"><b>paperExtractions.ts</b> · markGrobidFailed:676</span>
+    </div>
+
+  </section>
+
+  <!-- ===================== PHASE 5 ===================== -->
+  <section class="phase">
+    <div class="phase-head">
+      <span class="phase-num">05</span>
+      <span class="phase-title">Hasil akhir: paper siap di-query</span>
+    </div>
+    <p class="phase-desc">Data tersebar di vector store + beberapa tabel. Frontend memantau via polling, dengan gate metadata yang sudah dilonggarkan.</p>
+
+    <div class="grid2">
+      <div class="card fn" style="--lane: var(--fn)">
+        <div class="step-top"><span class="lane-tag">Convex Fn</span><span class="step-title">Frontend polling status</span></div>
+        <p class="step-body">
+          UI memanggil query <code>paperExtractions.getStatus({ artifactId })</code> → <code>{ extraction, metadata }</code>.
+          <code>extraction.status</code> berasal dari baris GROBID; <code>metadata</code> dari
+          <code>artifactPaperMetadata</code> (sumber GROBID <em>atau</em> resolver/LLM).
+        </p>
+        <span class="ref"><b>paperExtractions.ts</b> · getStatus:136</span>
+      </div>
+      <div class="card client" style="--lane: var(--client)">
+        <div class="step-top"><span class="lane-tag">Client</span><span class="step-title">Gate dilonggarkan + state pending/failed</span></div>
+        <p class="step-body">
+          <code>derivePaperMetadataView()</code> kini menampilkan metadata <strong>kapan pun “usable”</strong>
+          (ada title/abstract/authors) — <strong>tidak lagi</strong> mensyaratkan
+          <code>detectedDocumentKind === "scholarly_paper"</code> (perbaikan akar masalah “metadata tidak terlihat”).
+          Tambah state <span class="pill running">pending</span> (“Reading paper details…”, <code>SidebarPending</code>);
+          banner <span class="pill failed">failed</span> tidak alarm bila metadata sudah ada.
+        </p>
+        <span class="ref"><b>paper-metadata-model.ts</b> · derivePaperMetadataView:24</span>
+        <span class="ref"><b>artifact-detail-sidebar.tsx</b>:77</span>
+      </div>
+      <div class="card ext" style="--lane: var(--ext)">
+        <div class="step-top"><span class="lane-tag">RAG store</span><span class="step-title">Apa yang queryable</span></div>
+        <p class="step-body">
+          Vektor di <code>artifactRag</code> (namespace <code>user:{id}</code>, filter <code>artifactId</code> +
+          <code>workspaceId</code>) untuk pencarian semantik; <code>artifactPaperMetadata</code> untuk UX paper;
+          <code>artifactContents</code> untuk teks/markdown lengkap.
+        </p>
+      </div>
+      <div class="card fn" style="--lane: var(--fn)">
+        <div class="step-top"><span class="lane-tag">Tahu keterbatasan</span><span class="step-title">Follow-up tertunda</span></div>
+        <p class="step-body">
+          UI pending/failed &amp; tombol retry masih <strong>terikat ke baris GROBID saja</strong> — retry belum
+          men-trigger ulang resolver/LLM, dan tak ada spinner saat GROBID dimatikan. Butuh sinyal
+          <strong>“enrichment status”</strong> tersendiri (keputusan skema, ditunda).
+        </p>
+      </div>
+    </div>
+
+    <div class="note branch" style="margin-top:18px;">
+      <strong>Cabang alternatif — paper dari URL (bukan upload manual).</strong>
+      Jika user menambah <strong>URL</strong> (DOI/arXiv/PMID), <code>createUrl</code> → <code>ingestUrl</code>
+      mengklasifikasi URL, me-resolve metadata dari CrossRef / OpenAlex / arXiv / DataCite / Unpaywall / Semantic Scholar,
+      mengunduh PDF open-access bila ada, lalu <code>convertUrlArtifactToPdf</code> + <code>finalizeStoredArtifact</code>
+      menjalankan <strong>pipeline Fase 03–04 yang sama</strong>. Jika tak ada PDF, metadata disimpan saja (metadata-only).
+      <span class="ref"><b>paperIngest/ingest.ts</b>:31–124</span> <span class="ref"><b>paperIngest/resolve.ts</b></span>
+    </div>
+  </section>
+
+  <!-- ===================== STATUS TABLE ===================== -->
+  <section class="phase" id="status">
+    <div class="phase-head">
+      <span class="phase-num">★</span>
+      <span class="phase-title">Tabel transisi status</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Tahap</th><th>Tabel</th><th>Field</th><th>Nilai</th><th>Lokasi</th></tr></thead>
+        <tbody>
+          <tr><td>File terupload</td><td><code>artifacts</code></td><td><code>indexingStatus</code></td><td><span class="pill pending">pending</span></td><td class="where">createUploadedArtifactInternal</td></tr>
+          <tr><td>Teks terekstrak + RAG</td><td><code>artifacts</code></td><td><code>indexingStatus</code></td><td><span class="pill ready">ready</span></td><td class="where">finalizeUploadedDocument:327</td></tr>
+          <tr><td>Resolver/LLM dapat metadata</td><td><code>artifactPaperMetadata</code></td><td><code>metadataSource</code></td><td><code>crossref/…/llm</code></td><td class="where">upsertResolvedPaperMetadata:248</td></tr>
+          <tr><td>Resolver/LLM tandai paper</td><td><code>artifacts</code></td><td><code>detectedDocumentKind</code></td><td><code>scholarly_paper</code></td><td class="where">setArtifactDetectedKind:342</td></tr>
+          <tr><td>GROBID diantrikan</td><td><code>artifactExtractions</code></td><td><code>status</code></td><td><span class="pill pending">pending</span></td><td class="where">queueGrobidExtraction:372</td></tr>
+          <tr><td>GROBID berjalan</td><td><code>artifactExtractions</code></td><td><code>status</code></td><td><span class="pill running">running</span></td><td class="where">runGrobidExtraction:436</td></tr>
+          <tr><td>GROBID selesai</td><td><code>artifactExtractions</code></td><td><code>status</code></td><td><span class="pill ready">ready</span></td><td class="where">markGrobidReady:590</td></tr>
+          <tr><td>GROBID gagal</td><td><code>artifactExtractions</code></td><td><code>status</code></td><td><span class="pill failed">failed</span></td><td class="where">markGrobidFailed:676</td></tr>
+          <tr><td>Metadata GROBID (rank tertinggi)</td><td><code>artifactPaperMetadata</code></td><td><code>metadataSource</code></td><td><code>grobid</code></td><td class="where">markGrobidReady:590</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== FILE MAP ===================== -->
+  <section class="phase" id="files">
+    <div class="phase-head">
+      <span class="phase-num">★</span>
+      <span class="phase-title">Peta file kunci</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Peran</th><th>Path</th></tr></thead>
+        <tbody>
+          <tr><td>Route page (server)</td><td class="where">apps/web/app/app/workspaces/[workspaceId]/page.tsx</td></tr>
+          <tr><td>Board + input upload</td><td class="where">features/workspaces/components/workspace-library-board.tsx</td></tr>
+          <tr><td>Orkestrasi upload klien</td><td class="where">features/workspaces/utils/workspace-file-upload.ts</td></tr>
+          <tr><td>State toast progress</td><td class="where">features/workspaces/components/workspace-upload-toast.tsx</td></tr>
+          <tr><td>Data layer (mutations/actions)</td><td class="where">features/workspaces/api/use-workspaces-data.ts</td></tr>
+          <tr><td>Generate upload URL</td><td class="where">packages/convex/convex/artifacts.ts</td></tr>
+          <tr><td>createFromStorage + ekstraksi + decouple</td><td class="where">packages/convex/convex/artifactUploads.ts</td></tr>
+          <tr><td>Config RAG / embeddings</td><td class="where">packages/convex/convex/agent/rag.ts</td></tr>
+          <tr><td>Metadata write + rank + GROBID</td><td class="where">packages/convex/convex/paperExtractions.ts</td></tr>
+          <tr><td><strong>Enrichment: resolver + LLM (baru)</strong></td><td class="where">packages/convex/convex/paperMetadataEnrichment.ts</td></tr>
+          <tr><td><strong>Identifier helpers / header region (baru)</strong></td><td class="where">packages/convex/convex/paperIngest/uploadIdentifiers.ts</td></tr>
+          <tr><td>Resolver identifier (di-reuse)</td><td class="where">packages/convex/convex/paperIngest/resolve.ts · identifiers.ts</td></tr>
+          <tr><td>GROBID HTTP client</td><td class="where">packages/convex/convex/paperExtraction/grobidClient.ts</td></tr>
+          <tr><td>Parser TEI XML</td><td class="where">packages/convex/convex/paperExtraction/teiParser.ts</td></tr>
+          <tr><td>Ingest URL→paper (cabang)</td><td class="where">packages/convex/convex/paperIngest/ingest.ts</td></tr>
+          <tr><td><strong>Gate metadata UI (baru)</strong></td><td class="where">apps/web/features/workspaces/utils/paper-metadata-model.ts</td></tr>
+          <tr><td>Sidebar paper (gate + states)</td><td class="where">apps/web/features/workspaces/components/artifact-detail-sidebar.tsx</td></tr>
+          <tr><td>Kebijakan / limit upload</td><td class="where">packages/convex/convex/artifactUploadPolicy.ts · artifactUploadLimits.ts</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="footer">
+    Diperbarui 2026-06-09 untuk pipeline enrichment baru (branch <code>development</code>, belum di-commit) · Aqsha monorepo ·
+    Fokus: jalur upload PDF paper di <code>/app/workspaces/[workspaceId]</code>.<br/>
+    Lane warna mengikuti legenda di atas. Referensi <code>file:fungsi:line</code> merujuk ke kode aktual setelah perubahan;
+    Fase 04 kini mencakup dua jalur enrichment (resolver identifier + LLM, dan GROBID).
+  </div>
+
+</div>
+</body>
+</html>
