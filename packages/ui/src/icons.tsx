@@ -7,6 +7,7 @@ import {
   ArrowRight01Icon,
   ArrowReloadHorizontalIcon,
   ArrowUp01Icon,
+  ArrowUpToLineIcon as HugeArrowUpToLineIcon,
   ArrowUpRight01Icon,
   ArrangeByLettersAZIcon,
   Attachment01Icon,
@@ -121,6 +122,7 @@ export const ArrowDownIcon = createIcon(ArrowDown01Icon);
 export const ArrowLeftIcon = createIcon(ArrowLeft01Icon);
 export const ArrowRight = createIcon(ArrowRight01Icon);
 export const ArrowUpIcon = createIcon(ArrowUp01Icon);
+export const ArrowUpToLineIcon = createIcon(HugeArrowUpToLineIcon);
 export const ArrowUpRightIcon = createIcon(ArrowUpRight01Icon);
 export const BookOpen = createIcon(BookOpen01Icon);
 export const BookOpenIcon = createIcon(BookOpen01Icon);

@@ -2,7 +2,7 @@
 
 import {
   AlertCircleIcon,
-  ArrowUpIcon,
+  ArrowUpToLineIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   Loader2Icon,
@@ -502,56 +502,67 @@ function PdfReaderToolbar({
         </div>
       ) : null}
 
-      <div
-        role="toolbar"
-        aria-label="PDF reading tools"
-        className="flex max-w-[calc(100vw-1.5rem)] items-center gap-0.5 overflow-x-auto rounded-full border border-border bg-popover/95 px-1.5 py-1 shadow-md backdrop-blur supports-[backdrop-filter]:bg-popover/80"
-      >
-        <ToolbarButton label="Zoom out" onClick={onZoomOut} disabled={!canZoomOut}>
-          <MinusIcon className="size-4" />
-        </ToolbarButton>
-        <button
-          type="button"
-          onClick={onResetZoom}
-          title="Fit width"
-          className="min-w-12 shrink-0 rounded-md px-1.5 py-1 text-[12px] font-medium tabular-nums text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      <div className="flex items-center gap-2">
+        {currentPage > 1 ? (
+          <button
+            type="button"
+            onClick={onTop}
+            aria-label="Back to top"
+            title="Back to top"
+            className="flex size-9 shrink-0 items-center justify-center rounded-full border border-border bg-popover/95 text-muted-foreground shadow-md backdrop-blur transition-colors hover:text-foreground supports-[backdrop-filter]:bg-popover/80"
+          >
+            <ArrowUpToLineIcon className="size-4" />
+          </button>
+        ) : null}
+
+        <div
+          role="toolbar"
+          aria-label="PDF reading tools"
+          className="flex max-w-[calc(100vw-1.5rem)] items-center gap-0.5 overflow-x-auto rounded-full border border-border bg-popover/95 px-1.5 py-1 shadow-md backdrop-blur supports-[backdrop-filter]:bg-popover/80"
         >
-          {zoomPercent}%
-        </button>
-        <ToolbarButton label="Zoom in" onClick={onZoomIn} disabled={!canZoomIn}>
-          <PlusIcon className="size-4" />
-        </ToolbarButton>
+          <ToolbarButton label="Zoom out" onClick={onZoomOut} disabled={!canZoomOut}>
+            <MinusIcon className="size-4" />
+          </ToolbarButton>
+          <button
+            type="button"
+            onClick={onResetZoom}
+            title="Fit width"
+            className="min-w-12 shrink-0 rounded-md px-1.5 py-1 text-[12px] font-medium tabular-nums text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            {zoomPercent}%
+          </button>
+          <ToolbarButton label="Zoom in" onClick={onZoomIn} disabled={!canZoomIn}>
+            <PlusIcon className="size-4" />
+          </ToolbarButton>
 
-        <ToolbarDivider />
+          <ToolbarDivider />
 
-        <ToolbarButton label="Back to top" onClick={onTop}>
-          <ArrowUpIcon className="size-4" />
-        </ToolbarButton>
-        <ToolbarButton label="Previous page" onClick={onPrev} disabled={currentPage <= 1}>
-          <ChevronUpIcon className="size-4" />
-        </ToolbarButton>
-        <span className="shrink-0 px-1 text-[12px] font-medium tabular-nums text-muted-foreground">
-          {currentPage} / {numPages}
-        </span>
-        <ToolbarButton label="Next page" onClick={onNext} disabled={currentPage >= numPages}>
-          <ChevronDownIcon className="size-4" />
-        </ToolbarButton>
+          <ToolbarButton label="Previous page" onClick={onPrev} disabled={currentPage <= 1}>
+            <ChevronUpIcon className="size-4" />
+          </ToolbarButton>
+          <span className="shrink-0 px-1 text-[12px] font-medium tabular-nums text-muted-foreground">
+            {currentPage} / {numPages}
+          </span>
+          <ToolbarButton label="Next page" onClick={onNext} disabled={currentPage >= numPages}>
+            <ChevronDownIcon className="size-4" />
+          </ToolbarButton>
 
-        <ToolbarDivider />
+          <ToolbarDivider />
 
-        <ToolbarButton label="Find in document" onClick={onToggleSearch} active={searchOpen}>
-          <SearchIcon className="size-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-          onClick={onToggleFullscreen}
-        >
-          {isFullscreen ? (
-            <MinimizeIcon className="size-4" />
-          ) : (
-            <MaximizeIcon className="size-4" />
-          )}
-        </ToolbarButton>
+          <ToolbarButton label="Find in document" onClick={onToggleSearch} active={searchOpen}>
+            <SearchIcon className="size-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+            onClick={onToggleFullscreen}
+          >
+            {isFullscreen ? (
+              <MinimizeIcon className="size-4" />
+            ) : (
+              <MaximizeIcon className="size-4" />
+            )}
+          </ToolbarButton>
+        </div>
       </div>
     </div>
   );
