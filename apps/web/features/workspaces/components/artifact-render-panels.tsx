@@ -128,9 +128,7 @@ export function ArtifactReadingColumn({
     const abstract = paperExtraction?.metadata?.abstract;
     return (
       <div className="space-y-8">
-        <div className={cn("h-[78svh] min-h-[640px] overflow-hidden", insetSurfaceClass)}>
-          <PdfArtifactViewer url={payload.url} fileName={payload.fileName} />
-        </div>
+        <PdfArtifactViewer url={payload.url} />
         {abstract ? <AbstractSection abstract={abstract} /> : null}
       </div>
     );

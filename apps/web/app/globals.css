@@ -3,8 +3,6 @@
 @import "shadcn/tailwind.css";
 @import "@blocknote/react/style.css";
 @import "@blocknote/shadcn/style.css";
-@import "@react-pdf-viewer/core/lib/styles/index.css";
-@import "@react-pdf-viewer/default-layout/lib/styles/index.css";
 @import "./styles/blocknote-aqsha.css";
 
 @source "../node_modules/@blocknote/shadcn";
@@ -727,4 +725,69 @@
   100% {
     opacity: 0;
   }
+}
+
+/* PDF viewer (react-pdf) — flush, theme-aware pages with citation links. */
+.react-pdf__Document {
+  width: 100%;
+}
+
+.aqsha-pdf-page {
+  position: relative;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #ffffff;
+  box-shadow:
+    0 0 0 1px var(--border),
+    0 1px 3px hsl(0 0% 0% / 0.08);
+}
+
+.aqsha-pdf-page .react-pdf__Page {
+  background: transparent !important;
+}
+
+/* Follow the app theme: in dark mode invert the rendered canvas only, so the
+   transparent text layer and the annotation (citation) layer stay correct. */
+.dark .aqsha-pdf-page {
+  background: var(--card);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.dark .react-pdf__Page__canvas {
+  filter: invert(0.92) hue-rotate(180deg);
+}
+
+/* Tier-1 citations: the PDF's own annotation layer. External links (new tab)
+   read as sky; internal links (jump within the document) read as mint. */
+.react-pdf__Page__annotations .linkAnnotation > a {
+  border-radius: 3px;
+  transition:
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.react-pdf__Page__annotations .linkAnnotation > a[target] {
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--sky-foreground) 55%, transparent);
+}
+
+.react-pdf__Page__annotations .linkAnnotation > a:not([target]) {
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--mint) 60%, transparent);
+}
+
+.react-pdf__Page__annotations .linkAnnotation > a[target]:hover {
+  background-color: color-mix(in oklch, var(--sky-soft) 70%, transparent);
+}
+
+.react-pdf__Page__annotations .linkAnnotation > a:not([target]):hover {
+  background-color: color-mix(in oklch, var(--mint-soft) 70%, transparent);
+}
+
+/* Tier-2 fallback marks for PDFs with no embedded hyperlinks. */
+.aqsha-cite-token {
+  border-radius: 3px;
+  padding: 0 1px;
+  color: inherit;
+  background: color-mix(in oklch, var(--sky-soft) 75%, transparent);
+  pointer-events: auto;
+  cursor: pointer;
 }
