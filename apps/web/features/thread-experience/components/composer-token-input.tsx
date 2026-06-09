@@ -316,6 +316,14 @@ export function TokenizedPromptInput({
     if (document.activeElement === editor) {
       moveCaretToEnd(editor);
     }
+    // The placeholder is an absolute overlay; seeded pinned pills live inside the
+    // editor. Recompute emptiness here so the placeholder hides as soon as pills
+    // are rendered — otherwise it overlaps them while `value` is still "".
+    setIsEditorEmpty(
+      value.trim().length === 0 &&
+        !editorHasCommandChips(editor) &&
+        !editorHasContextChips(editor),
+    );
     if (onHeightChange) {
       onHeightChange(
         value.length === 0 &&
