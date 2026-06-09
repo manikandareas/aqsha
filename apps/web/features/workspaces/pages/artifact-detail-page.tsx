@@ -25,7 +25,6 @@ import {
 import {
   ArtifactDetailSkeleton,
   ArtifactHeaderActions,
-  ArtifactIndexingStatus,
   ArtifactMissingState,
   ArtifactReadingColumn,
   type ArtifactRenderPayload,
@@ -199,13 +198,6 @@ export function ArtifactDetailPage({
             </section>
           )}
         </div>
-
-        {ready && detail && activeRenderPayload ? (
-          <ArtifactIndexingStatus
-            status={detail.artifact.indexingStatus}
-            reason={detail.artifact.indexingFailureReason}
-          />
-        ) : null}
 
         {ready && detail ? (
           <DeleteArtifactDialog

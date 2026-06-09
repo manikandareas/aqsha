@@ -129,6 +129,10 @@ function ArtifactMetadataPanel({
         <div className="space-y-4">
           <PropertyRow label="Type" value={friendlyTypeLabel(payload.artifactType)} badge />
           <PropertyRow label="Added" value={addedLabel(artifact.source, artifact.createdAt)} />
+          <IndexStatusRow
+            status={artifact.indexingStatus}
+            reason={artifact.indexingFailureReason}
+          />
 
           {authors.length > 0 ? (
             <PropertyRow label="Authors" value={authors.join(", ")} />
@@ -309,6 +313,10 @@ export function MarkdownArtifactDetails({ artifact }: { artifact: ArtifactSideba
       <PopoverContent align="end" className="w-64 space-y-4">
         <PropertyRow label="Type" value="Markdown" badge />
         <PropertyRow label="Source" value={markdownSourceLabel(artifact.source)} />
+        <IndexStatusRow
+          status={artifact.indexingStatus}
+          reason={artifact.indexingFailureReason}
+        />
         <PropertyRow label="Created" value={formatDate(artifact.createdAt)} />
         <PropertyRow label="Updated" value={formatDate(artifact.updatedAt)} />
       </PopoverContent>
@@ -376,6 +384,45 @@ function StatusFailure({
         <RotateCcwIcon className="size-3.5" />
         Retry
       </Button>
+    </div>
+  );
+}
+
+function indexingDisplay(status?: "not_indexed" | "pending" | "ready" | "failed") {
+  switch (status) {
+    case "ready":
+      return { label: "Indexed", tone: "bg-mint-foreground" };
+    case "pending":
+      return { label: "Indexing", tone: "bg-lemon-foreground" };
+    case "failed":
+      return { label: "Indexing failed", tone: "bg-destructive" };
+    default:
+      return { label: "Not indexed", tone: "bg-muted-foreground/50" };
+  }
+}
+
+function IndexStatusRow({
+  status,
+  reason,
+}: {
+  status?: "not_indexed" | "pending" | "ready" | "failed";
+  reason?: string;
+}) {
+  const { label, tone } = indexingDisplay(status);
+  return (
+    <div>
+      <dt className="text-[12px] font-medium text-muted-foreground">Index</dt>
+      <dd className="mt-1.5 flex items-center gap-1.5 text-[13px] font-medium text-foreground">
+        {status === "pending" ? (
+          <Loader2Icon className="size-3.5 animate-spin text-muted-foreground" />
+        ) : (
+          <span className={cn("size-1.5 rounded-full", tone)} />
+        )}
+        {label}
+      </dd>
+      {status === "failed" && reason ? (
+        <p className="mt-1 text-[12px] leading-5 text-destructive">{reason}</p>
+      ) : null}
     </div>
   );
 }
