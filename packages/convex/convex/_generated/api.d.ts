@@ -72,6 +72,8 @@ import type * as billing_portal from "../billing/portal.js";
 import type * as billing_products from "../billing/products.js";
 import type * as billing_subscription from "../billing/subscription.js";
 import type * as billing_usage from "../billing/usage.js";
+import type * as billing_usageRollupBackfill from "../billing/usageRollupBackfill.js";
+import type * as billing_usageShape from "../billing/usageShape.js";
 import type * as billing_validators from "../billing/validators.js";
 import type * as crons from "../crons.js";
 import type * as explore from "../explore.js";
@@ -191,6 +193,8 @@ declare const fullApi: ApiFromModules<{
   "billing/products": typeof billing_products;
   "billing/subscription": typeof billing_subscription;
   "billing/usage": typeof billing_usage;
+  "billing/usageRollupBackfill": typeof billing_usageRollupBackfill;
+  "billing/usageShape": typeof billing_usageShape;
   "billing/validators": typeof billing_validators;
   crons: typeof crons;
   explore: typeof explore;

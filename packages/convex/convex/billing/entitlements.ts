@@ -25,6 +25,7 @@ import {
 } from "./catalog";
 import { getAdminBillingOverride } from "./admin";
 import { polar } from "./polar";
+import { emptyFeatureCounts, type UsageFeature } from "./usageShape";
 
 const featureValidator = v.union(
   v.literal("normal_chat"),
@@ -297,6 +298,13 @@ export async function consumeCredits(
     metadataJson: args.metadataJson,
     createdAt: now,
   });
+  await bumpUsageDailyRollup(ctx, {
+    ownerUserId: args.ownerUserId,
+    createdAt: now,
+    feature: args.feature,
+    credits: args.credits,
+    estimatedCostCents,
+  });
 
   return {
     ...entitlement,
@@ -362,6 +370,66 @@ export async function recordProviderUsage(
     estimatedCostCents,
     metadataJson: args.metadataJson,
     createdAt: now,
+  });
+  await bumpUsageDailyRollup(ctx, {
+    ownerUserId: args.ownerUserId,
+    createdAt: now,
+    feature: args.feature,
+    credits: args.credits,
+    estimatedCostCents,
+  });
+}
+
+// Returns the UTC calendar day ("YYYY-MM-DD") for an epoch-ms timestamp.
+export function utcDateString(epochMs: number): string {
+  return new Date(epochMs).toISOString().slice(0, 10);
+}
+
+// Atomically increments the per-(owner, UTC day) usage rollup for a single
+// ledger event. MUST be called in the same mutation/transaction as the
+// corresponding `providerUsageLedger` insert, with the same values, so the
+// rollup stays consistent with the ledger.
+export async function bumpUsageDailyRollup(
+  ctx: MutationCtx,
+  args: {
+    ownerUserId: string;
+    createdAt: number;
+    feature: UsageFeature;
+    credits: number;
+    estimatedCostCents: number;
+  },
+): Promise<void> {
+  const date = utcDateString(args.createdAt);
+  const existing = await ctx.db
+    .query("usageDailyRollup")
+    .withIndex("by_owner_date", (q) =>
+      q.eq("ownerUserId", args.ownerUserId).eq("date", date),
+    )
+    .unique();
+
+  if (existing) {
+    const featureCounts = {
+      ...existing.featureCounts,
+      [args.feature]: existing.featureCounts[args.feature] + 1,
+    };
+    await ctx.db.patch("usageDailyRollup", existing._id, {
+      credits: existing.credits + args.credits,
+      estimatedCostCents: existing.estimatedCostCents + args.estimatedCostCents,
+      eventCount: existing.eventCount + 1,
+      featureCounts,
+    });
+    return;
+  }
+
+  const featureCounts = emptyFeatureCounts();
+  featureCounts[args.feature] = 1;
+  await ctx.db.insert("usageDailyRollup", {
+    ownerUserId: args.ownerUserId,
+    date,
+    credits: args.credits,
+    estimatedCostCents: args.estimatedCostCents,
+    eventCount: 1,
+    featureCounts,
   });
 }
 

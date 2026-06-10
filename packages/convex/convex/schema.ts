@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { featureCountValidator } from "./billing/usageShape";
 import { explorePaperFields } from "./explore/validators";
 import { feedItemFields, feedProviderValidator } from "./feed/validators";
 
@@ -277,6 +278,20 @@ export default defineSchema(
     })
       .index("by_owner_created", ["ownerUserId", "createdAt"])
       .index("by_owner_feature_created", ["ownerUserId", "feature", "createdAt"]),
+    // Denormalized per-(owner, UTC day) usage rollup. Maintained atomically in
+    // the same transaction as each `providerUsageLedger` insert (see
+    // `bumpUsageDailyRollup`) so the usage `activity` query reads a bounded set
+    // of rows instead of scanning the full ledger. `date` is "YYYY-MM-DD" (UTC)
+    // which sorts lexicographically == chronologically, enabling string-range
+    // window reads on the `by_owner_date` index.
+    usageDailyRollup: defineTable({
+      ownerUserId: v.string(),
+      date: v.string(),
+      credits: v.number(),
+      estimatedCostCents: v.number(),
+      eventCount: v.number(),
+      featureCounts: featureCountValidator,
+    }).index("by_owner_date", ["ownerUserId", "date"]),
     messageCommands: defineTable({
       ownerUserId: v.string(),
       threadId: v.string(),
