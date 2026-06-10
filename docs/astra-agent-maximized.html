@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Astra Agent 2.0 — Audit & Rancangan Maksimalisasi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F5F7F3; --card:#FFFFFF; --card2:#FBFCFA; --ink:#1A222C; --mut:#56616D; --mut2:#8A95A1;
+  --line:#E2E7DF; --line2:#CBD3C6;
+  --verify:#0E7C5B; --verify-bg:#E7F3EE;
+  --warn:#A86E12; --warn-bg:#F8EFDC;
+  --crit:#B3402A; --crit-bg:#F8E7E2;
+  --info:#2B5FAD; --info-bg:#E8EFF9;
+  --side:#15231F; --side-txt:#D7E2DC; --side-mut:#7E938A;
+  --code-bg:#101C18; --code-txt:#D8E6DF;
+  --radius:12px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"Public Sans",-apple-system,sans-serif;font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased}
+a{color:var(--verify);text-decoration:none}
+a:hover{text-decoration:underline}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.85em;background:#EEF2EC;border:1px solid var(--line);padding:.06em .35em;border-radius:5px;color:#23433A;word-break:break-word}
+pre{background:var(--code-bg);color:var(--code-txt);border-radius:10px;padding:16px 18px;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:12.6px;line-height:1.6;margin:14px 0}
+pre code{background:none;border:none;padding:0;color:inherit;font-size:inherit}
+.cm{color:#6E8C80}.kw{color:#7FD9B5}.st{color:#E8C988}.fn{color:#9FC2EE}
+
+.layout{display:flex;align-items:flex-start}
+.sidebar{position:sticky;top:0;height:100vh;width:280px;min-width:280px;overflow-y:auto;padding:26px 18px 40px;background:var(--side);color:var(--side-txt);font-size:13px}
+.brand{font-family:"Fraunces",serif;font-size:19px;font-weight:700;letter-spacing:.2px;line-height:1.3;margin-bottom:4px}
+.brand .v{color:#6FD3AE}
+.brand-sub{color:var(--side-mut);font-size:11.5px;margin-bottom:22px;font-family:"IBM Plex Mono",monospace}
+.navgrp{margin:18px 0 6px;color:var(--side-mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.12em;font-family:"IBM Plex Mono",monospace}
+.sidebar a{display:block;color:var(--side-txt);padding:6px 10px;border-radius:7px;margin:1px 0}
+.sidebar a:hover{background:#1F352E;text-decoration:none}
+.sidebar a .n{color:#6FD3AE;font-family:"IBM Plex Mono",monospace;font-size:11px;margin-right:7px}
+
+main{flex:1;min-width:0;padding:48px 56px 120px;max-width:1060px;margin:0 auto}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--verify);margin-bottom:10px}
+h1{font-family:"Fraunces",serif;font-weight:600;font-size:40px;line-height:1.15;margin:0 0 14px;letter-spacing:-.01em}
+h2{font-family:"Fraunces",serif;font-weight:600;font-size:27px;margin:0 0 6px;letter-spacing:-.005em;scroll-margin-top:24px}
+h3{font-size:16.5px;font-weight:700;margin:26px 0 8px}
+h4{font-size:14px;font-weight:700;margin:18px 0 6px}
+.lede{font-size:17px;color:var(--mut);max-width:760px}
+section{margin:64px 0 0;padding-top:8px}
+.sec-eyebrow{display:flex;align-items:baseline;gap:12px;margin-bottom:6px}
+.sec-eyebrow .id{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--mut2);letter-spacing:.1em}
+.sec-sub{color:var(--mut);max-width:780px;margin:4px 0 22px}
+
+.stamp{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:99px;border:1.4px solid currentColor;white-space:nowrap}
+.stamp.crit{color:var(--crit);background:var(--crit-bg)}
+.stamp.high{color:var(--warn);background:var(--warn-bg)}
+.stamp.med{color:var(--info);background:var(--info-bg)}
+.stamp.ok{color:var(--verify);background:var(--verify-bg)}
+
+.statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:26px 0 8px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px}
+.stat .num{font-family:"Fraunces",serif;font-size:26px;font-weight:700;color:var(--ink)}
+.stat .lbl{font-size:12px;color:var(--mut)}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px 22px;margin:14px 0}
+.card.t-verify{border-left:4px solid var(--verify)}
+.card.t-warn{border-left:4px solid var(--warn)}
+.card.t-info{border-left:4px solid var(--info)}
+
+.finding{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 20px;margin:10px 0;display:grid;grid-template-columns:86px 1fr;gap:16px}
+.finding .fid{font-family:"IBM Plex Mono",monospace;font-size:12.5px;font-weight:600;color:var(--mut);padding-top:2px}
+.finding .fid .stamp{margin-top:8px;display:inline-flex}
+.finding h4{margin:0 0 4px;font-size:14.5px}
+.finding p{margin:4px 0;font-size:13.8px;color:#3B4651}
+.finding .fix{margin-top:8px;padding:9px 12px;background:var(--verify-bg);border-radius:8px;font-size:13.3px;color:#114B3B}
+.finding .fix b{color:#0B5A43}
+
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+th{text-align:left;font-family:"IBM Plex Mono",monospace;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);background:var(--card2);padding:10px 14px;border-bottom:1px solid var(--line)}
+td{padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:none}
+
+.arch{margin:18px 0;border:1px solid var(--line2);border-radius:var(--radius);overflow:hidden;background:var(--card)}
+.arch .row{display:grid;gap:10px;padding:12px 14px;border-bottom:1px dashed var(--line2)}
+.arch .row:last-child{border-bottom:none}
+.arch .lbl{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--mut2);margin-bottom:2px}
+.node{border-radius:9px;padding:9px 12px;font-size:12.6px;line-height:1.45;border:1px solid var(--line)}
+.node b{display:block;font-size:12.8px}
+.node small{color:var(--mut);font-size:11.5px}
+.n-client{background:#F2F5F0}
+.n-orch{background:var(--info-bg);border-color:#C6D6EE}
+.n-agent{background:#FFF;border-color:var(--line2)}
+.n-verify{background:var(--verify-bg);border-color:#BCDDD0}
+.n-sandbox{background:#10231D;color:#D8E6DF;border-color:#10231D}
+.n-sandbox small{color:#8FB5A6}
+.n-data{background:#FAF6EC;border-color:#E8DDC0}
+.cols-2{grid-template-columns:1fr 1fr}
+.cols-3{grid-template-columns:1fr 1fr 1fr}
+.cols-4{grid-template-columns:repeat(4,1fr)}
+
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0;font-size:12.8px}
+.flow .step{background:var(--card);border:1px solid var(--line2);border-radius:8px;padding:7px 11px}
+.flow .step.v{background:var(--verify-bg);border-color:#BCDDD0;font-weight:600;color:#0B5A43}
+.flow .arr{color:var(--mut2);font-weight:700}
+
+ul{padding-left:20px;margin:8px 0}
+li{margin:5px 0}
+.phase{display:grid;grid-template-columns:110px 1fr;gap:18px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;margin:10px 0}
+.phase .pid{font-family:"Fraunces",serif;font-weight:700;font-size:20px;color:var(--verify)}
+.phase .pid small{display:block;font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--mut2);font-weight:400;text-transform:uppercase;letter-spacing:.08em;margin-top:4px}
+.phase h4{margin:0 0 6px}
+.phase p,.phase li{font-size:13.6px}
+
+.kicker{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--mut2)}
+hr.div{border:none;border-top:1px solid var(--line2);margin:50px 0 0}
+.footer{margin-top:70px;color:var(--mut2);font-size:12px;font-family:"IBM Plex Mono",monospace}
+
+@media (max-width:920px){
+  .layout{display:block}
+  .sidebar{position:relative;height:auto;width:auto}
+  main{padding:30px 20px 80px}
+  .finding{grid-template-columns:1fr}
+  .cols-2,.cols-3,.cols-4{grid-template-columns:1fr}
+  .phase{grid-template-columns:1fr}
+  h1{font-size:30px}
+}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+  <div class="brand">Astra Agent <span class="v">2.0</span></div>
+  <div class="brand-sub">audit · rancangan · roadmap</div>
+  <div class="navgrp">Evaluasi</div>
+  <a href="#ringkasan"><span class="n">00</span>Ringkasan Eksekutif</a>
+  <a href="#kekuatan"><span class="n">01</span>Yang Sudah Benar</a>
+  <a href="#temuan"><span class="n">02</span>Temuan Audit</a>
+  <a href="#gap"><span class="n">03</span>Gap vs Tren 2026</a>
+  <div class="navgrp">Rancangan</div>
+  <a href="#arsitektur"><span class="n">04</span>Arsitektur Target</a>
+  <a href="#sandbox"><span class="n">05</span>Lapisan Sandbox</a>
+  <a href="#verifikasi"><span class="n">06</span>Verification Engine</a>
+  <a href="#multiagent"><span class="n">07</span>Multi-Agent Deep Research</a>
+  <a href="#skills"><span class="n">08</span>Lapisan Agent Skills</a>
+  <a href="#interop"><span class="n">09</span>Interoperabilitas (MCP)</a>
+  <a href="#keandalan"><span class="n">10</span>Keandalan &amp; Tata Kelola</a>
+  <div class="navgrp">Eksekusi</div>
+  <a href="#skema"><span class="n">11</span>Perubahan Skema</a>
+  <a href="#roadmap"><span class="n">12</span>Roadmap Implementasi</a>
+  <a href="#stack"><span class="n">13</span>Keputusan Tech Stack</a>
+</nav>
+<main>
+
+<div class="eyebrow">Aqsha · Platform Riset Akademik · Convex + @convex-dev/agent</div>
+<h1>Dari Agen yang Menghasilkan,<br>Menjadi Agen yang <em style="color:var(--verify);font-style:normal">Memverifikasi</em></h1>
+<p class="lede">Audit menyeluruh atas subsistem Astra Agent saat ini (12 subsistem, ~10.6k LOC) dan rancangan detail untuk memaksimalkannya — menjadikan <b>lapisan verifikasi</b> (statistik via sandbox, sitasi 4-langkah, klaim level-span) sebagai diferensiasi inti, selaras dengan tren AI agent 2026 dan positioning integritas riset &amp; reproduktibilitas.</p>
+
+<div class="statgrid">
+  <div class="stat"><div class="num">21</div><div class="lbl">temuan audit diprioritaskan (dari 109 gotcha)</div></div>
+  <div class="stat"><div class="num">4</div><div class="lbl">temuan kritis yang harus diperbaiki sebelum fitur baru</div></div>
+  <div class="stat"><div class="num">4</div><div class="lbl">lapisan kapabilitas baru: sandbox, verifikasi, multi-agent, agent skills</div></div>
+  <div class="stat"><div class="num">5</div><div class="lbl">fase roadmap, semuanya di atas stack Convex eksisting</div></div>
+</div>
+
+<!-- ============ 00 RINGKASAN ============ -->
+<section id="ringkasan">
+<div class="sec-eyebrow"><span class="id">00</span><h2>Ringkasan Eksekutif</h2></div>
+<p class="sec-sub">Tiga kesimpulan utama dari evaluasi, yang menjadi dasar seluruh rancangan di bawah.</p>
+
+<div class="card t-verify">
+<h4>1 · Fondasinya sehat — jangan ganti, perkuat.</h4>
+<p>Arsitektur saat ini (dua agen Astra di atas satu store <code>components.agent</code>, tool diinjeksi per-call, HITL native via tool parts, deep research sebagai durable workflow, schema sidecar yang dipartisi <code>ownerUserId</code>) adalah pola yang benar untuk Convex. Sudah ada benih verifikasi yang serius: <code>citationChecks</code>, <code>auditClaims</code> dua-tahap, scoring kualitas+reliabilitas dua-poros, dan gate kesiapan bukti deterministik. Rancangan ini <b>tidak mengganti</b> arsitektur — ia menambah tiga lapisan dan memperbaiki 21 titik rapuh.</p>
+</div>
+<div class="card t-warn">
+<h4>2 · Ada hutang teknis yang akan meledak saat kapabilitas bertambah.</h4>
+<p>Empat temuan kritis (gating <code>executeArtifact</code> yang bergantung pada satu mekanisme implisit, billing yang diturunkan dari string model, deteksi sukses deep-research via pencocokan string, dan kredit yang dikonsumsi sebelum cek cache) semuanya jenis bug yang <i>diam-diam</i> salah — bukan crash. Begitu lapisan sandbox dan multi-agent menambah jumlah jalur eksekusi, biaya memperbaikinya berlipat. <b>Fase 0 roadmap adalah melunasi hutang ini dulu.</b></p>
+</div>
+<div class="card t-info">
+<h4>3 · Tren 2026 menunjuk persis ke arah positioning Aqsha.</h4>
+<p>Mayoritas tren mendorong agen <i>menghasilkan lebih banyak</i> — dan memperburuk krisis integritas (sitasi fabrikasi di NeurIPS 2025, peer review tanpa verifikasi sitasi sistematis). Kebutuhan yang meledak justru <b>verifikasi</b>. Astra sudah punya 60% bahan bakunya. Yang ditambahkan rancangan ini: (a) <b>sandbox Daytona</b> sebagai instrumen komputasi (statcheck, GRIM/GRIMMER, power analysis, replikasi, metafor), (b) <b>verifikasi sitasi 4-langkah</b>, (c) <b>orkestrasi multi-agent</b> di deep research, (d) <b>Agent Skills</b> (standar terbuka agentskills.io) sebagai lapisan pengetahuan prosedural yang membuat agen berjalan otonom per-domain tanpa hardcode prompt, (e) ekspos sandbox sebagai <b>MCP server</b> agar interoperable.</p>
+</div>
+
+<h3>Peta perubahan dalam satu kalimat per lapisan</h3>
+<table>
+<tr><th style="width:170px">Lapisan</th><th>Saat ini</th><th>Target</th></tr>
+<tr><td><b>Chat inline</b></td><td>4 tool riset + HITL, citation harvest post-hoc</td><td>+ tool <code>verifyStatistics</code> &amp; <code>runComputation</code> (sandbox, smart-routed), counter sitasi per-turn</td></tr>
+<tr><td><b>Deep research</b></td><td>Loop monolitik 1 action: discover→read→assess→synthesize→audit</td><td>Pipeline multi-agent: tahap <b>compute/verify</b> setelah retrieval; subagen literatur / statistik / sitasi / penulis sebagai workflow step paralel</td></tr>
+<tr><td><b>Verifikasi</b></td><td>auditClaims semantik (LLM lite) + citationChecks</td><td>Verification Engine terpadu: statistik (sandbox) + sitasi 4-langkah + klaim span-level; hasil = <code>verificationReport</code> per artifact</td></tr>
+<tr><td><b>Komputasi</b></td><td>Tidak ada</td><td>Daytona ephemeral, hydrasi dari Convex storage, image Python+R, pola Node action + Workflow</td></tr>
+<tr><td><b>Pengetahuan prosedural</b></td><td>Hardcode: SHARED_INSTRUCTIONS, buildPrompt slash command, prompt internal deep research</td><td>Agent Skills (SKILL.md, progressive disclosure 3-tier): metodologi riset, paket domain (medis, hukum, ekonomi), gaya sitasi, resep verifikasi — dapat ditambah tanpa deploy</td></tr>
+<tr><td><b>Interop</b></td><td>Tidak ada</td><td>MCP server (sandbox + verifikasi) via Convex HTTP actions; A2A ditunda sampai ada kebutuhan kolaborasi eksternal</td></tr>
+</table>
+</section>
+
+<!-- ============ 01 KEKUATAN ============ -->
+<section id="kekuatan">
+<div class="sec-eyebrow"><span class="id">01</span><h2>Yang Sudah Benar (dan Wajib Dipertahankan)</h2></div>
+<p class="sec-sub">Audit bukan hanya mencari masalah. Pola-pola ini adalah aset; rancangan baru sengaja dibangun di atasnya, bukan menggantinya.</p>
+
+<table>
+<tr><th style="width:240px">Pola</th><th>Mengapa ini benar</th></tr>
+<tr><td><b>Agen sebagai shell tipis</b> — tool diinjeksi per <code>streamText</code> call, bukan di konstruktor</td><td>Memungkinkan permukaan tool berbeda per giliran (turn pertama menahan <code>executeArtifact</code>; giliran deep hanya <code>startDeepResearch</code>). Ini fondasi sempurna untuk menambah tool sandbox dengan smart routing tanpa menyentuh definisi agen.</td></tr>
+<tr><td><b>HITL native via tool parts</b> — tanpa FSM terpisah</td><td><code>askUser</code> tanpa execute + <code>needsApproval</code> + derivasi pending dari message stream adalah pola idiomatik @convex-dev/agent. Tool sandbox yang mahal/berisiko tinggal memakai mekanisme approval yang sama.</td></tr>
+<tr><td><b>Deep research sebagai durable workflow</b> dengan 5 step retryable</td><td>Persis pondasi yang dibutuhkan untuk job sandbox panjang (batas durasi action Convex) dan untuk dekomposisi multi-agent: tinggal menambah step, bukan membangun orkestrator baru.</td></tr>
+<tr><td><b>Scoring dua-poros terpisah</b> — kualitas konten deterministik vs reliabilitas domain statistik</td><td>Keputusan desain yang matang (reproducible vs akumulatif). Verification Engine memakai pola yang sama: hasil komputasi deterministik vs penilaian LLM dipisah tegas.</td></tr>
+<tr><td><b>Gate kesiapan bukti deterministik</b> di samping penilaian sufficiency LLM</td><td>"LLM boleh menilai, tapi lantai bukti dijaga aturan keras" — prinsip ini diangkat menjadi prinsip umum seluruh Verification Engine.</td></tr>
+<tr><td><b>Schema sidecar dipartisi <code>ownerUserId</code></b>, pesan asli di komponen</td><td>Isolasi per-user by-convention yang konsisten. Tabel baru (<code>sandboxRuns</code>, <code>computationChecks</code>) mengikuti konvensi yang sama.</td></tr>
+<tr><td><b><code>citationChecks</code> + <code>researchExtracts</code> + audit klaim dua-tahap</b></td><td>Sudah 60% dari "verifikasi level-klaim / Agentic RAG" yang jadi tren 2026. Tinggal di-upgrade (model, paralelisasi, sumber bukti komputasional), bukan dibangun dari nol.</td></tr>
+<tr><td><b>Gerbang biaya berlapis</b> — kredit plan → rate limit per-user → katup global</td><td>Struktur yang tepat untuk menambah fitur mahal (sandbox) — tinggal menambah feature <code>sandbox_compute</code> ke enum dan katalog kredit.</td></tr>
+</table>
+</section>
+
+<!-- ============ 02 TEMUAN ============ -->
+<section id="temuan">
+<div class="sec-eyebrow"><span class="id">02</span><h2>Temuan Audit Berperingkat</h2></div>
+<p class="sec-sub">21 temuan terpenting dari ~109 gotcha yang terdokumentasi, ditambah analisis lintas-subsistem. Setiap temuan memuat rekomendasi perbaikan konkret. Format ID: <code>AUD-xx</code>, dirujuk kembali oleh roadmap.</p>
+
+<h3>Kritis — perbaiki sebelum menambah kapabilitas apa pun</h3>
+
+<div class="finding">
+  <div class="fid">AUD-01<br><span class="stamp crit">Kritis</span></div>
+  <div>
+    <h4>Gating <code>executeArtifact</code> bergantung pada satu mekanisme implisit (<code>activeTools</code>)</h4>
+    <p><code>executeArtifact</code> tidak punya <code>needsApproval</code>; satu-satunya penghalang tulis-tanpa-persetujuan adalah daftar <code>activeTools</code> di <code>runInlineGeneration</code>. Komentar kode malah menyebut <code>prepareStep</code> yang tidak pernah ada — call site baru (mis. jalur sandbox/multi-agent baru) yang lupa meneruskan <code>activeTools</code> akan membuka tulis artifact satu-tembakan tanpa propose yang disetujui.</p>
+    <div class="fix"><b>Perbaikan:</b> defense-in-depth — di dalam <code>executeArtifact.execute</code>, validasi server-side bahwa ada <code>proposeArtifact</code> ber-status approved pada step sebelumnya di thread yang sama (atau token approval yang dipersist saat approve). <code>activeTools</code> tetap dipakai sebagai UX-gate, tapi bukan satu-satunya gate. Hapus/koreksi komentar <code>prepareStep</code>.</div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="fid">AUD-02<br><span class="stamp crit">Kritis</span></div>
+  <div>
+    <h4>Fitur billing diturunkan dari string model, bukan dari konteks run</h4>
+    <p><code>recordUsage</code> menentukan <code>pro_chat</code> vs <code>normal_chat</code> dengan <code>model === CHAT_PRO_MODEL</code>. Jika env lite dan pro pernah diset ke model yang sama (sangat mungkin saat eksperimen model), seluruh penggunaan pro tertagih sebagai normal — tanpa error apa pun. Usage handler memang tidak menerima <code>agentKind</code>, tapi itu pilihan yang bisa diubah.</p>
+    <div class="fix"><b>Perbaikan:</b> teruskan <code>agentKind</code> (dan kelak <code>feature</code> eksplisit seperti <code>sandbox_compute</code>) melalui closure <code>usageHandler</code> per-call — handler sudah dibuat per call di <code>runInlineGeneration</code>, jadi tinggal menangkap variabel. String model hanya untuk atribusi, bukan keputusan billing.</div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="fid">AUD-03<br><span class="stamp crit">Kritis</span></div>
+  <div>
+    <h4>Deteksi sukses deep-research via pencocokan string output tool</h4>
+    <p>Cabang deep di <code>runInlineGeneration</code> memindai hasil tool untuk <code>output.status === "deep_research_started"</code>. Jika bentuk return <code>startDeepResearch</code> berubah, workflow tetap mulai sementara messages.ts menandai run selesai dan melepas composer — <i>double-completion</i> yang sukar didiagnosis.</p>
+    <div class="fix"><b>Perbaikan:</b> ekstrak konstanta + tipe return bersama (<code>DeepResearchStartedResult</code>) di satu modul yang diimpor kedua sisi; tambahkan type guard, dan unit test kontrak yang gagal saat bentuknya berubah. Pola sama dipakai untuk hasil tool sandbox (<code>SandboxRunResult</code>).</div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="fid">AUD-04<br><span class="stamp crit">Kritis</span></div>
+  <div>
+    <h4>Kredit &amp; token rate-limit dikonsumsi <i>sebelum</i> cek cache provider</h4>
+    <p><code>limitExternal</code> berjalan di awal fungsi, sebelum <code>readCachedCandidates</code> — cache hit tetap menagih kredit dan membakar bucket 20/menit. Pada deep research yang memanggil puluhan lookup per ronde, ini menggandakan biaya pengguna dan bisa memblokir run pada data yang sebenarnya sudah ada.</p>
+    <div class="fix"><b>Perbaikan:</b> pindahkan urutan menjadi <i>cache read → (miss) → gate → fetch → cache write</i>. Bila metering per-permintaan memang diinginkan, pisahkan: rate-limit tetap di depan (murah), konsumsi kredit hanya pada cache miss, atau tagih tarif "cached" yang lebih rendah lewat <code>estimateCredits</code>.</div>
+  </div>
+</div>
+
+<h3>Tinggi — sumber bug nyata atau penghambat rancangan baru</h3>
+
+<div class="finding">
+  <div class="fid">AUD-05<br><span class="stamp high">Tinggi</span></div>
+  <div>
+    <h4>Citation counter tidak diinjeksi pada normal chat — nomor sitasi bisa tabrakan dalam satu giliran</h4>
+    <p><code>requireCitationCounter</code> selalu jatuh ke counter baru per tool call, sehingga dua panggilan <code>searchWeb</code> + <code>searchArxiv</code> sama-sama mulai dari [1]. Rekonsiliasi post-hoc di <code>persistCited</code> mendedup berdasarkan <code>sourceKey</code>, tapi marker <code>[1]</code> di teks model menjadi ambigu — menunjuk dua sumber berbeda.</p>
+    <div class="fix"><b>Perbaikan:</b> buat satu <code>createCitationCounter()</code> per giliran di <code>runInlineGeneration</code> dan injeksikan ke ctx semua tool riset (field <code>citationCounter</code> sudah ada di <code>AqshaToolCtx</code> — tinggal diisi). Nomor jadi unik se-giliran; persistCited tak perlu menebak.</div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="fid">AUD-06<br><span class="stamp high">Tinggi</span></div>
+  <div>
+    <h4>Tiga daftar nama tool HITL disinkronkan manual (server, client, instruksi)</h4>
+    <p><code>HITL_TOOL_NAMES</code> di messages.ts, <code>hitl-parts.ts</code> di client, dan teks instruksi runtime harus identik. Drift diam-diam merusak deteksi pause atau gating — dan lapisan sandbox akan menambah tool ber-approval baru ke ketiganya.</p>
+    <div class="fix"><b>Perbaikan:</b> satu konstanta di package shared (<code>@aqsha/convex</code> sudah jadi dependensi web) yang diimpor server &amp; client; instruksi runtime digenerate dari konstanta yang sama saat build instruksi.</div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="fid">AUD-07<br><span class="stamp high">Tinggi</span></div>
+  <div>
+    <h4>Run ber-status <code>waiting</code> tidak dianggap aktif — send baru lolos saat HITL menggantung</h4>
+    <p><code>hasActiveReplyRun</code> hanya menghitung <code>queued|running</code>. Pengguna bisa mengirim pesan baru saat approval menggantung; resume kemudian berebut state dengan run baru. Ditambah scan hanya 8 run terakhir, run aktif bisa terlewat pada thread sibuk.</p>
+    <div class="fix"><b>Perbaikan:</b> sertakan <code>waiting</code> dalam definisi aktif (UI sudah memblokir composer via <code>hitlBlocking</code>, jadikan konsisten di server), atau definisikan kebijakan eksplisit "send baru = auto-deny pending HITL". Ganti scan take(8) dengan indeks <code>by_owner_thread_status</code>.</div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="fid">AUD-08<br><span class="stamp high">Tinggi</span></div>
+  <div>
+    <h4>Jalur resume HITL tidak mendapat konteks RAG segar</h4>
+    <p>RAG hanya dibangun saat <code>prompt</code> dan <code>visiblePrompt</code> tersedia; <code>resumeGeneration</code> tidak meneruskan keduanya, sehingga giliran setelah jawaban askUser kehilangan konteks dokumen — padahal jawaban pengguna sering kali justru menentukan dokumen mana yang relevan.</p>
+    <div class="fix"><b>Perbaikan:</b> pada resume, bangun query RAG dari jawaban HITL terakhir + pesan user terakhir (keduanya sudah ada di message store), lalu prepend seperti jalur normal.</div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="fid">AUD-09<br><span class="stamp high">Tinggi</span></div>
+  <div>
+    <h4>Kandidat "Provider unavailable" bisa dikutip model sebagai sumber</h4>
+    <p>Kegagalan provider dinormalisasi menjadi kandidat weak bertitel "Provider unavailable" dengan pesan error di locator/snippet. Untuk searchWeb ini memicu fallback Jina (bagus), tapi untuk arXiv/DOI kandidat sintetis itu masuk ke daftar yang model bisa kutip — pesan error bocor sebagai "sumber".</p>
+    <div class="fix"><b>Perbaikan:</b> saring kandidat <code>providerFailureReason()</code> sebelum <code>numberCandidates</code> di jalur tool; kembalikan ke model sebagai pesan status terstruktur (<code>{ok:false, reason}</code>), bukan sebagai kandidat. (Deep loop sudah menyaringnya — samakan perilaku.)</div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="fid">AUD-10<br><span class="stamp high">Tinggi</span></div>
+  <div>
+    <h4>Verifikasi klaim memakai model lite, sekuensial, maksimal 16 klaim</h4>
+    <p>Justru pada langkah yang menjadi nilai jual platform (audit klaim), semua panggilan LLM hardcode <code>DEEP_LITE_MODEL</code> dan berjalan satu-per-satu dalam for-loop. Run pro tidak benar-benar "pro" di tempat yang paling penting, dan latensi audit linear terhadap jumlah klaim.</p>
+    <div class="fix"><b>Perbaikan:</b> (a) verifikasi klaim memakai <code>deepModelForAgent(agentKind)</code> minimal untuk klasifikasi <code>contradicted/unsupported</code>; (b) batch paralel dengan <code>Promise.all</code> ber-konkurensi terbatas (rate limit aman karena ini panggilan LLM, bukan provider eksternal); (c) jadikan cap 16 konfigurable per-tier.</div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="fid">AUD-11<br><span class="stamp high">Tinggi</span></div>
+  <div>
+    <h4><code>researchRuns</code> adalah referensi tabel menggantung di union <code>runId</code></h4>
+    <p><code>v.id("researchRuns")</code> dirujuk di banyak tabel padahal tabelnya tidak didefinisikan — validator yang tidak pernah bisa terpenuhi, membingungkan pembaca skema dan tooling.</p>
+    <div class="fix"><b>Perbaikan:</b> hapus dari union (migrasi aman: tidak ada baris yang mungkin memuatnya) atau definisikan tabelnya bila memang reserved. Sekalian konsolidasikan enum duplikat <code>partially_supported|partial</code> di <code>citationChecks.support</code> dengan normalisasi saat tulis.</div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="fid">AUD-12<br><span class="stamp high">Tinggi</span></div>
+  <div>
+    <h4>Billing deep research flat &amp; estimasi token len/4 — keduanya terlepas dari biaya nyata</h4>
+    <p>Run deep ditagih flat 120/60 kredit berapapun ronde aktualnya; estimasi token <code>len/4</code> dipakai untuk gate kredit dan cek globalTokenUsage (yang konsumsinya advisory). Saat sandbox menambah dimensi biaya (menit compute), model flat semakin tidak akurat.</p>
+    <div class="fix"><b>Perbaikan:</b> tetap flat di muka (UX yang baik), tapi tambahkan <i>rekonsiliasi</i>: catat biaya aktual (token + panggilan provider + menit sandbox) ke <code>providerUsageLedger</code> per run, dan kalibrasi tarif flat dari data rollup berkala. Estimasi token diganti tokenizer ringan (mis. heuristik per-bahasa atau <code>tiktoken</code> approx di mutation tidak bisa — cukup kalibrasi konstanta dari data ledger).</div>
+  </div>
+</div>
+
+<h3>Sedang — perbaiki saat menyentuh modul terkait</h3>
+
+<div class="finding">
+  <div class="fid">AUD-13<br><span class="stamp med">Sedang</span></div>
+  <div>
+    <h4>Hasil kosong di-cache 24 jam</h4>
+    <p>Status <code>empty</code> dan <code>ready</code> sama-sama TTL 24h — kueri yang kebetulan nihil tidak dicoba ulang sehari penuh meski korpus berubah (arXiv terbit harian).</p>
+    <div class="fix"><b>Perbaikan:</b> TTL bertingkat: <code>ready</code> 24h, <code>empty</code> 1–2h, <code>failed</code> 10–15m.</div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="fid">AUD-14<br><span class="stamp med">Sedang</span></div>
+  <div>
+    <h4>arXiv global 1 req/3s menjadi bottleneck lintas-user</h4>
+    <p>Etiket arXiv benar dihormati, tapi bucket fixed-window global membuat burst dua pengguna saling memblokir dengan error "rate limited" alih-alih antre.</p>
+    <div class="fix"><b>Perbaikan:</b> antrekan, jangan tolak — bungkus panggilan arXiv dalam work queue kecil (komponen <code>@convex-dev/workpool</code> atau scheduler retry dengan backoff) sehingga pengguna mengalami latensi, bukan kegagalan. Prioritaskan OpenAlex/Crossref untuk metadata yang sama bila tersedia.</div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="fid">AUD-15<br><span class="stamp med">Sedang</span></div>
+  <div>
+    <h4>Lantai kesiapan bukti tinggi → banyak run berakhir <code>budget_exhausted</code>/partial</h4>
+    <p>Early-stop butuh ≥10 sumber readable, ≥8 extract, ≥4 domain, ≥3 bucket. Untuk topik sempit (lazim di riset akademik) lantai ini sulit dicapai dalam 2 ronde lite — run lite hampir selalu "partial".</p>
+    <div class="fix"><b>Perbaikan:</b> skala lantai terhadap tier dan terhadap <code>sufficiencyCriteria</code> rencana (mis. lite: 6/5/3/2). Tampilkan ke pengguna kenapa partial — lantai mana yang belum tercapai (datanya sudah ada di <code>assessEvidenceReadiness</code>).</div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="fid">AUD-16<br><span class="stamp med">Sedang</span></div>
+  <div>
+    <h4>Dua sinyal blokir composer (run status vs <code>hitlBlocking</code> turunan client)</h4>
+    <p>Saat pause HITL, thread sidecar tetap di-<code>idle</code>-kan dan blokir hanya dari derivasi part di client. Bila string state part berubah versi, composer bisa macet terbuka/tertutup tanpa jejak server.</p>
+    <div class="fix"><b>Perbaikan:</b> tambah status sidecar <code>waiting_hitl</code> yang diset bersama <code>completeInlineRun(keepWaiting)</code>; client memakai OR dari kedua sinyal. Sekaligus menyelesaikan AUD-07 secara konsisten.</div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="fid">AUD-17<br><span class="stamp med">Sedang</span></div>
+  <div>
+    <h4>Konteks prompt double-prepend tanpa anggaran gabungan</h4>
+    <p>RAG (6k) + bodi dokumen (16k) + manifest bersifat aditif dan urutan finalnya (<code>retrieved → document → "User message:"</code>) tidak pernah dievaluasi sebagai satu anggaran. Pada model context-window kecil, prompt bisa bengkak diam-diam; dan konten RAG bisa duplikat dengan bodi dokumen yang sama.</p>
+    <div class="fix"><b>Perbaikan:</b> satu <i>context assembler</i> dengan anggaran total (mis. 20k char), dedup chunk RAG terhadap artifact yang bodinya sudah disertakan penuh, dan label blok yang konsisten. Ini juga tempat menyuntikkan blok <code>&lt;computation_context&gt;</code> hasil sandbox nanti.</div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="fid">AUD-18<br><span class="stamp med">Sedang</span></div>
+  <div>
+    <h4>Jalur error composer tidak merestorasi konten; startThread tanpa optimistic echo</h4>
+    <p>Catch generik (error jaringan pasca-clear) menghilangkan teks yang diketik; pesan pertama thread baru tidak punya echo instan.</p>
+    <div class="fix"><b>Perbaikan:</b> panggil <code>restoreComposerContentAfterBlockedSend</code> juga di catch; untuk startThread, render echo lokal sementara sampai navigasi + subscription siap.</div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="fid">AUD-19<br><span class="stamp med">Sedang</span></div>
+  <div>
+    <h4>Kapabilitas yang sudah dibayar tapi tidak dipakai</h4>
+    <p><code>evidenceStrength</code> dipersist tapi tak dirender; <code>planResearch</code> action paralel/legacy tak dipakai jalur live; reason <code>duplicate</code> di SourceQuality mati; <code>approveTool.workspaceId</code> diterima tapi tidak diinjeksikan ("Phase 2.3").</p>
+    <div class="fix"><b>Perbaikan:</b> render badge evidenceStrength di panel sumber (murah, menambah persepsi rigor); hapus <code>planResearch</code> &amp; reason mati; selesaikan atau cabut parameter workspaceId.</div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="fid">AUD-20<br><span class="stamp med">Sedang</span></div>
+  <div>
+    <h4>Pembatalan deep research hanya dicek di batas ronde</h4>
+    <p><code>ensureNotCanceled</code> dicek di awal ronde/step — cancel di tengah fan-out discovery/read panjang tidak menghentikan apa pun sampai checkpoint berikutnya (biaya terus berjalan).</p>
+    <div class="fix"><b>Perbaikan:</b> cek pembatalan juga sebelum setiap fan-out provider dan sebelum setiap batch read; sandbox runner wajib menerima sinyal cancel (hapus sandbox = stop biaya).</div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="fid">AUD-21<br><span class="stamp med">Sedang</span></div>
+  <div>
+    <h4>Duplikasi kecil yang menumpuk</h4>
+    <p><code>USER_AGENT</code>/<code>userAgent()</code> duplikat verbatim di dua modul; mention markers harus mirror manual dengan <code>context-refs.ts</code>; sentinel "Thread baru" magic-string di 4 tempat.</p>
+    <div class="fix"><b>Perbaikan:</b> konsolidasikan ke modul konstanta bersama (<code>shared/constants.ts</code>) — sekali jalan bersama AUD-06.</div>
+  </div>
+</div>
+</section>
+
+<!-- ============ 03 GAP ============ -->
+<section id="gap">
+<div class="sec-eyebrow"><span class="id">03</span><h2>Kesiapan terhadap Tren AI Agent 2026</h2></div>
+<p class="sec-sub">Pemetaan jujur: mana tren yang sudah dijawab arsitektur saat ini, mana yang menjadi gap, dan mana yang sengaja <i>tidak</i> dikejar.</p>
+
+<table>
+<tr><th style="width:215px">Tren 2026</th><th style="width:110px">Status</th><th>Penilaian &amp; arah</th></tr>
+<tr><td><b>Keandalan &amp; tata kelola</b> — guardrail deterministik, verifikasi level-span, Agentic RAG, manusia sebagai supervisor</td><td><span class="stamp ok">Terdepan</span></td><td>Ini kekuatan terbesar Astra saat ini: HITL native, gate kesiapan deterministik, citationChecks, revisi klaim tak terdukung. Rancangan memperdalamnya (Verification Engine, §06) — bukan mengejar dari belakang.</td></tr>
+<tr><td><b>Krisis integritas sitasi</b> — verifikasi sitasi sistematis</td><td><span class="stamp med">Parsial</span></td><td>citationChecks memverifikasi <i>klaim terhadap sumber yang dibaca</i>, tetapi belum memverifikasi <i>sitasi itu sendiri</i> (eksistensi, konsistensi metadata, validitas DOI/arXiv). Provider Crossref/OpenAlex/arXiv sudah ada — verifikasi 4-langkah adalah komposisi dari yang sudah dibangun. <b>Quick win terbesar.</b></td></tr>
+<tr><td><b>AI scientist / komputasi loop-tertutup</b> — Virtual Lab, Kosmos, self-driving labs</td><td><span class="stamp crit">Gap</span></td><td>Astra murni retrieval+sintesis; tidak bisa menghitung apa pun. Lapisan sandbox (§05) menutup gap ini dengan prinsip self-driving labs: <i>validasi &amp; reproduktibilitas di atas efisiensi murni</i> — bukan IDE generik.</td></tr>
+<tr><td><b>Multi-agent orchestration</b></td><td><span class="stamp high">Parsial</span></td><td>Deep research sudah terdekomposisi jadi step durable, tapi semua "peran" hidup dalam satu action <code>researchLoop</code> monolitik (~3.2k LOC dalam satu modul). §07 mendekomposisinya menjadi subagen-sebagai-workflow-step — memakai Convex Workflow yang sudah terpasang, bukan framework orkestrasi baru.</td></tr>
+<tr><td><b>MCP</b> — standar akses tool/data</td><td><span class="stamp crit">Gap</span></td><td>Tidak ada permukaan MCP. §09 mengekspos sandbox + verifikasi sebagai MCP server via Convex HTTP actions; juga membuka jalan tool eksternal (mis. cloud lab, manajer referensi) dikonsumsi sebagai MCP client.</td></tr>
+<tr><td><b>Agent Skills</b> — standar terbuka pengetahuan prosedural (agentskills.io, dirilis Anthropic Des 2025, diadopsi 40+ klien)</td><td><span class="stamp crit">Gap</span></td><td>Semua pengetahuan prosedural Astra (instruksi agen, prompt slash command, metodologi deep research) hardcode di kode — menambah domain baru = deploy baru. §08 mengimplementasikan runtime Skills di Convex: katalog → aktivasi → resource on-demand; skill domain (medis/hukum/ekonomi) membuat agen otonom memilih metodologi yang tepat. Komplementer dengan MCP: <i>MCP memberi akses tool, Skills mengajarkan cara memakainya</i>.</td></tr>
+<tr><td><b>A2A</b> — koordinasi antar-agen</td><td><span class="stamp med">Ditunda sadar</span></td><td>Belum ada kebutuhan kolaborasi dengan agen eksternal. Keputusan: rancang antarmuka subagen internal agar <i>kompatibel secara konsep</i> dengan Agent Card (deskripsi kapabilitas + kontrak tugas), adopsi protokolnya nanti bila kebutuhan muncul. ACP/UCP/WebMCP: tidak relevan.</td></tr>
+</table>
+
+<div class="card t-verify">
+<h4>Tesis strategis</h4>
+<p>Saat 40% aplikasi enterprise menyematkan agen (Gartner, akhir 2026), volume keluaran agen meledak — dan bersamanya volume klaim &amp; sitasi yang tidak terverifikasi. Posisi Aqsha bukan "agen riset yang lebih cepat", melainkan <b>agen riset yang keluarannya sudah tersaring kualitasnya</b>: setiap laporan membawa bukti komputasi yang bisa direproduksi, sitasi yang tervalidasi 4 langkah, dan klaim yang teraudit. Itu produk yang tren 2026 ciptakan permintaannya, dan kompetitor generik tidak punya infrastrukturnya.</p>
+</div>
+</section>
+
+<!-- ============ 04 ARSITEKTUR ============ -->
+<section id="arsitektur">
+<div class="sec-eyebrow"><span class="id">04</span><h2>Arsitektur Target</h2></div>
+<p class="sec-sub">Semua yang berwarna <b style="color:var(--verify)">hijau</b> dan <b>gelap</b> adalah lapisan baru; sisanya adalah komponen eksisting yang dipertahankan. Tidak ada layanan eksternal baru selain Daytona — semuanya hidup di dalam Convex.</p>
+
+<div class="arch">
+  <div class="row"><div><div class="lbl">Client — apps/web</div></div>
+    <div class="row cols-3" style="padding:0;border:none">
+      <div class="node n-client"><b>Composer</b><small>lite / pro / deep + @mention + perintah</small></div>
+      <div class="node n-client"><b>Streaming + kartu HITL</b><small>useUIMessages, approval, askUser</small></div>
+      <div class="node n-client"><b>Panel Verifikasi <span class="stamp ok" style="font-size:9px;padding:1px 6px">BARU</span></b><small>verificationReport, badge integritas, log sandbox</small></div>
+    </div>
+  </div>
+  <div class="row"><div><div class="lbl">Orkestrasi — agent/messages.ts + smart router</div></div>
+    <div class="row cols-3" style="padding:0;border:none">
+      <div class="node n-orch"><b>send / startThread</b><small>kuota → simpan → jadwalkan</small></div>
+      <div class="node n-orch"><b>runInlineGeneration</b><small>tools per-call + activeTools + guard server-side (AUD-01)</small></div>
+      <div class="node n-orch"><b>Compute Router <span class="stamp ok" style="font-size:9px;padding:1px 6px">BARU</span></b><small>memutuskan kapan tool sandbox di-ekspos / di-approve</small></div>
+    </div>
+  </div>
+  <div class="row"><div><div class="lbl">Agen — runtime.ts</div></div>
+    <div class="row cols-2" style="padding:0;border:none">
+      <div class="node n-agent"><b>astraLite · 5 step</b><small>+ tools: search*, lookupDoi, searchThreadDocuments, <b style="color:var(--verify)">verifyStatistics</b></small></div>
+      <div class="node n-agent"><b>astraPro · 10 step</b><small>+ tools di atas + <b style="color:var(--verify)">runComputation</b> (approval)</small></div>
+    </div>
+  </div>
+  <div class="row"><div><div class="lbl">Pengetahuan — Agent Skills runtime <span class="stamp ok" style="font-size:9px;padding:1px 6px">BARU</span></div></div>
+    <div class="row cols-3" style="padding:0;border:none">
+      <div class="node n-verify"><b>Katalog (tier 1)</b><small>name+description semua skill aktif, ~100 token/skill, dirakit context assembler</small></div>
+      <div class="node n-verify"><b>activate_skill (tier 2)</b><small>tool ber-enum; body SKILL.md dibungkus &lt;skill_content&gt;, dedup per-sesi</small></div>
+      <div class="node n-verify"><b>Resource &amp; skrip (tier 3)</b><small>references/ dari Convex storage; scripts/ dieksekusi via sandbox</small></div>
+    </div>
+  </div>
+  <div class="row"><div><div class="lbl">Deep Research — multi-agent pipeline (Convex Workflow)</div></div>
+    <div class="row cols-4" style="padding:0;border:none">
+      <div class="node n-agent"><b>Subagen Literatur</b><small>discover → rerank → read (eksisting, diekstrak)</small></div>
+      <div class="node n-verify"><b>Subagen Statistik <span class="stamp ok" style="font-size:9px;padding:1px 6px">BARU</span></b><small>deteksi klaim kuantitatif → sandbox → recompute</small></div>
+      <div class="node n-verify"><b>Subagen Sitasi <span class="stamp ok" style="font-size:9px;padding:1px 6px">BARU</span></b><small>verifikasi 4-langkah per sumber</small></div>
+      <div class="node n-agent"><b>Subagen Penulis</b><small>synthesize → audit klaim (upgrade AUD-10) → revise</small></div>
+    </div>
+  </div>
+  <div class="row"><div><div class="lbl">Verification Engine — modul lintas-jalur <span class="stamp ok" style="font-size:9px;padding:1px 6px">BARU</span></div></div>
+    <div class="row cols-3" style="padding:0;border:none">
+      <div class="node n-verify"><b>Statistik</b><small>statcheck · GRIM/GRIMMER · power (R/Python di sandbox)</small></div>
+      <div class="node n-verify"><b>Sitasi 4-langkah</b><small>eksistensi → metadata → identifier → bukan cek link</small></div>
+      <div class="node n-verify"><b>Klaim span-level</b><small>citationChecks + bukti komputasional</small></div>
+    </div>
+  </div>
+  <div class="row"><div><div class="lbl">Komputasi — Daytona (ephemeral) <span class="stamp ok" style="font-size:9px;padding:1px 6px">BARU</span></div></div>
+    <div class="row cols-3" style="padding:0;border:none">
+      <div class="node n-sandbox"><b>Node action "use node"</b><small>SDK Daytona terisolasi dari V8 isolate Convex</small></div>
+      <div class="node n-sandbox"><b>Image: Python + R</b><small>statcheck, metafor, scipy, pandas — warm snapshot</small></div>
+      <div class="node n-sandbox"><b>Hydrasi ctx.storage</b><small>Convex storage = source of truth; sandbox = scratch</small></div>
+    </div>
+  </div>
+  <div class="row"><div><div class="lbl">Data — Convex (komponen: agent · rag · workflow · rateLimiter · polar)</div></div>
+    <div class="row cols-4" style="padding:0;border:none">
+      <div class="node n-data"><b>threads/messages</b><small>komponen agent (tak berubah)</small></div>
+      <div class="node n-data"><b>researchSources / extracts / citationChecks</b><small>+ kolom integritas</small></div>
+      <div class="node n-data"><b>sandboxRuns · computationChecks <span class="stamp ok" style="font-size:9px;padding:1px 6px">BARU</span></b><small>provenance komputasi</small></div>
+      <div class="node n-data"><b>usage ledger</b><small>+ feature sandbox_compute, citation_verify</small></div>
+    </div>
+  </div>
+  <div class="row"><div><div class="lbl">Interop <span class="stamp ok" style="font-size:9px;padding:1px 6px">BARU</span></div></div>
+    <div class="row cols-2" style="padding:0;border:none">
+      <div class="node n-orch"><b>MCP server (HTTP actions Convex)</b><small>tools: verify_statistics, run_computation, verify_citation</small></div>
+      <div class="node n-orch"><b>MCP client (opsional, fase akhir)</b><small>konsumsi tool eksternal: manajer referensi, dataset registry</small></div>
+    </div>
+  </div>
+</div>
+
+<h3>Tiga invariannya</h3>
+<ul>
+<li><b>Convex storage adalah source of truth; sandbox selalu ephemeral.</b> File dihidrasi dari <code>ctx.storage.get(storageId)</code> saat task mulai, output dipersist balik via <code>ctx.storage.store(blob)</code> dan didaftarkan sebagai artifact, sandbox dihapus. Filesystem sandbox tidak pernah dianggap penyimpanan.</li>
+<li><b>Hasil deterministik dan penilaian LLM tidak pernah dicampur dalam satu nilai.</b> Angka hasil recompute disimpan apa adanya di <code>computationChecks</code>; interpretasinya ("konsisten/diskrepan") adalah field terpisah dengan aturan eksplisit. Sama seperti pemisahan sourceQuality vs domainReliability yang sudah ada.</li>
+<li><b>Setiap kapabilitas baru lewat gerbang biaya yang sama:</b> kredit plan → rate limit → eksekusi → ledger → rollup. Feature enum bertambah (<code>sandbox_compute</code>, <code>citation_verify</code>), mekanismenya tidak.</li>
+</ul>
+</section>
+
+<!-- ============ 05 SANDBOX ============ -->
+<section id="sandbox">
+<div class="sec-eyebrow"><span class="id">05</span><h2>Lapisan Sandbox (Daytona)</h2></div>
+<p class="sec-sub">Sandbox bukan fitur "code execution" — ia <b>instrumen integritas riset</b>. Framing ini menentukan semua keputusan di bawah: image apa yang dibangun, tool apa yang diekspos ke model, dan kapan sandbox boleh menyala.</p>
+
+<h3>Pola integrasi tiga-file (constraint runtime Convex)</h3>
+<p>SDK TypeScript Daytona membutuhkan API Node (Buffer, streaming) yang tidak tersedia di V8 isolate default Convex. Solusinya — yang juga sudah dipakai <code>ragContext.ts</code> — adalah isolasi total di Node action:</p>
+
+<pre><code><span class="cm">// 1) convex/agent/sandbox/sandboxRunner.ts — semua kerja Daytona di sini</span>
+<span class="st">"use node"</span>;
+<span class="kw">import</span> { Daytona } <span class="kw">from</span> <span class="st">"@daytonaio/sdk"</span>;
+<span class="kw">import</span> { internalAction } <span class="kw">from</span> <span class="st">"../../_generated/server"</span>;
+
+<span class="kw">export const</span> <span class="fn">runSandboxTask</span> = internalAction({
+  args: { ownerUserId, runId, taskKind, files, command, timeoutMs },
+  handler: <span class="kw">async</span> (ctx, args) => {
+    <span class="kw">const</span> daytona = <span class="kw">new</span> Daytona({ apiKey: process.env.DAYTONA_API_KEY });
+    <span class="kw">const</span> sandbox = <span class="kw">await</span> daytona.create({ snapshot: RESEARCH_SNAPSHOT }); <span class="cm">// warm: Python+R+deps</span>
+    <span class="kw">try</span> {
+      <span class="cm">// Hydrasi: HANYA file yang dibutuhkan task (biaya & latensi), dari Convex storage</span>
+      <span class="kw">for</span> (<span class="kw">const</span> f <span class="kw">of</span> args.files) {
+        <span class="kw">const</span> blob = <span class="kw">await</span> ctx.storage.get(f.storageId);   <span class="cm">// ctx.storage tersedia di Node action</span>
+        <span class="kw">await</span> sandbox.fs.uploadFile(Buffer.from(<span class="kw">await</span> blob.arrayBuffer()), f.path);
+      }
+      <span class="cm">// Eksekusi. R berjalan via executeCommand (interpreter stateful Daytona = Python-only)</span>
+      <span class="kw">const</span> result = <span class="kw">await</span> sandbox.process.executeCommand(args.command, <span class="st">"/workspace"</span>, undefined, args.timeoutMs);
+      <span class="cm">// Persist output balik → Convex storage → daftarkan artifact</span>
+      <span class="kw">const</span> outputs = <span class="kw">await</span> <span class="fn">collectOutputs</span>(sandbox, ctx); <span class="cm">// ctx.storage.store(blob) per file</span>
+      <span class="kw">await</span> ctx.runMutation(internal.agent.sandbox.records.completeSandboxRun, {
+        runId: args.runId, exitCode: result.exitCode, stdout: clip(result.result), outputs });
+      <span class="kw">return</span> { ok: result.exitCode === 0, stdout: result.result, outputs };
+    } <span class="kw">finally</span> {
+      <span class="kw">await</span> daytona.delete(sandbox);   <span class="cm">// SELALU dihapus — ephemeral, juga saat error/cancel (AUD-20)</span>
+    }
+  },
+});</code></pre>
+
+<pre><code><span class="cm">// 2) convex/agent/sandbox/sandboxTools.ts — tool agen hanya mendelegasikan</span>
+<span class="kw">export const</span> verifyStatistics = <span class="fn">createTool</span>({
+  description: <span class="st">"Recompute statistik yang dilaporkan paper (p-value via statcheck, GRIM/GRIMMER, power analysis) di sandbox terisolasi. Pakai saat pengguna meminta cek integritas atau saat paper memuat klaim statistik yang bisa diverifikasi."</span>,
+  args: z.object({ artifactId: z.string(), checks: z.array(z.enum([<span class="st">"statcheck"</span>,<span class="st">"grim"</span>,<span class="st">"grimmer"</span>,<span class="st">"power"</span>])) }),
+  handler: <span class="kw">async</span> (ctx, input) => {
+    <span class="kw">const</span> userId = <span class="fn">requireToolUser</span>(ctx);
+    <span class="cm">// gate biaya & rate limit feature 'sandbox_compute' di sini, lalu:</span>
+    <span class="kw">return</span> ctx.runAction(internal.agent.sandbox.sandboxRunner.runStatVerification, { ... });
+  },
+});
+
+<span class="cm">// 3) messages.ts — registrasi per-call seperti tool lain; runComputation masuk daftar approval</span>
+<span class="kw">const</span> tools = { ...normalChatTools, ...buildHitlTools({promptMessageId}), ...<span class="fn">buildSandboxTools</span>(routerDecision) };</code></pre>
+
+<div class="card t-warn">
+<h4>Batas durasi action → Convex Workflow</h4>
+<p>Action Convex punya batas durasi; verifikasi statistik satu paper biasanya muat (&lt;1–2 menit dengan warm snapshot), tapi <b>replikasi paket reproducibility dan pipeline meta-analysis tidak</b>. Aturan: task sandbox yang dipanggil dari chat inline dibatasi timeout ketat (≤90 detik); task lebih panjang wajib lewat <code>WorkflowManager</code> yang sama dengan deep research — satu step per fase (provision → hydrate → execute → persist → teardown) sehingga retry tidak mengulang seluruh job dan teardown terjamin sebagai step terakhir + <code>onComplete</code>.</p>
+</div>
+
+<h3>Image &amp; warm start</h3>
+<table>
+<tr><th style="width:190px">Keputusan</th><th>Detail</th></tr>
+<tr><td><b>Satu snapshot riset</b></td><td>Python (scipy, statsmodels, pandas, numpy, matplotlib, pingouin) <b>+ R</b> (statcheck, metafor, pwr, rmarkdown). R wajib di image — statcheck dan metafor R-native; sandbox Python-only kehilangan fungsi inti positioning.</td></tr>
+<tr><td><b>R via <code>executeCommand</code></b></td><td>Interpreter stateful Daytona hanya Python; skrip R dijalankan <code>Rscript check.R</code> dengan output JSON ke stdout/file agar parsing deterministik.</td></tr>
+<tr><td><b>Warm snapshot</b></td><td>Snapshot Daytona berisi semua dependensi → start hitungan detik, bukan instal menit. Versi snapshot dicatat di <code>sandboxRuns.snapshotVersion</code> untuk reproduktibilitas (run lama bisa direplay di image yang sama).</td></tr>
+<tr><td><b>Tanpa network egress default</b></td><td>Task verifikasi statistik tidak butuh internet; matikan egress kecuali task replikasi yang perlu <code>git clone</code>/unduh data — dan itu pun lewat allowlist domain per-task.</td></tr>
+</table>
+
+<h3>Smart routing — guardrail #1: jangan spawn sandbox di setiap kueri</h3>
+<p>Compute Router adalah fungsi deterministik murah (bukan LLM) yang berjalan di <code>runInlineGeneration</code> sebelum perakitan tool, memutuskan tiga hal: tool sandbox <i>diekspos</i> atau tidak, perlu <i>approval</i> atau tidak, dan anggaran timeout.</p>
+<table>
+<tr><th>Sinyal</th><th>Keputusan router</th></tr>
+<tr><td>Tidak ada artifact/dataset di konteks thread &amp; tidak ada intent komputasi (regex ID+EN: "cek p-value", "verifikasi statistik", "reproduksi", "hitung ulang", "power analysis", dsb. — pola sama dengan <code>artifactCommandInference</code>)</td><td>Tool sandbox <b>tidak diekspos sama sekali</b> (tidak masuk <code>tools</code>) → nol risiko model iseng memanggil, nol token deskripsi tool terbuang.</td></tr>
+<tr><td>Ada paper terindeks di konteks + intent verifikasi statistik</td><td><code>verifyStatistics</code> diekspos, auto-execute (read-only atas konten paper, biaya bounded ≤90s, ditagih <code>sandbox_compute</code>).</td></tr>
+<tr><td>Intent komputasi bebas / dataset user / replikasi</td><td><code>runComputation</code> diekspos dengan <code>needsApproval: true</code> — kartu approval menampilkan perintah, file yang dihidrasi, estimasi kredit. Job panjang dialihkan ke workflow.</td></tr>
+<tr><td>Deep research, paper kuantitatif terdeteksi</td><td>Tahap compute/verify dijalankan <i>default</i> oleh subagen statistik (§07) — bukan keputusan model per-tool.</td></tr>
+</table>
+
+<h3>Guardrail #2 &amp; #3: isolasi dan anti-scope-creep</h3>
+<ul>
+<li><b>Isolasi data:</b> satu sandbox = satu run = satu pengguna; tidak pernah dipakai ulang lintas-user. Hanya file yang dirujuk task yang dihidrasi (bukan seluruh workspace). Kredensial tidak pernah masuk sandbox — semua I/O Convex terjadi di Node action, bukan di dalam sandbox.</li>
+<li><b>Bukan IDE generik:</b> permukaan tool dibatasi pada task riset bertipe (<code>taskKind</code> enum: <code>stat_verification | replication | meta_analysis | custom_analysis</code>). <code>custom_analysis</code> ada (fleksibilitas peneliti itu nyata) tapi selalu ber-approval dan ber-kuota lebih ketat. Tidak ada tool "buka terminal".</li>
+<li><b>Provenance:</b> setiap run mencatat perintah, hash input, versi snapshot, exit code, dan artifact output di <code>sandboxRuns</code> — laporan bisa menautkan "angka ini dihitung oleh run #x, bisa direplay".</li>
+</ul>
+</section>
+
+<!-- ============ 06 VERIFIKASI ============ -->
+<section id="verifikasi">
+<div class="sec-eyebrow"><span class="id">06</span><h2>Verification Engine — Diferensiasi Inti</h2></div>
+<p class="sec-sub">Tiga modul verifikasi dengan satu kontrak keluaran. Modul 1 dan 2 baru; modul 3 adalah upgrade <code>auditClaims</code> eksisting. Ketiganya menulis ke tabel yang saling tertaut dan dirangkum menjadi satu <code>verificationReport</code> per artifact.</p>
+
+<h3>Modul 1 · Verifikasi statistik otomatis (fitur prioritas #1)</h3>
+<p>Scope sengaja sempit dan bernilai jelas: tidak butuh pengguna mengunggah dataset — cukup paper yang sudah ada di workspace.</p>
+<div class="flow">
+  <span class="step">Ekstraksi teks paper<br><small style="color:var(--mut)">sudah ada: plainText/TEI di artifactContents</small></span><span class="arr">→</span>
+  <span class="step">LLM ekstrak klaim statistik terstruktur<br><small style="color:var(--mut)">test type, df, statistik, p dilaporkan, mean/SD, N</small></span><span class="arr">→</span>
+  <span class="step v">Sandbox: recompute</span><span class="arr">→</span>
+  <span class="step">Bandingkan deterministik<br><small style="color:var(--mut)">toleransi pembulatan eksplisit</small></span><span class="arr">→</span>
+  <span class="step v">computationChecks + ringkasan</span>
+</div>
+<table>
+<tr><th style="width:150px">Pemeriksaan</th><th>Alat</th><th>Yang dihasilkan</th></tr>
+<tr><td><b>statcheck</b></td><td>R · <code>statcheck</code> atas teks paper (NHST: t, F, χ², r, Z)</td><td>Per-klaim: p dilaporkan vs p dihitung-ulang; flag <i>inconsistency</i> dan <i>decision error</i> (melewati ambang signifikansi).</td></tr>
+<tr><td><b>GRIM / GRIMMER</b></td><td>Python (aritmetika murni)</td><td>Apakah mean/SD yang dilaporkan mungkin secara matematis untuk N integer yang dilaporkan.</td></tr>
+<tr><td><b>Power analysis</b></td><td>R · <code>pwr</code> / Python <code>statsmodels</code></td><td>Power post-hoc dari effect size + N; flag studi underpowered.</td></tr>
+</table>
+<p><b>Penyajian yang hati-hati:</b> diskrepansi statistik ≠ tuduhan fraud. Output selalu berbahasa netral ("p yang dilaporkan (0.043) tidak konsisten dengan t(38)=1.92 yang dihitung-ulang (p≈0.062); kemungkinan umum: salah ketik, pembulatan, koreksi yang tidak dilaporkan") dan menautkan run sandbox agar pengguna bisa memeriksa sendiri. Ini juga membedakan platform dari tooling "gotcha".</p>
+
+<h3>Modul 2 · Verifikasi sitasi 4-langkah</h3>
+<p>Menjawab krisis sitasi fabrikasi langsung. Hampir seluruhnya komposisi provider yang sudah ada — biaya implementasi rendah, nilai positioning tinggi.</p>
+<table>
+<tr><th style="width:46px">#</th><th style="width:200px">Langkah</th><th>Implementasi di stack eksisting</th></tr>
+<tr><td><b>1</b></td><td>Eksistensi via database akademik</td><td>Kueri judul+penulis ke OpenAlex (sudah ada <code>searchOpenAlexWorks</code>) dengan fallback Crossref; skor kecocokan fuzzy judul. Cache 24h eksisting dipakai.</td></tr>
+<tr><td><b>2</b></td><td>Konsistensi metadata</td><td>Bandingkan penulis/tahun/venue yang dikutip vs record database; <code>ExploreCandidateMetadata</code> sudah membawa semua field-nya.</td></tr>
+<tr><td><b>3</b></td><td>Validasi identifier</td><td>DOI → <code>lookupDoiProvider</code> (resolve + cocokkan judul); arXiv ID → <code>searchArxivProvider</code> mode id (normalisasi versi sudah ada di <code>canonicalSourceKey</code>).</td></tr>
+<tr><td><b>4</b></td><td>Bukan sekadar cek link</td><td>Status HTTP 200 tidak pernah dianggap bukti; langkah 1–3 yang menentukan. URL mati pada sitasi yang lolos 1–3 hanya menurunkan <i>aksesibilitas</i>, bukan validitas.</td></tr>
+</table>
+<p>Hasil per sitasi: <code>verified | metadata_mismatch | identifier_invalid | not_found | unverifiable</code> disimpan pada kolom baru <code>researchSources.integrityStatus</code> (+ <code>integrityDetailJson</code>). Dipicu di tiga tempat: (a) otomatis pada setiap sumber final deep research, (b) tool chat <code>verifyCitations</code> atas bibliografi paper di workspace — use case peer-reviewer, (c) endpoint MCP.</p>
+
+<h3>Modul 3 · Klaim span-level (upgrade <code>auditClaims</code>)</h3>
+<ul>
+<li><b>Model:</b> klasifikasi klaim memakai <code>deepModelForAgent(agentKind)</code>, bukan hardcode lite (AUD-10); batch paralel ber-konkurensi 4.</li>
+<li><b>Bukti komputasional ikut dihitung:</b> claim verifier menerima bukan hanya <code>researchExtracts</code> tapi juga <code>computationChecks</code> run ini — klaim kuantitatif yang didukung recompute mendapat <code>support: "supported"</code> dengan <code>evidenceKind: "computational"</code> (lebih kuat dari tekstual).</li>
+<li><b>Span eksplisit:</b> simpan offset karakter klaim di markdown laporan (<code>claimSpan</code>) sehingga UI bisa menyorot kalimat ↔ bukti, bukan hanya daftar terpisah.</li>
+<li><b>Agentic RAG sebagai aturan sintesis:</b> instruksi subagen penulis diubah dari "sitasi bila ada" menjadi kontrak: <i>klaim faktual tanpa extract/komputasi pendukung wajib ditulis sebagai hipotesis atau dihapus</i> — auditor menegakkan, bukan sekadar menilai.</li>
+</ul>
+
+<h3>Kontrak keluaran terpadu: <code>verificationReport</code></h3>
+<p>Satu dokumen ringkasan per artifact (laporan deep research atau paper yang diperiksa), dirakit dari ketiga modul — inilah yang dirender Panel Verifikasi dan dilampirkan di kepala laporan:</p>
+<pre><code>{
+  artifactId, runId,
+  statistics: { checked: 12, consistent: 10, discrepant: 2, decisionErrors: 1, sandboxRunIds: [...] },
+  citations:  { total: 14, verified: 11, metadataMismatch: 2, notFound: 1 },
+  claims:     { total: 16, supported: 12, partiallySupported: 3, revised: 1, computationalEvidence: 4 },
+  verdict:    <span class="st">"passed_with_notes"</span>  <span class="cm">// passed | passed_with_notes | needs_review | failed</span>
+}</code></pre>
+</section>
+
+<!-- ============ 07 MULTI-AGENT ============ -->
+<section id="multiagent">
+<div class="sec-eyebrow"><span class="id">07</span><h2>Deep Research sebagai Pipeline Multi-Agent</h2></div>
+<p class="sec-sub">Prinsip: <b>subagen = workflow step ber-kontrak, bukan framework baru.</b> Tantangan multi-agent 2026 yang belum selesai adalah koordinasi — Convex Workflow yang sudah terpasang justru menyelesaikan koordinasi secara durable (checkpoint, retry, onComplete). Yang perlu dilakukan adalah dekomposisi, bukan adopsi orkestrator eksternal.</p>
+
+<h3>Dari monolit ke pipeline</h3>
+<p>Saat ini <code>researchLoop</code> (~3.2k LOC modul) menjalankan semua peran dalam satu action. Dekomposisi target — setiap subagen adalah <code>internalAction</code> dengan kontrak input/output tertipe (gaya Agent Card: nama, kapabilitas, skema tugas), dipanggil sebagai <code>step.runAction</code>:</p>
+
+<div class="arch">
+  <div class="row"><div class="lbl">deepResearchExecuteWorkflow v2 — step berlabel; ⇄ = paralel (maxParallelism 6 sudah menampung)</div>
+    <div class="row cols-2" style="padding:0;border:none">
+      <div class="node n-agent"><b>1 · literatureAgent (per ronde)</b><small>discover → rerank → validateAndRead → assess — kode eksisting diekstrak apa adanya; kontrak keluar: AcceptedSource[] + extracts</small></div>
+      <div class="node n-agent"><b>2 · counterEvidenceAgent</b><small>eksisting, kini step terpisah agar bisa retry sendiri</small></div>
+      <div class="node n-verify"><b>3a ⇄ statisticalAgent</b><small>deteksi klaim kuantitatif pada sumber accepted + paper konteks → sandbox recompute → computationChecks. Paper kuantitatif: <b>default jalan</b>, ekstrak angka utama + cek integritas ringan</small></div>
+      <div class="node n-verify"><b>3b ⇄ citationAgent</b><small>verifikasi 4-langkah semua sumber final → integrityStatus. Paralel dengan 3a — keduanya hanya butuh keluaran step 1–2</small></div>
+      <div class="node n-agent"><b>4 · writerAgent</b><small>synthesize dengan konteks tambahan: computationChecks + integrityStatus → laporan yang sudah tersaring kualitasnya, bukan ringkasan</small></div>
+      <div class="node n-verify"><b>5 · auditorAgent</b><small>klaim span-level (Modul 3) → revisi → verificationReport</small></div>
+    </div>
+  </div>
+</div>
+
+<h3>Aturan koordinasi (yang membuat ini tetap sederhana)</h3>
+<ul>
+<li><b>Komunikasi hanya lewat data ber-skema di Convex</b> (researchSources, computationChecks, dst.) — tidak ada message-passing antar agen. Workflow step membaca keluaran step sebelumnya dari argumen/DB; debugging = membaca tabel.</li>
+<li><b>Kegagalan subagen verifikasi tidak menggagalkan run.</b> 3a/3b memakai <code>ACTION_RETRY</code> yang sama; bila tetap gagal, laporan terbit dengan bagian "Verifikasi tidak lengkap" eksplisit — degradasi yang jujur, konsisten dengan filosofi <code>Evidence Limits</code> yang sudah ada.</li>
+<li><b>Anggaran per-subagen, bukan hanya per-run:</b> <code>budgetJson</code> di agentRuns diperluas menjadi alokasi per step (token, panggilan provider, menit sandbox) — pelacakan biaya multi-agent yang jelas, dan dasar rekonsiliasi billing AUD-12.</li>
+<li><b>Observabilitas memakai jalur eksisting:</b> setiap subagen menulis <code>agentRunEvents</code> dengan <code>stepKey</code> miliknya (eventType baru: <code>compute</code>, <code>citation_check</code>) — progress panel UI langsung menampilkan aktivitas verifikasi tanpa plumbing baru.</li>
+<li><b>Setiap subagen membawa skill-nya sendiri (delegasi subagen, §08).</b> Subagen literatur mengaktifkan <code>deep-research-guide</code> + paket domain yang cocok; statistik memuat <code>stat-verification</code>; penulis memuat skill gaya sitasi/bahasa. Instruksi domain tidak membengkakkan konteks subagen lain — dan mengganti metodologi = mengganti skill, bukan kode.</li>
+<li><b>Chat inline tidak menjadi multi-agent.</b> Lite/pro tetap satu agen + tool; orkestrasi multi-agen hanya pada workflow durable, tempat ia benar-benar terbayar.</li>
+</ul>
+
+<div class="card t-info">
+<h4>Kesiapan A2A tanpa adopsi A2A</h4>
+<p>Karena tiap subagen sudah berbentuk (kapabilitas + skema tugas + kontrak hasil), memetakannya ke Agent Card A2A v1.0 kelak adalah pekerjaan adaptor, bukan refactor. Pemicu adopsi yang disepakati: saat ada kebutuhan nyata berkolaborasi dengan agen eksternal (mis. agen institusi/penerbit) — bukan sebelum itu.</p>
+</div>
+</section>
+
+<!-- ============ 08 AGENT SKILLS ============ -->
+<section id="skills">
+<div class="sec-eyebrow"><span class="id">08</span><h2>Lapisan Agent Skills — Pengetahuan Prosedural yang Bisa Dipasang</h2></div>
+<p class="sec-sub">Agent Skills (<a href="https://agentskills.io">agentskills.io</a>) adalah standar terbuka: sebuah skill = folder berisi <code>SKILL.md</code> (frontmatter <code>name</code> + <code>description</code> + instruksi Markdown) plus opsional <code>scripts/</code>, <code>references/</code>, <code>assets/</code>. Dirilis Anthropic sebagai standar terbuka (Des 2025), kini diadopsi 40+ klien. Pembagian perannya dengan MCP tegas: <b>MCP memberi agen akses ke tool &amp; data; Skills mengajarkan agen <i>apa yang harus dilakukan</i> dengan tool &amp; data itu.</b> Untuk Astra, ini lapisan yang mengubah pengetahuan riset dari hardcode menjadi aset yang bisa dipasang, diversi, dan dibagikan.</p>
+
+<h3>Mengapa ini menutup gap otonomi terbesar Astra</h3>
+<p>Saat ini seluruh pengetahuan prosedural Astra terkunci di kode: <code>SHARED_INSTRUCTIONS</code> di runtime.ts, <code>buildPrompt</code> 10 slash command, prompt internal deep research (bucket planning, sufficiency, sintesis) tersebar di deepResearch.ts. Konsekuensinya: agen hanya "tahu" satu cara meriset untuk semua bidang; menambah metodologi medis (PRISMA) atau hukum berarti deploy; pengguna tidak bisa mengajari agen protokol lab mereka sendiri. Dengan runtime Skills, agen <b>memilih sendiri metodologi yang tepat berdasarkan tugas</b> — progressive disclosure membuat puluhan skill terpasang hanya berbiaya ~100 token/skill di katalog, dan instruksi penuh dimuat hanya saat relevan. Itulah definisi operasional "berjalan otonom dengan maksimal": kemampuan bertambah tanpa kode bertambah.</p>
+
+<h3>Runtime Skills di Convex (cloud-hosted, mengikuti panduan implementasi resmi)</h3>
+<p>Astra adalah agen cloud-hosted tanpa filesystem pengguna — panduan klien agentskills.io memetakan kasus ini secara eksplisit: discovery via registry/upload, aktivasi via dedicated tool. Implementasinya menumpang infrastruktur eksisting hampir seluruhnya:</p>
+
+<table>
+<tr><th style="width:190px">Tahap (spec)</th><th>Implementasi di Astra</th></tr>
+<tr><td><b>1 · Discovery</b></td><td>Tiga scope dengan presedensi <i>workspace → user → builtin</i> (konvensi "project overrides user" di spec): <b>builtin</b> di-bundle repo (<code>packages/convex/skills/</code>, seed saat deploy), <b>user</b> via upload folder/zip di UI workspace → diparse (frontmatter YAML, validasi lunak: warn-and-load kecuali description kosong) → disimpan ke tabel <code>skills</code> + bodi/resource di Convex storage, <b>workspace</b> = skill yang dipin ke workspace tertentu (protokol lab). Kolisi nama: scope lebih spesifik menang + log peringatan.</td></tr>
+<tr><td><b>2 · Katalog (tier 1)</b></td><td>Context assembler (§10 keandalan) merakit blok <code>&lt;available_skills&gt;</code> berisi <code>name</code>+<code>description</code> skill yang enabled — ±50–100 token/skill. Filtering: skill disabled disembunyikan total (bukan diblokir saat aktivasi). Bila jumlah skill membengkak, deskripsi di-embed ke indeks RAG eksisting dan katalog lite dibatasi top-k relevan; pro/deep memuat katalog penuh.</td></tr>
+<tr><td><b>3 · Aktivasi (tier 2)</b></td><td>Tool <code>activate_skill</code> (createTool) dengan parameter <code>name</code> ber-<b>enum dari katalog</b> (cegah halusinasi nama — rekomendasi spec). Mengembalikan bodi SKILL.md dibungkus <code>&lt;skill_content name="..."&gt;</code> + daftar resource (tanpa eager-load). Dedup per-sesi: aktivasi ulang skill yang sudah di konteks mengembalikan acknowledgment pendek. Aktivasi eksplisit pengguna menumpang parser slash command eksisting: <code>/skill:nama</code> — jalur yang sama dengan auto-route.</td></tr>
+<tr><td><b>4 · Resource (tier 3)</b></td><td>Tool <code>read_skill_resource(name, path)</code> membaca <code>references/</code>/<code>assets/</code> dari Convex storage on-demand. <b><code>scripts/</code> tidak pernah dieksekusi di runtime Convex</b> — skrip dihidrasi ke sandbox Daytona dan berjalan lewat jalur <code>runSandboxTask</code> yang sama (gerbang biaya, approval, provenance <code>sandboxRuns</code> berlaku otomatis). Sinergi sempurna: skill membawa <i>resep</i>, sandbox menyediakan <i>laboratorium</i>.</td></tr>
+<tr><td><b>5 · Manajemen konteks</b></td><td>Blok <code>&lt;skill_content&gt;</code> ditandai terlindung dari kompaksi/pruning konteks (kehilangan instruksi skill di tengah sesi = degradasi senyap — peringatan eksplisit spec). Tag terstruktur sekaligus memudahkan identifikasi saat audit konteks.</td></tr>
+<tr><td><b>6 · Delegasi subagen</b></td><td>Pola lanjutan dari spec yang persis cocok dengan §07: setiap subagen deep research mengaktifkan skill-nya sendiri di sesi terpisah — instruksi domain tidak membengkakkan konteks subagen lain. Lihat tabel pemetaan di bawah.</td></tr>
+</table>
+
+<h3>Area yang didelegasikan menjadi skills</h3>
+<p>Prinsip pemilahan: <b>aturan keras tetap di kode (<code>guards.ts</code>), pengetahuan prosedural pindah ke skills.</b> Gating approval, lantai bukti, isolasi sandbox, billing — tidak pernah jadi skill. Yang jadi skill adalah "cara mengerjakan dengan benar":</p>
+
+<table>
+<tr><th style="width:230px">Kategori skill</th><th>Isi &amp; sumber migrasinya</th><th style="width:200px">Dipakai oleh</th></tr>
+<tr><td><b>deep-research-guide</b> (builtin, inti)</td><td>Metodologi riset umum: strategi sumber, template bucket, kriteria kecukupan, struktur laporan — migrasi dari prompt internal <code>deepResearch.ts</code> (planSourceBuckets default, instruksi sufficiency/sintesis).</td><td>Subagen literatur &amp; penulis; planning turn <code>/deep-research</code></td></tr>
+<tr><td><b>Paket domain</b>: <code>deep-research-medis</code>, <code>-hukum</code>, <code>-ekonomi</code>, <code>-cs-ml</code>, <code>-pendidikan</code>, …</td><td>Per bidang: hierarki bukti (medis: RCT &gt; kohort &gt; case report), alur PRISMA, istilah pencarian (MeSH-style), filter sumber (per_publication_date, venue), red flag domain (retraksi, predatory journal), format pelaporan lazim. <code>references/</code> memuat checklist (PRISMA 2020, CONSORT).</td><td>Subagen literatur (kueri &amp; bucket), penulis (struktur), auditor (standar bukti) — dipilih otonom oleh model dari deskripsi</td></tr>
+<tr><td><b>Resep verifikasi</b>: <code>stat-verification</code>, <code>citation-verification</code>, <code>replication-playbook</code></td><td>Kapan statcheck applicable vs tidak, ambang toleransi pembulatan per jenis uji, interpretasi GRIM yang jujur, urutan langkah replikasi. <code>scripts/</code> memuat template R/Python yang dihidrasi ke sandbox.</td><td>Subagen statistik; tool <code>verifyStatistics</code>; MCP</td></tr>
+<tr><td><b>Penulisan akademik</b>: <code>citation-apa7</code>, <code>-ieee</code>, <code>-vancouver</code>; <code>academic-id</code>/<code>-en</code>; <code>thesis-bab2-id</code></td><td>Konvensi gaya sitasi, register bahasa akademik Indonesia/Inggris, struktur bab tinjauan pustaka ala kampus ID — pasar inti Aqsha. <code>assets/</code> memuat template dokumen.</td><td>Subagen penulis; chat inline saat menyusun artifact</td></tr>
+<tr><td><b>Slash command sebagai skill</b></td><td>Bodi <code>buildPrompt</code> 10 command eksisting (<code>/literature-review</code>, <code>/methodology</code>, dst.) dimigrasikan jadi skill builtin; katalog command UI digenerate dari katalog skill → menambah command baru = menambah skill, tanpa deploy.</td><td>Parser prompt eksisting (jalur kompatibel)</td></tr>
+<tr><td><b>Skill jurnal target</b>: <code>submit-to-x</code></td><td>Panduan penulisan/format jurnal spesifik (struktur, batas kata, gaya sitasi, checklist submission) — niche yang sangat bernilai bagi peneliti, mustahil di-hardcode satu-satu.</td><td>Penulis; diunggah komunitas/pengguna</td></tr>
+<tr><td><b>Skill workspace/lab</b> (user-uploaded)</td><td>Protokol internal lab: konvensi penamaan dataset, pipeline analisis baku, gaya pelaporan pembimbing. Inilah nilai standar terbuka: skill yang sama berjalan di Claude Code milik mereka <i>dan</i> di Aqsha.</td><td>Semua jalur, scope workspace</td></tr>
+</table>
+
+<h3>Contoh: <code>deep-research-medis/SKILL.md</code> (builtin)</h3>
+<pre><code><span class="cm">---</span>
+<span class="kw">name:</span> deep-research-medis
+<span class="kw">description:</span> <span class="st">Metodologi deep research untuk topik kedokteran & kesehatan: hierarki bukti
+  (meta-analysis > RCT > kohort), penyaringan ala PRISMA, istilah pencarian klinis, deteksi
+  retraksi & jurnal predator. Gunakan saat pertanyaan riset menyangkut intervensi klinis,
+  epidemiologi, farmakologi, atau kesehatan masyarakat.</span>
+<span class="kw">license:</span> Proprietary
+<span class="kw">metadata:</span> { author: aqsha, version: <span class="st">"1.0"</span>, scope: builtin }
+<span class="cm">---</span>
+## Strategi sumber
+Prioritaskan bucket: (1) systematic review/meta-analysis, (2) RCT, (3) guideline
+(WHO/IDI/NICE), (4) studi observasional. Beri bobot rendah pada preprint yang belum
+peer-review; tandai eksplisit di laporan.
+
+## Kueri
+Gunakan terminologi klinis baku + sinonim awam; sertakan filter tahun ≤5 untuk
+intervensi, longgar untuk epidemiologi. Contoh pola: "{intervensi} randomized
+controlled trial {populasi}".
+
+## Penilaian bukti
+Periksa: ukuran sampel & power, conflict of interest, status retraksi (cek via
+verifikasi sitasi 4-langkah). Klaim efek klinis tanpa RCT/meta-analysis wajib
+ditulis sebagai bukti awal, bukan kesimpulan.
+
+## Pelaporan
+Struktur: PICO → ringkasan bukti per-outcome → kekuatan bukti (GRADE-style) →
+keterbatasan. Lihat [referensi PRISMA](references/prisma-2020-checklist.md).</code></pre>
+
+<h3>Keamanan: skill adalah vektor injeksi instruksi — perlakukan demikian</h3>
+<ul>
+<li><b>Guard deterministik kebal skill.</b> Skill hanya menambah instruksi ke konteks; <code>guards.ts</code>, gating approval, allowlist <code>taskKind</code>, dan lantai bukti berjalan di kode dan tidak bisa di-override oleh teks skill mana pun.</li>
+<li><b>Skrip selalu lewat laboratorium, bukan rumah.</b> <code>scripts/</code> hanya dieksekusi di sandbox Daytona dengan aturan approval/billing/egress yang sama — skill user-uploaded tidak pernah mendapat jalur eksekusi istimewa. Field eksperimental <code>allowed-tools</code> dihormati sebagai <i>penyempit</i> (subset dari yang diizinkan router), tidak pernah pelebar.</li>
+<li><b>Trust per scope.</b> Builtin: kurasi internal + checksum saat seed. User/workspace: pemilik dianggap setuju atas skill miliknya, tapi aktivasi pertama skill ber-<code>scripts/</code> menampilkan ringkasan isi (informed consent, kartu HITL eksisting); berbagi antar-pengguna/marketplace ditunda ke fase komunitas dengan review.</li>
+<li><b>Versi &amp; provenance.</b> <code>skills.version</code> + checksum; <code>agentRunEvents</code> mencatat <code>skill_activated</code> (eventType baru) — laporan bisa menyebut metodologi versi berapa yang dipakai, konsisten dengan etos reproduktibilitas.</li>
+</ul>
+
+<div class="card t-verify">
+<h4>Dampak strategis</h4>
+<p>Skills mengubah Aqsha dari aplikasi menjadi <b>platform metodologi</b>: pustaka skill domain yang terkurasi (medis, hukum, ekonomi, pendidikan — termasuk konvensi akademik Indonesia yang tidak dimiliki kompetitor global) menjadi moat konten di atas moat infrastruktur verifikasi. Dan karena formatnya standar terbuka, Aqsha bisa <i>mengimpor</i> ekosistem skill komunitas yang tumbuh — sekaligus skill buatan Aqsha portabel ke Claude Code/Codex/Gemini CLI, saluran distribusi gratis menuju peneliti.</p>
+</div>
+</section>
+
+<!-- ============ 09 INTEROP ============ -->
+<section id="interop">
+<div class="sec-eyebrow"><span class="id">09</span><h2>Interoperabilitas: Sandbox &amp; Verifikasi sebagai MCP Server</h2></div>
+<p class="sec-sub">MCP kini standar de-facto (Linux Foundation, 97jt+ unduhan, didukung semua lab besar). Mengekspos kapabilitas verifikasi Aqsha lewat MCP membuatnya dapat dipakai agen internal mana pun <i>dan</i> menjadi titik integrasi terbuka — peneliti bisa memanggil verifikasi Aqsha dari Claude/IDE/agen mereka sendiri.</p>
+
+<h3>Implementasi di Convex</h3>
+<ul>
+<li><b>Transport:</b> MCP Streamable HTTP di atas <b>Convex HTTP actions</b> (<code>convex/http.ts</code>) — tidak butuh server terpisah. Endpoint <code>/mcp</code> menerima JSON-RPC, mendelegasikan ke action/mutation internal yang sama dengan yang dipakai tool agen (satu implementasi, dua permukaan).</li>
+<li><b>Auth:</b> API key per-user (tabel <code>apiKeys</code> baru) yang dipetakan ke <code>ownerUserId</code> — seluruh gerbang kredit/rate-limit/isolasi eksisting otomatis berlaku karena semua jalur internal sudah ber-kunci <code>ownerUserId</code>.</li>
+<li><b>Tool yang diekspos (v1):</b>
+  <table>
+  <tr><th style="width:200px">MCP tool</th><th>Delegasi internal</th></tr>
+  <tr><td><code>verify_statistics</code></td><td><code>sandboxRunner.runStatVerification</code> — input: file/teks paper; output: computationChecks + ringkasan</td></tr>
+  <tr><td><code>verify_citations</code></td><td>Modul sitasi 4-langkah — input: bibliografi/daftar DOI; output: integrityStatus per item</td></tr>
+  <tr><td><code>run_computation</code></td><td><code>runSandboxTask</code> ber-taskKind — kuota lebih ketat, job panjang mengembalikan <code>workflowId</code> + tool <code>get_run_status</code> untuk polling</td></tr>
+  <tr><td><code>search_scholarly</code></td><td>Komposisi OpenAlex/Crossref/arXiv eksisting (nilai tambah: sudah ter-cache, ter-rate-limit sopan, ter-normalisasi)</td></tr>
+  </table></li>
+<li><b>MCP client (fase akhir, opsional):</b> kerangka yang sama dibalik — agen Astra mengonsumsi MCP server eksternal (manajer referensi Zotero, registry dataset) sebagai tool tambahan; arsitektur tool-injeksi-per-call membuat ini tinggal satu builder lagi.</li>
+</ul>
+</section>
+
+<!-- ============ 09 KEANDALAN ============ -->
+<section id="keandalan">
+<div class="sec-eyebrow"><span class="id">10</span><h2>Keandalan, Observabilitas &amp; Tata Kelola</h2></div>
+<p class="sec-sub">Tren #3 2026 — dan prasyarat agar lapisan baru tidak menambah entropi. Sebagian besar adalah penguatan mekanisme yang sudah ada.</p>
+
+<table>
+<tr><th style="width:210px">Area</th><th>Rancangan</th></tr>
+<tr><td><b>Guardrail deterministik</b></td><td>Semua gate keras dikodifikasi di satu modul <code>guards.ts</code>: approval-token executeArtifact (AUD-01), allowlist taskKind sandbox, lantai bukti, ambang toleransi statistik. Aturan keras tidak pernah hidup di prompt saja.</td></tr>
+<tr><td><b>Context engineering</b></td><td>Context assembler ber-anggaran tunggal (AUD-17) dengan urutan blok terdokumentasi: <code>&lt;computation_context&gt;</code> → <code>&lt;retrieved_document_context&gt;</code> → <code>&lt;thread_document_context&gt;</code> → manifest → pesan. RAG ikut tersedia di jalur resume (AUD-08).</td></tr>
+<tr><td><b>Observabilitas</b></td><td><code>agentRunEvents</code> diperluas (eventType <code>compute</code>, <code>citation_check</code>, <code>guard_block</code>) + <code>durationMs</code> dan <code>costCredits</code> per event → satu kueri menghasilkan trace biaya/latensi per run tanpa APM eksternal. Dashboard internal = kueri Convex biasa.</td></tr>
+<tr><td><b>Evaluasi (evals)</b></td><td>Suite regresi kecil yang berjalan di CI terhadap deployment preview Convex: (a) golden set 30–50 klaim statistik berlabel (konsisten/diskrepan) → presisi statcheck pipeline; (b) 50 sitasi (valid/fabrikasi/typo metadata) → akurasi verifikasi 4-langkah; (c) skenario HITL &amp; routing (slash command, auto-route, sandbox router) sebagai test kontrak. Verifikasi yang tidak diukur akan membusuk diam-diam.</td></tr>
+<tr><td><b>Manusia sebagai supervisor</b></td><td>Tetap pola eksisting: rencana deep research ber-approval; komputasi custom ber-approval; verifikasi read-only auto. Tambahan: kartu approval sandbox menampilkan <i>perintah persis</i> + file yang dihidrasi + estimasi kredit — informed consent, bukan tombol "ya".</td></tr>
+<tr><td><b>Anggaran nyata</b></td><td>Rekonsiliasi biaya per-run (AUD-12): ledger aktual per feature per run; <code>budgetJson</code> per-subagen; kalibrasi tarif flat dari rollup. Sandbox menit-compute masuk metering yang sama.</td></tr>
+</table>
+</section>
+
+<!-- ============ 10 SKEMA ============ -->
+<section id="skema">
+<div class="sec-eyebrow"><span class="id">11</span><h2>Perubahan Skema</h2></div>
+<p class="sec-sub">Dua tabel baru, perluasan tiga tabel, dua pembersihan. Semua mengikuti konvensi eksisting: partisi <code>ownerUserId</code>, indeks leading owner, optional field untuk toleransi baris lama.</p>
+
+<h3>Tabel baru</h3>
+<pre><code><span class="cm">// Provenance setiap eksekusi sandbox — dasar reproduktibilitas & billing</span>
+sandboxRuns: <span class="fn">defineTable</span>({
+  ownerUserId: v.string(), threadId: v.optional(v.string()), runId: v.optional(runId), <span class="cm">// tautan ke agentRuns</span>
+  taskKind: v.union(v.literal(<span class="st">"stat_verification"</span>), v.literal(<span class="st">"replication"</span>), v.literal(<span class="st">"meta_analysis"</span>), v.literal(<span class="st">"custom_analysis"</span>)),
+  status: v.union(v.literal(<span class="st">"provisioning"</span>), v.literal(<span class="st">"running"</span>), v.literal(<span class="st">"completed"</span>), v.literal(<span class="st">"failed"</span>), v.literal(<span class="st">"canceled"</span>), v.literal(<span class="st">"timeout"</span>)),
+  snapshotVersion: v.string(), command: v.string(), inputFileHashes: v.array(v.string()),
+  exitCode: v.optional(v.number()), stdoutClipped: v.optional(v.string()), errorMessage: v.optional(v.string()),
+  outputArtifactIds: v.array(v.id(<span class="st">"artifacts"</span>)), durationMs: v.optional(v.number()), creditsCharged: v.optional(v.number()),
+  createdAt: v.number(), completedAt: v.optional(v.number()),
+}).index(<span class="st">"by_owner_created"</span>, [<span class="st">"ownerUserId"</span>,<span class="st">"createdAt"</span>]).index(<span class="st">"by_owner_run"</span>, [<span class="st">"ownerUserId"</span>,<span class="st">"runId"</span>]),
+
+<span class="cm">// Hasil deterministik per pemeriksaan statistik — dipisah dari interpretasi</span>
+computationChecks: <span class="fn">defineTable</span>({
+  ownerUserId: v.string(), sandboxRunId: v.id(<span class="st">"sandboxRuns"</span>), runId: v.optional(runId),
+  artifactId: v.optional(v.id(<span class="st">"artifacts"</span>)),  <span class="cm">// paper yang diperiksa</span>
+  checkKind: v.union(v.literal(<span class="st">"statcheck"</span>), v.literal(<span class="st">"grim"</span>), v.literal(<span class="st">"grimmer"</span>), v.literal(<span class="st">"power"</span>)),
+  claimText: v.string(), claimSpan: v.optional(v.object({ start: v.number(), end: v.number() })),
+  reportedJson: v.string(), recomputedJson: v.string(),          <span class="cm">// angka mentah apa adanya</span>
+  outcome: v.union(v.literal(<span class="st">"consistent"</span>), v.literal(<span class="st">"discrepant"</span>), v.literal(<span class="st">"decision_error"</span>), v.literal(<span class="st">"not_computable"</span>)),
+  toleranceJson: v.string(), createdAt: v.number(),
+}).index(<span class="st">"by_owner_artifact"</span>, [<span class="st">"ownerUserId"</span>,<span class="st">"artifactId"</span>]).index(<span class="st">"by_owner_run"</span>, [<span class="st">"ownerUserId"</span>,<span class="st">"runId"</span>]),</code></pre>
+
+<pre><code><span class="cm">// Registry Agent Skills (standar agentskills.io) — builtin / user / workspace</span>
+skills: <span class="fn">defineTable</span>({
+  ownerUserId: v.optional(v.string()),            <span class="cm">// null untuk builtin</span>
+  scope: v.union(v.literal(<span class="st">"builtin"</span>), v.literal(<span class="st">"user"</span>), v.literal(<span class="st">"workspace"</span>)),
+  workspaceId: v.optional(v.id(<span class="st">"workspaces"</span>)),
+  name: v.string(),                               <span class="cm">// validasi spec: lowercase+hyphen, ≤64, = nama folder</span>
+  description: v.string(),                        <span class="cm">// ≤1024; bahan katalog tier-1</span>
+  version: v.string(), checksum: v.string(), enabled: v.boolean(),
+  bodyStorageId: v.id(<span class="st">"_storage"</span>),               <span class="cm">// bodi SKILL.md (frontmatter di-strip)</span>
+  resourcesJson: v.string(),                      <span class="cm">// manifest: [{path, storageId, kind: script|reference|asset}]</span>
+  hasScripts: v.boolean(),                        <span class="cm">// memicu informed-consent pada aktivasi pertama</span>
+  metadataJson: v.optional(v.string()), createdAt: v.number(), updatedAt: v.number(),
+}).index(<span class="st">"by_scope_name"</span>, [<span class="st">"scope"</span>,<span class="st">"name"</span>]).index(<span class="st">"by_owner_enabled"</span>, [<span class="st">"ownerUserId"</span>,<span class="st">"enabled"</span>])
+  .index(<span class="st">"by_owner_workspace"</span>, [<span class="st">"ownerUserId"</span>,<span class="st">"workspaceId"</span>]),
+
+<span class="cm">// Jejak aktivasi per-sesi (dedup + analitik + provenance metodologi)</span>
+skillActivations: <span class="fn">defineTable</span>({
+  ownerUserId: v.string(), threadId: v.string(), runId: v.optional(runId),
+  skillId: v.id(<span class="st">"skills"</span>), skillVersion: v.string(), activatedBy: v.union(v.literal(<span class="st">"model"</span>), v.literal(<span class="st">"user"</span>)),
+  createdAt: v.number(),
+}).index(<span class="st">"by_owner_thread"</span>, [<span class="st">"ownerUserId"</span>,<span class="st">"threadId"</span>]),</code></pre>
+
+<h3>Perluasan tabel eksisting</h3>
+<table>
+<tr><th style="width:210px">Tabel</th><th>Kolom baru (semua optional)</th></tr>
+<tr><td><code>researchSources</code></td><td><code>integrityStatus</code> (verified | metadata_mismatch | identifier_invalid | not_found | unverifiable), <code>integrityDetailJson</code>, <code>integrityCheckedAt</code> — hasil verifikasi sitasi 4-langkah.</td></tr>
+<tr><td><code>citationChecks</code></td><td><code>evidenceKind</code> (textual | computational | mixed), <code>computationCheckIds</code>, <code>claimSpan</code> — klaim ↔ bukti komputasi ↔ sorotan UI.</td></tr>
+<tr><td><code>agentRuns</code></td><td><code>verificationReportJson</code> (ringkasan terpadu §06), <code>budgetJson</code> diperluas ke alokasi per-subagen; <code>agentRunEvents.eventType</code> bertambah <code>skill_activated</code>.</td></tr>
+<tr><td><code>providerUsageLedger</code> + <code>USAGE_FEATURES</code></td><td>Feature baru: <code>sandbox_compute</code>, <code>citation_verify</code> — disinkronkan sekaligus di usageShape/featureCounts (hindari drift yang diingatkan gotcha skema).</td></tr>
+</table>
+
+<h3>Pembersihan</h3>
+<ul>
+<li>Hapus <code>v.id("researchRuns")</code> dari union <code>runId</code> (AUD-11) — migrasi aman, tak ada baris yang valid memuatnya.</li>
+<li>Normalisasi enum <code>citationChecks.support</code>: tulis selalu <code>partially_supported</code>; <code>partial</code> dipertahankan di validator hanya untuk baris lama dan dinormalisasi saat baca.</li>
+</ul>
+</section>
+
+<!-- ============ 11 ROADMAP ============ -->
+<section id="roadmap">
+<div class="sec-eyebrow"><span class="id">12</span><h2>Roadmap Implementasi</h2></div>
+<p class="sec-sub">Lima fase berurutan; setiap fase mandiri nilainya dan bisa dirilis. Estimasi relatif (S/M/L) — bukan kalender, karena kapasitas tim tidak diketahui.</p>
+
+<div class="phase">
+  <div class="pid">Fase 0<small>Pelunasan · M</small></div>
+  <div>
+    <h4>Perbaikan audit kritis &amp; konsolidasi</h4>
+    <ul>
+      <li>AUD-01 guard server-side executeArtifact · AUD-02 agentKind di usage handler · AUD-03 kontrak tipe deep-start · AUD-04 cache sebelum gate biaya.</li>
+      <li>AUD-05 injeksi citation counter per giliran · AUD-06/21 konstanta bersama (HITL names, markers, sentinel, USER_AGENT) · AUD-11 bersihkan skema.</li>
+      <li>Test kontrak untuk routing/HITL/billing — fondasi suite eval Fase 3.</li>
+    </ul>
+    <p><b>Keluaran:</b> basis yang aman untuk ditambah jalur eksekusi baru. Tidak ada fitur baru, tidak ada perubahan UX.</p>
+  </div>
+</div>
+
+<div class="phase">
+  <div class="pid">Fase 1<small>Sandbox · L</small></div>
+  <div>
+    <h4>Lapisan Daytona + verifikasi statistik (fitur #1)</h4>
+    <ul>
+      <li>Bangun snapshot riset (Python+R), pola tiga-file (<code>sandboxRunner</code> "use node" → <code>sandboxTools</code> → registrasi messages.ts), tabel <code>sandboxRuns</code>/<code>computationChecks</code>, feature billing <code>sandbox_compute</code>.</li>
+      <li>Compute Router deterministik + tool <code>verifyStatistics</code> (auto) dan <code>runComputation</code> (approval, kartu informed-consent).</li>
+      <li>Pipeline statcheck → GRIM/GRIMMER → power; penyajian netral; tautan replay run.</li>
+      <li>Job panjang via WorkflowManager (provision/hydrate/execute/persist/teardown sebagai step terpisah).</li>
+    </ul>
+    <p><b>Keluaran:</b> pengguna men-drop paper, bertanya "cek konsistensi statistiknya", dan menerima hasil recompute yang bisa direplay. Momen demo terkuat platform.</p>
+  </div>
+</div>
+
+<div class="phase">
+  <div class="pid">Fase 2<small>Integritas · M</small></div>
+  <div>
+    <h4>Verifikasi sitasi 4-langkah + integrasi ke deep research</h4>
+    <ul>
+      <li>Modul sitasi (komposisi OpenAlex/Crossref/arXiv eksisting) + kolom <code>integrityStatus</code>; tool chat <code>verifyCitations</code>; otomatis pada sumber final deep research.</li>
+      <li>Sisipkan tahap compute/verify ke workflow deep research (masih dalam struktur step lama): paper kuantitatif → ekstrak angka utama + cek integritas ringan secara default.</li>
+      <li>Panel Verifikasi v1 di UI: verificationReport ringkas, badge per sumber, badge evidenceStrength yang selama ini tak terpakai (AUD-19).</li>
+      <li><b>Agent Skills runtime v1:</b> tabel <code>skills</code>/<code>skillActivations</code>, parser+validator SKILL.md, katalog tier-1 di context assembler, tool <code>activate_skill</code> (enum) + <code>read_skill_resource</code>, proteksi kompaksi. Seed 4–6 skill builtin: <code>deep-research-guide</code>, <code>stat-verification</code>, <code>citation-verification</code>, <code>citation-apa7</code>, <code>academic-id</code>.</li>
+    </ul>
+    <p><b>Keluaran:</b> laporan deep research berubah dari ringkasan menjadi <i>ringkasan yang sudah tersaring kualitasnya</i> — klaim positioning terpenuhi end-to-end.</p>
+  </div>
+</div>
+
+<div class="phase">
+  <div class="pid">Fase 3<small>Orkestrasi · L</small></div>
+  <div>
+    <h4>Dekomposisi multi-agent + upgrade auditor + evals</h4>
+    <ul>
+      <li>Pecah <code>researchLoop</code> menjadi subagen ber-kontrak (literatur, counter-evidence, statistik ⇄ sitasi paralel, penulis, auditor) sebagai workflow step; anggaran per-subagen; event observabilitas baru.</li>
+      <li>Upgrade auditor: model per-tier, batch paralel, bukti komputasional, claimSpan (AUD-10, Modul 3).</li>
+      <li>Suite eval CI: golden set statistik + sitasi + skenario routing/HITL + <b>eval pemicu skill</b> (deskripsi memicu pada prompt relevan, diam pada yang tidak — sesuai panduan evaluating-skills agentskills.io); perbaikan AUD-13–17 yang tersentuh refactor.</li>
+      <li><b>Skills fase domain:</b> delegasi subagen (tiap subagen mengaktifkan skill-nya), paket domain pertama (<code>deep-research-medis</code>, <code>-cs-ml</code>, <code>-pendidikan</code>), migrasi 10 slash command ke skill builtin, upload skill user/workspace via UI + informed-consent skill ber-skrip.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="phase">
+  <div class="pid">Fase 4<small>Ekspansi · L</small></div>
+  <div>
+    <h4>MCP server + replikasi (fitur #2) + meta-analysis (fitur #3)</h4>
+    <ul>
+      <li>Endpoint MCP di Convex HTTP actions (verify_statistics, verify_citations, run_computation, search_scholarly) + API key per-user.</li>
+      <li>Workflow replikasi paket reproducibility: tarik repo data+kode → jalankan di sandbox (egress allowlist) → bandingkan hasil utama → laporan reproduksi.</li>
+      <li>Workflow systematic review/meta-analysis: ekstraksi effect size → pooled estimate (metafor) → forest/funnel plot → uji heterogenitas → deteksi publication bias; output artifact + verificationReport.</li>
+      <li><b>Ekosistem skills:</b> pustaka skill domain terkurasi sebagai konten produk (termasuk skill jurnal target &amp; konvensi akademik ID), impor skill komunitas (validasi <code>skills-ref</code> + review), ekspor skill Aqsha sebagai folder standar — portabel ke Claude Code/Codex/Gemini CLI.</li>
+      <li>Opsional: MCP client untuk tool eksternal; evaluasi adopsi A2A bila kebutuhan kolaborasi eksternal muncul.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="card t-warn">
+<h4>Dependensi yang mengikat urutan</h4>
+<p>Fase 1 bergantung pada Fase 0 (jalur eksekusi baru di atas gating yang masih rapuh = memperbanyak permukaan AUD-01/02/03). Fase 2 modul sitasi <i>tidak</i> bergantung Fase 1 dan bisa dikerjakan paralel bila ada kapasitas. Fase 3 sebaiknya tidak dimulai sebelum Fase 2 stabil — refactor besar di atas pipeline yang belum teruji menggandakan risiko regresi.</p>
+</div>
+</section>
+
+<!-- ============ 12 STACK ============ -->
+<section id="stack">
+<div class="sec-eyebrow"><span class="id">13</span><h2>Keputusan Tech Stack</h2></div>
+<p class="sec-sub">Prinsip: maksimalkan yang sudah dibayar (Convex + komponennya), tambah hanya yang memberi kapabilitas yang tak bisa dibangun murah di atasnya.</p>
+
+<table>
+<tr><th style="width:230px">Teknologi</th><th style="width:110px">Status</th><th>Peran &amp; alasan</th></tr>
+<tr><td><b>Convex</b> (BaaS) + <b>@convex-dev/agent</b></td><td><span class="stamp ok">Inti</span></td><td>Tetap fondasi tunggal: thread/message/stream, HITL native, reactive UI. Tidak ada alasan migrasi.</td></tr>
+<tr><td><b>@convex-dev/workflow</b></td><td><span class="stamp ok">Diperluas</span></td><td>Orkestrator multi-agent <i>dan</i> runner job sandbox panjang. Menggantikan kebutuhan akan framework orkestrasi eksternal (LangGraph dkk.) — durable, retry, onComplete sudah cukup.</td></tr>
+<tr><td><b>@convex-dev/rag</b>, <b>rate-limiter</b>, <b>polar</b></td><td><span class="stamp ok">Tetap</span></td><td>RAG context, gerbang biaya, billing — semua kapabilitas baru menumpang mekanisme yang sama (feature enum baru, bucket baru).</td></tr>
+<tr><td><b>Daytona SDK</b> (TypeScript)</td><td><span class="stamp med">Baru</span></td><td>Satu-satunya layanan eksternal baru. Ephemeral sandbox, warm snapshot, fs.uploadFile/process.executeCommand. Diisolasi penuh di Node action — radius ledakan kecil bila kelak diganti vendor (antarmuka <code>runSandboxTask</code> netral-vendor).</td></tr>
+<tr><td><b>Image: Python + R</b> (statcheck, metafor, pwr, scipy, statsmodels, pandas)</td><td><span class="stamp med">Baru</span></td><td>R wajib — statcheck &amp; metafor R-native. R via <code>Rscript</code>/executeCommand karena interpreter stateful Daytona Python-only.</td></tr>
+<tr><td><b>@modelcontextprotocol/sdk</b></td><td><span class="stamp med">Baru (Fase 4)</span></td><td>Server MCP Streamable-HTTP di atas Convex HTTP actions. Standar industri, biaya adopsi rendah karena handler mendelegasikan ke fungsi internal eksisting.</td></tr>
+<tr><td><b>Agent Skills</b> (standar agentskills.io) + <code>skills-ref</code></td><td><span class="stamp med">Baru (Fase 2)</span></td><td>Format SKILL.md untuk seluruh pengetahuan prosedural. Bukan dependensi runtime berat — parser YAML + dua tool + dua tabel; <code>skills-ref</code> dipakai di CI untuk validasi skill builtin. Nilai utamanya standar &amp; portabilitas, biaya adopsinya kecil.</td></tr>
+<tr><td><b>@convex-dev/workpool</b></td><td><span class="stamp med">Opsional</span></td><td>Antrean sopan untuk provider ber-etiket ketat (arXiv 1/3s, AUD-14) — pengguna mengalami latensi, bukan penolakan.</td></tr>
+<tr><td>Framework multi-agent eksternal (LangGraph/CrewAI/AutoGen)</td><td><span class="stamp crit">Ditolak</span></td><td>Menambah runtime, state store, dan model kegagalan kedua di samping Convex. Workflow + kontrak step memberi 90% nilainya dengan 10% kompleksitas.</td></tr>
+<tr><td>A2A, ACP/UCP, WebMCP</td><td><span class="stamp crit">Ditunda / N-A</span></td><td>A2A: ditunda sampai ada mitra agen eksternal nyata (kontrak subagen sudah kompatibel-konsep). ACP/UCP (commerce) dan WebMCP: di luar domain.</td></tr>
+</table>
+
+<hr class="div">
+<div class="footer">Astra Agent 2.0 — Audit &amp; Rancangan Maksimalisasi · disusun dari deep-dive 12-subsistem (agent-deep-dive.html) + riset tren AI agent 2026 + spesifikasi Agent Skills (agentskills.io) · semua rujukan AUD-xx tertaut ke §02</div>
+</section>
+</main>
+</div>
+</body>
+</html>

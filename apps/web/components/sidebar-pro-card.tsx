@@ -37,14 +37,14 @@ export function SidebarProCard({ className }: { className?: string }) {
         </div>
 
         <div className="flex items-center gap-1.5">
-          <Button asChild size="sm" className="h-7 flex-1 text-[12px]">
+          <Button asChild size="sm" className="h-7 text-[12px]">
             <Link href={UPGRADE_HREF}>Upgrade</Link>
           </Button>
           <Button
             asChild
             size="sm"
             variant="outline"
-            className="h-7 flex-1 text-[12px]"
+            className="h-7 text-[12px]"
           >
             <Link href={UPGRADE_HREF}>Pelajari</Link>
           </Button>
