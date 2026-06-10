@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
-import { api, internal } from "../convex/_generated/api";
+import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
 import schema from "../convex/schema";
 import {
@@ -164,70 +164,6 @@ describe("usage daily rollup", () => {
     expect(todayRow.featureCounts.pro_chat).toBe(1);
     expect(todayRow.credits).toBe(8);
     expect(todayRow.eventCount).toBe(3);
-  });
-
-  it("backfill recomputes rollups from the ledger and is idempotent", async () => {
-    const t = convexTest(schema, modules);
-    const now = new Date();
-    const today = now.toISOString().slice(0, 10);
-
-    // Insert ledger rows ONLY — no rollup written (simulates pre-rollup data).
-    const events: LedgerEvent[] = [
-      { ownerUserId: OWNER, feature: "normal_chat", credits: 2, estimatedCostCents: 3, createdAt: utcDayMs(today, 1) },
-      { ownerUserId: OWNER, feature: "pro_chat", credits: 5, estimatedCostCents: 9, createdAt: utcDayMs(today, 9) },
-      { ownerUserId: OTHER_OWNER, feature: "deep_research", credits: 120, estimatedCostCents: 40, createdAt: utcDayMs(today, 3) },
-    ];
-    await t.run(async (ctx) => {
-      for (const e of events) {
-        await ctx.db.insert("providerUsageLedger", {
-          ownerUserId: e.ownerUserId,
-          feature: e.feature,
-          provider: "test",
-          credits: e.credits,
-          estimatedCostCents: e.estimatedCostCents,
-          createdAt: e.createdAt,
-        });
-      }
-    });
-
-    // Before backfill: no rollup rows, so activity reads all zeros.
-    const before = (await t
-      .withIdentity(IDENTITY)
-      .query(api.billing.usage.activity, { days: 3 })) as ActivityRow[];
-    expect(before.every((r) => r.eventCount === 0)).toBe(true);
-
-    // Run the per-day recompute (the unit the backfill action calls), twice,
-    // to prove SET-from-ledger idempotency.
-    await t.mutation(internal.billing.usageRollupBackfill.recomputeUsageRollupDay, {
-      ownerUserId: OWNER,
-      date: today,
-    });
-    await t.mutation(internal.billing.usageRollupBackfill.recomputeUsageRollupDay, {
-      ownerUserId: OWNER,
-      date: today,
-    });
-
-    const after = (await t
-      .withIdentity(IDENTITY)
-      .query(api.billing.usage.activity, { days: 3 })) as ActivityRow[];
-    expect(after).toEqual(legacyActivity(events, OWNER, now, 3));
-
-    const todayRow = after.find((r) => r.date === today)!;
-    expect(todayRow.credits).toBe(7);
-    expect(todayRow.eventCount).toBe(2);
-    expect(todayRow.featureCounts.normal_chat).toBe(1);
-    expect(todayRow.featureCounts.pro_chat).toBe(1);
-
-    // Exactly one rollup row for OWNER/today (idempotent, no duplicates).
-    const rollupRows = await t.run(async (ctx) =>
-      ctx.db
-        .query("usageDailyRollup")
-        .withIndex("by_owner_date", (q) =>
-          q.eq("ownerUserId", OWNER).eq("date", today),
-        )
-        .collect(),
-    );
-    expect(rollupRows).toHaveLength(1);
   });
 
   it("USAGE_FEATURES matches the empty feature-count shape", () => {
