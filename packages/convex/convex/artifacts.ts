@@ -228,34 +228,22 @@ export const listByWorkspace = query({
 
 export const listForContextPicker = query({
   args: {
-    workspaceId: v.optional(v.id("workspaces")),
+    workspaceId: v.id("workspaces"),
   },
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
-    if (args.workspaceId) {
-      await assertWorkspaceOwner(ctx, args.workspaceId, user._id);
-      const artifacts = await ctx.db
-        .query("artifacts")
-        .withIndex("by_owner_workspace_status_updated", (q) =>
-          q
-            .eq("ownerUserId", user._id)
-            .eq("workspaceId", args.workspaceId)
-            .eq("status", "active"),
-        )
-        .order("desc")
-        .take(50);
-      return artifacts.map(toArtifactListItem);
-    }
-
-    return (await ctx.db
+    await assertWorkspaceOwner(ctx, args.workspaceId, user._id);
+    const artifacts = await ctx.db
       .query("artifacts")
-      .withIndex("by_owner_status_updated", (q) =>
-        q.eq("ownerUserId", user._id).eq("status", "active"),
+      .withIndex("by_owner_workspace_status_updated", (q) =>
+        q
+          .eq("ownerUserId", user._id)
+          .eq("workspaceId", args.workspaceId)
+          .eq("status", "active"),
       )
       .order("desc")
-      .take(50))
-      .filter((artifact) => artifact.workspaceId != null)
-      .map(toArtifactListItem);
+      .take(50);
+    return artifacts.map(toArtifactListItem);
   },
 });
 

@@ -1584,11 +1584,19 @@ async function listSteps(ctx: QueryCtx, ownerUserId: string, runId: Id<"agentRun
     .collect();
 }
 
+// Cap per-run events read by listForThread, which fans this out across up to 20
+// runs in a single reactive query. Realistic runs emit far fewer events; this
+// only bounds pathological multi-round runs. Take the newest N then reverse to
+// preserve chronological (oldest→newest) order for the progress panel.
+const RUN_EVENTS_DISPLAY_CAP = 200;
+
 async function listEvents(ctx: QueryCtx, ownerUserId: string, runId: Id<"agentRuns">) {
-  return await ctx.db
+  const events = await ctx.db
     .query("agentRunEvents")
     .withIndex("by_owner_run_created", (q) => q.eq("ownerUserId", ownerUserId).eq("runId", runId))
-    .collect();
+    .order("desc")
+    .take(RUN_EVENTS_DISPLAY_CAP);
+  return events.reverse();
 }
 
 async function assertRunOwner(ctx: QueryCtx | MutationCtx, runId: Id<"agentRuns">, ownerUserId: string) {
