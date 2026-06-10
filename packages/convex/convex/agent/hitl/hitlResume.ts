@@ -68,6 +68,7 @@ export const answerAskUser = mutation({
     toolCallId: v.string(),
     answers: askUserAnswerValidator,
   },
+  returns: v.object({ ok: v.literal(true), messageId: v.string() }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     await assertThreadOwner(ctx, args.threadId);
@@ -100,6 +101,7 @@ export const approveTool = mutation({
     // Phase 2.3; accepted here so the client contract is stable.
     workspaceId: v.optional(v.id("workspaces")),
   },
+  returns: v.object({ ok: v.literal(true), messageId: v.string() }),
   handler: async (ctx, args) => {
     await requireCurrentUser(ctx);
     await assertThreadOwner(ctx, args.threadId);
@@ -117,6 +119,7 @@ export const denyTool = mutation({
     approvalId: v.string(),
     reason: v.optional(v.string()),
   },
+  returns: v.object({ ok: v.literal(true), messageId: v.string() }),
   handler: async (ctx, args) => {
     await requireCurrentUser(ctx);
     await assertThreadOwner(ctx, args.threadId);
@@ -138,6 +141,7 @@ export const resumeHitl = mutation({
     threadId: v.string(),
     promptMessageId: v.string(),
   },
+  returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     await assertThreadOwner(ctx, args.threadId);

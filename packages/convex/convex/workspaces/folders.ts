@@ -31,6 +31,7 @@ export const create = mutation({
     workspaceId: v.id("workspaces"),
     name: v.string(),
   },
+  returns: v.id("workspaceFolders"),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     await assertWorkspaceOwner(ctx, args.workspaceId, user._id, { requireActive: true });
@@ -61,6 +62,7 @@ export const rename = mutation({
     folderId: v.id("workspaceFolders"),
     name: v.string(),
   },
+  returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     const folder = await assertFolderOwner(ctx, args.folderId, user._id);
@@ -78,6 +80,7 @@ export const move = mutation({
     folderId: v.id("workspaceFolders"),
     targetWorkspaceId: v.id("workspaces"),
   },
+  returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     const folder = await assertFolderOwner(ctx, args.folderId, user._id);
@@ -137,6 +140,7 @@ export const move = mutation({
 
 export const remove = mutation({
   args: { folderId: v.id("workspaceFolders") },
+  returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     const folder = await assertFolderOwner(ctx, args.folderId, user._id);

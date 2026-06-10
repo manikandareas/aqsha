@@ -7,6 +7,7 @@ export const sendPrompt = action({
   args: {
     prompt: v.string(),
   },
+  returns: v.object({ threadId: v.string(), text: v.string() }),
   handler: async (ctx, { prompt }) => {
     const user = await requireCurrentUser(ctx);
     const { threadId } = await astra.createThread(ctx, {

@@ -9,6 +9,12 @@ import { CHAT_LITE_MODEL } from "../agent/models";
 
 type BillingReason = "quota_exceeded" | "subscription_required" | "billing_inactive";
 
+const billingReasonValidator = v.union(
+  v.literal("quota_exceeded"),
+  v.literal("subscription_required"),
+  v.literal("billing_inactive"),
+);
+
 // ── "Kenapa relevan untukmu" — context-aware relevance note (PaperWeaver) ──
 export const explainRelevance = action({
   args: {
@@ -16,6 +22,10 @@ export const explainRelevance = action({
     context: v.optional(v.string()),
     topics: v.optional(v.array(v.string())),
   },
+  returns: v.union(
+    v.object({ ok: v.literal(true), reason: v.string() }),
+    v.object({ ok: v.literal(false), reason: billingReasonValidator }),
+  ),
   handler: async (
     ctx,
     args,
@@ -81,6 +91,10 @@ export const explainRelevance = action({
 // ── Glossary: explain an academic term in plain Bahasa Indonesia ──────────
 export const explainTerm = action({
   args: { term: v.string(), context: v.optional(v.string()) },
+  returns: v.union(
+    v.object({ ok: v.literal(true), definition: v.string() }),
+    v.object({ ok: v.literal(false), reason: billingReasonValidator }),
+  ),
   handler: async (
     ctx,
     args,

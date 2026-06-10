@@ -272,6 +272,7 @@ export const createDocument = mutation({
     folderId: v.optional(v.id("workspaceFolders")),
     title: v.optional(v.string()),
   },
+  returns: v.id("artifacts"),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     await assertWorkspaceOwner(ctx, args.workspaceId, user._id, { requireActive: true });
@@ -316,6 +317,7 @@ export const generateUploadUrl = mutation({
     workspaceId: v.optional(v.id("workspaces")),
     threadId: v.optional(v.string()),
   },
+  returns: v.string(),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     if (args.workspaceId) {
@@ -335,6 +337,7 @@ export const updateDocument = action({
     markdown: v.optional(v.string()),
     plainText: v.string(),
   },
+  returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     const storageId = await storeOversizedText(ctx, args.plainText, "text/plain");
@@ -460,6 +463,7 @@ export const createUrl = mutation({
     url: v.string(),
     title: v.optional(v.string()),
   },
+  returns: v.id("artifacts"),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     await assertWorkspaceOwner(ctx, args.workspaceId, user._id, { requireActive: true });
@@ -524,6 +528,7 @@ export const createUrl = mutation({
 
 export const retryUrlExtraction = mutation({
   args: { artifactId: v.id("artifacts") },
+  returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     const artifact = await assertWorkspaceArtifactOwner(ctx, args.artifactId, user._id, {
@@ -559,6 +564,7 @@ export const rename = mutation({
     artifactId: v.id("artifacts"),
     title: v.string(),
   },
+  returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     const artifact = await assertWorkspaceArtifactOwner(ctx, args.artifactId, user._id, {
@@ -579,6 +585,7 @@ export const move = mutation({
     targetWorkspaceId: v.optional(v.id("workspaces")),
     folderId: v.optional(v.id("workspaceFolders")),
   },
+  returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     const artifact = await assertWorkspaceArtifactOwner(ctx, args.artifactId, user._id, {
@@ -609,6 +616,7 @@ export const move = mutation({
 
 export const remove = mutation({
   args: { artifactId: v.id("artifacts") },
+  returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     const artifact = await assertWorkspaceArtifactOwner(ctx, args.artifactId, user._id, {

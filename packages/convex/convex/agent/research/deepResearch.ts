@@ -331,6 +331,11 @@ export const cancel = mutation({
 
 export const retry = mutation({
   args: { runId: v.id("agentRuns") },
+  returns: v.object({
+    ok: v.literal(true),
+    runId: v.id("agentRuns"),
+    workflowId: v.string(),
+  }),
   handler: async (ctx, args): Promise<{ ok: true; runId: Id<"agentRuns">; workflowId: string }> => {
     const user = await requireCurrentUser(ctx);
     const run = await ctx.db.get("agentRuns", args.runId);

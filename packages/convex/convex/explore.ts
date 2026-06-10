@@ -3,7 +3,7 @@ import { api, internal } from "./_generated/api";
 import { action, internalMutation, query, type ActionCtx } from "./_generated/server";
 import { requireCurrentUser } from "./auth";
 import { throwAppError } from "./lib/appError";
-import { explorePaperValidator } from "./explore/validators";
+import { explorePaperFields, explorePaperValidator } from "./explore/validators";
 import {
   lookupDoiProvider,
   providerFailureReason,
@@ -26,6 +26,14 @@ import {
 
 const defaultRecommendationQuery = "education research learning assessment artificial intelligence";
 const minFallbackResults = 5;
+
+// An explorePapers row with system fields stripped: exactly `explorePaperFields`
+// plus the denormalized `lastSeenAt`. Matches the table definition in schema.ts
+// (`{ ...explorePaperFields, lastSeenAt: v.number() }`) field-for-field.
+const explorePaperDetailValidator = v.object({
+  ...explorePaperFields,
+  lastSeenAt: v.number(),
+});
 
 type ProviderResult = {
   items: ExternalCandidate[];
@@ -139,6 +147,7 @@ export const getPaper = query({
   args: {
     key: v.string(),
   },
+  returns: v.union(explorePaperDetailValidator, v.null()),
   handler: async (ctx, args): Promise<(ExplorePaper & { lastSeenAt: number }) | null> => {
     await requireCurrentUser(ctx);
     const paper = await ctx.db
@@ -165,6 +174,7 @@ export const getOrFetchPaper = action({
   args: {
     key: v.string(),
   },
+  returns: v.union(explorePaperDetailValidator, v.null()),
   handler: async (
     ctx,
     args,

@@ -83,6 +83,7 @@ export const create = mutation({
   args: {
     name: v.string(),
   },
+  returns: v.id("workspaces"),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     return await createWorkspaceForOwner(ctx, {
@@ -111,6 +112,7 @@ export const rename = mutation({
     workspaceId: v.id("workspaces"),
     name: v.string(),
   },
+  returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     await renameWorkspaceForOwner(ctx, {
@@ -127,6 +129,7 @@ export const updateEmoji = mutation({
     workspaceId: v.id("workspaces"),
     emoji: v.string(),
   },
+  returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     await assertWorkspaceOwner(ctx, args.workspaceId, user._id);
@@ -152,6 +155,7 @@ export const renameFromAgentInternal = internalMutation({
 
 export const archive = mutation({
   args: { workspaceId: v.id("workspaces") },
+  returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     const workspace = await assertWorkspaceOwner(ctx, args.workspaceId, user._id);
