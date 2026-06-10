@@ -1,6 +1,7 @@
 "use client";
 
 import { NavUser } from "@/components/nav-user";
+import { SidebarProCard } from "@/components/sidebar-pro-card";
 import {
   CommandDialog,
   CommandEmpty,
@@ -290,7 +291,8 @@ export function AppSidebar({
           </ScrollArea>
         </SidebarContent>
 
-        <SidebarFooter className="mt-auto p-3">
+        <SidebarFooter className="mt-auto gap-3 p-3">
+          <SidebarProCard />
           <NavUser user={viewer} />
         </SidebarFooter>
       </Sidebar>
