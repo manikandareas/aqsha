@@ -1,4 +1,3 @@
-import Exa from "exa-js";
 import { XMLParser } from "fast-xml-parser";
 import { ConvexError, v } from "convex/values";
 import { internal } from "../_generated/api";
@@ -7,7 +6,11 @@ import {
   internalQuery,
   type ActionCtx,
 } from "../_generated/server";
+import { getExaClient } from "./exaClient";
 import { rateLimiter } from "../limits";
+import { asArray } from "../lib/arrays";
+import { normalizeDoi } from "../lib/identifiers";
+import { collapse, normalizeKey } from "../lib/text";
 import { providerValidator, type Provider } from "./providerCache";
 import type { SourceCandidate, SourceOrigin } from "./sourceCandidates";
 import { trimForSnippet } from "./sourceCandidates";
@@ -138,8 +141,8 @@ export async function searchExaCandidates(
     return [];
   }
 
-  const apiKey = process.env.EXA_API_KEY;
-  if (!apiKey) {
+  const exa = getExaClient();
+  if (!exa) {
     return [];
   }
   await limitExternal(ctx, args.ownerUserId, "exa");
@@ -160,7 +163,6 @@ export async function searchExaCandidates(
   }
 
   try {
-    const exa = new Exa(apiKey);
     const response = await exa.search(query, {
       numResults: limit,
       type: "auto",
@@ -484,8 +486,8 @@ export async function readWithExaContents(
   args: { ownerUserId: string; url: string },
 ): Promise<JinaReadResult> {
   await limitExternal(ctx, args.ownerUserId, "exa");
-  const apiKey = process.env.EXA_API_KEY;
-  if (!apiKey) {
+  const exa = getExaClient();
+  if (!exa) {
     return readFailure(args.url, "EXA_API_KEY is not configured");
   }
   const cacheKey = normalizeKey(args.url);
@@ -494,7 +496,6 @@ export async function readWithExaContents(
     return cached;
   }
   try {
-    const exa = new Exa(apiKey);
     const response = await exa.getContents([args.url], {
       text: { maxCharacters: 18_000 },
       highlights: true,
@@ -587,7 +588,7 @@ function providerRateLimit(ctx: ActionCtx, ownerUserId: string, provider: Provid
   return rateLimiter.limit(ctx, "jinaSearchPerUser", { key: ownerUserId });
 }
 
-async function readCachedCandidates(
+export async function readCachedCandidates(
   ctx: ActionCtx,
   provider: Provider,
   cacheKey: string,
@@ -609,7 +610,7 @@ async function readCachedCandidates(
   }
 }
 
-async function writeCachedCandidates(
+export async function writeCachedCandidates(
   ctx: ActionCtx,
   provider: Provider,
   cacheKey: string,
@@ -933,25 +934,6 @@ function extractDoi(value: ArxivEntry["arxiv:doi"]) {
     return normalizeDoi(value);
   }
   return normalizeDoi(value?.["#text"] ?? "");
-}
-
-function asArray<T>(value: T | T[] | undefined): T[] {
-  if (!value) {
-    return [];
-  }
-  return Array.isArray(value) ? value : [value];
-}
-
-function normalizeDoi(value: string) {
-  return value.replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").trim().toLowerCase();
-}
-
-function normalizeKey(value: string) {
-  return value.replace(/\s+/g, " ").trim().toLowerCase();
-}
-
-function collapse(value: string) {
-  return value.replace(/\s+/g, " ").trim();
 }
 
 function stripTags(value: string | undefined) {

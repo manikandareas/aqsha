@@ -73,13 +73,9 @@ function academicHint(host: string | null): string | null {
   );
 }
 
-export function normalizeDoi(value: string): string {
-  return value
-    .trim()
-    .replace(/^https?:\/\/(dx\.)?doi\.org\//i, "")
-    .replace(/^doi:/i, "")
-    .toLowerCase();
-}
+// Canonical DOI normalizer now lives in ../lib/identifiers; re-exported here
+// so existing import paths (and the identifiers unit tests) keep working.
+export { normalizeDoi } from "../lib/identifiers";
 
 /** Extract + clean the first DOI found anywhere in the input, or undefined. */
 export function extractDoi(value: string): string | undefined {

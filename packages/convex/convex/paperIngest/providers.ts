@@ -1,6 +1,11 @@
 import { XMLParser } from "fast-xml-parser";
 import type { ActionCtx } from "../_generated/server";
-import { reconstructOpenAlexAbstract } from "../agent/openalexProvider";
+import {
+  reconstructOpenAlexAbstract,
+  type OpenAlexWork,
+} from "../agent/openalexProvider";
+import { asArray } from "../lib/arrays";
+import { collapse, numberOrUndefined } from "../lib/text";
 import { arxivAbsUrl, arxivPdfUrl, normalizeDoi } from "./identifiers";
 import { contactEmail, fetchWithTimeout, globalThrottle, userAgent } from "./http";
 import type { ArxivPartial, PartialPaper } from "./model";
@@ -52,35 +57,6 @@ export async function openAlexByPmid(
     return null;
   }
 }
-
-type OpenAlexWork = {
-  doi?: string | null;
-  title?: string | null;
-  display_name?: string | null;
-  publication_year?: number | null;
-  abstract_inverted_index?: Record<string, number[]> | null;
-  primary_location?: OpenAlexLocation | null;
-  best_oa_location?: OpenAlexLocation | null;
-  open_access?: {
-    oa_status?: string | null;
-    oa_url?: string | null;
-  } | null;
-  authorships?: Array<{
-    author?: { display_name?: string | null } | null;
-    raw_author_name?: string | null;
-    institutions?: Array<{ display_name?: string | null }> | null;
-  }> | null;
-  locations?: OpenAlexLocation[] | null;
-};
-
-type OpenAlexLocation = {
-  landing_page_url?: string | null;
-  pdf_url?: string | null;
-  source?: {
-    display_name?: string | null;
-    host_organization_name?: string | null;
-  } | null;
-};
 
 function openAlexWorkToPartial(work: OpenAlexWork): PartialPaper {
   const location = work.best_oa_location ?? work.primary_location ?? null;
@@ -323,21 +299,8 @@ function compact(values: Array<string | null | undefined>): string[] {
   return values.filter((value): value is string => Boolean(value && value.trim()));
 }
 
-function collapse(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
-}
-
-function numberOrUndefined(value: number | null | undefined): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
 function yearFromIso(value: string | undefined): number | undefined {
   if (!value) return undefined;
   const match = value.match(/^(\d{4})/);
   return match ? Number(match[1]) : undefined;
-}
-
-function asArray<T>(value: T | T[] | undefined | null): T[] {
-  if (value === undefined || value === null) return [];
-  return Array.isArray(value) ? value : [value];
 }

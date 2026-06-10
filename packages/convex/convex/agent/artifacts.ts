@@ -8,7 +8,6 @@ import {
 } from "../_generated/server";
 import {
   artifactFamilyForType,
-  artifactTypeForLegacyArtifact,
   defaultLanguageForArtifactType,
   plainTextFromMarkdown,
   previewFromText,
@@ -18,27 +17,6 @@ import { requireCurrentUser } from "../auth";
 import { tryAssertThreadOwner } from "./threads";
 
 const ARTIFACT_INLINE_LIMIT = 800_000;
-
-const artifactTypeValidator = v.union(
-  v.literal("research_report"),
-  v.literal("markdown_report"),
-  v.literal("research_document"),
-  v.literal("source_bundle"),
-  v.literal("citation_evidence_view"),
-  v.literal("document"),
-  v.literal("code"),
-  v.literal("html"),
-  v.literal("json"),
-  v.literal("plain_text"),
-);
-
-const contentFormatValidator = v.union(
-  v.literal("markdown"),
-  v.literal("html"),
-  v.literal("plain"),
-  v.literal("code"),
-  v.literal("json"),
-);
 
 const relationValidator = v.union(
   v.literal("created"),
@@ -107,23 +85,6 @@ export const get = query({
   },
 });
 
-export const listVersions = query({
-  args: { artifactId: v.id("artifacts") },
-  handler: async (ctx, args) => {
-    const user = await requireCurrentUser(ctx);
-    const artifact = await ctx.db.get("artifacts", args.artifactId);
-    if (!artifact || artifact.ownerUserId !== user._id) {
-      return [];
-    }
-    return await ctx.db
-      .query("artifactVersions")
-      .withIndex("by_owner_artifact_version", (q) =>
-        q.eq("ownerUserId", user._id).eq("artifactId", args.artifactId),
-      )
-      .collect();
-  },
-});
-
 export const listForMessage = query({
   args: { messageId: v.string() },
   handler: async (ctx, args) => {
@@ -181,130 +142,24 @@ export const listCitationChecks = query({
     if (!artifact || artifact.ownerUserId !== user._id) {
       return [];
     }
-    const rows = await ctx.db
+    if (args.versionId) {
+      const versionId = args.versionId;
+      return await ctx.db
+        .query("citationChecks")
+        .withIndex("by_owner_artifact_version", (q) =>
+          q
+            .eq("ownerUserId", user._id)
+            .eq("artifactId", args.artifactId)
+            .eq("artifactVersionId", versionId),
+        )
+        .collect();
+    }
+    return await ctx.db
       .query("citationChecks")
       .withIndex("by_owner_artifact", (q) =>
         q.eq("ownerUserId", user._id).eq("artifactId", args.artifactId),
       )
       .collect();
-    if (!args.versionId) {
-      return rows;
-    }
-    return rows.filter((row) => row.artifactVersionId === args.versionId);
-  },
-});
-
-export const createVersionFromAgent = internalMutation({
-  args: {
-    ownerUserId: v.string(),
-    threadId: v.string(),
-    runId: v.optional(v.id("agentRuns")),
-    type: artifactTypeValidator,
-    title: v.string(),
-    contentFormat: contentFormatValidator,
-    body: v.string(),
-    createdByMessageId: v.optional(v.string()),
-    changeSummary: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    if (args.runId) {
-      await assertRunOwner(ctx, args.runId, args.ownerUserId);
-    }
-    const now = Date.now();
-    const artifactType = artifactTypeFromVersionArgs(args.contentFormat, args.type);
-    const plainText =
-      artifactType === "markdown" ? plainTextFromMarkdown(args.body) : args.body;
-    const artifactId = await ctx.db.insert("artifacts", {
-      ownerUserId: args.ownerUserId,
-      threadId: args.threadId,
-      runId: args.runId,
-      artifactType,
-      artifactFamily: artifactFamilyForType(artifactType),
-      source: "agent",
-      title: args.title,
-      language: defaultLanguageForArtifactType(artifactType),
-      indexingStatus: "not_indexed",
-      plainTextPreview: previewFromText(plainText),
-      status: "active",
-      createdAt: now,
-      updatedAt: now,
-    });
-    const versionId = await insertVersion(ctx, {
-      ownerUserId: args.ownerUserId,
-      threadId: args.threadId,
-      artifactId,
-      runId: args.runId,
-      versionNumber: 1,
-      title: args.title,
-      contentFormat: args.contentFormat,
-      body: args.body,
-      createdByMessageId: args.createdByMessageId,
-      changeSummary: args.changeSummary,
-      createdAt: now,
-    });
-    await ctx.db.patch("artifacts", artifactId, { currentVersionId: versionId });
-    return { artifactId, versionId };
-  },
-});
-
-export const updateVersionFromAgent = internalMutation({
-  args: {
-    ownerUserId: v.string(),
-    artifactId: v.id("artifacts"),
-    title: v.optional(v.string()),
-    contentFormat: contentFormatValidator,
-    body: v.string(),
-    createdByMessageId: v.optional(v.string()),
-    runId: v.optional(v.id("agentRuns")),
-    changeSummary: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const artifact = await assertArtifactOwner(ctx, args.artifactId, args.ownerUserId);
-    const versions = await ctx.db
-      .query("artifactVersions")
-      .withIndex("by_owner_artifact_version", (q) =>
-        q.eq("ownerUserId", args.ownerUserId).eq("artifactId", args.artifactId),
-      )
-      .collect();
-    const latest = versions.reduce(
-      (max, version) => Math.max(max, version.versionNumber),
-      0,
-    );
-    const now = Date.now();
-    const title = args.title ?? artifact.title;
-    const artifactType = artifactTypeFromVersionArgs(
-      args.contentFormat,
-      legacyTypeFromArtifactType(artifactTypeForLegacyArtifact(artifact)),
-    );
-    const plainText =
-      artifactType === "markdown" ? plainTextFromMarkdown(args.body) : args.body;
-    if (!artifact.threadId) {
-      throw new ConvexError("Artifact thread not found");
-    }
-    const versionId = await insertVersion(ctx, {
-      ownerUserId: args.ownerUserId,
-      threadId: artifact.threadId,
-      artifactId: artifact._id,
-      runId: args.runId,
-      versionNumber: latest + 1,
-      title,
-      contentFormat: args.contentFormat,
-      body: args.body,
-      createdByMessageId: args.createdByMessageId,
-      changeSummary: args.changeSummary,
-      createdAt: now,
-    });
-    await ctx.db.patch("artifacts", artifact._id, {
-      title,
-      artifactType,
-      artifactFamily: artifactFamilyForType(artifactType),
-      language: defaultLanguageForArtifactType(artifactType),
-      indexingStatus: "not_indexed",
-      plainTextPreview: previewFromText(plainText),
-      currentVersionId: versionId,
-      updatedAt: now,
-    });
-    return { artifactId: artifact._id, versionId };
   },
 });
 
@@ -499,20 +354,5 @@ function artifactTypeFromVersionArgs(
       return "plain_text";
     case "markdown":
       return "markdown";
-  }
-}
-
-function legacyTypeFromArtifactType(artifactType: ArtifactType | undefined): LegacyArtifactType {
-  switch (artifactType) {
-    case "code":
-      return "code";
-    case "html":
-      return "html";
-    case "json":
-      return "json";
-    case "plain_text":
-      return "plain_text";
-    default:
-      return "document";
   }
 }

@@ -1,13 +1,29 @@
 import { ConvexError } from "convex/values";
 import { internal } from "../_generated/api";
 import type { ActionCtx } from "../_generated/server";
+import type { ExploreCandidateMetadata } from "../exploreValidators";
 import { rateLimiter } from "../limits";
-import type { ExternalCandidate } from "./externalProviders";
+import { normalizeDoi } from "../lib/identifiers";
+import {
+  collapse,
+  firstNonEmpty,
+  normalizeKey,
+  numberOrUndefined,
+  uniqueCompact,
+} from "../lib/text";
+import {
+  readCachedCandidates,
+  writeCachedCandidates,
+  type ExternalCandidate,
+} from "./externalProviders";
 import { trimForSnippet } from "./sourceCandidates";
 
 const OPENALEX_ENDPOINT = "https://api.openalex.org/works";
 const USER_AGENT = "AqshaResearch/phase3 (https://aqsha.local; mailto optional)";
 
+// Superset of every OpenAlex `works` field consumed across the codebase
+// (agent explore path + paperIngest resolver). All fields optional; callers
+// `as`-cast raw JSON onto this shape, so additions are purely additive.
 export type OpenAlexWork = {
   id?: string;
   doi?: string | null;
@@ -20,10 +36,16 @@ export type OpenAlexWork = {
   abstract_inverted_index?: Record<string, number[]> | null;
   primary_location?: OpenAlexLocation | null;
   best_oa_location?: OpenAlexLocation | null;
-  open_access?: { is_oa?: boolean | null; oa_url?: string | null } | null;
+  locations?: OpenAlexLocation[] | null;
+  open_access?: {
+    is_oa?: boolean | null;
+    oa_status?: string | null;
+    oa_url?: string | null;
+  } | null;
   authorships?: Array<{
     author?: { display_name?: string | null } | null;
     raw_author_name?: string | null;
+    institutions?: Array<{ display_name?: string | null }> | null;
   }> | null;
   primary_topic?: OpenAlexTopic | null;
   topics?: OpenAlexTopic[] | null;
@@ -34,7 +56,10 @@ type OpenAlexLocation = {
   landing_page_url?: string | null;
   pdf_url?: string | null;
   is_oa?: boolean | null;
-  source?: { display_name?: string | null } | null;
+  source?: {
+    display_name?: string | null;
+    host_organization_name?: string | null;
+  } | null;
 };
 
 type OpenAlexTopic = {
@@ -42,20 +67,6 @@ type OpenAlexTopic = {
   score?: number | null;
   field?: { display_name?: string | null } | null;
   subfield?: { display_name?: string | null } | null;
-};
-
-type OpenAlexMetadata = {
-  authors?: string[];
-  year?: number;
-  publicationDate?: string;
-  venue?: string;
-  citedByCount?: number;
-  isOpenAccess?: boolean;
-  pdfUrl?: string;
-  openalexId?: string;
-  topics?: string[];
-  score?: number;
-  sourceLabel?: string;
 };
 
 export async function searchOpenAlexWorks(
@@ -76,7 +87,7 @@ export async function searchOpenAlexWorks(
   const limit = Math.min(args.limit ?? 8, 25);
   const fromYear = normalizeFromYear(args.fromYear);
   const cacheKey = normalizeKey(JSON.stringify({ mode, query, limit, fromYear }));
-  const cached = await readCachedOpenAlex(ctx, cacheKey);
+  const cached = await readCachedCandidates(ctx, "openalex", cacheKey);
   if (cached) {
     return cached;
   }
@@ -105,7 +116,7 @@ export async function searchOpenAlexWorks(
   const candidates = (json.results ?? [])
     .map(openAlexWorkToCandidate)
     .filter((item): item is ExternalCandidate => Boolean(item));
-  await writeCachedOpenAlex(ctx, cacheKey, candidates);
+  await writeCachedCandidates(ctx, "openalex", cacheKey, candidates);
   return candidates;
 }
 
@@ -131,7 +142,7 @@ export function openAlexWorkToCandidate(work: OpenAlexWork): ExternalCandidate |
     ...(work.topics ?? []).map((topic) => topic.display_name),
   ]).slice(0, 5);
   const abstract = reconstructOpenAlexAbstract(work.abstract_inverted_index);
-  const metadata: OpenAlexMetadata = {
+  const metadata: ExploreCandidateMetadata = {
     authors: (work.authorships ?? [])
       .map((authorship) =>
         collapse(authorship.author?.display_name ?? authorship.raw_author_name ?? ""),
@@ -272,34 +283,6 @@ async function limitOpenAlex(ctx: ActionCtx, ownerUserId: string) {
   ]);
 }
 
-async function readCachedOpenAlex(ctx: ActionCtx, cacheKey: string) {
-  const cached: { valueJson: string } | null = await ctx.runQuery(
-    internal.agent.externalProviders.getCache,
-    { provider: "openalex", cacheKey },
-  );
-  if (!cached) {
-    return null;
-  }
-  try {
-    return JSON.parse(cached.valueJson) as ExternalCandidate[];
-  } catch {
-    return null;
-  }
-}
-
-async function writeCachedOpenAlex(
-  ctx: ActionCtx,
-  cacheKey: string,
-  candidates: ExternalCandidate[],
-) {
-  await ctx.runMutation(internal.agent.externalProviders.putCache, {
-    provider: "openalex",
-    cacheKey,
-    status: candidates.length > 0 ? "ready" : "empty",
-    valueJson: JSON.stringify(candidates),
-  });
-}
-
 function userAgent() {
   const mailto = process.env.CROSSREF_MAILTO;
   return mailto ? `${USER_AGENT}; mailto:${mailto}` : USER_AGENT;
@@ -320,26 +303,3 @@ async function openAlexErrorMessage(response: Response) {
   }
 }
 
-function normalizeDoi(value: string) {
-  return value.replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").trim().toLowerCase();
-}
-
-function normalizeKey(value: string) {
-  return value.replace(/\s+/g, " ").trim().toLowerCase();
-}
-
-function firstNonEmpty(...values: Array<string | null | undefined>) {
-  return values.find((value) => value && value.trim())?.trim();
-}
-
-function numberOrUndefined(value: number | null | undefined) {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function uniqueCompact(values: Array<string | null | undefined>) {
-  return [...new Set(values.map((value) => collapse(value ?? "")).filter(Boolean))];
-}
-
-function collapse(value: string) {
-  return value.replace(/\s+/g, " ").trim();
-}

@@ -439,7 +439,7 @@ export const listCitationChecks = query({
       .withIndex("by_owner_artifact", (q) =>
         q.eq("ownerUserId", user._id).eq("artifactId", args.artifactId),
       )
-      .collect();
+      .take(200);
   },
 });
 

@@ -1,5 +1,5 @@
 import { paginationOptsValidator } from "convex/server";
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -13,6 +13,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { requireCurrentUser } from "./auth";
+import { throwAppError } from "./lib/appError";
 import { PLAN_CATALOG } from "./billing/catalog";
 import { getBillingSnapshot } from "./billing/entitlements";
 import {
@@ -542,7 +543,10 @@ export const retryUrlExtraction = mutation({
     });
     await assertWorkspaceOwner(ctx, artifact.workspaceId, user._id, { requireActive: true });
     if (artifactTypeForLegacyArtifact(artifact) !== "url") {
-      throw new ConvexError("Artifact is not a URL");
+      throwAppError({
+        message: "Artifact is not a URL",
+        code: "artifact_not_url",
+      });
     }
     const row = await getUrlRow(ctx, args.artifactId, user._id);
     await ctx.db.patch("artifacts", args.artifactId, {
@@ -651,7 +655,10 @@ export const updateMarkdownInternal = internalMutation({
     });
     await assertWorkspaceOwner(ctx, artifact.workspaceId, args.ownerUserId, { requireActive: true });
     if (artifactTypeForLegacyArtifact(artifact) !== "markdown") {
-      throw new ConvexError("Artifact is not editable Markdown");
+      throwAppError({
+        message: "Artifact is not editable Markdown",
+        code: "artifact_not_editable_markdown",
+      });
     }
     const row = await getContentRow(ctx, args.artifactId, args.ownerUserId);
     const now = Date.now();
@@ -786,7 +793,10 @@ export const saveAttachmentToWorkspace = mutation({
     const user = await requireCurrentUser(ctx);
     const artifact = await ctx.db.get("artifacts", args.artifactId);
     if (!artifact || artifact.ownerUserId !== user._id) {
-      throw new ConvexError("Attachment not found");
+      throwAppError({
+        message: "Attachment not found",
+        code: "attachment_not_found",
+      });
     }
     if (artifact.workspaceId) {
       const workspace = await ctx.db.get("workspaces", artifact.workspaceId);
@@ -837,12 +847,20 @@ export const saveAttachmentToWorkspace = mutation({
       } else if (activeWorkspaces.length === 1) {
         targetWorkspaceId = activeWorkspaces[0]._id;
       } else {
-        throw new ConvexError("Choose a workspace to save this attachment");
+        throwAppError({
+          message: "Choose a workspace to save this attachment",
+          code: "attachment_workspace_required",
+          field: "workspaceId",
+        });
       }
     }
 
     if (boundWorkspaceId && args.workspaceId && args.workspaceId !== boundWorkspaceId) {
-      throw new ConvexError("Attachment must be saved to the bound workspace");
+      throwAppError({
+        message: "Attachment must be saved to the bound workspace",
+        code: "attachment_workspace_mismatch",
+        field: "workspaceId",
+      });
     }
 
     const promoted = await ctx.runMutation(
@@ -1303,7 +1321,10 @@ export const updateArtifactFromAgentInternal = internalMutation({
     await assertWorkspaceOwner(ctx, artifact.workspaceId, args.ownerUserId, { requireActive: true });
     const artifactType = artifactTypeFromAgentInput(args.artifactType);
     if (!isAgentWritableArtifactType(artifactTypeForLegacyArtifact(artifact))) {
-      throw new ConvexError("Uploaded file artifacts cannot be overwritten by generated text");
+      throwAppError({
+        message: "Uploaded file artifacts cannot be overwritten by generated text",
+        code: "artifact_not_overwritable",
+      });
     }
     const row = await getContentRow(ctx, args.artifactId, args.ownerUserId);
     const now = Date.now();
@@ -1374,9 +1395,13 @@ async function assertLibraryCapacityForOwner(
     .withIndex("by_owner_status_updated", (q) =>
       q.eq("ownerUserId", ownerUserId).eq("status", "active"),
     )
-    .collect();
+    .take(limit + 1);
   if (activeArtifacts.length >= limit) {
-    throw new ConvexError("Library item limit reached for current plan");
+    throwAppError({
+      message: "Library item limit reached for current plan",
+      code: "library_item_limit_reached",
+      severity: "warning",
+    });
   }
 }
 
@@ -1392,9 +1417,13 @@ async function assertWorkspaceCapacity(ctx: MutationCtx, ownerUserId: string) {
     .withIndex("by_owner_status_updated", (q) =>
       q.eq("ownerUserId", ownerUserId).eq("status", "active"),
     )
-    .collect();
+    .take(limit + 1);
   if (activeWorkspaces.length >= limit) {
-    throw new ConvexError("Workspace limit reached for current plan");
+    throwAppError({
+      message: "Workspace limit reached for current plan",
+      code: "workspace_limit_reached",
+      severity: "warning",
+    });
   }
 }
 
@@ -1405,7 +1434,10 @@ async function getContentRow(
 ) {
   const row = await getContentRowOrNull(ctx, artifactId, ownerUserId);
   if (!row) {
-    throw new ConvexError("Artifact content not found");
+    throwAppError({
+      message: "Artifact content not found",
+      code: "artifact_content_not_found",
+    });
   }
   return row;
 }
@@ -1430,7 +1462,10 @@ async function getUrlRow(
 ) {
   const row = await getUrlRowOrNull(ctx, artifactId, ownerUserId);
   if (!row) {
-    throw new ConvexError("URL artifact not found");
+    throwAppError({
+      message: "URL artifact not found",
+      code: "artifact_url_not_found",
+    });
   }
   return row;
 }
@@ -1483,6 +1518,10 @@ function assertGeneratedArtifactFitsInline(content: string, plainText: string) {
     content.length > ARTIFACT_BODY_INLINE_LIMIT ||
     plainText.length > ARTIFACT_BODY_INLINE_LIMIT
   ) {
-    throw new ConvexError("Generated artifact is too large to save inline");
+    throwAppError({
+      message: "Generated artifact is too large to save inline",
+      code: "artifact_too_large_inline",
+      severity: "warning",
+    });
   }
 }

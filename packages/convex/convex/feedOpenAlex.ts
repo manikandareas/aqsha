@@ -1,6 +1,7 @@
 import { internal } from "./_generated/api";
 import type { ActionCtx } from "./_generated/server";
 import { rateLimiter } from "./limits";
+import { normalizeDoi } from "./lib/identifiers";
 import {
   buildOpenAlexWorksUrl,
   openAlexWorkToCandidate,
@@ -83,12 +84,7 @@ function worksToCandidates(works: OpenAlexWork[]): ExternalCandidate[] {
 
 export function normalizeDoiLoose(value: string | null | undefined): string {
   if (!value) return "";
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/^https?:\/\/(dx\.)?doi\.org\//, "")
-    .replace(/^doi:/, "")
-    .trim();
+  return normalizeDoi(value);
 }
 
 // Identifiers we can match a feed paper back to a raw work by.

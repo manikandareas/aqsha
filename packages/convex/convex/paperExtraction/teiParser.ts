@@ -1,9 +1,10 @@
 import { XMLParser } from "fast-xml-parser";
+import { asArray } from "../lib/arrays";
+import { normalizeDoi as normalizeDoiCanonical } from "../lib/identifiers";
+import type { PaperAuthor } from "../lib/paperTypes";
+import { collapse, uniqueCompactCI } from "../lib/text";
 
-export type ParsedPaperAuthor = {
-  name: string;
-  affiliation?: string;
-};
+export type ParsedPaperAuthor = PaperAuthor;
 
 export type ParsedPaperSection = {
   title?: string;
@@ -57,7 +58,7 @@ export function parseGrobidTei(teiXml: string): ParsedPaperMetadata {
   const abstract = textValue(findFirst(profileDesc, "abstract")) ?? undefined;
   const doi = normalizeDoi(textValue(findTypedIdno(teiHeader, "DOI")) ?? undefined);
   const authors = parseAuthors(analytic);
-  const affiliations = uniqueCompact(
+  const affiliations = uniqueCompactCI(
     collectByKey(teiHeader, "affiliation").map((item) => textValue(item) ?? ""),
   );
   const journal = textValue(findTitle(monogr, "j")) ?? undefined;
@@ -89,14 +90,14 @@ function parseAuthors(analytic: unknown): ParsedPaperAuthor[] {
   return asArray(getValue(analytic, "author"))
     .map((author) => {
       const persName = getValue(author, "persName") ?? author;
-      const name = uniqueCompact([
+      const name = uniqueCompactCI([
         textValue(getValue(persName, "forename")) ?? "",
         textValue(getValue(persName, "surname")) ?? "",
       ]).join(" ");
       const fallbackName = textValue(persName);
       const affiliation = textValue(getValue(author, "affiliation")) ?? undefined;
       return {
-        name: compactText(name || fallbackName || ""),
+        name: collapse(name || fallbackName || ""),
         affiliation,
       };
     })
@@ -107,9 +108,9 @@ function parseKeywords(profileDesc: unknown) {
   const keywordsNode = findFirst(profileDesc, "keywords");
   const terms = collectByKey(keywordsNode, "term").map((item) => textValue(item) ?? "");
   if (terms.length > 0) {
-    return uniqueCompact(terms);
+    return uniqueCompactCI(terms);
   }
-  return uniqueCompact((textValue(keywordsNode) ?? "").split(/[;,]/));
+  return uniqueCompactCI((textValue(keywordsNode) ?? "").split(/[;,]/));
 }
 
 function parseSections(body: unknown): ParsedPaperSection[] {
@@ -122,7 +123,7 @@ function parseSections(body: unknown): ParsedPaperSection[] {
         .map((item) => textValue(item) ?? "")
         .join("\n\n");
       const text = compactMultiline(paragraphText || textValue(div) || "");
-      return { title: title ? compactText(title) : undefined, text };
+      return { title: title ? collapse(title) : undefined, text };
     })
     .filter((section) => section.text.length > 0);
 }
@@ -197,10 +198,10 @@ function textValue(node: unknown): string | undefined {
     return undefined;
   }
   if (typeof node === "string" || typeof node === "number") {
-    return compactText(String(node));
+    return collapse(String(node));
   }
   if (Array.isArray(node)) {
-    return compactText(node.map((item) => textValue(item) ?? "").join(" "));
+    return collapse(node.map((item) => textValue(item) ?? "").join(" "));
   }
   if (typeof node === "object") {
     const record = node as Record<string, unknown>;
@@ -210,23 +211,16 @@ function textValue(node: unknown): string | undefined {
         .filter(([key]) => !key.startsWith("@_") && key !== "#text")
         .map(([, value]) => textValue(value) ?? ""),
     ].join(" ");
-    return compactText(text);
+    return collapse(text);
   }
   return undefined;
-}
-
-function asArray<T>(value: T | T[] | undefined): T[] {
-  if (value === undefined) {
-    return [];
-  }
-  return Array.isArray(value) ? value : [value];
 }
 
 function normalizeDoi(value: string | undefined) {
   if (!value) {
     return undefined;
   }
-  return value.replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").trim().toLowerCase();
+  return normalizeDoiCanonical(value);
 }
 
 function parseYear(node: unknown) {
@@ -259,23 +253,6 @@ function scoreConfidence(args: {
   if (args.authors.length > 0) score += 0.15;
   if (args.sections.length > 0) score += 0.15;
   return Math.min(1, Number(score.toFixed(2)));
-}
-
-function uniqueCompact(values: string[]) {
-  const seen = new Set<string>();
-  return values
-    .map(compactText)
-    .filter((value) => {
-      if (!value || seen.has(value.toLowerCase())) {
-        return false;
-      }
-      seen.add(value.toLowerCase());
-      return true;
-    });
-}
-
-function compactText(value: string) {
-  return value.replace(/\s+/g, " ").trim();
 }
 
 function compactMultiline(value: string) {

@@ -18,18 +18,30 @@ export const recordOutcome = internalMutation({
       .unique();
 
     if (existing) {
+      const successCount = existing.successCount + (args.success ? 1 : 0);
+      const failureCount = existing.failureCount + (args.success ? 0 : 1);
+      const total = successCount + failureCount;
+      const unreliable =
+        total >= MIN_OBSERVATIONS && failureCount / total > UNRELIABLE_THRESHOLD;
       await ctx.db.patch("domainReliability", existing._id, {
-        successCount: existing.successCount + (args.success ? 1 : 0),
-        failureCount: existing.failureCount + (args.success ? 0 : 1),
+        successCount,
+        failureCount,
+        unreliable,
         lastFailureReason: args.success ? existing.lastFailureReason : args.failureReason,
         lastSeenAt: now,
         updatedAt: now,
       });
     } else {
+      const successCount = args.success ? 1 : 0;
+      const failureCount = args.success ? 0 : 1;
+      const total = successCount + failureCount;
+      const unreliable =
+        total >= MIN_OBSERVATIONS && failureCount / total > UNRELIABLE_THRESHOLD;
       await ctx.db.insert("domainReliability", {
         domain: args.domain,
-        successCount: args.success ? 1 : 0,
-        failureCount: args.success ? 0 : 1,
+        successCount,
+        failureCount,
+        unreliable,
         lastFailureReason: args.success ? undefined : args.failureReason,
         lastSeenAt: now,
         updatedAt: now,
@@ -41,12 +53,10 @@ export const recordOutcome = internalMutation({
 export const listUnreliableDomains = internalQuery({
   args: {},
   handler: async (ctx) => {
-    const all = await ctx.db.query("domainReliability").collect();
-    return all
-      .filter((row) => {
-        const total = row.successCount + row.failureCount;
-        return total >= MIN_OBSERVATIONS && row.failureCount / total > UNRELIABLE_THRESHOLD;
-      })
-      .map((row) => row.domain);
+    const rows = await ctx.db
+      .query("domainReliability")
+      .withIndex("by_unreliable", (q) => q.eq("unreliable", true))
+      .collect();
+    return rows.map((row) => row.domain);
   },
 });

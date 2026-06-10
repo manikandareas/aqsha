@@ -1,3 +1,4 @@
+import { normalizeDoi } from "../lib/identifiers";
 import type { SourceCandidate } from "./sourceCandidates";
 
 const BLOCKED_PATTERNS = [
@@ -69,9 +70,9 @@ export function assessSourceQuality(
 export function canonicalSourceKey(
   source: Pick<SourceCandidate, "doi" | "arxivId" | "url" | "locator" | "title">,
 ) {
-  const doi = source.doi?.trim().toLowerCase();
+  const doi = source.doi ? normalizeDoi(source.doi) : undefined;
   if (doi) {
-    return `doi:${doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i, "")}`;
+    return `doi:${doi}`;
   }
   const arxivId = normalizeArxivId(source.arxivId || source.url || source.locator);
   if (arxivId) {

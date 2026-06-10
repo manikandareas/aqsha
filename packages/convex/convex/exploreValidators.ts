@@ -31,3 +31,22 @@ export const explorePaperFields = {
 };
 
 export const explorePaperValidator = v.object(explorePaperFields);
+
+// Shared wire shape for the per-candidate `metadataJson` blob that providers
+// (OpenAlex, Exa, Jina, Crossref, arXiv) stringify into `ExternalCandidate`
+// and the explore mapper parses back out. Lives in this leaf validator module
+// so both the provider layer (`agent/openalexProvider`) and the explore mapper
+// (`exploreModel`) can import it without creating an import cycle.
+export type ExploreCandidateMetadata = {
+  authors?: string[];
+  year?: number;
+  publicationDate?: string;
+  venue?: string;
+  citedByCount?: number;
+  isOpenAccess?: boolean;
+  pdfUrl?: string;
+  openalexId?: string;
+  topics?: string[];
+  score?: number;
+  sourceLabel?: string;
+};

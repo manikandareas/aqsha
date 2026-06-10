@@ -22,7 +22,7 @@ export const list = query({
           .eq("status", "active"),
       )
       .order("desc")
-      .collect();
+      .take(200);
   },
 });
 

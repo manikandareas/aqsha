@@ -3,15 +3,18 @@ import type { ToolSet } from "ai";
 import { z } from "zod";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
-import type { ActionCtx } from "../_generated/server";
-import { artifactTypeFromAgentInput, plainTextFromMarkdown } from "../artifactModel";
+import {
+  agentWritableArtifactTypeEnum,
+  artifactTypeFromAgentInput,
+  plainTextFromMarkdown,
+} from "../artifactModel";
 import { throwAppError } from "../lib/appError";
-
-type HitlToolCtx = ActionCtx & {
-  userId?: string;
-  threadId?: string;
-  messageId?: string;
-};
+import {
+  isLikelyConvexId,
+  requireToolMessageId,
+  requireToolThread,
+  requireToolUser,
+} from "./toolContext";
 
 const optionSchema = z.object({
   id: z.string().min(1).max(40),
@@ -24,16 +27,7 @@ const questionSchema = z.object({
   allowCustom: z.boolean().optional(),
 });
 
-const artifactTypeEnum = z.enum([
-  "markdown",
-  "plain_text",
-  "html",
-  "svg",
-  "mermaid",
-  "json",
-  "csv",
-  "code",
-]);
+const artifactTypeEnum = agentWritableArtifactTypeEnum;
 
 /**
  * Native in-thread HITL tool set. The model triggers HITL by calling these
@@ -355,24 +349,3 @@ export function buildDeepResearchTools(args: {
   };
 }
 
-function requireToolUser(ctx: HitlToolCtx) {
-  if (!ctx.userId) {
-    throw new Error("Tool call is missing user context");
-  }
-  return ctx.userId;
-}
-
-function requireToolMessageId(ctx: HitlToolCtx, fallback: string) {
-  return ctx.messageId ?? fallback;
-}
-
-function requireToolThread(ctx: HitlToolCtx) {
-  if (!ctx.threadId) {
-    throw new Error("Tool call is missing thread context");
-  }
-  return ctx.threadId;
-}
-
-function isLikelyConvexId(value: string | undefined) {
-  return Boolean(value && /^[a-z0-9]{24,40}$/.test(value));
-}

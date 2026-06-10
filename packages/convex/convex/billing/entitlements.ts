@@ -1,10 +1,11 @@
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import {
   internalMutation,
   type MutationCtx,
   type QueryCtx,
 } from "../_generated/server";
+import { throwAppError } from "../lib/appError";
 import {
   billingStatusAllowsUsage,
   currentMonthPeriod,
@@ -211,12 +212,13 @@ export async function requireEntitlement(
     return entitlementFailure("billing_inactive", snapshot.planKey, requiredPlan, period);
   }
   if (args.feature === "deep_research") {
-    const deepResearchRunsUsed = await countDeepResearchRuns(ctx, {
+    const limitReached = await deepResearchRunsLimitReached(ctx, {
       ownerUserId: args.ownerUserId,
       startedAt: period.startedAt,
       resetAt: period.resetAt,
+      limit: PLAN_CATALOG[snapshot.planKey].deepResearchRuns,
     });
-    if (deepResearchRunsUsed >= PLAN_CATALOG[snapshot.planKey].deepResearchRuns) {
+    if (limitReached) {
       return entitlementFailure("quota_exceeded", snapshot.planKey, requiredPlan, period);
     }
   }
@@ -398,12 +400,13 @@ export const consumeCreditsInternal = internalMutation({
   },
 });
 
-async function countDeepResearchRuns(
+async function deepResearchRunsLimitReached(
   ctx: QueryCtx | MutationCtx,
   args: {
     ownerUserId: string;
     startedAt: number;
     resetAt: number;
+    limit: number;
   },
 ) {
   const rows = await ctx.db
@@ -415,8 +418,8 @@ async function countDeepResearchRuns(
         .gte("createdAt", args.startedAt)
         .lt("createdAt", args.resetAt),
     )
-    .collect();
-  return rows.length;
+    .take(args.limit + 1);
+  return rows.length >= args.limit;
 }
 
 export const syncSubscriptionFromPolar = internalMutation({
@@ -446,7 +449,11 @@ export const syncSubscriptionFromPolar = internalMutation({
     const productKey = args.productKey;
     const planKey = planForProductKey(productKey);
     if (planKey === "free" || planKey === "admin") {
-      throw new ConvexError("Unknown Polar product for subscription");
+      throwAppError({
+        message: "Unknown Polar product for subscription",
+        code: "billing_subscription_product_unknown",
+        severity: "error",
+      });
     }
     const billingInterval = intervalForProductKey(productKey) ?? "month";
     const now = Date.now();
@@ -568,7 +575,11 @@ export async function ensureCreditPeriod(
   });
   const created = await ctx.db.get("billingCreditPeriods", id);
   if (!created) {
-    throw new ConvexError("Unable to create billing period");
+    throwAppError({
+      message: "Unable to create billing period",
+      code: "billing_period_create_failed",
+      severity: "error",
+    });
   }
   return created;
 }

@@ -1,10 +1,11 @@
 import { createThread } from "@convex-dev/agent";
 import { paginationOptsValidator } from "convex/server";
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 import { components } from "../_generated/api";
 import { mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { requireCurrentUser } from "../auth";
 import { assertWorkspaceOwner } from "../workspaceAccess";
+import { throwAppError } from "../lib/appError";
 
 type ThreadCtx = QueryCtx | MutationCtx | ActionCtx;
 
@@ -76,7 +77,7 @@ export async function tryAssertThreadOwner(ctx: ThreadCtx, threadId: string) {
 export async function assertThreadOwner(ctx: ThreadCtx, threadId: string) {
   const thread = await tryAssertThreadOwner(ctx, threadId);
   if (!thread) {
-    throw new ConvexError("Thread not found");
+    throwAppError({ message: "Thread not found", code: "thread_not_found" });
   }
   return thread;
 }
@@ -253,7 +254,11 @@ export const remove = mutation({
     }
 
     if (!isDone) {
-      throw new ConvexError("Thread deletion is still in progress. Try again.");
+      throwAppError({
+        message: "Thread deletion is still in progress. Try again.",
+        code: "thread_delete_in_progress",
+        severity: "warning",
+      });
     }
 
     return { ok: true as const };

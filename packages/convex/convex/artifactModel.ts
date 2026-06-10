@@ -1,4 +1,5 @@
 import { ConvexError } from "convex/values";
+import { z } from "zod";
 import {
   normalizeUploadMimeType,
   UPLOAD_REJECTED_MESSAGE,
@@ -60,6 +61,8 @@ export const agentWritableArtifactTypes = [
 ] as const satisfies readonly ArtifactType[];
 
 export type AgentWritableArtifactType = (typeof agentWritableArtifactTypes)[number];
+
+export const agentWritableArtifactTypeEnum = z.enum(agentWritableArtifactTypes);
 
 // Tipe yang boleh DI-UPLOAD user sebagai bahan riset (Pustaka). Sengaja sempit:
 // dokumen + data tabular. Tipe visual/kode (html/svg/mermaid/code) tetap bisa

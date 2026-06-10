@@ -1,8 +1,8 @@
-import Exa from "exa-js";
 import type { ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { cleanPlainText } from "../articlePreview";
 import { rateLimiter } from "../limits";
+import { getExaClient } from "./exaClient";
 
 // Exa news search on the SERVICE path (cron). Unlike `searchExaCandidates`,
 // this captures the result image (for image-led news cards) and uses the
@@ -25,8 +25,8 @@ export async function fetchScienceNews(
 ): Promise<ScienceNewsItem[]> {
   const query = args.query.trim();
   if (!query) return [];
-  const apiKey = process.env.EXA_API_KEY;
-  if (!apiKey) return [];
+  const exa = getExaClient();
+  if (!exa) return [];
 
   const limit = Math.min(args.limit ?? 6, 12);
   const cacheKey = `feed:news:${limit}:${args.startPublishedDate ?? "any"}:${query}`;
@@ -49,7 +49,6 @@ export async function fetchScienceNews(
 
   let items: ScienceNewsItem[] = [];
   try {
-    const exa = new Exa(apiKey);
     const response = await exa.search(query, {
       numResults: limit,
       type: "auto",

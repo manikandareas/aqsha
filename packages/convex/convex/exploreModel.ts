@@ -1,37 +1,20 @@
+import type { Infer } from "convex/values";
 import type { ExternalCandidate } from "./agent/externalProviders";
 import { canonicalSourceKey } from "./agent/sourceQuality";
 import { trimForSnippet } from "./agent/sourceCandidates";
+import {
+  explorePaperValidator,
+  exploreProviderValidator,
+  type ExploreCandidateMetadata,
+} from "./exploreValidators";
+import { normalizeDoi } from "./lib/identifiers";
+import { collapse, uniqueCompact } from "./lib/text";
 
 export type ExploreMode = "recommendations" | "search";
 
-export type ExploreProvider =
-  | "OpenAlex"
-  | "arXiv"
-  | "Exa"
-  | "Jina"
-  | "Crossref";
+export type ExploreProvider = Infer<typeof exploreProviderValidator>;
 
-export type ExplorePaper = {
-  key: string;
-  title: string;
-  snippet: string;
-  abstract?: string;
-  url: string;
-  pdfUrl?: string;
-  doi?: string;
-  arxivId?: string;
-  openalexId?: string;
-  provider: ExploreProvider;
-  sourceLabel: string;
-  authors: string[];
-  year?: number;
-  publicationDate?: string;
-  venue?: string;
-  citedByCount?: number;
-  isOpenAccess?: boolean;
-  topics: string[];
-  score?: number;
-};
+export type ExplorePaper = Infer<typeof explorePaperValidator>;
 
 export type ExploreProviderStatus = {
   provider: ExploreProvider;
@@ -46,20 +29,6 @@ export type ExploreSearchResponse = {
   providerStatus: ExploreProviderStatus[];
   generatedAt: number;
   cached: boolean;
-};
-
-export type ExploreCandidateMetadata = {
-  authors?: string[];
-  year?: number;
-  publicationDate?: string;
-  venue?: string;
-  citedByCount?: number;
-  isOpenAccess?: boolean;
-  pdfUrl?: string;
-  openalexId?: string;
-  topics?: string[];
-  score?: number;
-  sourceLabel?: string;
 };
 
 const providerLabels: Record<string, ExploreProvider> = {
@@ -173,18 +142,6 @@ function normalizeArxivId(value: string) {
   return match?.[1] ?? "";
 }
 
-function normalizeDoi(value: string) {
-  return value.replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").trim().toLowerCase();
-}
-
 function isLikelyUrl(value: string) {
   return /^https?:\/\//i.test(value);
-}
-
-function uniqueCompact(values: Array<string | null | undefined>) {
-  return [...new Set(values.map((value) => collapse(value ?? "")).filter(Boolean))];
-}
-
-function collapse(value: string) {
-  return value.replace(/\s+/g, " ").trim();
 }

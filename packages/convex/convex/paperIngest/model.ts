@@ -1,4 +1,6 @@
-export type ResolvedPaperAuthor = { name: string; affiliation?: string };
+import type { PaperAuthor } from "../lib/paperTypes";
+
+export type ResolvedPaperAuthor = PaperAuthor;
 
 export type PaperMetadataSource =
   | "openalex"

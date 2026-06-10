@@ -1,7 +1,8 @@
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { action, internalMutation, query, type ActionCtx } from "./_generated/server";
 import { requireCurrentUser } from "./auth";
+import { throwAppError } from "./lib/appError";
 import { explorePaperValidator } from "./exploreValidators";
 import {
   lookupDoiProvider,
@@ -358,7 +359,12 @@ function clampLimit(limit: number | undefined) {
     return 12;
   }
   if (!Number.isFinite(limit)) {
-    throw new ConvexError("Limit must be a number");
+    throwAppError({
+      message: "Limit must be a number",
+      code: "explore_limit_invalid",
+      field: "limit",
+      severity: "warning",
+    });
   }
   return Math.min(Math.max(Math.floor(limit), 1), 24);
 }

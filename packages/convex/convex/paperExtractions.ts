@@ -23,6 +23,7 @@ import {
   previewFromText,
 } from "./artifactModel";
 import { requireCurrentUser } from "./auth";
+import { throwAppError } from "./lib/appError";
 import { assertWorkspaceArtifactOwner } from "./workspaceAccess";
 import {
   isGrobidEnabled,
@@ -130,6 +131,15 @@ const extractionReturnValidator = v.union(
 );
 
 function extractionFailureMessage(error: unknown) {
+  // Unwrap structured app errors so the persisted `failureReason` stays a plain
+  // human-readable string rather than a serialized JSON payload.
+  if (error instanceof ConvexError) {
+    const data = error.data;
+    if (data && typeof data === "object" && typeof data.message === "string") {
+      return data.message;
+    }
+    return typeof data === "string" ? data : "GROBID extraction failed";
+  }
   return error instanceof Error ? error.message : "GROBID extraction failed";
 }
 
@@ -205,7 +215,10 @@ export const retryGrobidExtraction = mutation({
       requireActive: true,
     });
     if (artifactTypeForLegacyArtifact(artifact) !== "pdf" || !artifact.storageId) {
-      throw new ConvexError("Artifact is not an uploaded PDF");
+      throwAppError({
+        message: "Artifact is not an uploaded PDF",
+        code: "artifact_not_uploaded_pdf",
+      });
     }
     await ctx.runMutation(internal.paperExtractions.queueGrobidExtraction, {
       ownerUserId: user._id,
@@ -456,7 +469,10 @@ export const runGrobidExtraction = internalAction({
     try {
       const blob = await ctx.storage.get(target.storageId);
       if (!blob) {
-        throw new ConvexError("Uploaded PDF was not found");
+        throwAppError({
+          message: "Uploaded PDF was not found",
+          code: "artifact_pdf_not_found",
+        });
       }
       const pdfBytes = new Uint8Array(await blob.arrayBuffer());
       const result = await processFulltextPdfWithGrobid({
@@ -603,7 +619,10 @@ export const markGrobidReady = internalMutation({
   handler: async (ctx, args) => {
     const artifact = await ctx.db.get("artifacts", args.artifactId);
     if (!artifact || artifact.ownerUserId !== args.ownerUserId || !artifact.workspaceId) {
-      throw new ConvexError("Artifact not found");
+      throwAppError({
+        message: "Artifact not found",
+        code: "artifact_not_found",
+      });
     }
     const parsed = args.parsed;
     const now = Date.now();
@@ -619,7 +638,10 @@ export const markGrobidReady = internalMutation({
       )
       .unique();
     if (!row) {
-      throw new ConvexError("Artifact content not found");
+      throwAppError({
+        message: "Artifact content not found",
+        code: "artifact_content_not_found",
+      });
     }
     const inlinePlainText =
       parsed.plainText.length <= ARTIFACT_BODY_INLINE_LIMIT ? parsed.plainText : undefined;

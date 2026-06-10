@@ -1,10 +1,11 @@
 import { paginationOptsValidator } from "convex/server";
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireCurrentUser } from "./auth";
 import { assertWorkspaceOwner, normalizeName } from "./workspaceAccess";
+import { throwAppError } from "./lib/appError";
 import { PLAN_CATALOG } from "./billing/catalog";
 import { getBillingSnapshot } from "./billing/entitlements";
 import {
@@ -59,18 +60,21 @@ export const listActionsForMessage = query({
         q.eq("ownerUserId", user._id).eq("messageId", args.messageId),
       )
       .collect();
-    const results = [];
-    for (const row of rows) {
-      const workspace = await ctx.db.get("workspaces", row.workspaceId);
-      if (!workspace) {
-        continue;
-      }
-      results.push({
-        workspaceId: row.workspaceId,
-        action: row.action,
-        workspaceName: workspace.name,
-      });
-    }
+    const results = (
+      await Promise.all(
+        rows.map(async (row) => {
+          const workspace = await ctx.db.get("workspaces", row.workspaceId);
+          if (!workspace) {
+            return null;
+          }
+          return {
+            workspaceId: row.workspaceId,
+            action: row.action,
+            workspaceName: workspace.name,
+          };
+        }),
+      )
+    ).filter((result) => result !== null);
     return results;
   },
 });
@@ -273,8 +277,12 @@ async function assertWorkspaceCapacity(
     .withIndex("by_owner_status_updated", (q) =>
       q.eq("ownerUserId", ownerUserId).eq("status", "active"),
     )
-    .collect();
+    .take(limit + 1);
   if (activeWorkspaces.length >= limit) {
-    throw new ConvexError("Workspace limit reached for current plan");
+    throwAppError({
+      message: "Workspace limit reached for current plan",
+      code: "workspace_limit_reached",
+      severity: "warning",
+    });
   }
 }

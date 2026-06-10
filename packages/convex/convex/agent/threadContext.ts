@@ -13,6 +13,7 @@ import {
   isAgentWritableArtifactType,
 } from "../artifactModel";
 import { requireCurrentUser } from "../auth";
+import { collapse } from "../lib/text";
 import { assertWorkspaceArtifactOwner } from "../workspaceAccess";
 
 const PROMPT_CONTEXT_TOTAL_LIMIT = 16_000;
@@ -286,12 +287,8 @@ async function selectedRowToSummary(
   };
 }
 
-function compactText(value: string) {
-  return value.replace(/\s+/g, " ").trim();
-}
-
 function clipText(value: string, limit: number) {
-  const compact = compactText(value);
+  const compact = collapse(value);
   if (compact.length <= limit) {
     return compact;
   }

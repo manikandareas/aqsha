@@ -720,6 +720,11 @@ export default defineSchema(
       createdAt: v.number(),
     })
       .index("by_owner_artifact", ["ownerUserId", "artifactId"])
+      .index("by_owner_artifact_version", [
+        "ownerUserId",
+        "artifactId",
+        "artifactVersionId",
+      ])
       .index("by_owner_run", ["ownerUserId", "runId"]),
     researchSources: defineTable({
       ownerUserId: v.string(),
@@ -828,10 +833,13 @@ export default defineSchema(
       domain: v.string(),
       successCount: v.number(),
       failureCount: v.number(),
+      unreliable: v.optional(v.boolean()),
       lastFailureReason: v.optional(v.string()),
       lastSeenAt: v.number(),
       updatedAt: v.number(),
-    }).index("by_domain", ["domain"]),
+    })
+      .index("by_domain", ["domain"])
+      .index("by_unreliable", ["unreliable"]),
 
     // ── Feed surface ──────────────────────────────────────────────────────
     feedItems: defineTable({

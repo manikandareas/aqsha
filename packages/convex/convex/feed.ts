@@ -146,12 +146,15 @@ export const getSavedItems = query({
       .order("desc")
       .take(limit);
 
-    const items = [];
-    for (const row of saved) {
-      const item = await ctx.db.get("feedItems", row.feedItemId);
-      if (!item) continue;
-      items.push({ ...shapeFeedItem(item, { saved: true }), savedAt: row.createdAt });
-    }
+    const items = (
+      await Promise.all(
+        saved.map(async (row) => {
+          const item = await ctx.db.get("feedItems", row.feedItemId);
+          if (!item) return null;
+          return { ...shapeFeedItem(item, { saved: true }), savedAt: row.createdAt };
+        }),
+      )
+    ).filter((item) => item !== null);
     return items;
   },
 });
@@ -168,14 +171,17 @@ export const getSavedDiscoveryRefs = query({
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     if (args.itemRefs) {
-      const refs: DiscoveryResolvedRef[] = [];
-      for (const itemRef of args.itemRefs.slice(0, 80)) {
-        const item = await feedItemForDiscoveryRef(ctx, itemRef);
-        if (!item) continue;
-        if (!(await isFeedItemSaved(ctx, user._id, item._id))) continue;
-        pushDiscoveryRefsForItem(refs, item);
-      }
-      return refs;
+      const perRef = await Promise.all(
+        args.itemRefs.slice(0, 80).map(async (itemRef) => {
+          const item = await feedItemForDiscoveryRef(ctx, itemRef);
+          if (!item) return [];
+          if (!(await isFeedItemSaved(ctx, user._id, item._id))) return [];
+          const refs: DiscoveryResolvedRef[] = [];
+          pushDiscoveryRefsForItem(refs, item);
+          return refs;
+        }),
+      );
+      return perRef.flat();
     }
 
     const limit = Math.min(args.limit ?? 200, 500);
@@ -185,13 +191,16 @@ export const getSavedDiscoveryRefs = query({
       .order("desc")
       .take(limit);
 
-    const refs: DiscoveryResolvedRef[] = [];
-    for (const row of saved) {
-      const item = await ctx.db.get("feedItems", row.feedItemId);
-      if (!item) continue;
-      pushDiscoveryRefsForItem(refs, item);
-    }
-    return refs;
+    const perRow = await Promise.all(
+      saved.map(async (row) => {
+        const item = await ctx.db.get("feedItems", row.feedItemId);
+        if (!item) return [];
+        const refs: DiscoveryResolvedRef[] = [];
+        pushDiscoveryRefsForItem(refs, item);
+        return refs;
+      }),
+    );
+    return perRow.flat();
   },
 });
 
@@ -207,14 +216,17 @@ export const getHiddenDiscoveryRefs = query({
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     if (args.itemRefs) {
-      const refs: DiscoveryResolvedRef[] = [];
-      for (const itemRef of args.itemRefs.slice(0, 80)) {
-        const item = await feedItemForDiscoveryRef(ctx, itemRef);
-        if (!item) continue;
-        if (!(await isFeedItemHidden(ctx, user._id, item._id))) continue;
-        pushDiscoveryRefsForItem(refs, item);
-      }
-      return refs;
+      const perRef = await Promise.all(
+        args.itemRefs.slice(0, 80).map(async (itemRef) => {
+          const item = await feedItemForDiscoveryRef(ctx, itemRef);
+          if (!item) return [];
+          if (!(await isFeedItemHidden(ctx, user._id, item._id))) return [];
+          const refs: DiscoveryResolvedRef[] = [];
+          pushDiscoveryRefsForItem(refs, item);
+          return refs;
+        }),
+      );
+      return perRef.flat();
     }
 
     const limit = Math.min(args.limit ?? 200, 500);
@@ -224,13 +236,16 @@ export const getHiddenDiscoveryRefs = query({
       .order("desc")
       .take(limit);
 
-    const refs: DiscoveryResolvedRef[] = [];
-    for (const row of hidden) {
-      const item = await ctx.db.get("feedItems", row.feedItemId);
-      if (!item) continue;
-      pushDiscoveryRefsForItem(refs, item);
-    }
-    return refs;
+    const perRow = await Promise.all(
+      hidden.map(async (row) => {
+        const item = await ctx.db.get("feedItems", row.feedItemId);
+        if (!item) return [];
+        const refs: DiscoveryResolvedRef[] = [];
+        pushDiscoveryRefsForItem(refs, item);
+        return refs;
+      }),
+    );
+    return perRow.flat();
   },
 });
 
@@ -313,23 +328,25 @@ export const papersByKeys = query({
   args: { keys: v.array(v.string()) },
   handler: async (ctx, args) => {
     await requireCurrentUser(ctx);
-    const out = [];
-    for (const key of args.keys.slice(0, 12)) {
-      const paper = await ctx.db
-        .query("explorePapers")
-        .withIndex("by_key", (q) => q.eq("key", key))
-        .unique();
-      if (paper) {
-        out.push({
-          key: paper.key,
-          title: paper.title,
-          year: paper.year,
-          url: paper.url,
-          citedByCount: paper.citedByCount,
-          isOpenAccess: paper.isOpenAccess,
-        });
-      }
-    }
+    const out = (
+      await Promise.all(
+        args.keys.slice(0, 12).map(async (key) => {
+          const paper = await ctx.db
+            .query("explorePapers")
+            .withIndex("by_key", (q) => q.eq("key", key))
+            .unique();
+          if (!paper) return null;
+          return {
+            key: paper.key,
+            title: paper.title,
+            year: paper.year,
+            url: paper.url,
+            citedByCount: paper.citedByCount,
+            isOpenAccess: paper.isOpenAccess,
+          };
+        }),
+      )
+    ).filter((paper) => paper !== null);
     return out;
   },
 });

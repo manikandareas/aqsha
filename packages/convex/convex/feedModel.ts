@@ -1,23 +1,25 @@
 // Shared, runtime-light types & taxonomy for the Feed surface. Imported by the
 // frontend via `@aqsha/convex/feed`, so keep this free of server-only imports.
+// Validators live in the sibling leaf module `feedValidators.ts` (also
+// `convex/values`-only), so deriving types here introduces no server import.
 
-export type FeedItemKind = "paper" | "news" | "claim" | "topic" | "idea";
+import type { Infer } from "convex/values";
+import type {
+  feedClaimSummaryValidator,
+  feedItemKindValidator,
+  feedItemValidator,
+  feedProviderValidator,
+  feedRetractionStatusValidator,
+  feedVerdictValidator,
+} from "./feedValidators";
 
-export type FeedProvider =
-  | "openalex"
-  | "exa_news"
-  | "gdelt"
-  | "google_factcheck"
-  | "turnbackhoax";
+export type FeedItemKind = Infer<typeof feedItemKindValidator>;
 
-export type FeedVerdict =
-  | "supported"
-  | "partially_supported"
-  | "needs_context"
-  | "unverified"
-  | "contradicted";
+export type FeedProvider = Infer<typeof feedProviderValidator>;
 
-export type FeedRetractionStatus = "none" | "concern" | "retracted";
+export type FeedVerdict = Infer<typeof feedVerdictValidator>;
+
+export type FeedRetractionStatus = Infer<typeof feedRetractionStatusValidator>;
 
 export type DiscoveryItemRef =
   | { kind: "feed"; feedItemId: string }
@@ -54,25 +56,9 @@ export type FeedVerdictSeverity = "info" | "warning" | "high";
 // A fact-check verdict attached to a `claim` feed item (stored denormalized as
 // `feedItems.primaryClaim`). Verdicts shown to users are human-sourced
 // (ClaimReview); AI-derived verdicts stay at `needs_context`/`unverified` per
-// the guardrails.
-export type FeedClaim = {
-  claim: string;
-  verdict: FeedVerdict;
-  verdictSource: string;
-  verdictBy: "human" | "ai";
-  verdictLabelRaw: string;
-  publisher?: string;
-  reviewUrl?: string;
-  reviewedAt?: number;
-  evidence?: string;
-  confidence?: number;
-  severity?: FeedVerdictSeverity;
-  /** Who originally made the claim (from the ClaimReview `claimant`). */
-  claimant?: string;
-  /** When the claim was originally made, ms epoch (from `claimDate`). */
-  claimDate?: number;
-  supportingPaperKeys?: string[];
-};
+// the guardrails. Derived from `feedClaimSummaryValidator` (the field doc
+// comments live on the validator).
+export type FeedClaim = Infer<typeof feedClaimSummaryValidator>;
 
 // One scored research question from the idea generator (RAG + FINER).
 export type FeedIdeaQuestion = {
@@ -114,39 +100,19 @@ export type FeedConsensus = {
   cached: boolean;
 };
 
-// Shape returned by `api.feed.getFeed` per item. Kept in sync with
-// `feedItemFields` (packages/convex/convex/feedValidators.ts) plus the
-// per-request enrichments (claim join, relevance, reason).
-export type FeedItem = {
+// Shape returned by `api.feed.getFeed` per item. Derived from
+// `feedItemValidator` (packages/convex/convex/feedValidators.ts) with the
+// storage-only bookkeeping fields stripped, plus the per-request enrichments
+// (claim join, relevance, reason, saved) and the document id.
+//
+// The `Omit` is load-bearing: `dedupeKey`/`lastSeenAt`/`createdAt` are storage
+// internals that must NOT leak into the public/API shape. A naive
+// `Infer<typeof feedItemValidator>` would widen this type to include them.
+export type FeedItem = Omit<
+  Infer<typeof feedItemValidator>,
+  "dedupeKey" | "lastSeenAt" | "createdAt"
+> & {
   _id: string;
-  kind: FeedItemKind;
-  title: string;
-  titleId?: string;
-  summary: string;
-  tldr?: string;
-  tldrId?: string;
-  url: string;
-  imageUrl?: string;
-  /** Full reasoning text scraped from a claim's publisher review page. */
-  articleText?: string;
-  provider: FeedProvider;
-  sourceLabel: string;
-  paperKey?: string;
-  doi?: string;
-  authors?: string[];
-  year?: number;
-  venue?: string;
-  pdfUrl?: string;
-  citedByCount?: number;
-  isOpenAccess?: boolean;
-  topics: string[];
-  trendScore: number;
-  retractionStatus?: FeedRetractionStatus;
-  primaryClaim?: FeedClaim;
-  stanceSupporting?: number;
-  stanceContrasting?: number;
-  sparkline?: number[];
-  publishedAt?: number;
   /** Fact-check verdict for `claim` items. */
   claim?: FeedClaim;
   /** Per-user relevance in [0,100]; drives the relevance-color encoding. */

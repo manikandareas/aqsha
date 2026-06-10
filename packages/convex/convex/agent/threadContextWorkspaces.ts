@@ -192,24 +192,27 @@ export const listWorkspacesForThread = query({
       ownerUserId: user._id,
       threadId: args.threadId,
     });
-    const result = [];
-    for (const row of rows) {
-      const workspace = await ctx.db.get("workspaces", row.workspaceId);
-      if (
-        !workspace ||
-        workspace.ownerUserId !== user._id ||
-        workspace.status !== "active"
-      ) {
-        continue;
-      }
-      result.push({
-        rowId: row._id,
-        workspaceId: row.workspaceId,
-        name: workspace.name,
-        emoji: workspace.emoji,
-        createdAt: row.createdAt,
-      });
-    }
+    const result = (
+      await Promise.all(
+        rows.map(async (row) => {
+          const workspace = await ctx.db.get("workspaces", row.workspaceId);
+          if (
+            !workspace ||
+            workspace.ownerUserId !== user._id ||
+            workspace.status !== "active"
+          ) {
+            return null;
+          }
+          return {
+            rowId: row._id,
+            workspaceId: row.workspaceId,
+            name: workspace.name,
+            emoji: workspace.emoji,
+            createdAt: row.createdAt,
+          };
+        }),
+      )
+    ).filter((entry) => entry !== null);
     return result;
   },
 });

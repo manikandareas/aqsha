@@ -6,7 +6,7 @@ import {
 } from "@convex-dev/agent";
 import { generateObject } from "ai";
 import { paginationOptsValidator } from "convex/server";
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 import { z } from "zod";
 import { components, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
@@ -50,6 +50,7 @@ import {
   threadTitleFromPrompt,
 } from "./threadTitles";
 import { assertThreadOwner, tryAssertThreadOwner } from "./threads";
+import { throwAppError } from "../lib/appError";
 import { resolvePromptPayload } from "./promptRouting";
 import {
   promptExecutionKindForCommand,
@@ -168,7 +169,11 @@ async function upsertThreadMetadata(
   }
 
   if (args.preview === undefined) {
-    throw new ConvexError("Thread preview is required when creating metadata");
+    throwAppError({
+      message: "Thread preview is required when creating metadata",
+      code: "thread_metadata_preview_required",
+      severity: "error",
+    });
   }
 
   await ctx.db.insert("threadMetadata", {
@@ -204,10 +209,20 @@ async function updateThreadTitleFromPrompt(
 function validateContent(content: string) {
   const trimmed = content.trim();
   if (trimmed.length < 1) {
-    throw new ConvexError("Message cannot be empty");
+    throwAppError({
+      message: "Message cannot be empty",
+      code: "message_empty",
+      field: "content",
+      severity: "warning",
+    });
   }
   if (trimmed.length > MAX_CONTENT_LENGTH) {
-    throw new ConvexError("Message is too long");
+    throwAppError({
+      message: "Message is too long",
+      code: "message_too_long",
+      field: "content",
+      severity: "warning",
+    });
   }
   return trimmed;
 }
@@ -940,9 +955,8 @@ function hasPendingNativeHitl(
   return false;
 }
 
-// Count artifact create/update/delete side effects performed by native tools so
-// the run's artifactCount stays meaningful (the legacy collectArtifactResults
-// path only catches versionId-shaped results, which native tools do not emit).
+// Count artifact create/update/delete side effects performed by native HITL
+// tools (status-shaped results) so the run's artifactCount stays meaningful.
 function countNativeArtifactMutations(
   steps: Array<{ toolResults?: Array<{ output?: unknown }> }>,
 ): number {
@@ -1059,9 +1073,8 @@ async function runInlineGeneration(
       return;
     }
     const sourceCandidates = collectSourceCandidates(steps);
-    const artifactResults = collectArtifactResults(steps);
     const pendingHitl = hasPendingNativeHitl(steps);
-    const artifactCount = artifactResults.length + countNativeArtifactMutations(steps);
+    const artifactCount = countNativeArtifactMutations(steps);
     const assistantMessageId = getVisibleAssistantMessageId(result.savedMessages);
     if (assistantMessageId) {
       await ctx.runMutation(internal.agent.sources.persistCited, {
@@ -1071,16 +1084,6 @@ async function runInlineGeneration(
         candidates: sourceCandidates,
         citedNumbers: extractCitationNumbers(text),
       });
-      for (const artifact of artifactResults) {
-        await ctx.runMutation(internal.agent.artifacts.attachToMessage, {
-          ownerUserId: args.userId,
-          threadId: args.threadId,
-          messageId: assistantMessageId,
-          artifactId: artifact.artifactId,
-          versionId: artifact.versionId,
-          relation: artifact.relation,
-        });
-      }
     }
     if (args.runId) {
       await ctx.runMutation(internal.agent.messages.completeInlineRun, {
@@ -1154,7 +1157,7 @@ export const generateReply = internalAction({
       threadId: args.threadId,
     });
     if (!thread || thread.userId !== args.userId) {
-      throw new ConvexError("Thread not found");
+      throwAppError({ message: "Thread not found", code: "thread_not_found" });
     }
     await runInlineGeneration(ctx, {
       threadId: args.threadId,
@@ -1193,7 +1196,7 @@ export const resumeGeneration = internalAction({
       threadId: args.threadId,
     });
     if (!thread || thread.userId !== args.userId) {
-      throw new ConvexError("Thread not found");
+      throwAppError({ message: "Thread not found", code: "thread_not_found" });
     }
     await runInlineGeneration(ctx, {
       threadId: args.threadId,
@@ -1225,7 +1228,7 @@ export const generateDeepPlan = internalAction({
       threadId: args.threadId,
     });
     if (!thread || thread.userId !== args.userId) {
-      throw new ConvexError("Thread not found");
+      throwAppError({ message: "Thread not found", code: "thread_not_found" });
     }
     await runInlineGeneration(ctx, {
       threadId: args.threadId,
@@ -1280,7 +1283,7 @@ export const generateThreadTitle = internalAction({
       threadId: args.threadId,
     });
     if (!thread || thread.userId !== args.userId) {
-      throw new ConvexError("Thread not found");
+      throwAppError({ message: "Thread not found", code: "thread_not_found" });
     }
 
     const fallbackTitle = threadTitleFromPrompt(args.prompt);
@@ -1383,7 +1386,7 @@ export const completeInlineRun = internalMutation({
   handler: async (ctx, args) => {
     const run = await ctx.db.get("agentRuns", args.runId);
     if (!run || run.ownerUserId !== args.ownerUserId || run.threadId !== args.threadId) {
-      throw new ConvexError("Run not found");
+      throwAppError({ message: "Run not found", code: "run_not_found" });
     }
     const now = Date.now();
     const observations =
@@ -1508,24 +1511,6 @@ function isSourceCandidate(value: unknown): value is SourceCandidate {
   );
 }
 
-function collectArtifactResults(
-  steps: Array<{ toolResults?: Array<{ output?: unknown }> }>,
-) {
-  const results: Array<{
-    artifactId: Id<"artifacts">;
-    versionId: Id<"artifactVersions">;
-    relation: "created" | "updated";
-  }> = [];
-  for (const step of steps) {
-    for (const result of step.toolResults ?? []) {
-      if (isArtifactToolResult(result.output)) {
-        results.push(result.output);
-      }
-    }
-  }
-  return results;
-}
-
 type ToolObservation = {
   stepKey: string;
   label: string;
@@ -1572,19 +1557,6 @@ function collectToolObservations(
         }
         continue;
       }
-      if (isArtifactToolResult(output)) {
-        observations.push({
-          stepKey: "artifact",
-          label: output.relation === "updated" ? "Memperbarui artifact" : "Membuat artifact",
-          summary: output.relation === "updated" ? "Artifact diperbarui" : "Artifact dibuat",
-          artifactCount: 1,
-          eventType: "artifact",
-          eventTitle: "Artifact",
-          eventSummary: `${output.relation}: ${output.artifactId}`,
-          metadataJson: JSON.stringify({ toolName, artifactId: output.artifactId, versionId: output.versionId }),
-        });
-        continue;
-      }
     }
   }
   return observations;
@@ -1594,9 +1566,6 @@ function inferToolName(output: unknown) {
   if (Array.isArray(output) && output.some(isSourceCandidate)) {
     return "searchWeb";
   }
-  if (isArtifactToolResult(output)) {
-    return output.relation === "updated" ? "updateArtifact" : "createArtifact";
-  }
   return "tool";
 }
 
@@ -1605,26 +1574,6 @@ function providerLabel(candidates: SourceCandidate[]) {
     ...new Set(candidates.map((candidate) => candidate.provider ?? candidate.origin)),
   ];
   return providers.length > 0 ? providers.join(", ") : "provider eksternal";
-}
-
-function isArtifactToolResult(value: unknown): value is {
-  artifactId: Id<"artifacts">;
-  versionId: Id<"artifactVersions">;
-  relation: "created" | "updated";
-} {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const result = value as {
-    artifactId?: unknown;
-    versionId?: unknown;
-    relation?: unknown;
-  };
-  return (
-    typeof result.artifactId === "string" &&
-    typeof result.versionId === "string" &&
-    (result.relation === "created" || result.relation === "updated")
-  );
 }
 
 function getVisibleAssistantMessageId(
