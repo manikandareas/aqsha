@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { ensureCurrentUser } from "./auth/userRepository";
-import { seedFeedInterests } from "./feedInterests";
+import { seedFeedInterests } from "./feed/interests";
 import { throwAppError } from "./lib/appError";
 
 // ── Canonical option sets ────────────────────────────────────────────────────

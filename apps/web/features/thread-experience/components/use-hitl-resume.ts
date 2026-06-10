@@ -27,10 +27,10 @@ export function useHitlResume(
   threadId: string | undefined,
   hasPending: boolean,
 ): HitlActions {
-  const answerAskUser = useConvexMutationFn(api.agent.hitlResume.answerAskUser);
-  const approveTool = useConvexMutationFn(api.agent.hitlResume.approveTool);
-  const denyTool = useConvexMutationFn(api.agent.hitlResume.denyTool);
-  const resumeHitl = useConvexMutationFn(api.agent.hitlResume.resumeHitl);
+  const answerAskUser = useConvexMutationFn(api.agent.hitl.hitlResume.answerAskUser);
+  const approveTool = useConvexMutationFn(api.agent.hitl.hitlResume.approveTool);
+  const denyTool = useConvexMutationFn(api.agent.hitl.hitlResume.denyTool);
+  const resumeHitl = useConvexMutationFn(api.agent.hitl.hitlResume.resumeHitl);
 
   const lastMessageIdRef = useRef<string | null>(null);
   const pendingResumeRef = useRef(false);

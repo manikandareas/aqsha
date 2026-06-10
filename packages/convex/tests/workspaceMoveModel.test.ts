@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { shouldKeepThreadContextAfterWorkspaceMove } from "../convex/workspaceMoveModel";
+import { shouldKeepThreadContextAfterWorkspaceMove } from "../convex/workspaces/moveModel";
 import type { Id } from "../convex/_generated/dataModel";
 
 const workspaceA = "workspace-a" as Id<"workspaces">;

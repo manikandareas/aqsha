@@ -1,6 +1,6 @@
 import { Agent, stepCountIs, type UsageHandler } from "@convex-dev/agent";
 import { components, internal } from "../_generated/api";
-import { chatProvider } from "./providers";
+import { chatProvider } from "./providers/providers";
 import { CHAT_LITE_MODEL, CHAT_PRO_MODEL } from "./models";
 
 export type AgentKind = "lite" | "pro";

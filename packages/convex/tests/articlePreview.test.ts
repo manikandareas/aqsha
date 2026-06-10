@@ -3,7 +3,7 @@ import {
   cleanPlainText,
   extractArticlePreviewFromHtml,
   extractArticleTextFromHtml,
-} from "../convex/articlePreview";
+} from "../convex/papers/articlePreview";
 
 describe("article preview extraction", () => {
   it("extracts a resolved metadata image and article paragraphs", () => {

@@ -13,28 +13,28 @@
       "default": "./convex/_generated/server.js"
     },
     "./prompt-commands": {
-      "types": "./convex/agent/promptCommands.ts",
-      "default": "./convex/agent/promptCommands.ts"
+      "types": "./convex/agent/prompt/promptCommands.ts",
+      "default": "./convex/agent/prompt/promptCommands.ts"
     },
     "./artifact-upload-limits": {
-      "types": "./convex/artifactUploadLimits.ts",
-      "default": "./convex/artifactUploadLimits.ts"
+      "types": "./convex/artifacts/uploadLimits.ts",
+      "default": "./convex/artifacts/uploadLimits.ts"
     },
     "./artifact-upload-policy": {
-      "types": "./convex/artifactUploadPolicy.ts",
-      "default": "./convex/artifactUploadPolicy.ts"
+      "types": "./convex/artifacts/uploadPolicy.ts",
+      "default": "./convex/artifacts/uploadPolicy.ts"
     },
     "./billing-catalog": {
       "types": "./convex/billing/catalog.ts",
       "default": "./convex/billing/catalog.ts"
     },
     "./explore": {
-      "types": "./convex/exploreModel.ts",
-      "default": "./convex/exploreModel.ts"
+      "types": "./convex/explore/model.ts",
+      "default": "./convex/explore/model.ts"
     },
     "./feed": {
-      "types": "./convex/feedModel.ts",
-      "default": "./convex/feedModel.ts"
+      "types": "./convex/feed/model.ts",
+      "default": "./convex/feed/model.ts"
     }
   },
   "scripts": {

@@ -4,7 +4,7 @@ import {
   detectWorkspaceArtifactMutationIntent,
   findExplicitPromptCommandInContent,
   shouldAutoRouteArtifactCommand,
-} from "../convex/agent/artifactCommandInference";
+} from "../convex/agent/tools/artifactCommandInference";
 
 describe("artifact command inference", () => {
   const selectedDoc = {

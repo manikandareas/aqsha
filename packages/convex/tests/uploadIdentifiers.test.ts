@@ -4,7 +4,7 @@ import {
   isUsablePaperMetadata,
   normalizeLlmPaperMetadata,
   paperHeaderRegion,
-} from "../convex/paperIngest/uploadIdentifiers";
+} from "../convex/papers/ingest/uploadIdentifiers";
 
 describe("classifyPaperText", () => {
   it("extracts a DOI printed in the page text", () => {

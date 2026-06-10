@@ -206,7 +206,7 @@ function ComposerContent(props: ComposerProps) {
   const attachmentFiles = attachments.files;
   const [uploadError, setUploadError] = useState<string | null>(null);
   const generateUploadUrl = useConvexMutationFn(api.artifacts.generateUploadUrl);
-  const createThreadAttachment = useConvexActionFn(api.artifactUploads.createThreadAttachmentFromStorage);
+  const createThreadAttachment = useConvexActionFn(api.artifacts.uploads.createThreadAttachmentFromStorage);
 
   const retryAt = localRetryAt ?? rateStatus?.retryAt ?? null;
   const retrySeconds =

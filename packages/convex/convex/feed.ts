@@ -11,14 +11,14 @@ import {
 } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { requireCurrentUser } from "./auth";
-import { feedItemValidator, feedItemKindValidator } from "./feedValidators";
-import { candidatesToExplorePapers, type ExplorePaper } from "./exploreModel";
+import { feedItemValidator, feedItemKindValidator } from "./feed/validators";
+import { candidatesToExplorePapers, type ExplorePaper } from "./explore/model";
 import {
   fetchOpenAlexWorksService,
   workIdentifiers,
   normalizeDoiLoose,
-} from "./feedOpenAlex";
-import type { DiscoveryItemRef } from "./feedModel";
+} from "./feed/openAlex";
+import type { DiscoveryItemRef } from "./feed/model";
 
 const TRENDING_LIMIT = 24;
 const FEED_PAGE_LIMIT = 40;

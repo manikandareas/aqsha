@@ -39,10 +39,10 @@ import {
   type EntitlementResult,
 } from "../billing/entitlements";
 import { rateLimiter } from "../limits";
-import { normalChatTools } from "./researchTools";
-import { buildHitlTools, buildDeepResearchTools } from "./hitlTools";
+import { normalChatTools } from "./research/researchTools";
+import { buildHitlTools, buildDeepResearchTools } from "./hitl/hitlTools";
 import type { ToolSet } from "ai";
-import type { SourceCandidate } from "./sourceCandidates";
+import type { SourceCandidate } from "./research/sourceCandidates";
 import {
   isUsableGeneratedThreadTitle,
   normalizeGeneratedThreadTitle,
@@ -51,22 +51,22 @@ import {
 } from "./threadTitles";
 import { assertThreadOwner, tryAssertThreadOwner } from "./threads";
 import { throwAppError } from "../lib/appError";
-import { resolvePromptPayload } from "./promptRouting";
+import { resolvePromptPayload } from "./prompt/promptRouting";
 import {
   promptExecutionKindForCommand,
   type PromptPayload,
-} from "./promptPayload";
-import { assertWorkspaceOwner } from "../workspaceAccess";
+} from "./prompt/promptPayload";
+import { assertWorkspaceOwner } from "../workspaces/access";
 import {
   addContextArtifactsForThread,
   buildPromptContextForThread,
   persistMessageContextArtifacts,
   persistMessageContextWorkspaces,
   prependPromptContext,
-} from "./threadContext";
-import { addContextWorkspacesForThread } from "./threadContextWorkspaces";
-import { stripMentionMarkers } from "./mentionMarkers";
-import { CHAT_PROVIDER_NAME, chatProvider } from "./providers";
+} from "./context/threadContext";
+import { addContextWorkspacesForThread } from "./context/threadContextWorkspaces";
+import { stripMentionMarkers } from "./context/mentionMarkers";
+import { CHAT_PROVIDER_NAME, chatProvider } from "./providers/providers";
 import { hasActiveReplyRun, hasOtherActiveReplyRun } from "./runLifecycle";
 
 const MAX_CONTENT_LENGTH = 8_000;
@@ -452,7 +452,7 @@ async function scheduleGenerationForMessage(
   if (args.promptPayload.executionKind === "deep_research") {
     const run: {
       runId: import("../_generated/dataModel").Id<"agentRuns">;
-    } = await ctx.runMutation(internal.agent.deepResearch.startForMessage, {
+    } = await ctx.runMutation(internal.agent.research.deepResearch.startForMessage, {
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
       promptMessageId: args.messageId,
@@ -638,7 +638,7 @@ export const startThread = mutation({
       }
       await ctx.scheduler.runAfter(
         0,
-        internal.artifactUploads.processPendingAttachmentsAndStart,
+        internal.artifacts.uploads.processPendingAttachmentsAndStart,
         {
           ownerUserId: user._id,
           ownerEmail: user.email ?? undefined,
@@ -1000,7 +1000,7 @@ async function runInlineGeneration(
     let prompt = args.prompt;
     if (prompt && args.visiblePrompt) {
       const ragContext = await ctx.runAction(
-        internal.agent.ragContext.buildRagContextForThread,
+        internal.agent.context.ragContext.buildRagContextForThread,
         {
           ownerUserId: args.userId,
           threadId: args.threadId,
@@ -1077,7 +1077,7 @@ async function runInlineGeneration(
     const artifactCount = countNativeArtifactMutations(steps);
     const assistantMessageId = getVisibleAssistantMessageId(result.savedMessages);
     if (assistantMessageId) {
-      await ctx.runMutation(internal.agent.sources.persistCited, {
+      await ctx.runMutation(internal.agent.research.sources.persistCited, {
         ownerUserId: args.userId,
         threadId: args.threadId,
         messageId: assistantMessageId,

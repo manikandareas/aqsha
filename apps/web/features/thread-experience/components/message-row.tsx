@@ -93,7 +93,7 @@ export function MessageRow({
   const text = getMessageText(message);
   const hasText = Boolean(text.trim());
   const messageArtifacts = useConvexQueryData(
-    api.agent.artifacts.listForMessage,
+    api.agent.tools.artifacts.listForMessage,
     !isUser && message.id ? { messageId: message.id } : "skip",
   ) as MessageArtifactLink[] | undefined;
   const workspaceActions = useConvexQueryData(

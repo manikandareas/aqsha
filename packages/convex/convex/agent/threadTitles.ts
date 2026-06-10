@@ -1,4 +1,4 @@
-import { stripMentionMarkers } from "./mentionMarkers";
+import { stripMentionMarkers } from "./context/mentionMarkers";
 
 const MAX_THREAD_TITLE_LENGTH = 80;
 const BLOCKED_GENERATED_TITLES = new Set([

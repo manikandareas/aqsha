@@ -6,7 +6,7 @@ import {
   extractDoi,
   isAcademicIdentifier,
   normalizeDoi,
-} from "../convex/paperIngest/identifiers";
+} from "../convex/papers/ingest/identifiers";
 
 describe("classifyUrl — arXiv", () => {
   it("classifies an arxiv.org/abs URL", () => {

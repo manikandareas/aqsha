@@ -31,7 +31,7 @@ import {
   previewFromText,
   siteNameFromUrl,
   titleFromUrl,
-} from "./artifactModel";
+} from "./artifacts/model";
 import {
   assertFolderOwner,
   assertThreadAttachmentOwner,
@@ -39,9 +39,9 @@ import {
   assertWorkspaceArtifactOwner,
   assertWorkspaceOwner,
   normalizeName,
-} from "./workspaceAccess";
-import { workspaceEmojiForNewWorkspace } from "./workspaceEmoji";
-import { syncArtifactWorkspaceMove } from "./workspaceMoveModel";
+} from "./workspaces/access";
+import { workspaceEmojiForNewWorkspace } from "./workspaces/emoji";
+import { syncArtifactWorkspaceMove } from "./workspaces/moveModel";
 import { assertThreadOwner } from "./agent/threads";
 
 const markdownTitleFallback = "Untitled markdown";
@@ -527,7 +527,7 @@ export const createUrl = mutation({
       createdAt: now,
       updatedAt: now,
     });
-    await ctx.scheduler.runAfter(0, internal.paperIngest.ingest.ingestUrl, {
+    await ctx.scheduler.runAfter(0, internal.papers.ingest.ingest.ingestUrl, {
       artifactId,
     });
     return artifactId;
@@ -559,7 +559,7 @@ export const retryUrlExtraction = mutation({
       failureReason: undefined,
       updatedAt: Date.now(),
     });
-    await ctx.scheduler.runAfter(0, internal.paperIngest.ingest.ingestUrl, {
+    await ctx.scheduler.runAfter(0, internal.papers.ingest.ingest.ingestUrl, {
       artifactId: args.artifactId,
     });
     return { ok: true };
@@ -881,7 +881,7 @@ export const saveAttachmentToWorkspace = mutation({
     };
 
     if (promoted.plainText.trim()) {
-      await ctx.scheduler.runAfter(0, internal.artifactUploads.reindexPromotedAttachment, {
+      await ctx.scheduler.runAfter(0, internal.artifacts.uploads.reindexPromotedAttachment, {
         ownerUserId: user._id,
         artifactId: promoted.artifactId,
         workspaceId: promoted.workspaceId,

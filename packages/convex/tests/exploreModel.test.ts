@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
-import type { ExternalCandidate } from "../convex/agent/externalProviders";
+import type { ExternalCandidate } from "../convex/agent/providers/externalProviders";
 import {
   buildOpenAlexWorksUrl,
   openAlexWorkToCandidate,
   reconstructOpenAlexAbstract,
   searchOpenAlexWorks,
-} from "../convex/agent/openalexProvider";
+} from "../convex/agent/providers/openalexProvider";
 import {
   candidatesToExplorePapers,
   exploreCacheKey,
-} from "../convex/exploreModel";
+} from "../convex/explore/model";
 
 describe("explore paper model", () => {
   it("maps OpenAlex works into paper metadata", () => {

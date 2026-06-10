@@ -57,7 +57,7 @@ export function useWorkspaceLibraryData(workspaceId: string | WorkspaceId) {
       ? { paginationOpts: { cursor: null, numItems: workspacePageSize } }
       : "skip",
   );
-  const folders = useConvexQueryData(api.workspaceFolders.list, workspaceArgs);
+  const folders = useConvexQueryData(api.workspaces.folders.list, workspaceArgs);
   const artifactsPage = useConvexQueryData(
     api.artifacts.listByWorkspace,
     isAuthenticated && convexWorkspaceId
@@ -81,12 +81,12 @@ export function useWorkspaceLibraryData(workspaceId: string | WorkspaceId) {
     renameWorkspace: useConvexMutationFn(api.workspaces.rename),
     updateWorkspaceEmoji: useConvexMutationFn(api.workspaces.updateEmoji),
     archiveWorkspace: useConvexMutationFn(api.workspaces.archive),
-    createFolder: useConvexMutationFn(api.workspaceFolders.create),
-    renameFolder: useConvexMutationFn(api.workspaceFolders.rename),
-    moveFolder: useConvexMutationFn(api.workspaceFolders.move),
-    removeFolder: useConvexMutationFn(api.workspaceFolders.remove),
+    createFolder: useConvexMutationFn(api.workspaces.folders.create),
+    renameFolder: useConvexMutationFn(api.workspaces.folders.rename),
+    moveFolder: useConvexMutationFn(api.workspaces.folders.move),
+    removeFolder: useConvexMutationFn(api.workspaces.folders.remove),
     generateUploadUrl: useConvexMutationFn(api.artifacts.generateUploadUrl),
-    createUploadedArtifact: useConvexActionFn(api.artifactUploads.createFromStorage),
+    createUploadedArtifact: useConvexActionFn(api.artifacts.uploads.createFromStorage),
     createDocument: useConvexMutationFn(api.artifacts.createDocument),
     createUrl: useConvexMutationFn(api.artifacts.createUrl),
     renameArtifact: useConvexMutationFn(api.artifacts.rename),
@@ -146,7 +146,7 @@ export function useWorkspaceDetailData(workspaceId: string) {
     moveArtifact: libraryData.moveArtifact,
     removeArtifact: libraryData.removeArtifact,
     startThread: useConvexMutationFn(api.agent.messages.startThread),
-    addThreadContextArtifacts: useConvexMutationFn(api.agent.threadContext.addMany),
+    addThreadContextArtifacts: useConvexMutationFn(api.agent.context.threadContext.addMany),
     removeThread: useConvexMutationFn(api.agent.threads.remove),
   };
 }
@@ -171,7 +171,7 @@ export function useArtifactDetailData(artifactId: string) {
       : "skip",
   );
   const artifact = useConvexQueryData(api.artifacts.get, artifactArgs);
-  const paperExtraction = useConvexQueryData(api.paperExtractions.getStatus, artifactArgs);
+  const paperExtraction = useConvexQueryData(api.papers.extractions.getStatus, artifactArgs);
 
   return {
     isAuthenticated,
@@ -183,7 +183,7 @@ export function useArtifactDetailData(artifactId: string) {
     isLoading: artifact === undefined,
     updateDocument: useConvexActionFn(api.artifacts.updateDocument),
     retryUrlExtraction: useConvexMutationFn(api.artifacts.retryUrlExtraction),
-    retryGrobidExtraction: useConvexMutationFn(api.paperExtractions.retryGrobidExtraction),
+    retryGrobidExtraction: useConvexMutationFn(api.papers.extractions.retryGrobidExtraction),
     renameArtifact: useConvexMutationFn(api.artifacts.rename),
     moveArtifact: useConvexMutationFn(api.artifacts.move),
     removeArtifact: useConvexMutationFn(api.artifacts.remove),

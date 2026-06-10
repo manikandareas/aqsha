@@ -4,7 +4,7 @@ import { v } from "convex/values";
 import { components } from "../_generated/api";
 import { mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { requireCurrentUser } from "../auth";
-import { assertWorkspaceOwner } from "../workspaceAccess";
+import { assertWorkspaceOwner } from "../workspaces/access";
 import { throwAppError } from "../lib/appError";
 
 type ThreadCtx = QueryCtx | MutationCtx | ActionCtx;

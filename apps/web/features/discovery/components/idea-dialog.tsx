@@ -43,7 +43,7 @@ export function IdeaDialog({
   onStartResearch: (questionText: string) => void;
   busy: boolean;
 }) {
-  const generateIdeas = useConvexActionFn(api.feedIdeas.generateIdeas);
+  const generateIdeas = useConvexActionFn(api.feed.ideas.generateIdeas);
   const [questions, setQuestions] = useState<FeedIdeaQuestion[] | null>(null);
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(false);

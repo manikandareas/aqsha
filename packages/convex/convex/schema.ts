@@ -1,7 +1,7 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
-import { explorePaperFields } from "./exploreValidators";
-import { feedItemFields, feedProviderValidator } from "./feedValidators";
+import { explorePaperFields } from "./explore/validators";
+import { feedItemFields, feedProviderValidator } from "./feed/validators";
 
 const runId = v.union(v.id("agentRuns"), v.id("researchRuns"));
 

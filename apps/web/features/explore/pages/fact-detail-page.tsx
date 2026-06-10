@@ -109,7 +109,7 @@ function FactDetailContent({
     limit: 8,
   });
 
-  const getConsensus = useConvexActionFn(api.feedConsensus.getConsensus);
+  const getConsensus = useConvexActionFn(api.feed.consensus.getConsensus);
   const [consensus, setConsensus] = useState<FeedConsensus | null>(null);
   const [consensusLoading, setConsensusLoading] = useState(false);
   const [consensusError, setConsensusError] = useState<string | null>(null);

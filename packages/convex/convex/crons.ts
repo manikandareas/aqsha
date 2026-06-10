@@ -25,7 +25,7 @@ crons.interval(
 crons.interval(
   "feed:factcheck-claims",
   { hours: 24 },
-  internal.feedClaims.refreshFactCheckClaims,
+  internal.feed.claims.refreshFactCheckClaims,
   {},
 );
 
@@ -34,7 +34,7 @@ crons.interval(
 crons.interval(
   "feed:gdelt-topics",
   { hours: 24 },
-  internal.feedSources.refreshTrendingTopics,
+  internal.feed.sources.refreshTrendingTopics,
   {},
 );
 
@@ -43,7 +43,7 @@ crons.interval(
 crons.interval(
   "feed:science-news",
   { hours: 12 },
-  internal.feedSources.refreshScienceNews,
+  internal.feed.sources.refreshScienceNews,
   {},
 );
 
@@ -53,7 +53,7 @@ crons.interval(
 crons.interval(
   "feed:backfill-id",
   { hours: 6 },
-  internal.feedBahasa.backfillIndonesian,
+  internal.feed.bahasa.backfillIndonesian,
   {},
 );
 

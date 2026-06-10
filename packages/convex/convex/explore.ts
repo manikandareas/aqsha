@@ -3,7 +3,7 @@ import { api, internal } from "./_generated/api";
 import { action, internalMutation, query, type ActionCtx } from "./_generated/server";
 import { requireCurrentUser } from "./auth";
 import { throwAppError } from "./lib/appError";
-import { explorePaperValidator } from "./exploreValidators";
+import { explorePaperValidator } from "./explore/validators";
 import {
   lookupDoiProvider,
   providerFailureReason,
@@ -12,7 +12,7 @@ import {
   searchJinaCandidates,
   searchOpenAlexWorks,
   type ExternalCandidate,
-} from "./agent/externalProviders";
+} from "./agent/providers/externalProviders";
 import {
   candidatesToExplorePapers,
   exploreCacheKey,
@@ -22,7 +22,7 @@ import {
   type ExploreProvider,
   type ExploreProviderStatus,
   type ExploreSearchResponse,
-} from "./exploreModel";
+} from "./explore/model";
 
 const defaultRecommendationQuery = "education research learning assessment artificial intelligence";
 const minFallbackResults = 5;
@@ -318,7 +318,7 @@ async function runProvider(
 
 async function readExploreCache(ctx: ActionCtx, cacheKey: string) {
   const cached: { valueJson: string } | null = await ctx.runQuery(
-    internal.agent.externalProviders.getCache,
+    internal.agent.providers.externalProviders.getCache,
     { provider: "explore", cacheKey },
   );
   if (!cached) {
@@ -336,7 +336,7 @@ async function writeExploreCache(
   cacheKey: string,
   response: ExploreSearchResponse,
 ) {
-  await ctx.runMutation(internal.agent.externalProviders.putCache, {
+  await ctx.runMutation(internal.agent.providers.externalProviders.putCache, {
     provider: "explore",
     cacheKey,
     status: response.items.length > 0 ? "ready" : "empty",

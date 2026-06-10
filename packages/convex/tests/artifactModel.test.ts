@@ -11,7 +11,7 @@ import {
   siteNameFromUrl,
   titleFromUrl,
   uploadArtifactType,
-} from "../convex/artifactModel";
+} from "../convex/artifacts/model";
 
 describe("workspace artifact model helpers", () => {
   it("normalizes http URLs for workspace-level idempotency", () => {

@@ -4,7 +4,7 @@ import { internal } from "./_generated/api";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireCurrentUser } from "./auth";
-import { assertWorkspaceOwner, normalizeName } from "./workspaceAccess";
+import { assertWorkspaceOwner, normalizeName } from "./workspaces/access";
 import { throwAppError } from "./lib/appError";
 import { PLAN_CATALOG } from "./billing/catalog";
 import { getBillingSnapshot } from "./billing/entitlements";
@@ -12,7 +12,7 @@ import {
   isValidStoredWorkspaceEmoji,
   normalizeWorkspaceEmoji,
   workspaceEmojiForNewWorkspace,
-} from "./workspaceEmoji";
+} from "./workspaces/emoji";
 
 export const list = query({
   args: {
