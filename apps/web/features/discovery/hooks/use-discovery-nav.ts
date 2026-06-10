@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  parseAsBoolean,
   parseAsString,
   parseAsStringLiteral,
   useQueryStates,
@@ -16,15 +15,15 @@ export type DiscoveryView = (typeof discoveryViews)[number];
 export const discoveryRanges = ["all", "year", "threeYears", "fiveYears"] as const;
 export type DiscoveryRange = (typeof discoveryRanges)[number];
 
-export const discoveryLangs = ["id", "en"] as const;
-export type DiscoveryLang = (typeof discoveryLangs)[number];
+// Feed copy is Indonesian-first; cards prefer the `id` title/tldr variants when
+// present. Kept as a constant (not a user toggle) so the surface stays in one
+// language.
+export const DISCOVERY_LANG = "id" as const;
 
 const discoveryParsers = {
   view: parseAsStringLiteral(discoveryViews).withDefault("brief"),
   q: parseAsString.withDefault(""),
   range: parseAsStringLiteral(discoveryRanges).withDefault("all"),
-  lang: parseAsStringLiteral(discoveryLangs).withDefault("id"),
-  serendipity: parseAsBoolean.withDefault(false),
 };
 
 export function useDiscoveryNav() {

@@ -1,21 +1,14 @@
 "use client";
 
-import {
-  CompassIcon,
-  FilterIcon,
-  Loader2Icon,
-  SearchIcon,
-} from "@aqsha/ui/icons";
+import { FilterIcon, Loader2Icon, SearchIcon } from "@aqsha/ui/icons";
 import { type FormEvent, useRef, useState } from "react";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import {
-  type DiscoveryLang,
   type DiscoveryRange,
   type DiscoveryView,
   discoveryRangeLabels,
@@ -27,29 +20,59 @@ const VIEW_LABELS: Array<{ value: DiscoveryView; label: string }> = [
   { value: "papers", label: "Papers" },
 ];
 
-export function DiscoveryToolbar({
+// Discover-style underline tabs. Plain text labels with a 2px indicator under the
+// active one, anchored to the header's bottom edge (buttons span the full header
+// height). Rendered in the shared Explore header's center slot so the page top
+// stays tidy: title left · tabs centered · chat toggle right.
+export function DiscoveryViewTabs({
   view,
   onViewChange,
+}: {
+  view: DiscoveryView;
+  onViewChange: (view: DiscoveryView) => void;
+}) {
+  return (
+    <nav className="flex h-14 items-stretch gap-6" aria-label="Tampilan jelajahi">
+      {VIEW_LABELS.map((entry) => {
+        const active = view === entry.value;
+        return (
+          <button
+            key={entry.value}
+            type="button"
+            onClick={() => onViewChange(entry.value)}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "relative inline-flex items-center text-[14px] font-medium transition-colors",
+              active
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {entry.label}
+            {active ? (
+              <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-foreground" />
+            ) : null}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
+// Papers-only control row (search + time range). The Brief view needs no
+// controls, so the page renders this only for `papers` — keeping the feed flush
+// under the header otherwise.
+export function DiscoveryToolbar({
   query,
   onSubmitQuery,
   range,
   onRangeChange,
-  lang,
-  onLangChange,
-  serendipity,
-  onSerendipityChange,
   isSearching,
 }: {
-  view: DiscoveryView;
-  onViewChange: (view: DiscoveryView) => void;
   query: string;
   onSubmitQuery: (query: string) => void;
   range: DiscoveryRange;
   onRangeChange: (range: DiscoveryRange) => void;
-  lang: DiscoveryLang;
-  onLangChange: (lang: DiscoveryLang) => void;
-  serendipity: boolean;
-  onSerendipityChange: (value: boolean) => void;
   isSearching: boolean;
 }) {
   const [rangeOpen, setRangeOpen] = useState(false);
@@ -61,103 +84,39 @@ export function DiscoveryToolbar({
   };
 
   return (
-    <section className="mt-8 border-b border-border/80 pb-3">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <Tabs value={view} onValueChange={(value) => onViewChange(value as DiscoveryView)}>
-          <TabsList>
-            {VIEW_LABELS.map((entry) => (
-              <TabsTrigger key={entry.value} value={entry.value}>
-                {entry.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {view === "papers" ? (
-            <>
-              <form
-                onSubmit={handleSubmit}
-                className="flex h-9 w-[220px] items-center rounded-[8px] border border-border/80 bg-card/50 px-2 sm:w-[300px]"
-              >
-                <label htmlFor="discovery-search" className="sr-only">
-                  Cari paper
-                </label>
-                <input
-                  key={query}
-                  id="discovery-search"
-                  ref={inputRef}
-                  defaultValue={query}
-                  placeholder="Cari paper… Enter untuk mencari"
-                  className="h-8 min-w-0 flex-1 bg-transparent text-[13px] font-medium text-foreground outline-none placeholder:text-muted-foreground"
-                />
-                <span className="inline-flex size-7 shrink-0 items-center justify-center text-muted-foreground">
-                  {isSearching ? (
-                    <Loader2Icon className="size-4 animate-spin" />
-                  ) : (
-                    <SearchIcon className="size-4" strokeWidth={2} />
-                  )}
-                </span>
-              </form>
-              <RangePopover
-                range={range}
-                open={rangeOpen}
-                onOpenChange={setRangeOpen}
-                onRangeChange={(next) => {
-                  onRangeChange(next);
-                  setRangeOpen(false);
-                }}
-              />
-            </>
-          ) : null}
-
-          {view === "brief" ? (
-            <button
-              type="button"
-              onClick={() => onSerendipityChange(!serendipity)}
-              className={cn(
-                "inline-flex h-8 items-center gap-1.5 rounded-[7px] border px-2.5 text-[12.5px] font-medium transition-colors",
-                serendipity
-                  ? "border-lavender-soft-border bg-lavender-soft text-lavender-foreground"
-                  : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
-              title="Tampilkan bidang bersebelahan (anti filter bubble)"
-            >
-              <CompassIcon className="size-3.5" /> Serendipity
-            </button>
-          ) : null}
-
-          <LangToggle lang={lang} onLangChange={onLangChange} />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function LangToggle({
-  lang,
-  onLangChange,
-}: {
-  lang: DiscoveryLang;
-  onLangChange: (lang: DiscoveryLang) => void;
-}) {
-  return (
-    <div className="inline-flex h-8 items-center rounded-[7px] border border-border p-0.5">
-      {(["id", "en"] as const).map((code) => (
-        <button
-          key={code}
-          type="button"
-          onClick={() => onLangChange(code)}
-          className={cn(
-            "h-7 rounded-[5px] px-2 text-[12px] font-semibold uppercase transition-colors",
-            lang === code
-              ? "bg-primary text-primary-foreground"
-              : "text-muted-foreground hover:text-foreground",
+    <div className="flex flex-wrap items-center justify-end gap-2 border-b border-border/70 pb-3">
+      <form
+        onSubmit={handleSubmit}
+        className="flex h-9 w-full min-w-0 items-center rounded-[8px] border border-border/80 bg-card/50 px-2 sm:w-[280px]"
+      >
+        <label htmlFor="discovery-search" className="sr-only">
+          Cari paper
+        </label>
+        <input
+          key={query}
+          id="discovery-search"
+          ref={inputRef}
+          defaultValue={query}
+          placeholder="Cari paper… Enter untuk mencari"
+          className="h-8 min-w-0 flex-1 bg-transparent text-[13px] font-medium text-foreground outline-none placeholder:text-muted-foreground"
+        />
+        <span className="inline-flex size-7 shrink-0 items-center justify-center text-muted-foreground">
+          {isSearching ? (
+            <Loader2Icon className="size-4 animate-spin" />
+          ) : (
+            <SearchIcon className="size-4" strokeWidth={2} />
           )}
-        >
-          {code}
-        </button>
-      ))}
+        </span>
+      </form>
+      <RangePopover
+        range={range}
+        open={rangeOpen}
+        onOpenChange={setRangeOpen}
+        onRangeChange={(next) => {
+          onRangeChange(next);
+          setRangeOpen(false);
+        }}
+      />
     </div>
   );
 }
@@ -179,7 +138,7 @@ function RangePopover({
         <button
           type="button"
           className={cn(
-            "relative inline-flex h-9 items-center gap-1.5 rounded-[8px] border border-border/80 px-2.5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+            "relative inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[8px] border border-border/80 px-2.5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
             range !== "all" && "bg-muted text-foreground",
           )}
           aria-label={`Filter berdasarkan waktu: ${discoveryRangeLabels[range]}`}

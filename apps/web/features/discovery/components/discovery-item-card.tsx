@@ -182,14 +182,14 @@ export function DiscoveryStandardCard(props: CardProps) {
         />
       </CardLink>
 
-      <div className="flex min-w-0 flex-1 flex-col pt-3">
+      <div className="flex min-w-0 flex-1 flex-col pt-2.5">
         {isClaim && item.claim ? (
-          <div className="mb-2">
+          <div className="mb-1.5">
             <VerdictBadge verdict={item.claim.verdict} />
           </div>
         ) : null}
 
-        <h3 className="font-heading text-[17px] font-bold leading-[1.22] tracking-tight text-foreground sm:text-[18px]">
+        <h3 className="font-heading text-[15px] font-bold leading-[1.25] tracking-tight text-foreground">
           <CardLink
             item={item}
             className="line-clamp-3 break-words hover:underline underline-offset-4"
@@ -201,7 +201,7 @@ export function DiscoveryStandardCard(props: CardProps) {
         <RetractionFlag item={item} />
         <WhyRelevantNote note={props.relevanceNote} />
 
-        <div className="mt-auto pt-3.5">
+        <div className="mt-auto pt-3">
           <CardFooter {...props} />
         </div>
       </div>
@@ -227,8 +227,8 @@ export function DiscoveryClaimCard(props: CardProps) {
         />
       </CardLink>
 
-      <div className="flex min-w-0 flex-1 flex-col pt-3">
-        <div className="mb-2 flex flex-wrap items-center gap-2">
+      <div className="flex min-w-0 flex-1 flex-col pt-2.5">
+        <div className="mb-1.5 flex flex-wrap items-center gap-2">
           <VerdictBadge verdict={claim.verdict} />
           {claim.publisher ? (
             <span className="text-[11px] text-muted-foreground">
@@ -237,7 +237,7 @@ export function DiscoveryClaimCard(props: CardProps) {
           ) : null}
         </div>
 
-        <h3 className="font-heading text-[17px] font-bold leading-[1.22] tracking-tight text-foreground sm:text-[18px]">
+        <h3 className="font-heading text-[15px] font-bold leading-[1.25] tracking-tight text-foreground">
           <CardLink
             item={item}
             className="line-clamp-3 break-words hover:underline underline-offset-4"
@@ -246,7 +246,7 @@ export function DiscoveryClaimCard(props: CardProps) {
           </CardLink>
         </h3>
 
-        <div className="mt-auto flex items-center justify-between gap-3 pt-3.5">
+        <div className="mt-auto flex items-center justify-between gap-3 pt-3">
           <CardLink
             item={item}
             className="inline-flex h-8 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[12.5px] font-semibold text-primary-foreground transition-transform duration-150 ease-out hover:bg-primary-hover active:scale-[0.97]"

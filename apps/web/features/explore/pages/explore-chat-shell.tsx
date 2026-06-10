@@ -19,15 +19,21 @@ import {
 // renders the content split.
 export function ExploreChatShell({
   breadcrumbs,
+  headerCenter,
   chatSeed,
   children,
 }: {
   breadcrumbs: ExploreBreadcrumb[];
+  headerCenter?: ReactNode;
   chatSeed?: string;
   children: ReactNode;
 }) {
   return (
-    <ExploreChatShellBody breadcrumbs={breadcrumbs} chatSeed={chatSeed}>
+    <ExploreChatShellBody
+      breadcrumbs={breadcrumbs}
+      headerCenter={headerCenter}
+      chatSeed={chatSeed}
+    >
       {children}
     </ExploreChatShellBody>
   );
@@ -39,10 +45,12 @@ export function ExploreChatShell({
 // mirroring ThreadShellLayout / WorkspaceDetailClient.
 function ExploreChatShellBody({
   breadcrumbs,
+  headerCenter,
   chatSeed,
   children,
 }: {
   breadcrumbs: ExploreBreadcrumb[];
+  headerCenter?: ReactNode;
   chatSeed?: string;
   children: ReactNode;
 }) {
@@ -63,6 +71,7 @@ function ExploreChatShellBody({
           <>
             <ExploreSurfaceHeader
               breadcrumbs={breadcrumbs}
+              centerSlot={headerCenter}
               chatOpen={chatPanelOpen}
               onToggleChat={() => setChatPanelOpen((open) => !open)}
               showLeftTrigger={!isLeftSidebarOpen}

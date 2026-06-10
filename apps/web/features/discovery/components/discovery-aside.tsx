@@ -1,80 +1,98 @@
 "use client";
 
-import { GaugeIcon, LayersIcon, Quote, TrendingUpIcon } from "@aqsha/ui/icons";
+import {
+  ArrowUpRightIcon,
+  GaugeIcon,
+  Quote,
+  SparklesIcon,
+  TrendingUpIcon,
+} from "@aqsha/ui/icons";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import {
   formatCitationCount,
-  type FeedKind,
-  type KindBreakdown,
   type TopCitedPaper,
+  type TopicMomentum,
   type TopTopic,
   type VerdictBreakdown,
 } from "../utils/discovery-format";
-import { feedDetailHref, kindLabel } from "./discovery-item-card";
-import {
-  CompositionBar,
-  Donut,
-  VERDICT_FILL,
-  VERDICT_STYLE,
-} from "./discovery-visuals";
+import type { DiscoveryView } from "../hooks/use-discovery-nav";
+import { feedDetailHref } from "./discovery-item-card";
+import { Donut, Sparkline, VERDICT_FILL, VERDICT_STYLE } from "./discovery-visuals";
 
-// The fixed second sidebar for the discovery surface — a column of compact,
-// data-backed visual modules derived entirely from the items already loaded:
-// fact-balance donut, feed composition, trending topics, and most-cited papers.
-// Each module hides itself when it has no data, so the rail self-sizes per view
-// (Brief shows up to 4, Papers shows 2) and stays within the sticky viewport.
+// The fixed second sidebar for the discovery surface — a lean "widget deck" of
+// data-backed modules derived entirely from the items already loaded. Each view
+// shows its most useful modules, kept focused and within the sticky viewport:
+//   • Brief  → fact balance (donut) + topic momentum / most-cited + trending
+//   • Papers → trending topics + most-cited papers
+// The Brief middle slot prefers topic momentum (GDELT sparklines) but falls back
+// to most-cited papers when the topic lane is empty, so the rail keeps three
+// widgets instead of collapsing to two. Modules also self-hide without data.
 export function DiscoveryAside({
+  view,
   verdicts,
-  kinds,
+  momentum,
   topTopics,
   topCited,
   onSelectTopic,
 }: {
+  view: DiscoveryView;
   verdicts: VerdictBreakdown;
-  kinds: KindBreakdown;
+  momentum: TopicMomentum[];
   topTopics: TopTopic[];
   topCited: TopCitedPaper[];
   onSelectTopic: (name: string) => void;
 }) {
   return (
-    <div className="flex flex-col gap-4">
-      <FactBalanceModule verdicts={verdicts} />
-      <CompositionModule kinds={kinds} />
+    <div className="flex flex-col gap-5">
+      {view === "brief" ? <FactBalanceModule verdicts={verdicts} /> : null}
+      {view === "brief" ? (
+        momentum.length > 0 ? (
+          <MomentumModule momentum={momentum} onSelectTopic={onSelectTopic} />
+        ) : (
+          <MostCitedModule topCited={topCited} />
+        )
+      ) : null}
       <TrendingModule topTopics={topTopics} onSelectTopic={onSelectTopic} />
-      <MostCitedModule topCited={topCited} />
+      {view === "papers" ? <MostCitedModule topCited={topCited} /> : null}
     </div>
   );
 }
 
-function ModuleShell({
-  title,
-  icon,
+// ── Shared chrome ─────────────────────────────────────────────────────────
+function SectionHeader({ title, icon }: { title: string; icon?: ReactNode }) {
+  return (
+    <h2 className="mb-3 flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
+      {icon}
+      {title}
+    </h2>
+  );
+}
+
+function WidgetCard({
   children,
+  className,
 }: {
-  title: string;
-  icon?: React.ReactNode;
-  children: React.ReactNode;
+  children: ReactNode;
+  className?: string;
 }) {
   return (
-    <section className="rounded-[14px] border border-border bg-card p-4">
-      <h2 className="mb-3 flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
-        {icon}
-        {title}
-      </h2>
+    <section className={cn("rounded-[14px] border border-border bg-card p-4", className)}>
       {children}
     </section>
   );
 }
 
-// ── Module 1: fact-balance donut ──────────────────────────────────────────
+// ── Module 1: fact-balance hero card (donut + legend) ─────────────────────
 function FactBalanceModule({ verdicts }: { verdicts: VerdictBreakdown }) {
   if (verdicts.total === 0) return null;
   return (
-    <ModuleShell
-      title="Timbangan fakta hari ini"
-      icon={<GaugeIcon className="size-3.5" />}
-    >
+    <WidgetCard>
+      <SectionHeader
+        title="Timbangan fakta hari ini"
+        icon={<GaugeIcon className="size-3.5" />}
+      />
       <div className="flex items-center gap-4">
         <Donut
           total={verdicts.total}
@@ -88,10 +106,7 @@ function FactBalanceModule({ verdicts }: { verdicts: VerdictBreakdown }) {
         />
         <ul className="grid min-w-0 flex-1 gap-1.5">
           {verdicts.segments.map((segment) => (
-            <li
-              key={segment.verdict}
-              className="flex items-center gap-2 text-[12px]"
-            >
+            <li key={segment.verdict} className="flex items-center gap-2 text-[12px]">
               <span
                 className={cn(
                   "size-2 shrink-0 rounded-full",
@@ -108,59 +123,74 @@ function FactBalanceModule({ verdicts }: { verdicts: VerdictBreakdown }) {
           ))}
         </ul>
       </div>
-    </ModuleShell>
+    </WidgetCard>
   );
 }
 
-// ── Module 2: feed composition ────────────────────────────────────────────
-// Distinct tones per kind. `--lemon` and `--sky-soft` collapse to the same taupe
-// in this palette, so `news`/`topic` use chart-3/chart-5 to stay distinguishable.
-const KIND_FILL: Record<FeedKind, string> = {
-  paper: "var(--mint)",
-  news: "var(--chart-3)",
-  claim: "var(--coral)",
-  topic: "var(--chart-5)",
-  idea: "var(--lavender)",
-};
-
-function CompositionModule({ kinds }: { kinds: KindBreakdown }) {
-  if (kinds.distinctKinds < 2) return null;
+// ── Module 2: topic momentum (sparkline movers, 2-up tiles) ───────────────
+// Mirrors the reference's market-outlook tiles: a small grid of name + delta +
+// sparkline cards. Rising series read mint, falling read coral. Clicking a tile
+// searches papers for that topic.
+function MomentumModule({
+  momentum,
+  onSelectTopic,
+}: {
+  momentum: TopicMomentum[];
+  onSelectTopic: (name: string) => void;
+}) {
+  if (momentum.length === 0) return null;
   return (
-    <ModuleShell
-      title="Isi feed hari ini"
-      icon={<LayersIcon className="size-3.5" />}
-    >
-      <CompositionBar
-        segments={kinds.segments.map((segment) => ({
-          color: KIND_FILL[segment.kind],
-          count: segment.count,
-          label: kindLabel(segment.kind),
-        }))}
-      />
-      <ul className="mt-3 flex flex-wrap gap-x-3 gap-y-1.5">
-        {kinds.segments.map((segment) => (
-          <li
-            key={segment.kind}
-            className="flex items-center gap-1.5 text-[11.5px] font-medium text-muted-foreground"
-          >
-            <span
-              className="size-2 rounded-full"
-              style={{ backgroundColor: KIND_FILL[segment.kind] }}
-            />
-            {kindLabel(segment.kind)}
-            <span className="font-mono text-[11px] tabular-nums text-foreground/70">
-              {segment.count}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </ModuleShell>
+    <div>
+      <SectionHeader title="Momentum topik" icon={<TrendingUpIcon className="size-3.5" />} />
+      <div className="grid grid-cols-2 gap-2.5">
+        {momentum.map(({ item, values, changePct }) => {
+          const up = changePct >= 0;
+          const name = item.titleId ?? item.title;
+          return (
+            <button
+              key={item._id ?? item.title}
+              type="button"
+              onClick={() => onSelectTopic(item.title)}
+              title={`Cari paper tentang ${name}`}
+              className="rounded-[12px] border border-border bg-card p-3 text-left transition-colors hover:border-foreground/25"
+            >
+              <span className="line-clamp-1 text-[12px] font-semibold text-foreground">
+                {name}
+              </span>
+              <span
+                className={cn(
+                  "mt-1 inline-flex items-center gap-0.5 text-[11px] font-semibold tabular-nums",
+                  up ? "text-mint-foreground" : "text-coral-foreground",
+                )}
+              >
+                <ArrowUpRightIcon className={cn("size-3", !up && "rotate-90")} />
+                {Math.abs(changePct).toFixed(0)}%
+              </span>
+              <Sparkline
+                values={values}
+                className="mt-2 h-7"
+                stroke={up ? "var(--mint)" : "var(--coral)"}
+                fill={up ? "var(--mint-soft)" : "var(--coral-soft)"}
+              />
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
-// ── Module 3: trending topics (weighted tag cloud, clickable) ─────────────
-// Distinct from the ranked bars below: frequency is encoded by chip size + tint
-// (three tiers) rather than bar length, so each rail module reads differently.
+// ── Module 3: trending topics (ranked list, clickable) ────────────────────
+// Avatar tint cycles through the palette so each row reads like a distinct
+// "ticker", mirroring the reference's trending-companies list.
+const AVATAR_TINTS = [
+  "bg-mint-soft text-mint-foreground",
+  "bg-sky-soft text-sky-foreground",
+  "bg-coral-soft text-coral-foreground",
+  "bg-lavender-soft text-lavender-foreground",
+  "bg-lemon-soft text-lemon-foreground",
+];
+
 function TrendingModule({
   topTopics,
   onSelectTopic,
@@ -169,80 +199,88 @@ function TrendingModule({
   onSelectTopic: (name: string) => void;
 }) {
   if (topTopics.length === 0) return null;
-  const chips = topTopics.slice(0, 8);
-  const max = Math.max(1, ...chips.map((topic) => topic.count));
+  const rows = topTopics.slice(0, 6);
   return (
-    <ModuleShell title="Sedang ramai" icon={<TrendingUpIcon className="size-3.5" />}>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {chips.map((topic) => (
-          <button
-            key={topic.name}
-            type="button"
-            onClick={() => onSelectTopic(topic.name)}
-            title={`Cari paper tentang ${topic.name} · ${topic.count}`}
-            className={cn(
-              "max-w-full truncate rounded-full border px-2.5 py-1 leading-none transition-colors",
-              chipTierClass(topic.count / max),
-            )}
-          >
-            {topic.name}
-          </button>
-        ))}
+    <WidgetCard className="p-3">
+      <div className="px-1">
+        <SectionHeader
+          title="Sedang ramai"
+          icon={<SparklesIcon className="size-3.5" />}
+        />
       </div>
-    </ModuleShell>
+      <ul className="space-y-0.5">
+        {rows.map((topic, index) => (
+          <li key={topic.name}>
+            <button
+              type="button"
+              onClick={() => onSelectTopic(topic.name)}
+              title={`Cari paper tentang ${topic.name} · ${topic.count}`}
+              className="flex w-full items-center gap-2.5 rounded-[9px] px-1.5 py-1.5 text-left transition-colors hover:bg-muted"
+            >
+              <span
+                className={cn(
+                  "inline-flex size-7 shrink-0 items-center justify-center rounded-full text-[12px] font-bold uppercase",
+                  AVATAR_TINTS[index % AVATAR_TINTS.length],
+                )}
+                aria-hidden
+              >
+                {topic.name.trim()[0] ?? "•"}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-foreground">
+                {topic.name}
+              </span>
+              <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+                {topic.count}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </WidgetCard>
   );
 }
 
-// Size + tint tier for a trending chip, by its share of the busiest topic.
-function chipTierClass(ratio: number): string {
-  if (ratio > 0.66) {
-    return "border-mint-soft-border bg-mint-soft text-mint-foreground text-[14px] font-semibold";
-  }
-  if (ratio > 0.33) {
-    return "border-border bg-card text-foreground text-[12.5px] font-medium hover:bg-muted";
-  }
-  return "border-transparent bg-muted/50 text-muted-foreground text-[11.5px] font-medium hover:bg-muted";
-}
-
-// ── Module 4: most-cited papers ───────────────────────────────────────────
+// ── Module 4: most-cited papers (ranked list) ─────────────────────────────
 function MostCitedModule({ topCited }: { topCited: TopCitedPaper[] }) {
   if (topCited.length === 0) return null;
-  const max = Math.max(1, ...topCited.map((paper) => paper.count));
   return (
-    <ModuleShell title="Paling disitir" icon={<Quote className="size-3.5" />}>
-      <ul className="space-y-3">
-        {topCited.map(({ item, count }) => (
+    <WidgetCard className="p-3">
+      <div className="px-1">
+        <SectionHeader title="Paling disitir" icon={<Quote className="size-3.5" />} />
+      </div>
+      <ul className="space-y-0.5">
+        {topCited.map(({ item, count }, index) => (
           <li key={item.paperKey ?? item.title}>
             <Link
               href={feedDetailHref(item) ?? item.url}
-              className="group block"
+              className="group flex items-center gap-2.5 rounded-[9px] px-1.5 py-1.5 transition-colors hover:bg-muted"
             >
-              <span className="line-clamp-2 text-[12.5px] font-medium leading-snug text-muted-foreground group-hover:text-foreground">
-                {item.title}
+              <span
+                className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-mint-soft font-mono text-[12px] font-bold tabular-nums text-mint-foreground"
+                aria-hidden
+              >
+                {index + 1}
               </span>
-              <span className="mt-1.5 flex items-center gap-2">
-                <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
-                  <span
-                    className="block h-full rounded-full bg-mint"
-                    style={{ width: `${(count / max) * 100}%` }}
-                  />
+              <span className="min-w-0 flex-1">
+                <span className="line-clamp-2 text-[12.5px] font-medium leading-snug text-muted-foreground group-hover:text-foreground">
+                  {item.title}
                 </span>
-                <span
-                  className="shrink-0 font-mono text-[10.5px] tabular-nums text-muted-foreground"
-                  title={formatCitationCount(count) ?? undefined}
-                >
-                  {compactCount(count)}
-                </span>
+              </span>
+              <span
+                className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground"
+                title={formatCitationCount(count) ?? undefined}
+              >
+                {compactCount(count)}
               </span>
             </Link>
           </li>
         ))}
       </ul>
-    </ModuleShell>
+    </WidgetCard>
   );
 }
 
-// Compact citation count for the inline bar label ("1.2k"); the full
+// Compact citation count for the inline label ("1.2k"); the full
 // "1,234 citations" text lives in the row's title attribute.
 function compactCount(value: number): string {
   return value >= 1_000

@@ -123,35 +123,6 @@ export function deriveVerdictBreakdown(
   return { total, segments };
 }
 
-// ── Feed composition (content-mix bar) ────────────────────────────────────
-export type FeedKind = DiscoveryItem["kind"];
-export type KindCount = { kind: FeedKind; count: number };
-export type KindBreakdown = {
-  total: number;
-  segments: KindCount[];
-  distinctKinds: number;
-};
-
-// Fixed render order so the segmented bar + legend stay stable.
-const KIND_ORDER: FeedKind[] = ["paper", "news", "claim", "topic", "idea"];
-
-/**
- * Group discovery items by `kind`. `distinctKinds < 2` means there is nothing to
- * compare (e.g. an all-paper Papers view) and the module should hide.
- */
-export function deriveKindBreakdown(items: DiscoveryItem[]): KindBreakdown {
-  const counts = new Map<FeedKind, number>();
-  for (const item of items) {
-    counts.set(item.kind, (counts.get(item.kind) ?? 0) + 1);
-  }
-  const segments = KIND_ORDER.filter((kind) => counts.has(kind)).map((kind) => ({
-    kind,
-    count: counts.get(kind) as number,
-  }));
-  const total = segments.reduce((sum, segment) => sum + segment.count, 0);
-  return { total, segments, distinctKinds: segments.length };
-}
-
 // ── Most-cited papers (ranked bars) ───────────────────────────────────────
 export type TopCitedPaper = { item: DiscoveryItem; count: number };
 
@@ -176,6 +147,45 @@ export function deriveTopCited(
       (left, right) =>
         right.count - left.count ||
         left.item.title.localeCompare(right.item.title),
+    )
+    .slice(0, limit);
+}
+
+// ── Topic momentum (sparkline movers) ─────────────────────────────────────
+export type TopicMomentum = {
+  item: DiscoveryItem;
+  values: number[];
+  changePct: number;
+};
+
+/**
+ * Rank the trending `topic` items that carry a usable sparkline (the GDELT
+ * "topik naik daun" series). `changePct` is first→last delta over the window,
+ * used as the up/down signal; ordering follows the backend `trendScore` with the
+ * delta magnitude as the tiebreak. Empty result hides the module.
+ */
+export function deriveTopicMomentum(
+  items: DiscoveryItem[],
+  limit = 4,
+): TopicMomentum[] {
+  return items
+    .filter(
+      (item) =>
+        item.kind === "topic" &&
+        Array.isArray(item.sparkline) &&
+        item.sparkline.length > 1,
+    )
+    .map((item) => {
+      const values = item.sparkline as number[];
+      const first = values[0];
+      const last = values[values.length - 1];
+      const base = Math.abs(first) > 0 ? Math.abs(first) : 1;
+      return { item, values, changePct: ((last - first) / base) * 100 };
+    })
+    .toSorted(
+      (left, right) =>
+        right.item.trendScore - left.item.trendScore ||
+        Math.abs(right.changePct) - Math.abs(left.changePct),
     )
     .slice(0, limit);
 }

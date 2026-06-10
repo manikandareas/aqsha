@@ -36,13 +36,20 @@ import {
 } from "../components/discovery-item-card";
 import { DiscoveryListItem } from "../components/discovery-list-item";
 import { DiscoveryAside } from "../components/discovery-aside";
-import { DiscoveryToolbar } from "../components/discovery-toolbar";
+import {
+  DiscoveryToolbar,
+  DiscoveryViewTabs,
+} from "../components/discovery-toolbar";
 import { VERDICT_STYLE } from "../components/discovery-visuals";
-import { useDiscoveryNav, rangeToFromYear } from "../hooks/use-discovery-nav";
+import {
+  DISCOVERY_LANG,
+  useDiscoveryNav,
+  rangeToFromYear,
+} from "../hooks/use-discovery-nav";
 import { useStartResearch } from "../hooks/use-start-research";
 import {
-  deriveKindBreakdown,
   deriveTopCited,
+  deriveTopicMomentum,
   deriveTopTopics,
   deriveVerdictBreakdown,
 } from "../utils/discovery-format";
@@ -55,12 +62,10 @@ export function DiscoveryPage() {
   const [nav, setNav] = useDiscoveryNav();
 
   // Feed (reactive) drives Brief (all kinds, incl. claims); Papers (action) below.
-  const feedArgs = useMemo(() => {
-    if (nav.view === "papers") return "skip" as const;
-    const base: { serendipity?: boolean } = {};
-    if (nav.serendipity) base.serendipity = true;
-    return base;
-  }, [nav.view, nav.serendipity]);
+  const feedArgs = useMemo(
+    () => (nav.view === "papers" ? ("skip" as const) : {}),
+    [nav.view],
+  );
 
   const feedData = useConvexQueryData(api.feed.getFeed, feedArgs);
   const papersQuery = useConvexActionQueryWithKey(
@@ -102,7 +107,7 @@ export function DiscoveryPage() {
     api.feed.recordDiscoveryInteraction,
   );
   const createUrl = useConvexMutationFn(api.artifacts.createUrl);
-  const explainRelevance = useConvexActionFn(api.feedAi.explainRelevance);
+  const explainRelevance = useConvexActionFn(api.feed.ai.explainRelevance);
   const {
     startResearch,
     busyKey,
@@ -159,8 +164,8 @@ export function DiscoveryPage() {
     () => deriveVerdictBreakdown(rawItems),
     [rawItems],
   );
-  const kindBreakdown = useMemo(() => deriveKindBreakdown(rawItems), [rawItems]);
   const topCited = useMemo(() => deriveTopCited(rawItems, 4), [rawItems]);
+  const topicMomentum = useMemo(() => deriveTopicMomentum(rawItems, 4), [rawItems]);
 
   const isLoading =
     nav.view === "papers" ? papersQuery.isLoading : feedData === undefined;
@@ -265,7 +270,7 @@ export function DiscoveryPage() {
   const renderStandard = (item: DiscoveryItem) => {
     const shared = {
       item,
-      lang: nav.lang,
+      lang: DISCOVERY_LANG,
       saved: isSaved(item),
       busy: busyKey === discoveryItemKey(item),
       relevanceNote: relevanceNotes.get(discoveryItemKey(item)),
@@ -288,31 +293,25 @@ export function DiscoveryPage() {
   );
 
   return (
-    <ExploreChatShell breadcrumbs={[{ label: "Jelajahi" }]}>
-      <div className="mx-auto w-full max-w-[1760px] px-5 pb-12 pt-4 sm:px-8 md:pt-6 xl:px-10">
-          <header className="max-w-[680px]">
-            <h1 className="text-[30px] font-semibold leading-none tracking-normal text-foreground sm:text-[34px]">
-              Jelajahi
-            </h1>
-            <p className="mt-4 max-w-[680px] text-[14px] font-medium leading-6 text-muted-foreground sm:text-[15px]">
-              Bacaan riset hari ini — berita sains, klaim ditimbang bukti, dan
-              paper. Temukan ide, lalu mulai meneliti dalam satu klik.
-            </p>
-          </header>
-
-          <DiscoveryToolbar
-            view={nav.view}
-            onViewChange={(view) => void setNav({ view })}
-            query={nav.q}
-            onSubmitQuery={(q) => void setNav({ q })}
-            range={nav.range}
-            onRangeChange={(range) => void setNav({ range })}
-            lang={nav.lang}
-            onLangChange={(lang) => void setNav({ lang })}
-            serendipity={nav.serendipity}
-            onSerendipityChange={(value) => void setNav({ serendipity: value })}
-            isSearching={papersQuery.isFetching}
-          />
+    <ExploreChatShell
+      breadcrumbs={[{ label: "Jelajahi" }]}
+      headerCenter={
+        <DiscoveryViewTabs
+          view={nav.view}
+          onViewChange={(view) => void setNav({ view })}
+        />
+      }
+    >
+      <div className="mx-auto w-full max-w-[1200px] px-5 pb-12 pt-4 sm:px-8 xl:px-10">
+          {nav.view === "papers" ? (
+            <DiscoveryToolbar
+              query={nav.q}
+              onSubmitQuery={(q) => void setNav({ q })}
+              range={nav.range}
+              onRangeChange={(range) => void setNav({ range })}
+              isSearching={papersQuery.isFetching}
+            />
+          ) : null}
 
           {localError || researchError || viewError ? (
             <div className="mt-4 max-w-[760px] rounded-[7px] border border-destructive/20 bg-destructive/10 px-4 py-3 text-[13px] font-medium text-destructive">
@@ -333,7 +332,7 @@ export function DiscoveryPage() {
                     row.type === "grid" ? (
                       <div
                         key={row.key}
-                        className="grid grid-cols-1 gap-x-6 gap-y-10 @md/feed:grid-cols-2 @3xl/feed:grid-cols-3"
+                        className="grid grid-cols-1 gap-x-5 gap-y-8 @md/feed:grid-cols-2 @2xl/feed:grid-cols-3"
                       >
                         {row.items.map((item) => (
                           <div key={discoveryItemKey(item)}>{renderStandard(item)}</div>
@@ -355,7 +354,7 @@ export function DiscoveryPage() {
                         key={discoveryItemKey(item)}
                         item={item}
                         index={index}
-                        lang={nav.lang}
+                        lang={DISCOVERY_LANG}
                         saved={isSaved(item)}
                         busy={busyKey === discoveryItemKey(item)}
                         relevanceNote={relevanceNotes.get(discoveryItemKey(item))}
@@ -371,8 +370,9 @@ export function DiscoveryPage() {
 
             <aside className="min-w-0 @4xl/explore:sticky @4xl/explore:top-6 @4xl/explore:self-start">
               <DiscoveryAside
+                view={nav.view}
                 verdicts={verdictBreakdown}
-                kinds={kindBreakdown}
+                momentum={topicMomentum}
                 topTopics={topTopics}
                 topCited={topCited}
                 onSelectTopic={(name) => void setNav({ view: "papers", q: name })}
@@ -406,7 +406,7 @@ export function DiscoveryPage() {
     return (
       <DiscoveryHeroCard
         item={item}
-        lang={nav.lang}
+        lang={DISCOVERY_LANG}
         saved={isSaved(item)}
         busy={busyKey === discoveryItemKey(item)}
         relevanceNote={relevanceNotes.get(discoveryItemKey(item))}
@@ -421,7 +421,7 @@ export function DiscoveryPage() {
       <DiscoveryFeatureCard
         item={item}
         imageSide={side}
-        lang={nav.lang}
+        lang={DISCOVERY_LANG}
         saved={isSaved(item)}
         busy={busyKey === discoveryItemKey(item)}
         relevanceNote={relevanceNotes.get(discoveryItemKey(item))}

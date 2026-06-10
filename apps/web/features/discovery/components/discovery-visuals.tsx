@@ -120,10 +120,12 @@ export function Sparkline({
   values,
   className,
   stroke = "var(--coral)",
+  fill = "var(--coral-soft)",
 }: {
   values: number[];
   className?: string;
   stroke?: string;
+  fill?: string;
 }) {
   if (!values || values.length < 2) return null;
   const width = 120;
@@ -147,7 +149,7 @@ export function Sparkline({
       className={cn("h-8 w-full", className)}
       aria-hidden
     >
-      <polyline points={areaPoints} fill="var(--coral-soft)" stroke="none" opacity={0.5} />
+      <polyline points={areaPoints} fill={fill} stroke="none" opacity={0.5} />
       <polyline
         points={points}
         fill="none"
@@ -278,38 +280,6 @@ export function Donut({
           ) : null}
         </div>
       ) : null}
-    </div>
-  );
-}
-
-// ── Composition bar (single-row segmented proportion) ─────────────────────
-export function CompositionBar({
-  segments,
-  className,
-}: {
-  segments: Array<{ color: string; count: number; label: string }>;
-  className?: string;
-}) {
-  const total = segments.reduce((sum, segment) => sum + segment.count, 0);
-  if (total <= 0) return null;
-  return (
-    <div
-      className={cn(
-        "flex h-2.5 w-full overflow-hidden rounded-full bg-muted",
-        className,
-      )}
-    >
-      {segments.map((segment) => (
-        <div
-          key={segment.label}
-          className="h-full"
-          style={{
-            width: `${(segment.count / total) * 100}%`,
-            backgroundColor: segment.color,
-          }}
-          title={`${segment.label}: ${segment.count}`}
-        />
-      ))}
     </div>
   );
 }
