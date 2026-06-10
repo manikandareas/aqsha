@@ -11,6 +11,7 @@ import {
   type Dispatch,
   type RefObject,
 } from "react";
+import { AppLoadingOverlay } from "@/components/app-loading-overlay";
 import { toArtifactId, type ArtifactId } from "@/lib/convex-refs";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
 import { useConvexActionQueryWithKey } from "@/lib/convex-query";
@@ -23,7 +24,6 @@ import {
   PaperStatusBanner,
 } from "../components/artifact-detail-sidebar";
 import {
-  ArtifactDetailSkeleton,
   ArtifactHeaderActions,
   ArtifactMissingState,
   ArtifactReadingColumn,
@@ -166,7 +166,7 @@ export function ArtifactDetailPage({
 
         <div className={isMarkdown ? singleColumnGridClass : readerColumnClass}>
           {data.isLoading ? (
-            <ArtifactDetailSkeleton />
+            <AppLoadingOverlay variant="absolute" />
           ) : !ready || !detail ? (
             <ArtifactMissingState workspaceId={workspaceId} />
           ) : activeContentError ? (
@@ -174,7 +174,7 @@ export function ArtifactDetailPage({
               {activeContentError}
             </p>
           ) : !activeRenderPayload ? (
-            <ArtifactDetailSkeleton />
+            <AppLoadingOverlay variant="absolute" />
           ) : activeRenderPayload.artifactType === "markdown" ? (
             <div className="mx-auto w-full max-w-[820px]">
               <DocumentArtifactDetail

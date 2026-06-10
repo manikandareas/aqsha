@@ -11,7 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Skeleton } from "@/components/ui/skeleton";
+import { AppLoadingOverlay } from "@/components/app-loading-overlay";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toWorkspaceId } from "@/lib/convex-refs";
 import { useWorkspaceIndexData } from "../api/use-workspaces-data";
@@ -47,11 +47,7 @@ export function WorkspacesIndexPage() {
         </header>
 
         {isLoadingWorkspaces ? (
-          <div className="grid gap-2">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <Skeleton key={index} className="h-16 rounded-[8px]" />
-            ))}
-          </div>
+          <AppLoadingOverlay variant="absolute" />
         ) : workspaces.length === 0 ? (
           <div className="grid min-h-[42svh] place-items-center rounded-[8px] border border-dashed border-border bg-muted/20 p-8 text-center">
             <div className="grid gap-3">

@@ -15,7 +15,7 @@ import { useState } from "react";
 import { CopyCitationButton } from "@/components/citation/copy-citation-button";
 import { PropertyLink, PropertyRow } from "@/components/detail/property-list";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { AppLoadingOverlay } from "@/components/app-loading-overlay";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WorkspacePickerDialog } from "@/features/workspaces/components/workspace-picker-dialog";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
@@ -62,7 +62,7 @@ export function ExploreDetailPage({ paperRef }: { paperRef: string }) {
     >
       <div className="mx-auto grid w-full max-w-[1080px] gap-8 px-5 pb-12 pt-4 sm:px-8 @4xl/explore:grid-cols-[minmax(0,1fr)_260px] @4xl/explore:gap-10 @4xl/explore:px-10">
         {paperQuery.isLoading ? (
-          <ExploreDetailSkeleton />
+          <AppLoadingOverlay variant="absolute" />
         ) : paperError ? (
           <ExploreDetailState
             title="Paper gagal dimuat."
@@ -271,30 +271,6 @@ function PdfPanel({ paper }: { paper: ExplorePaper }) {
         className="h-[60svh] min-h-[380px] w-full bg-background"
       />
     </section>
-  );
-}
-
-function ExploreDetailSkeleton() {
-  return (
-    <>
-      <section className="min-w-0">
-        <div className="mb-4 flex items-center justify-between">
-          <Skeleton className="size-7 rounded-md bg-muted" />
-          <Skeleton className="h-8 w-28 rounded-md bg-muted" />
-        </div>
-        <Skeleton className="h-16 w-[76%] rounded-md bg-muted" />
-        <Skeleton className="mt-4 h-14 w-[70%] rounded-md bg-muted/70" />
-        <Skeleton className="mt-8 h-10 w-full rounded-none bg-muted/50" />
-        <Skeleton className="mt-6 h-6 w-24 rounded-md bg-muted" />
-        <Skeleton className="mt-4 h-40 w-full rounded-md bg-muted/60" />
-      </section>
-      <aside className="space-y-4 pt-2">
-        <Skeleton className="h-4 w-20 rounded-md bg-muted" />
-        {Array.from({ length: 8 }).map((_, index) => (
-          <Skeleton key={index} className="h-8 w-full rounded-md bg-muted/60" />
-        ))}
-      </aside>
-    </>
   );
 }
 

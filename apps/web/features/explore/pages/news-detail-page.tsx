@@ -15,8 +15,8 @@ import {
 } from "../components/reader-bits";
 import { relativeTime } from "../utils/reader-format";
 import {
+  ReaderDetailLoading,
   ReaderDetailShell,
-  ReaderDetailSkeleton,
   ReaderDetailState,
 } from "./reader-detail-shell";
 
@@ -37,7 +37,7 @@ export function NewsDetailPage({ feedItemId }: { feedItemId: string }) {
   return (
     <ReaderDetailShell breadcrumbLabel="Berita" chatSeed={chatSeed}>
       {data === undefined ? (
-        <ReaderDetailSkeleton />
+        <ReaderDetailLoading />
       ) : !data || data.kind !== "news" ? (
         <ReaderDetailState
           title="Berita tidak tersedia."

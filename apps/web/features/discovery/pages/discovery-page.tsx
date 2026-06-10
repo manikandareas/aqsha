@@ -15,7 +15,7 @@ import {
 import { CheckCircle2Icon, SparklesIcon } from "@aqsha/ui/icons";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { Skeleton } from "@/components/ui/skeleton";
+import { AppLoadingOverlay } from "@/components/app-loading-overlay";
 import { ExploreChatShell } from "@/features/explore/pages/explore-chat-shell";
 import { IdeaDialog, type IdeaSeed } from "@/features/discovery/components/idea-dialog";
 import { WorkspacePickerDialog } from "@/features/workspaces/components/workspace-picker-dialog";
@@ -322,7 +322,7 @@ export function DiscoveryPage() {
           <section className="grid grid-cols-1 gap-8 pt-6 @4xl/explore:grid-cols-[minmax(0,1fr)_340px] @4xl/explore:gap-10">
             <div className="@container/feed min-w-0">
               {isLoading ? (
-                <DiscoverySkeleton />
+                <AppLoadingOverlay variant="absolute" />
               ) : items.length === 0 ? (
                 <DiscoveryEmptyState view={nav.view} />
               ) : isBrief ? (
@@ -523,32 +523,6 @@ function DiscoveryEmptyState({ view }: { view: string }) {
       <p className="mx-auto mt-1.5 max-w-[380px] text-[13px] font-medium leading-5 text-muted-foreground">
         {message}
       </p>
-    </div>
-  );
-}
-
-function DiscoverySkeleton() {
-  return (
-    <div className="space-y-8">
-      <div className="grid grid-cols-1 gap-5 @xl/feed:grid-cols-[minmax(0,1fr)_minmax(280px,40%)] @xl/feed:gap-7">
-        <div className="order-2 flex flex-col justify-center gap-3 @xl/feed:order-1">
-          <Skeleton className="h-3 w-28 rounded-full bg-muted/50" />
-          <Skeleton className="h-8 w-[90%] rounded-[8px] bg-muted/60" />
-          <Skeleton className="h-8 w-[70%] rounded-[8px] bg-muted/60" />
-          <Skeleton className="mt-1 h-4 w-full rounded-full bg-muted/40" />
-          <Skeleton className="h-4 w-[85%] rounded-full bg-muted/40" />
-        </div>
-        <Skeleton className="order-1 h-52 w-full rounded-[12px] bg-muted/60 sm:h-64 @xl/feed:order-2 @xl/feed:h-full" />
-      </div>
-      <div className="grid grid-cols-1 gap-x-6 gap-y-8 @md/feed:grid-cols-2 @3xl/feed:grid-cols-3">
-        {Array.from({ length: 3 }).map((_, index) => (
-          <div key={index} className="flex flex-col gap-3">
-            <Skeleton className="aspect-[16/10] w-full rounded-[12px] bg-muted/50" />
-            <Skeleton className="h-5 w-[88%] rounded-[6px] bg-muted/50" />
-            <Skeleton className="h-4 w-1/2 rounded-full bg-muted/40" />
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

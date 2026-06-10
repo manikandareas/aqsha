@@ -26,7 +26,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
@@ -493,15 +492,6 @@ function HeaderLinkButton({
       </TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>
     </Tooltip>
-  );
-}
-
-export function ArtifactDetailSkeleton() {
-  return (
-    <div className="space-y-6">
-      <Skeleton className="h-8 w-1/2 rounded-md bg-muted/50" />
-      <Skeleton className="h-[70svh] min-h-[420px] w-full rounded-[8px] bg-muted/50" />
-    </div>
   );
 }
 

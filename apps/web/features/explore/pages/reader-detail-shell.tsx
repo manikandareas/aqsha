@@ -4,7 +4,7 @@ import { ArrowLeftIcon, BookOpenIcon } from "@aqsha/ui/icons";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { AppLoadingOverlay } from "@/components/app-loading-overlay";
 import { ExploreChatShell } from "./explore-chat-shell";
 
 // Single-column reader scaffolding shared by the news + fact detail pages.
@@ -68,18 +68,6 @@ export function ReaderDetailState({
   );
 }
 
-export function ReaderDetailSkeleton() {
-  return (
-    <div>
-      <Skeleton className="h-10 w-[85%] rounded-md bg-muted" />
-      <Skeleton className="mt-3 h-10 w-[60%] rounded-md bg-muted" />
-      <Skeleton className="mt-5 h-5 w-[70%] rounded-md bg-muted/70" />
-      <Skeleton className="mt-2 h-5 w-[55%] rounded-md bg-muted/70" />
-      <Skeleton className="mt-6 h-14 w-full rounded-[12px] bg-muted/60" />
-      <Skeleton className="mt-6 aspect-[16/9] w-full rounded-[14px] bg-muted/60" />
-      <Skeleton className="mt-6 h-5 w-full rounded-md bg-muted/50" />
-      <Skeleton className="mt-2 h-5 w-[92%] rounded-md bg-muted/50" />
-      <Skeleton className="mt-2 h-5 w-[80%] rounded-md bg-muted/50" />
-    </div>
-  );
+export function ReaderDetailLoading() {
+  return <AppLoadingOverlay variant="absolute" />;
 }

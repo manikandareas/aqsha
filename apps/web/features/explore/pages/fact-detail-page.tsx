@@ -29,8 +29,8 @@ import {
 } from "../components/reader-bits";
 import { formatAbsoluteDate, relativeTime } from "../utils/reader-format";
 import {
+  ReaderDetailLoading,
   ReaderDetailShell,
-  ReaderDetailSkeleton,
   ReaderDetailState,
 } from "./reader-detail-shell";
 
@@ -62,7 +62,7 @@ export function FactDetailPage({ feedItemId }: { feedItemId: string }) {
   return (
     <ReaderDetailShell breadcrumbLabel="Cek fakta" chatSeed={chatSeed}>
       {data === undefined ? (
-        <ReaderDetailSkeleton />
+        <ReaderDetailLoading />
       ) : !data || data.kind !== "claim" || !data.claim ? (
         <ReaderDetailState
           title="Cek fakta tidak tersedia."
