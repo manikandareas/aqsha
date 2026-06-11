@@ -2,6 +2,7 @@
 
 import { Loader2Icon } from "@aqsha/ui/icons";
 import { api } from "@aqsha/convex/api";
+import { useRouter } from "next/navigation";
 import {
   useEffect,
   useReducer,
@@ -10,24 +11,28 @@ import {
   type Dispatch,
   type RefObject,
 } from "react";
+import { AppLoadingOverlay } from "@/components/app-loading-overlay";
 import { toArtifactId, type ArtifactId } from "@/lib/convex-refs";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
 import { useConvexActionQueryWithKey } from "@/lib/convex-query";
-import { cn } from "@/lib/utils";
 import { useArtifactDetailData } from "../api/use-workspaces-data";
+import { DeleteArtifactDialog } from "../components/artifact-delete-dialog";
 import { ArtifactDetailHeader } from "../components/artifact-detail-header";
 import {
-  ArtifactLoading,
-  ArtifactMissing,
-  TypedArtifactDetail,
-  UrlArtifactDetail,
+  ArtifactMetadataPopover,
+  MarkdownArtifactDetails,
+  PaperStatusBanner,
+} from "../components/artifact-detail-sidebar";
+import {
+  ArtifactHeaderActions,
+  ArtifactMissingState,
+  ArtifactReadingColumn,
   type ArtifactRenderPayload,
   type PaperExtractionStatus,
 } from "../components/artifact-render-panels";
 import { BlockNoteEditorLoader } from "../components/blocknote-editor-loader";
 import type { DocumentEditorContent } from "../components/blocknote-document-editor";
-import { NameDialog } from "../components/workspace-dialogs";
-import { WorkspaceShell } from "../components/workspace-shell";
+import { DocumentTitleEditor } from "../components/document-title-editor";
 import {
   autosaveReducer,
   type AutosaveState,
@@ -40,6 +45,11 @@ const initialAutosaveState: AutosaveState = {
   error: null,
 };
 
+const readerColumnClass =
+  "mx-auto w-full max-w-[940px] px-4 pb-16 pt-2 sm:px-6";
+const singleColumnGridClass =
+  "mx-auto w-full max-w-[1080px] px-5 pb-12 pt-4 sm:px-8 lg:px-10";
+
 export function ArtifactDetailPage({
   workspaceId,
   artifactId,
@@ -48,16 +58,26 @@ export function ArtifactDetailPage({
   artifactId: string;
 }) {
   const data = useArtifactDetailData(artifactId);
+  const router = useRouter();
 
   const detail = data.artifact;
-  const renderPayloadVersionKey = detail
-    ? [
-        artifactId,
-        detail.artifact.updatedAt,
-        detail.content?.updatedAt ?? "no-content",
-        detail.url?.updatedAt ?? "no-url",
-      ].join(":")
-    : null;
+  const detailIsMarkdown = detail?.artifact.artifactType === "markdown";
+  // For markdown the render payload is only the initial seed: once loaded, the
+  // BlockNote editor owns the content and autosave pushes to Convex. Keeping the
+  // key stable per-artifact stops our own saves (which bump content.updatedAt)
+  // from churning the query key, which would otherwise blank the payload and
+  // remount the editor on every keystroke-batch. Papers/URLs still track
+  // updatedAt so extraction retries refresh the reader.
+  const renderPayloadVersionKey = !detail
+    ? null
+    : detailIsMarkdown
+      ? `${artifactId}:markdown`
+      : [
+          artifactId,
+          detail.artifact.updatedAt,
+          detail.content?.updatedAt ?? "no-content",
+          detail.url?.updatedAt ?? "no-url",
+        ].join(":");
   const renderPayloadQuery = useConvexActionQueryWithKey(
     api.artifacts.getRenderPayload,
     ["artifactRenderPayload", artifactId, renderPayloadVersionKey],
@@ -68,107 +88,145 @@ export function ArtifactDetailPage({
 
   const activeRenderPayload = (renderPayloadQuery.data ?? null) as ArtifactRenderPayload | null;
   const activeContentError = renderPayloadQuery.error
-    ? readableConvexErrorMessage(renderPayloadQuery.error, "Content gagal dimuat.")
+    ? readableConvexErrorMessage(renderPayloadQuery.error, "We couldn't load this content.")
     : null;
   const workspaceMismatch =
     detail?.artifact.workspaceId && detail.artifact.workspaceId !== workspaceId;
-  const workspaceName =
-    data.workspaces.find((workspace) => workspace._id === workspaceId)?.name ?? "Workspace";
   const [documentSaveState, dispatchDocumentSave] = useReducer(autosaveReducer, initialAutosaveState);
-  const [renameOpen, setRenameOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const markdownBlocksJson =
     activeRenderPayload?.artifactType === "markdown"
       ? activeRenderPayload.blocksJson
       : null;
 
+  // Seed autosave state once per artifact, when its content first becomes
+  // available. Re-seeding on every payload change would let a DB round-trip
+  // clobber in-flight autosave state (dropping edits queued during a save).
+  const initializedArtifactRef = useRef<string | null>(null);
   useEffect(() => {
     if (markdownBlocksJson === null) return;
+    if (initializedArtifactRef.current === artifactId) return;
+    initializedArtifactRef.current = artifactId;
     dispatchDocumentSave({ type: "reset", json: markdownBlocksJson });
   }, [artifactId, markdownBlocksJson]);
 
+  const ready = Boolean(detail) && !workspaceMismatch;
+  const isMarkdown = detailIsMarkdown;
+  const workspaceName = data.workspaces.find(
+    (workspace) => workspace._id === workspaceId,
+  )?.name;
+
+  const headerActions =
+    ready && detail && activeRenderPayload ? (
+      <ArtifactHeaderActions
+        payload={activeRenderPayload}
+        onDelete={() => setDeleteOpen(true)}
+      />
+    ) : null;
+
+  const metadataPopover =
+    ready && detail && activeRenderPayload && activeRenderPayload.artifactType !== "markdown" ? (
+      <ArtifactMetadataPopover
+        artifact={detail.artifact}
+        payload={activeRenderPayload}
+        title={detail.artifact.title}
+        paperExtraction={data.paperExtraction as PaperExtractionStatus}
+        artifactId={artifactId}
+        retryGrobidExtraction={data.retryGrobidExtraction}
+        retryUrlExtraction={data.retryUrlExtraction}
+      />
+    ) : null;
+
   return (
-    <WorkspaceShell
-      viewer={data.viewer}
-      workspaces={data.workspaces}
-      selectedWorkspaceId={workspaceId}
-      threads={data.threads}
-      createWorkspace={data.createWorkspace}
-      removeThread={data.removeThread}
-    >
-      <main className="grid h-svh min-h-0 grid-rows-[auto_1fr] overflow-hidden bg-background">
-        {data.isLoading ? (
-          <ArtifactLoading />
-        ) : !detail || workspaceMismatch ? (
-          <ArtifactMissing />
-        ) : (
-          <>
-            <ArtifactDetailHeader
-              workspaceId={workspaceId}
-              workspaceName={workspaceName}
-              artifactTitle={detail.artifact.title}
-              onRename={() => setRenameOpen(true)}
-              trailing={
-                detail.artifact.artifactType === "markdown"
-                  ? <SaveStatus state={documentSaveState} />
-                  : null
-              }
-            />
-            <section className={cn("h-full min-h-0 overflow-y-auto overflow-x-hidden px-5 pb-0 sm:px-7")}>
-              {activeContentError ? (
-                <p className="rounded-[8px] border border-destructive/30 bg-destructive/5 p-3 text-[13px] font-medium text-destructive">
-                  {activeContentError}
-                </p>
-              ) : !activeRenderPayload ? (
-                <ArtifactLoading />
-              ) : activeRenderPayload.artifactType === "url" ? (
-                <UrlArtifactDetail
-                  artifactId={artifactId}
-                  url={activeRenderPayload}
-                  retryUrlExtraction={data.retryUrlExtraction}
-                />
-              ) : activeRenderPayload.artifactType === "markdown" ? (
-                <DocumentArtifactDetail
-                  key={artifactId}
-                  artifactId={artifactId}
-                  initialBlocksJson={activeRenderPayload.blocksJson}
-                  initialMarkdown={activeRenderPayload.markdown}
-                  updateDocument={data.updateDocument}
-                  saveState={documentSaveState}
-                  dispatchSaveState={dispatchDocumentSave}
-                />
-              ) : (
-                <TypedArtifactDetail
-                  payload={activeRenderPayload}
-                  title={detail.artifact.title}
-                  paperExtraction={data.paperExtraction as PaperExtractionStatus}
-                  retryGrobidExtraction={data.retryGrobidExtraction}
-                  artifactId={artifactId}
-                />
-              )}
+    <main className="min-h-svh bg-background text-foreground">
+        {ready && detail ? (
+          <ArtifactDetailHeader
+            artifactTitle={detail.artifact.title}
+            workspaceId={workspaceId}
+            workspaceName={workspaceName}
+            onRenameArtifact={(name) =>
+              data.renameArtifact({ artifactId: toArtifactId(artifactId), title: name })
+            }
+            trailing={
+              isMarkdown ? (
+                <div className="flex items-center gap-1">
+                  <SaveStatus state={documentSaveState} />
+                  <MarkdownArtifactDetails artifact={detail.artifact} />
+                  {headerActions}
+                </div>
+              ) : metadataPopover || headerActions ? (
+                <div className="flex items-center gap-1">
+                  {metadataPopover}
+                  {headerActions}
+                </div>
+              ) : null
+            }
+          />
+        ) : null}
+
+        <div className={isMarkdown ? singleColumnGridClass : readerColumnClass}>
+          {data.isLoading ? (
+            <AppLoadingOverlay variant="absolute" />
+          ) : !ready || !detail ? (
+            <ArtifactMissingState workspaceId={workspaceId} />
+          ) : activeContentError ? (
+            <p className="rounded-[8px] border border-destructive/30 bg-destructive/5 p-3 text-[13px] font-medium text-destructive">
+              {activeContentError}
+            </p>
+          ) : !activeRenderPayload ? (
+            <AppLoadingOverlay variant="absolute" />
+          ) : activeRenderPayload.artifactType === "markdown" ? (
+            <div className="mx-auto w-full max-w-[820px]">
+              <DocumentArtifactDetail
+                key={artifactId}
+                artifactId={artifactId}
+                initialTitle={detail.artifact.title}
+                onRenameTitle={(title) =>
+                  data.renameArtifact({ artifactId: toArtifactId(artifactId), title })
+                }
+                initialBlocksJson={activeRenderPayload.blocksJson}
+                initialMarkdown={activeRenderPayload.markdown}
+                updateDocument={data.updateDocument}
+                saveState={documentSaveState}
+                dispatchSaveState={dispatchDocumentSave}
+              />
+            </div>
+          ) : (
+            <section className="min-w-0 space-y-5">
+              <PaperStatusBanner
+                payload={activeRenderPayload}
+                paperExtraction={data.paperExtraction as PaperExtractionStatus}
+                artifactId={artifactId}
+                retryGrobidExtraction={data.retryGrobidExtraction}
+                retryUrlExtraction={data.retryUrlExtraction}
+              />
+              <ArtifactReadingColumn
+                payload={activeRenderPayload}
+                title={detail.artifact.title}
+              />
             </section>
-            <NameDialog
-              open={renameOpen}
-              title="Rename artifact"
-              description="Update nama artifact yang tampil di workspace ini."
-              submitLabel="Simpan"
-              initialName={detail.artifact.title}
-              onOpenChange={setRenameOpen}
-              onSubmit={async ({ name }) => {
-                await data.renameArtifact({
-                  artifactId: toArtifactId(artifactId),
-                  title: name,
-                });
-              }}
-            />
-          </>
-        )}
-      </main>
-    </WorkspaceShell>
+          )}
+        </div>
+
+        {ready && detail ? (
+          <DeleteArtifactDialog
+            open={deleteOpen}
+            title={detail.artifact.title}
+            onOpenChange={setDeleteOpen}
+            onConfirm={async () => {
+              await data.removeArtifact({ artifactId: toArtifactId(artifactId) });
+              router.push(`/app/workspaces/${workspaceId}`);
+            }}
+          />
+        ) : null}
+    </main>
   );
 }
 
 function DocumentArtifactDetail({
   artifactId,
+  initialTitle,
+  onRenameTitle,
   initialBlocksJson,
   initialMarkdown,
   updateDocument,
@@ -176,6 +234,8 @@ function DocumentArtifactDetail({
   dispatchSaveState,
 }: {
   artifactId: string;
+  initialTitle: string;
+  onRenameTitle: (title: string) => Promise<unknown>;
   initialBlocksJson: string;
   initialMarkdown: string;
   updateDocument: (args: {
@@ -214,7 +274,8 @@ function DocumentArtifactDetail({
   ]);
 
   return (
-    <div className="grid w-full gap-3">
+    <div className="grid w-full gap-1">
+      <DocumentTitleEditor initialTitle={initialTitle} onRename={onRenameTitle} />
       <BlockNoteEditorLoader
         initialBlocksJson={initialBlocksJson}
         initialMarkdown={initialMarkdown}
@@ -280,7 +341,7 @@ async function saveLatestDocumentContent({
   } catch (error: unknown) {
     dispatch({
       type: "failed",
-      message: readableConvexErrorMessage(error, "Autosave gagal."),
+      message: readableConvexErrorMessage(error, "We couldn't save your changes."),
     });
   } finally {
     saveInFlightRef.current = false;
@@ -309,14 +370,10 @@ function SaveStatus({ state }: { state: AutosaveState }) {
     );
   }
   if (state.status === "failed") {
-    return (
-      <span className="text-[12px] font-medium text-destructive">
-        Failed{state.error ? ` / ${state.error}` : ""}
-      </span>
-    );
+    return <span className="text-[12px] font-medium text-destructive">Couldn&apos;t save</span>;
   }
   if (state.status === "saved") {
     return <span className="text-[12px] font-medium text-muted-foreground">Saved</span>;
   }
-  return <span className="text-[12px] font-medium text-muted-foreground">Idle</span>;
+  return null;
 }

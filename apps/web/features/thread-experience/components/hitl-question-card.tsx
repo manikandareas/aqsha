@@ -24,7 +24,7 @@ function isOtherOptionId(id: string) {
   return id === "other" || id === "custom" || id.endsWith("_other");
 }
 
-/** UI for agent `askHuman` tool — Questions card */
+/** UI for agent `askUser` tool — Questions card */
 export function HitlQuestionCard({
   prompt,
   options,
@@ -44,7 +44,7 @@ export function HitlQuestionCard({
   questionTotal?: number;
   onContinue: (args: { selectedOptionIds: string[]; customAnswer?: string }) => void;
   onSkip: () => void;
-  /** When set with questionIndex > 1, shows a Back control to rewind within this askHuman batch */
+  /** When set with questionIndex > 1, shows a Back control to rewind within this askUser batch */
   onBack?: () => void;
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -107,7 +107,7 @@ export function HitlQuestionCard({
   return (
     <Card
       size="sm"
-      data-hitl-tool="askHuman"
+      data-hitl-tool="askUser"
       className={cn("border-border/70", hitlCardShellClass)}
     >
       <CardHeader className={hitlCardHeaderClass}>

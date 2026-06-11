@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseGrobidTei } from "../convex/paperExtraction/teiParser";
+import { parseGrobidTei } from "../convex/papers/grobid/teiParser";
 
 const sampleTei = `<?xml version="1.0" encoding="UTF-8"?>
 <TEI xmlns="http://www.tei-c.org/ns/1.0">

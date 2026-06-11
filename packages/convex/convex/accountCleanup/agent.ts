@@ -37,20 +37,6 @@ export async function cleanupOwnerAgentData(
       .withIndex("by_owner_thread_created", (q) => q.eq("ownerUserId", ownerUserId))
       .take(501),
   );
-  const hitlCards = withinOwnerCleanupLimit(
-    "hitlCards",
-    await ctx.db
-      .query("hitlCards")
-      .withIndex("by_owner_session", (q) => q.eq("ownerUserId", ownerUserId))
-      .take(501),
-  );
-  const hitlSessions = withinOwnerCleanupLimit(
-    "hitlSessions",
-    await ctx.db
-      .query("hitlSessions")
-      .withIndex("by_owner_thread_phase_created", (q) => q.eq("ownerUserId", ownerUserId))
-      .take(501),
-  );
   const researchExtracts = withinOwnerCleanupLimit(
     "researchExtracts",
     await ctx.db
@@ -118,8 +104,6 @@ export async function cleanupOwnerAgentData(
   deletedRows += await deleteRows(ctx, "messageWorkspaceArtifacts", messageWorkspaceArtifacts);
   deletedRows += await deleteRows(ctx, "messageWorkspaceActions", messageWorkspaceActions);
   deletedRows += await deleteRows(ctx, "messageCommands", messageCommands);
-  deletedRows += await deleteRows(ctx, "hitlCards", hitlCards);
-  deletedRows += await deleteRows(ctx, "hitlSessions", hitlSessions);
   deletedRows += await deleteRows(ctx, "researchExtracts", researchExtracts);
   deletedRows += await deleteRows(ctx, "researchSources", researchSources);
   deletedRows += await deleteRows(ctx, "citationChecks", citationChecks);

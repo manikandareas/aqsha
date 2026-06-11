@@ -93,24 +93,20 @@ export function createVisibleComposerContent(content: string) {
 export function buildComposerSubmission({
   visibleContent,
   commands,
-  mode,
+  agentKind,
 }: {
   visibleContent: string;
   commands: PromptCommand[];
-  mode: "normal" | "deep";
+  agentKind: "lite" | "pro";
 }): ComposerSubmission {
+  // The selected agent (Lite/Pro) is orthogonal to the path: Deep Research is
+  // triggered purely by the /deep-research command (resolved into commandId),
+  // and the backend derives the deep path from that commandId.
   const trimmed = visibleContent.trim();
   const command = resolvePrimaryCommand(commands, trimmed);
-  const hasDeepCommand = commands.some((item) => item.mode === "deep");
-  const resolvedMode =
-    commands.length === 1 && commands[0]
-      ? commands[0].mode
-      : hasDeepCommand || command?.mode === "deep"
-        ? "deep"
-        : mode;
   return {
     content: trimmed,
-    mode: resolvedMode,
+    agentKind,
     commandId: commands.length === 1 ? commands[0]?.id : command?.id,
   };
 }
@@ -120,7 +116,9 @@ export function restoreComposerContentAfterBlockedSend(submittedContent: string)
 }
 
 function shouldShowStopForActiveRun(activeRun: ResearchRun | undefined) {
-  return Boolean(activeRun && activeRun.mode === "deep" && isRunActive(activeRun));
+  // Deep Research runs (Lite-deep or Pro-deep) execute as a durable workflow;
+  // show the Stop control for any active workflow run.
+  return Boolean(activeRun && activeRun.executionKind === "workflow" && isRunActive(activeRun));
 }
 
 export function getComposerAvailability({
@@ -131,6 +129,7 @@ export function getComposerAvailability({
   activeRun,
   hasAttachments = false,
   hitlBlocking = false,
+  isGenerating = false,
 }: {
   visibleContent: string;
   hasAttachments?: boolean;
@@ -139,6 +138,7 @@ export function getComposerAvailability({
   isRateLimited: boolean;
   activeRun?: ResearchRun;
   hitlBlocking?: boolean;
+  isGenerating?: boolean;
 }) {
   const isDeepActive = shouldShowStopForActiveRun(activeRun);
   return {
@@ -149,7 +149,8 @@ export function getComposerAvailability({
       !isSending &&
       !isRateLimited &&
       !isDeepActive &&
-      !hitlBlocking,
+      !hitlBlocking &&
+      !isGenerating,
     stopRunId: isDeepActive ? activeRun?._id : undefined,
   };
 }

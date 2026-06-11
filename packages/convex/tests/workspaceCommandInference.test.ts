@@ -3,7 +3,7 @@ import {
   buildAutoWorkspaceRoutingHint,
   detectWorkspaceManagementIntent,
   shouldAutoRouteWorkspaceCommand,
-} from "../convex/agent/workspaceCommandInference";
+} from "../convex/agent/tools/workspaceCommandInference";
 
 describe("workspace command inference", () => {
   it("detects create and rename intents", () => {

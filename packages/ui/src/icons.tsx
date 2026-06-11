@@ -7,6 +7,7 @@ import {
   ArrowRight01Icon,
   ArrowReloadHorizontalIcon,
   ArrowUp01Icon,
+  ArrowUpToLineIcon as HugeArrowUpToLineIcon,
   ArrowUpRight01Icon,
   ArrangeByLettersAZIcon,
   Attachment01Icon,
@@ -36,7 +37,9 @@ import {
   Delete02Icon,
   Dollar01Icon,
   Download01Icon,
+  ExpandParagraphIcon as HugeExpandParagraphIcon,
   ExternalLinkIcon as HugeExternalLinkIcon,
+  FavouriteIcon,
   File01Icon,
   FileDownloadIcon,
   FileScriptIcon,
@@ -47,6 +50,7 @@ import {
   GaugeIcon as HugeGaugeIcon,
   GitBranchIcon as HugeGitBranchIcon,
   HandshakeIcon as HugeHandshakeIcon,
+  HelpCircleIcon as HugeHelpCircleIcon,
   Home01Icon,
   Image01Icon,
   InformationCircleIcon,
@@ -56,14 +60,19 @@ import {
   Link01Icon,
   Link02Icon,
   Loading03Icon,
+  LockIcon as HugeLockIcon,
   Login01Icon,
   Logout01Icon,
+  Maximize01Icon,
   Message01Icon,
   MessageAdd01Icon,
   Mic01Icon,
+  Minimize01Icon,
+  MinusSignIcon,
   Moon02Icon,
   MoreHorizontalIcon as HugeMoreHorizontalIcon,
   MoreVerticalIcon as HugeMoreVerticalIcon,
+  NotebookIcon as HugeNotebookIcon,
   PaintBoardIcon,
   PanelLeftIcon as HugePanelLeftIcon,
   PencilEdit01Icon,
@@ -113,6 +122,7 @@ export const ArrowDownIcon = createIcon(ArrowDown01Icon);
 export const ArrowLeftIcon = createIcon(ArrowLeft01Icon);
 export const ArrowRight = createIcon(ArrowRight01Icon);
 export const ArrowUpIcon = createIcon(ArrowUp01Icon);
+export const ArrowUpToLineIcon = createIcon(HugeArrowUpToLineIcon);
 export const ArrowUpRightIcon = createIcon(ArrowUpRight01Icon);
 export const BookOpen = createIcon(BookOpen01Icon);
 export const BookOpenIcon = createIcon(BookOpen01Icon);
@@ -133,6 +143,7 @@ export const ChevronsUpDownIcon = createIcon(ChevronsDownUpIcon);
 export const Circle = createIcon(HugeCircleIcon);
 export const CircleIcon = createIcon(HugeCircleIcon);
 export const Clock3 = createIcon(Clock03Icon);
+export const ClockIcon = createIcon(Clock03Icon);
 export const CompassIcon = createIcon(HugeCompassIcon);
 export const Code2 = createIcon(CodeXmlIcon);
 export const Code2Icon = createIcon(CodeXmlIcon);
@@ -142,6 +153,7 @@ export const CreditCardIcon = createIcon(HugeCreditCardIcon);
 export const DollarSign = createIcon(Dollar01Icon);
 export const DownloadIcon = createIcon(Download01Icon);
 export const ExternalLinkIcon = createIcon(HugeExternalLinkIcon);
+export const ExpandParagraphIcon = createIcon(HugeExpandParagraphIcon);
 export const FileDownIcon = createIcon(FileDownloadIcon);
 export const FileIcon = createIcon(File01Icon);
 export const FileText = createIcon(FileScriptIcon);
@@ -154,6 +166,8 @@ export const GaugeIcon = createIcon(HugeGaugeIcon);
 export const GitBranch = createIcon(HugeGitBranchIcon);
 export const GitBranchIcon = createIcon(HugeGitBranchIcon);
 export const Handshake = createIcon(HugeHandshakeIcon);
+export const HeartIcon = createIcon(FavouriteIcon);
+export const HelpCircleIcon = createIcon(HugeHelpCircleIcon);
 export const HomeIcon = createIcon(Home01Icon);
 export const ImageIcon = createIcon(Image01Icon);
 export const InfoIcon = createIcon(InformationCircleIcon);
@@ -162,6 +176,7 @@ export const LayoutGridIcon = createIcon(HugeLayoutGridIcon);
 export const Library = createIcon(LibraryIcon);
 export const Link2Icon = createIcon(Link02Icon);
 export const LinkIcon = createIcon(Link01Icon);
+export const LockIcon = createIcon(HugeLockIcon);
 export const LogIn = createIcon(Login01Icon);
 export const LogOutIcon = createIcon(Logout01Icon);
 export const Loader2Icon = createIcon(Loading03Icon);
@@ -169,12 +184,16 @@ export const MessageSquare = createIcon(Message01Icon);
 export const MessageSquareIcon = createIcon(Message01Icon);
 export const MessageSquarePlusIcon = createIcon(MessageAdd01Icon);
 export const MicIcon = createIcon(Mic01Icon);
+export const MaximizeIcon = createIcon(Maximize01Icon);
+export const MinimizeIcon = createIcon(Minimize01Icon);
+export const MinusIcon = createIcon(MinusSignIcon);
 export const Monitor = createIcon(ComputerIcon);
 export const MonitorIcon = createIcon(ComputerIcon);
 export const Moon = createIcon(Moon02Icon);
 export const MoonIcon = createIcon(Moon02Icon);
 export const MoreHorizontalIcon = createIcon(HugeMoreHorizontalIcon);
 export const MoreVerticalIcon = createIcon(HugeMoreVerticalIcon);
+export const NotebookIcon = createIcon(HugeNotebookIcon);
 export const PaletteIcon = createIcon(PaintBoardIcon);
 export const PaperclipIcon = createIcon(Attachment01Icon);
 export const PanelLeftIcon = createIcon(HugePanelLeftIcon);

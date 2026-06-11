@@ -38,17 +38,6 @@ export function useThreadExperienceData(threadId?: string) {
     isAuthenticated && threadId ? { threadId } : "skip",
   );
   const threadQueriesEnabled = Boolean(isAuthenticated && threadId && selectedThread !== null);
-  const shouldLoadGlobalContextCandidates = Boolean(
-    isAuthenticated && (!threadId || (threadQueriesEnabled && !selectedThread?.workspaceId)),
-  );
-  const selectedContextArtifacts = useConvexQueryData(
-    api.agent.threadContext.listForThread,
-    threadQueriesEnabled ? { threadId: threadId! } : "skip",
-  );
-  const contextCandidateArtifacts = useConvexQueryData(
-    api.artifacts.listForContextPicker,
-    shouldLoadGlobalContextCandidates ? { workspaceId: undefined } : "skip",
-  );
   const createWorkspace = useConvexMutationFn(api.workspaces.create);
   const startThread = useConvexMutationFn(api.agent.messages.startThread);
   const sendMessage = useConvexOptimisticMutationState(
@@ -67,19 +56,19 @@ export function useThreadExperienceData(threadId?: string) {
     isAuthenticated ? {} : "skip",
   );
   const runs = useConvexQueryData(
-    api.agent.deepResearch.listForThread,
+    api.agent.research.deepResearch.listForThread,
     threadQueriesEnabled ? { threadId: threadId! } : "skip",
   ) as ResearchRun[] | undefined;
   const artifacts = useConvexQueryData(
-    api.agent.artifacts.list,
+    api.agent.tools.artifacts.list,
     threadQueriesEnabled ? { threadId: threadId! } : "skip",
   ) as ResearchArtifact[] | undefined;
   const sources = useConvexQueryData(
-    api.agent.sources.listForThread,
+    api.agent.research.sources.listForThread,
     threadQueriesEnabled ? { threadId: threadId! } : "skip",
   ) as ResearchSource[] | undefined;
-  const cancelRunMutation = useConvexMutationFn(api.agent.deepResearch.cancel);
-  const retryRun = useConvexMutationFn(api.agent.deepResearch.retry);
+  const cancelRunMutation = useConvexMutationFn(api.agent.research.deepResearch.cancel);
+  const retryRun = useConvexMutationFn(api.agent.research.deepResearch.retry);
   const removeThread = useConvexMutationFn(api.agent.threads.remove);
 
   const cancelRun = async (runId: string) => {
@@ -96,9 +85,6 @@ export function useThreadExperienceData(threadId?: string) {
     workspaces: workspacePage?.page ?? [],
     threads: threadPage?.page ?? [],
     selectedThread,
-    selectedContextArtifacts: selectedContextArtifacts ?? [],
-    selectedContextArtifactsLoaded: selectedContextArtifacts !== undefined,
-    contextCandidateArtifacts: contextCandidateArtifacts ?? [],
     createWorkspace,
     startThread,
     sendMessage: sendMessage.mutateAsync,

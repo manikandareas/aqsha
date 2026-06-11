@@ -5,11 +5,13 @@ import {
   artifactTypeFromAgentInput,
   artifactTypeFromUpload,
   contextFromText,
+  isUploadAllowedArtifactType,
   normalizeUrl,
   previewFromText,
   siteNameFromUrl,
   titleFromUrl,
-} from "../convex/artifactModel";
+  uploadArtifactType,
+} from "../convex/artifacts/model";
 
 describe("workspace artifact model helpers", () => {
   it("normalizes http URLs for workspace-level idempotency", () => {
@@ -67,5 +69,30 @@ describe("workspace artifact model helpers", () => {
     expect(artifactTypeFromAgentInput("html")).toBe("html");
     expect(() => artifactTypeFromAgentInput("pdf")).toThrow(ConvexError);
     expect(() => artifactTypeFromAgentInput("url")).toThrow(ConvexError);
+  });
+
+  it("accepts research document uploads and rejects non-research uploads", () => {
+    expect(uploadArtifactType({ fileName: "paper.pdf", mimeType: "" })).toBe("pdf");
+    expect(uploadArtifactType({ fileName: "draft.md", mimeType: "" })).toBe("markdown");
+    expect(uploadArtifactType({ fileName: "notes.txt", mimeType: "" })).toBe("plain_text");
+    expect(uploadArtifactType({ fileName: "data.csv", mimeType: "" })).toBe("csv");
+    expect(uploadArtifactType({ fileName: "data.json", mimeType: "" })).toBe("json");
+    expect(uploadArtifactType({ fileName: "export", mimeType: "application/json;charset=utf-8" })).toBe("json");
+    // Detectable but disallowed at upload time (these are agent-generated types).
+    expect(() => uploadArtifactType({ fileName: "logo.svg", mimeType: "" })).toThrow(ConvexError);
+    expect(() => uploadArtifactType({ fileName: "page.html", mimeType: "" })).toThrow(ConvexError);
+    expect(() => uploadArtifactType({ fileName: "main.py", mimeType: "" })).toThrow(ConvexError);
+    expect(() => uploadArtifactType({ fileName: "flow.mermaid", mimeType: "" })).toThrow(ConvexError);
+  });
+
+  it("keeps detecting agent-generated types so legacy artifacts still render", () => {
+    // artifactTypeFromUpload (detection) is intentionally NOT narrowed — only the
+    // upload entry points enforce uploadArtifactType. This preserves rendering for
+    // existing uploaded artifacts of these types.
+    expect(artifactTypeFromUpload({ fileName: "logo.svg", mimeType: "" })).toBe("svg");
+    expect(artifactTypeFromUpload({ fileName: "page.html", mimeType: "" })).toBe("html");
+    expect(artifactTypeFromUpload({ fileName: "main.py", mimeType: "" })).toBe("code");
+    expect(isUploadAllowedArtifactType("svg")).toBe(false);
+    expect(isUploadAllowedArtifactType("pdf")).toBe(true);
   });
 });

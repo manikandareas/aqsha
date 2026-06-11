@@ -4,7 +4,6 @@ import {
   AlertCircleIcon,
   ArrowUpIcon,
   ArrowUpRightIcon,
-  ChevronDownIcon,
   FileTextIcon,
   LayoutGridIcon,
   Loader2Icon,
@@ -16,12 +15,17 @@ import {
 } from "@aqsha/ui/icons";
 import { api } from "@aqsha/convex/api";
 import { LayoutGroup, m, useReducedMotion } from "motion/react";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { MAX_UPLOAD_BYTES } from "@aqsha/convex/artifact-upload-limits";
+import {
+  isAllowedWorkspaceUploadFile,
+  UPLOAD_REJECTED_MESSAGE,
+  WORKSPACE_UPLOAD_ACCEPT,
+} from "@aqsha/convex/artifact-upload-policy";
 import type { PromptCommand } from "@aqsha/convex/prompt-commands";
 import {
   PromptInput,
@@ -30,18 +34,20 @@ import {
   PromptInputSubmit,
   usePromptInputAttachments,
 } from "@/components/ai-elements/prompt-input";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { toArtifactId, toStorageId, type ArtifactId, type StorageId } from "@/lib/convex-refs";
+import {
+  toArtifactId,
+  toStorageId,
+  toWorkspaceId,
+  type ArtifactId,
+  type StorageId,
+} from "@/lib/convex-refs";
+import { splitContextRefs, type ContextRef } from "@/lib/context-refs";
 import {
   useConvexActionFn,
   useConvexMutationFn,
 } from "@/lib/convex-query";
+import { useComposerMentions } from "./composer-context-mentions";
 import type { RateStatus, ResearchRun, SendResult } from "../types";
 import { formatDate } from "../utils/datetime";
 import {
@@ -56,9 +62,16 @@ import type {
   StartThread,
   ThreadSummary,
 } from "./component-types";
+import {
+  AgentSelector,
+  useComposerAgentSelection,
+  type ComposerAgentKind,
+} from "./composer-agent-selector";
 import { TokenizedPromptInput } from "./composer-token-input";
 
 type ComposerVariant = "hero" | "docked";
+
+const EMPTY_CONTEXT_REFS: ContextRef[] = [];
 
 const COMPOSER_EASE_OUT = [0.23, 1, 0.32, 1] as const;
 const COMPOSER_COLLAPSED_RADIUS = 23;
@@ -95,8 +108,15 @@ type ComposerSharedProps = {
   activeRun?: ResearchRun;
   onCancelRun?: (runId: string) => Promise<unknown>;
   hitlBlocking?: boolean;
+  isGenerating?: boolean;
   showSuggestions?: boolean;
   threads?: ThreadSummary[];
+  /** Invoked when a Free user taps the locked Astra Pro option. */
+  onUpgrade?: () => void;
+  /** Sticky per-thread agent selection to initialize the selector. */
+  initialAgentKind?: ComposerAgentKind;
+  /** Optional pre-seeded composer text (e.g. an Explore detail item). */
+  initialContent?: string;
 };
 
 export type ComposerProps = ComposerSharedProps &
@@ -144,17 +164,39 @@ function ComposerContent(props: ComposerProps) {
     activeRun,
     onCancelRun,
     hitlBlocking = false,
+    isGenerating = false,
     showSuggestions = false,
     threads = [],
+    onUpgrade,
+    initialAgentKind,
+    initialContent,
   } = props;
 
   const threadId = props.mode === "thread" ? props.threadId : undefined;
   const onSend = props.mode === "thread" ? props.onSend : undefined;
   const onStartThread = props.mode === "disabled" ? undefined : props.onStartThread;
 
-  const [content, setContent] = useState("");
+  const mentions = useComposerMentions();
+  const pinnedContextRefs = mentions?.pinnedContextRefs ?? EMPTY_CONTEXT_REFS;
+
+  const [content, setContent] = useState(initialContent ?? "");
+  // Marked variant of `content` (mention pills kept as inline markers at their
+  // typed positions). Sent as the message so the bubble renders pills in place.
+  const [richContent, setRichContent] = useState("");
   const [inlineCommands, setInlineCommands] = useState<PromptCommand[]>([]);
-  const [mode, setMode] = useState<"normal" | "deep">("normal");
+  // Re-apply a pre-seed (e.g. an Explore detail item that loads after mount)
+  // only while the user hasn't diverged from the previously seeded text.
+  const lastSeedRef = useRef(initialContent ?? "");
+  useEffect(() => {
+    const nextSeed = initialContent ?? "";
+    if (nextSeed === lastSeedRef.current) return;
+    setContent((current) =>
+      current === lastSeedRef.current ? nextSeed : current,
+    );
+    lastSeedRef.current = nextSeed;
+  }, [initialContent]);
+  const { agentKind, canUsePro, setAgentKind, handleUpgrade } =
+    useComposerAgentSelection({ initialAgentKind, onUpgrade });
   const [isSending, setIsSending] = useState(false);
   const [localRetryAt, setLocalRetryAt] = useState<number | null>(null);
   const [billingBlock, setBillingBlock] = useState<SendResult & { ok: false } | null>(null);
@@ -164,7 +206,7 @@ function ComposerContent(props: ComposerProps) {
   const attachmentFiles = attachments.files;
   const [uploadError, setUploadError] = useState<string | null>(null);
   const generateUploadUrl = useConvexMutationFn(api.artifacts.generateUploadUrl);
-  const createThreadAttachment = useConvexActionFn(api.artifactUploads.createThreadAttachmentFromStorage);
+  const createThreadAttachment = useConvexActionFn(api.artifacts.uploads.createThreadAttachmentFromStorage);
 
   const retryAt = localRetryAt ?? rateStatus?.retryAt ?? null;
   const retrySeconds =
@@ -173,8 +215,6 @@ function ComposerContent(props: ComposerProps) {
       : 0;
   const isRateLimited = retrySeconds > 0;
   const visibleContent = createVisibleComposerContent(content);
-  const hasDeepInlineCommand = inlineCommands.some((command) => command.mode === "deep");
-  const effectiveMode = hasDeepInlineCommand ? "deep" : mode;
   const { canSend, isDeepActive } = getComposerAvailability({
     visibleContent,
     hasAttachments: attachmentFiles.length > 0,
@@ -183,6 +223,7 @@ function ComposerContent(props: ComposerProps) {
     isRateLimited,
     activeRun,
     hitlBlocking,
+    isGenerating,
   });
   const isInteractionLocked = isDeepActive || hitlBlocking;
   const router = useRouter();
@@ -191,6 +232,7 @@ function ComposerContent(props: ComposerProps) {
   const hasComposerContext =
     attachmentFiles.length > 0 ||
     contextArtifacts.length > 0 ||
+    pinnedContextRefs.length > 0 ||
     Boolean(contextLabel);
   const isExpanded =
     hasComposerContext ||
@@ -239,6 +281,7 @@ function ComposerContent(props: ComposerProps) {
     setUploadError(null);
     setIsSending(true);
     const submittedCommands = inlineCommands;
+    const draftRefs = pinnedContextRefs;
     try {
       const { attachments: uploadedArtifacts, pendingAttachments } =
         await uploadComposerAttachments({
@@ -260,10 +303,20 @@ function ComposerContent(props: ComposerProps) {
       const submission = buildComposerSubmission({
         visibleContent: fallbackContent,
         commands: submittedCommands,
-        mode: effectiveMode,
+        agentKind,
       });
+      // Send the marked (rich) content when there are mention pills, so the
+      // message renders them inline at their typed positions. Fall back to the
+      // plain submission content (e.g. attachments-only synthetic text).
+      const richBody = richContent.trim();
+      const sentContent =
+        mentions && richBody.length > 0 ? richBody : submission.content;
       setContent("");
       setInlineCommands([]);
+      setRichContent("");
+      // Reset the draft pills optimistically so they clear together with the
+      // text (restored below if the send is blocked).
+      mentions?.setContextRefs([]);
 
       const attachmentArgs = {
         ...(messageAttachmentArtifactIds.length > 0
@@ -271,28 +324,58 @@ function ComposerContent(props: ComposerProps) {
           : {}),
         ...(pendingAttachments.length > 0 ? { pendingAttachments } : {}),
       };
+      // The inline pills are the source of truth for the context added this
+      // turn; the backend accumulates them onto the thread (add semantics).
+      const { workspaceIds: contextWorkspaceIds, artifactIds: contextPaperIds } =
+        splitContextRefs(draftRefs);
+      const contextArgs = mentions
+        ? {
+            selectedContextArtifactIds: contextPaperIds.map(toArtifactId),
+            selectedContextWorkspaceIds: contextWorkspaceIds.map(toWorkspaceId),
+            contextArtifactSnapshot: draftRefs.flatMap((ref) =>
+              ref.kind === "paper"
+                ? [
+                    {
+                      artifactId: ref.artifactId,
+                      title: ref.label.includes(":")
+                        ? ref.label.slice(ref.label.indexOf(":") + 1)
+                        : ref.label.replace(/^@/, ""),
+                      source: "workspace" as const,
+                    },
+                  ]
+                : [],
+            ),
+          }
+        : {};
       const result = threadId && onSend
         ? await onSend({
             threadId,
-            content: submission.content,
-            mode: submission.mode,
+            content: sentContent,
+            agentKind: submission.agentKind,
             commandId: submission.commandId,
+            ...contextArgs,
             ...attachmentArgs,
           })
         : await onStartThread!({
-            content: submission.content,
-            mode: submission.mode,
+            content: sentContent,
+            agentKind: submission.agentKind,
             commandId: submission.commandId,
+            ...contextArgs,
             ...attachmentArgs,
           });
       if (!result.ok) {
         if (result.reason === "rate_limited" && result.retryAt) {
           setLocalRetryAt(result.retryAt);
           setBillingBlock(null);
+        } else if (result.reason === "reply_in_progress") {
+          toast.info("Astra masih menjawab pesan sebelumnya. Tunggu sebentar ya.");
+          setBillingBlock(null);
         } else {
           setBillingBlock(result);
         }
         setContent(restoreComposerContentAfterBlockedSend(submission.content));
+        // Restore the draft pills that were cleared optimistically.
+        mentions?.setContextRefs(draftRefs);
         setIsSending(false);
         return;
       }
@@ -342,7 +425,7 @@ function ComposerContent(props: ComposerProps) {
         transition={shellTransition}
       >
         <PromptInput
-          accept=".pdf,.docx,.txt,.md,.markdown,.csv,.json,.html,.htm,.svg,.mmd,.mermaid,.js,.jsx,.ts,.tsx,.css,.py,.java,.go,.rs,.sql,.sh,.yml,.yaml,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv,text/html,application/json,image/svg+xml,text/javascript,application/javascript,text/css,text/yaml,application/x-yaml"
+          accept={WORKSPACE_UPLOAD_ACCEPT}
           multiple
           maxFiles={4}
           maxFileSize={MAX_UPLOAD_BYTES}
@@ -364,23 +447,22 @@ function ComposerContent(props: ComposerProps) {
             isInteractionLocked={isInteractionLocked}
             isRateLimited={isRateLimited}
             isSending={isSending}
-            mode={mode}
+            isGenerating={isGenerating}
+            agentKind={agentKind}
+            canUsePro={canUsePro}
+            onUpgrade={handleUpgrade}
             retrySeconds={retrySeconds}
             shellExpanded={shellExpanded}
             showVoiceInput={showVoiceInput}
             uploadError={uploadError}
             onCancelRun={onCancelRun}
-            onCommandsChange={(commands) => {
-              setInlineCommands(commands);
-              if (commands.some((command) => command.mode === "deep")) {
-                setMode("deep");
-              }
-            }}
+            onCommandsChange={setInlineCommands}
             onHeightChange={setEditorHeight}
             onRemoveContextArtifact={onRemoveContextArtifact}
             onSubmit={requestFormSubmit}
             onValueChange={setContent}
-            setMode={setMode}
+            onRichValueChange={setRichContent}
+            setAgentKind={setAgentKind}
           />
         </PromptInput>
       </m.div>
@@ -427,7 +509,7 @@ async function uploadComposerAttachments({
 }: {
   createThreadAttachment: (args: {
     threadId: string;
-    storageId: never;
+    storageId: StorageId;
     fileName: string;
     mimeType: string;
     size: number;
@@ -456,6 +538,10 @@ async function uploadComposerAttachments({
       setUploadError(message);
       throw new Error(message);
     }
+    if (!isAllowedWorkspaceUploadFile(file)) {
+      setUploadError(UPLOAD_REJECTED_MESSAGE);
+      throw new Error(UPLOAD_REJECTED_MESSAGE);
+    }
     const uploadUrl = await generateUploadUrl(threadId ? { threadId } : {});
     const response = await fetch(uploadUrl, {
       method: "POST",
@@ -477,7 +563,7 @@ async function uploadComposerAttachments({
     if (threadId) {
       const artifact = await createThreadAttachment({
         threadId,
-        storageId: body.storageId as never,
+        storageId: toStorageId(body.storageId),
         fileName: file.name,
         mimeType: file.type || filePart.mediaType || "application/octet-stream",
         size: file.size,
@@ -533,7 +619,10 @@ function ComposerPromptInputContent({
   isInteractionLocked,
   isRateLimited,
   isSending,
-  mode,
+  isGenerating,
+  agentKind,
+  canUsePro,
+  onUpgrade,
   retrySeconds,
   shellExpanded,
   showVoiceInput,
@@ -544,7 +633,8 @@ function ComposerPromptInputContent({
   onRemoveContextArtifact,
   onSubmit,
   onValueChange,
-  setMode,
+  onRichValueChange,
+  setAgentKind,
 }: {
   activeRun?: ResearchRun;
   billingBlock: (SendResult & { ok: false }) | null;
@@ -559,7 +649,10 @@ function ComposerPromptInputContent({
   isInteractionLocked: boolean;
   isRateLimited: boolean;
   isSending: boolean;
-  mode: "normal" | "deep";
+  isGenerating: boolean;
+  agentKind: "lite" | "pro";
+  canUsePro: boolean;
+  onUpgrade?: () => void;
   retrySeconds: number;
   shellExpanded: boolean;
   showVoiceInput: boolean;
@@ -570,8 +663,10 @@ function ComposerPromptInputContent({
   onRemoveContextArtifact?: (artifactId: string) => void;
   onSubmit: () => void;
   onValueChange: (value: string) => void;
-  setMode: (mode: "normal" | "deep") => void;
+  onRichValueChange: (rich: string) => void;
+  setAgentKind: (agentKind: ComposerAgentKind) => void;
 }) {
+  const mentions = useComposerMentions();
   return (
     <>
       {isRateLimited || billingBlock ? (
@@ -614,6 +709,7 @@ function ComposerPromptInputContent({
               <TokenizedPromptInput
                 value={content}
                 onValueChange={onValueChange}
+                onRichValueChange={onRichValueChange}
                 onCommandsChange={onCommandsChange}
                 onHeightChange={onHeightChange}
                 onSubmit={onSubmit}
@@ -623,9 +719,16 @@ function ComposerPromptInputContent({
                 placeholder={
                   hitlBlocking
                     ? "Selesaikan langkah di atas terlebih dahulu…"
-                    : "Select board items, or / for voices..."
+                    : "Ketik @ untuk workspace, / untuk perintah…"
                 }
                 className={isExpanded ? "py-0.5" : undefined}
+                pinnedContextRefs={mentions?.pinnedContextRefs}
+                onContextRefsChange={mentions?.setContextRefs}
+                contextWorkspaces={mentions?.contextWorkspaces}
+                ambientWorkspaceId={mentions?.ambientWorkspaceId ?? null}
+                workspaceItems={mentions?.workspaceItems}
+                workspaceItemsLoading={mentions?.workspaceItemsLoading}
+                onRequestWorkspaceItems={mentions?.requestWorkspaceItems}
               />
             </div>
           </div>
@@ -642,11 +745,17 @@ function ComposerPromptInputContent({
               />
             ) : null}
             <div className="flex shrink-0 items-center gap-1">
-              <ModeSelector mode={mode} setMode={setMode} disabled={isInteractionLocked} />
+              <AgentSelector
+                agentKind={agentKind}
+                setAgentKind={setAgentKind}
+                canUsePro={canUsePro}
+                onUpgrade={onUpgrade}
+                disabled={isInteractionLocked}
+              />
               {showVoiceInput ? <MicButton disabled={disabled || isInteractionLocked} /> : null}
               <ComposerSubmitButton
                 canSend={canSend}
-                isSending={isSending}
+                isSending={isSending || isGenerating}
                 isDeepActive={isDeepActive}
                 activeRun={activeRun}
                 onCancelRun={onCancelRun}
@@ -905,88 +1014,6 @@ function ComposerUploadButton({
     >
       <PaperclipIcon className="size-3.5" />
     </button>
-  );
-}
-
-function ModeSelector({
-  mode,
-  setMode,
-  disabled,
-}: {
-  mode: "normal" | "deep";
-  setMode: (mode: "normal" | "deep") => void;
-  disabled?: boolean;
-}) {
-  const activeMode = getModeSelectorPresentation(mode);
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          disabled={disabled}
-          className="aqsha-composer-toolbar-btn inline-flex h-8 items-center gap-1 rounded-full bg-muted/20 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-all duration-150 cursor-pointer disabled:opacity-50"
-        >
-          <ModeSelectorImage src={activeMode.src} alt="" />
-          <span>{activeMode.shortLabel}</span>
-          <ChevronDownIcon className="size-3 text-muted-foreground/60" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-36">
-        <DropdownMenuItem
-          onClick={() => setMode("normal")}
-          className={cn(
-            "gap-2 data-highlighted:bg-muted/60 data-highlighted:text-foreground",
-            mode === "normal" && "bg-muted/60 font-medium text-foreground",
-          )}
-        >
-          <ModeSelectorImage src="/general-agent.png" alt="" />
-          <span className="font-semibold text-[11px]">
-            Normal Mode
-          </span>
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => setMode("deep")}
-          className={cn(
-            "gap-2 data-highlighted:bg-muted/60 data-highlighted:text-foreground",
-            mode === "deep" && "bg-muted/60 font-medium text-foreground",
-          )}
-        >
-          <ModeSelectorImage src="/pro-agent.png" alt="" />
-          <span className="font-semibold text-[11px]">
-            Deep Mode
-          </span>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function getModeSelectorPresentation(mode: "normal" | "deep") {
-  return mode === "deep"
-    ? { shortLabel: "Deep", src: "/pro-agent.png" }
-    : { shortLabel: "Normal", src: "/general-agent.png" };
-}
-
-function ModeSelectorImage({
-  src,
-  alt,
-}: {
-  src: string;
-  alt: string;
-}) {
-  return (
-    <span className="grid size-5 shrink-0 place-items-center overflow-hidden rounded-full bg-background">
-      <Image
-        src={src}
-        alt={alt}
-        width={20}
-        height={20}
-        className="size-5 object-contain"
-        draggable={false}
-        unoptimized
-      />
-    </span>
   );
 }
 

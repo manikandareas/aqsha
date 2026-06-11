@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { ResponsiveSidePanel } from "@/components/layout/responsive-side-panel";
 import { PanelBoardTitleDropdownTrigger } from "@/components/panel-title-dropdown-trigger";
@@ -10,14 +10,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SidebarProvider } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCloseRightPanel } from "@/hooks/use-close-right-panel";
 import { panelBodyPaddingClass } from "@/lib/panel-surface";
-import {
-  threadContextScopeKey,
-  useDraftContextSelection,
-} from "@/lib/thread-context-draft-store";
 import { cn } from "@/lib/utils";
 import {
   useWorkspaceLibraryData,
@@ -26,28 +21,20 @@ import { WorkspaceLibrarySurface } from "@/features/workspaces/components/worksp
 import { WorkspaceBoardToolbar } from "@/features/workspaces/components/workspace-board-toolbar";
 import { useWorkspaceLibraryDialogState } from "@/features/workspaces/hooks/use-workspace-library-dialogs";
 import { useThreadExperienceData } from "../api/use-thread-experience-data";
-import type {
-  SendMessage,
-  StartThread,
-} from "./component-types";
-import { ThreadShellLayout } from "./thread-shell-layout";
+import type { SendMessage, StartThread } from "./component-types";
 import {
-  buildContextArtifactSnapshot,
-  toMutationContextSnapshot,
-  toSelectedContextArtifactIds,
-} from "../utils/message-context";
+  ComposerMentionsProvider,
+  usePanelContextSelection,
+} from "./composer-context-mentions";
+import { ThreadShellLayout } from "./thread-shell-layout";
+import { toMutationContextSnapshot } from "../utils/message-context";
 
 export function ThreadDetailShell({ threadId }: { threadId?: string }) {
   const router = useRouter();
   const {
-    viewer,
     workspaces,
     threads,
     selectedThread,
-    selectedContextArtifacts,
-    selectedContextArtifactsLoaded,
-    contextCandidateArtifacts,
-    createWorkspace,
     startThread,
     sendMessage,
     rateStatus,
@@ -59,92 +46,23 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
     removeThread,
   } = useThreadExperienceData(threadId);
   const [contextPanelOpen, setContextPanelOpen] = useState(false);
-  const persistedContextIds = selectedContextArtifacts.map((item) => String(item.artifactId));
-  const draftContext = useDraftContextSelection(
-    threadId ? threadContextScopeKey(threadId) : "thread:new",
-    threadId && selectedContextArtifactsLoaded ? persistedContextIds : undefined,
-  );
-  const panelWorkspaceId = selectedThread?.workspaceId;
-  const workspaceLibrary = useWorkspaceLibraryData(panelWorkspaceId ?? "");
   const title = threadId
     ? (selectedThread?.title ?? "Thread tidak ditemukan")
     : "Thread baru";
 
-  const workspaceNameById = new Map(workspaces.map((workspace) => [workspace._id, workspace.name]));
-  const workspaceName = panelWorkspaceId
-    ? (workspaceNameById.get(panelWorkspaceId) ?? "Workspace")
-    : undefined;
-  const contextArtifactTitleById = (() => {
-    const titles = new Map<string, string>();
-    for (const item of selectedContextArtifacts) {
-      titles.set(String(item.artifactId), item.artifact.title);
-    }
-    for (const artifact of contextCandidateArtifacts) {
-      titles.set(artifact._id, artifact.title);
-    }
-    for (const artifact of workspaceLibrary.artifacts) {
-      titles.set(artifact._id, artifact.title);
-    }
-    return titles;
-  })();
-  const draftContextArtifacts = draftContext.selectedIds.map((artifactId) => ({
-        artifactId,
-        title: contextArtifactTitleById.get(artifactId) ?? "Artifact",
-      }));
-
-  const sendMessageWithDraftContext: SendMessage = async (args) => {
-    const shouldReplaceContext = draftContext.isDirty;
-    const messageAttachmentIds = args.messageAttachmentArtifactIds?.map(String) ?? [];
-    const panelIds = shouldReplaceContext ? draftContext.selectedIds : persistedContextIds;
-    const snapshotIds = [...new Set([...panelIds, ...messageAttachmentIds])];
-    const contextArtifactSnapshot = buildContextArtifactSnapshot(
-      snapshotIds,
-      contextArtifactTitleById,
-      messageAttachmentIds,
-    );
-    const panelSnapshot = shouldReplaceContext
-      ? buildContextArtifactSnapshot(
-          draftContext.selectedIds,
-          contextArtifactTitleById,
-        )
-      : undefined;
-    const result = await sendMessage({
+  // The composer (via the mention provider) is the source of truth for pinned
+  // context. These adapters just bridge the string-typed snapshot to the
+  // branded mutation args.
+  const startThreadAdapter: StartThread = (args) =>
+    startThread({
       ...args,
-      selectedContextArtifactIds: toSelectedContextArtifactIds(panelSnapshot),
-      contextArtifactSnapshot: toMutationContextSnapshot(contextArtifactSnapshot),
+      contextArtifactSnapshot: toMutationContextSnapshot(args.contextArtifactSnapshot),
     });
-    if (result.ok && threadId && shouldReplaceContext) {
-      draftContext.markSelectionPersisted(draftContext.selectedIds);
-    }
-    return result;
-  };
-
-  const startThreadWithDraftContext: StartThread = async (args) => {
-    const shouldIncludeContext = draftContext.isDirty;
-    const messageAttachmentIds = args.messageAttachmentArtifactIds?.map(String) ?? [];
-    const panelIds = shouldIncludeContext ? draftContext.selectedIds : [];
-    const snapshotIds = [...new Set([...panelIds, ...messageAttachmentIds])];
-    const contextArtifactSnapshot = buildContextArtifactSnapshot(
-      snapshotIds,
-      contextArtifactTitleById,
-      messageAttachmentIds,
-    );
-    const panelSnapshot = shouldIncludeContext
-      ? buildContextArtifactSnapshot(
-          draftContext.selectedIds,
-          contextArtifactTitleById,
-        )
-      : undefined;
-    const result = await startThread({
+  const sendMessageAdapter: SendMessage = (args) =>
+    sendMessage({
       ...args,
-      selectedContextArtifactIds: toSelectedContextArtifactIds(panelSnapshot),
-      contextArtifactSnapshot: toMutationContextSnapshot(contextArtifactSnapshot),
+      contextArtifactSnapshot: toMutationContextSnapshot(args.contextArtifactSnapshot),
     });
-    if (result.ok && shouldIncludeContext) {
-      draftContext.markSelectionPersisted(draftContext.selectedIds);
-    }
-    return result;
-  };
 
   const handleDeleteThread = async () => {
     if (!threadId) return;
@@ -155,34 +73,23 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
     router.replace(destination);
   };
 
+  const workspaceNameById = new Map(workspaces.map((workspace) => [workspace._id, workspace.name]));
+  const panelWorkspaceId = selectedThread?.workspaceId;
+  const workspaceName = panelWorkspaceId
+    ? (workspaceNameById.get(panelWorkspaceId) ?? "Workspace")
+    : undefined;
+
   const sidePanelContent = !threadId
-    ? (
-        <ThreadGlobalContextPanel
-          workspaces={workspaces}
-          selectedIds={draftContext.selectedIdSet}
-          onToggle={draftContext.toggleArtifact}
-          onSetSelection={draftContext.setSelectedArtifacts}
-        />
-      )
+    ? <ThreadGlobalContextPanel workspaces={workspaces} />
     : selectedThread != null
       ? selectedThread.workspaceId
         ? (
             <ThreadWorkspaceLibraryPanel
               workspaceId={selectedThread.workspaceId}
               workspaceName={workspaceName ?? "Workspace"}
-              selectedIds={draftContext.selectedIdSet}
-              onToggle={draftContext.toggleArtifact}
-              onSetSelection={draftContext.setSelectedArtifacts}
             />
           )
-        : (
-            <ThreadGlobalContextPanel
-              workspaces={workspaces}
-              selectedIds={draftContext.selectedIdSet}
-              onToggle={draftContext.toggleArtifact}
-              onSetSelection={draftContext.setSelectedArtifacts}
-            />
-          )
+        : <ThreadGlobalContextPanel workspaces={workspaces} />
       : null;
 
   const sidePanel = sidePanelContent ? (
@@ -190,21 +97,20 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
   ) : undefined;
 
   return (
-    <SidebarProvider className="min-h-svh overflow-hidden">
+    <ComposerMentionsProvider
+      threadId={threadId}
+      ambientWorkspaceId={selectedThread?.workspaceId ?? null}
+    >
       <ThreadShellLayout
-        viewer={viewer}
-        workspaces={workspaces}
         threads={threads}
-        selectedThreadId={threadId}
         onCreateThread={() => router.push("/app")}
         onSelectThread={(id) => router.push(`/app/threads/${id}`)}
-        createWorkspace={createWorkspace}
         title={title}
         threadId={threadId}
         selectedThread={selectedThread}
         rateStatus={rateStatus}
-        startThread={startThreadWithDraftContext}
-        sendMessage={sendMessageWithDraftContext}
+        startThread={startThreadAdapter}
+        sendMessage={sendMessageAdapter}
         runs={runs}
         artifacts={artifacts}
         sources={sources}
@@ -213,33 +119,36 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
         onCancelRun={cancelRun}
         onRetryRun={retryRun}
         onDeleteThread={threadId ? handleDeleteThread : undefined}
-        removeThread={removeThread}
         sidePanel={sidePanel}
-        contextArtifacts={draftContextArtifacts}
-        onRemoveContextArtifact={draftContext.toggleArtifact}
       />
-    </SidebarProvider>
+    </ComposerMentionsProvider>
   );
 }
 
 function ThreadWorkspaceLibraryPanel({
   workspaceId,
   workspaceName,
-  selectedIds,
-  onToggle,
-  onSetSelection,
   titleSlot,
 }: {
   workspaceId: string;
   workspaceName: string;
-  selectedIds: Set<string>;
-  onToggle: (artifactId: string) => void;
-  onSetSelection: (artifactIds: string[]) => void;
   titleSlot?: ReactNode;
 }) {
   const router = useRouter();
   const libraryData = useWorkspaceLibraryData(workspaceId);
   const dialogState = useWorkspaceLibraryDialogState();
+  const titleById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const artifact of libraryData.artifacts) {
+      map.set(artifact._id, artifact.title);
+    }
+    return map;
+  }, [libraryData.artifacts]);
+  const contextSelection = usePanelContextSelection({
+    workspaceId,
+    workspaceName,
+    titleById,
+  });
 
   if (libraryData.isLoading) {
     return (
@@ -260,9 +169,9 @@ function ThreadWorkspaceLibraryPanel({
       titleSlot={titleSlot}
       libraryData={libraryData}
       dialogState={dialogState}
-      getArtifactSelected={(artifactId) => selectedIds.has(artifactId)}
-      onToggleArtifactContext={onToggle}
-      onSetArtifactContextSelection={onSetSelection}
+      getArtifactSelected={contextSelection.getArtifactSelected}
+      onToggleArtifactContext={contextSelection.onToggleArtifactContext}
+      onSetArtifactContextSelection={contextSelection.onSetArtifactContextSelection}
       onAfterArchive={() => router.push("/app/workspaces")}
       showCreateActions
       showWorkspaceSettings
@@ -315,14 +224,8 @@ function WorkspacePanelSwitcher({
 
 function ThreadGlobalContextPanel({
   workspaces,
-  selectedIds,
-  onToggle,
-  onSetSelection,
 }: {
   workspaces: WorkspacePickerOption[];
-  selectedIds: Set<string>;
-  onToggle: (artifactId: string) => void;
-  onSetSelection: (artifactIds: string[]) => void;
 }) {
   const closePanel = useCloseRightPanel();
   const [selectedPanelWorkspaceId, setSelectedPanelWorkspaceId] = useState<string | null>(null);
@@ -343,9 +246,6 @@ function ThreadGlobalContextPanel({
       <ThreadWorkspaceLibraryPanel
         workspaceId={selectedPanelWorkspaceId}
         workspaceName={selectedWorkspaceName}
-        selectedIds={selectedIds}
-        onToggle={onToggle}
-        onSetSelection={onSetSelection}
         titleSlot={workspaceSwitcher}
       />
     );

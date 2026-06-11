@@ -1,10 +1,9 @@
 import { paginationOptsValidator } from "convex/server";
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   action,
-  internalAction,
   internalMutation,
   internalQuery,
   mutation,
@@ -14,6 +13,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { requireCurrentUser } from "./auth";
+import { throwAppError } from "./lib/appError";
 import { PLAN_CATALOG } from "./billing/catalog";
 import { getBillingSnapshot } from "./billing/entitlements";
 import {
@@ -31,7 +31,7 @@ import {
   previewFromText,
   siteNameFromUrl,
   titleFromUrl,
-} from "./artifactModel";
+} from "./artifacts/model";
 import {
   assertFolderOwner,
   assertThreadAttachmentOwner,
@@ -39,15 +39,10 @@ import {
   assertWorkspaceArtifactOwner,
   assertWorkspaceOwner,
   normalizeName,
-} from "./workspaceAccess";
-import { workspaceEmojiForNewWorkspace } from "./workspaceEmoji";
-import { syncArtifactWorkspaceMove } from "./workspaceMoveModel";
+} from "./workspaces/access";
+import { workspaceEmojiForNewWorkspace } from "./workspaces/emoji";
+import { syncArtifactWorkspaceMove } from "./workspaces/moveModel";
 import { assertThreadOwner } from "./agent/threads";
-import {
-  readWithExaContents,
-  readWithJinaReader,
-  type JinaReadResult,
-} from "./agent/externalProviders";
 
 const markdownTitleFallback = "Untitled markdown";
 
@@ -233,34 +228,22 @@ export const listByWorkspace = query({
 
 export const listForContextPicker = query({
   args: {
-    workspaceId: v.optional(v.id("workspaces")),
+    workspaceId: v.id("workspaces"),
   },
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
-    if (args.workspaceId) {
-      await assertWorkspaceOwner(ctx, args.workspaceId, user._id);
-      const artifacts = await ctx.db
-        .query("artifacts")
-        .withIndex("by_owner_workspace_status_updated", (q) =>
-          q
-            .eq("ownerUserId", user._id)
-            .eq("workspaceId", args.workspaceId)
-            .eq("status", "active"),
-        )
-        .order("desc")
-        .take(50);
-      return artifacts.map(toArtifactListItem);
-    }
-
-    return (await ctx.db
+    await assertWorkspaceOwner(ctx, args.workspaceId, user._id);
+    const artifacts = await ctx.db
       .query("artifacts")
-      .withIndex("by_owner_status_updated", (q) =>
-        q.eq("ownerUserId", user._id).eq("status", "active"),
+      .withIndex("by_owner_workspace_status_updated", (q) =>
+        q
+          .eq("ownerUserId", user._id)
+          .eq("workspaceId", args.workspaceId)
+          .eq("status", "active"),
       )
       .order("desc")
-      .take(50))
-      .filter((artifact) => artifact.workspaceId != null)
-      .map(toArtifactListItem);
+      .take(50);
+    return artifacts.map(toArtifactListItem);
   },
 });
 
@@ -289,6 +272,7 @@ export const createDocument = mutation({
     folderId: v.optional(v.id("workspaceFolders")),
     title: v.optional(v.string()),
   },
+  returns: v.id("artifacts"),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     await assertWorkspaceOwner(ctx, args.workspaceId, user._id, { requireActive: true });
@@ -333,6 +317,7 @@ export const generateUploadUrl = mutation({
     workspaceId: v.optional(v.id("workspaces")),
     threadId: v.optional(v.string()),
   },
+  returns: v.string(),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     if (args.workspaceId) {
@@ -352,6 +337,7 @@ export const updateDocument = action({
     markdown: v.optional(v.string()),
     plainText: v.string(),
   },
+  returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     const storageId = await storeOversizedText(ctx, args.plainText, "text/plain");
@@ -477,6 +463,7 @@ export const createUrl = mutation({
     url: v.string(),
     title: v.optional(v.string()),
   },
+  returns: v.id("artifacts"),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     await assertWorkspaceOwner(ctx, args.workspaceId, user._id, { requireActive: true });
@@ -532,13 +519,16 @@ export const createUrl = mutation({
       createdAt: now,
       updatedAt: now,
     });
-    await ctx.scheduler.runAfter(0, internal.artifacts.extractUrl, { artifactId });
+    await ctx.scheduler.runAfter(0, internal.papers.ingest.ingest.ingestUrl, {
+      artifactId,
+    });
     return artifactId;
   },
 });
 
 export const retryUrlExtraction = mutation({
   args: { artifactId: v.id("artifacts") },
+  returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     const artifact = await assertWorkspaceArtifactOwner(ctx, args.artifactId, user._id, {
@@ -546,7 +536,10 @@ export const retryUrlExtraction = mutation({
     });
     await assertWorkspaceOwner(ctx, artifact.workspaceId, user._id, { requireActive: true });
     if (artifactTypeForLegacyArtifact(artifact) !== "url") {
-      throw new ConvexError("Artifact is not a URL");
+      throwAppError({
+        message: "Artifact is not a URL",
+        code: "artifact_not_url",
+      });
     }
     const row = await getUrlRow(ctx, args.artifactId, user._id);
     await ctx.db.patch("artifacts", args.artifactId, {
@@ -559,7 +552,9 @@ export const retryUrlExtraction = mutation({
       failureReason: undefined,
       updatedAt: Date.now(),
     });
-    await ctx.scheduler.runAfter(0, internal.artifacts.extractUrl, { artifactId: args.artifactId });
+    await ctx.scheduler.runAfter(0, internal.papers.ingest.ingest.ingestUrl, {
+      artifactId: args.artifactId,
+    });
     return { ok: true };
   },
 });
@@ -569,6 +564,7 @@ export const rename = mutation({
     artifactId: v.id("artifacts"),
     title: v.string(),
   },
+  returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     const artifact = await assertWorkspaceArtifactOwner(ctx, args.artifactId, user._id, {
@@ -589,6 +585,7 @@ export const move = mutation({
     targetWorkspaceId: v.optional(v.id("workspaces")),
     folderId: v.optional(v.id("workspaceFolders")),
   },
+  returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     const artifact = await assertWorkspaceArtifactOwner(ctx, args.artifactId, user._id, {
@@ -619,6 +616,7 @@ export const move = mutation({
 
 export const remove = mutation({
   args: { artifactId: v.id("artifacts") },
+  returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     const artifact = await assertWorkspaceArtifactOwner(ctx, args.artifactId, user._id, {
@@ -630,55 +628,6 @@ export const remove = mutation({
       status: "deleted",
       deletedAt: now,
       updatedAt: now,
-    });
-    return { ok: true };
-  },
-});
-
-export const extractUrl = internalAction({
-  args: { artifactId: v.id("artifacts") },
-  handler: async (ctx, args): Promise<{ ok: boolean; reason?: string }> => {
-    const target = await ctx.runQuery(internal.artifacts.getUrlExtractionTarget, {
-      artifactId: args.artifactId,
-    });
-    if (!target) {
-      return { ok: false, reason: "not_found" };
-    }
-
-    const exa: JinaReadResult | null = process.env.EXA_API_KEY
-      ? await readWithExaContents(ctx, {
-          ownerUserId: target.ownerUserId,
-          url: target.normalizedUrl,
-        })
-      : null;
-    const read: JinaReadResult = exa?.ok
-      ? exa
-      : await readWithJinaReader(ctx, {
-          ownerUserId: target.ownerUserId,
-          url: target.normalizedUrl,
-        });
-
-    if (!read.ok) {
-      await ctx.runMutation(internal.artifacts.patchUrlExtractionFailed, {
-        artifactId: args.artifactId,
-        ownerUserId: target.ownerUserId,
-        failureReason: read.failureReason ?? "URL extraction failed",
-      });
-      return { ok: false, reason: read.failureReason ?? "URL extraction failed" };
-    }
-
-    const storageId =
-      read.markdown.length > ARTIFACT_BODY_INLINE_LIMIT
-        ? await ctx.storage.store(new Blob([read.markdown], { type: "text/markdown" }))
-        : undefined;
-    await ctx.runMutation(internal.artifacts.patchUrlExtractionReady, {
-      artifactId: args.artifactId,
-      ownerUserId: target.ownerUserId,
-      title: read.title || target.title,
-      description: read.snippet || undefined,
-      siteName: target.siteName,
-      readableText: read.markdown,
-      storageId,
     });
     return { ok: true };
   },
@@ -702,7 +651,10 @@ export const updateMarkdownInternal = internalMutation({
     });
     await assertWorkspaceOwner(ctx, artifact.workspaceId, args.ownerUserId, { requireActive: true });
     if (artifactTypeForLegacyArtifact(artifact) !== "markdown") {
-      throw new ConvexError("Artifact is not editable Markdown");
+      throwAppError({
+        message: "Artifact is not editable Markdown",
+        code: "artifact_not_editable_markdown",
+      });
     }
     const row = await getContentRow(ctx, args.artifactId, args.ownerUserId);
     const now = Date.now();
@@ -837,7 +789,10 @@ export const saveAttachmentToWorkspace = mutation({
     const user = await requireCurrentUser(ctx);
     const artifact = await ctx.db.get("artifacts", args.artifactId);
     if (!artifact || artifact.ownerUserId !== user._id) {
-      throw new ConvexError("Attachment not found");
+      throwAppError({
+        message: "Attachment not found",
+        code: "attachment_not_found",
+      });
     }
     if (artifact.workspaceId) {
       const workspace = await ctx.db.get("workspaces", artifact.workspaceId);
@@ -888,12 +843,20 @@ export const saveAttachmentToWorkspace = mutation({
       } else if (activeWorkspaces.length === 1) {
         targetWorkspaceId = activeWorkspaces[0]._id;
       } else {
-        throw new ConvexError("Choose a workspace to save this attachment");
+        throwAppError({
+          message: "Choose a workspace to save this attachment",
+          code: "attachment_workspace_required",
+          field: "workspaceId",
+        });
       }
     }
 
     if (boundWorkspaceId && args.workspaceId && args.workspaceId !== boundWorkspaceId) {
-      throw new ConvexError("Attachment must be saved to the bound workspace");
+      throwAppError({
+        message: "Attachment must be saved to the bound workspace",
+        code: "attachment_workspace_mismatch",
+        field: "workspaceId",
+      });
     }
 
     const promoted = await ctx.runMutation(
@@ -914,7 +877,7 @@ export const saveAttachmentToWorkspace = mutation({
     };
 
     if (promoted.plainText.trim()) {
-      await ctx.scheduler.runAfter(0, internal.artifactUploads.reindexPromotedAttachment, {
+      await ctx.scheduler.runAfter(0, internal.artifacts.uploads.reindexPromotedAttachment, {
         ownerUserId: user._id,
         artifactId: promoted.artifactId,
         workspaceId: promoted.workspaceId,
@@ -1015,7 +978,9 @@ export const patchUploadedArtifactIndexed = internalMutation({
       args.markdown.length <= ARTIFACT_BODY_INLINE_LIMIT ? args.markdown : undefined;
     await ctx.db.patch("artifacts", artifact._id, {
       title: args.title ?? artifact.title,
-      detectedDocumentKind: args.detectedDocumentKind,
+      // Preserve an existing classification (e.g. set during URL→PDF convert)
+      // when the caller doesn't provide one, instead of clearing it.
+      detectedDocumentKind: args.detectedDocumentKind ?? artifact.detectedDocumentKind,
       plainTextPreview: args.plainTextPreview ?? previewFromText(args.plainText),
       indexingStatus: "ready",
       indexingFailureReason: undefined,
@@ -1094,7 +1059,9 @@ export const getUrlExtractionTarget = internalQuery({
     return {
       ownerUserId: artifact.ownerUserId,
       artifactId: artifact._id,
+      workspaceId: artifact.workspaceId,
       title: artifact.title,
+      originalUrl: row.originalUrl,
       normalizedUrl: row.normalizedUrl,
       siteName: row.siteName ?? siteNameFromUrl(row.normalizedUrl),
     };
@@ -1163,6 +1130,121 @@ export const patchUrlExtractionFailed = internalMutation({
       failureReason: reason,
       updatedAt: Date.now(),
     });
+  },
+});
+
+/**
+ * Convert a `url` artifact into a `pdf` artifact after an open-access PDF has
+ * been downloaded for it (academic ingestion path). The artifact then flows
+ * through the SAME extraction/GROBID pipeline as an uploaded PDF. The original
+ * `artifactUrls` row is kept (marked ready) so URL-level dedupe still works.
+ */
+export const convertUrlArtifactToPdf = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    artifactId: v.id("artifacts"),
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    byteSize: v.number(),
+    title: v.optional(v.string()),
+  },
+  returns: v.object({ ok: v.boolean() }),
+  handler: async (ctx, args) => {
+    const artifact = await assertUploadedArtifactOwner(ctx, args.artifactId, args.ownerUserId, {
+      requireActive: true,
+    });
+    if (!artifact.workspaceId) {
+      return { ok: false };
+    }
+    const now = Date.now();
+    await ctx.db.patch("artifacts", args.artifactId, {
+      artifactType: "pdf",
+      artifactFamily: artifactFamilyForType("pdf"),
+      mimeType: "application/pdf",
+      fileName: args.fileName,
+      byteSize: args.byteSize,
+      storageId: args.storageId,
+      language: defaultLanguageForArtifactType("pdf"),
+      detectedDocumentKind: "scholarly_paper",
+      indexingStatus: "pending",
+      indexingFailureReason: undefined,
+      plainTextPreview: "Indexing is running.",
+      title: args.title ? normalizeName(args.title, "Artifact title") : artifact.title,
+      updatedAt: now,
+    });
+    // URL artifacts don't create a content row; the upload pipeline needs one.
+    const existingContent = await getContentRowOrNull(ctx, args.artifactId, args.ownerUserId);
+    if (!existingContent) {
+      await ctx.db.insert("artifactContents", {
+        ownerUserId: args.ownerUserId,
+        workspaceId: artifact.workspaceId,
+        artifactId: args.artifactId,
+        blocksJson: "",
+        markdown: "",
+        plainText: "",
+        contextText: "",
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    const urlRow = await getUrlRowOrNull(ctx, args.artifactId, args.ownerUserId);
+    if (urlRow) {
+      await ctx.db.patch("artifactUrls", urlRow._id, {
+        status: "ready",
+        failureReason: undefined,
+        extractedAt: now,
+        updatedAt: now,
+      });
+    }
+    return { ok: true };
+  },
+});
+
+/**
+ * Mark a `url` artifact as a scholarly paper for which no open-access PDF could
+ * be downloaded. Keeps it a `url` artifact but flips `detectedDocumentKind` so
+ * the resolved metadata (abstract/authors/DOI) renders in the paper sidebar.
+ */
+export const markUrlPaperMetadataOnly = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    artifactId: v.id("artifacts"),
+    title: v.string(),
+    abstract: v.optional(v.string()),
+    siteName: v.optional(v.string()),
+  },
+  returns: v.object({ ok: v.boolean() }),
+  handler: async (ctx, args) => {
+    const artifact = await assertUploadedArtifactOwner(ctx, args.artifactId, args.ownerUserId, {
+      requireActive: true,
+    });
+    const now = Date.now();
+    const readable = args.abstract ?? "";
+    await ctx.db.patch("artifacts", artifact._id, {
+      title: args.title || artifact.title,
+      detectedDocumentKind: "scholarly_paper",
+      indexingStatus: "ready",
+      indexingFailureReason: undefined,
+      plainTextPreview: previewFromText(readable || artifact.title),
+      updatedAt: now,
+    });
+    const row = await getUrlRowOrNull(ctx, args.artifactId, args.ownerUserId);
+    if (row) {
+      const inline =
+        readable.length <= ARTIFACT_BODY_INLINE_LIMIT ? readable : undefined;
+      await ctx.db.patch("artifactUrls", row._id, {
+        status: "ready",
+        title: args.title,
+        description: args.abstract ? previewFromText(args.abstract, 280) : undefined,
+        siteName: args.siteName ?? row.siteName,
+        readableText: inline,
+        contextText: contextFromText(readable),
+        failureReason: undefined,
+        extractedAt: now,
+        updatedAt: now,
+      });
+    }
+    return { ok: true };
   },
 });
 
@@ -1235,7 +1317,10 @@ export const updateArtifactFromAgentInternal = internalMutation({
     await assertWorkspaceOwner(ctx, artifact.workspaceId, args.ownerUserId, { requireActive: true });
     const artifactType = artifactTypeFromAgentInput(args.artifactType);
     if (!isAgentWritableArtifactType(artifactTypeForLegacyArtifact(artifact))) {
-      throw new ConvexError("Uploaded file artifacts cannot be overwritten by generated text");
+      throwAppError({
+        message: "Uploaded file artifacts cannot be overwritten by generated text",
+        code: "artifact_not_overwritable",
+      });
     }
     const row = await getContentRow(ctx, args.artifactId, args.ownerUserId);
     const now = Date.now();
@@ -1306,9 +1391,13 @@ async function assertLibraryCapacityForOwner(
     .withIndex("by_owner_status_updated", (q) =>
       q.eq("ownerUserId", ownerUserId).eq("status", "active"),
     )
-    .collect();
+    .take(limit + 1);
   if (activeArtifacts.length >= limit) {
-    throw new ConvexError("Library item limit reached for current plan");
+    throwAppError({
+      message: "Library item limit reached for current plan",
+      code: "library_item_limit_reached",
+      severity: "warning",
+    });
   }
 }
 
@@ -1324,9 +1413,13 @@ async function assertWorkspaceCapacity(ctx: MutationCtx, ownerUserId: string) {
     .withIndex("by_owner_status_updated", (q) =>
       q.eq("ownerUserId", ownerUserId).eq("status", "active"),
     )
-    .collect();
+    .take(limit + 1);
   if (activeWorkspaces.length >= limit) {
-    throw new ConvexError("Workspace limit reached for current plan");
+    throwAppError({
+      message: "Workspace limit reached for current plan",
+      code: "workspace_limit_reached",
+      severity: "warning",
+    });
   }
 }
 
@@ -1337,7 +1430,10 @@ async function getContentRow(
 ) {
   const row = await getContentRowOrNull(ctx, artifactId, ownerUserId);
   if (!row) {
-    throw new ConvexError("Artifact content not found");
+    throwAppError({
+      message: "Artifact content not found",
+      code: "artifact_content_not_found",
+    });
   }
   return row;
 }
@@ -1362,7 +1458,10 @@ async function getUrlRow(
 ) {
   const row = await getUrlRowOrNull(ctx, artifactId, ownerUserId);
   if (!row) {
-    throw new ConvexError("URL artifact not found");
+    throwAppError({
+      message: "URL artifact not found",
+      code: "artifact_url_not_found",
+    });
   }
   return row;
 }
@@ -1415,6 +1514,10 @@ function assertGeneratedArtifactFitsInline(content: string, plainText: string) {
     content.length > ARTIFACT_BODY_INLINE_LIMIT ||
     plainText.length > ARTIFACT_BODY_INLINE_LIMIT
   ) {
-    throw new ConvexError("Generated artifact is too large to save inline");
+    throwAppError({
+      message: "Generated artifact is too large to save inline",
+      code: "artifact_too_large_inline",
+      severity: "warning",
+    });
   }
 }

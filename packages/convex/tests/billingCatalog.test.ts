@@ -8,6 +8,7 @@ import {
   PLAN_CATALOG,
   PUBLIC_PLAN_KEYS,
   planForProductKey,
+  requiredPlanForFeature,
 } from "../convex/billing/catalog";
 import {
   isAdminClerkUserId,
@@ -31,7 +32,9 @@ describe("billing catalog", () => {
   });
 
   it("keeps Deep Research as a simple monthly run quota", () => {
-    expect(PLAN_CATALOG.free.deepResearchRuns).toBe(0);
+    // Free now gets a small taste of Deep Research (Lite); Pro-deep still
+    // requires the Astra Pro agent (paid plan).
+    expect(PLAN_CATALOG.free.deepResearchRuns).toBe(2);
     expect(PLAN_CATALOG.starter.deepResearchRuns).toBe(3);
     expect(PLAN_CATALOG.plus.deepResearchRuns).toBe(12);
     expect(PLAN_CATALOG.admin.deepResearchRuns).toBe(Number.MAX_SAFE_INTEGER);
@@ -100,6 +103,20 @@ describe("billing catalog", () => {
         outputTokens: 1_000,
       }),
     ).toBe(2);
+  });
+
+  it("charges a flat per-run credit for sandbox compute, ignoring token count", () => {
+    // Verification-engine runs are billed per-run, not per-token, so the credit
+    // is constant regardless of how much text the sandbox processed.
+    expect(estimateCredits({ feature: "sandbox_compute" })).toBe(10);
+    expect(estimateCredits({ feature: "sandbox_compute", totalTokens: 50_000 })).toBe(10);
+  });
+
+  it("gates sandbox compute behind a paid plan, like pro chat", () => {
+    expect(requiredPlanForFeature("sandbox_compute")).toBe("starter");
+    expect(requiredPlanForFeature("pro_chat")).toBe("starter");
+    expect(requiredPlanForFeature("normal_chat")).toBe("free");
+    expect(requiredPlanForFeature("external_search")).toBe("free");
   });
 
   it("allows canceled subscription grace until current period end", () => {

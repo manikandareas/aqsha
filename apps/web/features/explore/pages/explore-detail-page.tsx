@@ -5,24 +5,29 @@ import type { ExplorePaper } from "@aqsha/convex/explore";
 import {
   ArrowLeftIcon,
   BookOpenIcon,
-  CheckIcon,
-  CopyIcon,
   ExternalLinkIcon,
   FileTextIcon,
   LinkIcon,
+  PlusIcon,
 } from "@aqsha/ui/icons";
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
+import { CopyCitationButton } from "@/components/citation/copy-citation-button";
+import { PropertyLink, PropertyRow } from "@/components/detail/property-list";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { AppLoadingOverlay } from "@/components/app-loading-overlay";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ExploreSurfaceHeader } from "@/features/explore/components/explore-surface-header";
-import { WorkspaceShell } from "@/features/workspaces/components/workspace-shell";
-import { useWorkspaceIndexData } from "@/features/workspaces/api/use-workspaces-data";
+import { WorkspacePickerDialog } from "@/features/workspaces/components/workspace-picker-dialog";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
-import { useConvexQuery } from "@/lib/convex-query";
+import {
+  useConvexActionQueryWithKey,
+  useConvexMutationState,
+} from "@/lib/convex-query";
+import { toWorkspaceId } from "@/lib/convex-refs";
 import { formatCitation, type CitationFormat } from "../utils/citation";
 import { decodePaperRef } from "../utils/paper-ref";
+import { bestPaperIngestUrl } from "../utils/paper-ingest";
+import { ExploreChatShell } from "./explore-chat-shell";
 
 const citationFormats: Array<{ value: CitationFormat; label: string }> = [
   { value: "bibtex", label: "BibTeX" },
@@ -30,64 +35,87 @@ const citationFormats: Array<{ value: CitationFormat; label: string }> = [
   { value: "plain", label: "Plain text" },
 ];
 
+function buildPaperSeed(paper: ExplorePaper) {
+  const abstract = paper.abstract ?? paper.snippet;
+  return `${paper.title}\n\n${abstract}\n\nSumber: ${paper.url}`;
+}
+
 export function ExploreDetailPage({ paperRef }: { paperRef: string }) {
-  const shellData = useWorkspaceIndexData();
   const paperKey = safeDecodePaperRef(paperRef);
-  const paperQuery = useConvexQuery(
-    api.explore.getPaper,
+  const paperQuery = useConvexActionQueryWithKey(
+    api.explore.getOrFetchPaper,
+    ["explorePaperDetail", paperKey],
     paperKey ? { key: paperKey } : "skip",
   );
+  const paperError = paperQuery.error
+    ? readableConvexErrorMessage(paperQuery.error, "Paper gagal dimuat.")
+    : null;
+  const chatSeed = paperQuery.data ? buildPaperSeed(paperQuery.data) : undefined;
 
   return (
-    <WorkspaceShell
-      viewer={shellData.viewer}
-      workspaces={shellData.workspaces}
-      threads={shellData.threads}
-      createWorkspace={shellData.createWorkspace}
-      removeThread={shellData.removeThread}
+    <ExploreChatShell
+      breadcrumbs={[
+        { label: "Jelajahi", href: "/app/explore" },
+        { label: "Paper" },
+      ]}
+      chatSeed={chatSeed}
     >
-      <main className="min-h-svh bg-background text-foreground">
-        <ExploreSurfaceHeader
-          breadcrumbs={[
-            { label: "Explore", href: "/app/explore" },
-            { label: "Paper" },
-          ]}
-        />
-        <div className="mx-auto grid w-full max-w-[1080px] gap-8 px-5 pb-12 pt-4 sm:px-8 lg:grid-cols-[minmax(0,700px)_260px] lg:gap-10 lg:px-10">
-          {paperQuery.isLoading ? (
-            <ExploreDetailSkeleton />
-          ) : paperQuery.error ? (
-            <ExploreDetailState
-              title="Paper gagal dimuat."
-              message={readableConvexErrorMessage(paperQuery.error, "Paper gagal dimuat.")}
-            />
-          ) : !paperKey || !paperQuery.data ? (
-            <ExploreDetailState
-              title="Paper tidak tersedia."
-              message="Buka paper dari Explore terlebih dahulu agar detail tersimpan untuk akun ini."
-            />
-          ) : (
-            <ExploreDetailContent paper={paperQuery.data} />
-          )}
-        </div>
-      </main>
-    </WorkspaceShell>
+      <div className="mx-auto grid w-full max-w-[1080px] gap-8 px-5 pb-12 pt-4 sm:px-8 @4xl/explore:grid-cols-[minmax(0,1fr)_260px] @4xl/explore:gap-10 @4xl/explore:px-10">
+        {paperQuery.isLoading ? (
+          <AppLoadingOverlay variant="absolute" />
+        ) : paperError ? (
+          <ExploreDetailState
+            title="Paper gagal dimuat."
+            message={paperError}
+          />
+        ) : !paperKey || !paperQuery.data ? (
+          <ExploreDetailState
+            title="Paper tidak tersedia."
+            message="Paper ini tidak dapat ditemukan. Coba cari lewat Jelajahi."
+          />
+        ) : (
+          <ExploreDetailContent paper={paperQuery.data} />
+        )}
+      </div>
+    </ExploreChatShell>
   );
 }
 
 function ExploreDetailContent({ paper }: { paper: ExplorePaper & { lastSeenAt?: number } }) {
   const abstract = paper.abstract ?? paper.snippet;
   const summary = summarizeAbstract(abstract);
+  const createUrl = useConvexMutationState(api.artifacts.createUrl);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = async (workspaceId: string) => {
+    await createUrl.mutateAsync({
+      workspaceId: toWorkspaceId(workspaceId),
+      url: bestPaperIngestUrl(paper),
+      title: paper.title,
+    });
+    setSaved(true);
+  };
 
   return (
     <>
       <section className="min-w-0">
-        <div className="mb-4 flex items-center justify-end gap-4">
+        <div className="mb-4 flex items-center justify-end gap-2">
           <Button asChild variant="outline" size="sm" className="h-8 px-2.5 text-sm text-muted-foreground">
             <a href={paper.url} target="_blank" rel="noreferrer">
               Open
               <ExternalLinkIcon className="size-3" />
             </a>
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="h-8 px-2.5 text-sm"
+            disabled={saved}
+            onClick={() => setPickerOpen(true)}
+          >
+            <PlusIcon className="size-3.5" />
+            {saved ? "Added to library" : "Add to library"}
           </Button>
         </div>
 
@@ -146,13 +174,21 @@ function ExploreDetailContent({ paper }: { paper: ExplorePaper & { lastSeenAt?: 
       </section>
 
       <ExploreDetailSidebar paper={paper} />
+
+      <WorkspacePickerDialog
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        title="Simpan paper"
+        description="Pilih workspace tujuan. Paper akan otomatis diunduh dan metadatanya diekstrak."
+        onSelect={handleSave}
+      />
     </>
   );
 }
 
 function ExploreDetailSidebar({ paper }: { paper: ExplorePaper & { lastSeenAt?: number } }) {
   return (
-    <aside className="space-y-6 pt-2 lg:sticky lg:top-6 lg:self-start">
+    <aside className="space-y-6 pt-2 @4xl/explore:sticky @4xl/explore:top-6 @4xl/explore:self-start">
       <section>
         <h2 className="mb-4 text-[12px] font-semibold text-muted-foreground">Properties</h2>
         <div className="space-y-4">
@@ -179,7 +215,7 @@ function ExploreDetailSidebar({ paper }: { paper: ExplorePaper & { lastSeenAt?: 
         <h2 className="mb-3 text-[12px] font-semibold text-muted-foreground">Cite</h2>
         <div className="space-y-2">
           {citationFormats.map((format) => (
-            <CopyCitationButton key={format.value} paper={paper} format={format.value}>
+            <CopyCitationButton key={format.value} value={formatCitation(paper, format.value)}>
               {format.label}
             </CopyCitationButton>
           ))}
@@ -193,34 +229,6 @@ function ExploreDetailSidebar({ paper }: { paper: ExplorePaper & { lastSeenAt?: 
         </p>
       </section>
     </aside>
-  );
-}
-
-function CopyCitationButton({
-  paper,
-  format,
-  children,
-}: {
-  paper: ExplorePaper;
-  format: CitationFormat;
-  children: string;
-}) {
-  const [copied, setCopied] = useState(false);
-
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        void navigator.clipboard.writeText(formatCitation(paper, format)).then(() => {
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1_200);
-        });
-      }}
-      className="flex h-8 w-full items-center justify-between rounded-md border border-border bg-background px-3 text-[13px] font-medium text-foreground transition-colors hover:bg-muted active:scale-[0.99]"
-    >
-      <span>{children}</span>
-      {copied ? <CheckIcon className="size-3.5 text-mint-foreground" /> : <CopyIcon className="size-3.5" />}
-    </button>
   );
 }
 
@@ -266,33 +274,9 @@ function PdfPanel({ paper }: { paper: ExplorePaper }) {
   );
 }
 
-function ExploreDetailSkeleton() {
-  return (
-    <>
-      <section className="min-w-0">
-        <div className="mb-4 flex items-center justify-between">
-          <Skeleton className="size-7 rounded-md bg-muted" />
-          <Skeleton className="h-8 w-28 rounded-md bg-muted" />
-        </div>
-        <Skeleton className="h-16 w-[76%] rounded-md bg-muted" />
-        <Skeleton className="mt-4 h-14 w-[70%] rounded-md bg-muted/70" />
-        <Skeleton className="mt-8 h-10 w-full rounded-none bg-muted/50" />
-        <Skeleton className="mt-6 h-6 w-24 rounded-md bg-muted" />
-        <Skeleton className="mt-4 h-40 w-full rounded-md bg-muted/60" />
-      </section>
-      <aside className="space-y-4 pt-2">
-        <Skeleton className="h-4 w-20 rounded-md bg-muted" />
-        {Array.from({ length: 8 }).map((_, index) => (
-          <Skeleton key={index} className="h-8 w-full rounded-md bg-muted/60" />
-        ))}
-      </aside>
-    </>
-  );
-}
-
 function ExploreDetailState({ title, message }: { title: string; message: string }) {
   return (
-    <section className="lg:col-span-2">
+    <section className="@4xl/explore:col-span-2">
       <Button asChild variant="ghost" size="sm" className="-ml-2 mb-5 text-muted-foreground">
         <Link href="/app/explore">
           <ArrowLeftIcon className="size-4" />
@@ -309,69 +293,6 @@ function ExploreDetailState({ title, message }: { title: string; message: string
         </div>
       </div>
     </section>
-  );
-}
-
-function PropertyRow({
-  label,
-  value,
-  badge,
-  mutedValue,
-  icon,
-}: {
-  label: string;
-  value: string;
-  badge?: boolean;
-  mutedValue?: string;
-  icon?: ReactNode;
-}) {
-  return (
-    <div>
-      <dt className="text-[12px] font-medium text-muted-foreground">{label}</dt>
-      <dd className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[13px] font-medium text-foreground" title={value}>
-        {icon}
-        {badge ? (
-          <span className="min-w-0 truncate rounded-md bg-muted px-2 py-0.5 text-[13px] font-semibold">
-            {value}
-          </span>
-        ) : (
-          <span className="min-w-0 truncate">{value}</span>
-        )}
-        {mutedValue ? (
-          <span className="min-w-0 truncate text-xs font-semibold uppercase text-muted-foreground">
-            {mutedValue}
-          </span>
-        ) : null}
-      </dd>
-    </div>
-  );
-}
-
-function PropertyLink({
-  label,
-  value,
-  href,
-}: {
-  label: string;
-  value: string;
-  href: string;
-}) {
-  return (
-    <div>
-      <dt className="text-[12px] font-medium text-muted-foreground">{label}</dt>
-      <dd className="mt-1.5 min-w-0">
-        <a
-          href={href}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex max-w-full items-center gap-1 text-[13px] font-medium text-sky-foreground hover:underline"
-          title={value}
-        >
-          <span className="truncate">{value}</span>
-          <ExternalLinkIcon className="size-3.5 shrink-0" />
-        </a>
-      </dd>
-    </div>
   );
 }
 

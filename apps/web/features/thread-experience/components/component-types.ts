@@ -25,6 +25,7 @@ export type ThreadSummary = {
   lastMessagePreview: string;
   messageCount: number;
   status: "idle" | "streaming" | "failed";
+  lastAgentKind?: "lite" | "pro";
 };
 
 export type ViewerSummary =
@@ -37,10 +38,11 @@ export type ViewerSummary =
 
 export type StartThread = (args: {
   content: string;
-  mode: "normal" | "deep";
+  agentKind: "lite" | "pro";
   commandId?: string;
   workspaceId?: WorkspaceId;
   selectedContextArtifactIds?: ArtifactId[];
+  selectedContextWorkspaceIds?: WorkspaceId[];
   messageAttachmentArtifactIds?: ArtifactId[];
   pendingAttachments?: Array<{
     storageId: StorageId;
@@ -54,9 +56,10 @@ export type StartThread = (args: {
 export type SendMessage = (args: {
   threadId: string;
   content: string;
-  mode: "normal" | "deep";
+  agentKind: "lite" | "pro";
   commandId?: string;
   selectedContextArtifactIds?: ArtifactId[];
+  selectedContextWorkspaceIds?: WorkspaceId[];
   messageAttachmentArtifactIds?: ArtifactId[];
   contextArtifactSnapshot?: MessageContextArtifactMetadata[];
 }) => Promise<SendResult>;
@@ -93,9 +96,7 @@ export type ToggleThreadContextArtifact = (args: {
 export type RemoveThread = (args: { threadId: string }) => Promise<{ ok: true }>;
 
 export type ThreadShellLayoutProps = {
-  viewer: ViewerSummary;
   threads: ThreadSummary[];
-  selectedThreadId?: string;
   onCreateThread: () => void;
   onSelectThread?: (threadId: string) => void;
   title: string;
@@ -107,8 +108,6 @@ export type ThreadShellLayoutProps = {
       }
     | null
     | undefined;
-  workspaces?: Array<{ _id: string; name: string }>;
-  createWorkspace?: (args: { name: string }) => Promise<unknown>;
   rateStatus: RateStatus | undefined;
   startThread: StartThread;
   sendMessage: SendMessage;
@@ -120,7 +119,6 @@ export type ThreadShellLayoutProps = {
   onCancelRun: (runId: string) => Promise<unknown>;
   onRetryRun?: (args: { runId: AgentRunId }) => Promise<unknown>;
   onDeleteThread?: () => Promise<void>;
-  removeThread?: (args: { threadId: string }) => Promise<{ ok: true }>;
   sidePanel?: ReactNode;
   contextArtifacts?: DraftContextArtifact[];
   onRemoveContextArtifact?: (artifactId: string) => void;

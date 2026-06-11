@@ -14,7 +14,8 @@ export type SendResult =
         | "rate_limited"
         | "quota_exceeded"
         | "subscription_required"
-        | "billing_inactive";
+        | "billing_inactive"
+        | "reply_in_progress";
       retryAt?: number;
       resetAt?: number;
       requiredPlan?: "free" | "starter" | "plus";
@@ -44,6 +45,11 @@ export type MessageContextArtifactMetadata = {
   savedWorkspaceName?: string;
 };
 
+export type MessageContextWorkspaceMetadata = {
+  workspaceId: string;
+  name: string;
+};
+
 export type ChatMessage = {
   id: string;
   key: string;
@@ -52,10 +58,24 @@ export type ChatMessage = {
   order: number;
   stepOrder: number;
   text?: string;
-  parts?: Array<{ type: string; text?: string }>;
+  parts?: Array<{
+    type: string;
+    text?: string;
+    // AI SDK tool-part fields (present on `tool-<name>` / `dynamic-tool` parts).
+    toolCallId?: string;
+    toolName?: string;
+    state?: string;
+    input?: unknown;
+    output?: unknown;
+    errorText?: string;
+    approval?: { id: string; isAutomatic?: boolean; approved?: boolean; reason?: string };
+  }>;
   metadata?: {
     promptCommand?: PromptCommandMetadata;
     contextArtifacts?: MessageContextArtifactMetadata[];
+    contextWorkspaces?: MessageContextWorkspaceMetadata[];
+    /** User message text with inline mention markers (pills in place). */
+    richContent?: string;
   };
 };
 
@@ -205,7 +225,7 @@ export type ThreadExperienceAction =
 
 export type ComposerSubmission = {
   content: string;
-  mode: "normal" | "deep";
+  agentKind: "lite" | "pro";
   commandId?: string;
 };
 

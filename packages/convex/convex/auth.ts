@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action, internalMutation, mutation, query } from "./_generated/server";
 import {
@@ -16,6 +16,7 @@ import {
 import type { CurrentUser } from "./auth/types";
 import { getAuthenticatedIdentity, requireCurrentUser } from "./auth/userRepository";
 import { processClerkWebhook as processClerkWebhookHandler } from "./auth/webhooks";
+import { throwAppError } from "./lib/appError";
 
 export type { CurrentUser };
 export { requireCurrentUser };
@@ -102,8 +103,7 @@ export const deleteCurrentAccount = action({
     } catch (error) {
       await ctx.runMutation(internal.auth.markOwnerUserDeletionFailed, {
         ownerUserId: cleanupResult.ownerUserId,
-        reason:
-          error instanceof Error ? error.message : "Unknown Clerk user deletion error.",
+        reason: clerkDeletionFailureReason(error),
       });
       throw error;
     }
@@ -165,10 +165,23 @@ export const processClerkWebhook = internalMutation({
   handler: async (ctx, args) => await processClerkWebhookHandler(ctx, args),
 });
 
+function clerkDeletionFailureReason(error: unknown): string {
+  if (error instanceof ConvexError) {
+    const data = error.data as { message?: unknown } | undefined;
+    if (data && typeof data.message === "string") {
+      return data.message;
+    }
+  }
+  return error instanceof Error ? error.message : "Unknown Clerk user deletion error.";
+}
+
 async function deleteClerkUser(clerkUserId: string) {
   const secretKey = process.env.CLERK_SECRET_KEY;
   if (!secretKey) {
-    throw new Error("CLERK_SECRET_KEY is not configured in Convex.");
+    throwAppError({
+      message: "CLERK_SECRET_KEY is not configured in Convex.",
+      code: "clerk_secret_missing",
+    });
   }
 
   const response = await fetch(
@@ -184,8 +197,13 @@ async function deleteClerkUser(clerkUserId: string) {
 
   if (!response.ok && response.status !== 404) {
     const body = await response.text().catch(() => "");
-    throw new Error(
-      `Failed to delete Clerk user (${response.status}).${body ? ` ${body}` : ""}`,
-    );
+    if (body) {
+      console.error(`Clerk user deletion failed (${response.status}): ${body}`);
+    }
+    throwAppError({
+      message: `Failed to delete Clerk user (${response.status}).`,
+      code: "clerk_user_delete_failed",
+      severity: "error",
+    });
   }
 }

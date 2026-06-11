@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
-import { Inter, JetBrains_Mono, Playfair_Display } from "next/font/google";
+import { Inter, JetBrains_Mono, Instrument_Serif } from "next/font/google";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -17,10 +17,10 @@ const inter = Inter({
   weight: ["400", "500", "600", "700"],
 });
 
-const playfairDisplay = Playfair_Display({
+const instrumentSerif = Instrument_Serif({
   variable: "--font-serif",
   subsets: ["latin"],
-  weight: ["700", "800"],
+  weight: ["400"],
 });
 
 const jetbrainsMono = JetBrains_Mono({
@@ -48,7 +48,7 @@ export default async function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${inter.variable} ${playfairDisplay.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full">
         <ClerkProvider appearance={{ baseTheme: shadcn }}>

@@ -2,20 +2,11 @@ import { v } from "convex/values";
 import { query } from "../_generated/server";
 import { requireCurrentUser } from "../auth";
 import { ensureCreditPeriod, getBillingSnapshot } from "./entitlements";
-
-const featureCountValidator = v.object({
-  normal_chat: v.number(),
-  cited_answer: v.number(),
-  deep_research: v.number(),
-  external_search: v.number(),
-});
-
-const emptyFeatureCounts = () => ({
-  normal_chat: 0,
-  cited_answer: 0,
-  deep_research: 0,
-  external_search: 0,
-});
+import {
+  emptyFeatureCounts,
+  featureCountValidator,
+  type FeatureCounts,
+} from "./usageShape";
 
 export const getCurrentPeriod = query({
   args: {},
@@ -76,6 +67,8 @@ export const activity = query({
     const user = await requireCurrentUser(ctx);
     const dayCount = Math.max(1, Math.min(366, Math.floor(args.days ?? 365)));
     const now = new Date();
+    // Exclusive end-of-window timestamp == UTC midnight after today, matching
+    // the original ledger-scan window so output stays byte-identical.
     const end = Date.UTC(
       now.getUTCFullYear(),
       now.getUTCMonth(),
@@ -86,6 +79,7 @@ export const activity = query({
       0,
     );
     const start = end - dayCount * 24 * 60 * 60 * 1000;
+
     const rows = new Map<
       string,
       {
@@ -93,10 +87,12 @@ export const activity = query({
         credits: number;
         estimatedCostCents: number;
         eventCount: number;
-        featureCounts: ReturnType<typeof emptyFeatureCounts>;
+        featureCounts: FeatureCounts;
       }
     >();
 
+    // Seed every day in the window (chronological insertion order) with a zero
+    // row so the output always covers the full range, even days with no usage.
     for (let offset = 0; offset < dayCount; offset += 1) {
       const timestamp = start + offset * 24 * 60 * 60 * 1000;
       const date = new Date(timestamp).toISOString().slice(0, 10);
@@ -109,20 +105,37 @@ export const activity = query({
       });
     }
 
-    const ledger = ctx.db
-      .query("providerUsageLedger")
-      .withIndex("by_owner_created", (q) =>
-        q.eq("ownerUserId", user._id).gte("createdAt", start).lt("createdAt", end),
+    // ISO "YYYY-MM-DD" sorts lexicographically == chronologically, so a string
+    // range over the rollup index returns exactly the in-window days. `start`
+    // is inclusive (first seeded day); `end` is the exclusive window edge, so
+    // the last in-window day is the UTC day of `end - 1ms`.
+    const startDateStr = new Date(start).toISOString().slice(0, 10);
+    const endDateStr = new Date(end - 1).toISOString().slice(0, 10);
+
+    const rollup = ctx.db
+      .query("usageDailyRollup")
+      .withIndex("by_owner_date", (q) =>
+        q
+          .eq("ownerUserId", user._id)
+          .gte("date", startDateStr)
+          .lte("date", endDateStr),
       );
 
-    for await (const event of ledger) {
-      const date = new Date(event.createdAt).toISOString().slice(0, 10);
-      const row = rows.get(date);
+    for await (const day of rollup) {
+      const row = rows.get(day.date);
       if (!row) continue;
-      row.credits += event.credits;
-      row.estimatedCostCents += event.estimatedCostCents;
-      row.eventCount += 1;
-      row.featureCounts[event.feature] += 1;
+      row.credits = day.credits;
+      row.estimatedCostCents = day.estimatedCostCents;
+      row.eventCount = day.eventCount;
+      row.featureCounts = {
+        normal_chat: day.featureCounts.normal_chat,
+        pro_chat: day.featureCounts.pro_chat,
+        cited_answer: day.featureCounts.cited_answer,
+        deep_research: day.featureCounts.deep_research,
+        external_search: day.featureCounts.external_search,
+        // Optional on rows written before the feature existed — coalesce to 0.
+        sandbox_compute: day.featureCounts.sandbox_compute ?? 0,
+      };
     }
 
     return Array.from(rows.values());

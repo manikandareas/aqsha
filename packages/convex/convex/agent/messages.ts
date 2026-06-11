@@ -6,7 +6,7 @@ import {
 } from "@convex-dev/agent";
 import { generateObject } from "ai";
 import { paginationOptsValidator } from "convex/server";
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 import { z } from "zod";
 import { components, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
@@ -15,39 +15,72 @@ import {
   internalMutation,
   mutation,
   query,
+  type ActionCtx,
   type MutationCtx,
   type QueryCtx,
 } from "../_generated/server";
-import { astra, NORMAL_MODEL, recordUsage as handleUsage } from "./runtime";
+import {
+  agentForKind,
+  astra,
+  usageHandlerForAgent,
+  type AgentKind,
+} from "./runtime";
+import {
+  CHAT_LITE_MODEL,
+  CHAT_PRO_MODEL,
+  chatModelForAgent,
+  deepModelForAgent,
+} from "./models";
 import { requireCurrentUser } from "../auth";
-import { estimateCredits } from "../billing/catalog";
+import { estimateCredits, featureForUsage } from "../billing/catalog";
 import {
   consumeCredits,
   recordProviderUsage,
   type EntitlementResult,
 } from "../billing/entitlements";
 import { rateLimiter } from "../limits";
-import { normalChatTools } from "./researchTools";
-import { createHitlTools, createWorkspaceExecutionTools } from "./hitlTools";
-import type { ToolSet } from "ai";
-import type { SourceCandidate } from "./sourceCandidates";
 import {
+  buildNormalChatTools,
+  createCitationCounter,
+  type CitationCounter,
+  NORMAL_CHAT_TOOL_NAMES,
+} from "./research/researchTools";
+import { isDeepResearchStartedResult } from "./research/deepResearchContract";
+import { buildHitlTools, buildDeepResearchTools } from "./hitl/hitlTools";
+import { routeCompute } from "./sandbox/computeRouter";
+import { buildSandboxTools, SANDBOX_TOOL_NAMES } from "./sandbox/sandboxTools";
+import type { ToolSet } from "ai";
+import type { SourceCandidate } from "./research/sourceCandidates";
+import {
+  DEFAULT_THREAD_TITLE,
   isUsableGeneratedThreadTitle,
   normalizeGeneratedThreadTitle,
   shouldUsePromptTitle,
   threadTitleFromPrompt,
 } from "./threadTitles";
-import { assertThreadOwner, tryAssertThreadOwner } from "./threads";
-import { resolvePromptPayload } from "./promptRouting";
-import type { PromptPayload } from "./promptPayload";
-import { assertWorkspaceOwner } from "../workspaceAccess";
 import {
+  HITL_INITIAL_TOOL_NAMES,
+  PENDING_HITL_TOOL_NAME_SET,
+} from "./hitl/hitlToolNames";
+import { assertThreadOwner, tryAssertThreadOwner } from "./threads";
+import { throwAppError } from "../lib/appError";
+import { resolvePromptPayload } from "./prompt/promptRouting";
+import {
+  promptExecutionKindForCommand,
+  type PromptPayload,
+} from "./prompt/promptPayload";
+import { assertWorkspaceOwner } from "../workspaces/access";
+import {
+  addContextArtifactsForThread,
   buildPromptContextForThread,
   persistMessageContextArtifacts,
+  persistMessageContextWorkspaces,
   prependPromptContext,
-  replaceContextArtifactsForThread,
-} from "./threadContext";
-import { CHAT_PROVIDER_NAME, chatProvider } from "./providers";
+} from "./context/threadContext";
+import { addContextWorkspacesForThread } from "./context/threadContextWorkspaces";
+import { stripMentionMarkers } from "./context/mentionMarkers";
+import { CHAT_PROVIDER_NAME, chatProvider } from "./providers/providers";
+import { hasActiveReplyRun, hasOtherActiveReplyRun } from "./runLifecycle";
 
 const MAX_CONTENT_LENGTH = 8_000;
 const FAILURE_TEXT =
@@ -68,6 +101,7 @@ const sendResultValidator = v.union(
       v.literal("quota_exceeded"),
       v.literal("subscription_required"),
       v.literal("billing_inactive"),
+      v.literal("reply_in_progress"),
     ),
     retryAt: v.optional(v.number()),
     resetAt: v.optional(v.number()),
@@ -86,7 +120,12 @@ type SendResult =
     }
   | {
       ok: false;
-      reason: "rate_limited" | "quota_exceeded" | "subscription_required" | "billing_inactive";
+      reason:
+        | "rate_limited"
+        | "quota_exceeded"
+        | "subscription_required"
+        | "billing_inactive"
+        | "reply_in_progress";
       retryAt?: number;
       resetAt?: number;
       requiredPlan?: "free" | "starter" | "plus";
@@ -94,12 +133,12 @@ type SendResult =
     };
 
 function previewFromContent(content: string) {
-  const singleLine = content.replace(/\s+/g, " ").trim();
+  const singleLine = stripMentionMarkers(content).replace(/\s+/g, " ").trim();
   return singleLine.length > 140 ? `${singleLine.slice(0, 137)}...` : singleLine;
 }
 
 function trimForTitleContext(content: string) {
-  const singleLine = content.replace(/\s+/g, " ").trim();
+  const singleLine = stripMentionMarkers(content).replace(/\s+/g, " ").trim();
   return singleLine.length > 1_500
     ? `${singleLine.slice(0, 1_497).trimEnd()}...`
     : singleLine;
@@ -125,6 +164,7 @@ async function upsertThreadMetadata(
     status: "idle" | "streaming" | "failed";
     incrementMessageCount?: boolean;
     workspaceId?: Id<"workspaces">;
+    lastAgentKind?: AgentKind;
   },
 ) {
   const now = Date.now();
@@ -136,12 +176,17 @@ async function upsertThreadMetadata(
       messageCount: existing.messageCount + (args.incrementMessageCount ? 1 : 0),
       status: args.status,
       workspaceId: existing.workspaceId ?? args.workspaceId,
+      ...(args.lastAgentKind !== undefined ? { lastAgentKind: args.lastAgentKind } : {}),
     });
     return;
   }
 
   if (args.preview === undefined) {
-    throw new ConvexError("Thread preview is required when creating metadata");
+    throwAppError({
+      message: "Thread preview is required when creating metadata",
+      code: "thread_metadata_preview_required",
+      severity: "error",
+    });
   }
 
   await ctx.db.insert("threadMetadata", {
@@ -152,6 +197,7 @@ async function upsertThreadMetadata(
     lastMessagePreview: args.preview,
     messageCount: args.incrementMessageCount ? 1 : 0,
     status: args.status,
+    ...(args.lastAgentKind !== undefined ? { lastAgentKind: args.lastAgentKind } : {}),
   });
 }
 
@@ -169,17 +215,27 @@ async function updateThreadTitleFromPrompt(
 
   await astra.updateThreadMetadata(ctx, {
     threadId: args.threadId,
-    patch: { title: threadTitleFromPrompt(args.prompt) },
+    patch: { title: threadTitleFromPrompt(stripMentionMarkers(args.prompt)) },
   });
 }
 
 function validateContent(content: string) {
   const trimmed = content.trim();
   if (trimmed.length < 1) {
-    throw new ConvexError("Message cannot be empty");
+    throwAppError({
+      message: "Message cannot be empty",
+      code: "message_empty",
+      field: "content",
+      severity: "warning",
+    });
   }
   if (trimmed.length > MAX_CONTENT_LENGTH) {
-    throw new ConvexError("Message is too long");
+    throwAppError({
+      message: "Message is too long",
+      code: "message_too_long",
+      field: "content",
+      severity: "warning",
+    });
   }
   return trimmed;
 }
@@ -200,27 +256,47 @@ async function checkAndConsumeSendQuota(
     ownerUserId: string;
     ownerEmail?: string | null;
     content: string;
-    mode: "normal" | "deep";
+    agentKind: AgentKind;
+    isDeep: boolean;
   },
 ): Promise<
   | { ok: true }
   | { ok: false; retryAt?: number; entitlement?: Extract<EntitlementResult, { ok: false }> }
 > {
   const estimatedTokens = estimateTokens(args.content);
+  // Deep runs go through the deep_research feature (governed by the monthly
+  // deepResearchRuns quota). Lite-deep is allowed on Free (requiredPlan "free");
+  // Pro-deep and Pro chat require a paid plan.
+  const feature = args.isDeep
+    ? "deep_research"
+    : args.agentKind === "pro"
+      ? "pro_chat"
+      : "normal_chat";
+  const model = args.isDeep
+    ? deepModelForAgent(args.agentKind)
+    : chatModelForAgent(args.agentKind);
+  const requiredPlan = args.isDeep
+    ? args.agentKind === "pro"
+      ? ("starter" as const)
+      : ("free" as const)
+    : args.agentKind === "pro"
+      ? ("starter" as const)
+      : ("free" as const);
   const entitlement = await consumeCredits(ctx, {
     ownerUserId: args.ownerUserId,
     ownerEmail: args.ownerEmail,
-    feature: args.mode === "deep" ? "deep_research" : "normal_chat",
+    feature,
     provider: CHAT_PROVIDER_NAME,
-    model: args.mode === "deep" ? process.env.AQSHA_DEEP_MODEL ?? "gpt-5.5" : NORMAL_MODEL,
+    model,
     inputTokens: estimatedTokens,
     totalTokens: estimatedTokens,
     credits: estimateCredits({
-      feature: args.mode === "deep" ? "deep_research" : "normal_chat",
+      feature,
       inputTokens: estimatedTokens,
       totalTokens: estimatedTokens,
+      agentKind: args.agentKind,
     }),
-    requiredPlan: args.mode === "deep" ? "starter" : "free",
+    requiredPlan,
   });
   if (!entitlement.ok) {
     return { ok: false, entitlement };
@@ -228,10 +304,6 @@ async function checkAndConsumeSendQuota(
   const rateChecks = await Promise.all([
     rateLimiter.check(ctx, "sendMessage", { key: args.ownerUserId }),
     rateLimiter.check(ctx, "globalSendMessage"),
-    rateLimiter.check(ctx, "tokenUsagePerUser", {
-      key: args.ownerUserId,
-      count: estimatedTokens,
-    }),
     rateLimiter.check(ctx, "globalTokenUsage", { count: estimatedTokens }),
   ]);
   const blocked = rateChecks.find((status) => !status.ok);
@@ -255,10 +327,11 @@ async function savePromptAndScheduleRun(
     threadId: string;
     threadTitle?: string;
     content: string;
-    mode: "normal" | "deep";
+    agentKind: AgentKind;
     commandId?: string;
     workspaceId?: Id<"workspaces">;
     selectedContextArtifactIds?: Id<"artifacts">[];
+    selectedContextWorkspaceIds?: Id<"workspaces">[];
     messageAttachmentArtifactIds?: Id<"artifacts">[];
     contextArtifactSnapshot?: Array<{
       artifactId: Id<"artifacts">;
@@ -269,19 +342,29 @@ async function savePromptAndScheduleRun(
     deferGeneration?: boolean;
   },
 ): Promise<SendResult> {
-  if (args.selectedContextArtifactIds) {
-    await replaceContextArtifactsForThread(ctx, {
+  if (args.selectedContextArtifactIds && args.selectedContextArtifactIds.length > 0) {
+    await addContextArtifactsForThread(ctx, {
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
       artifactIds: args.selectedContextArtifactIds,
     });
   }
+  if (args.selectedContextWorkspaceIds && args.selectedContextWorkspaceIds.length > 0) {
+    await addContextWorkspacesForThread(ctx, {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      workspaceIds: args.selectedContextWorkspaceIds,
+    });
+  }
 
+  // The composer sends the message WITH inline mention markers. Keep the agent
+  // message clean, and stash the marked text separately for the bubble renderer.
+  const markedContent = args.content;
+  const cleanContent = stripMentionMarkers(markedContent);
   const promptPayload = await resolvePromptPayload(ctx, {
     ownerUserId: args.ownerUserId,
     threadId: args.threadId,
-    content: args.content,
-    mode: args.mode,
+    content: cleanContent,
     commandId: args.commandId,
   });
 
@@ -294,12 +377,23 @@ async function savePromptAndScheduleRun(
   const messageId = saved.messages[0]._id;
   const preview = previewFromContent(promptPayload.visibleContent);
 
+  if (markedContent !== cleanContent) {
+    await ctx.db.insert("messageRichContent", {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      messageId,
+      content: markedContent,
+      createdAt: Date.now(),
+    });
+  }
+
   if (promptPayload.commandMetadata) {
     await ctx.db.insert("messageCommands", {
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
       messageId,
       ...promptPayload.commandMetadata,
+      agentKind: args.agentKind,
       createdAt: Date.now(),
     });
   }
@@ -310,6 +404,11 @@ async function savePromptAndScheduleRun(
     messageId,
     snapshot: args.contextArtifactSnapshot,
   });
+  await persistMessageContextWorkspaces(ctx, {
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+    messageId,
+  });
 
   await upsertThreadMetadata(ctx, {
     ownerUserId: args.ownerUserId,
@@ -318,6 +417,7 @@ async function savePromptAndScheduleRun(
     status: args.deferGeneration ? "idle" : "streaming",
     incrementMessageCount: true,
     workspaceId: args.workspaceId,
+    lastAgentKind: args.agentKind,
   });
 
   await updateThreadTitleFromPrompt(ctx, {
@@ -334,7 +434,7 @@ async function savePromptAndScheduleRun(
     ownerUserId: args.ownerUserId,
     threadId: args.threadId,
     messageId,
-    mode: args.mode,
+    agentKind: args.agentKind,
     promptPayload,
     messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
   });
@@ -346,7 +446,7 @@ async function scheduleGenerationForMessage(
     ownerUserId: string;
     threadId: string;
     messageId: string;
-    mode: "normal" | "deep";
+    agentKind: AgentKind;
     promptPayload: PromptPayload;
     messageAttachmentArtifactIds?: Id<"artifacts">[];
   },
@@ -361,16 +461,17 @@ async function scheduleGenerationForMessage(
     contextBlock,
   });
 
-  if (args.mode === "deep") {
+  const commandId = args.promptPayload.commandMetadata?.commandId;
+  if (args.promptPayload.executionKind === "deep_research") {
     const run: {
       runId: import("../_generated/dataModel").Id<"agentRuns">;
-      workflowId: string;
-    } = await ctx.runMutation(internal.agent.deepResearch.startForMessage, {
+    } = await ctx.runMutation(internal.agent.research.deepResearch.startForMessage, {
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
       promptMessageId: args.messageId,
       prompt: generationPrompt,
-      commandId: args.promptPayload.commandMetadata?.commandId,
+      commandId,
+      agentKind: args.agentKind,
     });
 
     return { ok: true as const, messageId: args.messageId, ...run };
@@ -381,6 +482,7 @@ async function scheduleGenerationForMessage(
     threadId: args.threadId,
     promptMessageId: args.messageId,
     prompt: generationPrompt,
+    agentKind: args.agentKind,
   });
   await ctx.scheduler.runAfter(0, internal.agent.messages.generateReply, {
     threadId: args.threadId,
@@ -389,7 +491,8 @@ async function scheduleGenerationForMessage(
     prompt: generationPrompt,
     visiblePrompt: args.promptPayload.visibleContent,
     runId,
-    commandId: args.promptPayload.commandMetadata?.commandId,
+    commandId,
+    agentKind: args.agentKind,
     messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
   });
 
@@ -419,37 +522,43 @@ export const completeThreadStartAfterAttachments = internalMutation({
     messageId: v.string(),
     threadTitle: v.optional(v.string()),
     content: v.string(),
-    mode: v.union(v.literal("normal"), v.literal("deep")),
+    agentKind: v.union(v.literal("lite"), v.literal("pro")),
     commandId: v.optional(v.string()),
     workspaceId: v.optional(v.id("workspaces")),
     selectedContextArtifactIds: v.optional(v.array(v.id("artifacts"))),
+    selectedContextWorkspaceIds: v.optional(v.array(v.id("workspaces"))),
     contextArtifactSnapshot: v.optional(contextArtifactSnapshotValidator),
     messageAttachmentArtifactIds: v.array(v.id("artifacts")),
   },
   handler: async (ctx, args) => {
-    if (args.selectedContextArtifactIds) {
-      await replaceContextArtifactsForThread(ctx, {
+    if (args.selectedContextArtifactIds && args.selectedContextArtifactIds.length > 0) {
+      await addContextArtifactsForThread(ctx, {
         ownerUserId: args.ownerUserId,
         threadId: args.threadId,
         artifactIds: args.selectedContextArtifactIds,
       });
     }
-
-    const existingContextRows = await ctx.db
-      .query("messageContextArtifacts")
-      .withIndex("by_owner_message", (q) =>
-        q.eq("ownerUserId", args.ownerUserId).eq("messageId", args.messageId),
-      )
-      .collect();
-    for (const row of existingContextRows) {
-      await ctx.db.delete("messageContextArtifacts", row._id);
+    if (args.selectedContextWorkspaceIds && args.selectedContextWorkspaceIds.length > 0) {
+      await addContextWorkspacesForThread(ctx, {
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+        workspaceIds: args.selectedContextWorkspaceIds,
+      });
     }
 
+    // persistMessageContextArtifacts / persistMessageContextWorkspaces are
+    // idempotent by messageId (they clear prior rows first), so this two-phase
+    // completion path can re-run without duplicating context rows.
     await persistMessageContextArtifacts(ctx, {
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
       messageId: args.messageId,
       snapshot: args.contextArtifactSnapshot,
+    });
+    await persistMessageContextWorkspaces(ctx, {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      messageId: args.messageId,
     });
 
     await upsertThreadMetadata(ctx, {
@@ -463,7 +572,6 @@ export const completeThreadStartAfterAttachments = internalMutation({
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
       content: args.content,
-      mode: args.mode,
       commandId: args.commandId,
     });
 
@@ -471,7 +579,7 @@ export const completeThreadStartAfterAttachments = internalMutation({
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
       messageId: args.messageId,
-      mode: args.mode,
+      agentKind: args.agentKind,
       promptPayload,
       messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
     });
@@ -481,10 +589,11 @@ export const completeThreadStartAfterAttachments = internalMutation({
 export const startThread = mutation({
   args: {
     content: v.string(),
-    mode: v.union(v.literal("normal"), v.literal("deep")),
+    agentKind: v.union(v.literal("lite"), v.literal("pro")),
     commandId: v.optional(v.string()),
     workspaceId: v.optional(v.id("workspaces")),
     selectedContextArtifactIds: v.optional(v.array(v.id("artifacts"))),
+    selectedContextWorkspaceIds: v.optional(v.array(v.id("workspaces"))),
     messageAttachmentArtifactIds: v.optional(v.array(v.id("artifacts"))),
     pendingAttachments: v.optional(v.array(pendingAttachmentValidator)),
     contextArtifactSnapshot: v.optional(contextArtifactSnapshotValidator),
@@ -496,11 +605,17 @@ export const startThread = mutation({
     if (args.workspaceId) {
       await assertWorkspaceOwner(ctx, args.workspaceId, user._id, { requireActive: true });
     }
+    // A brand-new thread is "filed under" the explicit workspace if provided,
+    // else the first @mentioned workspace (decision: first @workspace from Home
+    // auto-files the thread). Ownership of the mentioned workspace is validated
+    // by replaceContextWorkspacesForThread.
+    const filedWorkspaceId = args.workspaceId ?? args.selectedContextWorkspaceIds?.[0];
     const quota = await checkAndConsumeSendQuota(ctx, {
       ownerUserId: user._id,
       ownerEmail: user.email,
       content,
-      mode: args.mode,
+      agentKind: args.agentKind,
+      isDeep: promptExecutionKindForCommand(args.commandId) === "deep_research",
     });
     if (!quota.ok) {
       return quota.entitlement
@@ -523,10 +638,11 @@ export const startThread = mutation({
         threadId,
         threadTitle: threadTitleFromPrompt(content),
         content,
-        mode: args.mode,
+        agentKind: args.agentKind,
         commandId: args.commandId,
-        workspaceId: args.workspaceId,
+        workspaceId: filedWorkspaceId,
         selectedContextArtifactIds: args.selectedContextArtifactIds,
+        selectedContextWorkspaceIds: args.selectedContextWorkspaceIds,
         contextArtifactSnapshot: args.contextArtifactSnapshot,
         deferGeneration: true,
       });
@@ -535,7 +651,7 @@ export const startThread = mutation({
       }
       await ctx.scheduler.runAfter(
         0,
-        internal.artifactUploads.processPendingAttachmentsAndStart,
+        internal.artifacts.uploads.processPendingAttachmentsAndStart,
         {
           ownerUserId: user._id,
           ownerEmail: user.email ?? undefined,
@@ -543,11 +659,12 @@ export const startThread = mutation({
           messageId: deferred.messageId,
           threadTitle: threadTitleFromPrompt(content),
           content,
-          mode: args.mode,
+          agentKind: args.agentKind,
           commandId: args.commandId,
-          workspaceId: args.workspaceId,
+          workspaceId: filedWorkspaceId,
           pendingAttachments: args.pendingAttachments,
           selectedContextArtifactIds: args.selectedContextArtifactIds,
+          selectedContextWorkspaceIds: args.selectedContextWorkspaceIds,
           contextArtifactSnapshot: args.contextArtifactSnapshot,
         },
       );
@@ -559,10 +676,11 @@ export const startThread = mutation({
       threadId,
       threadTitle: threadTitleFromPrompt(content),
       content,
-      mode: args.mode,
+      agentKind: args.agentKind,
       commandId: args.commandId,
-      workspaceId: args.workspaceId,
+      workspaceId: filedWorkspaceId,
       selectedContextArtifactIds: args.selectedContextArtifactIds,
+      selectedContextWorkspaceIds: args.selectedContextWorkspaceIds,
       messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
       contextArtifactSnapshot: args.contextArtifactSnapshot,
     });
@@ -575,9 +693,10 @@ export const send = mutation({
   args: {
     threadId: v.string(),
     content: v.string(),
-    mode: v.union(v.literal("normal"), v.literal("deep")),
+    agentKind: v.union(v.literal("lite"), v.literal("pro")),
     commandId: v.optional(v.string()),
     selectedContextArtifactIds: v.optional(v.array(v.id("artifacts"))),
+    selectedContextWorkspaceIds: v.optional(v.array(v.id("workspaces"))),
     messageAttachmentArtifactIds: v.optional(v.array(v.id("artifacts"))),
     contextArtifactSnapshot: v.optional(contextArtifactSnapshotValidator),
   },
@@ -586,11 +705,15 @@ export const send = mutation({
     const user = await requireCurrentUser(ctx);
     const content = validateContent(args.content);
     const thread = await assertThreadOwner(ctx, args.threadId);
+    if (await hasActiveReplyRun(ctx, { ownerUserId: user._id, threadId: args.threadId })) {
+      return { ok: false as const, reason: "reply_in_progress" as const };
+    }
     const quota = await checkAndConsumeSendQuota(ctx, {
       ownerUserId: user._id,
       ownerEmail: user.email,
       content,
-      mode: args.mode,
+      agentKind: args.agentKind,
+      isDeep: promptExecutionKindForCommand(args.commandId) === "deep_research",
     });
     if (!quota.ok) {
       return quota.entitlement
@@ -606,9 +729,10 @@ export const send = mutation({
       threadId: args.threadId,
       threadTitle: thread.title,
       content,
-      mode: args.mode,
+      agentKind: args.agentKind,
       commandId: args.commandId,
       selectedContextArtifactIds: args.selectedContextArtifactIds,
+      selectedContextWorkspaceIds: args.selectedContextWorkspaceIds,
       messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
       contextArtifactSnapshot: args.contextArtifactSnapshot,
     });
@@ -657,6 +781,32 @@ export const list = query({
           .collect(),
       ),
     );
+    const workspaceContextRows = await Promise.all(
+      messageIds.map((messageId) =>
+        ctx.db
+          .query("messageContextWorkspaces")
+          .withIndex("by_owner_message", (q) =>
+            q.eq("ownerUserId", user._id).eq("messageId", messageId),
+          )
+          .collect(),
+      ),
+    );
+    const richContentRows = await Promise.all(
+      messageIds.map((messageId) =>
+        ctx.db
+          .query("messageRichContent")
+          .withIndex("by_owner_message", (q) =>
+            q.eq("ownerUserId", user._id).eq("messageId", messageId),
+          )
+          .unique(),
+      ),
+    );
+    const richContentByMessageId = new Map<string, string>();
+    for (const row of richContentRows) {
+      if (row && row.threadId === args.threadId) {
+        richContentByMessageId.set(row.messageId, row.content);
+      }
+    }
     const byMessageId = new Map();
     for (const row of commandRows) {
       if (!row || row.threadId !== args.threadId) {
@@ -667,6 +817,7 @@ export const list = query({
         commandLabel: row.commandLabel,
         commandSlug: row.commandSlug,
         mode: row.mode,
+        agentKind: row.agentKind,
         argumentPreview: row.argumentPreview,
       });
     }
@@ -724,12 +875,33 @@ export const list = query({
         contextByMessageId.set(row.messageId, existing);
       }
     }
+    const workspaceContextByMessageId = new Map<
+      string,
+      Array<{ workspaceId: string; name: string }>
+    >();
+    for (const rows of workspaceContextRows) {
+      for (const row of rows) {
+        if (row.threadId !== args.threadId) {
+          continue;
+        }
+        const existing = workspaceContextByMessageId.get(row.messageId) ?? [];
+        existing.push({ workspaceId: String(row.workspaceId), name: row.name });
+        workspaceContextByMessageId.set(row.messageId, existing);
+      }
+    }
     return {
       ...paginated,
       page: paginated.page.map((message) => {
         const promptCommand = byMessageId.get(message.id);
         const contextArtifacts = contextByMessageId.get(message.id);
-        if (!promptCommand && !contextArtifacts?.length) {
+        const contextWorkspaces = workspaceContextByMessageId.get(message.id);
+        const richContent = richContentByMessageId.get(message.id);
+        if (
+          !promptCommand &&
+          !contextArtifacts?.length &&
+          !contextWorkspaces?.length &&
+          !richContent
+        ) {
           return message;
         }
         const existingMetadata = (message as { metadata?: unknown }).metadata;
@@ -741,6 +913,8 @@ export const list = query({
               : {}),
             ...(promptCommand ? { promptCommand } : {}),
             ...(contextArtifacts?.length ? { contextArtifacts } : {}),
+            ...(contextWorkspaces?.length ? { contextWorkspaces } : {}),
+            ...(richContent ? { richContent } : {}),
           },
         };
       }),
@@ -749,41 +923,256 @@ export const list = query({
   },
 });
 
-const HITL_COMMAND_PROFILES = {
-  artifact: "artifact",
-  workspace: "workspace",
-} as const;
+// HITL tool-name sets live in agent/hitl/hitlToolNames.ts (the single source of
+// truth shared with the web client). `HITL_INITIAL_TOOL_NAMES` is the initial-turn
+// surface (executeArtifact withheld until an approved proposeArtifact);
+// `PENDING_HITL_TOOL_NAME_SET` is every tool that can hold a turn pending approval.
 
-function resolveGenerationTools(args: {
-  hitlExecute?: boolean;
-  hitlSessionId?: Id<"hitlSessions">;
-  hitlWorkspaceId?: Id<"workspaces">;
-  hitlPayloadJson?: string;
-  commandId?: string;
-  promptMessageId: string;
-  runId?: Id<"agentRuns">;
-}): ToolSet {
-  if (args.hitlExecute && args.hitlSessionId) {
-    return createWorkspaceExecutionTools({
-      sessionId: args.hitlSessionId,
-      workspaceId: args.hitlWorkspaceId,
-      payloadJson: args.hitlPayloadJson,
-    });
+// A native HITL pause is an unsatisfied HITL tool call in this generation:
+// `askUser` (no execute) or a `needsApproval` action tool awaiting approval —
+// i.e. a tool call with no matching tool result.
+function hasPendingNativeHitl(
+  steps: Array<{
+    toolCalls?: Array<{ toolName?: string; toolCallId?: string }>;
+    toolResults?: Array<{ toolCallId?: string }>;
+  }>,
+): boolean {
+  const resolved = new Set<string>();
+  for (const step of steps) {
+    for (const result of step.toolResults ?? []) {
+      if (result.toolCallId) resolved.add(result.toolCallId);
+    }
   }
-  const profile =
-    args.commandId && args.commandId in HITL_COMMAND_PROFILES
-      ? HITL_COMMAND_PROFILES[args.commandId as keyof typeof HITL_COMMAND_PROFILES]
-      : null;
-  if (profile) {
-    return createHitlTools({
-      profile,
-      promptMessageId: args.promptMessageId,
+  for (const step of steps) {
+    for (const call of step.toolCalls ?? []) {
+      if (
+        call.toolCallId &&
+        PENDING_HITL_TOOL_NAME_SET.has(call.toolName ?? "") &&
+        !resolved.has(call.toolCallId)
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+// Count artifact create/update/delete side effects performed by native HITL
+// tools (status-shaped results) so the run's artifactCount stays meaningful.
+function countNativeArtifactMutations(
+  steps: Array<{ toolResults?: Array<{ output?: unknown }> }>,
+): number {
+  let count = 0;
+  for (const step of steps) {
+    for (const result of step.toolResults ?? []) {
+      const output = result.output as { status?: string } | undefined;
+      if (output?.status === "executed" || output?.status === "deleted") {
+        count += 1;
+      }
+    }
+  }
+  return count;
+}
+
+function buildGenerationTools(
+  promptMessageId: string,
+  counter: CitationCounter,
+  runId: Id<"agentRuns"> | undefined,
+): ToolSet {
+  // Sandbox tools are always in the toolset so the approval-gated runComputation
+  // can execute on the resume turn; their visibility is gated per-turn via
+  // activeTools (the compute router), so their schemas are only sent to the
+  // model when relevant (zero token waste otherwise).
+  return {
+    ...buildNormalChatTools(counter),
+    ...buildHitlTools({ promptMessageId }),
+    ...buildSandboxTools({ runId }),
+  };
+}
+
+// Shared generation core for the initial turn (generateReply) and HITL resume
+// (resumeGeneration). On the initial turn executeArtifact is withheld via
+// activeTools; on resume the full HITL tool set is available so the model can
+// run an approved proposeArtifact and then call executeArtifact.
+async function runInlineGeneration(
+  ctx: ActionCtx,
+  args: {
+    threadId: string;
+    userId: string;
+    promptMessageId: string;
+    runId?: Id<"agentRuns">;
+    agentKind: AgentKind;
+    prompt?: string;
+    visiblePrompt?: string;
+    includeExecuteArtifact: boolean;
+    messageAttachmentArtifactIds?: Id<"artifacts">[];
+    scheduleTitle: boolean;
+    deep?: boolean;
+  },
+) {
+  try {
+    let prompt = args.prompt;
+    if (prompt && args.visiblePrompt) {
+      const ragContext = await ctx.runAction(
+        internal.agent.context.ragContext.buildRagContextForThread,
+        {
+          ownerUserId: args.userId,
+          threadId: args.threadId,
+          query: args.visiblePrompt,
+          messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
+        },
+      );
+      prompt = ragContext ? [ragContext, "", prompt].join("\n") : prompt;
+    }
+    const tools =
+      args.deep && args.runId
+        ? buildDeepResearchTools({
+            promptMessageId: args.promptMessageId,
+            runId: args.runId,
+          })
+        : // One citation counter per turn so [n] markers stay unique across every
+          // research-tool call (AUD-05).
+          buildGenerationTools(
+            args.promptMessageId,
+            createCitationCounter(1),
+            args.runId,
+          );
+    let activeTools = args.deep
+      ? ["startDeepResearch"]
+      : args.includeExecuteArtifact
+        ? undefined
+        : [...NORMAL_CHAT_TOOL_NAMES, ...HITL_INITIAL_TOOL_NAMES];
+    // Compute router (deterministic, non-LLM): the sandbox tools are always in
+    // the toolset (so an approved runComputation can resume); on a non-deep
+    // initial turn we make them VISIBLE only when the prompt shows compute intent
+    // and the agent is Pro (Lite withholds — handled in routeCompute). No intent
+    // → not added to activeTools → schemas not sent → zero token waste. On a
+    // resume turn (activeTools undefined) the whole toolset is already active.
+    if (!args.deep && activeTools) {
+      const compute = routeCompute({
+        prompt: args.visiblePrompt ?? args.prompt ?? "",
+        agentKind: args.agentKind,
+      });
+      if (compute.exposeStatVerification) {
+        activeTools = [...activeTools, ...SANDBOX_TOOL_NAMES];
+      }
+    }
+    const agent = agentForKind(args.agentKind);
+    const result = await agent.streamText(
+      ctx,
+      { threadId: args.threadId, userId: args.userId },
+      {
+        promptMessageId: args.promptMessageId,
+        tools,
+        ...(prompt ? { prompt } : {}),
+        ...(activeTools ? { activeTools } : {}),
+      },
+      {
+        saveStreamDeltas: { chunking: "word", throttleMs: 100 },
+        usageHandler: usageHandlerForAgent(args.agentKind),
+      },
+    );
+    await result.consumeStream();
+    const text = await result.text;
+    const steps = await result.steps;
+    if (args.deep) {
+      // Deep research planning/resume: if the model started the research
+      // workflow (approved startDeepResearch), the workflow now owns the run +
+      // thread lifecycle. Otherwise this is a pause awaiting plan approval, or a
+      // plain text reply — patch the run status and release the composer.
+      const deepStarted = steps.some((step) =>
+        (step.toolResults ?? []).some((result) => {
+          const part = result as { toolName?: string; output?: unknown };
+          return (
+            part.toolName === "startDeepResearch" &&
+            isDeepResearchStartedResult(part.output)
+          );
+        }),
+      );
+      if (!deepStarted) {
+        const pending = hasPendingNativeHitl(steps);
+        if (args.runId) {
+          await ctx.runMutation(internal.agent.messages.patchRunStatus, {
+            ownerUserId: args.userId,
+            threadId: args.threadId,
+            runId: args.runId,
+            status: pending ? "waiting" : "completed",
+          });
+        }
+        await ctx.runMutation(internal.agent.messages.markThreadIdle, {
+          ownerUserId: args.userId,
+          threadId: args.threadId,
+          runId: args.runId,
+          preview: previewFromContent(text),
+          incrementMessageCount: true,
+        });
+      }
+      return;
+    }
+    const sourceCandidates = collectSourceCandidates(steps);
+    const pendingHitl = hasPendingNativeHitl(steps);
+    const artifactCount = countNativeArtifactMutations(steps);
+    const assistantMessageId = getVisibleAssistantMessageId(result.savedMessages);
+    if (assistantMessageId) {
+      await ctx.runMutation(internal.agent.research.sources.persistCited, {
+        ownerUserId: args.userId,
+        threadId: args.threadId,
+        messageId: assistantMessageId,
+        candidates: sourceCandidates,
+        citedNumbers: extractCitationNumbers(text),
+      });
+    }
+    if (args.runId) {
+      await ctx.runMutation(internal.agent.messages.completeInlineRun, {
+        ownerUserId: args.userId,
+        threadId: args.threadId,
+        runId: args.runId,
+        sourceCount: sourceCandidates.length,
+        artifactCount,
+        observations: collectToolObservations(steps),
+        keepWaiting: pendingHitl,
+      });
+    }
+    await ctx.runMutation(internal.agent.messages.markThreadIdle, {
+      ownerUserId: args.userId,
+      threadId: args.threadId,
       runId: args.runId,
-      commandId: args.commandId,
-      sourceKind: profile === "artifact" ? "artifact" : "generic",
+      preview: previewFromContent(text),
+      incrementMessageCount: true,
     });
+    if (args.scheduleTitle && args.visiblePrompt) {
+      await ctx.scheduler.runAfter(0, internal.agent.messages.generateThreadTitle, {
+        threadId: args.threadId,
+        userId: args.userId,
+        prompt: args.visiblePrompt,
+        assistantText: text,
+      });
+    }
+  } catch (error) {
+    if (args.runId) {
+      await ctx.runMutation(internal.agent.messages.failInlineRun, {
+        ownerUserId: args.userId,
+        threadId: args.threadId,
+        runId: args.runId,
+        errorMessage: readableError(error),
+      });
+    }
+    await astra.saveMessages(ctx, {
+      threadId: args.threadId,
+      userId: args.userId,
+      promptMessageId: args.promptMessageId,
+      messages: [{ role: "assistant", content: FAILURE_TEXT }],
+      failPendingSteps: true,
+      skipEmbeddings: true,
+    });
+    await ctx.runMutation(internal.agent.messages.markThreadFailed, {
+      ownerUserId: args.userId,
+      threadId: args.threadId,
+      runId: args.runId,
+      preview: FAILURE_TEXT,
+    });
+    throw error;
   }
-  return normalChatTools;
 }
 
 export const generateReply = internalAction({
@@ -795,130 +1184,127 @@ export const generateReply = internalAction({
     visiblePrompt: v.string(),
     runId: v.optional(v.id("agentRuns")),
     commandId: v.optional(v.string()),
+    // Optional for legacy/in-flight scheduled jobs queued before this field
+    // existed; defaults to "lite".
+    agentKind: v.optional(v.union(v.literal("lite"), v.literal("pro"))),
     messageAttachmentArtifactIds: v.optional(v.array(v.id("artifacts"))),
-    hitlExecute: v.optional(v.boolean()),
-    hitlSessionId: v.optional(v.id("hitlSessions")),
-    hitlWorkspaceId: v.optional(v.id("workspaces")),
-    hitlPayloadJson: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const thread = await ctx.runQuery(components.agent.threads.getThread, {
       threadId: args.threadId,
     });
     if (!thread || thread.userId !== args.userId) {
-      throw new ConvexError("Thread not found");
+      throwAppError({ message: "Thread not found", code: "thread_not_found" });
     }
+    await runInlineGeneration(ctx, {
+      threadId: args.threadId,
+      userId: args.userId,
+      promptMessageId: args.promptMessageId,
+      runId: args.runId,
+      agentKind: args.agentKind ?? "lite",
+      prompt: args.prompt,
+      visiblePrompt: args.visiblePrompt,
+      includeExecuteArtifact: false,
+      messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
+      scheduleTitle: true,
+    });
+  },
+});
 
-    try {
-      const ragContext = await ctx.runAction(
-        internal.agent.ragContext.buildRagContextForThread,
-        {
-          ownerUserId: args.userId,
-          threadId: args.threadId,
-          query: args.visiblePrompt,
-          messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
-        },
-      );
-      const prompt = ragContext
-        ? [ragContext, "", args.prompt].join("\n")
-        : args.prompt;
-      const tools = resolveGenerationTools(args);
-      const result = await astra.streamText(
-        ctx,
-        { threadId: args.threadId, userId: args.userId },
-        { promptMessageId: args.promptMessageId, prompt, tools },
-        {
-          saveStreamDeltas: { chunking: "word", throttleMs: 100 },
-          usageHandler: handleUsage,
-        },
-      );
-      await result.consumeStream();
-      const text = await result.text;
-      const steps = await result.steps;
-      const sourceCandidates = collectSourceCandidates(steps);
-      const artifactResults = collectArtifactResults(steps);
-      const hitlResults = collectHitlResults(steps);
-      const assistantMessageId = getVisibleAssistantMessageId(result.savedMessages);
-      if (assistantMessageId) {
-        await ctx.runMutation(internal.agent.sources.persistCited, {
-          ownerUserId: args.userId,
-          threadId: args.threadId,
-          messageId: assistantMessageId,
-          candidates: sourceCandidates,
-          citedNumbers: extractCitationNumbers(text),
-        });
-        for (const artifact of artifactResults) {
-          await ctx.runMutation(internal.agent.artifacts.attachToMessage, {
-            ownerUserId: args.userId,
-            threadId: args.threadId,
-            messageId: assistantMessageId,
-            artifactId: artifact.artifactId,
-            versionId: artifact.versionId,
-            relation: artifact.relation,
-          });
-        }
-        if (hitlResults.length > 0) {
-          await ctx.runMutation(internal.hitlSessions.attachAssistantMessageInternal, {
-            ownerUserId: args.userId,
-            threadId: args.threadId,
-            promptMessageId: args.promptMessageId,
-            assistantMessageId,
-          });
-        }
-      }
-      if (args.runId) {
-        await ctx.runMutation(internal.agent.messages.completeInlineRun, {
-          ownerUserId: args.userId,
-          threadId: args.threadId,
-          runId: args.runId,
-          sourceCount: sourceCandidates.length,
-          artifactCount: artifactResults.length,
-          observations: collectToolObservations(steps),
-          keepWaiting: hitlResults.length > 0 && !args.hitlExecute,
-        });
-      }
-      await ctx.runMutation(internal.agent.messages.markThreadIdle, {
-        ownerUserId: args.userId,
-        threadId: args.threadId,
-        preview: previewFromContent(text),
-        incrementMessageCount: true,
-      });
-      await ctx.scheduler.runAfter(0, internal.agent.messages.generateThreadTitle, {
-        threadId: args.threadId,
-        userId: args.userId,
-        prompt: args.visiblePrompt,
-        assistantText: text,
-      });
-    } catch (error) {
-      if (args.hitlExecute && args.hitlSessionId) {
-        await ctx.runMutation(internal.hitlSessions.failSessionInternal, {
-          sessionId: args.hitlSessionId,
-          ownerUserId: args.userId,
-        });
-      }
-      if (args.runId) {
-        await ctx.runMutation(internal.agent.messages.failInlineRun, {
-          ownerUserId: args.userId,
-          threadId: args.threadId,
-          runId: args.runId,
-          errorMessage: readableError(error),
-        });
-      }
-      await astra.saveMessages(ctx, {
-        threadId: args.threadId,
-        userId: args.userId,
-        promptMessageId: args.promptMessageId,
-        messages: [{ role: "assistant", content: FAILURE_TEXT }],
-        failPendingSteps: true,
-        skipEmbeddings: true,
-      });
-      await ctx.runMutation(internal.agent.messages.markThreadFailed, {
-        ownerUserId: args.userId,
-        threadId: args.threadId,
-        preview: FAILURE_TEXT,
-      });
-      throw error;
+// Resume generation after a native HITL pause is resolved: the user answered an
+// askUser question (tool-result saved) or approved/denied an action tool
+// (tool-approval-response saved). `promptMessageId` points at that saved
+// message so the model continues with the answer already in its context. The
+// full HITL tool set is available (incl. executeArtifact) so an approved
+// proposeArtifact can be followed by the actual write.
+export const resumeGeneration = internalAction({
+  args: {
+    threadId: v.string(),
+    userId: v.string(),
+    promptMessageId: v.string(),
+    runId: v.optional(v.id("agentRuns")),
+    agentKind: v.optional(v.union(v.literal("lite"), v.literal("pro"))),
+    // True when resuming a deep_research thread (the approved startDeepResearch
+    // tool must run, and the run lifecycle is owned by the research workflow).
+    deep: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const thread = await ctx.runQuery(components.agent.threads.getThread, {
+      threadId: args.threadId,
+    });
+    if (!thread || thread.userId !== args.userId) {
+      throwAppError({ message: "Thread not found", code: "thread_not_found" });
     }
+    await runInlineGeneration(ctx, {
+      threadId: args.threadId,
+      userId: args.userId,
+      promptMessageId: args.promptMessageId,
+      runId: args.runId,
+      agentKind: args.agentKind ?? "lite",
+      includeExecuteArtifact: true,
+      scheduleTitle: false,
+      deep: args.deep ?? false,
+    });
+  },
+});
+
+// Inline planning generation for /deep-research: the model proposes the
+// research plan by calling the startDeepResearch tool (needsApproval), which
+// pauses for the user. The actual research runs only after approval.
+export const generateDeepPlan = internalAction({
+  args: {
+    threadId: v.string(),
+    userId: v.string(),
+    promptMessageId: v.string(),
+    prompt: v.string(),
+    runId: v.id("agentRuns"),
+    agentKind: v.optional(v.union(v.literal("lite"), v.literal("pro"))),
+  },
+  handler: async (ctx, args) => {
+    const thread = await ctx.runQuery(components.agent.threads.getThread, {
+      threadId: args.threadId,
+    });
+    if (!thread || thread.userId !== args.userId) {
+      throwAppError({ message: "Thread not found", code: "thread_not_found" });
+    }
+    await runInlineGeneration(ctx, {
+      threadId: args.threadId,
+      userId: args.userId,
+      promptMessageId: args.promptMessageId,
+      runId: args.runId,
+      agentKind: args.agentKind ?? "pro",
+      prompt: args.prompt,
+      includeExecuteArtifact: false,
+      scheduleTitle: false,
+      deep: true,
+    });
+  },
+});
+
+// Minimal run status patch for deep research (whose runs use the workflow step
+// model, not inline observations — so completeInlineRun must not be used here).
+export const patchRunStatus = internalMutation({
+  args: {
+    ownerUserId: v.string(),
+    threadId: v.string(),
+    runId: v.id("agentRuns"),
+    status: v.union(
+      v.literal("running"),
+      v.literal("waiting"),
+      v.literal("completed"),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get("agentRuns", args.runId);
+    if (!run || run.ownerUserId !== args.ownerUserId || run.threadId !== args.threadId) {
+      return;
+    }
+    const now = Date.now();
+    await ctx.db.patch("agentRuns", args.runId, {
+      status: args.status,
+      updatedAt: now,
+      ...(args.status === "completed" ? { completedAt: now } : {}),
+    });
   },
 });
 
@@ -934,16 +1320,20 @@ export const generateThreadTitle = internalAction({
       threadId: args.threadId,
     });
     if (!thread || thread.userId !== args.userId) {
-      throw new ConvexError("Thread not found");
+      throwAppError({ message: "Thread not found", code: "thread_not_found" });
     }
 
     const fallbackTitle = threadTitleFromPrompt(args.prompt);
-    if (thread.title && thread.title !== "Thread baru" && thread.title !== fallbackTitle) {
+    if (
+      thread.title &&
+      thread.title !== DEFAULT_THREAD_TITLE &&
+      thread.title !== fallbackTitle
+    ) {
       return null;
     }
 
     const result = await generateObject({
-      model: chatProvider.chat(NORMAL_MODEL),
+      model: chatProvider.chat(CHAT_LITE_MODEL),
       maxOutputTokens: 80,
       schema: z.object({
         title: z
@@ -988,6 +1378,7 @@ export const startInlineRun = internalMutation({
     threadId: v.string(),
     promptMessageId: v.string(),
     prompt: v.string(),
+    agentKind: v.union(v.literal("lite"), v.literal("pro")),
   },
   handler: async (ctx, args): Promise<Id<"agentRuns">> => {
     const now = Date.now();
@@ -996,6 +1387,7 @@ export const startInlineRun = internalMutation({
       threadId: args.threadId,
       promptMessageId: args.promptMessageId,
       mode: "normal",
+      agentKind: args.agentKind,
       executionKind: "inline",
       promptSnapshot: args.prompt,
       status: "running",
@@ -1035,7 +1427,7 @@ export const completeInlineRun = internalMutation({
   handler: async (ctx, args) => {
     const run = await ctx.db.get("agentRuns", args.runId);
     if (!run || run.ownerUserId !== args.ownerUserId || run.threadId !== args.threadId) {
-      throw new ConvexError("Run not found");
+      throwAppError({ message: "Run not found", code: "run_not_found" });
     }
     const now = Date.now();
     const observations =
@@ -1160,45 +1552,6 @@ function isSourceCandidate(value: unknown): value is SourceCandidate {
   );
 }
 
-function collectArtifactResults(
-  steps: Array<{ toolResults?: Array<{ output?: unknown }> }>,
-) {
-  const results: Array<{
-    artifactId: Id<"artifacts">;
-    versionId: Id<"artifactVersions">;
-    relation: "created" | "updated";
-  }> = [];
-  for (const step of steps) {
-    for (const result of step.toolResults ?? []) {
-      if (isArtifactToolResult(result.output)) {
-        results.push(result.output);
-      }
-    }
-  }
-  return results;
-}
-
-function collectHitlResults(
-  steps: Array<{ toolResults?: Array<{ output?: unknown; toolName?: string }> }>,
-) {
-  const results: Array<{ toolName: string; sessionId?: string }> = [];
-  for (const step of steps) {
-    for (const result of step.toolResults ?? []) {
-      const toolName = result.toolName ?? "";
-      if (
-        toolName === "askHuman" ||
-        toolName === "presentPlan" ||
-        toolName === "presentWorkspacePlan" ||
-        toolName === "confirmAction"
-      ) {
-        const output = result.output as { sessionId?: string } | undefined;
-        results.push({ toolName, sessionId: output?.sessionId });
-      }
-    }
-  }
-  return results;
-}
-
 type ToolObservation = {
   stepKey: string;
   label: string;
@@ -1245,30 +1598,6 @@ function collectToolObservations(
         }
         continue;
       }
-      if (isArtifactToolResult(output)) {
-        observations.push({
-          stepKey: "artifact",
-          label: output.relation === "updated" ? "Memperbarui artifact" : "Membuat artifact",
-          summary: output.relation === "updated" ? "Artifact diperbarui" : "Artifact dibuat",
-          artifactCount: 1,
-          eventType: "artifact",
-          eventTitle: "Artifact",
-          eventSummary: `${output.relation}: ${output.artifactId}`,
-          metadataJson: JSON.stringify({ toolName, artifactId: output.artifactId, versionId: output.versionId }),
-        });
-        continue;
-      }
-      if (isHitlToolResult(output, toolName)) {
-        observations.push({
-          stepKey: "hitl",
-          label: "Menunggu konfirmasi",
-          summary: "Human-in-the-loop menunggu jawaban atau persetujuan",
-          eventType: "tool",
-          eventTitle: "HITL",
-          eventSummary: toolName,
-          metadataJson: JSON.stringify({ toolName, output }),
-        });
-      }
     }
   }
   return observations;
@@ -1278,26 +1607,7 @@ function inferToolName(output: unknown) {
   if (Array.isArray(output) && output.some(isSourceCandidate)) {
     return "searchWeb";
   }
-  if (isArtifactToolResult(output)) {
-    return output.relation === "updated" ? "updateArtifact" : "createArtifact";
-  }
-  if (typeof output === "object" && output !== null && "sessionId" in output) {
-    return "presentPlan";
-  }
   return "tool";
-}
-
-function isHitlToolResult(output: unknown, toolName: string) {
-  return (
-    toolName === "askHuman" ||
-    toolName === "presentPlan" ||
-    toolName === "presentWorkspacePlan" ||
-    toolName === "confirmAction" ||
-    (typeof output === "object" &&
-      output !== null &&
-      "sessionId" in output &&
-      "cardId" in output)
-  );
 }
 
 function providerLabel(candidates: SourceCandidate[]) {
@@ -1305,26 +1615,6 @@ function providerLabel(candidates: SourceCandidate[]) {
     ...new Set(candidates.map((candidate) => candidate.provider ?? candidate.origin)),
   ];
   return providers.length > 0 ? providers.join(", ") : "provider eksternal";
-}
-
-function isArtifactToolResult(value: unknown): value is {
-  artifactId: Id<"artifacts">;
-  versionId: Id<"artifactVersions">;
-  relation: "created" | "updated";
-} {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const result = value as {
-    artifactId?: unknown;
-    versionId?: unknown;
-    relation?: unknown;
-  };
-  return (
-    typeof result.artifactId === "string" &&
-    typeof result.versionId === "string" &&
-    (result.relation === "created" || result.relation === "updated")
-  );
 }
 
 function getVisibleAssistantMessageId(
@@ -1392,10 +1682,21 @@ export const markThreadIdle = internalMutation({
   args: {
     ownerUserId: v.string(),
     threadId: v.string(),
+    runId: v.optional(v.id("agentRuns")),
     preview: v.string(),
     incrementMessageCount: v.boolean(),
   },
   handler: async (ctx, args) => {
+    if (
+      args.runId &&
+      (await hasOtherActiveReplyRun(ctx, {
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+        runId: args.runId,
+      }))
+    ) {
+      return;
+    }
     await upsertThreadMetadata(ctx, {
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
@@ -1410,9 +1711,20 @@ export const markThreadFailed = internalMutation({
   args: {
     ownerUserId: v.string(),
     threadId: v.string(),
+    runId: v.optional(v.id("agentRuns")),
     preview: v.string(),
   },
   handler: async (ctx, args) => {
+    if (
+      args.runId &&
+      (await hasOtherActiveReplyRun(ctx, {
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+        runId: args.runId,
+      }))
+    ) {
+      return;
+    }
     await upsertThreadMetadata(ctx, {
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
@@ -1457,31 +1769,54 @@ export const recordUsage = internalMutation({
     inputTokens: v.number(),
     outputTokens: v.number(),
     totalTokens: v.number(),
+    agentKind: v.optional(v.union(v.literal("lite"), v.literal("pro"))),
   },
-  handler: async (ctx, args) => {
-    await Promise.all([
-      rateLimiter.limit(ctx, "tokenUsagePerUser", {
-        key: args.ownerUserId,
+  handler: async (ctx, { agentKind, ...args }) => {
+    // Observe-only: record global token throughput so the pre-send check can act
+    // as a system-wide safety valve, but NEVER throw here. This mutation runs in
+    // the usage handler AFTER the reply is already generated; throwing would crash
+    // a completed reply. `throws: false` covers normal over-limit; the try/catch
+    // covers the hard "count exceeds capacity" error the component raises when a
+    // single turn's tokens exceed the bucket capacity.
+    try {
+      const globalStatus = await rateLimiter.limit(ctx, "globalTokenUsage", {
         count: args.totalTokens,
-      }),
-      rateLimiter.limit(ctx, "globalTokenUsage", { count: args.totalTokens }),
-    ]);
+        throws: false,
+      });
+      if (!globalStatus.ok) {
+        console.warn("globalTokenUsage soft limit reached", {
+          totalTokens: args.totalTokens,
+          retryAfter: globalStatus.retryAfter,
+        });
+      }
+    } catch (error) {
+      console.warn("globalTokenUsage recording skipped", {
+        totalTokens: args.totalTokens,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    // Attribute billing to the run's agent tier (agentKind); fall back to the
+    // model string only for legacy/in-flight runs without it (AUD-02).
+    const feature = featureForUsage({
+      agentKind,
+      isProModel: args.model === CHAT_PRO_MODEL,
+    });
     await ctx.db.insert("usageLedger", {
       ...args,
-      model: args.model || NORMAL_MODEL,
+      model: args.model || CHAT_LITE_MODEL,
       createdAt: Date.now(),
     });
     await recordProviderUsage(ctx, {
       ownerUserId: args.ownerUserId,
       threadId: args.threadId,
-      feature: "normal_chat",
+      feature,
       provider: args.provider,
-      model: args.model || NORMAL_MODEL,
+      model: args.model || CHAT_LITE_MODEL,
       inputTokens: args.inputTokens,
       outputTokens: args.outputTokens,
       totalTokens: args.totalTokens,
       credits: estimateCredits({
-        feature: "normal_chat",
+        feature,
         inputTokens: args.inputTokens,
         outputTokens: args.outputTokens,
         totalTokens: args.totalTokens,

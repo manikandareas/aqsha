@@ -19,7 +19,11 @@ export default async function SignUpPage() {
         path="/sign-up"
         routing="path"
         signInUrl="/sign-in"
-        fallbackRedirectUrl="/app"
+        // A brand-new account is by definition not onboarded — send it straight
+        // to onboarding so it never flashes /app before the gate redirects.
+        // `force` overrides the global env fallback and any redirect_url.
+        forceRedirectUrl="/onboarding"
+        fallbackRedirectUrl="/onboarding"
       />
     </main>
   );

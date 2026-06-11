@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
-import type { ExternalCandidate } from "../convex/agent/externalProviders";
+import type { ExternalCandidate } from "../convex/agent/providers/externalProviders";
 import {
   buildOpenAlexWorksUrl,
   openAlexWorkToCandidate,
   reconstructOpenAlexAbstract,
   searchOpenAlexWorks,
-} from "../convex/agent/openalexProvider";
+} from "../convex/agent/providers/openalexProvider";
 import {
   candidatesToExplorePapers,
   exploreCacheKey,
-} from "../convex/exploreModel";
+} from "../convex/explore/model";
 
 describe("explore paper model", () => {
   it("maps OpenAlex works into paper metadata", () => {
@@ -191,7 +191,19 @@ describe("explore paper model", () => {
         limit: 12,
         now: Date.UTC(2026, 4, 27, 3),
       }),
-    ).toBe("explore:v2:recommendations::12:2026-05-27");
+    ).toBe("explore:v2:recommendations::12:all:2026-05-27");
+  });
+
+  it("buckets explore cache keys by fromYear when set", () => {
+    expect(
+      exploreCacheKey({
+        mode: "search",
+        query: "rag",
+        limit: 12,
+        fromYear: 2023,
+        now: Date.UTC(2026, 4, 27, 3),
+      }),
+    ).toBe("explore:v2:search:rag:12:2023:2026-05-27");
   });
 });
 

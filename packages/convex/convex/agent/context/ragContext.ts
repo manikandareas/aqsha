@@ -1,0 +1,115 @@
+"use node";
+
+import { v } from "convex/values";
+import { internal } from "../../_generated/api";
+import type { Id } from "../../_generated/dataModel";
+import { internalAction, type ActionCtx } from "../../_generated/server";
+import { embeddingProviderConfig } from "../providers/providers";
+import { artifactRag, artifactRagNamespace } from "./rag";
+
+const RAG_CONTEXT_LIMIT = 6_000;
+
+async function retrieveThreadDocumentContext(
+  ctx: ActionCtx,
+  args: {
+    ownerUserId: string;
+    threadId: string;
+    query: string;
+    messageAttachmentArtifactIds?: Id<"artifacts">[];
+  },
+): Promise<string> {
+  if (!embeddingProviderConfig.enabled || !args.query.trim()) {
+    return "";
+  }
+  const [artifactTargets, workspaceTargets] = await Promise.all([
+    ctx.runQuery(internal.agent.context.threadContext.listRagTargetsForThread, {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
+    }),
+    ctx.runQuery(
+      internal.agent.context.threadContextWorkspaces.listWorkspaceRagTargetsForThread,
+      {
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+      },
+    ),
+  ]);
+  if (artifactTargets.length === 0 && workspaceTargets.length === 0) {
+    return "";
+  }
+
+  // Paper chips filter by artifactId; whole-workspace chips filter by
+  // workspaceId. The RAG search ORs all filter entries, so this retrieves
+  // chunks belonging to any pinned paper or any referenced workspace. Whole
+  // workspaces are retrieved (never full-stuffed) and bounded by RAG_CONTEXT_LIMIT.
+  const filters = [
+    ...artifactTargets.map((target) => ({
+      name: "artifactId" as const,
+      value: target.artifactId,
+    })),
+    ...workspaceTargets.map((target) => ({
+      name: "workspaceId" as const,
+      value: target.workspaceId,
+    })),
+  ];
+
+  try {
+    const search = await artifactRag.search(ctx, {
+      namespace: artifactRagNamespace(args.ownerUserId),
+      query: args.query,
+      filters,
+      limit: Math.min(
+        12,
+        Math.max(3, artifactTargets.length * 2 + workspaceTargets.length * 4),
+      ),
+      chunkContext: { before: 1, after: 1 },
+      vectorScoreThreshold: 0.35,
+    });
+    const text = clipText(search.text, RAG_CONTEXT_LIMIT);
+    if (!text) {
+      return "";
+    }
+    return [
+      "<retrieved_document_context>",
+      "These excerpts were retrieved semantically from the user's uploaded and selected thread documents. Use them when relevant and prefer them over weaker guesses.",
+      "",
+      text,
+      "</retrieved_document_context>",
+    ].join("\n");
+  } catch (error) {
+    console.warn("Failed to retrieve RAG context", error);
+    return "";
+  }
+}
+
+export const buildRagContextForThread = internalAction({
+  args: {
+    ownerUserId: v.string(),
+    threadId: v.string(),
+    query: v.string(),
+    messageAttachmentArtifactIds: v.optional(v.array(v.id("artifacts"))),
+  },
+  handler: async (ctx, args): Promise<string> => {
+    return await retrieveThreadDocumentContext(ctx, args);
+  },
+});
+
+export const searchThreadDocuments = internalAction({
+  args: {
+    ownerUserId: v.string(),
+    threadId: v.string(),
+    query: v.string(),
+  },
+  handler: async (ctx, args): Promise<string> => {
+    return await retrieveThreadDocumentContext(ctx, args);
+  },
+});
+
+function clipText(value: string, limit: number) {
+  const compact = value.replace(/\s+/g, " ").trim();
+  if (compact.length <= limit) {
+    return compact;
+  }
+  return `${compact.slice(0, Math.max(0, limit - 3)).trimEnd()}...`;
+}

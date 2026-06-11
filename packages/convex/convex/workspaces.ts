@@ -1,17 +1,18 @@
 import { paginationOptsValidator } from "convex/server";
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireCurrentUser } from "./auth";
-import { assertWorkspaceOwner, normalizeName } from "./workspaceAccess";
+import { assertWorkspaceOwner, normalizeName } from "./workspaces/access";
+import { throwAppError } from "./lib/appError";
 import { PLAN_CATALOG } from "./billing/catalog";
 import { getBillingSnapshot } from "./billing/entitlements";
 import {
   isValidStoredWorkspaceEmoji,
   normalizeWorkspaceEmoji,
   workspaceEmojiForNewWorkspace,
-} from "./workspaceEmoji";
+} from "./workspaces/emoji";
 
 export const list = query({
   args: {
@@ -59,18 +60,21 @@ export const listActionsForMessage = query({
         q.eq("ownerUserId", user._id).eq("messageId", args.messageId),
       )
       .collect();
-    const results = [];
-    for (const row of rows) {
-      const workspace = await ctx.db.get("workspaces", row.workspaceId);
-      if (!workspace) {
-        continue;
-      }
-      results.push({
-        workspaceId: row.workspaceId,
-        action: row.action,
-        workspaceName: workspace.name,
-      });
-    }
+    const results = (
+      await Promise.all(
+        rows.map(async (row) => {
+          const workspace = await ctx.db.get("workspaces", row.workspaceId);
+          if (!workspace) {
+            return null;
+          }
+          return {
+            workspaceId: row.workspaceId,
+            action: row.action,
+            workspaceName: workspace.name,
+          };
+        }),
+      )
+    ).filter((result) => result !== null);
     return results;
   },
 });
@@ -79,6 +83,7 @@ export const create = mutation({
   args: {
     name: v.string(),
   },
+  returns: v.id("workspaces"),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     return await createWorkspaceForOwner(ctx, {
@@ -107,6 +112,7 @@ export const rename = mutation({
     workspaceId: v.id("workspaces"),
     name: v.string(),
   },
+  returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     await renameWorkspaceForOwner(ctx, {
@@ -123,6 +129,7 @@ export const updateEmoji = mutation({
     workspaceId: v.id("workspaces"),
     emoji: v.string(),
   },
+  returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     await assertWorkspaceOwner(ctx, args.workspaceId, user._id);
@@ -148,6 +155,7 @@ export const renameFromAgentInternal = internalMutation({
 
 export const archive = mutation({
   args: { workspaceId: v.id("workspaces") },
+  returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     const workspace = await assertWorkspaceOwner(ctx, args.workspaceId, user._id);
@@ -273,8 +281,12 @@ async function assertWorkspaceCapacity(
     .withIndex("by_owner_status_updated", (q) =>
       q.eq("ownerUserId", ownerUserId).eq("status", "active"),
     )
-    .collect();
+    .take(limit + 1);
   if (activeWorkspaces.length >= limit) {
-    throw new ConvexError("Workspace limit reached for current plan");
+    throwAppError({
+      message: "Workspace limit reached for current plan",
+      code: "workspace_limit_reached",
+      severity: "warning",
+    });
   }
 }

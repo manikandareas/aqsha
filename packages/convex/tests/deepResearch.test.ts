@@ -10,8 +10,8 @@ import {
   type DiscoveryCandidate,
   type ReadAttempt,
   type ResearchExtract,
-} from "../convex/agent/deepResearch";
-import { assessSourceQuality, canonicalSourceKey } from "../convex/agent/sourceQuality";
+} from "../convex/agent/research/deepResearch";
+import { assessSourceQuality, canonicalSourceKey } from "../convex/agent/research/sourceQuality";
 
 const expectedStepLabels = [
   "Merencanakan ronde",

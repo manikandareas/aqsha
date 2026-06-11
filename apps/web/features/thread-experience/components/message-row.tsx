@@ -2,6 +2,7 @@
 
 import { api } from "@aqsha/convex/api";
 import {
+  AlertCircleIcon,
   BracesIcon,
   CheckIcon,
   Code2Icon,
@@ -22,7 +23,7 @@ import {
 } from "@aqsha/ui/icons";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Message,
@@ -37,11 +38,19 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   toAgentRunId,
   toArtifactId,
   toWorkspaceId,
   type AgentRunId,
 } from "@/lib/convex-refs";
+import { parseMentionSegments } from "@/lib/context-refs";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
 import {
   useConvexMutationFn,
@@ -58,6 +67,8 @@ import type {
 } from "../types";
 import { ThreadActivityIndicator } from "./shared";
 import { MessageWorkspaceActions } from "./message-workspace-actions";
+import { MessageHitlParts } from "./message-hitl-parts";
+import type { HitlActions } from "./use-hitl-resume";
 
 export function MessageRow({
   message,
@@ -65,19 +76,24 @@ export function MessageRow({
   onRetryRun,
   sourceCount = 0,
   threadWorkspaceId,
+  hitlActions,
+  hitlDisabled,
 }: {
   message: ChatMessage;
   assistantRun?: ResearchRun;
   onRetryRun?: (args: { runId: AgentRunId }) => Promise<unknown>;
   sourceCount?: number;
   threadWorkspaceId?: string;
+  hitlActions?: HitlActions;
+  hitlDisabled?: boolean;
 }) {
   const isUser = message.role === "user";
   const isStreaming = message.status === "streaming";
+  const isFailed = message.status === "failed";
   const text = getMessageText(message);
   const hasText = Boolean(text.trim());
   const messageArtifacts = useConvexQueryData(
-    api.agent.artifacts.listForMessage,
+    api.agent.tools.artifacts.listForMessage,
     !isUser && message.id ? { messageId: message.id } : "skip",
   ) as MessageArtifactLink[] | undefined;
   const workspaceActions = useConvexQueryData(
@@ -88,20 +104,36 @@ export function MessageRow({
   if (isUser) {
     const promptCommand = message.metadata?.promptCommand;
     const contextArtifacts = message.metadata?.contextArtifacts ?? [];
+    // Uploaded files keep their card (they carry a save-to-workspace action).
+    // @mentions are encoded inline in the message text (markers) and render as
+    // pills at the exact position the user typed them.
+    const uploadedArtifacts = contextArtifacts.filter(
+      (artifact) => artifact.source === "upload",
+    );
+    // Prefer the marked rich content (mention pills in place); fall back to the
+    // plain message text (older messages, or no mentions).
+    const sourceText = message.metadata?.richContent ?? text;
     const displayText = promptCommand
-      ? stripVisibleCommandText(text, promptCommand)
-      : text;
+      ? stripVisibleCommandText(sourceText, promptCommand)
+      : sourceText;
+    const segments = parseMentionSegments(displayText);
     return (
       <div className="flex w-full min-w-0 flex-col items-end gap-2 overflow-x-hidden">
-        {contextArtifacts.length > 0 ? (
+        {uploadedArtifacts.length > 0 ? (
           <UserMessageContextArtifacts
-            artifacts={contextArtifacts}
+            artifacts={uploadedArtifacts}
             threadWorkspaceId={threadWorkspaceId}
           />
         ) : null}
         <div className="max-w-full whitespace-pre-wrap break-words rounded-[14px] border border-border/80 bg-card px-4 py-2.5 text-[13px] leading-[1.55] text-foreground sm:max-w-[560px]">
           {promptCommand ? <PromptCommandChip command={promptCommand} /> : null}
-          {displayText}
+          {segments.map((segment, index) =>
+            segment.type === "mention" ? (
+              <MessageMentionPill key={`m-${index}`} label={segment.label} />
+            ) : (
+              <Fragment key={`t-${index}`}>{segment.value}</Fragment>
+            ),
+          )}
         </div>
         <MessageWorkspaceActions actions={workspaceActions ?? []} align="end" />
       </div>
@@ -111,7 +143,16 @@ export function MessageRow({
   return (
     <Message from="assistant" className="min-w-0 overflow-x-hidden">
       <MessageContent className="w-full min-w-0 overflow-hidden bg-transparent p-0 text-[13px] leading-[1.55] text-ink-soft">
-        {hasText ? (
+        {isFailed ? (
+          <div className="flex items-start gap-2 rounded-[10px] border border-coral-soft-border bg-coral-soft px-3 py-2.5 text-[13px] font-medium leading-[1.55] text-coral-foreground">
+            <AlertCircleIcon className="mt-0.5 size-4 shrink-0" />
+            <span>
+              {hasText
+                ? text
+                : "Astra belum bisa menjawab pesan ini. Coba kirim ulang sebentar lagi."}
+            </span>
+          </div>
+        ) : hasText ? (
           <MessageResponse className="aqsha-prose aqsha-prose-message">
             {text}
           </MessageResponse>
@@ -120,6 +161,13 @@ export function MessageRow({
         ) : null}
       </MessageContent>
       <MessageArtifacts links={messageArtifacts ?? []} />
+      {hitlActions ? (
+        <MessageHitlParts
+          message={message}
+          actions={hitlActions}
+          disabled={hitlDisabled}
+        />
+      ) : null}
       <MessageSourceCount sourceCount={sourceCount} />
       {hasText ? (
         <AssistantMessageActions
@@ -226,6 +274,30 @@ type MessageArtifactLink = {
   version: NonNullable<ResearchArtifact["version"]> | null;
   linkKind?: "versioned" | "workspace";
 };
+
+function messagePillClass(tone: "context" | "default" | "deep") {
+  const base =
+    "mr-1 inline-flex translate-y-[-1px] items-center rounded-[5px] px-1 align-middle font-semibold leading-[18px] underline decoration-2 underline-offset-4";
+  switch (tone) {
+    case "default":
+      return cn(base, "bg-primary/10 text-primary decoration-primary/55");
+    case "deep":
+      return cn(
+        base,
+        "bg-lavender-soft text-lavender-foreground decoration-lavender-foreground/55",
+      );
+    default:
+      return cn(base, "bg-foreground/8 text-foreground decoration-foreground/30");
+  }
+}
+
+function MessageMentionPill({ label }: { label: string }) {
+  return (
+    <span contentEditable={false} className={messagePillClass("context")}>
+      {label}
+    </span>
+  );
+}
 
 function UserMessageContextArtifacts({
   artifacts,
@@ -511,50 +583,92 @@ function getArtifactTypePresentation(artifactType: string | undefined) {
 
 function MessageArtifacts({ links }: { links: MessageArtifactLink[] }) {
   const router = useRouter();
+  const [reportLink, setReportLink] = useState<MessageArtifactLink | null>(null);
   if (links.length === 0) return null;
 
   return (
-    <div className="mt-3 grid gap-2">
-      {links.map((link) => {
-        const workspaceId = link.artifact.workspaceId;
-        const canOpen = Boolean(workspaceId) && link.relation !== "deleted";
-        const presentation = getArtifactTypePresentation(link.artifact.artifactType);
-        const Icon = presentation.Icon;
+    <>
+      <div className="mt-3 grid gap-2">
+        {links.map((link) => {
+          const workspaceId = link.artifact.workspaceId;
+          const reportBody = link.version?.body;
+          // Workspace artifacts open in the workspace detail page; thread-only
+          // artifacts (e.g. Deep Research reports, which have no workspace) open
+          // inline in a dialog from their markdown body.
+          const canOpenWorkspace =
+            Boolean(workspaceId) && link.relation !== "deleted";
+          const canOpenReport =
+            !canOpenWorkspace && Boolean(reportBody) && link.relation !== "deleted";
+          const canOpen = canOpenWorkspace || canOpenReport;
+          const presentation = getArtifactTypePresentation(link.artifact.artifactType);
+          const Icon = presentation.Icon;
 
-        return (
-          <button
-            key={`${link.artifactId}-${link.versionId ?? "workspace"}`}
-            type="button"
-            disabled={!canOpen}
-            onClick={() => {
-              if (!workspaceId) return;
-              router.push(`/app/workspaces/${workspaceId}/artifacts/${link.artifactId}`);
-            }}
-            className={cn(
-              "flex max-w-xl items-center gap-3 rounded-[10px] border border-lavender-soft-border bg-lavender-soft px-3 py-2 text-left text-[13px] text-lavender-foreground transition-colors",
-              canOpen ? "hover:bg-lavender-soft" : "cursor-default bg-muted text-muted-foreground",
-            )}
-          >
-            <Icon className="size-4 shrink-0" />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate font-semibold">
-                {link.artifact.title}
+          return (
+            <button
+              key={`${link.artifactId}-${link.versionId ?? "workspace"}`}
+              type="button"
+              disabled={!canOpen}
+              onClick={() => {
+                if (canOpenWorkspace && workspaceId) {
+                  router.push(`/app/workspaces/${workspaceId}/artifacts/${link.artifactId}`);
+                  return;
+                }
+                if (canOpenReport) {
+                  setReportLink(link);
+                }
+              }}
+              className={cn(
+                "flex max-w-xl items-center gap-3 rounded-[10px] border border-lavender-soft-border bg-lavender-soft px-3 py-2 text-left text-[13px] text-lavender-foreground transition-colors",
+                canOpen ? "hover:bg-lavender-soft" : "cursor-default bg-muted text-muted-foreground",
+              )}
+            >
+              <Icon className="size-4 shrink-0" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-semibold">
+                  {link.artifact.title}
+                </span>
+                <span className="block text-[11px] font-medium text-muted-foreground">
+                  {link.relation === "deleted"
+                    ? "Dihapus dari workspace"
+                    : link.relation === "updated"
+                      ? "Diperbarui di workspace"
+                      : link.linkKind === "workspace" || workspaceId
+                        ? "Artefak workspace"
+                        : "Ketuk untuk membuka"}
+                  {link.version ? ` · v${link.version.versionNumber}` : ""}
+                </span>
               </span>
-              <span className="block text-[11px] font-medium text-muted-foreground">
-                {link.relation === "deleted"
-                  ? "Dihapus dari workspace"
-                  : link.relation === "updated"
-                    ? "Diperbarui di workspace"
-                    : link.linkKind === "workspace" || workspaceId
-                      ? "Artefak workspace"
-                      : "Artefak"}
-                {link.version ? ` · v${link.version.versionNumber}` : ""}
-              </span>
-            </span>
-          </button>
-        );
-      })}
-    </div>
+            </button>
+          );
+        })}
+      </div>
+      <Dialog
+        open={reportLink !== null}
+        onOpenChange={(open) => {
+          if (!open) setReportLink(null);
+        }}
+      >
+        <DialogContent className="flex max-h-[85svh] w-[min(92vw,820px)] max-w-none flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="border-b border-border/60 px-5 py-3.5 text-left">
+            <DialogTitle className="text-[15px]">
+              {reportLink?.artifact.title ?? "Artefak"}
+            </DialogTitle>
+            <DialogDescription className="text-[12px]">
+              {reportLink?.version
+                ? `Laporan riset · v${reportLink.version.versionNumber}`
+                : "Laporan riset"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+            {reportLink?.version?.body ? (
+              <MessageResponse className="aqsha-prose aqsha-prose-message">
+                {reportLink.version.body}
+              </MessageResponse>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -573,14 +687,9 @@ function PromptCommandChip({ command }: { command: PromptCommandMetadata }) {
   return (
     <span
       contentEditable={false}
-      className={cn(
-        "mr-1.5 inline-flex translate-y-[-1px] items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-none",
-        command.mode === "deep"
-          ? "border-lavender-soft-border bg-lavender-soft text-lavender-foreground"
-          : "border-sky-soft-border bg-sky-soft text-sky-foreground",
-      )}
+      className={messagePillClass(command.mode === "deep" ? "deep" : "default")}
     >
-      {command.commandSlug}
+      {command.commandSlug.replace(/^\//, "")}
     </span>
   );
 }

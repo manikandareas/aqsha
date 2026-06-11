@@ -1,6 +1,5 @@
 "use client";
 
-import { AppSidebar } from "@/components/app-sidebar";
 import { DetailSplitLayout } from "@/components/layout/detail-split-layout";
 import { useSidebar } from "@/components/ui/sidebar";
 import { ThreadChatSurface } from "./chat-thread-state";
@@ -8,16 +7,10 @@ import type { ThreadShellLayoutProps } from "./component-types";
 import { AccessDeniedState } from "./home-states";
 import { ThreadHeader } from "./thread-header";
 
-const emptyWorkspaces: ThreadShellLayoutProps["workspaces"] = [];
-
 export function ThreadShellLayout({
-  viewer,
-  workspaces = emptyWorkspaces,
   threads,
-  selectedThreadId,
   onCreateThread,
   onSelectThread,
-  createWorkspace,
   title,
   threadId,
   selectedThread,
@@ -32,7 +25,6 @@ export function ThreadShellLayout({
   onCancelRun,
   onRetryRun,
   onDeleteThread,
-  removeThread,
   sidePanel,
   contextArtifacts,
   onRemoveContextArtifact,
@@ -44,19 +36,8 @@ export function ThreadShellLayout({
   const showContextPanel = Boolean(sidePanel);
 
   return (
-    <>
-      <AppSidebar
-        viewer={viewer}
-        workspaces={workspaces}
-        selectedWorkspaceId={selectedThread?.workspaceId}
-        threads={threads}
-        selectedThreadId={selectedThreadId}
-        onCreateThread={onCreateThread}
-        createWorkspace={createWorkspace}
-        removeThread={removeThread}
-      />
-      <div className="flex h-svh min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
-        <DetailSplitLayout
+    <div className="flex h-svh min-h-0 min-w-0 flex-col overflow-hidden bg-background">
+      <DetailSplitLayout
           sideOpen={showContextPanel && rightPanelOpen}
           onSideOpenChange={onRightPanelOpenChange}
           main={
@@ -101,7 +82,6 @@ export function ThreadShellLayout({
           }
           side={sidePanel}
         />
-      </div>
-    </>
+    </div>
   );
 }

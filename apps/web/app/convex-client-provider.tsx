@@ -6,11 +6,14 @@ import { ConvexQueryClient } from "@convex-dev/react-query";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ConvexReactClient } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
+import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { api } from "@aqsha/convex/api";
+import { AppLoadingOverlay } from "@/components/app-loading-overlay";
 import {
   useConvexAuth,
   useConvexMutationState,
+  useConvexQueryData,
 } from "@/lib/convex-query";
 
 export function ConvexClientProvider({
@@ -59,7 +62,9 @@ export function ConvexClientProvider({
   return (
     <ConvexProviderWithClerk client={clients.convex} useAuth={useAuth}>
       <QueryClientProvider client={clients.queryClient}>
-        <AuthenticatedUserSync>{children}</AuthenticatedUserSync>
+        <AuthenticatedUserSync>
+          <OnboardingGate>{children}</OnboardingGate>
+        </AuthenticatedUserSync>
       </QueryClientProvider>
     </ConvexProviderWithClerk>
   );
@@ -104,6 +109,49 @@ function AuthenticatedUserSync({ children }: { children: ReactNode }) {
     syncCurrentUserAsync,
     userId,
   ]);
+
+  return <>{children}</>;
+}
+
+// Auto-serves onboarding to any signed-in user who hasn't finished it yet —
+// covers both fresh sign-ups and returning sign-ins, since the decision is
+// based on persisted state (api.onboarding.getStatus), not the auth event.
+// Only redirects from product routes (/app*); /onboarding itself is top-level
+// and excluded, so there is no redirect loop.
+function OnboardingGate({ children }: { children: ReactNode }) {
+  const { isAuthenticated: isConvexAuthenticated, isLoading: isConvexLoading } =
+    useConvexAuth();
+  const { isLoaded: isClerkLoaded, isSignedIn } = useAuth();
+  const pathname = usePathname();
+  const router = useRouter();
+
+  const ready =
+    isClerkLoaded && isSignedIn && !isConvexLoading && isConvexAuthenticated;
+  const status = useConvexQueryData(
+    api.onboarding.getStatus,
+    ready ? {} : "skip",
+  );
+
+  const onProductRoute = pathname?.startsWith("/app") ?? false;
+  const redirecting = ready && status?.completed === false && onProductRoute;
+
+  useEffect(() => {
+    if (redirecting) {
+      router.replace("/onboarding");
+    }
+  }, [redirecting, router]);
+
+  // While redirecting a not-yet-onboarded user off a product route, render a
+  // neutral loader instead of the app so the destination shell never flashes
+  // behind the redirect.
+  if (redirecting) {
+    return (
+      <AppLoadingOverlay
+        label="Menyiapkan onboarding"
+        messages={["Mengarahkan kamu ke langkah berikutnya"]}
+      />
+    );
+  }
 
   return <>{children}</>;
 }

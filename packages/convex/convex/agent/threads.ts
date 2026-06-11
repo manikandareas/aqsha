@@ -1,10 +1,12 @@
 import { createThread } from "@convex-dev/agent";
 import { paginationOptsValidator } from "convex/server";
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 import { components } from "../_generated/api";
 import { mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { requireCurrentUser } from "../auth";
-import { assertWorkspaceOwner } from "../workspaceAccess";
+import { assertWorkspaceOwner } from "../workspaces/access";
+import { throwAppError } from "../lib/appError";
+import { DEFAULT_THREAD_TITLE } from "./threadTitles";
 
 type ThreadCtx = QueryCtx | MutationCtx | ActionCtx;
 
@@ -17,6 +19,7 @@ const threadSummaryValidator = v.object({
   lastMessagePreview: v.string(),
   messageCount: v.number(),
   status: v.union(v.literal("idle"), v.literal("streaming"), v.literal("failed")),
+  lastAgentKind: v.optional(v.union(v.literal("lite"), v.literal("pro"))),
 });
 
 const threadPageValidator = v.object({
@@ -49,12 +52,13 @@ async function summarizeThread(ctx: QueryCtx, thread: {
   return {
     threadId: thread._id,
     workspaceId: metadata?.workspaceId,
-    title: thread.title ?? "Thread baru",
+    title: thread.title ?? DEFAULT_THREAD_TITLE,
     createdAt: thread._creationTime,
     lastActivityAt: metadata?.lastActivityAt ?? thread._creationTime,
     lastMessagePreview: metadata?.lastMessagePreview ?? "",
     messageCount: metadata?.messageCount ?? 0,
     status: metadata?.status ?? "idle",
+    lastAgentKind: metadata?.lastAgentKind,
   };
 }
 
@@ -74,7 +78,7 @@ export async function tryAssertThreadOwner(ctx: ThreadCtx, threadId: string) {
 export async function assertThreadOwner(ctx: ThreadCtx, threadId: string) {
   const thread = await tryAssertThreadOwner(ctx, threadId);
   if (!thread) {
-    throw new ConvexError("Thread not found");
+    throwAppError({ message: "Thread not found", code: "thread_not_found" });
   }
   return thread;
 }
@@ -92,7 +96,7 @@ export const create = mutation({
     if (args.workspaceId) {
       await assertWorkspaceOwner(ctx, args.workspaceId, user._id, { requireActive: true });
     }
-    const title = args.title?.trim() || "Thread baru";
+    const title = args.title?.trim() || DEFAULT_THREAD_TITLE;
     const threadId = await createThread(ctx, components.agent, {
       userId: user._id,
       title,
@@ -251,7 +255,11 @@ export const remove = mutation({
     }
 
     if (!isDone) {
-      throw new ConvexError("Thread deletion is still in progress. Try again.");
+      throwAppError({
+        message: "Thread deletion is still in progress. Try again.",
+        code: "thread_delete_in_progress",
+        severity: "warning",
+      });
     }
 
     return { ok: true as const };

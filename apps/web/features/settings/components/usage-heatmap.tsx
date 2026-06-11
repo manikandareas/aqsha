@@ -2,7 +2,8 @@ import { cn } from "@/lib/utils";
 import type { ActivityRow } from "../lib/types";
 
 const featureLabels: Record<keyof ActivityRow["featureCounts"], string> = {
-  normal_chat: "Chat biasa",
+  normal_chat: "Chat Astra Lite",
+  pro_chat: "Chat Astra Pro",
   cited_answer: "Jawaban dengan sitasi",
   deep_research: "Deep research",
   external_search: "Pencarian eksternal",
@@ -65,6 +66,7 @@ function FeatureBreakdown({ rows }: { rows: ActivityRow[] }) {
     },
     {
       normal_chat: 0,
+      pro_chat: 0,
       cited_answer: 0,
       deep_research: 0,
       external_search: 0,

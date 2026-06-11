@@ -1,5 +1,5 @@
 import type { MutationCtx, QueryCtx } from "../_generated/server";
-import { ensureDefaultWorkspaceForOwner } from "../workspaceDefaults";
+import { ensureDefaultWorkspaceForOwner } from "../workspaces/defaults";
 import type { AuthCtx, CurrentUser, DbAuthCtx, Identity, UserDoc } from "./types";
 
 export async function getAuthenticatedIdentity(ctx: AuthCtx): Promise<Identity> {

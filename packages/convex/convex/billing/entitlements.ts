@@ -1,10 +1,11 @@
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import {
   internalMutation,
   type MutationCtx,
   type QueryCtx,
 } from "../_generated/server";
+import { throwAppError } from "../lib/appError";
 import {
   billingStatusAllowsUsage,
   currentMonthPeriod,
@@ -24,13 +25,18 @@ import {
 } from "./catalog";
 import { getAdminBillingOverride } from "./admin";
 import { polar } from "./polar";
+import { emptyFeatureCounts, type UsageFeature } from "./usageShape";
 
 const featureValidator = v.union(
   v.literal("normal_chat"),
+  v.literal("pro_chat"),
   v.literal("cited_answer"),
   v.literal("deep_research"),
   v.literal("external_search"),
+  v.literal("sandbox_compute"),
 );
+
+const agentKindValidator = v.union(v.literal("lite"), v.literal("pro"));
 
 const runIdValidator = v.id("agentRuns");
 
@@ -208,12 +214,13 @@ export async function requireEntitlement(
     return entitlementFailure("billing_inactive", snapshot.planKey, requiredPlan, period);
   }
   if (args.feature === "deep_research") {
-    const deepResearchRunsUsed = await countDeepResearchRuns(ctx, {
+    const limitReached = await deepResearchRunsLimitReached(ctx, {
       ownerUserId: args.ownerUserId,
       startedAt: period.startedAt,
       resetAt: period.resetAt,
+      limit: PLAN_CATALOG[snapshot.planKey].deepResearchRuns,
     });
-    if (deepResearchRunsUsed >= PLAN_CATALOG[snapshot.planKey].deepResearchRuns) {
+    if (limitReached) {
       return entitlementFailure("quota_exceeded", snapshot.planKey, requiredPlan, period);
     }
   }
@@ -292,6 +299,13 @@ export async function consumeCredits(
     metadataJson: args.metadataJson,
     createdAt: now,
   });
+  await bumpUsageDailyRollup(ctx, {
+    ownerUserId: args.ownerUserId,
+    createdAt: now,
+    feature: args.feature,
+    credits: args.credits,
+    estimatedCostCents,
+  });
 
   return {
     ...entitlement,
@@ -358,6 +372,68 @@ export async function recordProviderUsage(
     metadataJson: args.metadataJson,
     createdAt: now,
   });
+  await bumpUsageDailyRollup(ctx, {
+    ownerUserId: args.ownerUserId,
+    createdAt: now,
+    feature: args.feature,
+    credits: args.credits,
+    estimatedCostCents,
+  });
+}
+
+// Returns the UTC calendar day ("YYYY-MM-DD") for an epoch-ms timestamp.
+export function utcDateString(epochMs: number): string {
+  return new Date(epochMs).toISOString().slice(0, 10);
+}
+
+// Atomically increments the per-(owner, UTC day) usage rollup for a single
+// ledger event. MUST be called in the same mutation/transaction as the
+// corresponding `providerUsageLedger` insert, with the same values, so the
+// rollup stays consistent with the ledger.
+export async function bumpUsageDailyRollup(
+  ctx: MutationCtx,
+  args: {
+    ownerUserId: string;
+    createdAt: number;
+    feature: UsageFeature;
+    credits: number;
+    estimatedCostCents: number;
+  },
+): Promise<void> {
+  const date = utcDateString(args.createdAt);
+  const existing = await ctx.db
+    .query("usageDailyRollup")
+    .withIndex("by_owner_date", (q) =>
+      q.eq("ownerUserId", args.ownerUserId).eq("date", date),
+    )
+    .unique();
+
+  if (existing) {
+    const featureCounts = {
+      ...existing.featureCounts,
+      // `?? 0` covers the optional `sandbox_compute` key on rollup rows written
+      // before that feature existed (no backfill — see usageShape.ts).
+      [args.feature]: (existing.featureCounts[args.feature] ?? 0) + 1,
+    };
+    await ctx.db.patch("usageDailyRollup", existing._id, {
+      credits: existing.credits + args.credits,
+      estimatedCostCents: existing.estimatedCostCents + args.estimatedCostCents,
+      eventCount: existing.eventCount + 1,
+      featureCounts,
+    });
+    return;
+  }
+
+  const featureCounts = emptyFeatureCounts();
+  featureCounts[args.feature] = 1;
+  await ctx.db.insert("usageDailyRollup", {
+    ownerUserId: args.ownerUserId,
+    date,
+    credits: args.credits,
+    estimatedCostCents: args.estimatedCostCents,
+    eventCount: 1,
+    featureCounts,
+  });
 }
 
 export const consumeCreditsInternal = internalMutation({
@@ -376,6 +452,7 @@ export const consumeCreditsInternal = internalMutation({
     estimatedCostCents: v.optional(v.number()),
     metadataJson: v.optional(v.string()),
     requiredPlan: v.optional(v.union(v.literal("free"), v.literal("starter"), v.literal("plus"))),
+    agentKind: v.optional(agentKindValidator),
   },
   handler: async (ctx, args): Promise<EntitlementResult> => {
     return await consumeCredits(ctx, {
@@ -388,17 +465,19 @@ export const consumeCreditsInternal = internalMutation({
           inputTokens: args.inputTokens,
           outputTokens: args.outputTokens,
           totalTokens: args.totalTokens,
+          agentKind: args.agentKind,
         }),
     });
   },
 });
 
-async function countDeepResearchRuns(
+async function deepResearchRunsLimitReached(
   ctx: QueryCtx | MutationCtx,
   args: {
     ownerUserId: string;
     startedAt: number;
     resetAt: number;
+    limit: number;
   },
 ) {
   const rows = await ctx.db
@@ -410,8 +489,8 @@ async function countDeepResearchRuns(
         .gte("createdAt", args.startedAt)
         .lt("createdAt", args.resetAt),
     )
-    .collect();
-  return rows.length;
+    .take(args.limit + 1);
+  return rows.length >= args.limit;
 }
 
 export const syncSubscriptionFromPolar = internalMutation({
@@ -441,7 +520,11 @@ export const syncSubscriptionFromPolar = internalMutation({
     const productKey = args.productKey;
     const planKey = planForProductKey(productKey);
     if (planKey === "free" || planKey === "admin") {
-      throw new ConvexError("Unknown Polar product for subscription");
+      throwAppError({
+        message: "Unknown Polar product for subscription",
+        code: "billing_subscription_product_unknown",
+        severity: "error",
+      });
     }
     const billingInterval = intervalForProductKey(productKey) ?? "month";
     const now = Date.now();
@@ -563,7 +646,11 @@ export async function ensureCreditPeriod(
   });
   const created = await ctx.db.get("billingCreditPeriods", id);
   if (!created) {
-    throw new ConvexError("Unable to create billing period");
+    throwAppError({
+      message: "Unable to create billing period",
+      code: "billing_period_create_failed",
+      severity: "error",
+    });
   }
   return created;
 }

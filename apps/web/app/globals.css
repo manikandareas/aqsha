@@ -3,8 +3,6 @@
 @import "shadcn/tailwind.css";
 @import "@blocknote/react/style.css";
 @import "@blocknote/shadcn/style.css";
-@import "@react-pdf-viewer/core/lib/styles/index.css";
-@import "@react-pdf-viewer/default-layout/lib/styles/index.css";
 @import "./styles/blocknote-aqsha.css";
 
 @source "../node_modules/@blocknote/shadcn";
@@ -246,14 +244,17 @@
   html {
     @apply h-full bg-background font-sans;
     width: 100%;
-    overflow-x: hidden;
+    /* Use `clip`, not `hidden`: `hidden` makes html/body a scroll container
+       (overflow-y computes to auto), which silently breaks descendant
+       `position: sticky`. `clip` guards horizontal overflow without that. */
+    overflow-x: clip;
   }
 
   body {
     @apply min-h-full bg-background text-foreground;
     width: 100%;
     letter-spacing: var(--tracking-normal);
-    overflow-x: hidden;
+    overflow-x: clip;
   }
 
   button:not(:disabled),
@@ -683,6 +684,35 @@
   font-size: 11.5px;
 }
 
+/* ─── Streamdown table: flat design ─── */
+
+/* TableBlock owns the outer container; reset table's own spacing */
+.aqsha-prose [data-streamdown="table"] {
+  margin: 0 !important;
+  overflow-x: visible !important;
+}
+
+/* Strip cell grid borders */
+.aqsha-prose [data-streamdown="table"] th,
+.aqsha-prose [data-streamdown="table"] td {
+  border: none !important;
+}
+
+/* Header/body separator */
+.aqsha-prose [data-streamdown="table"] thead th {
+  border-bottom: 1px solid var(--border) !important;
+}
+
+/* Row separators */
+.aqsha-prose [data-streamdown="table"] td {
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 55%, transparent) !important;
+}
+
+/* No border on last row */
+.aqsha-prose [data-streamdown="table"] tbody tr:last-child td {
+  border-bottom: none !important;
+}
+
 .stream-caret {
   animation: stream-caret 1s steps(2, start) infinite;
 }
@@ -724,4 +754,72 @@
   100% {
     opacity: 0;
   }
+}
+
+/* PDF viewer (react-pdf) — flush, theme-aware pages with citation links. */
+.react-pdf__Document {
+  width: 100%;
+}
+
+.aqsha-pdf-page {
+  background: var(--background);
+}
+
+.aqsha-pdf-page .react-pdf__Page {
+  background: transparent !important;
+}
+
+/* Borderless pages. Light mode keeps the native white page; dark mode inverts
+   the canvas so the page goes dark. The text and annotation (citation) layers
+   sit above the canvas and stay untouched. */
+.dark .aqsha-pdf-page .react-pdf__Page__canvas {
+  filter: invert(0.92) hue-rotate(180deg);
+}
+
+/* Tier-1 citations: the PDF's own annotation layer. External links (new tab)
+   read as sky; internal links (jump within the document) read as mint. */
+.react-pdf__Page__annotations .linkAnnotation > a {
+  border-radius: 3px;
+  transition:
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.react-pdf__Page__annotations .linkAnnotation > a[target] {
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--sky-foreground) 55%, transparent);
+}
+
+.react-pdf__Page__annotations .linkAnnotation > a:not([target]) {
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--mint) 60%, transparent);
+}
+
+.react-pdf__Page__annotations .linkAnnotation > a[target]:hover {
+  background-color: color-mix(in oklch, var(--sky-soft) 70%, transparent);
+}
+
+.react-pdf__Page__annotations .linkAnnotation > a:not([target]):hover {
+  background-color: color-mix(in oklch, var(--mint-soft) 70%, transparent);
+}
+
+/* Tier-2 fallback marks for PDFs with no embedded hyperlinks. */
+.aqsha-cite-token {
+  border-radius: 3px;
+  padding: 0 1px;
+  color: inherit;
+  background: color-mix(in oklch, var(--sky-soft) 75%, transparent);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* Find-in-document highlight (translucent so the canvas text shows through). */
+.aqsha-search-hit {
+  border-radius: 2px;
+  background: color-mix(in oklch, var(--lemon) 45%, transparent);
+}
+
+/* Focus mode: the reader root fills the screen and scrolls on its own. */
+.aqsha-pdf-root:fullscreen {
+  overflow-y: auto;
+  background: var(--background);
+  padding: 1.5rem 1rem 6rem;
 }

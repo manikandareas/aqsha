@@ -3,8 +3,8 @@ import {
   dedupeCandidatesForPersistence,
   sourceKeyForCandidate,
   usageForCandidate,
-} from "../convex/agent/sources";
-import type { SourceCandidate } from "../convex/agent/sourceCandidates";
+} from "../convex/agent/research/sources";
+import type { SourceCandidate } from "../convex/agent/research/sourceCandidates";
 
 describe("source provenance persistence helpers", () => {
   it("marks cited normal-mode candidates and keeps uncited candidates visible", () => {
