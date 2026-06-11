@@ -68,7 +68,7 @@ describe("parseSkillMarkdown", () => {
 
 describe("builtin skills", () => {
   it("every bundled builtin parses cleanly (no warnings, valid name)", () => {
-    expect(BUILTIN_SKILL_DOCS.length).toBeGreaterThanOrEqual(5);
+    expect(BUILTIN_SKILL_DOCS.length).toBeGreaterThanOrEqual(8);
     const names = new Set<string>();
     for (const doc of BUILTIN_SKILL_DOCS) {
       const skill = parseSkillMarkdown(doc);

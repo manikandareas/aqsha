@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internal } from "../../_generated/api";
-import type { Id } from "../../_generated/dataModel";
+import type { Doc, Id } from "../../_generated/dataModel";
 import { mutation, type MutationCtx } from "../../_generated/server";
 import { requireCurrentUser } from "../../auth";
 import { astra, type AgentKind } from "../runtime";
@@ -33,14 +33,19 @@ async function beginResume(
   ownerUserId: string,
   threadId: string,
 ): Promise<{ runId?: Id<"agentRuns">; agentKind: AgentKind; isDeep: boolean }> {
-  const runs = await ctx.db
-    .query("agentRuns")
-    .withIndex("by_owner_thread_created", (q) =>
-      q.eq("ownerUserId", ownerUserId).eq("threadId", threadId),
-    )
-    .order("desc")
-    .take(8);
-  const run = runs.find((candidate) => candidate.status === "waiting") ?? null;
+  // AUD-07: resolve the paused run via the index (newest waiting_hitl preferred,
+  // else plan-approval waiting) instead of scanning the last 8 runs.
+  let run: Doc<"agentRuns"> | null = null;
+  for (const status of ["waiting_hitl", "waiting"] as const) {
+    run = await ctx.db
+      .query("agentRuns")
+      .withIndex("by_owner_thread_status", (q) =>
+        q.eq("ownerUserId", ownerUserId).eq("threadId", threadId).eq("status", status),
+      )
+      .order("desc")
+      .first();
+    if (run) break;
+  }
   const now = Date.now();
   if (run) {
     await ctx.db.patch("agentRuns", run._id, { status: "running", updatedAt: now });

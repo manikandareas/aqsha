@@ -192,10 +192,16 @@ describe("deep research contract", () => {
     });
   });
 
-  it("runs the revise pass only for contradicted or high-confidence unsupported claims", () => {
+  it("runs the revise pass for contradicted, high-confidence, or no-evidence unsupported claims", () => {
+    // Slice 3.2 agentic-RAG enforcement: an unsupported claim still backed by a
+    // textual extract (low confidence) is NOT force-revised...
     expect(shouldReviseUnsupportedClaims([
-      { support: "unsupported", claim: "Minor descriptive claim.", confidence: 0.4 },
+      { support: "unsupported", claim: "Minor descriptive claim.", confidence: 0.4, extractKeys: ["k1"] },
     ])).toBe(false);
+    // ...but an unsupported claim with NO extract and NO computation IS enforced.
+    expect(shouldReviseUnsupportedClaims([
+      { support: "unsupported", claim: "An unsupported claim with no backing.", confidence: 0.2 },
+    ])).toBe(true);
     expect(shouldReviseUnsupportedClaims([
       { support: "unsupported", claim: "This policy must be adopted by clinics immediately.", confidence: 0.7 },
     ])).toBe(true);

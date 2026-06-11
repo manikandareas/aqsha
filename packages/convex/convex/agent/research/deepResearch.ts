@@ -3,7 +3,7 @@ import type { WorkflowId } from "@convex-dev/workflow";
 import { ConvexError, v } from "convex/values";
 import { z } from "zod";
 import { internal } from "../../_generated/api";
-import type { Id } from "../../_generated/dataModel";
+import type { Doc, Id } from "../../_generated/dataModel";
 import {
   internalAction,
   internalMutation,
@@ -40,6 +40,16 @@ import { CHAT_PROVIDER_NAME, chatProvider } from "../providers/providers";
 import { markThreadStatusAfterTerminalRun } from "../runLifecycle";
 import type { AgentKind } from "../runtime";
 import { DEEP_LITE_MODEL, deepModelForAgent } from "../models";
+import {
+  auditConcurrencyForAgent,
+  computeEvidencePatch,
+  enforceUnsupportedClaim,
+  linkComputationToClaim,
+  mapWithConcurrency,
+  type ComputationRef,
+  type EvidenceKind,
+} from "./claimEvidence";
+import type { RehydratedLoopState } from "./subagents/loopState";
 
 const agentKindValidator = v.union(v.literal("lite"), v.literal("pro"));
 
@@ -118,9 +128,13 @@ type CitationCheckDraft = {
   failureReason?: string;
   extractKeys?: string[];
   revisionAction?: "none" | "caveated" | "removed_or_rewritten";
+  // Module-3 auditor (Slice 3.2): evidence provenance + sandbox-recompute links.
+  evidenceKind?: EvidenceKind;
+  computationCheckIds?: string[];
+  claimSpan?: string;
 };
 
-type SourceBucket = {
+export type SourceBucket = {
   name: string;
   queries: string[];
   preferredProviders: Array<"exa" | "jina" | "arxiv" | "crossref">;
@@ -158,6 +172,12 @@ type RejectedSource = {
   readAttempts?: ReadAttempt[];
 };
 
+// AUD-15: the evidence floor is tier-scaled — Astra Lite runs fewer rounds
+// (roundCap 2) so it cannot be held to the full Pro floor (roundCap 4). Each
+// FloorCheck records the floor, the actual count, and whether it was met, so the
+// UI can show exactly which floor failed and at which tier.
+type FloorCheck = { key: string; have: number; floor: number; met: boolean };
+
 type EvidenceReadiness = {
   ready: boolean;
   status: "insufficient" | "partial" | "sufficient";
@@ -168,7 +188,21 @@ type EvidenceReadiness = {
   highQualityExtractCount: number;
   missing: string[];
   recommendation: string;
+  tier: "lite" | "pro";
+  floors: FloorCheck[];
 };
+
+function evidenceFloorForAgent(agentKind: AgentKind | undefined) {
+  const pro = (agentKind ?? "pro") === "pro";
+  return {
+    tier: pro ? ("pro" as const) : ("lite" as const),
+    sources: pro ? MIN_ACCEPTED_SOURCES : 6,
+    extracts: pro ? MIN_ACCEPTED_EXTRACTS : 5,
+    domains: pro ? MIN_DOMAIN_DIVERSITY : 3,
+    buckets: pro ? MIN_BUCKET_COVERAGE : 2,
+    strongExtracts: pro ? Math.min(4, MIN_ACCEPTED_EXTRACTS) : 3,
+  };
+}
 
 const stepDefinitions = [
   ["planRound", "Merencanakan ronde"],
@@ -204,24 +238,111 @@ export const deepResearchExecuteWorkflow = researchWorkflow.define({
   },
   handler: async (step, args): Promise<void> => {
     const plan = normalizePlan(args.plan, args.agentKind);
-    const loop = await step.runAction(internal.agent.research.deepResearch.researchLoop, {
-      ...args,
-      plan,
-    }, {
-      retry: ACTION_RETRY,
-    });
-    const synthesis = await step.runAction(internal.agent.research.deepResearch.synthesize, {
-      ...args,
-      plan,
-      sources: loop.sources,
-      extracts: loop.extracts,
-      roundState: loop.roundState,
-    }, {
-      retry: ACTION_RETRY,
-    });
+    // Strangler flag (Slice R1): v2 runs the decomposed literature rounds +
+    // counter-evidence as separate workflow steps, then rebuilds the synthesis
+    // inputs from persisted rows. v1 keeps the monolithic researchLoop. Both share
+    // the synthesize -> audit -> persist -> finalize tail below. Default off.
+    //
+    // The flag is read via a step, NOT process.env directly: the workflow handler
+    // runs in the deterministic workflow runtime where `process` is undefined, so a
+    // bare process.env access throws ReferenceError. Steps run in the normal action
+    // runtime, which exposes env vars.
+    const useV2 = await step.runQuery(
+      internal.agent.research.deepResearch.isDeepResearchV2Enabled,
+      {},
+    );
+    let loop: {
+      sources: SourceCandidate[];
+      extracts: ResearchExtract[];
+      roundState: ResearchRoundState[];
+    };
+    if (useV2) {
+      const roundCap = roundCapForAgent(args.agentKind);
+      const maxRounds = Math.min(plan.maxRounds || roundCap, roundCap);
+      const roundBase = {
+        runId: args.runId,
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+        agentKind: args.agentKind,
+        prompt: args.prompt,
+      };
+      for (let round = 1; round <= maxRounds; round += 1) {
+        const result = await step.runAction(
+          internal.agent.research.subagents.literatureRoundAgent.literatureRoundAgent,
+          { ...roundBase, plan, round, maxRounds },
+          { retry: ACTION_RETRY },
+        );
+        if (result.stop) break;
+      }
+      await step.runAction(
+        internal.agent.research.subagents.counterEvidenceAgent.counterEvidenceAgent,
+        { ...roundBase, plan },
+        { retry: ACTION_RETRY },
+      );
+      loop = await step.runQuery(internal.agent.research.deepResearch.loadRunEvidence, {
+        ownerUserId: args.ownerUserId,
+        runId: args.runId,
+      });
+    } else {
+      loop = await step.runAction(internal.agent.research.deepResearch.researchLoop, {
+        ...args,
+        plan,
+      }, {
+        retry: ACTION_RETRY,
+      });
+    }
+
+    // Synthesis stage. v2 verifies citations (pre-writer), then the writerAgent
+    // stages the report on the run; v1 keeps the monolithic synthesize step. Both
+    // produce { markdown, chatSummary } for the shared audit -> persist -> finalize
+    // tail below.
+    let synthesisMarkdown: string;
+    let chatSummary: string;
+    if (useV2) {
+      await step.runAction(
+        internal.agent.research.subagents.citationAgent.citationAgent,
+        {
+          runId: args.runId,
+          ownerUserId: args.ownerUserId,
+          threadId: args.threadId,
+          agentKind: args.agentKind,
+        },
+        { retry: ACTION_RETRY },
+      );
+      const writer = await step.runAction(
+        internal.agent.research.subagents.writerAgent.writerAgent,
+        {
+          runId: args.runId,
+          ownerUserId: args.ownerUserId,
+          threadId: args.threadId,
+          agentKind: args.agentKind,
+          prompt: args.prompt,
+          plan,
+        },
+        { retry: ACTION_RETRY },
+      );
+      const draft = await step.runQuery(
+        internal.agent.research.subagents.runState.getRunDraftMarkdown,
+        { runId: args.runId, ownerUserId: args.ownerUserId },
+      );
+      synthesisMarkdown = draft ?? "";
+      chatSummary = writer.chatSummary;
+    } else {
+      const synthesis = await step.runAction(internal.agent.research.deepResearch.synthesize, {
+        ...args,
+        plan,
+        sources: loop.sources,
+        extracts: loop.extracts,
+        roundState: loop.roundState,
+      }, {
+        retry: ACTION_RETRY,
+      });
+      synthesisMarkdown = synthesis.markdown;
+      chatSummary = synthesis.chatSummary;
+    }
 
     const isSimpleTopic = (plan.maxRounds ?? 1) === 1 && (plan.sufficiencyCriteria?.length ?? 0) <= 2;
-    let finalMarkdown = synthesis.markdown;
+    let finalMarkdown = synthesisMarkdown;
     let checks: Array<{
       claim: string;
       support: "supported" | "partially_supported" | "contradicted" | "partial" | "unsupported";
@@ -232,6 +353,9 @@ export const deepResearchExecuteWorkflow = researchWorkflow.define({
       failureReason?: string;
       extractKeys?: string[];
       revisionAction?: "none" | "caveated" | "removed_or_rewritten";
+      evidenceKind?: "textual" | "computational" | "mixed";
+      computationCheckIds?: string[];
+      claimSpan?: string;
     }> = [];
 
     if (!isSimpleTopic) {
@@ -239,7 +363,7 @@ export const deepResearchExecuteWorkflow = researchWorkflow.define({
         ...args,
         sources: loop.sources,
         extracts: loop.extracts,
-        markdown: synthesis.markdown,
+        markdown: synthesisMarkdown,
       }, {
         retry: ACTION_RETRY,
       });
@@ -257,9 +381,18 @@ export const deepResearchExecuteWorkflow = researchWorkflow.define({
     await step.runMutation(internal.agent.research.deepResearch.finalizeThread, {
       ...args,
       artifactId: persisted.primaryArtifactId,
-      responseSummary: synthesis.chatSummary,
+      responseSummary: chatSummary,
     });
   },
+});
+
+// The DEEP_RESEARCH_V2 strangler flag, read in a normal-runtime query so the
+// workflow handler can branch on it via a step (the handler runtime has no
+// `process`). Default off — only "1" enables the decomposed v2 path.
+export const isDeepResearchV2Enabled = internalQuery({
+  args: {},
+  returns: v.boolean(),
+  handler: async () => process.env.DEEP_RESEARCH_V2 === "1",
 });
 
 export const getStatus = query({
@@ -304,28 +437,38 @@ export const listForThread = query({
   },
 });
 
+// Owner-scoped cancel core, shared by the public mutation (auth'd) and the dev
+// harness (internal seam for the cancel-midrun smoke scenario).
+export async function cancelRunForOwner(
+  ctx: MutationCtx,
+  runId: Id<"agentRuns">,
+  ownerUserId: string,
+): Promise<void> {
+  const run = await ctx.db.get("agentRuns", runId);
+  if (!run || run.ownerUserId !== ownerUserId) {
+    throw new ConvexError("Run not found");
+  }
+  if (run.status === "completed" || run.status === "canceled") {
+    return;
+  }
+  await markCanceled(ctx, run._id, ownerUserId);
+  if (run.workflowId) {
+    try {
+      await researchWorkflow.cancel(ctx, run.workflowId as unknown as WorkflowId);
+    } catch (error) {
+      if (!isWorkflowAlreadyStoppedError(error)) {
+        throw error;
+      }
+    }
+  }
+}
+
 export const cancel = mutation({
   args: { runId: v.id("agentRuns") },
   returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
-    const run = await ctx.db.get("agentRuns", args.runId);
-    if (!run || run.ownerUserId !== user._id) {
-      throw new ConvexError("Run not found");
-    }
-    if (run.status === "completed" || run.status === "canceled") {
-      return { ok: true };
-    }
-    await markCanceled(ctx, run._id, user._id);
-    if (run.workflowId) {
-      try {
-        await researchWorkflow.cancel(ctx, run.workflowId as unknown as WorkflowId);
-      } catch (error) {
-        if (!isWorkflowAlreadyStoppedError(error)) {
-          throw error;
-        }
-      }
-    }
+    await cancelRunForOwner(ctx, args.runId, user._id);
     return { ok: true };
   },
 });
@@ -586,6 +729,524 @@ export const planResearch = internalAction({
   },
 });
 
+// Cross-round accumulation for the deep-research literature loop. The maps and
+// arrays are shared by reference across rounds; the scalar gapAssessment /
+// sufficiencyStatus are read at round entry and written back before return.
+export interface RoundLoopState {
+  candidatePool: Map<string, DiscoveryCandidate>;
+  acceptedByKey: Map<string, AcceptedSource>;
+  extractsByKey: Map<string, ResearchExtract>;
+  rejected: RejectedSource[];
+  domainPenalties: Map<string, number>;
+  roundState: ResearchRoundState[];
+  buckets: SourceBucket[];
+  gapAssessment: string;
+  sufficiencyStatus: SufficiencyStatus;
+}
+
+// The minimal per-round context (a subset of the workflow args). literatureRoundAgent
+// (Slice R1b) constructs this from the run row; researchLoop (v1) passes its own args.
+export type RoundAgentArgs = {
+  runId: Id<"agentRuns">;
+  ownerUserId: string;
+  threadId: string;
+  prompt: string;
+  agentKind?: AgentKind;
+};
+
+export function createRoundLoopState(
+  plan: ResearchPlan,
+  buckets: SourceBucket[],
+): RoundLoopState {
+  return {
+    candidatePool: new Map(),
+    acceptedByKey: new Map(),
+    extractsByKey: new Map(),
+    rejected: [],
+    domainPenalties: new Map(),
+    roundState: [],
+    buckets,
+    gapAssessment: `Initial plan: ${plan.sufficiencyCriteria.join("; ")}`,
+    sufficiencyStatus: "unknown",
+  };
+}
+
+// One literature round, extracted from the monolithic researchLoop (Slice R1a) so
+// it can be driven by the in-process loop (v1) OR a standalone literatureRoundAgent
+// step (v2). Behavior is 1:1 with the pre-extraction loop body — workflowSnapshot.test.ts
+// pins the composite decision trace. Returns whether the loop should stop.
+export async function runResearchRound(
+  ctx: ActionCtx,
+  args: RoundAgentArgs,
+  plan: ResearchPlan,
+  state: RoundLoopState,
+  round: number,
+  maxRounds: number,
+): Promise<{ stop: boolean; ready: boolean }> {
+  const {
+    candidatePool,
+    acceptedByKey,
+    extractsByKey,
+    rejected,
+    domainPenalties,
+    roundState,
+    buckets,
+  } = state;
+  let gapAssessment = state.gapAssessment;
+  let sufficiencyStatus = state.sufficiencyStatus;
+
+  await ensureNotCanceled(ctx, args.runId);
+  const queries = await chooseRoundQueries(ctx, {
+    prompt: args.prompt,
+    plan,
+    buckets,
+    round,
+    previousSources: [...acceptedByKey.values()].map((item) => item.source),
+    previousExtracts: [...extractsByKey.values()],
+    gapAssessment,
+    rejected,
+  });
+  await ctx.runMutation(internal.agent.research.deepResearch.recordRunEvent, {
+    runId: args.runId,
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+    stepKey: "planRound",
+    eventType: "query",
+    round,
+    title: `Round ${round} queries`,
+    summary: queries.map((item) => `${item.bucket.name}: ${item.query}`).join(" | "),
+    metadataJson: JSON.stringify({
+      queries: queries.map((item) => ({
+        bucket: item.bucket.name,
+        query: item.query,
+        providers: item.bucket.preferredProviders,
+      })),
+      gapAssessment,
+    }),
+  });
+  await ctx.runMutation(internal.agent.research.deepResearch.recordRoundState, {
+    runId: args.runId,
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+    round,
+    status: "planned",
+    query: queries.map((item) => item.query).join(" | "),
+    gapAssessment,
+    sufficiencyStatus,
+    sourceCount: acceptedByKey.size,
+    extractCount: extractsByKey.size,
+    stateJson: JSON.stringify({ queries }),
+  });
+  await ctx.runMutation(internal.agent.research.deepResearch.markStep, {
+    runId: args.runId,
+    ownerUserId: args.ownerUserId,
+    stepKey: "discoverRoundCandidates",
+    status: "running",
+  });
+
+  const discovery = await discoverCandidates(ctx, {
+    ownerUserId: args.ownerUserId,
+    queries,
+    excludedDomains: [...domainPenalties.entries()]
+      .filter(([, count]) => count >= 1)
+      .map(([domain]) => domain),
+  });
+  await ctx.runMutation(internal.agent.research.sources.upsertRunCandidates, {
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+    runId: args.runId,
+    usage: "candidate",
+    candidates: discovery.candidates.map((source) =>
+      sourceForStorage(source, "candidate"),
+    ),
+  });
+  mergeCandidatePool(candidatePool, discovery.candidates, {
+    acceptedKeys: new Set(acceptedByKey.keys()),
+    rejectedKeys: new Set(rejected.map((item) => sourceKey(item.source))),
+  });
+
+  await ctx.runMutation(internal.agent.research.deepResearch.recordRunEvent, {
+    runId: args.runId,
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+    stepKey: "discoverRoundCandidates",
+    eventType: "search",
+    round,
+    title: `Round ${round} discovery`,
+    summary: summarizeSourceDiscovery(discovery.byProvider),
+    metadataJson: JSON.stringify({
+      counts: discovery.counts,
+      poolSize: candidatePool.size,
+      newCandidateCount: discovery.candidates.filter((source) => candidatePool.has(sourceKey(source))).length,
+      sources: summarizeSourceMetadata(discovery.candidates),
+      domainPenalties: Object.fromEntries(domainPenalties),
+    }),
+  });
+
+  await ctx.runMutation(internal.agent.research.deepResearch.markStep, {
+    runId: args.runId,
+    ownerUserId: args.ownerUserId,
+    stepKey: "discoverRoundCandidates",
+    status: "completed",
+    summary: `${candidatePool.size} kandidat ditemukan`,
+    sourceCount: candidatePool.size,
+  });
+  await ctx.runMutation(internal.agent.research.deepResearch.markStep, {
+    runId: args.runId,
+    ownerUserId: args.ownerUserId,
+    stepKey: "rerankRoundCandidates",
+    status: "running",
+  });
+
+  const selected = await selectCandidatesToValidate(ctx, {
+    ownerUserId: args.ownerUserId,
+    query: queries.map((item) => item.query).join("\n"),
+    candidates: [...candidatePool.values()],
+    acceptedKeys: new Set(acceptedByKey.keys()),
+    rejectedKeys: new Set(rejected.map((item) => sourceKey(item.source))),
+  });
+  await ctx.runMutation(internal.agent.research.deepResearch.markStep, {
+    runId: args.runId,
+    ownerUserId: args.ownerUserId,
+    stepKey: "rerankRoundCandidates",
+    status: "completed",
+    summary: `${selected.length} kandidat prioritas`,
+    sourceCount: selected.length,
+  });
+  await ctx.runMutation(internal.agent.research.deepResearch.markStep, {
+    runId: args.runId,
+    ownerUserId: args.ownerUserId,
+    stepKey: "readRoundSources",
+    status: "running",
+  });
+  const validation = await validateAndRead(ctx, {
+    ownerUserId: args.ownerUserId,
+    runId: args.runId,
+    threadId: args.threadId,
+    candidates: selected,
+    acceptedByDomain: acceptedDomainCounts([...acceptedByKey.values()].map((item) => item.source)),
+    domainPenalties,
+  });
+  await recordValidationSources(ctx, {
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+    runId: args.runId,
+    accepted: validation.accepted,
+    rejected: validation.rejected,
+  });
+  for (const item of validation.accepted) {
+    acceptedByKey.set(sourceKey(item.source), item);
+    const extract = item.extract;
+    if (extractsByKey.size >= MAX_EXTRACTS_PER_RUN) {
+      break;
+    }
+    extractsByKey.set(`${extract.sourceKey}:${extract.quote.slice(0, 80)}`, extract);
+  }
+  rejected.push(...validation.rejected);
+  pruneResolvedCandidates(candidatePool, {
+    acceptedKeys: new Set(acceptedByKey.keys()),
+    rejectedKeys: new Set(rejected.map((item) => sourceKey(item.source))),
+  });
+  await ctx.runMutation(internal.agent.research.deepResearch.markStep, {
+    runId: args.runId,
+    ownerUserId: args.ownerUserId,
+    stepKey: "readRoundSources",
+    status: "completed",
+    summary: `${validation.accepted.length} sumber readable, ${validation.rejected.length} ditolak`,
+    sourceCount: acceptedByKey.size,
+  });
+  await ctx.runMutation(internal.agent.research.deepResearch.markStep, {
+    runId: args.runId,
+    ownerUserId: args.ownerUserId,
+    stepKey: "assessRoundSufficiency",
+    status: "running",
+  });
+
+  const assessment = await assessSufficiency(ctx, {
+    prompt: args.prompt,
+    plan,
+    round,
+    maxRounds,
+    sources: numberSources([...acceptedByKey.values()].map((item) => item.source)),
+    extracts: [...extractsByKey.values()],
+    previousGapAssessment: gapAssessment,
+    agentKind: args.agentKind,
+  });
+  gapAssessment = assessment.gapAssessment;
+  sufficiencyStatus = assessment.sufficiencyStatus;
+
+  await ctx.runMutation(internal.agent.research.deepResearch.recordRunEvent, {
+    runId: args.runId,
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+    stepKey: "assessRoundSufficiency",
+    eventType: "gap",
+    round,
+    title: `Round ${round} sufficiency`,
+    summary: gapAssessment,
+    metadataJson: JSON.stringify({
+      sufficiencyStatus,
+      readiness: assessment.readiness,
+      acceptedSources: acceptedByKey.size,
+      acceptedExtracts: extractsByKey.size,
+      rejected: validation.rejected.map((item) => ({
+        title: item.source.title,
+        url: item.source.url,
+        reason: item.reason,
+      })),
+      domainPenalties: Object.fromEntries(domainPenalties),
+    }),
+  });
+  await ctx.runMutation(internal.agent.research.deepResearch.updateLoopProgress, {
+    runId: args.runId,
+    ownerUserId: args.ownerUserId,
+    roundCount: round,
+    sufficiencyStatus,
+  });
+  const numberedAfterRead = numberSources(
+    [...acceptedByKey.values()].map((item) => sanitizeRuntimeSource(item.source)),
+  );
+  await ctx.runMutation(internal.agent.research.deepResearch.recordRoundState, {
+    runId: args.runId,
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+    round,
+    status: "completed",
+    query: queries.map((item) => item.query).join(" | "),
+    gapAssessment,
+    sufficiencyStatus,
+    sourceCount: acceptedByKey.size,
+    extractCount: extractsByKey.size,
+    stateJson: JSON.stringify({
+      sources: summarizeSourceMetadata(numberedAfterRead),
+      extracts: [...extractsByKey.values()].map((extract) => ({
+        sourceKey: extract.sourceKey,
+        citationNumber: extract.citationNumber,
+        relevance: extract.relevance,
+      })),
+      readiness: assessment.readiness,
+      // Slice 3.1: cross-round accumulator snapshot for literatureRoundAgent
+      // rehydration (domainPenalties is otherwise in-memory only). Read back
+      // via parseRoundSnapshot (subagents/loopState.ts).
+      accumulator: {
+        domainPenalties: Object.fromEntries(domainPenalties),
+        gapAssessment,
+        sufficiencyStatus,
+      },
+    }),
+  });
+
+  const roundCitationByKey = new Map(numberedAfterRead.map((source) => [sourceKey(source), source.citationNumber]));
+  roundState.push({
+    round,
+    query: queries.map((item) => item.query).join(" | "),
+    gapAssessment,
+    sufficiencyStatus,
+    stopReason: sufficiencyStatus === "sufficient" ? "sufficient_evidence" : undefined,
+    sources: numberedAfterRead,
+    extracts: [...extractsByKey.values()].map((extract) => ({
+      ...extract,
+      citationNumber: roundCitationByKey.get(extract.sourceKey) ?? extract.citationNumber,
+    })),
+  });
+  await ctx.runMutation(internal.agent.research.deepResearch.markStep, {
+    runId: args.runId,
+    ownerUserId: args.ownerUserId,
+    stepKey: "assessRoundSufficiency",
+    status: "completed",
+    summary: `${sufficiencyStatus}: ${gapAssessment}`,
+    sourceCount: acceptedByKey.size,
+  });
+
+  state.gapAssessment = gapAssessment;
+  state.sufficiencyStatus = sufficiencyStatus;
+  const ready = assessment.readiness.ready;
+  if (sufficiencyStatus === "sufficient" && ready) {
+    return { stop: true, ready };
+  }
+  if (round < maxRounds && !ready) {
+    state.gapAssessment = `${gapAssessment}\nNeed expansion: ${assessment.readiness.recommendation}`;
+  }
+  return { stop: false, ready };
+}
+
+// The counter-evidence pass, extracted from researchLoop's tail (Slice R1b) so it
+// runs either inline (v1) or as a standalone counterEvidenceAgent step (v2).
+// Mutates state.acceptedByKey / extractsByKey / rejected in place. 1:1 with the
+// pre-extraction inline block.
+export async function runCounterEvidence(
+  ctx: ActionCtx,
+  args: RoundAgentArgs,
+  state: RoundLoopState,
+): Promise<void> {
+  const { candidatePool, acceptedByKey, extractsByKey, rejected, domainPenalties } = state;
+  const sufficiencyStatus = state.sufficiencyStatus;
+  const counterDecision = await shouldRunCounterEvidencePass({
+    sufficiencyStatus,
+    acceptedSourceCount: acceptedByKey.size,
+    highRelevanceExtractCount: [...extractsByKey.values()].filter((extract) => extract.relevance === "high").length,
+    extracts: [...extractsByKey.values()],
+    prompt: args.prompt,
+  });
+  await ctx.runMutation(internal.agent.research.deepResearch.markStep, {
+    runId: args.runId,
+    ownerUserId: args.ownerUserId,
+    stepKey: "runCounterEvidencePass",
+    status: "running",
+  });
+  await ctx.runMutation(internal.agent.research.deepResearch.recordRunEvent, {
+    runId: args.runId,
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+    stepKey: "runCounterEvidencePass",
+    eventType: "audit",
+    title: "Counter-evidence pass",
+    summary: counterDecision
+      ? "Counter-evidence required by sufficiency confidence"
+      : "Counter-evidence not required for this status",
+    metadataJson: JSON.stringify({ sufficiencyStatus }),
+  });
+  if (counterDecision) {
+    const counterBucket: SourceBucket = {
+      name: "practitioner examples",
+      queries: [`counter evidence criticism limitations ${args.prompt}`],
+      preferredProviders: ["exa", "jina"],
+      excludeDomains: [],
+      freshnessTarget: "current",
+      minAcceptedSources: 1,
+    };
+    const discovery = await discoverCandidates(ctx, {
+      ownerUserId: args.ownerUserId,
+      queries: [{ bucket: counterBucket, query: counterBucket.queries[0] }],
+      excludedDomains: [],
+    });
+    await ctx.runMutation(internal.agent.research.sources.upsertRunCandidates, {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      runId: args.runId,
+      usage: "candidate",
+      candidates: discovery.candidates.map((source) =>
+        sourceForStorage(source, "candidate"),
+      ),
+    });
+    mergeCandidatePool(candidatePool, discovery.candidates, {
+      acceptedKeys: new Set(acceptedByKey.keys()),
+      rejectedKeys: new Set(rejected.map((item) => sourceKey(item.source))),
+    });
+    const selected = await selectCandidatesToValidate(ctx, {
+      ownerUserId: args.ownerUserId,
+      query: counterBucket.queries[0],
+      candidates: [...candidatePool.values()],
+      acceptedKeys: new Set(acceptedByKey.keys()),
+      rejectedKeys: new Set(rejected.map((item) => sourceKey(item.source))),
+    });
+    const validation = await validateAndRead(ctx, {
+      ownerUserId: args.ownerUserId,
+      runId: args.runId,
+      threadId: args.threadId,
+      candidates: selected.slice(0, 4),
+      acceptedByDomain: acceptedDomainCounts([...acceptedByKey.values()].map((item) => item.source)),
+      domainPenalties,
+    });
+    await recordValidationSources(ctx, {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      runId: args.runId,
+      accepted: validation.accepted,
+      rejected: validation.rejected,
+    });
+    for (const item of validation.accepted) {
+      acceptedByKey.set(sourceKey(item.source), item);
+      if (extractsByKey.size < MAX_EXTRACTS_PER_RUN) {
+        extractsByKey.set(`${item.extract.sourceKey}:${item.extract.quote.slice(0, 80)}`, item.extract);
+      }
+    }
+    rejected.push(...validation.rejected);
+    await ctx.runMutation(internal.agent.research.deepResearch.recordRunEvent, {
+      runId: args.runId,
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      stepKey: "runCounterEvidencePass",
+      eventType: "search",
+      title: "Counter-evidence discovery",
+      summary: `${validation.accepted.length} counter-evidence sources accepted from ${discovery.candidates.length} candidates`,
+      metadataJson: JSON.stringify({
+        counts: discovery.counts,
+        accepted: validation.accepted.map((item) => item.source.title),
+        rejected: validation.rejected.map((item) => ({ title: item.source.title, reason: item.reason })),
+      }),
+    });
+  }
+  await ctx.runMutation(internal.agent.research.deepResearch.markStep, {
+    runId: args.runId,
+    ownerUserId: args.ownerUserId,
+    stepKey: "runCounterEvidencePass",
+    status: "completed",
+    summary: counterDecision ? "Counter-evidence dicek sebagai risiko sintesis" : "Dilewati sesuai budget",
+  });
+}
+
+// Final accepted sources/extracts numbered consistently for synthesis. Pure read
+// of the accumulated state — shared by v1's return and the v2 loadRunEvidence path.
+export function finalizeRoundEvidence(state: RoundLoopState): {
+  sources: SourceCandidate[];
+  extracts: ResearchExtract[];
+  roundState: ResearchRoundState[];
+} {
+  const finalSources = numberSources(
+    [...state.acceptedByKey.values()].map((item) => sanitizeRuntimeSource(item.source)),
+  );
+  const citationByKey = new Map(finalSources.map((source) => [sourceKey(source), source.citationNumber]));
+  const finalExtracts = [...state.extractsByKey.values()].map((extract) => ({
+    ...extract,
+    citationNumber: citationByKey.get(extract.sourceKey) ?? extract.citationNumber,
+  }));
+  return { sources: finalSources, extracts: finalExtracts, roundState: state.roundState };
+}
+
+// Reconstruct a RoundLoopState from persisted rows (Slice R1b). The decomposed
+// literatureRoundAgent / counterEvidenceAgent rehydrate per step; only `.source`
+// and the key sets are read from acceptedByKey downstream, so extract/quality/
+// readAttempts are stubs. candidatePool starts empty each round (pool carryover is
+// an in-memory optimization, not persisted) — an accepted divergence from v1.
+export function buildRoundLoopStateFromRehydrated(
+  buckets: SourceBucket[],
+  rehydrated: RehydratedLoopState,
+): RoundLoopState {
+  const acceptedByKey = new Map<string, AcceptedSource>();
+  for (const source of rehydrated.acceptedSources) {
+    const key = sourceKey(source);
+    acceptedByKey.set(key, {
+      source,
+      extract: {
+        sourceKey: key,
+        citationNumber: source.citationNumber,
+        title: source.title,
+        locator: source.locator,
+        quote: "",
+        relevance: "medium",
+      },
+      quality: { ok: true, reason: "readable" },
+      readAttempts: [],
+    });
+  }
+  const rejected: RejectedSource[] = rehydrated.rejectedSources.map((source) => ({
+    source,
+    reason: "duplicate" as const,
+  }));
+  return {
+    candidatePool: new Map(),
+    acceptedByKey,
+    extractsByKey: rehydrated.extractsByKey,
+    rejected,
+    domainPenalties: rehydrated.domainPenalties,
+    roundState: [],
+    buckets,
+    gapAssessment: rehydrated.gapAssessment,
+    sufficiencyStatus: rehydrated.sufficiencyStatus,
+  };
+}
+
 export const researchLoop = internalAction({
   args: { ...workflowArgs(), plan: v.any() },
   handler: async (ctx, args): Promise<{
@@ -596,411 +1257,94 @@ export const researchLoop = internalAction({
     const plan = normalizePlan(args.plan, args.agentKind);
     const roundCap = roundCapForAgent(args.agentKind);
     const maxRounds = Math.min(plan.maxRounds || roundCap, roundCap);
-    const candidatePool = new Map<string, DiscoveryCandidate>();
-    const acceptedByKey = new Map<string, AcceptedSource>();
-    const extractsByKey = new Map<string, ResearchExtract>();
-    const rejected: RejectedSource[] = [];
-    const domainPenalties = new Map<string, number>();
-    const roundState: ResearchRoundState[] = [];
     const buckets = await planSourceBuckets(ctx, args.prompt, plan);
-    let gapAssessment = `Initial plan: ${plan.sufficiencyCriteria.join("; ")}`;
-    let sufficiencyStatus: SufficiencyStatus = "unknown";
+    // Persist the planned buckets once per run so the decomposed v2
+    // literatureRoundAgent (Slice R1b) can rehydrate them per round instead of
+    // re-planning. No-op for v1 correctness; read back only in v2.
+    await ctx.runMutation(internal.agent.research.deepResearch.persistRunBuckets, {
+      runId: args.runId,
+      ownerUserId: args.ownerUserId,
+      bucketsJson: JSON.stringify(buckets),
+    });
+    const state = createRoundLoopState(plan, buckets);
 
     for (let round = 1; round <= maxRounds; round += 1) {
-      await ensureNotCanceled(ctx, args.runId);
-      const queries = await chooseRoundQueries(ctx, {
-        prompt: args.prompt,
-        plan,
-        buckets,
-        round,
-        previousSources: [...acceptedByKey.values()].map((item) => item.source),
-        previousExtracts: [...extractsByKey.values()],
-        gapAssessment,
-        rejected,
-      });
-      await ctx.runMutation(internal.agent.research.deepResearch.recordRunEvent, {
-        runId: args.runId,
-        ownerUserId: args.ownerUserId,
-        threadId: args.threadId,
-        stepKey: "planRound",
-        eventType: "query",
-        round,
-        title: `Round ${round} queries`,
-        summary: queries.map((item) => `${item.bucket.name}: ${item.query}`).join(" | "),
-        metadataJson: JSON.stringify({
-          queries: queries.map((item) => ({
-            bucket: item.bucket.name,
-            query: item.query,
-            providers: item.bucket.preferredProviders,
-          })),
-          gapAssessment,
-        }),
-      });
-      await ctx.runMutation(internal.agent.research.deepResearch.recordRoundState, {
-        runId: args.runId,
-        ownerUserId: args.ownerUserId,
-        threadId: args.threadId,
-        round,
-        status: "planned",
-        query: queries.map((item) => item.query).join(" | "),
-        gapAssessment,
-        sufficiencyStatus,
-        sourceCount: acceptedByKey.size,
-        extractCount: extractsByKey.size,
-        stateJson: JSON.stringify({ queries }),
-      });
-      await ctx.runMutation(internal.agent.research.deepResearch.markStep, {
-        runId: args.runId,
-        ownerUserId: args.ownerUserId,
-        stepKey: "discoverRoundCandidates",
-        status: "running",
-      });
+      const { stop } = await runResearchRound(ctx, args, plan, state, round, maxRounds);
+      if (stop) break;
+    }
 
-      const discovery = await discoverCandidates(ctx, {
-        ownerUserId: args.ownerUserId,
-        queries,
-        excludedDomains: [...domainPenalties.entries()]
-          .filter(([, count]) => count >= 1)
-          .map(([domain]) => domain),
-      });
-      await ctx.runMutation(internal.agent.research.sources.upsertRunCandidates, {
-        ownerUserId: args.ownerUserId,
-        threadId: args.threadId,
-        runId: args.runId,
-        usage: "candidate",
-        candidates: discovery.candidates.map((source) =>
-          sourceForStorage(source, "candidate"),
-        ),
-      });
-      mergeCandidatePool(candidatePool, discovery.candidates, {
-        acceptedKeys: new Set(acceptedByKey.keys()),
-        rejectedKeys: new Set(rejected.map((item) => sourceKey(item.source))),
-      });
+    await runCounterEvidence(ctx, args, state);
 
-      await ctx.runMutation(internal.agent.research.deepResearch.recordRunEvent, {
-        runId: args.runId,
-        ownerUserId: args.ownerUserId,
-        threadId: args.threadId,
-        stepKey: "discoverRoundCandidates",
-        eventType: "search",
-        round,
-        title: `Round ${round} discovery`,
-        summary: summarizeSourceDiscovery(discovery.byProvider),
-        metadataJson: JSON.stringify({
-          counts: discovery.counts,
-          poolSize: candidatePool.size,
-          newCandidateCount: discovery.candidates.filter((source) => candidatePool.has(sourceKey(source))).length,
-          sources: summarizeSourceMetadata(discovery.candidates),
-          domainPenalties: Object.fromEntries(domainPenalties),
-        }),
-      });
-
-      await ctx.runMutation(internal.agent.research.deepResearch.markStep, {
-        runId: args.runId,
-        ownerUserId: args.ownerUserId,
-        stepKey: "discoverRoundCandidates",
-        status: "completed",
-        summary: `${candidatePool.size} kandidat ditemukan`,
-        sourceCount: candidatePool.size,
-      });
-      await ctx.runMutation(internal.agent.research.deepResearch.markStep, {
-        runId: args.runId,
-        ownerUserId: args.ownerUserId,
-        stepKey: "rerankRoundCandidates",
-        status: "running",
-      });
-
-      const selected = await selectCandidatesToValidate(ctx, {
-        ownerUserId: args.ownerUserId,
-        query: queries.map((item) => item.query).join("\n"),
-        candidates: [...candidatePool.values()],
-        acceptedKeys: new Set(acceptedByKey.keys()),
-        rejectedKeys: new Set(rejected.map((item) => sourceKey(item.source))),
-      });
-      await ctx.runMutation(internal.agent.research.deepResearch.markStep, {
-        runId: args.runId,
-        ownerUserId: args.ownerUserId,
-        stepKey: "rerankRoundCandidates",
-        status: "completed",
-        summary: `${selected.length} kandidat prioritas`,
-        sourceCount: selected.length,
-      });
-      await ctx.runMutation(internal.agent.research.deepResearch.markStep, {
-        runId: args.runId,
-        ownerUserId: args.ownerUserId,
-        stepKey: "readRoundSources",
-        status: "running",
-      });
-      const validation = await validateAndRead(ctx, {
-        ownerUserId: args.ownerUserId,
-        runId: args.runId,
-        threadId: args.threadId,
-        candidates: selected,
-        acceptedByDomain: acceptedDomainCounts([...acceptedByKey.values()].map((item) => item.source)),
-        domainPenalties,
-      });
-      await recordValidationSources(ctx, {
-        ownerUserId: args.ownerUserId,
-        threadId: args.threadId,
-        runId: args.runId,
-        accepted: validation.accepted,
-        rejected: validation.rejected,
-      });
-      for (const item of validation.accepted) {
-        acceptedByKey.set(sourceKey(item.source), item);
-        const extract = item.extract;
-        if (extractsByKey.size >= MAX_EXTRACTS_PER_RUN) {
-          break;
-        }
-        extractsByKey.set(`${extract.sourceKey}:${extract.quote.slice(0, 80)}`, extract);
-      }
-      rejected.push(...validation.rejected);
-      pruneResolvedCandidates(candidatePool, {
-        acceptedKeys: new Set(acceptedByKey.keys()),
-        rejectedKeys: new Set(rejected.map((item) => sourceKey(item.source))),
-      });
-      await ctx.runMutation(internal.agent.research.deepResearch.markStep, {
-        runId: args.runId,
-        ownerUserId: args.ownerUserId,
-        stepKey: "readRoundSources",
-        status: "completed",
-        summary: `${validation.accepted.length} sumber readable, ${validation.rejected.length} ditolak`,
-        sourceCount: acceptedByKey.size,
-      });
-      await ctx.runMutation(internal.agent.research.deepResearch.markStep, {
-        runId: args.runId,
-        ownerUserId: args.ownerUserId,
-        stepKey: "assessRoundSufficiency",
-        status: "running",
-      });
-
-      const assessment = await assessSufficiency(ctx, {
-        prompt: args.prompt,
-        plan,
-        round,
-        maxRounds,
-        sources: numberSources([...acceptedByKey.values()].map((item) => item.source)),
-        extracts: [...extractsByKey.values()],
-        previousGapAssessment: gapAssessment,
-      });
-      gapAssessment = assessment.gapAssessment;
-      sufficiencyStatus = assessment.sufficiencyStatus;
-
-      await ctx.runMutation(internal.agent.research.deepResearch.recordRunEvent, {
-        runId: args.runId,
-        ownerUserId: args.ownerUserId,
-        threadId: args.threadId,
-        stepKey: "assessRoundSufficiency",
-        eventType: "gap",
-        round,
-        title: `Round ${round} sufficiency`,
-        summary: gapAssessment,
-        metadataJson: JSON.stringify({
-          sufficiencyStatus,
-          readiness: assessment.readiness,
-          acceptedSources: acceptedByKey.size,
-          acceptedExtracts: extractsByKey.size,
-          rejected: validation.rejected.map((item) => ({
-            title: item.source.title,
-            url: item.source.url,
-            reason: item.reason,
-          })),
-          domainPenalties: Object.fromEntries(domainPenalties),
-        }),
-      });
+    if (state.sufficiencyStatus !== "sufficient" && state.roundState.length >= maxRounds) {
+      state.sufficiencyStatus = "budget_exhausted";
       await ctx.runMutation(internal.agent.research.deepResearch.updateLoopProgress, {
         runId: args.runId,
         ownerUserId: args.ownerUserId,
-        roundCount: round,
-        sufficiencyStatus,
-      });
-      const numberedAfterRead = numberSources(
-        [...acceptedByKey.values()].map((item) => sanitizeRuntimeSource(item.source)),
-      );
-      await ctx.runMutation(internal.agent.research.deepResearch.recordRoundState, {
-        runId: args.runId,
-        ownerUserId: args.ownerUserId,
-        threadId: args.threadId,
-        round,
-        status: "completed",
-        query: queries.map((item) => item.query).join(" | "),
-        gapAssessment,
-        sufficiencyStatus,
-        sourceCount: acceptedByKey.size,
-        extractCount: extractsByKey.size,
-        stateJson: JSON.stringify({
-          sources: summarizeSourceMetadata(numberedAfterRead),
-          extracts: [...extractsByKey.values()].map((extract) => ({
-            sourceKey: extract.sourceKey,
-            citationNumber: extract.citationNumber,
-            relevance: extract.relevance,
-          })),
-          readiness: assessment.readiness,
-        }),
-      });
-
-      const roundCitationByKey = new Map(numberedAfterRead.map((source) => [sourceKey(source), source.citationNumber]));
-      roundState.push({
-        round,
-        query: queries.map((item) => item.query).join(" | "),
-        gapAssessment,
-        sufficiencyStatus,
-        stopReason: sufficiencyStatus === "sufficient" ? "sufficient_evidence" : undefined,
-        sources: numberedAfterRead,
-        extracts: [...extractsByKey.values()].map((extract) => ({
-          ...extract,
-          citationNumber: roundCitationByKey.get(extract.sourceKey) ?? extract.citationNumber,
-        })),
-      });
-      await ctx.runMutation(internal.agent.research.deepResearch.markStep, {
-        runId: args.runId,
-        ownerUserId: args.ownerUserId,
-        stepKey: "assessRoundSufficiency",
-        status: "completed",
-        summary: `${sufficiencyStatus}: ${gapAssessment}`,
-        sourceCount: acceptedByKey.size,
-      });
-      if (
-        sufficiencyStatus === "sufficient" &&
-        assessment.readiness.ready
-      ) {
-        break;
-      }
-      if (round < maxRounds && !assessment.readiness.ready) {
-        gapAssessment = `${gapAssessment}\nNeed expansion: ${assessment.readiness.recommendation}`;
-      }
-    }
-
-    const counterDecision = await shouldRunCounterEvidencePass({
-      sufficiencyStatus,
-      acceptedSourceCount: acceptedByKey.size,
-      highRelevanceExtractCount: [...extractsByKey.values()].filter((extract) => extract.relevance === "high").length,
-      extracts: [...extractsByKey.values()],
-      prompt: args.prompt,
-    });
-    await ctx.runMutation(internal.agent.research.deepResearch.markStep, {
-      runId: args.runId,
-      ownerUserId: args.ownerUserId,
-      stepKey: "runCounterEvidencePass",
-      status: "running",
-    });
-    await ctx.runMutation(internal.agent.research.deepResearch.recordRunEvent, {
-      runId: args.runId,
-      ownerUserId: args.ownerUserId,
-      threadId: args.threadId,
-      stepKey: "runCounterEvidencePass",
-      eventType: "audit",
-      title: "Counter-evidence pass",
-      summary: counterDecision
-        ? "Counter-evidence required by sufficiency confidence"
-        : "Counter-evidence not required for this status",
-      metadataJson: JSON.stringify({ sufficiencyStatus }),
-    });
-    if (counterDecision) {
-      const counterBucket: SourceBucket = {
-        name: "practitioner examples",
-        queries: [`counter evidence criticism limitations ${args.prompt}`],
-        preferredProviders: ["exa", "jina"],
-        excludeDomains: [],
-        freshnessTarget: "current",
-        minAcceptedSources: 1,
-      };
-      const discovery = await discoverCandidates(ctx, {
-        ownerUserId: args.ownerUserId,
-        queries: [{ bucket: counterBucket, query: counterBucket.queries[0] }],
-        excludedDomains: [],
-      });
-      await ctx.runMutation(internal.agent.research.sources.upsertRunCandidates, {
-        ownerUserId: args.ownerUserId,
-        threadId: args.threadId,
-        runId: args.runId,
-        usage: "candidate",
-        candidates: discovery.candidates.map((source) =>
-          sourceForStorage(source, "candidate"),
-        ),
-      });
-      mergeCandidatePool(candidatePool, discovery.candidates, {
-        acceptedKeys: new Set(acceptedByKey.keys()),
-        rejectedKeys: new Set(rejected.map((item) => sourceKey(item.source))),
-      });
-      const selected = await selectCandidatesToValidate(ctx, {
-        ownerUserId: args.ownerUserId,
-        query: counterBucket.queries[0],
-        candidates: [...candidatePool.values()],
-        acceptedKeys: new Set(acceptedByKey.keys()),
-        rejectedKeys: new Set(rejected.map((item) => sourceKey(item.source))),
-      });
-      const validation = await validateAndRead(ctx, {
-        ownerUserId: args.ownerUserId,
-        runId: args.runId,
-        threadId: args.threadId,
-        candidates: selected.slice(0, 4),
-        acceptedByDomain: acceptedDomainCounts([...acceptedByKey.values()].map((item) => item.source)),
-        domainPenalties,
-      });
-      await recordValidationSources(ctx, {
-        ownerUserId: args.ownerUserId,
-        threadId: args.threadId,
-        runId: args.runId,
-        accepted: validation.accepted,
-        rejected: validation.rejected,
-      });
-      for (const item of validation.accepted) {
-        acceptedByKey.set(sourceKey(item.source), item);
-        if (extractsByKey.size < MAX_EXTRACTS_PER_RUN) {
-          extractsByKey.set(`${item.extract.sourceKey}:${item.extract.quote.slice(0, 80)}`, item.extract);
-        }
-      }
-      rejected.push(...validation.rejected);
-      await ctx.runMutation(internal.agent.research.deepResearch.recordRunEvent, {
-        runId: args.runId,
-        ownerUserId: args.ownerUserId,
-        threadId: args.threadId,
-        stepKey: "runCounterEvidencePass",
-        eventType: "search",
-        title: "Counter-evidence discovery",
-        summary: `${validation.accepted.length} counter-evidence sources accepted from ${discovery.candidates.length} candidates`,
-        metadataJson: JSON.stringify({
-          counts: discovery.counts,
-          accepted: validation.accepted.map((item) => item.source.title),
-          rejected: validation.rejected.map((item) => ({ title: item.source.title, reason: item.reason })),
-        }),
-      });
-    }
-    await ctx.runMutation(internal.agent.research.deepResearch.markStep, {
-      runId: args.runId,
-      ownerUserId: args.ownerUserId,
-      stepKey: "runCounterEvidencePass",
-      status: "completed",
-      summary: counterDecision ? "Counter-evidence dicek sebagai risiko sintesis" : "Dilewati sesuai budget",
-    });
-
-    if (sufficiencyStatus !== "sufficient" && roundState.length >= maxRounds) {
-      sufficiencyStatus = "budget_exhausted";
-      await ctx.runMutation(internal.agent.research.deepResearch.updateLoopProgress, {
-        runId: args.runId,
-        ownerUserId: args.ownerUserId,
-        roundCount: roundState.length,
-        sufficiencyStatus,
+        roundCount: state.roundState.length,
+        sufficiencyStatus: state.sufficiencyStatus,
       });
     }
 
-    const finalSources = numberSources(
-      [...acceptedByKey.values()].map((item) => sanitizeRuntimeSource(item.source)),
-    );
-    const citationByKey = new Map(finalSources.map((source) => [sourceKey(source), source.citationNumber]));
-    const finalExtracts = [...extractsByKey.values()].map((extract) => ({
-      ...extract,
-      citationNumber: citationByKey.get(extract.sourceKey) ?? extract.citationNumber,
-    }));
-
-    return {
-      sources: finalSources,
-      extracts: finalExtracts,
-      roundState,
-    };
+    return finalizeRoundEvidence(state);
   },
 });
+
+// Core report synthesis, extracted from the synthesize action (Slice R1c) so it is
+// shared by the v1 synthesize step and the v2 writerAgent. Pure of step bookkeeping
+// (the callers own markStep). `integrityNote`, when present, surfaces the citation
+// integrity summary the citationAgent produced so the writer can hedge flagged
+// sources. Behavior is 1:1 with the pre-extraction synthesize when integrityNote
+// is omitted.
+export async function generateSynthesis(args: {
+  prompt: string;
+  plan: ResearchPlan;
+  sources: SourceCandidate[];
+  extracts: ResearchExtract[];
+  roundState: ResearchRoundState[];
+  agentKind?: AgentKind;
+  integrityNote?: string;
+}): Promise<{ markdown: string; chatSummary: string; summary: string; readiness: EvidenceReadiness }> {
+  const sourceBlock = args.sources
+    .map((source) => `[${source.citationNumber}] ${source.title}: ${source.snippet}`)
+    .join("\n");
+  const extractBlock = args.extracts
+    .map((extract) => `[${extract.citationNumber}] ${extract.quote}`)
+    .join("\n");
+  const readiness = assessEvidenceReadiness(args.sources, args.extracts, args.agentKind);
+  const promptParts = [
+    `Prompt:\n${args.prompt}`,
+    `Research plan:\n${JSON.stringify(args.plan, null, 2)}`,
+    `Evidence readiness:\n${JSON.stringify(readiness, null, 2)}`,
+    `Round trace:\n${JSON.stringify(args.roundState, null, 2)}`,
+    `Accepted evidence extracts:\n${extractBlock || "No extracted evidence beyond snippets."}`,
+    `Sources:\n${sourceBlock}`,
+  ];
+  if (args.integrityNote) {
+    promptParts.push(`Citation integrity (treat flagged sources with caution):\n${args.integrityNote}`);
+  }
+  const result = await generateText({
+    model: chatProvider.chat(deepModelForAgent(args.agentKind)),
+    system:
+      readiness.ready
+        ? "Write a source-grounded markdown research report. Cite every factual claim with persisted source numbers. Prefer accepted evidence extracts over snippets. If evidence is insufficient, keep that limitation visible and do not overstate certainty. Also produce a concise chat summary (2-4 natural paragraphs, no implementation details) for the user."
+        : "Write a partial source-grounded markdown research artifact, not a full final recommendation report. State up front that accepted readable evidence did not meet the Deep Research target, cite only persisted source numbers, and ask for retry/expanded search before strong conclusions. Also produce a concise chat summary for the user.",
+    prompt: promptParts.join("\n\n"),
+    output: Output.object({
+      schema: z.object({
+        markdown: z.string().describe("Full research report in markdown with citations"),
+        chatSummary: z.string().describe("Concise natural chat summary for the user, 2-4 paragraphs. No implementation details, workflow status, or database records."),
+      }),
+    }),
+  });
+  const markdown = result.output?.markdown?.trim() ?? result.text.trim();
+  const chatSummary = result.output?.chatSummary?.trim() || buildPlainResponseSummary(markdown);
+  return {
+    markdown,
+    chatSummary,
+    summary: trimForSnippet(markdown.replace(/[#*_`>-]/g, ""), 220),
+    readiness,
+  };
+}
 
 export const synthesize = internalAction({
   args: {
@@ -1018,47 +1362,25 @@ export const synthesize = internalAction({
       stepKey: "synthesize",
       status: "running",
     });
-    const sourceBlock = args.sources
-      .map((source) => `[${source.citationNumber}] ${source.title}: ${source.snippet}`)
-      .join("\n");
-    const extractBlock = normalizeExtracts(args.extracts)
-      .map((extract) => `[${extract.citationNumber}] ${extract.quote}`)
-      .join("\n");
-    const readiness = assessEvidenceReadiness(args.sources, normalizeExtracts(args.extracts));
-    const result = await generateText({
-      model: chatProvider.chat(deepModelForAgent(args.agentKind)),
-      system:
-        readiness.ready
-          ? "Write a source-grounded markdown research report. Cite every factual claim with persisted source numbers. Prefer accepted evidence extracts over snippets. If evidence is insufficient, keep that limitation visible and do not overstate certainty. Also produce a concise chat summary (2-4 natural paragraphs, no implementation details) for the user."
-          : "Write a partial source-grounded markdown research artifact, not a full final recommendation report. State up front that accepted readable evidence did not meet the Deep Research target, cite only persisted source numbers, and ask for retry/expanded search before strong conclusions. Also produce a concise chat summary for the user.",
-      prompt: [
-        `Prompt:\n${args.prompt}`,
-        `Research plan:\n${JSON.stringify(normalizePlan(args.plan, args.agentKind), null, 2)}`,
-        `Evidence readiness:\n${JSON.stringify(readiness, null, 2)}`,
-        `Round trace:\n${JSON.stringify(args.roundState, null, 2)}`,
-        `Accepted evidence extracts:\n${extractBlock || "No extracted evidence beyond snippets."}`,
-        `Sources:\n${sourceBlock}`,
-      ].join("\n\n"),
-      output: Output.object({
-        schema: z.object({
-          markdown: z.string().describe("Full research report in markdown with citations"),
-          chatSummary: z.string().describe("Concise natural chat summary for the user, 2-4 paragraphs. No implementation details, workflow status, or database records."),
-        }),
-      }),
+    const out = await generateSynthesis({
+      prompt: args.prompt,
+      plan: normalizePlan(args.plan, args.agentKind),
+      sources: args.sources,
+      extracts: normalizeExtracts(args.extracts),
+      roundState: args.roundState,
+      agentKind: args.agentKind,
     });
-    const markdown = result.output?.markdown?.trim() ?? result.text.trim();
-    const chatSummary = result.output?.chatSummary?.trim() || buildPlainResponseSummary(markdown);
     await ctx.runMutation(internal.agent.research.deepResearch.markStep, {
       runId: args.runId,
       ownerUserId: args.ownerUserId,
       stepKey: "synthesize",
       status: "completed",
-      summary: readiness.ready ? "Laporan markdown tersusun" : `Artifact parsial tersusun: ${readiness.recommendation}`,
+      summary: out.readiness.ready ? "Laporan markdown tersusun" : `Artifact parsial tersusun: ${out.readiness.recommendation}`,
     });
     return {
-      markdown,
-      chatSummary,
-      summary: trimForSnippet(markdown.replace(/[#*_`>-]/g, ""), 220),
+      markdown: out.markdown,
+      chatSummary: out.chatSummary,
+      summary: out.summary,
     };
   },
 });
@@ -1087,7 +1409,21 @@ export const auditClaims = internalAction({
       status: "running",
     });
     const cited = extractCitationNumbers(args.markdown);
-    const checks = await verifyClaimsSemantically(args.markdown, args.sources, normalizeExtracts(args.extracts));
+    // Sandbox recomputations the statisticalAgent wrote for this run. Empty in the
+    // pre-3.1 layout (the stat pass is scheduled post-persist), so the linker
+    // degrades to evidenceKind: "textual"; fully effective once statisticalAgent
+    // runs before the auditor in Slice 3.1.
+    const computations = await ctx.runQuery(
+      internal.agent.research.deepResearch.listRunComputationChecks,
+      { ownerUserId: args.ownerUserId, runId: args.runId },
+    );
+    const checks = await verifyClaimsSemantically(
+      args.markdown,
+      args.sources,
+      normalizeExtracts(args.extracts),
+      args.agentKind,
+      computations,
+    );
     const needsRevision = shouldReviseUnsupportedClaims(checks);
     let markdown = withEvidenceLimits(args.markdown, checks);
     let verificationStatus: VerificationStatus =
@@ -1152,6 +1488,145 @@ export const auditClaims = internalAction({
   },
 });
 
+// Read the run's sandbox recomputations (statcheck/GRIM/power) for the auditor —
+// only IDs + the matched span, never the bulk reported/recomputed JSON (1 MB/step
+// discipline). Joins sandboxRuns(by_owner_run) -> computationChecks(by_owner_sandbox_run).
+export const listRunComputationChecks = internalQuery({
+  args: { ownerUserId: v.string(), runId: v.id("agentRuns") },
+  returns: v.array(
+    v.object({
+      computationCheckId: v.id("computationChecks"),
+      claimSpan: v.optional(v.string()),
+      claimText: v.string(),
+      outcome: v.union(
+        v.literal("consistent"),
+        v.literal("discrepant"),
+        v.literal("decision_error"),
+        v.literal("not_computable"),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const runs = await ctx.db
+      .query("sandboxRuns")
+      .withIndex("by_owner_run", (q) =>
+        q.eq("ownerUserId", args.ownerUserId).eq("runId", args.runId),
+      )
+      .take(20);
+    const perRun = await Promise.all(
+      runs.map((run) =>
+        ctx.db
+          .query("computationChecks")
+          .withIndex("by_owner_sandbox_run", (q) =>
+            q.eq("ownerUserId", args.ownerUserId).eq("sandboxRunId", run._id),
+          )
+          .take(100),
+      ),
+    );
+    return perRun.flat().map((check) => ({
+      computationCheckId: check._id,
+      claimSpan: check.claimSpan,
+      claimText: check.claimText,
+      outcome: check.outcome,
+    }));
+  },
+});
+
+// Rebuild the synthesis inputs (sources/extracts/roundState) from persisted rows
+// for the v2 decomposed path (Slice R1b), where the rounds ran as separate
+// literatureRoundAgent steps and returned only scalars. Mirrors researchLoop's
+// finalize block: accepted sources numbered in creation order, extract citation
+// numbers aligned; roundState is the lightweight per-round trace (gap/sufficiency)
+// — enough context for synthesize, which also receives the full sources/extracts.
+export const loadRunEvidence = internalQuery({
+  args: { ownerUserId: v.string(), runId: v.id("agentRuns") },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    sources: SourceCandidate[];
+    extracts: ResearchExtract[];
+    roundState: ResearchRoundState[];
+  }> => {
+    const [sourceRows, extractRows, roundRows] = await Promise.all([
+      ctx.db
+        .query("researchSources")
+        .withIndex("by_owner_run", (q) =>
+          q.eq("ownerUserId", args.ownerUserId).eq("runId", args.runId),
+        )
+        .take(400),
+      ctx.db
+        .query("researchExtracts")
+        .withIndex("by_owner_run", (q) =>
+          q.eq("ownerUserId", args.ownerUserId).eq("runId", args.runId),
+        )
+        .take(100),
+      ctx.db
+        .query("researchRoundStates")
+        .withIndex("by_owner_run_round", (q) =>
+          q.eq("ownerUserId", args.ownerUserId).eq("runId", args.runId),
+        )
+        .collect(),
+    ]);
+    const acceptedSources: Array<Omit<SourceCandidate, "citationNumber">> = sourceRows
+      .filter((row) => row.usage === "accepted")
+      .map((row) => sanitizeRuntimeSource(rowToRuntimeSource(row)));
+    const finalSources = numberSources(acceptedSources);
+    const citationByKey = new Map(finalSources.map((source) => [sourceKey(source), source.citationNumber]));
+    const extracts: ResearchExtract[] = extractRows.map((row) => ({
+      sourceKey: row.sourceKey,
+      citationNumber: citationByKey.get(row.sourceKey) ?? row.citationNumber,
+      title: row.title,
+      locator: row.locator,
+      quote: row.quote,
+      relevance: row.relevance,
+      notes: row.notes,
+    }));
+    const roundState: ResearchRoundState[] = roundRows
+      .filter((row) => row.status === "completed")
+      .sort((a, b) => a.round - b.round)
+      .map((row) => ({
+        round: row.round,
+        query: row.query,
+        gapAssessment: row.gapAssessment,
+        sufficiencyStatus: row.sufficiencyStatus,
+        stopReason: row.sufficiencyStatus === "sufficient" ? "sufficient_evidence" : undefined,
+        sources: [],
+        extracts: [],
+      }));
+    return { sources: finalSources, extracts, roundState };
+  },
+});
+
+// Citation-integrity summary the writerAgent folds into synthesis (Slice R1c), so
+// the report hedges sources the citationAgent flagged. A flagged source is any
+// accepted source whose integrityStatus is not "verified"/unset.
+export const getRunIntegritySummary = internalQuery({
+  args: { ownerUserId: v.string(), runId: v.id("agentRuns") },
+  returns: v.object({ note: v.string(), flaggedCount: v.number(), verifiedCount: v.number() }),
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("researchSources")
+      .withIndex("by_owner_run", (q) =>
+        q.eq("ownerUserId", args.ownerUserId).eq("runId", args.runId),
+      )
+      .take(400);
+    const flagged: string[] = [];
+    let verifiedCount = 0;
+    for (const row of rows) {
+      if (row.usage !== "accepted") continue;
+      if (row.integrityStatus === "verified") verifiedCount += 1;
+      else if (row.integrityStatus && row.integrityStatus !== "unverifiable") {
+        flagged.push(`[${row.citationNumber}] ${row.integrityStatus}`);
+      }
+    }
+    const note = flagged.length
+      ? `${flagged.length} source(s) flagged by citation integrity: ${flagged.join("; ")}.`
+      : "";
+    return { note, flaggedCount: flagged.length, verifiedCount };
+  },
+});
+
 export const persistArtifact = internalMutation({
   args: {
     ...workflowArgs(),
@@ -1176,6 +1651,13 @@ export const persistArtifact = internalMutation({
         failureReason: v.optional(v.string()),
         extractKeys: v.optional(v.array(v.string())),
         revisionAction: v.optional(v.union(v.literal("none"), v.literal("caveated"), v.literal("removed_or_rewritten"))),
+        evidenceKind: v.optional(
+          v.union(v.literal("textual"), v.literal("computational"), v.literal("mixed")),
+        ),
+        // ids-as-strings from listRunComputationChecks (claimEvidence is
+        // Convex-free); persistCitationChecks casts to Id<"computationChecks">.
+        computationCheckIds: v.optional(v.array(v.string())),
+        claimSpan: v.optional(v.string()),
       }),
     ),
   },
@@ -1435,6 +1917,25 @@ export const updateLoopProgress = internalMutation({
   },
 });
 
+// Persist the planned source buckets once per run (Slice R1a). v1 writes it for
+// the v2 read path; harmless to v1 itself.
+export const persistRunBuckets = internalMutation({
+  args: {
+    runId: v.id("agentRuns"),
+    ownerUserId: v.string(),
+    bucketsJson: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await assertRunOwner(ctx, args.runId, args.ownerUserId);
+    await ctx.db.patch("agentRuns", args.runId, {
+      bucketsJson: args.bucketsJson,
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
 export const recordRoundState = internalMutation({
   args: {
     runId: v.id("agentRuns"),
@@ -1536,6 +2037,9 @@ export const recordRunEvent = internalMutation({
       v.literal("artifact"),
       v.literal("status"),
       v.literal("failure"),
+      v.literal("compute"),
+      v.literal("citation_check"),
+      v.literal("skill_activated"),
     ),
     round: v.optional(v.number()),
     title: v.string(),
@@ -1825,7 +2329,7 @@ function sourceRuntimeValidator() {
   return sourceCandidateValidator;
 }
 
-function normalizePlan(value: unknown, agentKind?: AgentKind): ResearchPlan {
+export function normalizePlan(value: unknown, agentKind?: AgentKind): ResearchPlan {
   const plan = isRecord(value) ? value : {};
   return {
     title: stringValue(plan.title) || "Deep Research Report",
@@ -1870,7 +2374,7 @@ async function chooseNextQuery(
   return object.object.query.trim() || args.prompt;
 }
 
-async function planSourceBuckets(_ctx: ActionCtx, prompt: string, plan: ResearchPlan): Promise<SourceBucket[]> {
+export async function planSourceBuckets(_ctx: ActionCtx, prompt: string, plan: ResearchPlan): Promise<SourceBucket[]> {
   const fallback = defaultSourceBuckets(prompt, plan);
   try {
     const object = await generateObject({
@@ -1986,6 +2490,33 @@ function tagDiscovery(
       discoveryQuery,
     }),
   }));
+}
+
+// Map a persisted researchSources row back to a runtime SourceCandidate (the v2
+// loadRunEvidence read path). Mirrors runState.ts rowToSourceCandidate.
+function rowToRuntimeSource(row: Doc<"researchSources">): SourceCandidate {
+  return {
+    citationNumber: row.citationNumber,
+    sourceKey: row.sourceKey,
+    usage: row.usage,
+    origin: row.origin,
+    provider: row.provider,
+    providerRequestId: row.providerRequestId,
+    evidenceStrength: row.evidenceStrength,
+    title: row.title,
+    locator: row.locator,
+    url: row.url,
+    doi: row.doi,
+    arxivId: row.arxivId,
+    snippet: row.snippet,
+    readStatus: row.readStatus,
+    readError: row.readError,
+    qualityReason: row.qualityReason,
+    bucketName: row.bucketName,
+    discoveryQuery: row.discoveryQuery,
+    rerankScore: row.rerankScore,
+    metadataJson: row.metadataJson,
+  };
 }
 
 function sanitizeRuntimeSource(source: Omit<SourceCandidate, "citationNumber">): Omit<SourceCandidate, "citationNumber"> {
@@ -2642,9 +3173,10 @@ async function assessSufficiency(
     sources: SourceCandidate[];
     extracts: ResearchExtract[];
     previousGapAssessment: string;
+    agentKind?: AgentKind;
   },
 ) {
-  const readiness = assessEvidenceReadiness(args.sources, args.extracts);
+  const readiness = assessEvidenceReadiness(args.sources, args.extracts, args.agentKind);
   const object = await generateObject({
     model: chatProvider.chat(DEEP_LITE_MODEL),
     schema: z.object({
@@ -2674,7 +3206,9 @@ async function assessSufficiency(
 export function assessEvidenceReadiness(
   sources: SourceCandidate[],
   extracts: ResearchExtract[],
+  agentKind?: AgentKind,
 ): EvidenceReadiness {
+  const floor = evidenceFloorForAgent(agentKind);
   const readableSources = sources.filter((source) => source.readStatus === "ready" || source.origin === "arxiv");
   const domainCount = new Set(readableSources.flatMap((source) => {
     const domain = sourceDomain(source);
@@ -2688,24 +3222,16 @@ export function assessEvidenceReadiness(
   const highQualityExtractCount = extracts.filter((extract) =>
     extract.relevance === "high" || (extract.quote.length >= 500 && extract.relevance !== "low"),
   ).length;
-  const missing = [
-    readableSources.length < MIN_ACCEPTED_SOURCES
-      ? `${MIN_ACCEPTED_SOURCES - readableSources.length} more readable sources`
-      : null,
-    extracts.length < MIN_ACCEPTED_EXTRACTS
-      ? `${MIN_ACCEPTED_EXTRACTS - extracts.length} more accepted extracts`
-      : null,
-    domainCount < MIN_DOMAIN_DIVERSITY
-      ? `${MIN_DOMAIN_DIVERSITY - domainCount} more source domains`
-      : null,
-    bucketCount < MIN_BUCKET_COVERAGE
-      ? `${MIN_BUCKET_COVERAGE - bucketCount} more evidence buckets`
-      : null,
-    highQualityExtractCount < Math.min(4, MIN_ACCEPTED_EXTRACTS)
-      ? `${Math.min(4, MIN_ACCEPTED_EXTRACTS) - highQualityExtractCount} stronger extracts`
-      : null,
-  ].filter((item): item is string => Boolean(item));
-  const ready = missing.length === 0;
+  const floors: FloorCheck[] = [
+    { key: "readable sources", have: readableSources.length, floor: floor.sources, met: readableSources.length >= floor.sources },
+    { key: "accepted extracts", have: extracts.length, floor: floor.extracts, met: extracts.length >= floor.extracts },
+    { key: "source domains", have: domainCount, floor: floor.domains, met: domainCount >= floor.domains },
+    { key: "evidence buckets", have: bucketCount, floor: floor.buckets, met: bucketCount >= floor.buckets },
+    { key: "stronger extracts", have: highQualityExtractCount, floor: floor.strongExtracts, met: highQualityExtractCount >= floor.strongExtracts },
+  ];
+  const failed = floors.filter((check) => !check.met);
+  const missing = failed.map((check) => `${check.floor - check.have} more ${check.key}`);
+  const ready = failed.length === 0;
   return {
     ready,
     status: ready ? "sufficient" : readableSources.length >= 6 && extracts.length >= 5 ? "partial" : "insufficient",
@@ -2717,7 +3243,9 @@ export function assessEvidenceReadiness(
     missing,
     recommendation: ready
       ? "Evidence is diverse and readable enough for synthesis."
-      : missing.join("; "),
+      : `Below the ${floor.tier} floor: ${missing.join("; ")}.`,
+    tier: floor.tier,
+    floors,
   };
 }
 
@@ -2832,9 +3360,12 @@ function normalizeExtracts(value: unknown): ResearchExtract[] {
   });
 }
 
-async function extractVerifiableClaims(markdown: string): Promise<string[]> {
+async function extractVerifiableClaims(
+  markdown: string,
+  agentKind?: AgentKind,
+): Promise<string[]> {
   const object = await generateObject({
-    model: chatProvider.chat(DEEP_LITE_MODEL),
+    model: chatProvider.chat(deepModelForAgent(agentKind)),
     schema: z.object({
       claims: z.array(z.string().min(20).max(500)).max(16),
     }),
@@ -2849,13 +3380,36 @@ async function extractVerifiableClaims(markdown: string): Promise<string[]> {
   return object.object.claims;
 }
 
+// Merge any deterministic sandbox recomputations backing a claim onto its check:
+// set evidenceKind, link computationCheckIds, and upgrade a consistent quant
+// claim to supported (a recompute beats a citation). Pure composition of the
+// claimEvidence helpers; a no-match leaves evidenceKind: "textual".
+function applyComputationLink(
+  check: CitationCheckDraft,
+  computations: ComputationRef[],
+): CitationCheckDraft {
+  const link = linkComputationToClaim(check.claim, computations);
+  const patch = computeEvidencePatch(link, (check.extractKeys?.length ?? 0) > 0);
+  return {
+    ...check,
+    support: patch.support ?? check.support,
+    confidence: patch.support ? patch.confidence : check.confidence,
+    evidenceKind: patch.evidenceKind,
+    computationCheckIds: patch.computationCheckIds,
+    claimSpan: patch.claimSpan,
+  };
+}
+
 async function verifyClaimsSemantically(
   markdown: string,
   sources: SourceCandidate[],
   extracts: ResearchExtract[],
+  agentKind?: AgentKind,
+  computations: ComputationRef[] = [],
 ) {
+  const model = deepModelForAgent(agentKind);
   const sourceNumbers = new Set(sources.map((source) => source.citationNumber));
-  const claims = await extractVerifiableClaims(markdown);
+  const claims = await extractVerifiableClaims(markdown, agentKind);
   const structural = claims.map((claim): CitationCheckDraft => {
     const claimCitations = [...extractCitationNumbers(claim)].filter((number) => sourceNumbers.has(number));
     const relevantEvidence = extracts.filter((extract) =>
@@ -2872,46 +3426,51 @@ async function verifyClaimsSemantically(
       support,
       citationNumbers: claimCitations,
       evidence: relevantEvidence.map((extract) => extract.quote).join("\n") || evidenceText(support),
-      verifierModel: DEEP_LITE_MODEL,
+      verifierModel: model,
       confidence: support === "supported" ? 0.55 : 0.35,
       extractKeys: relevantEvidence.map((extract) => extractKey(extract)),
       revisionAction: "none",
     };
   });
-  const verified: CitationCheckDraft[] = [];
-  for (const check of structural) {
-    const evidence = extracts
-      .filter((extract) => check.citationNumbers.includes(extract.citationNumber))
-      .map((extract) => `[${extract.citationNumber}] ${extract.quote}`)
-      .join("\n");
-    if (!evidence) {
-      verified.push(check);
-      continue;
-    }
-    try {
-      const result = await generateObject({
-        model: chatProvider.chat(DEEP_LITE_MODEL),
-        schema: z.object({
-          support: z.enum(["supported", "partially_supported", "contradicted", "unsupported"]),
-          confidence: z.number().min(0).max(1),
-          failureReason: z.string().optional(),
-        }),
-        prompt: [
-          "Classify whether the evidence supports the factual claim.",
-          "Use supported only when the cited extract directly backs the claim. Use partially_supported when only part of the claim is backed. Use contradicted when evidence says the opposite. Use unsupported when evidence does not substantiate it.",
-          `Claim:\n${check.claim}`,
-          `Evidence:\n${evidence}`,
-        ].join("\n\n"),
-      });
-      verified.push(normalizeSemanticVerifierOutput(check, result.object));
-    } catch (error) {
-      verified.push({
-        ...check,
-        failureReason: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-  return verified;
+  // Bounded-concurrency semantic verification (tier-scaled), then deterministic
+  // linking of any sandbox recomputations. Each unit owns its try/catch so a
+  // single failure never throws the batch.
+  return mapWithConcurrency(
+    structural,
+    auditConcurrencyForAgent(agentKind),
+    async (check): Promise<CitationCheckDraft> => {
+      const evidence = extracts
+        .filter((extract) => check.citationNumbers.includes(extract.citationNumber))
+        .map((extract) => `[${extract.citationNumber}] ${extract.quote}`)
+        .join("\n");
+      let verified: CitationCheckDraft = check;
+      if (evidence) {
+        try {
+          const result = await generateObject({
+            model: chatProvider.chat(model),
+            schema: z.object({
+              support: z.enum(["supported", "partially_supported", "contradicted", "unsupported"]),
+              confidence: z.number().min(0).max(1),
+              failureReason: z.string().optional(),
+            }),
+            prompt: [
+              "Classify whether the evidence supports the factual claim.",
+              "Use supported only when the cited extract directly backs the claim. Use partially_supported when only part of the claim is backed. Use contradicted when evidence says the opposite. Use unsupported when evidence does not substantiate it.",
+              `Claim:\n${check.claim}`,
+              `Evidence:\n${evidence}`,
+            ].join("\n\n"),
+          });
+          verified = normalizeSemanticVerifierOutput(check, result.object);
+        } catch (error) {
+          verified = {
+            ...check,
+            failureReason: error instanceof Error ? error.message : String(error),
+          };
+        }
+      }
+      return applyComputationLink(verified, computations);
+    },
+  );
 }
 
 export function normalizeSemanticVerifierOutput(
@@ -2986,10 +3545,17 @@ async function reviseUnsupportedMarkdown(
   return withEvidenceLimits(result.text.trim() || markdown, checks);
 }
 
-export function shouldReviseUnsupportedClaims(checks: Array<Pick<CitationCheckDraft, "support" | "claim" | "confidence">>) {
+export function shouldReviseUnsupportedClaims(
+  checks: Array<
+    Pick<CitationCheckDraft, "support" | "claim" | "confidence" | "extractKeys" | "computationCheckIds">
+  >,
+) {
   return checks.some((check) =>
     check.support === "contradicted" ||
-    (check.support === "unsupported" && (check.confidence ?? 0) >= 0.6),
+    (check.support === "unsupported" && (check.confidence ?? 0) >= 0.6) ||
+    // Agentic-RAG enforcement: an unsupported claim with no extract and no
+    // computational backing must be revised (hypothesis/removed), not just scored.
+    enforceUnsupportedClaim(check),
   );
 }
 
@@ -3193,6 +3759,9 @@ async function persistCitationChecks(
       failureReason?: string;
       extractKeys?: string[];
       revisionAction?: "none" | "caveated" | "removed_or_rewritten";
+      evidenceKind?: "textual" | "computational" | "mixed";
+      computationCheckIds?: string[];
+      claimSpan?: string;
     }>;
     sourceIdsByNumber: Map<number, Id<"researchSources">>;
     extractIdsByKey: Map<string, Id<"researchExtracts">>;
@@ -3220,6 +3789,13 @@ async function persistCitationChecks(
           .filter((id): id is Id<"researchExtracts"> => Boolean(id)),
         revisionAction: check.revisionAction,
         evidence: check.evidence,
+        evidenceKind: check.evidenceKind,
+        // IDs originate from listRunComputationChecks (real computationChecks
+        // docs); the string boundary keeps claimEvidence Convex-free.
+        computationCheckIds: check.computationCheckIds as
+          | Id<"computationChecks">[]
+          | undefined,
+        claimSpan: check.claimSpan,
         createdAt: now,
       }),
     ),

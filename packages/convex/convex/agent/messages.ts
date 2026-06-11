@@ -13,6 +13,7 @@ import type { Id } from "../_generated/dataModel";
 import {
   internalAction,
   internalMutation,
+  internalQuery,
   mutation,
   query,
   type ActionCtx,
@@ -51,6 +52,7 @@ import { routeCompute } from "./sandbox/computeRouter";
 import { buildSandboxTools, SANDBOX_TOOL_NAMES } from "./sandbox/sandboxTools";
 import { buildCitationTools, CITATION_TOOL_NAMES } from "./research/citationTools";
 import { detectCitationVerifyIntent } from "./research/citationRouter";
+import { buildResumeRagContextHandler } from "./context/resumeContext";
 import { buildSkillTools, SKILL_TOOL_NAMES } from "./skills/skillTools";
 import type { ToolSet } from "ai";
 import type { SourceCandidate } from "./research/sourceCandidates";
@@ -486,6 +488,8 @@ async function scheduleGenerationForMessage(
     promptMessageId: args.messageId,
     prompt: generationPrompt,
     agentKind: args.agentKind,
+    visiblePrompt: args.promptPayload.visibleContent,
+    messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
   });
   await ctx.scheduler.runAfter(0, internal.agent.messages.generateReply, {
     threadId: args.threadId,
@@ -1014,6 +1018,9 @@ async function runInlineGeneration(
     messageAttachmentArtifactIds?: Id<"artifacts">[];
     scheduleTitle: boolean;
     deep?: boolean;
+    // AUD-08: pre-built RAG block to re-inject on a HITL resume turn (no string
+    // prompt is passed on resume, so it goes via contextHandler, not the prompt).
+    resumeRagContext?: string;
   },
 ) {
   try {
@@ -1096,6 +1103,12 @@ async function runInlineGeneration(
       {
         saveStreamDeltas: { chunking: "word", throttleMs: 100 },
         usageHandler: usageHandlerForAgent(args.agentKind),
+        // AUD-08: on a HITL resume the RAG block is injected via contextHandler
+        // (never via prompt, which would clobber the resolution message). No-op
+        // when resumeRagContext is unset (the normal initial-turn path).
+        ...(args.resumeRagContext
+          ? { contextHandler: buildResumeRagContextHandler(args.resumeRagContext) }
+          : {}),
       },
     );
     await result.consumeStream();
@@ -1261,6 +1274,29 @@ export const resumeGeneration = internalAction({
     if (!thread || thread.userId !== args.userId) {
       throwAppError({ message: "Thread not found", code: "thread_not_found" });
     }
+    // AUD-08: rebuild the pinned-document RAG context for an inline (non-deep) HITL
+    // resume from the recall query captured at run start, and re-inject it via
+    // contextHandler (the resume turn has no string prompt to prepend to). Absent
+    // snapshot (pre-R2 runs) → resume proceeds without RAG, the prior behavior.
+    let resumeRagContext: string | undefined;
+    if (!(args.deep ?? false) && args.runId) {
+      const recall = await ctx.runQuery(internal.agent.messages.getRunRecallContext, {
+        runId: args.runId,
+        ownerUserId: args.userId,
+      });
+      if (recall?.visiblePrompt) {
+        const block: string = await ctx.runAction(
+          internal.agent.context.ragContext.buildRagContextForThread,
+          {
+            ownerUserId: args.userId,
+            threadId: args.threadId,
+            query: recall.visiblePrompt,
+            messageAttachmentArtifactIds: recall.attachmentArtifactIds,
+          },
+        );
+        resumeRagContext = block || undefined;
+      }
+    }
     await runInlineGeneration(ctx, {
       threadId: args.threadId,
       userId: args.userId,
@@ -1270,7 +1306,29 @@ export const resumeGeneration = internalAction({
       includeExecuteArtifact: true,
       scheduleTitle: false,
       deep: args.deep ?? false,
+      resumeRagContext,
     });
+  },
+});
+
+// AUD-08: the recall query + pinned attachments captured at inline-run start, read
+// back by resumeGeneration to rebuild the RAG document context on a HITL resume.
+export const getRunRecallContext = internalQuery({
+  args: { runId: v.id("agentRuns"), ownerUserId: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      visiblePrompt: v.optional(v.string()),
+      attachmentArtifactIds: v.optional(v.array(v.id("artifacts"))),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get("agentRuns", args.runId);
+    if (!run || run.ownerUserId !== args.ownerUserId) return null;
+    return {
+      visiblePrompt: run.visiblePromptSnapshot,
+      attachmentArtifactIds: run.attachmentArtifactIds,
+    };
   },
 });
 
@@ -1405,6 +1463,10 @@ export const startInlineRun = internalMutation({
     promptMessageId: v.string(),
     prompt: v.string(),
     agentKind: v.union(v.literal("lite"), v.literal("pro")),
+    // AUD-08: the user-visible recall query + pinned attachments, stashed so a
+    // later HITL resume can rebuild RAG context (see resumeGeneration).
+    visiblePrompt: v.optional(v.string()),
+    messageAttachmentArtifactIds: v.optional(v.array(v.id("artifacts"))),
   },
   handler: async (ctx, args): Promise<Id<"agentRuns">> => {
     const now = Date.now();
@@ -1416,6 +1478,8 @@ export const startInlineRun = internalMutation({
       agentKind: args.agentKind,
       executionKind: "inline",
       promptSnapshot: args.prompt,
+      visiblePromptSnapshot: args.visiblePrompt,
+      attachmentArtifactIds: args.messageAttachmentArtifactIds,
       status: "running",
       currentStep: "understand",
       artifactCount: 0,
@@ -1505,7 +1569,9 @@ export const completeInlineRun = internalMutation({
       });
     }
     await ctx.db.patch("agentRuns", args.runId, {
-      status: args.keepWaiting ? "waiting" : "completed",
+      // AUD-16: a chat-turn pause here is an in-thread askUser/needsApproval HITL
+      // (keepWaiting === pendingHitl), distinct from plan-approval "waiting".
+      status: args.keepWaiting ? "waiting_hitl" : "completed",
       currentStep: observations.at(-1)?.stepKey ?? "finalize",
       sourceCount: args.sourceCount,
       artifactCount: args.artifactCount,

@@ -388,7 +388,10 @@ export default defineSchema(
       status: v.union(
         v.literal("queued"),
         v.literal("running"),
+        // `waiting` = paused for plan approval; `waiting_hitl` = paused for an
+        // in-thread askUser/needsApproval tool (AUD-16). Both count as active.
         v.literal("waiting"),
+        v.literal("waiting_hitl"),
         v.literal("completed"),
         v.literal("failed"),
         v.literal("canceled"),
@@ -430,12 +433,35 @@ export default defineSchema(
       // serialized VerificationReport. Optional — only set on runs that ran a
       // verification. See agent/sandbox/verificationReport.ts.
       verificationReportJson: v.optional(v.string()),
+      // Phase 3 (Slice 3.1) writer->auditor->finalize staging slot for the report
+      // markdown, so subagent steps pass a tiny runId ref instead of the full
+      // report through the workflow journal (1 MB/step). Point-read by runId.
+      draftMarkdown: v.optional(v.string()),
+      // Phase 3 (Slice R1a) planned source buckets, serialized once per run so the
+      // decomposed v2 literatureRoundAgent rehydrates them per round instead of
+      // re-planning. Optional/greenfield-safe; written by researchLoop/v2 start.
+      bucketsJson: v.optional(v.string()),
+      // Phase 3 (Slice R1c/R1d) verification degradation markers — a JSON array of
+      // { marker, reason } appended whenever a non-fatal verifier (citation /
+      // statistical / semantic) fails or is rate-limited. The finalizer reads these
+      // to ship a "verification incomplete" section instead of failing the run.
+      verificationMarkersJson: v.optional(v.string()),
+      // Phase 3 (Slice R2 / AUD-08) the user-visible recall query + pinned
+      // attachment ids captured at run start, so a HITL resume can rebuild the RAG
+      // document context and re-inject it via contextHandler (the resume turn has
+      // no string prompt to prepend to). Additive; absent on pre-R2 runs (resume
+      // then proceeds without RAG, the prior behavior).
+      visiblePromptSnapshot: v.optional(v.string()),
+      attachmentArtifactIds: v.optional(v.array(v.id("artifacts"))),
       createdAt: v.number(),
       updatedAt: v.number(),
       completedAt: v.optional(v.number()),
     })
       .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"])
       .index("by_owner_status", ["ownerUserId", "status"])
+      // AUD-07: reliable per-thread active/waiting lookup (replaces the take(8)
+      // ring-buffer scan that silently dropped older active runs).
+      .index("by_owner_thread_status", ["ownerUserId", "threadId", "status"])
       .index("by_workflow", ["workflowId"]),
     agentRunSteps: defineTable({
       ownerUserId: v.string(),
@@ -743,6 +769,20 @@ export default defineSchema(
         ),
       ),
       evidence: v.string(),
+      // Module-3 auditor (Phase 3, Slice 3.2): provenance of the claim's evidence.
+      // textual = backed by a cited extract only; computational = backed by a
+      // deterministic sandbox recompute; mixed = both. computationCheckIds links
+      // the backing computationChecks; claimSpan is the matched NHST span (for UI
+      // highlight). All optional/greenfield-safe — populated from the first audit.
+      evidenceKind: v.optional(
+        v.union(
+          v.literal("textual"),
+          v.literal("computational"),
+          v.literal("mixed"),
+        ),
+      ),
+      computationCheckIds: v.optional(v.array(v.id("computationChecks"))),
+      claimSpan: v.optional(v.string()),
       createdAt: v.number(),
     })
       .index("by_owner_artifact", ["ownerUserId", "artifactId"])

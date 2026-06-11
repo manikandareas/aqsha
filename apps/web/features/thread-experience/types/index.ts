@@ -88,6 +88,7 @@ export type ResearchRun = {
     | "queued"
     | "running"
     | "waiting"
+    | "waiting_hitl"
     | "completed"
     | "failed"
     | "canceled";
