@@ -6,6 +6,7 @@ import { mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from
 import { requireCurrentUser } from "../auth";
 import { assertWorkspaceOwner } from "../workspaces/access";
 import { throwAppError } from "../lib/appError";
+import { DEFAULT_THREAD_TITLE } from "./threadTitles";
 
 type ThreadCtx = QueryCtx | MutationCtx | ActionCtx;
 
@@ -51,7 +52,7 @@ async function summarizeThread(ctx: QueryCtx, thread: {
   return {
     threadId: thread._id,
     workspaceId: metadata?.workspaceId,
-    title: thread.title ?? "Thread baru",
+    title: thread.title ?? DEFAULT_THREAD_TITLE,
     createdAt: thread._creationTime,
     lastActivityAt: metadata?.lastActivityAt ?? thread._creationTime,
     lastMessagePreview: metadata?.lastMessagePreview ?? "",
@@ -95,7 +96,7 @@ export const create = mutation({
     if (args.workspaceId) {
       await assertWorkspaceOwner(ctx, args.workspaceId, user._id, { requireActive: true });
     }
-    const title = args.title?.trim() || "Thread baru";
+    const title = args.title?.trim() || DEFAULT_THREAD_TITLE;
     const threadId = await createThread(ctx, components.agent, {
       userId: user._id,
       title,

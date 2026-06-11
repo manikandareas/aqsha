@@ -15,6 +15,10 @@ import {
   requireToolThread,
   requireToolUser,
 } from "../tools/toolContext";
+import {
+  DEEP_RESEARCH_STARTED_STATUS,
+  type DeepResearchStartedResult,
+} from "../research/deepResearchContract";
 
 const optionSchema = z.object({
   id: z.string().min(1).max(40),
@@ -41,8 +45,11 @@ const artifactTypeEnum = agentWritableArtifactTypeEnum;
  *    tool's own `execute` (approve) or synthesizes a denied result (deny).
  *  - artifact create/update is two-step: `proposeArtifact` (needsApproval,
  *    display-only) is approved first, then the model calls `executeArtifact`
- *    with the final content. `executeArtifact` is gated to the post-approval
- *    step via prepareStep in agent/messages.ts (it is not approval-gated).
+ *    with the final content. `executeArtifact` itself is NOT approval-gated: it
+ *    is withheld from the initial turn via the `activeTools` allow-list in
+ *    agent/messages.ts (runInlineGeneration), so the model can only reach it on
+ *    the post-approval resume. A hard per-step gate via the AI SDK `prepareStep`
+ *    option is a planned follow-up; today the activeTools allow-list is the gate.
  */
 export function buildHitlTools(args: { promptMessageId: string }): ToolSet {
   return {
@@ -340,10 +347,11 @@ export function buildDeepResearchTools(args: {
             plan: input,
           },
         );
-        return {
-          status: "deep_research_started" as const,
+        const started: DeepResearchStartedResult = {
+          status: DEEP_RESEARCH_STARTED_STATUS,
           workflowId: result.workflowId,
         };
+        return started;
       },
     }),
   };

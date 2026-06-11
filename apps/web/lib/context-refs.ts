@@ -6,6 +6,11 @@
  * are rendered as inline pills in the composer (the same visual language as
  * slash commands) and pinned per-thread.
  */
+import {
+  MENTION_MARKER_OPEN,
+  MENTION_MARKER_CLOSE,
+} from "@aqsha/convex/mention-markers";
+
 export const MAX_CONTEXT_WORKSPACES = 5;
 export const MAX_CONTEXT_PAPERS = 12;
 
@@ -60,14 +65,12 @@ export function buildPaperMentionLabel(workspaceName: string, paperTitle: string
   return `@${workspaceName}:${paperTitle}`;
 }
 
-// Inline mention markers. A sent message keeps mention pills at the position the
-// user typed them by wrapping each pill label in private-use-area
-// sentinels (U+E000 / U+E001). The message
-// renderer splits on them to draw pills inline; sidebar preview / thread title
-// strip them. MUST stay in sync with the backend copy
-// (packages/convex/convex/agent/mentionMarkers.ts).
-export const MENTION_MARKER_OPEN = String.fromCharCode(0xe000);
-export const MENTION_MARKER_CLOSE = String.fromCharCode(0xe001);
+// Inline mention markers (private-use-area sentinels U+E000 / U+E001) come from
+// the backend single source of truth (imported at the top of this file) so the
+// two sides cannot drift; re-exported here for the composer/render consumers that
+// import them from this module. The message renderer splits on them to draw pills
+// inline; sidebar preview / thread title strip them.
+export { MENTION_MARKER_OPEN, MENTION_MARKER_CLOSE };
 
 export function wrapMentionLabel(label: string) {
   return `${MENTION_MARKER_OPEN}${label}${MENTION_MARKER_CLOSE}`;

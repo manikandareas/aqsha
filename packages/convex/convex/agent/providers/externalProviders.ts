@@ -14,16 +14,23 @@ import { collapse, normalizeKey } from "../../lib/text";
 import { providerValidator, type Provider } from "./providerCache";
 import type { SourceCandidate, SourceOrigin } from "../research/sourceCandidates";
 import { trimForSnippet } from "../research/sourceCandidates";
+import { researchUserAgent } from "./userAgent";
 export { searchOpenAlexWorks } from "./openalexProvider";
 
-const CACHE_TTL_MS = 1000 * 60 * 60 * 24;
+// Cache lifetime by result status. Successful lookups are stable for a day; a nil
+// result is retried sooner (corpora like arXiv publish daily); transient provider
+// failures clear quickly so we don't pin an error for long.
+const CACHE_TTL_BY_STATUS = {
+  ready: 1000 * 60 * 60 * 24, // 24h
+  empty: 1000 * 60 * 90, // 1.5h
+  failed: 1000 * 60 * 12, // 12m
+} as const;
 const CROSSREF_ENDPOINT = "https://api.crossref.org/works";
 const ARXIV_ENDPOINT = "https://export.arxiv.org/api/query";
 const JINA_SEARCH_ENDPOINT = "https://s.jina.ai";
 const JINA_READER_ENDPOINT = "https://r.jina.ai";
 const JINA_RERANK_ENDPOINT = "https://api.jina.ai/v1/rerank";
 const JINA_RERANK_MODEL = "jina-reranker-v2-base-multilingual";
-const USER_AGENT = "AqshaResearch/phase3 (https://aqsha.local; mailto optional)";
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
@@ -110,7 +117,7 @@ export const putCache = internalMutation({
       valueJson: args.valueJson,
       failureReason: args.failureReason,
       updatedAt: now,
-      expiresAt: now + CACHE_TTL_MS,
+      expiresAt: now + CACHE_TTL_BY_STATUS[args.status],
     };
     if (existing) {
       await ctx.db.patch("externalLookupCache", existing._id, patch);
@@ -145,7 +152,6 @@ export async function searchExaCandidates(
   if (!exa) {
     return [];
   }
-  await limitExternal(ctx, args.ownerUserId, "exa");
 
   const limit = Math.min(args.limit ?? 8, 20);
   const cacheKey = normalizeKey(JSON.stringify({
@@ -161,6 +167,8 @@ export async function searchExaCandidates(
   if (cached) {
     return cached;
   }
+  // Cache miss → charge the cost gate before the network call (AUD-04).
+  await limitExternal(ctx, args.ownerUserId, "exa");
 
   try {
     const response = await exa.search(query, {
@@ -209,7 +217,6 @@ export async function searchJinaCandidates(
   ctx: ActionCtx,
   args: SearchCandidateOptions,
 ): Promise<ExternalCandidate[]> {
-  await limitExternal(ctx, args.ownerUserId, "jina_search");
   const query = buildJinaQuery(args);
   if (!query) {
     return [];
@@ -227,6 +234,8 @@ export async function searchJinaCandidates(
   if (cached) {
     return cached;
   }
+  // Cache miss → charge the cost gate before the network call (AUD-04).
+  await limitExternal(ctx, args.ownerUserId, "jina_search");
 
   try {
     const url = new URL(`${JINA_SEARCH_ENDPOINT}/${encodeURIComponent(query)}`);
@@ -273,7 +282,6 @@ export async function readWithJinaReader(
   ctx: ActionCtx,
   args: { ownerUserId: string; url: string },
 ): Promise<JinaReadResult> {
-  await limitExternal(ctx, args.ownerUserId, "jina_read");
   const url = args.url.trim();
   if (!url) {
     return readFailure(url, "URL is empty");
@@ -284,6 +292,8 @@ export async function readWithJinaReader(
   if (cached) {
     return cached;
   }
+  // Cache miss → charge the cost gate before the network call (AUD-04).
+  await limitExternal(ctx, args.ownerUserId, "jina_read");
 
   try {
     const response = await fetch(`${JINA_READER_ENDPOINT}/${url}`, {
@@ -314,7 +324,6 @@ export async function jinaRerank(
   ctx: ActionCtx,
   args: { ownerUserId: string; query: string; documents: RerankInput[]; topN?: number },
 ): Promise<RerankResult[]> {
-  await limitExternal(ctx, args.ownerUserId, "jina_rerank");
   const documents = args.documents.filter((document) => document.text.trim());
   if (documents.length === 0) {
     return [];
@@ -332,6 +341,8 @@ export async function jinaRerank(
   if (cached) {
     return cached;
   }
+  // Cache miss → charge the cost gate before the network call (AUD-04).
+  await limitExternal(ctx, args.ownerUserId, "jina_rerank");
 
   const apiKey = process.env.JINA_API_KEY;
   if (!apiKey) {
@@ -382,7 +393,6 @@ export async function lookupDoiProvider(
   ctx: ActionCtx,
   args: { ownerUserId: string; doi: string },
 ): Promise<ExternalCandidate[]> {
-  await limitExternal(ctx, args.ownerUserId, "crossref");
   const doi = normalizeDoi(args.doi);
   if (!doi) {
     return [];
@@ -392,6 +402,8 @@ export async function lookupDoiProvider(
   if (cached) {
     return cached;
   }
+  // Cache miss → charge the cost gate before the network call (AUD-04).
+  await limitExternal(ctx, args.ownerUserId, "crossref");
 
   try {
     const url = new URL(`${CROSSREF_ENDPOINT}/${encodeURIComponent(doi)}`);
@@ -402,7 +414,7 @@ export async function lookupDoiProvider(
     const response = await fetch(url, {
       headers: {
         Accept: "application/json",
-        "User-Agent": userAgent(),
+        "User-Agent": researchUserAgent(),
       },
     });
     if (!response.ok) {
@@ -428,7 +440,6 @@ export async function searchArxivProvider(
   ctx: ActionCtx,
   args: { ownerUserId: string; query: string; limit?: number },
 ): Promise<ExternalCandidate[]> {
-  await limitExternal(ctx, args.ownerUserId, "arxiv");
   const query = args.query.trim();
   if (!query) {
     return [];
@@ -438,6 +449,8 @@ export async function searchArxivProvider(
   if (cached) {
     return cached;
   }
+  // Cache miss → charge the cost gate (and pace arXiv) before the network call (AUD-04).
+  await limitExternal(ctx, args.ownerUserId, "arxiv");
 
   try {
     const url = new URL(ARXIV_ENDPOINT);
@@ -447,7 +460,7 @@ export async function searchArxivProvider(
     url.searchParams.set("sortOrder", "descending");
 
     const response = await fetch(url, {
-      headers: { Accept: "application/atom+xml", "User-Agent": userAgent() },
+      headers: { Accept: "application/atom+xml", "User-Agent": researchUserAgent() },
     });
     if (!response.ok) {
       throw new Error(`arXiv returned ${response.status}`);
@@ -485,7 +498,6 @@ export async function readWithExaContents(
   ctx: ActionCtx,
   args: { ownerUserId: string; url: string },
 ): Promise<JinaReadResult> {
-  await limitExternal(ctx, args.ownerUserId, "exa");
   const exa = getExaClient();
   if (!exa) {
     return readFailure(args.url, "EXA_API_KEY is not configured");
@@ -495,6 +507,8 @@ export async function readWithExaContents(
   if (cached) {
     return cached;
   }
+  // Cache miss → charge the cost gate before the network call (AUD-04).
+  await limitExternal(ctx, args.ownerUserId, "exa");
   try {
     const response = await exa.getContents([args.url], {
       text: { maxCharacters: 18_000 },
@@ -536,18 +550,45 @@ async function limitExternal(ctx: ActionCtx, ownerUserId: string, provider: Prov
   if (!billing.ok) {
     throw new ConvexError(billing.reason);
   }
-  const checks = await Promise.all([
-    rateLimiter.check(ctx, "externalSearchPerUser", { key: ownerUserId }),
-    providerRateCheck(ctx, ownerUserId, provider),
-  ]);
-  const blocked = checks.find((status) => !status.ok);
-  if (blocked && !blocked.ok) {
+  // Per-user fan-out gate applies to every provider (fairness across users).
+  const perUser = await rateLimiter.check(ctx, "externalSearchPerUser", {
+    key: ownerUserId,
+  });
+  // arXiv is paced (see paceArxiv), not gated by a fail-fast check.
+  const providerOk =
+    provider === "arxiv"
+      ? true
+      : (await providerRateCheck(ctx, ownerUserId, provider)).ok;
+  if (!perUser.ok || !providerOk) {
     throw new ConvexError("External provider is rate limited");
   }
-  await Promise.all([
-    rateLimiter.limit(ctx, "externalSearchPerUser", { key: ownerUserId }),
-    providerRateLimit(ctx, ownerUserId, provider),
-  ]);
+  await rateLimiter.limit(ctx, "externalSearchPerUser", { key: ownerUserId });
+  if (provider === "arxiv") {
+    await paceArxiv(ctx);
+  } else {
+    await providerRateLimit(ctx, ownerUserId, provider);
+  }
+}
+
+// arXiv asks for at most 1 request / 3s GLOBALLY (per client/IP). Rather than
+// reject a burst — which surfaced as a hard error and blocked unrelated users
+// (AUD-14) — reserve the next global slot and wait for it, so the caller
+// experiences latency, not failure. If too many requests are already queued
+// ahead (beyond the bounded wait), surface as rate-limited so the deep-research
+// loop falls back to OpenAlex/Crossref for the same metadata instead of stalling.
+const ARXIV_MAX_PACE_MS = 6_000;
+
+async function paceArxiv(ctx: ActionCtx) {
+  const status = await rateLimiter.limit(ctx, "arxivSearchGlobal", {
+    reserve: true,
+  });
+  const waitMs = status.ok ? (status.retryAfter ?? 0) : 0;
+  if (waitMs > ARXIV_MAX_PACE_MS) {
+    throw new ConvexError("External provider is rate limited");
+  }
+  if (waitMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+  }
 }
 
 function providerRateCheck(ctx: ActionCtx, ownerUserId: string, provider: Provider) {
@@ -942,11 +983,6 @@ function stripTags(value: string | undefined) {
 
 function readableError(error: unknown) {
   return error instanceof Error ? error.message : "Unknown provider failure";
-}
-
-function userAgent() {
-  const mailto = process.env.CROSSREF_MAILTO;
-  return mailto ? `${USER_AGENT}; mailto:${mailto}` : USER_AGENT;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

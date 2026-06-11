@@ -17,9 +17,9 @@ import {
   type ExternalCandidate,
 } from "./externalProviders";
 import { trimForSnippet } from "../research/sourceCandidates";
+import { researchUserAgent } from "./userAgent";
 
 const OPENALEX_ENDPOINT = "https://api.openalex.org/works";
-const USER_AGENT = "AqshaResearch/phase3 (https://aqsha.local; mailto optional)";
 
 // Superset of every OpenAlex `works` field consumed across the codebase
 // (agent explore path + paperIngest resolver). All fields optional; callers
@@ -101,7 +101,7 @@ export async function searchOpenAlexWorks(
   const url = buildOpenAlexWorksUrl({ apiKey, query, limit, fromYear });
 
   const response = await fetch(url, {
-    headers: { Accept: "application/json", "User-Agent": userAgent() },
+    headers: { Accept: "application/json", "User-Agent": researchUserAgent() },
   });
   if (!response.ok) {
     const message = await openAlexErrorMessage(response);
@@ -281,11 +281,6 @@ async function limitOpenAlex(ctx: ActionCtx, ownerUserId: string) {
     rateLimiter.limit(ctx, "externalSearchPerUser", { key: ownerUserId }),
     rateLimiter.limit(ctx, "openAlexSearchGlobal"),
   ]);
-}
-
-function userAgent() {
-  const mailto = process.env.CROSSREF_MAILTO;
-  return mailto ? `${USER_AGENT}; mailto:${mailto}` : USER_AGENT;
 }
 
 async function openAlexErrorMessage(response: Response) {

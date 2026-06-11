@@ -1,9 +1,10 @@
 import type { ActionCtx } from "../../_generated/server";
 
 /**
- * Shared base context shape attached to agent tool executions. Individual tool
- * modules extend this with their own optional fields (e.g. researchTools adds
- * `runId` + `citationCounter`).
+ * Shared base context shape attached to agent tool executions. The framework
+ * injects `userId`/`threadId`/`messageId`; per-turn values that the framework
+ * cannot carry (e.g. the shared citation counter, or a deep-research `runId`) are
+ * threaded into tools via closure in their build* factory instead.
  */
 export type AgentToolCtx = ActionCtx & {
   userId?: string;

@@ -62,7 +62,14 @@ export function agentForKind(kind: AgentKind | undefined) {
 // store, so any of them can perform these neutral operations.
 export const astra = astraLite;
 
-export const recordUsage: UsageHandler = async (ctx, args) => {
+type UsageHandlerCtx = Parameters<UsageHandler>[0];
+type UsageHandlerArgs = Parameters<UsageHandler>[1];
+
+async function recordUsageImpl(
+  ctx: UsageHandlerCtx,
+  args: UsageHandlerArgs,
+  agentKind?: AgentKind,
+) {
   if (!args.userId || !args.threadId) {
     return;
   }
@@ -79,5 +86,17 @@ export const recordUsage: UsageHandler = async (ctx, args) => {
     inputTokens,
     outputTokens,
     totalTokens,
+    ...(agentKind ? { agentKind } : {}),
   });
-};
+}
+
+// Default usage handler (no run tier) — billing falls back to model-string
+// attribution. Kept for any call site that doesn't have an agentKind.
+export const recordUsage: UsageHandler = (ctx, args) =>
+  recordUsageImpl(ctx, args);
+
+// Per-call usage handler that attributes usage to the run's agent tier, so
+// billing no longer has to infer pro/normal from the model string (AUD-02).
+export function usageHandlerForAgent(agentKind: AgentKind): UsageHandler {
+  return (ctx, args) => recordUsageImpl(ctx, args, agentKind);
+}
