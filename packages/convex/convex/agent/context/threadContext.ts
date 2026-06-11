@@ -49,6 +49,9 @@ type PromptContextArtifact = {
     failureReason?: string;
   };
   content: string;
+  // AUD-17: true when the per-artifact 4k clip dropped part of the source content,
+  // so the artifact is NOT fully in the prompt and must stay RAG-eligible.
+  truncated: boolean;
 };
 
 const selectedContextValidator = v.object({
@@ -375,7 +378,9 @@ async function getPromptContextArtifact(
     url?.contextText ??
     url?.readableText ??
     "";
-  const content = clipText(rawContent, Math.min(PROMPT_CONTEXT_ARTIFACT_LIMIT, remainingBudget));
+  const limit = Math.min(PROMPT_CONTEXT_ARTIFACT_LIMIT, remainingBudget);
+  const truncated = collapse(rawContent).length > limit;
+  const content = clipText(rawContent, limit);
 
   return {
     artifactId: String(artifact._id),
@@ -390,6 +395,7 @@ async function getPromptContextArtifact(
         }
       : undefined,
     content,
+    truncated,
   };
 }
 
@@ -527,6 +533,16 @@ async function buildWorkspaceManifestForThread(
   return lines.join("\n").trim();
 }
 
+// AUD-17: an artifact is fully in the prompt block — and so excluded from RAG —
+// only when neither the per-artifact 4k clip nor the running 16k budget dropped
+// any of its content. Pure for unit testing the truncation edge.
+export function isArtifactFullyIncluded(
+  artifact: { truncated: boolean; content: string },
+  remainingBudget: number,
+): boolean {
+  return !artifact.truncated && collapse(artifact.content).length <= remainingBudget;
+}
+
 export async function buildPromptContextForThread(
   ctx: MutationCtx,
   args: {
@@ -553,15 +569,26 @@ export async function buildPromptContextForThread(
   ]);
 
   const artifacts: PromptContextArtifact[] = [];
+  // AUD-17: an artifact is "included" only when its full content fit the budget
+  // (no truncation). Fully-included artifacts are excluded from RAG retrieval to
+  // avoid duplicating the same text in both the prompt block and the RAG block;
+  // truncated artifacts stay RAG-eligible on purpose (the tail is still useful).
+  const includedArtifactIds: Id<"artifacts">[] = [];
   let remainingBudget = PROMPT_CONTEXT_TOTAL_LIMIT;
 
   for (const artifact of resolved) {
     if (!artifact || remainingBudget <= 0) {
       continue;
     }
+    // Fully included = not clipped by the per-artifact 4k limit (artifact.truncated)
+    // AND not clipped by the running total budget here.
+    const fullyIncluded = isArtifactFullyIncluded(artifact, remainingBudget);
     const content = clipText(artifact.content, remainingBudget);
     artifacts.push({ ...artifact, content });
     remainingBudget -= content.length;
+    if (fullyIncluded && artifact.artifactId) {
+      includedArtifactIds.push(artifact.artifactId as Id<"artifacts">);
+    }
   }
 
   const documentBlock = buildContextBlock(artifacts);
@@ -575,7 +602,7 @@ export async function buildPromptContextForThread(
   ]);
   const skillCatalogBlock = buildSkillCatalogBlock(catalogSkills);
   const activeSkillBlock = buildActiveSkillBlock(activeSkillBodies);
-  return [
+  const block = [
     workspaceManifest,
     documentBlock,
     skillCatalogBlock,
@@ -583,6 +610,7 @@ export async function buildPromptContextForThread(
   ]
     .filter(Boolean)
     .join("\n\n");
+  return { block, includedArtifactIds };
 }
 
 export function prependPromptContext(args: {

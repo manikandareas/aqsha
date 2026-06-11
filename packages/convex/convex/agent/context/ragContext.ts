@@ -16,6 +16,7 @@ async function retrieveThreadDocumentContext(
     threadId: string;
     query: string;
     messageAttachmentArtifactIds?: Id<"artifacts">[];
+    excludeArtifactIds?: Id<"artifacts">[];
   },
 ): Promise<string> {
   if (!embeddingProviderConfig.enabled || !args.query.trim()) {
@@ -35,7 +36,14 @@ async function retrieveThreadDocumentContext(
       },
     ),
   ]);
-  if (artifactTargets.length === 0 && workspaceTargets.length === 0) {
+  // AUD-17: drop artifacts whose full content is already in the prompt block —
+  // retrieving their chunks would duplicate the same text. Workspace filters are
+  // untouched (whole workspaces are never full-stuffed into the prompt).
+  const excluded = new Set<string>(args.excludeArtifactIds ?? []);
+  const includedArtifactTargets = excluded.size
+    ? artifactTargets.filter((target) => !excluded.has(target.artifactId))
+    : artifactTargets;
+  if (includedArtifactTargets.length === 0 && workspaceTargets.length === 0) {
     return "";
   }
 
@@ -44,7 +52,7 @@ async function retrieveThreadDocumentContext(
   // chunks belonging to any pinned paper or any referenced workspace. Whole
   // workspaces are retrieved (never full-stuffed) and bounded by RAG_CONTEXT_LIMIT.
   const filters = [
-    ...artifactTargets.map((target) => ({
+    ...includedArtifactTargets.map((target) => ({
       name: "artifactId" as const,
       value: target.artifactId,
     })),
@@ -89,6 +97,7 @@ export const buildRagContextForThread = internalAction({
     threadId: v.string(),
     query: v.string(),
     messageAttachmentArtifactIds: v.optional(v.array(v.id("artifacts"))),
+    excludeArtifactIds: v.optional(v.array(v.id("artifacts"))),
   },
   handler: async (ctx, args): Promise<string> => {
     return await retrieveThreadDocumentContext(ctx, args);

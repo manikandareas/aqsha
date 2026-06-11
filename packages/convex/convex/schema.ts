@@ -453,6 +453,10 @@ export default defineSchema(
       // then proceeds without RAG, the prior behavior).
       visiblePromptSnapshot: v.optional(v.string()),
       attachmentArtifactIds: v.optional(v.array(v.id("artifacts"))),
+      // Phase 3 (Slice R3 / AUD-17) artifacts whose FULL content was placed in the
+      // prompt context block at run start. Excluded from RAG retrieval (no
+      // duplicate text) on both the initial turn and the HITL resume rebuild.
+      includedArtifactIds: v.optional(v.array(v.id("artifacts"))),
       createdAt: v.number(),
       updatedAt: v.number(),
       completedAt: v.optional(v.number()),

@@ -456,7 +456,10 @@ async function scheduleGenerationForMessage(
     messageAttachmentArtifactIds?: Id<"artifacts">[];
   },
 ): Promise<SendResult> {
-  const contextBlock = await buildPromptContextForThread(ctx, {
+  // AUD-17: `includedArtifactIds` are the artifacts whose FULL content is already
+  // in the prompt block; they're excluded from RAG retrieval so the same text is
+  // not duplicated in both places.
+  const { block: contextBlock, includedArtifactIds } = await buildPromptContextForThread(ctx, {
     ownerUserId: args.ownerUserId,
     threadId: args.threadId,
     messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
@@ -490,6 +493,7 @@ async function scheduleGenerationForMessage(
     agentKind: args.agentKind,
     visiblePrompt: args.promptPayload.visibleContent,
     messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
+    includedArtifactIds,
   });
   await ctx.scheduler.runAfter(0, internal.agent.messages.generateReply, {
     threadId: args.threadId,
@@ -501,6 +505,7 @@ async function scheduleGenerationForMessage(
     commandId,
     agentKind: args.agentKind,
     messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
+    excludeArtifactIds: includedArtifactIds,
   });
 
   return { ok: true as const, messageId: args.messageId, runId };
@@ -1021,6 +1026,8 @@ async function runInlineGeneration(
     // AUD-08: pre-built RAG block to re-inject on a HITL resume turn (no string
     // prompt is passed on resume, so it goes via contextHandler, not the prompt).
     resumeRagContext?: string;
+    // AUD-17: artifacts already fully in the prompt block — excluded from RAG.
+    excludeArtifactIds?: Id<"artifacts">[];
   },
 ) {
   try {
@@ -1033,6 +1040,7 @@ async function runInlineGeneration(
           threadId: args.threadId,
           query: args.visiblePrompt,
           messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
+          excludeArtifactIds: args.excludeArtifactIds,
         },
       );
       prompt = ragContext ? [ragContext, "", prompt].join("\n") : prompt;
@@ -1227,6 +1235,9 @@ export const generateReply = internalAction({
     // existed; defaults to "lite".
     agentKind: v.optional(v.union(v.literal("lite"), v.literal("pro"))),
     messageAttachmentArtifactIds: v.optional(v.array(v.id("artifacts"))),
+    // AUD-17: artifacts already fully present in the prompt block — excluded from
+    // RAG retrieval to avoid duplicating the same text.
+    excludeArtifactIds: v.optional(v.array(v.id("artifacts"))),
   },
   handler: async (ctx, args) => {
     const thread = await ctx.runQuery(components.agent.threads.getThread, {
@@ -1245,6 +1256,7 @@ export const generateReply = internalAction({
       visiblePrompt: args.visiblePrompt,
       includeExecuteArtifact: false,
       messageAttachmentArtifactIds: args.messageAttachmentArtifactIds,
+      excludeArtifactIds: args.excludeArtifactIds,
       scheduleTitle: true,
     });
   },
@@ -1292,6 +1304,8 @@ export const resumeGeneration = internalAction({
             threadId: args.threadId,
             query: recall.visiblePrompt,
             messageAttachmentArtifactIds: recall.attachmentArtifactIds,
+            // AUD-17: exclude artifacts already in the original prompt block.
+            excludeArtifactIds: recall.includedArtifactIds,
           },
         );
         resumeRagContext = block || undefined;
@@ -1320,6 +1334,7 @@ export const getRunRecallContext = internalQuery({
     v.object({
       visiblePrompt: v.optional(v.string()),
       attachmentArtifactIds: v.optional(v.array(v.id("artifacts"))),
+      includedArtifactIds: v.optional(v.array(v.id("artifacts"))),
     }),
   ),
   handler: async (ctx, args) => {
@@ -1328,6 +1343,7 @@ export const getRunRecallContext = internalQuery({
     return {
       visiblePrompt: run.visiblePromptSnapshot,
       attachmentArtifactIds: run.attachmentArtifactIds,
+      includedArtifactIds: run.includedArtifactIds,
     };
   },
 });
@@ -1467,6 +1483,9 @@ export const startInlineRun = internalMutation({
     // later HITL resume can rebuild RAG context (see resumeGeneration).
     visiblePrompt: v.optional(v.string()),
     messageAttachmentArtifactIds: v.optional(v.array(v.id("artifacts"))),
+    // AUD-17: artifacts whose full content is already in the prompt block, stored
+    // so the HITL resume rebuild can exclude them from RAG too.
+    includedArtifactIds: v.optional(v.array(v.id("artifacts"))),
   },
   handler: async (ctx, args): Promise<Id<"agentRuns">> => {
     const now = Date.now();
@@ -1480,6 +1499,7 @@ export const startInlineRun = internalMutation({
       promptSnapshot: args.prompt,
       visiblePromptSnapshot: args.visiblePrompt,
       attachmentArtifactIds: args.messageAttachmentArtifactIds,
+      includedArtifactIds: args.includedArtifactIds,
       status: "running",
       currentStep: "understand",
       artifactCount: 0,
