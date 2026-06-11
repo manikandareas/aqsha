@@ -1,0 +1,17 @@
+# LOCAL SMOKE-TEST ONLY. Daytona uses the built image / snapshot directly — it
+# does not use docker-compose. This just builds the image and verifies the R +
+# Python verification stack loads and runs, before you push + snapshot it:
+#
+#   docker compose -f infra/statverify-snapshot/compose.yaml up --build
+#
+# Exit code 0 = healthy image.
+services:
+  statverify-smoke:
+    build:
+      context: .
+    image: aqsha-statverify:local
+    volumes:
+      - ./smoke-test.R:/workspace/smoke-test.R:ro
+    command: >
+      bash -lc "Rscript /workspace/smoke-test.R &&
+                python3 -c 'import scipy, statsmodels, pandas, numpy, pingouin; print(\"python verification stack OK\")'"
