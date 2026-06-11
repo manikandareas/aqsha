@@ -38,22 +38,29 @@ if (is.null(res) || nrow(res) == 0) {
   quit(save = "no", status = 0)
 }
 
-# statcheck column names drift slightly across versions; pull each defensively.
-col <- function(df, name) if (name %in% names(df)) df[[name]] else rep(NA, nrow(df))
+# statcheck column names changed across versions (newer releases use snake_case
+# like test_type/reported_p/computed_p; older ones use CamelCase like
+# Statistic/Reported.P.Value/Computed). Pull each by trying both.
+col <- function(df, candidates) {
+  for (n in candidates) {
+    if (n %in% names(df)) return(df[[n]])
+  }
+  rep(NA, nrow(df))
+}
 
 out <- data.frame(
-  source = as.character(col(res, "Source")),
-  statistic = as.character(col(res, "Statistic")),
-  df1 = suppressWarnings(as.numeric(col(res, "df1"))),
-  df2 = suppressWarnings(as.numeric(col(res, "df2"))),
-  testValue = suppressWarnings(as.numeric(col(res, "Value"))),
-  reportedComparison = as.character(col(res, "Reported.Comparison")),
-  reportedPValue = suppressWarnings(as.numeric(col(res, "Reported.P.Value"))),
-  computedPValue = suppressWarnings(as.numeric(col(res, "Computed"))),
-  raw = as.character(col(res, "Raw")),
-  statcheckError = as.logical(col(res, "Error")),
-  statcheckDecisionError = as.logical(col(res, "DecisionError")),
-  oneTailedInTxt = as.logical(col(res, "OneTailedInTxt")),
+  source = as.character(col(res, c("source", "Source"))),
+  statistic = as.character(col(res, c("test_type", "Statistic"))),
+  df1 = suppressWarnings(as.numeric(col(res, c("df1", "Df1")))),
+  df2 = suppressWarnings(as.numeric(col(res, c("df2", "Df2")))),
+  testValue = suppressWarnings(as.numeric(col(res, c("test_value", "Value")))),
+  reportedComparison = as.character(col(res, c("p_comp", "Reported.Comparison"))),
+  reportedPValue = suppressWarnings(as.numeric(col(res, c("reported_p", "Reported.P.Value")))),
+  computedPValue = suppressWarnings(as.numeric(col(res, c("computed_p", "Computed")))),
+  raw = as.character(col(res, c("raw", "Raw"))),
+  statcheckError = as.logical(col(res, c("error", "Error"))),
+  statcheckDecisionError = as.logical(col(res, c("decision_error", "DecisionError"))),
+  oneTailedInTxt = as.logical(col(res, c("one_tailed_in_txt", "OneTailedInTxt"))),
   stringsAsFactors = FALSE
 )
 
