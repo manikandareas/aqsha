@@ -22,7 +22,7 @@ import {
 import {
   agentForKind,
   astra,
-  recordUsage as handleUsage,
+  usageHandlerForAgent,
   type AgentKind,
 } from "./runtime";
 import {
@@ -32,23 +32,36 @@ import {
   deepModelForAgent,
 } from "./models";
 import { requireCurrentUser } from "../auth";
-import { estimateCredits } from "../billing/catalog";
+import { estimateCredits, featureForUsage } from "../billing/catalog";
 import {
   consumeCredits,
   recordProviderUsage,
   type EntitlementResult,
 } from "../billing/entitlements";
 import { rateLimiter } from "../limits";
-import { normalChatTools } from "./research/researchTools";
+import {
+  buildNormalChatTools,
+  createCitationCounter,
+  type CitationCounter,
+  NORMAL_CHAT_TOOL_NAMES,
+} from "./research/researchTools";
+import { isDeepResearchStartedResult } from "./research/deepResearchContract";
 import { buildHitlTools, buildDeepResearchTools } from "./hitl/hitlTools";
+import { routeCompute } from "./sandbox/computeRouter";
+import { buildSandboxTools, SANDBOX_TOOL_NAMES } from "./sandbox/sandboxTools";
 import type { ToolSet } from "ai";
 import type { SourceCandidate } from "./research/sourceCandidates";
 import {
+  DEFAULT_THREAD_TITLE,
   isUsableGeneratedThreadTitle,
   normalizeGeneratedThreadTitle,
   shouldUsePromptTitle,
   threadTitleFromPrompt,
 } from "./threadTitles";
+import {
+  HITL_INITIAL_TOOL_NAMES,
+  PENDING_HITL_TOOL_NAME_SET,
+} from "./hitl/hitlToolNames";
 import { assertThreadOwner, tryAssertThreadOwner } from "./threads";
 import { throwAppError } from "../lib/appError";
 import { resolvePromptPayload } from "./prompt/promptRouting";
@@ -910,21 +923,10 @@ export const list = query({
   },
 });
 
-// Native HITL tool names. `executeArtifact` is intentionally excluded from the
-// initial-turn tool surface so the model cannot write an artifact without first
-// going through an approved `proposeArtifact` (it is only offered on resume).
-const HITL_TOOL_NAMES = [
-  "askUser",
-  "proposeArtifact",
-  "deleteArtifact",
-  "createWorkspace",
-  "renameWorkspace",
-] as const;
-const PENDING_HITL_TOOL_NAMES = new Set<string>([
-  ...HITL_TOOL_NAMES,
-  "executeArtifact",
-  "startDeepResearch",
-]);
+// HITL tool-name sets live in agent/hitl/hitlToolNames.ts (the single source of
+// truth shared with the web client). `HITL_INITIAL_TOOL_NAMES` is the initial-turn
+// surface (executeArtifact withheld until an approved proposeArtifact);
+// `PENDING_HITL_TOOL_NAME_SET` is every tool that can hold a turn pending approval.
 
 // A native HITL pause is an unsatisfied HITL tool call in this generation:
 // `askUser` (no execute) or a `needsApproval` action tool awaiting approval —
@@ -945,7 +947,7 @@ function hasPendingNativeHitl(
     for (const call of step.toolCalls ?? []) {
       if (
         call.toolCallId &&
-        PENDING_HITL_TOOL_NAMES.has(call.toolName ?? "") &&
+        PENDING_HITL_TOOL_NAME_SET.has(call.toolName ?? "") &&
         !resolved.has(call.toolCallId)
       ) {
         return true;
@@ -972,8 +974,20 @@ function countNativeArtifactMutations(
   return count;
 }
 
-function buildGenerationTools(promptMessageId: string): ToolSet {
-  return { ...normalChatTools, ...buildHitlTools({ promptMessageId }) };
+function buildGenerationTools(
+  promptMessageId: string,
+  counter: CitationCounter,
+  runId: Id<"agentRuns"> | undefined,
+): ToolSet {
+  // Sandbox tools are always in the toolset so the approval-gated runComputation
+  // can execute on the resume turn; their visibility is gated per-turn via
+  // activeTools (the compute router), so their schemas are only sent to the
+  // model when relevant (zero token waste otherwise).
+  return {
+    ...buildNormalChatTools(counter),
+    ...buildHitlTools({ promptMessageId }),
+    ...buildSandboxTools({ runId }),
+  };
 }
 
 // Shared generation core for the initial turn (generateReply) and HITL resume
@@ -1016,12 +1030,33 @@ async function runInlineGeneration(
             promptMessageId: args.promptMessageId,
             runId: args.runId,
           })
-        : buildGenerationTools(args.promptMessageId);
-    const activeTools = args.deep
+        : // One citation counter per turn so [n] markers stay unique across every
+          // research-tool call (AUD-05).
+          buildGenerationTools(
+            args.promptMessageId,
+            createCitationCounter(1),
+            args.runId,
+          );
+    let activeTools = args.deep
       ? ["startDeepResearch"]
       : args.includeExecuteArtifact
         ? undefined
-        : [...Object.keys(normalChatTools), ...HITL_TOOL_NAMES];
+        : [...NORMAL_CHAT_TOOL_NAMES, ...HITL_INITIAL_TOOL_NAMES];
+    // Compute router (deterministic, non-LLM): the sandbox tools are always in
+    // the toolset (so an approved runComputation can resume); on a non-deep
+    // initial turn we make them VISIBLE only when the prompt shows compute intent
+    // and the agent is Pro (Lite withholds — handled in routeCompute). No intent
+    // → not added to activeTools → schemas not sent → zero token waste. On a
+    // resume turn (activeTools undefined) the whole toolset is already active.
+    if (!args.deep && activeTools) {
+      const compute = routeCompute({
+        prompt: args.visiblePrompt ?? args.prompt ?? "",
+        agentKind: args.agentKind,
+      });
+      if (compute.exposeStatVerification) {
+        activeTools = [...activeTools, ...SANDBOX_TOOL_NAMES];
+      }
+    }
     const agent = agentForKind(args.agentKind);
     const result = await agent.streamText(
       ctx,
@@ -1034,7 +1069,7 @@ async function runInlineGeneration(
       },
       {
         saveStreamDeltas: { chunking: "word", throttleMs: 100 },
-        usageHandler: handleUsage,
+        usageHandler: usageHandlerForAgent(args.agentKind),
       },
     );
     await result.consumeStream();
@@ -1046,11 +1081,13 @@ async function runInlineGeneration(
       // thread lifecycle. Otherwise this is a pause awaiting plan approval, or a
       // plain text reply — patch the run status and release the composer.
       const deepStarted = steps.some((step) =>
-        (step.toolResults ?? []).some(
-          (result) =>
-            (result.output as { status?: string } | undefined)?.status ===
-            "deep_research_started",
-        ),
+        (step.toolResults ?? []).some((result) => {
+          const part = result as { toolName?: string; output?: unknown };
+          return (
+            part.toolName === "startDeepResearch" &&
+            isDeepResearchStartedResult(part.output)
+          );
+        }),
       );
       if (!deepStarted) {
         const pending = hasPendingNativeHitl(steps);
@@ -1287,7 +1324,11 @@ export const generateThreadTitle = internalAction({
     }
 
     const fallbackTitle = threadTitleFromPrompt(args.prompt);
-    if (thread.title && thread.title !== "Thread baru" && thread.title !== fallbackTitle) {
+    if (
+      thread.title &&
+      thread.title !== DEFAULT_THREAD_TITLE &&
+      thread.title !== fallbackTitle
+    ) {
       return null;
     }
 
@@ -1728,8 +1769,9 @@ export const recordUsage = internalMutation({
     inputTokens: v.number(),
     outputTokens: v.number(),
     totalTokens: v.number(),
+    agentKind: v.optional(v.union(v.literal("lite"), v.literal("pro"))),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, { agentKind, ...args }) => {
     // Observe-only: record global token throughput so the pre-send check can act
     // as a system-wide safety valve, but NEVER throw here. This mutation runs in
     // the usage handler AFTER the reply is already generated; throwing would crash
@@ -1753,9 +1795,12 @@ export const recordUsage = internalMutation({
         error: error instanceof Error ? error.message : String(error),
       });
     }
-    // The chat usage handler does not receive agentKind, so derive the billed
-    // feature from the model that actually ran (Astra Pro uses CHAT_PRO_MODEL).
-    const feature = args.model === CHAT_PRO_MODEL ? "pro_chat" : "normal_chat";
+    // Attribute billing to the run's agent tier (agentKind); fall back to the
+    // model string only for legacy/in-flight runs without it (AUD-02).
+    const feature = featureForUsage({
+      agentKind,
+      isProModel: args.model === CHAT_PRO_MODEL,
+    });
     await ctx.db.insert("usageLedger", {
       ...args,
       model: args.model || CHAT_LITE_MODEL,
