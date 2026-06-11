@@ -5,6 +5,7 @@ node_modules
 coverage
 .worktrees/
 *.log
+.claude/
 apps/api/.env
 apps/api/.env.local
 apps/app/.env.local
