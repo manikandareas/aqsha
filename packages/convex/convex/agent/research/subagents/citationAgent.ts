@@ -33,6 +33,23 @@ export const citationAgent = internalAction({
       title: "Citation integrity",
       summary: "Memverifikasi integritas sitasi sebelum penulisan",
     });
+    // Slice R4: this step delegates the fixed citation-verification recipe — record
+    // its activation (provenance) without polluting sibling subagent contexts.
+    const skill = await ctx.runQuery(internal.agent.skills.skills.getActivatable, {
+      ownerUserId: args.ownerUserId,
+      name: "citation-verification",
+    });
+    if (skill) {
+      await ctx.runMutation(internal.agent.skills.skills.recordActivation, {
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+        runId: args.runId,
+        skillId: skill.skillId,
+        skillName: skill.name,
+        skillVersion: skill.version,
+        activatedBy: "model",
+      });
+    }
     try {
       const result: { verified: number; total: number; rateLimited: boolean } =
         await ctx.runAction(

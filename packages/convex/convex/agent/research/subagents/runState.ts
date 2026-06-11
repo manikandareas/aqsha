@@ -99,6 +99,34 @@ export interface VerificationMarker {
   reason: string;
 }
 
+// AUD/Slice R1d: when any non-fatal verifier degraded, the report ships a visible
+// "verification incomplete" caveat instead of the run failing. Pure so the writer
+// can append it deterministically and it can be unit-tested.
+const VERIFICATION_REASON_LABELS: Record<string, string> = {
+  citation_rate_limited: "verifikasi integritas sitasi dibatasi rate limit",
+  citation_failed: "verifikasi integritas sitasi gagal dijalankan",
+  statistical_not_configured: "verifikasi statistik tidak tersedia di lingkungan ini",
+  statistical_failed: "verifikasi statistik gagal dijalankan",
+};
+
+export function buildVerificationCaveat(markers: VerificationMarker[]): string {
+  if (markers.length === 0) return "";
+  const reasons = [...new Set(markers.map((m) => VERIFICATION_REASON_LABELS[m.reason] ?? m.reason))];
+  return [
+    "> **Catatan verifikasi: tidak lengkap.**",
+    ">",
+    `> Sebagian pemeriksaan otomatis tidak selesai (${reasons.join("; ")}). `,
+    "> Klaim tetap didasarkan pada sumber yang dikutip, namun perlakukan angka dan",
+    "> klaim yang belum terverifikasi dengan hati-hati.",
+  ].join("\n");
+}
+
+export function appendVerificationCaveat(markdown: string, markers: VerificationMarker[]): string {
+  const caveat = buildVerificationCaveat(markers);
+  if (!caveat) return markdown;
+  return `${markdown.trimEnd()}\n\n${caveat}\n`;
+}
+
 export function parseVerificationMarkers(json?: string | null): VerificationMarker[] {
   if (!json) return [];
   try {

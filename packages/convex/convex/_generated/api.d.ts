@@ -60,6 +60,7 @@ import type * as agent_research_subagents_counterEvidenceAgent from "../agent/re
 import type * as agent_research_subagents_literatureRoundAgent from "../agent/research/subagents/literatureRoundAgent.js";
 import type * as agent_research_subagents_loopState from "../agent/research/subagents/loopState.js";
 import type * as agent_research_subagents_runState from "../agent/research/subagents/runState.js";
+import type * as agent_research_subagents_skillDelegation from "../agent/research/subagents/skillDelegation.js";
 import type * as agent_research_subagents_writerAgent from "../agent/research/subagents/writerAgent.js";
 import type * as agent_runLifecycle from "../agent/runLifecycle.js";
 import type * as agent_runtime from "../agent/runtime.js";
@@ -224,6 +225,7 @@ declare const fullApi: ApiFromModules<{
   "agent/research/subagents/literatureRoundAgent": typeof agent_research_subagents_literatureRoundAgent;
   "agent/research/subagents/loopState": typeof agent_research_subagents_loopState;
   "agent/research/subagents/runState": typeof agent_research_subagents_runState;
+  "agent/research/subagents/skillDelegation": typeof agent_research_subagents_skillDelegation;
   "agent/research/subagents/writerAgent": typeof agent_research_subagents_writerAgent;
   "agent/runLifecycle": typeof agent_runLifecycle;
   "agent/runtime": typeof agent_runtime;

@@ -4,7 +4,11 @@ import { describe, expect, it } from "vitest";
 import { internal } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
 import schema from "../convex/schema";
-import { parseVerificationMarkers } from "../convex/agent/research/subagents/runState";
+import {
+  appendVerificationCaveat,
+  buildVerificationCaveat,
+  parseVerificationMarkers,
+} from "../convex/agent/research/subagents/runState";
 
 // Slice R1c: non-fatal verifiers append a degradation marker (never throw); the
 // integrity summary feeds the writer. Both are read-modify-write on the run row.
@@ -42,6 +46,28 @@ describe("parseVerificationMarkers", () => {
     expect(parseVerificationMarkers(JSON.stringify([{ marker: "x", reason: "y" }, { bad: 1 }]))).toEqual([
       { marker: "x", reason: "y" },
     ]);
+  });
+});
+
+describe("verification caveat", () => {
+  it("is empty when there are no markers", () => {
+    expect(buildVerificationCaveat([])).toBe("");
+    expect(appendVerificationCaveat("# Report", [])).toBe("# Report");
+  });
+
+  it("renders a deduped, human-readable caveat and appends it to the report", () => {
+    const markers = [
+      { marker: "verification_incomplete", reason: "citation_rate_limited" },
+      { marker: "verification_incomplete", reason: "citation_rate_limited" },
+      { marker: "verification_incomplete", reason: "statistical_failed" },
+    ];
+    const caveat = buildVerificationCaveat(markers);
+    expect(caveat).toContain("tidak lengkap");
+    expect(caveat).toContain("rate limit");
+    expect(caveat).toContain("verifikasi statistik gagal");
+    const appended = appendVerificationCaveat("# Report\n\nBody.", markers);
+    expect(appended.startsWith("# Report")).toBe(true);
+    expect(appended).toContain("Catatan verifikasi");
   });
 });
 

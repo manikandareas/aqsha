@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "../../../_generated/api";
-import { internalAction } from "../../../_generated/server";
+import { internalAction, type ActionCtx } from "../../../_generated/server";
+import type { Id } from "../../../_generated/dataModel";
 import { throwAppError } from "../../../lib/appError";
 import {
   generateSynthesis,
@@ -9,6 +10,8 @@ import {
 } from "../deepResearch";
 import type { SourceCandidate } from "../sourceCandidates";
 import { subagentBaseArgs } from "./contracts";
+import { appendVerificationCaveat } from "./runState";
+import { selectDomainPack } from "./skillDelegation";
 
 // Report writer (Slice R1c). Replaces the monolithic synthesize step in the v2
 // path: rebuilds the synthesis inputs from persisted rows, folds in the citation
@@ -17,6 +20,35 @@ import { subagentBaseArgs } from "./contracts";
 // runId instead of journaling the full report between steps.
 
 const SUBAGENT = "writer";
+
+// Resolve, load, and record the writer's delegated domain methodology pack.
+// Returns the pack body to inject, or undefined when no pack matches / is enabled.
+async function resolveWriterSkill(
+  ctx: ActionCtx,
+  args: { ownerUserId: string; threadId: string; runId: Id<"agentRuns">; prompt: string },
+): Promise<string | undefined> {
+  const catalog: Array<{ name: string; description: string }> = await ctx.runQuery(
+    internal.agent.skills.skills.listCatalog,
+    { ownerUserId: args.ownerUserId },
+  );
+  const packName = selectDomainPack(args.prompt, catalog);
+  if (!packName) return undefined;
+  const skill = await ctx.runQuery(internal.agent.skills.skills.getActivatable, {
+    ownerUserId: args.ownerUserId,
+    name: packName,
+  });
+  if (!skill) return undefined;
+  await ctx.runMutation(internal.agent.skills.skills.recordActivation, {
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+    runId: args.runId,
+    skillId: skill.skillId,
+    skillName: skill.name,
+    skillVersion: skill.version,
+    activatedBy: "model",
+  });
+  return skill.bodyText;
+}
 
 export const writerAgent = internalAction({
   args: {
@@ -58,6 +90,12 @@ export const writerAgent = internalAction({
         runId: args.runId,
       });
 
+    // Slice R4: resolve THIS step's domain methodology pack (writer only) and inject
+    // its body into the synthesis prompt; record the activation with the step key so
+    // the report can cite which methodology version was applied. Sibling subagents
+    // never see this pack — delegation keeps each context lean.
+    const skillContent = await resolveWriterSkill(ctx, args);
+
     const out = await generateSynthesis({
       prompt: args.prompt,
       plan: normalizePlan(args.plan, args.agentKind),
@@ -68,6 +106,7 @@ export const writerAgent = internalAction({
       roundState: evidence.roundState as never,
       agentKind: args.agentKind,
       integrityNote: integrity.note || undefined,
+      skillContent,
     });
 
     if (!out.markdown.trim()) {
@@ -77,10 +116,18 @@ export const writerAgent = internalAction({
         severity: "error",
       });
     }
+    // Slice R1d: if a non-fatal verifier (citation, …) degraded before the writer,
+    // append a visible "verification incomplete" caveat so the report is honest
+    // about partial verification (the run still ships).
+    const markers = await ctx.runQuery(
+      internal.agent.research.subagents.runState.getVerificationMarkers,
+      { runId: args.runId, ownerUserId: args.ownerUserId },
+    );
+    const staged = appendVerificationCaveat(out.markdown, markers);
     await ctx.runMutation(internal.agent.research.subagents.runState.setRunDraftMarkdown, {
       runId: args.runId,
       ownerUserId: args.ownerUserId,
-      markdown: out.markdown,
+      markdown: staged,
     });
     await ctx.runMutation(internal.agent.research.deepResearch.markStep, {
       runId: args.runId,

@@ -273,6 +273,22 @@ export const deepResearchExecuteWorkflow = researchWorkflow.define({
           { retry: ACTION_RETRY },
         );
         if (result.stop) break;
+        // Non-throwing cancel check BETWEEN rounds: a mid-round markStep can reset
+        // status to "running", so the in-round ensureNotCanceled is unreliable for a
+        // graceful stop. Here the run is idle between decomposed steps, so a canceled
+        // status is authoritative — stop the workflow; markCanceled already ran.
+        const run = await step.runQuery(internal.agent.research.deepResearch.getInternalRun, {
+          runId: args.runId,
+        });
+        if (run?.status === "canceled") {
+          return;
+        }
+      }
+      const run = await step.runQuery(internal.agent.research.deepResearch.getInternalRun, {
+        runId: args.runId,
+      });
+      if (run?.status === "canceled") {
+        return;
       }
       await step.runAction(
         internal.agent.research.subagents.counterEvidenceAgent.counterEvidenceAgent,
@@ -1303,6 +1319,9 @@ export async function generateSynthesis(args: {
   roundState: ResearchRoundState[];
   agentKind?: AgentKind;
   integrityNote?: string;
+  // Slice R4: the writer's delegated domain methodology pack (injected into this
+  // step's prompt only, so sibling subagent contexts stay lean).
+  skillContent?: string;
 }): Promise<{ markdown: string; chatSummary: string; summary: string; readiness: EvidenceReadiness }> {
   const sourceBlock = args.sources
     .map((source) => `[${source.citationNumber}] ${source.title}: ${source.snippet}`)
@@ -1311,14 +1330,18 @@ export async function generateSynthesis(args: {
     .map((extract) => `[${extract.citationNumber}] ${extract.quote}`)
     .join("\n");
   const readiness = assessEvidenceReadiness(args.sources, args.extracts, args.agentKind);
-  const promptParts = [
+  const promptParts = [];
+  if (args.skillContent) {
+    promptParts.push(`Domain research methodology (apply rigorously):\n${args.skillContent}`);
+  }
+  promptParts.push(
     `Prompt:\n${args.prompt}`,
     `Research plan:\n${JSON.stringify(args.plan, null, 2)}`,
     `Evidence readiness:\n${JSON.stringify(readiness, null, 2)}`,
     `Round trace:\n${JSON.stringify(args.roundState, null, 2)}`,
     `Accepted evidence extracts:\n${extractBlock || "No extracted evidence beyond snippets."}`,
     `Sources:\n${sourceBlock}`,
-  ];
+  );
   if (args.integrityNote) {
     promptParts.push(`Citation integrity (treat flagged sources with caution):\n${args.integrityNote}`);
   }
@@ -2205,11 +2228,23 @@ async function markStepMutation(
     });
   }
   if (args.status === "running") {
-    await ctx.db.patch("agentRuns", args.runId, {
-      status: "running",
-      currentStep: args.stepKey,
-      updatedAt: now,
-    });
+    // Never resurrect a canceled run: a cancel that lands mid-step must stay
+    // authoritative, otherwise the next markStep("running") inside the running
+    // step would flip it back and the cancel would be lost (the v2 cancel-midrun
+    // race). currentStep still advances for observability.
+    const run = await ctx.db.get("agentRuns", args.runId);
+    if (run && run.status === "canceled") {
+      await ctx.db.patch("agentRuns", args.runId, {
+        currentStep: args.stepKey,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.patch("agentRuns", args.runId, {
+        status: "running",
+        currentStep: args.stepKey,
+        updatedAt: now,
+      });
+    }
   }
 }
 
