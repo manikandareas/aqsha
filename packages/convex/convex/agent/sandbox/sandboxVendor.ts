@@ -49,6 +49,42 @@ const CREATE_TIMEOUT_SECONDS = 120;
 // Idle minutes before Daytona auto-stops (then auto-deletes, since ephemeral
 // forces autoDeleteInterval=0). Backstop if our explicit delete never runs.
 const AUTO_STOP_MINUTES = 5;
+// Base64 chars written per executeCommand append (keeps each command well within
+// shell/API length limits while minimizing round-trips).
+const WRITE_CHUNK_CHARS = 40_000;
+
+// Writes a file into the sandbox via executeCommand + base64 rather than
+// `fs.uploadFile`. The SDK's multipart upload needs the `form-data` module,
+// which is not bundleable in the Convex Node runtime; base64 over the shell is
+// dependency-free and safely round-trips any byte content (R scripts, text).
+async function writeFile(
+  sandbox: Sandbox,
+  path: string,
+  content: string,
+  timeoutSeconds: number,
+): Promise<void> {
+  const b64 = Buffer.from(content, "utf8").toString("base64");
+  const tmp = `${path}.b64`;
+  await sandbox.process.executeCommand(`: > '${tmp}'`, "/workspace", undefined, timeoutSeconds);
+  for (let i = 0; i < b64.length; i += WRITE_CHUNK_CHARS) {
+    const chunk = b64.slice(i, i + WRITE_CHUNK_CHARS);
+    await sandbox.process.executeCommand(
+      `printf '%s' '${chunk}' >> '${tmp}'`,
+      "/workspace",
+      undefined,
+      timeoutSeconds,
+    );
+  }
+  const decoded = await sandbox.process.executeCommand(
+    `base64 -d '${tmp}' > '${path}' && rm -f '${tmp}'`,
+    "/workspace",
+    undefined,
+    timeoutSeconds,
+  );
+  if (decoded.exitCode !== 0) {
+    throw new Error(`failed to write ${path}: ${decoded.result ?? ""}`);
+  }
+}
 
 /**
  * Provision one ephemeral sandbox, upload all files, run every command in it,
@@ -72,7 +108,7 @@ export async function runSandboxSession(
     );
 
     for (const file of req.files) {
-      await sandbox.fs.uploadFile(Buffer.from(file.content, "utf8"), file.path);
+      await writeFile(sandbox, file.path, file.content, req.timeoutSeconds);
     }
 
     const results: SandboxCommandResult[] = [];
