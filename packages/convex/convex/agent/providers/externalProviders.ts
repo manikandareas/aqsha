@@ -391,7 +391,7 @@ export async function jinaRerank(
 
 export async function lookupDoiProvider(
   ctx: ActionCtx,
-  args: { ownerUserId: string; doi: string },
+  args: { ownerUserId: string; doi: string; serviceMode?: boolean },
 ): Promise<ExternalCandidate[]> {
   const doi = normalizeDoi(args.doi);
   if (!doi) {
@@ -403,7 +403,7 @@ export async function lookupDoiProvider(
     return cached;
   }
   // Cache miss → charge the cost gate before the network call (AUD-04).
-  await limitExternal(ctx, args.ownerUserId, "crossref");
+  await limitExternal(ctx, args.ownerUserId, "crossref", args.serviceMode ?? false);
 
   try {
     const url = new URL(`${CROSSREF_ENDPOINT}/${encodeURIComponent(doi)}`);
@@ -438,7 +438,7 @@ export async function lookupDoiProvider(
 
 export async function searchArxivProvider(
   ctx: ActionCtx,
-  args: { ownerUserId: string; query: string; limit?: number },
+  args: { ownerUserId: string; query: string; limit?: number; serviceMode?: boolean },
 ): Promise<ExternalCandidate[]> {
   const query = args.query.trim();
   if (!query) {
@@ -450,7 +450,7 @@ export async function searchArxivProvider(
     return cached;
   }
   // Cache miss → charge the cost gate (and pace arXiv) before the network call (AUD-04).
-  await limitExternal(ctx, args.ownerUserId, "arxiv");
+  await limitExternal(ctx, args.ownerUserId, "arxiv", args.serviceMode ?? false);
 
   try {
     const url = new URL(ARXIV_ENDPOINT);
@@ -537,23 +537,34 @@ export async function readWithExaContents(
   }
 }
 
-async function limitExternal(ctx: ActionCtx, ownerUserId: string, provider: Provider) {
-  const billing = await ctx.runMutation(
-    internal.billing.entitlements.consumeCreditsInternal,
-    {
-      ownerUserId,
-      feature: "external_search",
-      provider,
-      credits: provider === "crossref" || provider === "arxiv" ? 1 : undefined,
-    },
-  );
-  if (!billing.ok) {
-    throw new ConvexError(billing.reason);
+async function limitExternal(
+  ctx: ActionCtx,
+  ownerUserId: string,
+  provider: Provider,
+  serviceMode = false,
+) {
+  // Service mode (internal verification paths) skips the per-user
+  // `external_search` credit + `externalSearchPerUser` fan-out gate — the work
+  // is already billed via the parent run — and keeps only the provider-level
+  // (global) pacing so we stay polite to Crossref/arXiv.
+  if (!serviceMode) {
+    const billing = await ctx.runMutation(
+      internal.billing.entitlements.consumeCreditsInternal,
+      {
+        ownerUserId,
+        feature: "external_search",
+        provider,
+        credits: provider === "crossref" || provider === "arxiv" ? 1 : undefined,
+      },
+    );
+    if (!billing.ok) {
+      throw new ConvexError(billing.reason);
+    }
   }
   // Per-user fan-out gate applies to every provider (fairness across users).
-  const perUser = await rateLimiter.check(ctx, "externalSearchPerUser", {
-    key: ownerUserId,
-  });
+  const perUser = serviceMode
+    ? ({ ok: true } as const)
+    : await rateLimiter.check(ctx, "externalSearchPerUser", { key: ownerUserId });
   // arXiv is paced (see paceArxiv), not gated by a fail-fast check.
   const providerOk =
     provider === "arxiv"
@@ -562,7 +573,9 @@ async function limitExternal(ctx: ActionCtx, ownerUserId: string, provider: Prov
   if (!perUser.ok || !providerOk) {
     throw new ConvexError("External provider is rate limited");
   }
-  await rateLimiter.limit(ctx, "externalSearchPerUser", { key: ownerUserId });
+  if (!serviceMode) {
+    await rateLimiter.limit(ctx, "externalSearchPerUser", { key: ownerUserId });
+  }
   if (provider === "arxiv") {
     await paceArxiv(ctx);
   } else {

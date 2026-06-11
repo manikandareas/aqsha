@@ -167,6 +167,9 @@ export function ThreadChatSurface({
                           run={entry.run}
                           artifacts={artifacts ?? []}
                           sourceCount={sourceCounts.byRunId.get(entry.run._id) ?? 0}
+                          sources={sources.filter(
+                            (source) => source.runId === entry.run._id,
+                          )}
                         />
                       ) : (
                         <MessageRow

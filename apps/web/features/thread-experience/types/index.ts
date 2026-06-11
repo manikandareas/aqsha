@@ -106,6 +106,10 @@ export type ResearchRun = {
     | "partial"
     | "failed";
   activeArtifactId?: string;
+  // Unified statistical verification summary (serialized VerificationReport),
+  // written by the sandbox stat path (Track 2B / on-demand sandbox_compute).
+  // Null for citation-only runs until a stat pass runs.
+  verificationReportJson?: string;
   retryable: boolean;
   errorMessage?: string;
   createdAt?: number;
@@ -189,6 +193,15 @@ export type ResearchSource = {
   arxivId?: string;
   snippet: string;
   evidenceStrength: "strong" | "medium" | "weak";
+  // 4-step citation integrity verdict (Track 2A). Unset until the auto-verify
+  // pass completes after the run (the panel shows a pending state meanwhile).
+  integrityStatus?:
+    | "verified"
+    | "metadata_mismatch"
+    | "identifier_invalid"
+    | "not_found"
+    | "unverifiable";
+  integrityCheckedAt?: number;
   readStatus?: "not_needed" | "ready" | "failed";
   qualityReason?: string;
   bucketName?: string;

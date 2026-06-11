@@ -25,7 +25,8 @@ export type CreditFeature =
   | "cited_answer"
   | "deep_research"
   | "external_search"
-  | "sandbox_compute";
+  | "sandbox_compute"
+  | "citation_verify";
 
 export const PLAN_ORDER: Record<PlanKey, number> = {
   free: 0,
@@ -236,6 +237,13 @@ export function estimateCredits(args: {
   }
   if (args.feature === "sandbox_compute") {
     return SANDBOX_COMPUTE_CREDITS;
+  }
+  if (args.feature === "citation_verify") {
+    // Usage-tracked, NOT charged: citation verification composes already
+    // cached + rate-limited scholarly providers (no per-user provider charge
+    // either — see the service-mode path). Recorded in the ledger/rollup for
+    // observability only; revisit pricing after measuring real usage.
+    return 0;
   }
   if (args.feature === "external_search") {
     return 2;

@@ -49,6 +49,9 @@ import { isDeepResearchStartedResult } from "./research/deepResearchContract";
 import { buildHitlTools, buildDeepResearchTools } from "./hitl/hitlTools";
 import { routeCompute } from "./sandbox/computeRouter";
 import { buildSandboxTools, SANDBOX_TOOL_NAMES } from "./sandbox/sandboxTools";
+import { buildCitationTools, CITATION_TOOL_NAMES } from "./research/citationTools";
+import { detectCitationVerifyIntent } from "./research/citationRouter";
+import { buildSkillTools, SKILL_TOOL_NAMES } from "./skills/skillTools";
 import type { ToolSet } from "ai";
 import type { SourceCandidate } from "./research/sourceCandidates";
 import {
@@ -978,6 +981,7 @@ function buildGenerationTools(
   promptMessageId: string,
   counter: CitationCounter,
   runId: Id<"agentRuns"> | undefined,
+  skillCatalogNames: string[],
 ): ToolSet {
   // Sandbox tools are always in the toolset so the approval-gated runComputation
   // can execute on the resume turn; their visibility is gated per-turn via
@@ -987,6 +991,8 @@ function buildGenerationTools(
     ...buildNormalChatTools(counter),
     ...buildHitlTools({ promptMessageId }),
     ...buildSandboxTools({ runId }),
+    ...buildCitationTools(),
+    ...buildSkillTools({ catalogNames: skillCatalogNames, runId }),
   };
 }
 
@@ -1024,6 +1030,15 @@ async function runInlineGeneration(
       );
       prompt = ragContext ? [ragContext, "", prompt].join("\n") : prompt;
     }
+    // Tier-1 skill catalog (names) for the per-turn activate_skill enum. Chat
+    // turns only — deep research delegates skills per-subagent (Phase 3).
+    const skillCatalogNames = args.deep
+      ? []
+      : (
+          await ctx.runQuery(internal.agent.skills.skills.listCatalog, {
+            ownerUserId: args.userId,
+          })
+        ).map((skill) => skill.name);
     const tools =
       args.deep && args.runId
         ? buildDeepResearchTools({
@@ -1036,6 +1051,7 @@ async function runInlineGeneration(
             args.promptMessageId,
             createCitationCounter(1),
             args.runId,
+            skillCatalogNames,
           );
     let activeTools = args.deep
       ? ["startDeepResearch"]
@@ -1055,6 +1071,16 @@ async function runInlineGeneration(
       });
       if (compute.exposeStatVerification) {
         activeTools = [...activeTools, ...SANDBOX_TOOL_NAMES];
+      }
+      // Citation verification is a free feature on BOTH tiers (unlike sandbox
+      // compute), so it is gated on prompt intent alone, not agent kind.
+      if (detectCitationVerifyIntent(args.visiblePrompt ?? args.prompt ?? "")) {
+        activeTools = [...activeTools, ...CITATION_TOOL_NAMES];
+      }
+      // Skills: the tier-1 catalog is always in the prompt; expose the
+      // activation + resource tools whenever there is a skill to name.
+      if (skillCatalogNames.length > 0) {
+        activeTools = [...activeTools, ...SKILL_TOOL_NAMES];
       }
     }
     const agent = agentForKind(args.agentKind);

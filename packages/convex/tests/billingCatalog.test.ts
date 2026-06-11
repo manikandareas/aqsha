@@ -119,6 +119,15 @@ describe("billing catalog", () => {
     expect(requiredPlanForFeature("external_search")).toBe("free");
   });
 
+  it("tracks citation verification without charging credits or gating a plan", () => {
+    // citation_verify is usage-tracked but free: it composes already cached +
+    // rate-limited scholarly providers (and the auto path runs in service mode,
+    // so no per-user provider charge either). Charged 0, available to all tiers.
+    expect(estimateCredits({ feature: "citation_verify" })).toBe(0);
+    expect(estimateCredits({ feature: "citation_verify", totalTokens: 50_000 })).toBe(0);
+    expect(requiredPlanForFeature("citation_verify")).toBe("free");
+  });
+
   it("allows canceled subscription grace until current period end", () => {
     expect(
       billingStatusAllowsUsage({

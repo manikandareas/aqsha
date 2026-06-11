@@ -17,6 +17,7 @@ import {
 import { requireCurrentUser } from "../../auth";
 import { estimateCredits } from "../../billing/catalog";
 import { consumeCredits } from "../../billing/entitlements";
+import { hasNhstReporting } from "../sandbox/computationRouting";
 import {
   jinaRerank,
   lookupDoiProvider,
@@ -1245,6 +1246,39 @@ export const persistArtifact = internalMutation({
       citationCheckCount: args.checks.length,
       updatedAt: now,
     });
+    // Auto-verify the report's citations (4-step integrity) off the workflow's
+    // critical path — fire-and-forget + non-fatal: a failure simply leaves
+    // integrityStatus unset and the report still ships. Runs after the run is
+    // marked completed (finalizeThread), so the UI must reactively re-render.
+    await ctx.scheduler.runAfter(
+      0,
+      internal.agent.research.citationIntegrity.verifyCitationsForRun,
+      {
+        ownerUserId: args.ownerUserId,
+        threadId: args.threadId,
+        runId: args.runId,
+      },
+    );
+    // Light stat-integrity pass (Track 2B): when the report itself reports NHST
+    // results, recompute them in the sandbox in SERVICE MODE (no per-user
+    // sandbox_compute charge — the deep_research run already billed). Persists
+    // verificationReportJson (not verificationStatus, which the semantic audit
+    // owns). Fire-and-forget + non-fatal; no-ops as not_configured when Daytona
+    // is unavailable.
+    if (hasNhstReporting(args.markdown)) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.agent.sandbox.sandboxRunner.runStatVerification,
+        {
+          ownerUserId: args.ownerUserId,
+          threadId: args.threadId,
+          runId: args.runId,
+          artifactId: report.artifactId,
+          text: args.markdown,
+          serviceMode: true,
+        },
+      );
+    }
     return { primaryArtifactId: report.artifactId, primaryVersionId: report.versionId };
   },
 });

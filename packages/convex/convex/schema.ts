@@ -268,6 +268,7 @@ export default defineSchema(
         v.literal("deep_research"),
         v.literal("external_search"),
         v.literal("sandbox_compute"),
+        v.literal("citation_verify"),
       ),
       provider: v.string(),
       model: v.optional(v.string()),
@@ -478,6 +479,8 @@ export default defineSchema(
         v.literal("status"),
         v.literal("failure"),
         v.literal("compute"),
+        v.literal("citation_check"),
+        v.literal("skill_activated"),
       ),
       round: v.optional(v.number()),
       title: v.string(),
@@ -869,6 +872,19 @@ export default defineSchema(
       discoveryQuery: v.optional(v.string()),
       rerankScore: v.optional(v.number()),
       metadataJson: v.optional(v.string()),
+      // Citation Integrity (4-step) result — written after sources persist
+      // (agent/research/citationIntegrity.ts). All optional/greenfield-safe.
+      integrityStatus: v.optional(
+        v.union(
+          v.literal("verified"),
+          v.literal("metadata_mismatch"),
+          v.literal("identifier_invalid"),
+          v.literal("not_found"),
+          v.literal("unverifiable"),
+        ),
+      ),
+      integrityDetailJson: v.optional(v.string()),
+      integrityCheckedAt: v.optional(v.number()),
       createdAt: v.number(),
       lastSeenAt: v.optional(v.number()),
     })
@@ -1029,6 +1045,45 @@ export default defineSchema(
       createdAt: v.number(),
       updatedAt: v.number(),
     }).index("by_question_key", ["questionKey"]),
+    // Agent Skills registry (open standard, agentskills.io) — builtin / user /
+    // workspace. The SKILL.md body is stored INLINE (bodyText, frontmatter
+    // stripped) so the per-turn context assembler (buildPromptContextForThread,
+    // a MutationCtx where blob reads are unavailable) can re-inject activated
+    // skill bodies; only larger references/assets live in _storage.
+    skills: defineTable({
+      ownerUserId: v.optional(v.string()), // null for builtin
+      scope: v.union(
+        v.literal("builtin"),
+        v.literal("user"),
+        v.literal("workspace"),
+      ),
+      workspaceId: v.optional(v.id("workspaces")),
+      name: v.string(), // lowercase-hyphen, <=64, == folder name
+      description: v.string(), // <=1024; tier-1 catalog material
+      version: v.string(),
+      checksum: v.string(),
+      enabled: v.boolean(),
+      bodyText: v.string(),
+      resourcesJson: v.string(), // manifest: [{ path, storageId, kind }]
+      hasScripts: v.boolean(),
+      metadataJson: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_scope_name", ["scope", "name"])
+      .index("by_owner_enabled", ["ownerUserId", "enabled"])
+      .index("by_owner_workspace", ["ownerUserId", "workspaceId"]),
+    // Per-thread skill activation trail (dedup + provenance + the source the
+    // context assembler re-materializes <skill_content> from each turn).
+    skillActivations: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      runId: v.optional(v.id("agentRuns")),
+      skillId: v.id("skills"),
+      skillVersion: v.string(),
+      activatedBy: v.union(v.literal("model"), v.literal("user")),
+      createdAt: v.number(),
+    }).index("by_owner_thread", ["ownerUserId", "threadId"]),
   },
   { schemaValidation: true },
 );

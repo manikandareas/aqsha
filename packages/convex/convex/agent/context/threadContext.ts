@@ -15,6 +15,12 @@ import {
 import { requireCurrentUser } from "../../auth";
 import { collapse } from "../../lib/text";
 import { assertWorkspaceArtifactOwner } from "../../workspaces/access";
+import {
+  buildActiveSkillBlock,
+  buildSkillCatalogBlock,
+  loadActiveSkillBodies,
+  loadCatalogSkills,
+} from "../skills/skillRegistry";
 
 const PROMPT_CONTEXT_TOTAL_LIMIT = 16_000;
 const PROMPT_CONTEXT_ARTIFACT_LIMIT = 4_000;
@@ -559,7 +565,24 @@ export async function buildPromptContextForThread(
   }
 
   const documentBlock = buildContextBlock(artifacts);
-  return [workspaceManifest, documentBlock].filter(Boolean).join("\n\n");
+  // Skills: tier-1 catalog (name+description of enabled skills) + tier-2
+  // re-injection of every skill activated in this thread. Re-materializing the
+  // bodies here (a MutationCtx reading the inline bodyText) every turn makes
+  // activated skills immune to message compaction/pruning.
+  const [catalogSkills, activeSkillBodies] = await Promise.all([
+    loadCatalogSkills(ctx, args.ownerUserId),
+    loadActiveSkillBodies(ctx, args.ownerUserId, args.threadId),
+  ]);
+  const skillCatalogBlock = buildSkillCatalogBlock(catalogSkills);
+  const activeSkillBlock = buildActiveSkillBlock(activeSkillBodies);
+  return [
+    workspaceManifest,
+    documentBlock,
+    skillCatalogBlock,
+    activeSkillBlock,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 export function prependPromptContext(args: {

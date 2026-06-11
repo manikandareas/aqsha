@@ -257,6 +257,7 @@ export async function runStatVerificationFlow(
     runId?: Id<"agentRuns">;
     artifactId: Id<"artifacts">;
     text: string;
+    serviceMode?: boolean;
   },
 ): Promise<StatVerificationResult> {
   const snapshot = process.env.DAYTONA_STATVERIFY_SNAPSHOT;
@@ -265,41 +266,51 @@ export async function runStatVerificationFlow(
     return { status: "not_configured" };
   }
 
-  // Fan-out gate first (cheap, fail fast) — don't charge a credit if the user
-  // is already over their per-minute sandbox budget.
-  const rate = await rateLimiter.check(ctx, "sandboxComputePerUser", {
-    key: args.ownerUserId,
-  });
-  if (!rate.ok) {
-    return { status: "rate_limited", retryAfterMs: rate.retryAfter };
+  // Service mode (the deep-research auto stat pass) skips the per-user
+  // sandbox_compute charge + fan-out gate — the parent deep_research run already
+  // billed the user. Interactive paths (verifyStatistics / runComputation) keep
+  // the gate.
+  if (!args.serviceMode) {
+    // Fan-out gate first (cheap, fail fast) — don't charge a credit if the user
+    // is already over their per-minute sandbox budget.
+    const rate = await rateLimiter.check(ctx, "sandboxComputePerUser", {
+      key: args.ownerUserId,
+    });
+    if (!rate.ok) {
+      return { status: "rate_limited", retryAfterMs: rate.retryAfter };
+    }
+
+    // Monthly credit gate. sandbox_compute is a flat per-run charge (see catalog).
+    const billing = await ctx.runMutation(
+      internal.billing.entitlements.consumeCreditsInternal,
+      {
+        ownerUserId: args.ownerUserId,
+        feature: "sandbox_compute",
+        provider: SANDBOX_PROVIDER,
+        threadId: args.threadId,
+        runId: args.runId,
+        metadataJson: JSON.stringify({
+          taskKind: "stat_verification",
+          artifactId: args.artifactId,
+        }),
+      },
+    );
+    if (!billing.ok) {
+      return {
+        status: "quota_blocked",
+        reason: billing.reason,
+        requiredPlan: billing.requiredPlan,
+      };
+    }
+    // Consume the fan-out token only after the credit succeeds.
+    await rateLimiter.limit(ctx, "sandboxComputePerUser", {
+      key: args.ownerUserId,
+    });
   }
 
-  // Monthly credit gate. sandbox_compute is a flat per-run charge (see catalog).
-  const billing = await ctx.runMutation(
-    internal.billing.entitlements.consumeCreditsInternal,
-    {
-      ownerUserId: args.ownerUserId,
-      feature: "sandbox_compute",
-      provider: SANDBOX_PROVIDER,
-      threadId: args.threadId,
-      runId: args.runId,
-      metadataJson: JSON.stringify({
-        taskKind: "stat_verification",
-        artifactId: args.artifactId,
-      }),
-    },
-  );
-  if (!billing.ok) {
-    return {
-      status: "quota_blocked",
-      reason: billing.reason,
-      requiredPlan: billing.requiredPlan,
-    };
-  }
-  // Consume the fan-out token only after the credit succeeds.
-  await rateLimiter.limit(ctx, "sandboxComputePerUser", { key: args.ownerUserId });
-
-  const creditsCharged = estimateCredits({ feature: "sandbox_compute" });
+  const creditsCharged = args.serviceMode
+    ? 0
+    : estimateCredits({ feature: "sandbox_compute" });
   const startedAt = Date.now();
   const sandboxRunId: Id<"sandboxRuns"> = await ctx.runMutation(
     internal.agent.sandbox.records.startSandboxRun,
@@ -461,6 +472,7 @@ export const runStatVerification = internalAction({
     runId: v.optional(v.id("agentRuns")),
     artifactId: v.id("artifacts"),
     text: v.string(),
+    serviceMode: v.optional(v.boolean()),
   },
   handler: async (ctx, args): Promise<StatVerificationResult> => {
     return await runStatVerificationFlow(ctx, args);

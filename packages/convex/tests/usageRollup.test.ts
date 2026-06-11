@@ -100,6 +100,8 @@ describe("usage daily rollup", () => {
       { ownerUserId: OWNER, feature: "normal_chat", credits: 1, estimatedCostCents: 1, createdAt: utcDayMs(today, 5) },
       { ownerUserId: OWNER, feature: "pro_chat", credits: 5, estimatedCostCents: 9, createdAt: utcDayMs(today, 9) },
       { ownerUserId: OWNER, feature: "sandbox_compute", credits: 10, estimatedCostCents: 0, createdAt: utcDayMs(today, 11) },
+      // Usage-tracked but free (0 credits): exercises the optional-key rollup path.
+      { ownerUserId: OWNER, feature: "citation_verify", credits: 0, estimatedCostCents: 0, createdAt: utcDayMs(today, 13) },
       { ownerUserId: OWNER, feature: "deep_research", credits: 120, estimatedCostCents: 40, createdAt: utcDayMs(yesterday, 3) },
       { ownerUserId: OWNER, feature: "external_search", credits: 2, estimatedCostCents: 0, createdAt: utcDayMs(yesterday, 8) },
       { ownerUserId: OWNER, feature: "cited_answer", credits: 3, estimatedCostCents: 2, createdAt: utcDayMs(yesterday, 20) },
@@ -166,8 +168,9 @@ describe("usage daily rollup", () => {
     expect(todayRow.featureCounts.normal_chat).toBe(2);
     expect(todayRow.featureCounts.pro_chat).toBe(1);
     expect(todayRow.featureCounts.sandbox_compute).toBe(1);
+    expect(todayRow.featureCounts.citation_verify).toBe(1);
     expect(todayRow.credits).toBe(18);
-    expect(todayRow.eventCount).toBe(4);
+    expect(todayRow.eventCount).toBe(5);
   });
 
   it("USAGE_FEATURES matches the empty feature-count shape", () => {

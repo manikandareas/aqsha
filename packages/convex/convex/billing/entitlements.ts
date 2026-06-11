@@ -34,6 +34,7 @@ const featureValidator = v.union(
   v.literal("deep_research"),
   v.literal("external_search"),
   v.literal("sandbox_compute"),
+  v.literal("citation_verify"),
 );
 
 const agentKindValidator = v.union(v.literal("lite"), v.literal("pro"));

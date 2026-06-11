@@ -8,18 +8,23 @@ import {
 import { useState } from "react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { cn } from "@/lib/utils";
-import type { ResearchArtifact, ResearchRun } from "../types";
+import type { ResearchArtifact, ResearchRun, ResearchSource } from "../types";
 import { formatCompactDuration } from "../utils/datetime";
 import { isRunActive } from "../utils/transcript-model";
+import { CitationIntegritySummary } from "./citation-integrity";
+
+const emptySources: ResearchSource[] = [];
 
 export function AgentRunBlock({
   run,
   artifacts,
   sourceCount = 0,
+  sources = emptySources,
 }: {
   run: ResearchRun;
   artifacts: ResearchArtifact[];
   sourceCount?: number;
+  sources?: ResearchSource[];
 }) {
   const sortedSteps = run.steps.slice().sort((a, b) => a.order - b.order);
   const activeStep = sortedSteps.find((step) => step.status === "running");
@@ -88,6 +93,12 @@ export function AgentRunBlock({
             />
           ))}
         </ol>
+      ) : null}
+      {open && isDeep ? (
+        <CitationIntegritySummary
+          sources={sources}
+          runCompleted={run.status === "completed"}
+        />
       ) : null}
       {run.status === "canceled" ? (
         <p className="mt-3 text-[13px] font-medium text-muted-foreground">

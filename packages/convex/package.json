@@ -46,9 +46,10 @@
     }
   },
   "scripts": {
-    "dev": "convex dev",
-    "codegen": "convex codegen",
-    "deploy": "convex deploy",
+    "skills:bundle": "node scripts/bundle-skills.mjs",
+    "dev": "node scripts/bundle-skills.mjs && convex dev",
+    "codegen": "node scripts/bundle-skills.mjs && convex codegen",
+    "deploy": "node scripts/bundle-skills.mjs && convex deploy",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "tsc -p convex && eslint . --report-unused-disable-directives --max-warnings 0",
@@ -69,6 +70,7 @@
     "mammoth": "^1.12.0",
     "standardwebhooks": "^1.0.0",
     "unpdf": "^1.6.2",
+    "yaml": "^2.6.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

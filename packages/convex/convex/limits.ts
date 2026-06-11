@@ -132,4 +132,13 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
     period: MINUTE,
     capacity: 5,
   },
+  // Per-user gate on citation-integrity verification (the 4-step engine). The
+  // work is composition of already-cached scholarly providers, so this caps
+  // fan-out per user; the feature is usage-tracked but not credit-charged.
+  citationVerifyPerUser: {
+    kind: "token bucket",
+    rate: 10,
+    period: MINUTE,
+    capacity: 10,
+  },
 });

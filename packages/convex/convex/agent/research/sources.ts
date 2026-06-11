@@ -55,6 +55,8 @@ export const listForThread = query({
       arxivId: row.arxivId,
       snippet: row.snippet,
       evidenceStrength: row.evidenceStrength,
+      integrityStatus: row.integrityStatus,
+      integrityCheckedAt: row.integrityCheckedAt,
       readStatus: row.readStatus,
       qualityReason: row.qualityReason,
       bucketName: row.bucketName,
