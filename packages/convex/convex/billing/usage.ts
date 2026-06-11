@@ -133,6 +133,8 @@ export const activity = query({
         cited_answer: day.featureCounts.cited_answer,
         deep_research: day.featureCounts.deep_research,
         external_search: day.featureCounts.external_search,
+        // Optional on rows written before the feature existed — coalesce to 0.
+        sandbox_compute: day.featureCounts.sandbox_compute ?? 0,
       };
     }
 

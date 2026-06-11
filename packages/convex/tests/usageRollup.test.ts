@@ -99,6 +99,7 @@ describe("usage daily rollup", () => {
       { ownerUserId: OWNER, feature: "normal_chat", credits: 2, estimatedCostCents: 3, createdAt: utcDayMs(today, 1) },
       { ownerUserId: OWNER, feature: "normal_chat", credits: 1, estimatedCostCents: 1, createdAt: utcDayMs(today, 5) },
       { ownerUserId: OWNER, feature: "pro_chat", credits: 5, estimatedCostCents: 9, createdAt: utcDayMs(today, 9) },
+      { ownerUserId: OWNER, feature: "sandbox_compute", credits: 10, estimatedCostCents: 0, createdAt: utcDayMs(today, 11) },
       { ownerUserId: OWNER, feature: "deep_research", credits: 120, estimatedCostCents: 40, createdAt: utcDayMs(yesterday, 3) },
       { ownerUserId: OWNER, feature: "external_search", credits: 2, estimatedCostCents: 0, createdAt: utcDayMs(yesterday, 8) },
       { ownerUserId: OWNER, feature: "cited_answer", credits: 3, estimatedCostCents: 2, createdAt: utcDayMs(yesterday, 20) },
@@ -132,7 +133,9 @@ describe("usage daily rollup", () => {
             eventCount: existing.eventCount + 1,
             featureCounts: {
               ...existing.featureCounts,
-              [e.feature]: existing.featureCounts[e.feature] + 1,
+              // `?? 0` mirrors bumpUsageDailyRollup: the optional sandbox_compute
+              // key is absent on rows written before the feature existed.
+              [e.feature]: (existing.featureCounts[e.feature] ?? 0) + 1,
             },
           });
         } else {
@@ -162,8 +165,9 @@ describe("usage daily rollup", () => {
     const todayRow = got.find((r) => r.date === today)!;
     expect(todayRow.featureCounts.normal_chat).toBe(2);
     expect(todayRow.featureCounts.pro_chat).toBe(1);
-    expect(todayRow.credits).toBe(8);
-    expect(todayRow.eventCount).toBe(3);
+    expect(todayRow.featureCounts.sandbox_compute).toBe(1);
+    expect(todayRow.credits).toBe(18);
+    expect(todayRow.eventCount).toBe(4);
   });
 
   it("USAGE_FEATURES matches the empty feature-count shape", () => {

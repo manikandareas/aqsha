@@ -24,7 +24,8 @@ export type CreditFeature =
   | "pro_chat"
   | "cited_answer"
   | "deep_research"
-  | "external_search";
+  | "external_search"
+  | "sandbox_compute";
 
 export const PLAN_ORDER: Record<PlanKey, number> = {
   free: 0,
@@ -182,8 +183,13 @@ export function requiredPlanForFeature(feature: CreditFeature): PublicPlanKey {
   // pro_chat always requires a paid plan. deep_research keeps "starter" as a
   // fallback default, but the send path passes an explicit requiredPlan that is
   // agent-aware (Lite-deep → "free" so Free can use its monthly quota; Pro-deep
-  // → "starter").
-  if (feature === "pro_chat" || feature === "deep_research") {
+  // → "starter"). sandbox_compute (the verification engine) is exposed only on
+  // the Astra Pro agent, so it requires the same paid plan as pro_chat.
+  if (
+    feature === "pro_chat" ||
+    feature === "deep_research" ||
+    feature === "sandbox_compute"
+  ) {
     return "starter";
   }
   return "free";
@@ -208,6 +214,11 @@ const NORMAL_CHAT_TOKENS_PER_CREDIT = 1_500;
 const PRO_CHAT_TOKENS_PER_CREDIT = 250; // ~6x normal_chat (gpt-5.5 is far costlier)
 const DEEP_PRO_CREDITS = 120;
 const DEEP_LITE_CREDITS = 60;
+// Flat per-run charge for an ephemeral sandbox compute job (Daytona, billed
+// per-second). Priced above external_search (2) to reflect provisioning +
+// runtime cost, but well below a deep-research run since it is a single bounded
+// recompute rather than a multi-round LLM loop.
+const SANDBOX_COMPUTE_CREDITS = 10;
 
 export function estimateCredits(args: {
   feature: CreditFeature;
@@ -223,6 +234,9 @@ export function estimateCredits(args: {
   if (args.feature === "deep_research") {
     return args.agentKind === "lite" ? DEEP_LITE_CREDITS : DEEP_PRO_CREDITS;
   }
+  if (args.feature === "sandbox_compute") {
+    return SANDBOX_COMPUTE_CREDITS;
+  }
   if (args.feature === "external_search") {
     return 2;
   }
@@ -230,6 +244,23 @@ export function estimateCredits(args: {
     return Math.max(1, Math.ceil(totalTokens / PRO_CHAT_TOKENS_PER_CREDIT));
   }
   return Math.max(1, Math.ceil(totalTokens / NORMAL_CHAT_TOKENS_PER_CREDIT));
+}
+
+// Billing feature for a chat usage event. The run's agent tier (agentKind) is the
+// source of truth; the model string is only a fallback for legacy/in-flight runs
+// that predate agentKind being threaded through (AUD-02), preserving the prior
+// model-string behavior in that case.
+export function featureForUsage(args: {
+  agentKind?: "lite" | "pro";
+  isProModel: boolean;
+}): Extract<CreditFeature, "normal_chat" | "pro_chat"> {
+  if (args.agentKind === "pro") {
+    return "pro_chat";
+  }
+  if (args.agentKind === "lite") {
+    return "normal_chat";
+  }
+  return args.isProModel ? "pro_chat" : "normal_chat";
 }
 
 export function estimateProviderCostCents(args: {

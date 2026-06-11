@@ -123,4 +123,13 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
     period: ONE_SECOND,
     capacity: 1,
   },
+  // Per-user gate on ephemeral sandbox compute runs (the verification engine).
+  // Each run provisions a Daytona sandbox (per-second billing), so this caps
+  // fan-out per user independently of the monthly credit quota.
+  sandboxComputePerUser: {
+    kind: "token bucket",
+    rate: 5,
+    period: MINUTE,
+    capacity: 5,
+  },
 });

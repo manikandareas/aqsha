@@ -33,6 +33,7 @@ const featureValidator = v.union(
   v.literal("cited_answer"),
   v.literal("deep_research"),
   v.literal("external_search"),
+  v.literal("sandbox_compute"),
 );
 
 const agentKindValidator = v.union(v.literal("lite"), v.literal("pro"));
@@ -410,7 +411,9 @@ export async function bumpUsageDailyRollup(
   if (existing) {
     const featureCounts = {
       ...existing.featureCounts,
-      [args.feature]: existing.featureCounts[args.feature] + 1,
+      // `?? 0` covers the optional `sandbox_compute` key on rollup rows written
+      // before that feature existed (no backfill — see usageShape.ts).
+      [args.feature]: (existing.featureCounts[args.feature] ?? 0) + 1,
     };
     await ctx.db.patch("usageDailyRollup", existing._id, {
       credits: existing.credits + args.credits,

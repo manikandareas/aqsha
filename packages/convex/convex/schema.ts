@@ -4,7 +4,9 @@ import { featureCountValidator } from "./billing/usageShape";
 import { explorePaperFields } from "./explore/validators";
 import { feedItemFields, feedProviderValidator } from "./feed/validators";
 
-const runId = v.union(v.id("agentRuns"), v.id("researchRuns"));
+// All run references point at `agentRuns`. (A former `researchRuns` table was
+// never defined; the dangling `v.id("researchRuns")` union member was removed.)
+const runId = v.id("agentRuns");
 
 const artifactTypeValidator = v.union(
   v.literal("markdown"),
@@ -265,6 +267,7 @@ export default defineSchema(
         v.literal("cited_answer"),
         v.literal("deep_research"),
         v.literal("external_search"),
+        v.literal("sandbox_compute"),
       ),
       provider: v.string(),
       model: v.optional(v.string()),
@@ -422,6 +425,10 @@ export default defineSchema(
       canceledAt: v.optional(v.number()),
       errorCode: v.optional(v.string()),
       errorMessage: v.optional(v.string()),
+      // Per-artifact statistical verification summary (sandbox compute path),
+      // serialized VerificationReport. Optional — only set on runs that ran a
+      // verification. See agent/sandbox/verificationReport.ts.
+      verificationReportJson: v.optional(v.string()),
       createdAt: v.number(),
       updatedAt: v.number(),
       completedAt: v.optional(v.number()),
@@ -470,6 +477,7 @@ export default defineSchema(
         v.literal("artifact"),
         v.literal("status"),
         v.literal("failure"),
+        v.literal("compute"),
       ),
       round: v.optional(v.number()),
       title: v.string(),
@@ -741,6 +749,78 @@ export default defineSchema(
         "artifactVersionId",
       ])
       .index("by_owner_run", ["ownerUserId", "runId"]),
+    // Provenance for a single ephemeral sandbox execution (Daytona). Owner-scoped,
+    // mirroring the citationChecks conventions (ownerUserId partition, by_owner_*
+    // indexes, v.id("agentRuns") for runId — never the union). This row is the run
+    // envelope; the raw recomputed numbers live in `computationChecks`.
+    sandboxRuns: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.optional(v.string()),
+      runId: v.optional(runId),
+      taskKind: v.union(
+        v.literal("stat_verification"),
+        v.literal("replication"),
+        v.literal("meta_analysis"),
+        v.literal("custom_analysis"),
+      ),
+      status: v.union(
+        v.literal("provisioning"),
+        v.literal("running"),
+        v.literal("completed"),
+        v.literal("failed"),
+        v.literal("canceled"),
+        v.literal("timeout"),
+      ),
+      // Versioned snapshot name (e.g. "aqsha-statverify-v1") for reproducibility.
+      snapshotVersion: v.string(),
+      command: v.string(),
+      // sha256 of each uploaded input file, for replay/determinism auditing.
+      inputFileHashes: v.array(v.string()),
+      exitCode: v.optional(v.number()),
+      stdoutClipped: v.optional(v.string()),
+      errorMessage: v.optional(v.string()),
+      outputArtifactIds: v.optional(v.array(v.id("artifacts"))),
+      durationMs: v.optional(v.number()),
+      creditsCharged: v.optional(v.number()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+      completedAt: v.optional(v.number()),
+    })
+      .index("by_owner_created", ["ownerUserId", "createdAt"])
+      .index("by_owner_run", ["ownerUserId", "runId"]),
+    // Deterministic per-check result produced by a sandboxRun. Raw reported vs
+    // recomputed numbers (reportedJson/recomputedJson) are stored as-is; the
+    // consistent/discrepant interpretation lives in `outcome` with explicit
+    // `toleranceJson` — never mixed (determinism invariant). `by_owner_sandbox_run`
+    // is the replay read path (all checks for a run); `by_owner_artifact` powers
+    // the per-artifact verification report.
+    computationChecks: defineTable({
+      ownerUserId: v.string(),
+      sandboxRunId: v.id("sandboxRuns"),
+      artifactId: v.id("artifacts"),
+      checkKind: v.union(
+        v.literal("statcheck"),
+        v.literal("grim"),
+        v.literal("grimmer"),
+        v.literal("power"),
+      ),
+      claimText: v.string(),
+      // Raw matched span (e.g. the NHST string statcheck flagged) for UI
+      // highlighting and replay. Absent when the check is span-less.
+      claimSpan: v.optional(v.string()),
+      reportedJson: v.string(),
+      recomputedJson: v.string(),
+      outcome: v.union(
+        v.literal("consistent"),
+        v.literal("discrepant"),
+        v.literal("decision_error"),
+        v.literal("not_computable"),
+      ),
+      toleranceJson: v.string(),
+      createdAt: v.number(),
+    })
+      .index("by_owner_artifact", ["ownerUserId", "artifactId"])
+      .index("by_owner_sandbox_run", ["ownerUserId", "sandboxRunId"]),
     researchSources: defineTable({
       ownerUserId: v.string(),
       threadId: v.string(),

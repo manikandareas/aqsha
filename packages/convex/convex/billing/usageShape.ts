@@ -13,20 +13,25 @@ export const USAGE_FEATURES = [
   "cited_answer",
   "deep_research",
   "external_search",
+  "sandbox_compute",
 ] as const;
 
 export type UsageFeature = (typeof USAGE_FEATURES)[number];
 
 export type FeatureCounts = Record<UsageFeature, number>;
 
-// Validator for the per-day feature-count object. Every feature key is a
-// required `v.number()` so the rollup row is always fully populated.
+// Validator for the per-day feature-count object. The original feature keys are
+// required so legacy rollup rows stay fully populated. `sandbox_compute` was
+// added later as `v.optional(...)` so existing rows (written before the feature
+// existed) keep validating without a backfill migration; read paths coalesce a
+// missing value to 0.
 export const featureCountValidator = v.object({
   normal_chat: v.number(),
   pro_chat: v.number(),
   cited_answer: v.number(),
   deep_research: v.number(),
   external_search: v.number(),
+  sandbox_compute: v.optional(v.number()),
 });
 
 // Fresh zeroed feature-count object. Returns a new object on each call so
@@ -38,5 +43,6 @@ export function emptyFeatureCounts(): FeatureCounts {
     cited_answer: 0,
     deep_research: 0,
     external_search: 0,
+    sandbox_compute: 0,
   };
 }
