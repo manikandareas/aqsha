@@ -12,10 +12,22 @@ import {
   optimisticallyInsertUserMessage,
   promptCommandMetadataForContent,
 } from "./optimistic-updates";
+import { isSdkBackend } from "@/lib/agent-backend";
+import { useThreadExperienceDataV2 } from "./use-thread-experience-data-v2";
 import type { ResearchArtifact, ResearchRun, ResearchSource } from "../types";
 
+// Backend switch (plan §9.4 Step 2): both hook variants always run (rules of
+// hooks) but the inactive one passes "skip" everywhere, so only one backend
+// is actually subscribed.
 export function useThreadExperienceData(threadId?: string) {
-  const { isAuthenticated } = useConvexAuth();
+  const legacy = useThreadExperienceDataLegacy(threadId, !isSdkBackend);
+  const v2 = useThreadExperienceDataV2(threadId, isSdkBackend);
+  return isSdkBackend ? v2 : legacy;
+}
+
+function useThreadExperienceDataLegacy(threadId: string | undefined, enabled: boolean) {
+  const { isAuthenticated: authed } = useConvexAuth();
+  const isAuthenticated = authed && enabled;
   const viewer = useConvexQueryData(api.auth.getCurrentUser, isAuthenticated ? {} : "skip");
   const threadPage = useConvexQueryData(
     api.agent.threads.list,

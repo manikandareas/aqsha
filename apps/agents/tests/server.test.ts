@@ -93,6 +93,28 @@ describe("server", () => {
     expect(await retried.json()).toMatchObject({ deduplicated: true });
   });
 
+  it("POST /runs executes a Convex-pre-created queued run instead of deduping", async () => {
+    // The v2 startThread mutation inserts the run row as `queued` BEFORE
+    // dispatching; the service must treat that as "not yet accepted".
+    const { store, fetchJson } = setup();
+    await store.upsertThread({ threadId: "t1", ownerUserId: "u1", agentKind: "lite" });
+    await store.createRun({
+      runId: "run-preseeded",
+      threadId: "t1",
+      ownerUserId: "u1",
+      agentKind: "lite",
+      mode: "normal",
+      promptMessageId: "m-user",
+    });
+    const accepted = await fetchJson("/runs", {
+      method: "POST",
+      body: JSON.stringify({ ...RUN_BODY, runId: "run-preseeded" }),
+    });
+    expect(accepted.status).toBe(202);
+    const body = (await accepted.json()) as { deduplicated?: boolean };
+    expect(body.deduplicated).toBeUndefined();
+  });
+
   it("POST /interactions/:id/respond records the response", async () => {
     const { store, fetchJson } = setup();
     const interaction = await store.createInteraction({

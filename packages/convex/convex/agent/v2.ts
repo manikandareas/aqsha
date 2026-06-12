@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import {
+  action,
   internalAction,
   internalMutation,
   mutation,
@@ -294,6 +295,85 @@ export const cancelRun = mutation({
       runId: args.runId,
     });
     return { ok: true };
+  },
+});
+
+export const removeThread = mutation({
+  args: { threadId: v.string() },
+  returns: v.object({ ok: v.boolean() }),
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    const thread = await findThread(ctx, args.threadId);
+    if (!thread || thread.ownerUserId !== user._id) {
+      return { ok: true };
+    }
+    // Bounded cleanup — dev-scale threads; large threads finish on a later
+    // call (the thread row goes last so retries keep finding the children).
+    const messages = await ctx.db
+      .query("chatMessages")
+      .withIndex("by_thread_created", (q) => q.eq("threadId", args.threadId))
+      .take(500);
+    for (const message of messages) {
+      await ctx.db.delete("chatMessages", message._id);
+    }
+    const interactions = await ctx.db
+      .query("pendingInteractions")
+      .withIndex("by_thread_created", (q) => q.eq("threadId", args.threadId))
+      .take(200);
+    for (const interaction of interactions) {
+      await ctx.db.delete("pendingInteractions", interaction._id);
+    }
+    const runs = await ctx.db
+      .query("agentRuns2")
+      .withIndex("by_thread_created", (q) => q.eq("threadId", args.threadId))
+      .take(100);
+    for (const run of runs) {
+      const events = await ctx.db
+        .query("agentRunEvents2")
+        .withIndex("by_run_seq", (q) => q.eq("runId", run.runId))
+        .take(500);
+      for (const event of events) {
+        await ctx.db.delete("agentRunEvents2", event._id);
+      }
+      await ctx.db.delete("agentRuns2", run._id);
+    }
+    await ctx.db.delete("chatThreads", thread._id);
+    return { ok: true };
+  },
+});
+
+// Composer `/` palette source (plan §5.4): temporary proxy to the service's
+// GET /commands registry until deploy-time sync lands. Action (outbound HTTP),
+// cached client-side via TanStack staleTime.
+export const listCommands = action({
+  args: {},
+  handler: async (ctx): Promise<
+    Array<{
+      name: string;
+      description: string;
+      argumentHint?: string;
+      scope: string;
+      interceptedByService?: boolean;
+    }>
+  > => {
+    await requireCurrentUser(ctx);
+    try {
+      const response = await fetch(`${serviceBaseUrl()}/commands`, {
+        headers: serviceHeaders(),
+      });
+      if (!response.ok) {
+        return [];
+      }
+      return (await response.json()) as Array<{
+        name: string;
+        description: string;
+        argumentHint?: string;
+        scope: string;
+        interceptedByService?: boolean;
+      }>;
+    } catch {
+      return [];
+    }
   },
 });
 

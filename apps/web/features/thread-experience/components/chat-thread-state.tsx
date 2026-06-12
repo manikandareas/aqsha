@@ -1,8 +1,15 @@
 "use client";
 
 import { useUIMessages } from "@convex-dev/agent/react";
+import {
+  uiHitlMessageFromInteraction,
+  uiMessageFromV2Row,
+  type V2InteractionRow,
+  type V2MessageRow,
+} from "@aqsha/agent-contracts";
 import { AlertCircleIcon } from "@aqsha/ui/icons";
 import { api } from "@aqsha/convex/api";
+import { isSdkBackend } from "@/lib/agent-backend";
 import { useConvexAuth, useConvexQueryData } from "@/lib/convex-query";
 import {
   Conversation,
@@ -97,20 +104,45 @@ export function ThreadChatSurface({
   seed?: string;
 }) {
   const { isAuthenticated } = useConvexAuth();
-  const threadStatus = useConvexQueryData(
+  // Backend split (plan §9.4 Step 2): both query sets always run, the
+  // inactive backend gets "skip" — components below see one message shape.
+  const legacyActive = isAuthenticated && !isSdkBackend;
+  const sdkActive = isAuthenticated && isSdkBackend;
+  const threadStatusLegacy = useConvexQueryData(
     api.agent.threads.get,
-    isAuthenticated && threadId ? { threadId } : "skip",
+    legacyActive && threadId ? { threadId } : "skip",
   );
+  const threadStatusV2 = useConvexQueryData(
+    api.agent.v2.queries.getThread,
+    sdkActive && threadId ? { threadId } : "skip",
+  );
+  const threadStatus = isSdkBackend ? threadStatusV2 : threadStatusLegacy;
   // Lock the composer while a reply is still being generated for this thread.
   // `send` only schedules generation and returns immediately, so `isSending`
   // alone re-opens the composer before the agent finishes streaming.
   const isGenerating = threadStatus?.status === "streaming";
   const messages = useUIMessages(
     api.agent.messages.list,
-    isAuthenticated && threadId ? { threadId } : "skip",
+    legacyActive && threadId ? { threadId } : "skip",
     { initialNumItems: 30, stream: true },
   );
-  const sortedMessages = sortTranscriptMessages(messages.results as unknown as ChatMessage[]);
+  const v2MessageRows = useConvexQueryData(
+    api.agent.v2.queries.listMessages,
+    sdkActive && threadId ? { threadId } : "skip",
+  );
+  const v2Interactions = useConvexQueryData(
+    api.agent.v2.queries.listPendingInteractions,
+    sdkActive && threadId ? { threadId } : "skip",
+  );
+  const backendMessages = isSdkBackend
+    ? ([
+        ...((v2MessageRows ?? []) as V2MessageRow[]).map(uiMessageFromV2Row),
+        ...((v2Interactions ?? []) as V2InteractionRow[]).map(
+          uiHitlMessageFromInteraction,
+        ),
+      ] as unknown as ChatMessage[])
+    : (messages.results as unknown as ChatMessage[]);
+  const sortedMessages = sortTranscriptMessages(backendMessages);
   // HITL is now native in-thread: a pending tool part (askUser awaiting an
   // answer, or an action awaiting approval) blocks the composer, and resolving
   // it resumes generation. Derived entirely from the message stream.

@@ -37,6 +37,7 @@
       "name": "@aqsha/app",
       "version": "0.1.0",
       "dependencies": {
+        "@aqsha/agent-contracts": "workspace:*",
         "@aqsha/convex": "workspace:*",
         "@aqsha/ui": "workspace:*",
         "@blocknote/core": "^0.51.1",

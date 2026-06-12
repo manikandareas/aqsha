@@ -49,8 +49,13 @@ export function createApp(deps: ServerDeps): Hono {
       );
     }
     const existing = await store.getRun(parsed.data.runId);
-    if (existing) {
-      // Idempotent retry from Convex: the run is already accepted.
+    // Idempotent retry guard — but ONLY when the run is genuinely in flight
+    // or finished. Convex pre-creates the row as `queued` before dispatching,
+    // so a queued row that is not active here still needs execution.
+    if (
+      existing &&
+      (runManager.isActive(existing.runId) || existing.status !== "queued")
+    ) {
       return c.json({ ok: true, runId: existing.runId, deduplicated: true }, 202);
     }
     const result = await runManager.startRun(parsed.data);

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { api } from "@aqsha/convex/api";
+import { isSdkBackend } from "@/lib/agent-backend";
 import { useConvexMutationFn } from "@/lib/convex-query";
 import { toWorkspaceId } from "@/lib/convex-refs";
 
@@ -31,6 +32,45 @@ export function useHitlResume(
   const approveTool = useConvexMutationFn(api.agent.hitl.hitlResume.approveTool);
   const denyTool = useConvexMutationFn(api.agent.hitl.hitlResume.denyTool);
   const resumeHitl = useConvexMutationFn(api.agent.hitl.hitlResume.resumeHitl);
+  // SDK backend (plan §5.3): one unified respond mutation. The card callbacks
+  // already carry the pendingInteractions row id as toolCallId/approvalId
+  // (see uiHitlMessageFromInteraction), and the mutation forwards the resume
+  // to the service when the run is interrupted — no client-side resume step.
+  const respondV2 = useConvexMutationFn(api.agent.v2.interactions.respond);
+
+  const onAnswerV2 = useCallback(
+    async (toolCallId: string, answers: HitlAnswer[]) => {
+      await respondV2({
+        interactionId: toolCallId as never,
+        response: { kind: "answers", answers },
+      });
+    },
+    [respondV2],
+  );
+  const onApproveV2 = useCallback(
+    async (approvalId: string, workspaceId?: string) => {
+      await respondV2({
+        interactionId: approvalId as never,
+        response: {
+          kind: "approval",
+          approved: true,
+          // Step-2 interim: the workspace pick rides along as a note until the
+          // service consumes it as a structured field (Step 3).
+          ...(workspaceId ? { note: `workspaceId:${workspaceId}` } : {}),
+        },
+      });
+    },
+    [respondV2],
+  );
+  const onDenyV2 = useCallback(
+    async (approvalId: string, reason?: string) => {
+      await respondV2({
+        interactionId: approvalId as never,
+        response: { kind: "approval", approved: false, ...(reason ? { note: reason } : {}) },
+      });
+    },
+    [respondV2],
+  );
 
   const lastMessageIdRef = useRef<string | null>(null);
   const pendingResumeRef = useRef(false);
@@ -84,5 +124,8 @@ export function useHitlResume(
     void resumeHitl({ threadId, promptMessageId: messageId });
   }, [hasPending, threadId, resumeHitl]);
 
+  if (isSdkBackend) {
+    return { onAnswer: onAnswerV2, onApprove: onApproveV2, onDeny: onDenyV2 };
+  }
   return { onAnswer, onApprove, onDeny };
 }

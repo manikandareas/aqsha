@@ -103,6 +103,7 @@ import type * as agent_tools_toolContext from "../agent/tools/toolContext.js";
 import type * as agent_tools_workspaceCommandInference from "../agent/tools/workspaceCommandInference.js";
 import type * as agent_v2 from "../agent/v2.js";
 import type * as agent_v2_interactions from "../agent/v2/interactions.js";
+import type * as agent_v2_queries from "../agent/v2/queries.js";
 import type * as agent_workflow from "../agent/workflow.js";
 import type * as artifacts from "../artifacts.js";
 import type * as artifacts_model from "../artifacts/model.js";
@@ -278,6 +279,7 @@ declare const fullApi: ApiFromModules<{
   "agent/tools/workspaceCommandInference": typeof agent_tools_workspaceCommandInference;
   "agent/v2": typeof agent_v2;
   "agent/v2/interactions": typeof agent_v2_interactions;
+  "agent/v2/queries": typeof agent_v2_queries;
   "agent/workflow": typeof agent_workflow;
   artifacts: typeof artifacts;
   "artifacts/model": typeof artifacts_model;
