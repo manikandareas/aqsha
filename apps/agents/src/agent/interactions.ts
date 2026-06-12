@@ -222,7 +222,18 @@ export function buildCanUseTool(input: {
       signal: options?.signal,
     });
     if (result.outcome === "allow") {
-      return { behavior: "allow", updatedInput: toolInput };
+      // The approval card may carry a structured workspace pick (Step 3); the
+      // user's choice overrides whatever workspace the model proposed.
+      const approvedWorkspaceId =
+        result.interaction.response?.kind === "approval"
+          ? result.interaction.response.workspaceId
+          : undefined;
+      return {
+        behavior: "allow",
+        updatedInput: approvedWorkspaceId
+          ? { ...toolInput, workspaceId: approvedWorkspaceId }
+          : toolInput,
+      };
     }
     if (result.outcome === "deny") {
       return { behavior: "deny", message: result.message };
@@ -260,9 +271,15 @@ export function resumePromptForInteraction(interaction: PendingInteraction): str
     return `The user answered your questions:\n${lines.join("\n")}\nContinue the task using these answers.`;
   }
   if (response.approved) {
-    return `The user approved your pending ${interaction.toolName} request${
-      response.note ? ` with note: ${response.note}` : ""
-    }. Proceed with the approved action now.`;
+    const extras = [
+      response.workspaceId
+        ? `Target workspace id: ${response.workspaceId} (use this workspaceId).`
+        : null,
+      response.note ? `Note from the user: ${response.note}` : null,
+    ].filter(Boolean);
+    return `The user approved your pending ${interaction.toolName} request. ${
+      extras.length ? `${extras.join(" ")} ` : ""
+    }Proceed with the approved action now.`;
   }
   return `The user declined your pending ${interaction.toolName} request${
     response.note ? `: ${response.note}` : ""

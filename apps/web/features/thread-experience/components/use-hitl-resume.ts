@@ -54,9 +54,7 @@ export function useHitlResume(
         response: {
           kind: "approval",
           approved: true,
-          // Step-2 interim: the workspace pick rides along as a note until the
-          // service consumes it as a structured field (Step 3).
-          ...(workspaceId ? { note: `workspaceId:${workspaceId}` } : {}),
+          ...(workspaceId ? { workspaceId } : {}),
         },
       });
     },

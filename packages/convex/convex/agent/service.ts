@@ -294,6 +294,11 @@ export const setRunStatus = mutation({
   handler: async (ctx, args) => {
     requireServiceToken(args.serviceToken);
     const run = await requireRun(ctx, args.runId);
+    // A user cancel recorded by agent.v2.cancelRun is sticky — the service may
+    // still be streaming and must not revive the run (plan §9.4 Step 3).
+    if (run.status === "canceled") {
+      return null;
+    }
     await ctx.db.patch("agentRuns2", run._id, {
       status: args.status,
       updatedAt: Date.now(),
@@ -323,13 +328,16 @@ export const finalizeRun = mutation({
   handler: async (ctx, args) => {
     requireServiceToken(args.serviceToken);
     const run = await requireRun(ctx, args.runId);
+    // Canceled stays canceled (durable cancel) — still record cost/usage/session
+    // from the service's late finalization, but never the terminal status.
+    const status = run.status === "canceled" ? "canceled" : args.status;
     await ctx.db.patch("agentRuns2", run._id, {
-      status: args.status,
+      status,
       sdkSessionId: args.sdkSessionId ?? run.sdkSessionId,
       costUsd: args.costUsd ?? run.costUsd,
       usageJson: args.usage ? JSON.stringify(args.usage) : run.usageJson,
       numTurns: args.numTurns ?? run.numTurns,
-      errorMessage: args.errorMessage,
+      errorMessage: status === "canceled" ? run.errorMessage : args.errorMessage,
       updatedAt: Date.now(),
     });
     return null;
@@ -711,6 +719,10 @@ export const applyArtifactAction = mutation({
           plainText,
         },
       );
+      // Link the artifact to its originating thread so the per-thread artifact
+      // panel fills on the sdk backend (plan §9.4 Step 3). `artifacts.threadId`
+      // is a plain string column, so the v2 `thr_*` id fits as-is.
+      await ctx.db.patch("artifacts", artifactId, { threadId: args.threadId });
       return { ok: true, artifactId: String(artifactId) };
     } catch (error) {
       return { ok: false, reason: failureReason(error) };

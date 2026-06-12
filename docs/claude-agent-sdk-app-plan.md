@@ -446,9 +446,16 @@ Urutan disusun supaya tiap step punya hasil yang bisa diverifikasi, dan step UI 
 - Composer: kirim prompt apa adanya (termasuk `/name args`); palette `/` membaca registry dari Convex (sinkron dari `GET /commands` service saat deploy, atau query proxy sementara).
 - *Exit (kriteria "selesai" versi owner)*: **dengan flag `sdk`, ketiga surface chat bisa dipakai dari UI**: kirim pesan → streaming balasan; askUser → kartu → jawab → lanjut; proposeArtifact → approve → artifact tertulis ke workspace; `/deep` jalan dengan run-progress; `/verify-citations` jalan. Dogfood internal dimulai di sini.
 
-**Step 3 — Pengerasan HITL & artifacts di UI (1 hari)**
-- Uji ketiga jalur hold-window dari UI (approve cepat / deny / biarkan timeout → resume), cancel run dari UI, perilaku saat service restart di tengah `waiting_hitl` (state recover dari Convex).
-- *Exit*: Phase 2 exit criteria asli (§6) terpenuhi end-to-end.
+**Step 3 — Pengerasan HITL & artifacts (1 hari)** ✅ **SELESAI (2026-06-12)**
+- ✅ **Durable cancel**: `agent.v2.cancelRun` kini mem-patch run→`canceled` + thread→`idle` + menutup pesan streaming di Convex SEBELUM forward ke service; guard di `agent/service:setRunStatus` (no-op pada run canceled) dan `finalizeRun` (status & errorMessage tidak menimpa `canceled`; cost/usage/sessionId tetap dicatat dari finalisasi telat service).
+- ✅ **Watchdog resume-recovery**: `watchdogSweep` menyapu run `waiting_hitl` yang interaction terakhirnya `responded` (index `by_run_status`) dengan `respondedAt > run.updatedAt` dan lebih tua dari grace 30 detik (menghindari balapan dengan forward dari `respond`) → schedule `forwardResume` (idempoten: service balas 409 bila run tak lagi menunggu). Menutup dua mode gagal: service restart di tengah `waiting_hitl` dan forward resume yang hilang.
+- ✅ **workspaceId terstruktur pada approval**: field `workspaceId` di response approval (`agent-contracts` + validator Convex + `use-hitl-resume`), bukan lagi note `workspaceId:<id>`; di service: `canUseTool` menyuntik pilihan user ke `updatedInput` (in-window), prompt resume menyebut target workspace, dan `executeArtifact` memakai override dari proposeArtifact approved terakhir (pilihan user menang atas argumen model).
+- ✅ **retryRun nyata**: mutation `agent.v2.retryRun` — hanya run `failed`, ambil prompt dari `promptMessageId` (fallback pesan user terakhir), re-queue + re-dispatch tanpa gating ulang (kuota sudah dikonsumsi saat kirim awal).
+- ✅ **Artifact↔thread**: `applyArtifactAction(create)` mem-patch `artifacts.threadId` dengan id `thr_*` (kolom string legacy); query publik baru `agent.v2.queries.listArtifacts` (index `by_owner_thread_created`) → panel artifacts per-thread terisi di backend sdk.
+- ✅ Tes: +8 convex-test (durable cancel sticky, resume-recovery 3 jalur, retryRun, artifact link; total file 24) + 4 unit test service (injeksi workspaceId, override executeArtifact, prompt resume).
+- ✅ Validasi headless live (`AGENTS_HOLD_WINDOW_MS=3000`): createWorkspace → hold window timeout → `waiting_hitl`; **kill service** → respond approve (forward hilang) → **restart service** → `watchdogSweep` → forwardResume → run `running` → `completed`, workspace nyata tercipta (termasuk konsumsi primed approval di turn resume).
+- Gap tersisa yang sengaja ditunda: palette `/` composer masih registry statis (penggantian komponen UI; proxy `listCommands` sudah ada), panel sources menunggu Step 4.
+- *Exit*: Phase 2 exit criteria asli (§6) terpenuhi end-to-end. ✅
 
 **Step 4 — Deep research durable (2–3 hari)**
 - Pecah `/deep` jadi fase `query()` terpisah yang diorkestrasi `runManager` (§5.5): planner → literature rounds (state `research*` di Convex, rehydrasi ala `loopState.ts`) → counter-evidence → citation-verify → writer; tiap fase idempotent + resumable setelah restart service.

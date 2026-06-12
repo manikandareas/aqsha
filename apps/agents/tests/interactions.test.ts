@@ -182,6 +182,31 @@ describe("buildCanUseTool", () => {
     expect(await store.listInteractions("t1")).toHaveLength(0);
   });
 
+  it("injects the structured workspace pick into the approved tool input", async () => {
+    const { store, broker } = setup();
+    const canUseTool = buildCanUseTool({ broker, ...baseInput });
+    const pending = canUseTool(qualifiedToolName("proposeArtifact"), {
+      action: "create",
+      title: "Draf",
+      workspaceId: "ws-model-pick",
+    });
+    setTimeout(async () => {
+      const rows = await store.listInteractions("t1");
+      await store.respondInteraction(rows[0]!.id, {
+        kind: "approval",
+        approved: true,
+        workspaceId: "ws-user-pick",
+      });
+    }, 5);
+    const result = await pending;
+    expect(result.behavior).toBe("allow");
+    if (result.behavior === "allow") {
+      // The user's pick from the approval card overrides the model's.
+      expect(result.updatedInput?.workspaceId).toBe("ws-user-pick");
+      expect(result.updatedInput?.title).toBe("Draf");
+    }
+  });
+
   it("routes gated tools through approval and denies on decline", async () => {
     const { store, broker } = setup();
     const canUseTool = buildCanUseTool({ broker, ...baseInput });
@@ -235,5 +260,82 @@ describe("resumePromptForInteraction", () => {
     });
     expect(resumePromptForInteraction(approved!)).toContain("approved");
     expect(resumePromptForInteraction(approved!)).toContain("proposeArtifact");
+  });
+
+  it("carries the structured workspace pick into the resume prompt", async () => {
+    const { store } = setup();
+    const interaction = await store.createInteraction({
+      ownerUserId: "u1",
+      threadId: "t1",
+      runId: "run1",
+      type: "tool_approval",
+      toolName: "proposeArtifact",
+      payload: {},
+    });
+    const approved = await store.respondInteraction(interaction.id, {
+      kind: "approval",
+      approved: true,
+      workspaceId: "ws-42",
+    });
+    const prompt = resumePromptForInteraction(approved!);
+    expect(prompt).toContain("ws-42");
+    expect(prompt).toContain("workspace");
+  });
+});
+
+describe("approvedWorkspaceOverride", () => {
+  it("returns the workspace pick of the LATEST approved proposeArtifact", async () => {
+    const { store } = setup();
+    const { approvedWorkspaceOverride } = await import("../src/tools/artifacts");
+    const ctx = { store, threadId: "t1" };
+
+    expect(await approvedWorkspaceOverride(ctx)).toBeUndefined();
+
+    const first = await store.createInteraction({
+      ownerUserId: "u1",
+      threadId: "t1",
+      runId: "run1",
+      type: "tool_approval",
+      toolName: "proposeArtifact",
+      payload: {},
+    });
+    await store.respondInteraction(first.id, {
+      kind: "approval",
+      approved: true,
+      workspaceId: "ws-old",
+    });
+    const second = await store.createInteraction({
+      ownerUserId: "u1",
+      threadId: "t1",
+      runId: "run2",
+      type: "tool_approval",
+      toolName: "proposeArtifact",
+      payload: {},
+    });
+    await store.respondInteraction(second.id, {
+      kind: "approval",
+      approved: true,
+      workspaceId: "ws-new",
+    });
+    expect(await approvedWorkspaceOverride(ctx)).toBe("ws-new");
+  });
+
+  it("returns undefined when the latest approval has no workspace pick", async () => {
+    const { store } = setup();
+    const { approvedWorkspaceOverride } = await import("../src/tools/artifacts");
+    const ctx = { store, threadId: "t1" };
+    const interaction = await store.createInteraction({
+      ownerUserId: "u1",
+      threadId: "t1",
+      runId: "run1",
+      type: "tool_approval",
+      toolName: "proposeArtifact",
+      payload: {},
+    });
+    await store.respondInteraction(interaction.id, {
+      kind: "approval",
+      approved: true,
+    });
+    expect(await approvedWorkspaceOverride(ctx)).toBeUndefined();
   });
 });

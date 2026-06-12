@@ -291,8 +291,98 @@ export const cancelRun = mutation({
     if (["completed", "failed", "canceled"].includes(run.status)) {
       return { ok: true };
     }
+    // Durable cancel (plan §9.4 Step 3): Convex is the source of truth, so the
+    // run flips to canceled HERE first — the service forward is best-effort
+    // and the agent/service finalize guards keep `canceled` sticky even when
+    // the still-streaming service later reports completed/failed.
+    await ctx.db.patch("agentRuns2", run._id, {
+      status: "canceled",
+      updatedAt: Date.now(),
+    });
+    const thread = await findThread(ctx, run.threadId);
+    if (thread) {
+      await ctx.db.patch("chatThreads", thread._id, { status: "idle" });
+    }
+    const streaming = await ctx.db
+      .query("chatMessages")
+      .withIndex("by_thread_created", (q) => q.eq("threadId", run.threadId))
+      .order("desc")
+      .take(5);
+    for (const message of streaming) {
+      if (message.runId === run.runId && message.status === "streaming") {
+        await ctx.db.patch("chatMessages", message._id, { status: "complete" });
+      }
+    }
     await ctx.scheduler.runAfter(0, internal.agent.v2.forwardCancel, {
       runId: args.runId,
+    });
+    return { ok: true };
+  },
+});
+
+export const retryRun = mutation({
+  args: { runId: v.string() },
+  returns: v.object({ ok: v.boolean() }),
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    const run = await requireRun(ctx, args.runId);
+    if (run.ownerUserId !== user._id) {
+      throwAppError({ message: "Run not found", code: "run_not_found" });
+    }
+    if (run.status !== "failed") {
+      throwAppError({
+        message: "Only failed runs can be retried",
+        code: "run_not_retryable",
+        severity: "info",
+      });
+    }
+    if (await hasActiveRun(ctx, run.threadId)) {
+      throwAppError({
+        message: "A reply is already in progress",
+        code: "reply_in_progress",
+        severity: "info",
+      });
+    }
+    // Recover the original prompt from the user message that started the run.
+    // No re-gating: the original send already consumed quota/credits.
+    let prompt: string | undefined;
+    if (run.promptMessageId) {
+      const messageId = ctx.db.normalizeId("chatMessages", run.promptMessageId);
+      const message = messageId ? await ctx.db.get("chatMessages", messageId) : null;
+      prompt = message?.text;
+    }
+    if (!prompt) {
+      const lastUser = await ctx.db
+        .query("chatMessages")
+        .withIndex("by_thread_created", (q) => q.eq("threadId", run.threadId))
+        .order("desc")
+        .take(20);
+      prompt = lastUser.find((m) => m.role === "user")?.text;
+    }
+    if (!prompt) {
+      throwAppError({
+        message: "Original prompt not found for this run",
+        code: "run_prompt_missing",
+      });
+    }
+    await ctx.db.patch("agentRuns2", run._id, {
+      status: "queued",
+      errorMessage: undefined,
+      updatedAt: Date.now(),
+    });
+    const thread = await findThread(ctx, run.threadId);
+    if (thread && thread.status === "failed") {
+      await ctx.db.patch("chatThreads", thread._id, { status: "idle" });
+    }
+    await ctx.scheduler.runAfter(0, internal.agent.v2.dispatchRun, {
+      runId: run.runId,
+      threadId: run.threadId,
+      ownerUserId: run.ownerUserId,
+      agentKind: run.agentKind,
+      mode: run.mode,
+      prompt,
+      promptMessageId: run.promptMessageId,
+      contextRefs: { artifactIds: [], workspaceIds: [] },
     });
     return { ok: true };
   },
@@ -480,6 +570,7 @@ export const markDispatchFailed = internalMutation({
 
 const QUEUED_STALL_MS = 5 * 60 * 1000;
 const RUNNING_STALL_MS = 10 * 60 * 1000;
+const RESUME_RECOVERY_GRACE_MS = 30 * 1000;
 const WATCHDOG_BATCH = 25;
 
 export const watchdogSweep = internalMutation({
@@ -519,6 +610,42 @@ export const watchdogSweep = internalMutation({
         if (message && message.runId === run.runId && message.status === "streaming") {
           await ctx.db.patch("chatMessages", message._id, { status: "error" });
         }
+      }
+    }
+
+    // Resume-recovery (plan §9.4 Step 3): a waiting_hitl run whose latest
+    // interaction was responded AFTER the run last moved means the resume
+    // forward was lost (service restart / unreachable). Re-forward it — the
+    // service answers 409 when the run is no longer waiting, so this is
+    // idempotent and safe to repeat every sweep until the service recovers.
+    const waitingRuns = await ctx.db
+      .query("agentRuns2")
+      .withIndex("by_status_updated", (q) => q.eq("status", "waiting_hitl"))
+      .take(WATCHDOG_BATCH);
+    for (const run of waitingRuns) {
+      const responded = await ctx.db
+        .query("pendingInteractions")
+        .withIndex("by_run_status", (q) =>
+          q.eq("runId", run.runId).eq("status", "responded"),
+        )
+        .order("desc")
+        .take(5);
+      const latest = responded.reduce<(typeof responded)[number] | null>(
+        (best, doc) =>
+          (doc.respondedAt ?? 0) > (best?.respondedAt ?? 0) ? doc : best,
+        null,
+      );
+      // 30s grace: the respond mutation forwards immediately on its own; only
+      // re-forward once that first attempt has clearly had time to land.
+      if (
+        latest &&
+        (latest.respondedAt ?? 0) > run.updatedAt &&
+        (latest.respondedAt ?? 0) < now - RESUME_RECOVERY_GRACE_MS
+      ) {
+        await ctx.scheduler.runAfter(0, internal.agent.v2.interactions.forwardResume, {
+          runId: run.runId,
+          interactionId: String(latest._id),
+        });
       }
     }
     return null;

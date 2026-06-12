@@ -20,9 +20,8 @@ import type {
 // shape, different source of truth — the first-party tables written by
 // apps/agents (api.agent.v2.*). Components never see the difference.
 //
-// Known Step-2 gaps (tracked in plan §9.3): per-thread artifact/source panels
-// are empty (the v2 service does not link artifacts to threads yet) and
-// retryRun is a no-op pending Step 3 hardening.
+// Remaining gap (plan §9.3): the per-thread sources panel stays empty until
+// deep research runs durably on this backend (Step 4).
 
 /**
  * The composer keeps sending the legacy {content, commandId} pair; the SDK
@@ -77,11 +76,16 @@ export function useThreadExperienceDataV2(threadId: string | undefined, enabled:
     api.agent.v2.queries.listRuns,
     threadQueriesEnabled ? { threadId: threadId! } : "skip",
   );
+  const artifactRows = useConvexQueryData(
+    api.agent.v2.queries.listArtifacts,
+    threadQueriesEnabled ? { threadId: threadId! } : "skip",
+  );
 
   const createWorkspace = useConvexMutationFn(api.workspaces.create);
   const startThreadV2 = useConvexMutationFn(api.agent.v2.startThread);
   const sendMessageV2 = useConvexMutationFn(api.agent.v2.sendMessage);
   const cancelRunV2 = useConvexMutationFn(api.agent.v2.cancelRun);
+  const retryRunV2 = useConvexMutationFn(api.agent.v2.retryRun);
   const removeThreadV2 = useConvexMutationFn(api.agent.v2.removeThread);
 
   const startThread = async (args: {
@@ -148,10 +152,18 @@ export function useThreadExperienceDataV2(threadId: string | undefined, enabled:
     sendMessage,
     rateStatus,
     runs,
-    artifacts: [] as ResearchArtifact[],
+    artifacts: (artifactRows ?? []) as ResearchArtifact[],
+    // Per-thread sources stay empty until deep research lands on this backend
+    // (plan §9.4 Step 4).
     sources: [] as ResearchSource[],
     cancelRun,
-    retryRun: async () => undefined,
+    retryRun: async (args: { runId: string }) => {
+      try {
+        return await retryRunV2({ runId: args.runId });
+      } catch (error) {
+        console.error("Failed to retry run", error);
+      }
+    },
     removeThread: removeThreadV2,
   };
 }

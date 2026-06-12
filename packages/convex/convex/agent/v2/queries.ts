@@ -135,6 +135,40 @@ export const listRuns = query({
   },
 });
 
+const MAX_ARTIFACTS = 50;
+
+// Per-thread artifact panel (plan §9.4 Step 3): the service links artifacts it
+// writes to their thread via `artifacts.threadId` (a v2 `thr_*` string), so the
+// legacy `by_owner_thread_created` index serves the sdk backend unchanged.
+export const listArtifacts = query({
+  args: { threadId: v.string() },
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    const thread = await ownedThread(ctx, args.threadId, user._id);
+    if (!thread) {
+      return [];
+    }
+    const docs = await ctx.db
+      .query("artifacts")
+      .withIndex("by_owner_thread_created", (q) =>
+        q.eq("ownerUserId", user._id).eq("threadId", args.threadId),
+      )
+      .order("desc")
+      .take(MAX_ARTIFACTS);
+    return docs
+      .filter((doc) => doc.status !== "deleted")
+      .map((doc) => ({
+        _id: String(doc._id),
+        title: doc.title,
+        artifactType: doc.artifactType,
+        currentVersionId: doc.currentVersionId
+          ? String(doc.currentVersionId)
+          : undefined,
+        createdAt: doc.createdAt,
+      }));
+  },
+});
+
 export const listPendingInteractions = query({
   args: { threadId: v.string() },
   handler: async (ctx, args) => {

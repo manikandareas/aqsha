@@ -1,6 +1,30 @@
 import { tool } from "@anthropic-ai/claude-agent-sdk";
+import { isApproved } from "@aqsha/agent-contracts";
 import { z } from "zod";
 import { errorResult, jsonResult, type RunToolContext } from "./context";
+
+/**
+ * The workspace the user picked in the latest approved proposeArtifact card
+ * (structured `response.workspaceId`, Step 3). The user's pick wins over the
+ * workspaceId the model passes to executeArtifact.
+ */
+export async function approvedWorkspaceOverride(
+  ctx: Pick<RunToolContext, "store" | "threadId">,
+): Promise<string | undefined> {
+  const interactions = await ctx.store.listInteractions(ctx.threadId);
+  for (let i = interactions.length - 1; i >= 0; i -= 1) {
+    const interaction = interactions[i];
+    if (!interaction) {
+      continue;
+    }
+    if (interaction.toolName === "proposeArtifact" && isApproved(interaction)) {
+      return interaction.response?.kind === "approval"
+        ? interaction.response.workspaceId
+        : undefined;
+    }
+  }
+  return undefined;
+}
 
 // Artifact HITL tools (port of agent/hitl/hitlTools.ts under the new model):
 // - proposeArtifact / deleteArtifact are approval-gated by canUseTool (the
@@ -47,10 +71,11 @@ export function buildArtifactTools(ctx: RunToolContext) {
       content: z.string().min(1).max(200_000),
     },
     async (args) => {
+      const workspaceOverride = await approvedWorkspaceOverride(ctx);
       const result = await ctx.store.applyArtifactAction(ctx.ownerUserId, ctx.threadId, {
         action: args.action,
         artifactId: args.artifactId,
-        workspaceId: args.workspaceId,
+        workspaceId: workspaceOverride ?? args.workspaceId,
         title: args.title,
         artifactType: args.artifactType,
         content: args.content,

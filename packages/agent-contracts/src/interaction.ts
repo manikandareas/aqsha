@@ -47,6 +47,9 @@ export const interactionResponseSchema = z.discriminatedUnion("kind", [
     kind: z.literal("approval"),
     approved: z.boolean(),
     note: z.string().max(2_000).optional(),
+    // Structured target workspace picked in the approval card (Step 3 — was
+    // previously smuggled through `note` as "workspaceId:<id>").
+    workspaceId: z.string().max(128).optional(),
   }),
 ]);
 export type InteractionResponse = z.infer<typeof interactionResponseSchema>;

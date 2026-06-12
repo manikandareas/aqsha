@@ -28,6 +28,8 @@ const responseValidator = v.union(
     kind: v.literal("approval"),
     approved: v.boolean(),
     note: v.optional(v.string()),
+    // Structured workspace pick from the approval card (Step 3).
+    workspaceId: v.optional(v.string()),
   }),
 );
 

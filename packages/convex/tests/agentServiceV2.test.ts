@@ -529,6 +529,344 @@ describe("agent.v2.interactions.respond (public)", () => {
   });
 });
 
+describe("durable cancel (Step 3)", () => {
+  const IDENTITY = { tokenIdentifier: OWNER, subject: OWNER };
+
+  async function seedCancelFixture(t: ReturnType<typeof convexTest>) {
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      await ctx.db.insert("users", {
+        ownerUserId: OWNER,
+        clerkUserId: OWNER,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert("chatThreads", {
+        threadId: THREAD,
+        ownerUserId: OWNER,
+        agentKind: "lite",
+        status: "streaming",
+        lastActivityAt: now,
+        messageCount: 1,
+      });
+      await ctx.db.insert("agentRuns2", {
+        runId: RUN,
+        threadId: THREAD,
+        ownerUserId: OWNER,
+        agentKind: "lite",
+        mode: "normal",
+        status: "running",
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert("chatMessages", {
+        threadId: THREAD,
+        ownerUserId: OWNER,
+        role: "assistant",
+        text: "sedang menulis…",
+        runId: RUN,
+        status: "streaming",
+        createdAt: now,
+      });
+    });
+  }
+
+  it("flips run→canceled + thread→idle in Convex before forwarding", async () => {
+    const t = setup();
+    await seedCancelFixture(t);
+    const result = await t
+      .withIdentity(IDENTITY)
+      .mutation(api.agent.v2.cancelRun, { runId: RUN });
+    expect(result).toEqual({ ok: true });
+    const state = await t.run(async (ctx) => {
+      const run = await ctx.db
+        .query("agentRuns2")
+        .withIndex("by_run_id", (q) => q.eq("runId", RUN))
+        .unique();
+      const thread = await ctx.db
+        .query("chatThreads")
+        .withIndex("by_thread_id", (q) => q.eq("threadId", THREAD))
+        .unique();
+      const message = await ctx.db
+        .query("chatMessages")
+        .withIndex("by_thread_created", (q) => q.eq("threadId", THREAD))
+        .unique();
+      return {
+        run: run!.status,
+        thread: thread!.status,
+        message: message!.status,
+      };
+    });
+    expect(state).toEqual({ run: "canceled", thread: "idle", message: "complete" });
+  });
+
+  it("keeps canceled sticky against late service finalize/setRunStatus", async () => {
+    const t = setup();
+    await seedCancelFixture(t);
+    await t.withIdentity(IDENTITY).mutation(api.agent.v2.cancelRun, { runId: RUN });
+
+    await t.mutation(api.agent.service.setRunStatus, {
+      serviceToken: TOKEN,
+      runId: RUN,
+      status: "running",
+    });
+    await t.mutation(api.agent.service.finalizeRun, {
+      serviceToken: TOKEN,
+      runId: RUN,
+      status: "completed",
+      sdkSessionId: "sess-late",
+      costUsd: 0.05,
+      errorMessage: "should not stick",
+    });
+    const run = await t.query(api.agent.service.getRun, {
+      serviceToken: TOKEN,
+      runId: RUN,
+    });
+    // Status stays canceled; bookkeeping (cost/session) is still recorded.
+    expect(run).toMatchObject({
+      status: "canceled",
+      sdkSessionId: "sess-late",
+      costUsd: 0.05,
+    });
+    expect(run!.errorMessage).toBeUndefined();
+  });
+});
+
+describe("retryRun (Step 3)", () => {
+  const IDENTITY = { tokenIdentifier: OWNER, subject: OWNER };
+
+  async function seedFailedRun(t: ReturnType<typeof convexTest>) {
+    return await t.run(async (ctx) => {
+      const now = Date.now();
+      await ctx.db.insert("users", {
+        ownerUserId: OWNER,
+        clerkUserId: OWNER,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert("chatThreads", {
+        threadId: THREAD,
+        ownerUserId: OWNER,
+        agentKind: "lite",
+        status: "failed",
+        lastActivityAt: now,
+        messageCount: 1,
+      });
+      const promptId = await ctx.db.insert("chatMessages", {
+        threadId: THREAD,
+        ownerUserId: OWNER,
+        role: "user",
+        text: "tolong ringkas papernya",
+        runId: RUN,
+        status: "complete",
+        createdAt: now,
+      });
+      await ctx.db.insert("agentRuns2", {
+        runId: RUN,
+        threadId: THREAD,
+        ownerUserId: OWNER,
+        agentKind: "lite",
+        mode: "normal",
+        promptMessageId: String(promptId),
+        status: "failed",
+        errorMessage: "Agent service unreachable",
+        createdAt: now,
+        updatedAt: now,
+      });
+      return promptId;
+    });
+  }
+
+  it("re-queues a failed run and schedules a fresh dispatch", async () => {
+    const t = setup();
+    await seedFailedRun(t);
+    const result = await t
+      .withIdentity(IDENTITY)
+      .mutation(api.agent.v2.retryRun, { runId: RUN });
+    expect(result).toEqual({ ok: true });
+    const state = await t.run(async (ctx) => {
+      const run = await ctx.db
+        .query("agentRuns2")
+        .withIndex("by_run_id", (q) => q.eq("runId", RUN))
+        .unique();
+      const thread = await ctx.db
+        .query("chatThreads")
+        .withIndex("by_thread_id", (q) => q.eq("threadId", THREAD))
+        .unique();
+      const jobs = await ctx.db.system.query("_scheduled_functions").collect();
+      return {
+        status: run!.status,
+        errorMessage: run!.errorMessage,
+        thread: thread!.status,
+        dispatches: jobs.filter((job) => job.name.includes("dispatchRun")).length,
+      };
+    });
+    expect(state).toEqual({
+      status: "queued",
+      errorMessage: undefined,
+      thread: "idle",
+      dispatches: 1,
+    });
+  });
+
+  it("rejects retry for non-failed runs", async () => {
+    const t = setup();
+    await seedFailedRun(t);
+    await t.run(async (ctx) => {
+      const run = await ctx.db
+        .query("agentRuns2")
+        .withIndex("by_run_id", (q) => q.eq("runId", RUN))
+        .unique();
+      await ctx.db.patch("agentRuns2", run!._id, { status: "completed" });
+    });
+    await expect(
+      t.withIdentity(IDENTITY).mutation(api.agent.v2.retryRun, { runId: RUN }),
+    ).rejects.toThrow(/Only failed runs/);
+  });
+});
+
+describe("artifact↔thread link + v2 listArtifacts (Step 3)", () => {
+  const IDENTITY = { tokenIdentifier: OWNER, subject: OWNER };
+
+  it("links service-created artifacts to the thread and lists them publicly", async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      await ctx.db.insert("users", {
+        ownerUserId: OWNER,
+        clerkUserId: OWNER,
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+    await seedThread(t);
+    const created = await t.mutation(api.agent.service.applyArtifactAction, {
+      serviceToken: TOKEN,
+      ownerUserId: OWNER,
+      threadId: THREAD,
+      action: "create",
+      title: "Laporan tertaut",
+      artifactType: "markdown",
+      content: "# Isi",
+    });
+    expect(created.ok).toBe(true);
+
+    const row = await t.run(async (ctx) => {
+      const id = ctx.db.normalizeId("artifacts", created.artifactId!);
+      return await ctx.db.get("artifacts", id!);
+    });
+    expect(row!.threadId).toBe(THREAD);
+
+    const listed = await t
+      .withIdentity(IDENTITY)
+      .query(api.agent.v2.queries.listArtifacts, { threadId: THREAD });
+    expect(listed).toHaveLength(1);
+    expect(listed[0]).toMatchObject({ title: "Laporan tertaut" });
+
+    const foreign = await t
+      .withIdentity({ tokenIdentifier: "intruder", subject: "intruder" })
+      .query(api.agent.v2.queries.listArtifacts, { threadId: THREAD });
+    expect(foreign).toEqual([]);
+  });
+});
+
+describe("watchdog resume-recovery (Step 3)", () => {
+  async function seedWaitingRun(
+    t: ReturnType<typeof convexTest>,
+    input: { runUpdatedAt: number; respondedAt?: number; pending?: boolean },
+  ) {
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      await ctx.db.insert("chatThreads", {
+        threadId: THREAD,
+        ownerUserId: OWNER,
+        agentKind: "lite",
+        status: "idle",
+        lastActivityAt: now,
+        messageCount: 0,
+      });
+      await ctx.db.insert("agentRuns2", {
+        runId: RUN,
+        threadId: THREAD,
+        ownerUserId: OWNER,
+        agentKind: "lite",
+        mode: "normal",
+        status: "waiting_hitl",
+        createdAt: input.runUpdatedAt,
+        updatedAt: input.runUpdatedAt,
+      });
+      await ctx.db.insert("pendingInteractions", {
+        ownerUserId: OWNER,
+        threadId: THREAD,
+        runId: RUN,
+        type: "tool_approval",
+        toolName: "proposeArtifact",
+        payloadJson: "{}",
+        status: input.pending ? "pending" : "responded",
+        responseJson: input.pending
+          ? undefined
+          : JSON.stringify({ kind: "approval", approved: true }),
+        createdAt: input.runUpdatedAt,
+        respondedAt: input.pending ? undefined : input.respondedAt,
+      });
+    });
+  }
+
+  async function scheduledResumeCount(t: ReturnType<typeof convexTest>) {
+    return await t.run(async (ctx) => {
+      const jobs = await ctx.db.system.query("_scheduled_functions").collect();
+      return jobs.filter((job) => job.name.includes("forwardResume")).length;
+    });
+  }
+
+  it("re-forwards a lost resume for a responded waiting_hitl run", async () => {
+    const t = setup();
+    const past = Date.now() - 10 * 60 * 1000;
+    await seedWaitingRun(t, {
+      runUpdatedAt: past,
+      respondedAt: past + 60 * 1000,
+    });
+    await t.mutation(internal.agent.v2.watchdogSweep, {});
+    expect(await scheduledResumeCount(t)).toBe(1);
+    // The run itself is untouched — the service flips it on actual resume.
+    const run = await t.query(api.agent.service.getRun, {
+      serviceToken: TOKEN,
+      runId: RUN,
+    });
+    expect(run!.status).toBe("waiting_hitl");
+  });
+
+  it("does not forward when the run moved after the response", async () => {
+    const t = setup();
+    const now = Date.now();
+    await seedWaitingRun(t, {
+      runUpdatedAt: now - 60 * 1000,
+      respondedAt: now - 5 * 60 * 1000,
+    });
+    await t.mutation(internal.agent.v2.watchdogSweep, {});
+    expect(await scheduledResumeCount(t)).toBe(0);
+  });
+
+  it("does not forward for still-pending interactions or fresh responses", async () => {
+    const t = setup();
+    await seedWaitingRun(t, {
+      runUpdatedAt: Date.now() - 10 * 60 * 1000,
+      pending: true,
+    });
+    await t.mutation(internal.agent.v2.watchdogSweep, {});
+    expect(await scheduledResumeCount(t)).toBe(0);
+
+    // Fresh response (< grace window) is left to the respond-path forward.
+    const t2 = setup();
+    await seedWaitingRun(t2, {
+      runUpdatedAt: Date.now() - 10 * 60 * 1000,
+      respondedAt: Date.now() - 5 * 1000,
+    });
+    await t2.mutation(internal.agent.v2.watchdogSweep, {});
+    expect(await scheduledResumeCount(t2)).toBe(0);
+  });
+});
+
 describe("watchdogSweep", () => {
   it("fails stalled queued/running runs but never waiting_hitl", async () => {
     const t = setup();
