@@ -32,6 +32,10 @@ const envSchema = z.object({
   ASTRA_PRO_MODEL: z.string().default(DEFAULT_PRO_MODEL),
   ASTRA_DEEP_LITE_MODEL: z.string().optional(),
   ASTRA_DEEP_PRO_MODEL: z.string().optional(),
+  // Optional thinking budget for the Pro tier ("max effort" on reasoning
+  // models behind an Anthropic-compatible gateway: the SDK's
+  // maxThinkingTokens maps to the provider's reasoning effort/budget).
+  ASTRA_PRO_MAX_THINKING_TOKENS: z.coerce.number().int().positive().optional(),
   // Turn budgets mirror the legacy step budgets (lite 5 / pro 10).
   ASTRA_LITE_MAX_TURNS: z.coerce.number().int().positive().default(5),
   ASTRA_PRO_MAX_TURNS: z.coerce.number().int().positive().default(10),
@@ -69,6 +73,7 @@ export type AgentsConfig = {
     deepPro: string;
   };
   maxTurns: { lite: number; pro: number; deep: number };
+  proMaxThinkingTokens: number | undefined;
   holdWindowMs: number;
   streamFlushMs: number;
   streamFlushChars: number;
@@ -114,6 +119,7 @@ export function loadConfig(
       pro: parsed.ASTRA_PRO_MAX_TURNS,
       deep: parsed.ASTRA_DEEP_MAX_TURNS,
     },
+    proMaxThinkingTokens: parsed.ASTRA_PRO_MAX_THINKING_TOKENS,
     holdWindowMs: parsed.AGENTS_HOLD_WINDOW_MS,
     streamFlushMs: parsed.AGENTS_STREAM_FLUSH_MS,
     streamFlushChars: parsed.AGENTS_STREAM_FLUSH_CHARS,

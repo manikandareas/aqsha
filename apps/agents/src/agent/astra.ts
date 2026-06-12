@@ -56,6 +56,11 @@ export function buildAstraQueryOptions(input: AstraTurnInput): AstraQueryOptions
     includePartialMessages: true,
   };
 
+  if (agentKind === "pro" && config.proMaxThinkingTokens) {
+    // "Max effort" for reasoning models behind an Anthropic-compatible
+    // gateway: the thinking budget maps to the provider's reasoning effort.
+    options.maxThinkingTokens = config.proMaxThinkingTokens;
+  }
   if (input.resumeSessionId) {
     options.resume = input.resumeSessionId;
   }
