@@ -176,9 +176,12 @@ export class ConvexStore implements AgentStore {
   }
 
   createInteraction(input: CreateInteractionInput): Promise<PendingInteraction> {
+    // `payload` must NOT be sent alongside payloadJson — the Convex endpoint
+    // validates args exactly and rejects unknown fields (found live, Step 1).
+    const { payload, ...rest } = input;
     return this.mutation(SERVICE_FUNCTIONS.createInteraction, {
-      ...input,
-      payloadJson: JSON.stringify(input.payload),
+      ...rest,
+      payloadJson: JSON.stringify(payload),
     });
   }
 

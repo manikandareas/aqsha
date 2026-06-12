@@ -86,6 +86,8 @@ import type * as agent_sandbox_scripts_power from "../agent/sandbox/scripts/powe
 import type * as agent_sandbox_scripts_statcheck from "../agent/sandbox/scripts/statcheck.js";
 import type * as agent_sandbox_statcheckClassify from "../agent/sandbox/statcheckClassify.js";
 import type * as agent_sandbox_verificationReport from "../agent/sandbox/verificationReport.js";
+import type * as agent_service from "../agent/service.js";
+import type * as agent_service_model from "../agent/service/model.js";
 import type * as agent_skills_builtin_generated from "../agent/skills/builtin/generated.js";
 import type * as agent_skills_builtin_index from "../agent/skills/builtin/index.js";
 import type * as agent_skills_skillParser from "../agent/skills/skillParser.js";
@@ -99,6 +101,8 @@ import type * as agent_tools_artifactCommandInference from "../agent/tools/artif
 import type * as agent_tools_artifacts from "../agent/tools/artifacts.js";
 import type * as agent_tools_toolContext from "../agent/tools/toolContext.js";
 import type * as agent_tools_workspaceCommandInference from "../agent/tools/workspaceCommandInference.js";
+import type * as agent_v2 from "../agent/v2.js";
+import type * as agent_v2_interactions from "../agent/v2/interactions.js";
 import type * as agent_workflow from "../agent/workflow.js";
 import type * as artifacts from "../artifacts.js";
 import type * as artifacts_model from "../artifacts/model.js";
@@ -257,6 +261,8 @@ declare const fullApi: ApiFromModules<{
   "agent/sandbox/scripts/statcheck": typeof agent_sandbox_scripts_statcheck;
   "agent/sandbox/statcheckClassify": typeof agent_sandbox_statcheckClassify;
   "agent/sandbox/verificationReport": typeof agent_sandbox_verificationReport;
+  "agent/service": typeof agent_service;
+  "agent/service/model": typeof agent_service_model;
   "agent/skills/builtin/generated": typeof agent_skills_builtin_generated;
   "agent/skills/builtin/index": typeof agent_skills_builtin_index;
   "agent/skills/skillParser": typeof agent_skills_skillParser;
@@ -270,6 +276,8 @@ declare const fullApi: ApiFromModules<{
   "agent/tools/artifacts": typeof agent_tools_artifacts;
   "agent/tools/toolContext": typeof agent_tools_toolContext;
   "agent/tools/workspaceCommandInference": typeof agent_tools_workspaceCommandInference;
+  "agent/v2": typeof agent_v2;
+  "agent/v2/interactions": typeof agent_v2_interactions;
   "agent/workflow": typeof agent_workflow;
   artifacts: typeof artifacts;
   "artifacts/model": typeof artifacts_model;

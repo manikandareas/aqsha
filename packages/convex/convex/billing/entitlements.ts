@@ -156,7 +156,13 @@ async function getPolarSubscriptionOrNull(ctx: QueryCtx | MutationCtx, ownerUser
   try {
     return await polar.getCurrentSubscription(ctx, { userId: ownerUserId });
   } catch (error) {
-    if (readableError(error).includes("Product not found")) {
+    const message = readableError(error);
+    if (message.includes("Product not found")) {
+      return null;
+    }
+    // convex-test runs without the polar component mounted; fall back to the
+    // mirrored billingSubscriptions row (never hit in production).
+    if (message.includes('Component "polar" is not registered')) {
       return null;
     }
     throw error;

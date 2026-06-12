@@ -1137,6 +1137,96 @@ export default defineSchema(
       activatedBy: v.union(v.literal("model"), v.literal("user")),
       createdAt: v.number(),
     }).index("by_owner_thread", ["ownerUserId", "threadId"]),
+
+    // ── SDK agent backend (plan docs/claude-agent-sdk-app-plan.md §4.5) ──────
+    // First-party chat storage for the apps/agents service. Thread/run/message
+    // ids are SERVICE-GENERATED strings (thr_*/run_*), not Convex ids, so the
+    // service stays storage-agnostic; every table indexes that external id.
+    // `agentRuns2`/`agentRunEvents2` carry the v2 suffix because the legacy
+    // runtime still owns `agentRuns`/`agentRunEvents` until cutover (D7).
+    chatThreads: defineTable({
+      threadId: v.string(),
+      ownerUserId: v.string(),
+      title: v.optional(v.string()),
+      workspaceId: v.optional(v.id("workspaces")),
+      status: v.union(v.literal("idle"), v.literal("streaming"), v.literal("failed")),
+      sdkSessionId: v.optional(v.string()),
+      agentKind: v.union(v.literal("lite"), v.literal("pro")),
+      lastActivityAt: v.number(),
+      messageCount: v.number(),
+      lastMessagePreview: v.optional(v.string()),
+    })
+      .index("by_thread_id", ["threadId"])
+      .index("by_owner_activity", ["ownerUserId", "lastActivityAt"]),
+    chatMessages: defineTable({
+      threadId: v.string(),
+      ownerUserId: v.string(),
+      role: v.union(v.literal("user"), v.literal("assistant"), v.literal("system")),
+      text: v.string(),
+      runId: v.optional(v.string()),
+      status: v.union(
+        v.literal("streaming"),
+        v.literal("complete"),
+        v.literal("error"),
+      ),
+      createdAt: v.number(),
+    }).index("by_thread_created", ["threadId", "createdAt"]),
+    agentRuns2: defineTable({
+      runId: v.string(),
+      threadId: v.string(),
+      ownerUserId: v.string(),
+      promptMessageId: v.optional(v.string()),
+      status: v.union(
+        v.literal("queued"),
+        v.literal("running"),
+        v.literal("waiting"),
+        v.literal("waiting_hitl"),
+        v.literal("completed"),
+        v.literal("failed"),
+        v.literal("canceled"),
+      ),
+      mode: v.union(v.literal("normal"), v.literal("deep")),
+      agentKind: v.union(v.literal("lite"), v.literal("pro")),
+      sdkSessionId: v.optional(v.string()),
+      costUsd: v.optional(v.number()),
+      usageJson: v.optional(v.string()),
+      numTurns: v.optional(v.number()),
+      errorMessage: v.optional(v.string()),
+      verificationReportJson: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_run_id", ["runId"])
+      .index("by_thread_created", ["threadId", "createdAt"])
+      // Watchdog sweep: active statuses ordered by staleness.
+      .index("by_status_updated", ["status", "updatedAt"]),
+    agentRunEvents2: defineTable({
+      runId: v.string(),
+      seq: v.number(),
+      type: v.string(),
+      payloadJson: v.string(),
+      createdAt: v.number(),
+    }).index("by_run_seq", ["runId", "seq"]),
+    pendingInteractions: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      runId: v.string(),
+      type: v.union(v.literal("ask_user"), v.literal("tool_approval")),
+      toolName: v.string(),
+      toolUseId: v.optional(v.string()),
+      payloadJson: v.string(),
+      status: v.union(
+        v.literal("pending"),
+        v.literal("responded"),
+        v.literal("expired"),
+        v.literal("superseded"),
+      ),
+      responseJson: v.optional(v.string()),
+      createdAt: v.number(),
+      respondedAt: v.optional(v.number()),
+    })
+      .index("by_thread_created", ["threadId", "createdAt"])
+      .index("by_run_status", ["runId", "status"]),
   },
   { schemaValidation: true },
 );

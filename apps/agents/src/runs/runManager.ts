@@ -403,6 +403,18 @@ export class RunManager {
           interactionId: interruptState.pendingInteractionId,
         },
       });
+      // Race guard: the user may have responded in the instant between the
+      // hold-window expiring and the run finalizing as waiting_hitl (the
+      // responder only forwards a resume when it OBSERVES waiting_hitl).
+      // If the interaction is already responded, resume ourselves.
+      if (interruptState.pendingInteractionId) {
+        const interaction = await store.getInteraction(
+          interruptState.pendingInteractionId,
+        );
+        if (interaction?.status === "responded") {
+          void this.resumeRun(runId, interaction.id);
+        }
+      }
       return;
     }
 

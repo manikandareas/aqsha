@@ -256,7 +256,9 @@ function sendBillingFailure(entitlement: Extract<EntitlementResult, { ok: false 
   };
 }
 
-async function checkAndConsumeSendQuota(
+// Exported for reuse by the v2 (SDK backend) entrypoints in agent/v2.ts —
+// identical gating semantics across both backends during dual-run.
+export async function checkAndConsumeSendQuota(
   ctx: MutationCtx,
   args: {
     ownerUserId: string;

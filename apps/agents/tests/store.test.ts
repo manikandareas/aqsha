@@ -118,6 +118,22 @@ describe("ConvexStore", () => {
     const eventCall = calls.find((c) => c.path === SERVICE_FUNCTIONS.appendRunEvent)!;
     expect(eventCall.args.payloadJson).toBe(JSON.stringify({ a: 1 }));
 
+    // The Convex endpoint validates args exactly: only payloadJson may cross
+    // the wire — a stray `payload` object is an ArgumentValidationError.
+    await store.createInteraction({
+      ownerUserId: "u1",
+      threadId: "t1",
+      runId: "r1",
+      type: "tool_approval",
+      toolName: "createWorkspace",
+      payload: { name: "Riset" },
+    });
+    const interactionCall = calls.find(
+      (c) => c.path === SERVICE_FUNCTIONS.createInteraction,
+    )!;
+    expect(interactionCall.args.payloadJson).toBe(JSON.stringify({ name: "Riset" }));
+    expect("payload" in interactionCall.args).toBe(false);
+
     await store.searchThreadDocuments("t1", "q");
     expect(calls.some((c) => c.kind === "action")).toBe(true);
   });
