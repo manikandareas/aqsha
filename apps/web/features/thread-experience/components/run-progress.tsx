@@ -82,7 +82,7 @@ export function AgentRunBlock({
         <ol className="mt-2 grid gap-1.5 pl-0">
           {sortedSteps.map((step) => (
             <AgentRunStep
-              key={step.stepKey}
+              key={`${step.stepKey}-${step.order}`}
               step={step}
               events={(run.events ?? []).filter(
                 (event) => eventStepKey(event) === step.stepKey,

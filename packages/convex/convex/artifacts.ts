@@ -1029,11 +1029,16 @@ export const getContentTarget = internalQuery({
     if (
       !artifact ||
       artifact.ownerUserId !== args.ownerUserId ||
-      !artifact.workspaceId ||
       artifact.status !== "active"
     ) {
       return null;
     }
+    // NOTE: a non-null workspaceId is intentionally NOT required. Chat-attached
+    // documents ("Lampiran chat") are thread-scoped and have workspaceId === null,
+    // yet their extracted text lives in artifactContents just like workspace docs.
+    // The ownership + active-status checks above are the security boundary; the old
+    // workspaceId guard wrongly made verifyCitations / verifyStatistics / the
+    // artifact viewer report "no text" for any chat attachment.
     const artifactType = artifactTypeForLegacyArtifact(artifact);
     const [content, url] = await Promise.all([
       getContentRowOrNull(ctx, artifact._id, args.ownerUserId),

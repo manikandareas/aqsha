@@ -1089,9 +1089,16 @@ async function runInlineGeneration(
         activeTools = [...activeTools, ...SANDBOX_TOOL_NAMES];
       }
       // Citation verification is a free feature on BOTH tiers (unlike sandbox
-      // compute), so it is gated on prompt intent alone, not agent kind.
+      // compute), so it is gated on prompt intent alone, not agent kind. When the
+      // user EXPLICITLY asks to verify citations we focus the toolset on the
+      // dedicated verifyCitations tool and drop the generic web-search tools
+      // (searchWeb/searchArxiv/lookupDoi): otherwise a weaker model follows the
+      // verify-citations skill recipe MANUALLY via repeated searchWeb calls and
+      // exhausts its whole step budget (stepCountIs) before writing any answer.
+      // The dedicated tool resolves the in-context document and runs the 4-step
+      // engine server-side in a single call. HITL initial tools stay available.
       if (detectCitationVerifyIntent(args.visiblePrompt ?? args.prompt ?? "")) {
-        activeTools = [...activeTools, ...CITATION_TOOL_NAMES];
+        activeTools = [...CITATION_TOOL_NAMES, ...HITL_INITIAL_TOOL_NAMES];
       }
       // Skills: the tier-1 catalog is always in the prompt; expose the
       // activation + resource tools whenever there is a skill to name.

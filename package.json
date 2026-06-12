@@ -4,6 +4,8 @@
   "packageManager": "bun@1.3.10",
   "workspaces": [
     "apps/web",
+    "apps/agents",
+    "packages/agent-contracts",
     "packages/convex",
     "packages/ui"
   ],
@@ -13,8 +15,10 @@
     "dev:convex": "bun run --filter '@aqsha/convex' dev",
     "build": "bun run --filter '@aqsha/app' build",
     "build:app": "bun run --filter '@aqsha/app' build",
+    "dev:agents": "bun run --filter '@aqsha/agents' dev",
+    "test:agents": "bun run --filter '@aqsha/agents' --filter '@aqsha/agent-contracts' test",
     "lint": "bun run --parallel --filter '@aqsha/app' --filter '@aqsha/convex' lint",
-    "typecheck": "bun run --parallel --filter '@aqsha/app' --filter '@aqsha/convex' --filter '@aqsha/ui' typecheck"
+    "typecheck": "bun run --parallel --filter '@aqsha/app' --filter '@aqsha/convex' --filter '@aqsha/ui' --filter '@aqsha/agents' --filter '@aqsha/agent-contracts' typecheck"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
