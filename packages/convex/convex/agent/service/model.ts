@@ -163,6 +163,19 @@ export function interactionRecord(doc: Doc<"pendingInteractions">) {
   };
 }
 
+export function researchPhaseRecord(doc: Doc<"researchPhaseStates">) {
+  return {
+    runId: doc.runId,
+    phase: doc.phase,
+    status: doc.status,
+    output: doc.output,
+    sdkSessionId: doc.sdkSessionId,
+    costUsd: doc.costUsd,
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
+  };
+}
+
 // ── thread denormalized aggregates ──────────────────────────────────────────
 
 export async function bumpThreadOnMessage(

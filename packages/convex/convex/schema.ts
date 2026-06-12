@@ -1207,6 +1207,25 @@ export default defineSchema(
       payloadJson: v.string(),
       createdAt: v.number(),
     }).index("by_run_seq", ["runId", "seq"]),
+    // Durable deep-research phase state (plan §5.5 / §9.4 Step 4): one row per
+    // run×phase; the service skips phases already `done` when a run is
+    // re-dispatched after a service restart or a user retry.
+    researchPhaseStates: defineTable({
+      runId: v.string(),
+      phase: v.union(
+        v.literal("plan"),
+        v.literal("literature"),
+        v.literal("counter_evidence"),
+        v.literal("citation_verify"),
+        v.literal("write"),
+      ),
+      status: v.union(v.literal("running"), v.literal("done"), v.literal("failed")),
+      output: v.optional(v.string()),
+      sdkSessionId: v.optional(v.string()),
+      costUsd: v.optional(v.number()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }).index("by_run_phase", ["runId", "phase"]),
     pendingInteractions: defineTable({
       ownerUserId: v.string(),
       threadId: v.string(),

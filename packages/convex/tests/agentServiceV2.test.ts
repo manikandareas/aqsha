@@ -632,6 +632,67 @@ describe("durable cancel (Step 3)", () => {
   });
 });
 
+describe("research phase state (Step 4)", () => {
+  it("upserts phases idempotently and lists them per run", async () => {
+    const t = setup();
+    const created = await t.mutation(api.agent.service.upsertResearchPhase, {
+      serviceToken: TOKEN,
+      runId: RUN,
+      phase: "plan",
+      status: "running",
+    });
+    expect(created).toMatchObject({ runId: RUN, phase: "plan", status: "running" });
+
+    const done = await t.mutation(api.agent.service.upsertResearchPhase, {
+      serviceToken: TOKEN,
+      runId: RUN,
+      phase: "plan",
+      status: "done",
+      output: "rencana riset",
+      sdkSessionId: "sess-plan",
+      costUsd: 0.2,
+    });
+    expect(done).toMatchObject({
+      status: "done",
+      output: "rencana riset",
+      sdkSessionId: "sess-plan",
+      costUsd: 0.2,
+    });
+
+    // Partial update keeps earlier fields.
+    const touched = await t.mutation(api.agent.service.upsertResearchPhase, {
+      serviceToken: TOKEN,
+      runId: RUN,
+      phase: "plan",
+      status: "done",
+    });
+    expect(touched.output).toBe("rencana riset");
+
+    await t.mutation(api.agent.service.upsertResearchPhase, {
+      serviceToken: TOKEN,
+      runId: RUN,
+      phase: "literature",
+      status: "running",
+    });
+    const listed = await t.query(api.agent.service.listResearchPhases, {
+      serviceToken: TOKEN,
+      runId: RUN,
+    });
+    expect(listed).toHaveLength(2);
+    expect(listed.map((p: { phase: string }) => p.phase).sort()).toEqual([
+      "literature",
+      "plan",
+    ]);
+
+    await expect(
+      t.query(api.agent.service.listResearchPhases, {
+        serviceToken: "wrong",
+        runId: RUN,
+      }),
+    ).rejects.toThrow(/Invalid service token/);
+  });
+});
+
 describe("retryRun (Step 3)", () => {
   const IDENTITY = { tokenIdentifier: OWNER, subject: OWNER };
 

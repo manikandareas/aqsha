@@ -63,6 +63,9 @@ export const runEventTypeSchema = z.enum([
   "citation_check",
   "interaction_pending",
   "interaction_resolved",
+  // Deep-research phase markers (plan §5.5 durable orchestration, Step 4).
+  "phase_start",
+  "phase_done",
   "error",
 ]);
 export type RunEventType = z.infer<typeof runEventTypeSchema>;

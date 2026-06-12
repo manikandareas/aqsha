@@ -22,6 +22,7 @@ import {
   requireRun,
   requireThread,
   requireServiceToken,
+  researchPhaseRecord,
   runEventRecord,
   runRecord,
   threadRecord,
@@ -471,6 +472,75 @@ export const listInteractions = query({
       .order("desc")
       .take(MAX_THREAD_INTERACTIONS);
     return docs.reverse().map(interactionRecord);
+  },
+});
+
+// ── deep-research phase state (plan §5.5 durable orchestration, Step 4) ─────
+// Additive contract extension: SERVICE_FUNCTIONS grew from 25 to 27 endpoints
+// (recorded in plan §9.2).
+
+const deepPhaseValidator = v.union(
+  v.literal("plan"),
+  v.literal("literature"),
+  v.literal("counter_evidence"),
+  v.literal("citation_verify"),
+  v.literal("write"),
+);
+
+export const upsertResearchPhase = mutation({
+  args: {
+    serviceToken: v.string(),
+    runId: v.string(),
+    phase: deepPhaseValidator,
+    status: v.union(v.literal("running"), v.literal("done"), v.literal("failed")),
+    output: v.optional(v.string()),
+    sdkSessionId: v.optional(v.string()),
+    costUsd: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    requireServiceToken(args.serviceToken);
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("researchPhaseStates")
+      .withIndex("by_run_phase", (q) =>
+        q.eq("runId", args.runId).eq("phase", args.phase),
+      )
+      .unique();
+    if (existing) {
+      await ctx.db.patch("researchPhaseStates", existing._id, {
+        status: args.status,
+        output: args.output ?? existing.output,
+        sdkSessionId: args.sdkSessionId ?? existing.sdkSessionId,
+        costUsd: args.costUsd ?? existing.costUsd,
+        updatedAt: now,
+      });
+      const updated = await ctx.db.get("researchPhaseStates", existing._id);
+      return researchPhaseRecord(updated!);
+    }
+    const id = await ctx.db.insert("researchPhaseStates", {
+      runId: args.runId,
+      phase: args.phase,
+      status: args.status,
+      output: args.output,
+      sdkSessionId: args.sdkSessionId,
+      costUsd: args.costUsd,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const inserted = await ctx.db.get("researchPhaseStates", id);
+    return researchPhaseRecord(inserted!);
+  },
+});
+
+export const listResearchPhases = query({
+  args: { serviceToken: v.string(), runId: v.string() },
+  handler: async (ctx, args) => {
+    requireServiceToken(args.serviceToken);
+    const docs = await ctx.db
+      .query("researchPhaseStates")
+      .withIndex("by_run_phase", (q) => q.eq("runId", args.runId))
+      .take(20);
+    return docs.map(researchPhaseRecord);
   },
 });
 

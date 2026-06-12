@@ -425,6 +425,13 @@ export const removeThread = mutation({
       for (const event of events) {
         await ctx.db.delete("agentRunEvents2", event._id);
       }
+      const phases = await ctx.db
+        .query("researchPhaseStates")
+        .withIndex("by_run_phase", (q) => q.eq("runId", run.runId))
+        .take(20);
+      for (const phase of phases) {
+        await ctx.db.delete("researchPhaseStates", phase._id);
+      }
       await ctx.db.delete("agentRuns2", run._id);
     }
     await ctx.db.delete("chatThreads", thread._id);

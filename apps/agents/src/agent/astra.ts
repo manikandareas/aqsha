@@ -24,6 +24,8 @@ export type AstraTurnInput = {
   canUseTool?: unknown;
   agents?: Record<string, SubagentDefinition>;
   abortController?: AbortController;
+  /** Per-phase turn budget for deep-research phases (plan §5.5). */
+  maxTurnsOverride?: number;
 };
 
 // Structural options object compatible with the SDK's Options type. Kept as a
@@ -39,11 +41,13 @@ export function buildAstraQueryOptions(input: AstraTurnInput): AstraQueryOptions
       ? deepModelForAgent(config, agentKind)
       : chatModelForAgent(config, agentKind),
     systemPrompt: isDeep ? deepResearchInstructions() : instructionsForKind(agentKind),
-    maxTurns: isDeep
-      ? config.maxTurns.deep
-      : agentKind === "pro"
-        ? config.maxTurns.pro
-        : config.maxTurns.lite,
+    maxTurns:
+      input.maxTurnsOverride ??
+      (isDeep
+        ? config.maxTurns.deep
+        : agentKind === "pro"
+          ? config.maxTurns.pro
+          : config.maxTurns.lite),
     allowedTools: allowedToolsForTurn({ phase: input.phase, mode }),
     disallowedTools: [...DISALLOWED_BUILTIN_TOOLS],
     // Never bypassPermissions (it ignores allowedTools — plan §4.4 footgun).

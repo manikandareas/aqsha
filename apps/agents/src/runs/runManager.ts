@@ -4,6 +4,15 @@ import {
   buildAstraQueryOptions,
   type AstraQueryOptions,
 } from "../agent/astra";
+import {
+  buildDeepPhasePrompt,
+  DEEP_PHASES,
+  DEEP_PHASE_POLICIES,
+  isMaxTurnsStop,
+  PHASE_BUDGET_EXHAUSTED_NOTE,
+  phaseStateMap,
+  priorOutputsFrom,
+} from "../agent/deepPhases";
 import { buildRunHooks } from "../agent/hooks";
 import {
   buildCanUseTool,
@@ -18,7 +27,7 @@ import type { AgentsConfig } from "../config";
 import { buildProviderDeps } from "../providers";
 import type { ProviderDeps } from "../providers/types";
 import type { AgentStore, RunRecord } from "../store/types";
-import { buildDeepResearchAgents } from "../subagents";
+import { buildLiteratureSearcherAgents } from "../subagents";
 import { selectDomainPack } from "../subagents/skillDelegation";
 import {
   buildAqshaMcpServer,
@@ -190,7 +199,11 @@ export class RunManager {
   ): Promise<void> {
     await this.acquireSlot();
     try {
-      await this.executeTurn(request, options);
+      if (request.mode === "deep") {
+        await this.executeDeepRun(request, options);
+      } else {
+        await this.executeTurn(request, options);
+      }
     } catch (error) {
       await this.failRun(
         request,
@@ -292,18 +305,6 @@ export class RunManager {
             includeHistory: needsHistoryRebuild,
           });
 
-    const deepAgents =
-      request.mode === "deep"
-        ? buildDeepResearchAgents({
-            config,
-            agentKind: request.agentKind,
-            writerSkill: selectDomainPack(
-              assembled.prompt,
-              readSkillEntries(config.appRoot),
-            ),
-          })
-        : undefined;
-
     const abortController = new AbortController();
     const queryOptions = buildAstraQueryOptions({
       config,
@@ -319,7 +320,6 @@ export class RunManager {
         threadId: request.threadId,
         ownerUserId: request.ownerUserId,
       }),
-      agents: deepAgents,
       abortController,
     });
 
@@ -459,6 +459,323 @@ export class RunManager {
     });
   }
 
+  // ── deep research: durable multi-phase orchestration (plan §5.5, Step 4) ──
+  //
+  // A /deep run executes as a sequence of ISOLATED query() calls (no session
+  // chaining between phases); each phase persists its output via
+  // upsertResearchPhase before the next starts. Re-dispatching the run (user
+  // retry after a crash, watchdog-failed run) replays only missing phases, and
+  // a HITL interrupt in any phase resumes THAT phase's own SDK session.
+
+  /** Recover the research question across restarts/resumes. */
+  private async deepQuestion(request: RunRequest, isResume: boolean): Promise<string> {
+    if (!isResume) {
+      return request.prompt;
+    }
+    const messages = await this.deps.store.listMessages(request.threadId, 100);
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const message = messages[i];
+      if (message?.role === "user" && message.text.trim()) {
+        const text = message.text.trim();
+        return text.startsWith("/deep") ? text.slice("/deep".length).trim() : text;
+      }
+    }
+    return request.prompt;
+  }
+
+  private async executeDeepRun(
+    request: RunRequest,
+    turn?: { phase?: TurnPhase; resumeInteraction?: PendingInteraction },
+  ): Promise<void> {
+    const { store, config } = this.deps;
+    const runId = request.runId;
+    const isResume = Boolean(turn?.resumeInteraction);
+
+    await store.setRunStatus(runId, "running");
+    await store.setThreadStatus(request.threadId, "streaming");
+    await store.appendRunEvent({
+      runId,
+      type: "run_status",
+      payload: { status: "running", mode: "deep", resume: isResume },
+    });
+
+    const question = await this.deepQuestion(request, isResume);
+    const states = phaseStateMap(await store.listResearchPhases(runId));
+    const writerSkill = selectDomainPack(question, readSkillEntries(config.appRoot));
+
+    const assistantMessage = await store.createMessage({
+      threadId: request.threadId,
+      ownerUserId: request.ownerUserId,
+      role: "assistant",
+      text: "",
+      runId,
+      status: "streaming",
+    });
+
+    const activeRun: ActiveRun = { runId, canceled: false };
+    this.active.set(runId, activeRun);
+    // The resume response satisfies the model's retry of the gated tool in the
+    // resumed phase instead of opening a fresh hold-window.
+    if (turn?.resumeInteraction) {
+      this.broker.primeResolvedApproval(runId, turn.resumeInteraction);
+    }
+    let resumeConsumed = false;
+
+    try {
+      for (const phase of DEEP_PHASES) {
+        const existing = states[phase];
+        if (existing?.status === "done") {
+          continue;
+        }
+        if (activeRun.canceled) {
+          break;
+        }
+        const policy = DEEP_PHASE_POLICIES[phase];
+
+        // Only the first non-done phase can be the interrupted one; later
+        // phases always start fresh.
+        const resumingThisPhase =
+          isResume && !resumeConsumed && Boolean(existing?.sdkSessionId);
+        const prompt = resumingThisPhase
+          ? resumePromptForInteraction(turn!.resumeInteraction!)
+          : buildDeepPhasePrompt({
+              phase,
+              question,
+              contextBlock:
+                phase === "plan" ? await this.deepContextBlock(request) : undefined,
+              priorOutputs: priorOutputsFrom(states),
+              writerSkill: phase === "write" ? writerSkill : undefined,
+            });
+        const turnPhase: TurnPhase = resumingThisPhase
+          ? (turn?.phase ?? "initial")
+          : "initial";
+        if (resumingThisPhase) {
+          resumeConsumed = true;
+        }
+
+        await store.upsertResearchPhase({ runId, phase, status: "running" });
+        await store.appendRunEvent({
+          runId,
+          type: "phase_start",
+          payload: { phase, resumed: resumingThisPhase },
+        });
+
+        const toolCtx = {
+          runId,
+          threadId: request.threadId,
+          ownerUserId: request.ownerUserId,
+          store,
+          providers: this.providerDeps,
+          broker: this.broker,
+          sandbox: this.sandbox,
+          config,
+          nextCitationNumber: createCitationCounter(),
+        };
+        const abortController = new AbortController();
+        const options = buildAstraQueryOptions({
+          config,
+          agentKind: request.agentKind,
+          mode: "deep",
+          phase: turnPhase,
+          resumeSessionId: resumingThisPhase ? existing?.sdkSessionId : undefined,
+          mcpServer: buildAqshaMcpServer(toolCtx),
+          hooks: buildRunHooks({ store, runId, threadId: request.threadId }),
+          canUseTool: buildCanUseTool({
+            broker: this.broker,
+            runId,
+            threadId: request.threadId,
+            ownerUserId: request.ownerUserId,
+          }),
+          agents: policy.useSubagents
+            ? buildLiteratureSearcherAgents({ config, agentKind: request.agentKind })
+            : undefined,
+          abortController,
+          maxTurnsOverride: policy.maxTurns,
+        });
+
+        const bridge = new StreamBridge(store, {
+          runId,
+          threadId: request.threadId,
+          messageId: assistantMessage.messageId,
+          flushMs: config.streamFlushMs,
+          flushChars: config.streamFlushChars,
+          silent: !policy.streamsToChat,
+        });
+
+        let streamError: string | undefined;
+        let interruptState: ReturnType<InteractionBroker["interruptState"]>;
+        try {
+          const handle = this.deps.runner({ prompt, options });
+          activeRun.handle = handle;
+          this.broker.registerRun(runId, () => {
+            void handle.interrupt().catch(() => {});
+          });
+          for await (const message of handle.stream) {
+            await bridge.handle(message);
+          }
+        } catch (error) {
+          streamError = error instanceof Error ? error.message : "Stream failed";
+        } finally {
+          interruptState = this.broker.interruptState(runId);
+          this.broker.unregisterRun(runId);
+        }
+
+        await bridge.flush();
+        const result = bridge.result();
+
+        if (activeRun.canceled) {
+          break;
+        }
+
+        if (interruptState) {
+          // HITL pause inside this phase: persist the phase session so the
+          // resume re-enters THIS phase, then park the run.
+          await store.upsertResearchPhase({
+            runId,
+            phase,
+            status: "running",
+            sdkSessionId: result.sessionId,
+            costUsd: sumCost(existing?.costUsd, result.summary.costUsd),
+          });
+          await store.finalizeMessage(assistantMessage.messageId, {
+            text: result.finalText,
+            status: "complete",
+          });
+          await store.finalizeRun(runId, { status: "waiting_hitl" });
+          await store.setThreadStatus(request.threadId, "idle");
+          await store.appendRunEvent({
+            runId,
+            type: "run_status",
+            payload: {
+              status: "waiting_hitl",
+              phase,
+              reason: interruptState.reason,
+              interactionId: interruptState.pendingInteractionId,
+            },
+          });
+          // Same respond-while-finalizing race guard as the normal turn loop.
+          if (interruptState.pendingInteractionId) {
+            const interaction = await store.getInteraction(
+              interruptState.pendingInteractionId,
+            );
+            if (interaction?.status === "responded") {
+              void this.resumeRun(runId, interaction.id);
+            }
+          }
+          return;
+        }
+
+        // Turn-budget exhaustion degrades to done-partial (legacy "budget
+        // exhausted" semantics) when the phase produced usable text — or when
+        // the phase is an optional quality gate, which must not kill the run.
+        const maxTurnsStop = isMaxTurnsStop({
+          streamError,
+          resultSubtype: result.resultSubtype,
+        });
+        const maxTurnsPartial =
+          maxTurnsStop &&
+          (result.finalText.trim().length > 0 || policy.optional === true);
+
+        if (
+          !maxTurnsPartial &&
+          (streamError ||
+            (result.resultSubtype && result.resultSubtype !== "success"))
+        ) {
+          const message = streamError ?? `phase ${phase}: ${result.resultSubtype}`;
+          await store.upsertResearchPhase({
+            runId,
+            phase,
+            status: "failed",
+            costUsd: sumCost(existing?.costUsd, result.summary.costUsd),
+          });
+          await store.finalizeMessage(assistantMessage.messageId, {
+            text:
+              result.finalText ||
+              "Maaf, riset mendalam terhenti karena kesalahan. Coba kirim ulang untuk melanjutkan dari fase terakhir.",
+            status: "error",
+          });
+          await store.finalizeRun(runId, { status: "failed", errorMessage: message });
+          await store.setThreadStatus(request.threadId, "failed");
+          await store.appendRunEvent({
+            runId,
+            type: "error",
+            payload: { phase, message },
+          });
+          return;
+        }
+
+        const doneState = await store.upsertResearchPhase({
+          runId,
+          phase,
+          status: "done",
+          output: result.finalText.trim() || PHASE_BUDGET_EXHAUSTED_NOTE,
+          sdkSessionId: result.sessionId,
+          costUsd: sumCost(existing?.costUsd, result.summary.costUsd),
+        });
+        states[phase] = doneState;
+        await store.appendRunEvent({
+          runId,
+          type: "phase_done",
+          payload: { phase, costUsd: result.summary.costUsd },
+        });
+      }
+    } finally {
+      this.broker.unregisterRun(runId);
+      this.active.delete(runId);
+    }
+
+    const finalStates = await store.listResearchPhases(runId);
+    const totalCost = finalStates.reduce(
+      (sum, state) => sum + (state.costUsd ?? 0),
+      0,
+    );
+
+    if (activeRun.canceled) {
+      const writeText = states.write?.output ?? "";
+      await store.finalizeMessage(assistantMessage.messageId, {
+        text: writeText,
+        status: "complete",
+      });
+      await store.finalizeRun(runId, {
+        status: "canceled",
+        costUsd: totalCost > 0 ? totalCost : undefined,
+      });
+      await store.setThreadStatus(request.threadId, "idle");
+      return;
+    }
+
+    await store.finalizeMessage(assistantMessage.messageId, {
+      text: states.write?.output ?? "",
+      status: "complete",
+    });
+    await store.finalizeRun(runId, {
+      status: "completed",
+      costUsd: totalCost > 0 ? totalCost : undefined,
+    });
+    await store.setThreadStatus(request.threadId, "idle");
+    await store.appendRunEvent({
+      runId,
+      type: "run_status",
+      payload: { status: "completed", costUsd: totalCost },
+    });
+  }
+
+  /** Artifact/manifest context for the plan phase (no question appended). */
+  private async deepContextBlock(request: RunRequest): Promise<string | undefined> {
+    const assembled = await assemblePrompt({
+      store: this.deps.store,
+      request: { ...request, prompt: "" },
+      includeHistory: false,
+    });
+    const block = assembled.prompt.trim();
+    return block ? block : undefined;
+  }
+
+}
+
+function sumCost(...values: Array<number | undefined>): number | undefined {
+  const total = values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+  return total > 0 ? total : undefined;
 }
 
 /** Generate a run id when the caller (dev tools) does not provide one. */

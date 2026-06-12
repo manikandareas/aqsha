@@ -66,6 +66,12 @@ export class StreamBridge {
       flushMs: number;
       flushChars: number;
       now?: () => number;
+      /**
+       * Capture-only mode: text and result summary are accumulated but never
+       * written to the message. Used by non-write deep-research phases whose
+       * output is phase state, not chat text (plan §5.5).
+       */
+      silent?: boolean;
     },
   ) {}
 
@@ -147,6 +153,9 @@ export class StreamBridge {
 
   /** Non-blocking write: one mutation in flight, latest text wins. */
   private scheduleFlush(): void {
+    if (this.opts.silent) {
+      return;
+    }
     if (this.inflight) {
       this.trailingQueued = true;
       return;
@@ -176,6 +185,9 @@ export class StreamBridge {
 
   /** Blocking drain: awaits in-flight writes and persists the latest text. */
   async flush(): Promise<void> {
+    if (this.opts.silent) {
+      return;
+    }
     while (this.inflight) {
       await this.inflight;
     }

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type {
   InteractionResponse,
   PendingInteraction,
+  ResearchPhaseState,
   RunResultSummary,
 } from "@aqsha/agent-contracts";
 import type {
@@ -31,6 +32,7 @@ export class MemoryStore implements AgentStore {
   private interactionWaiters = new Map<string, Array<(row: PendingInteraction) => void>>();
   private artifacts = new Map<string, ArtifactSnapshot & { ownerUserId: string; deleted?: boolean }>();
   private workspaces = new Map<string, WorkspaceRecord>();
+  private researchPhases = new Map<string, ResearchPhaseState>();
 
   constructor(private readonly now: () => number = Date.now) {}
 
@@ -433,5 +435,37 @@ export class MemoryStore implements AgentStore {
     }
     workspace.name = action.name;
     return { ok: true, workspaceId: workspace.workspaceId };
+  }
+
+  // ── deep-research phase state ──────────────────────────────────────────────
+
+  async upsertResearchPhase(input: {
+    runId: string;
+    phase: ResearchPhaseState["phase"];
+    status: ResearchPhaseState["status"];
+    output?: string;
+    sdkSessionId?: string;
+    costUsd?: number;
+  }): Promise<ResearchPhaseState> {
+    const key = `${input.runId}:${input.phase}`;
+    const existing = this.researchPhases.get(key);
+    const state: ResearchPhaseState = {
+      runId: input.runId,
+      phase: input.phase,
+      status: input.status,
+      output: input.output ?? existing?.output,
+      sdkSessionId: input.sdkSessionId ?? existing?.sdkSessionId,
+      costUsd: input.costUsd ?? existing?.costUsd,
+      createdAt: existing?.createdAt ?? this.now(),
+      updatedAt: this.now(),
+    };
+    this.researchPhases.set(key, state);
+    return state;
+  }
+
+  async listResearchPhases(runId: string): Promise<ResearchPhaseState[]> {
+    return [...this.researchPhases.values()]
+      .filter((state) => state.runId === runId)
+      .sort((a, b) => a.createdAt - b.createdAt);
   }
 }

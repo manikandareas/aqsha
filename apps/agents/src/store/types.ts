@@ -3,6 +3,7 @@ import type {
   InteractionResponse,
   InteractionType,
   PendingInteraction,
+  ResearchPhaseState,
   RunEventType,
   RunMode,
   RunResultSummary,
@@ -193,4 +194,15 @@ export interface AgentStore {
     ownerUserId: string,
     action: WorkspaceAction,
   ): Promise<{ ok: boolean; workspaceId?: string; reason?: string }>;
+
+  // ── deep-research phase state (plan §5.5 durable orchestration) ──────────
+  upsertResearchPhase(input: {
+    runId: string;
+    phase: ResearchPhaseState["phase"];
+    status: ResearchPhaseState["status"];
+    output?: string;
+    sdkSessionId?: string;
+    costUsd?: number;
+  }): Promise<ResearchPhaseState>;
+  listResearchPhases(runId: string): Promise<ResearchPhaseState[]>;
 }

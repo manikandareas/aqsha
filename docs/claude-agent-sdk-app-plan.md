@@ -377,6 +377,8 @@ Plan siap dieksekusi mulai **Phase 0 — Spike & validasi**.
    - `getPolarSubscriptionOrNull` kini menelan error "Component polar is not registered" (hanya terjadi di convex-test) → fallback ke mirror `billingSubscriptions`; perilaku produksi tidak berubah.
    - Mutation publik v2 memakai id string buatan service (`thr_*`/`run_*`) — `crypto.randomUUID()` tersedia di runtime Convex.
 
+0c. **Temuan Step 4 (2026-06-12):** kontrak `SERVICE_FUNCTIONS` diperluas **secara aditif** 25 → 27 endpoint (`upsertResearchPhase`, `listResearchPhases`) untuk state fase deep research durable (§5.5) — tidak ada endpoint existing yang berubah. Tabel baru `researchPhaseStates` (`by_run_phase`). Event run baru: `phase_start` / `phase_done`.
+
 1. **`maxBudgetUsd` TIDAK ADA di SDK** (§3 & §5.7 menyebutnya) — verifikasi API `@anthropic-ai/claude-agent-sdk@0.3.x`: hanya `maxTurns` + `total_cost_usd` di result. Guard biaya per run harus diimplementasikan sendiri (cek kumulatif `total_cost_usd` antar fase + `maxTurns` per tier). Risiko §7 baris "Biaya loop SDK" perlu mitigasi versi ini.
 2. **Deep research first-cut = satu `query()`** dengan `agents` option (kalimat pertama §5.5), bukan multi-fase durable. Cukup untuk validasi kualitas; durability §5.5 menyusul (Step 4 di 9.4).
 3. **Ekstraksi bibliografi heuristik** (regex DOI/arXiv/tahun/judul, heading References/Daftar Pustaka) menggantikan LLM extraction — deterministik & teruji; engine konservatif sehingga parse buruk berdegradasi ke `unverifiable`, bukan false flag.
@@ -457,10 +459,16 @@ Urutan disusun supaya tiap step punya hasil yang bisa diverifikasi, dan step UI 
 - Gap tersisa yang sengaja ditunda: palette `/` composer masih registry statis (penggantian komponen UI; proxy `listCommands` sudah ada), panel sources menunggu Step 4.
 - *Exit*: Phase 2 exit criteria asli (§6) terpenuhi end-to-end. ✅
 
-**Step 4 — Deep research durable (2–3 hari)**
-- Pecah `/deep` jadi fase `query()` terpisah yang diorkestrasi `runManager` (§5.5): planner → literature rounds (state `research*` di Convex, rehydrasi ala `loopState.ts`) → counter-evidence → citation-verify → writer; tiap fase idempotent + resumable setelah restart service.
-- Eval berdampingan vs implementasi lama (N run, golden set existing di `agent/evals/`).
-- *Exit*: Phase 3 exit criteria asli.
+**Step 4 — Deep research durable (2–3 hari)** ✅ **SELESAI (2026-06-12)**
+- ✅ `/deep` kini dieksekusi `runManager.executeDeepRun` sebagai **5 fase `query()` TERISOLASI** (tanpa session-chaining antar fase): `plan → literature → counter_evidence → citation_verify → write` (`agent/deepPhases.ts`: kebijakan per fase — maxTurns, subagents, streamsToChat, optional). State durable di tabel baru `researchPhaseStates` (`by_run_phase`) via 2 endpoint service aditif (kontrak 25→27, lihat 9.2 #0c); output tiap fase = input prompt fase berikutnya.
+- ✅ Durabilitas: run yang di-redispatch (retry user / setelah restart service) **hanya mengulang fase yang belum `done`**; fase `failed` diulang dari fase itu. HITL di fase mana pun menyimpan `sdkSessionId` per fase → resume masuk kembali ke fase yang sama (primed approval tetap bekerja). Hanya fase `write` yang streaming ke pesan chat (StreamBridge mode `silent` untuk fase lain); cost dijumlah lintas fase/percobaan ke `agentRuns2.costUsd`.
+- ✅ Subagents: hanya `literature-searcher` (paralel per sub-pertanyaan) yang tersisa sebagai subagent; planner/counter-evidence/citation-verifier/writer kini fase main-agent terisolasi (dead defs dihapus). Domain pack writer tetap via `skillDelegation` (instruksi skill di prompt fase write).
+- ✅ Ketangguhan budget turn (temuan live): SDK melempar error saat `maxTurns` habis → (a) teks parsial yang ada = fase `done` parsial (semantik "budget exhausted" legacy); (b) fase quality-gate (`counter_evidence`, `citation_verify`) bertanda `optional` tidak pernah mematikan run — `done` dengan catatan keterbatasan eksplisit yang diteruskan ke writer.
+- ✅ Tes: +5 unit test runManager deep (orkestrasi 5 fase, replay fase tersisa, HITL write-phase resume sesi fase, max-turns parsial, optional-phase kosong) + 1 convex-test endpoint fase; total agents 104, convex 357.
+- ✅ Validasi live (lite, deepseek-v4-flash): run `/deep` nyata dengan **2× kill service di tengah** (mid-literature & post-failure) + 2 kegagalan fase max-turns → tiap re-dispatch lanjut tepat dari fase tersisa (event `phase_start` membuktikan `plan` tak pernah diulang); fase write → proposeArtifact → `waiting_hitl` → approve → resume → **artifact laporan markdown nyata tertulis & tertaut ke thread** → run `completed`.
+- ⚠️ Temuan biaya: run lite end-to-end (termasuk retry) ≈ **$14.9** — tanpa prompt-cache di deepseek, system prompt ~32K dibilling penuh per turn × banyak turn fase literature/verify. Guard biaya per run (deviasi 9.2 #1) jadi prioritas Step 5; pemilihan model deep tier mungkin perlu ditinjau owner.
+- ⏳ Ditunda (dicatat, butuh keputusan owner soal biaya): eval paritas N-run berdampingan vs implementasi legacy (golden set `agent/evals/`).
+- *Exit*: Orkestrasi multi-fase resumable §5.5 terpenuhi; paritas kualitas formal menunggu eval di atas.
 
 **Step 5 — Phase 4: sandbox, observability, billing (2–3 hari)**
 - Port engine Daytona ke `SandboxService` (skrip R + claim extraction + report builder; split-timing dipertahankan §5.6).

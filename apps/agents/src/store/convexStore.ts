@@ -1,6 +1,7 @@
 import type {
   InteractionResponse,
   PendingInteraction,
+  ResearchPhaseState,
   RunResultSummary,
 } from "@aqsha/agent-contracts";
 import type {
@@ -57,6 +58,9 @@ export const SERVICE_FUNCTIONS = {
   searchThreadDocuments: "agent/service:searchThreadDocuments",
   applyArtifactAction: "agent/service:applyArtifactAction",
   applyWorkspaceAction: "agent/service:applyWorkspaceAction",
+  // Step 4 (additive): durable deep-research phase state (plan §5.5).
+  upsertResearchPhase: "agent/service:upsertResearchPhase",
+  listResearchPhases: "agent/service:listResearchPhases",
 } as const;
 
 const RESPONSE_POLL_MS = 1_500;
@@ -277,5 +281,20 @@ export class ConvexStore implements AgentStore {
       ownerUserId,
       ...action,
     });
+  }
+
+  upsertResearchPhase(input: {
+    runId: string;
+    phase: ResearchPhaseState["phase"];
+    status: ResearchPhaseState["status"];
+    output?: string;
+    sdkSessionId?: string;
+    costUsd?: number;
+  }): Promise<ResearchPhaseState> {
+    return this.mutation(SERVICE_FUNCTIONS.upsertResearchPhase, input);
+  }
+
+  listResearchPhases(runId: string): Promise<ResearchPhaseState[]> {
+    return this.query(SERVICE_FUNCTIONS.listResearchPhases, { runId });
   }
 }
