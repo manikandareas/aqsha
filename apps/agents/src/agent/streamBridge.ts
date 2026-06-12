@@ -50,6 +50,12 @@ export class StreamBridge {
   private sessionId: string | undefined;
   private resultSubtype: string | undefined;
   private resultSummary: StreamBridgeResult["summary"] = {};
+  // Write pipeline: at most ONE store mutation in flight; further flushes
+  // coalesce into a trailing write. Store round-trips must never block the
+  // SDK stream loop (found live: a ~300ms Convex RTT per awaited flush
+  // throttled token consumption to a crawl).
+  private inflight: Promise<void> | null = null;
+  private trailingQueued = false;
 
   constructor(
     private readonly store: AgentStore,
@@ -86,7 +92,7 @@ export class StreamBridge {
       const delta = message.event?.delta;
       if (delta?.type === "text_delta" && delta.text) {
         this.pendingDelta += delta.text;
-        await this.maybeFlush();
+        this.maybeScheduleFlush();
       }
       return;
     }
@@ -107,7 +113,7 @@ export class StreamBridge {
       }
       // The full message supersedes any partial deltas for this block.
       this.pendingDelta = "";
-      await this.maybeFlush(true);
+      this.maybeScheduleFlush(true);
       return;
     }
 
@@ -125,7 +131,7 @@ export class StreamBridge {
     }
   }
 
-  private async maybeFlush(force = false): Promise<void> {
+  private maybeScheduleFlush(force = false): void {
     const text = this.currentText;
     if (text === this.lastFlushedText) {
       return;
@@ -135,11 +141,44 @@ export class StreamBridge {
       this.now() - this.lastFlushAt >= this.opts.flushMs ||
       text.length - this.lastFlushedText.length >= this.opts.flushChars;
     if (due) {
-      await this.flush();
+      this.scheduleFlush();
     }
   }
 
+  /** Non-blocking write: one mutation in flight, latest text wins. */
+  private scheduleFlush(): void {
+    if (this.inflight) {
+      this.trailingQueued = true;
+      return;
+    }
+    const text = this.currentText;
+    if (text === this.lastFlushedText) {
+      return;
+    }
+    this.lastFlushedText = text;
+    this.lastFlushAt = this.now();
+    this.inflight = this.store
+      .updateMessageText(this.opts.messageId, text)
+      .catch((error) => {
+        // Transient store failures are tolerable mid-stream: the next flush
+        // (and the final drain) re-writes the full text.
+        console.error("streamBridge flush failed", error);
+        this.lastFlushedText = "";
+      })
+      .finally(() => {
+        this.inflight = null;
+        if (this.trailingQueued) {
+          this.trailingQueued = false;
+          this.scheduleFlush();
+        }
+      });
+  }
+
+  /** Blocking drain: awaits in-flight writes and persists the latest text. */
   async flush(): Promise<void> {
+    while (this.inflight) {
+      await this.inflight;
+    }
     const text = this.currentText;
     if (text === this.lastFlushedText) {
       return;

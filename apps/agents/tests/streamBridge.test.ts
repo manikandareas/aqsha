@@ -72,6 +72,67 @@ describe("StreamBridge", () => {
     expect(bridge.currentText).toBe("");
   });
 
+  it("never blocks stream consumption on store latency (single in-flight, coalesced)", async () => {
+    // Regression for the live Step-2 lag: a slow store round-trip must not
+    // throttle handle(); writes pipeline one-at-a-time with the latest text.
+    const store = new MemoryStore();
+    await store.upsertThread({ threadId: "t1", ownerUserId: "u1", agentKind: "lite" });
+    const message = await store.createMessage({
+      threadId: "t1",
+      ownerUserId: "u1",
+      role: "assistant",
+      text: "",
+      status: "streaming",
+    });
+    let writes = 0;
+    let release: (() => void) | null = null;
+    const slowStore = new Proxy(store, {
+      get(target, prop, receiver) {
+        if (prop === "updateMessageText") {
+          return async (messageId: string, text: string) => {
+            writes += 1;
+            await new Promise<void>((resolve) => {
+              release = resolve;
+            });
+            return store.updateMessageText(messageId, text);
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    const bridge = new StreamBridge(slowStore, {
+      runId: "run1",
+      threadId: "t1",
+      messageId: message.messageId,
+      flushMs: 1_000_000,
+      flushChars: 1, // every delta is flush-worthy
+      now: () => 0,
+    });
+
+    const start = Date.now();
+    for (let i = 0; i < 20; i += 1) {
+      await bridge.handle({
+        type: "stream_event",
+        event: { delta: { type: "text_delta", text: `t${i} ` } },
+      });
+    }
+    // All 20 deltas consumed instantly even though the first write is hung.
+    expect(Date.now() - start).toBeLessThan(100);
+    expect(writes).toBe(1);
+
+    // Release the hung write → exactly one trailing coalesced write follows.
+    const drained = bridge.flush();
+    while (release) {
+      const current: () => void = release;
+      release = null;
+      current();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    await drained;
+    const [assistant] = await store.listMessages("t1", 10);
+    expect(assistant?.text).toContain("t19");
+  });
+
   it("maps the result message into the run summary", async () => {
     const { bridge } = await setup();
     await bridge.handle({
