@@ -428,7 +428,7 @@ Urutan disusun supaya tiap step punya hasil yang bisa diverifikasi, dan step UI 
 - Set `AGENTS_STORE=convex`, `CONVEX_URL`, `AGENTS_SERVICE_TOKEN` di service → **normal chat end-to-end tanpa UI** (curl → data muncul reaktif di dashboard Convex).
 - *Exit*: Phase 1.1 + 1.4 selesai; vitest convex-test untuk endpoint service; `convex dev --once` bersih.
 
-**Step 2 — Integrasi `apps/web` (data-hooks + flag) (2–3 hari) — *milestone "bisa dites via UI"*** ◐ **IMPLEMENTASI SELESAI (2026-06-12) — menunggu dogfood UI owner**
+**Step 2 — Integrasi `apps/web` (data-hooks + flag) (2–3 hari) — *milestone "bisa dites via UI"*** ✅ **SELESAI (2026-06-12) — dikonfirmasi owner via dogfood UI**
 - ✅ Flag `NEXT_PUBLIC_AGENT_BACKEND=legacy|sdk` (`apps/web/lib/agent-backend.ts`); kedua varian hook selalu dipanggil (rules of hooks), yang nonaktif full-"skip".
 - ✅ Query publik v2 (`convex/agent/v2/queries.ts`): listThreads/getThread/listMessages/listRuns/listPendingInteractions — auth `requireCurrentUser` + ownership; plus `removeThread` dan proxy `listCommands` (GET /commands service).
 - ✅ Adapter `packages/agent-contracts/src/uiAdapters.ts` (+5 unit test): pesan v2 → `ChatMessage`, run+events v2 → `ResearchRun`, dan **interaction pending → pesan sintetis ber-part HITL** (`tool-askUser` state `input-available`; approval state `approval-requested` + `approval.id`) — kontrak persis `utils/hitl-parts.ts`, kartu HITL existing dirender tanpa perubahan komponen.
@@ -437,6 +437,7 @@ Urutan disusun supaya tiap step punya hasil yang bisa diverifikasi, dan step UI 
 - ✅ E2E pipeline penuh tervalidasi live: `startThread` (mutation ber-auth) → scheduler → **tunnel ngrok** → service → SDK → stream balik ke Convex → terbaca via query publik. Bug nyata diperbaiki: dedupe `POST /runs` salah menganggap row `queued` pre-created Convex sebagai "sudah diterima" → run tak pernah dieksekusi (+ regression test).
 - ⏳ Exit final menunggu dogfood owner di tiga surface UI (butuh sesi login Clerk).
 - Perbaikan dari dogfood pertama: **streaming lag** — `bridge.handle()` meng-`await` mutation Convex per flush (~300ms RTT) sehingga konsumsi token SDK ter-throttle serial. Fix: write pipeline non-blocking (maks 1 mutation in-flight, trailing flush coalesced, drain saat final) + regression test; cadence UI kini ≈ 1 update per RTT dengan teks penuh terbaru.
+- Perbaikan dari dogfood kedua: **streaming terasa "melompat"** — jalur sdk me-render potongan ~RTT mentah; legacy terasa alami karena `useUIMessages` punya smoothing adaptif bawaan. Fix: `useSmoothText` (hook yang sama) diterapkan pada pesan asisten yang sedang streaming di layer data sdk. Dikonfirmasi owner: "much better", Step 2 done.
 - Gap interim (dicatat): palette `/` masih registry statis (proxy `listCommands` sudah ada, penggantian palette = perubahan komponen UI → Step 3); panel artifacts/sources per-thread kosong di sdk (service belum menautkan artifact↔thread); `retryRun` no-op; workspace pick saat approve dikirim sebagai note.
 - Flag `AGENT_BACKEND=legacy|sdk` per user (env/user setting) di data-hooks layer `features/thread-experience` — komponen UI TIDAK ditulis ulang (§4.5).
 - Hooks baru via `useConvexQueryData`: daftar thread + pesan (subscribe `chatThreads`/`chatMessages`), status run + events (`agentRuns`/`agentRunEvents` → run-progress), interaksi pending (`pendingInteractions` → kartu HITL).
