@@ -11,3 +11,5 @@ apps/api/.env.local
 apps/app/.env.local
 packages/convex/.env.local
 packages/convex/.convex/
+apps/agents/.env
+apps/agents/.env.local
