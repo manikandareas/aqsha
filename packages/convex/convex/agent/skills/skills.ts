@@ -14,29 +14,56 @@ function readVersion(metadataJson: string | undefined): string {
   }
 }
 
+// Read the routing-hint keywords persisted inside metadataJson (the parser folds
+// frontmatter `metadata.triggerKeywords` into metadata). Used by listCatalog so
+// the deterministic domain-pack scorer can match Indonesian prompts against an
+// English catalog description. Returns [] when absent/malformed.
+function readTriggerKeywords(metadataJson: string | undefined): string[] {
+  if (!metadataJson) return [];
+  try {
+    const meta = JSON.parse(metadataJson) as { triggerKeywords?: unknown };
+    return Array.isArray(meta.triggerKeywords)
+      ? meta.triggerKeywords.filter((k): k is string => typeof k === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+// Bounded read of builtin skill rows — the curated builtin set is small (≤ tens),
+// so this scoped scan stays well within limits (mirrors loadCatalogSkills).
+const BUILTIN_SCAN_LIMIT = 100;
+
 // Seed/refresh builtin skills from the bundled SKILL.md constants. Idempotent:
-// only inserts new skills or patches changed ones (checksum compare), so it is
-// safe to run on every deploy. Run via: npx convex run agent/skills/skills:seedBuiltinSkills
+// inserts new skills, patches changed ones (checksum compare), and PRUNES builtin
+// rows whose name is no longer in the bundle (so a skill rename doesn't orphan the
+// old name in the catalog). Safe to run on every deploy. Run via:
+// npx convex run agent/skills/skills:seedBuiltinSkills
 export const seedBuiltinSkills = internalMutation({
   args: {},
   returns: v.object({
     seeded: v.number(),
     updated: v.number(),
     skipped: v.number(),
+    pruned: v.number(),
   }),
   handler: async (ctx) => {
     const now = Date.now();
     let seeded = 0;
     let updated = 0;
     let skipped = 0;
+    let pruned = 0;
+    const desiredNames = new Set<string>();
     for (const doc of BUILTIN_SKILL_DOCS) {
       const parsed = parseSkillMarkdown(doc);
       if (!parsed || !parsed.name) {
         continue; // invalid builtin — skip (parser already enforces description)
       }
+      desiredNames.add(parsed.name);
       const version = readVersion(parsed.metadataJson);
       const checksum = skillChecksum(
-        `${parsed.name}:${version}:${parsed.description}:${parsed.body}`,
+        // triggerKeywords ride in metadataJson; fold it in so keyword-only edits re-seed.
+        `${parsed.name}:${version}:${parsed.description}:${parsed.body}:${parsed.metadataJson ?? ""}`,
       );
       const existing = await ctx.db
         .query("skills")
@@ -67,7 +94,24 @@ export const seedBuiltinSkills = internalMutation({
         skipped += 1;
       }
     }
-    return { seeded, updated, skipped };
+    // Prune renamed/removed builtins. The index scopes the scan to scope="builtin",
+    // so user/workspace skills (by_owner_enabled) are never reached; the defensive
+    // guard keeps it true even if the query changes. Dangling skillActivations
+    // degrade silently (loadActiveSkillBodies null-guards ctx.db.get), and renamed
+    // skills get a fresh _id on re-insert so historical activations still reference
+    // the old methodology version (provenance preserved, not corrupted).
+    const builtinRows = await ctx.db
+      .query("skills")
+      .withIndex("by_scope_name", (q) => q.eq("scope", "builtin"))
+      .take(BUILTIN_SCAN_LIMIT);
+    for (const row of builtinRows) {
+      if (row.scope !== "builtin") continue;
+      if (!desiredNames.has(row.name)) {
+        await ctx.db.delete("skills", row._id);
+        pruned += 1;
+      }
+    }
+    return { seeded, updated, skipped, pruned };
   },
 });
 
@@ -79,6 +123,7 @@ export const listCatalog = internalQuery({
     return skills.map((skill) => ({
       name: skill.name,
       description: skill.description,
+      triggerKeywords: readTriggerKeywords(skill.metadataJson),
       hasScripts: skill.hasScripts,
     }));
   },

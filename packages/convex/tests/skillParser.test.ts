@@ -6,25 +6,27 @@ import {
 import { BUILTIN_SKILL_DOCS } from "../convex/agent/skills/builtin";
 
 const VALID_SKILL = `---
-name: deep-research-medis
+name: research-medicine
 description: >
-  Metodologi deep research untuk topik kedokteran: hierarki bukti
-  (meta-analysis > RCT > kohort), penyaringan ala PRISMA.
+  Deep-research methodology for medicine: evidence hierarchy
+  (meta-analysis > RCT > cohort), PRISMA-style screening.
 license: Proprietary
-metadata: { author: aqsha, version: "1.0", scope: builtin }
+metadata: { author: aqsha, version: "1.0", scope: builtin, triggerKeywords: [kedokteran, rct] }
 allowed-tools: searchArxiv lookupDoi verifyCitations
 ---
-## Strategi sumber
-Prioritaskan systematic review/meta-analysis, lalu RCT.
+## Source strategy
+Prioritize systematic reviews/meta-analyses, then RCTs.
 `;
 
 describe("parseSkillMarkdown", () => {
   it("parses frontmatter + body, normalizes allowed-tools and metadata", () => {
     const skill = parseSkillMarkdown(VALID_SKILL);
     expect(skill).not.toBeNull();
-    expect(skill!.name).toBe("deep-research-medis");
-    expect(skill!.description).toContain("Metodologi deep research");
+    expect(skill!.name).toBe("research-medicine");
+    expect(skill!.description).toContain("Deep-research methodology");
     expect(skill!.license).toBe("Proprietary");
+    // triggerKeywords are parsed from metadata.triggerKeywords (routing hints).
+    expect(skill!.triggerKeywords).toEqual(["kedokteran", "rct"]);
     // allowed-tools is a space-separated string normalized to a narrower array.
     expect(skill!.allowedTools).toEqual([
       "searchArxiv",
@@ -38,7 +40,7 @@ describe("parseSkillMarkdown", () => {
       scope: "builtin",
     });
     // Body has the frontmatter stripped.
-    expect(skill!.body.startsWith("## Strategi sumber")).toBe(true);
+    expect(skill!.body.startsWith("## Source strategy")).toBe(true);
     expect(skill!.warnings).toEqual([]);
   });
 
@@ -68,7 +70,7 @@ describe("parseSkillMarkdown", () => {
 
 describe("builtin skills", () => {
   it("every bundled builtin parses cleanly (no warnings, valid name)", () => {
-    expect(BUILTIN_SKILL_DOCS.length).toBeGreaterThanOrEqual(8);
+    expect(BUILTIN_SKILL_DOCS.length).toBeGreaterThanOrEqual(10);
     const names = new Set<string>();
     for (const doc of BUILTIN_SKILL_DOCS) {
       const skill = parseSkillMarkdown(doc);

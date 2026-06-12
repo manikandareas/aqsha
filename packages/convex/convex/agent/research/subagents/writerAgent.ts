@@ -27,10 +27,13 @@ async function resolveWriterSkill(
   ctx: ActionCtx,
   args: { ownerUserId: string; threadId: string; runId: Id<"agentRuns">; prompt: string },
 ): Promise<string | undefined> {
-  const catalog: Array<{ name: string; description: string }> = await ctx.runQuery(
-    internal.agent.skills.skills.listCatalog,
-    { ownerUserId: args.ownerUserId },
-  );
+  const catalog: Array<{
+    name: string;
+    description: string;
+    triggerKeywords?: string[];
+  }> = await ctx.runQuery(internal.agent.skills.skills.listCatalog, {
+    ownerUserId: args.ownerUserId,
+  });
   const packName = selectDomainPack(args.prompt, catalog);
   if (!packName) return undefined;
   const skill = await ctx.runQuery(internal.agent.skills.skills.getActivatable, {

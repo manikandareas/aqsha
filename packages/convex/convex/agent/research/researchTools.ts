@@ -7,6 +7,7 @@ import {
   jinaSearchWeb,
   searchWebProvider,
   searchArxivProvider,
+  providerFailureReason,
 } from "../providers/externalProviders";
 import type { SourceCandidate } from "./sourceCandidates";
 import { type AgentToolCtx, requireToolUser, requireToolThread } from "../tools/toolContext";
@@ -126,14 +127,22 @@ export const NORMAL_CHAT_TOOL_NAMES = [
   "lookupDoi",
 ] as const;
 
-function numberCandidates(
+export function numberCandidates(
   candidates: Array<Omit<SourceCandidate, "citationNumber">>,
   counter: CitationCounter,
 ): SourceCandidate[] {
-  return candidates.slice(0, 5).map((candidate) => ({
-    ...candidate,
-    citationNumber: counter.next(),
-  }));
+  // AUD-09: drop synthetic "Provider unavailable" candidates before numbering so a
+  // provider failure (arXiv/DOI/web down) can never be handed to the model as a
+  // citable source — its error message would otherwise leak as a [n] citation.
+  // The model just sees fewer/no results, which is honest. (The deep loop already
+  // filters these; this matches that behavior on the tool path.)
+  return candidates
+    .filter((candidate) => providerFailureReason(candidate) === null)
+    .slice(0, 5)
+    .map((candidate) => ({
+      ...candidate,
+      citationNumber: counter.next(),
+    }));
 }
 
 function hasUsableResults(candidates: Array<Omit<SourceCandidate, "citationNumber">>) {

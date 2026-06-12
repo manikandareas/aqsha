@@ -51,7 +51,7 @@ export interface IntentGoldenRow {
 
 export interface SkillTriggerGoldenRow {
   prompt: string;
-  /** The builtin skill name (e.g. "stat-verification"). */
+  /** The builtin skill name (e.g. "verify-statistics"). */
   skill: string;
   /** Whether the skill SHOULD fire on this prompt. */
   relevant: boolean;

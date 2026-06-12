@@ -1,11 +1,11 @@
 // Pure routing for the approval-gated runComputation tool: maps a requested
 // taskKind to how it executes at the current Daytona tier. statcheck/GRIM/power
-// run inline from the pre-baked snapshot with no egress. Replication &
-// meta-analysis need git clone / data download (egress), which this account's
-// tier blocks; custom analysis needs an audited custom-script path. Both are
-// deferred (the long-job workflow in computationWorkflow.ts is the ready
-// activation point once the tier supports egress). Dependency-free → unit
-// testable.
+// AND meta-analysis run inline from the pre-baked snapshot with no egress —
+// meta-analysis pools effect sizes supplied IN the artifact (no download). Only
+// replication (git clone + dataset download = egress) and custom analysis (an
+// audited custom-script path) are tier-blocked; they stay deferred (the long-job
+// workflow in computationWorkflow.ts is the ready activation point once the tier
+// supports egress). Dependency-free → unit testable.
 
 export const COMPUTATION_TASK_KINDS = [
   "stat_verification",
@@ -21,7 +21,9 @@ export type ComputationExecution = "inline" | "tier_unavailable";
 export function routeComputationTaskKind(
   taskKind: ComputationTaskKind,
 ): ComputationExecution {
-  return taskKind === "stat_verification" ? "inline" : "tier_unavailable";
+  return taskKind === "stat_verification" || taskKind === "meta_analysis"
+    ? "inline"
+    : "tier_unavailable";
 }
 
 // A reported test statistic with degrees of freedom, e.g. t(38), F(2, 57),

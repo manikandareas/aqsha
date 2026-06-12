@@ -21,14 +21,7 @@ import {
   loadActiveSkillBodies,
   loadCatalogSkills,
 } from "../skills/skillRegistry";
-
-const PROMPT_CONTEXT_TOTAL_LIMIT = 16_000;
-const PROMPT_CONTEXT_ARTIFACT_LIMIT = 4_000;
-const PROMPT_CONTEXT_THREAD_DOCUMENT_LIMIT = 4;
-const THREAD_DOCUMENT_ARTIFACT_SCAN_LIMIT = 12;
-const MAX_SELECTED_CONTEXT_ARTIFACTS = 12;
-const WORKSPACE_MANIFEST_WORKSPACE_LIMIT = 5;
-const WORKSPACE_MANIFEST_ITEM_LIMIT = 40;
+import { CONTEXT_BUDGET, clipText } from "./contextBudget";
 
 type ThreadContextCtx = QueryCtx | MutationCtx;
 
@@ -133,7 +126,7 @@ async function listSelectedRows(ctx: ThreadContextCtx, args: {
       q.eq("ownerUserId", args.ownerUserId).eq("threadId", args.threadId),
     )
     .order("asc")
-    .take(MAX_SELECTED_CONTEXT_ARTIFACTS);
+    .take(CONTEXT_BUDGET.selectedArtifacts);
 }
 
 async function listThreadDocumentArtifacts(ctx: ThreadContextCtx, args: {
@@ -150,7 +143,7 @@ async function listThreadDocumentArtifacts(ctx: ThreadContextCtx, args: {
         .eq("status", "active"),
     )
     .order("desc")
-    .take(THREAD_DOCUMENT_ARTIFACT_SCAN_LIMIT);
+    .take(CONTEXT_BUDGET.threadDocumentScan);
 
   return artifacts.filter((artifact) => {
     const artifactType = artifactTypeForLegacyArtifact(artifact);
@@ -224,7 +217,7 @@ async function listContextArtifactTargets(
   }
   const remainingThreadUploadSlots = Math.max(
     0,
-    PROMPT_CONTEXT_THREAD_DOCUMENT_LIMIT,
+    CONTEXT_BUDGET.threadDocuments,
   );
   if (remainingThreadUploadSlots > 0) {
     let threadUploadCount = 0;
@@ -294,14 +287,6 @@ async function selectedRowToSummary(
         }
       : undefined,
   };
-}
-
-function clipText(value: string, limit: number) {
-  const compact = collapse(value);
-  if (compact.length <= limit) {
-    return compact;
-  }
-  return `${compact.slice(0, Math.max(0, limit - 3)).trimEnd()}...`;
 }
 
 function buildContextBlock(artifacts: PromptContextArtifact[]) {
@@ -378,9 +363,9 @@ async function getPromptContextArtifact(
     url?.contextText ??
     url?.readableText ??
     "";
-  const limit = Math.min(PROMPT_CONTEXT_ARTIFACT_LIMIT, remainingBudget);
-  const truncated = collapse(rawContent).length > limit;
-  const content = clipText(rawContent, limit);
+  const limit = Math.min(CONTEXT_BUDGET.perArtifactChars, remainingBudget);
+  // The clip report's `clipped` flag IS the truncation signal — no second collapse.
+  const clipped = clipText(rawContent, limit);
 
   return {
     artifactId: String(artifact._id),
@@ -394,8 +379,8 @@ async function getPromptContextArtifact(
           failureReason: url.failureReason,
         }
       : undefined,
-    content,
-    truncated,
+    content: clipped.text,
+    truncated: clipped.clipped,
   };
 }
 
@@ -461,7 +446,7 @@ export async function listActiveWorkspaceIdsForThread(
         q.eq("ownerUserId", args.ownerUserId).eq("threadId", args.threadId),
       )
       .order("asc")
-      .take(WORKSPACE_MANIFEST_WORKSPACE_LIMIT),
+      .take(CONTEXT_BUDGET.workspaceManifestWorkspaces),
   ]);
   const ids: Id<"workspaces">[] = [];
   const seen = new Set<string>();
@@ -475,7 +460,7 @@ export async function listActiveWorkspaceIdsForThread(
       ids.push(row.workspaceId);
     }
   }
-  return ids.slice(0, WORKSPACE_MANIFEST_WORKSPACE_LIMIT);
+  return ids.slice(0, CONTEXT_BUDGET.workspaceManifestWorkspaces);
 }
 
 /**
@@ -514,11 +499,11 @@ async function buildWorkspaceManifestForThread(
           .eq("status", "active"),
       )
       .order("desc")
-      .take(WORKSPACE_MANIFEST_ITEM_LIMIT);
+      .take(CONTEXT_BUDGET.workspaceManifestItems);
     lines.push(`[Workspace: ${workspace.name}]`);
     lines.push(`Workspace ID: ${workspace._id}`);
     lines.push(
-      `Items (${artifacts.length}${artifacts.length >= WORKSPACE_MANIFEST_ITEM_LIMIT ? "+" : ""}):`,
+      `Items (${artifacts.length}${artifacts.length >= CONTEXT_BUDGET.workspaceManifestItems ? "+" : ""}):`,
     );
     if (artifacts.length === 0) {
       lines.push("- (empty — no documents yet)");
@@ -563,7 +548,7 @@ export async function buildPromptContextForThread(
         ctx,
         args.ownerUserId,
         target,
-        PROMPT_CONTEXT_ARTIFACT_LIMIT,
+        CONTEXT_BUDGET.perArtifactChars,
       ),
     ),
   ]);
@@ -574,7 +559,7 @@ export async function buildPromptContextForThread(
   // avoid duplicating the same text in both the prompt block and the RAG block;
   // truncated artifacts stay RAG-eligible on purpose (the tail is still useful).
   const includedArtifactIds: Id<"artifacts">[] = [];
-  let remainingBudget = PROMPT_CONTEXT_TOTAL_LIMIT;
+  let remainingBudget = CONTEXT_BUDGET.promptTotalChars;
 
   for (const artifact of resolved) {
     if (!artifact || remainingBudget <= 0) {
@@ -583,7 +568,7 @@ export async function buildPromptContextForThread(
     // Fully included = not clipped by the per-artifact 4k limit (artifact.truncated)
     // AND not clipped by the running total budget here.
     const fullyIncluded = isArtifactFullyIncluded(artifact, remainingBudget);
-    const content = clipText(artifact.content, remainingBudget);
+    const content = clipText(artifact.content, remainingBudget).text;
     artifacts.push({ ...artifact, content });
     remainingBudget -= content.length;
     if (fullyIncluded && artifact.artifactId) {
@@ -712,7 +697,7 @@ async function insertContextArtifact(
     ownerUserId: args.ownerUserId,
     threadId: args.threadId,
   });
-  if (selectedRows.length >= MAX_SELECTED_CONTEXT_ARTIFACTS) {
+  if (selectedRows.length >= CONTEXT_BUDGET.selectedArtifacts) {
     throw new ConvexError("Too many selected context artifacts");
   }
 
@@ -920,7 +905,7 @@ export async function replaceContextArtifactsForThread(
   });
 
   const uniqueArtifactIds = [...new Set(args.artifactIds)];
-  if (uniqueArtifactIds.length > MAX_SELECTED_CONTEXT_ARTIFACTS) {
+  if (uniqueArtifactIds.length > CONTEXT_BUDGET.selectedArtifacts) {
     throw new ConvexError("Too many selected context artifacts");
   }
 
@@ -980,7 +965,7 @@ export const toggle = mutation({
       ownerUserId: user._id,
       threadId: args.threadId,
     });
-    if (selectedRows.length >= MAX_SELECTED_CONTEXT_ARTIFACTS) {
+    if (selectedRows.length >= CONTEXT_BUDGET.selectedArtifacts) {
       throw new ConvexError("Too many selected context artifacts");
     }
 

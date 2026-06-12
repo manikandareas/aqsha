@@ -57,6 +57,21 @@ import {
   POWER_R,
   POWER_SCRIPT_PATH,
 } from "./scripts/power";
+import {
+  META_COMMAND,
+  META_FOREST_READ_COMMAND,
+  META_FUNNEL_READ_COMMAND,
+  META_R,
+  META_SCRIPT_PATH,
+  META_STUDIES_PATH,
+} from "./scripts/metaanalysis";
+import {
+  describeHeterogeneity,
+  parseMetaStdout,
+  suggestsPublicationBias,
+  type MetaAnalysisResult,
+} from "./metaAnalysisClassify";
+import { extractMetaStudies } from "./metaClaimExtraction";
 
 const SANDBOX_PROVIDER = "daytona";
 const VERIFICATION_TIMEOUT_SECONDS = 90;
@@ -70,6 +85,13 @@ export interface VerificationCheckItem {
   detail: string;
 }
 
+// The gate/env outcomes shared by every sandbox compute task. Inlined into each
+// task's result union so callers can switch on `status` uniformly.
+export type SandboxGateBlock =
+  | { status: "not_configured" }
+  | { status: "rate_limited"; retryAfterMs: number }
+  | { status: "quota_blocked"; reason: string; requiredPlan: string };
+
 export type StatVerificationResult =
   | {
       status: "completed";
@@ -79,14 +101,33 @@ export type StatVerificationResult =
       byKind: Record<ComputationCheckKind, OutcomeSummary>;
       items: VerificationCheckItem[];
     }
-  | { status: "not_configured" }
-  | { status: "rate_limited"; retryAfterMs: number }
-  | { status: "quota_blocked"; reason: string; requiredPlan: string }
+  | SandboxGateBlock
   | {
       status: "failed";
       sandboxRunId: Id<"sandboxRuns"> | null;
       errorMessage: string;
     };
+
+export type MetaAnalysisRunResult =
+  | {
+      status: "completed";
+      sandboxRunId: Id<"sandboxRuns">;
+      summary: MetaAnalysisResult;
+      heterogeneity: "low" | "moderate" | "high" | null;
+      publicationBiasSignal: boolean;
+    }
+  | SandboxGateBlock
+  | {
+      status: "failed";
+      sandboxRunId: Id<"sandboxRuns"> | null;
+      errorMessage: string;
+    };
+
+// Discriminated by taskKind so the runComputation tool can shape a neutral message
+// per task without re-querying.
+export type SandboxComputeResult =
+  | ({ kind: "stat_verification" } & StatVerificationResult)
+  | ({ kind: "meta_analysis" } & MetaAnalysisRunResult);
 
 // One classified check, ready to persist plus a compact item for the response.
 interface ClassifiedCheck {
@@ -249,21 +290,30 @@ function isNotable(check: ClassifiedCheck, powerAdequate: Map<string, boolean | 
   return false;
 }
 
-export async function runStatVerificationFlow(
+// Shared env + gate prologue for every sandbox compute task. Resolves the
+// snapshot/apiKey, and (unless serviceMode) runs the fan-out rate gate then the
+// flat sandbox_compute credit gate, consuming the rate token only after the credit
+// succeeds. Returns the resolved env + creditsCharged on success, or the block to
+// return verbatim. Behaviour-preserving extraction of the former stat prologue.
+type SandboxGate =
+  | { ok: true; snapshot: string; apiKey: string; creditsCharged: number }
+  | { ok: false; block: SandboxGateBlock };
+
+async function gateSandboxCompute(
   ctx: ActionCtx,
   args: {
     ownerUserId: string;
     threadId?: string;
     runId?: Id<"agentRuns">;
     artifactId: Id<"artifacts">;
-    text: string;
+    taskKind: "stat_verification" | "meta_analysis";
     serviceMode?: boolean;
   },
-): Promise<StatVerificationResult> {
+): Promise<SandboxGate> {
   const snapshot = process.env.DAYTONA_STATVERIFY_SNAPSHOT;
   const apiKey = process.env.DAYTONA_API_KEY;
   if (!snapshot || !apiKey) {
-    return { status: "not_configured" };
+    return { ok: false, block: { status: "not_configured" } };
   }
 
   // Service mode (the deep-research auto stat pass) skips the per-user
@@ -277,7 +327,7 @@ export async function runStatVerificationFlow(
       key: args.ownerUserId,
     });
     if (!rate.ok) {
-      return { status: "rate_limited", retryAfterMs: rate.retryAfter };
+      return { ok: false, block: { status: "rate_limited", retryAfterMs: rate.retryAfter } };
     }
 
     // Monthly credit gate. sandbox_compute is a flat per-run charge (see catalog).
@@ -290,16 +340,19 @@ export async function runStatVerificationFlow(
         threadId: args.threadId,
         runId: args.runId,
         metadataJson: JSON.stringify({
-          taskKind: "stat_verification",
+          taskKind: args.taskKind,
           artifactId: args.artifactId,
         }),
       },
     );
     if (!billing.ok) {
       return {
-        status: "quota_blocked",
-        reason: billing.reason,
-        requiredPlan: billing.requiredPlan,
+        ok: false,
+        block: {
+          status: "quota_blocked",
+          reason: billing.reason,
+          requiredPlan: billing.requiredPlan,
+        },
       };
     }
     // Consume the fan-out token only after the credit succeeds.
@@ -311,6 +364,30 @@ export async function runStatVerificationFlow(
   const creditsCharged = args.serviceMode
     ? 0
     : estimateCredits({ feature: "sandbox_compute" });
+  return { ok: true, snapshot, apiKey, creditsCharged };
+}
+
+export async function runStatVerificationFlow(
+  ctx: ActionCtx,
+  args: {
+    ownerUserId: string;
+    threadId?: string;
+    runId?: Id<"agentRuns">;
+    artifactId: Id<"artifacts">;
+    text: string;
+    serviceMode?: boolean;
+  },
+): Promise<StatVerificationResult> {
+  const gate = await gateSandboxCompute(ctx, {
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+    runId: args.runId,
+    artifactId: args.artifactId,
+    taskKind: "stat_verification",
+    serviceMode: args.serviceMode,
+  });
+  if (!gate.ok) return gate.block;
+  const { snapshot, apiKey, creditsCharged } = gate;
   const startedAt = Date.now();
   const sandboxRunId: Id<"sandboxRuns"> = await ctx.runMutation(
     internal.agent.sandbox.records.startSandboxRun,
@@ -476,5 +553,190 @@ export const runStatVerification = internalAction({
   },
   handler: async (ctx, args): Promise<StatVerificationResult> => {
     return await runStatVerificationFlow(ctx, args);
+  },
+});
+
+// Decode a base64 plot read back from the sandbox and store it as a PNG blob,
+// returning the storageId (or null when the plot was not produced).
+async function storePlot(
+  ctx: ActionCtx,
+  base64: string | undefined,
+): Promise<Id<"_storage"> | null> {
+  const trimmed = (base64 ?? "").trim();
+  if (!trimmed) return null;
+  try {
+    const bytes = Buffer.from(trimmed, "base64");
+    if (bytes.length === 0) return null;
+    const blob = new Blob([bytes], { type: "image/png" });
+    return await ctx.storage.store(blob);
+  } catch {
+    return null;
+  }
+}
+
+export async function runMetaAnalysisFlow(
+  ctx: ActionCtx,
+  args: {
+    ownerUserId: string;
+    threadId?: string;
+    runId?: Id<"agentRuns">;
+    artifactId: Id<"artifacts">;
+    text: string;
+    serviceMode?: boolean;
+  },
+): Promise<MetaAnalysisRunResult> {
+  const gate = await gateSandboxCompute(ctx, {
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+    runId: args.runId,
+    artifactId: args.artifactId,
+    taskKind: "meta_analysis",
+    serviceMode: args.serviceMode,
+  });
+  if (!gate.ok) return gate.block;
+  const { snapshot, apiKey, creditsCharged } = gate;
+  const startedAt = Date.now();
+
+  // Extract study-level effect sizes from the artifact (best-effort, no egress).
+  const studies = await extractMetaStudies(args.text);
+  const studiesJson = JSON.stringify(studies);
+
+  const sandboxRunId: Id<"sandboxRuns"> = await ctx.runMutation(
+    internal.agent.sandbox.records.startSandboxRun,
+    {
+      ownerUserId: args.ownerUserId,
+      threadId: args.threadId,
+      runId: args.runId,
+      taskKind: "meta_analysis",
+      snapshotVersion: snapshot,
+      command: META_COMMAND,
+      inputFileHashes: [sha256Hex(studiesJson)],
+      creditsCharged,
+    },
+  );
+
+  try {
+    // Fewer than two pooled studies → nothing to meta-analyze; record an honest
+    // summary without provisioning a sandbox.
+    if (studies.length < 2) {
+      const summary: MetaAnalysisResult = {
+        status: "insufficient_studies",
+        k: studies.length,
+      };
+      await ctx.runMutation(internal.agent.sandbox.records.completeSandboxRun, {
+        ownerUserId: args.ownerUserId,
+        sandboxRunId,
+        status: "completed",
+        metaAnalysisJson: JSON.stringify(summary),
+        durationMs: Date.now() - startedAt,
+      });
+      return {
+        status: "completed",
+        sandboxRunId,
+        summary,
+        heterogeneity: null,
+        publicationBiasSignal: false,
+      };
+    }
+
+    const results = await runSandboxSession({
+      apiKey,
+      snapshot,
+      files: [
+        { path: META_SCRIPT_PATH, content: META_R },
+        { path: META_STUDIES_PATH, content: studiesJson },
+      ],
+      commands: [
+        { key: "meta", command: META_COMMAND, cwd: "/workspace" },
+        { key: "forest", command: META_FOREST_READ_COMMAND, cwd: "/workspace" },
+        { key: "funnel", command: META_FUNNEL_READ_COMMAND, cwd: "/workspace" },
+      ],
+      timeoutSeconds: VERIFICATION_TIMEOUT_SECONDS,
+    });
+
+    const metaResult = resultByKey(results, "meta");
+    const summary = parseMetaStdout(metaResult?.stdout ?? "");
+    if (!summary) {
+      throw new Error("meta-analysis produced no parseable output");
+    }
+
+    // Read back the plots (empty base64 when not produced) and store as blobs.
+    const [forestStorageId, funnelStorageId] = await Promise.all([
+      storePlot(ctx, resultByKey(results, "forest")?.stdout),
+      storePlot(ctx, resultByKey(results, "funnel")?.stdout),
+    ]);
+
+    const timedOut = Boolean(metaResult?.timedOut);
+    const persisted = { ...summary, forestStorageId, funnelStorageId };
+    await ctx.runMutation(internal.agent.sandbox.records.completeSandboxRun, {
+      ownerUserId: args.ownerUserId,
+      sandboxRunId,
+      status: timedOut ? "timeout" : "completed",
+      exitCode: metaResult?.exitCode,
+      stdoutClipped: clip(metaResult?.stdout ?? "", STDOUT_CLIP_CHARS),
+      metaAnalysisJson: JSON.stringify(persisted),
+      durationMs: Date.now() - startedAt,
+    });
+
+    const heterogeneity =
+      summary.status === "ok" ? describeHeterogeneity(summary.i2) : null;
+    const publicationBiasSignal =
+      summary.status === "ok" ? suggestsPublicationBias(summary) : false;
+
+    if (args.runId && args.threadId) {
+      const headline =
+        summary.status === "ok"
+          ? `k=${summary.k}, estimasi gabungan ${summary.pooledEstimate.toFixed(3)} (I²=${summary.i2.toFixed(0)}%)`
+          : `tidak dapat menggabungkan (${summary.status}, k=${summary.k})`;
+      await ctx.runMutation(internal.agent.sandbox.records.recordComputeEvent, {
+        ownerUserId: args.ownerUserId,
+        runId: args.runId,
+        threadId: args.threadId,
+        title: "Meta-analisis",
+        summary: headline,
+        metadataJson: JSON.stringify({ sandboxRunId, status: summary.status }),
+      });
+    }
+
+    return {
+      status: "completed",
+      sandboxRunId,
+      summary,
+      heterogeneity,
+      publicationBiasSignal,
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    await ctx.runMutation(internal.agent.sandbox.records.completeSandboxRun, {
+      ownerUserId: args.ownerUserId,
+      sandboxRunId,
+      status: "failed",
+      errorMessage: clip(errorMessage, ERROR_CLIP_CHARS),
+      durationMs: Date.now() - startedAt,
+    });
+    return { status: "failed", sandboxRunId, errorMessage };
+  }
+}
+
+// Single dispatcher the approval-gated runComputation tool calls: routes by
+// taskKind to the matching flow and tags the result so the tool can shape a
+// neutral, task-specific message. stat_verification keeps its own direct action
+// (runStatVerification) for the auto verifyStatistics path.
+export const runComputation = internalAction({
+  args: {
+    ownerUserId: v.string(),
+    threadId: v.optional(v.string()),
+    runId: v.optional(v.id("agentRuns")),
+    artifactId: v.id("artifacts"),
+    text: v.string(),
+    taskKind: v.union(v.literal("stat_verification"), v.literal("meta_analysis")),
+  },
+  handler: async (ctx, args): Promise<SandboxComputeResult> => {
+    if (args.taskKind === "meta_analysis") {
+      const result = await runMetaAnalysisFlow(ctx, args);
+      return { kind: "meta_analysis", ...result };
+    }
+    const result = await runStatVerificationFlow(ctx, args);
+    return { kind: "stat_verification", ...result };
   },
 });

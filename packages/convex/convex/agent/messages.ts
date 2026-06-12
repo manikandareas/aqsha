@@ -48,6 +48,7 @@ import {
 } from "./research/researchTools";
 import { isDeepResearchStartedResult } from "./research/deepResearchContract";
 import { buildHitlTools, buildDeepResearchTools } from "./hitl/hitlTools";
+import { buildExecuteArtifactGate } from "./hitl/executeArtifactGate";
 import { routeCompute } from "./sandbox/computeRouter";
 import { buildSandboxTools, SANDBOX_TOOL_NAMES } from "./sandbox/sandboxTools";
 import { buildCitationTools, CITATION_TOOL_NAMES } from "./research/citationTools";
@@ -1099,6 +1100,16 @@ async function runInlineGeneration(
       }
     }
     const agent = agentForKind(args.agentKind);
+    // AUD-01: on an inline HITL resume the whole toolset is open (activeTools
+    // undefined) so an approved proposeArtifact can be followed by executeArtifact.
+    // This per-step gate keeps executeArtifact inert until an approved proposeArtifact
+    // is actually in the conversation, so an unrelated resume (askUser / runComputation)
+    // can never reach the artifact write. Initial turns already withhold it via the
+    // allow-list, so the gate is only attached here.
+    const executeArtifactGate =
+      !args.deep && args.includeExecuteArtifact
+        ? buildExecuteArtifactGate(Object.keys(tools))
+        : undefined;
     const result = await agent.streamText(
       ctx,
       { threadId: args.threadId, userId: args.userId },
@@ -1107,6 +1118,7 @@ async function runInlineGeneration(
         tools,
         ...(prompt ? { prompt } : {}),
         ...(activeTools ? { activeTools } : {}),
+        ...(executeArtifactGate ? { prepareStep: executeArtifactGate } : {}),
       },
       {
         saveStreamDeltas: { chunking: "word", throttleMs: 100 },

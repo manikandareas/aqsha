@@ -15,7 +15,10 @@ import {
   routeComputationTaskKind,
   type ComputationTaskKind,
 } from "./computationRouting";
-import type { StatVerificationResult } from "./sandboxRunner";
+import type {
+  MetaAnalysisRunResult,
+  StatVerificationResult,
+} from "./sandboxRunner";
 
 // Tool names exposed by the sandbox compute path. Used by messages.ts to add
 // the tools to `activeTools` when the compute router exposes them (mirrors
@@ -130,6 +133,88 @@ async function runVerificationForArtifact(
   };
 }
 
+// Neutral, task-specific message for a meta-analysis run. Heterogeneity is
+// described, never treated as an error; publication-bias diagnostics are framed
+// as cautionary signals, not proof.
+function neutralMetaMessage(result: MetaAnalysisRunResult): string {
+  switch (result.status) {
+    case "not_configured":
+      return "Mesin komputasi belum aktif di lingkungan ini, jadi meta-analisis tidak dapat dijalankan saat ini.";
+    case "rate_limited":
+      return "Terlalu banyak permintaan komputasi dalam waktu singkat. Coba lagi sebentar lagi.";
+    case "quota_blocked":
+      return result.reason === "subscription_required"
+        ? "Meta-analisis tersedia di paket berbayar (Astra Pro). Tingkatkan paket untuk menggunakannya."
+        : "Kuota kredit untuk komputasi sudah habis untuk periode ini.";
+    case "failed":
+      return "Meta-analisis gagal dijalankan. Tidak ada hasil yang dapat dilaporkan untuk percobaan ini.";
+    case "completed": {
+      const s = result.summary;
+      if (s.status !== "ok") {
+        return s.status === "insufficient_studies" || s.status === "no_studies"
+          ? `Tidak cukup studi dengan data efek yang dapat digabungkan (k=${s.k}). Meta-analisis membutuhkan minimal dua studi dengan effect size + varians, atau mean/SD/N per kelompok.`
+          : "Model meta-analisis tidak dapat diestimasi dari data yang tersedia.";
+      }
+      const parts = [
+        `Meta-analisis ${s.k} studi (${s.measure}).`,
+        `Estimasi gabungan ${s.pooledEstimate.toFixed(3)} (95% CI ${s.ciLower.toFixed(3)}–${s.ciUpper.toFixed(3)}, p=${s.pValue.toFixed(3)}).`,
+        `Heterogenitas ${result.heterogeneity} (I²=${s.i2.toFixed(0)}%, Q p=${s.qPValue.toFixed(3)}).`,
+      ];
+      if (s.eggerPValue != null) {
+        parts.push(`Uji Egger p=${s.eggerPValue.toFixed(3)}.`);
+      }
+      if (result.publicationBiasSignal) {
+        parts.push(
+          "Ada sinyal kemungkinan bias publikasi — perlu ditafsirkan hati-hati, bukan bukti pasti.",
+        );
+      }
+      return parts.join(" ");
+    }
+  }
+}
+
+// Resolve full text for an artifact and run the approved meta-analysis via the
+// dispatcher, shaping a neutral response. Mirrors runVerificationForArtifact.
+async function runMetaAnalysisForArtifact(
+  ctx: AgentToolCtx,
+  args: { runId?: Id<"agentRuns">; artifactIdInput: string },
+) {
+  const ownerUserId = requireToolUser(ctx);
+  const threadId = requireToolThread(ctx);
+  if (!isLikelyConvexId(args.artifactIdInput)) {
+    return {
+      status: "no_paper" as const,
+      message:
+        "Tidak ada dokumen yang valid untuk dianalisis. Minta pengguna memilih atau melampirkan paper terlebih dahulu.",
+    };
+  }
+  const artifactId = args.artifactIdInput as Id<"artifacts">;
+  const text = await resolveArtifactPlainText(ctx, ownerUserId, artifactId);
+  if (!text.trim()) {
+    return {
+      status: "no_text" as const,
+      message:
+        "Teks dokumen belum dapat dibaca (mungkin masih diindeks atau tidak berisi teks). Meta-analisis tidak dapat dijalankan.",
+    };
+  }
+
+  const dispatched = await ctx.runAction(
+    internal.agent.sandbox.sandboxRunner.runComputation,
+    { ownerUserId, threadId, runId: args.runId, artifactId, text, taskKind: "meta_analysis" },
+  );
+  const result: MetaAnalysisRunResult = dispatched as MetaAnalysisRunResult;
+
+  return {
+    status: result.status,
+    sandboxRunId:
+      result.status === "completed" || result.status === "failed"
+        ? result.sandboxRunId
+        : undefined,
+    summary: result.status === "completed" ? result.summary : undefined,
+    message: neutralMetaMessage(result),
+  };
+}
+
 export function buildSandboxTools(args: { runId?: Id<"agentRuns"> }): ToolSet {
   return {
     verifyStatistics: createTool({
@@ -151,7 +236,7 @@ export function buildSandboxTools(args: { runId?: Id<"agentRuns"> }): ToolSet {
 
     runComputation: createTool({
       description:
-        "Run an approval-gated statistical computation over a workspace document. The user must approve before it runs — populate title, summary, and planBullets as an informed-consent card stating the document, what will run, and that it costs sandbox credits. taskKind 'stat_verification' recomputes statistics (statcheck/GRIM/power); 'replication', 'meta_analysis', and 'custom_analysis' are not yet available at this tier. Report results in neutral language.",
+        "Run an approval-gated statistical computation over a workspace document. The user must approve before it runs — populate title, summary, and planBullets as an informed-consent card stating the document, what will run, and that it costs sandbox credits. taskKind 'stat_verification' recomputes statistics (statcheck/GRIM/power); 'meta_analysis' pools per-study effect sizes reported in the document into a random-effects estimate with heterogeneity (I²/Q) and publication-bias diagnostics (Egger, trim-and-fill) plus forest/funnel plots; 'replication' and 'custom_analysis' are not yet available at this tier (they need sandbox network access). Report results in neutral language.",
       inputSchema: z.object({
         artifactId: z
           .string()
@@ -180,8 +265,14 @@ export function buildSandboxTools(args: { runId?: Id<"agentRuns"> }): ToolSet {
           return {
             status: "tier_unavailable" as const,
             message:
-              "Komputasi ini (replikasi/meta-analisis/analisis kustom) belum tersedia pada tier saat ini karena memerlukan akses jaringan sandbox. Verifikasi statistik (stat_verification) tetap bisa dijalankan.",
+              "Komputasi ini (replikasi/analisis kustom) belum tersedia pada tier saat ini karena memerlukan akses jaringan sandbox. Verifikasi statistik (stat_verification) dan meta-analisis (meta_analysis) tetap bisa dijalankan.",
           };
+        }
+        if (input.taskKind === "meta_analysis") {
+          return runMetaAnalysisForArtifact(ctx, {
+            runId: args.runId,
+            artifactIdInput: input.artifactId,
+          });
         }
         return runVerificationForArtifact(ctx, {
           runId: args.runId,

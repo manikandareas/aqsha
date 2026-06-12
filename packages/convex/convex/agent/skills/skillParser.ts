@@ -15,10 +15,29 @@ export type ParsedSkill = {
   // NARROWER (subset of router-allowed tools), never a widener. Normalized to
   // an array here; enforcement lives in code (guards), not in skill text.
   allowedTools?: string[];
+  // Routing hints for the deterministic domain-pack scorer (selectDomainPack) and
+  // the skill-trigger eval surrogate. The catalog description can read English
+  // while these keywords carry the Indonesian + English domain nouns, so
+  // autonomous activation keeps firing on Indonesian product prompts. Sourced from
+  // frontmatter `metadata.triggerKeywords` (array | space/comma string) or a
+  // top-level `trigger-keywords` string.
+  triggerKeywords?: string[];
   metadataJson?: string;
   body: string;
   warnings: string[];
 };
+
+// Normalize a frontmatter keyword field (string[] | space/comma-delimited string)
+// into a deduped, trimmed string array. Returns undefined when nothing usable.
+function normalizeKeywords(raw: unknown): string[] | undefined {
+  const parts = Array.isArray(raw)
+    ? raw.filter((k): k is string => typeof k === "string")
+    : typeof raw === "string"
+      ? raw.split(/[\s,]+/)
+      : [];
+  const cleaned = [...new Set(parts.map((k) => k.trim()).filter(Boolean))];
+  return cleaned.length > 0 ? cleaned : undefined;
+}
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
 const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -82,10 +101,14 @@ export function parseSkillMarkdown(raw: string): ParsedSkill | null {
         : undefined;
 
   const metadata = frontmatter.metadata;
-  const metadataJson =
+  const metadataObj =
     metadata && typeof metadata === "object"
-      ? JSON.stringify(metadata)
+      ? (metadata as Record<string, unknown>)
       : undefined;
+  const triggerKeywords =
+    normalizeKeywords(metadataObj?.triggerKeywords) ??
+    normalizeKeywords(frontmatter["trigger-keywords"]);
+  const metadataJson = metadataObj ? JSON.stringify(metadataObj) : undefined;
 
   return {
     name,
@@ -93,6 +116,7 @@ export function parseSkillMarkdown(raw: string): ParsedSkill | null {
     license,
     compatibility,
     allowedTools,
+    triggerKeywords,
     metadataJson,
     body: bodyRaw.trim(),
     warnings,

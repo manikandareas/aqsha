@@ -37,7 +37,7 @@ export const citationAgent = internalAction({
     // its activation (provenance) without polluting sibling subagent contexts.
     const skill = await ctx.runQuery(internal.agent.skills.skills.getActivatable, {
       ownerUserId: args.ownerUserId,
-      name: "citation-verification",
+      name: "verify-citations",
     });
     if (skill) {
       await ctx.runMutation(internal.agent.skills.skills.recordActivation, {

@@ -281,7 +281,11 @@ export default defineSchema(
       createdAt: v.number(),
     })
       .index("by_owner_created", ["ownerUserId", "createdAt"])
-      .index("by_owner_feature_created", ["ownerUserId", "feature", "createdAt"]),
+      .index("by_owner_feature_created", ["ownerUserId", "feature", "createdAt"])
+      // AUD-12: per-run reconciliation — aggregate the ACTUAL cost (tokens +
+      // provider calls + sandbox) attributed to one run vs the flat credits charged
+      // up front, so flat rates can be calibrated from real data.
+      .index("by_owner_run", ["ownerUserId", "runId"]),
     // Denormalized per-(owner, UTC day) usage rollup. Maintained atomically in
     // the same transaction as each `providerUsageLedger` insert (see
     // `bumpUsageDailyRollup`) so the usage `activity` query reads a bounded set
@@ -827,6 +831,11 @@ export default defineSchema(
       stdoutClipped: v.optional(v.string()),
       errorMessage: v.optional(v.string()),
       outputArtifactIds: v.optional(v.array(v.id("artifacts"))),
+      // Meta-analysis summary envelope (pooled estimate, CI, I²/Q heterogeneity,
+      // Egger/trim-and-fill, k, and the forest/funnel plot storageIds). Self-
+      // contained for meta_analysis runs — NOT routed through computationChecks,
+      // whose consistent/discrepant taxonomy does not apply to a pooled summary.
+      metaAnalysisJson: v.optional(v.string()),
       durationMs: v.optional(v.number()),
       creditsCharged: v.optional(v.number()),
       createdAt: v.number(),

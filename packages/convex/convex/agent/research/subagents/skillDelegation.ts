@@ -9,17 +9,29 @@ import { skillTriggerScore } from "../../evals/skillTriggerSurrogate";
 
 // Domain methodology packs the writer chooses between, with a general fallback.
 export const DEEP_RESEARCH_DOMAIN_PACKS = [
-  "deep-research-medis",
-  "deep-research-cs-ml",
-  "deep-research-pendidikan",
+  "research-medicine",
+  "research-cs-ml",
+  "research-education",
 ] as const;
-export const DEEP_RESEARCH_FALLBACK_PACK = "deep-research-guide";
+export const DEEP_RESEARCH_FALLBACK_PACK = "research-general";
 
 // Minimum description-overlap score to prefer a specialized pack over the general
 // guide. Below this, the prompt is not clearly on-domain → use the fallback.
 const DOMAIN_PACK_THRESHOLD = 0.12;
 
-export type SkillCatalogEntry = { name: string; description: string };
+export type SkillCatalogEntry = {
+  name: string;
+  description: string;
+  triggerKeywords?: string[];
+};
+
+// The text the deterministic scorer matches a prompt against: the (possibly
+// English) catalog description PLUS the routing-hint keywords (which carry the
+// Indonesian + English domain nouns). This keeps autonomous routing firing on
+// Indonesian product prompts even when the description reads English.
+export function scoringText(entry: SkillCatalogEntry): string {
+  return [entry.description, ...(entry.triggerKeywords ?? [])].join(" ");
+}
 
 // Pick the domain methodology pack whose description best matches the prompt,
 // falling back to the general deep-research guide when nothing is clearly
@@ -34,7 +46,7 @@ export function selectDomainPack(
   for (const name of DEEP_RESEARCH_DOMAIN_PACKS) {
     const entry = byName.get(name);
     if (!entry) continue;
-    const score = skillTriggerScore(prompt, entry.description);
+    const score = skillTriggerScore(prompt, scoringText(entry));
     if (!best || score > best.score) {
       best = { name, score };
     }

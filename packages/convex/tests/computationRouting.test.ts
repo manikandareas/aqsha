@@ -13,13 +13,13 @@ import {
 // Slice 1.4: the approval-gated runComputation routing + its HITL wiring.
 
 describe("routeComputationTaskKind", () => {
-  it("runs stat_verification inline", () => {
+  it("runs stat_verification and meta_analysis inline (no egress needed)", () => {
     expect(routeComputationTaskKind("stat_verification")).toBe("inline");
+    expect(routeComputationTaskKind("meta_analysis")).toBe("inline");
   });
 
   it("marks egress/long-running task kinds as tier_unavailable", () => {
     expect(routeComputationTaskKind("replication")).toBe("tier_unavailable");
-    expect(routeComputationTaskKind("meta_analysis")).toBe("tier_unavailable");
     expect(routeComputationTaskKind("custom_analysis")).toBe("tier_unavailable");
   });
 

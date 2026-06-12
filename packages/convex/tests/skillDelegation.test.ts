@@ -5,30 +5,44 @@ import {
 } from "../convex/agent/research/subagents/skillDelegation";
 
 // Slice R4: the writer resolves only its own domain methodology pack. The selector
-// picks the best-matching deep-research-* pack by description overlap and falls back
-// to the general guide when nothing is clearly on-domain.
+// picks the best-matching research-* pack by description+triggerKeywords overlap and
+// falls back to the general guide when nothing is clearly on-domain. Descriptions are
+// English; the Indonesian routing terms ride in triggerKeywords (mirrors production).
 
 const catalog = [
   {
-    name: "deep-research-medis",
+    name: "research-medicine",
     description:
-      "Metodologi deep research bidang kedokteran/kesehatan: skrining PRISMA, hierarki bukti meta-analisis RCT kohort, retraction dan jurnal predator. Untuk pertanyaan riset klinis biomedis.",
+      "Deep-research methodology for medicine and health: PRISMA screening, evidence hierarchy, retraction and predatory-journal flagging.",
+    triggerKeywords: [
+      "kedokteran", "klinis", "biomedis", "prisma", "hierarki", "bukti",
+      "rct", "kohort", "meta-analisis", "retraction", "jurnal", "predator",
+    ],
   },
   {
-    name: "deep-research-cs-ml",
+    name: "research-cs-ml",
     description:
-      "Metodologi deep research bidang computer science machine learning: benchmark dan SOTA, ablation reproducibility, preprint, leaderboard. Untuk pertanyaan riset CS ML.",
+      "Deep-research methodology for computer science / machine learning: benchmark and SOTA discipline, ablation and reproducibility, preprint weighting, leaderboard caution.",
+    triggerKeywords: [
+      "benchmark", "sota", "ablation", "reproducibility", "preprint",
+      "leaderboard", "machine", "learning", "computer", "model",
+    ],
   },
   {
-    name: "deep-research-pendidikan",
+    name: "research-education",
     description:
-      "Metodologi deep research bidang pendidikan: hierarki desain studi, effect size dan ukuran sampel, batas transfer konteks pembelajaran. Untuk pertanyaan riset pendidikan.",
+      "Deep-research methodology for education: study-design hierarchy, effect-size and sample-size caution, context-transfer limits.",
+    triggerKeywords: [
+      "pendidikan", "pembelajaran", "desain", "studi", "effect", "size",
+      "ukuran", "sampel", "transfer", "konteks", "kurikulum",
+    ],
   },
   {
-    name: "deep-research-guide",
-    description: "Metodologi umum deep research berbasis sumber lintas bidang.",
+    name: "research-general",
+    description: "General source-based deep-research methodology across domains.",
+    triggerKeywords: ["deep", "research", "riset", "metodologi", "sintesis", "sumber"],
   },
-  { name: "citation-apa7", description: "Konvensi sitasi APA 7." },
+  { name: "cite-apa7", description: "APA 7th citation conventions." },
 ];
 
 describe("selectDomainPack", () => {
@@ -37,7 +51,7 @@ describe("selectDomainPack", () => {
       "Apakah RCT meta-analisis mendukung efikasi intervensi klinis untuk pasien kohort?",
       catalog,
     );
-    expect(pack).toBe("deep-research-medis");
+    expect(pack).toBe("research-medicine");
   });
 
   it("picks the CS/ML pack for a benchmark/ablation prompt", () => {
@@ -45,7 +59,7 @@ describe("selectDomainPack", () => {
       "Bandingkan benchmark SOTA dan ablation reproducibility model machine learning di leaderboard",
       catalog,
     );
-    expect(pack).toBe("deep-research-cs-ml");
+    expect(pack).toBe("research-cs-ml");
   });
 
   it("falls back to the general guide for an off-domain prompt", () => {
@@ -54,6 +68,6 @@ describe("selectDomainPack", () => {
   });
 
   it("returns null when neither a matched pack nor the fallback is present", () => {
-    expect(selectDomainPack("apa pun", [{ name: "citation-apa7", description: "x" }])).toBeNull();
+    expect(selectDomainPack("apa pun", [{ name: "cite-apa7", description: "x" }])).toBeNull();
   });
 });

@@ -47,9 +47,10 @@ const artifactTypeEnum = agentWritableArtifactTypeEnum;
  *    display-only) is approved first, then the model calls `executeArtifact`
  *    with the final content. `executeArtifact` itself is NOT approval-gated: it
  *    is withheld from the initial turn via the `activeTools` allow-list in
- *    agent/messages.ts (runInlineGeneration), so the model can only reach it on
- *    the post-approval resume. A hard per-step gate via the AI SDK `prepareStep`
- *    option is a planned follow-up; today the activeTools allow-list is the gate.
+ *    agent/messages.ts (runInlineGeneration). On the post-approval resume the whole
+ *    toolset is open, so a per-step `prepareStep` hard gate (AUD-01,
+ *    agent/hitl/executeArtifactGate.ts) keeps executeArtifact inert until an
+ *    approved proposeArtifact is actually present in the conversation.
  */
 export function buildHitlTools(args: { promptMessageId: string }): ToolSet {
   return {

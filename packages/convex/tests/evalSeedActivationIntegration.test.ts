@@ -22,7 +22,7 @@ describe("skills seed -> catalog -> activate -> dedup", () => {
     expect(first.updated).toBe(0);
 
     const second = await t.mutation(internal.agent.skills.skills.seedBuiltinSkills, {});
-    expect(second).toEqual({ seeded: 0, updated: 0, skipped: BUILTIN_SKILL_DOCS.length });
+    expect(second).toEqual({ seeded: 0, updated: 0, skipped: BUILTIN_SKILL_DOCS.length, pruned: 0 });
   });
 
   it("lists the seeded builtins in the tier-1 catalog", async () => {
@@ -33,9 +33,9 @@ describe("skills seed -> catalog -> activate -> dedup", () => {
     });
     expect(catalog.length).toBe(BUILTIN_SKILL_DOCS.length);
     const names = catalog.map((c) => c.name);
-    expect(names).toContain("stat-verification");
-    expect(names).toContain("citation-verification");
-    expect(names).toContain("deep-research-guide");
+    expect(names).toContain("verify-statistics");
+    expect(names).toContain("verify-citations");
+    expect(names).toContain("research-general");
   });
 
   it("activates a skill once per thread and dedups the repeat", async () => {
@@ -43,7 +43,7 @@ describe("skills seed -> catalog -> activate -> dedup", () => {
     await t.mutation(internal.agent.skills.skills.seedBuiltinSkills, {});
     const skill = await t.query(internal.agent.skills.skills.getActivatable, {
       ownerUserId: OWNER,
-      name: "stat-verification",
+      name: "verify-statistics",
     });
     expect(skill).not.toBeNull();
     const threadId = "thread-eval-1";

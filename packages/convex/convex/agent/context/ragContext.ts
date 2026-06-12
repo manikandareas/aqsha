@@ -5,9 +5,8 @@ import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import { internalAction, type ActionCtx } from "../../_generated/server";
 import { embeddingProviderConfig } from "../providers/providers";
+import { CONTEXT_BUDGET, clipText } from "./contextBudget";
 import { artifactRag, artifactRagNamespace } from "./rag";
-
-const RAG_CONTEXT_LIMIT = 6_000;
 
 async function retrieveThreadDocumentContext(
   ctx: ActionCtx,
@@ -74,7 +73,7 @@ async function retrieveThreadDocumentContext(
       chunkContext: { before: 1, after: 1 },
       vectorScoreThreshold: 0.35,
     });
-    const text = clipText(search.text, RAG_CONTEXT_LIMIT);
+    const text = clipText(search.text, CONTEXT_BUDGET.ragTotalChars).text;
     if (!text) {
       return "";
     }
@@ -114,11 +113,3 @@ export const searchThreadDocuments = internalAction({
     return await retrieveThreadDocumentContext(ctx, args);
   },
 });
-
-function clipText(value: string, limit: number) {
-  const compact = value.replace(/\s+/g, " ").trim();
-  if (compact.length <= limit) {
-    return compact;
-  }
-  return `${compact.slice(0, Math.max(0, limit - 3)).trimEnd()}...`;
-}

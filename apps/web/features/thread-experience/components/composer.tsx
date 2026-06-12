@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { readableConvexErrorMessage } from "@/lib/convex-error";
 import { MAX_UPLOAD_BYTES } from "@aqsha/convex/artifact-upload-limits";
 import {
   isAllowedWorkspaceUploadFile,
@@ -282,6 +283,10 @@ function ComposerContent(props: ComposerProps) {
     setIsSending(true);
     const submittedCommands = inlineCommands;
     const draftRefs = pinnedContextRefs;
+    // Snapshot the editor draft so an unexpected/network failure can restore the
+    // user's text, rich body, commands, and pills instead of losing them (AUD-18).
+    const draftContent = content;
+    const draftRichContent = richContent;
     try {
       const { attachments: uploadedArtifacts, pendingAttachments } =
         await uploadComposerAttachments({
@@ -389,8 +394,17 @@ function ComposerContent(props: ComposerProps) {
       }
       setIsSending(false);
     } catch (error) {
+      // AUD-18: an unexpected/network failure must not silently swallow the user's
+      // draft. Restore the text, rich body, commands, and pills exactly as the
+      // blocked-send path does, surface a readable error, and stop the spinner.
+      setContent(draftContent);
+      setRichContent(draftRichContent);
+      setInlineCommands(submittedCommands);
+      mentions?.setContextRefs(draftRefs);
       setIsSending(false);
-      throw error;
+      toast.error(
+        readableConvexErrorMessage(error, "Gagal mengirim pesan. Coba lagi."),
+      );
     }
   };
 

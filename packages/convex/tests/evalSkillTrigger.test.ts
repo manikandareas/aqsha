@@ -5,6 +5,7 @@ import { parseSkillMarkdown } from "../convex/agent/skills/skillParser";
 import { skillWouldTrigger } from "../convex/agent/evals/skillTriggerSurrogate";
 import { binaryMetrics, formatMetricsMarkdown } from "../convex/agent/evals/scoring";
 import { parseSkillTriggerGolden } from "../convex/agent/evals/goldenSets";
+import { scoringText } from "../convex/agent/research/subagents/skillDelegation";
 import { emitMetrics } from "./evalEmit";
 
 // Layer-A eval (Slice 3.3): grade the SHIPPED builtin skill descriptions with the
@@ -15,20 +16,32 @@ import { emitMetrics } from "./evalEmit";
 // so the eval can never drift from the bundled skills.
 
 describe("skill-trigger surrogate golden matrix", () => {
-  const descByName = new Map<string, string>();
+  // Score against the SAME description+triggerKeywords composite as production
+  // selectDomainPack (scoringText), so an English description backed by Indonesian
+  // keywords still fires on Indonesian prompts.
+  const scoringByName = new Map<string, string>();
   for (const doc of BUILTIN_SKILL_DOCS) {
     const parsed = parseSkillMarkdown(doc);
-    if (parsed) descByName.set(parsed.name, parsed.description);
+    if (parsed) {
+      scoringByName.set(
+        parsed.name,
+        scoringText({
+          name: parsed.name,
+          description: parsed.description,
+          triggerKeywords: parsed.triggerKeywords,
+        }),
+      );
+    }
   }
   const golden = parseSkillTriggerGolden(skillTriggerFixture);
 
   it("references only known builtin skills", () => {
     for (const row of golden) {
-      expect(descByName.has(row.skill), `unknown skill: ${row.skill}`).toBe(true);
+      expect(scoringByName.has(row.skill), `unknown skill: ${row.skill}`).toBe(true);
     }
   });
 
-  const predicted = golden.map((g) => skillWouldTrigger(g.prompt, descByName.get(g.skill) ?? ""));
+  const predicted = golden.map((g) => skillWouldTrigger(g.prompt, scoringByName.get(g.skill) ?? ""));
   const expected = golden.map((g) => g.relevant);
   const report = binaryMetrics(predicted, expected);
 

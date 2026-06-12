@@ -101,9 +101,13 @@ export const approveTool = mutation({
   args: {
     threadId: v.string(),
     approvalId: v.string(),
-    // Optional workspace chosen at approval time (used when the proposed action
-    // could not resolve a workspace). Injection into the tool call is handled in
-    // Phase 2.3; accepted here so the client contract is stable.
+    // Optional workspace chosen at approval time (the inline picker in
+    // HitlPlanReviewCard, shown only when the proposed action could not resolve a
+    // workspace). Accepted here so the client contract is stable. NOTE: it is not
+    // yet injected into the resumed tool call — `astra.approveToolCall` only marks
+    // the existing call approved and replays its ORIGINAL args (the SDK exposes no
+    // arg override), so consuming this requires stashing it for executeArtifact to
+    // read. Tracked as a feature, not wired here.
     workspaceId: v.optional(v.id("workspaces")),
   },
   returns: v.object({ ok: v.literal(true), messageId: v.string() }),
