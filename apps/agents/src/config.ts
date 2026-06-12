@@ -10,6 +10,12 @@ const DEFAULT_PRO_MODEL = "claude-sonnet-4-6";
 
 const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
+  // Anthropic-compatible gateway support (e.g. OpenRouter's Anthropic skin:
+  // ANTHROPIC_BASE_URL=https://openrouter.ai/api + ANTHROPIC_AUTH_TOKEN=sk-or-…
+  // with ANTHROPIC_API_KEY left empty). The SDK child process reads these
+  // straight from the environment; config only validates presence.
+  ANTHROPIC_BASE_URL: z.string().url().optional(),
+  ANTHROPIC_AUTH_TOKEN: z.string().optional(),
   AGENTS_PORT: z.coerce.number().int().positive().default(8787),
   // Shared secret for inbound requests from Convex (plan §4.4). Empty in dev →
   // auth middleware refuses everything except /healthz unless explicitly
@@ -54,6 +60,8 @@ export type AgentsConfig = {
   storeBackend: "memory" | "convex";
   convexUrl: string | undefined;
   anthropicApiKey: string | undefined;
+  anthropicBaseUrl: string | undefined;
+  anthropicAuthToken: string | undefined;
   models: {
     chatLite: string;
     chatPro: string;
@@ -92,7 +100,9 @@ export function loadConfig(
     allowUnauthenticated: parsed.AGENTS_ALLOW_UNAUTHENTICATED,
     storeBackend: parsed.AGENTS_STORE,
     convexUrl: parsed.CONVEX_URL,
-    anthropicApiKey: parsed.ANTHROPIC_API_KEY,
+    anthropicApiKey: parsed.ANTHROPIC_API_KEY?.trim() || undefined,
+    anthropicBaseUrl: parsed.ANTHROPIC_BASE_URL,
+    anthropicAuthToken: parsed.ANTHROPIC_AUTH_TOKEN?.trim() || undefined,
     models: {
       chatLite: parsed.ASTRA_LITE_MODEL,
       chatPro: parsed.ASTRA_PRO_MODEL,

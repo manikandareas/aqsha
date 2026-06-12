@@ -26,7 +26,7 @@ export const CITATION_TOOL_NAMES = ["verifyCitations"] as const;
 export const SANDBOX_AUTO_TOOL_NAMES = ["verifyStatistics"] as const;
 export const SANDBOX_GATED_TOOL_NAMES = ["runComputation"] as const;
 
-// Tools offered on the initial turn. `executeArtifact` is intentionally
+// HITL tools visible on the initial turn. `executeArtifact` is intentionally
 // excluded so the model cannot write an artifact without an approved
 // `proposeArtifact` first (defense layer 1 of the double gate).
 export const HITL_INITIAL_TOOL_NAMES = [
@@ -70,14 +70,21 @@ export function allowedToolsForTurn(input: {
   phase: TurnPhase;
   mode: "normal" | "deep";
 }): string[] {
+  // CRITICAL (verified live, Phase-0 spike): a tool listed in `allowedTools`
+  // is auto-allowed by the SDK and `canUseTool` is NEVER consulted for it.
+  // Approval-gated tools must therefore stay OFF this list — they remain
+  // visible to the model via the MCP server, and their permission request
+  // falls through to `canUseTool`, which runs the hold-window (plan §5.3).
   const logical: string[] = [
     ...RESEARCH_TOOL_NAMES,
     ...CITATION_TOOL_NAMES,
     ...SANDBOX_AUTO_TOOL_NAMES,
-    ...SANDBOX_GATED_TOOL_NAMES,
-    ...HITL_INITIAL_TOOL_NAMES,
+    "askUser",
   ];
   if (input.phase === "resume_after_approval") {
+    // The proposeArtifact approval already happened; the PreToolUse hook
+    // still verifies it (defense layer 2), so executeArtifact may skip the
+    // canUseTool prompt on the resume turn.
     logical.push(EXECUTE_ARTIFACT_TOOL_NAME);
   }
   const allowed = logical.map(qualifiedToolName);

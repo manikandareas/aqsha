@@ -361,6 +361,14 @@ Plan siap dieksekusi mulai **Phase 0 — Spike & validasi**.
 
 ### 9.2 Deviasi & temuan teknis vs desain di atas
 
+0. **Spike live Step 0 (2026-06-12) — temuan SDK nyata:**
+   - **Gateway OpenRouter menggantikan API key Anthropic langsung** (deviasi D5, keputusan owner): `ANTHROPIC_BASE_URL=https://openrouter.ai/api` + `ANTHROPIC_AUTH_TOKEN=sk-or-…` + `ANTHROPIC_API_KEY` kosong; model memakai slug OpenRouter (`anthropic/claude-haiku-4.5`, `anthropic/claude-sonnet-4.6`) via `ASTRA_*_MODEL`. Billing lewat kredit OpenRouter; `total_cost_usd` tetap terisi di result.
+   - **KRITIS — `allowedTools` MEM-BYPASS `canUseTool`**: tool yang ada di allow-list di-auto-allow tanpa konsultasi `canUseTool`. Hold-window §5.3 hanya bekerja bila tool gated TIDAK ada di `allowedTools` (tetap terlihat oleh model via MCP server; permission jatuh ke `canUseTool`). `toolPolicy.ts` diperbaiki + unit test penjaga.
+   - **Approval timeout→resume butuh "primed approval"**: saat resume, model mengulang panggilan tool gated → broker semula membuka window baru dan timeout berulang (deadlock). Fix: respons interaction yang sudah tercatat di-prime one-shot ke turn resume (`InteractionBroker.primeResolvedApproval`), dikonsumsi oleh retry pertama tool yang sama.
+   - **`slash_commands` di `system/init` bocor command host** (plugin/user-level) meskipun `settingSources:["project"]` — di laptop dev terlihat ~35 command, bukan hanya 10 skill + builtin. Tidak memblokir (registry palette kita dari `GET /commands`, bukan dari init), tapi di container produksi harus diverifikasi bersih.
+   - Skenario tervalidasi end-to-end: session resume antar turn (sessionId stabil, konteks diingat, cache read ~32K, turn-2 $0.02/3.9s), hold-window approve/deny in-place (tanpa interrupt), timeout→interrupt→respond→resume→tool jalan, askUser kartu terstruktur→interrupt→jawab→resume, pemicu skill otonom (verify-citations terpicu dari deskripsi, engine 4-langkah jalan dengan provider nyata), `/verify-citations` eksplisit (5 turns, $0.10), `/deep` lite penuh (planner → 2 literature paralel → counter-evidence → citation-verify → writer → proposeArtifact, ~203s, berakhir `waiting_hitl` menunggu approval artifact — sesuai desain).
+   - **Benchmark D6**: chat haiku-4.5 $0.058/7.9s vs sonnet-4.6 $0.126/9.4s (kualitas keduanya layak; sonnet lebih tajam strukturnya). Default D6 dikunci: Lite=haiku-4.5, Pro=sonnet-4.6. Upgrade writer deep ke opus = keputusan owner terbuka (lihat 9.4 Step 0).
+
 1. **`maxBudgetUsd` TIDAK ADA di SDK** (§3 & §5.7 menyebutnya) — verifikasi API `@anthropic-ai/claude-agent-sdk@0.3.x`: hanya `maxTurns` + `total_cost_usd` di result. Guard biaya per run harus diimplementasikan sendiri (cek kumulatif `total_cost_usd` antar fase + `maxTurns` per tier). Risiko §7 baris "Biaya loop SDK" perlu mitigasi versi ini.
 2. **Deep research first-cut = satu `query()`** dengan `agents` option (kalimat pertama §5.5), bukan multi-fase durable. Cukup untuk validasi kualitas; durability §5.5 menyusul (Step 4 di 9.4).
 3. **Ekstraksi bibliografi heuristik** (regex DOI/arXiv/tahun/judul, heading References/Daftar Pustaka) menggantikan LLM extraction — deterministik & teruji; engine konservatif sehingga parse buruk berdegradasi ke `unverifiable`, bukan false flag.
@@ -388,11 +396,12 @@ Plan siap dieksekusi mulai **Phase 0 — Spike & validasi**.
 
 Urutan disusun supaya tiap step punya hasil yang bisa diverifikasi, dan step UI tidak dimulai sebelum data layer-nya nyata.
 
-**Step 0 — Commit & spike live (≤½ hari)**
-- Commit hasil build saat ini (branch `development`).
-- Jalankan service dengan `ANTHROPIC_API_KEY` asli + memory store: uji end-to-end nyata — session resume antar turn, hold-window approval, pemicu skill otonom DAN `/verify-citations` via prompt, subagent paralel `/deep`, baca `slash_commands` dari `system/init`.
-- Catat biaya/latency haiku-4-5 vs sonnet-4-6 pada sample prompt produk → kunci keputusan D6 (termasuk apakah writer deep perlu naik kelas).
-- *Exit*: checklist Phase 0 asli (§6) tercentang dengan SDK sungguhan; anomali API SDK (bila ada) tercatat di sini.
+**Step 0 — Commit & spike live (≤½ hari)** ✅ **SELESAI (2026-06-12)**
+- ✅ Commit build (`fd5e5af`) di branch `development`.
+- ✅ Live via gateway OpenRouter (deviasi D5 — lihat 9.2 #0) + memory store, harness `apps/agents/scripts/spike.ts`: session resume, hold-window 3 jalur, askUser, skill otonom, `/verify-citations`, `/deep` subagent paralel, `slash_commands` dari `system/init` — semua tervalidasi.
+- ✅ Dua bug nyata ditemukan & diperbaiki dari spike: allowedTools-bypass-canUseTool (gate approval tidak pernah terpicu) + primed approval untuk resume pasca-timeout (deadlock window berulang). Keduanya kini ber-unit-test.
+- ✅ Benchmark D6 tercatat (9.2 #0): default Lite=haiku-4.5 / Pro=sonnet-4.6 dikunci. ⏳ Keputusan owner terbuka: upgrade writer deep ke opus (opsional, tinggal env `ASTRA_DEEP_PRO_MODEL`).
+- *Exit*: checklist Phase 0 asli (§6) tercentang dengan SDK sungguhan; anomali tercatat di 9.2 #0.
 
 **Step 1 — Convex Phase 1: tabel first-party + endpoint service (1–2 hari)**
 - `packages/convex/convex/schema.ts`: tambah `chatThreads`, `chatMessages`, `agentRuns2` *(atau nama baru bila bentrok dengan tabel lama)*, `agentRunEvents2`, `pendingInteractions` persis §4.5 + index per pola baca (by_thread, by_owner_activity, by_run_seq, by_thread_status).

@@ -339,6 +339,11 @@ export class RunManager {
     try {
       const handle = this.deps.runner({ prompt: assembled.prompt, options: queryOptions });
       activeRun.handle = handle;
+      if (turn?.resumeInteraction) {
+        // Timeout → respond → resume: the recorded response must satisfy the
+        // model's retry of the gated tool instead of opening a new window.
+        this.broker.primeResolvedApproval(runId, turn.resumeInteraction);
+      }
       this.broker.registerRun(runId, () => {
         void handle.interrupt().catch(() => {
           // Stream may already be closed; interrupt state still drives status.

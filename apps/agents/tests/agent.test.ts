@@ -7,6 +7,7 @@ import {
 } from "../src/agent/contextAssembly";
 import {
   allowedToolsForTurn,
+  APPROVAL_GATED_TOOL_NAMES,
   logicalToolName,
   qualifiedToolName,
 } from "../src/agent/toolPolicy";
@@ -25,8 +26,8 @@ describe("toolPolicy", () => {
   it("excludes executeArtifact on the initial turn and includes it on resume", () => {
     const initial = allowedToolsForTurn({ phase: "initial", mode: "normal" });
     expect(initial).not.toContain(qualifiedToolName("executeArtifact"));
-    expect(initial).toContain(qualifiedToolName("proposeArtifact"));
     expect(initial).toContain(qualifiedToolName("searchWeb"));
+    expect(initial).toContain(qualifiedToolName("askUser"));
     expect(initial).not.toContain("Agent");
 
     const resume = allowedToolsForTurn({
@@ -34,6 +35,16 @@ describe("toolPolicy", () => {
       mode: "normal",
     });
     expect(resume).toContain(qualifiedToolName("executeArtifact"));
+  });
+
+  it("keeps approval-gated tools OFF allowedTools so canUseTool is consulted", () => {
+    // Verified live (Phase-0 spike): allowedTools entries are auto-allowed by
+    // the SDK and canUseTool is never called for them. The hold-window only
+    // works if gated tools stay absent from the allow-list.
+    const initial = allowedToolsForTurn({ phase: "initial", mode: "normal" });
+    for (const gated of APPROVAL_GATED_TOOL_NAMES) {
+      expect(initial).not.toContain(qualifiedToolName(gated));
+    }
   });
 
   it("allows the Agent tool only in deep mode", () => {

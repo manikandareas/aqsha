@@ -28,11 +28,38 @@ export type RunInterruptState = {
 export class InteractionBroker {
   private interruptStates = new Map<string, RunInterruptState>();
   private interruptRequests = new Map<string, () => void>();
+  /** One-shot approvals carried into a resume turn (timeout → respond → resume). */
+  private primedApprovals = new Map<string, PendingInteraction>();
 
   constructor(
     private readonly store: AgentStore,
     private readonly holdWindowMs: number,
   ) {}
+
+  /**
+   * Carry a responded tool_approval into the resume turn: when the model
+   * retries the same gated tool, the prior response resolves it immediately
+   * instead of opening a fresh hold-window (which would loop the timeout).
+   * One-shot: consumed by the first matching canUseTool call.
+   */
+  primeResolvedApproval(runId: string, interaction: PendingInteraction): void {
+    if (interaction.type === "tool_approval" && interaction.response) {
+      this.primedApprovals.set(runId, interaction);
+    }
+  }
+
+  /** Consume a primed approval for this run+tool, if any. */
+  private takePrimedApproval(
+    runId: string,
+    toolName: string,
+  ): PendingInteraction | undefined {
+    const primed = this.primedApprovals.get(runId);
+    if (primed && primed.toolName === toolName) {
+      this.primedApprovals.delete(runId);
+      return primed;
+    }
+    return undefined;
+  }
 
   /** Register the interrupt trigger for an executing run (called by runManager). */
   registerRun(runId: string, interrupt: () => void): void {
@@ -42,6 +69,7 @@ export class InteractionBroker {
   unregisterRun(runId: string): void {
     this.interruptRequests.delete(runId);
     this.interruptStates.delete(runId);
+    this.primedApprovals.delete(runId);
   }
 
   interruptState(runId: string): RunInterruptState | undefined {
@@ -66,6 +94,19 @@ export class InteractionBroker {
     payload: Record<string, unknown>;
     signal?: AbortSignal;
   }): Promise<ApprovalOutcome> {
+    const primed = this.takePrimedApproval(input.runId, input.toolName);
+    if (primed?.response?.kind === "approval") {
+      if (primed.response.approved) {
+        return { outcome: "allow", interaction: primed };
+      }
+      return {
+        outcome: "deny",
+        interaction: primed,
+        message: primed.response.note
+          ? `The user declined this action: ${primed.response.note}`
+          : "The user declined this action.",
+      };
+    }
     const interaction = await this.store.createInteraction({
       ownerUserId: input.ownerUserId,
       threadId: input.threadId,
