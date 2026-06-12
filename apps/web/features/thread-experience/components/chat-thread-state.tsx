@@ -1,6 +1,6 @@
 "use client";
 
-import { useUIMessages } from "@convex-dev/agent/react";
+import { useSmoothText, useUIMessages } from "@convex-dev/agent/react";
 import {
   uiHitlMessageFromInteraction,
   uiMessageFromV2Row,
@@ -134,7 +134,7 @@ export function ThreadChatSurface({
     api.agent.v2.queries.listPendingInteractions,
     sdkActive && threadId ? { threadId } : "skip",
   );
-  const backendMessages = isSdkBackend
+  const rawBackendMessages = isSdkBackend
     ? ([
         ...((v2MessageRows ?? []) as V2MessageRow[]).map(uiMessageFromV2Row),
         ...((v2Interactions ?? []) as V2InteractionRow[]).map(
@@ -142,6 +142,29 @@ export function ThreadChatSurface({
         ),
       ] as unknown as ChatMessage[])
     : (messages.results as unknown as ChatMessage[]);
+  // The sdk backend delivers text in ~RTT-sized jumps (one Convex write per
+  // round-trip); smooth the in-flight assistant message client-side so it
+  // reads like token streaming — the same trick useUIMessages does natively
+  // on the legacy backend.
+  const streamingV2 = isSdkBackend
+    ? rawBackendMessages.find(
+        (message) => message.role === "assistant" && message.status === "streaming",
+      )
+    : undefined;
+  const [smoothedText] = useSmoothText(streamingV2?.text ?? "", {
+    startStreaming: true,
+  });
+  const backendMessages = streamingV2
+    ? rawBackendMessages.map((message) =>
+        message === streamingV2
+          ? {
+              ...message,
+              text: smoothedText,
+              parts: [{ type: "text", text: smoothedText }],
+            }
+          : message,
+      )
+    : rawBackendMessages;
   const sortedMessages = sortTranscriptMessages(backendMessages);
   // HITL is now native in-thread: a pending tool part (askUser awaiting an
   // answer, or an action awaiting approval) blocks the composer, and resolving
