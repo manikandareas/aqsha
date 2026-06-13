@@ -59,7 +59,6 @@ import type * as billing_entitlements from "../billing/entitlements.js";
 import type * as billing_polar from "../billing/polar.js";
 import type * as billing_portal from "../billing/portal.js";
 import type * as billing_products from "../billing/products.js";
-import type * as billing_reconciliation from "../billing/reconciliation.js";
 import type * as billing_subscription from "../billing/subscription.js";
 import type * as billing_usage from "../billing/usage.js";
 import type * as billing_usageShape from "../billing/usageShape.js";
@@ -170,7 +169,6 @@ declare const fullApi: ApiFromModules<{
   "billing/polar": typeof billing_polar;
   "billing/portal": typeof billing_portal;
   "billing/products": typeof billing_products;
-  "billing/reconciliation": typeof billing_reconciliation;
   "billing/subscription": typeof billing_subscription;
   "billing/usage": typeof billing_usage;
   "billing/usageShape": typeof billing_usageShape;

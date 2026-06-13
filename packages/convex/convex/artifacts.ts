@@ -120,7 +120,6 @@ type ArtifactReadModelInput = {
   mimeType?: string;
   fileName?: string;
   storageId?: Id<"_storage">;
-  runId?: string;
 };
 
 function sourceForLegacyArtifact(
@@ -140,9 +139,6 @@ function sourceForLegacyArtifact(
   }
   if (artifact.storageId) {
     return "upload";
-  }
-  if (artifact.runId) {
-    return "agent";
   }
   return "manual";
 }

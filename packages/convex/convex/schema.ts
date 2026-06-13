@@ -260,7 +260,6 @@ export default defineSchema(
     providerUsageLedger: defineTable({
       ownerUserId: v.string(),
       threadId: v.optional(v.string()),
-      runId: v.optional(runId),
       feature: v.union(
         v.literal("normal_chat"),
         v.literal("pro_chat"),
@@ -281,11 +280,7 @@ export default defineSchema(
       createdAt: v.number(),
     })
       .index("by_owner_created", ["ownerUserId", "createdAt"])
-      .index("by_owner_feature_created", ["ownerUserId", "feature", "createdAt"])
-      // AUD-12: per-run reconciliation — aggregate the ACTUAL cost (tokens +
-      // provider calls + sandbox) attributed to one run vs the flat credits charged
-      // up front, so flat rates can be calibrated from real data.
-      .index("by_owner_run", ["ownerUserId", "runId"]),
+      .index("by_owner_feature_created", ["ownerUserId", "feature", "createdAt"]),
     // Denormalized per-(owner, UTC day) usage rollup. Maintained atomically in
     // the same transaction as each `providerUsageLedger` insert (see
     // `bumpUsageDailyRollup`) so the usage `activity` query reads a bounded set
@@ -559,7 +554,6 @@ export default defineSchema(
       workspaceId: v.optional(v.id("workspaces")),
       folderId: v.optional(v.id("workspaceFolders")),
       threadId: v.optional(v.string()),
-      runId: v.optional(runId),
       artifactType: v.optional(artifactTypeValidator),
       artifactFamily: v.optional(artifactFamilyValidator),
       source: v.optional(artifactSourceValidator),
@@ -592,7 +586,6 @@ export default defineSchema(
         "status",
         "createdAt",
       ])
-      .index("by_owner_run", ["ownerUserId", "runId"])
       .index("by_owner_status_updated", ["ownerUserId", "status", "updatedAt"])
       .index("by_owner_workspace_status_updated", [
         "ownerUserId",
@@ -716,7 +709,6 @@ export default defineSchema(
       ownerUserId: v.string(),
       threadId: v.string(),
       artifactId: v.id("artifacts"),
-      runId: v.optional(runId),
       versionNumber: v.number(),
       contentFormat: v.union(
         v.literal("markdown"),
