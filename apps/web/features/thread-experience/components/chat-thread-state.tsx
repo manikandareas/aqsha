@@ -1,6 +1,5 @@
 "use client";
 
-import { useSmoothText } from "@convex-dev/agent/react";
 import {
   uiHitlMessageFromInteraction,
   uiMessageFromRow,
@@ -121,32 +120,17 @@ export function ThreadChatSurface({
     active && threadId ? { threadId } : "skip",
   );
   const messagesLoading = Boolean(threadId) && messageRows === undefined;
-  const rawBackendMessages = [
+  const backendMessages = [
     ...((messageRows ?? []) as AgentMessageRow[]).map(uiMessageFromRow),
     ...((interactionRows ?? []) as AgentInteractionRow[]).map(
       uiHitlMessageFromInteraction,
     ),
   ] as unknown as ChatMessage[];
-  // The sdk backend delivers text in ~RTT-sized jumps (one Convex write per
-  // round-trip); smooth the in-flight assistant message client-side so it
-  // reads like token streaming.
-  const streamingMessage = rawBackendMessages.find(
-    (message) => message.role === "assistant" && message.status === "streaming",
-  );
-  const [smoothedText] = useSmoothText(streamingMessage?.text ?? "", {
-    startStreaming: true,
-  });
-  const backendMessages = streamingMessage
-    ? rawBackendMessages.map((message) =>
-        message === streamingMessage
-          ? {
-              ...message,
-              text: smoothedText,
-              parts: [{ type: "text", text: smoothedText }],
-            }
-          : message,
-      )
-    : rawBackendMessages;
+  // The sdk backend delivers assistant text in ~RTT-sized jumps (one Convex
+  // write per round-trip). Smoothing happens per-message inside MessageRow (the
+  // transcript keys each row by message id, so every turn's reveal starts from a
+  // fresh cursor). A single shared smoother here leaked the previous turn's text
+  // into the next bubble until the new stream overtook the old cursor.
   const sortedMessages = sortTranscriptMessages(backendMessages);
   // HITL is now native in-thread: a pending tool part (askUser awaiting an
   // answer, or an action awaiting approval) blocks the composer, and resolving
