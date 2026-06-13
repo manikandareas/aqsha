@@ -8,7 +8,7 @@ export function useSettingsOverviewData() {
   const current = useConvexQueryData(api.billing.current.get, isAuthenticated ? {} : "skip");
   const activity = useConvexQueryData(api.billing.usage.activity, isAuthenticated ? { days: 365 } : "skip");
   const threads = useConvexQueryData(
-    api.agent.v2.queries.listThreads,
+    api.agent.queries.listThreads,
     isAuthenticated ? {} : "skip",
   );
 

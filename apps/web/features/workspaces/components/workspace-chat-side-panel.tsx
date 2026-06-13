@@ -31,7 +31,7 @@ export function WorkspaceChatSidePanel({
     : undefined;
   // New threads are filed under this workspace; pinned context is owned by the
   // composer's inline pills (mention provider). This adapter injects the
-  // workspace before forwarding to the v2 backend (mirrors ExploreChatSidePanel,
+  // workspace before forwarding to the agent backend (mirrors ExploreChatSidePanel,
   // which is workspace-less).
   const startThread: StartThread = (args) =>
     threadExperience.startThread({

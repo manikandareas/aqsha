@@ -83,7 +83,7 @@ async function getContextArtifactTargetById(
 
 // RAG targets are derived purely from live `artifacts` rows: any message
 // attachments passed in plus the thread's own uploaded documents. (Pinned
-// per-thread context — the retired threadContextArtifacts table — is gone; v2
+// per-thread context — the retired threadContextArtifacts table — is gone; the agent
 // sends context per-turn via the dispatch payload.)
 async function listContextArtifactTargets(
   ctx: ThreadContextCtx,

@@ -570,8 +570,6 @@ export default defineSchema(
     // First-party chat storage for the apps/agents service. Thread/run/message
     // ids are SERVICE-GENERATED strings (thr_*/run_*), not Convex ids, so the
     // service stays storage-agnostic; every table indexes that external id.
-    // `agentRuns2`/`agentRunEvents2` keep the v2 suffix from the cutover era; the
-    // legacy v1 `agentRuns`/`agentRunEvents` tables have since been dropped.
     chatThreads: defineTable({
       threadId: v.string(),
       ownerUserId: v.string(),
@@ -604,7 +602,7 @@ export default defineSchema(
       ),
       createdAt: v.number(),
     }).index("by_thread_created", ["threadId", "createdAt"]),
-    agentRuns2: defineTable({
+    agentRuns: defineTable({
       runId: v.string(),
       threadId: v.string(),
       ownerUserId: v.string(),
@@ -633,7 +631,7 @@ export default defineSchema(
       .index("by_thread_created", ["threadId", "createdAt"])
       // Watchdog sweep: active statuses ordered by staleness.
       .index("by_status_updated", ["status", "updatedAt"]),
-    agentRunEvents2: defineTable({
+    agentRunEvents: defineTable({
       runId: v.string(),
       seq: v.number(),
       type: v.string(),

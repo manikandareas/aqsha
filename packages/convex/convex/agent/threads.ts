@@ -3,7 +3,7 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { requireCurrentUser } from "../auth";
 import { throwAppError } from "../lib/appError";
 
-// Thread ownership helpers for the SDK (v2) backend. The legacy thread CRUD
+// Thread ownership helpers for the SDK backend. The legacy thread CRUD
 // queries (api.agent.threads.*) and the @convex-dev/agent component reads are
 // gone after the Step 6 cutover; these two helpers now resolve ownership against
 // the first-party `chatThreads` table. `artifacts.generateUploadUrl` is the

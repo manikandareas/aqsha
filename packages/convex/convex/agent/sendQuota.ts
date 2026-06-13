@@ -9,8 +9,8 @@ import { CHAT_PROVIDER_NAME } from "./providers/providers";
 import { type AgentKind, chatModelForAgent, deepModelForAgent } from "./models";
 
 // Send-quota gate, shared by BOTH agent backends (legacy agent/messages.ts and
-// the SDK backend agent/v2.ts) so rate-limit + billing semantics stay identical
-// during dual-run. Extracted to this leaf so v2.ts no longer imports messages.ts
+// the SDK backend agent.ts) so rate-limit + billing semantics stay identical
+// during dual-run. Extracted to this leaf so agent.ts no longer imports messages.ts
 // (which transitively pulls in the entire legacy runtime — plan Step 6 §3d).
 
 export function estimateTokens(content: string): number {

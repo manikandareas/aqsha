@@ -1,9 +1,9 @@
-// Adapters from the v2 (SDK backend) Convex rows to the shapes the existing
+// Adapters from the SDK-backend Convex rows to the shapes the existing
 // apps/web thread-experience components consume (plan §9.4 Step 2: data-hooks
 // change, UI components do not). Structural copies of the web types — kept
 // minimal and assignable to features/thread-experience/types.
 
-export type V2MessageRow = {
+export type AgentMessageRow = {
   messageId: string;
   role: "user" | "assistant" | "system";
   text: string;
@@ -12,7 +12,7 @@ export type V2MessageRow = {
   createdAt: number;
 };
 
-export type V2InteractionRow = {
+export type AgentInteractionRow = {
   id: string;
   runId: string;
   type: "ask_user" | "tool_approval";
@@ -21,7 +21,7 @@ export type V2InteractionRow = {
   createdAt: number;
 };
 
-export type V2RunRow = {
+export type AgentRunRow = {
   runId: string;
   promptMessageId?: string;
   status:
@@ -78,7 +78,7 @@ const MESSAGE_STATUS_MAP = {
   error: "failed",
 } as const;
 
-export function uiMessageFromV2Row(row: V2MessageRow): UiChatMessage {
+export function uiMessageFromRow(row: AgentMessageRow): UiChatMessage {
   return {
     id: row.messageId,
     key: row.messageId,
@@ -108,9 +108,9 @@ function parsePayload(json: string): Record<string, unknown> {
  * - ask_user → state "input-available" on tool-askUser;
  * - tool_approval → state "approval-requested" + approval.id = interaction id.
  * The card callbacks then carry the interaction id back as toolCallId /
- * approvalId, which the v2 respond mutation accepts directly.
+ * approvalId, which the respond mutation accepts directly.
  */
-export function uiHitlMessageFromInteraction(row: V2InteractionRow): UiChatMessage {
+export function uiHitlMessageFromInteraction(row: AgentInteractionRow): UiChatMessage {
   const part: UiMessagePart =
     row.type === "ask_user"
       ? {
@@ -142,7 +142,7 @@ export type UiResearchRun = {
   promptMessageId?: string;
   mode: "normal" | "deep";
   executionKind: "inline" | "workflow";
-  status: V2RunRow["status"];
+  status: AgentRunRow["status"];
   verificationReportJson?: string;
   retryable: boolean;
   errorMessage?: string;
@@ -218,12 +218,12 @@ function eventTitle(type: string, payload: Record<string, unknown>): string {
 }
 
 /** Only deep runs render a progress block in the legacy UI; map both anyway. */
-export function uiRunFromV2Row(row: V2RunRow): UiResearchRun {
+export function uiRunFromRow(row: AgentRunRow): UiResearchRun {
   return {
     _id: row.runId,
     promptMessageId: row.promptMessageId,
     mode: row.mode,
-    // The v2 service runs everything in-process; "workflow" only signals the
+    // The agent service runs everything in-process; "workflow" only signals the
     // richer deep-progress UI.
     executionKind: row.mode === "deep" ? "workflow" : "inline",
     status: row.status,

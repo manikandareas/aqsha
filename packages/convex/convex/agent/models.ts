@@ -1,4 +1,4 @@
-// Agent tier. Canonical home is here (cross-domain: feed/papers/billing/v2 all
+// Agent tier. Canonical home is here (cross-domain: feed/papers/billing/agent all
 // consume it); the legacy runtime.ts re-exports it until that file is retired.
 export type AgentKind = "lite" | "pro";
 

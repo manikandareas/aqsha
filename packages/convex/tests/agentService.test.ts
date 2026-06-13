@@ -3,7 +3,7 @@ import { convexTest } from "convex-test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, internal } from "../convex/_generated/api";
 import schema from "../convex/schema";
-import { deleteV2AgentData } from "../convex/accountCleanup/agent";
+import { deleteAgentData } from "../convex/accountCleanup/agent";
 
 // Step 1 (plan §9.4): the agent/service:* facade is the Convex side of
 // SERVICE_FUNCTIONS in apps/agents/src/store/convexStore.ts. These tests pin
@@ -12,7 +12,7 @@ import { deleteV2AgentData } from "../convex/accountCleanup/agent";
 
 const modules = import.meta.glob("../convex/**/*.ts");
 const TOKEN = "test-service-token";
-const OWNER = "owner-v2";
+const OWNER = "owner-agent";
 const THREAD = "thr_test-1";
 const RUN = "run_test-1";
 
@@ -416,7 +416,7 @@ describe("getWorkspaceManifests", () => {
   });
 });
 
-describe("agent.v2.interactions.respond (public)", () => {
+describe("agent.interactions.respond (public)", () => {
   const IDENTITY = { tokenIdentifier: OWNER, subject: OWNER };
 
   async function seedRespondFixture(t: ReturnType<typeof convexTest>) {
@@ -442,7 +442,7 @@ describe("agent.v2.interactions.respond (public)", () => {
         lastActivityAt: now,
         messageCount: 0,
       });
-      await ctx.db.insert("agentRuns2", {
+      await ctx.db.insert("agentRuns", {
         runId: RUN,
         threadId: THREAD,
         ownerUserId: OWNER,
@@ -472,7 +472,7 @@ describe("agent.v2.interactions.respond (public)", () => {
     const interactionId = await seedRespondFixture(t);
     const result = await t
       .withIdentity(IDENTITY)
-      .mutation(api.agent.v2.interactions.respond, {
+      .mutation(api.agent.interactions.respond, {
         interactionId,
         response: { kind: "approval", approved: true },
       });
@@ -487,16 +487,16 @@ describe("agent.v2.interactions.respond (public)", () => {
     const interactionId = await seedRespondFixture(t);
     await t.run(async (ctx) => {
       const run = await ctx.db
-        .query("agentRuns2")
+        .query("agentRuns")
         .withIndex("by_run_id", (q) => q.eq("runId", RUN))
         .unique();
-      await ctx.db.patch("agentRuns2", run!._id, { status: "waiting_hitl" });
+      await ctx.db.patch("agentRuns", run!._id, { status: "waiting_hitl" });
     });
 
     await expect(
       t
         .withIdentity({ tokenIdentifier: "intruder", subject: "intruder" })
-        .mutation(api.agent.v2.interactions.respond, {
+        .mutation(api.agent.interactions.respond, {
           interactionId,
           response: { kind: "approval", approved: true },
         }),
@@ -504,14 +504,14 @@ describe("agent.v2.interactions.respond (public)", () => {
 
     const result = await t
       .withIdentity(IDENTITY)
-      .mutation(api.agent.v2.interactions.respond, {
+      .mutation(api.agent.interactions.respond, {
         interactionId,
         response: { kind: "approval", approved: true },
       });
     expect(result).toEqual({ ok: true, resuming: true });
 
     await expect(
-      t.withIdentity(IDENTITY).mutation(api.agent.v2.interactions.respond, {
+      t.withIdentity(IDENTITY).mutation(api.agent.interactions.respond, {
         interactionId,
         response: { kind: "approval", approved: false },
       }),
@@ -522,7 +522,7 @@ describe("agent.v2.interactions.respond (public)", () => {
     const t = setup();
     const interactionId = await seedRespondFixture(t);
     await expect(
-      t.withIdentity(IDENTITY).mutation(api.agent.v2.interactions.respond, {
+      t.withIdentity(IDENTITY).mutation(api.agent.interactions.respond, {
         interactionId,
         response: { kind: "answers", answers: [{ prompt: "x" }] },
       }),
@@ -550,7 +550,7 @@ describe("durable cancel (Step 3)", () => {
         lastActivityAt: now,
         messageCount: 1,
       });
-      await ctx.db.insert("agentRuns2", {
+      await ctx.db.insert("agentRuns", {
         runId: RUN,
         threadId: THREAD,
         ownerUserId: OWNER,
@@ -577,11 +577,11 @@ describe("durable cancel (Step 3)", () => {
     await seedCancelFixture(t);
     const result = await t
       .withIdentity(IDENTITY)
-      .mutation(api.agent.v2.cancelRun, { runId: RUN });
+      .mutation(api.agent.cancelRun, { runId: RUN });
     expect(result).toEqual({ ok: true });
     const state = await t.run(async (ctx) => {
       const run = await ctx.db
-        .query("agentRuns2")
+        .query("agentRuns")
         .withIndex("by_run_id", (q) => q.eq("runId", RUN))
         .unique();
       const thread = await ctx.db
@@ -604,7 +604,7 @@ describe("durable cancel (Step 3)", () => {
   it("keeps canceled sticky against late service finalize/setRunStatus", async () => {
     const t = setup();
     await seedCancelFixture(t);
-    await t.withIdentity(IDENTITY).mutation(api.agent.v2.cancelRun, { runId: RUN });
+    await t.withIdentity(IDENTITY).mutation(api.agent.cancelRun, { runId: RUN });
 
     await t.mutation(api.agent.service.setRunStatus, {
       serviceToken: TOKEN,
@@ -748,7 +748,7 @@ describe("retryRun (Step 3)", () => {
         status: "complete",
         createdAt: now,
       });
-      await ctx.db.insert("agentRuns2", {
+      await ctx.db.insert("agentRuns", {
         runId: RUN,
         threadId: THREAD,
         ownerUserId: OWNER,
@@ -769,11 +769,11 @@ describe("retryRun (Step 3)", () => {
     await seedFailedRun(t);
     const result = await t
       .withIdentity(IDENTITY)
-      .mutation(api.agent.v2.retryRun, { runId: RUN });
+      .mutation(api.agent.retryRun, { runId: RUN });
     expect(result).toEqual({ ok: true });
     const state = await t.run(async (ctx) => {
       const run = await ctx.db
-        .query("agentRuns2")
+        .query("agentRuns")
         .withIndex("by_run_id", (q) => q.eq("runId", RUN))
         .unique();
       const thread = await ctx.db
@@ -801,18 +801,18 @@ describe("retryRun (Step 3)", () => {
     await seedFailedRun(t);
     await t.run(async (ctx) => {
       const run = await ctx.db
-        .query("agentRuns2")
+        .query("agentRuns")
         .withIndex("by_run_id", (q) => q.eq("runId", RUN))
         .unique();
-      await ctx.db.patch("agentRuns2", run!._id, { status: "completed" });
+      await ctx.db.patch("agentRuns", run!._id, { status: "completed" });
     });
     await expect(
-      t.withIdentity(IDENTITY).mutation(api.agent.v2.retryRun, { runId: RUN }),
+      t.withIdentity(IDENTITY).mutation(api.agent.retryRun, { runId: RUN }),
     ).rejects.toThrow(/Only failed runs/);
   });
 });
 
-describe("artifact↔thread link + v2 listArtifacts (Step 3)", () => {
+describe("artifact↔thread link + listArtifacts (Step 3)", () => {
   const IDENTITY = { tokenIdentifier: OWNER, subject: OWNER };
 
   it("links service-created artifacts to the thread and lists them publicly", async () => {
@@ -846,13 +846,13 @@ describe("artifact↔thread link + v2 listArtifacts (Step 3)", () => {
 
     const listed = await t
       .withIdentity(IDENTITY)
-      .query(api.agent.v2.queries.listArtifacts, { threadId: THREAD });
+      .query(api.agent.queries.listArtifacts, { threadId: THREAD });
     expect(listed).toHaveLength(1);
     expect(listed[0]).toMatchObject({ title: "Laporan tertaut" });
 
     const foreign = await t
       .withIdentity({ tokenIdentifier: "intruder", subject: "intruder" })
-      .query(api.agent.v2.queries.listArtifacts, { threadId: THREAD });
+      .query(api.agent.queries.listArtifacts, { threadId: THREAD });
     expect(foreign).toEqual([]);
   });
 });
@@ -872,7 +872,7 @@ describe("watchdog resume-recovery (Step 3)", () => {
         lastActivityAt: now,
         messageCount: 0,
       });
-      await ctx.db.insert("agentRuns2", {
+      await ctx.db.insert("agentRuns", {
         runId: RUN,
         threadId: THREAD,
         ownerUserId: OWNER,
@@ -913,7 +913,7 @@ describe("watchdog resume-recovery (Step 3)", () => {
       runUpdatedAt: past,
       respondedAt: past + 60 * 1000,
     });
-    await t.mutation(internal.agent.v2.watchdogSweep, {});
+    await t.mutation(internal.agent.watchdogSweep, {});
     expect(await scheduledResumeCount(t)).toBe(1);
     // The run itself is untouched — the service flips it on actual resume.
     const run = await t.query(api.agent.service.getRun, {
@@ -930,7 +930,7 @@ describe("watchdog resume-recovery (Step 3)", () => {
       runUpdatedAt: now - 60 * 1000,
       respondedAt: now - 5 * 60 * 1000,
     });
-    await t.mutation(internal.agent.v2.watchdogSweep, {});
+    await t.mutation(internal.agent.watchdogSweep, {});
     expect(await scheduledResumeCount(t)).toBe(0);
   });
 
@@ -940,7 +940,7 @@ describe("watchdog resume-recovery (Step 3)", () => {
       runUpdatedAt: Date.now() - 10 * 60 * 1000,
       pending: true,
     });
-    await t.mutation(internal.agent.v2.watchdogSweep, {});
+    await t.mutation(internal.agent.watchdogSweep, {});
     expect(await scheduledResumeCount(t)).toBe(0);
 
     // Fresh response (< grace window) is left to the respond-path forward.
@@ -949,7 +949,7 @@ describe("watchdog resume-recovery (Step 3)", () => {
       runUpdatedAt: Date.now() - 10 * 60 * 1000,
       respondedAt: Date.now() - 5 * 1000,
     });
-    await t2.mutation(internal.agent.v2.watchdogSweep, {});
+    await t2.mutation(internal.agent.watchdogSweep, {});
     expect(await scheduledResumeCount(t2)).toBe(0);
   });
 });
@@ -972,7 +972,7 @@ describe("watchdogSweep", () => {
         ["run_stalled-running", "running"],
         ["run_waiting-user", "waiting_hitl"],
       ] as const) {
-        await ctx.db.insert("agentRuns2", {
+        await ctx.db.insert("agentRuns", {
           runId,
           threadId: THREAD,
           ownerUserId: OWNER,
@@ -984,9 +984,9 @@ describe("watchdogSweep", () => {
         });
       }
     });
-    await t.mutation(internal.agent.v2.watchdogSweep, {});
+    await t.mutation(internal.agent.watchdogSweep, {});
     const statuses = await t.run(async (ctx) => {
-      const runs = await ctx.db.query("agentRuns2").collect();
+      const runs = await ctx.db.query("agentRuns").collect();
       return Object.fromEntries(runs.map((run) => [run.runId, run.status]));
     });
     expect(statuses).toEqual({
@@ -997,7 +997,7 @@ describe("watchdogSweep", () => {
   });
 });
 
-describe("account cleanup of v2 tables (Step 6a)", () => {
+describe("account cleanup of agent tables (Step 6a)", () => {
   async function seedOwner(t: ReturnType<typeof convexTest>, owner: string, thread: string, run: string) {
     await t.run(async (ctx) => {
       const now = Date.now();
@@ -1017,7 +1017,7 @@ describe("account cleanup of v2 tables (Step 6a)", () => {
         status: "complete",
         createdAt: now,
       });
-      await ctx.db.insert("agentRuns2", {
+      await ctx.db.insert("agentRuns", {
         runId: run,
         threadId: thread,
         ownerUserId: owner,
@@ -1027,7 +1027,7 @@ describe("account cleanup of v2 tables (Step 6a)", () => {
         createdAt: now,
         updatedAt: now,
       });
-      await ctx.db.insert("agentRunEvents2", {
+      await ctx.db.insert("agentRunEvents", {
         runId: run,
         seq: 0,
         type: "run_status",
@@ -1058,19 +1058,19 @@ describe("account cleanup of v2 tables (Step 6a)", () => {
     return await t.run(async (ctx) => ({
       threads: (await ctx.db.query("chatThreads").collect()).length,
       messages: (await ctx.db.query("chatMessages").collect()).length,
-      runs: (await ctx.db.query("agentRuns2").collect()).length,
-      events: (await ctx.db.query("agentRunEvents2").collect()).length,
+      runs: (await ctx.db.query("agentRuns").collect()).length,
+      events: (await ctx.db.query("agentRunEvents").collect()).length,
       phases: (await ctx.db.query("researchPhaseStates").collect()).length,
       interactions: (await ctx.db.query("pendingInteractions").collect()).length,
     }));
   }
 
-  it("cascade-deletes only the target owner's v2 agent data", async () => {
+  it("cascade-deletes only the target owner's agent data", async () => {
     const t = setup();
     await seedOwner(t, OWNER, "thr_a", "run_a");
     await seedOwner(t, "owner-other", "thr_b", "run_b");
 
-    const deleted = await t.run(async (ctx) => deleteV2AgentData(ctx, OWNER));
+    const deleted = await t.run(async (ctx) => deleteAgentData(ctx, OWNER));
     expect(deleted).toBeGreaterThan(0);
 
     const after = await countAll(t);
@@ -1092,9 +1092,9 @@ describe("account cleanup of v2 tables (Step 6a)", () => {
     expect(survivor?.threadId).toBe("thr_b");
   });
 
-  it("is a no-op for an owner with no v2 data", async () => {
+  it("is a no-op for an owner with no agent data", async () => {
     const t = setup();
-    const deleted = await t.run(async (ctx) => deleteV2AgentData(ctx, "nobody"));
+    const deleted = await t.run(async (ctx) => deleteAgentData(ctx, "nobody"));
     expect(deleted).toBe(0);
   });
 });

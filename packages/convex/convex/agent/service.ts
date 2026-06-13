@@ -261,7 +261,7 @@ export const createRun = mutation({
       return runRecord(existing);
     }
     const now = Date.now();
-    const id = await ctx.db.insert("agentRuns2", {
+    const id = await ctx.db.insert("agentRuns", {
       runId: args.runId,
       threadId: args.threadId,
       ownerUserId: args.ownerUserId,
@@ -272,7 +272,7 @@ export const createRun = mutation({
       createdAt: now,
       updatedAt: now,
     });
-    const inserted = await ctx.db.get("agentRuns2", id);
+    const inserted = await ctx.db.get("agentRuns", id);
     return runRecord(inserted!);
   },
 });
@@ -295,12 +295,12 @@ export const setRunStatus = mutation({
   handler: async (ctx, args) => {
     requireServiceToken(args.serviceToken);
     const run = await requireRun(ctx, args.runId);
-    // A user cancel recorded by agent.v2.cancelRun is sticky — the service may
+    // A user cancel recorded by agent.cancelRun is sticky — the service may
     // still be streaming and must not revive the run (plan §9.4 Step 3).
     if (run.status === "canceled") {
       return null;
     }
-    await ctx.db.patch("agentRuns2", run._id, {
+    await ctx.db.patch("agentRuns", run._id, {
       status: args.status,
       updatedAt: Date.now(),
     });
@@ -332,7 +332,7 @@ export const finalizeRun = mutation({
     // Canceled stays canceled (durable cancel) — still record cost/usage/session
     // from the service's late finalization, but never the terminal status.
     const status = run.status === "canceled" ? "canceled" : args.status;
-    await ctx.db.patch("agentRuns2", run._id, {
+    await ctx.db.patch("agentRuns", run._id, {
       status,
       sdkSessionId: args.sdkSessionId ?? run.sdkSessionId,
       costUsd: args.costUsd ?? run.costUsd,
@@ -373,7 +373,7 @@ export const setRunVerificationReport = mutation({
   handler: async (ctx, args) => {
     requireServiceToken(args.serviceToken);
     const run = await requireRun(ctx, args.runId);
-    await ctx.db.patch("agentRuns2", run._id, {
+    await ctx.db.patch("agentRuns", run._id, {
       verificationReportJson: args.verificationReportJson,
       updatedAt: Date.now(),
     });
@@ -393,7 +393,7 @@ export const appendRunEvent = mutation({
     const run = await requireRun(ctx, args.runId);
     const seq = await nextRunEventSeq(ctx, args.runId);
     const now = Date.now();
-    const id = await ctx.db.insert("agentRunEvents2", {
+    const id = await ctx.db.insert("agentRunEvents", {
       runId: args.runId,
       seq,
       type: args.type,
@@ -401,8 +401,8 @@ export const appendRunEvent = mutation({
       createdAt: now,
     });
     // Events double as the run heartbeat for the watchdog sweep.
-    await ctx.db.patch("agentRuns2", run._id, { updatedAt: now });
-    const inserted = await ctx.db.get("agentRunEvents2", id);
+    await ctx.db.patch("agentRuns", run._id, { updatedAt: now });
+    const inserted = await ctx.db.get("agentRunEvents", id);
     return runEventRecord(inserted!);
   },
 });
@@ -412,7 +412,7 @@ export const listRunEvents = query({
   handler: async (ctx, args) => {
     requireServiceToken(args.serviceToken);
     const docs = await ctx.db
-      .query("agentRunEvents2")
+      .query("agentRunEvents")
       .withIndex("by_run_seq", (q) => q.eq("runId", args.runId))
       .take(MAX_RUN_EVENTS);
     return docs.map(runEventRecord);
@@ -827,7 +827,7 @@ export const applyArtifactAction = mutation({
       );
       // Link the artifact to its originating thread so the per-thread artifact
       // panel fills on the sdk backend (plan §9.4 Step 3). `artifacts.threadId`
-      // is a plain string column, so the v2 `thr_*` id fits as-is.
+      // is a plain string column, so the `thr_*` id fits as-is.
       await ctx.db.patch("artifacts", artifactId, { threadId: args.threadId });
       return { ok: true, artifactId: String(artifactId) };
     } catch (error) {

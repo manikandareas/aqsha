@@ -12,7 +12,7 @@ import { chatProvider } from "./providers/providers";
 import { findThread } from "./service/model";
 
 // Auto-generated chat thread titles. A thread is created with no title and
-// renders the "Percakapan baru" fallback (agent/v2/queries.ts) until the first
+// renders the "Percakapan baru" fallback (agent/queries.ts) until the first
 // turn completes. finalizeRun (agent/service.ts) then claims the thread —
 // titleStatus undefined → "generating", inside its own transaction, so the
 // generator is scheduled at most once even under duplicate/concurrent

@@ -4,7 +4,7 @@ export type WorkspaceId = GenericId<"workspaces">;
 export type ArtifactId = GenericId<"artifacts">;
 export type WorkspaceFolderId = GenericId<"workspaceFolders">;
 // The SDK agent backend (apps/agents) generates run ids as opaque `run_*`
-// strings, not Convex document ids — `agent.v2.retryRun` takes `v.string()`.
+// strings, not Convex document ids — `agent.retryRun` takes `v.string()`.
 export type AgentRunId = string;
 export type StorageId = GenericId<"_storage">;
 

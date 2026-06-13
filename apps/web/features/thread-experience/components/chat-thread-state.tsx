@@ -3,9 +3,9 @@
 import { useSmoothText } from "@convex-dev/agent/react";
 import {
   uiHitlMessageFromInteraction,
-  uiMessageFromV2Row,
-  type V2InteractionRow,
-  type V2MessageRow,
+  uiMessageFromRow,
+  type AgentInteractionRow,
+  type AgentMessageRow,
 } from "@aqsha/agent-contracts";
 import { AlertCircleIcon } from "@aqsha/ui/icons";
 import { api } from "@aqsha/convex/api";
@@ -105,40 +105,40 @@ export function ThreadChatSurface({
   const { isAuthenticated } = useConvexAuth();
   const active = isAuthenticated;
   const threadStatus = useConvexQueryData(
-    api.agent.v2.queries.getThread,
+    api.agent.queries.getThread,
     active && threadId ? { threadId } : "skip",
   );
   // Lock the composer while a reply is still being generated for this thread.
   // `send` only schedules generation and returns immediately, so `isSending`
   // alone re-opens the composer before the agent finishes streaming.
   const isGenerating = threadStatus?.status === "streaming";
-  const v2MessageRows = useConvexQueryData(
-    api.agent.v2.queries.listMessages,
+  const messageRows = useConvexQueryData(
+    api.agent.queries.listMessages,
     active && threadId ? { threadId } : "skip",
   );
-  const v2Interactions = useConvexQueryData(
-    api.agent.v2.queries.listPendingInteractions,
+  const interactionRows = useConvexQueryData(
+    api.agent.queries.listPendingInteractions,
     active && threadId ? { threadId } : "skip",
   );
-  const messagesLoading = Boolean(threadId) && v2MessageRows === undefined;
+  const messagesLoading = Boolean(threadId) && messageRows === undefined;
   const rawBackendMessages = [
-    ...((v2MessageRows ?? []) as V2MessageRow[]).map(uiMessageFromV2Row),
-    ...((v2Interactions ?? []) as V2InteractionRow[]).map(
+    ...((messageRows ?? []) as AgentMessageRow[]).map(uiMessageFromRow),
+    ...((interactionRows ?? []) as AgentInteractionRow[]).map(
       uiHitlMessageFromInteraction,
     ),
   ] as unknown as ChatMessage[];
   // The sdk backend delivers text in ~RTT-sized jumps (one Convex write per
   // round-trip); smooth the in-flight assistant message client-side so it
   // reads like token streaming.
-  const streamingV2 = rawBackendMessages.find(
+  const streamingMessage = rawBackendMessages.find(
     (message) => message.role === "assistant" && message.status === "streaming",
   );
-  const [smoothedText] = useSmoothText(streamingV2?.text ?? "", {
+  const [smoothedText] = useSmoothText(streamingMessage?.text ?? "", {
     startStreaming: true,
   });
-  const backendMessages = streamingV2
+  const backendMessages = streamingMessage
     ? rawBackendMessages.map((message) =>
-        message === streamingV2
+        message === streamingMessage
           ? {
               ...message,
               text: smoothedText,

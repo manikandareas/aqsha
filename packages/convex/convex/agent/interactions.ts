@@ -1,9 +1,9 @@
 import { v } from "convex/values";
-import { internal } from "../../_generated/api";
-import { internalAction, mutation } from "../../_generated/server";
-import { requireCurrentUser } from "../../auth";
-import { throwAppError } from "../../lib/appError";
-import { findRun } from "../service/model";
+import { internal } from "../_generated/api";
+import { internalAction, mutation } from "../_generated/server";
+import { requireCurrentUser } from "../auth";
+import { throwAppError } from "../lib/appError";
+import { findRun } from "./service/model";
 
 // Unified HITL response endpoint (plan §5.3): one mutation replaces the legacy
 // answerAskUser / approveTool / denyTool trio. The response is recorded in
@@ -80,7 +80,7 @@ export const respond = mutation({
       run && (run.status === "waiting_hitl" || run.status === "waiting"),
     );
     if (resuming) {
-      await ctx.scheduler.runAfter(0, internal.agent.v2.interactions.forwardResume, {
+      await ctx.scheduler.runAfter(0, internal.agent.interactions.forwardResume, {
         runId: interaction.runId,
         interactionId: String(interaction._id),
       });

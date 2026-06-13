@@ -13,20 +13,19 @@ export async function cleanupOwnerAgentData(
   let deletedRows = 0;
 
   // The agent backend is the standalone apps/agents SDK service on the
-  // first-party v2 tables; the legacy v1 agent tables were dropped in the
-  // v1→v2 cleanup, so account deletion only needs to clear the v2 data.
-  deletedRows += await deleteV2AgentData(ctx, ownerUserId);
+  // first-party agent tables, so account deletion clears that dataset.
+  deletedRows += await deleteAgentData(ctx, ownerUserId);
 
   return { deletedRows };
 }
 
-const maxV2Threads = 500;
+const maxThreads = 500;
 
 // Cascade-delete the SDK first-party agent tables for an owner. chatThreads is
 // the only owner-indexed table; messages/runs/events/interactions/phases hang
 // off thread/run ids, so we walk the owner's threads and delete their children
-// (same shape as agent.v2.removeThread, but owner-scoped and unauthenticated).
-export async function deleteV2AgentData(
+// (same shape as agent.removeThread, but owner-scoped and unauthenticated).
+export async function deleteAgentData(
   ctx: MutationCtx,
   ownerUserId: string,
 ): Promise<number> {
@@ -35,7 +34,7 @@ export async function deleteV2AgentData(
     await ctx.db
       .query("chatThreads")
       .withIndex("by_owner_activity", (q) => q.eq("ownerUserId", ownerUserId))
-      .take(maxV2Threads + 1),
+      .take(maxThreads + 1),
   );
 
   let deleted = 0;
@@ -59,21 +58,21 @@ export async function deleteV2AgentData(
     deleted += await deleteRows(ctx, "pendingInteractions", interactions);
 
     const runs = withinOwnerCleanupLimit(
-      "agentRuns2",
+      "agentRuns",
       await ctx.db
-        .query("agentRuns2")
+        .query("agentRuns")
         .withIndex("by_thread_created", (q) => q.eq("threadId", thread.threadId))
         .take(maxRowsPerTable + 1),
     );
     for (const run of runs) {
       const events = withinOwnerCleanupLimit(
-        "agentRunEvents2",
+        "agentRunEvents",
         await ctx.db
-          .query("agentRunEvents2")
+          .query("agentRunEvents")
           .withIndex("by_run_seq", (q) => q.eq("runId", run.runId))
           .take(maxRowsPerTable + 1),
       );
-      deleted += await deleteRows(ctx, "agentRunEvents2", events);
+      deleted += await deleteRows(ctx, "agentRunEvents", events);
 
       const phases = await ctx.db
         .query("researchPhaseStates")
@@ -81,7 +80,7 @@ export async function deleteV2AgentData(
         .take(20);
       deleted += await deleteRows(ctx, "researchPhaseStates", phases);
     }
-    deleted += await deleteRows(ctx, "agentRuns2", runs);
+    deleted += await deleteRows(ctx, "agentRuns", runs);
 
     await ctx.db.delete("chatThreads", thread._id);
     deleted += 1;

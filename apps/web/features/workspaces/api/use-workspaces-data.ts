@@ -22,7 +22,7 @@ export function useWorkspaceIndexData() {
       : "skip",
   );
   const threads = useConvexQueryData(
-    api.agent.v2.queries.listThreads,
+    api.agent.queries.listThreads,
     isAuthenticated ? {} : "skip",
   );
 
@@ -34,7 +34,7 @@ export function useWorkspaceIndexData() {
     isLoadingWorkspaces: workspacePage === undefined,
     createWorkspace: useConvexMutationFn(api.workspaces.create),
     archiveWorkspace: useConvexMutationFn(api.workspaces.archive),
-    removeThread: useConvexMutationFn(api.agent.v2.removeThread),
+    removeThread: useConvexMutationFn(api.agent.removeThread),
   };
 }
 
@@ -97,11 +97,11 @@ export function useWorkspaceDetailData(workspaceId: string) {
   const libraryData = useWorkspaceLibraryData(workspaceId);
   const viewer = useConvexQueryData(api.auth.getCurrentUser, isAuthenticated ? {} : "skip");
   const threads = useConvexQueryData(
-    api.agent.v2.queries.listThreads,
+    api.agent.queries.listThreads,
     isAuthenticated ? {} : "skip",
   );
   const workspaceThreads = useConvexQueryData(
-    api.agent.v2.queries.listThreadsByWorkspace,
+    api.agent.queries.listThreadsByWorkspace,
     isAuthenticated && workspaceId ? { workspaceId } : "skip",
   );
   const rateStatus = useConvexQueryData(
@@ -135,10 +135,10 @@ export function useWorkspaceDetailData(workspaceId: string) {
     renameArtifact: libraryData.renameArtifact,
     moveArtifact: libraryData.moveArtifact,
     removeArtifact: libraryData.removeArtifact,
-    // New-thread creation is owned by the chat panel via the v2 thread-experience
+    // New-thread creation is owned by the chat panel via the thread-experience
     // dispatcher (see WorkspaceChatSidePanel); pinned context rides the composer
     // pills, so the legacy startThread/addThreadContextArtifacts bindings are gone.
-    removeThread: useConvexMutationFn(api.agent.v2.removeThread),
+    removeThread: useConvexMutationFn(api.agent.removeThread),
   };
 }
 
@@ -156,7 +156,7 @@ export function useArtifactDetailData(artifactId: string) {
       : "skip",
   );
   const threads = useConvexQueryData(
-    api.agent.v2.queries.listThreads,
+    api.agent.queries.listThreads,
     isAuthenticated ? {} : "skip",
   );
   const artifact = useConvexQueryData(api.artifacts.get, artifactArgs);
@@ -177,6 +177,6 @@ export function useArtifactDetailData(artifactId: string) {
     moveArtifact: useConvexMutationFn(api.artifacts.move),
     removeArtifact: useConvexMutationFn(api.artifacts.remove),
     createWorkspace: useConvexMutationFn(api.workspaces.create),
-    removeThread: useConvexMutationFn(api.agent.v2.removeThread),
+    removeThread: useConvexMutationFn(api.agent.removeThread),
   };
 }

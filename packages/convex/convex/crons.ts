@@ -61,9 +61,9 @@ crons.interval(
 // no heartbeat (run events bump updatedAt) flip to failed so the user can
 // retry; waiting_hitl is user-paced and never swept.
 crons.interval(
-  "agent-v2:watchdog",
+  "agent:watchdog",
   { minutes: 5 },
-  internal.agent.v2.watchdogSweep,
+  internal.agent.watchdogSweep,
   {},
 );
 

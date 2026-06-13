@@ -1,13 +1,13 @@
 import { v } from "convex/values";
-import type { Doc } from "../../_generated/dataModel";
-import { query, type QueryCtx } from "../../_generated/server";
-import { requireCurrentUser } from "../../auth";
-import { findThread } from "../service/model";
+import type { Doc } from "../_generated/dataModel";
+import { query, type QueryCtx } from "../_generated/server";
+import { requireCurrentUser } from "../auth";
+import { findThread } from "./service/model";
 
 // Public read surface for the SDK agent backend (plan §9.4 Step 2): the web
 // data-hooks subscribe to these instead of the legacy @convex-dev/agent
 // queries when AGENT_BACKEND=sdk. Auth at the boundary: every query resolves
-// the current user and only ever returns rows it owns. Shapes are raw v2 rows;
+// the current user and only ever returns rows it owns. Shapes are raw agent rows;
 // the UI adapts them via @aqsha/agent-contracts adapters.
 
 const MAX_THREADS = 50;
@@ -126,14 +126,14 @@ export const listRuns = query({
       return [];
     }
     const runs = await ctx.db
-      .query("agentRuns2")
+      .query("agentRuns")
       .withIndex("by_thread_created", (q) => q.eq("threadId", args.threadId))
       .order("desc")
       .take(MAX_RUNS);
     const withEvents = await Promise.all(
       runs.reverse().map(async (run) => {
         const events = await ctx.db
-          .query("agentRunEvents2")
+          .query("agentRunEvents")
           .withIndex("by_run_seq", (q) => q.eq("runId", run.runId))
           .take(MAX_EVENTS_PER_RUN);
         return {
@@ -165,7 +165,7 @@ export const listRuns = query({
 const MAX_ARTIFACTS = 50;
 
 // Per-thread artifact panel (plan §9.4 Step 3): the service links artifacts it
-// writes to their thread via `artifacts.threadId` (a v2 `thr_*` string), so the
+// writes to their thread via `artifacts.threadId` (a `thr_*` string), so the
 // legacy `by_owner_thread_created` index serves the sdk backend unchanged.
 export const listArtifacts = query({
   args: { threadId: v.string() },

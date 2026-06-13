@@ -161,13 +161,12 @@ path-sensitive.
 (`docs/claude-agent-sdk-app-plan.md`), `@convex-dev/agent` and
 `@convex-dev/workflow` are unmounted; the agent runtime is the standalone
 `apps/agents` service (Claude Agent SDK). Convex owns the first-party agent
-tables (`chatThreads`, `chatMessages`, `agentRuns2`, `agentRunEvents2`,
-`pendingInteractions`, `researchPhaseStates`) and the service facade
-(`agent/service.ts` + `agent/v2*`); it no longer runs `generateText`/threads
-through a component. Don't re-introduce `@convex-dev/agent`/`@convex-dev/workflow`.
-Some inert legacy first-party tables (`agentRuns`, `threadMetadata`,
-`threadContext*`, `messageContext*`, `skillActivations`, etc.) remain pending a
-data-clearing migration — don't build new features on them.
+tables (`chatThreads`, `chatMessages`, `agentRuns`, `agentRunEvents`,
+`pendingInteractions`, `researchPhaseStates`) and the public facade
+(`agent.ts` + `agent/queries.ts` + `agent/interactions.ts`) plus the
+service-facing functions in `agent/service.ts` (the `agent/service:*` paths the
+SDK service binds to); it no longer runs `generateText`/threads through a
+component. Don't re-introduce `@convex-dev/agent`/`@convex-dev/workflow`.
 
 ## Crons & HTTP (path-sensitive)
 

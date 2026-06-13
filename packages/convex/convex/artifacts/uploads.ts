@@ -164,7 +164,7 @@ export const createThreadAttachmentFromStorage = action({
 // legacy thread start) was removed in the Step 6 cutover; it was only scheduled
 // by the deleted legacy agent/messages.ts. The SDK backend uploads attachments
 // as artifacts first (createFromStorage) and passes their ids to
-// agent.v2.startThread as messageAttachmentArtifactIds.
+// agent.startThread as messageAttachmentArtifactIds.
 
 export const reindexPromotedAttachment = internalAction({
   args: {

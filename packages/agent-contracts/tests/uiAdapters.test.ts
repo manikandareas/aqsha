@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   uiHitlMessageFromInteraction,
-  uiMessageFromV2Row,
-  uiRunFromV2Row,
+  uiMessageFromRow,
+  uiRunFromRow,
 } from "../src/uiAdapters";
 
-describe("uiMessageFromV2Row", () => {
+describe("uiMessageFromRow", () => {
   it("maps status and produces a text part", () => {
-    const message = uiMessageFromV2Row({
+    const message = uiMessageFromRow({
       messageId: "m1",
       role: "assistant",
       text: "halo",
@@ -23,7 +23,7 @@ describe("uiMessageFromV2Row", () => {
       parts: [{ type: "text", text: "halo" }],
     });
     expect(
-      uiMessageFromV2Row({
+      uiMessageFromRow({
         messageId: "m2",
         role: "assistant",
         text: "",
@@ -81,9 +81,9 @@ describe("uiHitlMessageFromInteraction", () => {
   });
 });
 
-describe("uiRunFromV2Row", () => {
+describe("uiRunFromRow", () => {
   it("maps run + events into the ResearchRun shape", () => {
-    const run = uiRunFromV2Row({
+    const run = uiRunFromRow({
       runId: "run1",
       status: "completed",
       mode: "deep",

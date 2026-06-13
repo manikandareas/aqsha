@@ -56,9 +56,9 @@ export async function requireThread(
 export async function findRun(
   ctx: QueryCtx | MutationCtx,
   runId: string,
-): Promise<Doc<"agentRuns2"> | null> {
+): Promise<Doc<"agentRuns"> | null> {
   return await ctx.db
-    .query("agentRuns2")
+    .query("agentRuns")
     .withIndex("by_run_id", (q) => q.eq("runId", runId))
     .unique();
 }
@@ -66,7 +66,7 @@ export async function findRun(
 export async function requireRun(
   ctx: QueryCtx | MutationCtx,
   runId: string,
-): Promise<Doc<"agentRuns2">> {
+): Promise<Doc<"agentRuns">> {
   const run = await findRun(ctx, runId);
   if (!run) {
     throwAppError({ message: "Run not found", code: "run_not_found" });
@@ -103,7 +103,7 @@ export function messageRecord(doc: Doc<"chatMessages">) {
   };
 }
 
-export function runRecord(doc: Doc<"agentRuns2">) {
+export function runRecord(doc: Doc<"agentRuns">) {
   return {
     runId: doc.runId,
     threadId: doc.threadId,
@@ -123,7 +123,7 @@ export function runRecord(doc: Doc<"agentRuns2">) {
   };
 }
 
-export function runEventRecord(doc: Doc<"agentRunEvents2">) {
+export function runEventRecord(doc: Doc<"agentRunEvents">) {
   return {
     runId: doc.runId,
     seq: doc.seq,
@@ -195,7 +195,7 @@ export async function nextRunEventSeq(
   runId: string,
 ): Promise<number> {
   const last = await ctx.db
-    .query("agentRunEvents2")
+    .query("agentRunEvents")
     .withIndex("by_run_seq", (q) => q.eq("runId", runId))
     .order("desc")
     .first();
@@ -204,8 +204,8 @@ export async function nextRunEventSeq(
 
 export async function touchRun(
   ctx: MutationCtx,
-  run: Doc<"agentRuns2">,
-  patch: Partial<Doc<"agentRuns2">> = {},
+  run: Doc<"agentRuns">,
+  patch: Partial<Doc<"agentRuns">> = {},
 ): Promise<void> {
-  await ctx.db.patch("agentRuns2", run._id, { ...patch, updatedAt: Date.now() });
+  await ctx.db.patch("agentRuns", run._id, { ...patch, updatedAt: Date.now() });
 }

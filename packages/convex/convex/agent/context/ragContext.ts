@@ -19,7 +19,7 @@ async function retrieveThreadDocumentContext(
     return "";
   }
   // Targets are the thread's uploaded documents (workspace-scoped pinned context
-  // was retired in the v1→v2 cleanup; v2 routes context per-turn).
+  // was retired in the legacy cleanup; the agent routes context per-turn).
   const artifactTargets = await ctx.runQuery(
     internal.agent.context.threadContext.listRagTargetsForThread,
     {

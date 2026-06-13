@@ -1,22 +1,22 @@
 import { v } from "convex/values";
-import { internal } from "../_generated/api";
+import { internal } from "./_generated/api";
 import {
   action,
   internalAction,
   internalMutation,
   mutation,
   type MutationCtx,
-} from "../_generated/server";
-import { requireCurrentUser } from "../auth";
-import { throwAppError } from "../lib/appError";
-import { checkAndConsumeSendQuota } from "./sendQuota";
+} from "./_generated/server";
+import { requireCurrentUser } from "./auth";
+import { throwAppError } from "./lib/appError";
+import { checkAndConsumeSendQuota } from "./agent/sendQuota";
 import {
   bumpThreadOnMessage,
   findRun,
   findThread,
   messageRecord,
   requireRun,
-} from "./service/model";
+} from "./agent/service/model";
 
 // Public entrypoints for the SDK agent backend (plan §4.1 / §9.4 Step 1):
 // startThread/sendMessage validate + gate (same rate-limit/billing semantics
@@ -142,7 +142,7 @@ async function persistTurnAndDispatch(
 
   const runId = `run_${crypto.randomUUID()}`;
   const isDeep = input.prompt.startsWith("/deep");
-  await ctx.db.insert("agentRuns2", {
+  await ctx.db.insert("agentRuns", {
     runId,
     threadId: input.threadId,
     ownerUserId: input.ownerUserId,
@@ -168,7 +168,7 @@ async function persistTurnAndDispatch(
       workspaceIds: input.contextWorkspaceIds,
     },
   };
-  await ctx.scheduler.runAfter(0, internal.agent.v2.dispatchRun, payload);
+  await ctx.scheduler.runAfter(0, internal.agent.dispatchRun, payload);
   return {
     ok: true,
     threadId: input.threadId,
@@ -179,7 +179,7 @@ async function persistTurnAndDispatch(
 
 async function hasActiveRun(ctx: MutationCtx, threadId: string): Promise<boolean> {
   const recent = await ctx.db
-    .query("agentRuns2")
+    .query("agentRuns")
     .withIndex("by_thread_created", (q) => q.eq("threadId", threadId))
     .order("desc")
     .take(10);
@@ -295,7 +295,7 @@ export const cancelRun = mutation({
     // run flips to canceled HERE first — the service forward is best-effort
     // and the agent/service finalize guards keep `canceled` sticky even when
     // the still-streaming service later reports completed/failed.
-    await ctx.db.patch("agentRuns2", run._id, {
+    await ctx.db.patch("agentRuns", run._id, {
       status: "canceled",
       updatedAt: Date.now(),
     });
@@ -313,7 +313,7 @@ export const cancelRun = mutation({
         await ctx.db.patch("chatMessages", message._id, { status: "complete" });
       }
     }
-    await ctx.scheduler.runAfter(0, internal.agent.v2.forwardCancel, {
+    await ctx.scheduler.runAfter(0, internal.agent.forwardCancel, {
       runId: args.runId,
     });
     return { ok: true };
@@ -365,7 +365,7 @@ export const retryRun = mutation({
         code: "run_prompt_missing",
       });
     }
-    await ctx.db.patch("agentRuns2", run._id, {
+    await ctx.db.patch("agentRuns", run._id, {
       status: "queued",
       errorMessage: undefined,
       updatedAt: Date.now(),
@@ -374,7 +374,7 @@ export const retryRun = mutation({
     if (thread && thread.status === "failed") {
       await ctx.db.patch("chatThreads", thread._id, { status: "idle" });
     }
-    await ctx.scheduler.runAfter(0, internal.agent.v2.dispatchRun, {
+    await ctx.scheduler.runAfter(0, internal.agent.dispatchRun, {
       runId: run.runId,
       threadId: run.threadId,
       ownerUserId: run.ownerUserId,
@@ -414,16 +414,16 @@ export const removeThread = mutation({
       await ctx.db.delete("pendingInteractions", interaction._id);
     }
     const runs = await ctx.db
-      .query("agentRuns2")
+      .query("agentRuns")
       .withIndex("by_thread_created", (q) => q.eq("threadId", args.threadId))
       .take(100);
     for (const run of runs) {
       const events = await ctx.db
-        .query("agentRunEvents2")
+        .query("agentRunEvents")
         .withIndex("by_run_seq", (q) => q.eq("runId", run.runId))
         .take(500);
       for (const event of events) {
-        await ctx.db.delete("agentRunEvents2", event._id);
+        await ctx.db.delete("agentRunEvents", event._id);
       }
       const phases = await ctx.db
         .query("researchPhaseStates")
@@ -432,7 +432,7 @@ export const removeThread = mutation({
       for (const phase of phases) {
         await ctx.db.delete("researchPhaseStates", phase._id);
       }
-      await ctx.db.delete("agentRuns2", run._id);
+      await ctx.db.delete("agentRuns", run._id);
     }
     await ctx.db.delete("chatThreads", thread._id);
     return { ok: true };
@@ -529,7 +529,7 @@ export const dispatchRun = internalAction({
       }
       await new Promise((resolve) => setTimeout(resolve, attempt * 1_000));
     }
-    await ctx.runMutation(internal.agent.v2.markDispatchFailed, {
+    await ctx.runMutation(internal.agent.markDispatchFailed, {
       runId: args.runId,
       message: `Agent service unreachable (${lastError}). Coba kirim ulang.`,
     });
@@ -560,7 +560,7 @@ export const markDispatchFailed = internalMutation({
     if (!run || !["queued", "running"].includes(run.status)) {
       return null;
     }
-    await ctx.db.patch("agentRuns2", run._id, {
+    await ctx.db.patch("agentRuns", run._id, {
       status: "failed",
       errorMessage: args.message,
       updatedAt: Date.now(),
@@ -591,13 +591,13 @@ export const watchdogSweep = internalMutation({
     ];
     for (const sweep of sweeps) {
       const stalled = await ctx.db
-        .query("agentRuns2")
+        .query("agentRuns")
         .withIndex("by_status_updated", (q) =>
           q.eq("status", sweep.status).lt("updatedAt", sweep.cutoff),
         )
         .take(WATCHDOG_BATCH);
       for (const run of stalled) {
-        await ctx.db.patch("agentRuns2", run._id, {
+        await ctx.db.patch("agentRuns", run._id, {
           status: "failed",
           errorMessage: "Run terhenti tanpa respons dari agent service. Coba kirim ulang.",
           updatedAt: now,
@@ -626,7 +626,7 @@ export const watchdogSweep = internalMutation({
     // service answers 409 when the run is no longer waiting, so this is
     // idempotent and safe to repeat every sweep until the service recovers.
     const waitingRuns = await ctx.db
-      .query("agentRuns2")
+      .query("agentRuns")
       .withIndex("by_status_updated", (q) => q.eq("status", "waiting_hitl"))
       .take(WATCHDOG_BATCH);
     for (const run of waitingRuns) {
@@ -649,7 +649,7 @@ export const watchdogSweep = internalMutation({
         (latest.respondedAt ?? 0) > run.updatedAt &&
         (latest.respondedAt ?? 0) < now - RESUME_RECOVERY_GRACE_MS
       ) {
-        await ctx.scheduler.runAfter(0, internal.agent.v2.interactions.forwardResume, {
+        await ctx.scheduler.runAfter(0, internal.agent.interactions.forwardResume, {
           runId: run.runId,
           interactionId: String(latest._id),
         });
