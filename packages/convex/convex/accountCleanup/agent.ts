@@ -68,21 +68,6 @@ export async function cleanupOwnerAgentData(
       .withIndex("by_owner_thread_created", (q) => q.eq("ownerUserId", ownerUserId))
       .take(501),
   );
-  const threadContextArtifacts = withinOwnerCleanupLimit(
-    "threadContextArtifacts",
-    await ctx.db
-      .query("threadContextArtifacts")
-      .withIndex("by_owner_thread_created", (q) => q.eq("ownerUserId", ownerUserId))
-      .take(501),
-  );
-  const threadMetadata = withinOwnerCleanupLimit(
-    "threadMetadata",
-    await ctx.db
-      .query("threadMetadata")
-      .withIndex("by_owner_activity", (q) => q.eq("ownerUserId", ownerUserId))
-      .take(501),
-  );
-
   deletedRows += await deleteRows(ctx, "messageWorkspaceActions", messageWorkspaceActions);
   deletedRows += await deleteRows(ctx, "researchExtracts", researchExtracts);
   deletedRows += await deleteRows(ctx, "researchSources", researchSources);
@@ -91,8 +76,6 @@ export async function cleanupOwnerAgentData(
   deletedRows += await deleteRows(ctx, "agentRunSteps", agentRunSteps);
   deletedRows += await deleteRows(ctx, "researchRoundStates", researchRoundStates);
   deletedRows += await deleteRows(ctx, "agentRuns", agentRuns);
-  deletedRows += await deleteRows(ctx, "threadContextArtifacts", threadContextArtifacts);
-  deletedRows += await deleteRows(ctx, "threadMetadata", threadMetadata);
 
   // First-party SDK-backend tables (plan §4.5). These coexist with the legacy
   // component during dual-run, so account deletion must clear BOTH or the new

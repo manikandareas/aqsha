@@ -19,7 +19,6 @@ import type * as agent_context_mentionMarkers from "../agent/context/mentionMark
 import type * as agent_context_rag from "../agent/context/rag.js";
 import type * as agent_context_ragContext from "../agent/context/ragContext.js";
 import type * as agent_context_threadContext from "../agent/context/threadContext.js";
-import type * as agent_context_threadContextWorkspaces from "../agent/context/threadContextWorkspaces.js";
 import type * as agent_hitl_hitlToolNames from "../agent/hitl/hitlToolNames.js";
 import type * as agent_models from "../agent/models.js";
 import type * as agent_prompt_promptCommands from "../agent/prompt/promptCommands.js";
@@ -129,7 +128,6 @@ declare const fullApi: ApiFromModules<{
   "agent/context/rag": typeof agent_context_rag;
   "agent/context/ragContext": typeof agent_context_ragContext;
   "agent/context/threadContext": typeof agent_context_threadContext;
-  "agent/context/threadContextWorkspaces": typeof agent_context_threadContextWorkspaces;
   "agent/hitl/hitlToolNames": typeof agent_hitl_hitlToolNames;
   "agent/models": typeof agent_models;
   "agent/prompt/promptCommands": typeof agent_prompt_promptCommands;

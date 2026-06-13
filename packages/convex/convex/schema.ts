@@ -129,42 +129,6 @@ export default defineSchema(
       clerkUserId: v.optional(v.string()),
       processedAt: v.number(),
     }).index("by_event_key", ["eventKey"]),
-    threadMetadata: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.string(),
-      workspaceId: v.optional(v.id("workspaces")),
-      lastActivityAt: v.number(),
-      lastMessagePreview: v.string(),
-      messageCount: v.number(),
-      status: v.union(v.literal("idle"), v.literal("streaming"), v.literal("failed")),
-      // Sticky per-thread selected agent for the composer. Optional for legacy
-      // rows; defaults to "lite" at read time.
-      lastAgentKind: v.optional(v.union(v.literal("lite"), v.literal("pro"))),
-    })
-      .index("by_thread", ["threadId"])
-      .index("by_owner_activity", ["ownerUserId", "lastActivityAt"])
-      .index("by_owner_workspace_activity", ["ownerUserId", "workspaceId", "lastActivityAt"]),
-    threadContextArtifacts: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.string(),
-      workspaceId: v.optional(v.id("workspaces")),
-      artifactId: v.id("artifacts"),
-      createdAt: v.number(),
-    })
-      .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"])
-      .index("by_owner_thread_artifact", ["ownerUserId", "threadId", "artifactId"])
-      .index("by_owner_workspace_artifact", ["ownerUserId", "workspaceId", "artifactId"]),
-    // Whole-workspace context references pinned to a thread. Additive to
-    // threadMetadata.workspaceId ("filed under"): a thread can reference many
-    // workspaces as RAG context sources. Mirrors threadContextArtifacts.
-    threadContextWorkspaces: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.string(),
-      workspaceId: v.id("workspaces"),
-      createdAt: v.number(),
-    })
-      .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"])
-      .index("by_owner_thread_workspace", ["ownerUserId", "threadId", "workspaceId"]),
     workspaces: defineTable({
       ownerUserId: v.string(),
       name: v.string(),

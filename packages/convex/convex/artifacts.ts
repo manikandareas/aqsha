@@ -602,7 +602,6 @@ export const move = mutation({
     await syncArtifactWorkspaceMove(ctx, {
       ownerUserId: user._id,
       artifactId: args.artifactId,
-      previousWorkspaceId: artifact.workspaceId,
       targetWorkspaceId,
       updatedAt: now,
     });
