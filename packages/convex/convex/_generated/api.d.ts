@@ -254,6 +254,5 @@ export declare const components: {
   agent: import("@convex-dev/agent/_generated/component.js").ComponentApi<"agent">;
   rag: import("@convex-dev/rag/_generated/component.js").ComponentApi<"rag">;
   rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
-  workflow: import("@convex-dev/workflow/_generated/component.js").ComponentApi<"workflow">;
   polar: import("@convex-dev/polar/_generated/component.js").ComponentApi<"polar">;
 };
