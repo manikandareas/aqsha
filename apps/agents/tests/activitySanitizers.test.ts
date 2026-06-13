@@ -86,6 +86,20 @@ describe("sanitizeToolResult", () => {
     expect(JSON.stringify(out)).not.toContain("secret.example");
   });
 
+  it("decodes the LIVE bare content-array tool_response shape", () => {
+    // Verified against the 0.3.x SDK: PostToolUse delivers the content blocks as
+    // a bare array, not wrapped in { content: [...] }.
+    const bareArray = [
+      { type: "text", text: JSON.stringify([{ title: "a" }, { title: "b" }, { title: "c" }]) },
+    ];
+    expect(sanitizeToolResult("searchWeb", bareArray)).toEqual({ resultCount: 3 });
+    expect(
+      sanitizeToolResult("verifyStatistics", [
+        { type: "text", text: JSON.stringify({ verdict: "passed", items: [{}, {}] }) },
+      ]),
+    ).toEqual({ verdict: "passed", checksRun: 2 });
+  });
+
   it("reports only whether thread documents matched, never the excerpt", () => {
     expect(sanitizeToolResult("searchThreadDocuments", textResponse("kutipan rahasia")))
       .toEqual({ hasResults: true });

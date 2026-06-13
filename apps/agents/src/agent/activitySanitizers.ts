@@ -56,14 +56,28 @@ function compact(
 }
 
 // ── tool_response decoding (defensive; never throws) ─────────────────────────
-// MCP tool results are `{ content: [{ type:"text", text }], isError? }`; the
-// payload data is JSON-encoded inside the text block(s). Decode best-effort and
-// expose only counts/enums derived from it — never the decoded value itself.
+// The PostToolUse `tool_response` for an in-process MCP tool is delivered as the
+// BARE content-block array `[{ type:"text", text }]` (verified live against the
+// 0.3.x SDK), though the full CallToolResult `{ content: [...], isError? }` shape
+// is also accepted for robustness. The payload data is JSON-encoded inside the
+// text block(s); we expose only counts/enums derived from it — never the decoded
+// value itself.
+
+function responseContentArray(response: unknown): unknown[] | undefined {
+  if (Array.isArray(response)) return response;
+  if (
+    response &&
+    typeof response === "object" &&
+    Array.isArray((response as { content?: unknown }).content)
+  ) {
+    return (response as { content: unknown[] }).content;
+  }
+  return undefined;
+}
 
 function responseText(response: unknown): string | undefined {
-  if (!response || typeof response !== "object") return undefined;
-  const content = (response as { content?: unknown }).content;
-  if (!Array.isArray(content)) return undefined;
+  const content = responseContentArray(response);
+  if (!content) return undefined;
   const parts: string[] = [];
   for (const block of content) {
     if (
