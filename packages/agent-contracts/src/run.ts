@@ -79,7 +79,7 @@ export const runEventSchema = z.object({
 });
 export type RunEvent = z.infer<typeof runEventSchema>;
 
-// Final accounting persisted on agentRuns from the SDK result message.
+// Final accounting persisted on agentRuns2 from the SDK result message.
 export const runUsageSchema = z.object({
   inputTokens: z.number().nonnegative().optional(),
   outputTokens: z.number().nonnegative().optional(),

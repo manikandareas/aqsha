@@ -1,5 +1,5 @@
 // Per-artifact statistical verification report — the single summary persisted on
-// agentRuns.verificationReportJson and surfaced to the user. Pure builder so the
+// agentRuns2.verificationReportJson and surfaced to the user. Pure builder so the
 // verdict logic is unit-testable. Neutral by construction: only a flipped
 // significance decision escalates to "needs_review"; a mere numeric discrepancy
 // or an uncheckable claim is a note, never a failure (a discrepancy is not

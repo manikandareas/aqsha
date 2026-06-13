@@ -58,7 +58,6 @@ import type {
   ResearchRun,
 } from "../types";
 import { ThreadActivityIndicator } from "./shared";
-import { MessageWorkspaceActions } from "./message-workspace-actions";
 import { MessageHitlParts } from "./message-hitl-parts";
 import type { HitlActions } from "./use-hitl-resume";
 
@@ -84,10 +83,6 @@ export function MessageRow({
   const isFailed = message.status === "failed";
   const text = getMessageText(message);
   const hasText = Boolean(text.trim());
-  const workspaceActions = useConvexQueryData(
-    api.workspaces.listActionsForMessage,
-    isUser && message.id ? { messageId: message.id } : "skip",
-  );
 
   if (isUser) {
     const promptCommand = message.metadata?.promptCommand;
@@ -123,7 +118,6 @@ export function MessageRow({
             ),
           )}
         </div>
-        <MessageWorkspaceActions actions={workspaceActions ?? []} align="end" />
       </div>
     );
   }
