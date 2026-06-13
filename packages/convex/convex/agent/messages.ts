@@ -26,16 +26,11 @@ import {
   usageHandlerForAgent,
   type AgentKind,
 } from "./runtime";
-import {
-  CHAT_LITE_MODEL,
-  CHAT_PRO_MODEL,
-  chatModelForAgent,
-  deepModelForAgent,
-} from "./models";
+import { CHAT_LITE_MODEL, CHAT_PRO_MODEL } from "./models";
+import { checkAndConsumeSendQuota } from "./sendQuota";
 import { requireCurrentUser } from "../auth";
 import { estimateCredits, featureForUsage } from "../billing/catalog";
 import {
-  consumeCredits,
   recordProviderUsage,
   type EntitlementResult,
 } from "../billing/entitlements";
@@ -85,7 +80,7 @@ import {
 } from "./context/threadContext";
 import { addContextWorkspacesForThread } from "./context/threadContextWorkspaces";
 import { stripMentionMarkers } from "./context/mentionMarkers";
-import { CHAT_PROVIDER_NAME, chatProvider } from "./providers/providers";
+import { chatProvider } from "./providers/providers";
 import { hasActiveReplyRun, hasOtherActiveReplyRun } from "./runLifecycle";
 
 const MAX_CONTENT_LENGTH = 8_000;
@@ -150,9 +145,9 @@ function trimForTitleContext(content: string) {
     : singleLine;
 }
 
-function estimateTokens(content: string) {
-  return Math.max(1, Math.ceil(content.length / 4));
-}
+// checkAndConsumeSendQuota + estimateTokens moved to ./sendQuota (the SDK
+// backend reuses them without importing this legacy module). Re-imported here
+// so the legacy send path is unchanged.
 
 async function getThreadMetadata(ctx: QueryCtx | MutationCtx, threadId: string) {
   return await ctx.db
@@ -254,78 +249,6 @@ function sendBillingFailure(entitlement: Extract<EntitlementResult, { ok: false 
     requiredPlan: entitlement.requiredPlan,
     creditsRemaining: entitlement.creditsRemaining,
   };
-}
-
-// Exported for reuse by the v2 (SDK backend) entrypoints in agent/v2.ts —
-// identical gating semantics across both backends during dual-run.
-export async function checkAndConsumeSendQuota(
-  ctx: MutationCtx,
-  args: {
-    ownerUserId: string;
-    ownerEmail?: string | null;
-    content: string;
-    agentKind: AgentKind;
-    isDeep: boolean;
-  },
-): Promise<
-  | { ok: true }
-  | { ok: false; retryAt?: number; entitlement?: Extract<EntitlementResult, { ok: false }> }
-> {
-  const estimatedTokens = estimateTokens(args.content);
-  // Deep runs go through the deep_research feature (governed by the monthly
-  // deepResearchRuns quota). Lite-deep is allowed on Free (requiredPlan "free");
-  // Pro-deep and Pro chat require a paid plan.
-  const feature = args.isDeep
-    ? "deep_research"
-    : args.agentKind === "pro"
-      ? "pro_chat"
-      : "normal_chat";
-  const model = args.isDeep
-    ? deepModelForAgent(args.agentKind)
-    : chatModelForAgent(args.agentKind);
-  const requiredPlan = args.isDeep
-    ? args.agentKind === "pro"
-      ? ("starter" as const)
-      : ("free" as const)
-    : args.agentKind === "pro"
-      ? ("starter" as const)
-      : ("free" as const);
-  const entitlement = await consumeCredits(ctx, {
-    ownerUserId: args.ownerUserId,
-    ownerEmail: args.ownerEmail,
-    feature,
-    provider: CHAT_PROVIDER_NAME,
-    model,
-    inputTokens: estimatedTokens,
-    totalTokens: estimatedTokens,
-    credits: estimateCredits({
-      feature,
-      inputTokens: estimatedTokens,
-      totalTokens: estimatedTokens,
-      agentKind: args.agentKind,
-    }),
-    requiredPlan,
-  });
-  if (!entitlement.ok) {
-    return { ok: false, entitlement };
-  }
-  const rateChecks = await Promise.all([
-    rateLimiter.check(ctx, "sendMessage", { key: args.ownerUserId }),
-    rateLimiter.check(ctx, "globalSendMessage"),
-    rateLimiter.check(ctx, "globalTokenUsage", { count: estimatedTokens }),
-  ]);
-  const blocked = rateChecks.find((status) => !status.ok);
-  if (blocked && !blocked.ok) {
-    return {
-      ok: false,
-      retryAt: Date.now() + blocked.retryAfter,
-    };
-  }
-  await Promise.all([
-    rateLimiter.limit(ctx, "sendMessage", { key: args.ownerUserId }),
-    rateLimiter.limit(ctx, "globalSendMessage"),
-  ]);
-  return { ok: true };
 }
 
 async function savePromptAndScheduleRun(

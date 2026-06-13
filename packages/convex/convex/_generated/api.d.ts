@@ -86,6 +86,7 @@ import type * as agent_sandbox_scripts_power from "../agent/sandbox/scripts/powe
 import type * as agent_sandbox_scripts_statcheck from "../agent/sandbox/scripts/statcheck.js";
 import type * as agent_sandbox_statcheckClassify from "../agent/sandbox/statcheckClassify.js";
 import type * as agent_sandbox_verificationReport from "../agent/sandbox/verificationReport.js";
+import type * as agent_sendQuota from "../agent/sendQuota.js";
 import type * as agent_service from "../agent/service.js";
 import type * as agent_service_model from "../agent/service/model.js";
 import type * as agent_skills_builtin_generated from "../agent/skills/builtin/generated.js";
@@ -262,6 +263,7 @@ declare const fullApi: ApiFromModules<{
   "agent/sandbox/scripts/statcheck": typeof agent_sandbox_scripts_statcheck;
   "agent/sandbox/statcheckClassify": typeof agent_sandbox_statcheckClassify;
   "agent/sandbox/verificationReport": typeof agent_sandbox_verificationReport;
+  "agent/sendQuota": typeof agent_sendQuota;
   "agent/service": typeof agent_service;
   "agent/service/model": typeof agent_service_model;
   "agent/skills/builtin/generated": typeof agent_skills_builtin_generated;

@@ -9,7 +9,7 @@ import {
 } from "../_generated/server";
 import { requireCurrentUser } from "../auth";
 import { throwAppError } from "../lib/appError";
-import { checkAndConsumeSendQuota } from "./messages";
+import { checkAndConsumeSendQuota } from "./sendQuota";
 import {
   bumpThreadOnMessage,
   findRun,

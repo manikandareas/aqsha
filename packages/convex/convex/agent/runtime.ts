@@ -1,9 +1,11 @@
 import { Agent, stepCountIs, type UsageHandler } from "@convex-dev/agent";
 import { components, internal } from "../_generated/api";
 import { chatProvider } from "./providers/providers";
-import { CHAT_LITE_MODEL, CHAT_PRO_MODEL } from "./models";
+import { type AgentKind, CHAT_LITE_MODEL, CHAT_PRO_MODEL } from "./models";
 
-export type AgentKind = "lite" | "pro";
+// Re-exported for legacy importers; canonical definition now lives in models.ts
+// (severs the models → runtime edge so runtime.ts is deletable at cutover).
+export type { AgentKind };
 
 // Instruction lines shared by both Astra agents. The intro lines (answer
 // length / posture) differ per agent; everything else is identical so the two

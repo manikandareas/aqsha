@@ -1,4 +1,6 @@
-import type { AgentKind } from "./runtime";
+// Agent tier. Canonical home is here (cross-domain: feed/papers/billing/v2 all
+// consume it); the legacy runtime.ts re-exports it until that file is retired.
+export type AgentKind = "lite" | "pro";
 
 // Single source of truth for LLM model selection.
 //
