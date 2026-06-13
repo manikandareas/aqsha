@@ -3,6 +3,7 @@ import { convexTest } from "convex-test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, internal } from "../convex/_generated/api";
 import schema from "../convex/schema";
+import { deleteV2AgentData } from "../convex/accountCleanup/agent";
 
 // Step 1 (plan §9.4): the agent/service:* facade is the Convex side of
 // SERVICE_FUNCTIONS in apps/agents/src/store/convexStore.ts. These tests pin
@@ -993,5 +994,107 @@ describe("watchdogSweep", () => {
       "run_stalled-running": "failed",
       "run_waiting-user": "waiting_hitl",
     });
+  });
+});
+
+describe("account cleanup of v2 tables (Step 6a)", () => {
+  async function seedOwner(t: ReturnType<typeof convexTest>, owner: string, thread: string, run: string) {
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      await ctx.db.insert("chatThreads", {
+        threadId: thread,
+        ownerUserId: owner,
+        agentKind: "lite",
+        status: "idle",
+        lastActivityAt: now,
+        messageCount: 2,
+      });
+      await ctx.db.insert("chatMessages", {
+        threadId: thread,
+        ownerUserId: owner,
+        role: "user",
+        text: "hai",
+        status: "complete",
+        createdAt: now,
+      });
+      await ctx.db.insert("agentRuns2", {
+        runId: run,
+        threadId: thread,
+        ownerUserId: owner,
+        agentKind: "lite",
+        mode: "deep",
+        status: "completed",
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert("agentRunEvents2", {
+        runId: run,
+        seq: 0,
+        type: "run_status",
+        payloadJson: "{}",
+        createdAt: now,
+      });
+      await ctx.db.insert("researchPhaseStates", {
+        runId: run,
+        phase: "plan",
+        status: "done",
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert("pendingInteractions", {
+        ownerUserId: owner,
+        threadId: thread,
+        runId: run,
+        type: "ask_user",
+        toolName: "askUser",
+        payloadJson: "{}",
+        status: "pending",
+        createdAt: now,
+      });
+    });
+  }
+
+  async function countAll(t: ReturnType<typeof convexTest>) {
+    return await t.run(async (ctx) => ({
+      threads: (await ctx.db.query("chatThreads").collect()).length,
+      messages: (await ctx.db.query("chatMessages").collect()).length,
+      runs: (await ctx.db.query("agentRuns2").collect()).length,
+      events: (await ctx.db.query("agentRunEvents2").collect()).length,
+      phases: (await ctx.db.query("researchPhaseStates").collect()).length,
+      interactions: (await ctx.db.query("pendingInteractions").collect()).length,
+    }));
+  }
+
+  it("cascade-deletes only the target owner's v2 agent data", async () => {
+    const t = setup();
+    await seedOwner(t, OWNER, "thr_a", "run_a");
+    await seedOwner(t, "owner-other", "thr_b", "run_b");
+
+    const deleted = await t.run(async (ctx) => deleteV2AgentData(ctx, OWNER));
+    expect(deleted).toBeGreaterThan(0);
+
+    const after = await countAll(t);
+    // Exactly the other owner's single set of rows survives.
+    expect(after).toEqual({
+      threads: 1,
+      messages: 1,
+      runs: 1,
+      events: 1,
+      phases: 1,
+      interactions: 1,
+    });
+    const survivor = await t.run(async (ctx) =>
+      ctx.db
+        .query("chatThreads")
+        .withIndex("by_owner_activity", (q) => q.eq("ownerUserId", "owner-other"))
+        .unique(),
+    );
+    expect(survivor?.threadId).toBe("thr_b");
+  });
+
+  it("is a no-op for an owner with no v2 data", async () => {
+    const t = setup();
+    const deleted = await t.run(async (ctx) => deleteV2AgentData(ctx, "nobody"));
+    expect(deleted).toBe(0);
   });
 });
