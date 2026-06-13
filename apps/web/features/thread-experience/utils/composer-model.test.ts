@@ -17,8 +17,7 @@ function activeDeepRun(): ResearchRun {
     executionKind: "workflow",
     status: "running",
     retryable: true,
-    steps: [],
-    events: [],
+    activity: [],
   };
 }
 

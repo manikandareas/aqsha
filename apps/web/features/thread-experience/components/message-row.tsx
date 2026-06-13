@@ -10,6 +10,7 @@ import {
   ThumbsDownIcon,
   ThumbsUpIcon,
 } from "@aqsha/ui/icons";
+import { useSmoothText } from "@convex-dev/agent/react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -89,9 +90,13 @@ export function MessageRow({
             </span>
           </div>
         ) : hasText ? (
-          <MessageResponse className="aqsha-prose aqsha-prose-message">
-            {text}
-          </MessageResponse>
+          isStreaming ? (
+            <StreamingResponse text={text} />
+          ) : (
+            <MessageResponse className="aqsha-prose aqsha-prose-message">
+              {text}
+            </MessageResponse>
+          )
         ) : isStreaming ? (
           <ThreadActivityIndicator label="Sedang menulis..." />
         ) : null}
@@ -112,6 +117,23 @@ export function MessageRow({
         />
       ) : null}
     </Message>
+  );
+}
+
+/**
+ * Smooths a single in-flight assistant message's text (the sdk backend writes it
+ * in ~RTT-sized jumps). This lives per-MessageRow on purpose: the transcript
+ * keys each row by message id, so a new turn remounts this component and the
+ * reveal cursor resets to 0. A shared parent-level `useSmoothText` instead
+ * carried the previous turn's cursor/text into the next bubble, briefly showing
+ * the prior response until the new stream overtook the old length.
+ */
+function StreamingResponse({ text }: { text: string }) {
+  const [smoothed] = useSmoothText(text, { startStreaming: true });
+  return (
+    <MessageResponse className="aqsha-prose aqsha-prose-message">
+      {smoothed}
+    </MessageResponse>
   );
 }
 

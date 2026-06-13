@@ -79,6 +79,50 @@ export const runEventSchema = z.object({
 });
 export type RunEvent = z.infer<typeof runEventSchema>;
 
+// ── per-event payload shapes (Fase 2 enrichment; additive + backward-compat) ──
+//
+// The wire stays open (`payload: z.record(...)` above). These typed shapes
+// document the enriched payloads the agent service emits and type the emit
+// sites (apps/agents/src/agent/hooks.ts). Every added field is OPTIONAL, so the
+// thin Fase 1 events (`tool_start` = `{ toolName }`, `subagent_*` =
+// `{ agentType }`) still parse. The activity view-model derives from these and
+// re-applies a scalar-only allow-list on the client (defense in depth).
+//
+// Only safe scalars may appear in a summary — the agent service projects raw
+// tool inputs/outputs through `activitySanitizers.ts` before they reach here.
+export const activityScalarSchema = z.union([z.string(), z.number(), z.boolean()]);
+export type ActivityScalar = z.infer<typeof activityScalarSchema>;
+
+export const activityScalarRecordSchema = z.record(z.string(), activityScalarSchema);
+export type ActivityScalarRecord = z.infer<typeof activityScalarRecordSchema>;
+
+export const toolStartPayloadSchema = z.object({
+  toolName: z.string(),
+  toolUseId: z.string().optional(),
+  // Fase 3: the sub-agent the tool ran in (SDK `BaseHookInput.agent_id`, present
+  // only when the hook fires inside an AgentTool worker). Drives precise nesting
+  // of a sub-agent's tools — correct even for parallel sub-agents. Absent for
+  // main-thread tool calls.
+  parentAgentId: z.string().optional(),
+  inputSummary: activityScalarRecordSchema.optional(),
+});
+export type ToolStartPayload = z.infer<typeof toolStartPayloadSchema>;
+
+export const toolEndPayloadSchema = z.object({
+  toolName: z.string(),
+  toolUseId: z.string().optional(),
+  parentAgentId: z.string().optional(),
+  status: z.enum(["ok", "error"]).optional(),
+  resultSummary: activityScalarRecordSchema.optional(),
+});
+export type ToolEndPayload = z.infer<typeof toolEndPayloadSchema>;
+
+export const subagentPayloadSchema = z.object({
+  agentType: z.string().optional(),
+  agentId: z.string().optional(),
+});
+export type SubagentPayload = z.infer<typeof subagentPayloadSchema>;
+
 // Final accounting persisted on agentRuns from the SDK result message.
 export const runUsageSchema = z.object({
   inputTokens: z.number().nonnegative().optional(),

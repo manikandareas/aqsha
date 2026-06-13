@@ -25,8 +25,7 @@ function run(status: ResearchRun["status"]): ResearchRun {
     executionKind: "workflow",
     status,
     retryable: false,
-    steps: [],
-    events: [],
+    activity: [],
   };
 }
 

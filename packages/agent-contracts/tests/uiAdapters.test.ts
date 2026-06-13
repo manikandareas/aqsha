@@ -82,7 +82,7 @@ describe("uiHitlMessageFromInteraction", () => {
 });
 
 describe("uiRunFromRow", () => {
-  it("maps run + events into the ResearchRun shape", () => {
+  it("maps run + events into the ResearchRun shape with a normalized activity timeline", () => {
     const run = uiRunFromRow({
       runId: "run1",
       status: "completed",
@@ -95,7 +95,7 @@ describe("uiRunFromRow", () => {
           id: "run1:0",
           seq: 0,
           type: "subagent_start",
-          payloadJson: JSON.stringify({ subagent: "planner" }),
+          payloadJson: JSON.stringify({ agentType: "literature-searcher" }),
           createdAt: 2,
         },
         {
@@ -105,7 +105,6 @@ describe("uiRunFromRow", () => {
           payloadJson: JSON.stringify({ toolName: "searchWeb" }),
           createdAt: 3,
         },
-        { id: "run1:2", seq: 2, type: "error", payloadJson: "{}", createdAt: 4 },
       ],
     });
     expect(run).toMatchObject({
@@ -115,11 +114,11 @@ describe("uiRunFromRow", () => {
       retryable: false,
       completedAt: 9,
     });
-    expect(run.events.map((event) => event.eventType)).toEqual([
-      "status",
-      "tool",
-      "failure",
-    ]);
-    expect(run.events[0]!.title).toContain("planner");
+    // The single rendered representation is `activity` (the orphaned `events`
+    // mirror was removed in the Fase-3 cleanup).
+    const runNode = run.activity.find((node) => node.type === "run");
+    expect(runNode?.status).toBe("completed");
+    const subagent = run.activity.find((node) => node.type === "subagent");
+    expect(subagent?.title).toContain("literatur");
   });
 });

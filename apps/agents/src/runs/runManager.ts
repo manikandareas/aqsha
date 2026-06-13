@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { PendingInteraction, RunRequest } from "@aqsha/agent-contracts";
+import { RUN_ERROR_CODES, sanitizeRunErrorMessage } from "../agent/activitySanitizers";
 import {
   buildAstraQueryOptions,
   type AstraQueryOptions,
@@ -147,6 +148,18 @@ export class RunManager {
       return { ok: false, reason: "interaction_not_responded" };
     }
 
+    // Close the timeline's question/approval node on resume. An approval that
+    // timed out resolves inside interactions.ts when its primed response is
+    // consumed; ask_user has no such path, so emit interaction_resolved here so
+    // its node never hangs on "waiting_approval".
+    if (interaction.type === "ask_user") {
+      await store.appendRunEvent({
+        runId,
+        type: "interaction_resolved",
+        payload: { interactionId, toolName: interaction.toolName },
+      });
+    }
+
     const phase: TurnPhase =
       interaction.type === "tool_approval" &&
       interaction.toolName === "proposeArtifact" &&
@@ -173,24 +186,39 @@ export class RunManager {
 
   /** Cancel an active run (durable: status flips even if no stream is live). */
   async cancelRun(runId: string): Promise<{ ok: boolean }> {
+    const { store } = this.deps;
+    const run = await store.getRun(runId);
+    if (!run) {
+      return { ok: false };
+    }
     const active = this.active.get(runId);
     if (active) {
       active.canceled = true;
-      try {
-        await active.handle?.interrupt();
-      } catch {
-        // Already finished — fall through to status update.
-      }
-    }
-    const run = await this.deps.store.getRun(runId);
-    if (!run) {
-      return { ok: false };
     }
     if (["completed", "failed", "canceled"].includes(run.status)) {
       return { ok: true };
     }
-    await this.deps.store.finalizeRun(runId, { status: "canceled" });
-    await this.deps.store.setThreadStatus(run.threadId, "idle");
+    // Finalize + emit the terminal `canceled` event BEFORE interrupting the
+    // stream. The execution loop only advances past its stream loop once it is
+    // interrupted, so doing this first guarantees exactly one terminal event
+    // here (the loop then re-finalizes idempotently and writes the assistant
+    // message text). Interrupting first would let the loop finalize "canceled"
+    // in the gap, and this method would observe a terminal status and skip the
+    // event — leaving the timeline without an explicit "Dihentikan" marker.
+    await store.finalizeRun(runId, { status: "canceled" });
+    await store.setThreadStatus(run.threadId, "idle");
+    await store.appendRunEvent({
+      runId,
+      type: "run_status",
+      payload: { status: "canceled" },
+    });
+    if (active) {
+      try {
+        await active.handle?.interrupt();
+      } catch {
+        // Stream already finished — the canceled status/event is durable anyway.
+      }
+    }
     return { ok: true };
   }
 
@@ -228,10 +256,12 @@ export class RunManager {
       errorMessage: message,
     });
     await store.setThreadStatus(request.threadId, "failed");
+    // Stored `errorMessage` keeps the raw text for ops/logs; the client-facing
+    // event payload is sanitized at the source (plan §8 Fase 2 item 3).
     await store.appendRunEvent({
       runId: request.runId,
       type: "error",
-      payload: { message },
+      payload: { message: sanitizeRunErrorMessage(message) },
     });
   }
 
@@ -442,7 +472,7 @@ export class RunManager {
       await store.appendRunEvent({
         runId,
         type: "error",
-        payload: { message: streamError ?? result.resultSubtype },
+        payload: { message: sanitizeRunErrorMessage(streamError ?? result.resultSubtype) },
       });
       return;
     }
@@ -554,7 +584,10 @@ export class RunManager {
           await store.appendRunEvent({
             runId,
             type: "error",
-            payload: { message: "budget_exhausted", dispatchCostUsd },
+            payload: {
+              message: sanitizeRunErrorMessage(RUN_ERROR_CODES.budgetExhausted),
+              dispatchCostUsd,
+            },
           });
           return;
         }
@@ -728,7 +761,7 @@ export class RunManager {
           await store.appendRunEvent({
             runId,
             type: "error",
-            payload: { phase, message },
+            payload: { phase, message: sanitizeRunErrorMessage(message) },
           });
           return;
         }
