@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { PendingInteraction, RunRequest } from "@aqsha/agent-contracts";
+import { RUN_ERROR_CODES, sanitizeRunErrorMessage } from "../agent/activitySanitizers";
 import {
   buildAstraQueryOptions,
   type AstraQueryOptions,
@@ -228,10 +229,12 @@ export class RunManager {
       errorMessage: message,
     });
     await store.setThreadStatus(request.threadId, "failed");
+    // Stored `errorMessage` keeps the raw text for ops/logs; the client-facing
+    // event payload is sanitized at the source (plan §8 Fase 2 item 3).
     await store.appendRunEvent({
       runId: request.runId,
       type: "error",
-      payload: { message },
+      payload: { message: sanitizeRunErrorMessage(message) },
     });
   }
 
@@ -442,7 +445,7 @@ export class RunManager {
       await store.appendRunEvent({
         runId,
         type: "error",
-        payload: { message: streamError ?? result.resultSubtype },
+        payload: { message: sanitizeRunErrorMessage(streamError ?? result.resultSubtype) },
       });
       return;
     }
@@ -554,7 +557,10 @@ export class RunManager {
           await store.appendRunEvent({
             runId,
             type: "error",
-            payload: { message: "budget_exhausted", dispatchCostUsd },
+            payload: {
+              message: sanitizeRunErrorMessage(RUN_ERROR_CODES.budgetExhausted),
+              dispatchCostUsd,
+            },
           });
           return;
         }
@@ -728,7 +734,7 @@ export class RunManager {
           await store.appendRunEvent({
             runId,
             type: "error",
-            payload: { phase, message },
+            payload: { phase, message: sanitizeRunErrorMessage(message) },
           });
           return;
         }

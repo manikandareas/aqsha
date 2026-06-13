@@ -1,5 +1,15 @@
-import { isApproved } from "@aqsha/agent-contracts";
+import {
+  isApproved,
+  type SubagentPayload,
+  type ToolEndPayload,
+  type ToolStartPayload,
+} from "@aqsha/agent-contracts";
 import type { AgentStore } from "../store/types";
+import {
+  sanitizeToolInput,
+  sanitizeToolResult,
+  toolResponseIsError,
+} from "./activitySanitizers";
 import {
   EXECUTE_ARTIFACT_TOOL_NAME,
   logicalToolName,
@@ -10,12 +20,22 @@ import {
 // (defense layer 2 — layer 1 is the allow-list) plus run-event instrumentation.
 // Hook inputs/outputs are typed structurally to stay decoupled from SDK type
 // names; the shapes match the documented hook contract.
+//
+// Fase 2 (plan §7–§8): tool events now carry the SDK `tool_use_id` (exact
+// pairing of start↔end in the view-model), a SANITIZED input/result summary,
+// and an explicit ok/error status; subagent events carry `agent_id`. All detail
+// flows through `activitySanitizers.ts` first — raw inputs/responses never reach
+// the payload.
 
 type HookInputLike = {
   hook_event_name?: string;
   tool_name?: string;
   tool_input?: Record<string, unknown>;
-  // Subagent + compaction events carry extra fields; captured loosely.
+  // PostToolUse carries the tool result; PostToolUseFailure carries `error`.
+  tool_response?: unknown;
+  tool_use_id?: string;
+  // SubagentStart/Stop carry `agent_id`; compaction carries trigger fields.
+  agent_id?: string;
   [key: string]: unknown;
 };
 
@@ -84,14 +104,15 @@ export function buildRunHooks(input: {
 }): RunHooks {
   const { store, runId, threadId } = input;
 
-  const preToolUse: HookCallbackLike = async (hookInput) => {
+  const preToolUse: HookCallbackLike = async (hookInput, toolUseID) => {
     const toolName = hookInput.tool_name ?? "";
     const logical = logicalToolName(toolName);
-    await store.appendRunEvent({
-      runId,
-      type: "tool_start",
-      payload: { toolName: logical },
-    });
+    const toolUseId = toolUseID ?? hookInput.tool_use_id;
+    const inputSummary = sanitizeToolInput(logical, hookInput.tool_input);
+    const payload: ToolStartPayload = { toolName: logical };
+    if (toolUseId) payload.toolUseId = toolUseId;
+    if (Object.keys(inputSummary).length > 0) payload.inputSummary = inputSummary;
+    await store.appendRunEvent({ runId, type: "tool_start", payload });
     if (logical === EXECUTE_ARTIFACT_TOOL_NAME) {
       const gate = await executeArtifactGateAllows(
         store,
@@ -111,36 +132,52 @@ export function buildRunHooks(input: {
     return {};
   };
 
-  const postToolUse: HookCallbackLike = async (hookInput) => {
-    await store.appendRunEvent({
-      runId,
-      type: "tool_end",
-      payload: { toolName: logicalToolName(hookInput.tool_name ?? "") },
-    });
+  const postToolUse: HookCallbackLike = async (hookInput, toolUseID) => {
+    const logical = logicalToolName(hookInput.tool_name ?? "");
+    const isError = toolResponseIsError(hookInput.tool_response);
+    const payload: ToolEndPayload = {
+      toolName: logical,
+      status: isError ? "error" : "ok",
+    };
+    const toolUseId = toolUseID ?? hookInput.tool_use_id;
+    if (toolUseId) payload.toolUseId = toolUseId;
+    // An error result is just a message, not data — skip the result summary.
+    const resultSummary = isError
+      ? {}
+      : sanitizeToolResult(logical, hookInput.tool_response);
+    if (Object.keys(resultSummary).length > 0) payload.resultSummary = resultSummary;
+    await store.appendRunEvent({ runId, type: "tool_end", payload });
     return {};
   };
 
-  const subagentStart: HookCallbackLike = async (hookInput) => {
-    await store.appendRunEvent({
-      runId,
-      type: "subagent_start",
-      payload: {
-        agentType: stringField(hookInput, "agent_type", "subagent_type", "agentType"),
-      },
-    });
+  // A tool that threw mid-execution: close its timeline node as failed. The raw
+  // `error` string is deliberately dropped (it can carry a stack/path/secret) —
+  // the view-model derives a safe "Gagal …" title from the tool name.
+  const postToolUseFailure: HookCallbackLike = async (hookInput, toolUseID) => {
+    const payload: ToolEndPayload = {
+      toolName: logicalToolName(hookInput.tool_name ?? ""),
+      status: "error",
+    };
+    const toolUseId = toolUseID ?? hookInput.tool_use_id;
+    if (toolUseId) payload.toolUseId = toolUseId;
+    await store.appendRunEvent({ runId, type: "tool_end", payload });
     return {};
   };
 
-  const subagentStop: HookCallbackLike = async (hookInput) => {
-    await store.appendRunEvent({
-      runId,
-      type: "subagent_stop",
-      payload: {
-        agentType: stringField(hookInput, "agent_type", "subagent_type", "agentType"),
-      },
-    });
-    return {};
-  };
+  const subagentEvent =
+    (type: "subagent_start" | "subagent_stop"): HookCallbackLike =>
+    async (hookInput) => {
+      const payload: SubagentPayload = {};
+      const agentType = stringField(hookInput, "agent_type", "subagent_type", "agentType");
+      if (agentType) payload.agentType = agentType;
+      const agentId = stringField(hookInput, "agent_id", "agentId");
+      if (agentId) payload.agentId = agentId;
+      await store.appendRunEvent({ runId, type, payload });
+      return {};
+    };
+
+  const subagentStart = subagentEvent("subagent_start");
+  const subagentStop = subagentEvent("subagent_stop");
 
   const preCompact: HookCallbackLike = async () => {
     await store.appendRunEvent({ runId, type: "compaction", payload: {} });
@@ -153,6 +190,9 @@ export function buildRunHooks(input: {
     ],
     PostToolUse: [
       { matcher: `^${qualifiedToolName("")}`, hooks: [postToolUse] },
+    ],
+    PostToolUseFailure: [
+      { matcher: `^${qualifiedToolName("")}`, hooks: [postToolUseFailure] },
     ],
     SubagentStart: [{ hooks: [subagentStart] }],
     SubagentStop: [{ hooks: [subagentStop] }],

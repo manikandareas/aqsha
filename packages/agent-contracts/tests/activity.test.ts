@@ -426,4 +426,218 @@ describe("activityEventsFromRun", () => {
     expect(serialized).not.toContain("kueri rahasia pengguna");
     expect(serialized).not.toContain("sk-secret-123");
   });
+
+  // ── Fase 2: enriched payloads (toolUseId, summaries, agentId) ──────────────
+
+  it("pairs interleaved same-tool calls by toolUseId (not LIFO)", () => {
+    const result = activityEventsFromRun(
+      makeRow({
+        status: "completed",
+        updatedAt: 6000,
+        events: [
+          event(1, "tool_start", { toolName: "searchWeb", toolUseId: "tu_a" }, 1000),
+          event(2, "tool_start", { toolName: "searchWeb", toolUseId: "tu_b" }, 2000),
+          // First-opened tool finishes FIRST — LIFO would mis-pair this.
+          event(3, "tool_end", {
+            toolName: "searchWeb",
+            toolUseId: "tu_a",
+            status: "ok",
+            resultSummary: { resultCount: 1 },
+          }, 3000),
+          event(4, "tool_end", {
+            toolName: "searchWeb",
+            toolUseId: "tu_b",
+            status: "ok",
+            resultSummary: { resultCount: 9 },
+          }, 5000),
+        ],
+      }),
+    );
+    const first = result.find((node) => node.seq === 1)!;
+    const second = result.find((node) => node.seq === 2)!;
+    // tu_a opened at 1000, closed at 3000 → 2000ms, 1 hasil.
+    expect(first).toMatchObject({
+      status: "completed",
+      durationMs: 2000,
+      description: "1 hasil",
+    });
+    // tu_b opened at 2000, closed at 5000 → 3000ms, 9 hasil.
+    expect(second).toMatchObject({
+      status: "completed",
+      durationMs: 3000,
+      description: "9 hasil",
+    });
+  });
+
+  it("fills the description from a sanitized resultSummary", () => {
+    const result = activityEventsFromRun(
+      makeRow({
+        status: "completed",
+        updatedAt: 5000,
+        events: [
+          event(1, "tool_start", { toolName: "searchWeb", toolUseId: "tu_1" }),
+          event(2, "tool_end", {
+            toolName: "searchWeb",
+            toolUseId: "tu_1",
+            status: "ok",
+            resultSummary: { resultCount: 12 },
+          }),
+        ],
+      }),
+    );
+    const tool = result.find((node) => node.type === "tool");
+    expect(tool).toMatchObject({
+      status: "completed",
+      title: "Selesai mencari web",
+      description: "12 hasil",
+      metadata: { tool: "searchWeb", resultCount: 12 },
+    });
+  });
+
+  it("shows the inputSummary-derived description while a tool is still running", () => {
+    const result = activityEventsFromRun(
+      makeRow({
+        status: "running",
+        events: [
+          event(1, "tool_start", {
+            toolName: "proposeArtifact",
+            toolUseId: "tu_p",
+            inputSummary: { action: "create", title: "Ringkasan studi" },
+          }),
+        ],
+      }),
+    );
+    const tool = result.find((node) => node.type === "tool");
+    expect(tool).toMatchObject({
+      status: "running",
+      title: "Menyusun dokumen",
+      description: "Ringkasan studi",
+    });
+  });
+
+  it("reads agentId into the sub-agent node metadata", () => {
+    const result = activityEventsFromRun(
+      makeRow({
+        status: "completed",
+        mode: "deep",
+        updatedAt: 9000,
+        events: [
+          event(1, "subagent_start", {
+            agentType: "literature-searcher",
+            agentId: "agent_42",
+          }),
+          event(2, "subagent_stop", {
+            agentType: "literature-searcher",
+            agentId: "agent_42",
+          }),
+        ],
+      }),
+    );
+    const subagent = result.find((node) => node.type === "subagent");
+    expect(subagent?.metadata).toMatchObject({
+      agentType: "literature-searcher",
+      agentId: "agent_42",
+    });
+  });
+
+  it("pairs parallel sub-agents by agentId, not by close order", () => {
+    const result = activityEventsFromRun(
+      makeRow({
+        status: "completed",
+        mode: "deep",
+        updatedAt: 9000,
+        events: [
+          event(1, "subagent_start", { agentType: "literature-searcher", agentId: "a1" }, 1000),
+          event(2, "subagent_start", { agentType: "literature-searcher", agentId: "a2" }, 2000),
+          // a1 (opened first) also stops first.
+          event(3, "subagent_stop", { agentType: "literature-searcher", agentId: "a1" }, 3000),
+          event(4, "subagent_stop", { agentType: "literature-searcher", agentId: "a2" }, 7000),
+        ],
+      }),
+    );
+    // The two starts overlap by seq window, so coarse nesting (Fase 1) makes a2
+    // a child of a1 — but agentId pairing still closes each at its OWN stop, so
+    // the durations are correct (LIFO would swap them). Flatten to find both.
+    const flatten = (nodes: typeof result): typeof result =>
+      nodes.flatMap((node) => [node, ...flatten(node.children ?? [])]);
+    const all = flatten(result);
+    const a1 = all.find((node) => node.metadata?.agentId === "a1")!;
+    const a2 = all.find((node) => node.metadata?.agentId === "a2")!;
+    expect(a1.durationMs).toBe(2000); // 1000 → 3000
+    expect(a2.durationMs).toBe(5000); // 2000 → 7000
+  });
+
+  it("never renders the raw run.errorMessage on the header (no-leak) when no error event exists", () => {
+    // A long run whose terminal `error` event was truncated by the event cap,
+    // or a watchdog-failed run: only `run.errorMessage` (kept raw for ops) is
+    // present. It must NOT reach the rendered header / serialized output.
+    const result = activityEventsFromRun(
+      makeRow({
+        status: "failed",
+        updatedAt: 4000,
+        errorMessage: "fetch failed: ECONNREFUSED 10.0.0.5:5432\n  at /srv/app/exa.ts:42",
+        events: [event(1, "tool_start", { toolName: "searchWeb", toolUseId: "tu_1" }, 2000)],
+      }),
+    );
+    const runNode = result[0]!;
+    expect(runNode.status).toBe("failed");
+    expect(runNode.title).toBe("Berhenti sebelum selesai");
+    expect(runNode.description).toBeUndefined();
+    expect(JSON.stringify(result)).not.toContain("/srv/app");
+    expect(JSON.stringify(result)).not.toContain("ECONNREFUSED");
+  });
+
+  it("keeps a failed tool failed even if a matching tool_end arrives after the error", () => {
+    // The error handler closes the open tool as failed and de-indexes it from
+    // BOTH open-tool maps; a stray later tool_end with the same toolUseId must
+    // not resurrect it to completed.
+    const result = activityEventsFromRun(
+      makeRow({
+        status: "failed",
+        updatedAt: 6000,
+        events: [
+          event(1, "tool_start", { toolName: "searchWeb", toolUseId: "tu_1" }, 1000),
+          event(2, "error", { message: "Penyedia gagal" }, 2000),
+          event(3, "tool_end", {
+            toolName: "searchWeb",
+            toolUseId: "tu_1",
+            status: "ok",
+            resultSummary: { resultCount: 5 },
+          }, 3000),
+        ],
+      }),
+    );
+    const tools = result.filter((node) => node.type === "tool");
+    const paired = tools.find((node) => node.seq === 1)!;
+    expect(paired.status).toBe("failed");
+    expect(paired.title).toBe("Gagal mencari sumber web");
+    expect(paired.description).toBe("Penyedia gagal");
+    // The stray tool_end becomes a separate (orphan) node, never a resurrection.
+    expect(tools.some((node) => node.seq === 1 && node.status === "completed")).toBe(false);
+  });
+
+  it("drops non-scalar entries smuggled into a summary (normalizer default-deny)", () => {
+    const result = activityEventsFromRun(
+      makeRow({
+        status: "completed",
+        updatedAt: 5000,
+        events: [
+          event(1, "tool_start", { toolName: "searchWeb", toolUseId: "tu_1" }),
+          event(2, "tool_end", {
+            toolName: "searchWeb",
+            toolUseId: "tu_1",
+            status: "ok",
+            resultSummary: {
+              resultCount: 3,
+              leak: { secret: "rahasia-bersarang" },
+              tags: ["a", "b"],
+            },
+          }),
+        ],
+      }),
+    );
+    const tool = result.find((node) => node.type === "tool");
+    expect(tool?.metadata).toEqual({ tool: "searchWeb", resultCount: 3 });
+    expect(JSON.stringify(result)).not.toContain("rahasia-bersarang");
+  });
 });

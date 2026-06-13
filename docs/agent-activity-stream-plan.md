@@ -1,6 +1,67 @@
 # Plan: Real-time Agent Activity Stream / Timeline
 
-> Dokumen desain. Implementasi kode adalah follow-up setelah review.
+> Dokumen desain + status implementasi. **Fase 1 SUDAH SELESAI & ter-commit; Fase 2 & 3 belum dikerjakan.**
+
+## Status Implementasi
+
+| Fase | Status | Catatan |
+|---|---|---|
+| **Fase 1 — Frontend-only** | ✅ **SELESAI** — commit `ed5c5c2`, branch `development` (2026-06-13) | Belum di-push/PR. Semua gate hijau. |
+| **Fase 2 — Enrichment backend** | ✅ **SELESAI** — branch `development` (2026-06-13), uncommitted | Detail di "Fase 2 — yang dikerjakan" di bawah. Tanpa perubahan schema/index/Convex. Semua gate hijau. |
+| Fase 3 — Presisi & skala | ⏳ Belum | Detail di §9 Fase 3. |
+| Cleanup follow-up | ⏳ Belum | Hapus `steps` yatim + `eventStepKey` + mapping `events` lama (§12). |
+
+### Fase 2 — yang benar-benar dikerjakan
+- `apps/agents/src/agent/activitySanitizers.ts` (**baru**): chokepoint sanitasi tunggal. `TOOL_SANITIZERS` allow-list per tool + `sanitizeToolInput`/`sanitizeToolResult` (default-deny → `{}`), `toolResponseIsError` (baca `isError` dari CallToolResult MCP), dan `sanitizeRunErrorMessage` (allow-list kode aman → copy Indonesia; selain itu generik "Terjadi kesalahan internal"). Raw `tool_input`/`tool_response` **tidak pernah** keluar modul ini. Helper `safeLabel` (single-line + ≤120 char) untuk label bebas seperti judul artefak.
+- `apps/agents/src/agent/hooks.ts`: wire arg ke-2 `toolUseID` (fallback `tool_use_id`) ke `tool_start`/`tool_end`; tambah `tool_response` ke `HookInputLike`; isi `inputSummary` (start) & `resultSummary` (end) tersanitasi; set `status:"ok"|"error"` di `tool_end` (dari `toolResponseIsError`); **hook baru `PostToolUseFailure`** → `tool_end` `status:"error"` (raw `error` SDK sengaja dibuang); tambah `agentId` (dari `agent_id`) ke `subagent_start`/`subagent_stop` (helper `subagentEvent` dedup start/stop).
+- `apps/agents/src/runs/runManager.ts`: bungkus `message` di SEMUA emit `appendRunEvent type:"error"` (failRun, executeTurn, budget deep, phase deep) dengan `sanitizeRunErrorMessage`. `finalizeRun.errorMessage` tetap RAW (untuk ops/logs; dipertahankan agar `runManager.test.ts:114` tetap hijau) — hanya payload event client-facing yang disanitasi.
+- `packages/agent-contracts/src/run.ts` (additive): `toolStartPayloadSchema`/`toolEndPayloadSchema`/`subagentPayloadSchema` + `activityScalarRecordSchema`. Semua field tambahan **opsional** → event tipis Fase 1 tetap parse; dipakai untuk menTYPE emit site di hooks.ts + divalidasi di test.
+- `packages/agent-contracts/src/activity.ts`: pairing tool **eksak via `toolUseId`** (fallback stack per-nama LIFO); pairing sub-agen **eksak via `agentId`** (fallback LIFO) — benar untuk start/stop paralel (nesting tetap coarse by seq, presisi = Fase 3); baca `inputSummary`/`resultSummary` lewat `scalarsFrom` (default-deny scalar sisi normalizer) ke `metadata`; `describeTool()` → `description` Indonesia ("12 hasil", judul artefak, dst). Semua perilaku Fase 1 dipertahankan.
+- Test: `apps/agents/tests/activitySanitizers.test.ts` (**baru**, sanitizer murni + run-error + no-leak), `apps/agents/tests/hooks.test.ts` (extend: toolUseId, inputSummary/resultSummary, status, `PostToolUseFailure`, agentId, validasi schema, no-leak), `packages/agent-contracts/tests/activity.test.ts` (extend: pairing toolUseId, description dari summary, pairing agentId paralel, default-deny normalizer).
+
+### Keputusan scope Fase 2
+- **Item 5 (public `listRunEvents` Convex query) — DILEWATI (sengaja).** Ditandai "opsional" di plan; tak ada konsumen (frontend Fase 1 tetap pakai `listRuns`, mengalihkannya = refactor lebih besar yang berisiko regресi Fase 1); query publik tak-terpakai = dead code + perluasan permukaan keamanan, bertentangan dengan emphasis owner soal kerapian kode. Konsekuensi positif: **nol perubahan schema/index/Convex** → tak perlu `convex dev --once`. Optimasi read-amplification tetap kandidat Fase 3.
+- **`verifyCitations` & `deleteArtifact` — default-deny disengaja** (tanpa entri di `TOOL_SANITIZERS`): `citation_check` sudah memiliki ringkasan kaya (hindari hitung-ganda); `deleteArtifact` tak punya skalar aman yang berguna (hanya id buram).
+
+### Gate Fase 2 (hijau)
+`bun run typecheck` (5 paket) · `bun run lint` (0 error, 1 warning pra-ada `table-block.tsx`) · `bun run --filter '@aqsha/agent-contracts' test` (41) · `bun run --filter '@aqsha/agents' test` (181) · `bun run --filter '@aqsha/convex' test` (123).
+
+**Bukti DoD (demo end-to-end hooks → payloadJson → normalizer):**
+- searchWeb sukses → `{"toolName":"searchWeb","status":"ok","toolUseId":"tu_web","resultSummary":{"resultCount":2}}`
+- tool gagal (PostToolUseFailure) → `{"toolName":"searchArxiv","status":"error","toolUseId":"tu_arx"}`
+- Leak check (query / API key / URL / judul sumber / path file / "TypeError") = semua **tidak ada** di payload.
+- ActivityEvent: `tool · completed · "Selesai mencari web" · desc="2 hasil"` dan `tool · failed · "Gagal mencari preprint arXiv"`.
+
+### Review adversarial Fase 2 (4 lensa × 3 skeptik/temuan, 34 agen → 5 confirmed / 5 dismissed) — semua confirmed DIPERBAIKI
+- **HIGH (no-leak):** header run masih bisa membocorkan `run.errorMessage` MENTAH lewat fallback `safeErrorText(run.errorMessage)` ketika event `error` tersanitasi absen (truncation >200 event, atau watchdog). **Fix:** header hanya merender pesan dari event yang sudah disanitasi di sumber; `run.errorMessage` mentah tak pernah dirender (judul "Berhenti sebelum selesai" menanggung status gagal). `run.errorMessage` tetap mentah di DB untuk ops (owner-gated). *Sisa Fase 3:* drop/sanitasi `errorMessage` di wire `listRuns` + watchdog emit event tersanitasi.
+- **HIGH (regресi):** handler `error` mengeluarkan node tertutup dari `toolStacks` tapi BUKAN dari `toolsByUseId` (baru) → `tool_end` susulan bisa "menghidupkan" node failed jadi completed. Tidak terjangkau saat ini (urutan seq), tapi merusak parity defensif Fase 1. **Fix:** evict dari KEDUA map di handler error.
+- **MEDIUM (kualitas):** kunci sanitizer ↔ kunci `describeTool` hanya terikat string literal antar-paket, tanpa test penjembatan. **Fix:** test integrasi (apps/agents) memipa output sanitizer NYATA → normalizer → assert `description` (searchWeb "2 hasil", verifyStatistics "3 pemeriksaan, perlu ditinjau").
+- **LOW (kualitas):** sanitizer mengekstrak `verdict`/`action`/`computationKind`/`status` yang tak pernah dirender. **Fix:** `verdict` DISURFACE di `describeTool` (lensa Indonesia: lolos/perlu ditinjau/…); `action` + sanitizer `runComputation` DIBUANG → 1:1 producer→consumer.
+- **LOW (kualitas):** literal `"budget_exhausted"` terikat ke kunci allow-list. **Fix:** konstanta bersama `RUN_ERROR_CODES` (rename = compile error).
+- **Bonus dedup:** `ActivityScalar`/`ActivityScalarRecord` kini di-import dari `@aqsha/agent-contracts` (satu definisi).
+- Gate ulang setelah fix: typecheck (5) · lint (0 err) · agent-contracts **43** · apps/agents **183** · convex **123**.
+- **Dismissed (5):** error→tool_end resurrection (correctness menilai tak terjangkau — tetap diperbaiki sbg parity defensif), failed-tool keeps input description (informatif, bukan bug), MCP response shape unverified live (sanitizer defensif → {} bila beda; verifikasi manual §10), tipe ganda (sudah didedup), fallback key subagent mati (pra-ada, harmless).
+
+### Fase 1 — yang benar-benar dikerjakan
+- `packages/agent-contracts/src/activity.ts` (**baru**): tipe `ActivityEvent` + union (persis §3) + `activityEventsFromRun()` murni — fold tool via stack per-`toolName` (LIFO), nesting kasar fase→subagent→tool by window `seq`, map lifecycle/HITL/error, derivasi status terminal dari `run.status`, katalog label Indonesia (sentence case) dengan default-deny, allow-list scalar (`pickScalars`) anti-leak. Di-export dari `index.ts`.
+- `packages/agent-contracts/src/uiAdapters.ts`: `UiResearchRun.activity` + `uiRunFromRow` mengisi via `activityEventsFromRun(row)`. Legacy `steps`/`events` dibiarkan.
+- `apps/web/.../types/index.ts`: `ResearchRun.activity` ditambah.
+- `apps/web/.../components/run-progress.tsx`: **ditulis ulang** merender `run.activity` (ikon status, Shimmer saat aktif, children ber-nest `border-l border-border/70 pl-3`, collapse/expand `userToggled ?? (isActive || isDeep)`). Dead-code `AgentRunStep` + `eventStepKey` **dihapus**. Badge sumber + `CitationIntegritySummary` deep dipertahankan. (Tidak diekstrak ke file terpisah — itu opsional.)
+- `packages/agent-contracts/tests/activity.test.ts` (**baru**): 35 test (ordering, fold+durasi, nesting subagent & fase, error→failed, terminal-close titles, HITL pending→resolved, compaction hidden, 2× no-leak, judul gagal/selesai per jalur close).
+- 3× `*.test.ts` fixture web dapat `activity: []` (agar typecheck lolos).
+
+### Tambahan di luar rencana awal (hasil review adversarial 4-lensa, 14 agen → 4 confirmed / 6 dismissed)
+- **Bug HIGH diperbaiki:** node `failed`/`cancelled` semula menampilkan label *running* ("Mencari sumber web") padahal ikonnya gagal. Ditambah bentuk `failed?` pada `Label` + helper `failedTitle()` + `labelForNode()`, diterapkan di **SEMUA jalur close** (tool_end-failed, orphan, error-menutup-tool, terminal-close) — bukan hanya yang ditemukan reviewer.
+- **`safeErrorText()`** (baris pertama + batas 200 char) sebagai guard error-leak sisi frontend (mitigasi parsial; sanitasi penuh di sumber tetap Fase 2).
+
+### Keputusan scope dari review (penting untuk Fase 2/3)
+- **Sanitasi pesan error di `runManager.ts` → DITUNDA ke Fase 2** (file backend "JANGAN sentuh" di Fase 1; plan §8 menempatkan sanitasi di sumber). `safeErrorText` frontend sudah menanggulangi sebagian.
+- **Orphan phase/subagent close → DILEWATI** (tak terjadi di produksi: `phase_done`/`subagent_stop` selalu mengikuti start via try/finally + SDK hook; konsisten dengan pola no-op `interaction_resolved`).
+
+### Gate Fase 1 (hijau)
+`bun run typecheck` (5 paket) · `bun run lint` (0 error, 1 warning pra-ada di `table-block.tsx`) · `bun run --filter '@aqsha/agent-contracts' test` (35) · `bun run --filter '@aqsha/convex' test` (123).
+
+---
 
 ## Context
 
@@ -265,7 +326,7 @@ Jawaban akhir tetap `MessageRow` terpisah (sudah begitu secara struktural). Toke
 
 ## 9. Perubahan Implementasi (per file)
 
-### Fase 1 — Frontend-only (ship)
+### Fase 1 — Frontend-only ✅ SELESAI (commit `ed5c5c2`)
 | File | Perubahan |
 |---|---|
 | `packages/agent-contracts/src/activity.ts` (**baru**) | `ActivityEvent` + `activityEventsFromRun()` + katalog label. Export via `index.ts`. |

@@ -1,7 +1,24 @@
+import {
+  subagentPayloadSchema,
+  toolEndPayloadSchema,
+  toolStartPayloadSchema,
+} from "@aqsha/agent-contracts";
 import { describe, expect, it } from "vitest";
 import { buildRunHooks, executeArtifactGateAllows } from "../src/agent/hooks";
 import { qualifiedToolName } from "../src/agent/toolPolicy";
 import { MemoryStore } from "../src/store/memoryStore";
+
+const signal = { signal: new AbortController().signal };
+
+function payloadOf(store: MemoryStore, runId: string, type: string) {
+  return store
+    .listRunEvents(runId)
+    .then((events) =>
+      events
+        .filter((event) => event.type === type)
+        .map((event) => JSON.parse(event.payloadJson) as Record<string, unknown>),
+    );
+}
 
 async function approvedProposal(
   store: MemoryStore,
@@ -107,5 +124,156 @@ describe("buildRunHooks", () => {
     const events = await store.listRunEvents("run1");
     expect(events[0]?.type).toBe("subagent_start");
     expect(JSON.parse(events[0]?.payloadJson ?? "{}").agentType).toBe("planner");
+  });
+});
+
+describe("buildRunHooks — Fase 2 enrichment (sanitized payloads)", () => {
+  function jsonResponse(value: unknown, isError = false) {
+    return {
+      content: [{ type: "text", text: JSON.stringify(value) }],
+      ...(isError ? { isError: true } : {}),
+    };
+  }
+
+  it("tool_start carries toolUseId + a sanitized inputSummary, never the raw query", async () => {
+    const store = new MemoryStore();
+    const hooks = buildRunHooks({ store, runId: "run1", threadId: "t1" });
+    const preToolUse = hooks.PreToolUse?.[0]?.hooks[0]!;
+
+    await preToolUse(
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: qualifiedToolName("searchWeb"),
+        tool_input: { query: "kueri rahasia pengguna", apiKey: "sk-secret-123" },
+      },
+      "tu_web",
+      signal,
+    );
+    await preToolUse(
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: qualifiedToolName("lookupDoi"),
+        tool_input: { doi: "10.1000/xyz" },
+      },
+      "tu_doi",
+      signal,
+    );
+
+    const starts = await payloadOf(store, "run1", "tool_start");
+    // searchWeb has no input sanitizer → only the name + id, no query/secret.
+    expect(starts[0]).toEqual({ toolName: "searchWeb", toolUseId: "tu_web" });
+    // lookupDoi surfaces only the (public) DOI identifier.
+    expect(starts[1]).toEqual({
+      toolName: "lookupDoi",
+      toolUseId: "tu_doi",
+      inputSummary: { doi: "10.1000/xyz" },
+    });
+    // Every payload validates against the additive contract schema.
+    for (const start of starts) {
+      expect(toolStartPayloadSchema.safeParse(start).success).toBe(true);
+    }
+    const serialized = JSON.stringify(starts);
+    expect(serialized).not.toContain("kueri rahasia pengguna");
+    expect(serialized).not.toContain("sk-secret-123");
+  });
+
+  it("tool_end sets status ok and a sanitized resultSummary on success", async () => {
+    const store = new MemoryStore();
+    const hooks = buildRunHooks({ store, runId: "run1", threadId: "t1" });
+    const postToolUse = hooks.PostToolUse?.[0]?.hooks[0]!;
+
+    await postToolUse(
+      {
+        hook_event_name: "PostToolUse",
+        tool_name: qualifiedToolName("searchWeb"),
+        tool_input: { query: "x" },
+        tool_response: jsonResponse([{ title: "rahasia 1" }, { title: "rahasia 2" }]),
+      },
+      "tu_web",
+      signal,
+    );
+
+    const [end] = await payloadOf(store, "run1", "tool_end");
+    expect(end).toEqual({
+      toolName: "searchWeb",
+      toolUseId: "tu_web",
+      status: "ok",
+      resultSummary: { resultCount: 2 },
+    });
+    expect(toolEndPayloadSchema.safeParse(end).success).toBe(true);
+    expect(JSON.stringify(end)).not.toContain("rahasia");
+  });
+
+  it("tool_end reports status error (and no result data) for an errored result", async () => {
+    const store = new MemoryStore();
+    const hooks = buildRunHooks({ store, runId: "run1", threadId: "t1" });
+    const postToolUse = hooks.PostToolUse?.[0]?.hooks[0]!;
+
+    await postToolUse(
+      {
+        hook_event_name: "PostToolUse",
+        tool_name: qualifiedToolName("executeArtifact"),
+        tool_input: { action: "create", title: "Doc" },
+        tool_response: jsonResponse({ error: "Artifact write failed." }, true),
+      },
+      "tu_x",
+      signal,
+    );
+
+    const [end] = await payloadOf(store, "run1", "tool_end");
+    expect(end).toMatchObject({ toolName: "executeArtifact", status: "error" });
+    expect(end).not.toHaveProperty("resultSummary");
+  });
+
+  it("PostToolUseFailure closes the tool as error without leaking the raw error", async () => {
+    const store = new MemoryStore();
+    const hooks = buildRunHooks({ store, runId: "run1", threadId: "t1" });
+    const onFailure = hooks.PostToolUseFailure?.[0]?.hooks[0];
+    expect(onFailure).toBeDefined();
+
+    await onFailure!(
+      {
+        hook_event_name: "PostToolUseFailure",
+        tool_name: qualifiedToolName("searchWeb"),
+        tool_input: { query: "x" },
+        error: "TypeError: cannot read property at /srv/app/providers/exa.ts:88",
+      },
+      "tu_web",
+      signal,
+    );
+
+    const [end] = await payloadOf(store, "run1", "tool_end");
+    expect(end).toEqual({ toolName: "searchWeb", toolUseId: "tu_web", status: "error" });
+    expect(JSON.stringify(end)).not.toContain("/srv/app");
+    expect(JSON.stringify(end)).not.toContain("TypeError");
+  });
+
+  it("subagent events carry both agentType and agentId", async () => {
+    const store = new MemoryStore();
+    const hooks = buildRunHooks({ store, runId: "run1", threadId: "t1" });
+    await hooks.SubagentStart?.[0]?.hooks[0]!(
+      {
+        hook_event_name: "SubagentStart",
+        agent_type: "literature-searcher",
+        agent_id: "agent_42",
+      },
+      undefined,
+      signal,
+    );
+    await hooks.SubagentStop?.[0]?.hooks[0]!(
+      {
+        hook_event_name: "SubagentStop",
+        agent_type: "literature-searcher",
+        agent_id: "agent_42",
+      },
+      undefined,
+      signal,
+    );
+
+    const [start] = await payloadOf(store, "run1", "subagent_start");
+    const [stop] = await payloadOf(store, "run1", "subagent_stop");
+    expect(start).toEqual({ agentType: "literature-searcher", agentId: "agent_42" });
+    expect(stop).toEqual({ agentType: "literature-searcher", agentId: "agent_42" });
+    expect(subagentPayloadSchema.safeParse(start).success).toBe(true);
   });
 });

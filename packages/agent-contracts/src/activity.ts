@@ -226,6 +226,79 @@ function numberOf(payload: Record<string, unknown>, key: string): number | undef
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+/**
+ * Keep only safe-scalar entries from a nested summary object (the Fase 2
+ * `inputSummary` / `resultSummary` payloads). Normalizer-side default-deny:
+ * mirrors the source sanitizer so a nested object/array/secret can never reach
+ * the view-model even if a future payload smuggles one into a summary.
+ */
+function scalarsFrom(value: unknown): Record<string, string | number | boolean> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: Record<string, string | number | boolean> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (
+      typeof entry === "string" ||
+      typeof entry === "number" ||
+      typeof entry === "boolean"
+    ) {
+      out[key] = entry;
+    }
+  }
+  return out;
+}
+
+// Statistical-verification verdict → sentence-case Indonesian.
+const VERDICT_LABELS: Record<string, string> = {
+  passed: "lolos",
+  passed_with_notes: "lolos dengan catatan",
+  needs_review: "perlu ditinjau",
+  failed: "tidak lolos",
+};
+
+/**
+ * Human-readable Indonesian summary derived from a tool's sanitized scalar
+ * metadata (Fase 2 enrichment). Default-deny: an unknown tool or a missing key
+ * yields no description (the node falls back to its label only). The keys read
+ * here are the contract emitted by `activitySanitizers.ts` (apps/agents).
+ */
+function describeTool(
+  tool: string,
+  meta: Record<string, string | number | boolean>,
+): string | undefined {
+  switch (tool) {
+    case "searchWeb":
+    case "searchArxiv":
+      return typeof meta.resultCount === "number" ? `${meta.resultCount} hasil` : undefined;
+    case "lookupDoi":
+      return typeof meta.doi === "string" ? meta.doi : undefined;
+    case "searchThreadDocuments":
+      return typeof meta.hasResults === "boolean"
+        ? meta.hasResults
+          ? "dokumen ditemukan"
+          : "tidak ada dokumen"
+        : undefined;
+    case "verifyStatistics": {
+      const parts: string[] = [];
+      if (typeof meta.checksRun === "number") parts.push(`${meta.checksRun} pemeriksaan`);
+      const verdict = typeof meta.verdict === "string" ? VERDICT_LABELS[meta.verdict] : undefined;
+      if (verdict) parts.push(verdict);
+      return parts.length > 0 ? parts.join(", ") : undefined;
+    }
+    case "proposeArtifact":
+    case "executeArtifact":
+      return typeof meta.title === "string" ? meta.title : undefined;
+    case "createWorkspace":
+    case "renameWorkspace":
+      return typeof meta.name === "string" ? meta.name : undefined;
+    case "askUser":
+      return typeof meta.questionCount === "number"
+        ? `${meta.questionCount} pertanyaan`
+        : undefined;
+    default:
+      return undefined;
+  }
+}
+
 // ── internal working node (carries seq window for coarse nesting) ────────────
 
 const OPEN_SEQ = Number.MAX_SAFE_INTEGER;
@@ -308,7 +381,9 @@ export function activityEventsFromRun(run: AgentRunRow): ActivityEvent[] {
   const intervals: WorkingNode[] = []; // phases, subagents
   // Open-node bookkeeping for folding start→end pairs.
   const toolStacks = new Map<string, WorkingNode[]>(); // pairing per tool name
+  const toolsByUseId = new Map<string, WorkingNode>(); // exact pairing by toolUseId (Fase 2)
   const subagentStack: WorkingNode[] = [];
+  const subagentsById = new Map<string, WorkingNode>(); // exact pairing by agentId (Fase 2)
   const phaseStack: WorkingNode[] = [];
   const approvalsById = new Map<string, WorkingNode>();
   const openToolOrder: WorkingNode[] = []; // most-recent open tool for error attribution
@@ -338,45 +413,83 @@ export function activityEventsFromRun(run: AgentRunRow): ActivityEvent[] {
     switch (event.type) {
       case "tool_start": {
         const tool = stringOf(payload, "toolName") ?? "";
+        const toolUseId = stringOf(payload, "toolUseId");
         const label = TOOL_LABELS[tool] ?? FALLBACK_TOOL_LABEL;
+        // Merge the sanitized input summary (Fase 2) into metadata; a tool that
+        // knows its detail up front (e.g. an artifact title) shows it while live.
+        const metadata: Record<string, string | number | boolean> = {
+          ...(tool ? { tool } : {}),
+          ...scalarsFrom(payload.inputSummary),
+        };
         const node = makeNode(event.seq, at, {
           type: "tool",
           actor: "tool",
           status: "running",
           title: label.running,
+          description: describeTool(tool, metadata),
           visibility: "user",
-          metadata: tool ? { tool } : undefined,
+          metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
           _interval: false,
         });
         leaves.push(node);
         const stack = toolStacks.get(tool) ?? [];
         stack.push(node);
         toolStacks.set(tool, stack);
+        if (toolUseId) toolsByUseId.set(toolUseId, node);
         openToolOrder.push(node);
         break;
       }
       case "tool_end": {
         const tool = stringOf(payload, "toolName") ?? "";
-        const stack = toolStacks.get(tool);
-        const node = stack?.pop();
+        const toolUseId = stringOf(payload, "toolUseId");
         const failed =
           stringOf(payload, "status") === "error" || payload.ok === false;
         const label = TOOL_LABELS[tool] ?? FALLBACK_TOOL_LABEL;
+        const resultScalars = scalarsFrom(payload.resultSummary);
+        // Prefer exact pairing by toolUseId (Fase 2); fall back to the per-name
+        // LIFO stack for thin Fase 1 events that carry no id.
+        let node: WorkingNode | undefined;
+        if (toolUseId && toolsByUseId.has(toolUseId)) {
+          node = toolsByUseId.get(toolUseId);
+          toolsByUseId.delete(toolUseId);
+          const stack = toolStacks.get(tool);
+          if (stack && node) {
+            const i = stack.indexOf(node);
+            if (i >= 0) stack.splice(i, 1);
+          }
+        } else {
+          node = toolStacks.get(tool)?.pop();
+        }
         if (node) {
           node.status = failed ? "failed" : "completed";
           node.title = failed ? failedTitle(label) : label.completed;
+          if (Object.keys(resultScalars).length > 0) {
+            node.metadata = { ...(node.metadata ?? {}), ...resultScalars };
+          }
+          // A successful close refreshes the description from the merged
+          // summary; a failed close lets the "Gagal …" title do the talking
+          // (an error result carries no usable data).
+          if (!failed) {
+            const desc = describeTool(tool, node.metadata ?? {});
+            if (desc) node.description = desc;
+          }
           close(node, event.seq, at);
           const idx = openToolOrder.indexOf(node);
           if (idx >= 0) openToolOrder.splice(idx, 1);
         } else {
           // Orphan end (start never seen): surface a terminal point node.
+          const metadata: Record<string, string | number | boolean> = {
+            ...(tool ? { tool } : {}),
+            ...resultScalars,
+          };
           const orphan = makeNode(event.seq, at, {
             type: "tool",
             actor: "tool",
             status: failed ? "failed" : "completed",
             title: failed ? failedTitle(label) : label.completed,
+            description: failed ? undefined : describeTool(tool, metadata),
             visibility: "user",
-            metadata: tool ? { tool } : undefined,
+            metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
             _interval: false,
           });
           close(orphan, event.seq, at);
@@ -406,24 +519,42 @@ export function activityEventsFromRun(run: AgentRunRow): ActivityEvent[] {
       }
       case "subagent_start": {
         const agentType = stringOf(payload, "agentType");
+        const agentId = stringOf(payload, "agentId");
         const label = SUBAGENT_LABELS[agentType ?? ""] ?? FALLBACK_SUBAGENT_LABEL;
+        const metadata: Record<string, string | number | boolean> = {};
+        if (agentType) metadata.agentType = agentType;
+        if (agentId) metadata.agentId = agentId;
         const node = makeNode(event.seq, at, {
           type: "subagent",
           actor: "subagent",
           status: "running",
           title: label.running,
           visibility: "user",
-          metadata: agentType ? { agentType } : undefined,
+          metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
           _interval: true,
         });
         intervals.push(node);
         subagentStack.push(node);
+        if (agentId) subagentsById.set(agentId, node);
         break;
       }
       case "subagent_stop": {
         const agentType = stringOf(payload, "agentType");
+        const agentId = stringOf(payload, "agentId");
         const label = SUBAGENT_LABELS[agentType ?? ""] ?? FALLBACK_SUBAGENT_LABEL;
-        const node = subagentStack.pop();
+        // Prefer exact pairing by agentId (Fase 2) — correct even for parallel
+        // sub-agents; fall back to LIFO for thin Fase 1 events.
+        let node: WorkingNode | undefined;
+        if (agentId && subagentsById.has(agentId)) {
+          node = subagentsById.get(agentId);
+          subagentsById.delete(agentId);
+          if (node) {
+            const i = subagentStack.indexOf(node);
+            if (i >= 0) subagentStack.splice(i, 1);
+          }
+        } else {
+          node = subagentStack.pop();
+        }
         if (node) {
           node.status = "completed";
           node.title = label.completed;
@@ -520,6 +651,15 @@ export function activityEventsFromRun(run: AgentRunRow): ActivityEvent[] {
           if (stack) {
             const idx = stack.indexOf(openTool);
             if (idx >= 0) stack.splice(idx, 1);
+          }
+          // De-index from BOTH open-tool maps so a later tool_end can never
+          // resurrect this failed node (parity with the toolStacks removal
+          // above — Fase 2 added toolsByUseId, which must be evicted too).
+          for (const [id, node] of toolsByUseId) {
+            if (node === openTool) {
+              toolsByUseId.delete(id);
+              break;
+            }
           }
         } else if (message) {
           runErrorMessage = message;
@@ -631,10 +771,12 @@ export function activityEventsFromRun(run: AgentRunRow): ActivityEvent[] {
     actor: "main",
     status: runStatus,
     title: runTitle,
-    description:
-      run.status === "failed"
-        ? (runErrorMessage ?? safeErrorText(run.errorMessage))
-        : undefined,
+    // Only the error EVENT message reaches the header — it is sanitized at the
+    // source (apps/agents `sanitizeRunErrorMessage`). The raw `run.errorMessage`
+    // is kept for ops but is NOT rendered: it can carry a stack/path/secret and
+    // is not allow-listed (no-leak invariant). When no event message exists the
+    // header relies on its title ("Berhenti sebelum selesai") instead.
+    description: run.status === "failed" ? runErrorMessage : undefined,
     visibility: "user",
     startedAt: run.createdAt,
     endedAt: terminal ? run.updatedAt : undefined,
