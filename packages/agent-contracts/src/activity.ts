@@ -1,0 +1,645 @@
+// Activity stream view-model (plan docs/agent-activity-stream-plan.md §3–§4).
+//
+// `RunEvent` (run.ts) stays the wire/storage row; this module derives a
+// render-friendly `ActivityEvent` tree from the events already embedded on an
+// `AgentRunRow` (via api.agent.queries.listRuns). Pure + deterministic so it can
+// be unit-tested and called from `uiRunFromRow`. Convex reactivity is the
+// transport — no SSE/WebSocket. This is the "SDK event → internal app event"
+// adaptation layer; raw payloads/secrets never cross it (allow-list per type).
+//
+// Type-only import (erased at runtime) → no runtime cycle with uiAdapters, which
+// imports `activityEventsFromRun` as a value.
+import type { AgentRunRow } from "./uiAdapters";
+
+export type ActivityStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "waiting_approval";
+
+export type ActivityActor = "main" | "subagent" | "tool" | "system";
+
+export type ActivityVisibility = "user" | "developer" | "hidden";
+
+export type ActivityType =
+  | "run" // run header (started/completed/failed/cancelled)
+  | "tool" // one tool invocation (start→end folded into one node)
+  | "subagent" // one sub-agent instance
+  | "phase" // deep-research phase
+  | "approval" // HITL waiting for approval/answer
+  | "system"; // compaction, system notes
+
+export type ActivityEvent = {
+  id: string; // stable: `${runId}:${seq}` (or the folded pair's start seq)
+  runId: string;
+  parentId?: string; // nesting (sub-agent → its tools); Fase 1 coarse by seq window
+  seq: number; // execution order
+  type: ActivityType;
+  status: ActivityStatus;
+  actor: ActivityActor;
+  title: string; // human-readable Indonesian, sentence case
+  description?: string; // safe summary, e.g. "12 hasil"
+  metadata?: Record<string, string | number | boolean>; // safe scalars only
+  startedAt: number;
+  endedAt?: number;
+  durationMs?: number;
+  visibility: ActivityVisibility;
+  children?: ActivityEvent[]; // folding result (sub-agent/phase → tools)
+};
+
+// ── label catalogs (Indonesian, sentence case; default-deny on unknown) ──────
+
+type Label = { running: string; completed: string; failed?: string };
+
+const TOOL_LABELS: Record<string, Label> = {
+  searchWeb: { running: "Mencari sumber web", completed: "Selesai mencari web" },
+  searchArxiv: { running: "Mencari preprint arXiv", completed: "Selesai di arXiv" },
+  lookupDoi: { running: "Memverifikasi DOI", completed: "DOI terverifikasi" },
+  searchThreadDocuments: {
+    running: "Mencari dokumen di thread",
+    completed: "Selesai mencari dokumen",
+  },
+  verifyCitations: {
+    running: "Memverifikasi kutipan",
+    completed: "Kutipan diverifikasi",
+  },
+  verifyStatistics: {
+    running: "Memverifikasi statistik",
+    completed: "Statistik diperiksa",
+  },
+  runComputation: { running: "Menjalankan komputasi", completed: "Komputasi selesai" },
+  proposeArtifact: { running: "Menyusun dokumen", completed: "Usulan dokumen siap" },
+  executeArtifact: { running: "Menyimpan dokumen", completed: "Dokumen disimpan" },
+  deleteArtifact: { running: "Menghapus dokumen", completed: "Dokumen dihapus" },
+  createWorkspace: { running: "Membuat ruang kerja", completed: "Ruang kerja dibuat" },
+  renameWorkspace: {
+    running: "Mengganti nama ruang kerja",
+    completed: "Nama ruang kerja diperbarui",
+  },
+  askUser: { running: "Menunggu jawaban Anda", completed: "Jawaban diterima" },
+};
+
+const FALLBACK_TOOL_LABEL: Label = {
+  running: "Menjalankan langkah",
+  completed: "Langkah selesai",
+};
+
+const PHASE_LABELS: Record<string, Label> = {
+  plan: { running: "Merencanakan strategi", completed: "Strategi disusun" },
+  literature: { running: "Mencari literatur", completed: "Literatur terkumpul" },
+  counter_evidence: {
+    running: "Mencari bukti pembanding",
+    completed: "Bukti pembanding ditinjau",
+  },
+  citation_verify: {
+    running: "Memverifikasi kutipan",
+    completed: "Kutipan diverifikasi",
+  },
+  write: { running: "Menulis laporan", completed: "Laporan selesai" },
+};
+
+const FALLBACK_PHASE_LABEL: Label = {
+  running: "Menjalankan fase",
+  completed: "Fase selesai",
+};
+
+const SUBAGENT_LABELS: Record<string, Label> = {
+  "literature-searcher": {
+    running: "Agen pencari literatur bekerja",
+    completed: "Agen pencari literatur selesai",
+    failed: "Agen pencari literatur gagal",
+  },
+};
+
+const FALLBACK_SUBAGENT_LABEL: Label = {
+  running: "Sub-agen bekerja",
+  completed: "Sub-agen selesai",
+  failed: "Sub-agen gagal",
+};
+
+const APPROVAL_LABELS: Record<string, Label> = {
+  askUser: { running: "Menunggu jawaban Anda", completed: "Jawaban diterima" },
+  proposeArtifact: {
+    running: "Menunggu persetujuan dokumen",
+    completed: "Persetujuan diterima",
+  },
+  deleteArtifact: {
+    running: "Menunggu persetujuan penghapusan",
+    completed: "Persetujuan diterima",
+  },
+  createWorkspace: {
+    running: "Menunggu persetujuan ruang kerja",
+    completed: "Persetujuan diterima",
+  },
+  renameWorkspace: {
+    running: "Menunggu persetujuan penggantian nama",
+    completed: "Persetujuan diterima",
+  },
+  runComputation: {
+    running: "Menunggu persetujuan komputasi",
+    completed: "Persetujuan diterima",
+  },
+};
+
+const FALLBACK_APPROVAL_LABEL: Label = {
+  running: "Menunggu persetujuan",
+  completed: "Persetujuan diterima",
+};
+
+const RUN_RUNNING_TITLE = { normal: "Menjalankan permintaan", deep: "Riset mendalam" };
+const RUN_TERMINAL_TITLE: Record<string, string> = {
+  completed: "Selesai",
+  failed: "Berhenti sebelum selesai",
+  canceled: "Dihentikan",
+  waiting_hitl: "Menunggu persetujuan",
+  waiting: "Menunggu",
+};
+
+/** Failed-state title: explicit `failed` form, else "Gagal " + the action verb. */
+function failedTitle(label: Label): string {
+  if (label.failed) return label.failed;
+  const running = label.running;
+  return `Gagal ${running.charAt(0).toLowerCase()}${running.slice(1)}`;
+}
+
+const MAX_ERROR_DESCRIPTION = 200;
+
+/**
+ * Defense-in-depth for error copy: keep only the first line and bound the
+ * length so a stray multi-line / verbose backend error never floods or smuggles
+ * detail into the timeline. Source-level sanitization is Fase 2 (plan §8).
+ */
+function safeErrorText(message: string | undefined): string | undefined {
+  if (!message) return undefined;
+  const firstLine = message.split("\n", 1)[0]?.trim() ?? "";
+  if (!firstLine) return undefined;
+  return firstLine.length > MAX_ERROR_DESCRIPTION
+    ? `${firstLine.slice(0, MAX_ERROR_DESCRIPTION - 1)}…`
+    : firstLine;
+}
+
+// ── safe payload helpers ─────────────────────────────────────────────────────
+
+function safeParse(json: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(json) as unknown;
+    return parsed && typeof parsed === "object"
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Default-deny projection: keep only the explicitly allow-listed keys whose
+ * value is a safe scalar. Raw tool_input / tool_response / queries / secrets can
+ * never reach the view-model even if a future payload carries them.
+ */
+function pickScalars(
+  payload: Record<string, unknown>,
+  keys: readonly string[],
+): Record<string, string | number | boolean> | undefined {
+  const out: Record<string, string | number | boolean> = {};
+  for (const key of keys) {
+    const value = payload[key];
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    ) {
+      out[key] = value;
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function stringOf(payload: Record<string, unknown>, key: string): string | undefined {
+  const value = payload[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function numberOf(payload: Record<string, unknown>, key: string): number | undefined {
+  const value = payload[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+// ── internal working node (carries seq window for coarse nesting) ────────────
+
+const OPEN_SEQ = Number.MAX_SAFE_INTEGER;
+
+type WorkingNode = ActivityEvent & {
+  _startSeq: number;
+  _endSeq: number;
+  _interval: boolean; // phase | subagent own a [start, end] window
+};
+
+function close(node: WorkingNode, endSeq: number, endedAt: number): void {
+  node._endSeq = endSeq;
+  node.endedAt = endedAt;
+  node.durationMs = Math.max(0, endedAt - node.startedAt);
+}
+
+/** Resolve the label catalog for a node so a late close can pick the right
+ *  completed/failed title (the node carries its key in metadata). */
+function labelForNode(node: WorkingNode): Label | undefined {
+  const meta = node.metadata;
+  if (node.type === "tool" && typeof meta?.tool === "string") {
+    return TOOL_LABELS[meta.tool] ?? FALLBACK_TOOL_LABEL;
+  }
+  if (node.type === "phase") {
+    return PHASE_LABELS[typeof meta?.phase === "string" ? meta.phase : ""] ??
+      FALLBACK_PHASE_LABEL;
+  }
+  if (node.type === "subagent") {
+    return SUBAGENT_LABELS[typeof meta?.agentType === "string" ? meta.agentType : ""] ??
+      FALLBACK_SUBAGENT_LABEL;
+  }
+  return undefined;
+}
+
+/** Innermost interval whose seq window contains `seq` (latest opener wins). */
+function innermostContainer(
+  seq: number,
+  intervals: WorkingNode[],
+  excludeId?: string,
+): WorkingNode | undefined {
+  let best: WorkingNode | undefined;
+  for (const interval of intervals) {
+    if (interval.id === excludeId) continue;
+    if (interval._startSeq <= seq && seq <= interval._endSeq) {
+      if (!best || interval._startSeq > best._startSeq) {
+        best = interval;
+      }
+    }
+  }
+  return best;
+}
+
+function toClean(node: WorkingNode): ActivityEvent {
+  const { _startSeq: _s, _endSeq: _e, _interval: _i, children, ...rest } = node;
+  const clean: ActivityEvent = { ...rest };
+  if (children && children.length > 0) {
+    clean.children = (children as WorkingNode[]).map(toClean);
+  }
+  return clean;
+}
+
+/**
+ * Derive the activity timeline for one run. Returns `[runNode, ...topLevel]`
+ * where the run node is the header marker and the remaining top-level nodes are
+ * tools / phases / sub-agents / approvals in seq order (sub-agents and phases
+ * carry their folded `children`). Pure: no Date.now(), no mutation of input.
+ */
+export function activityEventsFromRun(run: AgentRunRow): ActivityEvent[] {
+  const runId = run.runId;
+  const isDeep = run.mode === "deep";
+
+  // 1. Stable order by seq, then createdAt, then id (defensive on ties).
+  const events = run.events.slice().sort((a, b) => {
+    if (a.seq !== b.seq) return a.seq - b.seq;
+    if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
+
+  const leaves: WorkingNode[] = []; // tools, approvals, system
+  const intervals: WorkingNode[] = []; // phases, subagents
+  // Open-node bookkeeping for folding start→end pairs.
+  const toolStacks = new Map<string, WorkingNode[]>(); // pairing per tool name
+  const subagentStack: WorkingNode[] = [];
+  const phaseStack: WorkingNode[] = [];
+  const approvalsById = new Map<string, WorkingNode>();
+  const openToolOrder: WorkingNode[] = []; // most-recent open tool for error attribution
+  let runErrorMessage: string | undefined;
+
+  const makeNode = (
+    seq: number,
+    startedAt: number,
+    fields: Omit<
+      WorkingNode,
+      "id" | "runId" | "seq" | "startedAt" | "_startSeq" | "_endSeq"
+    >,
+  ): WorkingNode => ({
+    id: `${runId}:${seq}`,
+    runId,
+    seq,
+    startedAt,
+    _startSeq: seq,
+    _endSeq: OPEN_SEQ,
+    ...fields,
+  });
+
+  for (const event of events) {
+    const payload = safeParse(event.payloadJson);
+    const at = event.createdAt;
+
+    switch (event.type) {
+      case "tool_start": {
+        const tool = stringOf(payload, "toolName") ?? "";
+        const label = TOOL_LABELS[tool] ?? FALLBACK_TOOL_LABEL;
+        const node = makeNode(event.seq, at, {
+          type: "tool",
+          actor: "tool",
+          status: "running",
+          title: label.running,
+          visibility: "user",
+          metadata: tool ? { tool } : undefined,
+          _interval: false,
+        });
+        leaves.push(node);
+        const stack = toolStacks.get(tool) ?? [];
+        stack.push(node);
+        toolStacks.set(tool, stack);
+        openToolOrder.push(node);
+        break;
+      }
+      case "tool_end": {
+        const tool = stringOf(payload, "toolName") ?? "";
+        const stack = toolStacks.get(tool);
+        const node = stack?.pop();
+        const failed =
+          stringOf(payload, "status") === "error" || payload.ok === false;
+        const label = TOOL_LABELS[tool] ?? FALLBACK_TOOL_LABEL;
+        if (node) {
+          node.status = failed ? "failed" : "completed";
+          node.title = failed ? failedTitle(label) : label.completed;
+          close(node, event.seq, at);
+          const idx = openToolOrder.indexOf(node);
+          if (idx >= 0) openToolOrder.splice(idx, 1);
+        } else {
+          // Orphan end (start never seen): surface a terminal point node.
+          const orphan = makeNode(event.seq, at, {
+            type: "tool",
+            actor: "tool",
+            status: failed ? "failed" : "completed",
+            title: failed ? failedTitle(label) : label.completed,
+            visibility: "user",
+            metadata: tool ? { tool } : undefined,
+            _interval: false,
+          });
+          close(orphan, event.seq, at);
+          leaves.push(orphan);
+        }
+        break;
+      }
+      case "citation_check": {
+        const checked = numberOf(payload, "checked");
+        const flagged = numberOf(payload, "flagged");
+        const parts: string[] = [];
+        if (checked !== undefined) parts.push(`${checked} diperiksa`);
+        if (flagged) parts.push(`${flagged} ditandai`);
+        const node = makeNode(event.seq, at, {
+          type: "tool",
+          actor: "tool",
+          status: "completed",
+          title: "Kutipan diverifikasi",
+          description: parts.length > 0 ? parts.join(", ") : undefined,
+          visibility: "user",
+          metadata: pickScalars(payload, ["checked", "verified", "flagged"]),
+          _interval: false,
+        });
+        close(node, event.seq, at);
+        leaves.push(node);
+        break;
+      }
+      case "subagent_start": {
+        const agentType = stringOf(payload, "agentType");
+        const label = SUBAGENT_LABELS[agentType ?? ""] ?? FALLBACK_SUBAGENT_LABEL;
+        const node = makeNode(event.seq, at, {
+          type: "subagent",
+          actor: "subagent",
+          status: "running",
+          title: label.running,
+          visibility: "user",
+          metadata: agentType ? { agentType } : undefined,
+          _interval: true,
+        });
+        intervals.push(node);
+        subagentStack.push(node);
+        break;
+      }
+      case "subagent_stop": {
+        const agentType = stringOf(payload, "agentType");
+        const label = SUBAGENT_LABELS[agentType ?? ""] ?? FALLBACK_SUBAGENT_LABEL;
+        const node = subagentStack.pop();
+        if (node) {
+          node.status = "completed";
+          node.title = label.completed;
+          close(node, event.seq, at);
+        }
+        break;
+      }
+      case "phase_start": {
+        const phase = stringOf(payload, "phase") ?? "";
+        const label = PHASE_LABELS[phase] ?? FALLBACK_PHASE_LABEL;
+        const node = makeNode(event.seq, at, {
+          type: "phase",
+          actor: "main",
+          status: "running",
+          title: label.running,
+          visibility: "user",
+          metadata: phase ? { phase } : undefined,
+          _interval: true,
+        });
+        intervals.push(node);
+        phaseStack.push(node);
+        break;
+      }
+      case "phase_done": {
+        const phase = stringOf(payload, "phase") ?? "";
+        const label = PHASE_LABELS[phase] ?? FALLBACK_PHASE_LABEL;
+        const node = phaseStack.pop();
+        if (node) {
+          node.status = "completed";
+          node.title = label.completed;
+          close(node, event.seq, at);
+        }
+        break;
+      }
+      case "interaction_pending": {
+        const tool = stringOf(payload, "toolName") ?? "";
+        const interactionId = stringOf(payload, "interactionId");
+        const label = APPROVAL_LABELS[tool] ?? FALLBACK_APPROVAL_LABEL;
+        const node = makeNode(event.seq, at, {
+          type: "approval",
+          actor: "system",
+          status: "waiting_approval",
+          title: label.running,
+          visibility: "user",
+          metadata: tool ? { tool } : undefined,
+          _interval: false,
+        });
+        leaves.push(node);
+        if (interactionId) approvalsById.set(interactionId, node);
+        break;
+      }
+      case "interaction_resolved": {
+        const tool = stringOf(payload, "toolName") ?? "";
+        const interactionId = stringOf(payload, "interactionId");
+        const label = APPROVAL_LABELS[tool] ?? FALLBACK_APPROVAL_LABEL;
+        const node = interactionId ? approvalsById.get(interactionId) : undefined;
+        if (node) {
+          node.status = "completed";
+          node.title = label.completed;
+          close(node, event.seq, at);
+        }
+        break;
+      }
+      case "compaction": {
+        // Internal housekeeping — present in the model but hidden from users
+        // (developer-mode is a later phase).
+        const node = makeNode(event.seq, at, {
+          type: "system",
+          actor: "system",
+          status: "completed",
+          title: "Merapikan konteks",
+          visibility: "hidden",
+          _interval: false,
+        });
+        close(node, event.seq, at);
+        leaves.push(node);
+        break;
+      }
+      case "error": {
+        const message = safeErrorText(stringOf(payload, "message"));
+        // Attribute to the most-recent still-open tool if any; otherwise the
+        // error is run-level and surfaces on the run header.
+        const openTool = openToolOrder.pop();
+        if (openTool) {
+          openTool.status = "failed";
+          openTool.title = failedTitle(labelForNode(openTool) ?? FALLBACK_TOOL_LABEL);
+          if (message) openTool.description = message;
+          close(openTool, event.seq, at);
+          const stack = toolStacks.get(
+            typeof openTool.metadata?.tool === "string"
+              ? openTool.metadata.tool
+              : "",
+          );
+          if (stack) {
+            const idx = stack.indexOf(openTool);
+            if (idx >= 0) stack.splice(idx, 1);
+          }
+        } else if (message) {
+          runErrorMessage = message;
+        }
+        break;
+      }
+      // run_status is consumed by the run header (built from the run row), not
+      // rendered as its own node. waiting_hitl is represented by the approval
+      // node from interaction_pending; completed/running drive the header.
+      case "run_status":
+      default:
+        break;
+    }
+  }
+
+  // 2. Terminal status from the run row: close anything still open. Set
+  //    status/timing only — never shrink the seq window, so coarse nesting in
+  //    step 3 still attributes later tools to a sub-agent/phase that the run
+  //    ended inside of.
+  const terminal = ["completed", "failed", "canceled"].includes(run.status);
+  if (terminal) {
+    const endedAt = run.updatedAt;
+    const fallbackStatus: ActivityStatus =
+      run.status === "completed"
+        ? "completed"
+        : run.status === "canceled"
+          ? "cancelled"
+          : "failed";
+    const closeTerminal = (node: WorkingNode, status: ActivityStatus) => {
+      node.status = status;
+      node.endedAt = endedAt;
+      node.durationMs = Math.max(0, endedAt - node.startedAt);
+      // Keep the title consistent with the status the node inherits. A node left
+      // "running" still carries its action label, so map it to the matching
+      // completed/failed copy; a cancelled action keeps its action label (it was
+      // interrupted mid-step), except an approval which becomes explicit.
+      const label = labelForNode(node);
+      if (status === "completed" && label) {
+        node.title = label.completed;
+      } else if (status === "failed" && label) {
+        node.title = failedTitle(label);
+      } else if (status === "cancelled" && node.type === "approval") {
+        node.title = "Persetujuan dibatalkan";
+      }
+    };
+    for (const node of [...leaves, ...intervals]) {
+      if (node.status === "running") {
+        closeTerminal(node, fallbackStatus);
+      } else if (node.status === "waiting_approval" && run.status !== "completed") {
+        closeTerminal(node, "cancelled");
+      }
+    }
+  }
+
+  // 3. Coarse nesting by seq window: leaves nest into the innermost containing
+  //    interval; sub-agents nest into the innermost containing phase.
+  const topLevel: WorkingNode[] = [];
+  for (const interval of intervals) {
+    if (interval._interval && interval.type === "subagent") {
+      const parent = innermostContainer(interval._startSeq, intervals, interval.id);
+      if (parent) {
+        interval.parentId = parent.id;
+        (parent.children ??= []).push(interval);
+        continue;
+      }
+    }
+    topLevel.push(interval);
+  }
+  for (const leaf of leaves) {
+    const parent = innermostContainer(leaf._startSeq, intervals);
+    if (parent) {
+      leaf.parentId = parent.id;
+      (parent.children ??= []).push(leaf);
+    } else {
+      topLevel.push(leaf);
+    }
+  }
+
+  // 4. Order siblings by seq everywhere.
+  const orderBySeq = (a: ActivityEvent, b: ActivityEvent) => a.seq - b.seq;
+  const sortTree = (node: WorkingNode) => {
+    if (node.children) {
+      (node.children as WorkingNode[]).forEach(sortTree);
+      node.children.sort(orderBySeq);
+    }
+  };
+  topLevel.forEach(sortTree);
+  topLevel.sort((a, b) => a._startSeq - b._startSeq);
+
+  // 5. Run header node (result[0]).
+  const runActive = !terminal;
+  const runStatus: ActivityStatus = runActive
+    ? "running"
+    : run.status === "completed"
+      ? "completed"
+      : run.status === "canceled"
+        ? "cancelled"
+        : "failed";
+  const runTitle = runActive
+    ? isDeep
+      ? RUN_RUNNING_TITLE.deep
+      : RUN_RUNNING_TITLE.normal
+    : (RUN_TERMINAL_TITLE[run.status] ?? "Selesai");
+  const runNode: ActivityEvent = {
+    id: `${runId}:run`,
+    runId,
+    seq: -1,
+    type: "run",
+    actor: "main",
+    status: runStatus,
+    title: runTitle,
+    description:
+      run.status === "failed"
+        ? (runErrorMessage ?? safeErrorText(run.errorMessage))
+        : undefined,
+    visibility: "user",
+    startedAt: run.createdAt,
+    endedAt: terminal ? run.updatedAt : undefined,
+    durationMs: terminal ? Math.max(0, run.updatedAt - run.createdAt) : undefined,
+  };
+
+  return [runNode, ...topLevel.map(toClean)];
+}

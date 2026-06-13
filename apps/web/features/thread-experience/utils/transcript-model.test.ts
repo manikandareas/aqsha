@@ -25,6 +25,7 @@ function run(overrides: Partial<ResearchRun>): ResearchRun {
     executionKind: "workflow",
     status: "completed",
     retryable: false,
+    activity: [],
     steps: [],
     events: [],
     ...overrides,

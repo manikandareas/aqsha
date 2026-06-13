@@ -2,6 +2,7 @@
 // apps/web thread-experience components consume (plan §9.4 Step 2: data-hooks
 // change, UI components do not). Structural copies of the web types — kept
 // minimal and assignable to features/thread-experience/types.
+import { activityEventsFromRun, type ActivityEvent } from "./activity";
 
 export type AgentMessageRow = {
   messageId: string;
@@ -155,6 +156,10 @@ export type UiResearchRun = {
     status: "pending" | "running" | "completed" | "failed" | "canceled";
     summary?: string;
   }>;
+  // Normalized activity timeline (plan §3). Rendered by AgentRunBlock; the
+  // legacy `steps`/`events` below stay for deep-research / sources until the
+  // documented Fase-1 cleanup follow-up removes the orphaned step path.
+  activity: ActivityEvent[];
   events: Array<{
     _id: string;
     stepKey?: string;
@@ -235,6 +240,7 @@ export function uiRunFromRow(row: AgentRunRow): UiResearchRun {
       ? row.updatedAt
       : undefined,
     steps: [],
+    activity: activityEventsFromRun(row),
     events: row.events.map((event) => {
       const payload = parsePayload(event.payloadJson);
       return {

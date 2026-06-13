@@ -1,3 +1,4 @@
+import type { ActivityEvent } from "@aqsha/agent-contracts";
 import type { PromptCommand } from "@aqsha/convex/prompt-commands";
 
 export type SendResult =
@@ -87,6 +88,9 @@ export type ResearchRun = {
   createdAt?: number;
   completedAt?: number;
   canceledAt?: number;
+  // Normalized activity timeline rendered by AgentRunBlock (plan §3). The
+  // legacy `steps`/`events` below remain for deep-research / sources.
+  activity: ActivityEvent[];
   steps: Array<{
     stepKey: string;
     label: string;
