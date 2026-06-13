@@ -40,6 +40,14 @@ const envSchema = z.object({
   ASTRA_LITE_MAX_TURNS: z.coerce.number().int().positive().default(5),
   ASTRA_PRO_MAX_TURNS: z.coerce.number().int().positive().default(10),
   ASTRA_DEEP_MAX_TURNS: z.coerce.number().int().positive().default(24),
+  // Custom per-dispatch cost guard (the SDK has no maxBudgetUsd — plan §9.2
+  // deviation #1). Applies to the cost accrued during ONE dispatch of a run;
+  // a retry gets a fresh allowance and continues from the persisted phases.
+  ASTRA_MAX_RUN_BUDGET_USD: z.coerce.number().positive().default(20),
+  // Observability (plan §5.7): both are passed through to the SDK child
+  // process via the inherited environment; set the OTLP endpoint alongside.
+  CLAUDE_CODE_ENABLE_TELEMETRY: z.string().optional(),
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),
   // HITL hold-window before interrupting the run (plan §5.3, ~45s).
   AGENTS_HOLD_WINDOW_MS: z.coerce.number().int().positive().default(45_000),
   // Stream bridge flush cadence (plan §4.3, ~250ms / N chars).
@@ -73,6 +81,8 @@ export type AgentsConfig = {
     deepPro: string;
   };
   maxTurns: { lite: number; pro: number; deep: number };
+  /** Per-dispatch run cost ceiling in USD (custom maxBudgetUsd replacement). */
+  maxRunBudgetUsd: number;
   proMaxThinkingTokens: number | undefined;
   holdWindowMs: number;
   streamFlushMs: number;
@@ -119,6 +129,7 @@ export function loadConfig(
       pro: parsed.ASTRA_PRO_MAX_TURNS,
       deep: parsed.ASTRA_DEEP_MAX_TURNS,
     },
+    maxRunBudgetUsd: parsed.ASTRA_MAX_RUN_BUDGET_USD,
     proMaxThinkingTokens: parsed.ASTRA_PRO_MAX_THINKING_TOKENS,
     holdWindowMs: parsed.AGENTS_HOLD_WINDOW_MS,
     streamFlushMs: parsed.AGENTS_STREAM_FLUSH_MS,

@@ -379,6 +379,41 @@ describe("RunManager", () => {
     expect(cv?.output).toContain("budget turn habis");
   });
 
+  it("stops a deep dispatch when the per-dispatch cost budget is exhausted", async () => {
+    const store = new MemoryStore();
+    const tightConfig = loadConfig({
+      AGENTS_HOLD_WINDOW_MS: "40",
+      AGENTS_STREAM_FLUSH_MS: "1",
+      AGENTS_STREAM_FLUSH_CHARS: "1",
+      ASTRA_MAX_RUN_BUDGET_USD: "0.15",
+    });
+    const calls: string[] = [];
+    const runner: QueryRunner = ({ prompt }) => {
+      calls.push(prompt);
+      return streamOf([
+        { type: "system", subtype: "init", session_id: "sess_b" },
+        {
+          type: "assistant",
+          message: { content: [{ type: "text", text: "keluaran" }] },
+        },
+        { type: "result", subtype: "success", total_cost_usd: 0.1 },
+      ]);
+    };
+    const manager = new RunManager({ store, config: tightConfig, runner });
+    await manager.startRun(request({ prompt: "/deep pertanyaan riset" }));
+
+    const run = await waitFor(async () => {
+      const row = await store.getRun("run1");
+      return row?.status === "failed" ? row : null;
+    });
+    // Two phases ran (0.1 + 0.1 ≥ 0.15) before the guard tripped.
+    expect(calls).toHaveLength(2);
+    expect(run.errorMessage).toContain("budget");
+    // Completed phases survive: a retry continues instead of starting over.
+    const phases = await store.listResearchPhases("run1");
+    expect(phases.filter((p) => p.status === "done")).toHaveLength(2);
+  });
+
   it("deep write-phase HITL interrupt parks the run and resumes that phase's session", async () => {
     const store = new MemoryStore();
     let managerRef: RunManager | null = null;

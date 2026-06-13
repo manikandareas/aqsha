@@ -632,6 +632,31 @@ describe("durable cancel (Step 3)", () => {
   });
 });
 
+describe("setRunVerificationReport (Step 5)", () => {
+  it("persists the report JSON on the run", async () => {
+    const t = setup();
+    await seedThread(t);
+    await t.mutation(api.agent.service.createRun, {
+      serviceToken: TOKEN,
+      runId: RUN,
+      threadId: THREAD,
+      ownerUserId: OWNER,
+      agentKind: "lite",
+      mode: "normal",
+    });
+    await t.mutation(api.agent.service.setRunVerificationReport, {
+      serviceToken: TOKEN,
+      runId: RUN,
+      verificationReportJson: JSON.stringify({ verdict: "passed" }),
+    });
+    const run = await t.query(api.agent.service.getRun, {
+      serviceToken: TOKEN,
+      runId: RUN,
+    });
+    expect(JSON.parse(run!.verificationReportJson!)).toEqual({ verdict: "passed" });
+  });
+});
+
 describe("research phase state (Step 4)", () => {
   it("upserts phases idempotently and lists them per run", async () => {
     const t = setup();

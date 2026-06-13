@@ -345,6 +345,23 @@ export const finalizeRun = mutation({
   },
 });
 
+export const setRunVerificationReport = mutation({
+  args: {
+    serviceToken: v.string(),
+    runId: v.string(),
+    verificationReportJson: v.string(),
+  },
+  handler: async (ctx, args) => {
+    requireServiceToken(args.serviceToken);
+    const run = await requireRun(ctx, args.runId);
+    await ctx.db.patch("agentRuns2", run._id, {
+      verificationReportJson: args.verificationReportJson,
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
 export const appendRunEvent = mutation({
   args: {
     serviceToken: v.string(),

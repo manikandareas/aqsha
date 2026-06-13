@@ -190,6 +190,17 @@ export class MemoryStore implements AgentStore {
     run.updatedAt = this.now();
   }
 
+  async setRunVerificationReport(
+    runId: string,
+    verificationReportJson: string,
+  ): Promise<void> {
+    const run = this.runs.get(runId);
+    if (run) {
+      run.verificationReportJson = verificationReportJson;
+      run.updatedAt = this.now();
+    }
+  }
+
   async appendRunEvent(input: {
     runId: string;
     type: RunEventRecord["type"];

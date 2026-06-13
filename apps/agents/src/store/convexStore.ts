@@ -61,6 +61,8 @@ export const SERVICE_FUNCTIONS = {
   // Step 4 (additive): durable deep-research phase state (plan §5.5).
   upsertResearchPhase: "agent/service:upsertResearchPhase",
   listResearchPhases: "agent/service:listResearchPhases",
+  // Step 5 (additive): statistical-verification report persistence (§5.6).
+  setRunVerificationReport: "agent/service:setRunVerificationReport",
 } as const;
 
 const RESPONSE_POLL_MS = 1_500;
@@ -161,6 +163,16 @@ export class ConvexStore implements AgentStore {
 
   async finalizeRun(runId: string, summary: RunResultSummary): Promise<void> {
     await this.mutation(SERVICE_FUNCTIONS.finalizeRun, { runId, ...summary });
+  }
+
+  async setRunVerificationReport(
+    runId: string,
+    verificationReportJson: string,
+  ): Promise<void> {
+    await this.mutation(SERVICE_FUNCTIONS.setRunVerificationReport, {
+      runId,
+      verificationReportJson,
+    });
   }
 
   appendRunEvent(input: {

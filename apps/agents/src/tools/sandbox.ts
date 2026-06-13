@@ -21,6 +21,18 @@ export function buildSandboxTools(ctx: RunToolContext) {
         runId: ctx.runId,
         artifactText: artifact.text,
       });
+      if (result.status === "completed") {
+        // Persist the report on the run for the verification UI (plan §5.6).
+        await ctx.store.setRunVerificationReport(
+          ctx.runId,
+          JSON.stringify({
+            artifactId: args.artifactId,
+            verdict: result.verdict,
+            summary: result.summary,
+            items: result.items,
+          }),
+        );
+      }
       return jsonResult(result);
     },
     { annotations: { readOnlyHint: true } },

@@ -76,7 +76,14 @@ export class RunManager {
     this.broker = new InteractionBroker(deps.store, deps.config.holdWindowMs);
     this.sandbox =
       deps.sandbox ??
-      buildSandboxService({ daytonaApiKey: deps.config.providers.daytonaApiKey });
+      buildSandboxService({
+        daytonaApiKey: deps.config.providers.daytonaApiKey,
+        snapshot: deps.config.providers.daytonaSnapshot,
+        anthropicBaseUrl: deps.config.anthropicBaseUrl,
+        anthropicApiKey: deps.config.anthropicApiKey,
+        anthropicAuthToken: deps.config.anthropicAuthToken,
+        extractionModel: deps.config.models.chatLite,
+      });
     this.providerDeps = deps.providerDeps ?? buildProviderDeps(deps.config);
   }
 
@@ -520,6 +527,10 @@ export class RunManager {
       this.broker.primeResolvedApproval(runId, turn.resumeInteraction);
     }
     let resumeConsumed = false;
+    // Custom cost guard (no maxBudgetUsd in the SDK — plan §9.2 #1): bounds
+    // the spend of THIS dispatch; a retry continues from the persisted phases
+    // with a fresh allowance, so progress stays possible but bounded per click.
+    let dispatchCostUsd = 0;
 
     try {
       for (const phase of DEEP_PHASES) {
@@ -529,6 +540,23 @@ export class RunManager {
         }
         if (activeRun.canceled) {
           break;
+        }
+        if (dispatchCostUsd >= config.maxRunBudgetUsd) {
+          await store.finalizeMessage(assistantMessage.messageId, {
+            text: `Riset mendalam dihentikan sementara: batas biaya per percobaan (US$${config.maxRunBudgetUsd}) tercapai. Fase yang selesai tersimpan — coba kirim ulang untuk melanjutkan.`,
+            status: "error",
+          });
+          await store.finalizeRun(runId, {
+            status: "failed",
+            errorMessage: `Run budget exceeded (US$${config.maxRunBudgetUsd} per dispatch)`,
+          });
+          await store.setThreadStatus(request.threadId, "failed");
+          await store.appendRunEvent({
+            runId,
+            type: "error",
+            payload: { message: "budget_exhausted", dispatchCostUsd },
+          });
+          return;
         }
         const policy = DEEP_PHASE_POLICIES[phase];
 
@@ -622,6 +650,7 @@ export class RunManager {
 
         await bridge.flush();
         const result = bridge.result();
+        dispatchCostUsd += result.summary.costUsd ?? 0;
 
         if (activeRun.canceled) {
           break;

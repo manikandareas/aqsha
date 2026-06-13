@@ -81,6 +81,8 @@ matching args (every call carries `serviceToken`), then set
 | `ASTRA_LITE_MODEL` / `ASTRA_PRO_MODEL` | `claude-haiku-4-5` / `claude-sonnet-4-6` | tiers (D6) |
 | `ASTRA_DEEP_LITE_MODEL` / `ASTRA_DEEP_PRO_MODEL` | chat models | deep tiers |
 | `AGENTS_HOLD_WINDOW_MS` | `45000` | HITL hold-window |
+| `ASTRA_MAX_RUN_BUDGET_USD` | `20` | per-dispatch cost guard (no SDK maxBudgetUsd) |
+| `CLAUDE_CODE_ENABLE_TELEMETRY` / `OTEL_EXPORTER_OTLP_ENDPOINT` | — | OTEL: inherited by the SDK child process |
 | `EXA_API_KEY`, `JINA_API_KEY`, `OPENALEX_API_KEY`, `CROSSREF_MAILTO` | — | providers |
 | `DAYTONA_API_KEY`, `DAYTONA_STATVERIFY_SNAPSHOT` | — | sandbox (Phase 4) |
 
@@ -92,14 +94,19 @@ matching args (every call carries `serviceToken`), then set
 - ✅ Phase 2 HITL redesign: `pendingInteractions` model, hold-window,
   interrupt/resume, unified respond endpoint, artifact/workspace flows,
   executeArtifact gate, command registry.
-- ✅ Phase 3 (first cut): deep research as one `query()` with the five
-  subagents (`planner`, `literature-searcher`, `counter-evidence`,
-  `citation-verifier`, `writer`) + domain-pack delegation. Multi-phase
-  resumable orchestration (plan §5.5 durability) is still TODO.
-- ⏳ Phase 4: Daytona statistical-verification engine port (tool surface ships
-  now, returns `not_configured`), OTEL, billing reconciliation.
-- ⏳ Convex side: first-party tables + `agent/service:*` endpoints + web
-  data-hooks migration (explicitly out of scope for this build).
+- ✅ Phase 3: deep research as DURABLE multi-phase orchestration
+  (`runs/runManager.ts executeDeepRun` + `agent/deepPhases.ts`): five isolated
+  query() phases (plan → literature → counter_evidence → citation_verify →
+  write) with per-phase state in the store (`researchPhaseStates`); only the
+  parallel `literature-searcher` remains a subagent. Re-dispatch replays only
+  non-done phases; HITL resumes the interrupted phase's own session.
+- ✅ Phase 4 (engine): Daytona statistical-verification engine ported to
+  `src/sandbox/` (classifiers + R scripts + vendor + claim extraction);
+  `buildSandboxService` runs it when `DAYTONA_API_KEY` +
+  `DAYTONA_STATVERIFY_SNAPSHOT` are set, else `not_configured`. Per-dispatch
+  cost guard via `ASTRA_MAX_RUN_BUDGET_USD`; OTEL via inherited env.
+- ✅ Convex side: first-party tables + `agent/service:*` endpoints (28) +
+  web data-hooks behind `NEXT_PUBLIC_AGENT_BACKEND=sdk`.
 
 Bibliography extraction for `verifyCitations` is currently a deterministic
 parser (`citations/bibliography.ts`); the legacy LLM extraction pass can be

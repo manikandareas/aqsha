@@ -146,6 +146,8 @@ export interface AgentStore {
   getRun(runId: string): Promise<RunRecord | null>;
   setRunStatus(runId: string, status: RunStatus): Promise<void>;
   finalizeRun(runId: string, summary: RunResultSummary): Promise<void>;
+  /** Persist a statistical-verification report on the run (plan §5.6). */
+  setRunVerificationReport(runId: string, verificationReportJson: string): Promise<void>;
   appendRunEvent(input: {
     runId: string;
     type: RunEventType;

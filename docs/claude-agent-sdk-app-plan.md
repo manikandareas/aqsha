@@ -470,10 +470,15 @@ Urutan disusun supaya tiap step punya hasil yang bisa diverifikasi, dan step UI 
 - ⏳ Ditunda (dicatat, butuh keputusan owner soal biaya): eval paritas N-run berdampingan vs implementasi legacy (golden set `agent/evals/`).
 - *Exit*: Orkestrasi multi-fase resumable §5.5 terpenuhi; paritas kualitas formal menunggu eval di atas.
 
-**Step 5 — Phase 4: sandbox, observability, billing (2–3 hari)**
-- Port engine Daytona ke `SandboxService` (skrip R + claim extraction + report builder; split-timing dipertahankan §5.6).
-- OTEL (`CLAUDE_CODE_ENABLE_TELEMETRY=1` + collector) + tulis `total_cost_usd`/usage ke `agentRuns` → rekonsiliasi billing; **guard biaya custom** per run (deviasi #1).
-- *Exit*: `verifyStatistics` nyata dari UI; biaya run tercatat akurat.
+**Step 5 — Phase 4: sandbox, observability, billing (2–3 hari)** ✅ **SELESAI (2026-06-12)**
+- ✅ **Engine Daytona diport penuh** ke `apps/agents/src/sandbox/` (klasifier murni statcheck/GRIM/GRIMMER/power/meta verbatim + 4 skrip R + `sandboxVendor` `@daytona/sdk` + `engine.ts` flows decoupled dari Convex). Claim extraction LLM ditulis ulang tanpa dependensi `ai`: `llmExtract.ts` fetch langsung ke Messages API gateway (prompt+schema zod legacy dipertahankan; best-effort — tanpa auth LLM berdegradasi ke statcheck-only). Gating rate-limit/billing TIDAK ikut (tetap di Convex, §3); record `sandboxRuns`/`computationChecks` legacy digantikan report di run.
+- ✅ `buildSandboxService` aktif bila `DAYTONA_API_KEY`+`DAYTONA_STATVERIFY_SNAPSHOT` ada (else `not_configured`); report verifikasi dipersist ke `agentRuns2.verificationReportJson` via endpoint aditif ke-28 `setRunVerificationReport` (kontrak 27→28).
+- ✅ **Guard biaya custom** (pengganti `maxBudgetUsd`, deviasi 9.2 #1): `ASTRA_MAX_RUN_BUDGET_USD` (default $20) membatasi biaya per-DISPATCH run deep — fase selesai tersimpan, retry mendapat jatah baru (progres tetap maju, spend dibatasi per percobaan); biaya aktual `total_cost_usd` tersumasi ke `agentRuns2.costUsd` (Step 4).
+- ✅ OTEL: `CLAUDE_CODE_ENABLE_TELEMETRY` + `OTEL_EXPORTER_OTLP_ENDPOINT` divalidasi config dan diwariskan ke child process SDK; collector belum di-deploy (tinggal set env saat tersedia).
+- ✅ Tes: +59 unit test service (klasifier porting, verdict report, routing, llmExtract robustness, engine end-to-end dengan vendor fake, wiring service, budget guard) — total agents 161, convex 358.
+- ✅ Validasi live: `verifyStatistics` nyata via Daytona (snapshot `aqsha-statverify-v1`) pada artifact berisi statistik sengaja-tak-konsisten → 7 checks (3 consistent, 4 discrepant), verdict `passed_with_notes`, report persisted, run completed ($0.32).
+- ⏳ Catatan: rekonsiliasi billing produk berbasis `costUsd` aktual (kredit vs biaya) = keputusan produk/billing terbuka (lihat memory Phase-2 "2B billing"); plot meta-analysis dikembalikan base64 tanpa blob storage.
+- *Exit*: `verifyStatistics` nyata ✅; biaya run tercatat akurat ✅.
 
 **Step 6 — Dual-run → cutover → bersih-bersih**
 - Periode dual-run dengan flag per user → migrasikan semua user ke `sdk`.
