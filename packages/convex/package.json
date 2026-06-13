@@ -46,10 +46,9 @@
     }
   },
   "scripts": {
-    "skills:bundle": "node scripts/bundle-skills.mjs",
-    "dev": "node scripts/bundle-skills.mjs && convex dev",
-    "codegen": "node scripts/bundle-skills.mjs && convex codegen",
-    "deploy": "node scripts/bundle-skills.mjs && convex deploy",
+    "dev": "convex dev",
+    "codegen": "convex codegen",
+    "deploy": "convex deploy",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "tsc -p convex && eslint . --report-unused-disable-directives --max-warnings 0",

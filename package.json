@@ -10,7 +10,7 @@
     "packages/ui"
   ],
   "scripts": {
-    "dev": "bun run --parallel --filter '@aqsha/app' --filter '@aqsha/convex' dev",
+    "dev": "bun run --parallel --filter '@aqsha/app' --filter '@aqsha/convex' --filter '@aqsha/agents' dev",
     "dev:app": "bun run --filter '@aqsha/app' dev",
     "dev:convex": "bun run --filter '@aqsha/convex' dev",
     "build": "bun run --filter '@aqsha/app' build",
