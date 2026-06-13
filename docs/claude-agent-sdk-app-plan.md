@@ -480,9 +480,15 @@ Urutan disusun supaya tiap step punya hasil yang bisa diverifikasi, dan step UI 
 - ⏳ Catatan: rekonsiliasi billing produk berbasis `costUsd` aktual (kredit vs biaya) = keputusan produk/billing terbuka (lihat memory Phase-2 "2B billing"); plot meta-analysis dikembalikan base64 tanpa blob storage.
 - *Exit*: `verifyStatistics` nyata ✅; biaya run tercatat akurat ✅.
 
-**Step 6 — Dual-run → cutover → bersih-bersih**
-- Periode dual-run dengan flag per user → migrasikan semua user ke `sdk`.
-- Hapus: runtime agent lama di `packages/convex/convex/agent/` (kecuali yang dipakai endpoint service), `@convex-dev/agent` + `@convex-dev/workflow` dari `convex.config.ts`, FSM HITL lama, skills runtime custom; perbarui `AGENTS.md`/`CLAUDE.md`.
+**Step 6 — Dual-run → cutover → bersih-bersih** ◐ **SEDANG BERJALAN (2026-06-13)** — owner setuju cutover + sudah dogfood Step 3–5.
+- **Cutover-readiness diverifikasi** lewat workflow multi-agent (6 lensa peta + verifikasi adversarial + sintesis): 40 file aman-hapus, 5 partial-trim, 37 must-keep. **Temuan kritis yang luput dari brief**: `accountCleanup/agent.ts` (jalur produksi tiap hapus akun) masih memanggil `components.agent.threads.*` + tabel `agentRuns` lama DAN tidak menyentuh tabel v2 sama sekali → kebocoran data dual-run; ini memblokir unmount komponen. Plus `messages.ts` keystone (mengikat seluruh import tree legacy via `checkAndConsumeSendQuota`), `assertThreadOwner` (dipakai `artifacts.generateUploadUrl` publik) baca `components.agent.threads`, dan kolom `v.id("agentRuns")` di tabel cross-domain yang masih hidup.
+- **Ladder eksekusi**: batch reversibel (kode, `git revert`-able) DULU, lalu DUA langkah destruktif tak-terbalikkan (unmount `app.use(agent)` = hapus permanen data thread lama per D7; drop tabel legacy) sebagai langkah ber-sign-off terpisah.
+  - ✅ **6a (commit `430256e`)**: `accountCleanup` kini cascade-hapus tabel first-party v2 (fix bug privasi dual-run + lepas dependensi komponen). +2 convex-test.
+  - ✅ **6b (commit `d908c94`)**: ekstrak `agent/sendQuota.ts` (putus edge v2→messages.ts→runtime legacy) + relokasi `AgentKind` ke `models.ts` (putus edge models→runtime). Tanpa perubahan perilaku.
+  - ◐ **6c (frontend sdk-only)**: butuh twin v2 `listThreadsByWorkspace`, drop `addThreadContextArtifacts` (mati), rute SEMUA entry-point buat-thread (workspace-detail, discovery, settings) ke v2 (samakan workspace-detail dgn pola dispatcher explore), buang legacy data-hook + flag `agent-backend` + `useUIMessages` + blok artifact per-pesan + legacy hitlResume + `optimistic-updates`. **Menyentuh surface parity-locked → butuh dogfood UI login owner (gate `apps/web/AGENTS.md`).** Reversibel.
+  - ⏳ **6d**: hapus 40 file legacy aman + partial-trim (`messages`/`threads`/`runtime`/`sourceCandidates`/`sourceQuality`) + rewire `assertThreadOwner` ke `chatThreads`. Reversibel.
+  - ⏳ **6e**: lepas `app.use(workflow)` (setelah deps legacy hilang). Reversibel.
+  - ⛔ **6f [TAK-TERBALIKKAN]**: unmount `app.use(agent)` (hapus data thread legacy permanen, D7) + drop tabel legacy (perlu migrasi `v.id("agentRuns")`→`v.string()` di tabel cross-domain dulu). Langkah ber-sign-off owner terpisah, idealnya commit/deploy sendiri.
 - *Exit*: Phase 4.3 — definisi **SELESAI PENUH** untuk inisiatif ini.
 
 **Estimasi total sisa pekerjaan: ~8–12 hari kerja**, dengan milestone "agent + web terintegrasi, bisa dites via UI" tercapai di akhir **Step 2**.
