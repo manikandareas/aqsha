@@ -93,7 +93,7 @@ export type ToggleThreadContextArtifact = (args: {
   artifactId: ArtifactId;
 }) => Promise<{ ok: boolean; selected: boolean }>;
 
-export type RemoveThread = (args: { threadId: string }) => Promise<{ ok: true }>;
+export type RemoveThread = (args: { threadId: string }) => Promise<{ ok: boolean }>;
 
 export type ThreadShellLayoutProps = {
   threads: ThreadSummary[];

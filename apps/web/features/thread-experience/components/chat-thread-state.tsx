@@ -1,6 +1,6 @@
 "use client";
 
-import { useSmoothText, useUIMessages } from "@convex-dev/agent/react";
+import { useSmoothText } from "@convex-dev/agent/react";
 import {
   uiHitlMessageFromInteraction,
   uiMessageFromV2Row,
@@ -9,7 +9,6 @@ import {
 } from "@aqsha/agent-contracts";
 import { AlertCircleIcon } from "@aqsha/ui/icons";
 import { api } from "@aqsha/convex/api";
-import { isSdkBackend } from "@/lib/agent-backend";
 import { useConvexAuth, useConvexQueryData } from "@/lib/convex-query";
 import {
   Conversation,
@@ -104,53 +103,36 @@ export function ThreadChatSurface({
   seed?: string;
 }) {
   const { isAuthenticated } = useConvexAuth();
-  // Backend split (plan §9.4 Step 2): both query sets always run, the
-  // inactive backend gets "skip" — components below see one message shape.
-  const legacyActive = isAuthenticated && !isSdkBackend;
-  const sdkActive = isAuthenticated && isSdkBackend;
-  const threadStatusLegacy = useConvexQueryData(
-    api.agent.threads.get,
-    legacyActive && threadId ? { threadId } : "skip",
-  );
-  const threadStatusV2 = useConvexQueryData(
+  const active = isAuthenticated;
+  const threadStatus = useConvexQueryData(
     api.agent.v2.queries.getThread,
-    sdkActive && threadId ? { threadId } : "skip",
+    active && threadId ? { threadId } : "skip",
   );
-  const threadStatus = isSdkBackend ? threadStatusV2 : threadStatusLegacy;
   // Lock the composer while a reply is still being generated for this thread.
   // `send` only schedules generation and returns immediately, so `isSending`
   // alone re-opens the composer before the agent finishes streaming.
   const isGenerating = threadStatus?.status === "streaming";
-  const messages = useUIMessages(
-    api.agent.messages.list,
-    legacyActive && threadId ? { threadId } : "skip",
-    { initialNumItems: 30, stream: true },
-  );
   const v2MessageRows = useConvexQueryData(
     api.agent.v2.queries.listMessages,
-    sdkActive && threadId ? { threadId } : "skip",
+    active && threadId ? { threadId } : "skip",
   );
   const v2Interactions = useConvexQueryData(
     api.agent.v2.queries.listPendingInteractions,
-    sdkActive && threadId ? { threadId } : "skip",
+    active && threadId ? { threadId } : "skip",
   );
-  const rawBackendMessages = isSdkBackend
-    ? ([
-        ...((v2MessageRows ?? []) as V2MessageRow[]).map(uiMessageFromV2Row),
-        ...((v2Interactions ?? []) as V2InteractionRow[]).map(
-          uiHitlMessageFromInteraction,
-        ),
-      ] as unknown as ChatMessage[])
-    : (messages.results as unknown as ChatMessage[]);
+  const messagesLoading = Boolean(threadId) && v2MessageRows === undefined;
+  const rawBackendMessages = [
+    ...((v2MessageRows ?? []) as V2MessageRow[]).map(uiMessageFromV2Row),
+    ...((v2Interactions ?? []) as V2InteractionRow[]).map(
+      uiHitlMessageFromInteraction,
+    ),
+  ] as unknown as ChatMessage[];
   // The sdk backend delivers text in ~RTT-sized jumps (one Convex write per
   // round-trip); smooth the in-flight assistant message client-side so it
-  // reads like token streaming — the same trick useUIMessages does natively
-  // on the legacy backend.
-  const streamingV2 = isSdkBackend
-    ? rawBackendMessages.find(
-        (message) => message.role === "assistant" && message.status === "streaming",
-      )
-    : undefined;
+  // reads like token streaming.
+  const streamingV2 = rawBackendMessages.find(
+    (message) => message.role === "assistant" && message.status === "streaming",
+  );
   const [smoothedText] = useSmoothText(streamingV2?.text ?? "", {
     startStreaming: true,
   });
@@ -171,7 +153,7 @@ export function ThreadChatSurface({
   // it resumes generation. Derived entirely from the message stream.
   const pendingHitl = hasPendingHitl(sortedMessages);
   const hitlBlocking = pendingHitl;
-  const hitlActions = useHitlResume(threadId, pendingHitl);
+  const hitlActions = useHitlResume();
   const hasMessages = sortedMessages.length > 0;
   const activeRun = runs.find(isRunActive);
   const interleavedEntries = interleaveRunsWithMessages(sortedMessages, runs);
@@ -241,7 +223,7 @@ export function ThreadChatSurface({
                   );
                 })}
               </>
-            ) : messages.status === "LoadingFirstPage" && threadId ? (
+            ) : messagesLoading ? (
               <CenteredLoading label="Memuat pesan..." />
             ) : (
               <ConversationEmptyState className={compact ? "min-h-[24svh]" : "min-h-[48svh]"}>

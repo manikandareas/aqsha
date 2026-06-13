@@ -11,7 +11,6 @@ import {
 
 const workspacePageSize = 50;
 const artifactPageSize = 100;
-const threadPageSize = 30;
 
 export function useWorkspaceIndexData() {
   const { isAuthenticated } = useConvexAuth();
@@ -22,22 +21,20 @@ export function useWorkspaceIndexData() {
       ? { paginationOpts: { cursor: null, numItems: workspacePageSize } }
       : "skip",
   );
-  const threadPage = useConvexQueryData(
-    api.agent.threads.list,
-    isAuthenticated
-      ? { paginationOpts: { cursor: null, numItems: threadPageSize } }
-      : "skip",
+  const threads = useConvexQueryData(
+    api.agent.v2.queries.listThreads,
+    isAuthenticated ? {} : "skip",
   );
 
   return {
     isAuthenticated,
     viewer,
     workspaces: workspacePage?.page ?? [],
-    threads: threadPage?.page ?? [],
+    threads: threads ?? [],
     isLoadingWorkspaces: workspacePage === undefined,
     createWorkspace: useConvexMutationFn(api.workspaces.create),
     archiveWorkspace: useConvexMutationFn(api.workspaces.archive),
-    removeThread: useConvexMutationFn(api.agent.threads.remove),
+    removeThread: useConvexMutationFn(api.agent.v2.removeThread),
   };
 }
 
@@ -99,20 +96,13 @@ export function useWorkspaceDetailData(workspaceId: string) {
   const { isAuthenticated } = useConvexAuth();
   const libraryData = useWorkspaceLibraryData(workspaceId);
   const viewer = useConvexQueryData(api.auth.getCurrentUser, isAuthenticated ? {} : "skip");
-  const threadPage = useConvexQueryData(
-    api.agent.threads.list,
-    isAuthenticated
-      ? { paginationOpts: { cursor: null, numItems: threadPageSize } }
-      : "skip",
+  const threads = useConvexQueryData(
+    api.agent.v2.queries.listThreads,
+    isAuthenticated ? {} : "skip",
   );
-  const workspaceThreadPage = useConvexQueryData(
-    api.agent.threads.listByWorkspace,
-    isAuthenticated && workspaceId
-      ? {
-          workspaceId: toWorkspaceId(workspaceId),
-          paginationOpts: { cursor: null, numItems: threadPageSize },
-        }
-      : "skip",
+  const workspaceThreads = useConvexQueryData(
+    api.agent.v2.queries.listThreadsByWorkspace,
+    isAuthenticated && workspaceId ? { workspaceId } : "skip",
   );
   const rateStatus = useConvexQueryData(
     api.agent.rateLimits.getSendStatus,
@@ -126,10 +116,10 @@ export function useWorkspaceDetailData(workspaceId: string) {
     workspaces: libraryData.workspaces,
     folders: libraryData.folders,
     artifacts: libraryData.artifacts,
-    threads: threadPage?.page ?? [],
-    workspaceThreads: workspaceThreadPage?.page ?? [],
+    threads: threads ?? [],
+    workspaceThreads: workspaceThreads ?? [],
     rateStatus,
-    isLoading: libraryData.isLoading || workspaceThreadPage === undefined,
+    isLoading: libraryData.isLoading || workspaceThreads === undefined,
     createWorkspace: useConvexMutationFn(api.workspaces.create),
     renameWorkspace: libraryData.renameWorkspace,
     updateWorkspaceEmoji: libraryData.updateWorkspaceEmoji,
@@ -145,9 +135,10 @@ export function useWorkspaceDetailData(workspaceId: string) {
     renameArtifact: libraryData.renameArtifact,
     moveArtifact: libraryData.moveArtifact,
     removeArtifact: libraryData.removeArtifact,
-    startThread: useConvexMutationFn(api.agent.messages.startThread),
-    addThreadContextArtifacts: useConvexMutationFn(api.agent.context.threadContext.addMany),
-    removeThread: useConvexMutationFn(api.agent.threads.remove),
+    // New-thread creation is owned by the chat panel via the v2 thread-experience
+    // dispatcher (see WorkspaceChatSidePanel); pinned context rides the composer
+    // pills, so the legacy startThread/addThreadContextArtifacts bindings are gone.
+    removeThread: useConvexMutationFn(api.agent.v2.removeThread),
   };
 }
 
@@ -164,11 +155,9 @@ export function useArtifactDetailData(artifactId: string) {
       ? { paginationOpts: { cursor: null, numItems: workspacePageSize } }
       : "skip",
   );
-  const threadPage = useConvexQueryData(
-    api.agent.threads.list,
-    isAuthenticated
-      ? { paginationOpts: { cursor: null, numItems: threadPageSize } }
-      : "skip",
+  const threads = useConvexQueryData(
+    api.agent.v2.queries.listThreads,
+    isAuthenticated ? {} : "skip",
   );
   const artifact = useConvexQueryData(api.artifacts.get, artifactArgs);
   const paperExtraction = useConvexQueryData(api.papers.extractions.getStatus, artifactArgs);
@@ -177,7 +166,7 @@ export function useArtifactDetailData(artifactId: string) {
     isAuthenticated,
     viewer,
     workspaces: workspacesPage?.page ?? [],
-    threads: threadPage?.page ?? [],
+    threads: threads ?? [],
     artifact,
     paperExtraction,
     isLoading: artifact === undefined,
@@ -188,6 +177,6 @@ export function useArtifactDetailData(artifactId: string) {
     moveArtifact: useConvexMutationFn(api.artifacts.move),
     removeArtifact: useConvexMutationFn(api.artifacts.remove),
     createWorkspace: useConvexMutationFn(api.workspaces.create),
-    removeThread: useConvexMutationFn(api.agent.threads.remove),
+    removeThread: useConvexMutationFn(api.agent.v2.removeThread),
   };
 }

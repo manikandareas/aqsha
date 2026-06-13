@@ -5,13 +5,10 @@ import { useRouter } from "next/navigation";
 import { DetailSplitLayout } from "@/components/layout/detail-split-layout";
 import { ResponsiveSidePanel } from "@/components/layout/responsive-side-panel";
 import { useSidebar } from "@/components/ui/sidebar";
-import { toWorkspaceId } from "@/lib/convex-refs";
-import type { StartThread } from "@/features/thread-experience/components/component-types";
 import {
   ComposerMentionsProvider,
   usePanelContextSelection,
 } from "@/features/thread-experience/components/composer-context-mentions";
-import { toMutationContextSnapshot } from "@/features/thread-experience/utils/message-context";
 import {
   useWorkspaceDetailData,
   type WorkspaceLibraryData,
@@ -41,16 +38,6 @@ function WorkspaceDetailMain({
   const leftSidebar = useSidebar();
   const [chatPanelOpen, setChatPanelOpen] = useState(false);
   const [panelThreadId, setPanelThreadId] = useState<string | null>(null);
-
-  // The thread is filed under this workspace ("disimpan di"); the workspace also
-  // pre-seeds as an inline context pill via the mention provider. The composer
-  // supplies the pinned context refs; we just brand the snapshot here.
-  const handleStartThread: StartThread = (args) =>
-    data.startThread({
-      ...args,
-      workspaceId: toWorkspaceId(workspaceId),
-      contextArtifactSnapshot: toMutationContextSnapshot(args.contextArtifactSnapshot),
-    });
 
   const handlePanelThreadChange = (threadId: string | null) => {
     setPanelThreadId(threadId);
@@ -97,8 +84,6 @@ function WorkspaceDetailMain({
                   onActiveThreadIdChange={handlePanelThreadChange}
                   threads={data.workspaceThreads}
                   rateStatus={data.rateStatus}
-                  startThread={handleStartThread}
-                  removeThread={data.removeThread}
                 />
               </ResponsiveSidePanel>
             }

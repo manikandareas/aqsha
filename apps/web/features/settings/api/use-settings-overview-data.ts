@@ -7,14 +7,14 @@ export function useSettingsOverviewData() {
   const { isAuthenticated } = useConvexAuth();
   const current = useConvexQueryData(api.billing.current.get, isAuthenticated ? {} : "skip");
   const activity = useConvexQueryData(api.billing.usage.activity, isAuthenticated ? { days: 365 } : "skip");
-  const threadPage = useConvexQueryData(
-    api.agent.threads.list,
-    isAuthenticated ? { paginationOpts: { cursor: null, numItems: 50 } } : "skip",
+  const threads = useConvexQueryData(
+    api.agent.v2.queries.listThreads,
+    isAuthenticated ? {} : "skip",
   );
 
   return {
     current,
     activity,
-    threadCount: threadPage?.page.length,
+    threadCount: threads?.length,
   };
 }

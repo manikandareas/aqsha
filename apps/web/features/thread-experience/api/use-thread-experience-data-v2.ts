@@ -10,6 +10,10 @@ import {
 } from "@/lib/convex-query";
 import type { WorkspaceId } from "@/lib/convex-refs";
 import type {
+  SendMessage,
+  StartThread,
+} from "../components/component-types";
+import type {
   ResearchArtifact,
   ResearchRun,
   ResearchSource,
@@ -40,7 +44,7 @@ export function promptForSdkBackend(content: string, commandId?: string): string
   return `${slug} ${content}`.trim();
 }
 
-export function useThreadExperienceDataV2(threadId: string | undefined, enabled: boolean) {
+export function useThreadExperienceDataV2(threadId: string | undefined, enabled = true) {
   const { isAuthenticated } = useConvexAuth();
   const active = enabled && isAuthenticated;
   const viewer = useConvexQueryData(api.auth.getCurrentUser, active ? {} : "skip");
@@ -88,15 +92,11 @@ export function useThreadExperienceDataV2(threadId: string | undefined, enabled:
   const retryRunV2 = useConvexMutationFn(api.agent.v2.retryRun);
   const removeThreadV2 = useConvexMutationFn(api.agent.v2.removeThread);
 
-  const startThread = async (args: {
-    content: string;
-    agentKind: "lite" | "pro";
-    commandId?: string;
-    workspaceId?: string;
-    selectedContextArtifactIds?: string[];
-    selectedContextWorkspaceIds?: string[];
-    messageAttachmentArtifactIds?: string[];
-  }): Promise<SendResult> => {
+  // Typed against the shared StartThread/SendMessage contracts so this hook IS
+  // the canonical thread-experience surface. Fields the v2 backend doesn't use
+  // (contextArtifactSnapshot, pendingAttachments) are accepted and ignored —
+  // pinned context rides contextArtifactIds.
+  const startThread: StartThread = async (args) => {
     return (await startThreadV2({
       content: promptForSdkBackend(args.content, args.commandId),
       agentKind: args.agentKind,
@@ -109,15 +109,7 @@ export function useThreadExperienceDataV2(threadId: string | undefined, enabled:
     })) as SendResult;
   };
 
-  const sendMessage = async (args: {
-    threadId: string;
-    content: string;
-    agentKind: "lite" | "pro";
-    commandId?: string;
-    selectedContextArtifactIds?: string[];
-    selectedContextWorkspaceIds?: string[];
-    messageAttachmentArtifactIds?: string[];
-  }): Promise<SendResult> => {
+  const sendMessage: SendMessage = async (args) => {
     return (await sendMessageV2({
       threadId: args.threadId,
       content: promptForSdkBackend(args.content, args.commandId),

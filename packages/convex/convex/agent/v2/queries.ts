@@ -48,6 +48,33 @@ export const listThreads = query({
   },
 });
 
+export const listThreadsByWorkspace = query({
+  args: { workspaceId: v.string() },
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    // chatThreads is indexed by owner+activity, not workspace; dev-scale thread
+    // counts make an owner scan + in-memory workspace filter cheap and correct.
+    const threads = await ctx.db
+      .query("chatThreads")
+      .withIndex("by_owner_activity", (q) => q.eq("ownerUserId", user._id))
+      .order("desc")
+      .take(MAX_THREADS);
+    return threads
+      .filter((thread) => thread.workspaceId && String(thread.workspaceId) === args.workspaceId)
+      .map((thread) => ({
+        threadId: thread.threadId,
+        workspaceId: thread.workspaceId ? String(thread.workspaceId) : undefined,
+        title: thread.title ?? "Percakapan baru",
+        createdAt: thread._creationTime,
+        lastActivityAt: thread.lastActivityAt,
+        lastMessagePreview: thread.lastMessagePreview ?? "",
+        messageCount: thread.messageCount,
+        status: thread.status,
+        lastAgentKind: thread.agentKind,
+      }));
+  },
+});
+
 export const getThread = query({
   args: { threadId: v.string() },
   handler: async (ctx, args) => {
