@@ -1,6 +1,11 @@
 # Plan: Pembersihan Legacy Convex (v1 → v2) Pasca-Cutover Agent
 
-> Status: **DRAFT siap eksekusi (2026-06-13).** Disusun setelah cutover agent Step 6
+> Status: **SELESAI (2026-06-13) — batch C1–C6 semua hijau, ter-commit, ter-push ke DEV.**
+> 21 tabel legacy + `const runId` + 3 kolom `v.id("agentRuns")` + `@convex-dev/agent`/`@convex-dev/workflow`
+> dep sudah hilang; gerbang penuh hijau (typecheck + lint + 111 convex test + `convex dev --once`).
+> Keputusan P1–P5 = DROP (terimplementasi). Sisa satu langkah owner: promosi ke produksi via `npx convex deploy`.
+>
+> Status awal: **DRAFT siap eksekusi (2026-06-13).** Disusun setelah cutover agent Step 6
 > (`docs/claude-agent-sdk-app-plan.md`) selesai: runtime agent kini sepenuhnya di
 > `apps/agents` (Claude Agent SDK) di atas tabel first-party v2, komponen
 > `@convex-dev/agent` + `@convex-dev/workflow` sudah di-unmount, runtime legacy di
