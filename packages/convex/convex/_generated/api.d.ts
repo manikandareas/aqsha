@@ -34,7 +34,6 @@ import type * as agent_research_sourceQuality from "../agent/research/sourceQual
 import type * as agent_sendQuota from "../agent/sendQuota.js";
 import type * as agent_service from "../agent/service.js";
 import type * as agent_service_model from "../agent/service/model.js";
-import type * as agent_skills_skillRegistry from "../agent/skills/skillRegistry.js";
 import type * as agent_threads from "../agent/threads.js";
 import type * as agent_v2 from "../agent/v2.js";
 import type * as agent_v2_interactions from "../agent/v2/interactions.js";
@@ -143,7 +142,6 @@ declare const fullApi: ApiFromModules<{
   "agent/sendQuota": typeof agent_sendQuota;
   "agent/service": typeof agent_service;
   "agent/service/model": typeof agent_service_model;
-  "agent/skills/skillRegistry": typeof agent_skills_skillRegistry;
   "agent/threads": typeof agent_threads;
   "agent/v2": typeof agent_v2;
   "agent/v2/interactions": typeof agent_v2_interactions;
