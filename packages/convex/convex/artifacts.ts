@@ -802,15 +802,17 @@ export const saveAttachmentToWorkspace = mutation({
       requireActive: true,
     });
 
-    const threadMetadata = artifact.threadId
+    // The thread's "filed under" workspace now lives on the first-party
+    // chatThreads table (threadMetadata was retired in the v1→v2 cleanup).
+    const boundThread = artifact.threadId
       ? await ctx.db
-          .query("threadMetadata")
-          .withIndex("by_thread", (q) => q.eq("threadId", artifact.threadId!))
+          .query("chatThreads")
+          .withIndex("by_thread_id", (q) => q.eq("threadId", artifact.threadId!))
           .unique()
       : null;
     const boundWorkspaceId =
-      threadMetadata?.ownerUserId === user._id
-        ? threadMetadata.workspaceId
+      boundThread?.ownerUserId === user._id
+        ? boundThread.workspaceId
         : undefined;
 
     let targetWorkspaceId = boundWorkspaceId ?? args.workspaceId;

@@ -12,24 +12,10 @@ export async function cleanupOwnerAgentData(
 ): Promise<OwnerCleanupResult> {
   let deletedRows = 0;
 
-  const messageWorkspaceArtifacts = withinOwnerCleanupLimit(
-    "messageWorkspaceArtifacts",
-    await ctx.db
-      .query("messageWorkspaceArtifacts")
-      .withIndex("by_owner_thread_created", (q) => q.eq("ownerUserId", ownerUserId))
-      .take(501),
-  );
   const messageWorkspaceActions = withinOwnerCleanupLimit(
     "messageWorkspaceActions",
     await ctx.db
       .query("messageWorkspaceActions")
-      .withIndex("by_owner_thread_created", (q) => q.eq("ownerUserId", ownerUserId))
-      .take(501),
-  );
-  const messageCommands = withinOwnerCleanupLimit(
-    "messageCommands",
-    await ctx.db
-      .query("messageCommands")
       .withIndex("by_owner_thread_created", (q) => q.eq("ownerUserId", ownerUserId))
       .take(501),
   );
@@ -97,9 +83,7 @@ export async function cleanupOwnerAgentData(
       .take(501),
   );
 
-  deletedRows += await deleteRows(ctx, "messageWorkspaceArtifacts", messageWorkspaceArtifacts);
   deletedRows += await deleteRows(ctx, "messageWorkspaceActions", messageWorkspaceActions);
-  deletedRows += await deleteRows(ctx, "messageCommands", messageCommands);
   deletedRows += await deleteRows(ctx, "researchExtracts", researchExtracts);
   deletedRows += await deleteRows(ctx, "researchSources", researchSources);
   deletedRows += await deleteRows(ctx, "citationChecks", citationChecks);

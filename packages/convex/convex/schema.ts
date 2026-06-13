@@ -295,39 +295,6 @@ export default defineSchema(
       eventCount: v.number(),
       featureCounts: featureCountValidator,
     }).index("by_owner_date", ["ownerUserId", "date"]),
-    messageCommands: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.string(),
-      messageId: v.string(),
-      commandId: v.string(),
-      commandLabel: v.string(),
-      commandSlug: v.string(),
-      // Legacy execution mode; retained for read tolerance of existing rows.
-      mode: v.union(v.literal("normal"), v.literal("deep")),
-      // Which agent produced this command run. Optional for legacy rows.
-      agentKind: v.optional(v.union(v.literal("lite"), v.literal("pro"))),
-      argumentPreview: v.string(),
-      expandedPromptSnapshot: v.string(),
-      createdAt: v.number(),
-    })
-      .index("by_owner_message", ["ownerUserId", "messageId"])
-      .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"]),
-    messageWorkspaceArtifacts: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.string(),
-      messageId: v.string(),
-      artifactId: v.id("artifacts"),
-      relation: v.union(
-        v.literal("created"),
-        v.literal("updated"),
-        v.literal("deleted"),
-        v.literal("referenced"),
-      ),
-      createdAt: v.number(),
-    })
-      .index("by_owner_message", ["ownerUserId", "messageId"])
-      .index("by_owner_artifact", ["ownerUserId", "artifactId"])
-      .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"]),
     messageWorkspaceActions: defineTable({
       ownerUserId: v.string(),
       threadId: v.string(),
@@ -338,38 +305,6 @@ export default defineSchema(
     })
       .index("by_owner_message", ["ownerUserId", "messageId"])
       .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"]),
-    messageContextArtifacts: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.string(),
-      messageId: v.string(),
-      artifactId: v.id("artifacts"),
-      title: v.string(),
-      artifactType: v.optional(artifactTypeValidator),
-      source: v.optional(v.union(v.literal("upload"), v.literal("workspace"))),
-      kind: v.optional(v.union(v.literal("document"), v.literal("url"))),
-      createdAt: v.number(),
-    }).index("by_owner_message", ["ownerUserId", "messageId"]),
-    // Per-message snapshot of the workspaces that were active context when the
-    // message was sent (filed-under + @mentioned). Drives the message bubble's
-    // workspace badges.
-    messageContextWorkspaces: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.string(),
-      messageId: v.string(),
-      workspaceId: v.id("workspaces"),
-      name: v.string(),
-      createdAt: v.number(),
-    }).index("by_owner_message", ["ownerUserId", "messageId"]),
-    // The user message text WITH inline mention markers, kept separate from the
-    // agent message (which is stored clean) so the bubble can render mention
-    // pills at the exact position the user typed them.
-    messageRichContent: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.string(),
-      messageId: v.string(),
-      content: v.string(),
-      createdAt: v.number(),
-    }).index("by_owner_message", ["ownerUserId", "messageId"]),
     agentRuns: defineTable({
       ownerUserId: v.string(),
       threadId: v.string(),
@@ -726,22 +661,6 @@ export default defineSchema(
     })
       .index("by_owner_artifact_version", ["ownerUserId", "artifactId", "versionNumber"])
       .index("by_owner_artifact_created", ["ownerUserId", "artifactId", "createdAt"]),
-    messageArtifacts: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.string(),
-      messageId: v.string(),
-      artifactId: v.id("artifacts"),
-      versionId: v.id("artifactVersions"),
-      relation: v.union(
-        v.literal("created"),
-        v.literal("updated"),
-        v.literal("referenced"),
-      ),
-      createdAt: v.number(),
-    })
-      .index("by_owner_message", ["ownerUserId", "messageId"])
-      .index("by_owner_artifact", ["ownerUserId", "artifactId"])
-      .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"]),
     citationChecks: defineTable({
       ownerUserId: v.string(),
       threadId: v.string(),
