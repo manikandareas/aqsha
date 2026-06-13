@@ -203,6 +203,15 @@ describe("RunManager", () => {
       return row?.status === "canceled" ? row : null;
     });
     expect(run.status).toBe("canceled");
+
+    // Cancel emits an explicit terminal event so the timeline shows "Dihentikan"
+    // even via the event stream (not only the run row).
+    const canceledEvents = (await store.listRunEvents("run1")).filter(
+      (eventRow) =>
+        eventRow.type === "run_status" &&
+        JSON.parse(eventRow.payloadJson).status === "canceled",
+    );
+    expect(canceledEvents.length).toBeGreaterThanOrEqual(1);
   });
 
   it("intercepts /deep: runs the durable five-phase orchestration", async () => {

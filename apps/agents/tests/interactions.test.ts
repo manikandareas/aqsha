@@ -108,6 +108,13 @@ describe("InteractionBroker.requestApproval (hold-window)", () => {
       payload: { name: "Spike" },
     });
     expect(result.outcome).toBe("allow");
+    // The timeline node opened on timeout must close: consuming the primed
+    // approval emits interaction_resolved keyed by the same interaction id.
+    const resolved = (await store.listRunEvents("run1")).filter(
+      (eventRow) => eventRow.type === "interaction_resolved",
+    );
+    expect(resolved).toHaveLength(1);
+    expect(JSON.parse(resolved[0]!.payloadJson).interactionId).toBe(interaction.id);
     // One-shot: a second call opens a fresh window (times out here).
     const second = await broker.requestApproval({
       ...baseInput,

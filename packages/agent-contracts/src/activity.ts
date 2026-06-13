@@ -307,6 +307,10 @@ type WorkingNode = ActivityEvent & {
   _startSeq: number;
   _endSeq: number;
   _interval: boolean; // phase | subagent own a [start, end] window
+  // Fase 3 precise nesting: the sub-agent (agent_id) a tool ran in, when the
+  // SDK supplied it. Present → nest under that sub-agent exactly; absent →
+  // fall back to the Fase 1 seq-window heuristic.
+  _parentAgentId?: string;
 };
 
 function close(node: WorkingNode, endSeq: number, endedAt: number): void {
@@ -352,12 +356,41 @@ function innermostContainer(
 }
 
 function toClean(node: WorkingNode): ActivityEvent {
-  const { _startSeq: _s, _endSeq: _e, _interval: _i, children, ...rest } = node;
+  const {
+    _startSeq: _s,
+    _endSeq: _e,
+    _interval: _i,
+    _parentAgentId: _p,
+    children,
+    ...rest
+  } = node;
   const clean: ActivityEvent = { ...rest };
   if (children && children.length > 0) {
     clean.children = (children as WorkingNode[]).map(toClean);
   }
   return clean;
+}
+
+/**
+ * Filter an activity tree by viewer visibility (render-side, pure). `user` nodes
+ * always show; `developer` nodes show only in dev/debug mode; `hidden` nodes
+ * never show. Recurses into children so a hidden/developer node is dropped at
+ * every depth. Returns new nodes (input is never mutated).
+ */
+export function filterByVisibility(
+  nodes: ActivityEvent[],
+  options?: { developer?: boolean },
+): ActivityEvent[] {
+  const developer = options?.developer === true;
+  const allow = (visibility: ActivityVisibility): boolean =>
+    visibility === "user" || (developer && visibility === "developer");
+  const walk = (list: ActivityEvent[]): ActivityEvent[] =>
+    list
+      .filter((node) => allow(node.visibility))
+      .map((node) =>
+        node.children ? { ...node, children: walk(node.children) } : node,
+      );
+  return walk(nodes);
 }
 
 /**
@@ -384,10 +417,17 @@ export function activityEventsFromRun(run: AgentRunRow): ActivityEvent[] {
   const toolsByUseId = new Map<string, WorkingNode>(); // exact pairing by toolUseId (Fase 2)
   const subagentStack: WorkingNode[] = [];
   const subagentsById = new Map<string, WorkingNode>(); // exact pairing by agentId (Fase 2)
+  // Stable agentId → sub-agent node (never deleted on stop): precise nesting in
+  // step 3 attaches a tool to the sub-agent it ran in (Fase 3).
+  const subagentNodeByAgentId = new Map<string, WorkingNode>();
   const phaseStack: WorkingNode[] = [];
   const approvalsById = new Map<string, WorkingNode>();
   const openToolOrder: WorkingNode[] = []; // most-recent open tool for error attribution
   let runErrorMessage: string | undefined;
+  // Fase 3: a `run_status` event carrying status "canceled" is a terminal
+  // marker in the stream itself (runManager emits it on cancel). Consumed so the
+  // timeline reflects cancel even before the run row's status has propagated.
+  let sawCanceledEvent = false;
 
   const makeNode = (
     seq: number,
@@ -430,6 +470,7 @@ export function activityEventsFromRun(run: AgentRunRow): ActivityEvent[] {
           visibility: "user",
           metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
           _interval: false,
+          _parentAgentId: stringOf(payload, "parentAgentId"),
         });
         leaves.push(node);
         const stack = toolStacks.get(tool) ?? [];
@@ -491,6 +532,7 @@ export function activityEventsFromRun(run: AgentRunRow): ActivityEvent[] {
             visibility: "user",
             metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
             _interval: false,
+            _parentAgentId: stringOf(payload, "parentAgentId"),
           });
           close(orphan, event.seq, at);
           leaves.push(orphan);
@@ -535,7 +577,10 @@ export function activityEventsFromRun(run: AgentRunRow): ActivityEvent[] {
         });
         intervals.push(node);
         subagentStack.push(node);
-        if (agentId) subagentsById.set(agentId, node);
+        if (agentId) {
+          subagentsById.set(agentId, node);
+          subagentNodeByAgentId.set(agentId, node);
+        }
         break;
       }
       case "subagent_stop": {
@@ -619,14 +664,14 @@ export function activityEventsFromRun(run: AgentRunRow): ActivityEvent[] {
         break;
       }
       case "compaction": {
-        // Internal housekeeping — present in the model but hidden from users
-        // (developer-mode is a later phase).
+        // Internal housekeeping: not part of the user narrative, but useful for
+        // debugging — surfaced only in dev/debug mode (Fase 3 visibility gate).
         const node = makeNode(event.seq, at, {
           type: "system",
           actor: "system",
           status: "completed",
           title: "Merapikan konteks",
-          visibility: "hidden",
+          visibility: "developer",
           _interval: false,
         });
         close(node, event.seq, at);
@@ -668,24 +713,36 @@ export function activityEventsFromRun(run: AgentRunRow): ActivityEvent[] {
       }
       // run_status is consumed by the run header (built from the run row), not
       // rendered as its own node. waiting_hitl is represented by the approval
-      // node from interaction_pending; completed/running drive the header.
-      case "run_status":
+      // node from interaction_pending; completed/running drive the header. A
+      // `canceled` status is the one we also read here: it is a terminal marker
+      // (runManager emits it on cancel) used below to close open nodes.
+      case "run_status": {
+        if (stringOf(payload, "status") === "canceled") sawCanceledEvent = true;
+        break;
+      }
       default:
         break;
     }
   }
 
-  // 2. Terminal status from the run row: close anything still open. Set
-  //    status/timing only — never shrink the seq window, so coarse nesting in
-  //    step 3 still attributes later tools to a sub-agent/phase that the run
-  //    ended inside of.
-  const terminal = ["completed", "failed", "canceled"].includes(run.status);
+  // Effective terminal status: the run row drives it, but a streamed
+  // `run_status: canceled` event upgrades a not-yet-terminal row to canceled
+  // (the emit and the row write both happen in cancelRun; this keeps the
+  // timeline correct if the event is observed first).
+  const rowTerminal = ["completed", "failed", "canceled"].includes(run.status);
+  const effectiveRunStatus: AgentRunRow["status"] =
+    !rowTerminal && sawCanceledEvent ? "canceled" : run.status;
+
+  // 2. Terminal status: close anything still open. Set status/timing only —
+  //    never shrink the seq window, so coarse nesting in step 3 still attributes
+  //    later tools to a sub-agent/phase that the run ended inside of.
+  const terminal = ["completed", "failed", "canceled"].includes(effectiveRunStatus);
   if (terminal) {
     const endedAt = run.updatedAt;
     const fallbackStatus: ActivityStatus =
-      run.status === "completed"
+      effectiveRunStatus === "completed"
         ? "completed"
-        : run.status === "canceled"
+        : effectiveRunStatus === "canceled"
           ? "cancelled"
           : "failed";
     const closeTerminal = (node: WorkingNode, status: ActivityStatus) => {
@@ -697,8 +754,9 @@ export function activityEventsFromRun(run: AgentRunRow): ActivityEvent[] {
       // completed/failed copy; a cancelled action keeps its action label (it was
       // interrupted mid-step), except an approval which becomes explicit.
       const label = labelForNode(node);
-      if (status === "completed" && label) {
-        node.title = label.completed;
+      if (status === "completed") {
+        if (label) node.title = label.completed;
+        else if (node.type === "approval") node.title = "Persetujuan diterima";
       } else if (status === "failed" && label) {
         node.title = failedTitle(label);
       } else if (status === "cancelled" && node.type === "approval") {
@@ -708,18 +766,48 @@ export function activityEventsFromRun(run: AgentRunRow): ActivityEvent[] {
     for (const node of [...leaves, ...intervals]) {
       if (node.status === "running") {
         closeTerminal(node, fallbackStatus);
-      } else if (node.status === "waiting_approval" && run.status !== "completed") {
-        closeTerminal(node, "cancelled");
+      } else if (node.status === "waiting_approval") {
+        // A terminal run can no longer be blocked on the user: a completed run
+        // implies the approval was granted (or became unnecessary); a failed or
+        // canceled run cancels it. Either way the node must not hang on
+        // "waiting_approval" — the in-turn interaction_resolved is the normal
+        // close; this is the safety net when that event never arrives (model
+        // approves but never retries, or the event was truncated).
+        closeTerminal(
+          node,
+          effectiveRunStatus === "completed" ? "completed" : "cancelled",
+        );
       }
     }
   }
 
-  // 3. Coarse nesting by seq window: leaves nest into the innermost containing
-  //    interval; sub-agents nest into the innermost containing phase.
+  // 3. Nesting. Sub-agents nest into the innermost containing phase by seq
+  //    window (phases never overlap, so this is exact). Leaves prefer PRECISE
+  //    nesting: a tool whose hook fired inside a sub-agent carries that
+  //    sub-agent's agent_id, so it attaches to exactly that sub-agent — correct
+  //    even when sub-agents run in parallel, where a seq-window guess is not.
+  //    Tools without an agent_id (main thread, or thin Fase 1 events) fall back
+  //    to the innermost containing interval by seq window.
+  // Sub-agents nest into the innermost containing PHASE only — never into one
+  //   another. Parallel sub-agents overlap by seq window, so nesting by all
+  //   intervals would wrongly make one the child of another; phases never
+  //   overlap, so phase containment is exact. Their tools then attach by
+  //   agent_id below, keeping parallel sub-agents as correct siblings.
+  const phaseIntervals = intervals.filter((node) => node.type === "phase");
+  // Seq-window container pool for leaves WITHOUT a parentAgentId (main-thread
+  // tools, or thin pre-Fase-3 events). It includes every phase (a main-thread
+  // tool belongs to its phase, open or closed) plus sub-agents that actually
+  // CLOSED (a real _endSeq). A sub-agent whose subagent_stop was never observed
+  // keeps an open window (OPEN_SEQ) that would otherwise swallow every later
+  // main-thread tool in the phase — exclude it, so a stop-less worker's tools
+  // attach ONLY via parentAgentId, never by an unbounded seq window.
+  const leafContainers = intervals.filter(
+    (node) => node.type === "phase" || node._endSeq !== OPEN_SEQ,
+  );
   const topLevel: WorkingNode[] = [];
   for (const interval of intervals) {
-    if (interval._interval && interval.type === "subagent") {
-      const parent = innermostContainer(interval._startSeq, intervals, interval.id);
+    if (interval.type === "subagent") {
+      const parent = innermostContainer(interval._startSeq, phaseIntervals);
       if (parent) {
         interval.parentId = parent.id;
         (parent.children ??= []).push(interval);
@@ -729,7 +817,11 @@ export function activityEventsFromRun(run: AgentRunRow): ActivityEvent[] {
     topLevel.push(interval);
   }
   for (const leaf of leaves) {
-    const parent = innermostContainer(leaf._startSeq, intervals);
+    const subagentParent = leaf._parentAgentId
+      ? subagentNodeByAgentId.get(leaf._parentAgentId)
+      : undefined;
+    const parent =
+      subagentParent ?? innermostContainer(leaf._startSeq, leafContainers);
     if (parent) {
       leaf.parentId = parent.id;
       (parent.children ??= []).push(leaf);
@@ -753,16 +845,16 @@ export function activityEventsFromRun(run: AgentRunRow): ActivityEvent[] {
   const runActive = !terminal;
   const runStatus: ActivityStatus = runActive
     ? "running"
-    : run.status === "completed"
+    : effectiveRunStatus === "completed"
       ? "completed"
-      : run.status === "canceled"
+      : effectiveRunStatus === "canceled"
         ? "cancelled"
         : "failed";
   const runTitle = runActive
     ? isDeep
       ? RUN_RUNNING_TITLE.deep
       : RUN_RUNNING_TITLE.normal
-    : (RUN_TERMINAL_TITLE[run.status] ?? "Selesai");
+    : (RUN_TERMINAL_TITLE[effectiveRunStatus] ?? "Selesai");
   const runNode: ActivityEvent = {
     id: `${runId}:run`,
     runId,
@@ -776,7 +868,7 @@ export function activityEventsFromRun(run: AgentRunRow): ActivityEvent[] {
     // is kept for ops but is NOT rendered: it can carry a stack/path/secret and
     // is not allow-listed (no-leak invariant). When no event message exists the
     // header relies on its title ("Berhenti sebelum selesai") instead.
-    description: run.status === "failed" ? runErrorMessage : undefined,
+    description: effectiveRunStatus === "failed" ? runErrorMessage : undefined,
     visibility: "user",
     startedAt: run.createdAt,
     endedAt: terminal ? run.updatedAt : undefined,

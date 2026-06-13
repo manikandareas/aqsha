@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activityEventsFromRun } from "../src/activity";
+import { activityEventsFromRun, type ActivityEvent, filterByVisibility } from "../src/activity";
 import type { AgentRunRow } from "../src/uiAdapters";
 
 type RawEvent = AgentRunRow["events"][number];
@@ -368,7 +368,7 @@ describe("activityEventsFromRun", () => {
     });
   });
 
-  it("keeps compaction hidden from users", () => {
+  it("classifies compaction as developer-only (revealed only in dev-mode)", () => {
     const result = activityEventsFromRun(
       makeRow({
         status: "running",
@@ -376,7 +376,7 @@ describe("activityEventsFromRun", () => {
       }),
     );
     const system = result.find((node) => node.type === "system");
-    expect(system?.visibility).toBe("hidden");
+    expect(system?.visibility).toBe("developer");
   });
 
   it("produces a flat, accurate timeline for a normal multi-tool run", () => {
@@ -555,9 +555,9 @@ describe("activityEventsFromRun", () => {
         ],
       }),
     );
-    // The two starts overlap by seq window, so coarse nesting (Fase 1) makes a2
-    // a child of a1 — but agentId pairing still closes each at its OWN stop, so
-    // the durations are correct (LIFO would swap them). Flatten to find both.
+    // Without a phase the two sub-agents are top-level siblings; agentId pairing
+    // still closes each at its OWN stop, so the durations are correct (LIFO would
+    // swap them). Flatten to find both regardless of nesting.
     const flatten = (nodes: typeof result): typeof result =>
       nodes.flatMap((node) => [node, ...flatten(node.children ?? [])]);
     const all = flatten(result);
@@ -639,5 +639,189 @@ describe("activityEventsFromRun", () => {
     const tool = result.find((node) => node.type === "tool");
     expect(tool?.metadata).toEqual({ tool: "searchWeb", resultCount: 3 });
     expect(JSON.stringify(result)).not.toContain("rahasia-bersarang");
+  });
+
+  // ── Fase 3: precise parallel-subagent nesting + cancel event ───────────────
+
+  it("nests each parallel sub-agent's tools by parentAgentId, not by seq window", () => {
+    const result = activityEventsFromRun(
+      makeRow({
+        status: "completed",
+        mode: "deep",
+        updatedAt: 11000,
+        events: [
+          event(0, "phase_start", { phase: "literature" }),
+          event(1, "subagent_start", { agentType: "literature-searcher", agentId: "a1" }),
+          event(2, "subagent_start", { agentType: "literature-searcher", agentId: "a2" }),
+          // Interleaved tools, each tagged with the sub-agent it ran in. By seq
+          // window the innermost interval for BOTH is a2 (latest opener); only
+          // parentAgentId attributes searchWeb to a1 correctly.
+          event(3, "tool_start", {
+            toolName: "searchArxiv",
+            toolUseId: "tx",
+            parentAgentId: "a2",
+          }),
+          event(4, "tool_start", {
+            toolName: "searchWeb",
+            toolUseId: "tw",
+            parentAgentId: "a1",
+          }),
+          event(5, "tool_end", { toolName: "searchArxiv", toolUseId: "tx", status: "ok" }),
+          event(6, "tool_end", { toolName: "searchWeb", toolUseId: "tw", status: "ok" }),
+          event(7, "subagent_stop", { agentType: "literature-searcher", agentId: "a1" }),
+          event(8, "subagent_stop", { agentType: "literature-searcher", agentId: "a2" }),
+          event(9, "phase_done", { phase: "literature" }),
+        ],
+      }),
+    );
+    const flatten = (nodes: ActivityEvent[]): ActivityEvent[] =>
+      nodes.flatMap((node) => [node, ...flatten(node.children ?? [])]);
+    const all = flatten(result);
+    const phase = all.find((node) => node.type === "phase")!;
+    const a1 = all.find((node) => node.metadata?.agentId === "a1")!;
+    const a2 = all.find((node) => node.metadata?.agentId === "a2")!;
+    const searchWeb = all.find((node) => node.metadata?.tool === "searchWeb")!;
+    const searchArxiv = all.find((node) => node.metadata?.tool === "searchArxiv")!;
+    // Parallel sub-agents are siblings under the phase, never nested in each other.
+    expect(a1.parentId).toBe(phase.id);
+    expect(a2.parentId).toBe(phase.id);
+    // Each tool attaches to the sub-agent its hook reported, not the seq guess.
+    expect(searchWeb.parentId).toBe(a1.id);
+    expect(a1.children?.some((child) => child.id === searchWeb.id)).toBe(true);
+    expect(searchArxiv.parentId).toBe(a2.id);
+    expect(a2.children?.some((child) => child.id === searchArxiv.id)).toBe(true);
+  });
+
+  it("falls back to seq-window nesting for sub-agent tools without an agent_id", () => {
+    // Thin Fase 1 events (no parentAgentId) must keep nesting under the sub-agent
+    // window — backward compatibility for the coarse path.
+    const result = activityEventsFromRun(
+      makeRow({
+        status: "completed",
+        mode: "deep",
+        updatedAt: 9000,
+        events: [
+          event(1, "subagent_start", { agentType: "literature-searcher", agentId: "a1" }),
+          event(2, "tool_start", { toolName: "searchArxiv" }),
+          event(3, "tool_end", { toolName: "searchArxiv" }),
+          event(4, "subagent_stop", { agentType: "literature-searcher", agentId: "a1" }),
+        ],
+      }),
+    );
+    const subagent = result.find((node) => node.type === "subagent")!;
+    expect(subagent.children?.[0]).toMatchObject({ type: "tool", parentId: subagent.id });
+  });
+
+  it("consumes a streamed run_status:canceled event before the row status flips", () => {
+    const result = activityEventsFromRun(
+      makeRow({
+        status: "running", // row not yet terminal
+        updatedAt: 5000,
+        events: [
+          event(1, "tool_start", { toolName: "searchWeb" }, 2000),
+          event(2, "run_status", { status: "canceled" }, 4000),
+        ],
+      }),
+    );
+    const runNode = result[0]!;
+    expect(runNode.status).toBe("cancelled");
+    expect(runNode.title).toBe("Dihentikan");
+    const tool = result.find((node) => node.type === "tool");
+    expect(tool?.status).toBe("cancelled");
+  });
+
+  it("keeps a main-thread tool under the phase when a sub-agent's stop event was dropped", () => {
+    // A sub-agent whose subagent_stop never arrived keeps an open seq window; a
+    // later main-thread tool (no agent_id) must nest under the PHASE, not get
+    // swallowed by the stop-less sub-agent's unbounded window. Its own tool
+    // (tagged with the agent_id) still attaches to it.
+    const result = activityEventsFromRun(
+      makeRow({
+        status: "completed",
+        mode: "deep",
+        updatedAt: 12000,
+        events: [
+          event(0, "phase_start", { phase: "literature" }),
+          event(1, "subagent_start", { agentType: "literature-searcher", agentId: "a1" }),
+          event(2, "tool_start", { toolName: "searchArxiv", toolUseId: "tA", parentAgentId: "a1" }),
+          event(3, "tool_end", { toolName: "searchArxiv", toolUseId: "tA", parentAgentId: "a1", status: "ok" }),
+          // NO subagent_stop for a1 (dropped / event-cap truncation).
+          event(4, "tool_start", { toolName: "verifyCitations" }), // main thread, no agent_id
+          event(5, "tool_end", { toolName: "verifyCitations", status: "ok" }),
+          event(6, "phase_done", { phase: "literature" }),
+        ],
+      }),
+    );
+    const flatten = (nodes: ActivityEvent[]): ActivityEvent[] =>
+      nodes.flatMap((node) => [node, ...flatten(node.children ?? [])]);
+    const all = flatten(result);
+    const phase = all.find((node) => node.type === "phase")!;
+    const a1 = all.find((node) => node.metadata?.agentId === "a1")!;
+    const arxiv = all.find((node) => node.metadata?.tool === "searchArxiv")!;
+    const verify = all.find((node) => node.metadata?.tool === "verifyCitations")!;
+    expect(arxiv.parentId).toBe(a1.id);
+    expect(verify.parentId).toBe(phase.id);
+  });
+
+  it("closes a still-open approval node on a completed run (no hanging waiting_approval)", () => {
+    // Approval granted on resume but the model never retried the gated tool, so
+    // no interaction_resolved arrived: the completed run must still close it.
+    const result = activityEventsFromRun(
+      makeRow({
+        status: "completed",
+        updatedAt: 5000,
+        events: [
+          event(1, "interaction_pending", {
+            interactionId: "i1",
+            toolName: "proposeArtifact",
+          }),
+        ],
+      }),
+    );
+    const approval = result.find((node) => node.type === "approval")!;
+    expect(approval.status).toBe("completed");
+    expect(approval.title).toBe("Persetujuan diterima");
+  });
+});
+
+describe("filterByVisibility", () => {
+  const leaf = (id: string, visibility: ActivityEvent["visibility"]): ActivityEvent => ({
+    id,
+    runId: "run1",
+    seq: Number(id.replace(/\D/g, "")) || 0,
+    type: "tool",
+    status: "completed",
+    actor: "tool",
+    title: id,
+    visibility,
+    startedAt: 0,
+  });
+
+  it("shows user always, developer only in dev-mode, and hidden never", () => {
+    const nodes: ActivityEvent[] = [
+      { ...leaf("n1", "user"), children: [leaf("c-dev", "developer"), leaf("c-user", "user")] },
+      leaf("n2", "developer"),
+      leaf("n3", "hidden"),
+    ];
+
+    const userView = filterByVisibility(nodes);
+    expect(userView.map((node) => node.id)).toEqual(["n1"]);
+    expect(userView[0]?.children?.map((child) => child.id)).toEqual(["c-user"]);
+
+    const devView = filterByVisibility(nodes, { developer: true });
+    expect(devView.map((node) => node.id)).toEqual(["n1", "n2"]);
+    expect(devView[0]?.children?.map((child) => child.id)).toEqual(["c-dev", "c-user"]);
+
+    // Hidden nodes never appear in either view, at any depth.
+    const ids = JSON.stringify([userView, devView]);
+    expect(ids).not.toContain("n3");
+  });
+
+  it("never mutates the input tree", () => {
+    const nodes: ActivityEvent[] = [
+      { ...leaf("n1", "user"), children: [leaf("c-dev", "developer")] },
+    ];
+    filterByVisibility(nodes);
+    expect(nodes[0]?.children?.map((child) => child.id)).toEqual(["c-dev"]);
   });
 });

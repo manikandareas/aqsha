@@ -1,6 +1,6 @@
 # Plan: Real-time Agent Activity Stream / Timeline
 
-> Dokumen desain + status implementasi. **Fase 1 SUDAH SELESAI & ter-commit; Fase 2 & 3 belum dikerjakan.**
+> Dokumen desain + status implementasi. **Fase 1 ter-commit; Fase 2 & Fase 3 + cleanup §12 SELESAI (uncommitted).**
 
 ## Status Implementasi
 
@@ -8,8 +8,24 @@
 |---|---|---|
 | **Fase 1 — Frontend-only** | ✅ **SELESAI** — commit `ed5c5c2`, branch `development` (2026-06-13) | Belum di-push/PR. Semua gate hijau. |
 | **Fase 2 — Enrichment backend** | ✅ **SELESAI** — branch `development` (2026-06-13), uncommitted | Detail di "Fase 2 — yang dikerjakan" di bawah. Tanpa perubahan schema/index/Convex. Semua gate hijau. |
-| Fase 3 — Presisi & skala | ⏳ Belum | Detail di §9 Fase 3. |
-| Cleanup follow-up | ⏳ Belum | Hapus `steps` yatim + `eventStepKey` + mapping `events` lama (§12). |
+| **Fase 3 — Presisi & skala** | ✅ **SELESAI** — branch `development` (2026-06-13), uncommitted | Detail di "Fase 3 — yang dikerjakan" di bawah. Nesting presisi via **`agent_id`** (bukan stream `parent_tool_use_id`). Tanpa perubahan schema/index/Convex. Semua gate hijau. |
+| **Cleanup follow-up (§12)** | ✅ **SELESAI** — bersama Fase 3 | `eventStepKey` sudah hilang sejak Fase 1; `steps`/`events`/`EVENT_TYPE_MAP`/`eventTitle` yatim dihapus dari `uiAdapters` + `ResearchRun` (tanpa konsumen; grep bersih). |
+
+### Fase 3 — yang benar-benar dikerjakan
+- **Keputusan kunci (grounded di SDK 0.3.175, mengoreksi asumsi plan §1.7/§6):** `BaseHookInput.agent_id` ADA di setiap hook input (`PreToolUse`/`PostToolUse`/`PostToolUseFailure`) saat hook dipicu di dalam sub-agen — dokumen SDK: *"Use this field to distinguish subagent calls from main-thread calls."* `literature-searcher` hanya memakai tool aqsha yang sudah cocok matcher `^mcp__aqsha__`, jadi tool internalnya **sudah** ter-emit; cukup membaca `agent_id`. Maka nesting presisi sub-agen paralel dicapai murni lewat hook — **`streamBridge.ts` TIDAK disentuh dan matcher TIDAK dilebarkan** (emit Task tool akan menduplikasi node sub-agen). Owner menyetujui "agent_id saja".
+- `packages/agent-contracts/src/run.ts`: `parentAgentId` opsional di `toolStart/EndPayloadSchema` (additive; event lama tetap parse).
+- `apps/agents/src/agent/hooks.ts`: baca `agent_id` → `parentAgentId` di tool_start/end/PostToolUseFailure (setelah sanitasi Fase 2; `parentAgentId` tak pernah masuk metadata client — di-strip di `toClean`).
+- `packages/agent-contracts/src/activity.ts`: nesting **presisi** leaf→sub-agen via `_parentAgentId` (benar untuk paralel), fallback window-seq Fase 1; sub-agen paralel jadi **sibling** di bawah fase (nest hanya ke phase interval); `compaction` → `visibility:"developer"`; konsumsi event `run_status:canceled`; helper murni `filterByVisibility` (user/developer/hidden).
+- `apps/agents/src/agent/interactions.ts`: emit `interaction_resolved` saat primed-approval dikonsumsi (timeout→resume).
+- `apps/agents/src/runs/runManager.ts`: `cancelRun` emit `run_status:canceled` terminal (race-free: finalize+emit sebelum interrupt); `resumeRun` tutup node `ask_user`.
+- `apps/web/.../run-progress.tsx`: toggle mode pengembang (render node `developer` + metadata teknis); Accordion **terkontrol** per-fase untuk `/deep` (pertahankan collapse user lintas batas fase).
+
+### Review adversarial Fase 3 (5 lensa × 3 skeptik/temuan, 74 agen → 3 confirmed / 20 dismissed) — semua confirmed DIPERBAIKI
+- **MEDIUM (correctness):** tool main-thread (tanpa `parentAgentId`) bisa salah ter-nest di bawah sub-agen yang event `subagent_stop`-nya hilang (window `_endSeq=OPEN_SEQ` tak terbatas). **Fix:** fallback window-seq leaf mengecualikan sub-agen yang masih terbuka (`_endSeq===OPEN_SEQ`); sub-agen yang sudah tutup tetap menampung tool by window (kompat thin-event). + test regresi.
+- **MEDIUM (correctness):** node `tool_approval` bisa menggantung `waiting_approval` di run **completed** bila model menyetujui tapi tak me-retry tool. **Fix:** safety-net view-model — terminal-close menutup node `waiting_approval` di run completed jadi `completed` ("Persetujuan diterima"). + test regresi.
+- **MEDIUM (regression):** Accordion `/deep` (key-remount) mereset collapse user tiap batas fase di run live. **Fix:** Accordion terkontrol (lacak collapse eksplisit user; fase baru auto-buka tanpa membuang collapse lama).
+- **Dismissed (20):** semua adalah verifikasi-benar (no-leak `filterByVisibility`/`parentAgentId` opaque, cancel race exactly-once, ask_user resolve idempotent, hooks sanitasi utuh, child pre-filter sekali, prop signature, cast cleanup sound, dll.).
+- Gate setelah fix: typecheck (5) · lint (0 err) · agent-contracts **50** · apps/agents **185** · convex **123** · web **74**.
 
 ### Fase 2 — yang benar-benar dikerjakan
 - `apps/agents/src/agent/activitySanitizers.ts` (**baru**): chokepoint sanitasi tunggal. `TOOL_SANITIZERS` allow-list per tool + `sanitizeToolInput`/`sanitizeToolResult` (default-deny → `{}`), `toolResponseIsError` (baca `isError` dari CallToolResult MCP), dan `sanitizeRunErrorMessage` (allow-list kode aman → copy Indonesia; selain itu generik "Terjadi kesalahan internal"). Raw `tool_input`/`tool_response` **tidak pernah** keluar modul ini. Helper `safeLabel` (single-line + ≤120 char) untuk label bebas seperti judul artefak.

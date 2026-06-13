@@ -26,8 +26,6 @@ function run(overrides: Partial<ResearchRun>): ResearchRun {
     status: "completed",
     retryable: false,
     activity: [],
-    steps: [],
-    events: [],
     ...overrides,
   };
 }

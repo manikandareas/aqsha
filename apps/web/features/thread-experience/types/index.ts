@@ -88,42 +88,10 @@ export type ResearchRun = {
   createdAt?: number;
   completedAt?: number;
   canceledAt?: number;
-  // Normalized activity timeline rendered by AgentRunBlock (plan §3). The
-  // legacy `steps`/`events` below remain for deep-research / sources.
+  // Normalized activity timeline rendered by AgentRunBlock (plan §3) — the only
+  // run-progress representation. The orphaned `steps`/`events` mirror (unread by
+  // any component) was removed in the Fase-3 cleanup (plan §12).
   activity: ActivityEvent[];
-  steps: Array<{
-    stepKey: string;
-    label: string;
-    order: number;
-    status: "pending" | "running" | "completed" | "failed" | "canceled";
-    summary?: string;
-    sourceCount?: number;
-    artifactCount?: number;
-    failureReason?: string;
-    startedAt?: number;
-    completedAt?: number;
-  }>;
-  events: Array<{
-    _id: string;
-    stepKey?: string;
-    eventType:
-      | "plan"
-      | "gap"
-      | "query"
-      | "search"
-      | "read"
-      | "rerank"
-      | "audit"
-      | "tool"
-      | "artifact"
-      | "status"
-      | "failure";
-    round?: number;
-    title: string;
-    summary: string;
-    metadataJson?: string;
-    createdAt: number;
-  }>;
 };
 
 export type ResearchArtifact = {

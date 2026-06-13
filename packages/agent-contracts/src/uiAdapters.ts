@@ -149,78 +149,11 @@ export type UiResearchRun = {
   errorMessage?: string;
   createdAt?: number;
   completedAt?: number;
-  steps: Array<{
-    stepKey: string;
-    label: string;
-    order: number;
-    status: "pending" | "running" | "completed" | "failed" | "canceled";
-    summary?: string;
-  }>;
-  // Normalized activity timeline (plan §3). Rendered by AgentRunBlock; the
-  // legacy `steps`/`events` below stay for deep-research / sources until the
-  // documented Fase-1 cleanup follow-up removes the orphaned step path.
+  // Normalized activity timeline (plan §3) — the single rendered representation,
+  // derived from the run's events. The earlier orphaned `steps`/`events` mirror
+  // (never read by any component) was removed in the Fase-3 cleanup (plan §12).
   activity: ActivityEvent[];
-  events: Array<{
-    _id: string;
-    stepKey?: string;
-    eventType:
-      | "plan"
-      | "gap"
-      | "query"
-      | "search"
-      | "read"
-      | "rerank"
-      | "audit"
-      | "tool"
-      | "artifact"
-      | "status"
-      | "failure";
-    title: string;
-    summary: string;
-    metadataJson?: string;
-    createdAt: number;
-  }>;
 };
-
-const EVENT_TYPE_MAP: Record<string, UiResearchRun["events"][number]["eventType"]> = {
-  tool_start: "tool",
-  tool_end: "tool",
-  subagent_start: "status",
-  subagent_stop: "status",
-  run_status: "status",
-  compaction: "status",
-  citation_check: "audit",
-  interaction_pending: "status",
-  interaction_resolved: "status",
-  error: "failure",
-};
-
-function eventTitle(type: string, payload: Record<string, unknown>): string {
-  const toolName = typeof payload.toolName === "string" ? payload.toolName : undefined;
-  const subagent = typeof payload.subagent === "string" ? payload.subagent : undefined;
-  switch (type) {
-    case "tool_start":
-      return toolName ? `Menjalankan ${toolName}` : "Menjalankan tool";
-    case "tool_end":
-      return toolName ? `Selesai ${toolName}` : "Tool selesai";
-    case "subagent_start":
-      return subagent ? `Subagent ${subagent} mulai` : "Subagent mulai";
-    case "subagent_stop":
-      return subagent ? `Subagent ${subagent} selesai` : "Subagent selesai";
-    case "interaction_pending":
-      return "Menunggu konfirmasi pengguna";
-    case "interaction_resolved":
-      return "Konfirmasi diterima";
-    case "citation_check":
-      return "Verifikasi sitasi";
-    case "error":
-      return typeof payload.message === "string" ? payload.message : "Terjadi kesalahan";
-    case "run_status":
-      return typeof payload.status === "string" ? `Status: ${payload.status}` : "Status";
-    default:
-      return type;
-  }
-}
 
 /** Only deep runs render a progress block in the legacy UI; map both anyway. */
 export function uiRunFromRow(row: AgentRunRow): UiResearchRun {
@@ -239,18 +172,6 @@ export function uiRunFromRow(row: AgentRunRow): UiResearchRun {
     completedAt: ["completed", "failed", "canceled"].includes(row.status)
       ? row.updatedAt
       : undefined,
-    steps: [],
     activity: activityEventsFromRun(row),
-    events: row.events.map((event) => {
-      const payload = parsePayload(event.payloadJson);
-      return {
-        _id: event.id,
-        eventType: EVENT_TYPE_MAP[event.type] ?? "status",
-        title: eventTitle(event.type, payload),
-        summary: "",
-        metadataJson: event.payloadJson,
-        createdAt: event.createdAt,
-      };
-    }),
   };
 }

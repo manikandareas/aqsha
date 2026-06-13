@@ -99,6 +99,11 @@ export type ActivityScalarRecord = z.infer<typeof activityScalarRecordSchema>;
 export const toolStartPayloadSchema = z.object({
   toolName: z.string(),
   toolUseId: z.string().optional(),
+  // Fase 3: the sub-agent the tool ran in (SDK `BaseHookInput.agent_id`, present
+  // only when the hook fires inside an AgentTool worker). Drives precise nesting
+  // of a sub-agent's tools — correct even for parallel sub-agents. Absent for
+  // main-thread tool calls.
+  parentAgentId: z.string().optional(),
   inputSummary: activityScalarRecordSchema.optional(),
 });
 export type ToolStartPayload = z.infer<typeof toolStartPayloadSchema>;
@@ -106,6 +111,7 @@ export type ToolStartPayload = z.infer<typeof toolStartPayloadSchema>;
 export const toolEndPayloadSchema = z.object({
   toolName: z.string(),
   toolUseId: z.string().optional(),
+  parentAgentId: z.string().optional(),
   status: z.enum(["ok", "error"]).optional(),
   resultSummary: activityScalarRecordSchema.optional(),
 });

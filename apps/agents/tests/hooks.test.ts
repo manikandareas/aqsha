@@ -276,4 +276,71 @@ describe("buildRunHooks — Fase 2 enrichment (sanitized payloads)", () => {
     expect(stop).toEqual({ agentType: "literature-searcher", agentId: "agent_42" });
     expect(subagentPayloadSchema.safeParse(start).success).toBe(true);
   });
+
+  it("tool events carry parentAgentId from a sub-agent agent_id (absent on the main thread)", async () => {
+    const store = new MemoryStore();
+    const hooks = buildRunHooks({ store, runId: "run1", threadId: "t1" });
+    const preToolUse = hooks.PreToolUse?.[0]?.hooks[0]!;
+    const postToolUse = hooks.PostToolUse?.[0]?.hooks[0]!;
+    const onFailure = hooks.PostToolUseFailure?.[0]?.hooks[0]!;
+
+    // A tool called inside the literature-searcher sub-agent: the SDK sets
+    // agent_id on the hook input (BaseHookInput.agent_id).
+    await preToolUse(
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: qualifiedToolName("searchArxiv"),
+        tool_input: { query: "x" },
+        agent_id: "agent_lit_1",
+      },
+      "tu_sub",
+      signal,
+    );
+    await postToolUse(
+      {
+        hook_event_name: "PostToolUse",
+        tool_name: qualifiedToolName("searchArxiv"),
+        tool_response: jsonResponse([{ title: "p" }]),
+        agent_id: "agent_lit_1",
+      },
+      "tu_sub",
+      signal,
+    );
+    // A main-thread tool call carries no agent_id → no parentAgentId.
+    await preToolUse(
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: qualifiedToolName("searchWeb"),
+        tool_input: { query: "y" },
+      },
+      "tu_main",
+      signal,
+    );
+    // PostToolUseFailure inside the sub-agent also propagates the agent_id.
+    await onFailure(
+      {
+        hook_event_name: "PostToolUseFailure",
+        tool_name: qualifiedToolName("lookupDoi"),
+        agent_id: "agent_lit_1",
+      },
+      "tu_fail",
+      signal,
+    );
+
+    const starts = await payloadOf(store, "run1", "tool_start");
+    const ends = await payloadOf(store, "run1", "tool_end");
+    expect(starts.find((p) => p.toolUseId === "tu_sub")?.parentAgentId).toBe("agent_lit_1");
+    expect(starts.find((p) => p.toolUseId === "tu_main")).not.toHaveProperty(
+      "parentAgentId",
+    );
+    expect(ends.find((p) => p.toolUseId === "tu_sub")?.parentAgentId).toBe("agent_lit_1");
+    expect(ends.find((p) => p.toolUseId === "tu_fail")?.parentAgentId).toBe("agent_lit_1");
+    // Every enriched payload still validates against the additive schema.
+    for (const start of starts) {
+      expect(toolStartPayloadSchema.safeParse(start).success).toBe(true);
+    }
+    for (const end of ends) {
+      expect(toolEndPayloadSchema.safeParse(end).success).toBe(true);
+    }
+  });
 });

@@ -26,8 +26,6 @@ function run(status: ResearchRun["status"]): ResearchRun {
     status,
     retryable: false,
     activity: [],
-    steps: [],
-    events: [],
   };
 }
 

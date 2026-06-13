@@ -96,6 +96,15 @@ export class InteractionBroker {
   }): Promise<ApprovalOutcome> {
     const primed = this.takePrimedApproval(input.runId, input.toolName);
     if (primed?.response?.kind === "approval") {
+      // Timeout → user responded → resume: the original interaction_pending was
+      // never paired with an interaction_resolved (the hold-window expired). Emit
+      // it now (keyed by the SAME interaction id) so the timeline's approval node
+      // closes instead of hanging on "waiting_approval".
+      await this.store.appendRunEvent({
+        runId: input.runId,
+        type: "interaction_resolved",
+        payload: { interactionId: primed.id, toolName: input.toolName },
+      });
       if (primed.response.approved) {
         return { outcome: "allow", interaction: primed };
       }

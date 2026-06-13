@@ -26,6 +26,16 @@ import {
 // and an explicit ok/error status; subagent events carry `agent_id`. All detail
 // flows through `activitySanitizers.ts` first — raw inputs/responses never reach
 // the payload.
+//
+// Fase 3 (plan §6): tool events also carry `parentAgentId` — the SDK
+// `BaseHookInput.agent_id`, which is set ONLY when a hook fires from inside a
+// sub-agent (an AgentTool worker). The literature-searcher sub-agent already
+// uses aqsha MCP tools, so its tool calls already match this matcher and already
+// fire here; we simply read the agent_id the SDK supplies so the view-model can
+// nest each sub-agent's tools precisely — correct even when sub-agents run in
+// parallel (where a seq-window heuristic cannot be). No matcher widening: the
+// built-in Agent/Task spawn is already represented by the subagent_start node,
+// and emitting it as a tool too would duplicate that node.
 
 type HookInputLike = {
   hook_event_name?: string;
@@ -111,6 +121,8 @@ export function buildRunHooks(input: {
     const inputSummary = sanitizeToolInput(logical, hookInput.tool_input);
     const payload: ToolStartPayload = { toolName: logical };
     if (toolUseId) payload.toolUseId = toolUseId;
+    const parentAgentId = stringField(hookInput, "agent_id", "agentId");
+    if (parentAgentId) payload.parentAgentId = parentAgentId;
     if (Object.keys(inputSummary).length > 0) payload.inputSummary = inputSummary;
     await store.appendRunEvent({ runId, type: "tool_start", payload });
     if (logical === EXECUTE_ARTIFACT_TOOL_NAME) {
@@ -141,6 +153,8 @@ export function buildRunHooks(input: {
     };
     const toolUseId = toolUseID ?? hookInput.tool_use_id;
     if (toolUseId) payload.toolUseId = toolUseId;
+    const parentAgentId = stringField(hookInput, "agent_id", "agentId");
+    if (parentAgentId) payload.parentAgentId = parentAgentId;
     // An error result is just a message, not data — skip the result summary.
     const resultSummary = isError
       ? {}
@@ -160,6 +174,8 @@ export function buildRunHooks(input: {
     };
     const toolUseId = toolUseID ?? hookInput.tool_use_id;
     if (toolUseId) payload.toolUseId = toolUseId;
+    const parentAgentId = stringField(hookInput, "agent_id", "agentId");
+    if (parentAgentId) payload.parentAgentId = parentAgentId;
     await store.appendRunEvent({ runId, type: "tool_end", payload });
     return {};
   };

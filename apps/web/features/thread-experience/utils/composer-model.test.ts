@@ -18,8 +18,6 @@ function activeDeepRun(): ResearchRun {
     status: "running",
     retryable: true,
     activity: [],
-    steps: [],
-    events: [],
   };
 }
 
