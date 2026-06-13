@@ -1,5 +1,3 @@
-import { ConvexError } from "convex/values";
-import { components } from "../_generated/api";
 import type { MutationCtx } from "../_generated/server";
 import {
   deleteRows,
@@ -8,14 +6,11 @@ import {
   withinOwnerCleanupLimit,
 } from "./shared";
 
-const maxAgentThreads = 100;
-
 export async function cleanupOwnerAgentData(
   ctx: MutationCtx,
   ownerUserId: string,
 ): Promise<OwnerCleanupResult> {
   let deletedRows = 0;
-  const deletedAgentThreads = await deleteAgentThreads(ctx, ownerUserId);
 
   const messageWorkspaceArtifacts = withinOwnerCleanupLimit(
     "messageWorkspaceArtifacts",
@@ -120,7 +115,7 @@ export async function cleanupOwnerAgentData(
   // backend leaks orphaned chat data after a user is gone.
   deletedRows += await deleteV2AgentData(ctx, ownerUserId);
 
-  return { deletedRows, deletedAgentThreads };
+  return { deletedRows };
 }
 
 const maxV2Threads = 500;
@@ -192,52 +187,3 @@ export async function deleteV2AgentData(
   return deleted;
 }
 
-async function deleteAgentThreads(ctx: MutationCtx, ownerUserId: string) {
-  let cursor: string | null = null;
-  let deletedThreads = 0;
-  let pageGuard = 0;
-
-  while (pageGuard < 2) {
-    const threads: {
-      page: Array<{ _id: string }>;
-      continueCursor: string;
-      isDone: boolean;
-    } = await ctx.runQuery(components.agent.threads.listThreadsByUserId, {
-      userId: ownerUserId,
-      order: "desc",
-      paginationOpts: { numItems: 50, cursor },
-    });
-
-    for (const thread of threads.page) {
-      let isDone = false;
-      let guard = 0;
-      while (!isDone && guard < 50) {
-        const result: { isDone: boolean } = await ctx.runMutation(
-          components.agent.threads.deleteAllForThreadIdAsync,
-          { threadId: thread._id },
-        );
-        isDone = result.isDone;
-        guard += 1;
-      }
-      if (!isDone) {
-        throw new ConvexError("Thread deletion is still in progress. Try again.");
-      }
-      deletedThreads += 1;
-      if (deletedThreads > maxAgentThreads) {
-        throw new ConvexError(
-          `Account deletion needs support cleanup: more than ${maxAgentThreads} threads.`,
-        );
-      }
-    }
-
-    if (threads.isDone) {
-      return deletedThreads;
-    }
-    cursor = threads.continueCursor;
-    pageGuard += 1;
-  }
-
-  throw new ConvexError(
-    `Account deletion needs support cleanup: more than ${maxAgentThreads} threads.`,
-  );
-}

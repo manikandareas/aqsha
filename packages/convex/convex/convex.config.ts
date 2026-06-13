@@ -1,17 +1,16 @@
 import { defineApp } from "convex/server";
-import agent from "@convex-dev/agent/convex.config";
 import rateLimiter from "@convex-dev/rate-limiter/convex.config";
 import rag from "@convex-dev/rag/convex.config";
 import polar from "@convex-dev/polar/convex.config";
 
 const app = defineApp();
 
-// @convex-dev/workflow was removed in the Step 6 cutover — it backed only the
-// legacy deep-research/computation runtime (now deleted); the SDK backend
-// orchestrates durable deep research in apps/agents over the agentRuns2 +
-// researchPhaseStates tables. The `agent` component stays mounted for its
-// legacy thread/message data until the irreversible 6f unmount.
-app.use(agent);
+// Step 6 cutover complete: @convex-dev/agent and @convex-dev/workflow are
+// unmounted. The agent runtime now lives in apps/agents (Claude Agent SDK) on
+// first-party tables (chatThreads/chatMessages/agentRuns2/agentRunEvents2/
+// pendingInteractions/researchPhaseStates). Unmounting the agent component
+// permanently dropped its legacy in-component thread/message data (decision D7).
+// rag/rateLimiter/polar remain — used product-wide and by the new surface.
 app.use(rag);
 app.use(rateLimiter);
 app.use(polar);
