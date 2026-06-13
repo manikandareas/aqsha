@@ -341,6 +341,25 @@ export const finalizeRun = mutation({
       errorMessage: status === "canceled" ? run.errorMessage : args.errorMessage,
       updatedAt: Date.now(),
     });
+
+    // Auto-title the thread from its first completed turn. The claim
+    // (titleStatus undefined → "generating") commits inside this transaction,
+    // so duplicate/concurrent finalizeRun calls schedule the generator at most
+    // once (OCC serializability). titleStatus "ready" is terminal; an existing
+    // title also short-circuits. See agent/threadTitles.ts.
+    if (status === "completed") {
+      const thread = await findThread(ctx, run.threadId);
+      if (thread && !thread.title && thread.titleStatus === undefined) {
+        await ctx.db.patch("chatThreads", thread._id, {
+          titleStatus: "generating",
+        });
+        await ctx.scheduler.runAfter(
+          0,
+          internal.agent.threadTitles.generateThreadTitle,
+          { threadId: run.threadId },
+        );
+      }
+    }
     return null;
   },
 });

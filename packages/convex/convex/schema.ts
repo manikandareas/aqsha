@@ -576,6 +576,11 @@ export default defineSchema(
       threadId: v.string(),
       ownerUserId: v.string(),
       title: v.optional(v.string()),
+      // Claim for the auto-title generator (agent/threadTitles.ts). Absent =
+      // never attempted; "generating" = claimed + action in flight (set inside
+      // finalizeRun's transaction so the schedule fires at most once per
+      // thread); "ready" = terminal (title set, or attempt finished unusable).
+      titleStatus: v.optional(v.union(v.literal("generating"), v.literal("ready"))),
       workspaceId: v.optional(v.id("workspaces")),
       status: v.union(v.literal("idle"), v.literal("streaming"), v.literal("failed")),
       sdkSessionId: v.optional(v.string()),
