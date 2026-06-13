@@ -28,28 +28,6 @@ export type RateStatus = {
   serverTime: number;
 };
 
-export type PromptCommandMetadata = {
-  commandId: string;
-  commandLabel: string;
-  commandSlug: string;
-  mode: "normal" | "deep";
-  argumentPreview: string;
-};
-
-export type MessageContextArtifactMetadata = {
-  artifactId: string;
-  title: string;
-  artifactType?: string;
-  source?: "upload" | "workspace";
-  savedWorkspaceId?: string;
-  savedWorkspaceName?: string;
-};
-
-export type MessageContextWorkspaceMetadata = {
-  workspaceId: string;
-  name: string;
-};
-
 export type ChatMessage = {
   id: string;
   key: string;
@@ -70,13 +48,6 @@ export type ChatMessage = {
     errorText?: string;
     approval?: { id: string; isAutomatic?: boolean; approved?: boolean; reason?: string };
   }>;
-  metadata?: {
-    promptCommand?: PromptCommandMetadata;
-    contextArtifacts?: MessageContextArtifactMetadata[];
-    contextWorkspaces?: MessageContextWorkspaceMetadata[];
-    /** User message text with inline mention markers (pills in place). */
-    richContent?: string;
-  };
 };
 
 export type ResearchRun = {
@@ -88,6 +59,7 @@ export type ResearchRun = {
     | "queued"
     | "running"
     | "waiting"
+    | "waiting_hitl"
     | "completed"
     | "failed"
     | "canceled";
@@ -106,6 +78,10 @@ export type ResearchRun = {
     | "partial"
     | "failed";
   activeArtifactId?: string;
+  // Unified statistical verification summary (serialized VerificationReport),
+  // written by the sandbox stat path (Track 2B / on-demand sandbox_compute).
+  // Null for citation-only runs until a stat pass runs.
+  verificationReportJson?: string;
   retryable: boolean;
   errorMessage?: string;
   createdAt?: number;
@@ -189,6 +165,15 @@ export type ResearchSource = {
   arxivId?: string;
   snippet: string;
   evidenceStrength: "strong" | "medium" | "weak";
+  // 4-step citation integrity verdict (Track 2A). Unset until the auto-verify
+  // pass completes after the run (the panel shows a pending state meanwhile).
+  integrityStatus?:
+    | "verified"
+    | "metadata_mismatch"
+    | "identifier_invalid"
+    | "not_found"
+    | "unverifiable";
+  integrityCheckedAt?: number;
   readStatus?: "not_needed" | "ready" | "failed";
   qualityReason?: string;
   bucketName?: string;

@@ -57,4 +57,14 @@ crons.interval(
   {},
 );
 
+// SDK agent backend watchdog (plan §4.3): runs stuck in queued/running with
+// no heartbeat (run events bump updatedAt) flip to failed so the user can
+// retry; waiting_hitl is user-paced and never swept.
+crons.interval(
+  "agent:watchdog",
+  { minutes: 5 },
+  internal.agent.watchdogSweep,
+  {},
+);
+
 export default crons;

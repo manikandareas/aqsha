@@ -3,11 +3,6 @@
 import { useThreadExperienceData } from "@/features/thread-experience/api/use-thread-experience-data";
 import { CompactThreadChatPanel } from "@/features/thread-experience/components/compact-thread-chat-panel";
 import { ComposerMentionsProvider } from "@/features/thread-experience/components/composer-context-mentions";
-import type {
-  SendMessage,
-  StartThread,
-} from "@/features/thread-experience/components/component-types";
-import { toMutationContextSnapshot } from "@/features/thread-experience/utils/message-context";
 
 // Global (workspace-less) chat panel for the Explore surfaces. Mirrors
 // WorkspaceChatSidePanel — same thread switcher, new/delete/close chrome, and
@@ -26,23 +21,6 @@ export function ExploreChatSidePanel({
   const data = useThreadExperienceData(activeThreadId ?? undefined);
   const activeThread = activeThreadId ? data.selectedThread : undefined;
 
-  // The raw mutations carry branded Convex ids; brand the snapshot before
-  // forwarding so the composer's StartThread/SendMessage contracts line up.
-  const startThread: StartThread = (args) =>
-    data.startThread({
-      ...args,
-      contextArtifactSnapshot: toMutationContextSnapshot(
-        args.contextArtifactSnapshot,
-      ),
-    });
-  const sendMessage: SendMessage = (args) =>
-    data.sendMessage({
-      ...args,
-      contextArtifactSnapshot: toMutationContextSnapshot(
-        args.contextArtifactSnapshot,
-      ),
-    });
-
   return (
     <ComposerMentionsProvider threadId={activeThreadId ?? undefined} ambientWorkspaceId={null}>
       <CompactThreadChatPanel
@@ -57,8 +35,8 @@ export function ExploreChatSidePanel({
             : Promise.resolve()
         }
         rateStatus={data.rateStatus}
-        startThread={startThread}
-        onSend={sendMessage}
+        startThread={data.startThread}
+        onSend={data.sendMessage}
         runs={data.runs}
         artifacts={data.artifacts}
         sources={data.sources}

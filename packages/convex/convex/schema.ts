@@ -4,10 +4,6 @@ import { featureCountValidator } from "./billing/usageShape";
 import { explorePaperFields } from "./explore/validators";
 import { feedItemFields, feedProviderValidator } from "./feed/validators";
 
-// All run references point at `agentRuns`. (A former `researchRuns` table was
-// never defined; the dangling `v.id("researchRuns")` union member was removed.)
-const runId = v.id("agentRuns");
-
 const artifactTypeValidator = v.union(
   v.literal("markdown"),
   v.literal("plain_text"),
@@ -129,42 +125,6 @@ export default defineSchema(
       clerkUserId: v.optional(v.string()),
       processedAt: v.number(),
     }).index("by_event_key", ["eventKey"]),
-    threadMetadata: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.string(),
-      workspaceId: v.optional(v.id("workspaces")),
-      lastActivityAt: v.number(),
-      lastMessagePreview: v.string(),
-      messageCount: v.number(),
-      status: v.union(v.literal("idle"), v.literal("streaming"), v.literal("failed")),
-      // Sticky per-thread selected agent for the composer. Optional for legacy
-      // rows; defaults to "lite" at read time.
-      lastAgentKind: v.optional(v.union(v.literal("lite"), v.literal("pro"))),
-    })
-      .index("by_thread", ["threadId"])
-      .index("by_owner_activity", ["ownerUserId", "lastActivityAt"])
-      .index("by_owner_workspace_activity", ["ownerUserId", "workspaceId", "lastActivityAt"]),
-    threadContextArtifacts: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.string(),
-      workspaceId: v.optional(v.id("workspaces")),
-      artifactId: v.id("artifacts"),
-      createdAt: v.number(),
-    })
-      .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"])
-      .index("by_owner_thread_artifact", ["ownerUserId", "threadId", "artifactId"])
-      .index("by_owner_workspace_artifact", ["ownerUserId", "workspaceId", "artifactId"]),
-    // Whole-workspace context references pinned to a thread. Additive to
-    // threadMetadata.workspaceId ("filed under"): a thread can reference many
-    // workspaces as RAG context sources. Mirrors threadContextArtifacts.
-    threadContextWorkspaces: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.string(),
-      workspaceId: v.id("workspaces"),
-      createdAt: v.number(),
-    })
-      .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"])
-      .index("by_owner_thread_workspace", ["ownerUserId", "threadId", "workspaceId"]),
     workspaces: defineTable({
       ownerUserId: v.string(),
       name: v.string(),
@@ -260,7 +220,6 @@ export default defineSchema(
     providerUsageLedger: defineTable({
       ownerUserId: v.string(),
       threadId: v.optional(v.string()),
-      runId: v.optional(runId),
       feature: v.union(
         v.literal("normal_chat"),
         v.literal("pro_chat"),
@@ -268,6 +227,7 @@ export default defineSchema(
         v.literal("deep_research"),
         v.literal("external_search"),
         v.literal("sandbox_compute"),
+        v.literal("citation_verify"),
       ),
       provider: v.string(),
       model: v.optional(v.string()),
@@ -295,234 +255,11 @@ export default defineSchema(
       eventCount: v.number(),
       featureCounts: featureCountValidator,
     }).index("by_owner_date", ["ownerUserId", "date"]),
-    messageCommands: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.string(),
-      messageId: v.string(),
-      commandId: v.string(),
-      commandLabel: v.string(),
-      commandSlug: v.string(),
-      // Legacy execution mode; retained for read tolerance of existing rows.
-      mode: v.union(v.literal("normal"), v.literal("deep")),
-      // Which agent produced this command run. Optional for legacy rows.
-      agentKind: v.optional(v.union(v.literal("lite"), v.literal("pro"))),
-      argumentPreview: v.string(),
-      expandedPromptSnapshot: v.string(),
-      createdAt: v.number(),
-    })
-      .index("by_owner_message", ["ownerUserId", "messageId"])
-      .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"]),
-    messageWorkspaceArtifacts: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.string(),
-      messageId: v.string(),
-      artifactId: v.id("artifacts"),
-      relation: v.union(
-        v.literal("created"),
-        v.literal("updated"),
-        v.literal("deleted"),
-        v.literal("referenced"),
-      ),
-      createdAt: v.number(),
-    })
-      .index("by_owner_message", ["ownerUserId", "messageId"])
-      .index("by_owner_artifact", ["ownerUserId", "artifactId"])
-      .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"]),
-    messageWorkspaceActions: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.string(),
-      messageId: v.string(),
-      workspaceId: v.id("workspaces"),
-      action: v.union(v.literal("created"), v.literal("renamed")),
-      createdAt: v.number(),
-    })
-      .index("by_owner_message", ["ownerUserId", "messageId"])
-      .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"]),
-    messageContextArtifacts: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.string(),
-      messageId: v.string(),
-      artifactId: v.id("artifacts"),
-      title: v.string(),
-      artifactType: v.optional(artifactTypeValidator),
-      source: v.optional(v.union(v.literal("upload"), v.literal("workspace"))),
-      kind: v.optional(v.union(v.literal("document"), v.literal("url"))),
-      createdAt: v.number(),
-    }).index("by_owner_message", ["ownerUserId", "messageId"]),
-    // Per-message snapshot of the workspaces that were active context when the
-    // message was sent (filed-under + @mentioned). Drives the message bubble's
-    // workspace badges.
-    messageContextWorkspaces: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.string(),
-      messageId: v.string(),
-      workspaceId: v.id("workspaces"),
-      name: v.string(),
-      createdAt: v.number(),
-    }).index("by_owner_message", ["ownerUserId", "messageId"]),
-    // The user message text WITH inline mention markers, kept separate from the
-    // agent message (which is stored clean) so the bubble can render mention
-    // pills at the exact position the user typed them.
-    messageRichContent: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.string(),
-      messageId: v.string(),
-      content: v.string(),
-      createdAt: v.number(),
-    }).index("by_owner_message", ["ownerUserId", "messageId"]),
-    agentRuns: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.string(),
-      promptMessageId: v.string(),
-      // Legacy execution mode; retained for read tolerance of existing rows.
-      mode: v.union(v.literal("normal"), v.literal("deep")),
-      // Selected agent for this run (modulates chat model/steps and deep
-      // research model/round cap). Optional for legacy rows; defaults at read
-      // time to mode === "deep" ? "pro" : "lite".
-      agentKind: v.optional(v.union(v.literal("lite"), v.literal("pro"))),
-      executionKind: v.union(v.literal("inline"), v.literal("workflow")),
-      workflowId: v.optional(v.string()),
-      promptSnapshot: v.optional(v.string()),
-      commandId: v.optional(v.string()),
-      status: v.union(
-        v.literal("queued"),
-        v.literal("running"),
-        v.literal("waiting"),
-        v.literal("completed"),
-        v.literal("failed"),
-        v.literal("canceled"),
-      ),
-      currentStep: v.optional(v.string()),
-      failedStep: v.optional(v.string()),
-      roundCount: v.optional(v.number()),
-      maxRounds: v.optional(v.number()),
-      sufficiencyStatus: v.optional(
-        v.union(
-          v.literal("unknown"),
-          v.literal("insufficient"),
-          v.literal("partial"),
-          v.literal("sufficient"),
-          v.literal("budget_exhausted"),
-        ),
-      ),
-      verificationStatus: v.optional(
-        v.union(
-          v.literal("not_started"),
-          v.literal("checking"),
-          v.literal("passed"),
-          v.literal("revised"),
-          v.literal("partial"),
-          v.literal("failed"),
-        ),
-      ),
-      budgetJson: v.optional(v.string()),
-      activeArtifactId: v.optional(v.id("artifacts")),
-      artifactCount: v.number(),
-      sourceCount: v.number(),
-      citationCheckCount: v.number(),
-      retryOfRunId: v.optional(runId),
-      retryable: v.boolean(),
-      canceledAt: v.optional(v.number()),
-      errorCode: v.optional(v.string()),
-      errorMessage: v.optional(v.string()),
-      // Per-artifact statistical verification summary (sandbox compute path),
-      // serialized VerificationReport. Optional — only set on runs that ran a
-      // verification. See agent/sandbox/verificationReport.ts.
-      verificationReportJson: v.optional(v.string()),
-      createdAt: v.number(),
-      updatedAt: v.number(),
-      completedAt: v.optional(v.number()),
-    })
-      .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"])
-      .index("by_owner_status", ["ownerUserId", "status"])
-      .index("by_workflow", ["workflowId"]),
-    agentRunSteps: defineTable({
-      ownerUserId: v.string(),
-      runId,
-      stepKey: v.string(),
-      label: v.string(),
-      order: v.number(),
-      status: v.union(
-        v.literal("pending"),
-        v.literal("running"),
-        v.literal("completed"),
-        v.literal("failed"),
-        v.literal("canceled"),
-      ),
-      summary: v.optional(v.string()),
-      sourceCount: v.optional(v.number()),
-      artifactCount: v.optional(v.number()),
-      failureReason: v.optional(v.string()),
-      startedAt: v.optional(v.number()),
-      completedAt: v.optional(v.number()),
-      updatedAt: v.number(),
-    })
-      .index("by_run_order", ["runId", "order"])
-      .index("by_owner_run", ["ownerUserId", "runId"])
-      .index("by_owner_run_and_step", ["ownerUserId", "runId", "stepKey"]),
-    agentRunEvents: defineTable({
-      ownerUserId: v.string(),
-      runId,
-      threadId: v.string(),
-      stepKey: v.optional(v.string()),
-      eventType: v.union(
-        v.literal("plan"),
-        v.literal("gap"),
-        v.literal("query"),
-        v.literal("search"),
-        v.literal("read"),
-        v.literal("rerank"),
-        v.literal("audit"),
-        v.literal("tool"),
-        v.literal("artifact"),
-        v.literal("status"),
-        v.literal("failure"),
-        v.literal("compute"),
-      ),
-      round: v.optional(v.number()),
-      title: v.string(),
-      summary: v.string(),
-      metadataJson: v.optional(v.string()),
-      createdAt: v.number(),
-    })
-      .index("by_owner_run_created", ["ownerUserId", "runId", "createdAt"])
-      .index("by_run_created", ["runId", "createdAt"]),
-    researchRoundStates: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.string(),
-      runId,
-      round: v.number(),
-      status: v.union(
-        v.literal("planned"),
-        v.literal("discovering"),
-        v.literal("reading"),
-        v.literal("assessing"),
-        v.literal("completed"),
-        v.literal("failed"),
-      ),
-      query: v.string(),
-      gapAssessment: v.string(),
-      sufficiencyStatus: v.union(
-        v.literal("unknown"),
-        v.literal("insufficient"),
-        v.literal("partial"),
-        v.literal("sufficient"),
-        v.literal("budget_exhausted"),
-      ),
-      sourceCount: v.number(),
-      extractCount: v.number(),
-      stateJson: v.string(),
-      createdAt: v.number(),
-      updatedAt: v.number(),
-    })
-      .index("by_owner_run_round", ["ownerUserId", "runId", "round"])
-      .index("by_run_round", ["runId", "round"]),
     artifacts: defineTable({
       ownerUserId: v.string(),
       workspaceId: v.optional(v.id("workspaces")),
       folderId: v.optional(v.id("workspaceFolders")),
       threadId: v.optional(v.string()),
-      runId: v.optional(runId),
       artifactType: v.optional(artifactTypeValidator),
       artifactFamily: v.optional(artifactFamilyValidator),
       source: v.optional(artifactSourceValidator),
@@ -555,7 +292,6 @@ export default defineSchema(
         "status",
         "createdAt",
       ])
-      .index("by_owner_run", ["ownerUserId", "runId"])
       .index("by_owner_status_updated", ["ownerUserId", "status", "updatedAt"])
       .index("by_owner_workspace_status_updated", [
         "ownerUserId",
@@ -679,7 +415,6 @@ export default defineSchema(
       ownerUserId: v.string(),
       threadId: v.string(),
       artifactId: v.id("artifacts"),
-      runId: v.optional(runId),
       versionNumber: v.number(),
       contentFormat: v.union(
         v.literal("markdown"),
@@ -697,205 +432,6 @@ export default defineSchema(
     })
       .index("by_owner_artifact_version", ["ownerUserId", "artifactId", "versionNumber"])
       .index("by_owner_artifact_created", ["ownerUserId", "artifactId", "createdAt"]),
-    messageArtifacts: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.string(),
-      messageId: v.string(),
-      artifactId: v.id("artifacts"),
-      versionId: v.id("artifactVersions"),
-      relation: v.union(
-        v.literal("created"),
-        v.literal("updated"),
-        v.literal("referenced"),
-      ),
-      createdAt: v.number(),
-    })
-      .index("by_owner_message", ["ownerUserId", "messageId"])
-      .index("by_owner_artifact", ["ownerUserId", "artifactId"])
-      .index("by_owner_thread_created", ["ownerUserId", "threadId", "createdAt"]),
-    citationChecks: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.string(),
-      runId,
-      artifactId: v.id("artifacts"),
-      artifactVersionId: v.id("artifactVersions"),
-      claim: v.string(),
-      support: v.union(
-        v.literal("supported"),
-        v.literal("partially_supported"),
-        v.literal("contradicted"),
-        v.literal("partial"),
-        v.literal("unsupported"),
-      ),
-      sourceIds: v.array(v.id("researchSources")),
-      verifierModel: v.optional(v.string()),
-      confidence: v.optional(v.number()),
-      failureReason: v.optional(v.string()),
-      extractIds: v.optional(v.array(v.id("researchExtracts"))),
-      revisionAction: v.optional(
-        v.union(
-          v.literal("none"),
-          v.literal("caveated"),
-          v.literal("removed_or_rewritten"),
-        ),
-      ),
-      evidence: v.string(),
-      createdAt: v.number(),
-    })
-      .index("by_owner_artifact", ["ownerUserId", "artifactId"])
-      .index("by_owner_artifact_version", [
-        "ownerUserId",
-        "artifactId",
-        "artifactVersionId",
-      ])
-      .index("by_owner_run", ["ownerUserId", "runId"]),
-    // Provenance for a single ephemeral sandbox execution (Daytona). Owner-scoped,
-    // mirroring the citationChecks conventions (ownerUserId partition, by_owner_*
-    // indexes, v.id("agentRuns") for runId — never the union). This row is the run
-    // envelope; the raw recomputed numbers live in `computationChecks`.
-    sandboxRuns: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.optional(v.string()),
-      runId: v.optional(runId),
-      taskKind: v.union(
-        v.literal("stat_verification"),
-        v.literal("replication"),
-        v.literal("meta_analysis"),
-        v.literal("custom_analysis"),
-      ),
-      status: v.union(
-        v.literal("provisioning"),
-        v.literal("running"),
-        v.literal("completed"),
-        v.literal("failed"),
-        v.literal("canceled"),
-        v.literal("timeout"),
-      ),
-      // Versioned snapshot name (e.g. "aqsha-statverify-v1") for reproducibility.
-      snapshotVersion: v.string(),
-      command: v.string(),
-      // sha256 of each uploaded input file, for replay/determinism auditing.
-      inputFileHashes: v.array(v.string()),
-      exitCode: v.optional(v.number()),
-      stdoutClipped: v.optional(v.string()),
-      errorMessage: v.optional(v.string()),
-      outputArtifactIds: v.optional(v.array(v.id("artifacts"))),
-      durationMs: v.optional(v.number()),
-      creditsCharged: v.optional(v.number()),
-      createdAt: v.number(),
-      updatedAt: v.number(),
-      completedAt: v.optional(v.number()),
-    })
-      .index("by_owner_created", ["ownerUserId", "createdAt"])
-      .index("by_owner_run", ["ownerUserId", "runId"]),
-    // Deterministic per-check result produced by a sandboxRun. Raw reported vs
-    // recomputed numbers (reportedJson/recomputedJson) are stored as-is; the
-    // consistent/discrepant interpretation lives in `outcome` with explicit
-    // `toleranceJson` — never mixed (determinism invariant). `by_owner_sandbox_run`
-    // is the replay read path (all checks for a run); `by_owner_artifact` powers
-    // the per-artifact verification report.
-    computationChecks: defineTable({
-      ownerUserId: v.string(),
-      sandboxRunId: v.id("sandboxRuns"),
-      artifactId: v.id("artifacts"),
-      checkKind: v.union(
-        v.literal("statcheck"),
-        v.literal("grim"),
-        v.literal("grimmer"),
-        v.literal("power"),
-      ),
-      claimText: v.string(),
-      // Raw matched span (e.g. the NHST string statcheck flagged) for UI
-      // highlighting and replay. Absent when the check is span-less.
-      claimSpan: v.optional(v.string()),
-      reportedJson: v.string(),
-      recomputedJson: v.string(),
-      outcome: v.union(
-        v.literal("consistent"),
-        v.literal("discrepant"),
-        v.literal("decision_error"),
-        v.literal("not_computable"),
-      ),
-      toleranceJson: v.string(),
-      createdAt: v.number(),
-    })
-      .index("by_owner_artifact", ["ownerUserId", "artifactId"])
-      .index("by_owner_sandbox_run", ["ownerUserId", "sandboxRunId"]),
-    researchSources: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.string(),
-      messageId: v.optional(v.string()),
-      runId: v.optional(runId),
-      artifactId: v.optional(v.id("artifacts")),
-      artifactVersionId: v.optional(v.id("artifactVersions")),
-      sourceKey: v.optional(v.string()),
-      usage: v.optional(
-        v.union(
-          v.literal("candidate"),
-          v.literal("cited"),
-          v.literal("accepted"),
-          v.literal("rejected"),
-        ),
-      ),
-      citationNumber: v.number(),
-      origin: v.union(
-        v.literal("web"),
-        v.literal("arxiv"),
-        v.literal("doi"),
-      ),
-      provider: v.optional(v.string()),
-      providerRequestId: v.optional(v.string()),
-      evidenceStrength: v.union(
-        v.literal("strong"),
-        v.literal("medium"),
-        v.literal("weak"),
-      ),
-      title: v.string(),
-      locator: v.string(),
-      url: v.optional(v.string()),
-      doi: v.optional(v.string()),
-      arxivId: v.optional(v.string()),
-      snippet: v.string(),
-      readStatus: v.optional(
-        v.union(
-          v.literal("not_needed"),
-          v.literal("ready"),
-          v.literal("failed"),
-        ),
-      ),
-      readError: v.optional(v.string()),
-      qualityReason: v.optional(v.string()),
-      bucketName: v.optional(v.string()),
-      discoveryQuery: v.optional(v.string()),
-      rerankScore: v.optional(v.number()),
-      metadataJson: v.optional(v.string()),
-      createdAt: v.number(),
-      lastSeenAt: v.optional(v.number()),
-    })
-      .index("by_owner_thread", ["ownerUserId", "threadId"])
-      .index("by_owner_message", ["ownerUserId", "messageId"])
-      .index("by_owner_run", ["ownerUserId", "runId"])
-      .index("by_owner_run_source_key", ["ownerUserId", "runId", "sourceKey"])
-      .index("by_owner_artifact", ["ownerUserId", "artifactId"]),
-    researchExtracts: defineTable({
-      ownerUserId: v.string(),
-      runId,
-      threadId: v.string(),
-      sourceKey: v.string(),
-      citationNumber: v.number(),
-      title: v.string(),
-      locator: v.string(),
-      quote: v.string(),
-      relevance: v.union(
-        v.literal("high"),
-        v.literal("medium"),
-        v.literal("low"),
-      ),
-      notes: v.optional(v.string()),
-      createdAt: v.number(),
-    })
-      .index("by_owner_run", ["ownerUserId", "runId"])
-      .index("by_run_citation", ["runId", "citationNumber"]),
     externalLookupCache: defineTable({
       provider: v.union(
         v.literal("openalex"),
@@ -1029,6 +565,118 @@ export default defineSchema(
       createdAt: v.number(),
       updatedAt: v.number(),
     }).index("by_question_key", ["questionKey"]),
+
+    // ── SDK agent backend (plan docs/claude-agent-sdk-app-plan.md §4.5) ──────
+    // First-party chat storage for the apps/agents service. Thread/run/message
+    // ids are SERVICE-GENERATED strings (thr_*/run_*), not Convex ids, so the
+    // service stays storage-agnostic; every table indexes that external id.
+    chatThreads: defineTable({
+      threadId: v.string(),
+      ownerUserId: v.string(),
+      title: v.optional(v.string()),
+      // Claim for the auto-title generator (agent/threadTitles.ts). Absent =
+      // never attempted; "generating" = claimed + action in flight (set inside
+      // finalizeRun's transaction so the schedule fires at most once per
+      // thread); "ready" = terminal (title set, or attempt finished unusable).
+      titleStatus: v.optional(v.union(v.literal("generating"), v.literal("ready"))),
+      workspaceId: v.optional(v.id("workspaces")),
+      status: v.union(v.literal("idle"), v.literal("streaming"), v.literal("failed")),
+      sdkSessionId: v.optional(v.string()),
+      agentKind: v.union(v.literal("lite"), v.literal("pro")),
+      lastActivityAt: v.number(),
+      messageCount: v.number(),
+      lastMessagePreview: v.optional(v.string()),
+    })
+      .index("by_thread_id", ["threadId"])
+      .index("by_owner_activity", ["ownerUserId", "lastActivityAt"]),
+    chatMessages: defineTable({
+      threadId: v.string(),
+      ownerUserId: v.string(),
+      role: v.union(v.literal("user"), v.literal("assistant"), v.literal("system")),
+      text: v.string(),
+      runId: v.optional(v.string()),
+      status: v.union(
+        v.literal("streaming"),
+        v.literal("complete"),
+        v.literal("error"),
+      ),
+      createdAt: v.number(),
+    }).index("by_thread_created", ["threadId", "createdAt"]),
+    agentRuns: defineTable({
+      runId: v.string(),
+      threadId: v.string(),
+      ownerUserId: v.string(),
+      promptMessageId: v.optional(v.string()),
+      status: v.union(
+        v.literal("queued"),
+        v.literal("running"),
+        v.literal("waiting"),
+        v.literal("waiting_hitl"),
+        v.literal("completed"),
+        v.literal("failed"),
+        v.literal("canceled"),
+      ),
+      mode: v.union(v.literal("normal"), v.literal("deep")),
+      agentKind: v.union(v.literal("lite"), v.literal("pro")),
+      sdkSessionId: v.optional(v.string()),
+      costUsd: v.optional(v.number()),
+      usageJson: v.optional(v.string()),
+      numTurns: v.optional(v.number()),
+      errorMessage: v.optional(v.string()),
+      verificationReportJson: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_run_id", ["runId"])
+      .index("by_thread_created", ["threadId", "createdAt"])
+      // Watchdog sweep: active statuses ordered by staleness.
+      .index("by_status_updated", ["status", "updatedAt"]),
+    agentRunEvents: defineTable({
+      runId: v.string(),
+      seq: v.number(),
+      type: v.string(),
+      payloadJson: v.string(),
+      createdAt: v.number(),
+    }).index("by_run_seq", ["runId", "seq"]),
+    // Durable deep-research phase state (plan §5.5 / §9.4 Step 4): one row per
+    // run×phase; the service skips phases already `done` when a run is
+    // re-dispatched after a service restart or a user retry.
+    researchPhaseStates: defineTable({
+      runId: v.string(),
+      phase: v.union(
+        v.literal("plan"),
+        v.literal("literature"),
+        v.literal("counter_evidence"),
+        v.literal("citation_verify"),
+        v.literal("write"),
+      ),
+      status: v.union(v.literal("running"), v.literal("done"), v.literal("failed")),
+      output: v.optional(v.string()),
+      sdkSessionId: v.optional(v.string()),
+      costUsd: v.optional(v.number()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }).index("by_run_phase", ["runId", "phase"]),
+    pendingInteractions: defineTable({
+      ownerUserId: v.string(),
+      threadId: v.string(),
+      runId: v.string(),
+      type: v.union(v.literal("ask_user"), v.literal("tool_approval")),
+      toolName: v.string(),
+      toolUseId: v.optional(v.string()),
+      payloadJson: v.string(),
+      status: v.union(
+        v.literal("pending"),
+        v.literal("responded"),
+        v.literal("expired"),
+        v.literal("superseded"),
+      ),
+      responseJson: v.optional(v.string()),
+      createdAt: v.number(),
+      respondedAt: v.optional(v.number()),
+    })
+      .index("by_thread_created", ["threadId", "createdAt"])
+      .index("by_run_status", ["runId", "status"]),
   },
   { schemaValidation: true },
 );

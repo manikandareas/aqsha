@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
 import { useConvexMutationFn } from "@/lib/convex-query";
+import { promptForSdkBackend } from "@/features/thread-experience/api/use-thread-experience-data";
 
 type StartResearchOptions = {
   busyKey?: string;
@@ -16,7 +17,7 @@ type StartResearchOptions = {
 // card grids and reader pages do not drift.
 export function useStartResearch() {
   const router = useRouter();
-  const startThread = useConvexMutationFn(api.agent.messages.startThread);
+  const startThread = useConvexMutationFn(api.agent.startThread);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,9 +28,9 @@ export function useStartResearch() {
       setError(null);
       try {
         const result = await startThread({
-          content,
+          // No commandId here; deep research is encoded as a /deep prompt.
+          content: promptForSdkBackend(content, "deep-research"),
           agentKind: "pro",
-          commandId: "deep-research",
         });
         if (result?.ok && "threadId" in result && result.threadId) {
           await options.onSuccess?.();

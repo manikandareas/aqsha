@@ -7,7 +7,9 @@
 | Package | Path | Runtime | Key Tech |
 |---|---|---|---|
 | `@aqsha/app` | `apps/web` | Next.js 16 (App Router) | React 19, Tailwind v4, Convex client |
+| `@aqsha/agents` | `apps/agents` | Node/Bun service (Hono) | Claude Agent SDK runtime for Astra — see `apps/agents/AGENTS.md` |
 | `@aqsha/convex` | `packages/convex` | Convex | Convex functions/components, Clerk Auth, Agent/Workflow, internal provenance |
+| `@aqsha/agent-contracts` | `packages/agent-contracts` | shared | zod contracts shared by convex + agents (+ web later) |
 | `@aqsha/ui` | `packages/ui` | shared | React UI primitives and shared token CSS |
 
 ## Exact Dev Commands
@@ -18,6 +20,8 @@ bun dev
 # Run one workspace
 bun run dev:app
 bun run dev:convex
+bun run dev:agents      # Claude Agent SDK service (apps/agents)
+bun run test:agents     # vitest for apps/agents + packages/agent-contracts
 
 # Verification
 bun run lint
@@ -73,4 +77,4 @@ bun run --filter '@aqsha/convex' test
 ## Notable Defaults
 - `apps/web` consumes generated Convex exports through `@aqsha/convex/api` and `@aqsha/convex/server`.
 - `apps/web` consumes `@aqsha/ui`.
-- Only `packages/convex` has a test runner configured (`vitest`).
+- `packages/convex`, `apps/agents`, and `packages/agent-contracts` have `vitest` test runners configured.

@@ -11,7 +11,6 @@ import type {
   ResearchRun,
   ResearchSource,
   SendResult,
-  MessageContextArtifactMetadata,
 } from "../types";
 
 export type { ArtifactId, WorkspaceId };
@@ -50,7 +49,6 @@ export type StartThread = (args: {
     mimeType: string;
     size: number;
   }>;
-  contextArtifactSnapshot?: MessageContextArtifactMetadata[];
 }) => Promise<SendResult>;
 
 export type SendMessage = (args: {
@@ -61,7 +59,6 @@ export type SendMessage = (args: {
   selectedContextArtifactIds?: ArtifactId[];
   selectedContextWorkspaceIds?: WorkspaceId[];
   messageAttachmentArtifactIds?: ArtifactId[];
-  contextArtifactSnapshot?: MessageContextArtifactMetadata[];
 }) => Promise<SendResult>;
 
 export type ContextCandidateArtifact = {
@@ -93,7 +90,7 @@ export type ToggleThreadContextArtifact = (args: {
   artifactId: ArtifactId;
 }) => Promise<{ ok: boolean; selected: boolean }>;
 
-export type RemoveThread = (args: { threadId: string }) => Promise<{ ok: true }>;
+export type RemoveThread = (args: { threadId: string }) => Promise<{ ok: boolean }>;
 
 export type ThreadShellLayoutProps = {
   threads: ThreadSummary[];

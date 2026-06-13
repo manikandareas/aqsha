@@ -3,7 +3,9 @@ import type { GenericId } from "convex/values";
 export type WorkspaceId = GenericId<"workspaces">;
 export type ArtifactId = GenericId<"artifacts">;
 export type WorkspaceFolderId = GenericId<"workspaceFolders">;
-export type AgentRunId = GenericId<"agentRuns">;
+// The SDK agent backend (apps/agents) generates run ids as opaque `run_*`
+// strings, not Convex document ids — `agent.retryRun` takes `v.string()`.
+export type AgentRunId = string;
 export type StorageId = GenericId<"_storage">;
 
 /** Route/param strings are validated by Convex handlers at runtime. */
@@ -24,7 +26,7 @@ export function toArtifactIds(ids: Iterable<string>): ArtifactId[] {
 }
 
 export function toAgentRunId(id: string): AgentRunId {
-  return id as AgentRunId;
+  return id;
 }
 
 export function toStorageId(id: string): StorageId {

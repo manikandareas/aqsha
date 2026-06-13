@@ -1,0 +1,49 @@
+[
+  { "skill": "write-academic-id", "prompt": "bantu menyunting teks akademik berbahasa Indonesia agar ragam formal", "relevant": true },
+  { "skill": "write-academic-id", "prompt": "perbaiki istilah baku dan struktur argumen ilmiah", "relevant": true },
+  { "skill": "write-academic-id", "prompt": "tulis dalam ragam bahasa akademik formal", "relevant": true },
+  { "skill": "write-academic-id", "prompt": "recompute the p-value with statcheck", "relevant": false },
+  { "skill": "write-academic-id", "prompt": "verifikasi DOI dan metadata sitasi", "relevant": false },
+
+  { "skill": "cite-apa7", "prompt": "format sitasi gaya APA untuk daftar pustaka", "relevant": true },
+  { "skill": "cite-apa7", "prompt": "periksa konvensi referensi in-text APA", "relevant": true },
+  { "skill": "cite-apa7", "prompt": "susun daftar pustaka edisi APA 7th", "relevant": true },
+  { "skill": "cite-apa7", "prompt": "lakukan power analysis untuk studi", "relevant": false },
+  { "skill": "cite-apa7", "prompt": "metodologi deep research lintas bidang", "relevant": false },
+
+  { "skill": "verify-citations", "prompt": "verifikasi apakah sitasi valid dan tidak fabrikasi", "relevant": true },
+  { "skill": "verify-citations", "prompt": "cek eksistensi dan konsistensi metadata DOI", "relevant": true },
+  { "skill": "verify-citations", "prompt": "periksa validitas arXiv ID pada daftar pustaka", "relevant": true },
+  { "skill": "verify-citations", "prompt": "tulis ragam bahasa akademik formal", "relevant": false },
+  { "skill": "verify-citations", "prompt": "strategi pencarian bertingkat untuk riset", "relevant": false },
+
+  { "skill": "research-general", "prompt": "strategi pencarian bertingkat untuk riset lintas bidang", "relevant": true },
+  { "skill": "research-general", "prompt": "metodologi deep research dengan sintesis banyak sumber", "relevant": true },
+  { "skill": "research-general", "prompt": "kriteria kecukupan bukti dan struktur laporan riset", "relevant": true },
+  { "skill": "research-general", "prompt": "format sitasi gaya APA", "relevant": false },
+  { "skill": "research-general", "prompt": "verifikasi statistik p-value dengan statcheck", "relevant": false },
+
+  { "skill": "verify-statistics", "prompt": "verifikasi konsistensi angka statistik p-value paper", "relevant": true },
+  { "skill": "verify-statistics", "prompt": "kapan statcheck GRIM power applicable", "relevant": true },
+  { "skill": "verify-statistics", "prompt": "periksa toleransi pembulatan mean dan SD", "relevant": true },
+  { "skill": "verify-statistics", "prompt": "susun daftar pustaka gaya APA", "relevant": false },
+  { "skill": "verify-statistics", "prompt": "tulis teks akademik bahasa Indonesia formal", "relevant": false },
+
+  { "skill": "research-medicine", "prompt": "riset klinis dengan skrining PRISMA dan hierarki bukti RCT", "relevant": true },
+  { "skill": "research-medicine", "prompt": "tinjauan meta-analisis dan flag jurnal predator", "relevant": true },
+  { "skill": "research-medicine", "prompt": "sintesis bukti kedokteran dengan penandaan retraction", "relevant": true },
+  { "skill": "research-medicine", "prompt": "bandingkan benchmark SOTA dengan ablation", "relevant": false },
+  { "skill": "research-medicine", "prompt": "format sitasi gaya APA", "relevant": false },
+
+  { "skill": "research-cs-ml", "prompt": "bandingkan benchmark SOTA dengan studi ablation", "relevant": true },
+  { "skill": "research-cs-ml", "prompt": "riset machine learning dengan reproducibility dan preprint", "relevant": true },
+  { "skill": "research-cs-ml", "prompt": "kewaspadaan leaderboard untuk klaim computer science", "relevant": true },
+  { "skill": "research-cs-ml", "prompt": "skrining PRISMA hierarki bukti RCT klinis", "relevant": false },
+  { "skill": "research-cs-ml", "prompt": "format sitasi gaya APA", "relevant": false },
+
+  { "skill": "research-education", "prompt": "riset pendidikan dengan effect size dan ukuran sampel", "relevant": true },
+  { "skill": "research-education", "prompt": "desain studi pembelajaran dan batas transfer konteks", "relevant": true },
+  { "skill": "research-education", "prompt": "hierarki desain studi pendidikan dengan effect size", "relevant": true },
+  { "skill": "research-education", "prompt": "bandingkan benchmark SOTA leaderboard", "relevant": false },
+  { "skill": "research-education", "prompt": "verifikasi DOI dan metadata sitasi", "relevant": false }
+]

@@ -80,6 +80,11 @@ export async function searchOpenAlexWorks(
     // after Jan 1 of this year are returned (server-side, so narrowing the
     // range refetches instead of emptying a client-side filter).
     fromYear?: number;
+    // Internal verification paths (citation integrity, deep-research stat pass)
+    // are already billed via their parent run, so they skip the per-user
+    // `external_search` credit + `externalSearchPerUser` bucket and rely on the
+    // global provider bucket only — mirroring the feed-cron service path.
+    serviceMode?: boolean;
   },
 ): Promise<ExternalCandidate[]> {
   const query = args.query.trim();
@@ -96,7 +101,7 @@ export async function searchOpenAlexWorks(
   if (!apiKey) {
     throw new Error("OPENALEX_API_KEY is not configured");
   }
-  await limitOpenAlex(ctx, args.ownerUserId);
+  await limitOpenAlex(ctx, args.ownerUserId, args.serviceMode ?? false);
 
   const url = buildOpenAlexWorksUrl({ apiKey, query, limit, fromYear });
 
@@ -257,20 +262,28 @@ const openAlexSelectFields = [
   "ids",
 ];
 
-async function limitOpenAlex(ctx: ActionCtx, ownerUserId: string) {
-  const billing = await ctx.runMutation(
-    internal.billing.entitlements.consumeCreditsInternal,
-    {
-      ownerUserId,
-      feature: "external_search",
-      provider: "openalex",
-    },
-  );
-  if (!billing.ok) {
-    throw new ConvexError(billing.reason);
+async function limitOpenAlex(
+  ctx: ActionCtx,
+  ownerUserId: string,
+  serviceMode: boolean,
+) {
+  if (!serviceMode) {
+    const billing = await ctx.runMutation(
+      internal.billing.entitlements.consumeCreditsInternal,
+      {
+        ownerUserId,
+        feature: "external_search",
+        provider: "openalex",
+      },
+    );
+    if (!billing.ok) {
+      throw new ConvexError(billing.reason);
+    }
   }
   const checks = await Promise.all([
-    rateLimiter.check(ctx, "externalSearchPerUser", { key: ownerUserId }),
+    ...(serviceMode
+      ? []
+      : [rateLimiter.check(ctx, "externalSearchPerUser", { key: ownerUserId })]),
     rateLimiter.check(ctx, "openAlexSearchGlobal"),
   ]);
   const blocked = checks.find((status) => !status.ok);
@@ -278,7 +291,9 @@ async function limitOpenAlex(ctx: ActionCtx, ownerUserId: string) {
     throw new ConvexError("External provider is rate limited");
   }
   await Promise.all([
-    rateLimiter.limit(ctx, "externalSearchPerUser", { key: ownerUserId }),
+    ...(serviceMode
+      ? []
+      : [rateLimiter.limit(ctx, "externalSearchPerUser", { key: ownerUserId })]),
     rateLimiter.limit(ctx, "openAlexSearchGlobal"),
   ]);
 }

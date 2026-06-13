@@ -95,7 +95,7 @@ export function sourceDomain(source: Pick<SourceCandidate, "url" | "locator">) {
   }
 }
 
-function normalizeArxivId(value?: string) {
+export function normalizeArxivId(value?: string) {
   const match = value?.match(/(?:arxiv\.org\/(?:abs|pdf|html)\/|^)(\d{4}\.\d{4,5}(?:v\d+)?)/i);
   return match?.[1]?.replace(/v\d+$/i, "").toLowerCase();
 }

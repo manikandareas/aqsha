@@ -34,11 +34,10 @@ const featureValidator = v.union(
   v.literal("deep_research"),
   v.literal("external_search"),
   v.literal("sandbox_compute"),
+  v.literal("citation_verify"),
 );
 
 const agentKindValidator = v.union(v.literal("lite"), v.literal("pro"));
-
-const runIdValidator = v.id("agentRuns");
 
 export type EntitlementResult =
   | {
@@ -155,7 +154,13 @@ async function getPolarSubscriptionOrNull(ctx: QueryCtx | MutationCtx, ownerUser
   try {
     return await polar.getCurrentSubscription(ctx, { userId: ownerUserId });
   } catch (error) {
-    if (readableError(error).includes("Product not found")) {
+    const message = readableError(error);
+    if (message.includes("Product not found")) {
+      return null;
+    }
+    // convex-test runs without the polar component mounted; fall back to the
+    // mirrored billingSubscriptions row (never hit in production).
+    if (message.includes('Component "polar" is not registered')) {
       return null;
     }
     throw error;
@@ -249,7 +254,6 @@ export async function consumeCredits(
     provider: string;
     model?: string;
     threadId?: string;
-    runId?: Id<"agentRuns">;
     inputTokens?: number;
     outputTokens?: number;
     totalTokens?: number;
@@ -287,7 +291,6 @@ export async function consumeCredits(
   await ctx.db.insert("providerUsageLedger", {
     ownerUserId: args.ownerUserId,
     threadId: args.threadId,
-    runId: args.runId,
     feature: args.feature,
     provider: args.provider,
     model: args.model,
@@ -315,70 +318,6 @@ export async function consumeCredits(
       period.creditsLimit - period.creditsUsed - args.credits,
     ),
   };
-}
-
-export async function recordProviderUsage(
-  ctx: MutationCtx,
-  args: {
-    ownerUserId: string;
-    ownerEmail?: string | null;
-    feature: CreditFeature;
-    credits: number;
-    provider: string;
-    model?: string;
-    threadId?: string;
-    runId?: Id<"agentRuns">;
-    inputTokens?: number;
-    outputTokens?: number;
-    totalTokens?: number;
-    estimatedCostCents?: number;
-    metadataJson?: string;
-  },
-) {
-  const snapshot = await getBillingSnapshot(ctx, args.ownerUserId, args.ownerEmail);
-  const period = await ensureCreditPeriod(ctx, {
-    ownerUserId: args.ownerUserId,
-    planKey: snapshot.planKey,
-    status: snapshot.status,
-  });
-  const now = Date.now();
-  const estimatedCostCents =
-    args.estimatedCostCents ??
-    estimateProviderCostCents({
-      provider: args.provider,
-      model: args.model,
-      inputTokens: args.inputTokens,
-      outputTokens: args.outputTokens,
-      feature: args.feature,
-    });
-
-  await ctx.db.patch("billingCreditPeriods", period._id, {
-    creditsUsed: period.creditsUsed + args.credits,
-    estimatedCostCents: period.estimatedCostCents + estimatedCostCents,
-    updatedAt: now,
-  });
-  await ctx.db.insert("providerUsageLedger", {
-    ownerUserId: args.ownerUserId,
-    threadId: args.threadId,
-    runId: args.runId,
-    feature: args.feature,
-    provider: args.provider,
-    model: args.model,
-    inputTokens: args.inputTokens,
-    outputTokens: args.outputTokens,
-    totalTokens: args.totalTokens,
-    credits: args.credits,
-    estimatedCostCents,
-    metadataJson: args.metadataJson,
-    createdAt: now,
-  });
-  await bumpUsageDailyRollup(ctx, {
-    ownerUserId: args.ownerUserId,
-    createdAt: now,
-    feature: args.feature,
-    credits: args.credits,
-    estimatedCostCents,
-  });
 }
 
 // Returns the UTC calendar day ("YYYY-MM-DD") for an epoch-ms timestamp.
@@ -444,7 +383,6 @@ export const consumeCreditsInternal = internalMutation({
     provider: v.string(),
     model: v.optional(v.string()),
     threadId: v.optional(v.string()),
-    runId: v.optional(runIdValidator),
     inputTokens: v.optional(v.number()),
     outputTokens: v.optional(v.number()),
     totalTokens: v.optional(v.number()),

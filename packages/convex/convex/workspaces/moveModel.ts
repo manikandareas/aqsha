@@ -1,19 +1,11 @@
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 
-export function shouldKeepThreadContextAfterWorkspaceMove(args: {
-  threadWorkspaceId?: Id<"workspaces">;
-  targetWorkspaceId: Id<"workspaces">;
-}) {
-  return !args.threadWorkspaceId || args.threadWorkspaceId === args.targetWorkspaceId;
-}
-
 export async function syncArtifactWorkspaceMove(
   ctx: MutationCtx,
   args: {
     ownerUserId: string;
     artifactId: Id<"artifacts">;
-    previousWorkspaceId: Id<"workspaces">;
     targetWorkspaceId: Id<"workspaces">;
     updatedAt: number;
   },
@@ -24,7 +16,6 @@ export async function syncArtifactWorkspaceMove(
     workspaceId: args.targetWorkspaceId,
     updatedAt: args.updatedAt,
   });
-  await syncThreadContextRowsAfterArtifactWorkspaceMove(ctx, args);
 }
 
 async function patchArtifactWorkspaceRows(
@@ -85,50 +76,6 @@ async function patchArtifactWorkspaceRows(
     await ctx.db.patch("artifactExtractions", extraction._id, {
       workspaceId: args.workspaceId,
       updatedAt: args.updatedAt,
-    });
-  }
-}
-
-async function syncThreadContextRowsAfterArtifactWorkspaceMove(
-  ctx: MutationCtx,
-  args: {
-    ownerUserId: string;
-    artifactId: Id<"artifacts">;
-    previousWorkspaceId: Id<"workspaces">;
-    targetWorkspaceId: Id<"workspaces">;
-  },
-) {
-  if (args.previousWorkspaceId === args.targetWorkspaceId) {
-    return;
-  }
-
-  const rows = await ctx.db
-    .query("threadContextArtifacts")
-    .withIndex("by_owner_workspace_artifact", (q) =>
-      q
-        .eq("ownerUserId", args.ownerUserId)
-        .eq("workspaceId", args.previousWorkspaceId)
-        .eq("artifactId", args.artifactId),
-    )
-    .collect();
-
-  for (const row of rows) {
-    const metadata = await ctx.db
-      .query("threadMetadata")
-      .withIndex("by_thread", (q) => q.eq("threadId", row.threadId))
-      .unique();
-    if (
-      metadata?.ownerUserId === args.ownerUserId &&
-      !shouldKeepThreadContextAfterWorkspaceMove({
-        threadWorkspaceId: metadata.workspaceId,
-        targetWorkspaceId: args.targetWorkspaceId,
-      })
-    ) {
-      await ctx.db.delete("threadContextArtifacts", row._id);
-      continue;
-    }
-    await ctx.db.patch("threadContextArtifacts", row._id, {
-      workspaceId: args.targetWorkspaceId,
     });
   }
 }

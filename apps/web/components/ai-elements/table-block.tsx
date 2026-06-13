@@ -14,7 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 import type { ComponentProps } from "react";
@@ -119,7 +119,11 @@ export function TableBlock({ children, className, node: _node, ...props }: Table
       </div>
 
       <Dialog open={fullscreen} onOpenChange={setFullscreen}>
-        <DialogContent className="max-w-4xl overflow-auto p-6 pt-10">
+        <DialogContent
+          className="max-w-4xl overflow-auto p-6 pt-10"
+          aria-describedby={undefined}
+        >
+          <DialogTitle className="sr-only">Table fullscreen view</DialogTitle>
           <div className="aqsha-prose overflow-x-auto">
             <table
               data-streamdown="table"

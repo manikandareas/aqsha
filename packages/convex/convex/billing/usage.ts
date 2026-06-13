@@ -135,6 +135,7 @@ export const activity = query({
         external_search: day.featureCounts.external_search,
         // Optional on rows written before the feature existed — coalesce to 0.
         sandbox_compute: day.featureCounts.sandbox_compute ?? 0,
+        citation_verify: day.featureCounts.citation_verify ?? 0,
       };
     }
 

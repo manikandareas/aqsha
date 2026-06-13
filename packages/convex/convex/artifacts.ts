@@ -120,7 +120,6 @@ type ArtifactReadModelInput = {
   mimeType?: string;
   fileName?: string;
   storageId?: Id<"_storage">;
-  runId?: string;
 };
 
 function sourceForLegacyArtifact(
@@ -140,9 +139,6 @@ function sourceForLegacyArtifact(
   }
   if (artifact.storageId) {
     return "upload";
-  }
-  if (artifact.runId) {
-    return "agent";
   }
   return "manual";
 }
@@ -606,7 +602,6 @@ export const move = mutation({
     await syncArtifactWorkspaceMove(ctx, {
       ownerUserId: user._id,
       artifactId: args.artifactId,
-      previousWorkspaceId: artifact.workspaceId,
       targetWorkspaceId,
       updatedAt: now,
     });
@@ -806,15 +801,17 @@ export const saveAttachmentToWorkspace = mutation({
       requireActive: true,
     });
 
-    const threadMetadata = artifact.threadId
+    // The thread's "filed under" workspace now lives on the first-party
+    // chatThreads table (threadMetadata was retired in the v1→v2 cleanup).
+    const boundThread = artifact.threadId
       ? await ctx.db
-          .query("threadMetadata")
-          .withIndex("by_thread", (q) => q.eq("threadId", artifact.threadId!))
+          .query("chatThreads")
+          .withIndex("by_thread_id", (q) => q.eq("threadId", artifact.threadId!))
           .unique()
       : null;
     const boundWorkspaceId =
-      threadMetadata?.ownerUserId === user._id
-        ? threadMetadata.workspaceId
+      boundThread?.ownerUserId === user._id
+        ? boundThread.workspaceId
         : undefined;
 
     let targetWorkspaceId = boundWorkspaceId ?? args.workspaceId;
@@ -1029,11 +1026,16 @@ export const getContentTarget = internalQuery({
     if (
       !artifact ||
       artifact.ownerUserId !== args.ownerUserId ||
-      !artifact.workspaceId ||
       artifact.status !== "active"
     ) {
       return null;
     }
+    // NOTE: a non-null workspaceId is intentionally NOT required. Chat-attached
+    // documents ("Lampiran chat") are thread-scoped and have workspaceId === null,
+    // yet their extracted text lives in artifactContents just like workspace docs.
+    // The ownership + active-status checks above are the security boundary; the old
+    // workspaceId guard wrongly made verifyCitations / verifyStatistics / the
+    // artifact viewer report "no text" for any chat attachment.
     const artifactType = artifactTypeForLegacyArtifact(artifact);
     const [content, url] = await Promise.all([
       getContentRowOrNull(ctx, artifact._id, args.ownerUserId),

@@ -50,35 +50,6 @@ export const get = query({
   },
 });
 
-export const listActionsForMessage = query({
-  args: { messageId: v.string() },
-  handler: async (ctx, args) => {
-    const user = await requireCurrentUser(ctx);
-    const rows = await ctx.db
-      .query("messageWorkspaceActions")
-      .withIndex("by_owner_message", (q) =>
-        q.eq("ownerUserId", user._id).eq("messageId", args.messageId),
-      )
-      .collect();
-    const results = (
-      await Promise.all(
-        rows.map(async (row) => {
-          const workspace = await ctx.db.get("workspaces", row.workspaceId);
-          if (!workspace) {
-            return null;
-          }
-          return {
-            workspaceId: row.workspaceId,
-            action: row.action,
-            workspaceName: workspace.name,
-          };
-        }),
-      )
-    ).filter((result) => result !== null);
-    return results;
-  },
-});
-
 export const create = mutation({
   args: {
     name: v.string(),

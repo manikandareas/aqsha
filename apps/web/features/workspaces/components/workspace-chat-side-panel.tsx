@@ -2,17 +2,15 @@
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { panelBodyPaddingClass } from "@/lib/panel-surface";
+import { toWorkspaceId } from "@/lib/convex-refs";
 import { cn } from "@/lib/utils";
 import { useThreadExperienceData } from "@/features/thread-experience/api/use-thread-experience-data";
 import { CompactThreadChatPanel } from "@/features/thread-experience/components/compact-thread-chat-panel";
 import type {
-  RemoveThread,
-  SendMessage,
   StartThread,
   ThreadSummary,
 } from "@/features/thread-experience/components/component-types";
 import type { RateStatus } from "@/features/thread-experience/types";
-import { toMutationContextSnapshot } from "@/features/thread-experience/utils/message-context";
 
 export function WorkspaceChatSidePanel({
   workspaceId,
@@ -20,30 +18,27 @@ export function WorkspaceChatSidePanel({
   onActiveThreadIdChange,
   threads,
   rateStatus,
-  startThread,
-  removeThread,
 }: {
   workspaceId: string;
   activeThreadId: string | null;
   onActiveThreadIdChange: (threadId: string | null) => void;
   threads: ThreadSummary[];
   rateStatus: RateStatus | undefined;
-  startThread: StartThread;
-  removeThread: RemoveThread;
 }) {
   const threadExperience = useThreadExperienceData(activeThreadId ?? undefined);
   const activeThread = activeThreadId
     ? threadExperience.selectedThread
     : undefined;
-  // Pinned context is owned by the composer's inline pills (mention provider).
-  // This adapter just brands the snapshot before forwarding.
-  const sendMessage: SendMessage = (args) =>
-    threadExperience.sendMessage({
+  // New threads are filed under this workspace; pinned context is owned by the
+  // composer's inline pills (mention provider). This adapter injects the
+  // workspace before forwarding to the agent backend (mirrors ExploreChatSidePanel,
+  // which is workspace-less).
+  const startThread: StartThread = (args) =>
+    threadExperience.startThread({
       ...args,
-      contextArtifactSnapshot: toMutationContextSnapshot(
-        args.contextArtifactSnapshot,
-      ),
+      workspaceId: toWorkspaceId(workspaceId),
     });
+  const sendMessage = threadExperience.sendMessage;
 
   return (
     <CompactThreadChatPanel
@@ -54,7 +49,7 @@ export function WorkspaceChatSidePanel({
       deleteDescription="Thread dan pesannya akan dihapus permanen dari workspace ini."
       onDeleteThread={() =>
         activeThreadId
-          ? removeThread({ threadId: activeThreadId })
+          ? threadExperience.removeThread({ threadId: activeThreadId })
           : Promise.resolve()
       }
       rateStatus={rateStatus}
