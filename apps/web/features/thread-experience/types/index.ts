@@ -28,28 +28,6 @@ export type RateStatus = {
   serverTime: number;
 };
 
-export type PromptCommandMetadata = {
-  commandId: string;
-  commandLabel: string;
-  commandSlug: string;
-  mode: "normal" | "deep";
-  argumentPreview: string;
-};
-
-export type MessageContextArtifactMetadata = {
-  artifactId: string;
-  title: string;
-  artifactType?: string;
-  source?: "upload" | "workspace";
-  savedWorkspaceId?: string;
-  savedWorkspaceName?: string;
-};
-
-export type MessageContextWorkspaceMetadata = {
-  workspaceId: string;
-  name: string;
-};
-
 export type ChatMessage = {
   id: string;
   key: string;
@@ -70,13 +48,6 @@ export type ChatMessage = {
     errorText?: string;
     approval?: { id: string; isAutomatic?: boolean; approved?: boolean; reason?: string };
   }>;
-  metadata?: {
-    promptCommand?: PromptCommandMetadata;
-    contextArtifacts?: MessageContextArtifactMetadata[];
-    contextWorkspaces?: MessageContextWorkspaceMetadata[];
-    /** User message text with inline mention markers (pills in place). */
-    richContent?: string;
-  };
 };
 
 export type ResearchRun = {

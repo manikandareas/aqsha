@@ -21,13 +21,11 @@ import { WorkspaceLibrarySurface } from "@/features/workspaces/components/worksp
 import { WorkspaceBoardToolbar } from "@/features/workspaces/components/workspace-board-toolbar";
 import { useWorkspaceLibraryDialogState } from "@/features/workspaces/hooks/use-workspace-library-dialogs";
 import { useThreadExperienceData } from "../api/use-thread-experience-data";
-import type { SendMessage, StartThread } from "./component-types";
 import {
   ComposerMentionsProvider,
   usePanelContextSelection,
 } from "./composer-context-mentions";
 import { ThreadShellLayout } from "./thread-shell-layout";
-import { toMutationContextSnapshot } from "../utils/message-context";
 
 export function ThreadDetailShell({ threadId }: { threadId?: string }) {
   const router = useRouter();
@@ -49,20 +47,6 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
   const title = threadId
     ? (selectedThread?.title ?? "Thread tidak ditemukan")
     : "Thread baru";
-
-  // The composer (via the mention provider) is the source of truth for pinned
-  // context. These adapters just bridge the string-typed snapshot to the
-  // branded mutation args.
-  const startThreadAdapter: StartThread = (args) =>
-    startThread({
-      ...args,
-      contextArtifactSnapshot: toMutationContextSnapshot(args.contextArtifactSnapshot),
-    });
-  const sendMessageAdapter: SendMessage = (args) =>
-    sendMessage({
-      ...args,
-      contextArtifactSnapshot: toMutationContextSnapshot(args.contextArtifactSnapshot),
-    });
 
   const handleDeleteThread = async () => {
     if (!threadId) return;
@@ -109,8 +93,8 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
         threadId={threadId}
         selectedThread={selectedThread}
         rateStatus={rateStatus}
-        startThread={startThreadAdapter}
-        sendMessage={sendMessageAdapter}
+        startThread={startThread}
+        sendMessage={sendMessage}
         runs={runs}
         artifacts={artifacts}
         sources={sources}

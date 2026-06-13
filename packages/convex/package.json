@@ -57,12 +57,10 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.63",
-    "@convex-dev/agent": "^0.6.1",
     "@daytona/sdk": "^0.186.0",
     "@convex-dev/polar": "^0.9.1",
     "@convex-dev/rag": "^0.7.5",
     "@convex-dev/rate-limiter": "^0.3.2",
-    "@convex-dev/workflow": "^0.3.12",
     "ai": "^6.0.177",
     "convex": "^1.38.0",
     "exa-js": "^2.12.1",

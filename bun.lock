@@ -110,11 +110,9 @@
       "version": "0.0.0",
       "dependencies": {
         "@ai-sdk/openai": "^3.0.63",
-        "@convex-dev/agent": "^0.6.1",
         "@convex-dev/polar": "^0.9.1",
         "@convex-dev/rag": "^0.7.5",
         "@convex-dev/rate-limiter": "^0.3.2",
-        "@convex-dev/workflow": "^0.3.12",
         "@daytona/sdk": "^0.186.0",
         "ai": "^6.0.177",
         "convex": "^1.38.0",
@@ -379,8 +377,6 @@
     "@convex-dev/rate-limiter": ["@convex-dev/rate-limiter@0.3.2", "", { "peerDependencies": { "convex": "^1.24.8", "react": "^18.2.0 || ^19.0.0" }, "optionalPeers": ["react"] }, "sha512-+oBPsBfFbzdxiF/9XaaTQmVnvDlvEfg/c69/v8LxTbw4VLuiflIKlfnPQL8OS0azXQQ11hcPWHmU8ytFmHKDXA=="],
 
     "@convex-dev/react-query": ["@convex-dev/react-query@0.1.0", "", { "peerDependencies": { "@tanstack/react-query": "^5.0.0", "convex": "^1.29.3" } }, "sha512-ULmBZCtAQDUePdBhUv7hj1Yy4QiCelhi6uEIOtMpjW8db6W9CFKvQwLt9heLngccFyMFfAZdOfSrT+cP4AH0Jw=="],
-
-    "@convex-dev/workflow": ["@convex-dev/workflow@0.3.12", "", { "dependencies": { "async-channel": "^0.2.0" }, "peerDependencies": { "@convex-dev/workpool": "^0.3.0 || ^0.4.0", "convex": "^1.31.7", "convex-helpers": "^0.1.99" } }, "sha512-4c4eSe2sXnhxE6Td4benRg6OMJahWkOHdLv++FxpjZVZUANFmJqYKZxx8Bxqs0SB4ECGd2j0MZalNppLPKxQ7Q=="],
 
     "@convex-dev/workpool": ["@convex-dev/workpool@0.4.6", "", { "peerDependencies": { "convex": "^1.31.7", "convex-helpers": "^0.1.94" } }, "sha512-e+cIgQePx5rrGizvzaYocWQCsDFbFlYqR1ZbtFPLa909izwc5GvoasPJPANeFhHRWaA5NBipNVqNtfHySi7Ldw=="],
 
@@ -1299,8 +1295,6 @@
     "ast-types": ["ast-types@0.16.1", "", { "dependencies": { "tslib": "^2.0.1" } }, "sha512-6t10qk83GOG8p0vKmaCr8eiilZwO171AvbROMtvvNiwrTly62t+7XkA8RdIIVbpMhCASAsxgAzdRSwh6nw/5Dg=="],
 
     "ast-types-flow": ["ast-types-flow@0.0.8", "", {}, "sha512-OH/2E5Fg20h2aPrbe+QL8JZQFko0YZaF+j4mnQ7BGhfavO7OpSLa8a0y9sBwomHdSbkhTS8TQNayBfnW5DwbvQ=="],
-
-    "async-channel": ["async-channel@0.2.0", "", {}, "sha512-BJyjI/sfKlyijaBt2hbOSxT28xGNtLR0QLzAKO1Hlnv5BULY7sAoYoTPW3lfr1ZIC7y+FxabxO9T8GXpyoofGg=="],
 
     "async-function": ["async-function@1.0.0", "", {}, "sha512-hsU18Ae8CDTR6Kgu9DYf0EbCr/a5iGL0rytQDobUcdpYOKokk8LEjVphnXkDkgpi0wYVsqrXuP0bZxJaTqdgoA=="],
 

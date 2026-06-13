@@ -11,7 +11,6 @@ import type {
   ResearchRun,
   ResearchSource,
   SendResult,
-  MessageContextArtifactMetadata,
 } from "../types";
 
 export type { ArtifactId, WorkspaceId };
@@ -50,7 +49,6 @@ export type StartThread = (args: {
     mimeType: string;
     size: number;
   }>;
-  contextArtifactSnapshot?: MessageContextArtifactMetadata[];
 }) => Promise<SendResult>;
 
 export type SendMessage = (args: {
@@ -61,7 +59,6 @@ export type SendMessage = (args: {
   selectedContextArtifactIds?: ArtifactId[];
   selectedContextWorkspaceIds?: WorkspaceId[];
   messageAttachmentArtifactIds?: ArtifactId[];
-  contextArtifactSnapshot?: MessageContextArtifactMetadata[];
 }) => Promise<SendResult>;
 
 export type ContextCandidateArtifact = {

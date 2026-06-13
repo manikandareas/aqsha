@@ -337,19 +337,6 @@ function ComposerContent(props: ComposerProps) {
         ? {
             selectedContextArtifactIds: contextPaperIds.map(toArtifactId),
             selectedContextWorkspaceIds: contextWorkspaceIds.map(toWorkspaceId),
-            contextArtifactSnapshot: draftRefs.flatMap((ref) =>
-              ref.kind === "paper"
-                ? [
-                    {
-                      artifactId: ref.artifactId,
-                      title: ref.label.includes(":")
-                        ? ref.label.slice(ref.label.indexOf(":") + 1)
-                        : ref.label.replace(/^@/, ""),
-                      source: "workspace" as const,
-                    },
-                  ]
-                : [],
-            ),
           }
         : {};
       const result = threadId && onSend

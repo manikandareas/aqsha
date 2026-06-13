@@ -7,12 +7,10 @@ import { cn } from "@/lib/utils";
 import { useThreadExperienceData } from "@/features/thread-experience/api/use-thread-experience-data";
 import { CompactThreadChatPanel } from "@/features/thread-experience/components/compact-thread-chat-panel";
 import type {
-  SendMessage,
   StartThread,
   ThreadSummary,
 } from "@/features/thread-experience/components/component-types";
 import type { RateStatus } from "@/features/thread-experience/types";
-import { toMutationContextSnapshot } from "@/features/thread-experience/utils/message-context";
 
 export function WorkspaceChatSidePanel({
   workspaceId,
@@ -32,24 +30,15 @@ export function WorkspaceChatSidePanel({
     ? threadExperience.selectedThread
     : undefined;
   // New threads are filed under this workspace; pinned context is owned by the
-  // composer's inline pills (mention provider). These adapters brand the
-  // snapshot and inject the workspace before forwarding to the v2 backend
-  // (mirrors ExploreChatSidePanel, which is workspace-less).
+  // composer's inline pills (mention provider). This adapter injects the
+  // workspace before forwarding to the v2 backend (mirrors ExploreChatSidePanel,
+  // which is workspace-less).
   const startThread: StartThread = (args) =>
     threadExperience.startThread({
       ...args,
       workspaceId: toWorkspaceId(workspaceId),
-      contextArtifactSnapshot: toMutationContextSnapshot(
-        args.contextArtifactSnapshot,
-      ),
     });
-  const sendMessage: SendMessage = (args) =>
-    threadExperience.sendMessage({
-      ...args,
-      contextArtifactSnapshot: toMutationContextSnapshot(
-        args.contextArtifactSnapshot,
-      ),
-    });
+  const sendMessage = threadExperience.sendMessage;
 
   return (
     <CompactThreadChatPanel

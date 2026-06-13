@@ -94,8 +94,8 @@ export function useThreadExperienceDataV2(threadId: string | undefined, enabled 
 
   // Typed against the shared StartThread/SendMessage contracts so this hook IS
   // the canonical thread-experience surface. Fields the v2 backend doesn't use
-  // (contextArtifactSnapshot, pendingAttachments) are accepted and ignored —
-  // pinned context rides contextArtifactIds.
+  // (pendingAttachments) are accepted and ignored — pinned context rides
+  // contextArtifactIds.
   const startThread: StartThread = async (args) => {
     return (await startThreadV2({
       content: promptForSdkBackend(args.content, args.commandId),
