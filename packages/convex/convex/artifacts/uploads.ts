@@ -28,23 +28,11 @@ const textLikeMimeTypes = new Set([
   "application/json",
 ]);
 
-const pendingAttachmentValidator = v.object({
-  storageId: v.id("_storage"),
-  fileName: v.string(),
-  mimeType: v.string(),
-  size: v.number(),
-});
-
 type ExtractedDocument = {
   markdown: string;
   plainText: string;
 };
 
-type ProcessedAttachment = {
-  artifactId: Id<"artifacts">;
-  title: string;
-  artifactType: string;
-};
 
 export const createFromStorage = action({
   args: {
@@ -172,84 +160,11 @@ export const createThreadAttachmentFromStorage = action({
   },
 });
 
-export const processPendingAttachmentsAndStart = internalAction({
-  args: {
-    ownerUserId: v.string(),
-    ownerEmail: v.optional(v.string()),
-    threadId: v.string(),
-    messageId: v.string(),
-    threadTitle: v.optional(v.string()),
-    content: v.string(),
-    agentKind: v.union(v.literal("lite"), v.literal("pro")),
-    commandId: v.optional(v.string()),
-    workspaceId: v.optional(v.id("workspaces")),
-    pendingAttachments: v.array(pendingAttachmentValidator),
-    selectedContextArtifactIds: v.optional(v.array(v.id("artifacts"))),
-    selectedContextWorkspaceIds: v.optional(v.array(v.id("workspaces"))),
-    contextArtifactSnapshot: v.optional(
-      v.array(
-        v.object({
-          artifactId: v.id("artifacts"),
-          title: v.string(),
-          artifactType: v.optional(v.string()),
-          source: v.optional(v.union(v.literal("upload"), v.literal("workspace"))),
-        }),
-      ),
-    ),
-  },
-  handler: async (ctx, args) => {
-    const processed: ProcessedAttachment[] = [];
-    for (const pending of args.pendingAttachments) {
-      validateUpload(pending);
-      const title = titleFromFileName(pending.fileName);
-      const artifactType = uploadArtifactType({
-        fileName: pending.fileName,
-        mimeType: pending.mimeType || "application/octet-stream",
-      });
-      const artifactId: Id<"artifacts"> = await ctx.runMutation(
-        internal.artifacts.createThreadAttachmentInternal,
-        {
-          ownerUserId: args.ownerUserId,
-          threadId: args.threadId,
-          title,
-          artifactType,
-          storageId: pending.storageId,
-          fileName: pending.fileName,
-          mimeType: pending.mimeType || "application/octet-stream",
-          byteSize: pending.size,
-        },
-      );
-      await finalizeUploadedDocument(ctx, {
-        ownerUserId: args.ownerUserId,
-        artifactId,
-        title,
-        storageId: pending.storageId,
-        fileName: pending.fileName,
-        mimeType: pending.mimeType,
-        threadId: args.threadId,
-      });
-      processed.push({ artifactId, title, artifactType });
-    }
-
-    const uploadedIds = processed.map((item) => item.artifactId);
-    const snapshot = buildAttachmentSnapshot(processed, args.contextArtifactSnapshot);
-
-    await ctx.runMutation(internal.agent.messages.completeThreadStartAfterAttachments, {
-      ownerUserId: args.ownerUserId,
-      threadId: args.threadId,
-      messageId: args.messageId,
-      threadTitle: args.threadTitle,
-      content: args.content,
-      agentKind: args.agentKind,
-      commandId: args.commandId,
-      workspaceId: args.workspaceId,
-      selectedContextArtifactIds: args.selectedContextArtifactIds,
-      selectedContextWorkspaceIds: args.selectedContextWorkspaceIds,
-      contextArtifactSnapshot: snapshot,
-      messageAttachmentArtifactIds: uploadedIds,
-    });
-  },
-});
+// NOTE: `processPendingAttachmentsAndStart` (deferred raw-attachment upload →
+// legacy thread start) was removed in the Step 6 cutover; it was only scheduled
+// by the deleted legacy agent/messages.ts. The SDK backend uploads attachments
+// as artifacts first (createFromStorage) and passes their ids to
+// agent.v2.startThread as messageAttachmentArtifactIds.
 
 export const reindexPromotedAttachment = internalAction({
   args: {
@@ -293,36 +208,6 @@ export const reindexPromotedAttachment = internalAction({
     }
   },
 });
-
-function buildAttachmentSnapshot(
-  processed: ProcessedAttachment[],
-  existing?: Array<{
-    artifactId: Id<"artifacts">;
-    title: string;
-    artifactType?: string;
-    source?: "upload" | "workspace";
-  }>,
-) {
-  const uploadedSnapshot = processed.map((item) => ({
-    artifactId: item.artifactId,
-    title: item.title,
-    artifactType: item.artifactType,
-    source: "upload" as const,
-  }));
-  const merged = [...(existing ?? []), ...uploadedSnapshot];
-  if (merged.length === 0) {
-    return undefined;
-  }
-  const seen = new Set<string>();
-  return merged.filter((item) => {
-    const key = String(item.artifactId);
-    if (seen.has(key)) {
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
-}
 
 async function finalizeUploadedDocument(
   ctx: ActionCtx,

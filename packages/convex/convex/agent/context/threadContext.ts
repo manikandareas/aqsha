@@ -1,5 +1,4 @@
 import { ConvexError, v } from "convex/values";
-import { components } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import {
   internalQuery,
@@ -74,13 +73,13 @@ const contextMutationResultValidator = v.object({
 });
 
 async function getThreadOwner(ctx: ThreadContextCtx, threadId: string) {
-  const thread = await ctx.runQuery(components.agent.threads.getThread, {
-    threadId,
-  });
-  if (!thread?.userId) {
-    return null;
-  }
-  return thread.userId;
+  // Reads the first-party chatThreads table (the @convex-dev/agent component is
+  // unmounted after the Step 6 cutover).
+  const thread = await ctx.db
+    .query("chatThreads")
+    .withIndex("by_thread_id", (q) => q.eq("threadId", threadId))
+    .unique();
+  return thread?.ownerUserId ?? null;
 }
 
 export async function isOwnedThread(ctx: ThreadContextCtx, args: {
