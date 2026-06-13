@@ -3,7 +3,10 @@
 Standalone Node/Bun service implementing the agent side of
 `docs/claude-agent-sdk-app-plan.md`. It runs Astra on
 `@anthropic-ai/claude-agent-sdk` (Hono HTTP surface, in-process MCP tools,
-SDK sessions per thread) and is deliberately **not** wired to `apps/web` yet.
+SDK sessions per thread). As of the Step 6 cutover it is the **only** agent
+backend: `apps/web` talks to it through the Convex `agent/service` + `agent/v2`
+facade on the first-party tables, and the legacy `@convex-dev/agent` runtime in
+`packages/convex` has been removed.
 
 ## Commands
 

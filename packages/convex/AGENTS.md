@@ -153,10 +153,21 @@ Rules:
 ## Components — don't roll your own
 
 Use the mounted Convex components (in `convex.config.ts`) instead of hand-rolling:
-`@convex-dev/agent` (chat/threads/messages/tools — never a manual `messages`
-table), `@convex-dev/rag`, `@convex-dev/workflow` (multi-step/durable flows),
-`@convex-dev/rate-limiter` (`limits.ts`), `@convex-dev/polar` (billing). Access via
-`components.*`; their references are config-sensitive, not path-sensitive.
+`@convex-dev/rag`, `@convex-dev/rate-limiter` (`limits.ts`), `@convex-dev/polar`
+(billing). Access via `components.*`; their references are config-sensitive, not
+path-sensitive.
+
+**The AI agent does NOT live in Convex anymore.** As of the Step 6 cutover
+(`docs/claude-agent-sdk-app-plan.md`), `@convex-dev/agent` and
+`@convex-dev/workflow` are unmounted; the agent runtime is the standalone
+`apps/agents` service (Claude Agent SDK). Convex owns the first-party agent
+tables (`chatThreads`, `chatMessages`, `agentRuns2`, `agentRunEvents2`,
+`pendingInteractions`, `researchPhaseStates`) and the service facade
+(`agent/service.ts` + `agent/v2*`); it no longer runs `generateText`/threads
+through a component. Don't re-introduce `@convex-dev/agent`/`@convex-dev/workflow`.
+Some inert legacy first-party tables (`agentRuns`, `threadMetadata`,
+`threadContext*`, `messageContext*`, `skillActivations`, etc.) remain pending a
+data-clearing migration — don't build new features on them.
 
 ## Crons & HTTP (path-sensitive)
 
