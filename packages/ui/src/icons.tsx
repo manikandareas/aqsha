@@ -95,25 +95,28 @@ import {
   UserIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { forwardRef } from "react";
+import type { Ref } from "react";
 
 import type { HugeiconsIconProps, IconSvgElement } from "@hugeicons/react";
 
 type IconProps = Omit<HugeiconsIconProps, "icon" | "altIcon" | "strokeWidth"> & {
   strokeWidth?: string | number;
+  ref?: Ref<SVGSVGElement>;
 };
 
 const createIcon = (icon: IconSvgElement) =>
-  forwardRef<SVGSVGElement, IconProps>(({ strokeWidth, ...props }, ref) => (
-    <HugeiconsIcon
-      ref={ref}
-      icon={icon}
-      strokeWidth={
-        typeof strokeWidth === "string" ? Number(strokeWidth) : strokeWidth
-      }
-      {...props}
-    />
-  ));
+  function Icon({ ref, strokeWidth, ...props }: IconProps) {
+    return (
+      <HugeiconsIcon
+        ref={ref}
+        icon={icon}
+        strokeWidth={
+          typeof strokeWidth === "string" ? Number(strokeWidth) : strokeWidth
+        }
+        {...props}
+      />
+    );
+  };
 
 export const AlertCircleIcon = createIcon(HugeAlertCircleIcon);
 export const ArchiveIcon = createIcon(HugeArchiveIcon);
