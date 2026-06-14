@@ -46,6 +46,7 @@ export const SERVICE_FUNCTIONS = {
   setRunStatus: "agent/service:setRunStatus",
   finalizeRun: "agent/service:finalizeRun",
   appendRunEvent: "agent/service:appendRunEvent",
+  upsertRunEventBySegmentId: "agent/service:upsertRunEventBySegmentId",
   listRunEvents: "agent/service:listRunEvents",
   createInteraction: "agent/service:createInteraction",
   getInteraction: "agent/service:getInteraction",
@@ -191,6 +192,20 @@ export class ConvexStore implements AgentStore {
   }): Promise<RunEventRecord> {
     return this.mutation(SERVICE_FUNCTIONS.appendRunEvent, {
       runId: input.runId,
+      type: input.type,
+      payloadJson: JSON.stringify(input.payload),
+    });
+  }
+
+  upsertRunEventBySegmentId(input: {
+    runId: string;
+    segmentId: string;
+    type: RunEventRecord["type"];
+    payload: Record<string, unknown>;
+  }): Promise<RunEventRecord> {
+    return this.mutation(SERVICE_FUNCTIONS.upsertRunEventBySegmentId, {
+      runId: input.runId,
+      segmentId: input.segmentId,
       type: input.type,
       payloadJson: JSON.stringify(input.payload),
     });

@@ -417,6 +417,50 @@ export const appendRunEvent = mutation({
   },
 });
 
+// Upsert an answer-segment event keyed by segmentId so a growing
+// text/reasoning segment stays ONE row (re-patched, keeping its seq) instead of
+// one row per delta. Mirrors memoryStore.upsertRunEventBySegmentId.
+export const upsertRunEventBySegmentId = mutation({
+  args: {
+    serviceToken: v.string(),
+    runId: v.string(),
+    segmentId: v.string(),
+    type: v.string(),
+    payloadJson: v.string(),
+  },
+  handler: async (ctx, args) => {
+    requireServiceToken(args.serviceToken);
+    const run = await requireRun(ctx, args.runId);
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("agentRunEvents")
+      .withIndex("by_run_segment", (q) =>
+        q.eq("runId", args.runId).eq("segmentId", args.segmentId),
+      )
+      .unique();
+    if (existing) {
+      // Patch in place: KEEP seq + createdAt, refresh the (grown) payload.
+      await ctx.db.patch("agentRunEvents", existing._id, { payloadJson: args.payloadJson });
+      // Heartbeat for the watchdog sweep.
+      await ctx.db.patch("agentRuns", run._id, { updatedAt: now });
+      const patched = await ctx.db.get("agentRunEvents", existing._id);
+      return runEventRecord(patched!);
+    }
+    const seq = await nextRunEventSeq(ctx, args.runId);
+    const id = await ctx.db.insert("agentRunEvents", {
+      runId: args.runId,
+      seq,
+      type: args.type,
+      payloadJson: args.payloadJson,
+      segmentId: args.segmentId,
+      createdAt: now,
+    });
+    await ctx.db.patch("agentRuns", run._id, { updatedAt: now });
+    const inserted = await ctx.db.get("agentRunEvents", id);
+    return runEventRecord(inserted!);
+  },
+});
+
 export const listRunEvents = query({
   args: { serviceToken: v.string(), runId: v.string() },
   handler: async (ctx, args) => {

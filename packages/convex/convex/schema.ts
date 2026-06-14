@@ -639,8 +639,14 @@ export default defineSchema(
       seq: v.number(),
       type: v.string(),
       payloadJson: v.string(),
+      // Upsert key for coalesced answer segments: set only on
+      // text_segment/reasoning_segment rows so a growing segment is ONE row
+      // (re-patched, keeping its seq). All other event types leave it undefined.
+      segmentId: v.optional(v.string()),
       createdAt: v.number(),
-    }).index("by_run_seq", ["runId", "seq"]),
+    })
+      .index("by_run_seq", ["runId", "seq"])
+      .index("by_run_segment", ["runId", "segmentId"]),
     // Durable deep-research phase state (plan §5.5 / §9.4 Step 4): one row per
     // run×phase; the service skips phases already `done` when a run is
     // re-dispatched after a service restart or a user retry.

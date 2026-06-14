@@ -1,5 +1,11 @@
 import type { RunResultSummary, RunUsage } from "@aqsha/agent-contracts";
 import type { AgentStore } from "../store/types";
+import type { SegmentCoordinator } from "./segmentCoordinator";
+
+// A leading line break on a freshly-opened segment is the bridge's own "\n\n"
+// join artifact between two assistant messages (committedText separator), not
+// model-intended — strip it so a segment never starts with a blank line.
+const LEADING_BREAKS = /^[\n\r\u0085\u2028\u2029]+/;
 
 // Stream bridge (plan §4.3): consumes the SDK message stream and writes
 // batched updates into the store — assistant text flushed in-place on the
@@ -73,6 +79,21 @@ export class StreamBridge {
   private inflight: Promise<void> | null = null;
   private trailingQueued = false;
 
+  // ── ordered answer segments (answer-stream redesign Fase 1) ────────────────
+  // The contiguous text/reasoning between two tool boundaries is one segment.
+  // Each is upserted as ONE `agentRunEvents` row keyed by `segmentId` (coalesced,
+  // keeps its seq), so interleaving segments with the tool nodes by seq yields
+  // the precise reasoning↔tool↔answer order. `segmentTextOffset` /
+  // `segmentReasoningOffset` mark where the current segment starts within the
+  // full streamed text/reasoning.
+  private segmentIndex = 0;
+  private segmentTextOffset = 0;
+  private segmentReasoningOffset = 0;
+  private segmentInflight: Promise<void> | null = null;
+  private segmentTrailingQueued = false;
+  private lastWrittenSegmentText = "";
+  private lastWrittenSegmentReasoning = "";
+
   constructor(
     private readonly store: AgentStore,
     private readonly opts: {
@@ -81,6 +102,19 @@ export class StreamBridge {
       messageId: string;
       flushMs: number;
       flushChars: number;
+      /**
+       * Unique per executeTurn / deep-phase dispatch so a resume's segments get
+       * fresh `segmentId`s (never colliding with the original turn's, which
+       * would patch instead of append). Combined with the segment kind + index.
+       */
+      turnKey: string;
+      /**
+       * Imposes reasoning↔tool ordering despite the SDK's eager message
+       * production: the bridge releases a tool's barrier once the preceding
+       * segment is closed, and the PreToolUse hook waits on it before emitting
+       * tool_start. Optional (dev/tests without ordering needs omit it).
+       */
+      coordinator?: SegmentCoordinator;
       now?: () => number;
       /**
        * Capture-only mode: text and result summary are accumulated but never
@@ -159,6 +193,15 @@ export class StreamBridge {
       this.pendingDelta = "";
       this.pendingReasoning = "";
       this.maybeScheduleFlush(true);
+      // A main-thread tool_use in this message ends the current answer segment:
+      // close it (so its seq lands before the tool's) and open the next one. The
+      // close also releases each tool's ordering barrier (see SegmentCoordinator).
+      const toolUseIds = blocks
+        .filter((block) => block.type === "tool_use" && typeof block.id === "string")
+        .map((block) => block.id as string);
+      if (toolUseIds.length > 0) {
+        await this.closeSegmentAtToolBoundary(toolUseIds);
+      }
       return;
     }
 
@@ -203,6 +246,7 @@ export class StreamBridge {
       this.pendingChars() >= this.opts.flushChars;
     if (due) {
       this.scheduleFlush();
+      this.scheduleSegmentFlush();
     }
   }
 
@@ -241,6 +285,109 @@ export class StreamBridge {
       });
   }
 
+  // ── answer-segment writes (Fase 1) ─────────────────────────────────────────
+
+  private segmentId(kind: "text" | "reasoning"): string {
+    return `${this.opts.runId}:${this.opts.turnKey}:${kind}:${this.segmentIndex}`;
+  }
+
+  /** The current segment's text/reasoning (full stream minus the prior segments),
+   *  with the inter-message join artifact stripped from the front. */
+  private currentSegmentText(): string {
+    return this.currentText.slice(this.segmentTextOffset).replace(LEADING_BREAKS, "");
+  }
+
+  private currentSegmentReasoning(): string {
+    return this.currentReasoning
+      .slice(this.segmentReasoningOffset)
+      .replace(LEADING_BREAKS, "");
+  }
+
+  /** Upsert the current text/reasoning segment rows (skip empties + no-ops). */
+  private async writeSegments(): Promise<void> {
+    // Reasoning BEFORE text, sequentially: a step's reasoning thus takes a lower
+    // seq than its text on first insert (the model thinks, then writes), and the
+    // two never race for nextRunEventSeq.
+    const reasoning = this.currentSegmentReasoning();
+    if (reasoning && reasoning !== this.lastWrittenSegmentReasoning) {
+      this.lastWrittenSegmentReasoning = reasoning;
+      await this.store.upsertRunEventBySegmentId({
+        runId: this.opts.runId,
+        segmentId: this.segmentId("reasoning"),
+        type: "reasoning_segment",
+        payload: { text: reasoning, index: this.segmentIndex },
+      });
+    }
+    const text = this.currentSegmentText();
+    if (text && text !== this.lastWrittenSegmentText) {
+      this.lastWrittenSegmentText = text;
+      await this.store.upsertRunEventBySegmentId({
+        runId: this.opts.runId,
+        segmentId: this.segmentId("text"),
+        type: "text_segment",
+        payload: { text, index: this.segmentIndex },
+      });
+    }
+  }
+
+  /** Non-blocking segment write: one upsert in flight, latest snapshot wins
+   *  (mirrors scheduleFlush so the stream loop is never blocked on the store). */
+  private scheduleSegmentFlush(): void {
+    if (this.opts.silent) {
+      return;
+    }
+    if (this.segmentInflight) {
+      this.segmentTrailingQueued = true;
+      return;
+    }
+    this.segmentInflight = this.writeSegments()
+      .catch((error) => {
+        console.error("streamBridge segment flush failed", error);
+        // Allow the next flush to re-send the (unchanged) snapshot.
+        this.lastWrittenSegmentText = "";
+        this.lastWrittenSegmentReasoning = "";
+      })
+      .finally(() => {
+        this.segmentInflight = null;
+        if (this.segmentTrailingQueued) {
+          this.segmentTrailingQueued = false;
+          this.scheduleSegmentFlush();
+        }
+      });
+  }
+
+  /** Blocking drain of the segment pipeline + a final upsert of the snapshot. */
+  private async flushSegments(): Promise<void> {
+    if (this.opts.silent) {
+      return;
+    }
+    while (this.segmentInflight) {
+      await this.segmentInflight;
+    }
+    await this.writeSegments();
+  }
+
+  /**
+   * A main-thread tool ends the current segment. Flush it (so its seq is
+   * committed BEFORE the tool_start the PreToolUse hook is waiting to write),
+   * release each tool's ordering barrier, then open the next segment. Barriers
+   * release even in silent mode (the hooks still wait); only the writes are
+   * skipped.
+   */
+  private async closeSegmentAtToolBoundary(toolUseIds: string[]): Promise<void> {
+    await this.flushSegments();
+    if (this.opts.coordinator) {
+      for (const toolUseId of toolUseIds) {
+        this.opts.coordinator.release(toolUseId);
+      }
+    }
+    this.segmentIndex += 1;
+    this.segmentTextOffset = this.currentText.length;
+    this.segmentReasoningOffset = this.currentReasoning.length;
+    this.lastWrittenSegmentText = "";
+    this.lastWrittenSegmentReasoning = "";
+  }
+
   /** Blocking drain: awaits in-flight writes and persists the latest snapshot. */
   async flush(): Promise<void> {
     if (this.opts.silent) {
@@ -249,15 +396,17 @@ export class StreamBridge {
     while (this.inflight) {
       await this.inflight;
     }
-    if (!this.isDirty()) {
-      return;
+    if (this.isDirty()) {
+      const text = this.currentText;
+      const reasoning = this.currentReasoning;
+      this.lastFlushedText = text;
+      this.lastFlushedReasoning = reasoning;
+      this.lastFlushAt = this.now();
+      await this.store.updateMessageText(this.opts.messageId, text, reasoning || undefined);
     }
-    const text = this.currentText;
-    const reasoning = this.currentReasoning;
-    this.lastFlushedText = text;
-    this.lastFlushedReasoning = reasoning;
-    this.lastFlushAt = this.now();
-    await this.store.updateMessageText(this.opts.messageId, text, reasoning || undefined);
+    // Always close out the final answer segment (it may have grown since the
+    // last scheduled flush, or never been written if it was a no-tool turn).
+    await this.flushSegments();
   }
 
   /** Final state after the stream ends (or is interrupted). */

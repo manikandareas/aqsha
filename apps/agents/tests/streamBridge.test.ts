@@ -19,6 +19,7 @@ async function setup(flushChars = 5) {
     messageId: message.messageId,
     flushMs: 1_000_000, // effectively disabled; flushes via char threshold
     flushChars,
+    turnKey: "turn1",
     now: () => now,
   });
   return { store, bridge, messageId: message.messageId, advance: (ms: number) => (now += ms) };
@@ -106,6 +107,7 @@ describe("StreamBridge", () => {
       messageId: message.messageId,
       flushMs: 1_000_000,
       flushChars: 1, // every delta is flush-worthy
+      turnKey: "turn1",
       now: () => 0,
     });
 
@@ -192,6 +194,61 @@ describe("StreamBridge", () => {
       message: { content: [{ type: "thinking", thinking: "subagent thought" }] },
     });
     expect(bridge.currentReasoning).toBe("");
+  });
+
+  it("emits coalesced answer segments for a no-tool turn (one row per kind)", async () => {
+    const { store, bridge } = await setup(5);
+    await bridge.handle({
+      type: "stream_event",
+      event: { delta: { type: "thinking_delta", thinking: "Berpikir dulu." } },
+    });
+    await bridge.handle({
+      type: "stream_event",
+      event: { delta: { type: "text_delta", text: "Halo " } },
+    });
+    await bridge.handle({
+      type: "stream_event",
+      event: { delta: { type: "text_delta", text: "dunia jawaban" } },
+    });
+    await bridge.flush();
+    const events = await store.listRunEvents("run1");
+    const reasoning = events.filter((e) => e.type === "reasoning_segment");
+    const text = events.filter((e) => e.type === "text_segment");
+    // Coalesced: ONE row per kind across many deltas, re-patched in place.
+    expect(reasoning).toHaveLength(1);
+    expect(text).toHaveLength(1);
+    expect(JSON.parse(reasoning[0]!.payloadJson).text).toBe("Berpikir dulu.");
+    expect(JSON.parse(text[0]!.payloadJson).text).toBe("Halo dunia jawaban");
+    // Reasoning is written first → lower seq than the text it precedes.
+    expect(reasoning[0]!.seq).toBeLessThan(text[0]!.seq);
+  });
+
+  it("writes no segment events in silent mode", async () => {
+    const store = new MemoryStore();
+    await store.upsertThread({ threadId: "t1", ownerUserId: "u1", agentKind: "lite" });
+    const message = await store.createMessage({
+      threadId: "t1",
+      ownerUserId: "u1",
+      role: "assistant",
+      text: "",
+      status: "streaming",
+    });
+    const bridge = new StreamBridge(store, {
+      runId: "run1",
+      threadId: "t1",
+      messageId: message.messageId,
+      flushMs: 0,
+      flushChars: 1,
+      turnKey: "turn1",
+      silent: true,
+      now: () => 0,
+    });
+    await bridge.handle({
+      type: "stream_event",
+      event: { delta: { type: "text_delta", text: "teks fase senyap" } },
+    });
+    await bridge.flush();
+    expect(await store.listRunEvents("run1")).toHaveLength(0);
   });
 
   it("maps the result message into the run summary", async () => {

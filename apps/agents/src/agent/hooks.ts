@@ -10,6 +10,7 @@ import {
   sanitizeToolResult,
   toolResponseIsError,
 } from "./activitySanitizers";
+import type { SegmentCoordinator } from "./segmentCoordinator";
 import {
   EXECUTE_ARTIFACT_TOOL_NAME,
   logicalToolName,
@@ -107,21 +108,46 @@ export async function executeArtifactGateAllows(
   return { allowed: true };
 }
 
+// Safety net for the ordering barrier: a main-thread tool waits at most this
+// long for the bridge to close the preceding answer segment before it records
+// its tool_start anyway (the bridge normally releases within a few ms; this only
+// trips on a dropped message or a cancelled run).
+const SEGMENT_BARRIER_TIMEOUT_MS = 3_000;
+
 export function buildRunHooks(input: {
   store: AgentStore;
   runId: string;
   threadId: string;
+  /**
+   * Answer-stream Fase 1 ordering barrier. When present, a MAIN-THREAD tool's
+   * PreToolUse waits for the bridge to close the preceding segment before it
+   * records tool_start, so `seq(segment) < seq(tool_start)` despite the SDK's
+   * eager message production. Omitted in dev/tests that don't assert ordering.
+   */
+  coordinator?: SegmentCoordinator;
 }): RunHooks {
-  const { store, runId, threadId } = input;
+  const { store, runId, threadId, coordinator } = input;
 
-  const preToolUse: HookCallbackLike = async (hookInput, toolUseID) => {
+  const preToolUse: HookCallbackLike = async (hookInput, toolUseID, context) => {
     const toolName = hookInput.tool_name ?? "";
     const logical = logicalToolName(toolName);
     const toolUseId = toolUseID ?? hookInput.tool_use_id;
+    const parentAgentId = stringField(hookInput, "agent_id", "agentId");
+    // Main-thread tools order behind their preceding answer segment; sub-agent
+    // tools (parentAgentId set) nest under the sub-agent node, not the main
+    // timeline, so they never wait on a main-thread segment. The abort signal
+    // (fired on cancel) bails the wait early so a cancelled run records no late
+    // tool_start.
+    if (coordinator && !parentAgentId) {
+      await coordinator.awaitSegmentClosed(
+        toolUseId,
+        SEGMENT_BARRIER_TIMEOUT_MS,
+        context?.signal,
+      );
+    }
     const inputSummary = sanitizeToolInput(logical, hookInput.tool_input);
     const payload: ToolStartPayload = { toolName: logical };
     if (toolUseId) payload.toolUseId = toolUseId;
-    const parentAgentId = stringField(hookInput, "agent_id", "agentId");
     if (parentAgentId) payload.parentAgentId = parentAgentId;
     if (Object.keys(inputSummary).length > 0) payload.inputSummary = inputSummary;
     await store.appendRunEvent({ runId, type: "tool_start", payload });

@@ -160,6 +160,19 @@ export interface AgentStore {
     type: RunEventType;
     payload: Record<string, unknown>;
   }): Promise<RunEventRecord>;
+  /**
+   * Upsert an answer segment event keyed by `segmentId` (answer-stream redesign
+   * Fase 1): the FIRST emit inserts a new row with the next seq; later emits of
+   * the same `segmentId` PATCH that row's payload and KEEP its seq, so a growing
+   * text/reasoning segment is one coalesced row, not one per delta. Used only for
+   * `text_segment` / `reasoning_segment`.
+   */
+  upsertRunEventBySegmentId(input: {
+    runId: string;
+    segmentId: string;
+    type: RunEventType;
+    payload: Record<string, unknown>;
+  }): Promise<RunEventRecord>;
   listRunEvents(runId: string): Promise<RunEventRecord[]>;
 
   // ── interactions (HITL, plan §5.3) ───────────────────────────────────────

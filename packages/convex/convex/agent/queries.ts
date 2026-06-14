@@ -13,7 +13,13 @@ import { findThread } from "./service/model";
 const MAX_THREADS = 50;
 const MAX_MESSAGES = 100;
 const MAX_RUNS = 10;
-const MAX_EVENTS_PER_RUN = 200;
+// Matches the service-side cap (`MAX_RUN_EVENTS = 500` in service.ts): events are
+// taken via `by_run_seq` in ASCENDING seq, so a run that exceeds this would drop
+// its HIGHEST-seq events. The answer-stream redesign emits ordered answer segments
+// into the same per-run seq space and the final answer is the last `text_segment`
+// (highest seq), so dropping the tail would truncate the answer. 500 gives headroom
+// for heavy deep-research runs (5 phases, sub-agent tools, segment pairs).
+const MAX_EVENTS_PER_RUN = 500;
 const MAX_INTERACTIONS = 100;
 
 async function ownedThread(

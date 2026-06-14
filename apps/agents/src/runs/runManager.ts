@@ -15,6 +15,7 @@ import {
   priorOutputsFrom,
 } from "../agent/deepPhases";
 import { buildRunHooks } from "../agent/hooks";
+import { SegmentCoordinator } from "../agent/segmentCoordinator";
 import {
   buildCanUseTool,
   InteractionBroker,
@@ -342,6 +343,12 @@ export class RunManager {
             includeHistory: needsHistoryRebuild,
           });
 
+    // One coordinator + turnKey per dispatch: the bridge releases tool barriers
+    // and tags its answer segments; the hooks wait on those barriers so
+    // reasoning↔tool ordering is precise (answer-stream Fase 1).
+    const coordinator = new SegmentCoordinator();
+    const turnKey = randomUUID();
+
     const abortController = new AbortController();
     const queryOptions = buildAstraQueryOptions({
       config,
@@ -350,7 +357,7 @@ export class RunManager {
       phase,
       resumeSessionId,
       mcpServer,
-      hooks: buildRunHooks({ store, runId, threadId: request.threadId }),
+      hooks: buildRunHooks({ store, runId, threadId: request.threadId, coordinator }),
       canUseTool: buildCanUseTool({
         broker: this.broker,
         runId,
@@ -366,6 +373,8 @@ export class RunManager {
       messageId: assistantMessage.messageId,
       flushMs: config.streamFlushMs,
       flushChars: config.streamFlushChars,
+      turnKey,
+      coordinator,
     });
 
     const activeRun: ActiveRun = { runId, canceled: false };
@@ -632,6 +641,10 @@ export class RunManager {
           config,
           nextCitationNumber: createCitationCounter(),
         };
+        // Per-phase coordinator + turnKey (each phase is its own query() +
+        // bridge); the turnKey keeps every phase's segment ids distinct.
+        const coordinator = new SegmentCoordinator();
+        const turnKey = randomUUID();
         const abortController = new AbortController();
         const options = buildAstraQueryOptions({
           config,
@@ -640,7 +653,7 @@ export class RunManager {
           phase: turnPhase,
           resumeSessionId: resumingThisPhase ? existing?.sdkSessionId : undefined,
           mcpServer: buildAqshaMcpServer(toolCtx),
-          hooks: buildRunHooks({ store, runId, threadId: request.threadId }),
+          hooks: buildRunHooks({ store, runId, threadId: request.threadId, coordinator }),
           canUseTool: buildCanUseTool({
             broker: this.broker,
             runId,
@@ -660,6 +673,8 @@ export class RunManager {
           messageId: assistantMessage.messageId,
           flushMs: config.streamFlushMs,
           flushChars: config.streamFlushChars,
+          turnKey,
+          coordinator,
           silent: !policy.streamsToChat,
         });
 

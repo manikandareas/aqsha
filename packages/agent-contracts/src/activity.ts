@@ -882,3 +882,61 @@ export function activityEventsFromRun(run: AgentRunRow): ActivityEvent[] {
 
   return [runNode, ...topLevel.map(toClean)];
 }
+
+// ── ordered answer timeline (answer-stream redesign Fase 1) ──────────────────
+//
+// `activityEventsFromRun` gives the activity TREE (run header + nested
+// tools/sub-agents/phases) but NOT the assistant text/reasoning — those used to
+// live as two unordered blobs on `chatMessages`. With Fase 1 the bridge also
+// emits `text_segment` / `reasoning_segment` events into the same per-run seq
+// space (one coalesced row per contiguous segment), and a PreToolUse ordering
+// barrier guarantees a segment's seq precedes the tool that followed it. Merging
+// the segments with the top-level activity nodes BY SEQ therefore reconstructs
+// the precise reasoning → tool → reasoning → … → answer order.
+
+export type OrderedPart =
+  | { kind: "reasoning"; seq: number; index?: number; text: string }
+  | { kind: "text"; seq: number; index?: number; text: string }
+  | { kind: "node"; seq: number; node: ActivityEvent };
+
+const SEGMENT_TYPES = new Set(["text_segment", "reasoning_segment"]);
+
+/**
+ * Flatten a run into an ordered list of answer parts (reasoning/text segments +
+ * top-level activity nodes), by seq. A sub-agent's tools stay nested inside its
+ * node — only top-level nodes interleave with the segments. Returns `null` for a
+ * LEGACY run that carries no segment events, so the caller falls back to the
+ * two-blob `uiMessageFromRow` + `activityEventsFromRun` rendering. Pure.
+ */
+export function orderedPartsFromRun(run: AgentRunRow): OrderedPart[] | null {
+  const hasSegments = run.events.some((event) => SEGMENT_TYPES.has(event.type));
+  if (!hasSegments) return null;
+
+  const parts: OrderedPart[] = [];
+
+  // Top-level activity nodes (drop the run header at index 0); their nested
+  // children ride along inside each node.
+  const [, ...topLevel] = activityEventsFromRun(run);
+  for (const node of topLevel) {
+    parts.push({ kind: "node", seq: node.seq, node });
+  }
+
+  // Answer segments: one coalesced row each, carrying the full chunk text.
+  for (const event of run.events) {
+    if (!SEGMENT_TYPES.has(event.type)) continue;
+    const payload = safeParse(event.payloadJson);
+    const text = stringOf(payload, "text");
+    if (!text) continue;
+    const index = numberOf(payload, "index");
+    parts.push({
+      kind: event.type === "reasoning_segment" ? "reasoning" : "text",
+      seq: event.seq,
+      ...(index !== undefined ? { index } : {}),
+      text,
+    });
+  }
+
+  // Shared seq space → a stable sort interleaves segments and nodes precisely.
+  parts.sort((a, b) => a.seq - b.seq);
+  return parts;
+}

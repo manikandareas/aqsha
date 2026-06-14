@@ -28,6 +28,10 @@ export class MemoryStore implements AgentStore {
   private messages = new Map<string, MessageRecord>();
   private runs = new Map<string, RunRecord>();
   private runEvents = new Map<string, RunEventRecord[]>();
+  // runId → segmentId → the (mutable) event record, so an answer-segment upsert
+  // patches the existing row in place and keeps its seq (mirrors the Convex
+  // `by_run_segment` lookup).
+  private runEventSegments = new Map<string, Map<string, RunEventRecord>>();
   private interactions = new Map<string, PendingInteraction>();
   private interactionWaiters = new Map<string, Array<(row: PendingInteraction) => void>>();
   private artifacts = new Map<string, ArtifactSnapshot & { ownerUserId: string; deleted?: boolean }>();
@@ -223,6 +227,34 @@ export class MemoryStore implements AgentStore {
     };
     events.push(event);
     this.runEvents.set(input.runId, events);
+    return event;
+  }
+
+  async upsertRunEventBySegmentId(input: {
+    runId: string;
+    segmentId: string;
+    type: RunEventRecord["type"];
+    payload: Record<string, unknown>;
+  }): Promise<RunEventRecord> {
+    const segments = this.runEventSegments.get(input.runId) ?? new Map();
+    const existing = segments.get(input.segmentId);
+    if (existing) {
+      // Patch in place: keep seq + createdAt, refresh the (grown) payload.
+      existing.payloadJson = JSON.stringify(input.payload);
+      return existing;
+    }
+    const events = this.runEvents.get(input.runId) ?? [];
+    const event: RunEventRecord = {
+      runId: input.runId,
+      seq: events.length,
+      type: input.type,
+      payloadJson: JSON.stringify(input.payload),
+      createdAt: this.now(),
+    };
+    events.push(event);
+    this.runEvents.set(input.runId, events);
+    segments.set(input.segmentId, event);
+    this.runEventSegments.set(input.runId, segments);
     return event;
   }
 

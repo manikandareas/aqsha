@@ -67,6 +67,14 @@ export const runEventTypeSchema = z.enum([
   "phase_start",
   "phase_done",
   "error",
+  // Ordered answer segments (answer-stream redesign Fase 1): a contiguous run of
+  // assistant text / reasoning between two tool boundaries, emitted with a
+  // stable `segmentId` so the streaming bridge re-patches ONE row per segment
+  // (keeping its seq) instead of one row per delta. Interleaving these with the
+  // tool/subagent nodes by seq reconstructs the precise reasoning↔tool↔answer
+  // order that the two text/reasoning blobs on `chatMessages` cannot.
+  "text_segment",
+  "reasoning_segment",
 ]);
 export type RunEventType = z.infer<typeof runEventTypeSchema>;
 
@@ -122,6 +130,18 @@ export const subagentPayloadSchema = z.object({
   agentId: z.string().optional(),
 });
 export type SubagentPayload = z.infer<typeof subagentPayloadSchema>;
+
+// `text_segment` / `reasoning_segment` payload (answer-stream redesign Fase 1).
+// `text` is the segment's contiguous chunk (re-sent in full on each coalesced
+// upsert — the chunk grows, never the row count). `index` is the 0-based step
+// ordinal (segment 0 = before the first tool, segment 1 = after it, …), carried
+// for grouping a step's reasoning with its text in the view-model. The wire-
+// level `segmentId` lives on the event row (the upsert key), not in this payload.
+export const segmentPayloadSchema = z.object({
+  text: z.string(),
+  index: z.number().int().nonnegative().optional(),
+});
+export type SegmentPayload = z.infer<typeof segmentPayloadSchema>;
 
 // Final accounting persisted on agentRuns from the SDK result message.
 export const runUsageSchema = z.object({

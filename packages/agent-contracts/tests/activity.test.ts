@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { activityEventsFromRun, type ActivityEvent, filterByVisibility } from "../src/activity";
+import {
+  activityEventsFromRun,
+  type ActivityEvent,
+  filterByVisibility,
+  orderedPartsFromRun,
+  type OrderedPart,
+} from "../src/activity";
 import type { AgentRunRow } from "../src/uiAdapters";
 
 type RawEvent = AgentRunRow["events"][number];
@@ -31,6 +37,101 @@ function makeRow(partial: Partial<AgentRunRow> = {}): AgentRunRow {
     ...partial,
   };
 }
+
+describe("orderedPartsFromRun", () => {
+  it("returns null for a legacy run that carries no answer segments", () => {
+    const row = makeRow({
+      status: "completed",
+      updatedAt: 9000,
+      events: [
+        event(0, "run_status", { status: "running" }),
+        event(1, "tool_start", { toolName: "searchWeb", toolUseId: "tu1" }),
+        event(2, "tool_end", { toolName: "searchWeb", toolUseId: "tu1", status: "ok" }),
+      ],
+    });
+    expect(orderedPartsFromRun(row)).toBeNull();
+  });
+
+  it("interleaves reasoning/text segments with tool nodes by seq", () => {
+    const row = makeRow({
+      status: "completed",
+      updatedAt: 9000,
+      events: [
+        event(0, "run_status", { status: "running" }),
+        event(1, "reasoning_segment", { text: "Saya perlu mencari", index: 0 }),
+        event(2, "text_segment", { text: "Mari cari sumber", index: 0 }),
+        event(3, "tool_start", { toolName: "searchWeb", toolUseId: "tu1" }),
+        event(4, "tool_end", {
+          toolName: "searchWeb",
+          toolUseId: "tu1",
+          status: "ok",
+          resultSummary: { resultCount: 2 },
+        }),
+        event(5, "text_segment", { text: "Jawaban akhir.", index: 1 }),
+      ],
+    });
+    const parts = orderedPartsFromRun(row);
+    expect(parts).not.toBeNull();
+    expect(parts!.map((p) => p.kind)).toEqual(["reasoning", "text", "node", "text"]);
+    // The tool_start+tool_end fold into ONE node part with its description.
+    const toolPart = parts![2] as Extract<OrderedPart, { kind: "node" }>;
+    expect(toolPart.node.type).toBe("tool");
+    expect(toolPart.node.status).toBe("completed");
+    expect(toolPart.node.description).toBe("2 hasil");
+    // Strict seq order across the merged streams.
+    expect(parts!.map((p) => p.seq)).toEqual([1, 2, 3, 5]);
+    expect((parts![0] as Extract<OrderedPart, { kind: "reasoning" }>).text).toBe(
+      "Saya perlu mencari",
+    );
+    expect((parts![3] as Extract<OrderedPart, { kind: "text" }>).text).toBe("Jawaban akhir.");
+  });
+
+  it("keeps a sub-agent's tools nested inside its node, not as top-level parts", () => {
+    const row = makeRow({
+      status: "completed",
+      mode: "deep",
+      updatedAt: 9000,
+      events: [
+        event(0, "run_status", { status: "running", mode: "deep" }),
+        event(1, "phase_start", { phase: "literature" }),
+        event(2, "subagent_start", { agentType: "literature-searcher", agentId: "a1" }),
+        event(3, "tool_start", {
+          toolName: "searchArxiv",
+          toolUseId: "tu2",
+          parentAgentId: "a1",
+        }),
+        event(4, "tool_end", { toolName: "searchArxiv", toolUseId: "tu2", status: "ok" }),
+        event(5, "subagent_stop", { agentType: "literature-searcher", agentId: "a1" }),
+        event(6, "phase_done", { phase: "literature" }),
+        event(7, "text_segment", { text: "Laporan akhir.", index: 0 }),
+      ],
+    });
+    const parts = orderedPartsFromRun(row);
+    expect(parts).not.toBeNull();
+    // Only the phase node + the answer text are top-level; the sub-agent and its
+    // tool are nested under the phase, never flattened into the parts list.
+    expect(parts!.map((p) => p.kind)).toEqual(["node", "text"]);
+    const phasePart = parts![0] as Extract<OrderedPart, { kind: "node" }>;
+    expect(phasePart.node.type).toBe("phase");
+    const subagent = phasePart.node.children?.[0];
+    expect(subagent?.type).toBe("subagent");
+    expect(subagent?.children?.[0]?.type).toBe("tool");
+  });
+
+  it("orders reasoning before text within the same step", () => {
+    const row = makeRow({
+      status: "completed",
+      updatedAt: 9000,
+      events: [
+        event(0, "run_status", { status: "running" }),
+        event(1, "reasoning_segment", { text: "Pikiran", index: 0 }),
+        event(2, "text_segment", { text: "Tulisan", index: 0 }),
+      ],
+    });
+    const parts = orderedPartsFromRun(row)!;
+    expect(parts.map((p) => p.kind)).toEqual(["reasoning", "text"]);
+  });
+});
 
 describe("activityEventsFromRun", () => {
   it("emits a running run header for a freshly started run with no events", () => {
