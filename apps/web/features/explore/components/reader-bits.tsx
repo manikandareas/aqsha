@@ -2,6 +2,7 @@
 
 import type { FeedItem } from "@aqsha/convex/feed";
 import { ExternalLinkIcon, SparklesIcon } from "@aqsha/ui/icons";
+import Image from "next/image";
 import Link from "next/link";
 import { VerdictBadge } from "@/features/discovery/components/discovery-visuals";
 import { cn } from "@/lib/utils";
@@ -21,13 +22,12 @@ export function ReaderHeroMedia({
   return (
     <div
       className={cn(
-        "aspect-[16/9] w-full overflow-hidden rounded-[14px] border border-border bg-muted bg-cover bg-center",
+        "relative aspect-[16/9] w-full overflow-hidden rounded-[14px] border border-border bg-muted",
         className,
       )}
-      style={{ backgroundImage: `url("${imageUrl}")` }}
-      role="img"
-      aria-label={title}
-    />
+    >
+      <Image src={imageUrl} alt={title} fill unoptimized sizes="(max-width: 768px) 100vw, 900px" className="object-cover" />
+    </div>
   );
 }
 
@@ -88,8 +88,8 @@ export function ReaderArticleBody({
         className,
       )}
     >
-      {paragraphs.map((paragraph, index) => (
-        <p key={index} className="whitespace-pre-line">
+      {paragraphs.map((paragraph) => (
+        <p key={paragraph} className="whitespace-pre-line">
           {paragraph}
         </p>
       ))}
@@ -102,14 +102,13 @@ export function ReaderArticleBody({
 function toParagraphs(text: string): string[] {
   const byBlankLine = text
     .split(/\n{2,}/)
-    .map((part) => part.trim())
-    .filter(Boolean);
+    .flatMap((part) => { const t = part.trim(); return t ? [t] : []; });
   if (byBlankLine.length > 1) return byBlankLine;
   const byLine = text
     .split(/\n+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-  return byLine.length > 0 ? byLine : [text.trim()].filter(Boolean);
+    .flatMap((part) => { const t = part.trim(); return t ? [t] : []; });
+  const trimmed = text.trim();
+  return byLine.length > 0 ? byLine : (trimmed ? [trimmed] : []);
 }
 
 // ── "Discover more" related grid ──────────────────────────────────────────
@@ -148,12 +147,9 @@ function ReaderRelatedCard({
   return (
     <Link href={href} className="group flex flex-col focus:outline-none">
       {item.imageUrl ? (
-        <div
-          className="aspect-[16/10] w-full overflow-hidden rounded-[10px] border border-border bg-muted bg-cover bg-center transition-opacity group-hover:opacity-90"
-          style={{ backgroundImage: `url("${item.imageUrl}")` }}
-          role="img"
-          aria-label={title}
-        />
+        <div className="relative aspect-[16/10] w-full overflow-hidden rounded-[10px] border border-border bg-muted transition-opacity group-hover:opacity-90">
+          <Image src={item.imageUrl} alt={title} fill unoptimized sizes="(max-width: 640px) 50vw, 25vw" className="object-cover" />
+        </div>
       ) : item.kind === "claim" && item.claim ? (
         <div className="flex aspect-[16/10] w-full items-center justify-center rounded-[10px] border border-border bg-muted">
           <VerdictBadge verdict={item.claim.verdict} />

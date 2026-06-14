@@ -18,8 +18,9 @@ import {
   type VerdictBreakdown,
 } from "../utils/discovery-format";
 import type { DiscoveryView } from "../hooks/use-discovery-nav";
-import { feedDetailHref } from "./discovery-item-card";
-import { Donut, Sparkline, VERDICT_FILL, VERDICT_STYLE } from "./discovery-visuals";
+import { feedDetailHref } from "../utils/discovery-card-utils";
+import { VERDICT_FILL, VERDICT_STYLE } from "../utils/discovery-verdict-style";
+import { Donut, Sparkline } from "./discovery-visuals";
 
 // The fixed second sidebar for the discovery surface — a lean "widget deck" of
 // data-backed modules derived entirely from the items already loaded. Each view

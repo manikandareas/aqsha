@@ -14,11 +14,9 @@ import {
   ReaderSourceCard,
 } from "../components/reader-bits";
 import { relativeTime } from "../utils/reader-format";
-import {
-  ReaderDetailLoading,
-  ReaderDetailShell,
-  ReaderDetailState,
-} from "./reader-detail-shell";
+import { ReaderDetailShell } from "./reader-detail-shell";
+import { ReaderDetailLoading } from "./reader-detail-loading";
+import { ReaderDetailState } from "./reader-detail-state";
 
 function buildNewsSeed(item: FeedItem) {
   const title = item.titleId ?? item.title;

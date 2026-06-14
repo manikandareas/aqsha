@@ -48,7 +48,7 @@ export function ConsensusMeter({ consensus }: { consensus: FeedConsensus }) {
   );
 }
 
-export function StanceChip({
+function StanceChip({
   stance,
 }: {
   stance: "yes" | "no" | "possibly" | "neutral";

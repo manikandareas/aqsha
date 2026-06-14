@@ -9,7 +9,7 @@ import {
   panelHeaderPaddingClass,
 } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
-import { AccessDeniedState } from "./home-states";
+import { AccessDeniedState } from "./access-denied-state";
 import { ThreadChatSurface } from "./chat-thread-state";
 import { ThreadDeleteActions } from "./thread-actions-menu";
 import { ThreadRecentSwitcher } from "./thread-recent-switcher";

@@ -16,6 +16,7 @@ import {
   ThumbsDownIcon,
   TrendingUpIcon,
 } from "@aqsha/ui/icons";
+import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import {
@@ -25,7 +26,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { encodePaperRef } from "@/features/explore/utils/paper-ref";
 import {
   domainFromUrl,
   relativeTime,
@@ -34,9 +34,15 @@ import {
 import { cn } from "@/lib/utils";
 import { formatCitationCount } from "../utils/discovery-format";
 import {
+  buildSourceLine,
+  feedDetailHref,
+  kindLabel,
+  kindPanelClass,
+} from "../utils/discovery-card-utils";
+import { VERDICT_STYLE } from "../utils/discovery-verdict-style";
+import {
   Sparkline,
   StanceTally,
-  VERDICT_STYLE,
   VerdictBadge,
 } from "./discovery-visuals";
 
@@ -488,15 +494,9 @@ function CardMedia({
 }) {
   if (item.imageUrl) {
     return (
-      <div
-        className={cn(
-          "overflow-hidden rounded-[12px] bg-muted bg-cover bg-center",
-          className,
-        )}
-        style={{ backgroundImage: `url("${item.imageUrl}")` }}
-        role="img"
-        aria-label={title}
-      />
+      <div className={cn("relative overflow-hidden rounded-[12px] bg-muted", className)}>
+        <Image src={item.imageUrl} alt={title} fill unoptimized sizes="(max-width: 640px) 100vw, 400px" className="object-cover" />
+      </div>
     );
   }
   if (item.kind === "claim" && item.claim) {
@@ -581,18 +581,6 @@ export function WhyRelevantTrigger({
   );
 }
 
-// Internal detail-page href for a feed item (paper → /[ref], news → /n/[id],
-// claim → /f/[id]); null when there is no internal surface (fall back to the
-// external source url). Feed-sourced items always carry `_id`.
-export function feedDetailHref(item: DiscoveryItem): string | null {
-  if (item.kind === "paper" && item.paperKey) {
-    return `/app/explore/${encodePaperRef(item.paperKey)}`;
-  }
-  if (item.kind === "news" && item._id) return `/app/explore/n/${item._id}`;
-  if (item.kind === "claim" && item._id) return `/app/explore/f/${item._id}`;
-  return null;
-}
-
 function CardLink({
   item,
   children,
@@ -648,36 +636,6 @@ export function IconButton({
   );
 }
 
-export function kindLabel(kind: FeedItem["kind"]): string {
-  switch (kind) {
-    case "paper":
-      return "Paper";
-    case "news":
-      return "Berita";
-    case "claim":
-      return "Klaim";
-    case "topic":
-      return "Topik";
-    default:
-      return "Ide";
-  }
-}
-
-export function kindPanelClass(kind: FeedItem["kind"]): string {
-  switch (kind) {
-    case "claim":
-      return "bg-gradient-to-br from-coral-soft to-lemon-soft";
-    case "topic":
-      return "bg-gradient-to-br from-sky-soft to-lavender-soft";
-    case "paper":
-      return "bg-gradient-to-br from-sky-soft to-mint-soft";
-    case "idea":
-      return "bg-gradient-to-br from-lavender-soft to-mint-soft";
-    default:
-      return "bg-gradient-to-br from-lemon-soft to-coral-soft";
-  }
-}
-
 function kindAvatarClass(kind: FeedItem["kind"]): string {
   switch (kind) {
     case "claim":
@@ -691,35 +649,6 @@ function kindAvatarClass(kind: FeedItem["kind"]): string {
     default:
       return "bg-lemon-soft text-lemon-foreground";
   }
-}
-
-export function buildSourceLine(item: DiscoveryItem): string {
-  const parts: string[] = [];
-  if (item.kind === "paper" && item.authors && item.authors.length > 0) {
-    parts.push(item.authors.slice(0, 4).join(", "));
-  } else {
-    parts.push(item.sourceLabel);
-  }
-  const date = formatItemDate(item);
-  if (date) parts.push(date);
-  return parts.join(" · ");
-}
-
-function formatItemDate(item: DiscoveryItem): string {
-  if (item.kind === "paper" && item.year && !item.publishedAt) {
-    return String(item.year);
-  }
-  if (item.publishedAt) {
-    try {
-      return new Date(item.publishedAt).toLocaleDateString("id-ID", {
-        year: "numeric",
-        month: "short",
-      });
-    } catch {
-      return "";
-    }
-  }
-  return item.year ? String(item.year) : "";
 }
 
 function displayTitle(item: DiscoveryItem, lang: "id" | "en"): string {

@@ -10,10 +10,8 @@ import {
 import Link from "next/link";
 import { useState } from "react";
 import { ConsensusMeter } from "@/features/explore/components/consensus-meter";
-import {
-  VERDICT_STYLE,
-  VerdictBadge,
-} from "@/features/discovery/components/discovery-visuals";
+import { VERDICT_STYLE } from "@/features/discovery/utils/discovery-verdict-style";
+import { VerdictBadge } from "@/features/discovery/components/discovery-visuals";
 import { encodePaperRef } from "@/features/explore/utils/paper-ref";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
 import {
@@ -28,11 +26,9 @@ import {
   ReaderSourceCard,
 } from "../components/reader-bits";
 import { formatAbsoluteDate, relativeTime } from "../utils/reader-format";
-import {
-  ReaderDetailLoading,
-  ReaderDetailShell,
-  ReaderDetailState,
-} from "./reader-detail-shell";
+import { ReaderDetailShell } from "./reader-detail-shell";
+import { ReaderDetailLoading } from "./reader-detail-loading";
+import { ReaderDetailState } from "./reader-detail-state";
 
 type FactClaim = NonNullable<FeedItem["claim"]>;
 
@@ -125,18 +121,19 @@ function FactDetailContent({
       });
       if (result.ok) {
         setConsensus(result.consensus);
+        setConsensusLoading(false);
       } else {
         setConsensusError(
           result.reason === "empty"
             ? "Tidak ada paper relevan untuk dinilai."
             : "Konsensus tidak bisa dihitung sekarang.",
         );
+        setConsensusLoading(false);
       }
     } catch (caught) {
       setConsensusError(
         readableConvexErrorMessage(caught, "Gagal menghitung konsensus."),
       );
-    } finally {
       setConsensusLoading(false);
     }
   };

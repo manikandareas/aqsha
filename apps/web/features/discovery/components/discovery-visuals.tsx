@@ -1,68 +1,8 @@
 "use client";
 
 import type { FeedVerdict } from "@aqsha/convex/feed";
-import {
-  AlertCircleIcon,
-  CheckCircle2Icon,
-  HelpCircleIcon,
-  InfoIcon,
-  XCircleIcon,
-} from "@aqsha/ui/icons";
-import type { ComponentType } from "react";
 import { cn } from "@/lib/utils";
-
-// ── Verdict badge (graduated taxonomy, evidence-first) ────────────────────
-type VerdictStyle = {
-  label: string;
-  icon: ComponentType<{ className?: string }>;
-  className: string;
-  accent: string; // strip / dot color
-};
-
-export const VERDICT_STYLE: Record<FeedVerdict, VerdictStyle> = {
-  supported: {
-    label: "Fakta",
-    icon: CheckCircle2Icon,
-    className: "bg-mint-soft text-mint-foreground border-mint-soft-border",
-    accent: "bg-mint",
-  },
-  partially_supported: {
-    label: "Sebagian benar",
-    icon: AlertCircleIcon,
-    className: "bg-lemon-soft text-lemon-foreground border-lemon-soft-border",
-    accent: "bg-lemon",
-  },
-  needs_context: {
-    label: "Perlu konteks",
-    icon: InfoIcon,
-    className: "bg-coral-soft text-coral-foreground border-coral-soft-border",
-    accent: "bg-coral",
-  },
-  unverified: {
-    label: "Belum terverifikasi",
-    icon: HelpCircleIcon,
-    className: "bg-muted text-muted-foreground border-border",
-    accent: "bg-muted-foreground/40",
-  },
-  contradicted: {
-    label: "Hoaks",
-    icon: XCircleIcon,
-    className: "bg-destructive/10 text-destructive border-destructive/25",
-    accent: "bg-destructive",
-  },
-};
-
-// SVG stroke colors for the fact-balance donut. `VERDICT_STYLE[v].accent` is a
-// Tailwind `bg-*` class (fine for legend swatches), not a value usable as an SVG
-// stroke — so the donut maps verdicts to raw CSS-var colors instead. `unverified`
-// uses the full muted tone (not the /40 swatch) so the ring stays legible.
-export const VERDICT_FILL: Record<FeedVerdict, string> = {
-  supported: "var(--mint)",
-  partially_supported: "var(--lemon)",
-  needs_context: "var(--coral)",
-  unverified: "var(--muted-foreground)",
-  contradicted: "var(--destructive)",
-};
+import { VERDICT_STYLE } from "../utils/discovery-verdict-style";
 
 export function VerdictBadge({
   verdict,
@@ -163,7 +103,7 @@ export function Sparkline({
 }
 
 // ── Relevance dot (Scholar Inbox style triage signal) ─────────────────────
-export function RelevanceDot({ score }: { score?: number }) {
+function RelevanceDot({ score }: { score?: number }) {
   if (score === undefined || score <= 0) return null;
   const opacity = Math.max(0.35, Math.min(1, score / 100));
   return (
@@ -205,10 +145,6 @@ export function ScoreBar({
 }
 
 // ── Donut (segmented ring for small distributions) ────────────────────────
-// One <circle> per segment sharing the same geometry; each is a single dash of
-// length `fraction × circumference`, shifted by the cumulative offset. Rotated
-// -90° so segments begin at 12 o'clock. A faint track keeps it reading as a ring
-// even when nearly empty. Caller maps categories → CSS-var colors before passing.
 export function Donut({
   segments,
   total,
@@ -227,7 +163,7 @@ export function Donut({
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
 
-  let consumed = 0; // cumulative fraction placed so far
+  let consumed = 0;
   const arcs =
     total > 0
       ? segments.map((segment) => {

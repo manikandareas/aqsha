@@ -14,7 +14,7 @@ import {
 } from "@aqsha/convex/feed";
 import { CheckCircle2Icon, SparklesIcon } from "@aqsha/ui/icons";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { AppLoadingOverlay } from "@/components/app-loading-overlay";
 import { ExploreChatShell } from "@/features/explore/pages/explore-chat-shell";
 import { IdeaDialog, type IdeaSeed } from "@/features/discovery/components/idea-dialog";
@@ -40,7 +40,7 @@ import {
   DiscoveryToolbar,
   DiscoveryViewTabs,
 } from "../components/discovery-toolbar";
-import { VERDICT_STYLE } from "../components/discovery-visuals";
+import { VERDICT_STYLE } from "../utils/discovery-verdict-style";
 import {
   DISCOVERY_LANG,
   useDiscoveryNav,
@@ -62,10 +62,7 @@ export function DiscoveryPage() {
   const [nav, setNav] = useDiscoveryNav();
 
   // Feed (reactive) drives Brief (all kinds, incl. claims); Papers (action) below.
-  const feedArgs = useMemo(
-    () => (nav.view === "papers" ? ("skip" as const) : {}),
-    [nav.view],
-  );
+  const feedArgs = nav.view === "papers" ? ("skip" as const) : {};
 
   const feedData = useConvexQueryData(api.feed.getFeed, feedArgs);
   const papersQuery = useConvexActionQueryWithKey(
@@ -80,16 +77,13 @@ export function DiscoveryPage() {
         }
       : "skip",
   );
-  const paperItemRefs = useMemo<DiscoveryItemRef[]>(
-    () =>
-      nav.view === "papers"
-        ? (papersQuery.data?.items ?? emptyPapers).map((paper) => ({
-            kind: "paper" as const,
-            paperKey: paper.key,
-          }))
-        : [],
-    [nav.view, papersQuery.data],
-  );
+  const paperItemRefs: DiscoveryItemRef[] =
+    nav.view === "papers"
+      ? (papersQuery.data?.items ?? emptyPapers).map((paper) => ({
+          kind: "paper" as const,
+          paperKey: paper.key,
+        }))
+      : [];
   const savedRefsData = useConvexQueryData(
     api.feed.getSavedDiscoveryRefs,
     nav.view === "papers" ? { itemRefs: paperItemRefs } : "skip",
@@ -124,48 +118,41 @@ export function DiscoveryPage() {
   const [ideaOpen, setIdeaOpen] = useState(false);
   const [workspaceItem, setWorkspaceItem] = useState<DiscoveryItem | null>(null);
 
-  const savedRefs = useMemo(() => {
+  const savedRefs = (() => {
     const set = new Set<string>();
     for (const ref of (savedRefsData ?? []) as DiscoverySavedRef[]) {
       set.add(savedRefKey(ref));
     }
     return set;
-  }, [savedRefsData]);
-  const hiddenRefs = useMemo(() => {
+  })();
+  const hiddenRefs = (() => {
     const set = new Set<string>();
     for (const ref of (hiddenRefsData ?? []) as DiscoverySavedRef[]) {
       set.add(savedRefKey(ref));
     }
     return set;
-  }, [hiddenRefsData]);
+  })();
 
-  const rawItems = useMemo<DiscoveryItem[]>(() => {
+  const rawItems: DiscoveryItem[] = (() => {
     if (nav.view === "papers") {
       return (papersQuery.data?.items ?? emptyPapers).map((paper) =>
         paperToDiscoveryItem(paper, savedRefs),
       );
     }
     return ((feedData ?? []) as FeedItem[]).map(feedItemToDiscoveryItem);
-  }, [nav.view, papersQuery.data, feedData, savedRefs]);
+  })();
 
-  const items = useMemo(
-    () =>
-      rawItems.filter((item) => {
-        const key = discoveryItemKey(item);
-        return !hiddenIds.has(key) && !hiddenRefs.has(key);
-      }),
-    [rawItems, hiddenIds, hiddenRefs],
-  );
-  const topTopics = useMemo(() => deriveTopTopics(rawItems, 8), [rawItems]);
+  const items = rawItems.filter((item) => {
+    const key = discoveryItemKey(item);
+    return !hiddenIds.has(key) && !hiddenRefs.has(key);
+  });
+  const topTopics = deriveTopTopics(rawItems, 8);
   // Right-rail aggregates — derived from the items already loaded (zero backend).
   // Each derive returns an empty/zero result for views that lack the data, so the
   // matching rail module hides itself.
-  const verdictBreakdown = useMemo(
-    () => deriveVerdictBreakdown(rawItems),
-    [rawItems],
-  );
-  const topCited = useMemo(() => deriveTopCited(rawItems, 4), [rawItems]);
-  const topicMomentum = useMemo(() => deriveTopicMomentum(rawItems, 4), [rawItems]);
+  const verdictBreakdown = deriveVerdictBreakdown(rawItems);
+  const topCited = deriveTopCited(rawItems, 4);
+  const topicMomentum = deriveTopicMomentum(rawItems, 4);
 
   const isLoading =
     nav.view === "papers" ? papersQuery.isLoading : feedData === undefined;
@@ -205,6 +192,12 @@ export function DiscoveryPage() {
     const id = discoveryItemKey(item);
     if (relevanceNotes.has(id) || whyLoading.has(id)) return;
     setWhyLoading((prev) => new Set(prev).add(id));
+    const clearLoading = () =>
+      setWhyLoading((prev) => {
+        const nextSet = new Set(prev);
+        nextSet.delete(id);
+        return nextSet;
+      });
     try {
       const result = await explainRelevance({
         title: item.title,
@@ -214,14 +207,9 @@ export function DiscoveryPage() {
       if (result.ok) {
         setRelevanceNotes((prev) => new Map(prev).set(id, result.reason));
       }
+      clearLoading();
     } catch {
-      // keep the trigger available to retry
-    } finally {
-      setWhyLoading((prev) => {
-        const nextSet = new Set(prev);
-        nextSet.delete(id);
-        return nextSet;
-      });
+      clearLoading();
     }
   };
 
@@ -267,30 +255,9 @@ export function DiscoveryPage() {
     onWhyRelevant: (item) => void handleWhyRelevant(item),
   };
 
-  const renderStandard = (item: DiscoveryItem) => {
-    const shared = {
-      item,
-      lang: DISCOVERY_LANG,
-      saved: isSaved(item),
-      busy: busyKey === discoveryItemKey(item),
-      relevanceNote: relevanceNotes.get(discoveryItemKey(item)),
-      whyLoading: whyLoading.has(discoveryItemKey(item)),
-      handlers,
-    };
-    // Claim cards use a lean, verdict-forward layout in the Brief masonry.
-    return item.kind === "claim" ? (
-      <DiscoveryClaimCard {...shared} />
-    ) : (
-      <DiscoveryStandardCard {...shared} />
-    );
-  };
-
   const isBrief = nav.view === "brief";
   const hero = isBrief ? items[0] : undefined;
-  const briefRows = useMemo(
-    () => (isBrief ? buildBriefRows(items.slice(1)) : []),
-    [isBrief, items],
-  );
+  const briefRows = isBrief ? buildBriefRows(items.slice(1)) : [];
 
   return (
     <ExploreChatShell
@@ -327,7 +294,17 @@ export function DiscoveryPage() {
                 <DiscoveryEmptyState view={nav.view} />
               ) : isBrief ? (
                 <div className="space-y-10">
-                  {hero ? renderHeroCard(hero) : null}
+                  {hero ? (
+                    <DiscoveryHeroCard
+                      item={hero}
+                      lang={DISCOVERY_LANG}
+                      saved={isSaved(hero)}
+                      busy={busyKey === discoveryItemKey(hero)}
+                      relevanceNote={relevanceNotes.get(discoveryItemKey(hero))}
+                      whyLoading={whyLoading.has(discoveryItemKey(hero))}
+                      handlers={handlers}
+                    />
+                  ) : null}
                   {briefRows.map((row) =>
                     row.type === "grid" ? (
                       <div
@@ -335,12 +312,43 @@ export function DiscoveryPage() {
                         className="grid grid-cols-1 gap-x-5 gap-y-8 @md/feed:grid-cols-2 @2xl/feed:grid-cols-3"
                       >
                         {row.items.map((item) => (
-                          <div key={discoveryItemKey(item)}>{renderStandard(item)}</div>
+                          <div key={discoveryItemKey(item)}>
+                            {item.kind === "claim" ? (
+                              <DiscoveryClaimCard
+                                item={item}
+                                lang={DISCOVERY_LANG}
+                                saved={isSaved(item)}
+                                busy={busyKey === discoveryItemKey(item)}
+                                relevanceNote={relevanceNotes.get(discoveryItemKey(item))}
+                                whyLoading={whyLoading.has(discoveryItemKey(item))}
+                                handlers={handlers}
+                              />
+                            ) : (
+                              <DiscoveryStandardCard
+                                item={item}
+                                lang={DISCOVERY_LANG}
+                                saved={isSaved(item)}
+                                busy={busyKey === discoveryItemKey(item)}
+                                relevanceNote={relevanceNotes.get(discoveryItemKey(item))}
+                                whyLoading={whyLoading.has(discoveryItemKey(item))}
+                                handlers={handlers}
+                              />
+                            )}
+                          </div>
                         ))}
                       </div>
                     ) : (
                       <div key={row.key} className="border-t border-border/60 pt-10">
-                        {renderFeatureCard(row.item, row.side)}
+                        <DiscoveryFeatureCard
+                          item={row.item}
+                          imageSide={row.side}
+                          lang={DISCOVERY_LANG}
+                          saved={isSaved(row.item)}
+                          busy={busyKey === discoveryItemKey(row.item)}
+                          relevanceNote={relevanceNotes.get(discoveryItemKey(row.item))}
+                          whyLoading={whyLoading.has(discoveryItemKey(row.item))}
+                          handlers={handlers}
+                        />
                       </div>
                     ),
                   )}
@@ -401,35 +409,6 @@ export function DiscoveryPage() {
       />
     </ExploreChatShell>
   );
-
-  function renderHeroCard(item: DiscoveryItem) {
-    return (
-      <DiscoveryHeroCard
-        item={item}
-        lang={DISCOVERY_LANG}
-        saved={isSaved(item)}
-        busy={busyKey === discoveryItemKey(item)}
-        relevanceNote={relevanceNotes.get(discoveryItemKey(item))}
-        whyLoading={whyLoading.has(discoveryItemKey(item))}
-        handlers={handlers}
-      />
-    );
-  }
-
-  function renderFeatureCard(item: DiscoveryItem, side: "left" | "right") {
-    return (
-      <DiscoveryFeatureCard
-        item={item}
-        imageSide={side}
-        lang={DISCOVERY_LANG}
-        saved={isSaved(item)}
-        busy={busyKey === discoveryItemKey(item)}
-        relevanceNote={relevanceNotes.get(discoveryItemKey(item))}
-        whyLoading={whyLoading.has(discoveryItemKey(item))}
-        handlers={handlers}
-      />
-    );
-  }
 }
 
 type BriefRow =

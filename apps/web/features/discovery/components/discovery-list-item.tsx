@@ -13,17 +13,21 @@ import {
   ThumbsDownIcon,
 } from "@aqsha/ui/icons";
 import type { DiscoveryItem } from "@aqsha/convex/feed";
+import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { formatCitationCount, topicBadgeClass } from "../utils/discovery-format";
-import { StanceTally, VERDICT_STYLE, VerdictBadge } from "./discovery-visuals";
+import { StanceTally, VerdictBadge } from "./discovery-visuals";
+import { VERDICT_STYLE } from "../utils/discovery-verdict-style";
 import {
   buildSourceLine,
-  CardProps,
   feedDetailHref,
-  IconButton,
   kindLabel,
   kindPanelClass,
+} from "../utils/discovery-card-utils";
+import {
+  CardProps,
+  IconButton,
   RetractionFlag,
   WhyRelevantNote,
   WhyRelevantTrigger,
@@ -233,12 +237,9 @@ function ListThumbnail({
   }
   if (item.kind === "news" && item.imageUrl) {
     return (
-      <div
-        className="h-[98px] w-[72px] rounded-[6px] border border-border bg-muted bg-cover bg-center shadow-sm sm:h-[104px] sm:w-[76px]"
-        style={{ backgroundImage: `url("${item.imageUrl}")` }}
-        role="img"
-        aria-label={item.title}
-      />
+      <div className="relative h-[98px] w-[72px] overflow-hidden rounded-[6px] border border-border bg-muted shadow-sm sm:h-[104px] sm:w-[76px]">
+        <Image src={item.imageUrl} alt={item.title} fill unoptimized sizes="76px" className="object-cover" />
+      </div>
     );
   }
   if (item.kind === "claim" && item.claim) {
