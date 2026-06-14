@@ -166,6 +166,11 @@ function failedTitle(label: Label): string {
 
 const MAX_ERROR_DESCRIPTION = 200;
 
+// Cut at the FIRST line terminator of any kind (LF, CR, U+2028/U+2029, U+0085)
+// so an interior break can't push a second line into the timeline — matches the
+// source-side `safeLabel` clamp (apps/agents activitySanitizers.ts).
+const LINE_TERMINATOR = /[\n\r\u0085\u2028\u2029]/;
+
 /**
  * Defense-in-depth for error copy: keep only the first line and bound the
  * length so a stray multi-line / verbose backend error never floods or smuggles
@@ -173,7 +178,7 @@ const MAX_ERROR_DESCRIPTION = 200;
  */
 function safeErrorText(message: string | undefined): string | undefined {
   if (!message) return undefined;
-  const firstLine = message.split("\n", 1)[0]?.trim() ?? "";
+  const firstLine = message.split(LINE_TERMINATOR, 1)[0]?.trim() ?? "";
   if (!firstLine) return undefined;
   return firstLine.length > MAX_ERROR_DESCRIPTION
     ? `${firstLine.slice(0, MAX_ERROR_DESCRIPTION - 1)}…`

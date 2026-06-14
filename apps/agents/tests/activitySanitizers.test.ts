@@ -20,15 +20,25 @@ function textResponse(text: string) {
 }
 
 describe("sanitizeToolInput", () => {
-  it("never copies the raw query or secrets for searchWeb", () => {
+  it("surfaces the clamped agent query for searchWeb but never secrets (D6)", () => {
     const out = sanitizeToolInput("searchWeb", {
-      query: "kueri rahasia pengguna",
+      query: "meta-analisis olahraga dan kognisi",
       apiKey: "sk-secret-123",
       limit: 5,
     });
-    expect(out).toEqual({});
-    expect(JSON.stringify(out)).not.toContain("kueri rahasia");
+    // D6: the model-composed query rides through (single field), nothing else.
+    expect(out).toEqual({ query: "meta-analisis olahraga dan kognisi" });
     expect(JSON.stringify(out)).not.toContain("sk-secret-123");
+    expect(out).not.toHaveProperty("apiKey");
+    expect(out).not.toHaveProperty("limit");
+  });
+
+  it("single-lines and bounds a long / multi-line search query (D6 clamp)", () => {
+    const long = `${"a".repeat(200)}\nbaris kedua bocor`;
+    const out = sanitizeToolInput("searchArxiv", { query: long });
+    expect(typeof out.query).toBe("string");
+    expect((out.query as string).length).toBeLessThanOrEqual(120);
+    expect(JSON.stringify(out)).not.toContain("baris kedua bocor");
   });
 
   it("exposes only the DOI for lookupDoi", () => {
@@ -53,6 +63,19 @@ describe("sanitizeToolInput", () => {
       name: `Riset\nbaris kedua bocor`,
     });
     expect(out.name).toBe("Riset");
+  });
+
+  it("cuts at every line terminator, not just \\n (CR, U+2028, U+2029, NEL)", () => {
+    // An interior CR / Unicode line/paragraph separator / NEL must NOT smuggle a
+    // second line through an allow-listed scalar (Fase 0 adversarial review).
+    const separators = ["\r", "\r\n", "\u2028", "\u2029", "\u0085"];
+    for (const sep of separators) {
+      const out = sanitizeToolInput("createWorkspace", {
+        name: `Riset${sep}baris kedua bocor`,
+      });
+      expect(out.name).toBe("Riset");
+      expect(JSON.stringify(out)).not.toContain("baris kedua bocor");
+    }
   });
 
   it("counts askUser questions without copying their text", () => {
@@ -122,6 +145,37 @@ describe("sanitizeToolResult", () => {
     expect(JSON.stringify(out)).not.toContain("extracted claim");
   });
 
+  it("exposes only the opaque artifact id + action for executeArtifact, never the body", () => {
+    const out = sanitizeToolResult(
+      "executeArtifact",
+      jsonResponse({
+        ok: true,
+        artifactId: "k17abc99",
+        action: "create",
+        content: "isi dokumen rahasia yang sangat panjang",
+      }),
+    );
+    expect(out).toEqual({ artifactId: "k17abc99", action: "create" });
+    expect(JSON.stringify(out)).not.toContain("isi dokumen rahasia");
+  });
+
+  it("rejects a non-id artifactId and out-of-range action (no free text on id scalar)", () => {
+    // Prose where an id is expected is dropped — only the id-safe token survives.
+    expect(
+      sanitizeToolResult(
+        "executeArtifact",
+        jsonResponse({ artifactId: "judul dokumen rahasia", action: "update" }),
+      ),
+    ).toEqual({ action: "update" });
+    // An action outside the allow-list enum is dropped.
+    expect(
+      sanitizeToolResult(
+        "executeArtifact",
+        jsonResponse({ artifactId: "k1", action: "exfiltrate" }),
+      ),
+    ).toEqual({ artifactId: "k1" });
+  });
+
   it("default-denies unknown tools and malformed responses", () => {
     expect(sanitizeToolResult("searchWeb", { content: [{ type: "text", text: "{" }] }))
       .toEqual({});
@@ -184,6 +238,59 @@ describe("sanitizer → normalizer key contract (cross-package)", () => {
     expect(toolNodeFor("verifyStatistics", summary)?.description).toBe(
       "3 pemeriksaan, perlu ditinjau",
     );
+  });
+
+  it("executeArtifact result scalars reach node.metadata for the artifact card", () => {
+    // The artifact card (plan §7) resolves its row via node.metadata.artifactId
+    // and labels create/update via node.metadata.action — assert both survive the
+    // sanitizer → normalizer pipe end to end.
+    const summary = sanitizeToolResult(
+      "executeArtifact",
+      jsonResponse({ ok: true, artifactId: "k42xyz", action: "update" }),
+    );
+    const node = toolNodeFor("executeArtifact", summary);
+    expect(node?.metadata?.artifactId).toBe("k42xyz");
+    expect(node?.metadata?.action).toBe("update");
+  });
+
+  it("searchWeb query input reaches node.metadata for the expanded tool row (D6)", () => {
+    // The clamped query is carried in tool_start's inputSummary; assert it lands
+    // in node.metadata where the expanded ToolRow body (plan §6) reads it.
+    const inputSummary = sanitizeToolInput("searchWeb", {
+      query: "efek tidur terhadap memori",
+    });
+    const row: AgentRunRow = {
+      runId: "r",
+      status: "completed",
+      mode: "normal",
+      agentKind: "lite",
+      createdAt: 1000,
+      updatedAt: 5000,
+      events: [
+        {
+          id: "r:1",
+          seq: 1,
+          type: "tool_start",
+          payloadJson: JSON.stringify({ toolName: "searchWeb", toolUseId: "tu", inputSummary }),
+          createdAt: 2000,
+        },
+        {
+          id: "r:2",
+          seq: 2,
+          type: "tool_end",
+          payloadJson: JSON.stringify({
+            toolName: "searchWeb",
+            toolUseId: "tu",
+            status: "ok",
+            resultSummary: sanitizeToolResult("searchWeb", jsonResponse([{ title: "a" }])),
+          }),
+          createdAt: 4000,
+        },
+      ],
+    };
+    const node = activityEventsFromRun(row).find((n) => n.type === "tool");
+    expect(node?.metadata?.query).toBe("efek tidur terhadap memori");
+    expect(node?.description).toBe("1 hasil");
   });
 });
 

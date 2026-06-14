@@ -135,7 +135,7 @@ describe("buildRunHooks — Fase 2 enrichment (sanitized payloads)", () => {
     };
   }
 
-  it("tool_start carries toolUseId + a sanitized inputSummary, never the raw query", async () => {
+  it("tool_start carries toolUseId + the clamped agent query (D6), never other secrets", async () => {
     const store = new MemoryStore();
     const hooks = buildRunHooks({ store, runId: "run1", threadId: "t1" });
     const preToolUse = hooks.PreToolUse?.[0]?.hooks[0]!;
@@ -144,7 +144,7 @@ describe("buildRunHooks — Fase 2 enrichment (sanitized payloads)", () => {
       {
         hook_event_name: "PreToolUse",
         tool_name: qualifiedToolName("searchWeb"),
-        tool_input: { query: "kueri rahasia pengguna", apiKey: "sk-secret-123" },
+        tool_input: { query: "meta-analisis olahraga dan kognisi", apiKey: "sk-secret-123" },
       },
       "tu_web",
       signal,
@@ -160,8 +160,13 @@ describe("buildRunHooks — Fase 2 enrichment (sanitized payloads)", () => {
     );
 
     const starts = await payloadOf(store, "run1", "tool_start");
-    // searchWeb has no input sanitizer → only the name + id, no query/secret.
-    expect(starts[0]).toEqual({ toolName: "searchWeb", toolUseId: "tu_web" });
+    // D6: searchWeb surfaces the model-composed query (clamped) — and nothing
+    // else from the input (the api key never rides along).
+    expect(starts[0]).toEqual({
+      toolName: "searchWeb",
+      toolUseId: "tu_web",
+      inputSummary: { query: "meta-analisis olahraga dan kognisi" },
+    });
     // lookupDoi surfaces only the (public) DOI identifier.
     expect(starts[1]).toEqual({
       toolName: "lookupDoi",
@@ -173,7 +178,6 @@ describe("buildRunHooks — Fase 2 enrichment (sanitized payloads)", () => {
       expect(toolStartPayloadSchema.safeParse(start).success).toBe(true);
     }
     const serialized = JSON.stringify(starts);
-    expect(serialized).not.toContain("kueri rahasia pengguna");
     expect(serialized).not.toContain("sk-secret-123");
   });
 

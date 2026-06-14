@@ -15,6 +15,13 @@ import type { ActivityScalar, ActivityScalarRecord } from "@aqsha/agent-contract
 
 const MAX_LABEL_LENGTH = 120;
 
+// Every line terminator that should END the single line: LF, CR, CRLF (either
+// of CR/LF cuts), U+2028 line separator, U+2029 paragraph separator, U+0085 NEL.
+// An LF-only cut left an interior \r or the Unicode separators able to smuggle a
+// second line through an allow-listed scalar — a "single-line" gap caught in the
+// Fase 0 adversarial review. `.trim()` after the cut drops a leading/trailing CR.
+const LINE_TERMINATOR = /[\n\r\u0085\u2028\u2029]/;
+
 /**
  * Bound + single-line a free-text scalar so a long/multiline value cannot
  * smuggle detail through an allow-listed key (e.g. an artifact title that the
@@ -22,7 +29,7 @@ const MAX_LABEL_LENGTH = 120;
  */
 function safeLabel(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
-  const firstLine = value.split("\n", 1)[0]?.trim() ?? "";
+  const firstLine = value.split(LINE_TERMINATOR, 1)[0]?.trim() ?? "";
   if (!firstLine) return undefined;
   return firstLine.length > MAX_LABEL_LENGTH
     ? `${firstLine.slice(0, MAX_LABEL_LENGTH - 1)}…`
@@ -33,6 +40,24 @@ function safeCount(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value >= 0
     ? Math.trunc(value)
     : undefined;
+}
+
+const MAX_ID_LENGTH = 128;
+const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+/**
+ * Accept an OPAQUE identifier only: a bounded, single-token string of id-safe
+ * characters (the strict superset of Convex's url-safe document ids). Rejects
+ * whitespace / punctuation / prose so a non-id string — a stray title, a path,
+ * or smuggled detail — can never reach the client through an id-typed scalar.
+ * An opaque id is safe to surface (it points at a row the owner already owns);
+ * free text is not.
+ */
+function safeId(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > MAX_ID_LENGTH) return undefined;
+  return ID_PATTERN.test(trimmed) ? trimmed : undefined;
 }
 
 function safeEnum<T extends string>(
@@ -127,16 +152,30 @@ type ToolSanitizer = {
 const searchResult = (response: unknown): ActivityScalarRecord =>
   compact({ resultCount: safeCount(responseArrayLength(response)) });
 
-const SANDBOX_VERDICTS = ["passed", "passed_with_notes", "needs_review", "failed"] as const;
+/**
+ * The agent-generated search query (single-line, clamped — D6, plan §6). This
+ * is the query the MODEL composed for the tool call ("Mencari …"), not the
+ * user's private prompt — but it still funnels through this chokepoint and is
+ * clamped to a single bounded line so nothing larger can ride along.
+ */
+const searchInput = (input: Record<string, unknown>): ActivityScalarRecord =>
+  compact({ query: safeLabel(input.query) });
 
-// Every key emitted below is consumed by `describeTool` in the view-model
-// (packages/agent-contracts/src/activity.ts) — keep that 1:1 so the chokepoint
-// never produces scalars that are never rendered. An end-to-end test
-// (apps/agents/tests/activitySanitizers.test.ts) bridges the two to catch drift.
+const SANDBOX_VERDICTS = ["passed", "passed_with_notes", "needs_review", "failed"] as const;
+const ARTIFACT_ACTIONS = ["create", "update", "delete"] as const;
+
+// Every key emitted below has a renderer in the view-model — keep that 1:1 so
+// the chokepoint never produces scalars that are never shown. Most keys feed the
+// inline chip via `describeTool` (packages/agent-contracts/src/activity.ts);
+// the answer-stream redesign adds keys read by the expanded tool row (`query`)
+// and the clickable artifact card (`artifactId`, `action`, plan §6–§7). An
+// end-to-end test (apps/agents/tests/activitySanitizers.test.ts) bridges the
+// sanitizer output to its consumers to catch drift.
 const TOOL_SANITIZERS: Record<string, ToolSanitizer> = {
-  // Research — only the result COUNT is exposed; never the query text.
-  searchWeb: { result: searchResult },
-  searchArxiv: { result: searchResult },
+  // Research — the clamped agent query (D6) + the result COUNT. The raw
+  // candidate list (titles, urls, snippets) is never exposed.
+  searchWeb: { input: searchInput, result: searchResult },
+  searchArxiv: { input: searchInput, result: searchResult },
   lookupDoi: {
     // A DOI is a public identifier, safe to surface; the result is the
     // resolved candidate count.
@@ -168,6 +207,19 @@ const TOOL_SANITIZERS: Record<string, ToolSanitizer> = {
   },
   executeArtifact: {
     input: (input) => compact({ title: safeLabel(input.title) }),
+    // The write result carries the opaque artifact id + which action ran. These
+    // are LOAD-BEARING for the clickable artifact card (plan §7): the id lets the
+    // card open the artifact's side panel, the action drives "Dibuat"/"Diperbarui".
+    // The document body is never in the result and so can never leak here.
+    result: (response) => {
+      const parsed = responseJson(response);
+      if (!parsed || typeof parsed !== "object") return {};
+      const value = parsed as { artifactId?: unknown; action?: unknown };
+      return compact({
+        artifactId: safeId(value.artifactId),
+        action: safeEnum(value.action, ARTIFACT_ACTIONS),
+      });
+    },
   },
   createWorkspace: {
     input: (input) => compact({ name: safeLabel(input.name) }),

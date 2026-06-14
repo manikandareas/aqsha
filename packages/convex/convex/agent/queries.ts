@@ -192,7 +192,9 @@ export const listArtifacts = query({
         currentVersionId: doc.currentVersionId
           ? String(doc.currentVersionId)
           : undefined,
+        source: doc.source,
         createdAt: doc.createdAt,
+        updatedAt: doc.updatedAt,
       }));
   },
 });

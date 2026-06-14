@@ -51,7 +51,7 @@ export default async function RootLayout({
       className={`${inter.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full">
-        <ClerkProvider appearance={{ baseTheme: shadcn }}>
+        <ClerkProvider appearance={{ theme: shadcn }}>
           <ThemeProvider
             attribute="class"
             defaultTheme="system"
