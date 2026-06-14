@@ -156,12 +156,8 @@ function messagePillClass(tone: "context" | "default" | "deep") {
     "mr-1 inline-flex translate-y-[-1px] items-center rounded-[5px] px-1 align-middle font-semibold leading-[18px] underline decoration-2 underline-offset-4";
   switch (tone) {
     case "default":
-      return cn(base, "bg-primary/10 text-primary decoration-primary/55");
     case "deep":
-      return cn(
-        base,
-        "bg-lavender-soft text-lavender-foreground decoration-lavender-foreground/55",
-      );
+      return cn(base, "bg-primary/10 text-primary decoration-primary/55");
     default:
       return cn(base, "bg-foreground/8 text-foreground decoration-foreground/30");
   }

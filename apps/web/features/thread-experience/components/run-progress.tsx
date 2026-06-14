@@ -2,103 +2,26 @@
 
 import { type ActivityEvent } from "@aqsha/agent-contracts";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@aqsha/ui/components/accordion";
-import {
   CheckIcon,
   ClockIcon,
   ShieldIcon,
   XCircleIcon,
 } from "@aqsha/ui/icons";
-import { useState } from "react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import type { ResearchRun } from "../types";
 import { formatCompactDuration } from "../utils/datetime";
 import { isArtifactToolNode } from "../utils/turn-model";
-import { SubagentCard, SubagentRunningChip } from "./subagent-card";
+import { SubagentCard } from "./subagent-card";
 import { ToolRow } from "./tool-row";
 import { ChatArtifactCard } from "./chat-artifact-card";
 
 // Activity-timeline primitives (plan §5.2) shared by the unified `AssistantTurn`:
-// the run header summary, deep-phase accordion, nested activity rows, and the
-// status icon / tone / duration helpers. The legacy sibling `AgentRunBlock` was
-// folded into `AssistantTurn` in the answer-stream redesign (Fase 2) — these are
-// the reusable pieces it left behind.
-
-// Deep runs: each top-level phase node is a collapsible accordion section; any
-// non-phase top-level node renders inline. A live deep run emits phases one at a
-// time, so the accordion is CONTROLLED: phases start open and a newly-arrived
-// phase auto-opens, but a phase the user collapsed stays collapsed across later
-// phase boundaries. We track only the user's explicit collapses; open = all
-// phases minus those.
-export function DeepPhaseTimeline({
-  nodes,
-  devMode,
-  run,
-}: {
-  nodes: ActivityEvent[];
-  devMode: boolean;
-  // The run is passed only to derive the sub-agent "N berjalan" chip duration;
-  // the timeline itself reads everything from `nodes`.
-  run?: ResearchRun;
-}) {
-  const phaseIds = nodes.flatMap((node) => (node.type === "phase" ? [node.id] : []));
-  const [collapsed, setCollapsed] = useState<string[]>([]);
-  const openIds = phaseIds.filter((id) => !collapsed.includes(id));
-  const durationLabel = run ? formatRunDuration(run) : undefined;
-  if (phaseIds.length === 0) {
-    return (
-      <ol className="mt-2 grid gap-1.5 pl-0">
-        {nodes.map((node) => (
-          <ActivityNodeRow key={node.id} node={node} devMode={devMode} />
-        ))}
-      </ol>
-    );
-  }
-  return (
-    <Accordion
-      type="multiple"
-      value={openIds}
-      onValueChange={(open) =>
-        setCollapsed(phaseIds.filter((id) => !open.includes(id)))
-      }
-      className="mt-2"
-    >
-      {nodes.map((node) =>
-        node.type === "phase" ? (
-          <AccordionItem key={node.id} value={node.id} className="border-b-0">
-            <AccordionTrigger className="py-1.5 text-[13px] font-medium text-foreground no-underline hover:no-underline">
-              <NodeLine node={node} devMode={devMode} />
-            </AccordionTrigger>
-            <AccordionContent className="pb-1 pt-0">
-              {node.children && node.children.length > 0 ? (
-                <ol className="grid gap-1.5 border-l border-border/70 pl-3">
-                  {node.children.map((child) => (
-                    <ActivityNodeRow key={child.id} node={child} devMode={devMode} />
-                  ))}
-                </ol>
-              ) : null}
-              <SubagentRunningChip
-                nodes={node.children ?? []}
-                durationLabel={durationLabel}
-                className="mt-1.5"
-              />
-            </AccordionContent>
-          </AccordionItem>
-        ) : (
-          <ol key={node.id} className="grid gap-1.5 py-1.5 pl-0">
-            <ActivityNodeRow node={node} devMode={devMode} />
-          </ol>
-        ),
-      )}
-    </Accordion>
-  );
-}
+// the nested activity rows and the status icon / tone / duration helpers. Both
+// normal and deep runs now render through one flat `ActivityNodeRow` tree (a deep
+// phase is just a heading row with indented children) — the legacy accordion-only
+// deep timeline was removed so the two modes share one visual language.
 
 export function ActivityNodeRow({
   node,
@@ -179,7 +102,7 @@ export function NodeLine({ node, devMode }: { node: ActivityEvent; devMode: bool
         </span>
       </span>
       {devDetail ? (
-        <span className="mt-0.5 block pl-5 font-mono text-[11px] text-muted-foreground/80">
+        <span className="mt-0.5 block pl-5 font-mono text-[11px] text-muted-foreground">
           {devDetail}
         </span>
       ) : null}
@@ -212,19 +135,22 @@ export function NodeStatusIcon({
     case "cancelled":
       return <XCircleIcon className={cn(className, "text-muted-foreground")} />;
     case "waiting_approval":
-      return <ShieldIcon className={cn(className, "text-lavender")} />;
+      return <ShieldIcon className={cn(className, "text-primary")} />;
     default:
       return <ClockIcon className={cn(className, "text-muted-foreground")} />;
   }
 }
 
+// A node's TITLE tone. The meaningful states (running, waiting approval, done)
+// read at full `foreground` so titles stay the anchor of each row; status itself
+// is carried by the leading icon's color, not by grey-ing the whole line. Failures
+// stay coral; pending/cancelled rows are muted to recede.
 export function toneClass(status: ActivityEvent["status"]): string {
   switch (status) {
     case "running":
     case "waiting_approval":
-      return "text-foreground";
     case "completed":
-      return "text-ink-soft";
+      return "text-foreground";
     case "failed":
       return "text-coral-foreground";
     case "cancelled":

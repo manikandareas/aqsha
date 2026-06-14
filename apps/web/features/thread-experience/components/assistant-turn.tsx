@@ -1,8 +1,18 @@
 "use client";
 
 import { type ActivityEvent, filterByVisibility } from "@aqsha/agent-contracts";
-import { AlertCircleIcon, Code2Icon, FolderTreeIcon } from "@aqsha/ui/icons";
+import {
+  AlertCircleIcon,
+  ChevronDownIcon,
+  Code2Icon,
+  FolderTreeIcon,
+} from "@aqsha/ui/icons";
 import { Fragment, useState, type ReactNode } from "react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import { Reasoning } from "@/components/ai-elements/reasoning";
 import { Shimmer } from "@/components/ai-elements/shimmer";
@@ -21,7 +31,6 @@ import {
 } from "./message-row";
 import {
   ActivityNodeRow,
-  DeepPhaseTimeline,
   NodeLine,
   findHeadlineNode,
   formatRunDuration,
@@ -61,6 +70,9 @@ export function AssistantTurn({
   hitlDisabled?: boolean;
 }) {
   const [devMode, setDevMode] = useState(false);
+  // null = auto (expanded while the run is active, collapsed once it settles);
+  // a non-null value is the user's manual override and wins for the turn's life.
+  const [manualProcessOpen, setManualProcessOpen] = useState<boolean | null>(null);
 
   const isActive = run ? isRunActive(run) : false;
   const isDeep = run?.mode === "deep";
@@ -104,7 +116,6 @@ export function AssistantTurn({
   // ── ordered timeline → React elements ──────────────────────────────────────
   const elements: ReactNode[] = [];
   let nodeBuffer: ReactNode[] = [];
-  let phaseBuffer: ActivityEvent[] = [];
   let listSeq = 0;
   let hitlRendered = false;
   const flushNodes = () => {
@@ -116,35 +127,16 @@ export function AssistantTurn({
     );
     nodeBuffer = [];
   };
-  const flushPhases = () => {
-    if (phaseBuffer.length === 0) return;
-    elements.push(
-      <DeepPhaseTimeline
-        key={`phases-${listSeq++}`}
-        nodes={phaseBuffer}
-        devMode={devMode}
-        run={run}
-      />,
-    );
-    phaseBuffer = [];
-  };
 
-  // Top-level sub-agents are a defensive case (today they only appear nested in a
-  // deep-research phase, where DeepPhaseTimeline renders the chip). When one does
-  // surface at the top level, render the "N berjalan" chip once above the cards.
+  // Top-level sub-agents are a defensive case (today they only appear nested under
+  // a deep-research phase row). When one does surface at the top level, render the
+  // "N berjalan" chip once above the cards.
   const topLevelSubagentNodes = parts.flatMap((part) =>
     part.kind === "subagent" ? [part.node] : [],
   );
   let subagentChipShown = false;
 
   for (const part of parts) {
-    if (part.kind === "phase" && isDeep) {
-      flushNodes();
-      const node = visible(part.node);
-      if (node) phaseBuffer.push(node);
-      continue;
-    }
-    flushPhases();
     if (part.kind === "reasoning") {
       flushNodes();
       elements.push(
@@ -209,11 +201,10 @@ export function AssistantTurn({
         </li>,
       );
     } else {
-      // system / non-deep phase → nested activity row.
+      // phase (both modes) / system → flat heading row with indented children.
       nodeBuffer.push(<ActivityNodeRow key={part.id} node={node} devMode={devMode} />);
     }
   }
-  flushPhases();
   flushNodes();
   // A pending HITL with no approval anchor (legacy fallback) renders at the end.
   if (hitlActions && pendingHitl.length > 0 && !hitlRendered) {
@@ -221,23 +212,60 @@ export function AssistantTurn({
     hitlRendered = true;
   }
 
+  // The whole process timeline (reasoning ↔ tools ↔ sub-agents ↔ artifacts —
+  // everything but the final answer) collapses under the run header. Auto-expanded
+  // while the run is active so live progress is visible, then auto-collapsed once
+  // it settles to keep the answer prominent; a pending approval forces it open so
+  // the HITL card can never be hidden. A manual toggle overrides the auto state.
+  const hasProcess = elements.length > 0;
+  const mustShowProcess = pendingHitl.length > 0;
+  const processOpen = mustShowProcess
+    ? true
+    : manualProcessOpen !== null
+      ? manualProcessOpen
+      : isActive;
+
+  const processTimeline = (
+    <div className="mt-2 grid gap-2 text-[13px] text-muted-foreground">
+      {elements}
+    </div>
+  );
+
   return (
     <div className="w-full min-w-0 overflow-x-hidden">
-      {run ? (
-        <RunHeader
-          run={run}
-          devMode={devMode}
-          onToggleDevMode={() => setDevMode((value) => !value)}
-          showDevToggle={hasNodeParts}
-          sourceCount={runSourceCount}
-        />
-      ) : null}
-
-      {elements.length > 0 ? (
-        <div className="mt-2 grid gap-2 text-[13px] text-muted-foreground">
-          {elements}
-        </div>
-      ) : null}
+      {run && hasProcess ? (
+        <Collapsible
+          open={processOpen}
+          onOpenChange={(next) => setManualProcessOpen(next)}
+          className="min-w-0"
+        >
+          <RunHeader
+            run={run}
+            devMode={devMode}
+            onToggleDevMode={() => setDevMode((value) => !value)}
+            showDevToggle={hasNodeParts}
+            sourceCount={runSourceCount}
+            collapsible
+            open={processOpen}
+          />
+          <CollapsibleContent className="overflow-hidden">
+            {processTimeline}
+          </CollapsibleContent>
+        </Collapsible>
+      ) : (
+        <>
+          {run ? (
+            <RunHeader
+              run={run}
+              devMode={devMode}
+              onToggleDevMode={() => setDevMode((value) => !value)}
+              showDevToggle={hasNodeParts}
+              sourceCount={runSourceCount}
+            />
+          ) : null}
+          {hasProcess ? processTimeline : null}
+        </>
+      )}
 
       {isDeep ? (
         <CitationIntegritySummary
@@ -247,7 +275,7 @@ export function AssistantTurn({
       ) : null}
 
       <Message from="assistant" className="mt-3 min-w-0 overflow-x-hidden">
-        <MessageContent className="w-full min-w-0 overflow-hidden bg-transparent p-0 text-[13px] leading-[1.55] text-ink-soft">
+        <MessageContent className="w-full min-w-0 overflow-hidden bg-transparent p-0 text-[13px] leading-[1.55] text-foreground">
           {isFailed ? (
             <div className="flex items-start gap-2 rounded-[10px] border border-coral-soft-border bg-coral-soft px-3 py-2.5 text-[13px] font-medium leading-[1.55] text-coral-foreground">
               <AlertCircleIcon className="mt-0.5 size-4 shrink-0" />
@@ -294,16 +322,21 @@ function RunHeader({
   onToggleDevMode,
   showDevToggle,
   sourceCount,
+  collapsible = false,
+  open = false,
 }: {
   run: ResearchRun;
   devMode: boolean;
   onToggleDevMode: () => void;
   showDevToggle: boolean;
   sourceCount: number;
+  // When true, the summary doubles as the trigger that collapses the process
+  // timeline below it (a chevron is appended). The dev-mode toggle and source
+  // chip stay as sibling controls so they are not nested inside the button.
+  collapsible?: boolean;
+  open?: boolean;
 }) {
   const isActive = isRunActive(run);
-  const isDeep = run.mode === "deep";
-  const accentClass = isDeep ? "text-lavender" : "text-primary";
   const activity = run.activity ?? [];
   const runNode = activity.find((node) => node.type === "run");
   const nonRunNodes = activity.filter((node) => node.type !== "run");
@@ -335,10 +368,28 @@ function RunHeader({
   return (
     <div className="text-[13px] text-muted-foreground">
       <div className="flex items-center gap-2">
-        {isActive ? (
+        {collapsible ? (
+          <CollapsibleTrigger className="group flex min-w-0 flex-1 items-center gap-1.5 text-left transition-colors hover:text-foreground">
+            {isActive ? (
+              <Shimmer as="span" className="min-w-0 flex-1 font-medium">
+                {summaryText}
+              </Shimmer>
+            ) : (
+              <span className="min-w-0 flex-1 font-medium text-foreground">
+                {summaryText}
+              </span>
+            )}
+            <ChevronDownIcon
+              className={cn(
+                "size-3.5 shrink-0 text-muted-foreground transition-transform duration-200",
+                open ? "rotate-180" : "rotate-0",
+              )}
+            />
+          </CollapsibleTrigger>
+        ) : isActive ? (
           <Shimmer className="min-w-0 flex-1 font-medium">{summaryText}</Shimmer>
         ) : (
-          <span className={cn("min-w-0 flex-1 font-medium", accentClass)}>
+          <span className="min-w-0 flex-1 font-medium text-foreground">
             {summaryText}
           </span>
         )}

@@ -1,16 +1,41 @@
 "use client";
 
 import { type ActivityEvent } from "@aqsha/agent-contracts";
-import { ChevronDownIcon } from "@aqsha/ui/icons";
+import { ChevronDownIcon, WrenchIcon, XCircleIcon } from "@aqsha/ui/icons";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Shimmer } from "@/components/ai-elements/shimmer";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { toolRowModel } from "../utils/turn-model";
-import { NodeStatusIcon, metadataLine, nodeDuration, toneClass } from "./run-progress";
+import { metadataLine, nodeDuration, toneClass } from "./run-progress";
+
+// A tool row is identified by a wrench glyph instead of the generic checklist
+// status icon (`NodeStatusIcon`) used elsewhere — it reads as "tool invocation"
+// at a glance. The live/failure affordances stay: a running tool keeps the
+// spinner, a failed/cancelled one keeps the error cross; every other state
+// (completed/pending) shows the wrench.
+function ToolStatusIcon({
+  status,
+  className,
+}: {
+  status: ActivityEvent["status"];
+  className?: string;
+}) {
+  switch (status) {
+    case "running":
+      return <Spinner className={cn(className, "text-primary")} />;
+    case "failed":
+      return <XCircleIcon className={cn(className, "text-coral-foreground")} />;
+    case "cancelled":
+      return <XCircleIcon className={cn(className, "text-muted-foreground")} />;
+    default:
+      return <WrenchIcon className={cn(className, "text-muted-foreground")} />;
+  }
+}
 
 // One tool invocation as a collapsible row (plan §6). Collapsed: status icon +
 // Indonesian title (Shimmer while running) + inline summary chip from the node
@@ -31,7 +56,7 @@ export function ToolRow({
 
   const header = (
     <span className={cn("flex min-w-0 items-start gap-1.5 leading-5", toneClass(node.status))}>
-      <NodeStatusIcon status={node.status} className="mt-0.5 size-3.5 shrink-0" />
+      <ToolStatusIcon status={node.status} className="mt-0.5 size-3.5 shrink-0" />
       <span className="min-w-0">
         {model.isRunning ? (
           <Shimmer as="span">{model.title}</Shimmer>
@@ -67,7 +92,7 @@ export function ToolRow({
             </div>
           ))}
           {devDetail ? (
-            <div className="pt-0.5 font-mono text-[11px] text-muted-foreground/80">
+            <div className="pt-0.5 font-mono text-[11px] text-muted-foreground">
               {devDetail}
             </div>
           ) : null}

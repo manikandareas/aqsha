@@ -132,7 +132,7 @@ export function CitationIntegritySummary({
           ))}
         </ul>
       ) : null}
-      <p className="mt-1.5 text-[11px] text-muted-foreground/80">
+      <p className="mt-1.5 text-[11px] text-muted-foreground">
         Penanda bukan tuduhan — bisa karena salah ketik metadata atau basis data
         yang tidak lengkap.
       </p>

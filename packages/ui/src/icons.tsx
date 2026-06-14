@@ -93,6 +93,7 @@ import {
   Upload01Icon,
   CloudUploadIcon,
   UserIcon,
+  Wrench01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { Ref } from "react";
@@ -227,6 +228,7 @@ export const TrendingUpIcon = createIcon(ChartUpIcon);
 export const UploadCloudIcon = createIcon(CloudUploadIcon);
 export const UploadIcon = createIcon(Upload01Icon);
 export const UserRoundIcon = createIcon(UserIcon);
+export const WrenchIcon = createIcon(Wrench01Icon);
 export const RotateCcwIcon = createIcon(ArrowReloadHorizontalIcon);
 export const XCircleIcon = createIcon(CancelCircleIcon);
 export const XIcon = createIcon(Cancel01Icon);
