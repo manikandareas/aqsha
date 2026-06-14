@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code when working with this repository.
 
+## Bahasa / Language
+
+Untuk setiap proses brainstorming dan planning, gunakan **bahasa Indonesia**. Istilah teknis (nama fungsi, package, framework, dsb.) tetap dalam bahasa Inggris.
+
 ## Companion Docs
 
 - `AGENTS.md` — current monorepo boundaries and exact commands.

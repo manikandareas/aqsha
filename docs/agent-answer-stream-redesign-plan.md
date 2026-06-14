@@ -1,6 +1,6 @@
 # Plan: Agent Answer Stream Redesign (UI Streaming)
 
-> Dokumen desain + rencana implementasi. **Fase 0 + Fase 1 + Fase 2 + Fase 3 SELESAI (4/6 fase), branch `development`.**
+> Dokumen desain + rencana implementasi. **SEMUA FASE SELESAI (6/6), branch `development`.**
 >
 > Penerus + perluasan langsung dari [`agent-activity-stream-plan.md`](./agent-activity-stream-plan.md)
 > (Fase 1–3 + cleanup §12 SELESAI). Membangun **di atas** kontrak `ActivityEvent`,
@@ -16,8 +16,8 @@
 | **Fase 1 — Urutan presisi (backend)**         | ✅ **SELESAI** — branch `development` (2026-06-14), uncommitted | Segmen `text`/`reasoning` ber-seq di `agentRunEvents` + `orderedPartsFromRun`. **Satu-satunya perubahan schema.** Barrier ordering (SDK EAGER). Detail di "Fase 1 — yang dikerjakan". |
 | **Fase 2 — Penggabungan timeline (frontend)** | ✅ **SELESAI** — branch `development` (2026-06-14), uncommitted | `AssistantTurn` + `ToolRow` collapsible; konsumsi `orderedPartsFromRun` (urutan presisi); hapus split run/message. Tanpa perubahan schema. Detail di "Fase 2 — yang dikerjakan". |
 | **Fase 3 — Kartu sub-agen**                   | ✅ **SELESAI** — branch `development` (2026-06-14), uncommitted | `SubagentCard` (satu kartu/sub-agen) + ringkasan progresif (running tool / roll-up) + chip "N berjalan". Helper kontrak murni, tanpa perubahan schema. Detail di "Fase 3 — yang dikerjakan". |
-| **Fase 4 — Kartu artefak + side panel**       | ⬜ Belum                                                        | `ChatArtifactCard` + `ArtifactDetailPanel` + `ThreadPanelProvider`. Thread-detail dulu.                                                                                               |
-| **Fase 5 — Parity + polish + cleanup**        | ⬜ Belum                                                        | Rollout side panel ke 3 surface; v2 ringkasan sub-agen; hapus `artifactVersions` mati.                                                                                                |
+| **Fase 4 — Kartu artefak + side panel**       | ✅ **SELESAI** — branch `development` (2026-06-14), uncommitted | `ChatArtifactCard` + `ArtifactDetailPanel` (reusable page\|panel) + `ThreadPanelProvider` + `ChatArtifactProvider`; thread-detail panel mode. Tanpa perubahan schema. Detail di "Fase 4 — yang dikerjakan". |
+| **Fase 5 — Parity + polish + cleanup**        | ✅ **SELESAI** — branch `development` (2026-06-14), uncommitted | Parity 3 surface (otomatis via `ChatThreadState`); v2 ringkasan sub-agen (`last_assistant_message`); hapus `artifactVersions`/`currentVersionId` mati (widen-migrate-narrow). Detail di "Fase 5 — yang dikerjakan". |
 
 **Gerbang per fase (semua wajib hijau sebelum lanjut):**
 `bun run typecheck` (5 paket) · `bun run lint` · `bun run --filter '@aqsha/agent-contracts' test` ·
@@ -103,6 +103,29 @@ Render sub-agen nested-rekursif (`ActivityNodeRow` → `NodeLine` + `<ol>` ber-`
 - **Test:** agent-contracts `subagentSummary` (roll-up / count-only / default-deny) + `subagentCurrentActivity` (seq tertinggi anti-flicker / none-running / no-children); @aqsha/app `subagentCardModel` (ringkasan running vs terminal, forceExpanded dev-mode) + `runningSubagentCount`.
 - **Review adversarial:** anti-flicker (pilih seq tertinggi deterministik ✓), no-leak (allow-list scalar via helper ✓), parity 3 surface (komponen bersama ✓), kartu vs nested-rekursif lama (cabang subagent short-circuit, jalur lama mati dihapus → tak double-render ✓), chip hanya saat ≥1 running (`null` di 0 ✓).
 - **Gate:** typecheck (5) · lint 0 error (12 warning pra-ada) · agent-contracts **62** · apps/agents **206** · convex **123** · @aqsha/app **90**. Tanpa `convex dev --once` (tak menyentuh schema).
+
+### Fase 4 — Kartu artefak + side panel ✅ (gate hijau, tanpa perubahan schema)
+
+`executeArtifact` (tool node, `metadata.tool==="executeArtifact"` — diskriminator allow-list, bukan judul) kini dirender **kartu artefak yang dapat diklik** alih-alih `ToolRow`; klik → side panel (thread-detail) atau deep-link (panel compact, D2).
+
+- **Presentasi bersama (murni + unit-test):** `apps/web/components/artifact-presentation.ts` (`artifactTypeLabel`/`provenanceLabel`/`formatArtifactYear`, tanpa ikon) diekstrak dari `library-artifact-card.tsx`; ikon-per-tipe pindah ke **komponen `ArtifactTypeIcon` di `packages/ui/src/icons.tsx`** (Hugeicons, tanpa lucide) — dipakai library card + chat card (tanpa regresi). Komponen (bukan `const Icon = fn()`) → tak melanggar `react-hooks/static-components`.
+- **View-model murni (`turn-model.ts`):** `TurnPart` varian `artifact`; `isArtifactToolNode(node)`; `chatArtifactCardModel(node, artifactById)` → `{artifactId, title, artifactType, action, live, found, source, createdAt, updatedAt, workspaceId}` (running tanpa id → `live` Shimmer; resolusi id↔`artifacts`; fallback judul node; default "Dokumen"). `nodePart` me-route node artefak → part `artifact` (jalur ordered + fallback legacy).
+- **`components/chat-artifact-card.tsx` (baru):** live → Shimmer "Menulis/Memperbarui dokumen…"; terminal → kartu (ikon tipe, judul, "Dibuat/Diperbarui · tanggal", provenance, label tipe). Klik: thread-detail (`!compact` + provider) → `openArtifactPanel(artifactId)`; compact → deep-link `/app/workspaces/[ws]/artifacts/[id]`; tanpa id/ws → statis.
+- **`components/chat-artifact-context.tsx` (baru):** `ChatArtifactProvider({artifacts, compact})` di-mount di `ChatThreadState` (3 surface) → kartu di kedalaman transcript resolve `artifactById` + `compact` tanpa prop-drill.
+- **`components/thread-panel-context.tsx` + `utils/thread-panel-model.ts` (baru, reducer murni + test):** mode `closed | context | {artifact}` (`ThreadPanelProvider`, meniru `ComposerMentionsProvider`); `openArtifactPanel`/`openContextPanel`/`backToContext`/`closePanel`/`setOpen`. SATU slot `ResponsiveSidePanel`: mode artefak MENGGANTIKAN panel library (tombol kembali). `ThreadDetailShell` → `ThreadDetailShellView` (di dalam provider): `rightPanelOpen=isOpen`, `onRightPanelOpenChange=setOpen` (mobile/header toggle sinkron); provider di-`key` per thread (reset saat ganti thread).
+- **`ArtifactDetailView` reusable (`features/workspaces/components/artifact-detail-view.tsx`):** ekstrak inner `ArtifactDetailPage` → varian `page` (route penuh, tanpa regresi: `<main min-h-svh>` + breadcrumb) & `panel` (toolbar back+close, workspaceId di-derive dari `detail.artifact.workspaceId`, mengisi slot panel tanpa re-frame). Data: `api.artifacts.get` + `getRenderPayload`. **Markdown:** halaman = editor BlockNote editable, key STABIL (`:markdown`, anti-churn autosave); panel = **viewer read-only** (render `markdown` via `MessageResponse`) di-key `updatedAt` → panel ikut update saat agen menulis ulang dokumen markdown (perbaikan temuan review adversarial: key markdown stabil sebelumnya membuat panel basi untuk tulisan agen — markdown = tipe default tulisan agen). Non-markdown (paper/url) di-key `updatedAt` di kedua varian. `artifact-detail-page.tsx` = wrapper tipis; `ArtifactTitleBreadcrumb` di-export.
+- **Convex (tanpa schema):** `agent/queries.ts:listArtifacts` proyeksi `+workspaceId` (target deep-link compact; agen selalu me-resolve workspace di `service.applyArtifactAction` → tak null). `ResearchArtifact` `+source/+updatedAt/+workspaceId`.
+- **No-leak:** `artifactId` = `safeId` opaque; `action` enum; `title` allow-list (sudah dipakai ToolRow). Tak ada query Convex baru.
+- **Test:** @aqsha/app `artifact-presentation` (label/provenance/year), `chatArtifactCardModel` (live/create/update/resolusi/fallback), `isArtifactToolNode`, `buildTurnParts` artefak (ordered+legacy), `thread-panel-model` reducer. convex `listArtifacts` proyeksi membawa `workspaceId` (string, tak null).
+- **Gate:** typecheck (5) · lint 0 error (12 warning pra-ada) · agent-contracts **62** · apps/agents **206** · convex **123** · @aqsha/app **109**. Tanpa `convex dev --once`.
+
+### Fase 5 — Parity + v2 ringkasan + cleanup ✅ (gate hijau, satu perubahan schema = cleanup)
+
+- **A) Parity 3 surface (D2) — otomatis via arsitektur Fase 4.** `ChatArtifactProvider` di `ChatThreadState` (dibagi thread-detail main + `WorkspaceChatSidePanel` + `ExploreChatSidePanel` lewat `CompactThreadChatPanel`, `compact=true`) → kartu + deep-link langsung berlaku di 3 surface tanpa kode tambahan. `ThreadPanelProvider` hanya di thread-detail (satu slot panel); surface compact deep-link (D2). Checklist `apps/web/AGENTS.md` §13 hijau.
+- **B) v2 ringkasan sub-agen (backend, additive):** `hooks.ts` `subagent_stop` baca `hookInput.last_assistant_message` → `sanitizeSubagentSummary` (baru, = `safeLabel`: single-line ≤120, no-leak) → `payload.summary`. `run.ts` `subagentPayloadSchema.summary?`. `activity.ts`: `ActivityEvent.summary?` (baru, opsional) + `safeSummary` (defense-in-depth ≤120) di `subagent_stop` → `node.summary`; `subagentSummary` UTAMAKAN `node.summary` saat terminal, fallback roll-up tool (Fase 3 tetap hijau). payloadJson open → tanpa perubahan Convex schema.
+- **C) Cleanup tabel/field MATI (D3) — satu-satunya perubahan schema:** hapus tabel `artifactVersions` + field `artifacts.currentVersionId` (audit: 0 penulis di codebase). Bersih: `accountCleanup/artifacts.ts` (blok query+delete+storage loop), `agent/queries.ts` (proyeksi `currentVersionId`), `apps/web .../types/index.ts` (`currentVersionId?` + `version?`). **Data eksisting (sadar + dicatat):** dev punya **4 baris legacy** `currentVersionId` (versi kode lama, kini tak ada penulis) → **widen-migrate-narrow**: restore field+tabel sementara + migrasi sekali `clearDeadVersionPointers` (paginate, patch `undefined`, idempotent) → `clearDeadVersionPointers({cursor:null})` = `{cleared:4, isDone:true}` → hapus field+tabel+migrasi → `convex dev --once` **push bersih** (tabel+2 index `artifactVersions` terhapus). **⚠️ PROD:** `convex deploy` schema sempit ini akan GAGAL bila prod menyimpan baris `currentVersionId` legacy — owner harus migrasi dulu (re-introduce `clearDeadVersionPointers` dari git commit migrasi, jalankan, baru deploy sempit); prod greenfield (AGENTS.md) → kemungkinan nihil.
+- **Test:** agents `sanitizeSubagentSummary` (single-line/CR/U+2028 cut, clamp ≤120, no-leak key/path) + hooks `subagent_stop` membawa summary tersanitasi & `subagent_start` tidak; agent-contracts `subagentSummary` prioritas `node.summary` (v2) + fallback roll-up + end-to-end `activityEventsFromRun` membawa summary ke node; convex `listArtifacts` tanpa `currentVersionId` + `cleanupOwnerArtifacts` (tanpa `artifactVersions`).
+- **Gate:** typecheck (5) · lint 0 error (12 warning pra-ada) · agent-contracts **65** · apps/agents **213** · convex **124** · @aqsha/app **109** · `convex dev --once` push bersih.
 
 ---
 
@@ -509,10 +532,10 @@ Referensi screenshot berbahasa Inggris → wajib diterjemahkan (label uppercase 
   (frontend).
 - **Read backend:** ber-index & ber-batas (`packages/convex/AGENTS.md`).
 - **Parity (Fase 4/5)** — checklist `apps/web/AGENTS.md` sebagai gerbang keluar:
-  - [ ] Fitur jalan di thread-detail **main**, workspace-chat **panel**, Explore **panel**
-  - [ ] Tiap surface dibungkus `ComposerMentionsProvider` (+ `ThreadPanelProvider`)
-  - [ ] Chrome panel pakai token `lib/panel-surface.ts`; prop `compact` dihormati
-  - [ ] Mobile open/close sinkron via `DetailSplitLayout`/`useCloseRightPanel`
+  - [x] Fitur jalan di thread-detail **main**, workspace-chat **panel**, Explore **panel** (kartu lewat `ChatThreadState` bersama; thread-detail = side panel, compact = deep-link)
+  - [x] Tiap surface dibungkus `ComposerMentionsProvider` (+ `ThreadPanelProvider` di thread-detail; surface compact memakai deep-link D2 → tak butuh provider panel)
+  - [x] Chrome panel pakai token `lib/panel-surface.ts` (`ArtifactDetailPanel` mengisi slot `ResponsiveSidePanel` tanpa double-frame); prop `compact` dihormati di kartu
+  - [x] Mobile open/close sinkron via `DetailSplitLayout`/`useCloseRightPanel` (`panel.setOpen` ⇄ `onSideOpenChange`; reducer `closePanel`/`back`)
 
 ---
 

@@ -1,5 +1,9 @@
 # Aqsha Monorepo — Agent Notes
 
+## Bahasa / Language
+
+Untuk setiap proses brainstorming dan planning, gunakan **bahasa Indonesia**. Istilah teknis (nama fungsi, package, framework, dsb.) tetap dalam bahasa Inggris.
+
 ## Package Manager
 - **Bun** `1.3.10` is pinned in `packageManager`. Use `bun install`, never `npm` / `pnpm` / `yarn`.
 
