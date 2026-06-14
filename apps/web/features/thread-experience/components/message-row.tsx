@@ -20,6 +20,7 @@ import {
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message";
+import { Reasoning } from "@/components/ai-elements/reasoning";
 import {
   toAgentRunId,
   type AgentRunId,
@@ -57,6 +58,8 @@ export function MessageRow({
   const isFailed = message.status === "failed";
   const text = getMessageText(message);
   const hasText = Boolean(text.trim());
+  const reasoning = getMessageReasoning(message);
+  const hasReasoning = Boolean(reasoning.trim());
 
   if (isUser) {
     // @mentions are encoded inline in the message text (markers) and render as
@@ -67,7 +70,7 @@ export function MessageRow({
         <div className="max-w-full whitespace-pre-wrap break-words rounded-[14px] border border-border/80 bg-card px-4 py-2.5 text-[13px] leading-[1.55] text-foreground sm:max-w-[560px]">
           {segments.map((segment, index) =>
             segment.type === "mention" ? (
-              <MessageMentionPill key={`m-${index}`} label={segment.label} />
+              <MessageMentionPill key={`m-${segment.label}`} label={segment.label} />
             ) : (
               <Fragment key={`t-${index}`}>{segment.value}</Fragment>
             ),
@@ -80,6 +83,12 @@ export function MessageRow({
   return (
     <Message from="assistant" className="min-w-0 overflow-x-hidden">
       <MessageContent className="w-full min-w-0 overflow-hidden bg-transparent p-0 text-[13px] leading-[1.55] text-ink-soft">
+        {hasReasoning ? (
+          <Reasoning
+            text={reasoning}
+            isThinking={isStreaming && !hasText}
+          />
+        ) : null}
         {isFailed ? (
           <div className="flex items-start gap-2 rounded-[10px] border border-coral-soft-border bg-coral-soft px-3 py-2.5 text-[13px] font-medium leading-[1.55] text-coral-foreground">
             <AlertCircleIcon className="mt-0.5 size-4 shrink-0" />
@@ -97,7 +106,7 @@ export function MessageRow({
               {text}
             </MessageResponse>
           )
-        ) : isStreaming ? (
+        ) : isStreaming && !hasReasoning ? (
           <ThreadActivityIndicator label="Sedang menulis..." />
         ) : null}
       </MessageContent>
@@ -178,11 +187,11 @@ function AssistantMessageActions({
     setIsRetrying(true);
     try {
       await onRetryRun({ runId: toAgentRunId(assistantRun._id) });
+      setIsRetrying(false);
     } catch (error) {
       toast.error(
         readableConvexErrorMessage(error, "Respons belum bisa dicoba ulang."),
       );
-    } finally {
       setIsRetrying(false);
     }
   };
@@ -263,6 +272,16 @@ function getMessageText(message: ChatMessage) {
     ?.flatMap((part) => (part.type === "text" && part.text ? [part.text] : []))
     .join("");
   return partText || message.text || "";
+}
+
+function getMessageReasoning(message: ChatMessage) {
+  return (
+    message.parts
+      ?.flatMap((part) =>
+        part.type === "reasoning" && part.text ? [part.text] : [],
+      )
+      .join("") ?? ""
+  );
 }
 
 async function copyTextToClipboard(text: string) {
