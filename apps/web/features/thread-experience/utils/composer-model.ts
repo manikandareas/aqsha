@@ -51,7 +51,7 @@ function findPromptCommandInContent(content: string) {
   );
 }
 
-export function previewFromComposerContent(content: string, command: PromptCommand) {
+function previewFromComposerContent(content: string, command: PromptCommand) {
   const argument = stripCommandFromContent(content, command);
   const singleLine = argument.replace(/\s+/g, " ").trim();
   return singleLine.length > 140 ? `${singleLine.slice(0, 137)}...` : singleLine;

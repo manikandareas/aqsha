@@ -2,7 +2,7 @@
 
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect } from "react";
+import { useEffect } from "react";
 import { ArrowLeftIcon, ArrowRight, Loader2Icon } from "@aqsha/ui/icons";
 import { api } from "@aqsha/convex/api";
 import { Button } from "@/components/ui/button";
@@ -74,12 +74,12 @@ export function OnboardingPage() {
     }
   }, [status, step, router]);
 
-  const handleBack = useCallback(() => {
+  const handleBack = () => {
     const target = BACK_TARGET[step];
     if (target) setStep(target);
-  }, [step, setStep]);
+  };
 
-  const handlePrimary = useCallback(async () => {
+  const handlePrimary = async () => {
     switch (step) {
       case "welcome":
         setStep("background");
@@ -99,7 +99,7 @@ export function OnboardingPage() {
         router.replace(HOME_AFTER_ONBOARDING);
         return;
     }
-  }, [step, submit, setStep, router]);
+  };
 
   const isQuestionStep = questionIndex >= 0;
   const canPrimary =

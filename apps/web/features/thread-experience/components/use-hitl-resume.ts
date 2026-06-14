@@ -1,6 +1,5 @@
 "use client";
 
-import { useCallback } from "react";
 import { api } from "@aqsha/convex/api";
 import { useConvexMutationFn } from "@/lib/convex-query";
 
@@ -25,37 +24,28 @@ export type HitlActions = {
 export function useHitlResume(): HitlActions {
   const respond = useConvexMutationFn(api.agent.interactions.respond);
 
-  const onAnswer = useCallback(
-    async (toolCallId: string, answers: HitlAnswer[]) => {
-      await respond({
-        interactionId: toolCallId as never,
-        response: { kind: "answers", answers },
-      });
-    },
-    [respond],
-  );
-  const onApprove = useCallback(
-    async (approvalId: string, workspaceId?: string) => {
-      await respond({
-        interactionId: approvalId as never,
-        response: {
-          kind: "approval",
-          approved: true,
-          ...(workspaceId ? { workspaceId } : {}),
-        },
-      });
-    },
-    [respond],
-  );
-  const onDeny = useCallback(
-    async (approvalId: string, reason?: string) => {
-      await respond({
-        interactionId: approvalId as never,
-        response: { kind: "approval", approved: false, ...(reason ? { note: reason } : {}) },
-      });
-    },
-    [respond],
-  );
+  const onAnswer = async (toolCallId: string, answers: HitlAnswer[]) => {
+    await respond({
+      interactionId: toolCallId as never,
+      response: { kind: "answers", answers },
+    });
+  };
+  const onApprove = async (approvalId: string, workspaceId?: string) => {
+    await respond({
+      interactionId: approvalId as never,
+      response: {
+        kind: "approval",
+        approved: true,
+        ...(workspaceId ? { workspaceId } : {}),
+      },
+    });
+  };
+  const onDeny = async (approvalId: string, reason?: string) => {
+    await respond({
+      interactionId: approvalId as never,
+      response: { kind: "approval", approved: false, ...(reason ? { note: reason } : {}) },
+    });
+  };
 
   return { onAnswer, onApprove, onDeny };
 }

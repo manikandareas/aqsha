@@ -22,7 +22,7 @@ export function OnboardingStepIndicator({
       <span className="relative inline-block w-[1.4em] text-center text-foreground">
         <AnimatePresence mode="wait" initial={false}>
           <m.span
-            key={index}
+            key={pad(index)}
             className="inline-block"
             initial={reduce ? false : { opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}

@@ -44,7 +44,6 @@ import type {
 import {
   type ComponentProps,
   type ReactNode,
-  useCallback,
   useEffect,
   useState,
   useSyncExternalStore,
@@ -431,18 +430,15 @@ function PrimaryNavLink({
 }
 
 function usePersistentCollapse(storageKey: string | undefined) {
-  const subscribe = useCallback(
-    (onStoreChange: () => void) => {
-      if (!storageKey) return () => {};
-      window.addEventListener("storage", onStoreChange);
-      window.addEventListener(SIDEBAR_SECTION_EVENT, onStoreChange);
-      return () => {
-        window.removeEventListener("storage", onStoreChange);
-        window.removeEventListener(SIDEBAR_SECTION_EVENT, onStoreChange);
-      };
-    },
-    [storageKey],
-  );
+  const subscribe = (onStoreChange: () => void) => {
+    if (!storageKey) return () => {};
+    window.addEventListener("storage", onStoreChange);
+    window.addEventListener(SIDEBAR_SECTION_EVENT, onStoreChange);
+    return () => {
+      window.removeEventListener("storage", onStoreChange);
+      window.removeEventListener(SIDEBAR_SECTION_EVENT, onStoreChange);
+    };
+  };
 
   const collapsed = useSyncExternalStore(
     subscribe,
@@ -451,12 +447,12 @@ function usePersistentCollapse(storageKey: string | undefined) {
     () => false,
   );
 
-  const toggle = useCallback(() => {
+  const toggle = () => {
     if (!storageKey) return;
     const next = window.localStorage.getItem(storageKey) === "1" ? "0" : "1";
     window.localStorage.setItem(storageKey, next);
     window.dispatchEvent(new Event(SIDEBAR_SECTION_EVENT));
-  }, [storageKey]);
+  };
 
   return [collapsed, toggle] as const;
 }

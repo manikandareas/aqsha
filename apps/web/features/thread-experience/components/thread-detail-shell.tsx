@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { ResponsiveSidePanel } from "@/components/layout/responsive-side-panel";
 import { PanelBoardTitleDropdownTrigger } from "@/components/panel-title-dropdown-trigger";
@@ -121,13 +121,13 @@ function ThreadWorkspaceLibraryPanel({
   const router = useRouter();
   const libraryData = useWorkspaceLibraryData(workspaceId);
   const dialogState = useWorkspaceLibraryDialogState();
-  const titleById = useMemo(() => {
+  const titleById = (() => {
     const map = new Map<string, string>();
     for (const artifact of libraryData.artifacts) {
       map.set(artifact._id, artifact.title);
     }
     return map;
-  }, [libraryData.artifacts]);
+  })();
   const contextSelection = usePanelContextSelection({
     workspaceId,
     workspaceName,

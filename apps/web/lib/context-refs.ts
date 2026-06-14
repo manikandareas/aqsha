@@ -65,13 +65,6 @@ export function buildPaperMentionLabel(workspaceName: string, paperTitle: string
   return `@${workspaceName}:${paperTitle}`;
 }
 
-// Inline mention markers (private-use-area sentinels U+E000 / U+E001) come from
-// the backend single source of truth (imported at the top of this file) so the
-// two sides cannot drift; re-exported here for the composer/render consumers that
-// import them from this module. The message renderer splits on them to draw pills
-// inline; sidebar preview / thread title strip them.
-export { MENTION_MARKER_OPEN, MENTION_MARKER_CLOSE };
-
 export function wrapMentionLabel(label: string) {
   return `${MENTION_MARKER_OPEN}${label}${MENTION_MARKER_CLOSE}`;
 }
@@ -106,6 +99,6 @@ export function parseMentionSegments(text: string): MentionSegment[] {
   return segments;
 }
 
-export function hasMentionMarkers(text: string) {
+function hasMentionMarkers(text: string) {
   return text.includes(MENTION_MARKER_OPEN);
 }

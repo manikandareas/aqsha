@@ -24,7 +24,7 @@ function toolNameForPart(part: MessagePart): string | null {
   return null;
 }
 
-export function asHitlToolPart(part: MessagePart): HitlToolPart | null {
+function asHitlToolPart(part: MessagePart): HitlToolPart | null {
   const toolName = toolNameForPart(part);
   if (!toolName || !HITL_CARD_TOOL_NAME_SET.has(toolName)) return null;
   return {
@@ -39,7 +39,7 @@ export function asHitlToolPart(part: MessagePart): HitlToolPart | null {
   };
 }
 
-export function isPendingHitlPart(part: HitlToolPart): boolean {
+function isPendingHitlPart(part: HitlToolPart): boolean {
   if (part.state === "approval-requested") return true;
   if (part.toolName === "askUser" && part.state === "input-available") return true;
   return false;

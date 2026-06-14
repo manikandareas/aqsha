@@ -47,8 +47,7 @@ export function AppLoadingOverlay({
   const activeMessage = messages[cycle ? index : 0] ?? "";
 
   return (
-    <div
-      role="status"
+    <output
       aria-live="polite"
       aria-label={label}
       className={cn(
@@ -85,6 +84,6 @@ export function AppLoadingOverlay({
           </div>
         </div>
       </div>
-    </div>
+    </output>
   );
 }

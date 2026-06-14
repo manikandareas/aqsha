@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { DetailSplitLayout } from "@/components/layout/detail-split-layout";
 import { ResponsiveSidePanel } from "@/components/layout/responsive-side-panel";
@@ -114,13 +114,13 @@ function WorkspaceLibraryMain({
   onAfterArchive: () => void;
 }) {
   const dialogState = useWorkspaceLibraryDialogState();
-  const titleById = useMemo(() => {
+  const titleById = (() => {
     const map = new Map<string, string>();
     for (const artifact of libraryData.artifacts) {
       map.set(artifact._id, artifact.title);
     }
     return map;
-  }, [libraryData.artifacts]);
+  })();
   const contextSelection = usePanelContextSelection({
     workspaceId,
     workspaceName,

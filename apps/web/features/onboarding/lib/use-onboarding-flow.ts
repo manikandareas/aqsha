@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useState } from "react";
 import { api } from "@aqsha/convex/api";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
 import { useConvexMutationState } from "@/lib/convex-query";
 import { MIN_INTERESTS, SOURCE_OTHER } from "./onboarding-options";
 
-export const ONBOARDING_STEPS = [
+const ONBOARDING_STEPS = [
   "welcome",
   "background",
   "interests",
@@ -16,7 +16,7 @@ export const ONBOARDING_STEPS = [
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 
 // The three steps that show the step indicator (welcome/finish don't count).
-export const QUESTION_STEPS: OnboardingStep[] = [
+const QUESTION_STEPS: OnboardingStep[] = [
   "background",
   "interests",
   "source",
@@ -39,49 +39,34 @@ export function useOnboardingFlow() {
   });
   const complete = useConvexMutationState(api.onboarding.complete);
 
-  const setBackground = useCallback(
-    (id: string) => setAnswers((a) => ({ ...a, background: id })),
-    [],
-  );
-  const toggleInterest = useCallback(
-    (id: string) =>
-      setAnswers((a) => ({
-        ...a,
-        interests: a.interests.includes(id)
-          ? a.interests.filter((x) => x !== id)
-          : [...a.interests, id],
-      })),
-    [],
-  );
-  const setSource = useCallback(
-    (id: string) => setAnswers((a) => ({ ...a, source: id })),
-    [],
-  );
-  const setSourceOther = useCallback(
-    (value: string) => setAnswers((a) => ({ ...a, sourceOther: value })),
-    [],
-  );
+  const setBackground = (id: string) => setAnswers((a) => ({ ...a, background: id }));
+  const toggleInterest = (id: string) =>
+    setAnswers((a) => ({
+      ...a,
+      interests: a.interests.includes(id)
+        ? a.interests.filter((x) => x !== id)
+        : [...a.interests, id],
+    }));
+  const setSource = (id: string) => setAnswers((a) => ({ ...a, source: id }));
+  const setSourceOther = (value: string) => setAnswers((a) => ({ ...a, sourceOther: value }));
 
-  const isStepValid = useCallback(
-    (target: OnboardingStep): boolean => {
-      switch (target) {
-        case "background":
-          return Boolean(answers.background);
-        case "interests":
-          return answers.interests.length >= MIN_INTERESTS;
-        case "source":
-          if (!answers.source) return false;
-          if (answers.source === SOURCE_OTHER.id)
-            return answers.sourceOther.trim().length > 0;
-          return true;
-        default:
-          return true;
-      }
-    },
-    [answers],
-  );
+  const isStepValid = (target: OnboardingStep): boolean => {
+    switch (target) {
+      case "background":
+        return Boolean(answers.background);
+      case "interests":
+        return answers.interests.length >= MIN_INTERESTS;
+      case "source":
+        if (!answers.source) return false;
+        if (answers.source === SOURCE_OTHER.id)
+          return answers.sourceOther.trim().length > 0;
+        return true;
+      default:
+        return true;
+    }
+  };
 
-  const submit = useCallback(async (): Promise<boolean> => {
+  const submit = async (): Promise<boolean> => {
     if (!answers.background || !answers.source) return false;
     try {
       await complete.mutateAsync({
@@ -97,9 +82,9 @@ export function useOnboardingFlow() {
     } catch {
       return false;
     }
-  }, [answers, complete]);
+  };
 
-  const questionIndex = useMemo(() => QUESTION_STEPS.indexOf(step), [step]);
+  const questionIndex = QUESTION_STEPS.indexOf(step);
 
   const errorMessage = complete.error
     ? readableConvexErrorMessage(

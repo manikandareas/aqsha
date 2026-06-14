@@ -21,6 +21,14 @@ export type IdeaSeed = {
   topics?: string[];
 };
 
+type IdeaDialogProps = {
+  seed: IdeaSeed | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onStartResearch: (questionText: string) => void;
+  busy: boolean;
+};
+
 const GAP_LABEL: Record<string, string> = {
   geografis: "Celah geografis",
   temporal: "Celah temporal",
@@ -30,34 +38,30 @@ const GAP_LABEL: Record<string, string> = {
   konteks: "Celah konteks",
 };
 
-export function IdeaDialog({
+export function IdeaDialog(props: IdeaDialogProps) {
+  return <IdeaDialogInner key={props.seed?.title ?? ""} {...props} />;
+}
+
+function IdeaDialogInner({
   seed,
   open,
   onOpenChange,
   onStartResearch,
   busy,
-}: {
-  seed: IdeaSeed | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onStartResearch: (questionText: string) => void;
-  busy: boolean;
-}) {
+}: IdeaDialogProps) {
   const generateIdeas = useConvexActionFn(api.feed.ideas.generateIdeas);
   const [questions, setQuestions] = useState<FeedIdeaQuestion[] | null>(null);
   const [drafts, setDrafts] = useState<Record<number, string>>({});
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const generatedFor = useRef<string | null>(null);
+  const [done, setDone] = useState(false);
+  const triggered = useRef(false);
+
+  // true until the request finishes (success or error)
+  const loading = !done && error === null;
 
   useEffect(() => {
-    if (!open || !seed) return;
-    if (generatedFor.current === seed.title) return;
-    generatedFor.current = seed.title;
-    setQuestions(null);
-    setDrafts({});
-    setError(null);
-    setLoading(true);
+    if (!open || !seed || triggered.current) return;
+    triggered.current = true;
     let active = true;
     void (async () => {
       try {
@@ -75,12 +79,11 @@ export function IdeaDialog({
         } else {
           setError(reasonMessage(result.reason));
         }
+        if (active) setDone(true);
       } catch (caught) {
         if (active) {
           setError(readableConvexErrorMessage(caught, "Gagal menghasilkan ide."));
         }
-      } finally {
-        if (active) setLoading(false);
       }
     })();
     return () => {
@@ -88,13 +91,8 @@ export function IdeaDialog({
     };
   }, [open, seed, generateIdeas]);
 
-  const handleOpenChange = (next: boolean) => {
-    if (!next) generatedFor.current = null;
-    onOpenChange(next);
-  };
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-[16px]">
@@ -119,7 +117,7 @@ export function IdeaDialog({
           <div className="space-y-3">
             {questions.map((q, index) => (
               <div
-                key={index}
+                key={q.question}
                 className="rounded-[10px] border border-border bg-card p-3.5"
               >
                 <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -136,6 +134,7 @@ export function IdeaDialog({
                     setDrafts((prev) => ({ ...prev, [index]: event.target.value }))
                   }
                   rows={2}
+                  aria-label={q.question}
                   className="w-full resize-none rounded-[8px] border border-border bg-background px-3 py-2 text-[13.5px] font-medium leading-snug text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                 />
 

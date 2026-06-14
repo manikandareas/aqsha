@@ -2,7 +2,7 @@
 
 import { api } from "@aqsha/convex/api";
 import { useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
 import { useConvexMutationFn } from "@/lib/convex-query";
 import { promptForSdkBackend } from "@/features/thread-experience/api/use-thread-experience-data";
@@ -21,40 +21,37 @@ export function useStartResearch() {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const startResearch = useCallback(
-    async (content: string, options: StartResearchOptions = {}) => {
-      if (busyKey) return;
-      setBusyKey(options.busyKey ?? "default");
-      setError(null);
-      try {
-        const result = await startThread({
-          // No commandId here; deep research is encoded as a /deep prompt.
-          content: promptForSdkBackend(content, "deep-research"),
-          agentKind: "pro",
-        });
-        if (result?.ok && "threadId" in result && result.threadId) {
-          await options.onSuccess?.();
-          router.push(`/app/threads/${result.threadId}`);
-          return;
-        }
-        const rateLimited =
-          !!result &&
-          !result.ok &&
-          "reason" in result &&
-          result.reason === "rate_limited";
-        setError(
-          rateLimited
-            ? "Batas pengiriman tercapai. Coba lagi sebentar lagi."
-            : "Riset tidak bisa dimulai sekarang. Coba lagi nanti.",
-        );
-        setBusyKey(null);
-      } catch (caught) {
-        setError(readableConvexErrorMessage(caught, "Gagal memulai riset."));
-        setBusyKey(null);
+  const startResearch = async (content: string, options: StartResearchOptions = {}) => {
+    if (busyKey) return;
+    setBusyKey(options.busyKey ?? "default");
+    setError(null);
+    try {
+      const result = await startThread({
+        // No commandId here; deep research is encoded as a /deep prompt.
+        content: promptForSdkBackend(content, "deep-research"),
+        agentKind: "pro",
+      });
+      if (result?.ok && "threadId" in result && result.threadId) {
+        await options.onSuccess?.();
+        router.push(`/app/threads/${result.threadId}`);
+        return;
       }
-    },
-    [busyKey, router, startThread],
-  );
+      const rateLimited =
+        !!result &&
+        !result.ok &&
+        "reason" in result &&
+        result.reason === "rate_limited";
+      setError(
+        rateLimited
+          ? "Batas pengiriman tercapai. Coba lagi sebentar lagi."
+          : "Riset tidak bisa dimulai sekarang. Coba lagi nanti.",
+      );
+      setBusyKey(null);
+    } catch (caught) {
+      setError(readableConvexErrorMessage(caught, "Gagal memulai riset."));
+      setBusyKey(null);
+    }
+  };
 
   return { startResearch, busy: Boolean(busyKey), busyKey, error };
 }

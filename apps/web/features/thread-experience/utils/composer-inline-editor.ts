@@ -17,9 +17,9 @@ const INLINE_PILL_TONE = {
     "bg-foreground/5 text-foreground decoration-foreground/30 hover:bg-foreground/10 hover:decoration-foreground/60",
 } as const;
 
-export type InlinePillTone = keyof typeof INLINE_PILL_TONE;
+type InlinePillTone = keyof typeof INLINE_PILL_TONE;
 
-export function inlinePillClass(tone: InlinePillTone) {
+function inlinePillClass(tone: InlinePillTone) {
   return cn(INLINE_PILL_BASE, INLINE_PILL_TONE[tone]);
 }
 
@@ -377,7 +377,7 @@ function appendVisibleContentTokens(root: HTMLElement, visibleContent: string) {
   }
 }
 
-export function renderComposerEditorFromVisibleContent(root: HTMLElement, visibleContent: string) {
+function renderComposerEditorFromVisibleContent(root: HTMLElement, visibleContent: string) {
   root.replaceChildren();
   appendVisibleContentTokens(root, visibleContent);
 }

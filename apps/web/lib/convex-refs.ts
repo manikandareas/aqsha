@@ -21,7 +21,7 @@ export function toWorkspaceFolderId(id: string): WorkspaceFolderId {
   return id as WorkspaceFolderId;
 }
 
-export function toArtifactIds(ids: Iterable<string>): ArtifactId[] {
+function toArtifactIds(ids: Iterable<string>): ArtifactId[] {
   return [...ids].map(toArtifactId);
 }
 

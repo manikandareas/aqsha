@@ -4,7 +4,7 @@ import { DetailSplitLayout } from "@/components/layout/detail-split-layout";
 import { useSidebar } from "@/components/ui/sidebar";
 import { ThreadChatSurface } from "./chat-thread-state";
 import type { ThreadShellLayoutProps } from "./component-types";
-import { AccessDeniedState } from "./home-states";
+import { AccessDeniedState } from "./access-denied-state";
 import { ThreadHeader } from "./thread-header";
 
 export function ThreadShellLayout({

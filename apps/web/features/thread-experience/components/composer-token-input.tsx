@@ -63,6 +63,8 @@ export type ContextItemOption = {
   title: string;
 };
 
+const EMPTY_CONTEXT_WORKSPACES: ContextWorkspaceOption[] = [];
+
 function truncateLabel(value: string, max = 22) {
   const compact = value.replace(/\s+/g, " ").trim();
   return compact.length > max ? `${compact.slice(0, max - 1)}…` : compact;
@@ -82,7 +84,7 @@ export function TokenizedPromptInput({
   pinnedContextRefs = EMPTY_PINNED_REFS,
   onContextRefsChange,
   onRichValueChange,
-  contextWorkspaces = [],
+  contextWorkspaces = EMPTY_CONTEXT_WORKSPACES,
   ambientWorkspaceId = null,
   workspaceItems,
   workspaceItemsLoading = false,
@@ -124,7 +126,6 @@ export function TokenizedPromptInput({
   const [slashFilterQuery, setSlashFilterQuery] = useState<string | null>(null);
   const [mentionFilterQuery, setMentionFilterQuery] = useState<string | null>(null);
   const [drillWorkspaceId, setDrillWorkspaceId] = useState<string | null>(null);
-  const [isEditorEmpty, setIsEditorEmpty] = useState(true);
 
   const slashOpen = slashFilterQuery !== null;
   const mentionOpen = mentionFilterQuery !== null;
@@ -191,26 +192,25 @@ export function TokenizedPromptInput({
   const itemOptions: MentionItemOption[] =
     !mentionOpen || mentionMode !== "item"
       ? []
-      : (workspaceItems ?? [])
-          .filter(
-            (item) => mentionQuery === "" || item.title.toLowerCase().includes(mentionQuery),
-          )
-          .map((item) => {
-            const pinned = pinnedArtifactIds.has(item.artifactId);
-            return {
-              type: "item" as const,
-              workspaceId: item.workspaceId,
-              workspaceName: drillWorkspaceName,
-              artifactId: item.artifactId,
-              title: item.title,
-              disabled: pinned || paperCapReached,
-              disabledReason: pinned
-                ? "sudah ditambahkan"
-                : paperCapReached
-                  ? "batas 12 paper"
-                  : undefined,
-            };
-          });
+      : (workspaceItems ?? []).flatMap((item) => {
+          if (mentionQuery !== "" && !item.title.toLowerCase().includes(mentionQuery)) {
+            return [];
+          }
+          const pinned = pinnedArtifactIds.has(item.artifactId);
+          return [{
+            type: "item" as const,
+            workspaceId: item.workspaceId,
+            workspaceName: drillWorkspaceName,
+            artifactId: item.artifactId,
+            title: item.title,
+            disabled: pinned || paperCapReached,
+            disabledReason: pinned
+              ? "sudah ditambahkan"
+              : paperCapReached
+                ? "batas 12 paper"
+                : undefined,
+          }];
+        });
 
   const activeLength = slashOpen
     ? filteredCommands.length
@@ -268,11 +268,6 @@ export function TokenizedPromptInput({
           : editor.scrollHeight,
       );
     }
-    setIsEditorEmpty(
-      serialized.trim().length === 0 &&
-        !editorHasCommandChips(editor) &&
-        !editorHasContextChips(editor),
-    );
     if (!isPaletteDismissed()) {
       const before = getTextBeforeCursor(editor);
       const slash = getSlashFilterQueryBeforeCursor(before);
@@ -316,14 +311,6 @@ export function TokenizedPromptInput({
     if (document.activeElement === editor) {
       moveCaretToEnd(editor);
     }
-    // The placeholder is an absolute overlay; seeded pinned pills live inside the
-    // editor. Recompute emptiness here so the placeholder hides as soon as pills
-    // are rendered — otherwise it overlaps them while `value` is still "".
-    setIsEditorEmpty(
-      value.trim().length === 0 &&
-        !editorHasCommandChips(editor) &&
-        !editorHasContextChips(editor),
-    );
     if (onHeightChange) {
       onHeightChange(
         value.length === 0 &&
@@ -555,6 +542,7 @@ export function TokenizedPromptInput({
     focusEditor();
   };
 
+  const isEditorEmpty = value.trim().length === 0 && pinnedContextRefs.length === 0;
   const showPlaceholder = isEditorEmpty;
 
   return (

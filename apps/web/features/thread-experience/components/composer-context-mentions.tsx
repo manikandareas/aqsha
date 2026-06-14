@@ -2,9 +2,7 @@
 
 import {
   createContext,
-  useCallback,
-  useContext,
-  useMemo,
+  use,
   useState,
   type ReactNode,
 } from "react";
@@ -39,7 +37,7 @@ type ComposerMentionsValue = {
 const ComposerMentionsContext = createContext<ComposerMentionsValue | null>(null);
 
 export function useComposerMentions() {
-  return useContext(ComposerMentionsContext);
+  return use(ComposerMentionsContext);
 }
 
 function truncate(value: string, max: number) {
@@ -78,15 +76,11 @@ function ComposerMentionsProviderInner({
   const workspacesPage = useConvexQueryData(api.workspaces.list, {
     paginationOpts: { numItems: 50, cursor: null },
   });
-  const contextWorkspaces: ContextWorkspaceOption[] = useMemo(
-    () =>
-      (workspacesPage?.page ?? []).map((workspace) => ({
-        workspaceId: String(workspace._id),
-        name: workspace.name,
-        emoji: workspace.emoji,
-      })),
-    [workspacesPage],
-  );
+  const contextWorkspaces: ContextWorkspaceOption[] = (workspacesPage?.page ?? []).map((workspace) => ({
+    workspaceId: String(workspace._id),
+    name: workspace.name,
+    emoji: workspace.emoji,
+  }));
 
   // The composer draft: the pills the user is adding for the CURRENT compose.
   // Starts empty and is cleared after each send — the composer never re-seeds
@@ -95,7 +89,7 @@ function ComposerMentionsProviderInner({
   // the agent reads it regardless of what the composer shows.
   const [contextRefs, setContextRefs] = useState<ContextRef[]>([]);
 
-  const appendContextRef = useCallback((ref: ContextRef) => {
+  const appendContextRef = (ref: ContextRef) => {
     setContextRefs((current) => {
       const key = contextRefKey(ref);
       if (current.some((existing) => contextRefKey(existing) === key)) {
@@ -110,14 +104,14 @@ function ComposerMentionsProviderInner({
       }
       return [...current, ref];
     });
-  }, []);
+  };
 
   const [pickerWorkspaceId, setPickerWorkspaceId] = useState<string | null>(null);
   const pickerItems = useConvexQueryData(
     api.artifacts.listForContextPicker,
     pickerWorkspaceId ? { workspaceId: toWorkspaceId(pickerWorkspaceId) } : "skip",
   );
-  const workspaceItems: ContextItemOption[] | undefined = useMemo(() => {
+  const workspaceItems: ContextItemOption[] | undefined = (() => {
     if (!pickerWorkspaceId || pickerItems === undefined) {
       return undefined;
     }
@@ -126,35 +120,22 @@ function ComposerMentionsProviderInner({
       artifactId: String(item._id),
       title: item.title,
     }));
-  }, [pickerItems, pickerWorkspaceId]);
+  })();
 
-  const requestWorkspaceItems = useCallback((workspaceId: string | null) => {
+  const requestWorkspaceItems = (workspaceId: string | null) => {
     setPickerWorkspaceId(workspaceId);
-  }, []);
+  };
 
-  const value = useMemo<ComposerMentionsValue>(
-    () => ({
-      pinnedContextRefs: contextRefs,
-      setContextRefs,
-      appendContextRef,
-      contextWorkspaces,
-      ambientWorkspaceId,
-      workspaceItems,
-      workspaceItemsLoading: pickerWorkspaceId !== null && pickerItems === undefined,
-      requestWorkspaceItems,
-    }),
-    [
-      contextRefs,
-      setContextRefs,
-      appendContextRef,
-      contextWorkspaces,
-      ambientWorkspaceId,
-      workspaceItems,
-      pickerWorkspaceId,
-      pickerItems,
-      requestWorkspaceItems,
-    ],
-  );
+  const value: ComposerMentionsValue = {
+    pinnedContextRefs: contextRefs,
+    setContextRefs,
+    appendContextRef,
+    contextWorkspaces,
+    ambientWorkspaceId,
+    workspaceItems,
+    workspaceItemsLoading: pickerWorkspaceId !== null && pickerItems === undefined,
+    requestWorkspaceItems,
+  };
 
   return (
     <ComposerMentionsContext.Provider value={value}>
@@ -164,7 +145,7 @@ function ComposerMentionsProviderInner({
 }
 
 /** Build a paper context ref (used by side panels inserting the same token). */
-export function buildPaperContextRef(args: {
+function buildPaperContextRef(args: {
   workspaceId: string;
   workspaceName: string;
   artifactId: string;
@@ -182,7 +163,7 @@ export function buildPaperContextRef(args: {
 }
 
 /** Build a workspace context ref (used by side panels). */
-export function buildWorkspaceContextRef(args: {
+function buildWorkspaceContextRef(args: {
   workspaceId: string;
   workspaceName: string;
 }): ContextRef {
