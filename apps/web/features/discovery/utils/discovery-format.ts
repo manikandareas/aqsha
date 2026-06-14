@@ -42,7 +42,7 @@ const paperDateFormatter = new Intl.DateTimeFormat("en", {
   year: "numeric",
 });
 
-export function formatPaperDate(paper: {
+function formatPaperDate(paper: {
   publicationDate?: string;
   year?: number;
 }): string {
@@ -136,13 +136,11 @@ export function deriveTopCited(
   limit = 4,
 ): TopCitedPaper[] {
   return items
-    .filter(
-      (item) =>
-        item.kind === "paper" &&
-        typeof item.citedByCount === "number" &&
-        item.citedByCount > 0,
+    .flatMap((item) =>
+      item.kind === "paper" && typeof item.citedByCount === "number" && item.citedByCount > 0
+        ? [{ item, count: item.citedByCount as number }]
+        : [],
     )
-    .map((item) => ({ item, count: item.citedByCount as number }))
     .toSorted(
       (left, right) =>
         right.count - left.count ||
@@ -169,18 +167,15 @@ export function deriveTopicMomentum(
   limit = 4,
 ): TopicMomentum[] {
   return items
-    .filter(
-      (item) =>
-        item.kind === "topic" &&
-        Array.isArray(item.sparkline) &&
-        item.sparkline.length > 1,
-    )
-    .map((item) => {
+    .flatMap((item) => {
+      if (!(item.kind === "topic" && Array.isArray(item.sparkline) && item.sparkline.length > 1)) {
+        return [];
+      }
       const values = item.sparkline as number[];
       const first = values[0];
       const last = values[values.length - 1];
       const base = Math.abs(first) > 0 ? Math.abs(first) : 1;
-      return { item, values, changePct: ((last - first) / base) * 100 };
+      return [{ item, values, changePct: ((last - first) / base) * 100 }];
     })
     .toSorted(
       (left, right) =>
