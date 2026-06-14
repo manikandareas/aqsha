@@ -89,7 +89,7 @@ export function ArtifactMetadataPopover(props: ArtifactMetadataProps) {
   );
 }
 
-function ArtifactMetadataPanel({
+export function ArtifactMetadataPanel({
   artifact,
   payload,
   title,
@@ -314,21 +314,28 @@ export function MarkdownArtifactDetails({ artifact }: { artifact: ArtifactSideba
         align="end"
         className="max-h-[72svh] w-[22rem] max-w-[calc(100vw-2rem)] overflow-y-auto p-4"
       >
-        <section>
-          <h2 className="mb-4 text-[12px] font-semibold text-muted-foreground">About</h2>
-          <div className="space-y-4">
-            <PropertyRow label="Type" value="Document" badge />
-            <PropertyRow label="Source" value={markdownSourceLabel(artifact.source)} />
-            <IndexStatusRow
-              status={artifact.indexingStatus}
-              reason={artifact.indexingFailureReason}
-            />
-            <PropertyRow label="Created" value={formatDate(artifact.createdAt)} />
-            <PropertyRow label="Updated" value={formatDate(artifact.updatedAt)} />
-          </div>
-        </section>
+        <MarkdownArtifactInfo artifact={artifact} />
       </PopoverContent>
     </Popover>
+  );
+}
+
+/** Inner metadata content for a markdown document (popover/menu-agnostic). */
+export function MarkdownArtifactInfo({ artifact }: { artifact: ArtifactSidebarRecord }) {
+  return (
+    <section>
+      <h2 className="mb-4 text-[12px] font-semibold text-muted-foreground">About</h2>
+      <div className="space-y-4">
+        <PropertyRow label="Type" value="Document" badge />
+        <PropertyRow label="Source" value={markdownSourceLabel(artifact.source)} />
+        <IndexStatusRow
+          status={artifact.indexingStatus}
+          reason={artifact.indexingFailureReason}
+        />
+        <PropertyRow label="Created" value={formatDate(artifact.createdAt)} />
+        <PropertyRow label="Updated" value={formatDate(artifact.updatedAt)} />
+      </div>
+    </section>
   );
 }
 

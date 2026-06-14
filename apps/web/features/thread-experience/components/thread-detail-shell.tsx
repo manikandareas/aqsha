@@ -147,7 +147,6 @@ function ThreadDetailShellView({
     mode.kind === "artifact" ? (
       <ArtifactDetailPanel
         artifactId={mode.artifactId}
-        onBack={panel?.backToContext}
         onClose={panel?.closePanel}
       />
     ) : (

@@ -1,6 +1,12 @@
 "use client";
 
-import { ArrowLeftIcon, Loader2Icon, XIcon } from "@aqsha/ui/icons";
+import {
+  InfoIcon,
+  Loader2Icon,
+  MoreHorizontalIcon,
+  PanelLeftIcon,
+  Trash2Icon,
+} from "@aqsha/ui/icons";
 import { api } from "@aqsha/convex/api";
 import { useRouter } from "next/navigation";
 import {
@@ -15,6 +21,7 @@ import {
 import { MessageResponse } from "@/components/ai-elements/message";
 import { AppLoadingOverlay } from "@/components/app-loading-overlay";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toArtifactId, type ArtifactId } from "@/lib/convex-refs";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
 import { useConvexActionQueryWithKey } from "@/lib/convex-query";
@@ -22,10 +29,12 @@ import { panelHeaderPaddingClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
 import { useArtifactDetailData } from "../api/use-workspaces-data";
 import { DeleteArtifactDialog } from "./artifact-delete-dialog";
-import { ArtifactDetailHeader, ArtifactTitleBreadcrumb } from "./artifact-detail-header";
+import { ArtifactDetailHeader } from "./artifact-detail-header";
 import {
+  ArtifactMetadataPanel,
   ArtifactMetadataPopover,
   MarkdownArtifactDetails,
+  MarkdownArtifactInfo,
   PaperStatusBanner,
 } from "./artifact-detail-sidebar";
 import {
@@ -72,7 +81,6 @@ export function ArtifactDetailView({
   workspaceId: workspaceIdProp,
   variant,
   onClose,
-  onBack,
 }: {
   artifactId: string;
   /** Required for the page route; the panel derives it from the loaded artifact. */
@@ -80,8 +88,6 @@ export function ArtifactDetailView({
   variant: ArtifactDetailVariant;
   /** Panel only: close the side panel. */
   onClose?: () => void;
-  /** Panel only: return to the workspace-library panel. */
-  onBack?: () => void;
 }) {
   const data = useArtifactDetailData(artifactId);
   const router = useRouter();
@@ -181,6 +187,35 @@ export function ArtifactDetailView({
   const renameArtifact = (name: string) =>
     data.renameArtifact({ artifactId: toArtifactId(artifactId), title: name });
 
+  // Side-panel "Info" content (same metadata the popover shows on the page),
+  // surfaced from the panel's More menu instead of its own header trigger.
+  const infoContent =
+    ready && detail && activeRenderPayload ? (
+      activeRenderPayload.artifactType === "markdown" ? (
+        <MarkdownArtifactInfo artifact={detail.artifact} />
+      ) : (
+        <ArtifactMetadataPanel
+          artifact={detail.artifact}
+          payload={activeRenderPayload}
+          title={detail.artifact.title}
+          paperExtraction={data.paperExtraction as PaperExtractionStatus}
+          artifactId={artifactId}
+          retryGrobidExtraction={data.retryGrobidExtraction}
+          retryUrlExtraction={data.retryUrlExtraction}
+        />
+      )
+    ) : null;
+
+  // The side panel collapses every action into one More menu (Info + Delete),
+  // sitting next to the close toggle. The full page keeps its richer `trailing`.
+  const panelActions =
+    ready && detail && infoContent ? (
+      <ArtifactPanelActions
+        infoContent={infoContent}
+        onDelete={() => setDeleteOpen(true)}
+      />
+    ) : null;
+
   const trailing =
     ready && detail ? (
       isMarkdown ? (
@@ -208,16 +243,10 @@ export function ArtifactDetailView({
           trailing={trailing}
         />
       ) : (
-        <ArtifactPanelToolbar
-          title={detail.artifact.title}
-          onRename={renameArtifact}
-          onBack={onBack}
-          onClose={onClose}
-          trailing={trailing}
-        />
+        <ArtifactPanelToolbar onClose={onClose} trailing={panelActions} />
       )
     ) : variant === "panel" ? (
-      <ArtifactPanelToolbar title="Dokumen" onBack={onBack} onClose={onClose} />
+      <ArtifactPanelToolbar onClose={onClose} />
     ) : null;
 
   const body = (
@@ -314,60 +343,111 @@ export function ArtifactDetailView({
 }
 
 function ArtifactPanelToolbar({
-  title,
-  onRename,
-  onBack,
   onClose,
   trailing,
 }: {
-  title: string;
-  onRename?: (name: string) => Promise<unknown>;
-  onBack?: () => void;
   onClose?: () => void;
   trailing?: ReactNode;
 }) {
+  // Borderless action bar matching the workspace panel header padding: no back
+  // arrow, no title — just the More menu (`trailing`) and the close toggle,
+  // which mirrors the workspace panel's close affordance.
   return (
     <header
       className={cn(
-        "flex shrink-0 items-center justify-between gap-2 border-b border-border/60 bg-background",
+        "flex shrink-0 items-center justify-end gap-0.5 bg-background",
         panelHeaderPaddingClass,
       )}
     >
-      <div className="flex min-w-0 items-center gap-1.5">
-        {onBack ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={onBack}
-            aria-label="Kembali ke pustaka"
-          >
-            <ArrowLeftIcon className="size-4" />
-          </Button>
-        ) : null}
-        {onRename ? (
-          <ArtifactTitleBreadcrumb title={title} onRename={onRename} />
-        ) : (
-          <span className="min-w-0 truncate text-[13px] font-medium text-foreground">
-            {title}
-          </span>
-        )}
-      </div>
-      <div className="flex shrink-0 items-center gap-0.5">
-        {trailing}
-        {onClose ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={onClose}
-            aria-label="Tutup panel"
-          >
-            <XIcon className="size-4" />
-          </Button>
-        ) : null}
-      </div>
+      {trailing}
+      {onClose ? (
+        <Button
+          type="button"
+          variant="ghost"
+          className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+          onClick={onClose}
+          aria-label="Tutup panel"
+        >
+          <PanelLeftIcon className="size-3.5 rotate-180" />
+        </Button>
+      ) : null}
     </header>
+  );
+}
+
+/**
+ * Side-panel header actions: a single More popover next to the close toggle.
+ *
+ * One overlay, two views. The "menu" view lists Info + Delete; choosing Info
+ * swaps the SAME popover to the metadata "info" view (the panel the page header
+ * shows in its own popover). This deliberately avoids nesting a Popover inside a
+ * DropdownMenu — two dismissable layers sharing an anchor fight each other (the
+ * menu closing dismisses the just-opened popover → flicker), which is the bug we
+ * hit before. A single controlled surface sidesteps that entirely.
+ */
+function ArtifactPanelActions({
+  infoContent,
+  onDelete,
+}: {
+  infoContent: ReactNode;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [view, setView] = useState<"menu" | "info">("menu");
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    // Always reopen on the menu view, never stuck on a stale info panel.
+    if (!next) setView("menu");
+  };
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+          aria-label="Tindakan lainnya"
+        >
+          <MoreHorizontalIcon className="size-3.5" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        className={cn(
+          view === "info"
+            ? "max-h-[72svh] w-[22rem] max-w-[calc(100vw-2rem)] overflow-y-auto p-4"
+            : "w-44 p-1",
+        )}
+      >
+        {view === "menu" ? (
+          <div className="grid gap-0.5">
+            <button
+              type="button"
+              onClick={() => setView("info")}
+              className="flex w-full items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] text-foreground transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+            >
+              <InfoIcon className="size-4 text-muted-foreground" />
+              Info
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onDelete();
+              }}
+              className="flex w-full items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] text-destructive transition-colors hover:bg-destructive/10 focus-visible:bg-destructive/10 focus-visible:outline-none"
+            >
+              <Trash2Icon className="size-4" />
+              Delete
+            </button>
+          </div>
+        ) : (
+          infoContent
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -375,19 +455,12 @@ function ArtifactPanelToolbar({
 export function ArtifactDetailPanel({
   artifactId,
   onClose,
-  onBack,
 }: {
   artifactId: string;
   onClose?: () => void;
-  onBack?: () => void;
 }) {
   return (
-    <ArtifactDetailView
-      artifactId={artifactId}
-      variant="panel"
-      onClose={onClose}
-      onBack={onBack}
-    />
+    <ArtifactDetailView artifactId={artifactId} variant="panel" onClose={onClose} />
   );
 }
 

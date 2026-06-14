@@ -87,7 +87,6 @@ export function AssistantTurn({
   const hasNodeParts = parts.some(
     (part) =>
       part.kind === "tool" ||
-      part.kind === "artifact" ||
       part.kind === "subagent" ||
       part.kind === "phase" ||
       part.kind === "approval" ||
@@ -112,6 +111,15 @@ export function AssistantTurn({
         ))}
       </Fragment>
     ) : null;
+
+  // Artifact cards are actionable (click → side panel) and conceptually part of
+  // the answer, not the process. They render at the very bottom — under the final
+  // response, grouped with the text — instead of inside the collapsible timeline.
+  const artifactCards = parts.flatMap((part) => {
+    if (part.kind !== "artifact") return [];
+    const node = visible(part.node);
+    return node ? [<ChatArtifactCard key={part.id} node={node} />] : [];
+  });
 
   // ── ordered timeline → React elements ──────────────────────────────────────
   const elements: ReactNode[] = [];
@@ -155,6 +163,7 @@ export function AssistantTurn({
       );
       continue;
     }
+    if (part.kind === "artifact") continue; // rendered at the bottom, below the answer
     const node = visible(part.node);
     if (!node) continue;
     if (part.kind === "approval") {
@@ -172,12 +181,6 @@ export function AssistantTurn({
       nodeBuffer.push(
         <li key={part.id}>
           <ToolRow node={node} devMode={devMode} />
-        </li>,
-      );
-    } else if (part.kind === "artifact") {
-      nodeBuffer.push(
-        <li key={part.id}>
-          <ChatArtifactCard node={node} />
         </li>,
       );
     } else if (part.kind === "subagent") {
@@ -297,6 +300,9 @@ export function AssistantTurn({
             <ThreadActivityFallback />
           ) : null}
         </MessageContent>
+        {artifactCards.length > 0 ? (
+          <div className="mt-3 grid gap-2">{artifactCards}</div>
+        ) : null}
         <MessageSourceCount sourceCount={messageSourceCount} />
         {hasText ? (
           <AssistantMessageActions
