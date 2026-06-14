@@ -211,12 +211,12 @@ function AskUserCard({
       return;
     }
     setAnswers(next);
-    setIndex(index + 1);
+    setIndex(prev => prev + 1);
   };
 
   return (
     <HitlQuestionCard
-      key={index}
+      key={prompt}
       prompt={prompt}
       options={options}
       allowCustom={question.allowCustom !== false}
@@ -231,7 +231,7 @@ function AskUserCard({
         index > 0
           ? () => {
               setAnswers(answers.slice(0, -1));
-              setIndex(index - 1);
+              setIndex(prev => prev - 1);
             }
           : undefined
       }

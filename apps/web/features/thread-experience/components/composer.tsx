@@ -183,7 +183,7 @@ function ComposerContent(props: ComposerProps) {
   const [content, setContent] = useState(initialContent ?? "");
   // Marked variant of `content` (mention pills kept as inline markers at their
   // typed positions). Sent as the message so the bubble renders pills in place.
-  const [richContent, setRichContent] = useState("");
+  const richContentRef = useRef("");
   const [inlineCommands, setInlineCommands] = useState<PromptCommand[]>([]);
   // Re-apply a pre-seed (e.g. an Explore detail item that loads after mount)
   // only while the user hasn't diverged from the previously seeded text.
@@ -286,7 +286,7 @@ function ComposerContent(props: ComposerProps) {
     // Snapshot the editor draft so an unexpected/network failure can restore the
     // user's text, rich body, commands, and pills instead of losing them (AUD-18).
     const draftContent = content;
-    const draftRichContent = richContent;
+    const draftRichContent = richContentRef.current;
     try {
       const { attachments: uploadedArtifacts, pendingAttachments } =
         await uploadComposerAttachments({
@@ -313,12 +313,12 @@ function ComposerContent(props: ComposerProps) {
       // Send the marked (rich) content when there are mention pills, so the
       // message renders them inline at their typed positions. Fall back to the
       // plain submission content (e.g. attachments-only synthetic text).
-      const richBody = richContent.trim();
+      const richBody = richContentRef.current.trim();
       const sentContent =
         mentions && richBody.length > 0 ? richBody : submission.content;
       setContent("");
       setInlineCommands([]);
-      setRichContent("");
+      richContentRef.current = "";
       // Reset the draft pills optimistically so they clear together with the
       // text (restored below if the send is blocked).
       mentions?.setContextRefs([]);
@@ -385,7 +385,7 @@ function ComposerContent(props: ComposerProps) {
       // draft. Restore the text, rich body, commands, and pills exactly as the
       // blocked-send path does, surface a readable error, and stop the spinner.
       setContent(draftContent);
-      setRichContent(draftRichContent);
+      richContentRef.current = draftRichContent;
       setInlineCommands(submittedCommands);
       mentions?.setContextRefs(draftRefs);
       setIsSending(false);
@@ -462,7 +462,7 @@ function ComposerContent(props: ComposerProps) {
             onRemoveContextArtifact={onRemoveContextArtifact}
             onSubmit={requestFormSubmit}
             onValueChange={setContent}
-            onRichValueChange={setRichContent}
+            onRichValueChange={(rich) => { richContentRef.current = rich; }}
             setAgentKind={setAgentKind}
           />
         </PromptInput>
