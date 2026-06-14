@@ -992,6 +992,44 @@ describe("subagentSummary", () => {
     const node = subagentNode("completed", [], "Agen pencari literatur selesai");
     expect(subagentSummary(node)).toBe("Agen pencari literatur selesai");
   });
+
+  it("prefers the v2 node.summary over the tool roll-up when terminal", () => {
+    const node = subagentNode("completed", [
+      toolChild(2, "completed", "Selesai mencari web", { resultCount: 5 }),
+    ]);
+    expect(subagentSummary({ ...node, summary: "Menulis respons akhir" })).toBe(
+      "Menulis respons akhir",
+    );
+  });
+
+  it("falls back to the tool roll-up when the v2 summary is empty", () => {
+    const node = subagentNode("completed", [
+      toolChild(2, "completed", "Selesai mencari web", { resultCount: 5 }),
+    ]);
+    expect(subagentSummary({ ...node, summary: "   " })).toBe("1 pencarian, 5 sumber");
+  });
+
+  it("carries the sanitized summary from a subagent_stop event onto the node (v2)", () => {
+    const result = activityEventsFromRun(
+      makeRow({
+        status: "completed",
+        updatedAt: 9000,
+        events: [
+          event(1, "subagent_start", { agentType: "literature-searcher", agentId: "a1" }),
+          event(2, "tool_start", { toolName: "searchArxiv", parentAgentId: "a1" }),
+          event(3, "tool_end", { toolName: "searchArxiv", parentAgentId: "a1" }),
+          event(4, "subagent_stop", {
+            agentType: "literature-searcher",
+            agentId: "a1",
+            summary: "Menulis respons akhir",
+          }),
+        ],
+      }),
+    );
+    const subagent = result.find((node) => node.type === "subagent");
+    expect(subagent?.summary).toBe("Menulis respons akhir");
+    expect(subagentSummary(subagent!)).toBe("Menulis respons akhir");
+  });
 });
 
 describe("subagentCurrentActivity", () => {

@@ -6,6 +6,7 @@ import {
 } from "@aqsha/agent-contracts";
 import type { AgentStore } from "../store/types";
 import {
+  sanitizeSubagentSummary,
   sanitizeToolInput,
   sanitizeToolResult,
   toolResponseIsError,
@@ -214,6 +215,16 @@ export function buildRunHooks(input: {
       if (agentType) payload.agentType = agentType;
       const agentId = stringField(hookInput, "agent_id", "agentId");
       if (agentId) payload.agentId = agentId;
+      // Fase 5 v2: the SubagentStop hook input carries `last_assistant_message`
+      // (the sub-agent's final text). Surface a single-line, ≤120-char summary —
+      // sanitized at this chokepoint so a long completion / document body can
+      // never leak — for the card's terminal roll-up.
+      if (type === "subagent_stop") {
+        const summary = sanitizeSubagentSummary(
+          stringField(hookInput, "last_assistant_message"),
+        );
+        if (summary) payload.summary = summary;
+      }
       await store.appendRunEvent({ runId, type, payload });
       return {};
     };

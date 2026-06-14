@@ -125,6 +125,44 @@ describe("buildRunHooks", () => {
     expect(events[0]?.type).toBe("subagent_start");
     expect(JSON.parse(events[0]?.payloadJson ?? "{}").agentType).toBe("planner");
   });
+
+  it("SubagentStop carries a sanitized last_assistant_message summary (Fase 5 v2)", async () => {
+    const store = new MemoryStore();
+    const hooks = buildRunHooks({ store, runId: "run1", threadId: "t1" });
+    await hooks.SubagentStop?.[0]?.hooks[0]!(
+      {
+        hook_event_name: "SubagentStop",
+        agent_type: "literature-searcher",
+        agent_id: "a1",
+        last_assistant_message:
+          "Menemukan 5 studi relevan.\nRahasia: API_KEY=sk-999 /srv/secret",
+      },
+      undefined,
+      signal,
+    );
+    const [payload] = await payloadOf(store, "run1", "subagent_stop");
+    const parsed = subagentPayloadSchema.parse(payload);
+    // Only the first line survives; the second line (key/path) never leaks.
+    expect(parsed.summary).toBe("Menemukan 5 studi relevan.");
+    expect(JSON.stringify(payload)).not.toContain("API_KEY");
+    expect(JSON.stringify(payload)).not.toContain("/srv/secret");
+  });
+
+  it("SubagentStart never carries a summary", async () => {
+    const store = new MemoryStore();
+    const hooks = buildRunHooks({ store, runId: "run1", threadId: "t1" });
+    await hooks.SubagentStart?.[0]?.hooks[0]!(
+      {
+        hook_event_name: "SubagentStart",
+        agent_type: "literature-searcher",
+        last_assistant_message: "should be ignored on start",
+      },
+      undefined,
+      signal,
+    );
+    const [payload] = await payloadOf(store, "run1", "subagent_start");
+    expect(subagentPayloadSchema.parse(payload).summary).toBeUndefined();
+  });
 });
 
 describe("buildRunHooks — Fase 2 enrichment (sanitized payloads)", () => {

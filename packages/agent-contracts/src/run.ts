@@ -128,6 +128,10 @@ export type ToolEndPayload = z.infer<typeof toolEndPayloadSchema>;
 export const subagentPayloadSchema = z.object({
   agentType: z.string().optional(),
   agentId: z.string().optional(),
+  // Answer-stream redesign Fase 5 v2: a single-line, ≤120-char summary derived
+  // from the sub-agent's `last_assistant_message` at `subagent_stop` (sanitized
+  // at the source chokepoint). Optional → thin Fase 1/3 events still parse.
+  summary: z.string().optional(),
 });
 export type SubagentPayload = z.infer<typeof subagentPayloadSchema>;
 

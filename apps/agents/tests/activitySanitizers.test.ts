@@ -2,6 +2,7 @@ import { activityEventsFromRun, type AgentRunRow } from "@aqsha/agent-contracts"
 import { describe, expect, it } from "vitest";
 import {
   sanitizeRunErrorMessage,
+  sanitizeSubagentSummary,
   sanitizeToolInput,
   sanitizeToolResult,
   toolResponseIsError,
@@ -320,5 +321,37 @@ describe("sanitizeRunErrorMessage", () => {
   it("falls back to the generic line for an empty message", () => {
     expect(sanitizeRunErrorMessage(undefined)).toBe("Terjadi kesalahan internal");
     expect(sanitizeRunErrorMessage("")).toBe("Terjadi kesalahan internal");
+  });
+});
+
+describe("sanitizeSubagentSummary (Fase 5 v2)", () => {
+  it("surfaces a short single-line summary", () => {
+    expect(sanitizeSubagentSummary("Menulis respons akhir")).toBe("Menulis respons akhir");
+  });
+
+  it("keeps only the first line (no second line smuggled through)", () => {
+    const raw = "Ringkasan singkat.\nRahasia: API_KEY=sk-12345 /srv/secret/path";
+    const safe = sanitizeSubagentSummary(raw);
+    expect(safe).toBe("Ringkasan singkat.");
+    expect(safe).not.toContain("API_KEY");
+    expect(safe).not.toContain("/srv/secret");
+  });
+
+  it("cuts interior CR / Unicode separators too (no multi-line leak)", () => {
+    expect(sanitizeSubagentSummary("Baris satu\rbaris dua")).toBe("Baris satu");
+    expect(sanitizeSubagentSummary("Baris satu baris dua")).toBe("Baris satu");
+  });
+
+  it("clamps a long completion to <=120 chars", () => {
+    const summary = sanitizeSubagentSummary("x".repeat(500));
+    expect(summary).toBeDefined();
+    expect(summary!.length).toBeLessThanOrEqual(120);
+    expect(summary!.endsWith("…")).toBe(true);
+  });
+
+  it("returns undefined for non-string / empty input", () => {
+    expect(sanitizeSubagentSummary(undefined)).toBeUndefined();
+    expect(sanitizeSubagentSummary("   ")).toBeUndefined();
+    expect(sanitizeSubagentSummary(42)).toBeUndefined();
   });
 });

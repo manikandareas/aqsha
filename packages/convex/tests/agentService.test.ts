@@ -2,8 +2,10 @@
 import { convexTest } from "convex-test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, internal } from "../convex/_generated/api";
+import type { Id } from "../convex/_generated/dataModel";
 import schema from "../convex/schema";
 import { deleteAgentData } from "../convex/accountCleanup/agent";
+import { cleanupOwnerArtifacts } from "../convex/accountCleanup/artifacts";
 
 // Step 1 (plan §9.4): the agent/service:* facade is the Convex side of
 // SERVICE_FUNCTIONS in apps/agents/src/store/convexStore.ts. These tests pin
@@ -849,11 +851,54 @@ describe("artifact↔thread link + listArtifacts (Step 3)", () => {
       .query(api.agent.queries.listArtifacts, { threadId: THREAD });
     expect(listed).toHaveLength(1);
     expect(listed[0]).toMatchObject({ title: "Laporan tertaut" });
+    // Fase 4 (answer-stream): the projection carries the artifact's own
+    // workspaceId so the in-chat artifact card can deep-link from a compact
+    // panel. An agent-created artifact always resolves a workspace (explicit →
+    // thread → default), so this is never null for these rows.
+    expect(typeof listed[0]!.workspaceId).toBe("string");
+    // Fase 5 cleanup: the dead `currentVersionId` projection is gone.
+    expect(listed[0]).not.toHaveProperty("currentVersionId");
 
     const foreign = await t
       .withIdentity({ tokenIdentifier: "intruder", subject: "intruder" })
       .query(api.agent.queries.listArtifacts, { threadId: THREAD });
     expect(foreign).toEqual([]);
+  });
+
+  it("cleans up an owner's artifacts + contents without the dead artifactVersions table (Fase 5)", async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      await ctx.db.insert("users", {
+        ownerUserId: OWNER,
+        clerkUserId: OWNER,
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+    await seedThread(t);
+    await t.mutation(api.agent.service.applyArtifactAction, {
+      serviceToken: TOKEN,
+      ownerUserId: OWNER,
+      threadId: THREAD,
+      action: "create",
+      title: "Untuk dihapus",
+      artifactType: "markdown",
+      content: "# Isi",
+    });
+
+    const result = await t.run(async (ctx) =>
+      cleanupOwnerArtifacts(ctx, OWNER, new Set<Id<"_storage">>()),
+    );
+    expect(result.deletedRows).toBeGreaterThan(0);
+
+    const remaining = await t.run(async (ctx) =>
+      ctx.db
+        .query("artifacts")
+        .withIndex("by_owner_status_updated", (q) => q.eq("ownerUserId", OWNER))
+        .take(10),
+    );
+    expect(remaining).toHaveLength(0);
   });
 });
 

@@ -41,13 +41,6 @@ export async function cleanupOwnerArtifacts(
       .withIndex("by_owner_artifact", (q) => q.eq("ownerUserId", ownerUserId))
       .take(501),
   );
-  const artifactVersions = withinOwnerCleanupLimit(
-    "artifactVersions",
-    await ctx.db
-      .query("artifactVersions")
-      .withIndex("by_owner_artifact_version", (q) => q.eq("ownerUserId", ownerUserId))
-      .take(501),
-  );
   const artifacts = withinOwnerCleanupLimit(
     "artifacts",
     await ctx.db
@@ -76,15 +69,11 @@ export async function cleanupOwnerArtifacts(
     addStorage(storageIds, metadata.sectionsStorageId);
     addStorage(storageIds, metadata.teiStorageId);
   }
-  for (const version of artifactVersions) {
-    addStorage(storageIds, version.storageId);
-  }
 
   deletedRows += await deleteRows(ctx, "artifactContents", artifactContents);
   deletedRows += await deleteRows(ctx, "artifactUrls", artifactUrls);
   deletedRows += await deleteRows(ctx, "artifactExtractions", artifactExtractions);
   deletedRows += await deleteRows(ctx, "artifactPaperMetadata", artifactPaperMetadata);
-  deletedRows += await deleteRows(ctx, "artifactVersions", artifactVersions);
   deletedRows += await deleteRows(ctx, "artifacts", artifacts);
 
   return { deletedRows };

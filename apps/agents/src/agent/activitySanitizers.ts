@@ -42,6 +42,18 @@ function safeCount(value: unknown): number | undefined {
     : undefined;
 }
 
+/**
+ * A sub-agent's `last_assistant_message` → a short, single-line summary
+ * ("Menulis respons …") for its card (answer-stream redesign Fase 5 v2, plan §8).
+ * Reuses `safeLabel` so the no-leak guarantee is identical to every other surfaced
+ * scalar: only the FIRST line survives (cut at any line terminator) and it is
+ * clamped to ≤120 chars — a long multi-paragraph completion, a smuggled second
+ * line, or a pasted document body can never ride along.
+ */
+export function sanitizeSubagentSummary(value: unknown): string | undefined {
+  return safeLabel(value);
+}
+
 const MAX_ID_LENGTH = 128;
 const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 

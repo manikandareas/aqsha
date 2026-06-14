@@ -41,6 +41,11 @@ export type ActivityEvent = {
   actor: ActivityActor;
   title: string; // human-readable Indonesian, sentence case
   description?: string; // safe summary, e.g. "12 hasil"
+  // Sub-agent terminal summary (Fase 5 v2): a single-line, ≤120-char roll-up
+  // derived from the sub-agent's `last_assistant_message`, sanitized at the
+  // source + re-clamped here. Preferred over the tool-count roll-up by
+  // `subagentSummary` once the sub-agent is terminal.
+  summary?: string;
   metadata?: Record<string, string | number | boolean>; // safe scalars only
   startedAt: number;
   endedAt?: number;
@@ -182,6 +187,23 @@ function safeErrorText(message: string | undefined): string | undefined {
   if (!firstLine) return undefined;
   return firstLine.length > MAX_ERROR_DESCRIPTION
     ? `${firstLine.slice(0, MAX_ERROR_DESCRIPTION - 1)}…`
+    : firstLine;
+}
+
+const MAX_SUMMARY_DESCRIPTION = 120;
+
+/**
+ * Defense-in-depth for the sub-agent summary (Fase 5 v2): the source already
+ * clamps `last_assistant_message` to a single line ≤120 chars; re-apply the same
+ * bound here so the view-model never trusts a longer/multiline value even if a
+ * future event smuggles one in.
+ */
+function safeSummary(message: string | undefined): string | undefined {
+  if (!message) return undefined;
+  const firstLine = message.split(LINE_TERMINATOR, 1)[0]?.trim() ?? "";
+  if (!firstLine) return undefined;
+  return firstLine.length > MAX_SUMMARY_DESCRIPTION
+    ? `${firstLine.slice(0, MAX_SUMMARY_DESCRIPTION - 1)}…`
     : firstLine;
 }
 
@@ -608,6 +630,8 @@ export function activityEventsFromRun(run: AgentRunRow): ActivityEvent[] {
         if (node) {
           node.status = "completed";
           node.title = label.completed;
+          const summary = safeSummary(stringOf(payload, "summary"));
+          if (summary) node.summary = summary;
           close(node, event.seq, at);
         }
         break;
@@ -963,6 +987,9 @@ function subagentToolChildren(node: ActivityEvent): ActivityEvent[] {
  * data. Pure.
  */
 export function subagentSummary(node: ActivityEvent): string {
+  // v2 (Fase 5): once the sub-agent is terminal it carries a sanitized summary
+  // from its `last_assistant_message` — prefer it over the tool-count roll-up.
+  if (node.summary && node.summary.trim()) return node.summary;
   const tools = subagentToolChildren(node);
   let sources = 0;
   for (const tool of tools) {

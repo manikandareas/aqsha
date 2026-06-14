@@ -280,7 +280,6 @@ export default defineSchema(
       plainTextPreview: v.optional(v.string()),
       status: v.optional(v.union(v.literal("active"), v.literal("deleted"))),
       deletedAt: v.optional(v.number()),
-      currentVersionId: v.optional(v.id("artifactVersions")),
       createdAt: v.number(),
       updatedAt: v.number(),
     })
@@ -411,27 +410,6 @@ export default defineSchema(
         "status",
         "updatedAt",
       ]),
-    artifactVersions: defineTable({
-      ownerUserId: v.string(),
-      threadId: v.string(),
-      artifactId: v.id("artifacts"),
-      versionNumber: v.number(),
-      contentFormat: v.union(
-        v.literal("markdown"),
-        v.literal("html"),
-        v.literal("plain"),
-        v.literal("code"),
-        v.literal("json"),
-      ),
-      title: v.string(),
-      body: v.optional(v.string()),
-      storageId: v.optional(v.id("_storage")),
-      createdByMessageId: v.optional(v.string()),
-      changeSummary: v.optional(v.string()),
-      createdAt: v.number(),
-    })
-      .index("by_owner_artifact_version", ["ownerUserId", "artifactId", "versionNumber"])
-      .index("by_owner_artifact_created", ["ownerUserId", "artifactId", "createdAt"]),
     externalLookupCache: defineTable({
       provider: v.union(
         v.literal("openalex"),
