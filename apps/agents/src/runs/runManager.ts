@@ -29,7 +29,7 @@ import type { AgentsConfig } from "../config";
 import { buildProviderDeps } from "../providers";
 import type { ProviderDeps } from "../providers/types";
 import type { AgentStore, RunRecord } from "../store/types";
-import { buildLiteratureSearcherAgents } from "../subagents";
+import { buildDeepResearchSubagents } from "../subagents";
 import { selectDomainPack } from "../subagents/skillDelegation";
 import {
   buildAqshaMcpServer,
@@ -660,8 +660,11 @@ export class RunManager {
             threadId: request.threadId,
             ownerUserId: request.ownerUserId,
           }),
+          // Per-phase isolation: index the phase-keyed map so each phase only
+          // sees its own subagent. plan/write (useSubagents:false) never index
+          // it → agents stays undefined.
           agents: policy.useSubagents
-            ? buildLiteratureSearcherAgents({ config, agentKind: request.agentKind })
+            ? buildDeepResearchSubagents({ config, agentKind: request.agentKind })[phase]
             : undefined,
           abortController,
           maxTurnsOverride: policy.maxTurns,

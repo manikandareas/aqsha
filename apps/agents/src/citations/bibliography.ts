@@ -105,7 +105,7 @@ export function parseReferenceEntry(entry: string): CitationInput | null {
   };
 }
 
-const MAX_CITATIONS = 60;
+export const MAX_CITATIONS = 60;
 
 /** Extract every parseable citation from a document. */
 export function extractCitations(text: string): CitationInput[] {

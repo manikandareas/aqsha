@@ -1,7 +1,8 @@
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { extractCitations } from "../citations/bibliography";
+import { extractCitations, MAX_CITATIONS } from "../citations/bibliography";
 import {
+  type CitationInput,
   FLAGGED_INTEGRITY_STATUSES,
   verifyOneCitation,
   type CitationProviders,
@@ -13,11 +14,20 @@ import {
 } from "../providers";
 import { errorResult, jsonResult, type RunToolContext } from "./context";
 
-// verifyCitations (port of agent/research/citationTools.ts): extract the
-// bibliography from an artifact, run the four-step integrity engine per
-// reference, and report with neutral framing (a flag is not an accusation).
+// Citation integrity tools (port of agent/research/citationTools.ts). Two
+// entrypoints share the same four-step engine, reported with neutral framing
+// (a flag is not an accusation):
+//   - verifyCitations: extracts the bibliography from a FINISHED artifact.
+//   - verifyIdentifiers: verifies a CALLER-SUPPLIED reference list, so the deep
+//     citation_verify phase can run before any artifact exists (plan §4.2).
 
 const VERIFY_CONCURRENCY = 4;
+
+const NEUTRAL_CAVEAT =
+  "A flag is not an accusation: it can stem from a metadata typo, an incomplete database, or a provider outage. Recommend manual verification for flagged items and use neutral language.";
+
+/** A reference to verify; `citation` is the [n] number, echoed back unchanged. */
+type CitationVerifyRef = CitationInput & { citation?: number };
 
 export function citationProvidersFor(ctx: RunToolContext): CitationProviders {
   return {
@@ -28,6 +38,67 @@ export function citationProvidersFor(ctx: RunToolContext): CitationProviders {
       searchOpenAlexWorks(ctx.providers, { query, limit }),
   };
 }
+
+/** Run the four-step engine over a reference list, batched by concurrency. */
+async function runVerificationBatch(
+  providers: CitationProviders,
+  refs: CitationVerifyRef[],
+): Promise<Array<Record<string, unknown>>> {
+  const items: Array<Record<string, unknown>> = [];
+  for (let i = 0; i < refs.length; i += VERIFY_CONCURRENCY) {
+    const chunk = refs.slice(i, i + VERIFY_CONCURRENCY);
+    const settled = await Promise.all(
+      chunk.map(async (ref) => {
+        try {
+          const result = await verifyOneCitation(providers, ref);
+          return {
+            reference: ref.title,
+            citation: ref.citation,
+            doi: ref.doi,
+            arxivId: ref.arxivId,
+            status: result.status,
+            issues: result.signals.metadataIssues,
+            matchedTitle: result.matchedTitle,
+          };
+        } catch {
+          return {
+            reference: ref.title,
+            citation: ref.citation,
+            status: "unverifiable" as const,
+            issues: [] as string[],
+          };
+        }
+      }),
+    );
+    items.push(...settled);
+  }
+  return items;
+}
+
+/** Roll the per-reference verdicts up into a checked/verified/flagged count. */
+function tally(items: Array<Record<string, unknown>>): {
+  checked: number;
+  verified: number;
+  flagged: number;
+} {
+  const verified = items.filter((item) => item.status === "verified").length;
+  const flagged = items.filter((item) =>
+    FLAGGED_INTEGRITY_STATUSES.has(
+      item.status as Parameters<typeof FLAGGED_INTEGRITY_STATUSES.has>[0],
+    ),
+  ).length;
+  return { checked: items.length, verified, flagged };
+}
+
+const VerifyItem = z.object({
+  title: z.string().min(1),
+  doi: z.string().optional(),
+  arxivId: z.string().optional(),
+  authors: z.array(z.string()).optional(),
+  year: z.number().optional(),
+  venue: z.string().optional(),
+  citation: z.number().optional(),
+});
 
 export function buildCitationTools(ctx: RunToolContext) {
   const verifyCitations = tool(
@@ -48,57 +119,36 @@ export function buildCitationTools(ctx: RunToolContext) {
         });
       }
 
-      const providers = citationProvidersFor(ctx);
-      const items: Array<Record<string, unknown>> = [];
-      for (let i = 0; i < citations.length; i += VERIFY_CONCURRENCY) {
-        const chunk = citations.slice(i, i + VERIFY_CONCURRENCY);
-        const settled = await Promise.all(
-          chunk.map(async (citation) => {
-            try {
-              const result = await verifyOneCitation(providers, citation);
-              return {
-                reference: citation.title,
-                doi: citation.doi,
-                arxivId: citation.arxivId,
-                status: result.status,
-                issues: result.signals.metadataIssues,
-                matchedTitle: result.matchedTitle,
-              };
-            } catch {
-              return {
-                reference: citation.title,
-                status: "unverifiable" as const,
-                issues: [] as string[],
-              };
-            }
-          }),
-        );
-        items.push(...settled);
-      }
-
-      const verified = items.filter((item) => item.status === "verified").length;
-      const flagged = items.filter((item) =>
-        FLAGGED_INTEGRITY_STATUSES.has(
-          item.status as Parameters<typeof FLAGGED_INTEGRITY_STATUSES.has>[0],
-        ),
-      ).length;
-
+      const items = await runVerificationBatch(citationProvidersFor(ctx), citations);
+      const summary = tally(items);
       await ctx.store.appendRunEvent({
         runId: ctx.runId,
         type: "citation_check",
-        payload: { checked: items.length, verified, flagged },
+        payload: summary,
       });
 
-      return jsonResult({
-        status: "completed",
-        summary: { checked: items.length, verified, flagged },
-        items,
-        caveat:
-          "A flag is not an accusation: it can stem from a metadata typo, an incomplete database, or a provider outage. Recommend manual verification for flagged items and use neutral language.",
-      });
+      return jsonResult({ status: "completed", summary, items, caveat: NEUTRAL_CAVEAT });
     },
     { annotations: { readOnlyHint: true } },
   );
 
-  return [verifyCitations];
+  const verifyIdentifiers = tool(
+    "verifyIdentifiers",
+    "Verify a list of collected references (existence, metadata consistency, DOI/arXiv validity) WITHOUT a finished document. Call once with the whole list; pass each reference's [n] citation number to get verdicts keyed by it back. Use this during research before any artifact exists.",
+    { references: z.array(VerifyItem).min(1).max(MAX_CITATIONS) },
+    async (args) => {
+      const items = await runVerificationBatch(citationProvidersFor(ctx), args.references);
+      const summary = tally(items);
+      await ctx.store.appendRunEvent({
+        runId: ctx.runId,
+        type: "citation_check",
+        payload: summary,
+      });
+
+      return jsonResult({ status: "completed", summary, items, caveat: NEUTRAL_CAVEAT });
+    },
+    { annotations: { readOnlyHint: true } },
+  );
+
+  return [verifyCitations, verifyIdentifiers];
 }

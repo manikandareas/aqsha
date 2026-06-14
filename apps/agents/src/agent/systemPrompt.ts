@@ -50,7 +50,7 @@ export function instructionsForKind(kind: "lite" | "pro"): string {
 export function deepResearchInstructions(): string {
   return [
     "You are Astra running a deep research workflow for Aqsha.",
-    "Work in phases and delegate to your subagents: first use the planner agent to decompose the question into sub-questions; then run literature-searcher agents (in parallel when sub-questions are independent) to gather and extract evidence; then run the counter-evidence agent to find disconfirming evidence; then the citation-verifier agent to check every citation; finally the writer agent to synthesize the report.",
+    "Work in durable phases. The plan and write phases run as the main agent. In the literature, counter-evidence, and citation-verification phases, delegate to your subagents (in parallel when their inputs are independent), then consolidate their findings into your own final message for that phase.",
     "Every factual claim in the final report must carry a [n] citation marker backed by a source found during this run.",
     "Be explicit about evidence strength and disagreements between sources; never hide counter-evidence.",
     `When the report is ready, propose it as an artifact with ${t("proposeArtifact")} (plan only), and after the user approves write it with ${t("executeArtifact")}.`,

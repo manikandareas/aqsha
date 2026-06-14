@@ -34,13 +34,13 @@ export const DEEP_PHASE_POLICIES: Record<DeepPhase, DeepPhasePolicy> = {
   literature: { maxTurns: 16, useSubagents: true, streamsToChat: false },
   counter_evidence: {
     maxTurns: 10,
-    useSubagents: false,
+    useSubagents: true,
     streamsToChat: false,
     optional: true,
   },
   citation_verify: {
     maxTurns: 12,
-    useSubagents: false,
+    useSubagents: true,
     streamsToChat: false,
     optional: true,
   },
@@ -100,7 +100,7 @@ export function buildDeepPhasePrompt(input: DeepPhasePromptInput): string {
       break;
     case "counter_evidence":
       blocks.push(
-        "PHASE 3/5 — COUNTER-EVIDENCE. Adversarial pass: search specifically for evidence AGAINST the emerging conclusions of the evidence inventory below — failed replications, contradicting studies, critiques, retractions. Report findings with the same citation discipline; report honestly when you find none.",
+        "PHASE 3/5 — COUNTER-EVIDENCE. Delegate to the counter-evidence subagent (via the Agent tool) to run an adversarial pass over the evidence inventory below — searching specifically for evidence AGAINST its emerging conclusions: failed replications, contradicting studies, critiques, retractions. Then consolidate the subagent's findings into your own final message: list each rebuttal with its [n] citation and strength, and report honestly when none is found. Your final message is the only output that survives, so do not leave the consolidation to the subagent.",
         CITATION_DISCIPLINE,
         section("Research question", question),
         section("Evidence inventory", priorOutputs.literature),
@@ -108,7 +108,8 @@ export function buildDeepPhasePrompt(input: DeepPhasePromptInput): string {
       break;
     case "citation_verify":
       blocks.push(
-        "PHASE 4/5 — CITATION VERIFICATION. Verify every identifier (DOI/arXiv/URL) collected below using the verifyCitations tool (preferred) or lookupDoi/searchArxiv individually. Your final message: per-reference verdicts with neutral framing — a flag is not an accusation, recommend manual review for anything uncertain.",
+        "PHASE 4/5 — CITATION VERIFICATION. Delegate to the citation-verifier subagent (via the Agent tool), passing the full reference list collected below (each source's title, identifier, authors, year, and its [n] number). Then consolidate the subagent's verdicts into your own final message: per-reference results keyed by [n], with neutral framing — a flag is not an accusation, recommend manual review for anything uncertain. Your final message is the only output that survives, so do not leave the consolidation to the subagent.",
+        CITATION_DISCIPLINE,
         section("Research question", question),
         section("Evidence inventory", priorOutputs.literature),
         section("Counter-evidence findings", priorOutputs.counter_evidence),

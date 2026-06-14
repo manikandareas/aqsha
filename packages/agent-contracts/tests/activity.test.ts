@@ -173,6 +173,23 @@ describe("activityEventsFromRun", () => {
     expect(timeline.map((node) => node.seq)).toEqual([1, 3]);
   });
 
+  it("labels the verifyIdentifiers tool with its dedicated copy (not the fallback)", () => {
+    const result = activityEventsFromRun(
+      makeRow({
+        status: "completed",
+        mode: "deep",
+        updatedAt: 6000,
+        events: [
+          event(1, "tool_start", { toolName: "verifyIdentifiers" }, 2000),
+          event(2, "tool_end", { toolName: "verifyIdentifiers" }, 4000),
+        ],
+      }),
+    );
+    const tool = result.find((node) => node.type === "tool");
+    expect(tool?.title).toBe("Daftar kutipan diverifikasi");
+    expect(tool?.title).not.toBe("Langkah selesai");
+  });
+
   it("folds tool_start + tool_end into one running→completed node with durationMs", () => {
     const result = activityEventsFromRun(
       makeRow({
@@ -392,6 +409,65 @@ describe("activityEventsFromRun", () => {
       status: "failed",
       title: "Agen pencari literatur gagal",
     });
+  });
+
+  it("renders the counter-evidence and citation-verifier subagent labels", () => {
+    const result = activityEventsFromRun(
+      makeRow({
+        status: "completed",
+        mode: "deep",
+        updatedAt: 9000,
+        events: [
+          event(1, "subagent_start", { agentType: "counter-evidence", agentId: "ce1" }),
+          event(2, "subagent_stop", { agentType: "counter-evidence", agentId: "ce1" }),
+          event(3, "subagent_start", { agentType: "citation-verifier", agentId: "cv1" }),
+          event(4, "subagent_stop", { agentType: "citation-verifier", agentId: "cv1" }),
+        ],
+      }),
+    );
+    const subagents = result.filter((node) => node.type === "subagent");
+    expect(subagents.map((node) => node.title)).toEqual([
+      "Agen bukti pembanding selesai",
+      "Agen verifikasi kutipan selesai",
+    ]);
+  });
+
+  it("gives the new verifier subagents their dedicated failed labels", () => {
+    const counter = activityEventsFromRun(
+      makeRow({
+        status: "failed",
+        mode: "deep",
+        updatedAt: 6000,
+        events: [event(1, "subagent_start", { agentType: "counter-evidence" }, 2000)],
+      }),
+    ).find((node) => node.type === "subagent");
+    expect(counter?.title).toBe("Agen bukti pembanding gagal");
+
+    const verifier = activityEventsFromRun(
+      makeRow({
+        status: "failed",
+        mode: "deep",
+        updatedAt: 6000,
+        events: [event(1, "subagent_start", { agentType: "citation-verifier" }, 2000)],
+      }),
+    ).find((node) => node.type === "subagent");
+    expect(verifier?.title).toBe("Agen verifikasi kutipan gagal");
+  });
+
+  it("falls back to the generic subagent label for an unknown agent type", () => {
+    const result = activityEventsFromRun(
+      makeRow({
+        status: "completed",
+        mode: "deep",
+        updatedAt: 5000,
+        events: [
+          event(1, "subagent_start", { agentType: "mystery-agent" }),
+          event(2, "subagent_stop", { agentType: "mystery-agent" }),
+        ],
+      }),
+    );
+    const subagent = result.find((node) => node.type === "subagent");
+    expect(subagent?.title).toBe("Sub-agen selesai");
   });
 
   it("bounds error copy to a single trimmed line", () => {

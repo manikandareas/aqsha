@@ -21,7 +21,13 @@ export const RESEARCH_TOOL_NAMES = [
   "searchThreadDocuments",
 ] as const;
 
+// Artifact-based verifier: extracts the bibliography from a finished document.
 export const CITATION_TOOL_NAMES = ["verifyCitations"] as const;
+
+// List-based verifier: checks a caller-supplied reference list (no artifact
+// needed), so the deep citation_verify phase works pre-write (plan §4.2). Kept
+// separate from CITATION_TOOL_NAMES on purpose — different contract.
+export const LIST_VERIFY_TOOL_NAMES = ["verifyIdentifiers"] as const;
 
 export const SANDBOX_AUTO_TOOL_NAMES = ["verifyStatistics"] as const;
 export const SANDBOX_GATED_TOOL_NAMES = ["runComputation"] as const;
@@ -78,6 +84,7 @@ export function allowedToolsForTurn(input: {
   const logical: string[] = [
     ...RESEARCH_TOOL_NAMES,
     ...CITATION_TOOL_NAMES,
+    ...LIST_VERIFY_TOOL_NAMES,
     ...SANDBOX_AUTO_TOOL_NAMES,
     "askUser",
   ];

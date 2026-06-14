@@ -70,6 +70,10 @@ const TOOL_LABELS: Record<string, Label> = {
     running: "Memverifikasi kutipan",
     completed: "Kutipan diverifikasi",
   },
+  verifyIdentifiers: {
+    running: "Memverifikasi daftar kutipan",
+    completed: "Daftar kutipan diverifikasi",
+  },
   verifyStatistics: {
     running: "Memverifikasi statistik",
     completed: "Statistik diperiksa",
@@ -115,6 +119,16 @@ const SUBAGENT_LABELS: Record<string, Label> = {
     running: "Agen pencari literatur bekerja",
     completed: "Agen pencari literatur selesai",
     failed: "Agen pencari literatur gagal",
+  },
+  "counter-evidence": {
+    running: "Agen bukti pembanding bekerja",
+    completed: "Agen bukti pembanding selesai",
+    failed: "Agen bukti pembanding gagal",
+  },
+  "citation-verifier": {
+    running: "Agen verifikasi kutipan bekerja",
+    completed: "Agen verifikasi kutipan selesai",
+    failed: "Agen verifikasi kutipan gagal",
   },
 };
 

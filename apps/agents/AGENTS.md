@@ -100,9 +100,12 @@ matching args (every call carries `serviceToken`), then set
 - ✅ Phase 3: deep research as DURABLE multi-phase orchestration
   (`runs/runManager.ts executeDeepRun` + `agent/deepPhases.ts`): five isolated
   query() phases (plan → literature → counter_evidence → citation_verify →
-  write) with per-phase state in the store (`researchPhaseStates`); only the
-  parallel `literature-searcher` remains a subagent. Re-dispatch replays only
-  non-done phases; HITL resumes the interrupted phase's own session.
+  write) with per-phase state in the store (`researchPhaseStates`). The
+  literature, counter_evidence, and citation_verify phases each delegate to
+  their own dedicated subagent (`literature-searcher` fan-out, `counter-evidence`,
+  `citation-verifier`), selected per-phase from `buildDeepResearchSubagents`;
+  plan/write run as the main agent. Re-dispatch replays only non-done phases;
+  HITL resumes the interrupted phase's own session.
 - ✅ Phase 4 (engine): Daytona statistical-verification engine ported to
   `src/sandbox/` (classifiers + R scripts + vendor + claim extraction);
   `buildSandboxService` runs it when `DAYTONA_API_KEY` +

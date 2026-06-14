@@ -257,6 +257,10 @@ describe("RunManager", () => {
       "literature-searcher",
     ]);
     expect(calls[1]!.options.allowedTools).toContain("Agent");
+    // Phase 3 & 4 each delegate to their OWN dedicated subagent (no leakage of
+    // the literature searcher across phase boundaries).
+    expect(Object.keys(calls[2]!.options.agents as object)).toEqual(["counter-evidence"]);
+    expect(Object.keys(calls[3]!.options.agents as object)).toEqual(["citation-verifier"]);
     // Write phase consumes the whole evidence chain.
     expect(calls[4]!.prompt).toContain("output fase 1");
     expect(calls[4]!.prompt).toContain("output fase 3");
@@ -295,9 +299,9 @@ describe("RunManager", () => {
       output: "bukti tersimpan",
     });
 
-    const calls: Array<{ prompt: string }> = [];
-    const runner: QueryRunner = ({ prompt }) => {
-      calls.push({ prompt });
+    const calls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
+    const runner: QueryRunner = ({ prompt, options }) => {
+      calls.push({ prompt, options });
       return streamOf(COMPLETED_MESSAGES);
     };
     const manager = new RunManager({ store, config, runner });
@@ -311,14 +315,20 @@ describe("RunManager", () => {
     expect(calls).toHaveLength(3);
     expect(calls[0]!.prompt).toContain("COUNTER-EVIDENCE");
     expect(calls[0]!.prompt).toContain("bukti tersimpan");
+    expect(calls[1]!.prompt).toContain("CITATION VERIFICATION");
+    // Lock the per-phase wiring: a flat-map regression would leak the wrong
+    // subagent (or the literature searcher) into these phases.
+    expect(Object.keys(calls[0]!.options.agents as object)).toEqual(["counter-evidence"]);
+    expect(Object.keys(calls[1]!.options.agents as object)).toEqual(["citation-verifier"]);
+    expect(calls[2]!.options.agents).toBeUndefined();
   });
 
   it("treats a max-turns stop with usable text as a done-partial phase", async () => {
     const store = new MemoryStore();
-    const calls: string[] = [];
-    const runner: QueryRunner = ({ prompt }) => {
+    const calls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
+    const runner: QueryRunner = ({ prompt, options }) => {
       const index = calls.length;
-      calls.push(prompt);
+      calls.push({ prompt, options });
       if (index === 2) {
         // counter_evidence phase: emits text, then the SDK throws max-turns.
         return {
@@ -348,6 +358,7 @@ describe("RunManager", () => {
     });
     expect(run.status).toBe("completed");
     expect(calls).toHaveLength(5);
+    expect(Object.keys(calls[2]!.options.agents as object)).toEqual(["counter-evidence"]);
     const phases = await store.listResearchPhases("run1");
     const counter = phases.find((p) => p.phase === "counter_evidence");
     expect(counter?.status).toBe("done");
@@ -356,10 +367,10 @@ describe("RunManager", () => {
 
   it("optional phase that exhausts turns with NO text degrades to done with a caveat", async () => {
     const store = new MemoryStore();
-    const calls: string[] = [];
-    const runner: QueryRunner = ({ prompt }) => {
+    const calls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
+    const runner: QueryRunner = ({ prompt, options }) => {
       const index = calls.length;
-      calls.push(prompt);
+      calls.push({ prompt, options });
       if (index === 3) {
         // citation_verify: burns every turn on tool calls, no text, then throws.
         return {
@@ -382,6 +393,7 @@ describe("RunManager", () => {
       return row?.status === "completed" ? row : null;
     });
     expect(calls).toHaveLength(5);
+    expect(Object.keys(calls[3]!.options.agents as object)).toEqual(["citation-verifier"]);
     const phases = await store.listResearchPhases("run1");
     const cv = phases.find((p) => p.phase === "citation_verify");
     expect(cv?.status).toBe("done");
