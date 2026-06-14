@@ -51,12 +51,14 @@ import { hasPendingHitl } from "../utils/hitl-parts";
 import { useHitlResume } from "./use-hitl-resume";
 import { UserMessageBubble } from "./message-row";
 import { AssistantTurn } from "./assistant-turn";
+import { ChatArtifactProvider } from "./chat-artifact-context";
 import { CenteredLoading } from "./shared";
 import { useConvexAuth } from "convex/react";
 
 const emptyContextArtifacts: DraftContextArtifact[] = [];
 const emptyThreadSummaries: ThreadSummary[] = [];
 const emptyRuns: ResearchRun[] = [];
+const emptyArtifacts: ResearchArtifact[] = [];
 const emptySources: ResearchSource[] = [];
 const cancelNoop = async () => undefined;
 
@@ -68,6 +70,7 @@ export function ThreadChatSurface({
   startThread,
   onSend,
   runs = emptyRuns,
+  artifacts = emptyArtifacts,
   sources = emptySources,
   onCancelRun = cancelNoop,
   onRetryRun,
@@ -165,6 +168,7 @@ export function ThreadChatSurface({
   }
 
   return (
+    <ChatArtifactProvider artifacts={artifacts} compact={compact}>
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
       <Conversation className="min-h-0 min-w-0 flex-1 overflow-x-hidden">
         <ConversationContent
@@ -292,5 +296,6 @@ export function ThreadChatSurface({
         </div>
       </div>
     </div>
+    </ChatArtifactProvider>
   );
 }

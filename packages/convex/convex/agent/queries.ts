@@ -195,9 +195,10 @@ export const listArtifacts = query({
         _id: String(doc._id),
         title: doc.title,
         artifactType: doc.artifactType,
-        currentVersionId: doc.currentVersionId
-          ? String(doc.currentVersionId)
-          : undefined,
+        // The artifact's OWN workspace — the in-chat artifact card uses it to
+        // deep-link to the full artifact route from a compact (embedded) panel
+        // (answer-stream redesign Fase 4 §7). Falsy for chat-only attachments.
+        workspaceId: doc.workspaceId ? String(doc.workspaceId) : undefined,
         source: doc.source,
         createdAt: doc.createdAt,
         updatedAt: doc.updatedAt,

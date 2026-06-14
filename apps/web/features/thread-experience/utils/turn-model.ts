@@ -3,7 +3,7 @@ import {
   subagentCurrentActivity,
   subagentSummary,
 } from "@aqsha/agent-contracts";
-import type { ChatMessage, ResearchRun } from "../types";
+import type { ChatMessage, ResearchArtifact, ResearchRun } from "../types";
 
 // ── unified turn model (answer-stream redesign Fase 2) ───────────────────────
 //
@@ -17,6 +17,9 @@ import type { ChatMessage, ResearchRun } from "../types";
 export type TurnPart =
   | { kind: "reasoning"; id: string; text: string; isThinking: boolean }
   | { kind: "tool"; id: string; node: ActivityEvent }
+  // An `executeArtifact` tool call renders as a clickable artifact card (Fase 4)
+  // instead of a plain tool row — opens the artifact's side panel / deep-link.
+  | { kind: "artifact"; id: string; node: ActivityEvent }
   | { kind: "subagent"; id: string; node: ActivityEvent }
   | { kind: "phase"; id: string; node: ActivityEvent }
   | { kind: "approval"; id: string; node: ActivityEvent }
@@ -184,12 +187,26 @@ function reasoningOf(message: ChatMessage | undefined): string {
   );
 }
 
+/**
+ * Whether a node is the `executeArtifact` tool call that writes a document — the
+ * one tool rendered as a clickable artifact card instead of a tool row. The
+ * discriminator is the allow-listed logical tool name on `metadata.tool` (set at
+ * the source for every tool node); never a brittle title match. `proposeArtifact`
+ * stays a tool/approval row — it has no `artifactId` to open until executed.
+ */
+export function isArtifactToolNode(node: ActivityEvent): boolean {
+  return node.type === "tool" && node.metadata?.tool === "executeArtifact";
+}
+
 function nodePart(
   node: ActivityEvent,
 ): Extract<
   TurnPart,
-  { kind: "tool" | "subagent" | "phase" | "approval" | "system" }
+  { kind: "tool" | "artifact" | "subagent" | "phase" | "approval" | "system" }
 > {
+  if (isArtifactToolNode(node)) {
+    return { kind: "artifact", id: node.id, node };
+  }
   const kind =
     node.type === "subagent"
       ? "subagent"
@@ -379,6 +396,66 @@ export function runningSubagentCount(nodes: ActivityEvent[]): number {
   return nodes.filter(
     (node) => node.type === "subagent" && node.status === "running",
   ).length;
+}
+
+// ── chat artifact card presentation (Fase 4 §7) ──────────────────────────────
+
+export type ChatArtifactCardModel = {
+  /** Opaque artifact id (allow-listed `safeId`) — resolves the row, the side
+   *  panel, and the compact deep-link. Absent while the write is still running. */
+  artifactId?: string;
+  title: string;
+  artifactType?: string;
+  /** "create" → "Dibuat", "update" → "Diperbarui". Defaults to create. */
+  action: "create" | "update";
+  /** The write is still in flight (no id yet) → show a "Menulis/Memperbarui
+   *  dokumen…" shimmer instead of a clickable card. */
+  live: boolean;
+  /** Whether `artifactId` resolved to a row in the per-thread artifact list. */
+  found: boolean;
+  source?: ResearchArtifact["source"];
+  createdAt?: number;
+  updatedAt?: number;
+  /** The artifact's OWN workspace — the compact deep-link target. */
+  workspaceId?: string;
+};
+
+function artifactAction(value: string | number | boolean | undefined): "create" | "update" {
+  return value === "update" ? "update" : "create";
+}
+
+/**
+ * Pure presentation model for one in-chat artifact card (§7). Resolves the
+ * `executeArtifact` node's `metadata.artifactId` against the per-thread artifact
+ * list (`artifactById`) for the authoritative title / type / timestamps;
+ * otherwise falls back to the node's own (allow-listed) title. While the node is
+ * still `running` there is no id yet → `live`, so the card shows a writing
+ * shimmer. No-leak: every field is an allow-listed scalar (`artifactId`/`action`/
+ * `title`) or comes from the resolved row — never raw payload. Pure.
+ */
+export function chatArtifactCardModel(
+  node: ActivityEvent,
+  artifactById: Map<string, ResearchArtifact>,
+): ChatArtifactCardModel {
+  const meta = node.metadata ?? {};
+  const artifactId = typeof meta.artifactId === "string" ? meta.artifactId : undefined;
+  const action = artifactAction(meta.action);
+  const live = node.status === "running" || (node.status === "pending" && !artifactId);
+  const row = artifactId ? artifactById.get(artifactId) : undefined;
+  const metaTitle = typeof meta.title === "string" ? meta.title : undefined;
+
+  return {
+    artifactId,
+    title: row?.title ?? metaTitle ?? "Dokumen",
+    artifactType: row?.artifactType,
+    action,
+    live,
+    found: Boolean(row),
+    source: row?.source,
+    createdAt: row?.createdAt,
+    updatedAt: row?.updatedAt,
+    workspaceId: row?.workspaceId,
+  };
 }
 
 /** Pure presentation model for a tool node's collapsible row (§6). */

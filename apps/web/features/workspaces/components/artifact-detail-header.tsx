@@ -45,7 +45,7 @@ export function ArtifactDetailHeader({
   );
 }
 
-function ArtifactTitleBreadcrumb({
+export function ArtifactTitleBreadcrumb({
   title,
   onRename,
 }: {

@@ -19,8 +19,10 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import type { ResearchRun } from "../types";
 import { formatCompactDuration } from "../utils/datetime";
+import { isArtifactToolNode } from "../utils/turn-model";
 import { SubagentCard, SubagentRunningChip } from "./subagent-card";
 import { ToolRow } from "./tool-row";
+import { ChatArtifactCard } from "./chat-artifact-card";
 
 // Activity-timeline primitives (plan §5.2) shared by the unified `AssistantTurn`:
 // the run header summary, deep-phase accordion, nested activity rows, and the
@@ -107,10 +109,19 @@ export function ActivityNodeRow({
 }) {
   // Children are already visibility-filtered by `filterByVisibility` upstream.
   const children = node.children ?? [];
-  // A leaf tool node renders as a collapsible ToolRow (its input/result summary
+  // An `executeArtifact` leaf renders as the clickable artifact card (Fase 4) —
+  // this is the nested/deep path (it sits inside the write phase of a deep run);
+  // a leaf tool node renders as a collapsible ToolRow (its input/result summary
   // on click); a sub-agent renders as ONE dynamic SubagentCard (Fase 3) — never
   // the old recursive nested list; everything else (phases, approvals, system)
   // keeps the plain status line + nested children.
+  if (isArtifactToolNode(node)) {
+    return (
+      <li>
+        <ChatArtifactCard node={node} />
+      </li>
+    );
+  }
   if (node.type === "tool" && children.length === 0) {
     return (
       <li>

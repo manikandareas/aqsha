@@ -1,8 +1,10 @@
 import type { ActivityEvent, OrderedPart } from "@aqsha/agent-contracts";
 import { describe, expect, it } from "vitest";
-import type { ChatMessage, ResearchRun } from "../types";
+import type { ChatMessage, ResearchArtifact, ResearchRun } from "../types";
 import {
   buildTurnParts,
+  chatArtifactCardModel,
+  isArtifactToolNode,
   pairRunsWithTurns,
   runningSubagentCount,
   subagentCardModel,
@@ -222,6 +224,140 @@ describe("buildTurnParts", () => {
     );
 
     expect(parts.map((part) => part.kind)).toEqual(["reasoning", "tool"]);
+  });
+});
+
+function artifactRow(overrides: Partial<ResearchArtifact>): ResearchArtifact {
+  return {
+    _id: "art_1",
+    title: "Ringkasan riset",
+    artifactType: "markdown",
+    source: "agent",
+    createdAt: 1000,
+    updatedAt: 2000,
+    workspaceId: "ws_1",
+    ...overrides,
+  };
+}
+
+function artifactNode(overrides: Partial<ActivityEvent>): ActivityEvent {
+  return node({
+    type: "tool",
+    title: "Dokumen disimpan",
+    metadata: { tool: "executeArtifact" },
+    ...overrides,
+  });
+}
+
+describe("isArtifactToolNode", () => {
+  it("is true only for an executeArtifact tool node", () => {
+    expect(isArtifactToolNode(artifactNode({}))).toBe(true);
+    expect(isArtifactToolNode(node({ metadata: { tool: "searchWeb" } }))).toBe(false);
+    expect(isArtifactToolNode(node({ metadata: { tool: "proposeArtifact" } }))).toBe(false);
+    expect(isArtifactToolNode(node({ type: "subagent", metadata: { tool: "executeArtifact" } }))).toBe(
+      false,
+    );
+    expect(isArtifactToolNode(node({ metadata: undefined }))).toBe(false);
+  });
+});
+
+describe("chatArtifactCardModel", () => {
+  it("is live (writing) while the node is still running, with no id yet", () => {
+    const model = chatArtifactCardModel(
+      artifactNode({ status: "running", metadata: { tool: "executeArtifact", title: "Draf" } }),
+      new Map(),
+    );
+    expect(model.live).toBe(true);
+    expect(model.action).toBe("create");
+    expect(model.artifactId).toBeUndefined();
+    expect(model.title).toBe("Draf");
+  });
+
+  it("resolves the row for a created artifact (title/type/provenance/timestamps)", () => {
+    const model = chatArtifactCardModel(
+      artifactNode({
+        status: "completed",
+        metadata: { tool: "executeArtifact", artifactId: "art_1", action: "create" },
+      }),
+      new Map([["art_1", artifactRow({})]]),
+    );
+    expect(model.live).toBe(false);
+    expect(model.found).toBe(true);
+    expect(model.action).toBe("create");
+    expect(model.title).toBe("Ringkasan riset");
+    expect(model.artifactType).toBe("markdown");
+    expect(model.source).toBe("agent");
+    expect(model.createdAt).toBe(1000);
+    expect(model.updatedAt).toBe(2000);
+    expect(model.workspaceId).toBe("ws_1");
+  });
+
+  it("reports the update action for a re-written artifact", () => {
+    const model = chatArtifactCardModel(
+      artifactNode({
+        status: "completed",
+        metadata: { tool: "executeArtifact", artifactId: "art_1", action: "update" },
+      }),
+      new Map([["art_1", artifactRow({ title: "Versi baru" })]]),
+    );
+    expect(model.action).toBe("update");
+    expect(model.title).toBe("Versi baru");
+  });
+
+  it("falls back to the node title when the id resolves to no row", () => {
+    const model = chatArtifactCardModel(
+      artifactNode({
+        status: "completed",
+        metadata: { tool: "executeArtifact", artifactId: "art_missing", action: "create", title: "Tak ketemu" },
+      }),
+      new Map([["art_1", artifactRow({})]]),
+    );
+    expect(model.found).toBe(false);
+    expect(model.title).toBe("Tak ketemu");
+    expect(model.workspaceId).toBeUndefined();
+  });
+
+  it("uses a default title when neither a row nor a node title exists", () => {
+    const model = chatArtifactCardModel(
+      artifactNode({ status: "completed", metadata: { tool: "executeArtifact", artifactId: "art_x" } }),
+      new Map(),
+    );
+    expect(model.title).toBe("Dokumen");
+  });
+});
+
+describe("buildTurnParts — artifact node", () => {
+  it("emits an artifact part for an executeArtifact node (primary path)", () => {
+    const ordered: OrderedPart[] = [
+      {
+        kind: "node",
+        seq: 1,
+        node: artifactNode({
+          id: "run-1:1",
+          seq: 1,
+          status: "completed",
+          metadata: { tool: "executeArtifact", artifactId: "art_1", action: "create" },
+        }),
+      },
+      { kind: "text", seq: 2, text: "selesai" },
+    ];
+    const parts = buildTurnParts(
+      message({ id: "a", role: "assistant", status: "success", order: 2, text: "selesai" }),
+      run({ _id: "run-1", orderedParts: ordered }),
+    );
+    expect(parts.map((part) => part.kind)).toEqual(["artifact"]);
+  });
+
+  it("emits an artifact part in the legacy fallback path too", () => {
+    const parts = buildTurnParts(
+      message({ id: "a", role: "assistant", status: "success", order: 2, text: "x" }),
+      run({
+        _id: "run-1",
+        orderedParts: null,
+        activity: [runNode, artifactNode({ id: "run-1:1", seq: 1, status: "completed" })],
+      }),
+    );
+    expect(parts.map((part) => part.kind)).toEqual(["artifact"]);
   });
 });
 

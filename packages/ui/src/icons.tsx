@@ -230,3 +230,45 @@ export const UserRoundIcon = createIcon(UserIcon);
 export const RotateCcwIcon = createIcon(ArrowReloadHorizontalIcon);
 export const XCircleIcon = createIcon(CancelCircleIcon);
 export const XIcon = createIcon(Cancel01Icon);
+
+// Shared icon-per-artifact-type mapping (used by the workspace library card and
+// the in-chat artifact card). Lives here so every artifact surface draws from the
+// same Hugeicons-backed set; the textual label / provenance copy stays app-side.
+function getArtifactTypeIcon(artifactType: string | undefined): typeof FileTextIcon {
+  switch (artifactType) {
+    case "url":
+      return LinkIcon;
+    case "pdf":
+      return FileTextIcon;
+    case "docx":
+      return FileIcon;
+    case "html":
+    case "code":
+      return Code2Icon;
+    case "svg":
+      return ImageIcon;
+    case "mermaid":
+      return GitBranchIcon;
+    case "json":
+      return BracesIcon;
+    case "csv":
+      return TableIcon;
+    case "plain_text":
+      return FileTextIcon;
+    default:
+      return FileTextIcon;
+  }
+}
+
+/** Renders the icon for an artifact type (markdown/pdf/url/…). Exposed as a
+ *  component so consumers don't resolve a component during render. */
+export function ArtifactTypeIcon({
+  artifactType,
+  className,
+}: {
+  artifactType: string | undefined;
+  className?: string;
+}) {
+  const Icon = getArtifactTypeIcon(artifactType);
+  return <Icon className={className} />;
+}

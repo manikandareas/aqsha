@@ -28,6 +28,7 @@ import {
 } from "./run-progress";
 import { SubagentCard, SubagentRunningChip } from "./subagent-card";
 import { ToolRow } from "./tool-row";
+import { ChatArtifactCard } from "./chat-artifact-card";
 import type { HitlActions } from "./use-hitl-resume";
 
 const emptySources: ResearchSource[] = [];
@@ -74,6 +75,7 @@ export function AssistantTurn({
   const hasNodeParts = parts.some(
     (part) =>
       part.kind === "tool" ||
+      part.kind === "artifact" ||
       part.kind === "subagent" ||
       part.kind === "phase" ||
       part.kind === "approval" ||
@@ -178,6 +180,12 @@ export function AssistantTurn({
       nodeBuffer.push(
         <li key={part.id}>
           <ToolRow node={node} devMode={devMode} />
+        </li>,
+      );
+    } else if (part.kind === "artifact") {
+      nodeBuffer.push(
+        <li key={part.id}>
+          <ChatArtifactCard node={node} />
         </li>,
       );
     } else if (part.kind === "subagent") {

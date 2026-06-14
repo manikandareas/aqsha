@@ -115,16 +115,12 @@ export type ResearchArtifact = {
     | "code"
     | "url";
   title: string;
-  currentVersionId?: string;
-  version?: {
-    _id: string;
-    versionNumber: number;
-    contentFormat: "markdown" | "html" | "plain" | "code" | "json";
-    title: string;
-    body?: string;
-    changeSummary?: string;
-    createdAt: number;
-  } | null;
+  // Projected by `api.agent.queries.listArtifacts` — drive the in-chat artifact
+  // card: provenance chip (`source`), "Diperbarui" timestamp (`updatedAt`), and
+  // the compact deep-link target (`workspaceId`, the artifact's own workspace).
+  source?: "manual" | "upload" | "agent" | "url";
+  updatedAt?: number;
+  workspaceId?: string;
   createdAt: number;
 };
 
