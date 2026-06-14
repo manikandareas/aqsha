@@ -1,4 +1,8 @@
-import { promptCommands, type PromptCommand } from "@aqsha/convex/prompt-commands";
+import {
+  matchPromptCommandInContent,
+  promptCommands,
+  type PromptCommand,
+} from "@aqsha/convex/prompt-commands";
 import type {
   ComposerSubmission,
   ResearchRun,
@@ -37,38 +41,6 @@ export function filterPromptCommandsBySlashQuery(query: string) {
   });
 }
 
-function findPromptCommandInContent(content: string) {
-  const trimmed = content.trim();
-  return (
-    promptCommands.find((command) =>
-      [command.slug, ...command.aliases].some(
-        (slug) =>
-          trimmed === slug ||
-          trimmed.startsWith(`${slug} `) ||
-          trimmed.startsWith(`${slug}\n`),
-      ),
-    ) ?? null
-  );
-}
-
-function previewFromComposerContent(content: string, command: PromptCommand) {
-  const argument = stripCommandFromContent(content, command);
-  const singleLine = argument.replace(/\s+/g, " ").trim();
-  return singleLine.length > 140 ? `${singleLine.slice(0, 137)}...` : singleLine;
-}
-
-function stripCommandFromContent(content: string, command: PromptCommand) {
-  const trimmed = content.trim();
-  const slugs = [command.slug, ...command.aliases].sort((a, b) => b.length - a.length);
-  for (const slug of slugs) {
-    if (trimmed === slug) return "";
-    if (trimmed.startsWith(`${slug} `) || trimmed.startsWith(`${slug}\n`)) {
-      return trimmed.slice(slug.length).trim();
-    }
-  }
-  return trimmed;
-}
-
 export function resolvePrimaryCommand(
   commands: PromptCommand[],
   visibleContent: string,
@@ -83,7 +55,7 @@ export function resolvePrimaryCommand(
     }
     return null;
   }
-  return findPromptCommandInContent(visibleContent);
+  return matchPromptCommandInContent(visibleContent);
 }
 
 export function createVisibleComposerContent(content: string) {

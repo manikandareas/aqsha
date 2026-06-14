@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
 import { useConvexMutationFn } from "@/lib/convex-query";
-import { promptForSdkBackend } from "@/features/thread-experience/api/use-thread-experience-data";
 
 type StartResearchOptions = {
   busyKey?: string;
@@ -27,8 +26,10 @@ export function useStartResearch() {
     setError(null);
     try {
       const result = await startThread({
-        // No commandId here; deep research is encoded as a /deep prompt.
-        content: promptForSdkBackend(content, "deep-research"),
+        // Deep research; the backend expands the deep-research command into the
+        // service-intercepted `/deep <question>` dispatch prompt.
+        content,
+        commandId: "deep-research",
         agentKind: "pro",
       });
       if (result?.ok && "threadId" in result && result.threadId) {

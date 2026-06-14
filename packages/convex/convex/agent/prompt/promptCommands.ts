@@ -240,3 +240,83 @@ export function buildPromptCommandPrompt(commandId: string, argument: string) {
     expandedPrompt: command.buildPrompt(argument),
   };
 }
+
+/** All recognizable triggers for a command, longest first (alias-safe). */
+function commandSlugs(command: PromptCommand): string[] {
+  return [command.slug, ...command.aliases].sort((a, b) => b.length - a.length);
+}
+
+/** Match a leading slash command (slug or alias) at the start of `content`. */
+export function matchPromptCommandInContent(content: string): PromptCommand | null {
+  const trimmed = content.trim();
+  return (
+    promptCommands.find((command) =>
+      commandSlugs(command).some(
+        (slug) =>
+          trimmed === slug ||
+          trimmed.startsWith(`${slug} `) ||
+          trimmed.startsWith(`${slug}\n`),
+      ),
+    ) ?? null
+  );
+}
+
+/** Strip a leading command slug/alias, returning the remaining argument text. */
+export function stripPromptCommandSlug(
+  content: string,
+  command: PromptCommand,
+): string {
+  const trimmed = content.trim();
+  for (const slug of commandSlugs(command)) {
+    if (trimmed === slug) return "";
+    if (trimmed.startsWith(`${slug} `) || trimmed.startsWith(`${slug}\n`)) {
+      return trimmed.slice(slug.length).trim();
+    }
+  }
+  return trimmed;
+}
+
+export type CommandDispatch = {
+  /** What the user typed — stored as the message bubble text (single slug). */
+  displayText: string;
+  /** What the agent receives — expanded instruction, or `/deep <args>`. */
+  dispatchPrompt: string;
+  isDeep: boolean;
+};
+
+/**
+ * Split a composer turn into the friendly text shown in the bubble and the
+ * prompt dispatched to the agent. Normal commands expand to their rich
+ * `buildPrompt` instruction (so the SDK never sees a bare slash command it would
+ * reject as "Unknown command"); deep research maps to the service-intercepted
+ * `/deep <args>`. The slug is stripped before building the argument, so it is
+ * never duplicated.
+ */
+export function resolveCommandDispatch(
+  content: string,
+  commandId?: string | null,
+): CommandDispatch {
+  const displayText = content.trim();
+  const command =
+    getPromptCommand(commandId) ?? matchPromptCommandInContent(displayText);
+  if (!command) {
+    return {
+      displayText,
+      dispatchPrompt: displayText,
+      isDeep: displayText.startsWith("/deep"),
+    };
+  }
+  const argument = stripPromptCommandSlug(displayText, command);
+  if (command.mode === "deep") {
+    return {
+      displayText,
+      dispatchPrompt: `/deep ${argument}`.trim(),
+      isDeep: true,
+    };
+  }
+  return {
+    displayText,
+    dispatchPrompt: command.buildPrompt(argument),
+    isDeep: false,
+  };
+}

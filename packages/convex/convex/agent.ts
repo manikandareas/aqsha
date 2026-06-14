@@ -10,6 +10,7 @@ import {
 import { requireCurrentUser } from "./auth";
 import { throwAppError } from "./lib/appError";
 import { checkAndConsumeSendQuota } from "./agent/sendQuota";
+import { resolveCommandDispatch } from "./agent/prompt/promptCommands";
 import {
   bumpThreadOnMessage,
   findRun,
@@ -120,7 +121,11 @@ async function persistTurnAndDispatch(
     ownerUserId: string;
     threadId: string;
     agentKind: "lite" | "pro";
-    prompt: string;
+    /** Friendly text shown in the user bubble (keeps the single slug). */
+    displayText: string;
+    /** Expanded prompt dispatched to the agent service. */
+    dispatchPrompt: string;
+    isDeep: boolean;
     contextArtifactIds: string[];
     contextWorkspaceIds: string[];
   },
@@ -134,14 +139,17 @@ async function persistTurnAndDispatch(
     threadId: input.threadId,
     ownerUserId: input.ownerUserId,
     role: "user",
-    text: input.prompt,
+    text: input.displayText,
     status: "complete",
     createdAt: now,
   });
-  await bumpThreadOnMessage(ctx, thread, { text: input.prompt, countDelta: 1 });
+  await bumpThreadOnMessage(ctx, thread, {
+    text: input.displayText,
+    countDelta: 1,
+  });
 
   const runId = `run_${crypto.randomUUID()}`;
-  const isDeep = input.prompt.startsWith("/deep");
+  const isDeep = input.isDeep;
   await ctx.db.insert("agentRuns", {
     runId,
     threadId: input.threadId,
@@ -161,7 +169,7 @@ async function persistTurnAndDispatch(
     ownerUserId: input.ownerUserId,
     agentKind: input.agentKind,
     mode: isDeep ? "deep" : "normal",
-    prompt: input.prompt,
+    prompt: input.dispatchPrompt,
     promptMessageId: String(messageDocId),
     contextRefs: {
       artifactIds: input.contextArtifactIds,
@@ -192,6 +200,7 @@ export const startThread = mutation({
   args: {
     content: v.string(),
     agentKind: agentKindValidator,
+    commandId: v.optional(v.string()),
     workspaceId: v.optional(v.id("workspaces")),
     contextArtifactIds: v.optional(v.array(v.string())),
     contextWorkspaceIds: v.optional(v.array(v.string())),
@@ -199,13 +208,16 @@ export const startThread = mutation({
   returns: startResultValidator,
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
-    const prompt = normalizePrompt(args.content);
+    const turn = resolveCommandDispatch(
+      normalizePrompt(args.content),
+      args.commandId,
+    );
     const gate = await checkAndConsumeSendQuota(ctx, {
       ownerUserId: user._id,
       ownerEmail: user.email,
-      content: prompt,
+      content: turn.displayText,
       agentKind: args.agentKind,
-      isDeep: prompt.startsWith("/deep"),
+      isDeep: turn.isDeep,
     });
     if (!gate.ok) {
       return gateFailure(gate);
@@ -233,7 +245,9 @@ export const startThread = mutation({
       ownerUserId: user._id,
       threadId,
       agentKind: args.agentKind,
-      prompt,
+      displayText: turn.displayText,
+      dispatchPrompt: turn.dispatchPrompt,
+      isDeep: turn.isDeep,
       contextArtifactIds: args.contextArtifactIds ?? [],
       contextWorkspaceIds: args.contextWorkspaceIds ?? [],
     });
@@ -244,13 +258,17 @@ export const sendMessage = mutation({
   args: {
     threadId: v.string(),
     content: v.string(),
+    commandId: v.optional(v.string()),
     contextArtifactIds: v.optional(v.array(v.string())),
     contextWorkspaceIds: v.optional(v.array(v.string())),
   },
   returns: startResultValidator,
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
-    const prompt = normalizePrompt(args.content);
+    const turn = resolveCommandDispatch(
+      normalizePrompt(args.content),
+      args.commandId,
+    );
     const thread = await findThread(ctx, args.threadId);
     if (!thread || thread.ownerUserId !== user._id) {
       throwAppError({ message: "Thread not found", code: "thread_not_found" });
@@ -261,9 +279,9 @@ export const sendMessage = mutation({
     const gate = await checkAndConsumeSendQuota(ctx, {
       ownerUserId: user._id,
       ownerEmail: user.email,
-      content: prompt,
+      content: turn.displayText,
       agentKind: thread.agentKind,
-      isDeep: prompt.startsWith("/deep"),
+      isDeep: turn.isDeep,
     });
     if (!gate.ok) {
       return gateFailure(gate);
@@ -272,7 +290,9 @@ export const sendMessage = mutation({
       ownerUserId: user._id,
       threadId: args.threadId,
       agentKind: thread.agentKind,
-      prompt,
+      displayText: turn.displayText,
+      dispatchPrompt: turn.dispatchPrompt,
+      isDeep: turn.isDeep,
       contextArtifactIds: args.contextArtifactIds ?? [],
       contextWorkspaceIds: args.contextWorkspaceIds ?? [],
     });

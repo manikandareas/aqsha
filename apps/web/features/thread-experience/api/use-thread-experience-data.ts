@@ -2,7 +2,6 @@
 
 import { uiRunFromRow, type AgentRunRow } from "@aqsha/agent-contracts";
 import { api } from "@aqsha/convex/api";
-import { getPromptCommand } from "@aqsha/convex/prompt-commands";
 import { useConvexMutationFn, useConvexQueryData } from "@/lib/convex-query";
 import type { WorkspaceId } from "@/lib/convex-refs";
 import type { SendMessage, StartThread } from "../components/component-types";
@@ -19,26 +18,6 @@ import { useConvexAuth } from "convex/react";
 //
 // Remaining gap (plan §9.3): the per-thread sources panel stays empty until
 // deep research runs durably on this backend (Step 4).
-
-/**
- * The composer keeps sending the legacy {content, commandId} pair; the SDK
- * backend wants the slash command inline in the prompt (plan §5.4). Deep
- * research maps to the service-intercepted /deep.
- */
-export function promptForSdkBackend(
-  content: string,
-  commandId?: string,
-): string {
-  if (!commandId) {
-    return content;
-  }
-  const command = getPromptCommand(commandId);
-  if (!command) {
-    return content;
-  }
-  const slug = command.mode === "deep" ? "/deep" : command.slug;
-  return `${slug} ${content}`.trim();
-}
 
 export function useThreadExperienceData(
   threadId: string | undefined,
@@ -104,7 +83,8 @@ export function useThreadExperienceData(
   // contextArtifactIds.
   const startThread: StartThread = async (args) => {
     return (await startThreadMutation({
-      content: promptForSdkBackend(args.content, args.commandId),
+      content: args.content,
+      commandId: args.commandId,
       agentKind: args.agentKind,
       workspaceId: args.workspaceId as never,
       contextArtifactIds: [
@@ -118,7 +98,8 @@ export function useThreadExperienceData(
   const sendMessage: SendMessage = async (args) => {
     return (await sendMessageMutation({
       threadId: args.threadId,
-      content: promptForSdkBackend(args.content, args.commandId),
+      content: args.content,
+      commandId: args.commandId,
       contextArtifactIds: [
         ...(args.selectedContextArtifactIds ?? []),
         ...(args.messageAttachmentArtifactIds ?? []),
