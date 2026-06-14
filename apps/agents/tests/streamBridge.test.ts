@@ -133,6 +133,67 @@ describe("StreamBridge", () => {
     expect(assistant?.text).toContain("t19");
   });
 
+  it("captures thinking deltas as reasoning, separate from chat text", async () => {
+    const { store, bridge, messageId } = await setup(5);
+    await bridge.handle({
+      type: "stream_event",
+      event: { delta: { type: "thinking_delta", thinking: "Let me " } },
+    });
+    await bridge.handle({
+      type: "stream_event",
+      event: { delta: { type: "thinking_delta", thinking: "consider this." } },
+    });
+    await bridge.handle({
+      type: "stream_event",
+      event: { delta: { type: "text_delta", text: "Final answer." } },
+    });
+    await bridge.flush();
+    const row = (await store.listMessages("t1", 10)).find(
+      (m) => m.messageId === messageId,
+    );
+    expect(row?.reasoning).toBe("Let me consider this.");
+    expect(row?.text).toBe("Final answer.");
+    expect(bridge.currentReasoning).toBe("Let me consider this.");
+  });
+
+  it("accepts the gateway `reasoning` field as a thinking alias", async () => {
+    const { bridge } = await setup(5);
+    await bridge.handle({
+      type: "stream_event",
+      event: { delta: { type: "reasoning_delta", reasoning: "hmm" } },
+    });
+    expect(bridge.currentReasoning).toBe("hmm");
+  });
+
+  it("full thinking blocks supersede partial reasoning deltas", async () => {
+    const { bridge } = await setup();
+    await bridge.handle({
+      type: "stream_event",
+      event: { delta: { type: "thinking_delta", thinking: "partial reaso" } },
+    });
+    await bridge.handle({
+      type: "assistant",
+      message: {
+        content: [
+          { type: "thinking", thinking: "Considered fully." },
+          { type: "text", text: "Done." },
+        ],
+      },
+    });
+    expect(bridge.currentReasoning).toBe("Considered fully.");
+    expect(bridge.currentText).toBe("Done.");
+  });
+
+  it("ignores subagent reasoning blocks", async () => {
+    const { bridge } = await setup();
+    await bridge.handle({
+      type: "assistant",
+      parent_tool_use_id: "tu_sub",
+      message: { content: [{ type: "thinking", thinking: "subagent thought" }] },
+    });
+    expect(bridge.currentReasoning).toBe("");
+  });
+
   it("maps the result message into the run summary", async () => {
     const { bridge } = await setup();
     await bridge.handle({

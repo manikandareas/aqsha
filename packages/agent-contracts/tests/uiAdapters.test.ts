@@ -32,6 +32,33 @@ describe("uiMessageFromRow", () => {
       }).status,
     ).toBe("streaming");
   });
+
+  it("prepends a reasoning part before the text part", () => {
+    const message = uiMessageFromRow({
+      messageId: "m3",
+      role: "assistant",
+      text: "jawaban",
+      reasoning: "berpikir dulu",
+      status: "complete",
+      createdAt: 44,
+    });
+    expect(message.parts).toEqual([
+      { type: "reasoning", text: "berpikir dulu" },
+      { type: "text", text: "jawaban" },
+    ]);
+  });
+
+  it("emits a reasoning part even while the answer is still empty (thinking phase)", () => {
+    const message = uiMessageFromRow({
+      messageId: "m4",
+      role: "assistant",
+      text: "",
+      reasoning: "masih berpikir",
+      status: "streaming",
+      createdAt: 45,
+    });
+    expect(message.parts).toEqual([{ type: "reasoning", text: "masih berpikir" }]);
+  });
 });
 
 describe("uiHitlMessageFromInteraction", () => {

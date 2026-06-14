@@ -110,6 +110,7 @@ export const listMessages = query({
       messageId: String(message._id),
       role: message.role,
       text: message.text,
+      reasoning: message.reasoning,
       runId: message.runId,
       status: message.status,
       createdAt: message.createdAt,

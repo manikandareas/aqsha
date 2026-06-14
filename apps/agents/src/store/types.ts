@@ -36,6 +36,8 @@ export type MessageRecord = {
   ownerUserId: string;
   role: MessageRole;
   text: string;
+  /** Captured extended-thinking/reasoning stream (assistant messages only). */
+  reasoning?: string;
   runId?: string;
   status: MessageStatus;
   createdAt: number;
@@ -127,7 +129,12 @@ export interface AgentStore {
     runId?: string;
     status: MessageStatus;
   }): Promise<MessageRecord>;
-  updateMessageText(messageId: string, text: string): Promise<void>;
+  /**
+   * Persist the in-flight assistant message. `reasoning` is the optional
+   * extended-thinking stream; pass `undefined` to leave any stored reasoning
+   * untouched (it only ever grows during a turn).
+   */
+  updateMessageText(messageId: string, text: string, reasoning?: string): Promise<void>;
   finalizeMessage(
     messageId: string,
     input: { text: string; status: Extract<MessageStatus, "complete" | "error"> },

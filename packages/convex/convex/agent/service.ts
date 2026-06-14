@@ -193,11 +193,21 @@ async function requireMessage(ctx: QueryCtx, messageId: string) {
 }
 
 export const updateMessageText = mutation({
-  args: { serviceToken: v.string(), messageId: v.string(), text: v.string() },
+  args: {
+    serviceToken: v.string(),
+    messageId: v.string(),
+    text: v.string(),
+    // Optional extended-thinking stream; omitted args leave stored reasoning
+    // untouched (the bridge only sends it once reasoning has accumulated).
+    reasoning: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
     requireServiceToken(args.serviceToken);
     const message = await requireMessage(ctx, args.messageId);
-    await ctx.db.patch("chatMessages", message._id, { text: args.text });
+    await ctx.db.patch("chatMessages", message._id, {
+      text: args.text,
+      ...(args.reasoning !== undefined ? { reasoning: args.reasoning } : {}),
+    });
     return null;
   },
 });

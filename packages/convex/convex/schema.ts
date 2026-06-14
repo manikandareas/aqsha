@@ -594,6 +594,9 @@ export default defineSchema(
       ownerUserId: v.string(),
       role: v.union(v.literal("user"), v.literal("assistant"), v.literal("system")),
       text: v.string(),
+      // Captured extended-thinking/reasoning stream for assistant messages.
+      // Optional + additive: legacy rows simply have no reasoning.
+      reasoning: v.optional(v.string()),
       runId: v.optional(v.string()),
       status: v.union(
         v.literal("streaming"),

@@ -12,6 +12,12 @@ import type { AgentStore } from "../store/types";
 type ContentBlock = {
   type: string;
   text?: string;
+  // Extended-thinking payload. Anthropic emits `thinking` on `thinking` blocks;
+  // `reasoning` is the field some Anthropic-compatible gateways (the OpenRouter
+  // reasoning models this service runs behind) surface instead — accept both so
+  // reasoning is captured regardless of which the gateway normalizes to.
+  thinking?: string;
+  reasoning?: string;
   name?: string;
   id?: string;
   input?: unknown;
@@ -23,7 +29,10 @@ export type BridgeMessage = {
   session_id?: string;
   parent_tool_use_id?: string | null;
   message?: { content?: ContentBlock[] };
-  event?: { type?: string; delta?: { type?: string; text?: string } };
+  event?: {
+    type?: string;
+    delta?: { type?: string; text?: string; thinking?: string; reasoning?: string };
+  };
   total_cost_usd?: number;
   num_turns?: number;
   usage?: {
@@ -38,6 +47,7 @@ export type BridgeMessage = {
 export type StreamBridgeResult = {
   sessionId?: string;
   finalText: string;
+  finalReasoning: string;
   resultSubtype?: string;
   summary: Omit<RunResultSummary, "status"> & { resultText?: string };
 };
@@ -45,7 +55,13 @@ export type StreamBridgeResult = {
 export class StreamBridge {
   private committedText = "";
   private pendingDelta = "";
+  // Extended-thinking stream, captured in parallel to chat text. Deltas
+  // accumulate in `pendingReasoning`; a full `thinking` block in an assistant
+  // message supersedes the partials for that turn (same shape as text).
+  private committedReasoning = "";
+  private pendingReasoning = "";
   private lastFlushedText = "";
+  private lastFlushedReasoning = "";
   private lastFlushAt = 0;
   private sessionId: string | undefined;
   private resultSubtype: string | undefined;
@@ -80,8 +96,11 @@ export class StreamBridge {
   }
 
   get currentText(): string {
-    const joiner = this.committedText && this.pendingDelta ? "" : "";
-    return `${this.committedText}${joiner}${this.pendingDelta}`;
+    return `${this.committedText}${this.pendingDelta}`;
+  }
+
+  get currentReasoning(): string {
+    return `${this.committedReasoning}${this.pendingReasoning}`;
   }
 
   get capturedSessionId(): string | undefined {
@@ -99,6 +118,12 @@ export class StreamBridge {
       if (delta?.type === "text_delta" && delta.text) {
         this.pendingDelta += delta.text;
         this.maybeScheduleFlush();
+      } else if (delta?.type === "thinking_delta" || delta?.type === "reasoning_delta") {
+        const chunk = delta.thinking ?? delta.reasoning;
+        if (chunk) {
+          this.pendingReasoning += chunk;
+          this.maybeScheduleFlush();
+        }
       }
       return;
     }
@@ -108,17 +133,31 @@ export class StreamBridge {
       if (message.parent_tool_use_id) {
         return;
       }
-      const text = (message.message?.content ?? [])
+      const blocks = message.message?.content ?? [];
+      const text = blocks
         .filter((block) => block.type === "text" && block.text)
         .map((block) => block.text)
+        .join("\n\n");
+      // `redacted_thinking` blocks carry encrypted `data`, not readable text —
+      // intentionally excluded here (nothing to display).
+      const reasoning = blocks
+        .filter((block) => block.type === "thinking" || block.type === "reasoning")
+        .map((block) => block.thinking ?? block.reasoning)
+        .filter((value): value is string => Boolean(value))
         .join("\n\n");
       if (text) {
         this.committedText = this.committedText
           ? `${this.committedText}\n\n${text}`
           : text;
       }
+      if (reasoning) {
+        this.committedReasoning = this.committedReasoning
+          ? `${this.committedReasoning}\n\n${reasoning}`
+          : reasoning;
+      }
       // The full message supersedes any partial deltas for this block.
       this.pendingDelta = "";
+      this.pendingReasoning = "";
       this.maybeScheduleFlush(true);
       return;
     }
@@ -137,21 +176,37 @@ export class StreamBridge {
     }
   }
 
+  /** Either the chat text or the reasoning stream has unflushed content. */
+  private isDirty(): boolean {
+    return (
+      this.currentText !== this.lastFlushedText ||
+      this.currentReasoning !== this.lastFlushedReasoning
+    );
+  }
+
+  /** New characters accumulated across both streams since the last flush. */
+  private pendingChars(): number {
+    return (
+      this.currentText.length -
+      this.lastFlushedText.length +
+      (this.currentReasoning.length - this.lastFlushedReasoning.length)
+    );
+  }
+
   private maybeScheduleFlush(force = false): void {
-    const text = this.currentText;
-    if (text === this.lastFlushedText) {
+    if (!this.isDirty()) {
       return;
     }
     const due =
       force ||
       this.now() - this.lastFlushAt >= this.opts.flushMs ||
-      text.length - this.lastFlushedText.length >= this.opts.flushChars;
+      this.pendingChars() >= this.opts.flushChars;
     if (due) {
       this.scheduleFlush();
     }
   }
 
-  /** Non-blocking write: one mutation in flight, latest text wins. */
+  /** Non-blocking write: one mutation in flight, latest snapshot wins. */
   private scheduleFlush(): void {
     if (this.opts.silent) {
       return;
@@ -160,19 +215,22 @@ export class StreamBridge {
       this.trailingQueued = true;
       return;
     }
-    const text = this.currentText;
-    if (text === this.lastFlushedText) {
+    if (!this.isDirty()) {
       return;
     }
+    const text = this.currentText;
+    const reasoning = this.currentReasoning;
     this.lastFlushedText = text;
+    this.lastFlushedReasoning = reasoning;
     this.lastFlushAt = this.now();
     this.inflight = this.store
-      .updateMessageText(this.opts.messageId, text)
+      .updateMessageText(this.opts.messageId, text, reasoning || undefined)
       .catch((error) => {
         // Transient store failures are tolerable mid-stream: the next flush
-        // (and the final drain) re-writes the full text.
+        // (and the final drain) re-writes the full text + reasoning.
         console.error("streamBridge flush failed", error);
         this.lastFlushedText = "";
+        this.lastFlushedReasoning = "";
       })
       .finally(() => {
         this.inflight = null;
@@ -183,7 +241,7 @@ export class StreamBridge {
       });
   }
 
-  /** Blocking drain: awaits in-flight writes and persists the latest text. */
+  /** Blocking drain: awaits in-flight writes and persists the latest snapshot. */
   async flush(): Promise<void> {
     if (this.opts.silent) {
       return;
@@ -191,13 +249,15 @@ export class StreamBridge {
     while (this.inflight) {
       await this.inflight;
     }
-    const text = this.currentText;
-    if (text === this.lastFlushedText) {
+    if (!this.isDirty()) {
       return;
     }
+    const text = this.currentText;
+    const reasoning = this.currentReasoning;
     this.lastFlushedText = text;
+    this.lastFlushedReasoning = reasoning;
     this.lastFlushAt = this.now();
-    await this.store.updateMessageText(this.opts.messageId, text);
+    await this.store.updateMessageText(this.opts.messageId, text, reasoning || undefined);
   }
 
   /** Final state after the stream ends (or is interrupted). */
@@ -205,6 +265,7 @@ export class StreamBridge {
     return {
       sessionId: this.sessionId,
       finalText: this.currentText,
+      finalReasoning: this.currentReasoning,
       resultSubtype: this.resultSubtype,
       summary: this.resultSummary,
     };

@@ -8,6 +8,8 @@ export type AgentMessageRow = {
   messageId: string;
   role: "user" | "assistant" | "system";
   text: string;
+  /** Captured extended-thinking/reasoning stream (assistant messages only). */
+  reasoning?: string;
   runId?: string;
   status: "streaming" | "complete" | "error";
   createdAt: number;
@@ -80,6 +82,16 @@ const MESSAGE_STATUS_MAP = {
 } as const;
 
 export function uiMessageFromRow(row: AgentMessageRow): UiChatMessage {
+  // Reasoning renders as a collapsible block ABOVE the answer, so it must come
+  // first in `parts`. getMessageText (apps/web) only reads `type === "text"`,
+  // so the reasoning part never leaks into the copied/rendered answer body.
+  const parts: UiMessagePart[] = [];
+  if (row.reasoning) {
+    parts.push({ type: "reasoning", text: row.reasoning });
+  }
+  if (row.text) {
+    parts.push({ type: "text", text: row.text });
+  }
   return {
     id: row.messageId,
     key: row.messageId,
@@ -88,7 +100,7 @@ export function uiMessageFromRow(row: AgentMessageRow): UiChatMessage {
     order: row.createdAt,
     stepOrder: 0,
     text: row.text,
-    parts: row.text ? [{ type: "text", text: row.text }] : [],
+    parts,
   };
 }
 

@@ -97,6 +97,7 @@ export function messageRecord(doc: Doc<"chatMessages">) {
     ownerUserId: doc.ownerUserId,
     role: doc.role,
     text: doc.text,
+    reasoning: doc.reasoning,
     runId: doc.runId,
     status: doc.status,
     createdAt: doc.createdAt,

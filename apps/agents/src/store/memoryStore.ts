@@ -114,10 +114,17 @@ export class MemoryStore implements AgentStore {
     return message;
   }
 
-  async updateMessageText(messageId: string, text: string): Promise<void> {
+  async updateMessageText(
+    messageId: string,
+    text: string,
+    reasoning?: string,
+  ): Promise<void> {
     const message = this.messages.get(messageId);
     if (message) {
       message.text = text;
+      if (reasoning !== undefined) {
+        message.reasoning = reasoning;
+      }
     }
   }
 

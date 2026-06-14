@@ -127,8 +127,17 @@ export class ConvexStore implements AgentStore {
     return this.mutation(SERVICE_FUNCTIONS.createMessage, input);
   }
 
-  async updateMessageText(messageId: string, text: string): Promise<void> {
-    await this.mutation(SERVICE_FUNCTIONS.updateMessageText, { messageId, text });
+  async updateMessageText(
+    messageId: string,
+    text: string,
+    reasoning?: string,
+  ): Promise<void> {
+    await this.mutation(SERVICE_FUNCTIONS.updateMessageText, {
+      messageId,
+      text,
+      // Omit when undefined so the Convex patch leaves stored reasoning intact.
+      ...(reasoning !== undefined ? { reasoning } : {}),
+    });
   }
 
   async finalizeMessage(
