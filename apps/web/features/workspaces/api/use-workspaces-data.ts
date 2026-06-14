@@ -1,20 +1,27 @@
 "use client";
 
 import { api } from "@aqsha/convex/api";
-import { toArtifactId, toWorkspaceId, type WorkspaceId } from "@/lib/convex-refs";
+import {
+  toArtifactId,
+  toWorkspaceId,
+  type WorkspaceId,
+} from "@/lib/convex-refs";
 import {
   useConvexActionFn,
-  useConvexAuth,
   useConvexMutationFn,
   useConvexQueryData,
 } from "@/lib/convex-query";
+import { useConvexAuth } from "convex/react";
 
 const workspacePageSize = 50;
 const artifactPageSize = 100;
 
 export function useWorkspaceIndexData() {
   const { isAuthenticated } = useConvexAuth();
-  const viewer = useConvexQueryData(api.auth.getCurrentUser, isAuthenticated ? {} : "skip");
+  const viewer = useConvexQueryData(
+    api.auth.getCurrentUser,
+    isAuthenticated ? {} : "skip",
+  );
   const workspacePage = useConvexQueryData(
     api.workspaces.list,
     isAuthenticated
@@ -54,7 +61,10 @@ export function useWorkspaceLibraryData(workspaceId: string | WorkspaceId) {
       ? { paginationOpts: { cursor: null, numItems: workspacePageSize } }
       : "skip",
   );
-  const folders = useConvexQueryData(api.workspaces.folders.list, workspaceArgs);
+  const folders = useConvexQueryData(
+    api.workspaces.folders.list,
+    workspaceArgs,
+  );
   const artifactsPage = useConvexQueryData(
     api.artifacts.listByWorkspace,
     isAuthenticated && convexWorkspaceId
@@ -83,7 +93,9 @@ export function useWorkspaceLibraryData(workspaceId: string | WorkspaceId) {
     moveFolder: useConvexMutationFn(api.workspaces.folders.move),
     removeFolder: useConvexMutationFn(api.workspaces.folders.remove),
     generateUploadUrl: useConvexMutationFn(api.artifacts.generateUploadUrl),
-    createUploadedArtifact: useConvexActionFn(api.artifacts.uploads.createFromStorage),
+    createUploadedArtifact: useConvexActionFn(
+      api.artifacts.uploads.createFromStorage,
+    ),
     createDocument: useConvexMutationFn(api.artifacts.createDocument),
     createUrl: useConvexMutationFn(api.artifacts.createUrl),
     renameArtifact: useConvexMutationFn(api.artifacts.rename),
@@ -95,7 +107,10 @@ export function useWorkspaceLibraryData(workspaceId: string | WorkspaceId) {
 export function useWorkspaceDetailData(workspaceId: string) {
   const { isAuthenticated } = useConvexAuth();
   const libraryData = useWorkspaceLibraryData(workspaceId);
-  const viewer = useConvexQueryData(api.auth.getCurrentUser, isAuthenticated ? {} : "skip");
+  const viewer = useConvexQueryData(
+    api.auth.getCurrentUser,
+    isAuthenticated ? {} : "skip",
+  );
   const threads = useConvexQueryData(
     api.agent.queries.listThreads,
     isAuthenticated ? {} : "skip",
@@ -148,7 +163,10 @@ export function useArtifactDetailData(artifactId: string) {
     isAuthenticated && artifactId
       ? { artifactId: toArtifactId(artifactId) }
       : "skip";
-  const viewer = useConvexQueryData(api.auth.getCurrentUser, isAuthenticated ? {} : "skip");
+  const viewer = useConvexQueryData(
+    api.auth.getCurrentUser,
+    isAuthenticated ? {} : "skip",
+  );
   const workspacesPage = useConvexQueryData(
     api.workspaces.list,
     isAuthenticated
@@ -160,7 +178,10 @@ export function useArtifactDetailData(artifactId: string) {
     isAuthenticated ? {} : "skip",
   );
   const artifact = useConvexQueryData(api.artifacts.get, artifactArgs);
-  const paperExtraction = useConvexQueryData(api.papers.extractions.getStatus, artifactArgs);
+  const paperExtraction = useConvexQueryData(
+    api.papers.extractions.getStatus,
+    artifactArgs,
+  );
 
   return {
     isAuthenticated,
@@ -172,7 +193,9 @@ export function useArtifactDetailData(artifactId: string) {
     isLoading: artifact === undefined,
     updateDocument: useConvexActionFn(api.artifacts.updateDocument),
     retryUrlExtraction: useConvexMutationFn(api.artifacts.retryUrlExtraction),
-    retryGrobidExtraction: useConvexMutationFn(api.papers.extractions.retryGrobidExtraction),
+    retryGrobidExtraction: useConvexMutationFn(
+      api.papers.extractions.retryGrobidExtraction,
+    ),
     renameArtifact: useConvexMutationFn(api.artifacts.rename),
     moveArtifact: useConvexMutationFn(api.artifacts.move),
     removeArtifact: useConvexMutationFn(api.artifacts.remove),

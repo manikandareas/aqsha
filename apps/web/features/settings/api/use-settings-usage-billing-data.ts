@@ -2,13 +2,10 @@
 
 import { useState } from "react";
 import { api } from "@aqsha/convex/api";
-import {
-  useConvexActionState,
-  useConvexAuth,
-  useConvexQueryData,
-} from "@/lib/convex-query";
+import { useConvexActionState, useConvexQueryData } from "@/lib/convex-query";
 import { readableBillingError } from "../lib/settings-format";
 import type { Plan, ProductKey } from "../lib/types";
+import { useConvexAuth } from "convex/react";
 
 type PendingKey = ProductKey | "portal" | "cancel" | null;
 type UsageRangeDays = 30 | 90 | 365;
@@ -16,8 +13,14 @@ type UsageRangeDays = 30 | 90 | 365;
 export function useSettingsUsageBillingData() {
   const { isAuthenticated } = useConvexAuth();
   const [usageRangeDays, setUsageRangeDays] = useState<UsageRangeDays>(90);
-  const current = useConvexQueryData(api.billing.current.get, isAuthenticated ? {} : "skip");
-  const plansResult = useConvexQueryData(api.billing.products.list, isAuthenticated ? {} : "skip");
+  const current = useConvexQueryData(
+    api.billing.current.get,
+    isAuthenticated ? {} : "skip",
+  );
+  const plansResult = useConvexQueryData(
+    api.billing.products.list,
+    isAuthenticated ? {} : "skip",
+  );
   const plans = plansResult?.map(normalizePlan);
   const activity = useConvexQueryData(
     api.billing.usage.activity,
@@ -25,8 +28,12 @@ export function useSettingsUsageBillingData() {
   );
   const createCheckout = useConvexActionState(api.billing.checkout.create);
   const createPortal = useConvexActionState(api.billing.portal.create);
-  const changeSubscription = useConvexActionState(api.billing.subscription.change);
-  const cancelSubscription = useConvexActionState(api.billing.subscription.cancel);
+  const changeSubscription = useConvexActionState(
+    api.billing.subscription.change,
+  );
+  const cancelSubscription = useConvexActionState(
+    api.billing.subscription.cancel,
+  );
   const [pendingKey, setPendingKey] = useState<PendingKey>(null);
   const [billingError, setBillingError] = useState<string | null>(null);
   const [billingNotice, setBillingNotice] = useState<string | null>(null);
@@ -56,7 +63,9 @@ export function useSettingsUsageBillingData() {
     setBillingNotice(null);
     try {
       await changeSubscription.mutateAsync({ productKey });
-      setBillingNotice("Perubahan paket dikirim ke Polar. Status akan diperbarui setelah webhook diterima.");
+      setBillingNotice(
+        "Perubahan paket dikirim ke Polar. Status akan diperbarui setelah webhook diterima.",
+      );
       setPendingKey(null);
     } catch (error) {
       setBillingError(readableBillingError(error));
@@ -83,7 +92,9 @@ export function useSettingsUsageBillingData() {
     setBillingError(null);
     setBillingNotice(null);
     try {
-      const { url } = await createPortal.mutateAsync({ returnUrl: window.location.href });
+      const { url } = await createPortal.mutateAsync({
+        returnUrl: window.location.href,
+      });
       window.location.assign(url);
       setPendingKey(null);
     } catch (error) {
@@ -117,9 +128,11 @@ const productKeys = new Set<string>([
   "plusYearly",
 ]);
 
-function normalizePlan(plan: Omit<Plan, "products"> & {
-  products: Array<Omit<Plan["products"][number], "key"> & { key: string }>;
-}): Plan {
+function normalizePlan(
+  plan: Omit<Plan, "products"> & {
+    products: Array<Omit<Plan["products"][number], "key"> & { key: string }>;
+  },
+): Plan {
   return {
     ...plan,
     products: plan.products.flatMap((product) => {

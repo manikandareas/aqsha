@@ -3,7 +3,6 @@
 import {
   convexQuery,
   useConvexAction,
-  useConvexAuth,
   useConvexMutation,
 } from "@convex-dev/react-query";
 import {
@@ -19,9 +18,7 @@ import type {
   FunctionReturnType,
 } from "convex/server";
 
-export { useConvexAuth };
-
-export function useConvexQuery<
+function useConvexQuery<
   ConvexQueryReference extends FunctionReference<"query">,
 >(
   funcRef: ConvexQueryReference,
@@ -121,7 +118,7 @@ export function useConvexActionFn<
   return mutation.mutateAsync;
 }
 
-export function useConvexOptimisticMutationState<
+function useConvexOptimisticMutationState<
   ConvexMutationReference extends FunctionReference<"mutation">,
 >(
   funcRef: ConvexMutationReference,

@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  ChevronDownIcon,
-  LockIcon,
-} from "@aqsha/ui/icons";
+import { ChevronDownIcon, LockIcon } from "@aqsha/ui/icons";
 import { api } from "@aqsha/convex/api";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -14,11 +11,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  useConvexAuth,
-  useConvexQueryData,
-} from "@/lib/convex-query";
+import { useConvexQueryData } from "@/lib/convex-query";
 import { cn } from "@/lib/utils";
+import { useConvexAuth } from "convex/react";
 
 export type ComposerAgentKind = "lite" | "pro";
 
@@ -50,10 +45,11 @@ export function useComposerAgentSelection({
   }
 
   return {
-    agentKind: canUsePro ? selectedAgentKind : "lite" as const,
+    agentKind: canUsePro ? selectedAgentKind : ("lite" as const),
     canUsePro,
     setAgentKind: setSelectedAgentKind,
-    handleUpgrade: onUpgrade ?? (() => router.push("/app/settings/usage-billing")),
+    handleUpgrade:
+      onUpgrade ?? (() => router.push("/app/settings/usage-billing")),
   };
 }
 
@@ -126,13 +122,7 @@ function getAgentSelectorPresentation(agentKind: ComposerAgentKind) {
     : { shortLabel: "Lite", src: "/general-agent.png" };
 }
 
-function ModeSelectorImage({
-  src,
-  alt,
-}: {
-  src: string;
-  alt: string;
-}) {
+function ModeSelectorImage({ src, alt }: { src: string; alt: string }) {
   return (
     <span className="grid size-5 shrink-0 place-items-center overflow-hidden rounded-full bg-background">
       <Image

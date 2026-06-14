@@ -3,22 +3,16 @@
 import { uiRunFromRow, type AgentRunRow } from "@aqsha/agent-contracts";
 import { api } from "@aqsha/convex/api";
 import { getPromptCommand } from "@aqsha/convex/prompt-commands";
-import {
-  useConvexAuth,
-  useConvexMutationFn,
-  useConvexQueryData,
-} from "@/lib/convex-query";
+import { useConvexMutationFn, useConvexQueryData } from "@/lib/convex-query";
 import type { WorkspaceId } from "@/lib/convex-refs";
-import type {
-  SendMessage,
-  StartThread,
-} from "../components/component-types";
+import type { SendMessage, StartThread } from "../components/component-types";
 import type {
   ResearchArtifact,
   ResearchRun,
   ResearchSource,
   SendResult,
 } from "../types";
+import { useConvexAuth } from "convex/react";
 
 // The canonical thread-experience data hook: it reads/writes the first-party
 // agent tables written by the apps/agents SDK service (api.agent.*).
@@ -31,7 +25,10 @@ import type {
  * backend wants the slash command inline in the prompt (plan §5.4). Deep
  * research maps to the service-intercepted /deep.
  */
-export function promptForSdkBackend(content: string, commandId?: string): string {
+export function promptForSdkBackend(
+  content: string,
+  commandId?: string,
+): string {
   if (!commandId) {
     return content;
   }
@@ -43,10 +40,16 @@ export function promptForSdkBackend(content: string, commandId?: string): string
   return `${slug} ${content}`.trim();
 }
 
-export function useThreadExperienceData(threadId: string | undefined, enabled = true) {
+export function useThreadExperienceData(
+  threadId: string | undefined,
+  enabled = true,
+) {
   const { isAuthenticated } = useConvexAuth();
   const active = enabled && isAuthenticated;
-  const viewer = useConvexQueryData(api.auth.getCurrentUser, active ? {} : "skip");
+  const viewer = useConvexQueryData(
+    api.auth.getCurrentUser,
+    active ? {} : "skip",
+  );
   const threads = useConvexQueryData(
     api.agent.queries.listThreads,
     active ? {} : "skip",
@@ -68,9 +71,13 @@ export function useThreadExperienceData(threadId: string | undefined, enabled = 
         ? null
         : {
             ...selectedThreadRaw,
-            workspaceId: selectedThreadRaw.workspaceId as WorkspaceId | undefined,
+            workspaceId: selectedThreadRaw.workspaceId as
+              | WorkspaceId
+              | undefined,
           };
-  const threadQueriesEnabled = Boolean(active && threadId && selectedThread !== null);
+  const threadQueriesEnabled = Boolean(
+    active && threadId && selectedThread !== null,
+  );
   const rateStatus = useConvexQueryData(
     api.agent.rateLimits.getSendStatus,
     active ? {} : "skip",

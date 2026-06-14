@@ -8,7 +8,7 @@ import {
 } from "@aqsha/agent-contracts";
 import { AlertCircleIcon } from "@aqsha/ui/icons";
 import { api } from "@aqsha/convex/api";
-import { useConvexAuth, useConvexQueryData } from "@/lib/convex-query";
+import { useConvexQueryData } from "@/lib/convex-query";
 import {
   Conversation,
   ConversationContent,
@@ -45,13 +45,15 @@ import type {
   ThreadSummary,
 } from "./component-types";
 import { Composer } from "./composer";
-import { EmptyThreadCopy, HomeStartState } from "./home-states";
+import { HomeStartState } from "./home-states";
+import { EmptyThreadCopy } from "./empty-thread-copy";
 import { type AgentRunId } from "@/lib/convex-refs";
 import { hasPendingHitl } from "../utils/hitl-parts";
 import { useHitlResume } from "./use-hitl-resume";
 import { MessageRow } from "./message-row";
 import { AgentRunBlock } from "./run-progress";
 import { CenteredLoading } from "./shared";
+import { useConvexAuth } from "convex/react";
 
 const emptyContextArtifacts: DraftContextArtifact[] = [];
 const emptyThreadSummaries: ThreadSummary[] = [];
@@ -165,7 +167,12 @@ export function ThreadChatSurface({
         <ConversationContent
           className={cn(
             "gap-6 overflow-x-hidden p-0",
-            compact ? cn("max-w-none", panelBodyPaddingClass) : cn(threadTranscriptColumnClass, threadTranscriptBodyPaddingClass),
+            compact
+              ? cn("max-w-none", panelBodyPaddingClass)
+              : cn(
+                  threadTranscriptColumnClass,
+                  threadTranscriptBodyPaddingClass,
+                ),
           )}
         >
           <div className="flex w-full min-w-0 flex-col overflow-x-hidden">
@@ -187,7 +194,9 @@ export function ThreadChatSurface({
                         <AgentRunBlock
                           run={entry.run}
                           artifacts={artifacts ?? []}
-                          sourceCount={sourceCounts.byRunId.get(entry.run._id) ?? 0}
+                          sourceCount={
+                            sourceCounts.byRunId.get(entry.run._id) ?? 0
+                          }
                           sources={sources.filter(
                             (source) => source.runId === entry.run._id,
                           )}
@@ -197,7 +206,9 @@ export function ThreadChatSurface({
                           message={entry.message}
                           assistantRun={entry.assistantRun}
                           onRetryRun={onRetryRun}
-                          sourceCount={sourceCounts.byMessageId.get(entry.message.id) ?? 0}
+                          sourceCount={
+                            sourceCounts.byMessageId.get(entry.message.id) ?? 0
+                          }
                           threadWorkspaceId={threadWorkspaceId}
                           hitlActions={hitlActions}
                           hitlDisabled={isGenerating}
@@ -210,7 +221,9 @@ export function ThreadChatSurface({
             ) : messagesLoading ? (
               <CenteredLoading label="Memuat pesan..." />
             ) : (
-              <ConversationEmptyState className={compact ? "min-h-[24svh]" : "min-h-[48svh]"}>
+              <ConversationEmptyState
+                className={compact ? "min-h-[24svh]" : "min-h-[48svh]"}
+              >
                 <EmptyThreadCopy title={title} />
               </ConversationEmptyState>
             )}
@@ -221,14 +234,22 @@ export function ThreadChatSurface({
       <div
         className={cn(
           "shrink-0 min-w-0 overflow-x-hidden bg-background",
-          compact ? panelComposerPaddingClass : threadTranscriptComposerPaddingClass,
+          compact
+            ? panelComposerPaddingClass
+            : threadTranscriptComposerPaddingClass,
         )}
       >
-        <div className={cn(compact ? "mx-auto w-full max-w-none" : threadTranscriptColumnClass)}>
+        <div
+          className={cn(
+            compact ? "mx-auto w-full max-w-none" : threadTranscriptColumnClass,
+          )}
+        >
           {threadId && threadStatus?.status === "failed" ? (
             <div className="mb-2 flex items-start gap-2 rounded-[10px] border border-coral-soft-border bg-coral-soft px-3 py-2.5 text-[12px] font-medium leading-5 text-coral-foreground">
               <AlertCircleIcon className="mt-0.5 size-4 shrink-0" />
-              <span>Respons terakhir gagal diproses. Coba kirim pesan lagi.</span>
+              <span>
+                Respons terakhir gagal diproses. Coba kirim pesan lagi.
+              </span>
             </div>
           ) : null}
           {threadId && onSend ? (

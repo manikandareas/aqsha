@@ -3,12 +3,16 @@
 import type { CSSProperties, ReactNode } from "react";
 import { api } from "@aqsha/convex/api";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { useConvexAuth, useConvexQueryData } from "@/lib/convex-query";
+import { useConvexQueryData } from "@/lib/convex-query";
 import { SettingsRail } from "./settings-rail";
+import { useConvexAuth } from "convex/react";
 
 export function SettingsShell({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useConvexAuth();
-  const viewer = useConvexQueryData(api.auth.getCurrentUser, isAuthenticated ? {} : "skip");
+  const viewer = useConvexQueryData(
+    api.auth.getCurrentUser,
+    isAuthenticated ? {} : "skip",
+  );
 
   return (
     <SidebarProvider

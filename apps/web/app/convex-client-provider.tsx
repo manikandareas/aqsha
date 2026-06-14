@@ -4,14 +4,13 @@
 import { useAuth } from "@clerk/nextjs";
 import { ConvexQueryClient } from "@convex-dev/react-query";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ConvexReactClient } from "convex/react";
+import { ConvexReactClient, useConvexAuth } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { api } from "@aqsha/convex/api";
 import { AppLoadingOverlay } from "@/components/app-loading-overlay";
 import {
-  useConvexAuth,
   useConvexMutationState,
   useConvexQueryData,
 } from "@/lib/convex-query";
