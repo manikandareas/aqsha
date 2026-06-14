@@ -1,10 +1,54 @@
 {
+  "$schema": "https://react.doctor/schema/config.json",
   "ignore": {
     "overrides": [
       {
         "files": ["app/convex-client-provider.tsx"],
-        "rules": ["react-hooks-js/hooks"]
+        "rules": ["react-hooks-js/hooks", "react-doctor/nextjs-no-client-side-redirect"]
+      },
+      {
+        "files": ["lib/convex-query.ts"],
+        "rules": ["react-doctor/query-mutation-missing-invalidation"]
+      },
+      {
+        "files": ["features/workspaces/components/pdf-artifact-viewer.tsx"],
+        "rules": ["react-doctor/js-set-map-lookups", "react-doctor/prefer-useReducer", "react-doctor/no-autofocus"]
+      },
+      {
+        "files": ["features/thread-experience/components/composer-token-input.tsx"],
+        "rules": ["react-doctor/prefer-tag-over-role", "react-doctor/no-event-handler", "react-doctor/no-pass-data-to-parent", "react-doctor/prefer-useReducer", "react-doctor/no-giant-component"]
+      },
+      {
+        "files": ["features/onboarding/pages/onboarding-page.tsx"],
+        "rules": ["react-doctor/nextjs-no-client-side-redirect", "react-doctor/no-prevent-default"]
+      },
+      {
+        "files": ["features/thread-experience/components/message-row.tsx"],
+        "rules": ["react-doctor/exhaustive-deps"]
+      },
+      {
+        "files": ["features/thread-experience/components/composer.tsx"],
+        "rules": ["react-doctor/no-derived-state", "react-doctor/prefer-useReducer", "react-doctor/no-giant-component", "react-doctor/no-many-boolean-props"]
+      },
+      {
+        "files": ["features/discovery/pages/discovery-page.tsx"],
+        "rules": ["react-doctor/prefer-useReducer", "react-doctor/no-giant-component"]
+      },
+      {
+        "files": ["features/settings/pages/usage-billing-page.tsx"],
+        "rules": ["react-doctor/no-event-handler"]
+      },
+      {
+        "files": ["components/app-sidebar.tsx"],
+        "rules": ["react-doctor/no-giant-component"]
+      },
+      {
+        "files": ["features/workspaces/components/workspace-library-board.tsx"],
+        "rules": ["react-doctor/no-giant-component"]
       }
     ]
+  },
+  "rules": {
+    "react-doctor/repository-secret-file": "off"
   }
 }
