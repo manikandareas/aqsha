@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  interleaveRunsWithMessages,
-  sortTranscriptMessages,
-} from "./transcript-model";
+import { isRunActive, sortTranscriptMessages } from "./transcript-model";
 import type { ChatMessage, ResearchRun } from "../types";
 
 function message(overrides: Partial<ChatMessage>): ChatMessage {
@@ -41,54 +38,12 @@ describe("thread transcript model", () => {
     expect(sorted.map((item) => item.id)).toEqual(["first", "second", "third"]);
   });
 
-  it("places a Deep Research run after its prompt message", () => {
-    const entries = interleaveRunsWithMessages(
-      [
-        message({ id: "prompt", key: "prompt", role: "user", order: 0 }),
-        message({ id: "answer", key: "answer", role: "assistant", order: 1 }),
-      ],
-      [run({ _id: "deep-run", promptMessageId: "prompt" })],
-    );
-
-    expect(entries.map((entry) => entry.kind === "run" ? entry.run._id : entry.message.id)).toEqual([
-      "prompt",
-      "deep-run",
-      "answer",
-    ]);
-  });
-
-  it("associates retried runs with their matching assistant responses", () => {
-    const entries = interleaveRunsWithMessages(
-      [
-        message({ id: "prompt", key: "prompt", role: "user", order: 0 }),
-        message({ id: "answer-1", key: "answer-1", role: "assistant", order: 1 }),
-        message({ id: "answer-2", key: "answer-2", role: "assistant", order: 2 }),
-      ],
-      [
-        run({ _id: "original-run", promptMessageId: "prompt" }),
-        run({ _id: "retry-run", promptMessageId: "prompt" }),
-      ],
-    );
-
-    const assistantEntries = entries.filter(
-      (entry) => entry.kind === "message" && entry.message.role === "assistant",
-    );
-
-    expect(assistantEntries.map((entry) => entry.kind === "message" ? entry.assistantRun?._id : undefined)).toEqual([
-      "original-run",
-      "retry-run",
-    ]);
-  });
-
-  it("keeps orphaned runs renderable", () => {
-    const entries = interleaveRunsWithMessages(
-      [message({ id: "answer", key: "answer", role: "assistant", order: 1 })],
-      [run({ _id: "orphan-run", promptMessageId: "missing-message" })],
-    );
-
-    expect(entries.at(-1)).toMatchObject({
-      kind: "run",
-      run: { _id: "orphan-run" },
-    });
+  it("treats queued/running/waiting runs as active and terminal runs as inactive", () => {
+    expect(isRunActive(run({ status: "running" }))).toBe(true);
+    expect(isRunActive(run({ status: "queued" }))).toBe(true);
+    expect(isRunActive(run({ status: "waiting_hitl" }))).toBe(true);
+    expect(isRunActive(run({ status: "completed" }))).toBe(false);
+    expect(isRunActive(run({ status: "failed" }))).toBe(false);
+    expect(isRunActive(run({ status: "canceled" }))).toBe(false);
   });
 });

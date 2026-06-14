@@ -1,6 +1,6 @@
 "use client";
 
-import { type ActivityEvent, filterByVisibility } from "@aqsha/agent-contracts";
+import { type ActivityEvent } from "@aqsha/agent-contracts";
 import {
   Accordion,
   AccordionContent,
@@ -9,10 +9,7 @@ import {
 } from "@aqsha/ui/components/accordion";
 import {
   CheckIcon,
-  ChevronDownIcon,
   ClockIcon,
-  Code2Icon,
-  FolderTreeIcon,
   ShieldIcon,
   XCircleIcon,
 } from "@aqsha/ui/icons";
@@ -20,136 +17,15 @@ import { useState } from "react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
-import type { ResearchArtifact, ResearchRun, ResearchSource } from "../types";
+import type { ResearchRun } from "../types";
 import { formatCompactDuration } from "../utils/datetime";
-import { isRunActive } from "../utils/transcript-model";
-import { CitationIntegritySummary } from "./citation-integrity";
+import { ToolRow } from "./tool-row";
 
-const emptySources: ResearchSource[] = [];
-const emptyActivity: ActivityEvent[] = [];
-
-// Render the normalized activity timeline (plan §5.2): a collapsible run header
-// + nested tool / sub-agent / phase / approval nodes derived from the events
-// already streamed onto the run via Convex reactivity. Only `visibility: "user"`
-// nodes render by default; a dev-mode toggle also reveals `"developer"` nodes
-// (Fase 3). Deep runs group each phase in a collapsible accordion. The final
-// answer stays a separate MessageRow.
-export function AgentRunBlock({
-  run,
-  sourceCount = 0,
-  sources = emptySources,
-}: {
-  run: ResearchRun;
-  artifacts?: ResearchArtifact[];
-  sourceCount?: number;
-  sources?: ResearchSource[];
-}) {
-  const activity = run.activity ?? emptyActivity;
-  const runNode = activity.find((node) => node.type === "run");
-  const nonRunNodes = activity.filter((node) => node.type !== "run");
-
-  const isActive = isRunActive(run);
-  const isDeep = run.mode === "deep";
-  // Expanded while active, collapsed once done — but a manual toggle wins.
-  const [userToggled, setUserToggled] = useState<boolean | null>(null);
-  const [devMode, setDevMode] = useState(false);
-  const open = userToggled ?? (isActive || isDeep);
-  const accentClass = isDeep ? "text-lavender" : "text-primary";
-
-  // Visibility gate (recursively filters children): users see `user` nodes;
-  // dev-mode additionally reveals `developer` nodes. `hidden` never renders.
-  const timeline = filterByVisibility(nonRunNodes, { developer: devMode });
-
-  const durationLabel = formatRunDuration(run);
-  const headlineNode = findHeadlineNode(timeline);
-  const summaryText = isActive
-    ? headlineNode?.status === "running"
-      ? `Sedang mengerjakan · ${headlineNode.title.toLowerCase()}`
-      : headlineNode?.status === "waiting_approval"
-        ? headlineNode.title
-        : (runNode?.title ?? "Sedang mengerjakan")
-    : run.status === "completed"
-      ? run.verificationStatus === "revised"
-        ? `Direvisi · ${durationLabel}`
-        : run.verificationStatus === "partial" || run.verificationStatus === "failed"
-          ? `Verifikasi parsial · ${durationLabel}`
-          : run.sufficiencyStatus === "budget_exhausted" ||
-              run.sufficiencyStatus === "partial"
-            ? `Parsial · ${durationLabel}`
-            : `Selesai · ${durationLabel}`
-      : run.status === "failed"
-        ? "Berhenti sebelum selesai"
-        : run.status === "canceled"
-          ? "Dihentikan"
-          : `Berjalan · ${durationLabel}`;
-
-  return (
-    <div className="w-full text-[13px] text-muted-foreground">
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={() => setUserToggled(!open)}
-          className="group flex min-w-0 flex-1 items-center gap-1.5 text-left hover:text-foreground"
-        >
-          {isActive ? (
-            <Shimmer className="font-medium">{summaryText}</Shimmer>
-          ) : (
-            <span className={cn("font-medium", accentClass)}>{summaryText}</span>
-          )}
-          <ChevronDownIcon
-            className={cn(
-              "size-3.5 shrink-0 transition-transform",
-              open ? "rotate-0" : "-rotate-90",
-            )}
-          />
-        </button>
-        {open && nonRunNodes.length > 0 ? (
-          <button
-            type="button"
-            aria-pressed={devMode}
-            title={devMode ? "Sembunyikan detail pengembang" : "Mode pengembang"}
-            onClick={() => setDevMode((value) => !value)}
-            className={cn(
-              "inline-flex shrink-0 items-center rounded-[7px] border border-border/70 p-1 transition-colors hover:text-foreground",
-              devMode ? "bg-muted/60 text-foreground" : "text-muted-foreground",
-            )}
-          >
-            <Code2Icon className="size-3.5" />
-          </button>
-        ) : null}
-        {sourceCount > 0 ? (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-[7px] border border-border/70 bg-muted/35 px-2 py-1 text-[11px] font-medium text-muted-foreground">
-            <FolderTreeIcon className="size-3.5" />
-            <span>{sourceCount}</span>
-          </span>
-        ) : null}
-      </div>
-      {open && timeline.length > 0 ? (
-        isDeep ? (
-          <DeepPhaseTimeline nodes={timeline} devMode={devMode} />
-        ) : (
-          <ol className="mt-2 grid gap-1.5 pl-0">
-            {timeline.map((node) => (
-              <ActivityNodeRow key={node.id} node={node} devMode={devMode} />
-            ))}
-          </ol>
-        )
-      ) : null}
-      {open && !isActive && run.status === "failed" && runNode?.description ? (
-        <p className="mt-2 break-words text-[13px] text-coral-foreground">
-          {runNode.description}
-        </p>
-      ) : null}
-      {open && isDeep ? (
-        <CitationIntegritySummary
-          sources={sources}
-          runCompleted={run.status === "completed"}
-        />
-      ) : null}
-    </div>
-  );
-}
+// Activity-timeline primitives (plan §5.2) shared by the unified `AssistantTurn`:
+// the run header summary, deep-phase accordion, nested activity rows, and the
+// status icon / tone / duration helpers. The legacy sibling `AgentRunBlock` was
+// folded into `AssistantTurn` in the answer-stream redesign (Fase 2) — these are
+// the reusable pieces it left behind.
 
 // Deep runs: each top-level phase node is a collapsible accordion section; any
 // non-phase top-level node renders inline. A live deep run emits phases one at a
@@ -157,7 +33,7 @@ export function AgentRunBlock({
 // phase auto-opens, but a phase the user collapsed stays collapsed across later
 // phase boundaries. We track only the user's explicit collapses; open = all
 // phases minus those.
-function DeepPhaseTimeline({
+export function DeepPhaseTimeline({
   nodes,
   devMode,
 }: {
@@ -211,7 +87,7 @@ function DeepPhaseTimeline({
   );
 }
 
-function ActivityNodeRow({
+export function ActivityNodeRow({
   node,
   devMode,
 }: {
@@ -220,6 +96,16 @@ function ActivityNodeRow({
 }) {
   // Children are already visibility-filtered by `filterByVisibility` upstream.
   const children = node.children ?? [];
+  // A leaf tool node renders as a collapsible ToolRow (its input/result summary
+  // on click); everything else (phases, sub-agents, approvals, system) keeps the
+  // plain status line + nested children.
+  if (node.type === "tool" && children.length === 0) {
+    return (
+      <li>
+        <ToolRow node={node} devMode={devMode} />
+      </li>
+    );
+  }
 
   return (
     <li>
@@ -237,7 +123,7 @@ function ActivityNodeRow({
 
 /** One node's status line (icon + title + description + duration), plus the
  *  technical metadata line in dev-mode. Shared by leaf rows and phase triggers. */
-function NodeLine({ node, devMode }: { node: ActivityEvent; devMode: boolean }) {
+export function NodeLine({ node, devMode }: { node: ActivityEvent; devMode: boolean }) {
   const duration = nodeDuration(node);
   const isWorking = node.status === "running";
   const devDetail = devMode ? metadataLine(node) : null;
@@ -273,13 +159,13 @@ function NodeLine({ node, devMode }: { node: ActivityEvent; devMode: boolean }) 
 
 /** Dev-mode technical detail: the node's safe scalar metadata (raw tool name,
  *  ids, counts) — already allow-listed at the source, so safe to surface. */
-function metadataLine(node: ActivityEvent): string | null {
+export function metadataLine(node: ActivityEvent): string | null {
   if (!node.metadata) return null;
   const parts = Object.entries(node.metadata).map(([key, value]) => `${key}=${value}`);
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
-function NodeStatusIcon({
+export function NodeStatusIcon({
   status,
   className,
 }: {
@@ -302,7 +188,7 @@ function NodeStatusIcon({
   }
 }
 
-function toneClass(status: ActivityEvent["status"]): string {
+export function toneClass(status: ActivityEvent["status"]): string {
   switch (status) {
     case "running":
     case "waiting_approval":
@@ -319,7 +205,7 @@ function toneClass(status: ActivityEvent["status"]): string {
 }
 
 /** Headline node for the header: first running node (leaf-first), else waiting. */
-function findHeadlineNode(nodes: ActivityEvent[]): ActivityEvent | undefined {
+export function findHeadlineNode(nodes: ActivityEvent[]): ActivityEvent | undefined {
   return (
     findByStatus(nodes, "running") ?? findByStatus(nodes, "waiting_approval")
   );
@@ -340,14 +226,14 @@ function findByStatus(
 }
 
 /** Show a duration only for finished nodes that ran at least a second. */
-function nodeDuration(node: ActivityEvent): string | null {
+export function nodeDuration(node: ActivityEvent): string | null {
   if (node.endedAt === undefined || (node.durationMs ?? 0) < 1000) {
     return null;
   }
   return formatCompactDuration({ start: node.startedAt, end: node.endedAt });
 }
 
-function formatRunDuration(run: ResearchRun) {
+export function formatRunDuration(run: ResearchRun) {
   const end = run.completedAt ?? run.canceledAt ?? Date.now();
-  return formatCompactDuration({ start: run.createdAt, end });
+  return formatCompactDuration({ start: run.createdAt ?? end, end });
 }

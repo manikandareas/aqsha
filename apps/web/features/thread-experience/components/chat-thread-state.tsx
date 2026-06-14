@@ -30,13 +30,12 @@ import type {
   ResearchRun,
   ResearchSource,
 } from "../types";
+import { isRunActive, sortTranscriptMessages } from "../utils/transcript-model";
 import {
-  entryGapClass,
-  interleavedEntryKey,
-  interleaveRunsWithMessages,
-  isRunActive,
-  sortTranscriptMessages,
-} from "../utils/transcript-model";
+  pairRunsWithTurns,
+  turnEntryKey,
+  turnGapClass,
+} from "../utils/turn-model";
 import { getSourceCountsByOwner } from "../utils/research-panel-model";
 import type {
   DraftContextArtifact,
@@ -50,15 +49,14 @@ import { EmptyThreadCopy } from "./empty-thread-copy";
 import { type AgentRunId } from "@/lib/convex-refs";
 import { hasPendingHitl } from "../utils/hitl-parts";
 import { useHitlResume } from "./use-hitl-resume";
-import { MessageRow } from "./message-row";
-import { AgentRunBlock } from "./run-progress";
+import { UserMessageBubble } from "./message-row";
+import { AssistantTurn } from "./assistant-turn";
 import { CenteredLoading } from "./shared";
 import { useConvexAuth } from "convex/react";
 
 const emptyContextArtifacts: DraftContextArtifact[] = [];
 const emptyThreadSummaries: ThreadSummary[] = [];
 const emptyRuns: ResearchRun[] = [];
-const emptyArtifacts: ResearchArtifact[] = [];
 const emptySources: ResearchSource[] = [];
 const cancelNoop = async () => undefined;
 
@@ -70,14 +68,12 @@ export function ThreadChatSurface({
   startThread,
   onSend,
   runs = emptyRuns,
-  artifacts = emptyArtifacts,
   sources = emptySources,
   onCancelRun = cancelNoop,
   onRetryRun,
   compact = false,
   contextArtifacts = emptyContextArtifacts,
   onRemoveContextArtifact,
-  threadWorkspaceId,
   threads = emptyThreadSummaries,
   onThreadCreated,
   draftContextLabel,
@@ -122,27 +118,34 @@ export function ThreadChatSurface({
     active && threadId ? { threadId } : "skip",
   );
   const messagesLoading = Boolean(threadId) && messageRows === undefined;
-  const backendMessages = [
-    ...((messageRows ?? []) as AgentMessageRow[]).map(uiMessageFromRow),
-    ...((interactionRows ?? []) as AgentInteractionRow[]).map(
-      uiHitlMessageFromInteraction,
-    ),
-  ] as unknown as ChatMessage[];
-  // The sdk backend delivers assistant text in ~RTT-sized jumps (one Convex
-  // write per round-trip). Smoothing happens per-message inside MessageRow (the
-  // transcript keys each row by message id, so every turn's reveal starts from a
-  // fresh cursor). A single shared smoother here leaked the previous turn's text
-  // into the next bubble until the new stream overtook the old cursor.
-  const sortedMessages = sortTranscriptMessages(backendMessages);
-  // HITL is now native in-thread: a pending tool part (askUser awaiting an
-  // answer, or an action awaiting approval) blocks the composer, and resolving
-  // it resumes generation. Derived entirely from the message stream.
-  const pendingHitl = hasPendingHitl(sortedMessages);
+  // Real chat messages only (user + assistant). The sdk backend delivers
+  // assistant text in ~RTT-sized jumps (one Convex write per round-trip);
+  // smoothing happens per message id inside AssistantTurn so every turn's reveal
+  // starts from a fresh cursor (a shared smoother leaked the prior turn's text).
+  const sortedMessages = sortTranscriptMessages(
+    ((messageRows ?? []) as AgentMessageRow[]).map(
+      uiMessageFromRow,
+    ) as unknown as ChatMessage[],
+  );
+  // Pending HITL interactions are kept SEPARATE, keyed by their runId, so each
+  // renders ONCE — anchored at its run's approval node inside that run's turn —
+  // never as a stray sibling message (the synthetic message carries no runId).
+  const pendingHitlByRun = new Map<string, ChatMessage[]>();
+  for (const row of (interactionRows ?? []) as AgentInteractionRow[]) {
+    const synthetic = uiHitlMessageFromInteraction(row) as unknown as ChatMessage;
+    const bucket = pendingHitlByRun.get(row.runId) ?? [];
+    bucket.push(synthetic);
+    pendingHitlByRun.set(row.runId, bucket);
+  }
+  // A pending askUser/approval blocks the composer; resolving it resumes the run.
+  const pendingHitl = hasPendingHitl(
+    Array.from(pendingHitlByRun.values()).flat(),
+  );
   const hitlBlocking = pendingHitl;
   const hitlActions = useHitlResume();
   const hasMessages = sortedMessages.length > 0;
   const activeRun = runs.find(isRunActive);
-  const interleavedEntries = interleaveRunsWithMessages(sortedMessages, runs);
+  const turnEntries = pairRunsWithTurns(sortedMessages, runs, pendingHitlByRun);
   const sourceCounts = getSourceCountsByOwner(sources);
 
   if (!threadId && !hasMessages && runs.length === 0) {
@@ -180,36 +183,42 @@ export function ThreadChatSurface({
               <CenteredLoading label="Memuat thread..." />
             ) : hasMessages || runs.length > 0 ? (
               <>
-                {interleavedEntries.map((entry, index) => {
-                  const previous = interleavedEntries[index - 1];
+                {turnEntries.map((entry, index) => {
+                  const previous = turnEntries[index - 1];
                   return (
                     <div
-                      key={interleavedEntryKey(entry)}
+                      key={turnEntryKey(entry)}
                       className={cn(
                         "min-w-0",
-                        index === 0 ? "mt-0" : entryGapClass(previous, entry),
+                        index === 0 ? "mt-0" : turnGapClass(previous, entry),
                       )}
                     >
-                      {entry.kind === "run" ? (
-                        <AgentRunBlock
-                          run={entry.run}
-                          artifacts={artifacts ?? []}
-                          sourceCount={
-                            sourceCounts.byRunId.get(entry.run._id) ?? 0
-                          }
-                          sources={sources.filter(
-                            (source) => source.runId === entry.run._id,
-                          )}
-                        />
+                      {entry.kind === "user" ? (
+                        <UserMessageBubble message={entry.message} />
                       ) : (
-                        <MessageRow
+                        <AssistantTurn
                           message={entry.message}
-                          assistantRun={entry.assistantRun}
+                          run={entry.run}
+                          hitlMessages={entry.hitl}
                           onRetryRun={onRetryRun}
-                          sourceCount={
-                            sourceCounts.byMessageId.get(entry.message.id) ?? 0
+                          runSourceCount={
+                            entry.run
+                              ? sourceCounts.byRunId.get(entry.run._id) ?? 0
+                              : 0
                           }
-                          threadWorkspaceId={threadWorkspaceId}
+                          messageSourceCount={
+                            entry.message
+                              ? sourceCounts.byMessageId.get(entry.message.id) ??
+                                0
+                              : 0
+                          }
+                          sources={
+                            entry.run
+                              ? sources.filter(
+                                  (source) => source.runId === entry.run!._id,
+                                )
+                              : emptySources
+                          }
                           hitlActions={hitlActions}
                           hitlDisabled={isGenerating}
                         />

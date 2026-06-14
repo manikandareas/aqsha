@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  AlertCircleIcon,
   CheckIcon,
   CopyIcon,
   FolderTreeIcon,
@@ -14,130 +13,50 @@ import { useSmoothText } from "@convex-dev/agent/react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
-  Message,
   MessageAction,
   MessageActions,
-  MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message";
-import { Reasoning } from "@/components/ai-elements/reasoning";
-import {
-  toAgentRunId,
-  type AgentRunId,
-} from "@/lib/convex-refs";
+import { toAgentRunId, type AgentRunId } from "@/lib/convex-refs";
 import { parseMentionSegments } from "@/lib/context-refs";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
 import { cn } from "@/lib/utils";
-import type {
-  ChatMessage,
-  ResearchRun,
-} from "../types";
-import { ThreadActivityIndicator } from "./shared";
-import { MessageHitlParts } from "./message-hitl-parts";
-import type { HitlActions } from "./use-hitl-resume";
+import type { ChatMessage, ResearchRun } from "../types";
 
-export function MessageRow({
-  message,
-  assistantRun,
-  onRetryRun,
-  sourceCount = 0,
-  hitlActions,
-  hitlDisabled,
-}: {
-  message: ChatMessage;
-  assistantRun?: ResearchRun;
-  onRetryRun?: (args: { runId: AgentRunId }) => Promise<unknown>;
-  sourceCount?: number;
-  /** Accepted for caller parity; no longer read by this row. */
-  threadWorkspaceId?: string;
-  hitlActions?: HitlActions;
-  hitlDisabled?: boolean;
-}) {
-  const isUser = message.role === "user";
-  const isStreaming = message.status === "streaming";
-  const isFailed = message.status === "failed";
+// The user prompt bubble + the reusable assistant-answer primitives (streaming
+// body, message actions, source count). The assistant answer itself is composed
+// by `AssistantTurn` (answer-stream redesign Fase 2); the legacy `MessageRow`
+// wrapper was removed when the run timeline and the answer merged into one turn.
+
+/** The right-aligned user prompt bubble (inline @mention pills at their spots). */
+export function UserMessageBubble({ message }: { message: ChatMessage }) {
   const text = getMessageText(message);
-  const hasText = Boolean(text.trim());
-  const reasoning = getMessageReasoning(message);
-  const hasReasoning = Boolean(reasoning.trim());
-
-  if (isUser) {
-    // @mentions are encoded inline in the message text (markers) and render as
-    // pills at the exact position the user typed them.
-    const segments = parseMentionSegments(text);
-    return (
-      <div className="flex w-full min-w-0 flex-col items-end gap-2 overflow-x-hidden">
-        <div className="max-w-full whitespace-pre-wrap break-words rounded-[14px] border border-border/80 bg-card px-4 py-2.5 text-[13px] leading-[1.55] text-foreground sm:max-w-[560px]">
-          {segments.map((segment, index) =>
-            segment.type === "mention" ? (
-              <MessageMentionPill key={`m-${segment.label}`} label={segment.label} />
-            ) : (
-              <Fragment key={`t-${index}`}>{segment.value}</Fragment>
-            ),
-          )}
-        </div>
-      </div>
-    );
-  }
-
+  const segments = parseMentionSegments(text);
   return (
-    <Message from="assistant" className="min-w-0 overflow-x-hidden">
-      <MessageContent className="w-full min-w-0 overflow-hidden bg-transparent p-0 text-[13px] leading-[1.55] text-ink-soft">
-        {hasReasoning ? (
-          <Reasoning
-            text={reasoning}
-            isThinking={isStreaming && !hasText}
-          />
-        ) : null}
-        {isFailed ? (
-          <div className="flex items-start gap-2 rounded-[10px] border border-coral-soft-border bg-coral-soft px-3 py-2.5 text-[13px] font-medium leading-[1.55] text-coral-foreground">
-            <AlertCircleIcon className="mt-0.5 size-4 shrink-0" />
-            <span>
-              {hasText
-                ? text
-                : "Astra belum bisa menjawab pesan ini. Coba kirim ulang sebentar lagi."}
-            </span>
-          </div>
-        ) : hasText ? (
-          isStreaming ? (
-            <StreamingResponse text={text} />
+    <div className="flex w-full min-w-0 flex-col items-end gap-2 overflow-x-hidden">
+      <div className="max-w-full whitespace-pre-wrap break-words rounded-[14px] border border-border/80 bg-card px-4 py-2.5 text-[13px] leading-[1.55] text-foreground sm:max-w-[560px]">
+        {segments.map((segment, index) =>
+          segment.type === "mention" ? (
+            <MessageMentionPill key={`m-${segment.label}`} label={segment.label} />
           ) : (
-            <MessageResponse className="aqsha-prose aqsha-prose-message">
-              {text}
-            </MessageResponse>
-          )
-        ) : isStreaming && !hasReasoning ? (
-          <ThreadActivityIndicator label="Sedang menulis..." />
-        ) : null}
-      </MessageContent>
-      {hitlActions ? (
-        <MessageHitlParts
-          message={message}
-          actions={hitlActions}
-          disabled={hitlDisabled}
-        />
-      ) : null}
-      <MessageSourceCount sourceCount={sourceCount} />
-      {hasText ? (
-        <AssistantMessageActions
-          assistantRun={assistantRun}
-          text={text}
-          onRetryRun={onRetryRun}
-        />
-      ) : null}
-    </Message>
+            <Fragment key={`t-${index}`}>{segment.value}</Fragment>
+          ),
+        )}
+      </div>
+    </div>
   );
 }
 
 /**
  * Smooths a single in-flight assistant message's text (the sdk backend writes it
- * in ~RTT-sized jumps). This lives per-MessageRow on purpose: the transcript
- * keys each row by message id, so a new turn remounts this component and the
- * reveal cursor resets to 0. A shared parent-level `useSmoothText` instead
- * carried the previous turn's cursor/text into the next bubble, briefly showing
- * the prior response until the new stream overtook the old length.
+ * in ~RTT-sized jumps). The transcript keys the rendered answer by message id, so
+ * a new message remounts this component and the reveal cursor resets to 0. A
+ * shared parent-level `useSmoothText` instead carried the previous turn's
+ * cursor/text into the next bubble, briefly showing the prior response until the
+ * new stream overtook the old length — keep the per-message-id key in
+ * `AssistantTurn`.
  */
-function StreamingResponse({ text }: { text: string }) {
+export function StreamingResponse({ text }: { text: string }) {
   const [smoothed] = useSmoothText(text, { startStreaming: true });
   return (
     <MessageResponse className="aqsha-prose aqsha-prose-message">
@@ -146,7 +65,7 @@ function StreamingResponse({ text }: { text: string }) {
   );
 }
 
-function AssistantMessageActions({
+export function AssistantMessageActions({
   assistantRun,
   text,
   onRetryRun,
@@ -256,7 +175,7 @@ function MessageMentionPill({ label }: { label: string }) {
   );
 }
 
-function MessageSourceCount({ sourceCount }: { sourceCount: number }) {
+export function MessageSourceCount({ sourceCount }: { sourceCount: number }) {
   if (sourceCount <= 0) return null;
 
   return (
@@ -267,14 +186,14 @@ function MessageSourceCount({ sourceCount }: { sourceCount: number }) {
   );
 }
 
-function getMessageText(message: ChatMessage) {
+export function getMessageText(message: ChatMessage) {
   const partText = message.parts
     ?.flatMap((part) => (part.type === "text" && part.text ? [part.text] : []))
     .join("");
   return partText || message.text || "";
 }
 
-function getMessageReasoning(message: ChatMessage) {
+export function getMessageReasoning(message: ChatMessage) {
   return (
     message.parts
       ?.flatMap((part) =>

@@ -1,6 +1,6 @@
 # Plan: Agent Answer Stream Redesign (UI Streaming)
 
-> Dokumen desain + rencana implementasi. **Fase 0 + Fase 1 SELESAI (2/6 fase), branch `development`.**
+> Dokumen desain + rencana implementasi. **Fase 0 + Fase 1 + Fase 2 SELESAI (3/6 fase), branch `development`.**
 >
 > Penerus + perluasan langsung dari [`agent-activity-stream-plan.md`](./agent-activity-stream-plan.md)
 > (Fase 1–3 + cleanup §12 SELESAI). Membangun **di atas** kontrak `ActivityEvent`,
@@ -10,14 +10,14 @@
 
 ## Status implementasi
 
-| Fase | Status | Catatan |
-|---|---|---|
-| **Fase 0 — Pondasi data** | ✅ **SELESAI** — branch `development` (2026-06-14), uncommitted | Sanitizer `artifactId`/`action` + `query` (D6) + perlebar `listArtifacts`. Tanpa perubahan schema. Detail di "Fase 0 — yang dikerjakan". |
-| **Fase 1 — Urutan presisi (backend)** | ✅ **SELESAI** — branch `development` (2026-06-14), uncommitted | Segmen `text`/`reasoning` ber-seq di `agentRunEvents` + `orderedPartsFromRun`. **Satu-satunya perubahan schema.** Barrier ordering (SDK EAGER). Detail di "Fase 1 — yang dikerjakan". |
-| **Fase 2 — Penggabungan timeline (frontend)** | 🔄 Sedang dikerjakan | `AssistantTurn` + `ToolRow` collapsible; konsumsi `orderedPartsFromRun` (urutan presisi); hapus split run/message. |
-| **Fase 3 — Kartu sub-agen** | ⬜ Belum | `SubagentCard` + ringkasan progresif + chip "N berjalan". |
-| **Fase 4 — Kartu artefak + side panel** | ⬜ Belum | `ChatArtifactCard` + `ArtifactDetailPanel` + `ThreadPanelProvider`. Thread-detail dulu. |
-| **Fase 5 — Parity + polish + cleanup** | ⬜ Belum | Rollout side panel ke 3 surface; v2 ringkasan sub-agen; hapus `artifactVersions` mati. |
+| Fase                                          | Status                                                          | Catatan                                                                                                                                                                               |
+| --------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Fase 0 — Pondasi data**                     | ✅ **SELESAI** — branch `development` (2026-06-14), uncommitted | Sanitizer `artifactId`/`action` + `query` (D6) + perlebar `listArtifacts`. Tanpa perubahan schema. Detail di "Fase 0 — yang dikerjakan".                                              |
+| **Fase 1 — Urutan presisi (backend)**         | ✅ **SELESAI** — branch `development` (2026-06-14), uncommitted | Segmen `text`/`reasoning` ber-seq di `agentRunEvents` + `orderedPartsFromRun`. **Satu-satunya perubahan schema.** Barrier ordering (SDK EAGER). Detail di "Fase 1 — yang dikerjakan". |
+| **Fase 2 — Penggabungan timeline (frontend)** | ✅ **SELESAI** — branch `development` (2026-06-14), uncommitted | `AssistantTurn` + `ToolRow` collapsible; konsumsi `orderedPartsFromRun` (urutan presisi); hapus split run/message. Tanpa perubahan schema. Detail di "Fase 2 — yang dikerjakan". |
+| **Fase 3 — Kartu sub-agen**                   | ⬜ Belum                                                        | `SubagentCard` + ringkasan progresif + chip "N berjalan".                                                                                                                             |
+| **Fase 4 — Kartu artefak + side panel**       | ⬜ Belum                                                        | `ChatArtifactCard` + `ArtifactDetailPanel` + `ThreadPanelProvider`. Thread-detail dulu.                                                                                               |
+| **Fase 5 — Parity + polish + cleanup**        | ⬜ Belum                                                        | Rollout side panel ke 3 surface; v2 ringkasan sub-agen; hapus `artifactVersions` mati.                                                                                                |
 
 **Gerbang per fase (semua wajib hijau sebelum lanjut):**
 `bun run typecheck` (5 paket) · `bun run lint` · `bun run --filter '@aqsha/agent-contracts' test` ·
@@ -32,6 +32,7 @@ Convex `npx convex dev --once` hanya di Fase 1 (segmentasi — satu-satunya yang
 ### Fase 0 — Pondasi data ✅ (gate hijau)
 
 Sanitizer no-leak diperluas di sumber (`apps/agents/src/agent/activitySanitizers.ts`) — semua scalar baru di-allow-list + di-clamp di chokepoint tunggal:
+
 - **`executeArtifact.result` → `{ artifactId, action }`** (prasyarat load-bearing kartu artefak Fase 4): `safeId` (helper baru) menerima HANYA token id-aman `^[A-Za-z0-9_-]+$` ≤128 char (buang prosa/path/URL/JSON), `action` lewat `safeEnum(["create","update","delete"])`. Body dokumen tak pernah ada di hasil → tak bisa bocor.
 - **D6 — `query` di input `searchWeb`/`searchArxiv`** (helper `searchInput`): query yang DISUSUN MODEL (bukan prompt privat user) di-surface, di-clamp single-line ≤120 char. Tetap lewat chokepoint + review no-leak.
 - **`safeLabel`/`safeErrorText` dikeraskan** (temuan review adversarial F1, LOW): memotong di SEMUA line terminator (`/[\n\r\u0085\u2028\u2029]/`), bukan hanya `\n` — interior CR / pemisah Unicode tak bisa menyelundupkan baris kedua lewat scalar (mempengaruhi `query`/`title`/`name`/`doi` + `safeErrorText` client-side).
@@ -48,6 +49,7 @@ Sanitizer no-leak diperluas di sumber (`apps/agents/src/agent/activitySanitizers
 **Mekanisme urutan presisi (barrier per-`tool_use_id`):** `apps/agents/src/agent/segmentCoordinator.ts` (baru). Bridge menutup segmen pendahulu (await upsert → seq ter-commit) lalu `release(toolUseId)`; hook `PreToolUse` `awaitSegmentClosed` sebelum menulis `tool_start` → `seq(segmen) < seq(tool_start)` deterministik. Hanya tool main-thread (`!parentAgentId`); sub-agen tak menunggu. Timeout 3 dtk + abort-signal sebagai jaring pengaman (cancel bail dini — temuan review #3).
 
 **Perubahan:**
+
 - Schema (satu-satunya): `agentRunEvents.segmentId: v.optional(v.string())` + index `by_run_segment` (`convex dev --once` push bersih).
 - `convex/agent/service.ts`: mutation `upsertRunEventBySegmentId` (lookup `by_run_segment.unique()` → patch-keep-seq / insert `nextRunEventSeq`).
 - Store: `upsertRunEventBySegmentId` di `types.ts` + `memoryStore.ts` (referensi) + `convexStore.ts`.
@@ -59,6 +61,25 @@ Sanitizer no-leak diperluas di sumber (`apps/agents/src/agent/activitySanitizers
 - **Test:** `segmentCoordinator.test.ts` (barrier/abort/timeout), `segmentOrdering.test.ts` (bukti `seq(segmen)<seq(tool)` di bawah urutan EAGER hook-duluan), `streamBridge` (coalescing 1-baris + silent), `activity` `orderedPartsFromRun` (merge/nested/legacy-null).
 - **Review adversarial (9 vektor, 8 dipatahkan dengan trace):** 3 temuan laten → #1 cap (diperbaiki), #3 late tool_start saat cancel (diperbaiki: abort signal), #2 HITL resume = 2 pesan/run → dibawa ke Fase 2 (untuk timeline tunggal justru benar: satu `AssistantTurn` per RUN; jawaban final dari `message.text` kanonik).
 - **Gate:** typecheck (5) · lint 0 error · agent-contracts **56** · apps/agents **206** · convex **123** · @aqsha/app **74** · `convex dev --once` push sukses.
+
+### Fase 2 — Penggabungan timeline frontend ✅ (gate hijau, tanpa perubahan schema)
+
+Satu `AssistantTurn` per RUN menggantikan pasangan sibling `AgentRunBlock` + `MessageRow`; jawaban + reasoning + tool kini satu parent berurut (urutan presisi dari Fase 1).
+
+- **Kontrak (`uiAdapters.ts`):** `UiResearchRun.orderedParts: OrderedPart[] | null` diprakomputasi di `uiRunFromRow` via `orderedPartsFromRun(row)` — web `ResearchRun` tak membawa `events`, jadi adapter (tempat `events` ada) yang menderivasi; UI membaca `run.orderedParts`. Additive.
+- **`utils/turn-model.ts` (baru, murni + unit-test):**
+  - `pairRunsWithTurns(messages, runs, pendingHitlByRun)` ganti `interleaveRunsWithMessages` → emit `{kind:"user"} | {kind:"assistant-turn", message?, run?, hitl?}`, **satu turn per RUN**. Pesan asisten dipetakan ke run via jendela `createdAt` (run terakhir yang mulai ≤ `message.order`); pesan TERAKHIR run = jawaban final. Edge: (a) run tanpa pesan → `message:undefined` (shimmer); (b) gagal → tetap satu turn; (c) banyak run/prompt (deep+retry) → satu turn per run (lama collapse via header terminal); (d) yatim → turn (saat pesannya tercapai atau trailing).
+  - `buildTurnParts(message, run)` → `TurnPart[]`. Utama: `run.orderedParts` (reasoning↔tool↔text by seq). **Segmen text TERAKHIR (max seq) dibuang** — jawaban final dari `message.text` kanonik (aman truncation: event segmen bisa ter-clamp, `message.text` tidak); segmen text intermediate render inline (`intermediate-text`). Fallback (legacy `orderedParts===null` / pesan tanpa run): reasoning pesan + node `run.activity` urut seq.
+  - `toolRowModel(node)` murni: allow-list scalar (`query`,`resultCount`,`doi`,`checksRun`,`verdict`,`checked`,`verified`,`flagged`,`questionCount`,`hasResults`,`title`,`name`) → label ID sentence-case; **default-deny** (`tool`/`agentId`/`agentType`/`phase`/`artifactId`/`action` tak pernah muncul); verdict→VERDICT ID, boolean→Ya/Tidak.
+- **`components/assistant-turn.tsx` (baru):** header run (`RunHeader`: Shimmer ringkasan saat aktif, toggle dev-mode, chip sumber, error di header saat gagal) → parts berurut (grouping fase deep ke `DeepPhaseTimeline`, `filterByVisibility` per node, anchor HITL di node `approval`) → `CitationIntegritySummary` (deep) → jawaban final (`StreamingResponse` di-key per `message.id` saat streaming, else `MessageResponse`) + `AssistantMessageActions` + `MessageSourceCount`.
+- **`components/tool-row.tsx` (baru):** Collapsible (acuan `plan.tsx`/`reasoning.tsx`). Header: `NodeStatusIcon` + judul (Shimmer saat running) + chip `node.description`. Body: baris `toolRowModel` scalar (sentence-case ID) + raw metadata di dev-mode. Tanpa scalar → baris polos (tak collapsible).
+- **Integrasi:** `chat-thread-state.tsx` → `pairRunsWithTurns` → `<UserMessageBubble>` | `<AssistantTurn>`; interaksi HITL pending dipisah dari stream pesan, di-key per `runId` (`pendingHitlByRun`) → **single-render** di node `approval` (tak ada lagi MessageRow sintetis ganda). `message-row.tsx`: ekstrak `UserMessageBubble` + ekspor primitif asisten (`StreamingResponse`/`AssistantMessageActions`/`MessageSourceCount`/`getMessageText`), hapus `MessageRow`. `run-progress.tsx`: ekspor `NodeStatusIcon`/`toneClass`/`formatRunDuration`/`findHeadlineNode`/`DeepPhaseTimeline`/`ActivityNodeRow`/`NodeLine`/`nodeDuration`/`metadataLine`, leaf tool → `ToolRow`, **hapus `AgentRunBlock`** (dilipat ke `AssistantTurn`). `transcript-model.ts`: sisakan `sortTranscriptMessages`/`isRunActive` (hapus `interleaveRunsWithMessages`/`interleavedEntryKey`/`entryGapClass`/`TranscriptEntry`).
+- **Smoothing:** `StreamingResponse` (`useSmoothText`) di-key per `message.id` di dalam `AssistantTurn` (turn di-key per run id, stabil; jawaban di-key per message id → kursor reset per pesan, tak bocor antar giliran — regresi pendahulu dijaga).
+- **Parity:** 3 surface berbagi `ThreadChatSurface` (`chat-thread-state.tsx`) → satu perubahan mencakup thread-detail main + workspace panel + Explore panel; `compact` & `ComposerMentionsProvider` (level shell) tak tersentuh; `threadWorkspaceId` tetap di tipe prop (parity call-site).
+- **Test (web):** `turn-model.test.ts` — `pairRunsWithTurns` (streaming-sebelum-teks, gagal, deep, retry, yatim, HITL-resume-2-pesan, attach pending HITL), `buildTurnParts` (ordered + drop final segment, intermediate inline, fallback legacy), `toolRowModel` (chip+rows, default-deny, verdict/boolean ID); `transcript-model.test.ts` ramping (`sortTranscriptMessages`/`isRunActive`).
+- **Scope:** `executeArtifact` = `ToolRow` biasa (kartu klik = Fase 4); `subagent` = `ActivityNodeRow` nested (SubagentCard = Fase 3).
+- **Review adversarial (4 vektor):** smoothing (key per message id ✓), HITL single-render (anchor node approval + flag, fallback akhir ✓), parity 3 surface (komponen tunggal bersama ✓), urutan parts (`orderedPartsFromRun` pra-sort + final dari message.text ✓).
+- **Gate:** typecheck (5) · lint 0 error (12 warning pra-ada) · agent-contracts **56** · apps/agents **206** · convex **123** · @aqsha/app **85**. Tanpa `convex dev --once` (tak menyentuh schema).
 
 ---
 
@@ -83,10 +104,10 @@ screenshot). Empat perilaku target:
 
 Satu giliran agen dipersist lewat **dua kanal paralel yang tidak terurut bersama**:
 
-| Kanal | Sumber | Bentuk | Urutan |
-|---|---|---|---|
-| **1. Teks + reasoning** | `streamBridge.ts` → `chatMessages.text` / `.reasoning` | **Dua string blob** yang digabung `\n\n` lintas seluruh giliran | TIDAK ada per-langkah |
-| **2. Event aktivitas** | SDK hooks → `agentRunEvents` (`tool_start/tool_end/subagent_*/phase_*/…`) | Baris diskret per event | `seq` monotonik per run |
+| Kanal                   | Sumber                                                                    | Bentuk                                                          | Urutan                  |
+| ----------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------- | ----------------------- |
+| **1. Teks + reasoning** | `streamBridge.ts` → `chatMessages.text` / `.reasoning`                    | **Dua string blob** yang digabung `\n\n` lintas seluruh giliran | TIDAK ada per-langkah   |
+| **2. Event aktivitas**  | SDK hooks → `agentRunEvents` (`tool_start/tool_end/subagent_*/phase_*/…`) | Baris diskret per event                                         | `seq` monotonik per run |
 
 Tidak ada kunci urutan bersama yang menautkan satu potongan reasoning ke pemanggilan tool
 yang menyelanya. Maka perilaku #1 (urutan presisi `reasoning → tool → reasoning → teks`)
@@ -106,21 +127,21 @@ teks" tersedia di tempat `StreamBridge.handle` dan `store.appendRunEvent` keduan
 
 ## 2. Arsitektur saat ini (ground truth)
 
-| Aspek | File | Perilaku |
-|---|---|---|
-| Render transcript | `apps/web/.../components/chat-thread-state.tsx:183-219` | Map `interleavedEntries`: `kind:"run"` → `<AgentRunBlock>`, lainnya → `<MessageRow>`, sebagai **div sibling terpisah**. |
-| Pairing run↔pesan | `apps/web/.../utils/transcript-model.ts:18-94` | `interleaveRunsWithMessages`: run di-bucket per `promptMessageId`, di-emit sebagai entry sibling sebelum pesan asisten. |
-| Blok aktivitas | `apps/web/.../components/run-progress.tsx:37-152` | `AgentRunBlock` render `run.activity` (header collapsible + node tool/sub-agen/fase nested). Prop `artifacts` **diterima tapi tak pernah dirender** (`:43`). |
-| Pesan asisten | `apps/web/.../components/message-row.tsx:59-128,270-285` | `getMessageReasoning()` → satu `<Reasoning>` blob; `getMessageText()` → satu `<MessageResponse>`/Streamdown. Tanpa tool/step part. |
-| Adapter pesan | `packages/agent-contracts/src/uiAdapters.ts:84-105` | `uiMessageFromRow` → `parts: [reasoning?, text?]` (urutan fix, bukan eksekusi). |
-| Adapter run | `packages/agent-contracts/src/activity.ts:402-879` | `activityEventsFromRun` → pohon `ActivityEvent` (fold tool, nest sub-agen via `agent_id`/`parentAgentId`, gate visibility). |
-| Stream backend | `apps/agents/src/agent/streamBridge.ts:55-261` | Akumulasi `committedText`/`committedReasoning` (2 string), flush koalessing ~250ms / 800 char via `updateMessageText`, non-blocking (1 write in-flight + trailing). |
-| Emit event | `apps/agents/src/agent/hooks.ts` + `runManager.ts` + `interactions.ts` | `tool_*`, `subagent_*`, `phase_*`, `interaction_*`, `citation_check`, `compaction`, `error`, `run_status`. |
-| seq | `packages/convex/convex/agent/service.ts:394-418` + `service/model.ts:194-204` | `nextRunEventSeq` = `(last?.seq ?? -1) + 1`, di dalam transaksi mutasi (OCC per run). |
-| Schema | `packages/convex/convex/schema.ts:592-643` | `chatMessages {text, reasoning?, runId, status}`; `agentRunEvents {runId, seq, type:string, payloadJson:string, createdAt}` index `by_run_seq`. |
-| Artefak (tulis) | `apps/agents/src/tools/artifacts.ts` → `agent/service.ts:764-847` → `artifacts.ts:1253-1374` | `executeArtifact` tulis baris `artifacts` (+`source:"agent"`, `threadId`) + `artifactContents`. **`artifactVersions`/`currentVersionId` tak pernah ditulis.** |
-| Artefak (baca panel) | `convex/artifacts.ts:246,361` | `api.artifacts.get` (metadata+konten) + `api.artifacts.getRenderPayload(artifactId)` (action: body siap-render per tipe). |
-| Side panel thread | `thread-detail-shell.tsx:46,66-81` + `detail-split-layout.tsx` + `responsive-side-panel.tsx:32` | Satu boolean `contextPanelOpen`; satu target panel (library/global-context); chrome via `panelSurfaceClass({framed:true})`. |
+| Aspek                | File                                                                                            | Perilaku                                                                                                                                                            |
+| -------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Render transcript    | `apps/web/.../components/chat-thread-state.tsx:183-219`                                         | Map `interleavedEntries`: `kind:"run"` → `<AgentRunBlock>`, lainnya → `<MessageRow>`, sebagai **div sibling terpisah**.                                             |
+| Pairing run↔pesan    | `apps/web/.../utils/transcript-model.ts:18-94`                                                  | `interleaveRunsWithMessages`: run di-bucket per `promptMessageId`, di-emit sebagai entry sibling sebelum pesan asisten.                                             |
+| Blok aktivitas       | `apps/web/.../components/run-progress.tsx:37-152`                                               | `AgentRunBlock` render `run.activity` (header collapsible + node tool/sub-agen/fase nested). Prop `artifacts` **diterima tapi tak pernah dirender** (`:43`).        |
+| Pesan asisten        | `apps/web/.../components/message-row.tsx:59-128,270-285`                                        | `getMessageReasoning()` → satu `<Reasoning>` blob; `getMessageText()` → satu `<MessageResponse>`/Streamdown. Tanpa tool/step part.                                  |
+| Adapter pesan        | `packages/agent-contracts/src/uiAdapters.ts:84-105`                                             | `uiMessageFromRow` → `parts: [reasoning?, text?]` (urutan fix, bukan eksekusi).                                                                                     |
+| Adapter run          | `packages/agent-contracts/src/activity.ts:402-879`                                              | `activityEventsFromRun` → pohon `ActivityEvent` (fold tool, nest sub-agen via `agent_id`/`parentAgentId`, gate visibility).                                         |
+| Stream backend       | `apps/agents/src/agent/streamBridge.ts:55-261`                                                  | Akumulasi `committedText`/`committedReasoning` (2 string), flush koalessing ~250ms / 800 char via `updateMessageText`, non-blocking (1 write in-flight + trailing). |
+| Emit event           | `apps/agents/src/agent/hooks.ts` + `runManager.ts` + `interactions.ts`                          | `tool_*`, `subagent_*`, `phase_*`, `interaction_*`, `citation_check`, `compaction`, `error`, `run_status`.                                                          |
+| seq                  | `packages/convex/convex/agent/service.ts:394-418` + `service/model.ts:194-204`                  | `nextRunEventSeq` = `(last?.seq ?? -1) + 1`, di dalam transaksi mutasi (OCC per run).                                                                               |
+| Schema               | `packages/convex/convex/schema.ts:592-643`                                                      | `chatMessages {text, reasoning?, runId, status}`; `agentRunEvents {runId, seq, type:string, payloadJson:string, createdAt}` index `by_run_seq`.                     |
+| Artefak (tulis)      | `apps/agents/src/tools/artifacts.ts` → `agent/service.ts:764-847` → `artifacts.ts:1253-1374`    | `executeArtifact` tulis baris `artifacts` (+`source:"agent"`, `threadId`) + `artifactContents`. **`artifactVersions`/`currentVersionId` tak pernah ditulis.**       |
+| Artefak (baca panel) | `convex/artifacts.ts:246,361`                                                                   | `api.artifacts.get` (metadata+konten) + `api.artifacts.getRenderPayload(artifactId)` (action: body siap-render per tipe).                                           |
+| Side panel thread    | `thread-detail-shell.tsx:46,66-81` + `detail-split-layout.tsx` + `responsive-side-panel.tsx:32` | Satu boolean `contextPanelOpen`; satu target panel (library/global-context); chrome via `panelSurfaceClass({framed:true})`.                                         |
 
 ---
 
@@ -135,11 +156,17 @@ sibling `AgentRunBlock` + `MessageRow`.
 // apps/web/features/thread-experience/utils/turn-model.ts (baru)
 type TurnPart =
   | { kind: "reasoning"; text: string; isThinking: boolean }
-  | { kind: "tool"; node: ActivityEvent }            // ToolRow collapsible
-  | { kind: "subagent"; node: ActivityEvent }        // SubagentCard (satu kartu dinamis)
-  | { kind: "phase"; node: ActivityEvent }            // seksi Accordion /deep
-  | { kind: "artifact"; artifactId?: string; title: string; action: "create" | "update"; live: boolean }
-  | { kind: "hitl"; part: HitlToolPart }              // diselipkan di posisi seq approval
+  | { kind: "tool"; node: ActivityEvent } // ToolRow collapsible
+  | { kind: "subagent"; node: ActivityEvent } // SubagentCard (satu kartu dinamis)
+  | { kind: "phase"; node: ActivityEvent } // seksi Accordion /deep
+  | {
+      kind: "artifact";
+      artifactId?: string;
+      title: string;
+      action: "create" | "update";
+      live: boolean;
+    }
+  | { kind: "hitl"; part: HitlToolPart } // diselipkan di posisi seq approval
   | { kind: "answer"; text: string; isStreaming: boolean }; // Streamdown body
 ```
 
@@ -175,14 +202,14 @@ untuk `ToolRow`. Tool/Subagent/Artifact card harus dibuat baru.
 > D3 = versioning ringan + hapus tabel mati; D4 = kartu sub-agen identik (ringkasan live).
 > ✅ = terkonfirmasi · ⚠️ = masih default rekomendasi.
 
-| # | Keputusan | Opsi | Hasil |
-|---|---|---|---|
-| **D1** ✅ | Kedalaman urutan presisi #1 | (a) Aproksimasi UI saja · (b) segmentasi backend (urutan presisi) | **DIPILIH (b) langsung.** Segmentasi backend (Fase 1) **mendahului** penggabungan frontend (Fase 2) → urutan presisi sejak pertama kali terlihat, tanpa fase aproksimasi. Konsekuensi: hot-path streaming + perubahan schema tersentuh paling awal. |
-| **D2** ✅ | Ruang lingkup parity side panel artefak | (a) Thread-detail saja · (b) 3 surface per `apps/web/AGENTS.md` | **Thread-detail dulu (Fase 4), rollout 3 surface di Fase 5.** Di panel compact (embedded), kartu **deep-link** ke `/app/workspaces/[id]/artifacts/[id]` daripada panel-dalam-panel. |
-| **D3** ✅ | Versioning artefak | (a) Ringan: "Dibuat/Diperbarui" dari `action`+`createdAt/updatedAt` · (b) Hidupkan `artifactVersions` | **(a) ringan.** `artifactVersions`/`currentVersionId`/`ResearchArtifact.version` saat ini **mati** — hapus sebagai cleanup (Fase 5). |
-| **D4** ✅ | Identitas sub-agen | (a) Kartu identik dibedakan ringkasan live · (b) Judul tugas per-sub-pertanyaan | **(a).** Hanya `literature-searcher` yang pernah di-spawn hari ini; (b) ditangguhkan (v3) sampai desain deep-research menambah tipe sub-agen. |
-| **D5** ✅ | Pembalikan req 18 (jawaban terpisah dari run) | — | **Dibalik secara eksplisit.** Referensi owner mensyaratkan penggabungan. Dicatat sebagai supersede atas `agent-activity-stream-plan.md` §5.3/req 18. |
-| **D6** ⚠️ | Tampilkan teks query pencarian (Image 1: "Searched for '…'") | (a) Hanya jumlah hasil · (b) + teks query (clamped) | **(b).** Tambah `query` (single-line ≤120 char) ke input sanitizer `searchWeb`/`searchArxiv`. Query di-generate agen (bukan data privat user) — tetap melewati chokepoint + clamp + review no-leak. |
+| #         | Keputusan                                                    | Opsi                                                                                                  | Hasil                                                                                                                                                                                                                                               |
+| --------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **D1** ✅ | Kedalaman urutan presisi #1                                  | (a) Aproksimasi UI saja · (b) segmentasi backend (urutan presisi)                                     | **DIPILIH (b) langsung.** Segmentasi backend (Fase 1) **mendahului** penggabungan frontend (Fase 2) → urutan presisi sejak pertama kali terlihat, tanpa fase aproksimasi. Konsekuensi: hot-path streaming + perubahan schema tersentuh paling awal. |
+| **D2** ✅ | Ruang lingkup parity side panel artefak                      | (a) Thread-detail saja · (b) 3 surface per `apps/web/AGENTS.md`                                       | **Thread-detail dulu (Fase 4), rollout 3 surface di Fase 5.** Di panel compact (embedded), kartu **deep-link** ke `/app/workspaces/[id]/artifacts/[id]` daripada panel-dalam-panel.                                                                 |
+| **D3** ✅ | Versioning artefak                                           | (a) Ringan: "Dibuat/Diperbarui" dari `action`+`createdAt/updatedAt` · (b) Hidupkan `artifactVersions` | **(a) ringan.** `artifactVersions`/`currentVersionId`/`ResearchArtifact.version` saat ini **mati** — hapus sebagai cleanup (Fase 5).                                                                                                                |
+| **D4** ✅ | Identitas sub-agen                                           | (a) Kartu identik dibedakan ringkasan live · (b) Judul tugas per-sub-pertanyaan                       | **(a).** Hanya `literature-searcher` yang pernah di-spawn hari ini; (b) ditangguhkan (v3) sampai desain deep-research menambah tipe sub-agen.                                                                                                       |
+| **D5** ✅ | Pembalikan req 18 (jawaban terpisah dari run)                | —                                                                                                     | **Dibalik secara eksplisit.** Referensi owner mensyaratkan penggabungan. Dicatat sebagai supersede atas `agent-activity-stream-plan.md` §5.3/req 18.                                                                                                |
+| **D6** ⚠️ | Tampilkan teks query pencarian (Image 1: "Searched for '…'") | (a) Hanya jumlah hasil · (b) + teks query (clamped)                                                   | **(b).** Tambah `query` (single-line ≤120 char) ke input sanitizer `searchWeb`/`searchArxiv`. Query di-generate agen (bukan data privat user) — tetap melewati chokepoint + clamp + review no-leak.                                                 |
 
 ---
 
@@ -241,15 +268,15 @@ hanya saja metadata kini dev-mode only (`run-progress.tsx:240-280`).
   - **Body (expanded):** key/value dari `node.metadata` scalar (sentence-case Indonesia).
 - **Pemetaan per-tool** (dari `activitySanitizers.ts` + `describeTool`):
 
-| Tool | Header collapsed | Body expanded |
-|---|---|---|
-| `searchWeb` / `searchArxiv` | "Mencari sumber web · 12 hasil" | query (D6) + `resultCount` |
-| `lookupDoi` | "DOI terverifikasi · {doi}" | `doi`, `resultCount` |
-| `searchThreadDocuments` | "Selesai mencari dokumen" | "dokumen ditemukan"/"tidak ada" |
-| `verifyStatistics` | "Statistik diperiksa · {n} pemeriksaan, {verdict}" | `checksRun`, `verdict` |
-| `verifyCitations` (`citation_check`) | "Kutipan diverifikasi · {n} diperiksa" | `checked`, `flagged` |
-| `proposeArtifact` / `executeArtifact` | "Menyimpan dokumen · {judul}" | judul + link ke kartu artefak (§7) |
-| `askUser` | "Menunggu jawaban Anda · {n} pertanyaan" | (kartu HITL) |
+| Tool                                  | Header collapsed                                   | Body expanded                      |
+| ------------------------------------- | -------------------------------------------------- | ---------------------------------- |
+| `searchWeb` / `searchArxiv`           | "Mencari sumber web · 12 hasil"                    | query (D6) + `resultCount`         |
+| `lookupDoi`                           | "DOI terverifikasi · {doi}"                        | `doi`, `resultCount`               |
+| `searchThreadDocuments`               | "Selesai mencari dokumen"                          | "dokumen ditemukan"/"tidak ada"    |
+| `verifyStatistics`                    | "Statistik diperiksa · {n} pemeriksaan, {verdict}" | `checksRun`, `verdict`             |
+| `verifyCitations` (`citation_check`)  | "Kutipan diverifikasi · {n} diperiksa"             | `checked`, `flagged`               |
+| `proposeArtifact` / `executeArtifact` | "Menyimpan dokumen · {judul}"                      | judul + link ke kartu artefak (§7) |
+| `askUser`                             | "Menunggu jawaban Anda · {n} pertanyaan"           | (kartu HITL)                       |
 
 Default-deny: tool tanpa scalar → judul saja. **Tanpa perubahan backend** untuk tool normal
 (kecuali D6 query — di Fase 0).
@@ -259,12 +286,12 @@ Default-deny: tool tanpa scalar → judul saja. **Tanpa perubahan backend** untu
 ## 7. Behavior #3 — kartu artefak + side panel
 
 **Prasyarat load-bearing (Fase 0):** `executeArtifact` mengembalikan
-`{ok, artifactId, action}` (`tools/artifacts.ts:97`) tapi **hasilnya tak disanitasi** → 
+`{ok, artifactId, action}` (`tools/artifacts.ts:97`) tapi **hasilnya tak disanitasi** →
 `artifactId` tak pernah sampai UI. Tambah result sanitizer.
 
 - **Fase 0:**
   - `apps/agents/src/agent/activitySanitizers.ts`: tambah `executeArtifact.result =
-    { artifactId: safeId(r.artifactId), action: safeEnum(r.action, ["create","update","delete"]) }`
+{ artifactId: safeId(r.artifactId), action: safeEnum(r.action, ["create","update","delete"]) }`
     (helper `safeId` baru di samping `safeLabel`/`safeEnum`). `proposeArtifact` opsional.
   - `packages/agent-contracts/src/activity.ts`: teruskan `artifactId`/`action` ke
     `node.metadata` (sudah `string|number|boolean`, tanpa perubahan tipe); `describeTool`
@@ -284,7 +311,7 @@ Default-deny: tool tanpa scalar → judul saja. **Tanpa perubahan backend** untu
 
 - **Fase 4 — side panel:**
   - Ekstrak inner `ArtifactDetailPage` → komponen reusable `{artifactId, workspaceId,
-    variant: "page" | "panel"}`. Varian `panel`: buang wrapper `<main min-h-svh>`, ganti
+variant: "page" | "panel"}`. Varian `panel`: buang wrapper `<main min-h-svh>`, ganti
     breadcrumb workspace dengan toolbar panel + tombol tutup, bungkus
     `panelSurfaceClass({framed:true})` + `panelBodyPaddingClass`. Pakai ulang
     `ArtifactRenderPanels` + `ArtifactDetailHeader` + viewer (pdf/mermaid/json/csv/html/
@@ -315,6 +342,7 @@ Hari ini sub-agen dirender sebagai `ActivityNodeRow` rekursif: node `subagent` d
 children (tool-nya) sebagai `<ol>` ber-`border-l` nested ~2 level di dalam Accordion fase.
 
 **v1 (Fase 3, tanpa backend):**
+
 - `packages/agent-contracts/src/activity.ts`: helper murni
   `subagentSummary(node)` + `subagentCurrentActivity(node)`:
   - running → judul child tool yang sedang running (terbaru by seq), via Shimmer
@@ -330,7 +358,7 @@ children (tool-nya) sebagai `<ol>` ber-`border-l` nested ~2 level di dalam Accor
 - Branch `ActivityNodeRow` + body `AccordionContent` fase `literature` di
   `run-progress.tsx`/`AssistantTurn` agar `subagent` → `SubagentCard`.
 - **Chip "N berjalan" + waktu tunggu:** hitung `children.filter(c => c.type==="subagent" &&
-  c.status==="running").length`; waktu reuse `formatRunDuration(run)`. Tanpa backend.
+c.status==="running").length`; waktu reuse `formatRunDuration(run)`. Tanpa backend.
 
 **v2 (Fase 5, backend):** tangkap `last_assistant_message` di `subagent_stop`:
 `hooks.ts` baca `hookInput.last_assistant_message` → `sanitizeSubagentSummary` (safeLabel,
@@ -338,6 +366,7 @@ children (tool-nya) sebagai `<ol>` ber-`border-l` nested ~2 level di dalam Accor
 simpan di node; `subagentSummary` utamakan saat terminal. + test parity.
 
 **Catatan penting:**
+
 - Hanya `literature-searcher` yang pernah di-spawn (fase `literature` deep). planner/
   counter-evidence/citation-verifier/writer adalah **PHASE**, bukan sub-agen — tetap render
   sebagai baris Accordion fase. Kartu sub-agen referensi = literature-searcher paralel.
@@ -357,7 +386,7 @@ kebenaran jawaban (copy/finalize/judul thread/search).
   schema seluruh plan**): `agentRunEvents` + `segmentId: v.optional(v.string())` + index
   `by_run_segment: ["runId", "segmentId"]`.
 - **Store** (`apps/agents/src/store`): `upsertRunEventBySegmentId(runId, segmentId, type,
-  payload)` di `types.ts`, `convexStore.ts`, `memoryStore.ts`; mutasi Convex baru di
+payload)` di `types.ts`, `convexStore.ts`, `memoryStore.ts`; mutasi Convex baru di
   `agent/service.ts` (lookup `by_run_segment` → patch jika ada **pertahankan seq** / insert
   `nextRunEventSeq` jika belum).
 - **Kontrak** (`run.ts`): `runEventTypeSchema` + `text_segment` + `reasoning_segment`;
@@ -385,18 +414,19 @@ Salah-segmentasi hanya menurunkan granularitas urutan, tak pernah merusak jawaba
 **Cap & resume:** koalessing per-segmen jaga text/reasoning ~1 event per run kontiguous;
 estimasi worst-case vs `MAX_EVENTS_PER_RUN=200` (`queries.ts:16`) + `MAX_RUN_EVENTS=500`
 (`service.ts`) — naikkan cap atau paginasi bila perlu. `segmentId` unik lintas resume HITL
-+ fase deep. Cancel tutup segmen terbuka seperti `activity.ts:739-782`.
+
+- fase deep. Cancel tutup segmen terbuka seperti `activity.ts:739-782`.
 
 ---
 
 ## 10. Ringkasan perubahan kontrak (`@aqsha/agent-contracts`)
 
-| Fase | Perubahan | Sifat |
-|---|---|---|
-| 0 | `executeArtifact` sanitizer `{artifactId, action}`; `describeTool` artefak; (D6) `query` di searchWeb/searchArxiv input sanitizer | Additive, no-leak test |
-| 1 | `runEventTypeSchema` + `text_segment`/`reasoning_segment`; `orderedPartsFromRun(run)` | Additive |
-| 3 | `subagentSummary`/`subagentCurrentActivity` (helper murni); opsional `ActivityEvent.currentActivity?`/`summary?` | Additive |
-| 5 | `subagentPayloadSchema.summary?` (last_assistant_message) | Additive |
+| Fase | Perubahan                                                                                                                         | Sifat                  |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| 0    | `executeArtifact` sanitizer `{artifactId, action}`; `describeTool` artefak; (D6) `query` di searchWeb/searchArxiv input sanitizer | Additive, no-leak test |
+| 1    | `runEventTypeSchema` + `text_segment`/`reasoning_segment`; `orderedPartsFromRun(run)`                                             | Additive               |
+| 3    | `subagentSummary`/`subagentCurrentActivity` (helper murni); opsional `ActivityEvent.currentActivity?`/`summary?`                  | Additive               |
+| 5    | `subagentPayloadSchema.summary?` (last_assistant_message)                                                                         | Additive               |
 
 Semua field additive/opsional → event lama tetap parse. Pertahankan invariant pendahulu:
 normalizer **murni + ter-unit-test**, payload `agentRunEvents` open (`z.record`),
@@ -407,14 +437,14 @@ chokepoint sanitasi tunggal di `activitySanitizers.ts`, kunci sanitizer ↔ `des
 
 ## 11. Fase implementasi (ringkas)
 
-| Fase | Tujuan | File utama | Risiko |
-|---|---|---|---|
-| **0 Pondasi data** | `artifactId`/`action`/`query` sampai UI; perlebar `listArtifacts` | `activitySanitizers.ts`, `activity.ts`, `queries.ts`, test | Rendah |
-| **1 Urutan presisi (backend)** | Interleaving reasoning↔tool presisi via segmen ber-seq | `schema.ts`(+`segmentId`), `service.ts`, `convexStore.ts`/`memoryStore.ts`/`types.ts`, `streamBridge.ts`, `run.ts`, `activity.ts`(`orderedPartsFromRun`) | **Tinggi** (hot path + satu-satunya schema change) |
-| **2 Penggabungan timeline** | Satu parent berurut + `ToolRow`; konsumsi `orderedPartsFromRun`; hapus split sibling | `turn-model.ts`(+), `assistant-turn.tsx`(+), `tool-row.tsx`(+), `chat-thread-state.tsx`, `transcript-model.ts`, `message-row.tsx`, `run-progress.tsx` | **Sedang** (transcript inti, 3 surface, smoothing) |
-| **3 Kartu sub-agen** | Satu kartu dinamis + chip "N berjalan" | `subagent-card.tsx`(+), `activity.ts`(helper), `run-progress.tsx`/`assistant-turn.tsx` | Rendah |
-| **4 Kartu artefak + side panel** | Indikator live + kartu klik → side panel | `chat-artifact-card.tsx`(+), `artifact-detail-panel.tsx`(+), `ThreadPanelProvider`(+), `thread-detail-shell.tsx`, ekstrak `ArtifactDetailPage` | **Sedang-Tinggi** (parity, reuse viewer) |
-| **5 Parity + cleanup** | Rollout 3 surface; v2 ringkasan; hapus `artifactVersions` mati | panel twins, `hooks.ts`+sanitizer subagen, migrasi hapus `artifactVersions`/`currentVersionId`/`ResearchArtifact.version`, `accountCleanup` | Sedang |
+| Fase                             | Tujuan                                                                               | File utama                                                                                                                                               | Risiko                                             |
+| -------------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| **0 Pondasi data**               | `artifactId`/`action`/`query` sampai UI; perlebar `listArtifacts`                    | `activitySanitizers.ts`, `activity.ts`, `queries.ts`, test                                                                                               | Rendah                                             |
+| **1 Urutan presisi (backend)**   | Interleaving reasoning↔tool presisi via segmen ber-seq                               | `schema.ts`(+`segmentId`), `service.ts`, `convexStore.ts`/`memoryStore.ts`/`types.ts`, `streamBridge.ts`, `run.ts`, `activity.ts`(`orderedPartsFromRun`) | **Tinggi** (hot path + satu-satunya schema change) |
+| **2 Penggabungan timeline**      | Satu parent berurut + `ToolRow`; konsumsi `orderedPartsFromRun`; hapus split sibling | `turn-model.ts`(+), `assistant-turn.tsx`(+), `tool-row.tsx`(+), `chat-thread-state.tsx`, `transcript-model.ts`, `message-row.tsx`, `run-progress.tsx`    | **Sedang** (transcript inti, 3 surface, smoothing) |
+| **3 Kartu sub-agen**             | Satu kartu dinamis + chip "N berjalan"                                               | `subagent-card.tsx`(+), `activity.ts`(helper), `run-progress.tsx`/`assistant-turn.tsx`                                                                   | Rendah                                             |
+| **4 Kartu artefak + side panel** | Indikator live + kartu klik → side panel                                             | `chat-artifact-card.tsx`(+), `artifact-detail-panel.tsx`(+), `ThreadPanelProvider`(+), `thread-detail-shell.tsx`, ekstrak `ArtifactDetailPage`           | **Sedang-Tinggi** (parity, reuse viewer)           |
+| **5 Parity + cleanup**           | Rollout 3 surface; v2 ringkasan; hapus `artifactVersions` mati                       | panel twins, `hooks.ts`+sanitizer subagen, migrasi hapus `artifactVersions`/`currentVersionId`/`ResearchArtifact.version`, `accountCleanup`              | Sedang                                             |
 
 Owner memilih **urutan presisi langsung** (D1): segmentasi backend (Fase 1) **mendahului**
 penggabungan frontend (Fase 2), sehingga timeline tergabung sudah presisi sejak pertama kali
@@ -429,17 +459,17 @@ berjalan paralel dengan Fase 1 karena tak bergantung pada segmentasi.
 Referensi screenshot berbahasa Inggris → wajib diterjemahkan (label uppercase dilarang
 [[copywriting-no-uppercase]]). Sebagian sudah ada di katalog `activity.ts`.
 
-| Referensi (EN) | Aqsha (ID) | Sumber |
-|---|---|---|
-| Thought for 3 seconds | Berpikir 3 detik | baru (Reasoning header + durasi) |
-| Thinking… | Sedang berpikir… | `reasoning.tsx` (sudah ada) |
-| Searching the web | Mencari di web | `TOOL_LABELS.searchWeb.running` |
-| Searched for "…" | Mencari "…" / Selesai mencari "…" | baru (D6 query) |
-| Write file.md | Menulis dokumen / Menulis {judul} | `TOOL_LABELS.executeArtifact` |
-| Researching… | Sedang meneliti / Mencari literatur… | `subagentSummary` |
-| Writing response | Menulis respons | `subagentSummary` |
-| 4 Working | 4 berjalan | baru (chip sub-agen) |
-| Waiting 1m 51s | Menunggu 1m 51s | `formatRunDuration` |
+| Referensi (EN)        | Aqsha (ID)                           | Sumber                           |
+| --------------------- | ------------------------------------ | -------------------------------- |
+| Thought for 3 seconds | Berpikir 3 detik                     | baru (Reasoning header + durasi) |
+| Thinking…             | Sedang berpikir…                     | `reasoning.tsx` (sudah ada)      |
+| Searching the web     | Mencari di web                       | `TOOL_LABELS.searchWeb.running`  |
+| Searched for "…"      | Mencari "…" / Selesai mencari "…"    | baru (D6 query)                  |
+| Write file.md         | Menulis dokumen / Menulis {judul}    | `TOOL_LABELS.executeArtifact`    |
+| Researching…          | Sedang meneliti / Mencari literatur… | `subagentSummary`                |
+| Writing response      | Menulis respons                      | `subagentSummary`                |
+| 4 Working             | 4 berjalan                           | baru (chip sub-agen)             |
+| Waiting 1m 51s        | Menunggu 1m 51s                      | `formatRunDuration`              |
 
 ---
 
@@ -470,7 +500,7 @@ Referensi screenshot berbahasa Inggris → wajib diterjemahkan (label uppercase 
   terminal/flicker); `orderedPartsFromRun` (merge by seq, fold tool/artifact, fallback
   legacy, terminal-close cancel).
 - **apps/agents (vitest):** sanitizer `executeArtifact.result`/`query`/`subagent summary`
-  + no-leak; `streamBridge` batas segmen + koalessing + cap (Fase 1); `hooks` parity.
+  - no-leak; `streamBridge` batas segmen + koalessing + cap (Fase 1); `hooks` parity.
 - **convex (vitest):** `upsertRunEventBySegmentId` (patch-keep-seq vs insert); `listArtifacts`
   proyeksi lebar.
 - **web (vitest):** `turn-model` edge case; render `AssistantTurn`/`ToolRow`/`SubagentCard`/

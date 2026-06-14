@@ -1,4 +1,4 @@
-import type { ActivityEvent } from "@aqsha/agent-contracts";
+import type { ActivityEvent, OrderedPart } from "@aqsha/agent-contracts";
 import type { PromptCommand } from "@aqsha/convex/prompt-commands";
 
 export type SendResult =
@@ -88,10 +88,15 @@ export type ResearchRun = {
   createdAt?: number;
   completedAt?: number;
   canceledAt?: number;
-  // Normalized activity timeline rendered by AgentRunBlock (plan §3) — the only
-  // run-progress representation. The orphaned `steps`/`events` mirror (unread by
-  // any component) was removed in the Fase-3 cleanup (plan §12).
+  // Normalized activity timeline rendered by the run header / fallback path
+  // (plan §3). The orphaned `steps`/`events` mirror (unread by any component)
+  // was removed in the Fase-3 cleanup (plan §12).
   activity: ActivityEvent[];
+  // Ordered answer parts (Fase 1/2) precomputed by `uiRunFromRow`: reasoning/text
+  // segments merged with the top-level activity nodes by seq. `null` for a legacy
+  // run with no segment events → `buildTurnParts` falls back to the two-blob
+  // message rendering.
+  orderedParts?: OrderedPart[] | null;
 };
 
 export type ResearchArtifact = {
@@ -156,10 +161,6 @@ export type ResearchSource = {
 export type SourceFocus =
   | { type: "message"; messageId: string }
   | { type: "run"; runId: string };
-
-export type TranscriptEntry =
-  | { kind: "message"; message: ChatMessage; assistantRun?: ResearchRun }
-  | { kind: "run"; run: ResearchRun };
 
 export type ResearchPanelState = {
   activeArtifactId: string | null;

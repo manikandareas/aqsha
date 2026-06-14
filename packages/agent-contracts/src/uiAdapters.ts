@@ -2,7 +2,12 @@
 // apps/web thread-experience components consume (plan §9.4 Step 2: data-hooks
 // change, UI components do not). Structural copies of the web types — kept
 // minimal and assignable to features/thread-experience/types.
-import { activityEventsFromRun, type ActivityEvent } from "./activity";
+import {
+  activityEventsFromRun,
+  orderedPartsFromRun,
+  type ActivityEvent,
+  type OrderedPart,
+} from "./activity";
 
 export type AgentMessageRow = {
   messageId: string;
@@ -165,6 +170,13 @@ export type UiResearchRun = {
   // derived from the run's events. The earlier orphaned `steps`/`events` mirror
   // (never read by any component) was removed in the Fase-3 cleanup (plan §12).
   activity: ActivityEvent[];
+  // Ordered answer parts (answer-stream redesign Fase 1/2): reasoning/text
+  // segments merged with the top-level activity nodes BY SEQ, so the unified
+  // `AssistantTurn` can render the precise reasoning → tool → reasoning → answer
+  // order. `null` for a legacy run with no segment events → the turn model falls
+  // back to the two-blob message rendering. Precomputed here (not in the UI)
+  // because the web `ResearchRun` does not carry the raw `events` array.
+  orderedParts: OrderedPart[] | null;
 };
 
 /** Only deep runs render a progress block in the legacy UI; map both anyway. */
@@ -185,5 +197,6 @@ export function uiRunFromRow(row: AgentRunRow): UiResearchRun {
       ? row.updatedAt
       : undefined,
     activity: activityEventsFromRun(row),
+    orderedParts: orderedPartsFromRun(row),
   };
 }
