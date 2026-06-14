@@ -19,6 +19,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import type { ResearchRun } from "../types";
 import { formatCompactDuration } from "../utils/datetime";
+import { SubagentCard, SubagentRunningChip } from "./subagent-card";
 import { ToolRow } from "./tool-row";
 
 // Activity-timeline primitives (plan §5.2) shared by the unified `AssistantTurn`:
@@ -36,13 +37,18 @@ import { ToolRow } from "./tool-row";
 export function DeepPhaseTimeline({
   nodes,
   devMode,
+  run,
 }: {
   nodes: ActivityEvent[];
   devMode: boolean;
+  // The run is passed only to derive the sub-agent "N berjalan" chip duration;
+  // the timeline itself reads everything from `nodes`.
+  run?: ResearchRun;
 }) {
   const phaseIds = nodes.flatMap((node) => (node.type === "phase" ? [node.id] : []));
   const [collapsed, setCollapsed] = useState<string[]>([]);
   const openIds = phaseIds.filter((id) => !collapsed.includes(id));
+  const durationLabel = run ? formatRunDuration(run) : undefined;
   if (phaseIds.length === 0) {
     return (
       <ol className="mt-2 grid gap-1.5 pl-0">
@@ -75,6 +81,11 @@ export function DeepPhaseTimeline({
                   ))}
                 </ol>
               ) : null}
+              <SubagentRunningChip
+                nodes={node.children ?? []}
+                durationLabel={durationLabel}
+                className="mt-1.5"
+              />
             </AccordionContent>
           </AccordionItem>
         ) : (
@@ -97,12 +108,20 @@ export function ActivityNodeRow({
   // Children are already visibility-filtered by `filterByVisibility` upstream.
   const children = node.children ?? [];
   // A leaf tool node renders as a collapsible ToolRow (its input/result summary
-  // on click); everything else (phases, sub-agents, approvals, system) keeps the
-  // plain status line + nested children.
+  // on click); a sub-agent renders as ONE dynamic SubagentCard (Fase 3) — never
+  // the old recursive nested list; everything else (phases, approvals, system)
+  // keeps the plain status line + nested children.
   if (node.type === "tool" && children.length === 0) {
     return (
       <li>
         <ToolRow node={node} devMode={devMode} />
+      </li>
+    );
+  }
+  if (node.type === "subagent") {
+    return (
+      <li>
+        <SubagentCard node={node} devMode={devMode} />
       </li>
     );
   }

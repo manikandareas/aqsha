@@ -940,3 +940,55 @@ export function orderedPartsFromRun(run: AgentRunRow): OrderedPart[] | null {
   parts.sort((a, b) => a.seq - b.seq);
   return parts;
 }
+
+// ── sub-agent card summaries (answer-stream redesign Fase 3) ──────────────────
+//
+// A sub-agent node carries its tool invocations as `children` (the contract nests
+// a tool under the sub-agent it ran in, via agent_id). v1 summaries are derived
+// from those TOOL children ONLY: the sub-agent's own text/reasoning is dropped at
+// the stream bridge (`parent_tool_use_id`), so no live prose is available (that is
+// v3). Every value read here is the same allow-listed scalar metadata as the rest
+// of the timeline (default-deny) — raw payloads can never reach the card.
+
+/** A sub-agent's TOOL children (skips any non-tool node defensively). */
+function subagentToolChildren(node: ActivityEvent): ActivityEvent[] {
+  return (node.children ?? []).filter((child) => child.type === "tool");
+}
+
+/**
+ * Terminal roll-up for a finished sub-agent: a short Indonesian summary of what
+ * its tool children did — e.g. "3 pencarian, 12 sumber" (tool-call count + the
+ * summed `resultCount` scalars). DEFAULT-DENY: with no tool children and no
+ * source count it returns the sub-agent's own label (`node.title`), never raw
+ * data. Pure.
+ */
+export function subagentSummary(node: ActivityEvent): string {
+  const tools = subagentToolChildren(node);
+  let sources = 0;
+  for (const tool of tools) {
+    const count = tool.metadata?.resultCount;
+    if (typeof count === "number" && Number.isFinite(count) && count > 0) {
+      sources += count;
+    }
+  }
+  const parts: string[] = [];
+  if (tools.length > 0) parts.push(`${tools.length} pencarian`);
+  if (sources > 0) parts.push(`${sources} sumber`);
+  return parts.length > 0 ? parts.join(", ") : node.title;
+}
+
+/**
+ * Live activity for a RUNNING sub-agent: the title of the LAST (highest-seq) tool
+ * child that is still running. Picking by max seq is deterministic, so the line
+ * does not flicker when several tools run at once. Returns undefined when no tool
+ * child is running yet (the card then falls back to the sub-agent's own label).
+ * Pure.
+ */
+export function subagentCurrentActivity(node: ActivityEvent): string | undefined {
+  let current: ActivityEvent | undefined;
+  for (const tool of subagentToolChildren(node)) {
+    if (tool.status !== "running") continue;
+    if (!current || tool.seq > current.seq) current = tool;
+  }
+  return current?.title;
+}

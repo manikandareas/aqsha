@@ -1,6 +1,6 @@
 # Plan: Agent Answer Stream Redesign (UI Streaming)
 
-> Dokumen desain + rencana implementasi. **Fase 0 + Fase 1 + Fase 2 SELESAI (3/6 fase), branch `development`.**
+> Dokumen desain + rencana implementasi. **Fase 0 + Fase 1 + Fase 2 + Fase 3 SELESAI (4/6 fase), branch `development`.**
 >
 > Penerus + perluasan langsung dari [`agent-activity-stream-plan.md`](./agent-activity-stream-plan.md)
 > (Fase 1–3 + cleanup §12 SELESAI). Membangun **di atas** kontrak `ActivityEvent`,
@@ -15,7 +15,7 @@
 | **Fase 0 — Pondasi data**                     | ✅ **SELESAI** — branch `development` (2026-06-14), uncommitted | Sanitizer `artifactId`/`action` + `query` (D6) + perlebar `listArtifacts`. Tanpa perubahan schema. Detail di "Fase 0 — yang dikerjakan".                                              |
 | **Fase 1 — Urutan presisi (backend)**         | ✅ **SELESAI** — branch `development` (2026-06-14), uncommitted | Segmen `text`/`reasoning` ber-seq di `agentRunEvents` + `orderedPartsFromRun`. **Satu-satunya perubahan schema.** Barrier ordering (SDK EAGER). Detail di "Fase 1 — yang dikerjakan". |
 | **Fase 2 — Penggabungan timeline (frontend)** | ✅ **SELESAI** — branch `development` (2026-06-14), uncommitted | `AssistantTurn` + `ToolRow` collapsible; konsumsi `orderedPartsFromRun` (urutan presisi); hapus split run/message. Tanpa perubahan schema. Detail di "Fase 2 — yang dikerjakan". |
-| **Fase 3 — Kartu sub-agen**                   | ⬜ Belum                                                        | `SubagentCard` + ringkasan progresif + chip "N berjalan".                                                                                                                             |
+| **Fase 3 — Kartu sub-agen**                   | ✅ **SELESAI** — branch `development` (2026-06-14), uncommitted | `SubagentCard` (satu kartu/sub-agen) + ringkasan progresif (running tool / roll-up) + chip "N berjalan". Helper kontrak murni, tanpa perubahan schema. Detail di "Fase 3 — yang dikerjakan". |
 | **Fase 4 — Kartu artefak + side panel**       | ⬜ Belum                                                        | `ChatArtifactCard` + `ArtifactDetailPanel` + `ThreadPanelProvider`. Thread-detail dulu.                                                                                               |
 | **Fase 5 — Parity + polish + cleanup**        | ⬜ Belum                                                        | Rollout side panel ke 3 surface; v2 ringkasan sub-agen; hapus `artifactVersions` mati.                                                                                                |
 
@@ -80,6 +80,29 @@ Satu `AssistantTurn` per RUN menggantikan pasangan sibling `AgentRunBlock` + `Me
 - **Scope:** `executeArtifact` = `ToolRow` biasa (kartu klik = Fase 4); `subagent` = `ActivityNodeRow` nested (SubagentCard = Fase 3).
 - **Review adversarial (4 vektor):** smoothing (key per message id ✓), HITL single-render (anchor node approval + flag, fallback akhir ✓), parity 3 surface (komponen tunggal bersama ✓), urutan parts (`orderedPartsFromRun` pra-sort + final dari message.text ✓).
 - **Gate:** typecheck (5) · lint 0 error (12 warning pra-ada) · agent-contracts **56** · apps/agents **206** · convex **123** · @aqsha/app **85**. Tanpa `convex dev --once` (tak menyentuh schema).
+
+### Fase 3 — Kartu sub-agen ✅ (gate hijau, tanpa perubahan schema)
+
+Render sub-agen nested-rekursif (`ActivityNodeRow` → `NodeLine` + `<ol>` ber-`border-l`) diganti **satu `SubagentCard` dinamis** per node `type:"subagent"`, + chip "N berjalan". v1 ringkasan berbasis TOOL children (prosa live sub-agen dibuang di streamBridge — v3 ditangguhkan). Tanpa perubahan backend/schema.
+
+- **Kontrak (`activity.ts`) — helper MURNI additive (no field baru di `ActivityEvent`):**
+  - `subagentSummary(node)` — terminal roll-up dari tool children: `"{n} pencarian"` (jumlah child tool) + `", {m} sumber"` (jumlah `resultCount` ter-allow-list). **Default-deny:** tanpa tool child & tanpa source count → `node.title` (label sub-agen), tak pernah data mentah.
+  - `subagentCurrentActivity(node)` — running: judul child tool running **ber-seq tertinggi** (deterministik, anti-flicker); `undefined` bila belum ada child running (kartu fallback ke `node.title`).
+  - Keduanya pakai `subagentToolChildren` (filter `type:"tool"`) + scalar allow-list yang sama (`resultCount`) — tak ada materialisasi field; komponen yang memanggil (kontrak minimal).
+- **`utils/turn-model.ts` (web, murni + unit-test):**
+  - `subagentCardModel(node, {devMode})` → `{ title, isRunning, summary, children, forceExpanded }`. `summary` = `subagentCurrentActivity` (running) / `subagentSummary` (terminal); `forceExpanded` = devMode (children tampil tanpa expand).
+  - `runningSubagentCount(nodes)` → `nodes.filter(type==="subagent" && status==="running").length` (untuk chip).
+- **`components/subagent-card.tsx` (baru):**
+  - `SubagentCard` — judul = `node.title`; baris ringkasan dinamis (running → Shimmer; terminal → teks); ikon via `NodeStatusIcon`; durasi via `nodeDuration`. Tool children **disembunyikan** di balik `Collapsible` (acuan `ToolRow`), di-render ulang lewat `ActivityNodeRow` (tool → `ToolRow`); **dev-mode** → children tampil inline (`forceExpanded`).
+  - `SubagentRunningChip` — "{n} berjalan" (Shimmer) + "· Menunggu {durasi}"; `null` saat 0 running.
+- **Integrasi:**
+  - `run-progress.tsx` — `ActivityNodeRow` cabang baru `node.type==="subagent"` → `<SubagentCard>` (jalur rekursif nested sub-agen LAMA dihapus, anti double-render). `DeepPhaseTimeline` terima prop `run?` opsional → render `<SubagentRunningChip>` di `AccordionContent` fase (durasi `formatRunDuration(run)`).
+  - `assistant-turn.tsx` — `flushPhases` oper `run` ke `DeepPhaseTimeline`; TurnPart `kind:"subagent"` (top-level, defensif) → chip sekali di atas kartu + `<SubagentCard>`.
+- **No-leak:** kartu/ringkasan/chip HANYA scalar allow-list lewat helper kontrak; `agentId`/`agentType` tetap dev-mode only (`metadataLine`), tak pernah ke user.
+- **Parity:** `SubagentCard`/chip dipakai lewat `AssistantTurn` + `run-progress` yang dibagi `ChatThreadState` → otomatis mencakup thread-detail main + workspace panel + Explore panel.
+- **Test:** agent-contracts `subagentSummary` (roll-up / count-only / default-deny) + `subagentCurrentActivity` (seq tertinggi anti-flicker / none-running / no-children); @aqsha/app `subagentCardModel` (ringkasan running vs terminal, forceExpanded dev-mode) + `runningSubagentCount`.
+- **Review adversarial:** anti-flicker (pilih seq tertinggi deterministik ✓), no-leak (allow-list scalar via helper ✓), parity 3 surface (komponen bersama ✓), kartu vs nested-rekursif lama (cabang subagent short-circuit, jalur lama mati dihapus → tak double-render ✓), chip hanya saat ≥1 running (`null` di 0 ✓).
+- **Gate:** typecheck (5) · lint 0 error (12 warning pra-ada) · agent-contracts **62** · apps/agents **206** · convex **123** · @aqsha/app **90**. Tanpa `convex dev --once` (tak menyentuh schema).
 
 ---
 

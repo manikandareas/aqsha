@@ -4,6 +4,8 @@ import type { ChatMessage, ResearchRun } from "../types";
 import {
   buildTurnParts,
   pairRunsWithTurns,
+  runningSubagentCount,
+  subagentCardModel,
   toolRowModel,
   type TurnEntry,
 } from "./turn-model";
@@ -263,5 +265,79 @@ describe("toolRowModel", () => {
       { key: "verdict", label: "Hasil", value: "Lolos" },
       { key: "hasResults", label: "Dokumen ditemukan", value: "Ya" },
     ]);
+  });
+});
+
+function toolChild(overrides: Partial<ActivityEvent>): ActivityEvent {
+  return node({ id: `tool-${overrides.seq ?? 1}`, type: "tool", ...overrides });
+}
+
+function subagentNode(overrides: Partial<ActivityEvent>): ActivityEvent {
+  return node({
+    id: "sa-1",
+    type: "subagent",
+    actor: "subagent",
+    title: "Agen pencari literatur bekerja",
+    ...overrides,
+  });
+}
+
+describe("subagentCardModel", () => {
+  it("uses the live tool activity as the summary while running", () => {
+    const model = subagentCardModel(
+      subagentNode({
+        status: "running",
+        children: [
+          toolChild({ seq: 2, status: "running", title: "Mencari sumber web" }),
+        ],
+      }),
+    );
+
+    expect(model.isRunning).toBe(true);
+    expect(model.summary).toBe("Mencari sumber web");
+    expect(model.forceExpanded).toBe(false);
+    expect(model.children).toHaveLength(1);
+  });
+
+  it("uses the terminal roll-up as the summary once finished", () => {
+    const model = subagentCardModel(
+      subagentNode({
+        status: "completed",
+        title: "Agen pencari literatur selesai",
+        children: [
+          toolChild({ seq: 2, status: "completed", title: "Selesai mencari web", metadata: { resultCount: 7 } }),
+          toolChild({ seq: 3, status: "completed", title: "Selesai di arXiv", metadata: { resultCount: 5 } }),
+        ],
+      }),
+    );
+
+    expect(model.isRunning).toBe(false);
+    expect(model.summary).toBe("2 pencarian, 12 sumber");
+  });
+
+  it("hides children behind expand normally but forces them open in dev-mode", () => {
+    const sub = subagentNode({
+      status: "completed",
+      children: [toolChild({ seq: 2, status: "completed", title: "Selesai mencari web" })],
+    });
+
+    expect(subagentCardModel(sub).forceExpanded).toBe(false);
+    expect(subagentCardModel(sub, { devMode: true }).forceExpanded).toBe(true);
+  });
+});
+
+describe("runningSubagentCount", () => {
+  it("counts only running sub-agent nodes (for the 'N berjalan' chip)", () => {
+    const nodes = [
+      subagentNode({ id: "sa-a", status: "running" }),
+      subagentNode({ id: "sa-b", status: "running" }),
+      subagentNode({ id: "sa-c", status: "completed" }),
+      node({ id: "tool-x", type: "tool", status: "running" }),
+    ];
+    expect(runningSubagentCount(nodes)).toBe(2);
+  });
+
+  it("returns 0 when no sub-agent is running", () => {
+    expect(runningSubagentCount([subagentNode({ status: "completed" })])).toBe(0);
   });
 });

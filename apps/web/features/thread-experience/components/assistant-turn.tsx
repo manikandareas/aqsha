@@ -26,6 +26,7 @@ import {
   findHeadlineNode,
   formatRunDuration,
 } from "./run-progress";
+import { SubagentCard, SubagentRunningChip } from "./subagent-card";
 import { ToolRow } from "./tool-row";
 import type { HitlActions } from "./use-hitl-resume";
 
@@ -116,10 +117,23 @@ export function AssistantTurn({
   const flushPhases = () => {
     if (phaseBuffer.length === 0) return;
     elements.push(
-      <DeepPhaseTimeline key={`phases-${listSeq++}`} nodes={phaseBuffer} devMode={devMode} />,
+      <DeepPhaseTimeline
+        key={`phases-${listSeq++}`}
+        nodes={phaseBuffer}
+        devMode={devMode}
+        run={run}
+      />,
     );
     phaseBuffer = [];
   };
+
+  // Top-level sub-agents are a defensive case (today they only appear nested in a
+  // deep-research phase, where DeepPhaseTimeline renders the chip). When one does
+  // surface at the top level, render the "N berjalan" chip once above the cards.
+  const topLevelSubagentNodes = parts.flatMap((part) =>
+    part.kind === "subagent" ? [part.node] : [],
+  );
+  let subagentChipShown = false;
 
   for (const part of parts) {
     if (part.kind === "phase" && isDeep) {
@@ -166,8 +180,28 @@ export function AssistantTurn({
           <ToolRow node={node} devMode={devMode} />
         </li>,
       );
+    } else if (part.kind === "subagent") {
+      if (
+        !subagentChipShown &&
+        topLevelSubagentNodes.some((subagent) => subagent.status === "running")
+      ) {
+        subagentChipShown = true;
+        nodeBuffer.push(
+          <li key={`${part.id}-chip`}>
+            <SubagentRunningChip
+              nodes={topLevelSubagentNodes}
+              durationLabel={run ? formatRunDuration(run) : undefined}
+            />
+          </li>,
+        );
+      }
+      nodeBuffer.push(
+        <li key={part.id}>
+          <SubagentCard node={node} devMode={devMode} />
+        </li>,
+      );
     } else {
-      // subagent / system / non-deep phase → nested activity row.
+      // system / non-deep phase → nested activity row.
       nodeBuffer.push(<ActivityNodeRow key={part.id} node={node} devMode={devMode} />);
     }
   }

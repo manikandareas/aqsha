@@ -5,6 +5,8 @@ import {
   filterByVisibility,
   orderedPartsFromRun,
   type OrderedPart,
+  subagentCurrentActivity,
+  subagentSummary,
 } from "../src/activity";
 import type { AgentRunRow } from "../src/uiAdapters";
 
@@ -924,5 +926,92 @@ describe("filterByVisibility", () => {
     ];
     filterByVisibility(nodes);
     expect(nodes[0]?.children?.map((child) => child.id)).toEqual(["c-dev"]);
+  });
+});
+
+// ── Fase 3: sub-agent card summaries ─────────────────────────────────────────
+
+function toolChild(
+  seq: number,
+  status: ActivityEvent["status"],
+  title: string,
+  metadata?: Record<string, string | number | boolean>,
+): ActivityEvent {
+  return {
+    id: `tool:${seq}`,
+    runId: "run1",
+    seq,
+    type: "tool",
+    status,
+    actor: "tool",
+    title,
+    visibility: "user",
+    startedAt: 1000,
+    ...(metadata ? { metadata } : {}),
+  };
+}
+
+function subagentNode(
+  status: ActivityEvent["status"],
+  children: ActivityEvent[],
+  title = "Agen pencari literatur bekerja",
+): ActivityEvent {
+  return {
+    id: "sa:1",
+    runId: "run1",
+    seq: 1,
+    type: "subagent",
+    status,
+    actor: "subagent",
+    title,
+    visibility: "user",
+    startedAt: 1000,
+    children,
+  };
+}
+
+describe("subagentSummary", () => {
+  it("rolls up a finished sub-agent's tool children (count + summed sources)", () => {
+    const node = subagentNode("completed", [
+      toolChild(2, "completed", "Selesai mencari web", { resultCount: 5 }),
+      toolChild(3, "completed", "Selesai di arXiv", { resultCount: 4 }),
+      toolChild(4, "completed", "Selesai mencari web", { resultCount: 3 }),
+    ]);
+    expect(subagentSummary(node)).toBe("3 pencarian, 12 sumber");
+  });
+
+  it("omits the source count when no resultCount scalar is present", () => {
+    const node = subagentNode("completed", [
+      toolChild(2, "completed", "DOI terverifikasi", { doi: "10.x/abc" }),
+      toolChild(3, "completed", "DOI terverifikasi", { doi: "10.y/def" }),
+    ]);
+    expect(subagentSummary(node)).toBe("2 pencarian");
+  });
+
+  it("default-denies to the sub-agent label when there are no tool children", () => {
+    const node = subagentNode("completed", [], "Agen pencari literatur selesai");
+    expect(subagentSummary(node)).toBe("Agen pencari literatur selesai");
+  });
+});
+
+describe("subagentCurrentActivity", () => {
+  it("picks the highest-seq running tool child (deterministic, anti-flicker)", () => {
+    const node = subagentNode("running", [
+      toolChild(2, "running", "Mencari sumber web"),
+      toolChild(5, "running", "Mencari preprint arXiv"),
+      toolChild(3, "completed", "Selesai mencari web"),
+    ]);
+    expect(subagentCurrentActivity(node)).toBe("Mencari preprint arXiv");
+  });
+
+  it("returns undefined when no tool child is running yet", () => {
+    const node = subagentNode("running", [
+      toolChild(2, "completed", "Selesai mencari web"),
+    ]);
+    expect(subagentCurrentActivity(node)).toBeUndefined();
+  });
+
+  it("returns undefined when the sub-agent has no children yet", () => {
+    expect(subagentCurrentActivity(subagentNode("running", []))).toBeUndefined();
   });
 });

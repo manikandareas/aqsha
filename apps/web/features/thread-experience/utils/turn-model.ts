@@ -1,4 +1,8 @@
-import type { ActivityEvent } from "@aqsha/agent-contracts";
+import {
+  type ActivityEvent,
+  subagentCurrentActivity,
+  subagentSummary,
+} from "@aqsha/agent-contracts";
 import type { ChatMessage, ResearchRun } from "../types";
 
 // ── unified turn model (answer-stream redesign Fase 2) ───────────────────────
@@ -332,6 +336,49 @@ function formatScalar(key: string, value: string | number | boolean): string {
   }
   if (typeof value === "boolean") return value ? "Ya" : "Tidak";
   return String(value);
+}
+
+// ── sub-agent card presentation (Fase 3 §8) ──────────────────────────────────
+
+export type SubagentCardModel = {
+  title: string;
+  isRunning: boolean;
+  /** Dynamic summary line: running → current tool activity; terminal → roll-up.
+   *  Undefined only while running with no tool child yet (card uses title). */
+  summary?: string;
+  /** Tool children rendered when expanded (or always, in dev-mode). */
+  children: ActivityEvent[];
+  /** Dev-mode reveals the tool children without the user having to expand. */
+  forceExpanded: boolean;
+};
+
+/**
+ * Pure presentation model for one sub-agent card (§8). Title stays the sub-agent
+ * label; the summary line is dynamic — `subagentCurrentActivity` while running
+ * (rendered via Shimmer), `subagentSummary` once terminal. The tool children are
+ * hidden behind an expand unless `devMode` forces them open. No-leak: all copy is
+ * derived through the contract's allow-listed helpers.
+ */
+export function subagentCardModel(
+  node: ActivityEvent,
+  options?: { devMode?: boolean },
+): SubagentCardModel {
+  const isRunning = node.status === "running";
+  return {
+    title: node.title,
+    isRunning,
+    summary: isRunning ? subagentCurrentActivity(node) : subagentSummary(node),
+    children: node.children ?? [],
+    forceExpanded: options?.devMode === true,
+  };
+}
+
+/** Count the sub-agents still running among a node list (for the "N berjalan"
+ *  chip at the phase/group level). Pure. */
+export function runningSubagentCount(nodes: ActivityEvent[]): number {
+  return nodes.filter(
+    (node) => node.type === "subagent" && node.status === "running",
+  ).length;
 }
 
 /** Pure presentation model for a tool node's collapsible row (§6). */
