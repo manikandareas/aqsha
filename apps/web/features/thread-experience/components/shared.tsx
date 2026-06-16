@@ -1,7 +1,7 @@
 "use client";
 
-import { Loader2Icon } from "@aqsha/ui/icons";
 import { Shimmer } from "@/components/ai-elements/shimmer";
+import { FlickerSpinner } from "@/components/ui/flicker-spinner";
 import { cn } from "@/lib/utils";
 
 export function ThreadActivityIndicator({
@@ -19,10 +19,7 @@ export function ThreadActivityIndicator({
         className,
       )}
     >
-      <Loader2Icon
-        className="size-3.5 shrink-0 animate-spin text-muted-foreground"
-        aria-hidden
-      />
+      <FlickerSpinner className="size-3.5 shrink-0 text-muted-foreground" />
       <Shimmer className="font-medium">{label}</Shimmer>
     </output>
   );

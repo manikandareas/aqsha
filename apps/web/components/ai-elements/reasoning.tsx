@@ -1,5 +1,11 @@
 "use client";
 
+import { ChevronDownIcon } from "@aqsha/ui/icons";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { Shimmer } from "./shimmer";
 
@@ -13,11 +19,16 @@ export function firstReasoningParagraph(text: string): string {
   return text.trim().split(/\r?\n\s*\r?\n/)[0]?.trim() ?? "";
 }
 
+const previewClass =
+  "w-full min-w-0 whitespace-pre-wrap break-words text-[12px] leading-[1.6] text-muted-foreground";
+
 /**
- * Extended-thinking ("reasoning") preview rendered above an assistant answer.
- * Shown as muted inline text — not a collapsible, no rule — and trimmed to the
- * first paragraph so a long trace stays a glimpse. While the model is still
- * thinking (streaming, no answer yet) the preview shimmers.
+ * Extended-thinking ("reasoning") preview rendered above an assistant answer
+ * (AI-Elements collapse-after-stream pattern). While the model is still thinking
+ * (streaming, no answer yet) the first-paragraph glimpse shimmers inline. Once
+ * the trace is done AND there is more than the glimpse, it collapses to that
+ * glimpse as a clickable trigger that expands to the full trace; a
+ * single-paragraph trace stays plain muted text.
  */
 export function Reasoning({
   text,
@@ -34,14 +45,28 @@ export function Reasoning({
     return null;
   }
 
+  const full = text.trim();
+  const hasMore = full !== preview;
+
+  if (isThinking || !hasMore) {
+    return (
+      <div className={cn(previewClass, className)}>
+        {isThinking ? <Shimmer as="span">{preview}</Shimmer> : preview}
+      </div>
+    );
+  }
+
   return (
-    <div
-      className={cn(
-        "w-full min-w-0 whitespace-pre-wrap break-words text-[12px] leading-[1.6] text-muted-foreground",
-        className,
-      )}
-    >
-      {isThinking ? <Shimmer as="span">{preview}</Shimmer> : preview}
-    </div>
+    <Collapsible className={cn("w-full min-w-0", className)}>
+      <CollapsibleTrigger className="group flex w-full min-w-0 items-start gap-1 text-left">
+        <span className={cn(previewClass, "line-clamp-2 hover:text-foreground")}>
+          {preview}
+        </span>
+        <ChevronDownIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="overflow-hidden">
+        <div className={cn(previewClass, "mt-1.5")}>{full}</div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

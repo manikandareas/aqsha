@@ -7,11 +7,12 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { Badge } from "@/components/ui/badge";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
-import { toolRowModel } from "../utils/turn-model";
-import { metadataLine, nodeDuration, toneClass } from "./run-progress";
+import { type ToolRowModel, toolRowModel } from "../utils/turn-model";
+import { nodeDuration, toneClass } from "./run-progress";
 
 // A tool row is identified by a wrench glyph instead of the generic checklist
 // status icon (`NodeStatusIcon`) used elsewhere — it reads as "tool invocation"
@@ -37,25 +38,37 @@ function ToolStatusIcon({
   }
 }
 
+// Body rows split into an INPUT section (what the agent asked) vs an OUTPUT
+// section (what came back) — the AI-Elements Tool pattern, adapted to our
+// allow-listed scalar rows. Any key not listed as input is treated as output.
+const INPUT_KEYS = new Set(["query", "doi", "title", "name", "questionCount"]);
+type Row = ToolRowModel["rows"][number];
+
 // One tool invocation as a collapsible row (plan §6). Collapsed: status icon +
-// Indonesian title (Shimmer while running) + inline summary chip from the node
-// description (e.g. "12 hasil"). Expanded: the curated, allow-listed scalar
-// metadata only (`toolRowModel` is default-deny — raw payload never reaches it).
-// A tool with no body scalars renders as a plain, non-collapsible row.
-export function ToolRow({
-  node,
-  devMode,
-}: {
-  node: ActivityEvent;
-  devMode: boolean;
-}) {
+// Indonesian title (Shimmer while running, with the live query inline) + a small
+// result badge. Expanded: the curated, allow-listed scalar metadata only
+// (`toolRowModel` is default-deny — raw payload never reaches it), grouped into
+// Masukan / Hasil. A tool with no body scalars renders as a plain row.
+export function ToolRow({ node }: { node: ActivityEvent }) {
   const model = toolRowModel(node);
   const duration = nodeDuration(node);
-  const devDetail = devMode ? metadataLine(node) : null;
-  const hasBody = model.rows.length > 0 || Boolean(devDetail);
+  const hasBody = model.rows.length > 0;
+
+  const inputRows = model.rows.filter((row) => INPUT_KEYS.has(row.key));
+  const outputRows = model.rows.filter((row) => !INPUT_KEYS.has(row.key));
+  // Surface the query inline while running so the row is meaningful before the
+  // result lands (don't wait for resultCount).
+  const liveQuery = model.isRunning
+    ? model.rows.find((row) => row.key === "query")?.value
+    : undefined;
 
   const header = (
-    <span className={cn("flex min-w-0 items-start gap-1.5 leading-5", toneClass(node.status))}>
+    <span
+      className={cn(
+        "flex min-w-0 flex-1 items-start gap-1.5 leading-5",
+        toneClass(node.status),
+      )}
+    >
       <ToolStatusIcon status={node.status} className="mt-0.5 size-3.5 shrink-0" />
       <span className="min-w-0">
         {model.isRunning ? (
@@ -63,8 +76,8 @@ export function ToolRow({
         ) : (
           <span>{model.title}</span>
         )}
-        {model.description ? (
-          <span className="text-muted-foreground"> · {model.description}</span>
+        {liveQuery ? (
+          <span className="text-muted-foreground"> · {liveQuery}</span>
         ) : null}
         {duration ? (
           <span className="text-muted-foreground"> · {duration}</span>
@@ -73,31 +86,71 @@ export function ToolRow({
     </span>
   );
 
+  const resultBadge = model.description ? (
+    <Badge
+      variant="secondary"
+      className="mt-px shrink-0 rounded-full bg-muted/60 px-2 py-0 text-[11px] font-medium text-muted-foreground"
+    >
+      {model.description}
+    </Badge>
+  ) : null;
+
   if (!hasBody) {
-    return <div className="min-w-0">{header}</div>;
+    return (
+      <div className="flex min-w-0 items-start gap-1.5">
+        {header}
+        {resultBadge}
+      </div>
+    );
   }
 
   return (
     <Collapsible className="min-w-0">
-      <CollapsibleTrigger className="group flex w-full min-w-0 items-start gap-1 text-left hover:text-foreground">
+      <CollapsibleTrigger className="group flex w-full min-w-0 items-start gap-1.5 rounded-[8px] px-1.5 py-1 -mx-1.5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         {header}
+        {resultBadge}
         <ChevronDownIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
       </CollapsibleTrigger>
       <CollapsibleContent className="overflow-hidden">
-        <dl className="mt-1.5 grid gap-1 border-l border-border/70 pl-3 text-[12px]">
-          {model.rows.map((row) => (
-            <div key={row.key} className="flex min-w-0 gap-1.5">
-              <dt className="shrink-0 text-muted-foreground">{row.label}:</dt>
-              <dd className="min-w-0 break-words text-foreground">{row.value}</dd>
-            </div>
-          ))}
-          {devDetail ? (
-            <div className="pt-0.5 font-mono text-[11px] text-muted-foreground">
-              {devDetail}
-            </div>
-          ) : null}
-        </dl>
+        <div className="mt-1.5 grid gap-2 pl-3 text-[12px]">
+          <ToolRowSection label="Masukan" rows={inputRows} />
+          <ToolRowSection
+            label="Hasil"
+            rows={outputRows}
+            tone={node.status === "failed" ? "coral" : "default"}
+          />
+        </div>
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+
+function ToolRowSection({
+  label,
+  rows,
+  tone = "default",
+}: {
+  label: string;
+  rows: Row[];
+  tone?: "default" | "coral";
+}) {
+  if (rows.length === 0) return null;
+  return (
+    <dl className="grid gap-1">
+      <dt className="text-[11px] font-medium text-muted-foreground/70">{label}</dt>
+      {rows.map((row) => (
+        <div key={row.key} className="flex min-w-0 gap-1.5">
+          <dt className="shrink-0 text-muted-foreground">{row.label}:</dt>
+          <dd
+            className={cn(
+              "min-w-0 break-words",
+              tone === "coral" ? "text-coral-foreground" : "text-foreground",
+            )}
+          >
+            {row.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }

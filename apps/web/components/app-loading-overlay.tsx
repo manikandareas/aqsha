@@ -1,9 +1,9 @@
 "use client";
 
-import { Loader2Icon } from "@aqsha/ui/icons";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { useEffect, useState } from "react";
 
+import { FlickerSpinner } from "@/components/ui/flicker-spinner";
 import { cn } from "@/lib/utils";
 
 type AppLoadingOverlayProps = {
@@ -57,12 +57,7 @@ export function AppLoadingOverlay({
       )}
     >
       <div className="flex flex-col items-center gap-5 px-6 text-center">
-        <Loader2Icon
-          className={cn(
-            "size-7 text-muted-foreground",
-            !reduceMotion && "animate-spin",
-          )}
-        />
+        <FlickerSpinner className="size-7 text-muted-foreground" />
 
         <div className="flex flex-col items-center gap-2">
           <p className="font-heading text-lg font-semibold text-foreground">

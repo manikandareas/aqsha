@@ -1,10 +1,26 @@
 "use client";
 
+import { type ComponentType } from "react";
 import { type ActivityEvent } from "@aqsha/agent-contracts";
 import {
-  CheckIcon,
+  BookOpenIcon,
+  Code2Icon,
   ClockIcon,
+  FlagIcon,
+  FolderIcon,
+  GaugeIcon,
+  GitBranchIcon,
+  GlobeIcon,
+  InfoIcon,
+  LayersIcon,
+  Link2Icon,
+  MessageSquareIcon,
+  NotebookIcon,
+  PenLineIcon,
+  SaveIcon,
+  SearchIcon,
   ShieldIcon,
+  Trash2Icon,
   XCircleIcon,
 } from "@aqsha/ui/icons";
 import { Shimmer } from "@/components/ai-elements/shimmer";
@@ -12,7 +28,12 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import type { ResearchRun } from "../types";
 import { formatCompactDuration } from "../utils/datetime";
-import { isArtifactToolNode } from "../utils/turn-model";
+import {
+  type CompletedNodeIcon,
+  completedNodeIcon,
+  isArtifactToolNode,
+  phaseProgressLabel,
+} from "../utils/turn-model";
 import { SubagentCard } from "./subagent-card";
 import { ToolRow } from "./tool-row";
 import { ChatArtifactCard } from "./chat-artifact-card";
@@ -23,13 +44,7 @@ import { ChatArtifactCard } from "./chat-artifact-card";
 // phase is just a heading row with indented children) — the legacy accordion-only
 // deep timeline was removed so the two modes share one visual language.
 
-export function ActivityNodeRow({
-  node,
-  devMode,
-}: {
-  node: ActivityEvent;
-  devMode: boolean;
-}) {
+export function ActivityNodeRow({ node }: { node: ActivityEvent }) {
   // Children are already visibility-filtered by `filterByVisibility` upstream.
   const children = node.children ?? [];
   // An `executeArtifact` leaf renders as the clickable artifact card (Fase 4) —
@@ -48,25 +63,25 @@ export function ActivityNodeRow({
   if (node.type === "tool" && children.length === 0) {
     return (
       <li>
-        <ToolRow node={node} devMode={devMode} />
+        <ToolRow node={node} />
       </li>
     );
   }
   if (node.type === "subagent") {
     return (
       <li>
-        <SubagentCard node={node} devMode={devMode} />
+        <SubagentCard node={node} />
       </li>
     );
   }
 
   return (
     <li>
-      <NodeLine node={node} devMode={devMode} />
+      <NodeLine node={node} />
       {children.length > 0 ? (
-        <ol className="mt-1.5 grid gap-1.5 border-l border-border/70 pl-3">
+        <ol className="mt-1.5 grid gap-1.5 pl-3">
           {children.map((child) => (
-            <ActivityNodeRow key={child.id} node={child} devMode={devMode} />
+            <ActivityNodeRow key={child.id} node={child} />
           ))}
         </ol>
       ) : null}
@@ -74,25 +89,28 @@ export function ActivityNodeRow({
   );
 }
 
-/** One node's status line (icon + title + description + duration), plus the
- *  technical metadata line in dev-mode. Shared by leaf rows and phase triggers. */
-export function NodeLine({ node, devMode }: { node: ActivityEvent; devMode: boolean }) {
+/** One node's status line (icon + title + description + duration). Shared by
+ *  leaf rows and phase triggers. */
+export function NodeLine({ node }: { node: ActivityEvent }) {
   const duration = nodeDuration(node);
   const isWorking = node.status === "running";
-  const devDetail = devMode ? metadataLine(node) : null;
+  const progress = phaseProgressLabel(node);
 
   return (
     <span className="min-w-0">
       <span
         className={cn("flex items-start gap-1.5 leading-5", toneClass(node.status))}
       >
-        <NodeStatusIcon status={node.status} className="mt-0.5 size-3.5 shrink-0" />
+        <NodeStatusIcon node={node} className="mt-0.5 size-3.5 shrink-0" />
         <span className="min-w-0">
           {isWorking ? (
             <Shimmer as="span">{node.title}</Shimmer>
           ) : (
             <span>{node.title}</span>
           )}
+          {progress ? (
+            <span className="text-muted-foreground"> · {progress}</span>
+          ) : null}
           {node.description ? (
             <span className="text-muted-foreground"> · {node.description}</span>
           ) : null}
@@ -101,35 +119,51 @@ export function NodeLine({ node, devMode }: { node: ActivityEvent; devMode: bool
           ) : null}
         </span>
       </span>
-      {devDetail ? (
-        <span className="mt-0.5 block pl-5 font-mono text-[11px] text-muted-foreground">
-          {devDetail}
-        </span>
-      ) : null}
     </span>
   );
 }
 
-/** Dev-mode technical detail: the node's safe scalar metadata (raw tool name,
- *  ids, counts) — already allow-listed at the source, so safe to surface. */
-export function metadataLine(node: ActivityEvent): string | null {
-  if (!node.metadata) return null;
-  const parts = Object.entries(node.metadata).map(([key, value]) => `${key}=${value}`);
-  return parts.length > 0 ? parts.join(" · ") : null;
-}
+// Each completed-node icon family → its `@aqsha/ui` glyph (chosen by
+// `completedNodeIcon` from the node's activity, not its status). Replaces the
+// old single "dot" so a finished timeline reads as a sequence of meaningful
+// marks: web search → globe, verification → shield, write → pen, and so on.
+const COMPLETED_ICON: Record<
+  CompletedNodeIcon,
+  ComponentType<{ className?: string }>
+> = {
+  web: GlobeIcon,
+  search: SearchIcon,
+  link: Link2Icon,
+  verify: ShieldIcon,
+  stats: GaugeIcon,
+  compute: Code2Icon,
+  write: PenLineIcon,
+  save: SaveIcon,
+  workspace: FolderIcon,
+  delete: Trash2Icon,
+  ask: MessageSquareIcon,
+  plan: NotebookIcon,
+  literature: BookOpenIcon,
+  counter: LayersIcon,
+  subagent: GitBranchIcon,
+  system: InfoIcon,
+  done: FlagIcon,
+};
 
 export function NodeStatusIcon({
-  status,
+  node,
   className,
 }: {
-  status: ActivityEvent["status"];
+  node: ActivityEvent;
   className?: string;
 }) {
-  switch (status) {
+  switch (node.status) {
     case "running":
       return <Spinner className={cn(className, "text-primary")} />;
-    case "completed":
-      return <CheckIcon className={cn(className, "text-mint-foreground")} />;
+    case "completed": {
+      const Icon = COMPLETED_ICON[completedNodeIcon(node)];
+      return <Icon className={cn(className, "text-muted-foreground")} />;
+    }
     case "failed":
       return <XCircleIcon className={cn(className, "text-coral-foreground")} />;
     case "cancelled":

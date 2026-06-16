@@ -47,13 +47,26 @@ import { Composer } from "./composer";
 import { HomeStartState } from "./home-states";
 import { EmptyThreadCopy } from "./empty-thread-copy";
 import { type AgentRunId } from "@/lib/convex-refs";
-import { hasPendingHitl } from "../utils/hitl-parts";
 import { useHitlResume } from "./use-hitl-resume";
 import { UserMessageBubble } from "./message-row";
 import { AssistantTurn } from "./assistant-turn";
 import { ChatArtifactProvider } from "./chat-artifact-context";
 import { CenteredLoading } from "./shared";
 import { useConvexAuth } from "convex/react";
+
+/** First question prompt of an askUser payload — the label a free-text answer
+ *  is recorded against. Empty for approval interactions. */
+function firstQuestionPrompt(payloadJson: string): string {
+  try {
+    const parsed = JSON.parse(payloadJson) as {
+      questions?: Array<{ prompt?: unknown }>;
+    };
+    const prompt = parsed.questions?.[0]?.prompt;
+    return typeof prompt === "string" ? prompt : "";
+  } catch {
+    return "";
+  }
+}
 
 const emptyContextArtifacts: DraftContextArtifact[] = [];
 const emptyThreadSummaries: ThreadSummary[] = [];
@@ -130,25 +143,31 @@ export function ThreadChatSurface({
       uiMessageFromRow,
     ) as unknown as ChatMessage[],
   );
-  // Pending HITL interactions are kept SEPARATE, keyed by their runId, so each
-  // renders ONCE — anchored at its run's approval node inside that run's turn —
-  // never as a stray sibling message (the synthetic message carries no runId).
-  const pendingHitlByRun = new Map<string, ChatMessage[]>();
-  for (const row of (interactionRows ?? []) as AgentInteractionRow[]) {
+  // HITL interactions (pending AND answered) are kept SEPARATE, keyed by runId,
+  // so each renders ONCE inside its run's turn — the question stays visible after
+  // it is answered (read-only), never a stray sibling message.
+  const interactions = (interactionRows ?? []) as AgentInteractionRow[];
+  const hitlByRun = new Map<string, ChatMessage[]>();
+  for (const row of interactions) {
     const synthetic = uiHitlMessageFromInteraction(row) as unknown as ChatMessage;
-    const bucket = pendingHitlByRun.get(row.runId) ?? [];
+    const bucket = hitlByRun.get(row.runId) ?? [];
     bucket.push(synthetic);
-    pendingHitlByRun.set(row.runId, bucket);
+    hitlByRun.set(row.runId, bucket);
   }
-  // A pending askUser/approval blocks the composer; resolving it resumes the run.
-  const pendingHitl = hasPendingHitl(
-    Array.from(pendingHitlByRun.values()).flat(),
-  );
-  const hitlBlocking = pendingHitl;
+  // The latest still-pending interaction: the composer routes free-text to it
+  // (answer for askUser, deny+note for approvals) instead of sending a message.
+  const latestPending = interactions.filter((row) => row.status === "pending").at(-1);
+  const activeInteraction = latestPending
+    ? {
+        id: latestPending.id,
+        type: latestPending.type,
+        prompt: firstQuestionPrompt(latestPending.payloadJson),
+      }
+    : undefined;
   const hitlActions = useHitlResume();
   const hasMessages = sortedMessages.length > 0;
   const activeRun = runs.find(isRunActive);
-  const turnEntries = pairRunsWithTurns(sortedMessages, runs, pendingHitlByRun);
+  const turnEntries = pairRunsWithTurns(sortedMessages, runs, hitlByRun);
   const sourceCounts = getSourceCountsByOwner(sources);
 
   if (!threadId && !hasMessages && runs.length === 0) {
@@ -204,6 +223,7 @@ export function ThreadChatSurface({
                           message={entry.message}
                           run={entry.run}
                           hitlMessages={entry.hitl}
+                          userAnswers={entry.userAnswers}
                           onRetryRun={onRetryRun}
                           runSourceCount={
                             entry.run
@@ -278,7 +298,8 @@ export function ThreadChatSurface({
               onSend={onSend}
               contextArtifacts={contextArtifacts}
               onRemoveContextArtifact={onRemoveContextArtifact}
-              hitlBlocking={hitlBlocking}
+              activeInteraction={activeInteraction}
+              hitlActions={hitlActions}
               isGenerating={isGenerating}
               initialAgentKind={threadStatus?.lastAgentKind}
             />

@@ -49,6 +49,7 @@ import {
   useConvexMutationFn,
 } from "@/lib/convex-query";
 import { useComposerMentions } from "./composer-context-mentions";
+import type { HitlActions } from "./use-hitl-resume";
 import type { RateStatus, ResearchRun, SendResult } from "../types";
 import { formatDate } from "../utils/datetime";
 import {
@@ -108,7 +109,14 @@ type ComposerSharedProps = {
   showVoiceInput?: boolean;
   activeRun?: ResearchRun;
   onCancelRun?: (runId: string) => Promise<unknown>;
-  hitlBlocking?: boolean;
+  /** When a HITL interaction is pending, free-text in the composer answers it
+   *  (askUser) or declines it with the text as guidance (tool approval). */
+  activeInteraction?: {
+    id: string;
+    type: "ask_user" | "tool_approval";
+    prompt: string;
+  };
+  hitlActions?: HitlActions;
   isGenerating?: boolean;
   showSuggestions?: boolean;
   threads?: ThreadSummary[];
@@ -164,7 +172,8 @@ function ComposerContent(props: ComposerProps) {
     showVoiceInput = false,
     activeRun,
     onCancelRun,
-    hitlBlocking = false,
+    activeInteraction,
+    hitlActions,
     isGenerating = false,
     showSuggestions = false,
     threads = [],
@@ -223,10 +232,12 @@ function ComposerContent(props: ComposerProps) {
     isSending,
     isRateLimited,
     activeRun,
-    hitlBlocking,
     isGenerating,
   });
-  const isInteractionLocked = isDeepActive || hitlBlocking;
+  // HITL keeps the composer open (free-text answers the pending interaction);
+  // only an active Deep Research workflow locks the inputs.
+  const answerMode = Boolean(activeInteraction && hitlActions);
+  const isInteractionLocked = isDeepActive;
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
   const isContentEmpty = content.trim().length === 0 && inlineCommands.length === 0;
@@ -271,6 +282,33 @@ function ComposerContent(props: ComposerProps) {
 
   const handleSubmit = async (message?: PromptInputMessage) => {
     if (!canSend) {
+      return;
+    }
+
+    // HITL answer mode: a pending interaction is awaiting the user. Free-text
+    // answers it (askUser → answer; tool approval → decline with the text as
+    // guidance) instead of sending a new message. The backend materializes the
+    // text as a user bubble and resumes the run.
+    if (answerMode && activeInteraction && hitlActions) {
+      const answerText = content.trim();
+      if (!answerText) return;
+      setIsSending(true);
+      setContent("");
+      richContentRef.current = "";
+      try {
+        if (activeInteraction.type === "ask_user") {
+          await hitlActions.onAnswer(activeInteraction.id, [
+            { prompt: activeInteraction.prompt, customAnswer: answerText },
+          ]);
+        } else {
+          await hitlActions.onDeny(activeInteraction.id, answerText);
+        }
+      } catch (error) {
+        setContent(answerText);
+        toast.error(readableConvexErrorMessage(error, "Gagal mengirim jawaban."));
+      } finally {
+        setIsSending(false);
+      }
       return;
     }
 
@@ -442,7 +480,7 @@ function ComposerContent(props: ComposerProps) {
             contextArtifacts={contextArtifacts}
             contextLabel={contextLabel}
             disabled={disabled}
-            hitlBlocking={hitlBlocking}
+            answerMode={answerMode}
             isDeepActive={isDeepActive}
             isExpanded={isExpanded}
             isInteractionLocked={isInteractionLocked}
@@ -614,7 +652,7 @@ function ComposerPromptInputContent({
   contextArtifacts,
   contextLabel,
   disabled,
-  hitlBlocking,
+  answerMode,
   isDeepActive,
   isExpanded,
   isInteractionLocked,
@@ -644,7 +682,7 @@ function ComposerPromptInputContent({
   contextArtifacts: DraftContextArtifact[];
   contextLabel?: string;
   disabled: boolean;
-  hitlBlocking: boolean;
+  answerMode: boolean;
   isDeepActive: boolean;
   isExpanded: boolean;
   isInteractionLocked: boolean;
@@ -718,8 +756,8 @@ function ComposerPromptInputContent({
                 maxLength={8000}
                 isCollapsed={!isExpanded}
                 placeholder={
-                  hitlBlocking
-                    ? "Selesaikan langkah di atas terlebih dahulu…"
+                  answerMode
+                    ? "Ketik jawabanmu, atau gunakan opsi di atas…"
                     : "Ketik @ untuk workspace, / untuk perintah…"
                 }
                 className={isExpanded ? "py-0.5" : undefined}

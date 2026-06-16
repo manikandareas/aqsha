@@ -49,6 +49,7 @@ import {
   FolderTreeIcon as HugeFolderTreeIcon,
   GaugeIcon as HugeGaugeIcon,
   GitBranchIcon as HugeGitBranchIcon,
+  GlobeIcon as HugeGlobeIcon,
   HandshakeIcon as HugeHandshakeIcon,
   HelpCircleIcon as HugeHelpCircleIcon,
   Home01Icon,
@@ -164,11 +165,13 @@ export const FileText = createIcon(FileScriptIcon);
 export const FileTextIcon = createIcon(FileScriptIcon);
 export const FilterIcon = createIcon(HugeFilterIcon);
 export const Flag = createIcon(Flag01Icon);
+export const FlagIcon = createIcon(Flag01Icon);
 export const FolderIcon = createIcon(Folder01Icon);
 export const FolderTreeIcon = createIcon(HugeFolderTreeIcon);
 export const GaugeIcon = createIcon(HugeGaugeIcon);
 export const GitBranch = createIcon(HugeGitBranchIcon);
 export const GitBranchIcon = createIcon(HugeGitBranchIcon);
+export const GlobeIcon = createIcon(HugeGlobeIcon);
 export const Handshake = createIcon(HugeHandshakeIcon);
 export const HeartIcon = createIcon(FavouriteIcon);
 export const HelpCircleIcon = createIcon(HugeHelpCircleIcon);

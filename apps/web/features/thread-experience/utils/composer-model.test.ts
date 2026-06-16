@@ -105,16 +105,17 @@ describe("thread composer model", () => {
     });
   });
 
-  it("blocks composer send while HITL cards are pending", () => {
+  it("keeps the composer sendable while a HITL interaction is pending", () => {
+    // HITL no longer locks the composer — free-text answers the pending
+    // interaction instead of being blocked.
     const availability = getComposerAvailability({
       visibleContent: "follow up",
       disabled: false,
       isSending: false,
       isRateLimited: false,
-      hitlBlocking: true,
     });
 
-    expect(availability.canSend).toBe(false);
+    expect(availability.canSend).toBe(true);
     expect(availability.isDeepActive).toBe(false);
   });
 
