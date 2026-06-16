@@ -4,6 +4,7 @@ import type {
   PendingInteraction,
   ResearchPhaseState,
   RunResultSummary,
+  SourceCandidate,
 } from "@aqsha/agent-contracts";
 import type {
   AgentStore,
@@ -33,10 +34,11 @@ export class MemoryStore implements AgentStore {
   // `by_run_segment` lookup).
   private runEventSegments = new Map<string, Map<string, RunEventRecord>>();
   private interactions = new Map<string, PendingInteraction>();
-  private interactionWaiters = new Map<string, Array<(row: PendingInteraction) => void>>();
   private artifacts = new Map<string, ArtifactSnapshot & { ownerUserId: string; deleted?: boolean }>();
   private workspaces = new Map<string, WorkspaceRecord>();
   private researchPhases = new Map<string, ResearchPhaseState>();
+  // runId → appended sources (WS6). Exposed for test assertions via getSources.
+  private sources = new Map<string, SourceCandidate[]>();
 
   constructor(private readonly now: () => number = Date.now) {}
 
@@ -262,6 +264,25 @@ export class MemoryStore implements AgentStore {
     return [...(this.runEvents.get(runId) ?? [])];
   }
 
+  // ── research sources (WS6) ───────────────────────────────────────────────────
+
+  async insertSources(input: {
+    runId: string;
+    threadId: string;
+    ownerUserId: string;
+    sources: SourceCandidate[];
+  }): Promise<void> {
+    if (input.sources.length === 0) return;
+    const existing = this.sources.get(input.runId) ?? [];
+    existing.push(...input.sources);
+    this.sources.set(input.runId, existing);
+  }
+
+  /** Test-only: the sources appended for a run, in insertion order. */
+  getSources(runId: string): SourceCandidate[] {
+    return [...(this.sources.get(runId) ?? [])];
+  }
+
   // ── interactions ───────────────────────────────────────────────────────────
 
   async createInteraction(input: CreateInteractionInput): Promise<PendingInteraction> {
@@ -296,11 +317,6 @@ export class MemoryStore implements AgentStore {
     interaction.status = "responded";
     interaction.response = response;
     interaction.respondedAt = this.now();
-    const waiters = this.interactionWaiters.get(interactionId) ?? [];
-    this.interactionWaiters.delete(interactionId);
-    for (const resolve of waiters) {
-      resolve(interaction);
-    }
     return interaction;
   }
 
@@ -309,38 +325,6 @@ export class MemoryStore implements AgentStore {
     if (interaction && interaction.status === "pending") {
       interaction.status = "expired";
     }
-  }
-
-  async waitForResponse(
-    interactionId: string,
-    timeoutMs: number,
-    signal?: AbortSignal,
-  ): Promise<PendingInteraction | null> {
-    const existing = this.interactions.get(interactionId);
-    if (!existing) {
-      return null;
-    }
-    if (existing.status === "responded") {
-      return existing;
-    }
-    return new Promise((resolve) => {
-      let settled = false;
-      const finish = (value: PendingInteraction | null) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        clearTimeout(timer);
-        signal?.removeEventListener("abort", onAbort);
-        resolve(value);
-      };
-      const timer = setTimeout(() => finish(null), timeoutMs);
-      const onAbort = () => finish(null);
-      signal?.addEventListener("abort", onAbort, { once: true });
-      const waiters = this.interactionWaiters.get(interactionId) ?? [];
-      waiters.push((row) => finish(row));
-      this.interactionWaiters.set(interactionId, waiters);
-    });
   }
 
   async listInteractions(threadId: string): Promise<PendingInteraction[]> {

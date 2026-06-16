@@ -9,6 +9,7 @@ import {
   type QueryCtx,
 } from "../_generated/server";
 import { plainTextFromMarkdown } from "../artifacts/model";
+import { sourceCandidateValidator } from "./research/sourceCandidates";
 import { throwAppError } from "../lib/appError";
 import { ensureDefaultWorkspaceForOwner } from "../workspaces/defaults";
 import {
@@ -631,6 +632,46 @@ export const listResearchPhases = query({
       .withIndex("by_run_phase", (q) => q.eq("runId", args.runId))
       .take(20);
     return docs.map(researchPhaseRecord);
+  },
+});
+
+// Persist the sources a search tool gathered (WS6). Run/thread/owner-scoped;
+// each candidate keeps its per-turn `citationNumber` and (for searchWeb/arxiv)
+// the RAW `discoveryQuery`, so the panel can re-join links to a query step.
+// Append-only — the read paths dedupe by url, so a retried run is harmless.
+export const insertSources = mutation({
+  args: {
+    serviceToken: v.string(),
+    runId: v.string(),
+    threadId: v.string(),
+    ownerUserId: v.string(),
+    sources: v.array(sourceCandidateValidator),
+  },
+  returns: v.object({ inserted: v.number() }),
+  handler: async (ctx, args) => {
+    requireServiceToken(args.serviceToken);
+    const now = Date.now();
+    for (const source of args.sources) {
+      await ctx.db.insert("researchSources", {
+        runId: args.runId,
+        threadId: args.threadId,
+        ownerUserId: args.ownerUserId,
+        citationNumber: source.citationNumber,
+        usage: source.usage,
+        origin: source.origin,
+        provider: source.provider,
+        title: source.title,
+        locator: source.locator,
+        url: source.url,
+        doi: source.doi,
+        arxivId: source.arxivId,
+        snippet: source.snippet,
+        evidenceStrength: source.evidenceStrength,
+        discoveryQuery: source.discoveryQuery,
+        createdAt: now,
+      });
+    }
+    return { inserted: args.sources.length };
   },
 });
 

@@ -644,6 +644,42 @@ export default defineSchema(
       createdAt: v.number(),
       updatedAt: v.number(),
     }).index("by_run_phase", ["runId", "phase"]),
+    // Per-run research sources gathered by the search tools (WS6). Run-scoped +
+    // owner-gated; `discoveryQuery` carries the RAW (single-lined, un-clamped)
+    // search query so the sub-agent detail panel can re-join links to a tool
+    // step, and the answer-level Sources list can dedupe by url. Written by
+    // `agent/service:insertSources`, read per-thread by `agent.queries`.
+    researchSources: defineTable({
+      runId: v.string(),
+      threadId: v.string(),
+      ownerUserId: v.string(),
+      citationNumber: v.number(),
+      usage: v.optional(
+        v.union(
+          v.literal("candidate"),
+          v.literal("cited"),
+          v.literal("accepted"),
+          v.literal("rejected"),
+        ),
+      ),
+      origin: v.union(v.literal("web"), v.literal("arxiv"), v.literal("doi")),
+      provider: v.optional(v.string()),
+      title: v.string(),
+      locator: v.string(),
+      url: v.optional(v.string()),
+      doi: v.optional(v.string()),
+      arxivId: v.optional(v.string()),
+      snippet: v.string(),
+      evidenceStrength: v.union(
+        v.literal("strong"),
+        v.literal("medium"),
+        v.literal("weak"),
+      ),
+      discoveryQuery: v.optional(v.string()),
+      createdAt: v.number(),
+    })
+      .index("by_run", ["runId"])
+      .index("by_thread", ["threadId"]),
     pendingInteractions: defineTable({
       ownerUserId: v.string(),
       threadId: v.string(),

@@ -8,6 +8,7 @@ import type {
   RunMode,
   RunResultSummary,
   RunStatus,
+  SourceCandidate,
 } from "@aqsha/agent-contracts";
 
 // Storage abstraction over the first-party tables (plan §4.5). The service
@@ -175,6 +176,20 @@ export interface AgentStore {
   }): Promise<RunEventRecord>;
   listRunEvents(runId: string): Promise<RunEventRecord[]>;
 
+  // ── research sources (WS6) ───────────────────────────────────────────────
+  /**
+   * Persist the sources a search tool gathered for a run. Append-only; the read
+   * paths dedupe by url, so a retried run is harmless. `discoveryQuery` (set by
+   * searchWeb/searchArxiv) is the RAW query — never length-clamped — so the
+   * sub-agent detail panel can re-join links to a query step.
+   */
+  insertSources(input: {
+    runId: string;
+    threadId: string;
+    ownerUserId: string;
+    sources: SourceCandidate[];
+  }): Promise<void>;
+
   // ── interactions (HITL, plan §5.3) ───────────────────────────────────────
   createInteraction(input: CreateInteractionInput): Promise<PendingInteraction>;
   getInteraction(interactionId: string): Promise<PendingInteraction | null>;
@@ -183,15 +198,6 @@ export interface AgentStore {
     response: InteractionResponse,
   ): Promise<PendingInteraction | null>;
   expireInteraction(interactionId: string): Promise<void>;
-  /**
-   * Wait for a pending interaction to be responded to, up to timeoutMs.
-   * Resolves with the responded row, or null when the window elapses.
-   */
-  waitForResponse(
-    interactionId: string,
-    timeoutMs: number,
-    signal?: AbortSignal,
-  ): Promise<PendingInteraction | null>;
   listInteractions(threadId: string): Promise<PendingInteraction[]>;
 
   // ── context data (RAG + manifests stay Convex-owned; memory store fakes) ─

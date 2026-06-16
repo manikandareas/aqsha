@@ -3,6 +3,7 @@ import type {
   PendingInteraction,
   ResearchPhaseState,
   RunResultSummary,
+  SourceCandidate,
 } from "@aqsha/agent-contracts";
 import type {
   AgentStore,
@@ -64,17 +65,14 @@ export const SERVICE_FUNCTIONS = {
   listResearchPhases: "agent/service:listResearchPhases",
   // Step 5 (additive): statistical-verification report persistence (§5.6).
   setRunVerificationReport: "agent/service:setRunVerificationReport",
+  // WS6 (additive): per-run research source persistence.
+  insertSources: "agent/service:insertSources",
 } as const;
-
-const RESPONSE_POLL_MS = 1_500;
 
 export class ConvexStore implements AgentStore {
   constructor(
     private readonly caller: ConvexCaller,
     private readonly serviceToken: string,
-    private readonly sleep: (ms: number) => Promise<void> = (ms) =>
-      new Promise((resolve) => setTimeout(resolve, ms)),
-    private readonly now: () => number = Date.now,
   ) {}
 
   private withAuth(args: Record<string, unknown>): Record<string, unknown> {
@@ -215,6 +213,16 @@ export class ConvexStore implements AgentStore {
     return this.query(SERVICE_FUNCTIONS.listRunEvents, { runId });
   }
 
+  async insertSources(input: {
+    runId: string;
+    threadId: string;
+    ownerUserId: string;
+    sources: SourceCandidate[];
+  }): Promise<void> {
+    if (input.sources.length === 0) return;
+    await this.mutation(SERVICE_FUNCTIONS.insertSources, input);
+  }
+
   createInteraction(input: CreateInteractionInput): Promise<PendingInteraction> {
     // `payload` must NOT be sent alongside payloadJson — the Convex endpoint
     // validates args exactly and rejects unknown fields (found live, Step 1).
@@ -241,30 +249,6 @@ export class ConvexStore implements AgentStore {
 
   async expireInteraction(interactionId: string): Promise<void> {
     await this.mutation(SERVICE_FUNCTIONS.expireInteraction, { interactionId });
-  }
-
-  // Convex reactivity is on the web side; the service polls during the
-  // hold-window (bounded by timeoutMs ≈ 45s, so worst case ~30 queries).
-  async waitForResponse(
-    interactionId: string,
-    timeoutMs: number,
-    signal?: AbortSignal,
-  ): Promise<PendingInteraction | null> {
-    const deadline = this.now() + timeoutMs;
-    while (this.now() < deadline && !signal?.aborted) {
-      const interaction = await this.getInteraction(interactionId);
-      if (!interaction) {
-        return null;
-      }
-      if (interaction.status === "responded") {
-        return interaction;
-      }
-      if (interaction.status !== "pending") {
-        return null;
-      }
-      await this.sleep(Math.min(RESPONSE_POLL_MS, Math.max(0, deadline - this.now())));
-    }
-    return null;
   }
 
   listInteractions(threadId: string): Promise<PendingInteraction[]> {

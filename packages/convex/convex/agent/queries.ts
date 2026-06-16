@@ -169,6 +169,43 @@ export const listRuns = query({
   },
 });
 
+const MAX_SOURCES = 500;
+
+// Per-thread research sources (WS6) — one bounded query across all the thread's
+// runs (each row carries its `runId`, so the sub-agent detail panel filters by
+// run and the answer-level Sources list dedupes by url). Owner-gated; returns a
+// shape compatible with the frontend `ResearchSource` type.
+export const listSourcesByThread = query({
+  args: { threadId: v.string() },
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    const thread = await ownedThread(ctx, args.threadId, user._id);
+    if (!thread) {
+      return [];
+    }
+    const docs = await ctx.db
+      .query("researchSources")
+      .withIndex("by_thread", (q) => q.eq("threadId", args.threadId))
+      .take(MAX_SOURCES);
+    return docs.map((source) => ({
+      _id: String(source._id),
+      runId: source.runId,
+      usage: source.usage ?? "candidate",
+      origin: source.origin,
+      provider: source.provider,
+      title: source.title,
+      locator: source.locator,
+      url: source.url,
+      doi: source.doi,
+      arxivId: source.arxivId,
+      snippet: source.snippet,
+      evidenceStrength: source.evidenceStrength,
+      discoveryQuery: source.discoveryQuery,
+      createdAt: source.createdAt,
+    }));
+  },
+});
+
 const MAX_ARTIFACTS = 50;
 
 // Per-thread artifact panel (plan §9.4 Step 3): the service links artifacts it
@@ -219,8 +256,10 @@ export const listPendingInteractions = query({
       .withIndex("by_thread_created", (q) => q.eq("threadId", args.threadId))
       .order("desc")
       .take(MAX_INTERACTIONS);
+    // Include `responded` rows (not just `pending`) so the agent's question
+    // stays visible in the timeline after the user answers — rendered read-only.
     return docs
-      .filter((doc) => doc.status === "pending")
+      .filter((doc) => doc.status === "pending" || doc.status === "responded")
       .reverse()
       .map((doc) => ({
         id: String(doc._id),
@@ -228,6 +267,7 @@ export const listPendingInteractions = query({
         type: doc.type,
         toolName: doc.toolName,
         payloadJson: doc.payloadJson,
+        status: doc.status as "pending" | "responded",
         createdAt: doc.createdAt,
       }));
   },

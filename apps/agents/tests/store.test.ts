@@ -138,42 +138,99 @@ describe("ConvexStore", () => {
     expect(calls.some((c) => c.kind === "action")).toBe(true);
   });
 
-  it("waitForResponse polls until responded or the window elapses", async () => {
-    let status: "pending" | "responded" = "pending";
+  it("routes insertSources to the service path and skips an empty batch", async () => {
+    const calls: Array<{ path: string; args: Record<string, unknown> }> = [];
     const caller = {
-      query: vi.fn(async () => ({
-        id: "int1",
-        ownerUserId: "u1",
-        threadId: "t1",
-        runId: "r1",
-        type: "tool_approval",
-        toolName: "proposeArtifact",
-        payload: {},
-        status,
-        createdAt: 0,
-      })),
-      mutation: vi.fn(async () => null),
-      action: vi.fn(async () => null),
+      query: vi.fn(async () => null),
+      mutation: vi.fn(async (path: string, args: Record<string, unknown>) => {
+        calls.push({ path, args });
+        return { inserted: 0 };
+      }),
+      action: vi.fn(async () => "x"),
     };
-    let now = 0;
-    const sleep = async (ms: number) => {
-      now += ms;
-      if (now >= 3_000) {
-        status = "responded";
-      }
-    };
-    const store = new ConvexStore(caller, "svc", sleep, () => now);
+    const store = new ConvexStore(caller, "svc-token");
 
-    const responded = await store.waitForResponse("int1", 10_000);
-    expect(responded?.status).toBe("responded");
+    // Empty batch is a no-op (no wire call).
+    await store.insertSources({
+      runId: "r1",
+      threadId: "t1",
+      ownerUserId: "u1",
+      sources: [],
+    });
+    expect(calls).toHaveLength(0);
 
-    // Times out when nothing changes.
-    status = "pending";
-    now = 0;
-    const slowSleep = async (ms: number) => {
-      now += ms;
-    };
-    const store2 = new ConvexStore(caller, "svc", slowSleep, () => now);
-    expect(await store2.waitForResponse("int1", 4_000)).toBeNull();
+    await store.insertSources({
+      runId: "r1",
+      threadId: "t1",
+      ownerUserId: "u1",
+      sources: [
+        {
+          citationNumber: 1,
+          origin: "web",
+          evidenceStrength: "medium",
+          title: "S1",
+          locator: "l1",
+          snippet: "s1",
+          discoveryQuery: "ai tutoring",
+        },
+      ],
+    });
+    const call = calls.find((c) => c.path === SERVICE_FUNCTIONS.insertSources)!;
+    expect(call.args).toMatchObject({
+      runId: "r1",
+      threadId: "t1",
+      ownerUserId: "u1",
+      serviceToken: "svc-token",
+    });
+  });
+});
+
+describe("MemoryStore research sources (WS6)", () => {
+  it("appends sources per run and dedupe is left to the read side", async () => {
+    const store = new MemoryStore();
+    await store.insertSources({
+      runId: "r1",
+      threadId: "t1",
+      ownerUserId: "u1",
+      sources: [
+        {
+          citationNumber: 1,
+          origin: "web",
+          evidenceStrength: "medium",
+          title: "S1",
+          locator: "l1",
+          snippet: "s1",
+          discoveryQuery: "ai tutoring",
+        },
+      ],
+    });
+    await store.insertSources({
+      runId: "r1",
+      threadId: "t1",
+      ownerUserId: "u1",
+      sources: [
+        {
+          citationNumber: 2,
+          origin: "arxiv",
+          evidenceStrength: "strong",
+          title: "S2",
+          locator: "l2",
+          snippet: "s2",
+          discoveryQuery: "ai tutoring",
+        },
+      ],
+    });
+    // Empty batch is a no-op.
+    await store.insertSources({
+      runId: "r1",
+      threadId: "t1",
+      ownerUserId: "u1",
+      sources: [],
+    });
+
+    const stored = store.getSources("r1");
+    expect(stored.map((s) => s.citationNumber)).toEqual([1, 2]);
+    expect(stored.every((s) => s.discoveryQuery === "ai tutoring")).toBe(true);
+    expect(store.getSources("other")).toEqual([]);
   });
 });

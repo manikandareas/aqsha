@@ -469,7 +469,7 @@ describe("agent.interactions.respond (public)", () => {
     });
   }
 
-  it("records the response in place while the run is inside its hold-window", async () => {
+  it("records the response and materializes the answer as a user message", async () => {
     const t = setup();
     const interactionId = await seedRespondFixture(t);
     const result = await t
@@ -482,6 +482,28 @@ describe("agent.interactions.respond (public)", () => {
     expect(result).toEqual({ ok: true, resuming: false });
     const row = await t.run(async (ctx) => ctx.db.get("pendingInteractions", interactionId));
     expect(row).toMatchObject({ status: "responded" });
+
+    // The answer is materialized as a real user message (folded into the run's
+    // turn on the client) and the thread message count is bumped.
+    const messages = await t.run(async (ctx) =>
+      ctx.db
+        .query("chatMessages")
+        .withIndex("by_thread_created", (q) => q.eq("threadId", THREAD))
+        .collect(),
+    );
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      role: "user",
+      text: "Setujui",
+      runId: RUN,
+    });
+    const thread = await t.run(async (ctx) =>
+      ctx.db
+        .query("chatThreads")
+        .withIndex("by_thread_id", (q) => q.eq("threadId", THREAD))
+        .unique(),
+    );
+    expect(thread?.messageCount).toBe(1);
   });
 
   it("flags resuming for an interrupted run and rejects foreign users", async () => {
@@ -1141,5 +1163,111 @@ describe("account cleanup of agent tables (Step 6a)", () => {
     const t = setup();
     const deleted = await t.run(async (ctx) => deleteAgentData(ctx, "nobody"));
     expect(deleted).toBe(0);
+  });
+});
+
+describe("research sources (WS6)", () => {
+  const IDENTITY = { tokenIdentifier: OWNER, subject: OWNER };
+
+  function sourceFixture(n: number, query: string) {
+    return {
+      citationNumber: n,
+      origin: "web" as const,
+      evidenceStrength: "medium" as const,
+      title: `Source ${n}`,
+      locator: `loc-${n}`,
+      snippet: `snippet ${n}`,
+      url: `https://example.com/${n}`,
+      discoveryQuery: query,
+      usage: "candidate" as const,
+    };
+  }
+
+  async function seedThreadRun(t: ReturnType<typeof convexTest>) {
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      await ctx.db.insert("users", {
+        ownerUserId: OWNER,
+        clerkUserId: OWNER,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert("users", {
+        ownerUserId: "intruder",
+        clerkUserId: "intruder",
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert("chatThreads", {
+        threadId: THREAD,
+        ownerUserId: OWNER,
+        agentKind: "lite",
+        status: "idle",
+        lastActivityAt: now,
+        messageCount: 0,
+      });
+    });
+  }
+
+  it("insertSources persists run/owner-scoped rows with discoveryQuery + citationNumber", async () => {
+    const t = setup();
+    await seedThreadRun(t);
+    const result = await t.mutation(api.agent.service.insertSources, {
+      serviceToken: TOKEN,
+      runId: RUN,
+      threadId: THREAD,
+      ownerUserId: OWNER,
+      sources: [sourceFixture(1, "ai tutoring"), sourceFixture(2, "ai tutoring")],
+    });
+    expect(result).toEqual({ inserted: 2 });
+
+    const rows = await t.run(async (ctx) =>
+      ctx.db
+        .query("researchSources")
+        .withIndex("by_run", (q) => q.eq("runId", RUN))
+        .collect(),
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.citationNumber).sort()).toEqual([1, 2]);
+    expect(rows.every((r) => r.discoveryQuery === "ai tutoring")).toBe(true);
+    expect(rows.every((r) => r.threadId === THREAD && r.ownerUserId === OWNER)).toBe(true);
+  });
+
+  it("rejects insertSources without a valid service token", async () => {
+    const t = setup();
+    await expect(
+      t.mutation(api.agent.service.insertSources, {
+        serviceToken: "wrong",
+        runId: RUN,
+        threadId: THREAD,
+        ownerUserId: OWNER,
+        sources: [sourceFixture(1, "q")],
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("listSourcesByThread returns the owner's sources (runId preserved) and hides them from others", async () => {
+    const t = setup();
+    await seedThreadRun(t);
+    await t.mutation(api.agent.service.insertSources, {
+      serviceToken: TOKEN,
+      runId: RUN,
+      threadId: THREAD,
+      ownerUserId: OWNER,
+      sources: [sourceFixture(1, "ai tutoring"), sourceFixture(2, "unesco")],
+    });
+
+    const owned = await t
+      .withIdentity(IDENTITY)
+      .query(api.agent.queries.listSourcesByThread, { threadId: THREAD });
+    expect(owned).toHaveLength(2);
+    expect(owned.every((s) => s.runId === RUN)).toBe(true);
+    expect(owned.every((s) => s.usage === "candidate")).toBe(true);
+    expect(owned.map((s) => s.discoveryQuery).sort()).toEqual(["ai tutoring", "unesco"]);
+
+    const foreign = await t
+      .withIdentity({ tokenIdentifier: "intruder", subject: "intruder" })
+      .query(api.agent.queries.listSourcesByThread, { threadId: THREAD });
+    expect(foreign).toHaveLength(0);
   });
 });
