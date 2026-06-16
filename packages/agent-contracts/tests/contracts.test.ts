@@ -4,7 +4,10 @@ import {
   interactionResponseSchema,
   isActiveRunStatus,
   isApproved,
+  parseResearchPlanPayload,
   pendingInteractionSchema,
+  renderResearchPlanMarkdown,
+  researchPlanPayloadSchema,
   runRequestSchema,
   sourceCandidateSchema,
 } from "../src/index";
@@ -96,6 +99,83 @@ describe("interactions", () => {
     expect(() =>
       interactionResponseSchema.parse({ kind: "answers", answers: [] }),
     ).toThrow();
+  });
+
+  it("accepts the three plan_decision variants", () => {
+    for (const decision of ["start", "revise", "reject"] as const) {
+      const response = interactionResponseSchema.parse({
+        kind: "plan_decision",
+        decision,
+      });
+      expect(response.kind).toBe("plan_decision");
+      if (response.kind === "plan_decision") {
+        expect(response.decision).toBe(decision);
+      }
+    }
+    const start = interactionResponseSchema.parse({
+      kind: "plan_decision",
+      decision: "start",
+      editedPlan: "## Rencana\n\n1. a",
+    });
+    expect(start.kind === "plan_decision" && start.editedPlan).toBeTruthy();
+    const revise = interactionResponseSchema.parse({
+      kind: "plan_decision",
+      decision: "revise",
+      revisionInstruction: "fokuskan ke 2023",
+    });
+    expect(
+      revise.kind === "plan_decision" && revise.revisionInstruction,
+    ).toBeTruthy();
+  });
+
+  it("rejects an unknown plan_decision decision", () => {
+    expect(() =>
+      interactionResponseSchema.parse({ kind: "plan_decision", decision: "go" }),
+    ).toThrow();
+  });
+});
+
+describe("researchPlanPayloadSchema", () => {
+  const validPlan = {
+    title: "Dampak AI pada pendidikan",
+    summary: "Tinjauan lintas studi.",
+    questions: ["Apa bukti utama?", "Apa keterbatasannya?", "Bagaimana konteksnya?"],
+  };
+
+  it("parses a well-formed plan and bounds questions to 1–8", () => {
+    expect(researchPlanPayloadSchema.parse(validPlan).questions).toHaveLength(3);
+    expect(() =>
+      researchPlanPayloadSchema.parse({ ...validPlan, questions: [] }),
+    ).toThrow();
+    expect(() =>
+      researchPlanPayloadSchema.parse({
+        ...validPlan,
+        questions: Array.from({ length: 9 }, (_, i) => `q${i}`),
+      }),
+    ).toThrow();
+  });
+
+  it("parseResearchPlanPayload falls back gracefully on garbage", () => {
+    expect(parseResearchPlanPayload(validPlan)).toEqual(validPlan);
+    expect(parseResearchPlanPayload(null)).toEqual({
+      title: "Rencana riset",
+      questions: [],
+    });
+    expect(parseResearchPlanPayload({ title: "", questions: ["x"] })).toEqual({
+      title: "Rencana riset",
+      questions: [],
+    });
+  });
+
+  it("renderResearchPlanMarkdown emits a stable, parseable shape", () => {
+    const md = renderResearchPlanMarkdown(validPlan);
+    expect(md).toBe(
+      "## Dampak AI pada pendidikan\n\nTinjauan lintas studi.\n\n1. Apa bukti utama?\n2. Apa keterbatasannya?\n3. Bagaimana konteksnya?",
+    );
+    // summary is optional — omitting it drops the block, not the structure.
+    expect(
+      renderResearchPlanMarkdown({ title: "T", questions: ["a"] }),
+    ).toBe("## T\n\n1. a");
   });
 });
 

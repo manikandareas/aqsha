@@ -54,6 +54,7 @@ export const SERVICE_FUNCTIONS = {
   respondInteraction: "agent/service:respondInteraction",
   expireInteraction: "agent/service:expireInteraction",
   listInteractions: "agent/service:listInteractions",
+  listPendingInteractionsByRun: "agent/service:listPendingInteractionsByRun",
   listContextArtifacts: "agent/service:listContextArtifacts",
   getArtifact: "agent/service:getArtifact",
   getWorkspaceManifests: "agent/service:getWorkspaceManifests",
@@ -253,6 +254,10 @@ export class ConvexStore implements AgentStore {
 
   listInteractions(threadId: string): Promise<PendingInteraction[]> {
     return this.query(SERVICE_FUNCTIONS.listInteractions, { threadId });
+  }
+
+  listPendingInteractionsByRun(runId: string): Promise<PendingInteraction[]> {
+    return this.query(SERVICE_FUNCTIONS.listPendingInteractionsByRun, { runId });
   }
 
   listContextArtifacts(

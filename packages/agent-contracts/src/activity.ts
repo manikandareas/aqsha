@@ -144,6 +144,10 @@ const APPROVAL_LABELS: Record<string, Label> = {
     running: "Menunggu persetujuan dokumen",
     completed: "Persetujuan diterima",
   },
+  proposeResearchPlan: {
+    running: "Menunggu persetujuan rencana riset",
+    completed: "Rencana riset disetujui",
+  },
   deleteArtifact: {
     running: "Menunggu persetujuan penghapusan",
     completed: "Persetujuan diterima",

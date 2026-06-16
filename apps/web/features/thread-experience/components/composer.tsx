@@ -234,10 +234,18 @@ function ComposerContent(props: ComposerProps) {
     activeRun,
     isGenerating,
   });
-  // HITL keeps the composer open (free-text answers the pending interaction);
-  // only an active Deep Research workflow locks the inputs.
-  const answerMode = Boolean(activeInteraction && hitlActions);
+  // HITL keeps the composer open (free-text answers an ask_user interaction);
+  // only an active Deep Research workflow locks the inputs. answerMode must NOT
+  // fire for a plan-gate (tool_approval) interaction: the composer is locked then,
+  // so the misleading "Ketik jawabanmu…" placeholder and the onDeny submit path
+  // (a kind mismatch for the plan card) must both be suppressed (plan §7.5).
   const isInteractionLocked = isDeepActive;
+  const answerMode = Boolean(
+    activeInteraction &&
+      hitlActions &&
+      activeInteraction.type === "ask_user" &&
+      !isInteractionLocked,
+  );
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
   const isContentEmpty = content.trim().length === 0 && inlineCommands.length === 0;

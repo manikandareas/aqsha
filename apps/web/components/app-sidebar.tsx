@@ -71,7 +71,6 @@ const OLD_THREADS_COLLAPSED_STORAGE_KEY =
   "aqsha:sidebar:old-threads-collapsed";
 const WORKSPACES_COLLAPSED_STORAGE_KEY = "aqsha:sidebar:workspaces-collapsed";
 const SIDEBAR_SECTION_EVENT = "aqsha:sidebar-section-toggle";
-let sidebarActivityGroupingNow: number | null = null;
 const sidebarItemBaseClass =
   "h-8 gap-2 rounded-[8px] px-2.5 py-0 text-[12px] font-medium transition-[background-color,color,box-shadow] duration-150 ease-out hover:bg-muted/60 data-active:bg-primary/10 data-active:font-medium data-active:text-foreground data-active:shadow-none data-active:[&_svg]:text-primary hover:text-foreground active:bg-muted active:text-foreground [&_svg]:size-3.5";
 
@@ -108,7 +107,14 @@ export function AppSidebar({
   const router = useRouter();
   const [commandOpen, setCommandOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const activityGroupingNow = useSidebarActivityGroupingNow();
+  // Deferred to a mount effect so the recent/older cutoff reads `Date.now()`
+  // only on the client, avoiding an SSR hydration mismatch.
+  const [activityGroupingNow, setActivityGroupingNow] = useState<number | null>(
+    null,
+  );
+  useEffect(() => {
+    setActivityGroupingNow(Date.now());
+  }, []);
   const { isMobile, setOpen, setOpenMobile } = useSidebar();
   const sortedWorkspaces = workspaces.toSorted(
     (left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0),
@@ -468,29 +474,6 @@ function splitThreadsByActivity(threads: ThreadSummary[], now: number | null) {
   }
 
   return { recent, older };
-}
-
-function subscribeSidebarActivityGroupingNow(onStoreChange: () => void) {
-  if (sidebarActivityGroupingNow !== null) return () => {};
-
-  const frame = requestAnimationFrame(() => {
-    sidebarActivityGroupingNow = Date.now();
-    onStoreChange();
-  });
-
-  return () => cancelAnimationFrame(frame);
-}
-
-function getSidebarActivityGroupingNow() {
-  return sidebarActivityGroupingNow;
-}
-
-function useSidebarActivityGroupingNow() {
-  return useSyncExternalStore(
-    subscribeSidebarActivityGroupingNow,
-    getSidebarActivityGroupingNow,
-    () => null,
-  );
 }
 
 function usePersistentCollapse(

@@ -84,7 +84,7 @@ export function buildDeepPhasePrompt(input: DeepPhasePromptInput): string {
   switch (phase) {
     case "plan":
       blocks.push(
-        "PHASE 1/5 — RESEARCH PLAN. Decompose the research question into 3-6 focused, independently searchable sub-questions. For each: the sub-question, the best search strategy (web / arXiv / DOI lookup), and the expected evidence types. Return the plan as structured Markdown. Do NOT perform searches in this phase.",
+        "PHASE 1/5 — RESEARCH PLAN. Decompose the research question into 3-6 focused, independently searchable sub-questions. Then call proposeResearchPlan with a short title, a one-sentence summary, and the array of sub-questions. Do NOT perform searches. Do NOT write the plan as a chat message — submit it via the tool.",
         input.contextBlock ?? "",
         section("Research question", question),
       );

@@ -524,6 +524,25 @@ describe("activityEventsFromRun", () => {
     });
   });
 
+  it("labels the proposeResearchPlan approval node (not the fallback)", () => {
+    const result = activityEventsFromRun(
+      makeRow({
+        status: "waiting_hitl",
+        events: [
+          event(1, "interaction_pending", {
+            interactionId: "i1",
+            toolName: "proposeResearchPlan",
+          }),
+        ],
+      }),
+    );
+    const approval = result.find((node) => node.type === "approval");
+    // Asserts the APPROVAL_LABELS.proposeResearchPlan.running entry resolves
+    // (APPROVAL_LABELS is module-private, so we assert through the view-model).
+    // "Menunggu persetujuan" alone is the FALLBACK_APPROVAL_LABEL sentinel.
+    expect(approval?.title).toBe("Menunggu persetujuan rencana riset");
+  });
+
   it("closes the approval node when the interaction resolves", () => {
     const result = activityEventsFromRun(
       makeRow({

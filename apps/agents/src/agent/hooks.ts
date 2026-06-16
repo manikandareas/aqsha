@@ -70,6 +70,20 @@ export type HookMatcherLike = { matcher?: string; hooks: HookCallbackLike[] };
 export type RunHooks = Record<string, HookMatcherLike[]>;
 
 /**
+ * Live set of tool/sub-agent nodes this attempt OPENED but has not yet closed.
+ * The run manager reads it after a transient stream drop to synthesize the
+ * missing tool_end / subagent_stop before retrying, so a dead attempt's nodes
+ * fold into ONE failed node instead of orphaning as a duplicate "running" branch
+ * (a tool_start whose tool_end the dropped socket never delivered).
+ */
+export type OpenNodeTracker = {
+  /** toolUseId → logical tool name (the name a synthetic tool_end needs). */
+  tools: Map<string, string>;
+  /** agentId of a sub-agent whose subagent_stop has not been recorded. */
+  subagents: Set<string>;
+};
+
+/**
  * Verify there is an approved proposeArtifact interaction in this thread that
  * matches the executeArtifact call (same artifactId for updates; any approved
  * create-proposal for creates), and that no executeArtifact already consumed it.
@@ -126,8 +140,14 @@ export function buildRunHooks(input: {
    * eager message production. Omitted in dev/tests that don't assert ordering.
    */
   coordinator?: SegmentCoordinator;
+  /**
+   * Per-attempt open-node tracker (answer-stream retry). When present, tool and
+   * sub-agent nodes register here on start and deregister on end, so a transient
+   * retry can close whatever the dropped attempt left open.
+   */
+  openNodes?: OpenNodeTracker;
 }): RunHooks {
-  const { store, runId, threadId, coordinator } = input;
+  const { store, runId, threadId, coordinator, openNodes } = input;
 
   const preToolUse: HookCallbackLike = async (hookInput, toolUseID, context) => {
     const toolName = hookInput.tool_name ?? "";
@@ -152,6 +172,7 @@ export function buildRunHooks(input: {
     if (parentAgentId) payload.parentAgentId = parentAgentId;
     if (Object.keys(inputSummary).length > 0) payload.inputSummary = inputSummary;
     await store.appendRunEvent({ runId, type: "tool_start", payload });
+    if (toolUseId) openNodes?.tools.set(toolUseId, logical);
     if (logical === EXECUTE_ARTIFACT_TOOL_NAME) {
       const gate = await executeArtifactGateAllows(
         store,
@@ -188,6 +209,7 @@ export function buildRunHooks(input: {
       : sanitizeToolResult(logical, hookInput.tool_response);
     if (Object.keys(resultSummary).length > 0) payload.resultSummary = resultSummary;
     await store.appendRunEvent({ runId, type: "tool_end", payload });
+    if (toolUseId) openNodes?.tools.delete(toolUseId);
     return {};
   };
 
@@ -204,6 +226,7 @@ export function buildRunHooks(input: {
     const parentAgentId = stringField(hookInput, "agent_id", "agentId");
     if (parentAgentId) payload.parentAgentId = parentAgentId;
     await store.appendRunEvent({ runId, type: "tool_end", payload });
+    if (toolUseId) openNodes?.tools.delete(toolUseId);
     return {};
   };
 
@@ -215,6 +238,10 @@ export function buildRunHooks(input: {
       if (agentType) payload.agentType = agentType;
       const agentId = stringField(hookInput, "agent_id", "agentId");
       if (agentId) payload.agentId = agentId;
+      if (agentId) {
+        if (type === "subagent_start") openNodes?.subagents.add(agentId);
+        else openNodes?.subagents.delete(agentId);
+      }
       // Fase 5 v2: the SubagentStop hook input carries `last_assistant_message`
       // (the sub-agent's final text). Surface a single-line, ≤120-char summary —
       // sanitized at this chokepoint so a long completion / document body can

@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import { WorkspacePickerInline } from "@/features/workspaces/components/workspace-picker-inline";
 
 /** Shared inline review prompt for the approval tools: `proposeArtifact`,
- * `createWorkspace`, `renameWorkspace`, and `startDeepResearch`. Renders as
- * natural agent prose (no card chrome) with inline approve/decline controls. */
+ * `createWorkspace`, and `renameWorkspace` (plus `runComputation` via the generic
+ * fallback). Renders as natural agent prose (no card chrome) with inline
+ * approve/decline controls. The deep-research plan gate uses its own editable
+ * `ResearchPlanReviewCard` instead. */
 export function HitlPlanReviewCard({
   title,
   summary,
@@ -15,6 +17,7 @@ export function HitlPlanReviewCard({
   requiresWorkspacePick,
   workspaceName,
   disabled,
+  submitting,
   onReject,
   onBuild,
 }: {
@@ -23,7 +26,10 @@ export function HitlPlanReviewCard({
   planBullets?: string[];
   requiresWorkspacePick?: boolean;
   workspaceName?: string;
+  /** Non-interactive (a submit is in flight OR the run is terminal). */
   disabled?: boolean;
+  /** A response submit is actually in flight — drives the button spinner only. */
+  submitting?: boolean;
   onReject: () => void;
   onBuild: (workspaceId?: string) => void;
 }) {
@@ -83,7 +89,7 @@ export function HitlPlanReviewCard({
           disabled={disabled || !canBuild}
           onClick={() => onBuild(selectedWorkspaceId ?? undefined)}
         >
-          {disabled ? <Loader2Icon className="size-3 animate-spin" /> : null}
+          {submitting ? <Loader2Icon className="size-3 animate-spin" /> : null}
           Setujui
           <CornerDownLeftIcon className="size-2.5 opacity-60" />
         </Button>

@@ -566,6 +566,24 @@ export const listInteractions = query({
   },
 });
 
+// Pending interactions for ONE run (deep-research plan gate replay-idempotency,
+// plan §4.6c): before re-running the plan phase on a durable replay, the service
+// checks whether a `proposeResearchPlan` interaction is still pending so it can
+// re-park instead of creating a duplicate card. Uses the by_run_status index.
+export const listPendingInteractionsByRun = query({
+  args: { serviceToken: v.string(), runId: v.string() },
+  handler: async (ctx, args) => {
+    requireServiceToken(args.serviceToken);
+    const docs = await ctx.db
+      .query("pendingInteractions")
+      .withIndex("by_run_status", (q) =>
+        q.eq("runId", args.runId).eq("status", "pending"),
+      )
+      .take(MAX_THREAD_INTERACTIONS);
+    return docs.map(interactionRecord);
+  },
+});
+
 // ── deep-research phase state (plan §5.5 durable orchestration, Step 4) ─────
 // Additive contract extension: SERVICE_FUNCTIONS grew from 25 to 27 endpoints
 // (recorded in plan §9.2).

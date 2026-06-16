@@ -116,6 +116,61 @@ describe("InteractionBroker.requestApproval (immediate interrupt)", () => {
   });
 });
 
+describe("InteractionBroker — proposeResearchPlan plan gate", () => {
+  it("interrupts with reason 'plan_review' and preserves the plan payload", async () => {
+    const { store, broker } = setup();
+    let interrupted = false;
+    broker.registerRun("run1", () => {
+      interrupted = true;
+    });
+    const payload = {
+      title: "Dampak AI",
+      summary: "Tinjauan",
+      questions: ["a", "b", "c"],
+    };
+    const result = await broker.requestApproval({
+      ...baseInput,
+      toolName: "proposeResearchPlan",
+      payload,
+    });
+    expect(result.outcome).toBe("interrupt");
+    expect(interrupted).toBe(true);
+    expect(broker.interruptState("run1")?.reason).toBe("plan_review");
+    const stored = await store.getInteraction(result.interaction.id);
+    expect(stored).toMatchObject({
+      type: "tool_approval",
+      toolName: "proposeResearchPlan",
+      payload,
+    });
+  });
+
+  it("does NOT prime a plan_decision response (no silent no-op on revise)", async () => {
+    const { store, broker } = setup();
+    const interaction = await store.createInteraction({
+      ownerUserId: "u1",
+      threadId: "t1",
+      runId: "run1",
+      type: "tool_approval",
+      toolName: "proposeResearchPlan",
+      payload: { title: "T", questions: ["a", "b", "c"] },
+    });
+    const responded = await store.respondInteraction(interaction.id, {
+      kind: "plan_decision",
+      decision: "revise",
+      revisionInstruction: "fokus 2023",
+    });
+    broker.primeResolvedApproval("run1", responded!);
+    // The plan_decision must NOT have been primed: the next gated call interrupts
+    // again rather than consuming a stale primed approval.
+    const result = await broker.requestApproval({
+      ...baseInput,
+      toolName: "proposeResearchPlan",
+      payload: { title: "T", questions: ["a", "b", "c"] },
+    });
+    expect(result.outcome).toBe("interrupt");
+  });
+});
+
 describe("InteractionBroker.requestAskUser", () => {
   it("persists the question card and interrupts immediately", async () => {
     const { store, broker } = setup();
@@ -278,6 +333,28 @@ describe("resumePromptForInteraction", () => {
     const prompt = resumePromptForInteraction(approved!);
     expect(prompt).toContain("ws-42");
     expect(prompt).toContain("workspace");
+  });
+
+  it("formats a plan_decision revise as a re-plan instruction", async () => {
+    const { store } = setup();
+    const interaction = await store.createInteraction({
+      ownerUserId: "u1",
+      threadId: "t1",
+      runId: "run1",
+      type: "tool_approval",
+      toolName: "proposeResearchPlan",
+      payload: { title: "T", questions: ["a", "b", "c"] },
+    });
+    const revise = await store.respondInteraction(interaction.id, {
+      kind: "plan_decision",
+      decision: "revise",
+      revisionInstruction: "fokuskan ke studi 2023",
+    });
+    const prompt = resumePromptForInteraction(revise!);
+    expect(prompt).toContain("fokuskan ke studi 2023");
+    expect(prompt).toContain("proposeResearchPlan");
+    // It must NOT be mis-rendered as the approval/declined template.
+    expect(prompt).not.toContain("declined");
   });
 });
 

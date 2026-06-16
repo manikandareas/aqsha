@@ -83,6 +83,10 @@ export function AssistantTurn({
   const [manualProcessOpen, setManualProcessOpen] = useState<boolean | null>(null);
 
   const isActive = run ? isRunActive(run) : false;
+  // Terminal = the run settled (completed/failed/canceled); isRunActive already
+  // counts waiting_hitl as active, so !isActive is exactly the terminal set. Used
+  // to render any still-pending HITL card non-interactive (plan §7.3 zombie-card).
+  const runTerminal = Boolean(run) && !isActive;
   const isDeep = run?.mode === "deep";
   const parts = buildTurnParts(message, run);
   const pendingHitl = hitlMessages ?? [];
@@ -258,6 +262,7 @@ export function AssistantTurn({
                 message={item.message}
                 actions={hitlActions}
                 disabled={hitlDisabled}
+                runTerminal={runTerminal}
               />
             ),
           )}
@@ -323,10 +328,12 @@ function HitlExchangeQuestion({
   message,
   actions,
   disabled,
+  runTerminal,
 }: {
   message: ChatMessage;
   actions?: HitlActions;
   disabled?: boolean;
+  runTerminal?: boolean;
 }) {
   const part = messageHitlParts(message)[0];
   if (!part) return null;
@@ -344,7 +351,14 @@ function HitlExchangeQuestion({
     );
   }
   if (!actions) return null;
-  return <MessageHitlParts message={message} actions={actions} disabled={disabled} />;
+  return (
+    <MessageHitlParts
+      message={message}
+      actions={actions}
+      disabled={disabled}
+      runTerminal={runTerminal}
+    />
+  );
 }
 
 function ThreadActivityFallback() {

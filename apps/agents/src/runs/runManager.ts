@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type { PendingInteraction, RunRequest } from "@aqsha/agent-contracts";
+import {
+  parseResearchPlanPayload,
+  renderResearchPlanMarkdown,
+  type PendingInteraction,
+  type RunRequest,
+} from "@aqsha/agent-contracts";
 import { RUN_ERROR_CODES, sanitizeRunErrorMessage } from "../agent/activitySanitizers";
 import {
   buildAstraQueryOptions,
@@ -9,12 +14,13 @@ import {
   buildDeepPhasePrompt,
   DEEP_PHASES,
   DEEP_PHASE_POLICIES,
+  type DeepPhase,
   isMaxTurnsStop,
   PHASE_BUDGET_EXHAUSTED_NOTE,
   phaseStateMap,
   priorOutputsFrom,
 } from "../agent/deepPhases";
-import { buildRunHooks } from "../agent/hooks";
+import { buildRunHooks, type OpenNodeTracker } from "../agent/hooks";
 import { SegmentCoordinator } from "../agent/segmentCoordinator";
 import {
   buildCanUseTool,
@@ -23,6 +29,7 @@ import {
 } from "../agent/interactions";
 import { assemblePrompt } from "../agent/contextAssembly";
 import { StreamBridge, type BridgeMessage } from "../agent/streamBridge";
+import { backoffDelayMs, isTransientConnectionError } from "./retry";
 import type { TurnPhase } from "../agent/toolPolicy";
 import { parseServiceCommand, readSkillEntries } from "../commands/registry";
 import type { AgentsConfig } from "../config";
@@ -51,6 +58,21 @@ export type QueryRunner = (input: {
   prompt: string;
   options: AstraQueryOptions;
 }) => QueryHandle;
+
+/** One stream attempt's freshly-built options + bridge (rebuilt on retry). */
+type StreamAttempt = {
+  options: AstraQueryOptions;
+  bridge: StreamBridge;
+};
+
+/** Outcome of driving a stream to completion (across any transient retries). */
+type StreamOutcome = {
+  bridge: StreamBridge;
+  streamError?: string;
+  interruptState: ReturnType<InteractionBroker["interruptState"]>;
+  /** Total measurable cost across ALL attempts (failed ones included). */
+  costUsd: number;
+};
 
 type ActiveRun = {
   runId: string;
@@ -285,6 +307,185 @@ export class RunManager {
     next?.();
   }
 
+  // ── streaming with transient-retry (shared by normal turns + deep phases) ──
+  //
+  // Drives ONE logical turn/phase to completion, auto-retrying a TRANSIENT
+  // connection drop (network switch, gateway idle-timeout, socket reset) from
+  // scratch with exponential backoff. A fresh bridge/options is built per attempt
+  // (buildAttempt) so the failed partial is discarded; the caller's stable
+  // turnKey makes the retry's answer segments overwrite the dead attempt's rows.
+  // HITL interrupts and cancels never retry — only a transient failure does.
+
+  private async runStreamWithRetry(input: {
+    runId: string;
+    prompt: string;
+    activeRun: ActiveRun;
+    buildAttempt: (openNodes: OpenNodeTracker) => StreamAttempt;
+    /** Re-arm a resume's approved-tool response before each attempt. */
+    prime?: () => void;
+    /** Deep-phase tag for the retry notice (omitted for normal turns). */
+    phase?: DeepPhase;
+    /**
+     * Set false to forbid retries even on a transient drop — used when this turn
+     * re-executes an approved, side-effecting tool (a whole-turn replay would
+     * duplicate the artifact/workspace, since executeArtifact is not idempotent).
+     */
+    allowRetry?: boolean;
+  }): Promise<StreamOutcome> {
+    const { runId, activeRun } = input;
+    const { streamMaxRetries, streamRetryBaseMs, streamRetryMaxMs } = this.deps.config;
+    let bridge!: StreamBridge;
+    let streamError: string | undefined;
+    let interruptState: ReturnType<InteractionBroker["interruptState"]>;
+    let costUsd = 0;
+    let attempt = 0;
+    try {
+      while (true) {
+        attempt += 1;
+        // Fresh per-attempt open-node tracker: any tool/sub-agent the dropped
+        // attempt leaves open is closed (below) before the retry re-opens its own.
+        const openNodes: OpenNodeTracker = { tools: new Map(), subagents: new Set() };
+        const built = input.buildAttempt(openNodes);
+        bridge = built.bridge;
+        streamError = undefined;
+        // Prime BEFORE the stream so the gated tool's canUseTool sees the response.
+        input.prime?.();
+        const handle = this.deps.runner({ prompt: input.prompt, options: built.options });
+        activeRun.handle = handle;
+        this.broker.registerRun(runId, () => {
+          void handle.interrupt().catch(() => {
+            // Stream may already be closed; interrupt state still drives status.
+          });
+        });
+        try {
+          for await (const message of handle.stream) {
+            await bridge.handle(message);
+          }
+        } catch (error) {
+          streamError = error instanceof Error ? error.message : "Stream failed";
+        }
+        // Snapshot before the outer finally unregisters (which clears it).
+        interruptState = this.broker.interruptState(runId);
+
+        // Sum every attempt's measurable spend so the deep budget guard and the
+        // persisted cost reflect the true total, not just the surviving attempt.
+        const result = bridge.result();
+        costUsd += result.summary.costUsd ?? 0;
+
+        // A dropped connection surfaces either as a THROW (streamError) or as a
+        // non-success result message carrying the API error text. Retry only a
+        // transient one — never a HITL pause, a cancel, a forbidden replay, or a
+        // terminal fault (max-turns/auth/budget never match the transient check).
+        const failure =
+          streamError ??
+          (result.resultSubtype && result.resultSubtype !== "success"
+            ? result.summary.resultText ?? result.resultSubtype
+            : undefined);
+        const retriable =
+          input.allowRetry !== false &&
+          !interruptState &&
+          !activeRun.canceled &&
+          attempt <= streamMaxRetries &&
+          isTransientConnectionError(failure);
+        if (!retriable) {
+          break;
+        }
+        // Close the dead attempt's still-open tool/sub-agent nodes so they fold
+        // into ONE failed node instead of orphaning as a duplicate branch.
+        await this.closeOrphanNodes(runId, openNodes);
+        const delayMs = backoffDelayMs({
+          attempt,
+          baseMs: streamRetryBaseMs,
+          maxMs: streamRetryMaxMs,
+        });
+        console.warn(
+          `[run ${runId}${input.phase ? ` ${input.phase}` : ""}] transient stream drop ` +
+            `(attempt ${attempt}/${streamMaxRetries}), retrying in ${delayMs}ms: ${failure}`,
+        );
+        await this.emitRetryNotice({
+          runId,
+          phase: input.phase,
+          attempt,
+          maxRetries: streamMaxRetries,
+          delayMs,
+        });
+        await this.delayUnlessCanceled(activeRun, delayMs);
+        if (activeRun.canceled) {
+          break;
+        }
+      }
+    } finally {
+      this.broker.unregisterRun(runId);
+    }
+    return { bridge, streamError, interruptState, costUsd };
+  }
+
+  /**
+   * Synthesize the tool_end (status error) / subagent_stop that the dropped
+   * socket never delivered, so the abandoned attempt's nodes close as failed
+   * instead of lingering "running" and then rendering as a duplicate completed
+   * branch once the retry's own nodes finish.
+   */
+  private async closeOrphanNodes(
+    runId: string,
+    openNodes: OpenNodeTracker,
+  ): Promise<void> {
+    const { store } = this.deps;
+    for (const [toolUseId, toolName] of openNodes.tools) {
+      await store.appendRunEvent({
+        runId,
+        type: "tool_end",
+        payload: { toolName, status: "error", toolUseId },
+      });
+    }
+    for (const agentId of openNodes.subagents) {
+      await store.appendRunEvent({
+        runId,
+        type: "subagent_stop",
+        payload: { agentId },
+      });
+    }
+  }
+
+  /** Sleep `ms`, resolving early if the run is canceled mid-backoff. */
+  private delayUnlessCanceled(activeRun: ActiveRun, ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      if (activeRun.canceled || ms <= 0) {
+        resolve();
+        return;
+      }
+      const start = Date.now();
+      const timer = setInterval(() => {
+        if (activeRun.canceled || Date.now() - start >= ms) {
+          clearInterval(timer);
+          resolve();
+        }
+      }, Math.min(200, ms));
+    });
+  }
+
+  /** Durable "retrying after a connection drop" signal (run stays `running`). */
+  private async emitRetryNotice(input: {
+    runId: string;
+    phase?: DeepPhase;
+    attempt: number;
+    maxRetries: number;
+    delayMs: number;
+  }): Promise<void> {
+    await this.deps.store.appendRunEvent({
+      runId: input.runId,
+      type: "run_status",
+      payload: {
+        status: "running",
+        retrying: true,
+        attempt: input.attempt,
+        maxRetries: input.maxRetries,
+        delayMs: input.delayMs,
+        ...(input.phase ? { phase: input.phase } : {}),
+      },
+    });
+  }
+
   private async executeTurn(
     request: RunRequest,
     turn?: { phase?: TurnPhase; resumeInteraction?: PendingInteraction },
@@ -315,8 +516,10 @@ export class RunManager {
       status: "streaming",
     });
 
-    // Per-run tool context + MCP server (plan §5.1).
-    const toolCtx = {
+    // Per-run tool context (plan §5.1). The MCP server + citation counter are
+    // rebuilt per stream attempt (a transient retry re-runs from scratch), so
+    // keep the shared base here and stamp a fresh counter inside buildAttempt.
+    const toolCtxBase = {
       runId,
       threadId: request.threadId,
       ownerUserId: request.ownerUserId,
@@ -325,9 +528,7 @@ export class RunManager {
       broker: this.broker,
       sandbox: this.sandbox,
       config,
-      nextCitationNumber: createCitationCounter(),
     };
-    const mcpServer = buildAqshaMcpServer(toolCtx);
 
     // Prompt assembly: slash commands (non-/deep) pass through verbatim; a
     // missing session triggers full history rebuild from the store (§4.1.3).
@@ -343,70 +544,72 @@ export class RunManager {
             includeHistory: needsHistoryRebuild,
           });
 
-    // One coordinator + turnKey per dispatch: the bridge releases tool barriers
-    // and tags its answer segments; the hooks wait on those barriers so
-    // reasoning↔tool ordering is precise (answer-stream Fase 1).
-    const coordinator = new SegmentCoordinator();
+    // A stable turnKey across retries lets a retried attempt's answer segments
+    // overwrite the dead attempt's rows; the coordinator/bridge/options are
+    // rebuilt per attempt (buildAttempt) so a transient connection drop re-runs
+    // from scratch. The hooks wait on the per-attempt coordinator's barriers so
+    // reasoning↔tool ordering stays precise (answer-stream Fase 1).
     const turnKey = randomUUID();
-
-    const abortController = new AbortController();
-    const queryOptions = buildAstraQueryOptions({
-      config,
-      agentKind: request.agentKind,
-      mode: request.mode,
-      phase,
-      resumeSessionId,
-      mcpServer,
-      hooks: buildRunHooks({ store, runId, threadId: request.threadId, coordinator }),
-      canUseTool: buildCanUseTool({
-        broker: this.broker,
-        runId,
-        threadId: request.threadId,
-        ownerUserId: request.ownerUserId,
-      }),
-      abortController,
-    });
-
-    const bridge = new StreamBridge(store, {
-      runId,
-      threadId: request.threadId,
-      messageId: assistantMessage.messageId,
-      flushMs: config.streamFlushMs,
-      flushChars: config.streamFlushChars,
-      turnKey,
-      coordinator,
-    });
-
     const activeRun: ActiveRun = { runId, canceled: false };
     this.active.set(runId, activeRun);
 
-    let streamError: string | undefined;
-    let interruptState: ReturnType<InteractionBroker["interruptState"]>;
-    try {
-      const handle = this.deps.runner({ prompt: assembled.prompt, options: queryOptions });
-      activeRun.handle = handle;
-      if (turn?.resumeInteraction) {
-        // Resume after a tool approval: the recorded response must satisfy the
-        // model's retry of the gated tool instead of interrupting again.
-        this.broker.primeResolvedApproval(runId, turn.resumeInteraction);
-      }
-      this.broker.registerRun(runId, () => {
-        void handle.interrupt().catch(() => {
-          // Stream may already be closed; interrupt state still drives status.
-        });
+    const buildAttempt = (openNodes: OpenNodeTracker): StreamAttempt => {
+      const coordinator = new SegmentCoordinator();
+      const abortController = new AbortController();
+      const options = buildAstraQueryOptions({
+        config,
+        agentKind: request.agentKind,
+        mode: request.mode,
+        phase,
+        resumeSessionId,
+        mcpServer: buildAqshaMcpServer({
+          ...toolCtxBase,
+          nextCitationNumber: createCitationCounter(),
+        }),
+        hooks: buildRunHooks({
+          store,
+          runId,
+          threadId: request.threadId,
+          coordinator,
+          openNodes,
+        }),
+        canUseTool: buildCanUseTool({
+          broker: this.broker,
+          runId,
+          threadId: request.threadId,
+          ownerUserId: request.ownerUserId,
+        }),
+        abortController,
       });
+      const bridge = new StreamBridge(store, {
+        runId,
+        threadId: request.threadId,
+        messageId: assistantMessage.messageId,
+        flushMs: config.streamFlushMs,
+        flushChars: config.streamFlushChars,
+        turnKey,
+        coordinator,
+      });
+      return { options, bridge };
+    };
 
-      for await (const message of handle.stream) {
-        await bridge.handle(message);
-      }
-    } catch (error) {
-      streamError = error instanceof Error ? error.message : "Stream failed";
-    } finally {
-      // Snapshot before unregister clears the broker's per-run state.
-      interruptState = this.broker.interruptState(runId);
-      this.broker.unregisterRun(runId);
-      this.active.delete(runId);
-    }
+    const outcome = await this.runStreamWithRetry({
+      runId,
+      prompt: assembled.prompt,
+      activeRun,
+      buildAttempt,
+      // Resume after a tool approval: re-arm the recorded response before every
+      // attempt so the model's retry of the gated tool resolves instead of
+      // interrupting again (the broker drops the prime on unregister).
+      prime: turn?.resumeInteraction
+        ? () => this.broker.primeResolvedApproval(runId, turn.resumeInteraction!)
+        : undefined,
+      // Re-executing an approved side-effecting tool must not auto-retry (a
+      // whole-turn replay would duplicate the artifact/workspace).
+      allowRetry: !isApprovedToolApprovalResume(turn?.resumeInteraction),
+    });
+    const { bridge, streamError, interruptState } = outcome;
+    this.active.delete(runId);
 
     await bridge.flush();
     const result = bridge.result();
@@ -473,7 +676,7 @@ export class RunManager {
       await store.finalizeRun(runId, {
         status: "failed",
         sdkSessionId: result.sessionId,
-        costUsd: result.summary.costUsd,
+        costUsd: outcome.costUsd || undefined,
         usage: result.summary.usage,
         numTurns: result.summary.numTurns,
         errorMessage: streamError ?? result.resultSubtype,
@@ -494,7 +697,7 @@ export class RunManager {
     await store.finalizeRun(runId, {
       status: "completed",
       sdkSessionId: result.sessionId,
-      costUsd: result.summary.costUsd,
+      costUsd: outcome.costUsd || undefined,
       usage: result.summary.usage,
       numTurns: result.summary.numTurns,
     });
@@ -502,7 +705,7 @@ export class RunManager {
     await store.appendRunEvent({
       runId,
       type: "run_status",
-      payload: { status: "completed", costUsd: result.summary.costUsd },
+      payload: { status: "completed", costUsd: outcome.costUsd || undefined },
     });
   }
 
@@ -517,15 +720,36 @@ export class RunManager {
   /** Recover the research question across restarts/resumes. */
   private async deepQuestion(request: RunRequest, isResume: boolean): Promise<string> {
     if (!isResume) {
+      // Initial dispatch: request.prompt is already the /deep-stripped question.
       return request.prompt;
     }
+    // On resume, request.prompt is the resume instruction, NOT the question.
+    // Read the CANONICAL question from durable state — never the last user
+    // message, which after a plan decision is the materialized HITL bubble
+    // ("Mulai riset dengan rencana ini.") and would poison every downstream
+    // phase's `section("Research question", …)` (plan §4.6a).
     const messages = await this.deps.store.listMessages(request.threadId, 100);
-    for (let i = messages.length - 1; i >= 0; i -= 1) {
-      const message = messages[i];
-      if (message?.role === "user" && message.text.trim()) {
-        const text = message.text.trim();
-        return text.startsWith("/deep") ? text.slice("/deep".length).trim() : text;
+    const stripDeep = (text: string): string =>
+      text.startsWith("/deep") ? text.slice("/deep".length).trim() : text;
+    // 1. The exact message that started this run.
+    const run = await this.deps.store.getRun(request.runId);
+    if (run?.promptMessageId) {
+      const promptMessage = messages.find(
+        (message) => message.messageId === run.promptMessageId,
+      );
+      const text = promptMessage?.text.trim();
+      if (text) {
+        return stripDeep(text);
       }
+    }
+    // 2. The EARLIEST user message that issued a /deep command (the original
+    //    request precedes any materialized HITL bubble).
+    const deepMessage = messages.find(
+      (message) =>
+        message.role === "user" && message.text.trim().startsWith("/deep"),
+    );
+    if (deepMessage) {
+      return stripDeep(deepMessage.text.trim());
     }
     return request.prompt;
   }
@@ -548,6 +772,30 @@ export class RunManager {
 
     const question = await this.deepQuestion(request, isResume);
     const states = phaseStateMap(await store.listResearchPhases(runId));
+
+    // Replay idempotency (plan §4.6c): a durable re-dispatch WITHOUT a resume
+    // (crash/watchdog retry) of an already-parked plan phase must re-park the
+    // SAME card — running the phase again would open a second card and orphan the
+    // first. A real resume (isResume) is handled by Branch B below. Done before
+    // the assistant message is created so the re-park leaves no empty bubble.
+    if (!isResume && states.plan?.status === "running") {
+      const pending = await store.listPendingInteractionsByRun(runId);
+      const card = pending.find(
+        (interaction) => interaction.toolName === "proposeResearchPlan",
+      );
+      if (card) {
+        await this.parkForPlanReview({
+          runId,
+          threadId: request.threadId,
+          ownerUserId: request.ownerUserId,
+          existing: card,
+          sdkSessionId: states.plan.sdkSessionId,
+          costUsd: states.plan.costUsd,
+        });
+        return;
+      }
+    }
+
     const writerSkill = selectDomainPack(question, readSkillEntries(config.appRoot));
 
     const assistantMessage = await store.createMessage({
@@ -561,10 +809,63 @@ export class RunManager {
 
     const activeRun: ActiveRun = { runId, canceled: false };
     this.active.set(runId, activeRun);
-    // The resume response satisfies the model's retry of the gated tool in the
-    // resumed phase instead of interrupting again.
-    if (turn?.resumeInteraction) {
-      this.broker.primeResolvedApproval(runId, turn.resumeInteraction);
+
+    // Deep-research plan gate (plan §4.6b). A plan_decision resume is NOT a tool
+    // approval the model retries — handle it here (Branch B). The resumed phase's
+    // approved-tool response is (re-)primed per attempt inside the phase loop's
+    // runStreamWithRetry call, not here, so it survives a transient retry.
+    const planResume = resolvePlanDecision(turn?.resumeInteraction);
+    if (planResume) {
+      // Symmetric with all three decisions: close the old approval node so it
+      // never hangs on "waiting_approval" (plan §8 node-timeline fix).
+      const interactionId = turn!.resumeInteraction!.id;
+      await store.appendRunEvent({
+        runId,
+        type: "interaction_resolved",
+        payload: { interactionId, toolName: "proposeResearchPlan" },
+      });
+      if (planResume.decision === "reject") {
+        // Mirror cancelRun ordering: finalize terminal first, then thread, then
+        // event (the sticky service.finalizeRun wins a concurrent cancel race).
+        await store.finalizeRun(runId, { status: "canceled" });
+        await store.setThreadStatus(request.threadId, "idle");
+        await store.appendRunEvent({
+          runId,
+          type: "run_status",
+          payload: { status: "canceled", reason: "plan_rejected" },
+        });
+        await store.finalizeMessage(assistantMessage.messageId, {
+          text: "Rencana riset ditolak. Kirim /deep lagi kapan saja untuk memulai ulang.",
+          status: "complete",
+        });
+        this.active.delete(runId);
+        return;
+      }
+      if (planResume.decision === "start") {
+        // The approved plan (edited client-side, or the rendered original) becomes
+        // the plan phase output — the source of truth every later phase reads.
+        const planText =
+          planResume.editedPlan ??
+          renderResearchPlanMarkdown(
+            parseResearchPlanPayload(turn!.resumeInteraction!.payload),
+          );
+        states.plan = await store.upsertResearchPhase({
+          runId,
+          phase: "plan",
+          status: "done",
+          output: planText,
+        });
+        await store.appendRunEvent({
+          runId,
+          type: "phase_done",
+          payload: { phase: "plan", approved: true },
+        });
+        // Fall through: the loop skips the done plan phase and runs literature.
+      }
+      // revise: interaction_resolved already emitted; the plan stays NOT done.
+      // The loop re-enters the plan phase (resumingThisPhase via the persisted
+      // sdkSessionId) with the revision instruction injected, and the model
+      // re-calls proposeResearchPlan → parks again via the interruptState branch.
     }
     let resumeConsumed = false;
     // Custom cost guard (no maxBudgetUsd in the SDK — plan §9.2 #1): bounds
@@ -604,9 +905,14 @@ export class RunManager {
         const policy = DEEP_PHASE_POLICIES[phase];
 
         // Only the first non-done phase can be the interrupted one; later
-        // phases always start fresh.
+        // phases always start fresh. Gate on the PARKED phase's status, not on
+        // sdkSessionId: a parked phase is "running" (a fresh downstream phase is
+        // undefined, a finished one "done" and already skipped). The session is
+        // best-effort (resumeSessionId can be undefined), but the resume PROMPT —
+        // which carries the askUser answers / plan revision instruction — must
+        // always be injected, even when the SDK never surfaced a session_id.
         const resumingThisPhase =
-          isResume && !resumeConsumed && Boolean(existing?.sdkSessionId);
+          isResume && !resumeConsumed && existing?.status === "running";
         const prompt = resumingThisPhase
           ? resumePromptForInteraction(turn!.resumeInteraction!)
           : buildDeepPhasePrompt({
@@ -631,78 +937,88 @@ export class RunManager {
           payload: { phase, resumed: resumingThisPhase },
         });
 
-        const toolCtx = {
-          runId,
-          threadId: request.threadId,
-          ownerUserId: request.ownerUserId,
-          store,
-          providers: this.providerDeps,
-          broker: this.broker,
-          sandbox: this.sandbox,
-          config,
-          nextCitationNumber: createCitationCounter(),
-        };
-        // Per-phase coordinator + turnKey (each phase is its own query() +
-        // bridge); the turnKey keeps every phase's segment ids distinct.
-        const coordinator = new SegmentCoordinator();
+        // Per-phase isolation: index the phase-keyed map so each phase only sees
+        // its own subagent. plan/write (useSubagents:false) → undefined.
+        const subagents = policy.useSubagents
+          ? buildDeepResearchSubagents({ config, agentKind: request.agentKind })[phase]
+          : undefined;
+        // A stable turnKey across this phase's retries lets a retried attempt's
+        // segments overwrite the dead attempt's rows; the coordinator/bridge/
+        // options/MCP server are rebuilt per attempt so a transient connection
+        // drop re-runs the phase from scratch (each phase is its own query()).
         const turnKey = randomUUID();
-        const abortController = new AbortController();
-        const options = buildAstraQueryOptions({
-          config,
-          agentKind: request.agentKind,
-          mode: "deep",
-          phase: turnPhase,
-          resumeSessionId: resumingThisPhase ? existing?.sdkSessionId : undefined,
-          mcpServer: buildAqshaMcpServer(toolCtx),
-          hooks: buildRunHooks({ store, runId, threadId: request.threadId, coordinator }),
-          canUseTool: buildCanUseTool({
-            broker: this.broker,
+        const buildAttempt = (openNodes: OpenNodeTracker): StreamAttempt => {
+          const coordinator = new SegmentCoordinator();
+          const abortController = new AbortController();
+          const options = buildAstraQueryOptions({
+            config,
+            agentKind: request.agentKind,
+            mode: "deep",
+            phase: turnPhase,
+            resumeSessionId: resumingThisPhase ? existing?.sdkSessionId : undefined,
+            mcpServer: buildAqshaMcpServer({
+              runId,
+              threadId: request.threadId,
+              ownerUserId: request.ownerUserId,
+              store,
+              providers: this.providerDeps,
+              broker: this.broker,
+              sandbox: this.sandbox,
+              config,
+              nextCitationNumber: createCitationCounter(),
+            }),
+            hooks: buildRunHooks({
+              store,
+              runId,
+              threadId: request.threadId,
+              coordinator,
+              openNodes,
+            }),
+            canUseTool: buildCanUseTool({
+              broker: this.broker,
+              runId,
+              threadId: request.threadId,
+              ownerUserId: request.ownerUserId,
+            }),
+            agents: subagents,
+            abortController,
+            maxTurnsOverride: policy.maxTurns,
+          });
+          const bridge = new StreamBridge(store, {
             runId,
             threadId: request.threadId,
-            ownerUserId: request.ownerUserId,
-          }),
-          // Per-phase isolation: index the phase-keyed map so each phase only
-          // sees its own subagent. plan/write (useSubagents:false) never index
-          // it → agents stays undefined.
-          agents: policy.useSubagents
-            ? buildDeepResearchSubagents({ config, agentKind: request.agentKind })[phase]
-            : undefined,
-          abortController,
-          maxTurnsOverride: policy.maxTurns,
-        });
-
-        const bridge = new StreamBridge(store, {
-          runId,
-          threadId: request.threadId,
-          messageId: assistantMessage.messageId,
-          flushMs: config.streamFlushMs,
-          flushChars: config.streamFlushChars,
-          turnKey,
-          coordinator,
-          silent: !policy.streamsToChat,
-        });
-
-        let streamError: string | undefined;
-        let interruptState: ReturnType<InteractionBroker["interruptState"]>;
-        try {
-          const handle = this.deps.runner({ prompt, options });
-          activeRun.handle = handle;
-          this.broker.registerRun(runId, () => {
-            void handle.interrupt().catch(() => {});
+            messageId: assistantMessage.messageId,
+            flushMs: config.streamFlushMs,
+            flushChars: config.streamFlushChars,
+            turnKey,
+            coordinator,
+            silent: !policy.streamsToChat,
           });
-          for await (const message of handle.stream) {
-            await bridge.handle(message);
-          }
-        } catch (error) {
-          streamError = error instanceof Error ? error.message : "Stream failed";
-        } finally {
-          interruptState = this.broker.interruptState(runId);
-          this.broker.unregisterRun(runId);
-        }
+          return { options, bridge };
+        };
+
+        const outcome = await this.runStreamWithRetry({
+          runId,
+          prompt,
+          activeRun,
+          buildAttempt,
+          // Re-arm the resumed phase's approved-tool response before each attempt
+          // (no-op unless it is a primeable tool_approval; the broker guards it).
+          prime:
+            resumingThisPhase && turn?.resumeInteraction
+              ? () => this.broker.primeResolvedApproval(runId, turn.resumeInteraction!)
+              : undefined,
+          // A resumed write-phase artifact approval must not auto-retry (duplicate).
+          allowRetry: !(
+            resumingThisPhase && isApprovedToolApprovalResume(turn?.resumeInteraction)
+          ),
+          phase,
+        });
+        const { bridge, streamError, interruptState } = outcome;
 
         await bridge.flush();
         const result = bridge.result();
-        dispatchCostUsd += result.summary.costUsd ?? 0;
+        dispatchCostUsd += outcome.costUsd;
 
         if (activeRun.canceled) {
           break;
@@ -716,7 +1032,7 @@ export class RunManager {
             phase,
             status: "running",
             sdkSessionId: result.sessionId,
-            costUsd: sumCost(existing?.costUsd, result.summary.costUsd),
+            costUsd: sumCost(existing?.costUsd, outcome.costUsd),
           });
           await store.finalizeMessage(assistantMessage.messageId, {
             text: result.finalText,
@@ -746,28 +1062,30 @@ export class RunManager {
           return;
         }
 
-        // Turn-budget exhaustion degrades to done-partial (legacy "budget
-        // exhausted" semantics) when the phase produced usable text — or when
-        // the phase is an optional quality gate, which must not kill the run.
+        // A phase that ended in error degrades to done-partial (continue the run)
+        // instead of hard-failing when EITHER a max-turns stop left usable text,
+        // OR the phase is an optional quality gate (counter-evidence / citation
+        // verification) — those must never kill the run, even when a transient
+        // fault exhausted their retries (the writer proceeds with a caveat).
+        const phaseFailed = Boolean(
+          streamError || (result.resultSubtype && result.resultSubtype !== "success"),
+        );
         const maxTurnsStop = isMaxTurnsStop({
           streamError,
           resultSubtype: result.resultSubtype,
         });
-        const maxTurnsPartial =
-          maxTurnsStop &&
-          (result.finalText.trim().length > 0 || policy.optional === true);
+        const degradeToPartial =
+          phaseFailed &&
+          ((maxTurnsStop && result.finalText.trim().length > 0) ||
+            policy.optional === true);
 
-        if (
-          !maxTurnsPartial &&
-          (streamError ||
-            (result.resultSubtype && result.resultSubtype !== "success"))
-        ) {
+        if (phaseFailed && !degradeToPartial) {
           const message = streamError ?? `phase ${phase}: ${result.resultSubtype}`;
           await store.upsertResearchPhase({
             runId,
             phase,
             status: "failed",
-            costUsd: sumCost(existing?.costUsd, result.summary.costUsd),
+            costUsd: sumCost(existing?.costUsd, outcome.costUsd),
           });
           await store.finalizeMessage(assistantMessage.messageId, {
             text:
@@ -785,19 +1103,43 @@ export class RunManager {
           return;
         }
 
+        // Fallback (plan §4.6d): the plan phase finished WITHOUT the model
+        // calling proposeResearchPlan, so the gate would otherwise leak silently
+        // and the run would barrel into literature. Park manually for plan
+        // review from the model's free-text plan. The per-phase finally already
+        // ran broker.unregisterRun, so a broker call here is a no-op — this MUST
+        // be a manual park (DRY with replay via parkForPlanReview).
+        if (phase === "plan") {
+          await this.parkForPlanReview({
+            runId,
+            threadId: request.threadId,
+            ownerUserId: request.ownerUserId,
+            assistantMessageId: assistantMessage.messageId,
+            finalText: result.finalText,
+            sdkSessionId: result.sessionId,
+            costUsd: sumCost(existing?.costUsd, outcome.costUsd),
+            payload: {
+              title: question,
+              summary: "",
+              questions: extractPlanQuestions(result.finalText),
+            },
+          });
+          return;
+        }
+
         const doneState = await store.upsertResearchPhase({
           runId,
           phase,
           status: "done",
           output: result.finalText.trim() || PHASE_BUDGET_EXHAUSTED_NOTE,
           sdkSessionId: result.sessionId,
-          costUsd: sumCost(existing?.costUsd, result.summary.costUsd),
+          costUsd: sumCost(existing?.costUsd, outcome.costUsd),
         });
         states[phase] = doneState;
         await store.appendRunEvent({
           runId,
           type: "phase_done",
-          payload: { phase, costUsd: result.summary.costUsd },
+          payload: { phase, costUsd: outcome.costUsd || undefined },
         });
       }
     } finally {
@@ -852,11 +1194,137 @@ export class RunManager {
     return block ? block : undefined;
   }
 
+  /**
+   * Park a /deep run at the plan-review gate (plan §4.6d). Shared by the no-tool
+   * FALLBACK (`payload` → create a fresh card) and the durable REPLAY re-park
+   * (`existing` → re-park the still-pending card). Replicates the interruptState
+   * branch's persist-session → finalize → park → race-guard sequence. The caller
+   * returns inside the executeDeepRun try, so the outer finally clears
+   * `active`/broker — this method does NOT touch them.
+   */
+  private async parkForPlanReview(input: {
+    runId: string;
+    threadId: string;
+    ownerUserId: string;
+    sdkSessionId?: string;
+    costUsd?: number;
+    /** Fresh in-flight assistant message to finalize (fallback only). */
+    assistantMessageId?: string;
+    finalText?: string;
+    /** Re-park this already-pending card (replay) — skips create + pending event. */
+    existing?: PendingInteraction;
+    /** Create a new card from this payload (fallback). */
+    payload?: Record<string, unknown>;
+  }): Promise<void> {
+    const { store } = this.deps;
+    let interaction = input.existing;
+    if (!interaction) {
+      interaction = await store.createInteraction({
+        ownerUserId: input.ownerUserId,
+        threadId: input.threadId,
+        runId: input.runId,
+        type: "tool_approval",
+        toolName: "proposeResearchPlan",
+        payload: input.payload ?? {},
+      });
+      await store.appendRunEvent({
+        runId: input.runId,
+        type: "interaction_pending",
+        payload: { interactionId: interaction.id, toolName: "proposeResearchPlan" },
+      });
+    }
+    await store.upsertResearchPhase({
+      runId: input.runId,
+      phase: "plan",
+      status: "running",
+      sdkSessionId: input.sdkSessionId,
+      costUsd: input.costUsd,
+    });
+    if (input.assistantMessageId) {
+      await store.finalizeMessage(input.assistantMessageId, {
+        text: input.finalText ?? "",
+        status: "complete",
+      });
+    }
+    await store.finalizeRun(input.runId, { status: "waiting_hitl" });
+    await store.setThreadStatus(input.threadId, "idle");
+    await store.appendRunEvent({
+      runId: input.runId,
+      type: "run_status",
+      payload: {
+        status: "waiting_hitl",
+        phase: "plan",
+        reason: "plan_review",
+        interactionId: interaction.id,
+      },
+    });
+    // Respond-while-finalizing race guard (mirror the interruptState branch):
+    // if the user already responded in the window, resume now.
+    const latest = await store.getInteraction(interaction.id);
+    if (latest?.status === "responded") {
+      void this.resumeRun(input.runId, interaction.id);
+    }
+  }
+
 }
 
 function sumCost(...values: Array<number | undefined>): number | undefined {
   const total = values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
   return total > 0 ? total : undefined;
+}
+
+/**
+ * True when a resume re-executes an APPROVED, side-effecting tool (proposeArtifact
+ * → executeArtifact, createWorkspace, …). Such a turn must NOT auto-retry on a
+ * transient drop: a whole-turn replay re-runs the approved action and — since
+ * executeArtifact has no idempotency guard — would mint a duplicate. An ask_user
+ * answer or a denied approval has no side effect and stays retriable.
+ */
+function isApprovedToolApprovalResume(interaction?: PendingInteraction): boolean {
+  return (
+    interaction?.type === "tool_approval" &&
+    interaction.response?.kind === "approval" &&
+    interaction.response.approved === true
+  );
+}
+
+/**
+ * Narrow a resumed interaction to a deep-research plan decision (plan §4.6b).
+ * Returns null unless it is a responded `proposeResearchPlan` tool_approval
+ * carrying a `plan_decision` response — so a regular tool approval, an ask_user
+ * answer, or a durable replay (no resume) all fall through to the normal path.
+ */
+function resolvePlanDecision(interaction?: PendingInteraction): {
+  decision: "start" | "revise" | "reject";
+  editedPlan?: string;
+  revisionInstruction?: string;
+} | null {
+  if (
+    !interaction ||
+    interaction.toolName !== "proposeResearchPlan" ||
+    interaction.status !== "responded" ||
+    interaction.response?.kind !== "plan_decision"
+  ) {
+    return null;
+  }
+  const { decision, editedPlan, revisionInstruction } = interaction.response;
+  return { decision, editedPlan, revisionInstruction };
+}
+
+/**
+ * Best-effort sub-question extraction from a model's free-text plan, used only
+ * by the no-tool FALLBACK gate (plan §4.6d). Keeps numbered/bulleted list items,
+ * strips the marker, and caps at 6. Returns [] when no list is found — the card
+ * then renders title-only via parseResearchPlanPayload's fallback.
+ */
+function extractPlanQuestions(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /^(\d+[.)]|[-*])\s+/.test(line))
+    .map((line) => line.replace(/^(\d+[.)]|[-*])\s+/, "").trim())
+    .filter(Boolean)
+    .slice(0, 6);
 }
 
 /** Generate a run id when the caller (dev tools) does not provide one. */

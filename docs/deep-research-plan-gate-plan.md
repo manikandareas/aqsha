@@ -216,7 +216,7 @@ Test assert `APPROVAL_LABELS.proposeResearchPlan.running` non-kosong (bukan `FAL
 ## 7. Perubahan Frontend (`apps/web`)
 
 ### 7.1 `features/thread-experience/components/research-plan-review-card.tsx` (BARU)
-JANGAN rusak `HitlPlanReviewCard` (masih dipakai `proposeArtifact`/`createWorkspace`/`renameWorkspace`). Props:
+**Keputusan shell (owner, 2026-06-16): prose no-chrome, BUKAN `Plan` AI Elements.** Reuse styling/token dari `hitl-plan-review-card.tsx` (render sebagai prosa agen natural tanpa Card/border), selaras arah `hitl-conversational-redesign` (inline, no-card) dan konsisten dengan HITL lain (askUser/confirm). Komponen `Plan` AI Elements (`components/ai-elements/plan.tsx`, ber-chrome Card+Collapsible, saat ini 0 import) SENGAJA tidak dipakai untuk gate ini. JANGAN rusak `HitlPlanReviewCard` (masih dipakai `proposeArtifact`/`createWorkspace`/`renameWorkspace`). Props:
 ```ts
 { title: string; summary?: string; questions: string[]; disabled?: boolean;
   onStart: (editedQuestions: string[]) => void;
