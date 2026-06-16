@@ -46,7 +46,7 @@ export function AnswerSources({ sources }: { sources: ResearchSource[] }) {
       <CollapsibleTrigger className="group flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground hover:text-foreground">
         <Link2Icon className="size-3.5 shrink-0" />
         <span>{links.length} sumber</span>
-        <ChevronDownIcon className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-180" />
+        <ChevronDownIcon className="size-3.5 shrink-0 opacity-0 transition-all group-hover:opacity-100 group-focus-visible:opacity-100 group-data-[state=open]:rotate-180 group-data-[state=open]:opacity-100" />
       </CollapsibleTrigger>
       <CollapsibleContent className="overflow-hidden">
         <ul className="mt-1.5 grid gap-0.5">
