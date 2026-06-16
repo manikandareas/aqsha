@@ -596,6 +596,7 @@ export function TokenizedPromptInput({
       <PopoverContent
         align="start"
         side="bottom"
+        sideOffset={12}
         className="w-[min(22.5rem,calc(100vw-2rem))] overflow-hidden rounded-xl p-0"
         onMouseDown={(event) => {
           event.preventDefault();

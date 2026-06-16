@@ -291,6 +291,15 @@ function deletePreviousCharacter(range: Range, root: HTMLElement) {
     }
     if (previous?.nodeType === Node.TEXT_NODE) {
       const textNode = previous as Text;
+      if (textNode.length === 0) {
+        // An empty text node holds no visible character; deleting from it would
+        // call deleteData(-1, …) and throw. Drop it and retry so we still remove
+        // a real character.
+        textNode.remove();
+        range.setStart(root, startOffset - 1);
+        range.collapse(true);
+        return deletePreviousCharacter(range, root);
+      }
       textNode.deleteData(textNode.length - 1, 1);
       range.setStart(textNode, textNode.length);
       range.collapse(true);

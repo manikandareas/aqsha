@@ -88,6 +88,7 @@ import {
   SquareIcon as HugeSquareIcon,
   Sun01Icon,
   TableIcon as HugeTableIcon,
+  Telescope01Icon,
   TerminalIcon,
   ThumbsDownIcon as HugeThumbsDownIcon,
   ThumbsUpIcon as HugeThumbsUpIcon,
@@ -224,6 +225,7 @@ export const SquareIcon = createIcon(HugeSquareIcon);
 export const Sun = createIcon(Sun01Icon);
 export const SunIcon = createIcon(Sun01Icon);
 export const TableIcon = createIcon(HugeTableIcon);
+export const TelescopeIcon = createIcon(Telescope01Icon);
 export const ThumbsDownIcon = createIcon(HugeThumbsDownIcon);
 export const ThumbsUpIcon = createIcon(HugeThumbsUpIcon);
 export const Trash2Icon = createIcon(Delete02Icon);
