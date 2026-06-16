@@ -3,14 +3,7 @@
 import { CornerDownLeftIcon } from "@aqsha/ui/icons";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import {
-  hitlCardBodyClass,
-  hitlCardFooterClass,
-  hitlCardHeaderClass,
-  hitlCardShellClass,
-} from "./hitl-card-layout";
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
@@ -105,16 +98,12 @@ export function HitlQuestionCard({
   };
 
   return (
-    <Card
-      size="sm"
+    <div
       data-hitl-tool="askUser"
-      className={cn("border-border/70", hitlCardShellClass)}
+      className="flex w-full min-w-0 flex-col text-[13px] leading-[1.55]"
     >
-      <CardHeader className={hitlCardHeaderClass}>
-        <span className="text-[10px] font-medium text-muted-foreground">Questions</span>
-      </CardHeader>
-      <CardContent className={hitlCardBodyClass}>
-        <p className="text-[12px] font-semibold leading-snug text-foreground">{prompt}</p>
+      <div className="min-w-0">
+        <p className="text-[13px] font-medium leading-snug text-foreground">{prompt}</p>
         {presetOptions.length > 0 ? (
           <ul className="mt-2 space-y-1">
             {presetOptions.map((option, index) => {
@@ -195,16 +184,11 @@ export function HitlQuestionCard({
             className={cn("mt-1.5 w-full px-1", hitlQuestionCustomInputClass)}
           />
         ) : null}
-      </CardContent>
-      <CardFooter
-        className={cn(
-          hitlCardFooterClass,
-          "flex flex-row flex-wrap items-center justify-between gap-1",
-        )}
-      >
+      </div>
+      <div className="mt-2 flex flex-row flex-wrap items-center justify-between gap-1">
         <div className="flex min-w-0 items-center">
           {questionIndex !== undefined && questionTotal !== undefined && questionTotal > 1 ? (
-            <span className="text-[10px] text-muted-foreground">
+            <span className="text-[11px] text-muted-foreground">
               Pertanyaan {questionIndex} dari {questionTotal}
             </span>
           ) : null}
@@ -219,7 +203,7 @@ export function HitlQuestionCard({
               disabled={disabled}
               onClick={onBack}
             >
-              Back
+              Kembali
             </Button>
           ) : null}
           <Button
@@ -230,7 +214,7 @@ export function HitlQuestionCard({
             disabled={disabled}
             onClick={onSkip}
           >
-            Skip
+            Lewati
           </Button>
           <Button
             type="button"
@@ -239,11 +223,11 @@ export function HitlQuestionCard({
             disabled={disabled || !continueEnabled}
             onClick={handleContinue}
           >
-            Continue
+            Kirim
             <CornerDownLeftIcon className="size-2.5 opacity-60" />
           </Button>
         </div>
-      </CardFooter>
-    </Card>
+      </div>
+    </div>
   );
 }

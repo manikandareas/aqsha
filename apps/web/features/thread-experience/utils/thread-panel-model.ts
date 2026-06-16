@@ -15,11 +15,15 @@
 export type ThreadPanelMode =
   | { kind: "closed" }
   | { kind: "context" }
-  | { kind: "artifact"; artifactId: string };
+  | { kind: "artifact"; artifactId: string }
+  // A sub-agent detail panel (its search steps + re-joined source links). Like
+  // the artifact panel it REPLACES the library/context panel, with "back".
+  | { kind: "subagent"; runId: string; subagentId: string };
 
 export type ThreadPanelAction =
   | { type: "openContext" }
   | { type: "openArtifact"; artifactId: string }
+  | { type: "openSubagent"; runId: string; subagentId: string }
   | { type: "back" }
   // `setOpen` reflects the DetailSplitLayout / mobile sidebar toggle: closing
   // collapses the panel; opening from closed lands on the default context panel
@@ -37,8 +41,14 @@ export function threadPanelReducer(
       return { kind: "context" };
     case "openArtifact":
       return { kind: "artifact", artifactId: action.artifactId };
+    case "openSubagent":
+      return {
+        kind: "subagent",
+        runId: action.runId,
+        subagentId: action.subagentId,
+      };
     case "back":
-      // From the artifact panel, "back" returns to the library/context panel.
+      // From an artifact / sub-agent panel, "back" returns to the library panel.
       return { kind: "context" };
     case "setOpen":
       if (!action.open) return CLOSED_PANEL;

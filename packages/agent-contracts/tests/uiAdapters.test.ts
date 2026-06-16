@@ -69,6 +69,7 @@ describe("uiHitlMessageFromInteraction", () => {
       type: "ask_user",
       toolName: "askUser",
       payloadJson: JSON.stringify({ questions: [{ prompt: "Jenjang?" }] }),
+      status: "pending",
       createdAt: 10,
     });
     const part = message.parts![0]!;
@@ -87,12 +88,28 @@ describe("uiHitlMessageFromInteraction", () => {
       type: "tool_approval",
       toolName: "proposeArtifact",
       payloadJson: JSON.stringify({ title: "Draf" }),
+      status: "pending",
       createdAt: 11,
     });
     const part = message.parts![0]!;
     expect(part.type).toBe("tool-proposeArtifact");
     expect(part.state).toBe("approval-requested");
     expect(part.approval).toEqual({ id: "int2" });
+  });
+
+  it("renders a responded interaction read-only (answered state)", () => {
+    const message = uiHitlMessageFromInteraction({
+      id: "int4",
+      runId: "r1",
+      type: "ask_user",
+      toolName: "askUser",
+      payloadJson: JSON.stringify({ questions: [{ prompt: "Jenjang?" }] }),
+      status: "responded",
+      createdAt: 13,
+    });
+    // "answered" is NOT a pending state — the interactive card is replaced by the
+    // read-only question, with the user's reply shown as a separate bubble.
+    expect(message.parts![0]!.state).toBe("answered");
   });
 
   it("degrades to an empty input on malformed payload JSON", () => {
@@ -102,6 +119,7 @@ describe("uiHitlMessageFromInteraction", () => {
       type: "tool_approval",
       toolName: "createWorkspace",
       payloadJson: "not-json",
+      status: "pending",
       createdAt: 12,
     });
     expect(message.parts![0]!.input).toEqual({});

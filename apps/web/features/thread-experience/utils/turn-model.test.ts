@@ -4,8 +4,10 @@ import type { ChatMessage, ResearchArtifact, ResearchRun } from "../types";
 import {
   buildTurnParts,
   chatArtifactCardModel,
+  completedNodeIcon,
   isArtifactToolNode,
   pairRunsWithTurns,
+  phaseProgressLabel,
   runningSubagentCount,
   subagentCardModel,
   toolRowModel,
@@ -153,6 +155,27 @@ describe("pairRunsWithTurns", () => {
     // ONE turn for the run, even though it produced two assistant messages.
     expect(turnKinds(entries)).toEqual(["user:prompt", "turn:hitl-run"]);
     const turn = entries[1];
+    expect(turn.kind === "assistant-turn" && turn.message?.id).toBe("answer-final");
+  });
+
+  it("folds a HITL-answer user message into its run's turn (not a top-level bubble)", () => {
+    const entries = pairRunsWithTurns(
+      [
+        message({ id: "prompt", key: "prompt", role: "user", order: 0, runId: "hitl-run" }),
+        message({ id: "answer-pre", key: "answer-pre", role: "assistant", order: 2, runId: "hitl-run" }),
+        // The HITL answer: a user message tagged with the run, not the prompt.
+        message({ id: "hitl-answer", key: "hitl-answer", role: "user", order: 3, runId: "hitl-run" }),
+        message({ id: "answer-final", key: "answer-final", role: "assistant", order: 4, runId: "hitl-run" }),
+      ],
+      [run({ _id: "hitl-run", promptMessageId: "prompt", createdAt: 1 })],
+    );
+
+    // The answer is NOT a top-level user entry — only the original prompt is.
+    expect(turnKinds(entries)).toEqual(["user:prompt", "turn:hitl-run"]);
+    const turn = entries[1];
+    expect(turn.kind === "assistant-turn" && turn.userAnswers?.[0]?.id).toBe(
+      "hitl-answer",
+    );
     expect(turn.kind === "assistant-turn" && turn.message?.id).toBe("answer-final");
   });
 
@@ -431,8 +454,6 @@ describe("subagentCardModel", () => {
 
     expect(model.isRunning).toBe(true);
     expect(model.summary).toBe("Mencari sumber web");
-    expect(model.forceExpanded).toBe(false);
-    expect(model.children).toHaveLength(1);
   });
 
   it("uses the terminal roll-up as the summary once finished", () => {
@@ -450,16 +471,6 @@ describe("subagentCardModel", () => {
     expect(model.isRunning).toBe(false);
     expect(model.summary).toBe("2 pencarian, 12 sumber");
   });
-
-  it("hides children behind expand normally but forces them open in dev-mode", () => {
-    const sub = subagentNode({
-      status: "completed",
-      children: [toolChild({ seq: 2, status: "completed", title: "Selesai mencari web" })],
-    });
-
-    expect(subagentCardModel(sub).forceExpanded).toBe(false);
-    expect(subagentCardModel(sub, { devMode: true }).forceExpanded).toBe(true);
-  });
 });
 
 describe("runningSubagentCount", () => {
@@ -475,5 +486,71 @@ describe("runningSubagentCount", () => {
 
   it("returns 0 when no sub-agent is running", () => {
     expect(runningSubagentCount([subagentNode({ status: "completed" })])).toBe(0);
+  });
+});
+
+describe("phaseProgressLabel", () => {
+  it("counts completed direct children over total for a phase node", () => {
+    const phase = node({
+      type: "phase",
+      children: [
+        node({ id: "c1", status: "completed" }),
+        node({ id: "c2", status: "completed" }),
+        node({ id: "c3", status: "running" }),
+      ],
+    });
+    expect(phaseProgressLabel(phase)).toBe("2/3 langkah");
+  });
+
+  it("returns null for non-phase nodes or phases without children", () => {
+    expect(phaseProgressLabel(node({ type: "tool", children: [node({})] }))).toBeNull();
+    expect(phaseProgressLabel(node({ type: "phase" }))).toBeNull();
+    expect(phaseProgressLabel(node({ type: "phase", children: [] }))).toBeNull();
+  });
+});
+
+describe("completedNodeIcon", () => {
+  it("maps research tools to their semantic icon family", () => {
+    const cases: Array<[string, string]> = [
+      ["searchWeb", "web"],
+      ["searchArxiv", "search"],
+      ["searchThreadDocuments", "search"],
+      ["lookupDoi", "link"],
+      ["verifyCitations", "verify"],
+      ["verifyIdentifiers", "verify"],
+      ["verifyStatistics", "stats"],
+      ["runComputation", "compute"],
+      ["proposeArtifact", "write"],
+      ["executeArtifact", "save"],
+      ["createWorkspace", "workspace"],
+      ["deleteArtifact", "delete"],
+      ["askUser", "ask"],
+    ];
+    for (const [tool, expected] of cases) {
+      expect(
+        completedNodeIcon(node({ type: "tool", metadata: { tool } })),
+      ).toBe(expected);
+    }
+  });
+
+  it("maps deep-research phases to their icon family", () => {
+    expect(completedNodeIcon(node({ type: "phase", metadata: { phase: "plan" } }))).toBe(
+      "plan",
+    );
+    expect(
+      completedNodeIcon(node({ type: "phase", metadata: { phase: "literature" } })),
+    ).toBe("literature");
+    expect(
+      completedNodeIcon(node({ type: "phase", metadata: { phase: "citation_verify" } })),
+    ).toBe("verify");
+  });
+
+  it("maps sub-agent and system nodes, and default-denies the unknown to 'done'", () => {
+    expect(completedNodeIcon(subagentNode({}))).toBe("subagent");
+    expect(completedNodeIcon(node({ type: "system" }))).toBe("system");
+    expect(completedNodeIcon(node({ type: "tool", metadata: { tool: "mystery" } }))).toBe(
+      "done",
+    );
+    expect(completedNodeIcon(node({ type: "tool" }))).toBe("done");
   });
 });

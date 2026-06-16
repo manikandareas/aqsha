@@ -25,6 +25,7 @@ type ThreadPanelValue = {
   mode: ThreadPanelMode;
   isOpen: boolean;
   openArtifactPanel: (artifactId: string) => void;
+  openSubagentPanel: (runId: string, subagentId: string) => void;
   openContextPanel: () => void;
   backToContext: () => void;
   closePanel: () => void;
@@ -46,6 +47,8 @@ export function ThreadPanelProvider({ children }: { children: ReactNode }) {
       isOpen: isThreadPanelOpen(mode),
       openArtifactPanel: (artifactId: string) =>
         dispatch({ type: "openArtifact", artifactId }),
+      openSubagentPanel: (runId: string, subagentId: string) =>
+        dispatch({ type: "openSubagent", runId, subagentId }),
       openContextPanel: () => dispatch({ type: "openContext" }),
       backToContext: () => dispatch({ type: "back" }),
       closePanel: () => dispatch({ type: "setOpen", open: false }),

@@ -37,6 +37,9 @@ export type ChatMessage = {
   order: number;
   stepOrder: number;
   text?: string;
+  /** Owning run, when the message belongs to one (folds HITL answers into the
+   *  run's turn). */
+  runId?: string;
   parts?: Array<{
     type: string;
     text?: string;

@@ -25,12 +25,26 @@ describe("threadPanelReducer", () => {
     ).toEqual({ kind: "artifact", artifactId: "art_2" });
   });
 
+  it("opens the sub-agent panel, replacing the context panel", () => {
+    expect(
+      threadPanelReducer(CLOSED_PANEL, {
+        type: "openSubagent",
+        runId: "run_1",
+        subagentId: "sub_1",
+      }),
+    ).toEqual({ kind: "subagent", runId: "run_1", subagentId: "sub_1" });
+  });
+
   it("returns to the context panel via back (never closes)", () => {
-    const back = threadPanelReducer(
-      { kind: "artifact", artifactId: "art_1" },
-      { type: "back" },
-    );
-    expect(back).toEqual({ kind: "context" });
+    expect(
+      threadPanelReducer({ kind: "artifact", artifactId: "art_1" }, { type: "back" }),
+    ).toEqual({ kind: "context" });
+    expect(
+      threadPanelReducer(
+        { kind: "subagent", runId: "run_1", subagentId: "sub_1" },
+        { type: "back" },
+      ),
+    ).toEqual({ kind: "context" });
   });
 
   it("setOpen(false) closes from any mode", () => {

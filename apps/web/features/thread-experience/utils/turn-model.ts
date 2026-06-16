@@ -38,9 +38,13 @@ export type TurnEntry =
       // while a run has started streaming but written no assistant text yet.
       message?: ChatMessage;
       run?: ResearchRun;
-      // Pending HITL synthetic messages for this run (askUser / approval). Render
-      // ONE card at the approval node's seq position — never double with the node.
+      // HITL synthetic messages for this run (askUser / approval), pending or
+      // answered. Rendered as the agent's question in the turn's exchange block.
       hitl?: ChatMessage[];
+      // Real user messages that answered this run's HITL prompts. Folded into the
+      // turn so they render as user bubbles between the question and the
+      // continuation (not as stray top-level entries below the whole turn).
+      userAnswers?: ChatMessage[];
     };
 
 function isAssistant(message: ChatMessage): boolean {
@@ -68,6 +72,29 @@ export function pairRunsWithTurns(
   const sortedRuns = [...runs].sort(
     (a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0),
   );
+
+  // HITL answers: a user message tagged with a run's id that is NOT that run's
+  // original prompt. Fold these into their run's turn (rendered between the
+  // question and the continuation) and exclude them from top-level user entries.
+  const runIds = new Set(runs.map((run) => run._id));
+  const promptMessageIds = new Set(
+    runs.map((run) => run.promptMessageId).filter((id): id is string => Boolean(id)),
+  );
+  const userAnswersByRun = new Map<string, ChatMessage[]>();
+  const hitlAnswerIds = new Set<string>();
+  for (const message of messages) {
+    if (
+      message.role === "user" &&
+      message.runId &&
+      runIds.has(message.runId) &&
+      !promptMessageIds.has(message.id)
+    ) {
+      const bucket = userAnswersByRun.get(message.runId) ?? [];
+      bucket.push(message);
+      userAnswersByRun.set(message.runId, bucket);
+      hitlAnswerIds.add(message.id);
+    }
+  }
 
   // Assign each assistant message to the run it belongs to: the latest run that
   // started at/before the message. Later messages overwrite, so the LAST message
@@ -110,11 +137,14 @@ export function pairRunsWithTurns(
       run,
       message: runFinalMessage.get(run._id),
       hitl: hitlByRun.get(run._id),
+      userAnswers: userAnswersByRun.get(run._id),
     });
   };
 
   for (const message of messages) {
     if (message.role === "user") {
+      // HITL answers are folded into their run's turn, not emitted standalone.
+      if (hitlAnswerIds.has(message.id)) continue;
       entries.push({ kind: "user", message });
       for (const run of runsByPrompt.get(message.id) ?? []) emitRunTurn(run);
       continue;
@@ -363,31 +393,120 @@ export type SubagentCardModel = {
   /** Dynamic summary line: running → current tool activity; terminal → roll-up.
    *  Undefined only while running with no tool child yet (card uses title). */
   summary?: string;
-  /** Tool children rendered when expanded (or always, in dev-mode). */
-  children: ActivityEvent[];
-  /** Dev-mode reveals the tool children without the user having to expand. */
-  forceExpanded: boolean;
 };
 
 /**
  * Pure presentation model for one sub-agent card (§8). Title stays the sub-agent
  * label; the summary line is dynamic — `subagentCurrentActivity` while running
  * (rendered via Shimmer), `subagentSummary` once terminal. The tool children are
- * hidden behind an expand unless `devMode` forces them open. No-leak: all copy is
- * derived through the contract's allow-listed helpers.
+ * no longer inlined on the card — clicking it opens the detail side panel — so
+ * the model carries only the headline copy. No-leak: all copy is derived through
+ * the contract's allow-listed helpers.
  */
-export function subagentCardModel(
-  node: ActivityEvent,
-  options?: { devMode?: boolean },
-): SubagentCardModel {
+export function subagentCardModel(node: ActivityEvent): SubagentCardModel {
   const isRunning = node.status === "running";
   return {
     title: node.title,
     isRunning,
     summary: isRunning ? subagentCurrentActivity(node) : subagentSummary(node),
-    children: node.children ?? [],
-    forceExpanded: options?.devMode === true,
   };
+}
+
+// ── completed-node semantic icon (timeline) ──────────────────────────────────
+
+/** A completed timeline node's icon family — chosen by what the node DID, not
+ *  just its status, so the timeline reads as a sequence of meaningful glyphs
+ *  rather than a column of identical dots. `run-progress` maps each key to an
+ *  `@aqsha/ui` icon. */
+export type CompletedNodeIcon =
+  | "web"
+  | "search"
+  | "link"
+  | "verify"
+  | "stats"
+  | "compute"
+  | "write"
+  | "save"
+  | "workspace"
+  | "delete"
+  | "ask"
+  | "plan"
+  | "literature"
+  | "counter"
+  | "subagent"
+  | "system"
+  | "done";
+
+/**
+ * Pick the icon family for a COMPLETED node from its type + allow-listed scalar
+ * metadata (`tool` for tool nodes, `phase` for deep-research phases). Pure;
+ * default-deny to "done" for anything unrecognized. Only meaningful for the
+ * `completed` status — other statuses use their own status icon.
+ */
+export function completedNodeIcon(node: ActivityEvent): CompletedNodeIcon {
+  if (node.type === "tool") {
+    const tool = typeof node.metadata?.tool === "string" ? node.metadata.tool : "";
+    switch (tool) {
+      case "searchWeb":
+        return "web";
+      case "searchArxiv":
+      case "searchThreadDocuments":
+        return "search";
+      case "lookupDoi":
+        return "link";
+      case "verifyCitations":
+      case "verifyIdentifiers":
+        return "verify";
+      case "verifyStatistics":
+        return "stats";
+      case "runComputation":
+        return "compute";
+      case "proposeArtifact":
+        return "write";
+      case "executeArtifact":
+        return "save";
+      case "createWorkspace":
+      case "renameWorkspace":
+        return "workspace";
+      case "deleteArtifact":
+        return "delete";
+      case "askUser":
+        return "ask";
+      default:
+        return "done";
+    }
+  }
+  if (node.type === "phase") {
+    const phase = typeof node.metadata?.phase === "string" ? node.metadata.phase : "";
+    switch (phase) {
+      case "plan":
+        return "plan";
+      case "literature":
+        return "literature";
+      case "counter_evidence":
+        return "counter";
+      case "citation_verify":
+        return "verify";
+      case "write":
+        return "write";
+      default:
+        return "done";
+    }
+  }
+  if (node.type === "subagent") return "subagent";
+  if (node.type === "system") return "system";
+  return "done";
+}
+
+/** Deep-research phase progress as "N/M langkah" — completed direct children
+ *  over total (the AI-Elements Task counter pattern). Null unless the node is a
+ *  phase with at least one child. Pure. */
+export function phaseProgressLabel(node: ActivityEvent): string | null {
+  if (node.type !== "phase") return null;
+  const children = node.children ?? [];
+  if (children.length === 0) return null;
+  const completed = children.filter((child) => child.status === "completed").length;
+  return `${completed}/${children.length} langkah`;
 }
 
 /** Count the sub-agents still running among a node list (for the "N berjalan"

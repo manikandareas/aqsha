@@ -45,6 +45,33 @@ function isPendingHitlPart(part: HitlToolPart): boolean {
   return false;
 }
 
+/** An interaction the user already answered — rendered read-only (the question
+ *  stays visible; the answer is shown as a user bubble below it). */
+export function isAnsweredHitlPart(part: HitlToolPart): boolean {
+  return part.state === "answered";
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+/**
+ * The question text(s) of a HITL part, for read-only rendering once answered.
+ * askUser → each question prompt; approval tools → the action title/name.
+ */
+export function hitlQuestionLines(part: HitlToolPart): string[] {
+  if (part.toolName === "askUser") {
+    const questions = Array.isArray(part.input.questions) ? part.input.questions : [];
+    return questions
+      .map((question) => asString((question as { prompt?: unknown }).prompt))
+      .filter((prompt): prompt is string => Boolean(prompt));
+  }
+  const title =
+    asString(part.input.title) ?? asString(part.input.name) ?? "Tindakan disetujui";
+  const summary = asString(part.input.summary) ?? asString(part.input.message);
+  return summary ? [title, summary] : [title];
+}
+
 export function messageHitlParts(message: ChatMessage): HitlToolPart[] {
   const parts: HitlToolPart[] = [];
   for (const part of message.parts ?? []) {

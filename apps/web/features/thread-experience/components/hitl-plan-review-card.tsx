@@ -1,29 +1,13 @@
 "use client";
 
-import { CornerDownLeftIcon, Loader2Icon, XIcon } from "@aqsha/ui/icons";
+import { CornerDownLeftIcon, Loader2Icon } from "@aqsha/ui/icons";
 import { useState } from "react";
-import {
-  Plan,
-  PlanAction,
-  PlanContent,
-  PlanDescription,
-  PlanFooter,
-  PlanHeader,
-  PlanTitle,
-  PlanTrigger,
-} from "@/components/ai-elements/plan";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { WorkspacePickerInline } from "@/features/workspaces/components/workspace-picker-inline";
-import {
-  hitlCardBodyClass,
-  hitlCardFooterClass,
-  hitlCardHeaderClass,
-  hitlCardShellClass,
-} from "./hitl-card-layout";
 
-/** Shared Review Plan card for the approval tools: `proposeArtifact`,
- * `createWorkspace`, `renameWorkspace`, and `startDeepResearch`. */
+/** Shared inline review prompt for the approval tools: `proposeArtifact`,
+ * `createWorkspace`, `renameWorkspace`, and `startDeepResearch`. Renders as
+ * natural agent prose (no card chrome) with inline approve/decline controls. */
 export function HitlPlanReviewCard({
   title,
   summary,
@@ -48,63 +32,32 @@ export function HitlPlanReviewCard({
   const hasBullets = Boolean(planBullets?.length);
 
   return (
-    <Plan
-      defaultOpen={!hasBullets}
-      className={cn("border-border/70", hitlCardShellClass)}
+    <div
       data-hitl-tool="proposeArtifact"
+      className="flex w-full min-w-0 flex-col text-[13px] leading-[1.55]"
     >
-      <PlanHeader className={cn("flex-row items-center justify-between", hitlCardHeaderClass)}>
-        <span className="text-[10px] font-medium text-muted-foreground">Review plan</span>
-        <PlanAction>
-          <Button
-            type="button"
-            aria-label="Tolak rencana"
-            disabled={disabled}
-            variant="ghost"
-            size="icon-sm"
-            className="size-6 text-muted-foreground"
-            onClick={onReject}
-          >
-            <XIcon className="size-3" />
-          </Button>
-        </PlanAction>
-      </PlanHeader>
-
-      <div className={hitlCardBodyClass}>
-        <PlanTitle className="text-[12px] leading-snug">{title}</PlanTitle>
-        {summary ? (
-          <PlanDescription className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-            {summary}
-          </PlanDescription>
-        ) : null}
-        {!requiresWorkspacePick && workspaceName ? (
-          <p className="mt-1 text-[10px] text-muted-foreground/80">→ {workspaceName}</p>
-        ) : null}
-        {hasBullets ? (
-          <div className="mt-1.5 flex items-center justify-between border-t border-border/40 pt-1.5">
-            <span className="text-[10px] font-medium text-muted-foreground">Detail rencana</span>
-            <PlanTrigger className="size-6 [&_svg]:size-3" />
-          </div>
-        ) : null}
-      </div>
-
+      <p className="text-[13px] font-medium leading-snug text-foreground">{title}</p>
+      {summary ? (
+        <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">{summary}</p>
+      ) : null}
+      {!requiresWorkspacePick && workspaceName ? (
+        <p className="mt-0.5 text-[12px] text-muted-foreground/80">→ {workspaceName}</p>
+      ) : null}
       {hasBullets ? (
-        <PlanContent className={cn("border-t border-border/40 pt-0", hitlCardBodyClass)}>
-          <ul className="space-y-0.5 text-[10px] leading-snug text-foreground/80">
-            {planBullets!.map((bullet) => (
-              <li key={bullet} className="flex gap-1">
-                <span
-                  aria-hidden
-                  className="mt-1 size-0.5 shrink-0 rounded-full bg-muted-foreground/45"
-                />
-                <span>{bullet}</span>
-              </li>
-            ))}
-          </ul>
-        </PlanContent>
+        <ul className="mt-1.5 space-y-0.5 text-[12px] leading-snug text-foreground/80">
+          {planBullets!.map((bullet) => (
+            <li key={bullet} className="flex gap-1.5">
+              <span
+                aria-hidden
+                className="mt-1.5 size-1 shrink-0 rounded-full bg-muted-foreground/45"
+              />
+              <span className="min-w-0">{bullet}</span>
+            </li>
+          ))}
+        </ul>
       ) : null}
 
-      <PlanFooter className={cn("justify-end", hitlCardFooterClass)}>
+      <div className="mt-2 flex flex-row items-center justify-end gap-1">
         {requiresWorkspacePick ? (
           <WorkspacePickerInline
             variant="compact"
@@ -115,16 +68,26 @@ export function HitlPlanReviewCard({
         ) : null}
         <Button
           type="button"
+          variant="ghost"
           size="sm"
-          className={cn("h-6 shrink-0 gap-0.5 px-2.5 text-[11px] font-medium")}
+          className="h-6 px-2 text-[11px] text-muted-foreground"
+          disabled={disabled}
+          onClick={onReject}
+        >
+          Tolak
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          className="h-6 shrink-0 gap-0.5 px-2.5 text-[11px] font-medium"
           disabled={disabled || !canBuild}
           onClick={() => onBuild(selectedWorkspaceId ?? undefined)}
         >
           {disabled ? <Loader2Icon className="size-3 animate-spin" /> : null}
-          Build
+          Setujui
           <CornerDownLeftIcon className="size-2.5 opacity-60" />
         </Button>
-      </PlanFooter>
-    </Plan>
+      </div>
+    </div>
   );
 }

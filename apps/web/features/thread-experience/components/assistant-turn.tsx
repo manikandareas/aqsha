@@ -4,10 +4,9 @@ import { type ActivityEvent, filterByVisibility } from "@aqsha/agent-contracts";
 import {
   AlertCircleIcon,
   ChevronDownIcon,
-  Code2Icon,
   FolderTreeIcon,
 } from "@aqsha/ui/icons";
-import { Fragment, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   Collapsible,
   CollapsibleContent,
@@ -21,12 +20,19 @@ import { cn } from "@/lib/utils";
 import type { ChatMessage, ResearchRun, ResearchSource } from "../types";
 import { buildTurnParts } from "../utils/turn-model";
 import { isRunActive } from "../utils/transcript-model";
+import {
+  hitlQuestionLines,
+  isAnsweredHitlPart,
+  messageHitlParts,
+} from "../utils/hitl-parts";
+import { AnswerSources } from "./answer-sources";
 import { CitationIntegritySummary } from "./citation-integrity";
 import { MessageHitlParts } from "./message-hitl-parts";
 import {
   AssistantMessageActions,
   MessageSourceCount,
   StreamingResponse,
+  UserMessageBubble,
   getMessageText,
 } from "./message-row";
 import {
@@ -51,6 +57,7 @@ export function AssistantTurn({
   message,
   run,
   hitlMessages,
+  userAnswers,
   onRetryRun,
   runSourceCount = 0,
   messageSourceCount = 0,
@@ -60,8 +67,10 @@ export function AssistantTurn({
 }: {
   message?: ChatMessage;
   run?: ResearchRun;
-  /** Pending HITL synthetic messages for this run (single-rendered at approval). */
+  /** HITL synthetic question messages for this run (pending or answered). */
   hitlMessages?: ChatMessage[];
+  /** Real user messages that answered this run's HITL prompts. */
+  userAnswers?: ChatMessage[];
   onRetryRun?: (args: { runId: AgentRunId }) => Promise<unknown>;
   runSourceCount?: number;
   messageSourceCount?: number;
@@ -69,7 +78,6 @@ export function AssistantTurn({
   hitlActions?: HitlActions;
   hitlDisabled?: boolean;
 }) {
-  const [devMode, setDevMode] = useState(false);
   // null = auto (expanded while the run is active, collapsed once it settles);
   // a non-null value is the user's manual override and wins for the turn's life.
   const [manualProcessOpen, setManualProcessOpen] = useState<boolean | null>(null);
@@ -84,33 +92,23 @@ export function AssistantTurn({
   const text = message ? getMessageText(message) : "";
   const hasText = Boolean(text.trim());
 
-  const hasNodeParts = parts.some(
-    (part) =>
-      part.kind === "tool" ||
-      part.kind === "subagent" ||
-      part.kind === "phase" ||
-      part.kind === "approval" ||
-      part.kind === "system",
-  );
-
   // Visibility gate per node (recursively prunes children); users see `user`
-  // nodes, dev-mode also reveals `developer` nodes. `hidden` never renders.
+  // nodes only. `developer` and `hidden` nodes never render.
   const visible = (node: ActivityEvent): ActivityEvent | undefined =>
-    filterByVisibility([node], { developer: devMode })[0];
+    filterByVisibility([node])[0];
 
-  const hitlCards = (key: string) =>
-    hitlActions && pendingHitl.length > 0 ? (
-      <Fragment key={key}>
-        {pendingHitl.map((hitl) => (
-          <MessageHitlParts
-            key={hitl.id}
-            message={hitl}
-            actions={hitlActions}
-            disabled={hitlDisabled}
-          />
-        ))}
-      </Fragment>
-    ) : null;
+  // The HITL exchange (agent question → user answer) renders OUTSIDE the
+  // collapsible process timeline so the conversation stays visible: question
+  // (interactive while pending, read-only once answered) then the user's answer
+  // bubble, in chronological order, just above the agent's continuation.
+  const exchange = [
+    ...pendingHitl.map((m) => ({ kind: "hitl" as const, order: m.order, message: m })),
+    ...(userAnswers ?? []).map((m) => ({
+      kind: "answer" as const,
+      order: m.order,
+      message: m,
+    })),
+  ].sort((a, b) => a.order - b.order);
 
   // Artifact cards are actionable (click → side panel) and conceptually part of
   // the answer, not the process. They render at the very bottom — under the final
@@ -125,7 +123,6 @@ export function AssistantTurn({
   const elements: ReactNode[] = [];
   let nodeBuffer: ReactNode[] = [];
   let listSeq = 0;
-  let hitlRendered = false;
   const flushNodes = () => {
     if (nodeBuffer.length === 0) return;
     elements.push(
@@ -167,20 +164,17 @@ export function AssistantTurn({
     const node = visible(part.node);
     if (!node) continue;
     if (part.kind === "approval") {
-      if (hitlActions && pendingHitl.length > 0 && !hitlRendered) {
-        hitlRendered = true;
-        nodeBuffer.push(<li key={part.id}>{hitlCards(`${part.id}-card`)}</li>);
-      } else {
-        nodeBuffer.push(
-          <li key={part.id}>
-            <NodeLine node={node} devMode={devMode} />
-          </li>,
-        );
-      }
+      // The interactive HITL card lives in the exchange block (below the
+      // timeline); here the approval is just a process row.
+      nodeBuffer.push(
+        <li key={part.id}>
+          <NodeLine node={node} />
+        </li>,
+      );
     } else if (part.kind === "tool") {
       nodeBuffer.push(
         <li key={part.id}>
-          <ToolRow node={node} devMode={devMode} />
+          <ToolRow node={node} />
         </li>,
       );
     } else if (part.kind === "subagent") {
@@ -200,33 +194,25 @@ export function AssistantTurn({
       }
       nodeBuffer.push(
         <li key={part.id}>
-          <SubagentCard node={node} devMode={devMode} />
+          <SubagentCard node={node} />
         </li>,
       );
     } else {
       // phase (both modes) / system → flat heading row with indented children.
-      nodeBuffer.push(<ActivityNodeRow key={part.id} node={node} devMode={devMode} />);
+      nodeBuffer.push(<ActivityNodeRow key={part.id} node={node} />);
     }
   }
   flushNodes();
-  // A pending HITL with no approval anchor (legacy fallback) renders at the end.
-  if (hitlActions && pendingHitl.length > 0 && !hitlRendered) {
-    elements.push(<div key="hitl-end">{hitlCards("hitl-end-card")}</div>);
-    hitlRendered = true;
-  }
 
   // The whole process timeline (reasoning ↔ tools ↔ sub-agents ↔ artifacts —
   // everything but the final answer) collapses under the run header. Auto-expanded
   // while the run is active so live progress is visible, then auto-collapsed once
-  // it settles to keep the answer prominent; a pending approval forces it open so
-  // the HITL card can never be hidden. A manual toggle overrides the auto state.
+  // it settles to keep the answer prominent. A manual toggle overrides the auto
+  // state. (The HITL card no longer lives here — it renders in the exchange block
+  // below, always visible.)
   const hasProcess = elements.length > 0;
-  const mustShowProcess = pendingHitl.length > 0;
-  const processOpen = mustShowProcess
-    ? true
-    : manualProcessOpen !== null
-      ? manualProcessOpen
-      : isActive;
+  const processOpen =
+    manualProcessOpen !== null ? manualProcessOpen : isActive;
 
   const processTimeline = (
     <div className="mt-2 grid gap-2 text-[13px] text-muted-foreground">
@@ -244,9 +230,6 @@ export function AssistantTurn({
         >
           <RunHeader
             run={run}
-            devMode={devMode}
-            onToggleDevMode={() => setDevMode((value) => !value)}
-            showDevToggle={hasNodeParts}
             sourceCount={runSourceCount}
             collapsible
             open={processOpen}
@@ -258,17 +241,28 @@ export function AssistantTurn({
       ) : (
         <>
           {run ? (
-            <RunHeader
-              run={run}
-              devMode={devMode}
-              onToggleDevMode={() => setDevMode((value) => !value)}
-              showDevToggle={hasNodeParts}
-              sourceCount={runSourceCount}
-            />
+            <RunHeader run={run} sourceCount={runSourceCount} />
           ) : null}
           {hasProcess ? processTimeline : null}
         </>
       )}
+
+      {exchange.length > 0 ? (
+        <div className="mt-3 flex w-full min-w-0 flex-col gap-3">
+          {exchange.map((item) =>
+            item.kind === "answer" ? (
+              <UserMessageBubble key={item.message.id} message={item.message} />
+            ) : (
+              <HitlExchangeQuestion
+                key={item.message.id}
+                message={item.message}
+                actions={hitlActions}
+                disabled={hitlDisabled}
+              />
+            ),
+          )}
+        </div>
+      ) : null}
 
       {isDeep ? (
         <CitationIntegritySummary
@@ -303,7 +297,11 @@ export function AssistantTurn({
         {artifactCards.length > 0 ? (
           <div className="mt-3 grid gap-2">{artifactCards}</div>
         ) : null}
-        <MessageSourceCount sourceCount={messageSourceCount} />
+        {sources.length > 0 ? (
+          <AnswerSources sources={sources} />
+        ) : (
+          <MessageSourceCount sourceCount={messageSourceCount} />
+        )}
         {hasText ? (
           <AssistantMessageActions
             assistantRun={run}
@@ -316,6 +314,39 @@ export function AssistantTurn({
   );
 }
 
+/**
+ * The agent's HITL question in the exchange block: the interactive inline form
+ * while pending, or the read-only question text once answered (the user's reply
+ * renders as a separate bubble). No card chrome — it reads as natural agent prose.
+ */
+function HitlExchangeQuestion({
+  message,
+  actions,
+  disabled,
+}: {
+  message: ChatMessage;
+  actions?: HitlActions;
+  disabled?: boolean;
+}) {
+  const part = messageHitlParts(message)[0];
+  if (!part) return null;
+  if (isAnsweredHitlPart(part)) {
+    const lines = hitlQuestionLines(part);
+    if (lines.length === 0) return null;
+    return (
+      <div className="flex w-full min-w-0 flex-col gap-0.5 text-[13px] leading-[1.55] text-muted-foreground">
+        {lines.map((line, index) => (
+          <p key={index} className="min-w-0 break-words">
+            {line}
+          </p>
+        ))}
+      </div>
+    );
+  }
+  if (!actions) return null;
+  return <MessageHitlParts message={message} actions={actions} disabled={disabled} />;
+}
+
 function ThreadActivityFallback() {
   // Shown only before any reasoning/tool part or answer text exists (a run that
   // just started); the run header Shimmer covers the rest.
@@ -324,21 +355,15 @@ function ThreadActivityFallback() {
 
 function RunHeader({
   run,
-  devMode,
-  onToggleDevMode,
-  showDevToggle,
   sourceCount,
   collapsible = false,
   open = false,
 }: {
   run: ResearchRun;
-  devMode: boolean;
-  onToggleDevMode: () => void;
-  showDevToggle: boolean;
   sourceCount: number;
   // When true, the summary doubles as the trigger that collapses the process
-  // timeline below it (a chevron is appended). The dev-mode toggle and source
-  // chip stay as sibling controls so they are not nested inside the button.
+  // timeline below it (a chevron is appended). The source chip stays a sibling
+  // control so it is not nested inside the button.
   collapsible?: boolean;
   open?: boolean;
 }) {
@@ -346,7 +371,7 @@ function RunHeader({
   const activity = run.activity ?? [];
   const runNode = activity.find((node) => node.type === "run");
   const nonRunNodes = activity.filter((node) => node.type !== "run");
-  const timeline = filterByVisibility(nonRunNodes, { developer: devMode });
+  const timeline = filterByVisibility(nonRunNodes);
   const headlineNode = findHeadlineNode(timeline);
   const durationLabel = formatRunDuration(run);
 
@@ -399,20 +424,6 @@ function RunHeader({
             {summaryText}
           </span>
         )}
-        {showDevToggle ? (
-          <button
-            type="button"
-            aria-pressed={devMode}
-            title={devMode ? "Sembunyikan detail pengembang" : "Mode pengembang"}
-            onClick={onToggleDevMode}
-            className={cn(
-              "inline-flex shrink-0 items-center rounded-[7px] border border-border/70 p-1 transition-colors hover:text-foreground",
-              devMode ? "bg-muted/60 text-foreground" : "text-muted-foreground",
-            )}
-          >
-            <Code2Icon className="size-3.5" />
-          </button>
-        ) : null}
         {sourceCount > 0 ? (
           <span className="inline-flex shrink-0 items-center gap-1 rounded-[7px] border border-border/70 bg-muted/35 px-2 py-1 text-[11px] font-medium text-muted-foreground">
             <FolderTreeIcon className="size-3.5" />

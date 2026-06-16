@@ -2,16 +2,8 @@
 
 import { Loader2Icon } from "@aqsha/ui/icons";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
-import {
-  hitlCardBodyClass,
-  hitlCardFooterClass,
-  hitlCardHeaderClass,
-  hitlCardShellClass,
-} from "./hitl-card-layout";
 
-/** UI for agent `deleteArtifact` tool — Confirm card */
+/** UI for agent `deleteArtifact` tool — inline confirm prompt */
 export function HitlConfirmCard({
   title,
   message,
@@ -32,19 +24,13 @@ export function HitlConfirmCard({
   onConfirm: () => void;
 }) {
   return (
-    <Card
-      size="sm"
+    <div
       data-hitl-tool="deleteArtifact"
-      className={cn("border-coral-soft-border/60", hitlCardShellClass)}
+      className="flex w-full min-w-0 flex-col text-[13px] leading-[1.55]"
     >
-      <CardHeader className={hitlCardHeaderClass}>
-        <span className="text-[10px] font-medium text-muted-foreground">Confirm</span>
-      </CardHeader>
-      <CardContent className={hitlCardBodyClass}>
-        <h3 className="text-[12px] font-semibold leading-snug text-foreground">{title}</h3>
-        <p className="mt-0.5 text-[11px] leading-relaxed text-coral-foreground/90">{message}</p>
-      </CardContent>
-      <CardFooter className={cn("justify-end", hitlCardFooterClass)}>
+      <p className="text-[13px] font-medium leading-snug text-foreground">{title}</p>
+      <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">{message}</p>
+      <div className="mt-2 flex flex-row items-center justify-end gap-1">
         <Button
           type="button"
           variant="ghost"
@@ -66,7 +52,7 @@ export function HitlConfirmCard({
           {disabled ? <Loader2Icon className="size-3 animate-spin" /> : null}
           {confirmLabel}
         </Button>
-      </CardFooter>
-    </Card>
+      </div>
+    </div>
   );
 }

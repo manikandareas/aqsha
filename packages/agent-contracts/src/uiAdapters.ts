@@ -20,12 +20,24 @@ export type AgentMessageRow = {
   createdAt: number;
 };
 
+/** Map a backend `pendingInteractions.status` to the synthetic part state. */
+function hitlPartState(
+  type: "ask_user" | "tool_approval",
+  status: "pending" | "responded",
+): string {
+  if (status === "responded") return "answered";
+  return type === "ask_user" ? "input-available" : "approval-requested";
+}
+
 export type AgentInteractionRow = {
   id: string;
   runId: string;
   type: "ask_user" | "tool_approval";
   toolName: string;
   payloadJson: string;
+  // `responded` rows are kept so the agent's question stays visible after the
+  // user answers — rendered read-only, with the answer shown as a user bubble.
+  status: "pending" | "responded";
   createdAt: number;
 };
 
@@ -77,6 +89,9 @@ export type UiChatMessage = {
   order: number;
   stepOrder: number;
   text?: string;
+  /** Owning run, when the message belongs to one (used to fold HITL answers
+   *  into their run's turn). */
+  runId?: string;
   parts?: UiMessagePart[];
 };
 
@@ -105,6 +120,7 @@ export function uiMessageFromRow(row: AgentMessageRow): UiChatMessage {
     order: row.createdAt,
     stepOrder: 0,
     text: row.text,
+    runId: row.runId,
     parts,
   };
 }
@@ -129,18 +145,19 @@ function parsePayload(json: string): Record<string, unknown> {
  * approvalId, which the respond mutation accepts directly.
  */
 export function uiHitlMessageFromInteraction(row: AgentInteractionRow): UiChatMessage {
+  const state = hitlPartState(row.type, row.status);
   const part: UiMessagePart =
     row.type === "ask_user"
       ? {
           type: "tool-askUser",
           toolCallId: row.id,
-          state: "input-available",
+          state,
           input: parsePayload(row.payloadJson),
         }
       : {
           type: `tool-${row.toolName}`,
           toolCallId: row.id,
-          state: "approval-requested",
+          state,
           input: parsePayload(row.payloadJson),
           approval: { id: row.id },
         };
@@ -151,6 +168,7 @@ export function uiHitlMessageFromInteraction(row: AgentInteractionRow): UiChatMe
     status: "success",
     order: row.createdAt,
     stepOrder: 1,
+    runId: row.runId,
     parts: [part],
   };
 }

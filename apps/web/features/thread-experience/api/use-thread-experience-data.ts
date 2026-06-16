@@ -69,6 +69,10 @@ export function useThreadExperienceData(
     api.agent.queries.listArtifacts,
     threadQueriesEnabled ? { threadId: threadId! } : "skip",
   );
+  const sourceRows = useConvexQueryData(
+    api.agent.queries.listSourcesByThread,
+    threadQueriesEnabled ? { threadId: threadId! } : "skip",
+  );
 
   const createWorkspace = useConvexMutationFn(api.workspaces.create);
   const startThreadMutation = useConvexMutationFn(api.agent.startThread);
@@ -132,9 +136,7 @@ export function useThreadExperienceData(
     rateStatus,
     runs,
     artifacts: (artifactRows ?? []) as ResearchArtifact[],
-    // Per-thread sources stay empty until deep research lands on this backend
-    // (plan §9.4 Step 4).
-    sources: [] as ResearchSource[],
+    sources: (sourceRows ?? []) as ResearchSource[],
     cancelRun,
     retryRun: async (args: { runId: string }) => {
       try {

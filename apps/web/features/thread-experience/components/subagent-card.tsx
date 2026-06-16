@@ -1,44 +1,38 @@
 "use client";
 
 import { type ActivityEvent } from "@aqsha/agent-contracts";
-import { ChevronDownIcon } from "@aqsha/ui/icons";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { ChevronRightIcon } from "@aqsha/ui/icons";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { runningSubagentCount, subagentCardModel } from "../utils/turn-model";
-import { ActivityNodeRow, NodeStatusIcon, nodeDuration, toneClass } from "./run-progress";
+import { useChatArtifactContext } from "./chat-artifact-context";
+import { NodeStatusIcon, nodeDuration, toneClass } from "./run-progress";
+import { useThreadPanel } from "./thread-panel-context";
 
-// One sub-agent as a single dynamic card (plan §8), replacing the old recursive
-// `ActivityNodeRow` nesting. Title = sub-agent label; the summary line is dynamic
-// (running → current tool via Shimmer, terminal → "N pencarian, M sumber"). Tool
-// children are hidden behind an expand and reused through `ActivityNodeRow`
-// (tool → `ToolRow`); dev-mode reveals them inline. No-leak: every value comes
-// from the contract's allow-listed helpers (`subagentCardModel`).
-export function SubagentCard({
-  node,
-  devMode,
-}: {
-  node: ActivityEvent;
-  devMode: boolean;
-}) {
-  const model = subagentCardModel(node, { devMode });
+// One sub-agent as a single static card (no longer a collapsible): title =
+// sub-agent label, subtitle = the dynamic summary (running → current tool via
+// Shimmer, terminal → "N pencarian, M sumber"). The tool children are no longer
+// inlined here — clicking the card opens the sub-agent detail side panel
+// (`SubagentDetailPanel`) with the search steps + re-joined source links. On a
+// compact embedded panel there is no side-panel slot, so the card stays static
+// (D2 — avoids panel-in-panel). No-leak: every value comes from the contract's
+// allow-listed helpers (`subagentCardModel`).
+export function SubagentCard({ node }: { node: ActivityEvent }) {
+  const model = subagentCardModel(node);
+  const panel = useThreadPanel();
+  const compact = useChatArtifactContext()?.compact ?? false;
   const duration = nodeDuration(node);
-  const hasChildren = model.children.length > 0;
 
-  const headline = (
+  const body = (
     <span
       className={cn(
-        "flex min-w-0 items-start gap-1.5 leading-5",
+        "flex min-w-0 flex-1 items-start gap-1.5 leading-5",
         toneClass(node.status),
       )}
     >
-      <NodeStatusIcon status={node.status} className="mt-0.5 size-3.5 shrink-0" />
-      <span className="min-w-0">
+      <NodeStatusIcon node={node} className="mt-0.5 size-3.5 shrink-0" />
+      <span className="min-w-0 flex-1">
         <span className="font-medium text-foreground">{model.title}</span>
         {duration ? (
           <span className="text-muted-foreground"> · {duration}</span>
@@ -56,33 +50,30 @@ export function SubagentCard({
     </span>
   );
 
-  const childList = hasChildren ? (
-    <ol className="mt-1.5 grid gap-1.5 border-l border-border/70 pl-3">
-      {model.children.map((child) => (
-        <ActivityNodeRow key={child.id} node={child} devMode={devMode} />
-      ))}
-    </ol>
-  ) : null;
+  // Full surface → open the detail side panel; compact embedded panel → static
+  // card (no per-sub-agent route to deep-link to).
+  const canOpenPanel = !compact && panel != null;
+  if (canOpenPanel) {
+    return (
+      <button
+        type="button"
+        onClick={() => panel.openSubagentPanel(node.runId, node.id)}
+        aria-label={`Buka detail ${model.title}`}
+        className={cn(cardBaseClass, interactiveCardClass)}
+      >
+        {body}
+        <ChevronRightIcon className="size-4 shrink-0 self-center text-muted-foreground" />
+      </button>
+    );
+  }
 
-  return (
-    <div className="rounded-[10px] border border-border/70 bg-muted/20 px-3 py-2 text-[13px]">
-      {hasChildren && !model.forceExpanded ? (
-        <Collapsible className="min-w-0">
-          <CollapsibleTrigger className="group flex w-full min-w-0 items-start gap-1 text-left hover:text-foreground">
-            {headline}
-            <ChevronDownIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-          </CollapsibleTrigger>
-          <CollapsibleContent className="overflow-hidden">{childList}</CollapsibleContent>
-        </Collapsible>
-      ) : (
-        <>
-          {headline}
-          {childList}
-        </>
-      )}
-    </div>
-  );
+  return <div className={cardBaseClass}>{body}</div>;
 }
+
+const cardBaseClass =
+  "flex w-full min-w-0 items-start gap-1.5 rounded-[10px] border border-border/70 bg-muted/20 px-3 py-2 text-left text-[13px]";
+const interactiveCardClass =
+  "transition-colors hover:border-border hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background";
 
 // "N berjalan" chip (plan §8): how many sub-agents in `nodes` are still running,
 // plus the run's waiting time. Renders nothing unless at least one is running.
