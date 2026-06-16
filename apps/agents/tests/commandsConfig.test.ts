@@ -22,7 +22,6 @@ describe("config", () => {
     expect(config.models.chatPro).toBe("claude-sonnet-4-6");
     expect(config.models.deepPro).toBe("claude-sonnet-4-6");
     expect(config.maxTurns).toEqual({ lite: 5, pro: 10, deep: 24 });
-    expect(config.holdWindowMs).toBe(45_000);
     expect(config.storeBackend).toBe("memory");
   });
 
@@ -30,12 +29,10 @@ describe("config", () => {
     const config = loadConfig({
       ASTRA_PRO_MODEL: "claude-opus-4-8",
       ASTRA_DEEP_PRO_MODEL: "claude-opus-4-8",
-      AGENTS_HOLD_WINDOW_MS: "10000",
       AGENTS_STORE: "convex",
       CONVEX_URL: "https://example.convex.cloud",
     });
     expect(config.models.chatPro).toBe("claude-opus-4-8");
-    expect(config.holdWindowMs).toBe(10_000);
     expect(config.storeBackend).toBe("convex");
   });
 });

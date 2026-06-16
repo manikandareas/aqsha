@@ -7,11 +7,9 @@ import {
 import { qualifiedToolName } from "../src/agent/toolPolicy";
 import { MemoryStore } from "../src/store/memoryStore";
 
-const HOLD_MS = 40;
-
 function setup() {
   const store = new MemoryStore();
-  const broker = new InteractionBroker(store, HOLD_MS);
+  const broker = new InteractionBroker(store);
   return { store, broker };
 }
 
@@ -21,70 +19,35 @@ const baseInput = {
   ownerUserId: "u1",
 };
 
-describe("InteractionBroker.requestApproval (hold-window)", () => {
-  it("resolves allow in-place when the user approves within the window", async () => {
+describe("InteractionBroker.requestApproval (immediate interrupt)", () => {
+  it("creates the pending row and interrupts the run on the first pass", async () => {
     const { store, broker } = setup();
-    const pending = broker.requestApproval({
-      ...baseInput,
-      toolName: "proposeArtifact",
-      payload: { title: "Doc" },
-    });
-    // Respond shortly after creation.
-    setTimeout(async () => {
-      const rows = await store.listInteractions("t1");
-      await store.respondInteraction(rows[0]!.id, {
-        kind: "approval",
-        approved: true,
-      });
-    }, 5);
-    const result = await pending;
-    expect(result.outcome).toBe("allow");
-    // No interrupt was flagged.
-    expect(broker.interruptState("run1")).toBeUndefined();
-  });
-
-  it("resolves deny with the user's note", async () => {
-    const { store, broker } = setup();
-    const pending = broker.requestApproval({
-      ...baseInput,
-      toolName: "deleteArtifact",
-      payload: { artifactId: "a1" },
-    });
-    setTimeout(async () => {
-      const rows = await store.listInteractions("t1");
-      await store.respondInteraction(rows[0]!.id, {
-        kind: "approval",
-        approved: false,
-        note: "jangan dihapus",
-      });
-    }, 5);
-    const result = await pending;
-    expect(result.outcome).toBe("deny");
-    if (result.outcome === "deny") {
-      expect(result.message).toContain("jangan dihapus");
-    }
-  });
-
-  it("flags an interrupt when the hold window elapses", async () => {
-    const { broker } = setup();
     let interrupted = false;
     broker.registerRun("run1", () => {
       interrupted = true;
     });
     const result = await broker.requestApproval({
       ...baseInput,
-      toolName: "runComputation",
-      payload: {},
+      toolName: "proposeArtifact",
+      payload: { title: "Doc" },
     });
-    expect(result.outcome).toBe("timeout");
+    expect(result.outcome).toBe("interrupt");
     expect(interrupted).toBe(true);
-    expect(broker.interruptState("run1")?.reason).toBe("approval_timeout");
+    expect(broker.interruptState("run1")?.reason).toBe("approval");
     expect(broker.interruptState("run1")?.pendingInteractionId).toBe(
       result.interaction.id,
     );
+    // The pending interaction survives for the resume path.
+    const rows = await store.listInteractions("t1");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.status).toBe("pending");
+    // interaction_pending is emitted (no in-place resolve on the first pass).
+    const events = await store.listRunEvents("run1");
+    expect(events.some((e) => e.type === "interaction_pending")).toBe(true);
+    expect(events.some((e) => e.type === "interaction_resolved")).toBe(false);
   });
 
-  it("consumes a primed approval on resume instead of opening a new window", async () => {
+  it("consumes a primed approval on resume instead of interrupting again", async () => {
     const { store, broker } = setup();
     // Simulate the timeout → respond → resume flow: a responded interaction
     // is primed onto the run before the model retries the gated tool.
@@ -115,13 +78,13 @@ describe("InteractionBroker.requestApproval (hold-window)", () => {
     );
     expect(resolved).toHaveLength(1);
     expect(JSON.parse(resolved[0]!.payloadJson).interactionId).toBe(interaction.id);
-    // One-shot: a second call opens a fresh window (times out here).
+    // One-shot: a second call has no primed approval, so it interrupts again.
     const second = await broker.requestApproval({
       ...baseInput,
       toolName: "createWorkspace",
       payload: { name: "Spike 2" },
     });
-    expect(second.outcome).toBe("timeout");
+    expect(second.outcome).toBe("interrupt");
   });
 
   it("primed denial denies the retry without a new interaction", async () => {
@@ -189,23 +152,44 @@ describe("buildCanUseTool", () => {
     expect(await store.listInteractions("t1")).toHaveLength(0);
   });
 
-  it("injects the structured workspace pick into the approved tool input", async () => {
+  it("interrupts on the first pass and denies so the SDK does not execute", async () => {
     const { store, broker } = setup();
+    broker.registerRun("run1", () => {});
     const canUseTool = buildCanUseTool({ broker, ...baseInput });
-    const pending = canUseTool(qualifiedToolName("proposeArtifact"), {
+    const result = await canUseTool(qualifiedToolName("createWorkspace"), {
+      name: "Riset",
+    });
+    expect(result.behavior).toBe("deny");
+    // One pending interaction is created and the run is flagged for interrupt.
+    expect(await store.listInteractions("t1")).toHaveLength(1);
+    expect(broker.interruptState("run1")?.reason).toBe("approval");
+  });
+
+  it("injects the structured workspace pick from a primed approval on resume", async () => {
+    const { store, broker } = setup();
+    // Resume path: the responded interaction (with the user's workspace pick) is
+    // primed before the model retries the gated tool.
+    const interaction = await store.createInteraction({
+      ownerUserId: "u1",
+      threadId: "t1",
+      runId: "run1",
+      type: "tool_approval",
+      toolName: "proposeArtifact",
+      payload: {},
+    });
+    const responded = await store.respondInteraction(interaction.id, {
+      kind: "approval",
+      approved: true,
+      workspaceId: "ws-user-pick",
+    });
+    broker.primeResolvedApproval("run1", responded!);
+
+    const canUseTool = buildCanUseTool({ broker, ...baseInput });
+    const result = await canUseTool(qualifiedToolName("proposeArtifact"), {
       action: "create",
       title: "Draf",
       workspaceId: "ws-model-pick",
     });
-    setTimeout(async () => {
-      const rows = await store.listInteractions("t1");
-      await store.respondInteraction(rows[0]!.id, {
-        kind: "approval",
-        approved: true,
-        workspaceId: "ws-user-pick",
-      });
-    }, 5);
-    const result = await pending;
     expect(result.behavior).toBe("allow");
     if (result.behavior === "allow") {
       // The user's pick from the approval card overrides the model's.
@@ -214,18 +198,25 @@ describe("buildCanUseTool", () => {
     }
   });
 
-  it("routes gated tools through approval and denies on decline", async () => {
+  it("denies the retry from a primed denial", async () => {
     const { store, broker } = setup();
+    const interaction = await store.createInteraction({
+      ownerUserId: "u1",
+      threadId: "t1",
+      runId: "run1",
+      type: "tool_approval",
+      toolName: "createWorkspace",
+      payload: { name: "Riset" },
+    });
+    const responded = await store.respondInteraction(interaction.id, {
+      kind: "approval",
+      approved: false,
+    });
+    broker.primeResolvedApproval("run1", responded!);
     const canUseTool = buildCanUseTool({ broker, ...baseInput });
-    const pending = canUseTool(qualifiedToolName("createWorkspace"), { name: "Riset" });
-    setTimeout(async () => {
-      const rows = await store.listInteractions("t1");
-      await store.respondInteraction(rows[0]!.id, {
-        kind: "approval",
-        approved: false,
-      });
-    }, 5);
-    const result = await pending;
+    const result = await canUseTool(qualifiedToolName("createWorkspace"), {
+      name: "Riset",
+    });
     expect(result.behavior).toBe("deny");
   });
 });

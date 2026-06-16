@@ -75,7 +75,7 @@ export class RunManager {
       providerDeps?: ProviderDeps;
     },
   ) {
-    this.broker = new InteractionBroker(deps.store, deps.config.holdWindowMs);
+    this.broker = new InteractionBroker(deps.store);
     this.sandbox =
       deps.sandbox ??
       buildSandboxService({
@@ -386,8 +386,8 @@ export class RunManager {
       const handle = this.deps.runner({ prompt: assembled.prompt, options: queryOptions });
       activeRun.handle = handle;
       if (turn?.resumeInteraction) {
-        // Timeout → respond → resume: the recorded response must satisfy the
-        // model's retry of the gated tool instead of opening a new window.
+        // Resume after a tool approval: the recorded response must satisfy the
+        // model's retry of the gated tool instead of interrupting again.
         this.broker.primeResolvedApproval(runId, turn.resumeInteraction);
       }
       this.broker.registerRun(runId, () => {
@@ -430,7 +430,8 @@ export class RunManager {
     }
 
     if (interruptState) {
-      // HITL pause: askUser or an approval hold-window that elapsed.
+      // HITL pause: askUser or a tool approval. The question/approval becomes
+      // the turn's response; the run stops here until the user replies.
       await store.finalizeMessage(assistantMessage.messageId, {
         text: result.finalText,
         status: "complete",
@@ -450,8 +451,8 @@ export class RunManager {
         },
       });
       // Race guard: the user may have responded in the instant between the
-      // hold-window expiring and the run finalizing as waiting_hitl (the
-      // responder only forwards a resume when it OBSERVES waiting_hitl).
+      // interrupt firing and the run finalizing as waiting_hitl (the responder
+      // only forwards a resume when it OBSERVES waiting_hitl).
       // If the interaction is already responded, resume ourselves.
       if (interruptState.pendingInteractionId) {
         const interaction = await store.getInteraction(
@@ -561,7 +562,7 @@ export class RunManager {
     const activeRun: ActiveRun = { runId, canceled: false };
     this.active.set(runId, activeRun);
     // The resume response satisfies the model's retry of the gated tool in the
-    // resumed phase instead of opening a fresh hold-window.
+    // resumed phase instead of interrupting again.
     if (turn?.resumeInteraction) {
       this.broker.primeResolvedApproval(runId, turn.resumeInteraction);
     }

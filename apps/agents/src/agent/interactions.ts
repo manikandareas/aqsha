@@ -9,20 +9,21 @@ import {
   logicalToolName,
 } from "./toolPolicy";
 
-// HITL interaction broker (plan §5.3). Implements the hybrid hold-window:
-// canUseTool creates a pendingInteractions row and waits up to ~45s for the
-// user; a fast response resolves in place (allow/deny, no interrupt), a slow
-// one flags the run for interrupt and the response later resumes the session.
+// HITL interaction broker. Every HITL request (askUser AND tool approvals)
+// interrupts the run immediately: the question/approval becomes the turn's
+// final response and the run stops at `waiting_hitl`. The user's reply arrives
+// later via interactions.respond → resume (which re-primes a gated tool so it
+// executes on retry). There is no hold-window — HITL is always conversational.
 
 export type ApprovalOutcome =
   | { outcome: "allow"; interaction: PendingInteraction }
   | { outcome: "deny"; interaction: PendingInteraction; message: string }
-  | { outcome: "timeout"; interaction: PendingInteraction };
+  | { outcome: "interrupt"; interaction: PendingInteraction };
 
 export type RunInterruptState = {
-  /** Set when a hold-window expired or askUser fired; the run loop interrupts. */
+  /** Set when askUser or an approval fired; the run loop interrupts. */
   pendingInteractionId?: string;
-  reason?: "ask_user" | "approval_timeout";
+  reason?: "ask_user" | "approval";
 };
 
 export class InteractionBroker {
@@ -31,10 +32,7 @@ export class InteractionBroker {
   /** One-shot approvals carried into a resume turn (timeout → respond → resume). */
   private primedApprovals = new Map<string, PendingInteraction>();
 
-  constructor(
-    private readonly store: AgentStore,
-    private readonly holdWindowMs: number,
-  ) {}
+  constructor(private readonly store: AgentStore) {}
 
   /**
    * Carry a responded tool_approval into the resume turn: when the model
@@ -82,8 +80,10 @@ export class InteractionBroker {
   }
 
   /**
-   * tool_approval flow for a gated tool. Creates the pending row, waits the
-   * hold window; timeout interrupts the run and reports `timeout`.
+   * tool_approval flow for a gated tool. On the first pass it creates the
+   * pending row and interrupts the run immediately (the approval becomes the
+   * turn's response). When the model retries the gated tool on resume, a primed
+   * response resolves it in place (allow/deny) without a new interruption.
    */
   async requestApproval(input: {
     runId: string;
@@ -96,10 +96,10 @@ export class InteractionBroker {
   }): Promise<ApprovalOutcome> {
     const primed = this.takePrimedApproval(input.runId, input.toolName);
     if (primed?.response?.kind === "approval") {
-      // Timeout → user responded → resume: the original interaction_pending was
-      // never paired with an interaction_resolved (the hold-window expired). Emit
-      // it now (keyed by the SAME interaction id) so the timeline's approval node
-      // closes instead of hanging on "waiting_approval".
+      // Resume retry: the original interaction_pending was emitted on the first
+      // pass but never paired with an interaction_resolved (the run interrupted).
+      // Emit it now (keyed by the SAME interaction id) so the timeline's approval
+      // node closes instead of hanging on "waiting_approval".
       await this.store.appendRunEvent({
         runId: input.runId,
         type: "interaction_resolved",
@@ -130,39 +130,13 @@ export class InteractionBroker {
       type: "interaction_pending",
       payload: { interactionId: interaction.id, toolName: input.toolName },
     });
-
-    const responded = await this.store.waitForResponse(
-      interaction.id,
-      this.holdWindowMs,
-      input.signal,
-    );
-
-    if (!responded) {
-      this.flagInterrupt(input.runId, {
-        pendingInteractionId: interaction.id,
-        reason: "approval_timeout",
-      });
-      return { outcome: "timeout", interaction };
-    }
-
-    await this.store.appendRunEvent({
-      runId: input.runId,
-      type: "interaction_resolved",
-      payload: { interactionId: interaction.id, toolName: input.toolName },
+    // No hold-window: stop the run now and wait for the user's reply, which
+    // arrives via interactions.respond → resume.
+    this.flagInterrupt(input.runId, {
+      pendingInteractionId: interaction.id,
+      reason: "approval",
     });
-
-    if (responded.response?.kind === "approval" && responded.response.approved) {
-      return { outcome: "allow", interaction: responded };
-    }
-    const note =
-      responded.response?.kind === "approval" ? responded.response.note : undefined;
-    return {
-      outcome: "deny",
-      interaction: responded,
-      message: note
-        ? `The user declined this action: ${note}`
-        : "The user declined this action.",
-    };
+    return { outcome: "interrupt", interaction };
   }
 
   /**
@@ -247,13 +221,13 @@ export function buildCanUseTool(input: {
     if (result.outcome === "deny") {
       return { behavior: "deny", message: result.message };
     }
-    // Hold window elapsed: the run is being interrupted; deny so the SDK does
-    // not execute while we tear down. The approval survives in the store and
+    // outcome === "interrupt": the run is being torn down to wait for the user;
+    // deny so the SDK does not execute. The approval survives in the store and
     // the action re-runs on resume.
     return {
       behavior: "deny",
       message:
-        "Approval is still pending. The turn is paused; it will resume when the user responds.",
+        "Approval is pending. The turn is paused; it will resume when the user responds.",
     };
   };
 }

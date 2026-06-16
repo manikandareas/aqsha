@@ -3,7 +3,8 @@ import { internal } from "../_generated/api";
 import { internalAction, mutation } from "../_generated/server";
 import { requireCurrentUser } from "../auth";
 import { throwAppError } from "../lib/appError";
-import { findRun } from "./service/model";
+import { humanizeInteractionResponse } from "./hitl/humanize";
+import { bumpThreadOnMessage, findRun, findThread } from "./service/model";
 
 // Unified HITL response endpoint (plan §5.3): one mutation replaces the legacy
 // answerAskUser / approveTool / denyTool trio. The response is recorded in
@@ -67,14 +68,37 @@ export const respond = mutation({
         code: "interaction_response_mismatch",
       });
     }
+    const now = Date.now();
     await ctx.db.patch("pendingInteractions", interaction._id, {
       status: "responded",
       responseJson: JSON.stringify(args.response),
-      respondedAt: Date.now(),
+      respondedAt: now,
     });
 
-    // Resume only when the run already interrupted; a run still inside its
-    // hold-window resolves in place via the service's interaction poller.
+    // Materialize the answer as a real user message so the thread reads as a
+    // normal conversation: agent question (turn) → user answer (bubble) →
+    // agent continuation (resume). The interaction question stays visible
+    // because listInteractions also returns `responded` rows.
+    const thread = await findThread(ctx, interaction.threadId);
+    if (thread) {
+      const text = humanizeInteractionResponse({
+        payloadJson: interaction.payloadJson,
+        response: args.response,
+      });
+      await ctx.db.insert("chatMessages", {
+        threadId: interaction.threadId,
+        ownerUserId: user._id,
+        role: "user",
+        text,
+        runId: interaction.runId,
+        status: "complete",
+        createdAt: now,
+      });
+      await bumpThreadOnMessage(ctx, thread, { text, countDelta: 1 });
+    }
+
+    // Resume only when the run already interrupted (waiting_hitl). The service's
+    // resume re-primes a gated tool so it executes on the model's retry.
     const run = await findRun(ctx, interaction.runId);
     const resuming = Boolean(
       run && (run.status === "waiting_hitl" || run.status === "waiting"),
@@ -93,6 +117,7 @@ const RESUME_ATTEMPTS = 3;
 
 export const forwardResume = internalAction({
   args: { runId: v.string(), interactionId: v.string() },
+  returns: v.null(),
   handler: async (_ctx, args) => {
     const baseUrl = process.env.AGENTS_SERVICE_URL?.trim()?.replace(/\/$/, "");
     const token = process.env.AGENTS_SERVICE_TOKEN?.trim();

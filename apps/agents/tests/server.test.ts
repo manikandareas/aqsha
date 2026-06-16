@@ -24,7 +24,6 @@ function completedRunner(): QueryRunner {
 function setup() {
   const config = loadConfig({
     AGENTS_SERVICE_TOKEN: TOKEN,
-    AGENTS_HOLD_WINDOW_MS: "40",
   });
   const store = new MemoryStore();
   const runManager = new RunManager({ store, config, runner: completedRunner() });

@@ -6,7 +6,6 @@ import { RunManager, type QueryHandle, type QueryRunner } from "../src/runs/runM
 import { MemoryStore } from "../src/store/memoryStore";
 
 const config = loadConfig({
-  AGENTS_HOLD_WINDOW_MS: "40",
   AGENTS_STREAM_FLUSH_MS: "1",
   AGENTS_STREAM_FLUSH_CHARS: "1",
 });
@@ -403,7 +402,6 @@ describe("RunManager", () => {
   it("stops a deep dispatch when the per-dispatch cost budget is exhausted", async () => {
     const store = new MemoryStore();
     const tightConfig = loadConfig({
-      AGENTS_HOLD_WINDOW_MS: "40",
       AGENTS_STREAM_FLUSH_MS: "1",
       AGENTS_STREAM_FLUSH_CHARS: "1",
       ASTRA_MAX_RUN_BUDGET_USD: "0.15",

@@ -48,8 +48,6 @@ const envSchema = z.object({
   // process via the inherited environment; set the OTLP endpoint alongside.
   CLAUDE_CODE_ENABLE_TELEMETRY: z.string().optional(),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),
-  // HITL hold-window before interrupting the run (plan §5.3, ~45s).
-  AGENTS_HOLD_WINDOW_MS: z.coerce.number().int().positive().default(45_000),
   // Stream bridge flush cadence (plan §4.3, ~250ms / N chars).
   AGENTS_STREAM_FLUSH_MS: z.coerce.number().int().positive().default(250),
   AGENTS_STREAM_FLUSH_CHARS: z.coerce.number().int().positive().default(800),
@@ -84,7 +82,6 @@ export type AgentsConfig = {
   /** Per-dispatch run cost ceiling in USD (custom maxBudgetUsd replacement). */
   maxRunBudgetUsd: number;
   proMaxThinkingTokens: number | undefined;
-  holdWindowMs: number;
   streamFlushMs: number;
   streamFlushChars: number;
   maxConcurrentRuns: number;
@@ -131,7 +128,6 @@ export function loadConfig(
     },
     maxRunBudgetUsd: parsed.ASTRA_MAX_RUN_BUDGET_USD,
     proMaxThinkingTokens: parsed.ASTRA_PRO_MAX_THINKING_TOKENS,
-    holdWindowMs: parsed.AGENTS_HOLD_WINDOW_MS,
     streamFlushMs: parsed.AGENTS_STREAM_FLUSH_MS,
     streamFlushChars: parsed.AGENTS_STREAM_FLUSH_CHARS,
     maxConcurrentRuns: parsed.AGENTS_MAX_CONCURRENT_RUNS,
