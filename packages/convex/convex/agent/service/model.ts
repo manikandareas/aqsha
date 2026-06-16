@@ -25,9 +25,20 @@ const PREVIEW_LENGTH = 160;
 
 export function messagePreview(text: string): string {
   const collapsed = text.replace(/\s+/g, " ").trim();
-  return collapsed.length > PREVIEW_LENGTH
-    ? `${collapsed.slice(0, PREVIEW_LENGTH - 1)}…`
-    : collapsed;
+  if (collapsed.length <= PREVIEW_LENGTH) {
+    return collapsed;
+  }
+  // Truncate WITHOUT splitting a UTF-16 surrogate pair. A `.slice` that lands
+  // between a high/low surrogate (e.g. an emoji at the boundary) leaves a lone
+  // surrogate — an invalid Unicode string Convex refuses to store ("Received
+  // invalid json: unexpected end of hex escape"). Step back off a trailing high
+  // surrogate before appending the ellipsis.
+  let end = PREVIEW_LENGTH - 1;
+  const lastCode = collapsed.charCodeAt(end - 1);
+  if (lastCode >= 0xd800 && lastCode <= 0xdbff) {
+    end -= 1;
+  }
+  return `${collapsed.slice(0, end)}…`;
 }
 
 // ── lookups by service-generated string ids ─────────────────────────────────
