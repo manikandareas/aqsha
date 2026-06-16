@@ -6,6 +6,19 @@ export function collapse(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Drop a trailing lone high surrogate. A `.slice` to a fixed length can land
+ * between a UTF-16 surrogate pair (e.g. an emoji at the boundary), leaving a
+ * lone surrogate — an invalid Unicode string that Convex refuses to store
+ * ("Received invalid json: unexpected end of hex escape"). Call after any
+ * length-clamping slice whose result is persisted.
+ */
+export function dropLoneSurrogate(value: string): string {
+  if (value.length === 0) return value;
+  const lastCode = value.charCodeAt(value.length - 1);
+  return lastCode >= 0xd800 && lastCode <= 0xdbff ? value.slice(0, -1) : value;
+}
+
 /** Collapse whitespace and lowercase — a stable dedup/grouping key. */
 export function normalizeKey(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
@@ -67,7 +80,7 @@ export function clipText(
     return { text: compact, clipped: false };
   }
   return {
-    text: `${compact.slice(0, Math.max(0, limit - 3)).trimEnd()}...`,
+    text: `${dropLoneSurrogate(compact.slice(0, Math.max(0, limit - 3)).trimEnd())}...`,
     clipped: true,
   };
 }
@@ -78,5 +91,5 @@ export function trimForSnippet(value: string | null | undefined, max = 700): str
   if (text.length <= max) {
     return text;
   }
-  return `${text.slice(0, max - 3)}...`;
+  return `${dropLoneSurrogate(text.slice(0, max - 3))}...`;
 }

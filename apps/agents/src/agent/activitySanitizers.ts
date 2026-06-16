@@ -11,6 +11,7 @@
 
 // One definition of the scalar-summary shape, shared with the wire contract
 // (`toolStart/EndPayloadSchema`) and the view-model normalizer.
+import { dropLoneSurrogate } from "../lib/text";
 import type { ActivityScalar, ActivityScalarRecord } from "@aqsha/agent-contracts";
 
 const MAX_LABEL_LENGTH = 120;
@@ -32,7 +33,7 @@ function safeLabel(value: unknown): string | undefined {
   const firstLine = value.split(LINE_TERMINATOR, 1)[0]?.trim() ?? "";
   if (!firstLine) return undefined;
   return firstLine.length > MAX_LABEL_LENGTH
-    ? `${firstLine.slice(0, MAX_LABEL_LENGTH - 1)}…`
+    ? `${dropLoneSurrogate(firstLine.slice(0, MAX_LABEL_LENGTH - 1))}…`
     : firstLine;
 }
 
