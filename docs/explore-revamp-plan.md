@@ -1,9 +1,10 @@
 # Rencana Implementasi: Revamp Fitur Explore (Jelajahi)
 
-> Status: **Fase 0 + 1 + 2 SELESAI & ter-commit** (Fase 0 `6e27a98`, Fase 1 `c9104d4`, Fase 2 `d427871`) ·
-> **Fase 3 Slice 5 (infinite scroll) terimplementasi (uncommitted), gate hijau** · Slice 6–7 + Fase 4 belum.
-> Disusun 2026-06-16 dari riset codebase + eksternal (multi-agent) + review adversarial. Setiap klaim
-> file:line di bawah sudah diverifikasi langsung terhadap kode, bukan asumsi.
+> Status: **Fase 0–3 SELESAI & ter-commit** (Fase 0 `6e27a98`, Fase 1 `c9104d4`, Fase 2 `d427871`,
+> Fase 3 Slice 5 `1a51d83`, Slice 6+7 backend `334e9dc` + frontend `89fa042`), gate hijau ·
+> **hanya Fase 4 (Slice 8 Save-to-Workspace) tersisa**. Disusun 2026-06-16 dari riset codebase + eksternal
+> (multi-agent) + review adversarial. Setiap klaim file:line di bawah sudah diverifikasi langsung terhadap
+> kode, bukan asumsi.
 > **Cakupan: 9 isu** — Bagian I (Isu 1–5: backend/feed — drop Exa, Google News RSS, interests, cron 3 jam,
 > infinite scroll) + Bagian II (Isu 6–9: UI/UX — nav For You/Top/Topics, search global, Save-to-Workspace,
 > Tanya Astra).
@@ -15,7 +16,7 @@
 | **Fase 0** (Slice 9, Tanya Astra) | ✅ **SELESAI** + commit `6e27a98` | Pure frontend. Gate: `typecheck` hijau (5 workspace); lint file tersentuh bersih (1 error sisa = `app-sidebar.tsx` `set-state-in-effect`, **pra-ada & di luar scope**). |
 | **Fase 1** (Slice 1 + 2, lepas Exa + Google News) | ✅ **SELESAI** + commit `c9104d4` | Gate hijau: `typecheck` (5 workspace), convex test **159 pass** (4 file tes baru), `lint` (convex + file web tersentuh bersih), `convex dev --once` (schema additive + fungsi + cron tervalidasi). |
 | **Fase 2** (Slice 3 + 4, hidrasi 3 jam + interest) | ✅ **SELESAI** + commit `d427871` | `hydrateCycle` orchestrator (5 lane staggered) menyerap `feed:google-news` + `enrichGoogleNewsArticles`; `feed/interestKeywords.ts` SSOT + `searchPapers` interest-seeded (cache-key isolated). Gate hijau: typecheck (5 ws), convex test 174 pass, lint, `convex dev --once`. Adversarial review (14 agen) → 4 temuan minor diperbaiki (read/write interest normalize, `openAlexRecommendationQuery` helper, action-level cache-isolation test). |
-| **Fase 3** (Slice 5–7, infinite scroll + nav + search) | 🔄 **Slice 5 SELESAI** (uncommitted) · 6–7 belum | **Slice 5** (infinite scroll) implemented, gate hijau (typecheck 5 ws, convex test **178 pass**, lint, `convex dev --once`). Keputusan owner: `orderAt` **non-optional** (greenfield, backfill dev manual non-commit). Sisa: verifikasi UI manual + commit + adversarial review (jalan). **Slice 6** (nav For You/Top/Topics) + **Slice 7** (search global `searchText`) belum — butuh Keputusan Terbuka #7 (5 kategori Topics) + #8 (cakupan search). |
+| **Fase 3** (Slice 5–7, infinite scroll + nav + search) | ✅ **SELESAI** (Slice 5 `1a51d83`, Slice 6+7 backend `334e9dc` + frontend `89fa042`) | **Slice 5** infinite scroll (`orderAt` non-optional + `by_order` + `getFeedPaginated` + auto-scroll); review 8 temuan (guard wedge diperbaiki). **Slice 6** nav For You/Top/Topics + `topicCategories.ts` (5 kategori sains/kesehatan, Keputusan #7). **Slice 7** search global lintas-konten (`searchText`+searchIndex+`searchDiscovery`) + augment `searchPapers` live (Keputusan #8). Gate hijau: typecheck (5 ws), convex test **183 pass**, lint, `convex dev --once`, React Doctor. Review Slice 6+7 **jalan**. Sisa owner: verifikasi UI manual + `convex deploy` prod (schema-dulu) + push. |
 | **Fase 4** (Slice 8, Save-to-Workspace) | ⬜ belum | — |
 
 ### Yang dikerjakan di Fase 0 (2026-06-17)
@@ -165,9 +166,39 @@ pra-ada `app-sidebar.tsx`), `convex dev --once` (orderAt non-optional + `by_orde
 - **#7 (nit `?? createdAt` mati)** & **#4 (tes hidden lintas-cursor, redundan dgn tes kinds)** →
   di-skip sengaja (defensif tak berbahaya / sudah ter-cover).
 
-**Belum dikerjakan (Slice 6–7, butuh keputusan owner):** Slice 6 nav For You/Top/Topics perlu **Keputusan
-Terbuka #7** (5 kategori Topics: berita-umum vs fokus sains/kesehatan app). Slice 7 search global perlu
-**Keputusan Terbuka #8** (cakupan: hanya `feedItems` ter-`searchIndex` vs +augment `searchPapers` live).
+### Yang dikerjakan di Fase 3 Slice 6+7 (2026-06-17, backend `334e9dc` + frontend `89fa042`)
+
+**Keputusan owner:** Topics = **sains/kesehatan-adapted** (bukan berita-umum #7); search = `feedItems`
+searchIndex **+ augment `searchPapers` live** (#8). `searchText` optional/additive (greenfield, tanpa backfill).
+
+**Slice 6 — nav For You/Top/Topics (Isu 6):**
+- `getFeedPaginated` + arg `mode` (`foryou`/`top`/`topics`) + `topic`. `foryou` = komposit interest
+  (default); `top` = popularity + recency floor **tanpa interest**; `topics` = filter kategori lalu rank
+  foryou-style (filter post-paginate).
+- BARU `feed/topicCategories.ts`: 5 kategori (Sains & Teknologi, Kesehatan, Lingkungan, Sosial & Ekonomi,
+  Pendidikan) + `matchesTopicCategory` keyword sets; re-export via `@aqsha/convex/feed` (SSOT nav).
+- Frontend: `use-discovery-nav` view→mode (nuqs, default foryou) + `topic` nullable + back-compat `?view=`
+  diabaikan; `DiscoveryModeNav` (Topics = popover) + `discovery-aside` mode-aware. Tab Papers dihapus.
+
+**Slice 7 — search global lintas-konten (Isu 7):**
+- `feedItems.searchText` (optional) = `deriveSearchText(title+summary+topics)` + searchIndex `search_text`
+  (filterFields kind), di-inject di 3 write path. `feed.searchDiscovery` (paginated, relevance order,
+  filter kind/fromYear/hidden post-fetch).
+- Frontend: search + filter pindah ke header kanan (slot `headerRight` baru di ExploreChatShell/Header);
+  `DiscoveryToolbar` dihapus. Query non-kosong → `searchDiscovery` (paginated) **digabung** `searchPapers`
+  live (dedup paperKey via Set) + header "Hasil untuk …". `discovery-page` di-rework: satu `activeFeed`
+  (mode feed vs search) menggerakkan state-machine auto-scroll bersama; budget reset on `feedSessionKey`.
+
+**Tes:** `feedPaginated.test.ts` +4 (mode=top abaikan interest, mode=topics filter kategori, searchDiscovery
+match/kind/fromYear/hidden + blank). Convex **183 pass**.
+
+**Gate hijau:** typecheck (5 ws), convex 183, lint (convex bersih; app baseline), `convex dev --once`
+(searchText + searchIndex + mode/topic ter-push, additive aman), **React Doctor** (lolos setelah dedup
+O(n²)→Set diperbaiki).
+
+**Langkah owner tersisa:** verifikasi UI manual (nav For You/Top/Topics, popover Topics, search lintas-konten
++ augment paper, clear search); `convex deploy` **prod** (schema-dulu: `searchText`/`search_text` additive,
+aman walau ada row lama — row lama tak tersearch sampai re-upsert); push; review adversarial Slice 6+7 (jalan).
 
 ## Ringkasan eksekutif
 
