@@ -14,7 +14,7 @@ import {
 } from "@aqsha/convex/feed";
 import { CheckCircle2Icon, SparklesIcon } from "@aqsha/ui/icons";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppLoadingOverlay } from "@/components/app-loading-overlay";
 import { ExploreChatShell } from "@/features/explore/pages/explore-chat-shell";
 import { IdeaDialog, type IdeaSeed } from "@/features/discovery/components/idea-dialog";
@@ -25,6 +25,7 @@ import {
   useConvexActionFn,
   useConvexActionQueryWithKey,
   useConvexMutationFn,
+  useConvexPaginatedQueryData,
   useConvexQueryData,
 } from "@/lib/convex-query";
 import {
@@ -56,15 +57,36 @@ import {
 
 const emptyPapers: ExplorePaper[] = [];
 
+// Infinite-scroll tuning for the Brief feed (getFeedPaginated).
+const FEED_INITIAL_ITEMS = 18;
+const FEED_LOAD_MORE = 12;
+// Small, stable cap for the right-rail aggregates so they don't reshuffle as the
+// paginated main list grows.
+const ASIDE_FEED_LIMIT = 30;
+// Bound consecutive auto-loadMore calls between user scrolls so a run of
+// locally-hidden items (which shrinks a page without advancing the cursor view)
+// can't spin the IntersectionObserver. Reset whenever new items actually arrive.
+const MAX_AUTO_LOADS = 4;
+
 export function DiscoveryPage() {
   const router = useRouter();
 
   const [nav, setNav] = useDiscoveryNav();
 
-  // Feed (reactive) drives Brief (all kinds, incl. claims); Papers (action) below.
-  const feedArgs = nav.view === "papers" ? ("skip" as const) : {};
+  const isBriefView = nav.view !== "papers";
 
-  const feedData = useConvexQueryData(api.feed.getFeed, feedArgs);
+  // Brief = paginated reactive feed driving auto infinite scroll. Papers below.
+  const pagedFeed = useConvexPaginatedQueryData(
+    api.feed.getFeedPaginated,
+    isBriefView ? {} : "skip",
+    { initialNumItems: FEED_INITIAL_ITEMS },
+  );
+  // Aside aggregates read a small, stable getFeed cap so the right rail doesn't
+  // reshuffle on every loadMore as the paginated main list grows.
+  const asideFeedData = useConvexQueryData(
+    api.feed.getFeed,
+    isBriefView ? { limit: ASIDE_FEED_LIMIT } : "skip",
+  );
   const papersQuery = useConvexActionQueryWithKey(
     api.explore.searchPapers,
     ["discoveryPapers", nav.q, nav.range],
@@ -118,6 +140,11 @@ export function DiscoveryPage() {
   const [ideaOpen, setIdeaOpen] = useState(false);
   const [workspaceItem, setWorkspaceItem] = useState<DiscoveryItem | null>(null);
 
+  // Auto infinite-scroll plumbing (Brief feed).
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const autoLoadCountRef = useRef(0);
+  const prevResultsLenRef = useRef(0);
+
   const savedRefs = (() => {
     const set = new Set<string>();
     for (const ref of (savedRefsData ?? []) as DiscoverySavedRef[]) {
@@ -133,29 +160,76 @@ export function DiscoveryPage() {
     return set;
   })();
 
-  const rawItems: DiscoveryItem[] = (() => {
-    if (nav.view === "papers") {
-      return (papersQuery.data?.items ?? emptyPapers).map((paper) =>
-        paperToDiscoveryItem(paper, savedRefs),
-      );
-    }
-    return ((feedData ?? []) as FeedItem[]).map(feedItemToDiscoveryItem);
-  })();
+  const papersRawItems: DiscoveryItem[] = (
+    papersQuery.data?.items ?? emptyPapers
+  ).map((paper) => paperToDiscoveryItem(paper, savedRefs));
+  // Main list: paginated feed for Brief, on-demand search for Papers.
+  const mainRawItems: DiscoveryItem[] = isBriefView
+    ? (pagedFeed.results as FeedItem[]).map(feedItemToDiscoveryItem)
+    : papersRawItems;
+  // Right-rail aggregates read the stable capped feed (Brief) or the papers list,
+  // never the growing paginated results, so the rail stays put across loadMore.
+  const asideRawItems: DiscoveryItem[] = isBriefView
+    ? ((asideFeedData ?? []) as FeedItem[]).map(feedItemToDiscoveryItem)
+    : papersRawItems;
 
-  const items = rawItems.filter((item) => {
+  const items = mainRawItems.filter((item) => {
     const key = discoveryItemKey(item);
     return !hiddenIds.has(key) && !hiddenRefs.has(key);
   });
-  const topTopics = deriveTopTopics(rawItems, 8);
-  // Right-rail aggregates — derived from the items already loaded (zero backend).
+  const topTopics = deriveTopTopics(asideRawItems, 8);
   // Each derive returns an empty/zero result for views that lack the data, so the
   // matching rail module hides itself.
-  const verdictBreakdown = deriveVerdictBreakdown(rawItems);
-  const topCited = deriveTopCited(rawItems, 4);
-  const topicMomentum = deriveTopicMomentum(rawItems, 4);
+  const verdictBreakdown = deriveVerdictBreakdown(asideRawItems);
+  const topCited = deriveTopCited(asideRawItems, 4);
+  const topicMomentum = deriveTopicMomentum(asideRawItems, 4);
 
   const isLoading =
-    nav.view === "papers" ? papersQuery.isLoading : feedData === undefined;
+    nav.view === "papers"
+      ? papersQuery.isLoading
+      : pagedFeed.status === "LoadingFirstPage";
+
+  const feedStatus = pagedFeed.status;
+  const loadMoreFeed = pagedFeed.loadMore;
+  const resultsLen = pagedFeed.results.length;
+
+  // Start each fresh Brief session with a full auto-load budget. This fires on
+  // mount and on Papers -> Brief (which restarts the paginated query at page 1),
+  // and doubles as a user recovery path: toggling views re-arms auto-load if it
+  // ever stalled. Resets refs only (no setState), so it's lint-safe in an effect.
+  useEffect(() => {
+    autoLoadCountRef.current = 0;
+    prevResultsLenRef.current = 0;
+  }, [isBriefView]);
+
+  // Auto-load the next page when the sentinel scrolls into view. The budget
+  // (MAX_AUTO_LOADS) only counts down on genuine no-progress stalls — e.g. a page
+  // whose rows are all locally hidden, which shrinks below numItems without
+  // advancing the cursor — and is refunded the moment the feed actually grows, so
+  // normal scrolling never trips it. Tracking growth/shrink inside the callback
+  // (refs only) keeps this reactive-safe: a reactive hide can shrink results, and
+  // a later re-grow past the new baseline still reads as progress.
+  useEffect(() => {
+    if (!isBriefView) return;
+    const node = sentinelRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) return;
+        if (feedStatus !== "CanLoadMore") return;
+        if (resultsLen !== prevResultsLenRef.current) {
+          if (resultsLen > prevResultsLenRef.current) autoLoadCountRef.current = 0;
+          prevResultsLenRef.current = resultsLen;
+        }
+        if (autoLoadCountRef.current >= MAX_AUTO_LOADS) return;
+        autoLoadCountRef.current += 1;
+        loadMoreFeed(FEED_LOAD_MORE);
+      },
+      { rootMargin: "600px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [isBriefView, feedStatus, loadMoreFeed, resultsLen]);
   const viewError =
     nav.view === "papers" && papersQuery.error
       ? readableConvexErrorMessage(papersQuery.error, "Gagal mencari paper.")
@@ -255,7 +329,7 @@ export function DiscoveryPage() {
     onWhyRelevant: (item) => void handleWhyRelevant(item),
   };
 
-  const isBrief = nav.view === "brief";
+  const isBrief = isBriefView;
   const hero = isBrief ? items[0] : undefined;
   const briefRows = isBrief ? buildBriefRows(items.slice(1)) : [];
 
@@ -290,9 +364,10 @@ export function DiscoveryPage() {
             <div className="@container/feed min-w-0">
               {isLoading ? (
                 <AppLoadingOverlay variant="absolute" />
-              ) : items.length === 0 ? (
-                <DiscoveryEmptyState view={nav.view} />
               ) : isBrief ? (
+                items.length === 0 && feedStatus === "Exhausted" ? (
+                  <DiscoveryEmptyState view="brief" />
+                ) : (
                 <div className="space-y-10">
                   {hero ? (
                     <DiscoveryHeroCard
@@ -352,8 +427,16 @@ export function DiscoveryPage() {
                       </div>
                     ),
                   )}
-                  <CaughtUp />
+                  {feedStatus === "Exhausted" ? (
+                    <CaughtUp />
+                  ) : (
+                    <div ref={sentinelRef} aria-hidden className="h-px w-full" />
+                  )}
+                  {feedStatus === "LoadingMore" ? <FeedLoadingMore /> : null}
                 </div>
+                )
+              ) : items.length === 0 ? (
+                <DiscoveryEmptyState view="papers" />
               ) : (
                 <div>
                   <div className="divide-y divide-border/60">
@@ -371,7 +454,6 @@ export function DiscoveryPage() {
                       />
                     ))}
                   </div>
-                  {nav.view !== "papers" ? <CaughtUp /> : null}
                 </div>
               )}
             </div>
@@ -486,6 +568,14 @@ function CaughtUp() {
         Itu semua untuk sekarang. Feed disegarkan berkala — kembali lagi nanti
         atau simpan beberapa item untuk diteliti.
       </p>
+    </div>
+  );
+}
+
+function FeedLoadingMore() {
+  return (
+    <div className="flex items-center justify-center py-8 text-[12.5px] font-medium text-muted-foreground">
+      Memuat lebih banyak…
     </div>
   );
 }

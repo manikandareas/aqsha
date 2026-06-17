@@ -147,6 +147,19 @@ export type DiscoveryItem = Omit<FeedItem, "_id"> & {
   saved: boolean;
 };
 
+// The unified chronological sort key for the cross-kind paginated feed
+// (getFeedPaginated, by_order index). Non-optional on the table so the index is
+// total — a row without publishedAt (claims, topics, un-enriched news) would
+// otherwise sort indeterminately. Derived + maintained at every feedItems write
+// path (upsertFeedItems / claims / paper materialization).
+export function deriveOrderAt(item: {
+  publishedAt?: number;
+  lastSeenAt: number;
+  createdAt: number;
+}): number {
+  return item.publishedAt ?? item.lastSeenAt ?? item.createdAt;
+}
+
 export function discoveryItemKey(item: Pick<DiscoveryItem, "itemRef">): string {
   return item.itemRef.kind === "paper"
     ? `paper:${item.itemRef.paperKey}`

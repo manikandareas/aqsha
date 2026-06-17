@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { internal } from "./_generated/api";
 import {
   internalAction,
@@ -19,6 +20,7 @@ import {
   normalizeDoiLoose,
 } from "./feed/openAlex";
 import type { DiscoveryItemRef } from "./feed/model";
+import { deriveOrderAt } from "./feed/model";
 import { normalizeInterestTopic } from "./feed/interestKeywords";
 
 const TRENDING_LIMIT = 24;
@@ -132,6 +134,64 @@ export const getFeed = query({
     }
 
     return result;
+  },
+});
+
+// ── Public: paginated mixed feed for infinite scroll ──────────────────────
+// Chronological cursor over the cross-kind `by_order` index (orderAt desc),
+// re-ranked interest-aware *within each page*. Unlike getFeed (an in-memory
+// per-kind pool, no cursor), this supports true pagination for the discovery
+// surface's auto infinite scroll. getFeed stays for the stable aside cap +
+// home bento. Hidden + kind filtering happens post-paginate, so a page can
+// shrink below `numItems` — the cursor/isDone stay correct, and the client
+// guards the auto-loadMore loop. `returns` is omitted per AGENTS.md (the mapped
+// item shape isn't a single provable validator), matching getFeed.
+export const getFeedPaginated = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    kinds: v.optional(v.array(feedItemKindValidator)),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    const now = Date.now();
+    const kindSet =
+      args.kinds && args.kinds.length > 0 ? new Set(args.kinds) : null;
+
+    const page = await ctx.db
+      .query("feedItems")
+      .withIndex("by_order")
+      .order("desc")
+      .paginate(args.paginationOpts);
+
+    const interests = await loadInterestWeights(ctx, user._id);
+    const hidden = await loadHiddenItemIds(ctx, user._id);
+    const saved = await loadSavedItemIds(ctx, user._id);
+
+    const scored = page.page
+      .filter((item) => !hidden.has(item._id))
+      .filter((item) => !kindSet || kindSet.has(item.kind))
+      .map((item) => {
+        const interest = interestMatch(item.topics, interests);
+        const recency = recencyScore(item.publishedAt ?? item.lastSeenAt, now);
+        const popularity = popularityScore(item.trendScore);
+        const score =
+          recency * 1.0 +
+          popularity * 0.5 +
+          interest.normalized * 1.5 +
+          kindBoost(item.kind);
+        return {
+          shaped: {
+            ...shapeFeedItem(item, { saved: saved.has(item._id) }),
+            relevanceScore: Math.round(Math.min(1, interest.normalized) * 100),
+            reason: reasonFor(item, interest, false),
+          },
+          score,
+        };
+      });
+
+    scored.sort((a, b) => b.score - a.score);
+
+    return { ...page, page: scored.map((entry) => entry.shaped) };
   },
 });
 
@@ -495,6 +555,7 @@ export const upsertFeedItems = internalMutation({
     let inserted = 0;
     let updated = 0;
     for (const item of args.items) {
+      const orderAt = deriveOrderAt(item);
       const existing = await ctx.db
         .query("feedItems")
         .withIndex("by_dedupe_key", (q) => q.eq("dedupeKey", item.dedupeKey))
@@ -502,10 +563,12 @@ export const upsertFeedItems = internalMutation({
       if (existing) {
         const { createdAt, ...refreshFields } = item;
         void createdAt;
-        await ctx.db.patch("feedItems", existing._id, refreshFields);
+        // Refresh orderAt too so a re-seen item without publishedAt bubbles up
+        // by lastSeenAt (keeps the chronological by_order index live).
+        await ctx.db.patch("feedItems", existing._id, { ...refreshFields, orderAt });
         updated += 1;
       } else {
-        await ctx.db.insert("feedItems", item);
+        await ctx.db.insert("feedItems", { ...item, orderAt });
         inserted += 1;
       }
     }
@@ -812,7 +875,10 @@ async function ensureFeedItemForPaperKey(
     Date.now(),
     new Set<string>(),
   );
-  return await ctx.db.insert("feedItems", item);
+  return await ctx.db.insert("feedItems", {
+    ...item,
+    orderAt: deriveOrderAt(item),
+  });
 }
 
 async function existingFeedItemForPaperKey(

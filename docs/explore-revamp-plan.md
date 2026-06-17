@@ -1,8 +1,9 @@
 # Rencana Implementasi: Revamp Fitur Explore (Jelajahi)
 
-> Status: **Fase 0 + 1 SELESAI (terimplementasi, uncommitted)** · Fase 2/3/4 belum. Disusun 2026-06-16 dari
-> riset codebase + eksternal (multi-agent) + review adversarial. Setiap klaim file:line di bawah sudah
-> diverifikasi langsung terhadap kode, bukan asumsi.
+> Status: **Fase 0 + 1 + 2 SELESAI & ter-commit** (Fase 0 `6e27a98`, Fase 1 `c9104d4`, Fase 2 `d427871`) ·
+> **Fase 3 Slice 5 (infinite scroll) terimplementasi (uncommitted), gate hijau** · Slice 6–7 + Fase 4 belum.
+> Disusun 2026-06-16 dari riset codebase + eksternal (multi-agent) + review adversarial. Setiap klaim
+> file:line di bawah sudah diverifikasi langsung terhadap kode, bukan asumsi.
 > **Cakupan: 9 isu** — Bagian I (Isu 1–5: backend/feed — drop Exa, Google News RSS, interests, cron 3 jam,
 > infinite scroll) + Bagian II (Isu 6–9: UI/UX — nav For You/Top/Topics, search global, Save-to-Workspace,
 > Tanya Astra).
@@ -11,10 +12,10 @@
 
 | Fase | Status | Catatan |
 |------|--------|---------|
-| **Fase 0** (Slice 9, Tanya Astra) | ✅ **SELESAI** 2026-06-17 (uncommitted) | Pure frontend. Gate: `typecheck` hijau (5 workspace); lint file tersentuh bersih (1 error sisa = `app-sidebar.tsx` `set-state-in-effect`, **pra-ada & di luar scope**). |
-| **Fase 1** (Slice 1 + 2, lepas Exa + Google News) | ✅ **SELESAI** 2026-06-17 (uncommitted) | Gate hijau: `typecheck` (5 workspace), convex test **159 pass** (4 file tes baru), `lint` (convex + file web tersentuh bersih), `convex dev --once` (schema additive + fungsi + cron tervalidasi). |
-| **Fase 2** (Slice 3 + 4, hidrasi 3 jam + interest) | ⬜ belum | Orchestrator `hydrateCycle` akan menyerap cron sementara `feed:google-news` + jadwalkan `enrichGoogleNewsArticles`. |
-| **Fase 3** (Slice 5–7, infinite scroll + nav + search) | ⬜ belum | `orderAt`/`by_order`/`searchText` belum ada — sesuai rencana (bukan Fase 1). |
+| **Fase 0** (Slice 9, Tanya Astra) | ✅ **SELESAI** + commit `6e27a98` | Pure frontend. Gate: `typecheck` hijau (5 workspace); lint file tersentuh bersih (1 error sisa = `app-sidebar.tsx` `set-state-in-effect`, **pra-ada & di luar scope**). |
+| **Fase 1** (Slice 1 + 2, lepas Exa + Google News) | ✅ **SELESAI** + commit `c9104d4` | Gate hijau: `typecheck` (5 workspace), convex test **159 pass** (4 file tes baru), `lint` (convex + file web tersentuh bersih), `convex dev --once` (schema additive + fungsi + cron tervalidasi). |
+| **Fase 2** (Slice 3 + 4, hidrasi 3 jam + interest) | ✅ **SELESAI** + commit `d427871` | `hydrateCycle` orchestrator (5 lane staggered) menyerap `feed:google-news` + `enrichGoogleNewsArticles`; `feed/interestKeywords.ts` SSOT + `searchPapers` interest-seeded (cache-key isolated). Gate hijau: typecheck (5 ws), convex test 174 pass, lint, `convex dev --once`. Adversarial review (14 agen) → 4 temuan minor diperbaiki (read/write interest normalize, `openAlexRecommendationQuery` helper, action-level cache-isolation test). |
+| **Fase 3** (Slice 5–7, infinite scroll + nav + search) | 🔄 **Slice 5 SELESAI** (uncommitted) · 6–7 belum | **Slice 5** (infinite scroll) implemented, gate hijau (typecheck 5 ws, convex test **178 pass**, lint, `convex dev --once`). Keputusan owner: `orderAt` **non-optional** (greenfield, backfill dev manual non-commit). Sisa: verifikasi UI manual + commit + adversarial review (jalan). **Slice 6** (nav For You/Top/Topics) + **Slice 7** (search global `searchText`) belum — butuh Keputusan Terbuka #7 (5 kategori Topics) + #8 (cakupan search). |
 | **Fase 4** (Slice 8, Save-to-Workspace) | ⬜ belum | — |
 
 ### Yang dikerjakan di Fase 0 (2026-06-17)
@@ -77,6 +78,96 @@ ide, reader paper/berita/fakta) + commit (masih di working tree branch `developm
 2. Jalankan `internal.feed.sources.purgeLegacyExaNews` **sekali** (paginated, self-continuation) untuk bersihkan row `exa_news` lama.
 3. E2E manual: feed Jelajahi (lane berita Google News), buka detail berita, `/deep`/Tanya Astra dari item berita.
 4. Belum di-commit — semua perubahan masih di working tree branch `development`.
+
+### Yang dikerjakan di Fase 2 (2026-06-17, commit `d427871`)
+
+**Slice 3 — Interest-aware search + taksonomi SSOT (Isu 3):**
+- BARU `feed/interestKeywords.ts` = **single source of truth** taksonomi minat (`INTEREST_FIELD_TOPICS` 15
+  field, `normalizeInterestTopic`, `isInterestFieldId`, `topicsForInterestFields`). `onboarding.ts`
+  konsumsi SSOT (hapus `INTEREST_FIELDS` dup lokal).
+- `explore.searchPapers`: arg opsional `interestSeed` (default true). Recommendations (query kosong)
+  meng-seed `providerQuery`/`openAlexQuery` dari `internal.feed.userInterestTopics` (top minat user).
+  **Seed dilipat ke explore cache key** (`exploreCacheKey` dapat `seed?`) → feed personal tak bocor
+  lintas-user; cold-start (tanpa minat) tetap pakai key generik + OpenAlex trending. Helper murni baru
+  di `explore/model.ts`: `recommendationProviderQuery` + `openAlexRecommendationQuery`.
+- Normalisasi end-to-end: `userInterestTopics` normalize+dedupe **on read**, `bumpInterests` +
+  `seedFeedInterests` lowercase-trim **on write** (cegah varian kapital "Kecerdasan Buatan" bocor ke
+  provider berbahasa Inggris).
+
+**Slice 4 — Konsolidasi cron 3 jam (Isu 4):**
+- BARU `internal.feed.hydrateCycle` (internalAction): jadwalkan 5 lane via `scheduler.runAfter` staggered
+  (papers@0, GDELT@20m, Google News@40m, factcheck@60m, enrich@100m), tanpa `await`, **tanpa**
+  `backfillIndonesian`. `crons.ts`: 5 cron feed → satu `feed:hydrate-cycle` @3h; `agent:watchdog` tetap.
+- `refreshGoogleNews` tak lagi self-schedule enrichment (orchestrator yang atur cadence).
+
+**Tes baru:** `feedInterest.test.ts`, `feedHydrate.test.ts`, `exploreRecommendations.test.ts` (action-level
+cross-user cache isolation), `exploreModel.test.ts` diperluas. Convex **174 pass**.
+
+**Review adversarial (14 agen) → 4 temuan minor, semua diperbaiki:** (1) interest seed bawa topik
+mixed-case/Indonesia ke provider → normalize read+write; (2) tak ada tes isolasi cache lintas-user →
+tambah `exploreRecommendations.test.ts`; (3) komposisi `openAlexQuery` tak ter-tes → ekstrak helper murni
++ unit test; (4) komentar `interests.ts` overstate → diselesaikan oleh normalize write-side.
+
+**Gotcha terkonfirmasi:** `user._id` === `identity.tokenIdentifier` di query, mutation, **dan** action
+(`currentUserFromDoc` mengembalikan `_id: ownerUserId`; `currentUserFromIdentity` mengembalikan
+`_id: tokenIdentifier`). `userFeedInterests` ber-key tokenIdentifier di mana-mana → interest-read di jalur
+action (searchPapers) benar.
+
+**Langkah owner tersisa (Fase 2):** `convex deploy` **prod** (pure cron/function refactor, tanpa perubahan
+schema) supaya `feed:hydrate-cycle` + `hydrateCycle` menggantikan cron lama.
+
+### Yang dikerjakan di Fase 3 Slice 5 (2026-06-17, uncommitted)
+
+**Slice 5 — Infinite scroll (Isu 5):**
+- **Schema (D-greenfield):** `feedItems.orderAt: v.number()` **non-optional** + index `by_order ["orderAt"]`.
+  `deriveOrderAt = publishedAt ?? lastSeenAt ?? createdAt` (`feed/model.ts`), di-inject di **3 insert/patch
+  site** (`upsertFeedItems` insert+patch, `ensureFeedItemForPaperKey`, `claims.upsertClaimItems`
+  insert+patch). Builder/provider **tak disentuh** — typecheck menegakkan kewajiban field di tiap insert.
+- **Query baru** `feed.getFeedPaginated(paginationOpts, kinds?)`: paginate `by_order` desc, filter
+  hidden+kinds **post-paginate**, reorder interest-aware **per-page**. `returns` di-omit (shape mapped,
+  per AGENTS.md, seperti `getFeed`).
+- **Frontend:** `useConvexPaginatedQueryData` (re-export `usePaginatedQuery`) di `convex-query.ts` =
+  satu-satunya penyentuh adapter paginated. `discovery-page.tsx` Brief → auto infinite scroll
+  (IntersectionObserver, `rootMargin:600px`) + state lengkap (LoadingFirstPage→overlay, Exhausted+kosong→
+  empty-state, Exhausted+isi→"Kamu sudah update", CanLoadMore→sentinel, LoadingMore→footer). Guard
+  `MAX_AUTO_LOADS=4` (reset saat hasil bertambah) cegah loop page-shrink akibat filter hidden lokal. Aside
+  baca `getFeed(limit:30)` terpisah supaya rail tak goyang tiap loadMore. Papers view tak berubah.
+- **Migrasi dev (TIDAK di-commit):** karena dev punya 132 row lama tanpa `orderAt`, dilakukan
+  widen→backfill→narrow manual (schema optional sementara + throwaway `backfillOrderAtDev` → run → narrow).
+  Kode backfill **sengaja tak masuk diff** (prod greenfield dapat field non-optional langsung).
+- **Tes baru** `feedPaginated.test.ts`: kontinuitas pagination (tanpa drop/dup), item **tanpa
+  `publishedAt` tetap muncul** (via `orderAt`), filter `kinds`, exclude hidden, reorder interest per-page.
+- **Dokumentasi (wajib D1):** `feed-feature-prd.md` (P3 + risiko #7) + `feed-feature-research.md`
+  (§anti-doomscroll) dicatat pembalikan: kini infinite scroll otomatis, "Tampilkan lebih" dihapus.
+
+**Gate hijau:** typecheck (5 ws), convex **178 pass**, lint (convex bersih; app sama dgn baseline — 1 error
+pra-ada `app-sidebar.tsx`), `convex dev --once` (orderAt non-optional + `by_order` ter-push setelah backfill dev).
+
+**Langkah owner tersisa (Slice 5):**
+1. Verifikasi UI manual (scroll Brief→auto-load→"Kamu sudah update"; feed kosong→empty-state; tab Papers
+   tak berubah).
+2. **`convex deploy` prod — PRA-SYARAT KRITIS (review #1, major):** `orderAt` non-optional. Konfirmasi
+   `feedItems` prod **kosong** dulu (dashboard row count / `mcp convex tables`). **Jika ada baris lama →
+   JANGAN deploy field non-optional langsung** (push akan **gagal** "Schema validation failed … missing
+   field orderAt", bukan sekadar drop dari index). Lakukan widen→backfill→narrow: (a) `orderAt` jadi
+   `v.optional` → deploy → (b) backfill semua baris `orderAt = deriveOrderAt(row)` via paginated
+   internalMutation + `scheduler.runAfter` → (c) narrow ke `v.number()` → deploy. (Persis yang sudah
+   dilakukan manual di dev.) Lalu deploy frontend.
+3. Commit.
+
+**Review adversarial Slice 5 (12 agen) → 8 temuan (1 major, 5 minor, 2 nit). Ditindaklanjuti:**
+- **#1 (major, deploy precondition)** → bukan perubahan kode; diperkuat di langkah owner #2 di atas.
+- **#2/#3/#6/#8 (guard auto-load)** → **diperbaiki**: budget di-reset saat ganti view (Papers↔Brief =
+  jalur recovery) + logika growth/shrink dipindah ke callback observer (refs-only, lint-safe, reactive-safe);
+  wedge tak lagi permanen (self-heal saat feed tumbuh / toggle view).
+- **#5 (tes orderAt refresh on re-upsert)** → **ditambah** tes di `feedPaginated.test.ts` (lewat
+  `upsertFeedItems`, bukan insert langsung).
+- **#7 (nit `?? createdAt` mati)** & **#4 (tes hidden lintas-cursor, redundan dgn tes kinds)** →
+  di-skip sengaja (defensif tak berbahaya / sudah ter-cover).
+
+**Belum dikerjakan (Slice 6–7, butuh keputusan owner):** Slice 6 nav For You/Top/Topics perlu **Keputusan
+Terbuka #7** (5 kategori Topics: berita-umum vs fokus sains/kesehatan app). Slice 7 search global perlu
+**Keputusan Terbuka #8** (cakupan: hanya `feedItems` ter-`searchIndex` vs +augment `searchPapers` live).
 
 ## Ringkasan eksekutif
 
