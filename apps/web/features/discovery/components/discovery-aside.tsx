@@ -17,7 +17,7 @@ import {
   type TopTopic,
   type VerdictBreakdown,
 } from "../utils/discovery-format";
-import type { DiscoveryView } from "../hooks/use-discovery-nav";
+import type { DiscoveryMode } from "../hooks/use-discovery-nav";
 import { feedDetailHref } from "../utils/discovery-card-utils";
 import { VERDICT_FILL, VERDICT_STYLE } from "../utils/discovery-verdict-style";
 import { Donut, Sparkline } from "./discovery-visuals";
@@ -31,14 +31,14 @@ import { Donut, Sparkline } from "./discovery-visuals";
 // to most-cited papers when the topic lane is empty, so the rail keeps three
 // widgets instead of collapsing to two. Modules also self-hide without data.
 export function DiscoveryAside({
-  view,
+  mode,
   verdicts,
   momentum,
   topTopics,
   topCited,
   onSelectTopic,
 }: {
-  view: DiscoveryView;
+  mode: DiscoveryMode;
   verdicts: VerdictBreakdown;
   momentum: TopicMomentum[];
   topTopics: TopTopic[];
@@ -47,16 +47,14 @@ export function DiscoveryAside({
 }) {
   return (
     <div className="flex flex-col gap-5">
-      {view === "brief" ? <FactBalanceModule verdicts={verdicts} /> : null}
-      {view === "brief" ? (
-        momentum.length > 0 ? (
-          <MomentumModule momentum={momentum} onSelectTopic={onSelectTopic} />
-        ) : (
-          <MostCitedModule topCited={topCited} />
-        )
-      ) : null}
+      {/* Fact balance is most meaningful on the personalized feed. */}
+      {mode === "foryou" ? <FactBalanceModule verdicts={verdicts} /> : null}
+      {momentum.length > 0 ? (
+        <MomentumModule momentum={momentum} onSelectTopic={onSelectTopic} />
+      ) : (
+        <MostCitedModule topCited={topCited} />
+      )}
       <TrendingModule topTopics={topTopics} onSelectTopic={onSelectTopic} />
-      {view === "papers" ? <MostCitedModule topCited={topCited} /> : null}
     </div>
   );
 }

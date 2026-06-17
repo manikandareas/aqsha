@@ -38,8 +38,8 @@ import {
 import { DiscoveryListItem } from "../components/discovery-list-item";
 import { DiscoveryAside } from "../components/discovery-aside";
 import {
-  DiscoveryToolbar,
-  DiscoveryViewTabs,
+  DiscoveryHeaderControls,
+  DiscoveryModeNav,
 } from "../components/discovery-toolbar";
 import { VERDICT_STYLE } from "../utils/discovery-verdict-style";
 import {
@@ -73,46 +73,64 @@ export function DiscoveryPage() {
 
   const [nav, setNav] = useDiscoveryNav();
 
-  const isBriefView = nav.view !== "papers";
+  const searchActive = nav.q.trim().length > 0;
 
-  // Brief = paginated reactive feed driving auto infinite scroll. Papers below.
+  // Non-search: the mode/topic feed (For You / Top / Topics), paginated for auto
+  // infinite scroll. Search: the cross-content searchDiscovery index, augmented
+  // with a live external searchPapers pass (owner decision #8). Exactly one of
+  // these two paginated queries is live at a time; the other is skipped.
   const pagedFeed = useConvexPaginatedQueryData(
     api.feed.getFeedPaginated,
-    isBriefView ? {} : "skip",
+    searchActive
+      ? "skip"
+      : {
+          mode: nav.mode,
+          ...(nav.mode === "topics" && nav.topic ? { topic: nav.topic } : {}),
+        },
     { initialNumItems: FEED_INITIAL_ITEMS },
   );
-  // Aside aggregates read a small, stable getFeed cap so the right rail doesn't
-  // reshuffle on every loadMore as the paginated main list grows.
-  const asideFeedData = useConvexQueryData(
-    api.feed.getFeed,
-    isBriefView ? { limit: ASIDE_FEED_LIMIT } : "skip",
+  const searchFeed = useConvexPaginatedQueryData(
+    api.feed.searchDiscovery,
+    searchActive
+      ? { q: nav.q, fromYear: rangeToFromYear(nav.range) }
+      : "skip",
+    { initialNumItems: FEED_INITIAL_ITEMS },
   );
-  const papersQuery = useConvexActionQueryWithKey(
+  const externalPapers = useConvexActionQueryWithKey(
     api.explore.searchPapers,
-    ["discoveryPapers", nav.q, nav.range],
-    nav.view === "papers"
+    ["discoverySearch", nav.q, nav.range],
+    searchActive
       ? {
-          query: nav.q || undefined,
-          mode: nav.q ? "search" : "recommendations",
+          query: nav.q,
+          mode: "search",
           limit: 12,
           fromYear: rangeToFromYear(nav.range),
         }
       : "skip",
   );
-  const paperItemRefs: DiscoveryItemRef[] =
-    nav.view === "papers"
-      ? (papersQuery.data?.items ?? emptyPapers).map((paper) => ({
-          kind: "paper" as const,
-          paperKey: paper.key,
-        }))
-      : [];
+  const activeFeed = searchActive ? searchFeed : pagedFeed;
+
+  // Aside aggregates read a small, stable getFeed cap so the right rail doesn't
+  // reshuffle on every loadMore as the paginated main list grows.
+  const asideFeedData = useConvexQueryData(api.feed.getFeed, {
+    limit: ASIDE_FEED_LIMIT,
+  });
+
+  // Saved/hidden refs for the external (search) papers — feed items carry their
+  // own `saved` flag, but the augmented external papers need a lookup.
+  const paperItemRefs: DiscoveryItemRef[] = searchActive
+    ? (externalPapers.data?.items ?? emptyPapers).map((paper) => ({
+        kind: "paper" as const,
+        paperKey: paper.key,
+      }))
+    : [];
   const savedRefsData = useConvexQueryData(
     api.feed.getSavedDiscoveryRefs,
-    nav.view === "papers" ? { itemRefs: paperItemRefs } : "skip",
+    searchActive ? { itemRefs: paperItemRefs } : "skip",
   );
   const hiddenRefsData = useConvexQueryData(
     api.feed.getHiddenDiscoveryRefs,
-    nav.view === "papers" ? { itemRefs: paperItemRefs } : "skip",
+    searchActive ? { itemRefs: paperItemRefs } : "skip",
   );
 
   // Mutations / actions.
@@ -160,18 +178,30 @@ export function DiscoveryPage() {
     return set;
   })();
 
-  const papersRawItems: DiscoveryItem[] = (
-    papersQuery.data?.items ?? emptyPapers
-  ).map((paper) => paperToDiscoveryItem(paper, savedRefs));
-  // Main list: paginated feed for Brief, on-demand search for Papers.
-  const mainRawItems: DiscoveryItem[] = isBriefView
-    ? (pagedFeed.results as FeedItem[]).map(feedItemToDiscoveryItem)
-    : papersRawItems;
-  // Right-rail aggregates read the stable capped feed (Brief) or the papers list,
-  // never the growing paginated results, so the rail stays put across loadMore.
-  const asideRawItems: DiscoveryItem[] = isBriefView
-    ? ((asideFeedData ?? []) as FeedItem[]).map(feedItemToDiscoveryItem)
-    : papersRawItems;
+  // Main list: the active paginated feed (mode feed or search index), plus — in
+  // search — the external papers not already present in the cached results.
+  const feedDiscoveryItems: DiscoveryItem[] = (
+    activeFeed.results as FeedItem[]
+  ).map(feedItemToDiscoveryItem);
+  const feedPaperKeys = new Set(
+    feedDiscoveryItems
+      .map((item) => item.paperKey)
+      .filter((key): key is string => Boolean(key)),
+  );
+  const externalDiscoveryItems: DiscoveryItem[] = searchActive
+    ? (externalPapers.data?.items ?? emptyPapers)
+        .filter((paper) => !feedPaperKeys.has(paper.key))
+        .map((paper) => paperToDiscoveryItem(paper, savedRefs))
+    : [];
+  const mainRawItems: DiscoveryItem[] = [
+    ...feedDiscoveryItems,
+    ...externalDiscoveryItems,
+  ];
+  // Right-rail aggregates read the stable capped getFeed, never the growing
+  // paginated results, so the rail stays put across loadMore and search.
+  const asideRawItems: DiscoveryItem[] = (
+    (asideFeedData ?? []) as FeedItem[]
+  ).map(feedItemToDiscoveryItem);
 
   const items = mainRawItems.filter((item) => {
     const key = discoveryItemKey(item);
@@ -184,23 +214,25 @@ export function DiscoveryPage() {
   const topCited = deriveTopCited(asideRawItems, 4);
   const topicMomentum = deriveTopicMomentum(asideRawItems, 4);
 
-  const isLoading =
-    nav.view === "papers"
-      ? papersQuery.isLoading
-      : pagedFeed.status === "LoadingFirstPage";
+  const feedStatus = activeFeed.status;
+  const loadMoreFeed = activeFeed.loadMore;
+  const resultsLen = activeFeed.results.length;
 
-  const feedStatus = pagedFeed.status;
-  const loadMoreFeed = pagedFeed.loadMore;
-  const resultsLen = pagedFeed.results.length;
+  const isLoading = searchActive
+    ? feedStatus === "LoadingFirstPage" || externalPapers.isLoading
+    : feedStatus === "LoadingFirstPage";
 
-  // Start each fresh Brief session with a full auto-load budget. This fires on
-  // mount and on Papers -> Brief (which restarts the paginated query at page 1),
-  // and doubles as a user recovery path: toggling views re-arms auto-load if it
-  // ever stalled. Resets refs only (no setState), so it's lint-safe in an effect.
+  // Signature for the active paginated session — it changes whenever the query
+  // restarts at page 1 (mode/topic switch, or entering/leaving search). Resetting
+  // the auto-load budget here starts each fresh session unthrottled and doubles
+  // as a recovery path if auto-load ever stalled. Refs only (no setState).
+  const feedSessionKey = searchActive
+    ? `search:${nav.q}:${nav.range}`
+    : `feed:${nav.mode}:${nav.topic ?? ""}`;
   useEffect(() => {
     autoLoadCountRef.current = 0;
     prevResultsLenRef.current = 0;
-  }, [isBriefView]);
+  }, [feedSessionKey]);
 
   // Auto-load the next page when the sentinel scrolls into view. The budget
   // (MAX_AUTO_LOADS) only counts down on genuine no-progress stalls — e.g. a page
@@ -210,7 +242,6 @@ export function DiscoveryPage() {
   // (refs only) keeps this reactive-safe: a reactive hide can shrink results, and
   // a later re-grow past the new baseline still reads as progress.
   useEffect(() => {
-    if (!isBriefView) return;
     const node = sentinelRef.current;
     if (!node) return;
     const observer = new IntersectionObserver(
@@ -229,10 +260,11 @@ export function DiscoveryPage() {
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [isBriefView, feedStatus, loadMoreFeed, resultsLen]);
-  const viewError =
-    nav.view === "papers" && papersQuery.error
-      ? readableConvexErrorMessage(papersQuery.error, "Gagal mencari paper.")
+  }, [feedSessionKey, feedStatus, loadMoreFeed, resultsLen]);
+
+  const searchError =
+    searchActive && externalPapers.error
+      ? readableConvexErrorMessage(externalPapers.error, "Gagal mencari.")
       : null;
 
   const isSaved = (item: DiscoveryItem) => {
@@ -329,34 +361,47 @@ export function DiscoveryPage() {
     onWhyRelevant: (item) => void handleWhyRelevant(item),
   };
 
-  const isBrief = isBriefView;
-  const hero = isBrief ? items[0] : undefined;
-  const briefRows = isBrief ? buildBriefRows(items.slice(1)) : [];
+  // Feed modes render the editorial mosaic; search renders a flat results list.
+  const showMosaic = !searchActive;
+  const hero = showMosaic ? items[0] : undefined;
+  const briefRows = showMosaic ? buildBriefRows(items.slice(1)) : [];
 
   return (
     <ExploreChatShell
       breadcrumbs={[{ label: "Jelajahi" }]}
       headerCenter={
-        <DiscoveryViewTabs
-          view={nav.view}
-          onViewChange={(view) => void setNav({ view })}
+        <DiscoveryModeNav
+          mode={nav.mode}
+          topic={nav.topic}
+          onSelectMode={(mode) => void setNav({ mode, topic: null })}
+          onSelectTopic={(topic) => void setNav({ mode: "topics", topic })}
+        />
+      }
+      headerRight={
+        <DiscoveryHeaderControls
+          query={nav.q}
+          onSubmitQuery={(q) => void setNav({ q })}
+          range={nav.range}
+          onRangeChange={(range) => void setNav({ range })}
+          isSearching={
+            searchActive &&
+            (searchFeed.status === "LoadingFirstPage" ||
+              externalPapers.isFetching)
+          }
         />
       }
     >
       <div className="mx-auto w-full max-w-[1200px] px-5 pb-12 pt-4 sm:px-8 xl:px-10">
-          {nav.view === "papers" ? (
-            <DiscoveryToolbar
+          {searchActive ? (
+            <SearchResultsHeader
               query={nav.q}
-              onSubmitQuery={(q) => void setNav({ q })}
-              range={nav.range}
-              onRangeChange={(range) => void setNav({ range })}
-              isSearching={papersQuery.isFetching}
+              onClear={() => void setNav({ q: "" })}
             />
           ) : null}
 
-          {localError || researchError || viewError ? (
+          {localError || researchError || searchError ? (
             <div className="mt-4 max-w-[760px] rounded-[7px] border border-destructive/20 bg-destructive/10 px-4 py-3 text-[13px] font-medium text-destructive">
-              {localError ?? researchError ?? viewError}
+              {localError ?? researchError ?? searchError}
             </div>
           ) : null}
 
@@ -364,10 +409,12 @@ export function DiscoveryPage() {
             <div className="@container/feed min-w-0">
               {isLoading ? (
                 <AppLoadingOverlay variant="absolute" />
-              ) : isBrief ? (
-                items.length === 0 && feedStatus === "Exhausted" ? (
-                  <DiscoveryEmptyState view="brief" />
-                ) : (
+              ) : items.length === 0 && feedStatus === "Exhausted" ? (
+                <DiscoveryEmptyState
+                  mode={searchActive ? "search" : nav.mode}
+                  query={nav.q}
+                />
+              ) : showMosaic ? (
                 <div className="space-y-10">
                   {hero ? (
                     <DiscoveryHeroCard
@@ -434,9 +481,6 @@ export function DiscoveryPage() {
                   )}
                   {feedStatus === "LoadingMore" ? <FeedLoadingMore /> : null}
                 </div>
-                )
-              ) : items.length === 0 ? (
-                <DiscoveryEmptyState view="papers" />
               ) : (
                 <div>
                   <div className="divide-y divide-border/60">
@@ -454,18 +498,22 @@ export function DiscoveryPage() {
                       />
                     ))}
                   </div>
+                  {feedStatus !== "Exhausted" ? (
+                    <div ref={sentinelRef} aria-hidden className="h-px w-full" />
+                  ) : null}
+                  {feedStatus === "LoadingMore" ? <FeedLoadingMore /> : null}
                 </div>
               )}
             </div>
 
             <aside className="min-w-0 @4xl/explore:sticky @4xl/explore:top-6 @4xl/explore:self-start">
               <DiscoveryAside
-                view={nav.view}
+                mode={nav.mode}
                 verdicts={verdictBreakdown}
                 momentum={topicMomentum}
                 topTopics={topTopics}
                 topCited={topCited}
-                onSelectTopic={(name) => void setNav({ view: "papers", q: name })}
+                onSelectTopic={(name) => void setNav({ q: name })}
               />
             </aside>
           </section>
@@ -580,17 +628,52 @@ function FeedLoadingMore() {
   );
 }
 
-function DiscoveryEmptyState({ view }: { view: string }) {
+// Search results header: "Hasil untuk '…'" with a clear affordance.
+function SearchResultsHeader({
+  query,
+  onClear,
+}: {
+  query: string;
+  onClear: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 pb-3">
+      <p className="text-[13px] font-medium text-muted-foreground">
+        Hasil untuk{" "}
+        <span className="font-semibold text-foreground">“{query}”</span>
+      </p>
+      <button
+        type="button"
+        onClick={onClear}
+        className="inline-flex h-8 items-center rounded-[8px] border border-border/80 px-2.5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      >
+        Hapus pencarian
+      </button>
+    </div>
+  );
+}
+
+function DiscoveryEmptyState({
+  mode,
+  query,
+}: {
+  mode: string;
+  query: string;
+}) {
   const message =
-    view === "papers"
-      ? "Tidak ada paper yang cocok. Coba istilah lain atau perlebar rentang waktu."
-      : "Konten untuk lajur ini akan muncul setelah penyegaran terjadwal berikutnya.";
+    mode === "search"
+      ? `Tidak ada hasil untuk “${query}”. Coba kata kunci lain atau perlebar rentang waktu.`
+      : mode === "topics"
+        ? "Belum ada konten untuk topik ini. Coba topik lain atau kembali nanti."
+        : "Konten untuk lajur ini akan muncul setelah penyegaran terjadwal berikutnya.";
   return (
     <div className="mt-2 max-w-[560px] rounded-[10px] border border-border bg-card px-5 py-8 text-center">
       <div className="mx-auto mb-3 flex size-10 items-center justify-center rounded-full bg-mint-soft text-mint-foreground">
         <SparklesIcon className="size-5" />
       </div>
-      <h3 className="text-[15px] font-semibold text-foreground">Belum ada item</h3>
+      <h3 className="text-[15px] font-semibold text-foreground">
+        {mode === "search" ? "Tidak ada hasil" : "Belum ada item"}
+      </h3>
       <p className="mx-auto mt-1.5 max-w-[380px] text-[13px] font-medium leading-5 text-muted-foreground">
         {message}
       </p>

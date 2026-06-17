@@ -20,11 +20,13 @@ import {
 export function ExploreChatShell({
   breadcrumbs,
   headerCenter,
+  headerRight,
   chatSeed,
   children,
 }: {
   breadcrumbs: ExploreBreadcrumb[];
   headerCenter?: ReactNode;
+  headerRight?: ReactNode;
   chatSeed?: string;
   children: ReactNode;
 }) {
@@ -32,6 +34,7 @@ export function ExploreChatShell({
     <ExploreChatShellBody
       breadcrumbs={breadcrumbs}
       headerCenter={headerCenter}
+      headerRight={headerRight}
       chatSeed={chatSeed}
     >
       {children}
@@ -46,11 +49,13 @@ export function ExploreChatShell({
 function ExploreChatShellBody({
   breadcrumbs,
   headerCenter,
+  headerRight,
   chatSeed,
   children,
 }: {
   breadcrumbs: ExploreBreadcrumb[];
   headerCenter?: ReactNode;
+  headerRight?: ReactNode;
   chatSeed?: string;
   children: ReactNode;
 }) {
@@ -72,6 +77,7 @@ function ExploreChatShellBody({
             <ExploreSurfaceHeader
               breadcrumbs={breadcrumbs}
               centerSlot={headerCenter}
+              rightSlot={headerRight}
               chatOpen={chatPanelOpen}
               onToggleChat={() => setChatPanelOpen((open) => !open)}
               showLeftTrigger={!isLeftSidebarOpen}
