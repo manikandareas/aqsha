@@ -82,6 +82,7 @@ import type * as feed_providers_gdelt from "../feed/providers/gdelt.js";
 import type * as feed_providers_googleNews from "../feed/providers/googleNews.js";
 import type * as feed_providers_googleNewsDecode from "../feed/providers/googleNewsDecode.js";
 import type * as feed_sources from "../feed/sources.js";
+import type * as feed_topicCategories from "../feed/topicCategories.js";
 import type * as feed_validators from "../feed/validators.js";
 import type * as http from "../http.js";
 import type * as lib_appError from "../lib/appError.js";
@@ -194,6 +195,7 @@ declare const fullApi: ApiFromModules<{
   "feed/providers/googleNews": typeof feed_providers_googleNews;
   "feed/providers/googleNewsDecode": typeof feed_providers_googleNewsDecode;
   "feed/sources": typeof feed_sources;
+  "feed/topicCategories": typeof feed_topicCategories;
   "feed/validators": typeof feed_validators;
   http: typeof http;
   "lib/appError": typeof lib_appError;

@@ -462,11 +462,19 @@ export default defineSchema(
       // (getFeedPaginated). Non-optional so the by_order index is total — see
       // deriveOrderAt (feed/model.ts), maintained in every feedItems write path.
       orderAt: v.number(),
+      // Denormalized title+summary+topics blob for the global search index
+      // (Isu 7). Optional + additive: rows written before this lane simply
+      // aren't searchable until re-upserted. See deriveSearchText.
+      searchText: v.optional(v.string()),
     })
       .index("by_dedupe_key", ["dedupeKey"])
       .index("by_kind_trend", ["kind", "trendScore"])
       .index("by_kind_published", ["kind", "publishedAt"])
-      .index("by_order", ["orderAt"]),
+      .index("by_order", ["orderAt"])
+      .searchIndex("search_text", {
+        searchField: "searchText",
+        filterFields: ["kind"],
+      }),
     feedSources: defineTable({
       provider: feedProviderValidator,
       label: v.string(),

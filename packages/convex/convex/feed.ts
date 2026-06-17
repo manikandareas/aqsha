@@ -20,8 +20,12 @@ import {
   normalizeDoiLoose,
 } from "./feed/openAlex";
 import type { DiscoveryItemRef } from "./feed/model";
-import { deriveOrderAt } from "./feed/model";
+import { deriveOrderAt, deriveSearchText } from "./feed/model";
 import { normalizeInterestTopic } from "./feed/interestKeywords";
+import {
+  isDiscoveryTopicCategory,
+  matchesTopicCategory,
+} from "./feed/topicCategories";
 
 const TRENDING_LIMIT = 24;
 const FEED_PAGE_LIMIT = 40;
@@ -150,12 +154,24 @@ export const getFeedPaginated = query({
   args: {
     paginationOpts: paginationOptsValidator,
     kinds: v.optional(v.array(feedItemKindValidator)),
+    // Nav mode (Isu 6): "foryou" = interest-aware (default); "top" =
+    // popularity/recency, NOT personalized; "topics" = filter to `topic`
+    // category then rank foryou-style.
+    mode: v.optional(
+      v.union(v.literal("foryou"), v.literal("top"), v.literal("topics")),
+    ),
+    topic: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     const now = Date.now();
+    const mode = args.mode ?? "foryou";
     const kindSet =
       args.kinds && args.kinds.length > 0 ? new Set(args.kinds) : null;
+    const category =
+      mode === "topics" && args.topic && isDiscoveryTopicCategory(args.topic)
+        ? args.topic
+        : null;
 
     const page = await ctx.db
       .query("feedItems")
@@ -170,15 +186,24 @@ export const getFeedPaginated = query({
     const scored = page.page
       .filter((item) => !hidden.has(item._id))
       .filter((item) => !kindSet || kindSet.has(item.kind))
+      .filter(
+        (item) =>
+          !category || matchesTopicCategory(category, item.topics, item.title),
+      )
       .map((item) => {
         const interest = interestMatch(item.topics, interests);
         const recency = recencyScore(item.publishedAt ?? item.lastSeenAt, now);
         const popularity = popularityScore(item.trendScore);
+        // "Top" decouples interest and leans on popularity with a recency floor
+        // so high-citation-but-old papers don't dominate. "foryou"/"topics" keep
+        // the interest-aware composite.
         const score =
-          recency * 1.0 +
-          popularity * 0.5 +
-          interest.normalized * 1.5 +
-          kindBoost(item.kind);
+          mode === "top"
+            ? popularity * 1.0 + recency * 0.6 + kindBoost(item.kind)
+            : recency * 1.0 +
+              popularity * 0.5 +
+              interest.normalized * 1.5 +
+              kindBoost(item.kind);
         return {
           shaped: {
             ...shapeFeedItem(item, { saved: saved.has(item._id) }),
@@ -192,6 +217,62 @@ export const getFeedPaginated = query({
     scored.sort((a, b) => b.score - a.score);
 
     return { ...page, page: scored.map((entry) => entry.shaped) };
+  },
+});
+
+// ── Public: global cross-content search over the feed (Isu 7) ─────────────
+// Relevance-ranked full-text search across cached feed items (paper + news +
+// claim + topic) via the `search_text` index. Results keep Convex's relevance
+// order (no interest re-rank). `kinds`/`fromYear`/hidden are filtered
+// post-fetch (page-shrink guard handled client-side, same as getFeedPaginated).
+// The frontend augments these with a live external `searchPapers` pass for
+// uncached papers. `returns` omitted (mapped shape), matching getFeed.
+export const searchDiscovery = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    q: v.string(),
+    kinds: v.optional(v.array(feedItemKindValidator)),
+    fromYear: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    const text = args.q.trim().slice(0, 256);
+    if (!text) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+    const kindSet =
+      args.kinds && args.kinds.length > 0 ? new Set(args.kinds) : null;
+    const fromMs =
+      args.fromYear && Number.isFinite(args.fromYear)
+        ? Date.UTC(args.fromYear, 0, 1)
+        : null;
+
+    const page = await ctx.db
+      .query("feedItems")
+      .withSearchIndex("search_text", (q) => q.search("searchText", text))
+      .paginate(args.paginationOpts);
+
+    const interests = await loadInterestWeights(ctx, user._id);
+    const hidden = await loadHiddenItemIds(ctx, user._id);
+    const saved = await loadSavedItemIds(ctx, user._id);
+
+    const items = page.page
+      .filter((item) => !hidden.has(item._id))
+      .filter((item) => !kindSet || kindSet.has(item.kind))
+      .filter((item) => {
+        if (!fromMs) return true;
+        return (item.publishedAt ?? item.orderAt) >= fromMs;
+      })
+      .map((item) => {
+        const interest = interestMatch(item.topics, interests);
+        return {
+          ...shapeFeedItem(item, { saved: saved.has(item._id) }),
+          relevanceScore: Math.round(Math.min(1, interest.normalized) * 100),
+          reason: reasonFor(item, interest, false),
+        };
+      });
+
+    return { ...page, page: items };
   },
 });
 
@@ -556,6 +637,7 @@ export const upsertFeedItems = internalMutation({
     let updated = 0;
     for (const item of args.items) {
       const orderAt = deriveOrderAt(item);
+      const searchText = deriveSearchText(item);
       const existing = await ctx.db
         .query("feedItems")
         .withIndex("by_dedupe_key", (q) => q.eq("dedupeKey", item.dedupeKey))
@@ -565,10 +647,14 @@ export const upsertFeedItems = internalMutation({
         void createdAt;
         // Refresh orderAt too so a re-seen item without publishedAt bubbles up
         // by lastSeenAt (keeps the chronological by_order index live).
-        await ctx.db.patch("feedItems", existing._id, { ...refreshFields, orderAt });
+        await ctx.db.patch("feedItems", existing._id, {
+          ...refreshFields,
+          orderAt,
+          searchText,
+        });
         updated += 1;
       } else {
-        await ctx.db.insert("feedItems", { ...item, orderAt });
+        await ctx.db.insert("feedItems", { ...item, orderAt, searchText });
         inserted += 1;
       }
     }
@@ -878,6 +964,7 @@ async function ensureFeedItemForPaperKey(
   return await ctx.db.insert("feedItems", {
     ...item,
     orderAt: deriveOrderAt(item),
+    searchText: deriveSearchText(item),
   });
 }
 

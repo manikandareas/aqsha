@@ -17,6 +17,7 @@ function feedRow(
   o: {
     kind?: FeedKind;
     title?: string;
+    summary?: string;
     topics?: string[];
     trendScore?: number;
     publishedAt?: number;
@@ -24,26 +25,35 @@ function feedRow(
   } = {},
 ) {
   const orderAt = o.orderAt ?? BASE + seq;
+  const title = o.title ?? `Item ${seq}`;
+  const summary = o.summary ?? `Summary ${seq}`;
+  const topics = o.topics ?? [];
   return {
     kind: o.kind ?? ("news" as const),
-    title: o.title ?? `Item ${seq}`,
-    summary: `Summary ${seq}`,
+    title,
+    summary,
     url: `https://example.com/${seq}`,
     provider: "google_news" as const,
     sourceLabel: "Example",
-    topics: o.topics ?? [],
+    topics,
     trendScore: o.trendScore ?? 0,
     ...(o.publishedAt !== undefined ? { publishedAt: o.publishedAt } : {}),
     dedupeKey: `feed:${seq}`,
     lastSeenAt: orderAt,
     createdAt: BASE,
     orderAt,
+    searchText: `${title} ${summary} ${topics.join(" ")}`.toLowerCase(),
   };
 }
 
 async function collectPages(
   t: ReturnType<typeof convexTest>,
-  opts: { kinds?: FeedKind[]; numItems?: number } = {},
+  opts: {
+    kinds?: FeedKind[];
+    numItems?: number;
+    mode?: "foryou" | "top" | "topics";
+    topic?: string;
+  } = {},
 ) {
   const pages: Array<Array<{ _id: string; title: string; kind: string }>> = [];
   let cursor: string | null = null;
@@ -51,12 +61,35 @@ async function collectPages(
     const res = await t.withIdentity(IDENTITY).query(api.feed.getFeedPaginated, {
       paginationOpts: { numItems: opts.numItems ?? 2, cursor },
       ...(opts.kinds ? { kinds: opts.kinds } : {}),
+      ...(opts.mode ? { mode: opts.mode } : {}),
+      ...(opts.topic ? { topic: opts.topic } : {}),
     });
     pages.push(res.page as typeof pages[number]);
     if (res.isDone) break;
     cursor = res.continueCursor;
   }
   return pages;
+}
+
+async function collectSearch(
+  t: ReturnType<typeof convexTest>,
+  q: string,
+  opts: { kinds?: FeedKind[]; fromYear?: number; numItems?: number } = {},
+) {
+  const out: Array<{ _id: string; title: string; kind: string }> = [];
+  let cursor: string | null = null;
+  for (let i = 0; i < 25; i += 1) {
+    const res = await t.withIdentity(IDENTITY).query(api.feed.searchDiscovery, {
+      paginationOpts: { numItems: opts.numItems ?? 10, cursor },
+      q,
+      ...(opts.kinds ? { kinds: opts.kinds } : {}),
+      ...(opts.fromYear ? { fromYear: opts.fromYear } : {}),
+    });
+    out.push(...(res.page as typeof out));
+    if (res.isDone) break;
+    cursor = res.continueCursor;
+  }
+  return out;
 }
 
 describe("getFeedPaginated", () => {
@@ -228,5 +261,120 @@ describe("getFeedPaginated", () => {
       "Medicine item",
       "Physics item",
     ]);
+  });
+});
+
+describe("getFeedPaginated nav modes (Isu 6)", () => {
+  it("mode=top ranks by popularity and ignores interest", async () => {
+    const t = convexTest(schema, modules);
+    await t.run(async (ctx) => {
+      // A low-trendScore item the user is highly interested in...
+      await ctx.db.insert(
+        "feedItems",
+        feedRow(2, { title: "Niche", topics: ["medicine"], trendScore: 1 }),
+      );
+      // ...vs a popular item with no interest match.
+      await ctx.db.insert(
+        "feedItems",
+        feedRow(1, { title: "Popular", topics: ["sports"], trendScore: 100000 }),
+      );
+      await ctx.db.insert("userFeedInterests", {
+        ownerUserId: OWNER,
+        topic: "medicine",
+        weight: 10,
+        updatedAt: BASE,
+      });
+    });
+
+    // For You would lift "Niche" (interest); Top ignores interest → "Popular" wins.
+    const [topPage] = await collectPages(t, { mode: "top", numItems: 10 });
+    expect(topPage[0].title).toBe("Popular");
+    const [forYouPage] = await collectPages(t, { mode: "foryou", numItems: 10 });
+    expect(forYouPage[0].title).toBe("Niche");
+  });
+
+  it("mode=topics filters to the category by keyword match", async () => {
+    const t = convexTest(schema, modules);
+    await t.run(async (ctx) => {
+      await ctx.db.insert(
+        "feedItems",
+        feedRow(1, { title: "Uji vaksin terbaru", topics: ["kesehatan"] }),
+      );
+      await ctx.db.insert(
+        "feedItems",
+        feedRow(2, { title: "Energi terbarukan surya", topics: ["lingkungan"] }),
+      );
+      await ctx.db.insert(
+        "feedItems",
+        feedRow(3, { title: "Kurikulum sekolah baru", topics: ["pendidikan"] }),
+      );
+    });
+
+    const health = (
+      await collectPages(t, { mode: "topics", topic: "kesehatan", numItems: 10 })
+    ).flat();
+    expect(health.map((item) => item.title)).toEqual(["Uji vaksin terbaru"]);
+
+    // An unknown topic id falls back to no category filter (all items).
+    const all = (
+      await collectPages(t, { mode: "topics", topic: "bogus", numItems: 10 })
+    ).flat();
+    expect(all.length).toBe(3);
+  });
+});
+
+describe("searchDiscovery (Isu 7)", () => {
+  it("matches title/summary/topics, filters by kind + fromYear, excludes hidden", async () => {
+    const t = convexTest(schema, modules);
+    const hiddenId = await t.run(async (ctx) => {
+      await ctx.db.insert(
+        "feedItems",
+        feedRow(1, { kind: "news", title: "Vaksin flu musim ini" }),
+      );
+      await ctx.db.insert(
+        "feedItems",
+        feedRow(2, {
+          kind: "paper",
+          title: "Clinical trial",
+          summary: "A study about vaksin efficacy",
+          publishedAt: Date.UTC(2024, 0, 1),
+        }),
+      );
+      await ctx.db.insert(
+        "feedItems",
+        feedRow(3, { kind: "news", title: "Berita olahraga" }),
+      );
+      const hidden = await ctx.db.insert(
+        "feedItems",
+        feedRow(4, { kind: "news", title: "Vaksin hidden item" }),
+      );
+      await ctx.db.insert("hiddenFeedItems", {
+        ownerUserId: OWNER,
+        feedItemId: hidden,
+        createdAt: BASE,
+      });
+      return hidden;
+    });
+
+    const all = await collectSearch(t, "vaksin");
+    const titles = all.map((item) => item.title).sort();
+    // Matches title (news #1) + summary (paper #2); excludes the unrelated #3
+    // and the hidden #4.
+    expect(titles).toEqual(["Clinical trial", "Vaksin flu musim ini"]);
+    expect(all.some((item) => item._id === hiddenId)).toBe(false);
+
+    // Kind filter narrows to papers only.
+    const papersOnly = await collectSearch(t, "vaksin", { kinds: ["paper"] });
+    expect(papersOnly.map((item) => item.title)).toEqual(["Clinical trial"]);
+
+    // fromYear floor drops the news item (no publishedAt → orderAt is BASE 2023).
+    const recent = await collectSearch(t, "vaksin", { fromYear: 2024 });
+    expect(recent.map((item) => item.title)).toEqual(["Clinical trial"]);
+  });
+
+  it("returns empty for a blank query", async () => {
+    const t = convexTest(schema, modules);
+    const res = await collectSearch(t, "   ");
+    expect(res).toEqual([]);
   });
 });
