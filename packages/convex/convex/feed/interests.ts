@@ -1,9 +1,13 @@
 import type { MutationCtx } from "../_generated/server";
+import { normalizeInterestTopic } from "./interestKeywords";
 
 // Seed a positive interest floor for every topic (no 5-topic cap, unlike
 // feed interaction bumps). Used by onboarding to translate picked fields into
 // feed signal. Idempotent: re-running raises each topic to at most `weight`
 // rather than stacking, so re-completing onboarding never inflates weights.
+//
+// Topics are stored normalized (lowercase-trimmed) so they line up exactly with
+// the lowercase lookups in loadInterestWeights/interestMatch (feed.ts).
 export async function seedFeedInterests(
   ctx: MutationCtx,
   ownerUserId: string,
@@ -13,9 +17,9 @@ export async function seedFeedInterests(
   const now = Date.now();
   const seen = new Set<string>();
   for (const raw of topics) {
-    const topic = raw.trim();
-    if (!topic || seen.has(topic.toLowerCase())) continue;
-    seen.add(topic.toLowerCase());
+    const topic = normalizeInterestTopic(raw);
+    if (!topic || seen.has(topic)) continue;
+    seen.add(topic);
     const existing = await ctx.db
       .query("userFeedInterests")
       .withIndex("by_owner_topic", (q) =>

@@ -16,6 +16,8 @@ import {
   candidatesToExplorePapers,
   exploreCacheKey,
   normalizeExploreQuery,
+  openAlexRecommendationQuery,
+  recommendationProviderQuery,
   type ExploreMode,
   type ExplorePaper,
   type ExploreProvider,
@@ -25,6 +27,9 @@ import {
 
 const defaultRecommendationQuery = "education research learning assessment artificial intelligence";
 const minFallbackResults = 5;
+// How many of the user's top interest topics seed the recommendation query.
+// Kept small so the relevance search stays focused on the strongest interests.
+const RECOMMENDATION_INTEREST_LIMIT = 6;
 
 // An explorePapers row with system fields stripped: exactly `explorePaperFields`
 // plus the denormalized `lastSeenAt`. Matches the table definition in schema.ts
@@ -46,6 +51,9 @@ export const searchPapers = action({
     limit: v.optional(v.number()),
     mode: v.optional(v.union(v.literal("recommendations"), v.literal("search"))),
     fromYear: v.optional(v.number()),
+    // Seed empty-query recommendations with the user's top interest topics
+    // (default on). Pass false to get the generic cold-start recommendations.
+    interestSeed: v.optional(v.boolean()),
   },
   handler: async (ctx, args): Promise<ExploreSearchResponse> => {
     const user = await requireCurrentUser(ctx);
@@ -53,7 +61,20 @@ export const searchPapers = action({
     const mode: ExploreMode = args.mode ?? (query ? "search" : "recommendations");
     const limit = clampLimit(args.limit);
     const fromYear = clampFromYear(args.fromYear);
-    const cacheKey = exploreCacheKey({ mode, query, limit, fromYear });
+
+    // Interest-aware recommendations: when the query is empty, seed the provider
+    // search with the user's top interest topics. The seed is folded into the
+    // cache key so one user's personalized feed never serves another's.
+    const interestTopics =
+      mode === "recommendations" && (args.interestSeed ?? true)
+        ? await ctx.runQuery(internal.feed.userInterestTopics, {
+            ownerUserId: user._id,
+            limit: RECOMMENDATION_INTEREST_LIMIT,
+          })
+        : [];
+    const seedKey = interestTopics.length > 0 ? interestTopics.join(",") : undefined;
+
+    const cacheKey = exploreCacheKey({ mode, query, limit, fromYear, seed: seedKey });
     const cached = await readExploreCache(ctx, cacheKey);
     if (cached) {
       await cacheExplorePapers(ctx, cached.items);
@@ -62,13 +83,20 @@ export const searchPapers = action({
 
     const providerStatus: ExploreProviderStatus[] = [];
     const candidates: ExternalCandidate[] = [];
-    const providerQuery = query || defaultRecommendationQuery;
+    // Recommendations fall back to the interest seed (or the generic query when
+    // the user has no interests yet); search keeps the user's query verbatim.
+    const providerQuery =
+      query || recommendationProviderQuery(interestTopics, defaultRecommendationQuery);
+    // OpenAlex recommendations are interest-relevance searches when the user has
+    // interests, and the cited-by-count "trending" listing (empty query) on cold
+    // start — preserving the prior behavior for brand-new accounts.
+    const openAlexQuery = openAlexRecommendationQuery(query, interestTopics);
 
     await collectProvider(providerStatus, candidates, "OpenAlex", {
       run: () =>
         searchOpenAlexWorks(ctx, {
           ownerUserId: user._id,
-          query,
+          query: openAlexQuery,
           limit,
           mode,
           fromYear,

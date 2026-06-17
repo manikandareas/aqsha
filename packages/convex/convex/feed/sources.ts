@@ -173,15 +173,9 @@ export const refreshGoogleNews = internalAction({
       { items },
     );
 
-    // Best-effort article enrichment (resolve publisher URL → extract body).
-    // Soft-fails per item; never blocks ingestion. Phase 2 (Slice 4) will fold
-    // this into the feed:hydrate-cycle orchestrator instead of self-scheduling.
-    await ctx.scheduler.runAfter(
-      30_000,
-      internal.feed.sources.enrichGoogleNewsArticles,
-      {},
-    );
-
+    // Article enrichment (resolve publisher URL → extract body) is scheduled by
+    // the feed:hydrate-cycle orchestrator (internal.feed.hydrateCycle) on its
+    // own stagger, so this lane no longer self-schedules it.
     return { fetched: items.length, ...result };
   },
 });

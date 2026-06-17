@@ -19,6 +19,7 @@ import {
   normalizeDoiLoose,
 } from "./feed/openAlex";
 import type { DiscoveryItemRef } from "./feed/model";
+import { normalizeInterestTopic } from "./feed/interestKeywords";
 
 const TRENDING_LIMIT = 24;
 const FEED_PAGE_LIMIT = 40;
@@ -315,11 +316,23 @@ export const userInterestTopics = internalQuery({
       .query("userFeedInterests")
       .withIndex("by_owner_topic", (q) => q.eq("ownerUserId", args.ownerUserId))
       .take(100);
-    return rows
+    // Normalize on read so every consumer of the interest signal (feed scoring,
+    // search recommendations) shares one lowercase-trimmed contract, and collapse
+    // any case-variant rows (e.g. a seeded "machine learning" + an interaction-
+    // bumped one) to the highest-weight occurrence.
+    const limit = args.limit ?? 8;
+    const seen = new Set<string>();
+    const topics: string[] = [];
+    for (const row of rows
       .filter((row) => row.weight > 0)
-      .sort((a, b) => b.weight - a.weight)
-      .slice(0, args.limit ?? 8)
-      .map((row) => row.topic);
+      .sort((a, b) => b.weight - a.weight)) {
+      const topic = normalizeInterestTopic(row.topic);
+      if (!topic || seen.has(topic)) continue;
+      seen.add(topic);
+      topics.push(topic);
+      if (topics.length >= limit) break;
+    }
+    return topics;
   },
 });
 
@@ -544,6 +557,56 @@ export const refreshTrendingPapers = internalAction({
     );
 
     return { fetched: papers.length, ...result };
+  },
+});
+
+// ── Internal: feed hydration orchestrator (single 3h cron) ────────────────
+// Replaces the five separate feed crons. `crons.interval` has no per-job
+// offset, so one parent cron fans the lanes out with `scheduler.runAfter`
+// staggers — spacing the providers apart to avoid a thundering herd and to
+// respect each provider's rate budget. Each child is scheduled (never awaited):
+// the orchestrator must finish in well under the action limit, and per-lane
+// failures are already soft-failed inside each child. The Bahasa Indonesia
+// backfill lane is intentionally omitted for now (the Google News lane is
+// already hl=id) — re-enable it later by adding one more runAfter.
+const HYDRATE_STAGGER = {
+  trendingPapers: 0,
+  trendingTopics: 20 * 60_000,
+  googleNews: 40 * 60_000,
+  factCheckClaims: 60 * 60_000,
+  enrichGoogleNews: 100 * 60_000,
+} as const;
+
+export const hydrateCycle = internalAction({
+  args: {},
+  returns: v.object({ scheduled: v.number() }),
+  handler: async (ctx): Promise<{ scheduled: number }> => {
+    await ctx.scheduler.runAfter(
+      HYDRATE_STAGGER.trendingPapers,
+      internal.feed.refreshTrendingPapers,
+      {},
+    );
+    await ctx.scheduler.runAfter(
+      HYDRATE_STAGGER.trendingTopics,
+      internal.feed.sources.refreshTrendingTopics,
+      {},
+    );
+    await ctx.scheduler.runAfter(
+      HYDRATE_STAGGER.googleNews,
+      internal.feed.sources.refreshGoogleNews,
+      {},
+    );
+    await ctx.scheduler.runAfter(
+      HYDRATE_STAGGER.factCheckClaims,
+      internal.feed.claims.refreshFactCheckClaims,
+      {},
+    );
+    await ctx.scheduler.runAfter(
+      HYDRATE_STAGGER.enrichGoogleNews,
+      internal.feed.sources.enrichGoogleNewsArticles,
+      {},
+    );
+    return { scheduled: 5 };
   },
 });
 
@@ -897,7 +960,10 @@ async function bumpInterests(
 ): Promise<void> {
   const now = Date.now();
   for (const raw of topics.slice(0, 5)) {
-    const topic = raw.trim();
+    // Store normalized so interaction bumps share rows with the seeded topics
+    // (both go through the canonical normalizer) instead of forking a case
+    // variant; loadInterestWeights/interestMatch already look up lowercased.
+    const topic = normalizeInterestTopic(raw);
     if (!topic) continue;
     const existing = await ctx.db
       .query("userFeedInterests")

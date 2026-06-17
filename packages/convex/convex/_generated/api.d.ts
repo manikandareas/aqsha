@@ -73,6 +73,7 @@ import type * as feed_bahasa from "../feed/bahasa.js";
 import type * as feed_claims from "../feed/claims.js";
 import type * as feed_consensus from "../feed/consensus.js";
 import type * as feed_ideas from "../feed/ideas.js";
+import type * as feed_interestKeywords from "../feed/interestKeywords.js";
 import type * as feed_interests from "../feed/interests.js";
 import type * as feed_model from "../feed/model.js";
 import type * as feed_openAlex from "../feed/openAlex.js";
@@ -184,6 +185,7 @@ declare const fullApi: ApiFromModules<{
   "feed/claims": typeof feed_claims;
   "feed/consensus": typeof feed_consensus;
   "feed/ideas": typeof feed_ideas;
+  "feed/interestKeywords": typeof feed_interestKeywords;
   "feed/interests": typeof feed_interests;
   "feed/model": typeof feed_model;
   "feed/openAlex": typeof feed_openAlex;
