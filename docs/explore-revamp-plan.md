@@ -888,11 +888,11 @@ dependency.
 
 | Fase | Fokus | Slices | Sifat | Hasil utama |
 |------|-------|--------|-------|-------------|
-| **0** (opsional, quick win) | Polish copy/ikon | 9 | Frontend | "Tanya Astra" + ikon baru |
-| **1** ✅ | Lepas Exa & sumber berita gratis | 1, 2 | Backend | Explore tanpa Exa, berita via Google News — **SELESAI 2026-06-17** |
-| **2** | Hidrasi terpadu & personalisasi | 3, 4 | Backend | Cron 3 jam staggered + search interest-aware |
-| **3** | Pengalaman jelajah baru | 5, 6, 7 | Backend + Frontend | Infinite scroll + nav For You/Top/Topics + search global |
-| **4** | Aksi terpadu | 8 | Frontend-led | Save-to-Workspace konsisten (+ ikon app-wide) |
+| **0** ✅ | Polish copy/ikon | 9 | Frontend | "Tanya Astra" + ikon baru — **SELESAI** `6e27a98` |
+| **1** ✅ | Lepas Exa & sumber berita gratis | 1, 2 | Backend | Explore tanpa Exa, berita via Google News — **SELESAI** `c9104d4` |
+| **2** ✅ | Hidrasi terpadu & personalisasi | 3, 4 | Backend | Cron 3 jam staggered + search interest-aware — **SELESAI** `d427871` |
+| **3** ✅ | Pengalaman jelajah baru | 5, 6, 7 | Backend + Frontend | Infinite scroll + nav For You/Top/Topics + search global — **SELESAI** `1a51d83`/`334e9dc`/`89fa042` |
+| **4** ⬜ | Aksi terpadu | 8 | Frontend-led | Save-to-Workspace konsisten (+ ikon app-wide) — **belum** |
 
 > **Peta dependency:** Fase 0 & 1 & 2 saling independen (boleh paralel/urut bebas). Fase 3 berurutan
 > ketat: **5 → 6 → 7** (semua menyentuh `getFeedPaginated`/`nav`/header bersama). Fase 4 (Slice 8) butuh
@@ -900,7 +900,7 @@ dependency.
 
 ---
 
-### Fase 0 (opsional) — Polish "Tanya Astra" — ✅ SELESAI 2026-06-17 (uncommitted)
+### Fase 0 (opsional) — Polish "Tanya Astra" — ✅ SELESAI 2026-06-17 (commit `6e27a98`)
 **Tujuan:** rebrand action riset jadi conversational, nol risiko backend. **Prasyarat:** tidak ada.
 > Lihat **§ Yang dikerjakan di Fase 0 (2026-06-17)** di atas untuk rincian + penyimpangan.
 
@@ -909,7 +909,7 @@ dependency.
   `researchLabel`→`askLabel`. **Nol backend.** Grep bersih (tak ada Sparkles/"Teliti" tersisa di action);
   `typecheck` hijau. **DONE.**
 
-### Fase 1 — Lepas Exa & sumber berita gratis (backend) — ✅ SELESAI 2026-06-17 (uncommitted)
+### Fase 1 — Lepas Exa & sumber berita gratis (backend) — ✅ SELESAI 2026-06-17 (commit `c9104d4`)
 **Tujuan:** hilangkan biaya Exa dari explore, hidupkan lane berita via Google News RSS (gratis), bersihkan
 Exa dari ingest. **Prasyarat:** pra-cek empiris Google News (robots.txt / 302-follow / rate dari IP Convex).
 > Lihat **§ Status implementasi (progress log)** di atas untuk rincian eksekusi, temuan empiris, 6 fix
@@ -922,7 +922,7 @@ Exa dari ingest. **Prasyarat:** pra-cek empiris Google News (robots.txt / 302-fo
 - ✅ **Slice 2 — Hapus Exa fallback explore + ingest (Isu 1b + 1c).** Rantai explore OpenAlex→arXiv→Jina→
   Crossref; ingest Jina-only. Literal `Exa`/`exa` dipertahankan (additive). Tes. Ship. **DONE.**
 
-### Fase 2 — Hidrasi terpadu & personalisasi (backend)
+### Fase 2 — Hidrasi terpadu & personalisasi (backend) — ✅ SELESAI 2026-06-17 (commit `d427871`)
 **Tujuan:** satu siklus hidrasi 3 jam + feed/search hormati interest. **Prasyarat:** Slice 1 (referensi
 `refreshGoogleNews` masuk orchestrator di Slice 4).
 
@@ -932,7 +932,7 @@ Exa dari ingest. **Prasyarat:** pra-cek empiris Google News (robots.txt / 302-fo
   tanpa `backfillIndonesian`), satu cron `feed:hydrate-cycle`, hapus cron lama (termasuk `feed:google-news`
   sementara). Tes hydrate. Ship.
 
-### Fase 3 — Pengalaman jelajah baru (backend + frontend) — **berurutan 5 → 6 → 7**
+### Fase 3 — Pengalaman jelajah baru (backend + frontend) — **berurutan 5 → 6 → 7** — ✅ SELESAI 2026-06-17 (`1a51d83`/`334e9dc`/`89fa042`)
 **Tujuan:** surface explore baru — infinite scroll + nav For You/Top/Topics + search global. **Prasyarat:**
 Fase 1–2 (feed sudah terisi Google News + paper + claim/topic). Tiap slice: deploy Convex dulu, lalu frontend.
 
