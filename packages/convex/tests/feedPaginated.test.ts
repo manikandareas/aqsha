@@ -344,6 +344,18 @@ describe("searchDiscovery (Isu 7)", () => {
         "feedItems",
         feedRow(3, { kind: "news", title: "Berita olahraga" }),
       );
+      // #5: matches "vaksin", NO publishedAt, but a RECENT ingest (orderAt 2025).
+      // Guards the fromYear floor: it must bound on publication date, not ingest
+      // time. The old `publishedAt ?? orderAt` logic would have wrongly let this
+      // slip past a since-2024 filter on its 2025 orderAt.
+      await ctx.db.insert(
+        "feedItems",
+        feedRow(5, {
+          kind: "news",
+          title: "Vaksin baru diluncurkan",
+          orderAt: Date.UTC(2025, 0, 1),
+        }),
+      );
       const hidden = await ctx.db.insert(
         "feedItems",
         feedRow(4, { kind: "news", title: "Vaksin hidden item" }),
@@ -358,16 +370,23 @@ describe("searchDiscovery (Isu 7)", () => {
 
     const all = await collectSearch(t, "vaksin");
     const titles = all.map((item) => item.title).sort();
-    // Matches title (news #1) + summary (paper #2); excludes the unrelated #3
-    // and the hidden #4.
-    expect(titles).toEqual(["Clinical trial", "Vaksin flu musim ini"]);
+    // Matches title (news #1, news #5) + summary (paper #2); excludes the
+    // unrelated #3 and the hidden #4.
+    expect(titles).toEqual([
+      "Clinical trial",
+      "Vaksin baru diluncurkan",
+      "Vaksin flu musim ini",
+    ]);
     expect(all.some((item) => item._id === hiddenId)).toBe(false);
 
     // Kind filter narrows to papers only.
     const papersOnly = await collectSearch(t, "vaksin", { kinds: ["paper"] });
     expect(papersOnly.map((item) => item.title)).toEqual(["Clinical trial"]);
 
-    // fromYear floor drops the news item (no publishedAt → orderAt is BASE 2023).
+    // fromYear is a publication-date floor: BOTH news items are dropped — #1 (no
+    // publishedAt, old ingest) and #5 (no publishedAt despite a 2025 ingest).
+    // Only the paper (publishedAt 2024) survives. The old `publishedAt ?? orderAt`
+    // fallback would have wrongly kept #5 on its ingest time.
     const recent = await collectSearch(t, "vaksin", { fromYear: 2024 });
     expect(recent.map((item) => item.title)).toEqual(["Clinical trial"]);
   });

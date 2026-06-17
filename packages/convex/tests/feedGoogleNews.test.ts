@@ -41,6 +41,14 @@ describe("Google News feed lane (upsert + enrichment)", () => {
     expect(before).toHaveLength(1);
     expect(before[0].hasSummary).toBe(false);
 
+    // Google News rows ingest with a blank summary, so searchText starts as
+    // title + topics only — the body lead is not yet searchable.
+    const initialRow = await t.run((ctx) =>
+      ctx.db.get("feedItems", before[0].feedItemId),
+    );
+    expect(initialRow?.searchText).toContain("vaksin");
+    expect(initialRow?.searchText ?? "").not.toContain("peneliti");
+
     const resolvedUrl = "https://www.kompas.com/sains/read/uji-vaksin";
     const body = "Para peneliti memulai uji klinis fase tiga di Jakarta. ".repeat(8);
     const patchResult = await t.mutation(
@@ -73,6 +81,10 @@ describe("Google News feed lane (upsert + enrichment)", () => {
     expect(row?.resolvedUrl).toBe(resolvedUrl);
     expect((row?.articleText ?? "").length).toBeGreaterThan(0);
     expect(row?.summary).toBe("Para peneliti memulai uji klinis fase tiga.");
+    // searchText is recomputed from the now-filled summary so the enriched body
+    // lead becomes searchable via the search_text index.
+    expect(row?.searchText).toContain("peneliti");
+    expect(row?.searchText).toContain("klinis");
   });
 
   it("converges: a body-less item drops out after MAX_ENRICH_ATTEMPTS attempts", async () => {

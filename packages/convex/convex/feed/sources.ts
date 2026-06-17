@@ -20,6 +20,7 @@ import {
   type GoogleNewsItem,
 } from "./providers/googleNews";
 import { resolvePublisherUrl } from "./providers/googleNewsDecode";
+import { deriveSearchText } from "./model";
 import { fetchArticlePreview } from "../papers/articlePreview";
 
 // Research-relevant topics tracked for the "topik naik daun" lane.
@@ -243,6 +244,7 @@ export const patchGoogleNewsEnrichment = internalMutation({
         imageUrl?: string;
         summary?: string;
         tldr?: string;
+        searchText?: string;
       } = { enrichAttempts: (existing.enrichAttempts ?? 0) + 1 };
       if (update.resolvedUrl) patch.resolvedUrl = update.resolvedUrl;
       if (update.articleText) {
@@ -252,6 +254,14 @@ export const patchGoogleNewsEnrichment = internalMutation({
       if (update.imageUrl && !existing.imageUrl) patch.imageUrl = update.imageUrl;
       if (update.summary && existing.summary.trim().length === 0) {
         patch.summary = update.summary;
+        // Google News rows ingest with a blank summary, so their initial
+        // searchText is title+topics only. Recompute it now the body lead lands
+        // or the enriched news body stays unsearchable (search_text index).
+        patch.searchText = deriveSearchText({
+          title: existing.title,
+          summary: update.summary,
+          topics: existing.topics,
+        });
       }
       if (update.tldr && existing.tldr === undefined) patch.tldr = update.tldr;
       await ctx.db.patch("feedItems", update.feedItemId, patch);

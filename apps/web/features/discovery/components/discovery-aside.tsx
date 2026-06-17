@@ -23,13 +23,15 @@ import { VERDICT_FILL, VERDICT_STYLE } from "../utils/discovery-verdict-style";
 import { Donut, Sparkline } from "./discovery-visuals";
 
 // The fixed second sidebar for the discovery surface — a lean "widget deck" of
-// data-backed modules derived entirely from the items already loaded. Each view
-// shows its most useful modules, kept focused and within the sticky viewport:
-//   • Brief  → fact balance (donut) + topic momentum / most-cited + trending
-//   • Papers → trending topics + most-cited papers
-// The Brief middle slot prefers topic momentum (GDELT sparklines) but falls back
-// to most-cited papers when the topic lane is empty, so the rail keeps three
-// widgets instead of collapsing to two. Modules also self-hide without data.
+// data-backed modules derived entirely from the items already loaded. Modules
+// self-hide without data, so each nav mode (For You / Top / Topics) shows only
+// what it has, kept focused and within the sticky viewport:
+//   • Fact balance (donut) — For You only, where the personalized mix makes the
+//     verdict split meaningful.
+//   • Middle slot — prefers topic momentum (GDELT sparklines), falling back to
+//     most-cited papers when the momentum lane is empty, so the rail keeps three
+//     widgets instead of collapsing to two.
+//   • Trending topics — always.
 export function DiscoveryAside({
   mode,
   verdicts,

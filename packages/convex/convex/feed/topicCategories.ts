@@ -38,7 +38,10 @@ const CATEGORY_KEYWORDS: Record<DiscoveryTopicCategory, string[]> = {
   ],
   kesehatan: [
     "kesehatan", "health", "medicine", "medis", "medical", "penyakit",
-    "disease", "vaksin", "vaccine", "gizi", "nutrition", "mental",
+    // NB: bare "mental" substring-matches environmental/experimental/etc., so
+    // use disambiguated phrases/stems (matchesTopicCategory is substring-based).
+    "disease", "vaksin", "vaccine", "gizi", "nutrition", "mental health",
+    "kesehatan mental", "psikiatri", "psychiatr",
     "clinical", "klinis", "obat", "drug", "epidemi", "pandemi", "pandemic",
     "kanker", "cancer", "kedokteran", "imun", "immun", "stunting",
   ],
@@ -52,7 +55,10 @@ const CATEGORY_KEYWORDS: Record<DiscoveryTopicCategory, string[]> = {
     "ekonomi", "economic", "economy", "bisnis", "business", "sosial",
     "social", "sociolog", "politik", "political", "kebijakan", "policy",
     "keuangan", "finance", "pasar", "market", "pembangunan", "development",
-    "masyarakat", "demografi", "hukum", "law", "perdagangan", "investasi",
+    "masyarakat", "demografi", "perdagangan", "investasi",
+    // NB: bare "law" substring-matches flaw/claw/lawn; use specific tokens
+    // ("hukum" already covers Indonesian legal content).
+    "hukum", "lawsuit", "legislation", "regulasi",
   ],
   pendidikan: [
     "pendidikan", "education", "pembelajaran", "learning", "sekolah",

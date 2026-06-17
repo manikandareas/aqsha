@@ -165,7 +165,7 @@ export function DiscoveryHeaderControls({
     <div className="flex items-center gap-1.5">
       <form
         onSubmit={handleSubmit}
-        className="flex h-8 min-w-0 items-center rounded-[8px] border border-border/80 bg-card/50 px-2 sm:w-[220px]"
+        className="flex h-8 w-[150px] min-w-0 items-center rounded-[8px] border border-border/80 bg-card/50 px-2 sm:w-[220px]"
       >
         <label htmlFor="discovery-search" className="sr-only">
           Cari
@@ -183,7 +183,7 @@ export function DiscoveryHeaderControls({
           ref={inputRef}
           defaultValue={query}
           placeholder="Cari…"
-          className="hidden h-7 min-w-0 flex-1 bg-transparent text-[13px] font-medium text-foreground outline-none placeholder:text-muted-foreground sm:block"
+          className="h-7 min-w-0 flex-1 bg-transparent text-[13px] font-medium text-foreground outline-none placeholder:text-muted-foreground"
         />
       </form>
       <RangePopover

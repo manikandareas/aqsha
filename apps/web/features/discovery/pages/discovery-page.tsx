@@ -188,11 +188,17 @@ export function DiscoveryPage() {
       .map((item) => item.paperKey)
       .filter((key): key is string => Boolean(key)),
   );
-  const externalDiscoveryItems: DiscoveryItem[] = searchActive
-    ? (externalPapers.data?.items ?? emptyPapers)
-        .filter((paper) => !feedPaperKeys.has(paper.key))
-        .map((paper) => paperToDiscoveryItem(paper, savedRefs))
-    : [];
+  // Defer the live external papers until the in-app search index is fully
+  // paginated. That keeps the dedup against feed paper keys stable (a later index
+  // page can't retroactively remove an already-shown external row) and lands the
+  // external augmentation as one clean block at the end instead of reshuffling
+  // mid-scroll.
+  const externalDiscoveryItems: DiscoveryItem[] =
+    searchActive && searchFeed.status === "Exhausted"
+      ? (externalPapers.data?.items ?? emptyPapers)
+          .filter((paper) => !feedPaperKeys.has(paper.key))
+          .map((paper) => paperToDiscoveryItem(paper, savedRefs))
+      : [];
   const mainRawItems: DiscoveryItem[] = [
     ...feedDiscoveryItems,
     ...externalDiscoveryItems,
@@ -218,9 +224,25 @@ export function DiscoveryPage() {
   const loadMoreFeed = activeFeed.loadMore;
   const resultsLen = activeFeed.results.length;
 
-  const isLoading = searchActive
-    ? feedStatus === "LoadingFirstPage" || externalPapers.isLoading
-    : feedStatus === "LoadingFirstPage";
+  // The full-area overlay gates ONLY on the active paginated index's first page
+  // (mode feed or search index). The live external-papers pass (search) is a
+  // deferred augmentation appended after the index is exhausted — it must never
+  // blank out already-loaded index results, so it's excluded here.
+  const isLoading = feedStatus === "LoadingFirstPage";
+
+  // While the deferred external pass is still in flight (index already exhausted),
+  // surface a "loading more" affordance instead of a premature empty state.
+  const externalPending =
+    searchActive && feedStatus === "Exhausted" && externalPapers.isLoading;
+
+  // Manual fallback when auto-load stalls: reset the budget, re-baseline the
+  // growth tracker, and pull one more page. The observer re-arms auto-scroll once
+  // the list actually grows again.
+  const handleManualLoadMore = () => {
+    autoLoadCountRef.current = 0;
+    prevResultsLenRef.current = resultsLen;
+    loadMoreFeed(FEED_LOAD_MORE);
+  };
 
   // Signature for the active paginated session — it changes whenever the query
   // restarts at page 1 (mode/topic switch, or entering/leaving search). Resetting
@@ -252,6 +274,9 @@ export function DiscoveryPage() {
           if (resultsLen > prevResultsLenRef.current) autoLoadCountRef.current = 0;
           prevResultsLenRef.current = resultsLen;
         }
+        // Budget spent without the visible list growing (e.g. Topics post-filter
+        // dropped whole pages). Stop auto-spinning; the always-present manual
+        // "Muat lebih banyak" button (shown at CanLoadMore) is the escape.
         if (autoLoadCountRef.current >= MAX_AUTO_LOADS) return;
         autoLoadCountRef.current += 1;
         loadMoreFeed(FEED_LOAD_MORE);
@@ -409,7 +434,7 @@ export function DiscoveryPage() {
             <div className="@container/feed min-w-0">
               {isLoading ? (
                 <AppLoadingOverlay variant="absolute" />
-              ) : items.length === 0 && feedStatus === "Exhausted" ? (
+              ) : items.length === 0 && feedStatus === "Exhausted" && !externalPending ? (
                 <DiscoveryEmptyState
                   mode={searchActive ? "search" : nav.mode}
                   query={nav.q}
@@ -474,12 +499,15 @@ export function DiscoveryPage() {
                       </div>
                     ),
                   )}
-                  {feedStatus === "Exhausted" ? (
-                    <CaughtUp />
-                  ) : (
+                  {feedStatus !== "Exhausted" ? (
                     <div ref={sentinelRef} aria-hidden className="h-px w-full" />
-                  )}
-                  {feedStatus === "LoadingMore" ? <FeedLoadingMore /> : null}
+                  ) : null}
+                  <FeedFooter
+                    status={feedStatus}
+                    externalPending={externalPending}
+                    caughtUp
+                    onLoadMore={handleManualLoadMore}
+                  />
                 </div>
               ) : (
                 <div>
@@ -501,7 +529,12 @@ export function DiscoveryPage() {
                   {feedStatus !== "Exhausted" ? (
                     <div ref={sentinelRef} aria-hidden className="h-px w-full" />
                   ) : null}
-                  {feedStatus === "LoadingMore" ? <FeedLoadingMore /> : null}
+                  <FeedFooter
+                    status={feedStatus}
+                    externalPending={externalPending}
+                    caughtUp={false}
+                    onLoadMore={handleManualLoadMore}
+                  />
                 </div>
               )}
             </div>
@@ -626,6 +659,47 @@ function FeedLoadingMore() {
       Memuat lebih banyak…
     </div>
   );
+}
+
+// Bottom-of-feed footer shared by the mosaic (mode) and list (search) renders.
+// The caller owns the invisible IntersectionObserver sentinel (it lives next to
+// the parent's observer); this only renders the load-state UI: a "loading more"
+// spinner, a manual "Muat lebih banyak" button (shown at CanLoadMore), or — when
+// exhausted — the deferred-external spinner (search) or a "caught up" note
+// (mosaic, via `caughtUp`). The button is the escape hatch for a heavily
+// post-filtered Topics view where auto-load can exhaust its budget without
+// advancing; in practice it's only reached when stranded, since auto-load
+// (600px margin) keeps the feed growing ahead of a scrolling user.
+function FeedFooter({
+  status,
+  externalPending,
+  caughtUp,
+  onLoadMore,
+}: {
+  status: "LoadingFirstPage" | "LoadingMore" | "CanLoadMore" | "Exhausted";
+  externalPending: boolean;
+  caughtUp: boolean;
+  onLoadMore: () => void;
+}) {
+  if (status === "Exhausted") {
+    if (externalPending) return <FeedLoadingMore />;
+    return caughtUp ? <CaughtUp /> : null;
+  }
+  if (status === "LoadingMore") return <FeedLoadingMore />;
+  if (status === "CanLoadMore") {
+    return (
+      <div className="flex justify-center py-8">
+        <button
+          type="button"
+          onClick={onLoadMore}
+          className="inline-flex h-9 items-center rounded-[8px] border border-border/80 px-4 text-[13px] font-semibold text-foreground transition-colors hover:bg-muted"
+        >
+          Muat lebih banyak
+        </button>
+      </div>
+    );
+  }
+  return null;
 }
 
 // Search results header: "Hasil untuk '…'" with a clear affordance.

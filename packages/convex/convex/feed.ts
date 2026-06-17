@@ -53,8 +53,13 @@ const discoveryItemRefValidator = v.union(
 // `claim`. Shared by getFeed / getFeedItem / getRelatedFeedItems so every read
 // path returns an identically-shaped item.
 function shapeFeedItem(item: Doc<"feedItems">, options?: { saved?: boolean }) {
-  const { _creationTime, ...rest } = item;
+  // Strip storage-internal fields the client never reads: the denormalized
+  // search-index blob (searchText, up to 2000 chars) and the orderAt sort key.
+  // Multiplied across infinite-scroll pages, shipping these is pure bloat.
+  const { _creationTime, searchText, orderAt, ...rest } = item;
   void _creationTime;
+  void searchText;
+  void orderAt;
   return { ...rest, claim: item.primaryClaim, saved: Boolean(options?.saved) };
 }
 
@@ -261,7 +266,11 @@ export const searchDiscovery = query({
       .filter((item) => !kindSet || kindSet.has(item.kind))
       .filter((item) => {
         if (!fromMs) return true;
-        return (item.publishedAt ?? item.orderAt) >= fromMs;
+        // Year-range is a *publication-date* bound. Do NOT fall back to orderAt
+        // (publishedAt ?? lastSeenAt ?? createdAt) — that would let a freshly
+        // ingested, undated item slip past a "since 20XX" filter on its ingest
+        // time. Items with no known publish date are excluded once a range is set.
+        return (item.publishedAt ?? 0) >= fromMs;
       })
       .map((item) => {
         const interest = interestMatch(item.topics, interests);
