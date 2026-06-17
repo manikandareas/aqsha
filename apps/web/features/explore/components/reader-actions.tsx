@@ -6,7 +6,7 @@ import {
   BookmarkIcon,
   CheckIcon,
   Loader2Icon,
-  SparklesIcon,
+  MessageSquareIcon,
 } from "@aqsha/ui/icons";
 import { useState } from "react";
 import { useStartResearch } from "@/features/discovery/hooks/use-start-research";
@@ -14,11 +14,11 @@ import { useConvexMutationFn } from "@/lib/convex-query";
 
 export function ReaderActions({
   item,
-  researchLabel,
+  askLabel,
   researchSeed,
 }: {
   item: FeedItem;
-  researchLabel: string;
+  askLabel: string;
   researchSeed: string;
 }) {
   const { startResearch, busy, error } = useStartResearch();
@@ -54,9 +54,9 @@ export function ReaderActions({
           {busy ? (
             <Loader2Icon className="size-4 animate-spin" />
           ) : (
-            <SparklesIcon className="size-4" />
+            <MessageSquareIcon className="size-4" />
           )}
-          {researchLabel}
+          {askLabel}
         </button>
         <button
           type="button"

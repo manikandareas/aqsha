@@ -8,8 +8,8 @@ import {
   FileDownIcon,
   FolderIcon,
   Loader2Icon,
+  MessageSquareIcon,
   Quote,
-  SparklesIcon,
   ThumbsDownIcon,
 } from "@aqsha/ui/icons";
 import type { DiscoveryItem } from "@aqsha/convex/feed";
@@ -133,16 +133,16 @@ export function DiscoveryListItem({
           ) : null}
           <button
             type="button"
-            onClick={() => handlers.onTeliti(item)}
+            onClick={() => handlers.onAskAstra(item)}
             disabled={busy}
             className="inline-flex h-7 items-center gap-1.5 rounded-[7px] bg-primary px-2.5 text-[12px] font-semibold text-primary-foreground transition-colors hover:bg-primary-hover disabled:opacity-60"
           >
             {busy ? (
               <Loader2Icon className="size-3.5 animate-spin" />
             ) : (
-              <SparklesIcon className="size-3.5" />
+              <MessageSquareIcon className="size-3.5" />
             )}
-            Teliti ini
+            Tanya Astra
           </button>
           {isClaim ? (
             <button

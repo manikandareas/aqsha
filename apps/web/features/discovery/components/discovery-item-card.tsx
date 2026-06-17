@@ -10,9 +10,9 @@ import {
   HeartIcon,
   HelpCircleIcon,
   Loader2Icon,
+  MessageSquareIcon,
   MoreHorizontalIcon,
   Quote,
-  SparklesIcon,
   ThumbsDownIcon,
   TrendingUpIcon,
 } from "@aqsha/ui/icons";
@@ -34,7 +34,6 @@ import {
 import { cn } from "@/lib/utils";
 import { formatCitationCount } from "../utils/discovery-format";
 import {
-  buildSourceLine,
   feedDetailHref,
   kindLabel,
   kindPanelClass,
@@ -47,7 +46,7 @@ import {
 } from "./discovery-visuals";
 
 export type DiscoveryCardHandlers = {
-  onTeliti: (item: DiscoveryItem) => void;
+  onAskAstra: (item: DiscoveryItem) => void;
   onSave: (item: DiscoveryItem) => void;
   onSaveToWorkspace: (item: DiscoveryItem) => void;
   onHide: (item: DiscoveryItem) => void;
@@ -328,15 +327,15 @@ function CardOverflowMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuItem
-          onSelect={() => handlers.onTeliti(item)}
+          onSelect={() => handlers.onAskAstra(item)}
           disabled={busy}
         >
           {busy ? (
             <Loader2Icon className="animate-spin" />
           ) : (
-            <SparklesIcon />
+            <MessageSquareIcon />
           )}
-          Teliti ini
+          Tanya Astra
         </DropdownMenuItem>
         {isClaim ? (
           <DropdownMenuItem onSelect={() => handlers.onOpenEvidence(item)}>
