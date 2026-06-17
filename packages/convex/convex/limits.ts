@@ -78,6 +78,9 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
   // Feed service-path buckets (cron, no authenticated user). Mirror the
   // openAlexSearchGlobal pattern: global throttles that protect the providers
   // without consuming per-user credits.
+  // NOTE: unused after the Google News cutover (the Exa news lane was removed).
+  // Kept until runtime 0-usage is verified (Convex insights/logs); removal is
+  // separate cleanup work. `exaSearchPerUser` (above) is still used by the agent.
   exaSearchGlobal: {
     kind: "token bucket",
     rate: 6,

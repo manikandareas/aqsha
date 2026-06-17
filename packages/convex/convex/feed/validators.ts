@@ -10,7 +10,11 @@ export const feedItemKindValidator = v.union(
 
 export const feedProviderValidator = v.union(
   v.literal("openalex"),
+  // `exa_news` is retained for backward-compat with rows written before the
+  // Google News cutover; the news lane now writes `google_news`. Additive only —
+  // do not narrow this union until the legacy rows are purged + verified.
   v.literal("exa_news"),
+  v.literal("google_news"),
   v.literal("gdelt"),
   v.literal("google_factcheck"),
   v.literal("turnbackhoax"),
@@ -62,10 +66,19 @@ export const feedItemFields = {
   tldrId: v.optional(v.string()),
   titleId: v.optional(v.string()),
   url: v.string(),
+  // For Google News items, `url` is the opaque news.google.com redirect.
+  // `resolvedUrl` holds the decoded publisher URL once the lazy/best-effort
+  // resolver succeeds (see feed/providers/googleNewsDecode.ts). Readers link to
+  // `resolvedUrl ?? url`. Optional + additive; absent until enrichment resolves.
+  resolvedUrl: v.optional(v.string()),
   imageUrl: v.optional(v.string()),
   // Full reasoning text scraped from a claim's publisher review page (the
   // fact-check API gives no body). Optional + additive; older rows omit it.
   articleText: v.optional(v.string()),
+  // Number of times the Google News enrichment sweep has tried this item. Caps
+  // retries so unresolvable/body-less rows stop re-hitting external services
+  // every cycle (convergence). Optional + additive.
+  enrichAttempts: v.optional(v.number()),
   provider: feedProviderValidator,
   sourceLabel: v.string(),
   // Resolves to the shared `explorePapers` cache so feed papers reuse the

@@ -164,7 +164,7 @@ describe("explore paper model", () => {
         url: "https://arxiv.org/html/1706.03762",
       }),
       candidate({
-        provider: "exa",
+        provider: "openalex",
         title: "URL duplicate",
         url: "https://www.example.com/a?utm_source=test#section",
       }),

@@ -411,6 +411,10 @@ export default defineSchema(
         "updatedAt",
       ]),
     externalLookupCache: defineTable({
+      // Keep in sync with `providerValidator` in agent/providers/providerCache.ts
+      // (the getCache/putCache arg validator). This inline union is the stored
+      // column type; a missing literal here surfaces as an ArgumentValidationError
+      // when a cache write uses that provider.
       provider: v.union(
         v.literal("openalex"),
         v.literal("crossref"),
@@ -423,6 +427,7 @@ export default defineSchema(
         v.literal("paper_ingest"),
         v.literal("google_factcheck"),
         v.literal("gdelt"),
+        v.literal("google_news"),
       ),
       cacheKey: v.string(),
       status: v.union(v.literal("ready"), v.literal("empty"), v.literal("failed")),

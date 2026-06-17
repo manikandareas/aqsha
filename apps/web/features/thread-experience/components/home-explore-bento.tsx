@@ -39,9 +39,9 @@ export function HomeExploreBento() {
   const hero = items[3];
 
   const handlers: DiscoveryCardHandlers = {
-    onTeliti: (item) =>
+    onAskAstra: (item) =>
       void startResearch(
-        `${item.title}\n\n${item.tldr ?? item.summary}\n\nSumber: ${item.url}`,
+        `${item.title}\n\n${item.tldr ?? item.summary}\n\nSumber: ${item.resolvedUrl ?? item.url}`,
         { busyKey: discoveryItemKey(item) },
       ),
     onSave: () => router.push("/app/explore"),

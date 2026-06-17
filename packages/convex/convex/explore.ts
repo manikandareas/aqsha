@@ -8,7 +8,6 @@ import {
   lookupDoiProvider,
   providerFailureReason,
   searchArxivProvider,
-  searchExaCandidates,
   searchJinaCandidates,
   searchOpenAlexWorks,
   type ExternalCandidate,
@@ -89,20 +88,9 @@ export const searchPapers = action({
       providerStatus.push({ provider: "arXiv", status: "skipped" });
     }
 
-    if (candidateCount(candidates) < minFallbackResults) {
-      await collectProvider(providerStatus, candidates, "Exa", {
-        run: () =>
-          searchExaCandidates(ctx, {
-            ownerUserId: user._id,
-            query: providerQuery,
-            limit,
-            category: "research paper",
-          }),
-      });
-    } else {
-      providerStatus.push({ provider: "Exa", status: "skipped" });
-    }
-
+    // Exa was removed from the explore fallback chain (paid; now agent-only).
+    // The chain is OpenAlex → arXiv → Jina → Crossref. The "Exa" literal is
+    // retained in exploreProviderValidator/providerLabels for stored rows.
     if (candidateCount(candidates) < minFallbackResults) {
       await collectProvider(providerStatus, candidates, "Jina", {
         run: () =>

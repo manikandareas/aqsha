@@ -10,8 +10,8 @@ const crons = cronJobs();
 
 // Lane A — trending papers. OpenAlex list calls are cheap (~10 credits each)
 // and the action caches per day, so an 8h cadence keeps the feed fresh without
-// burning rate budget. Later waves add news (Exa), topics (GDELT) and
-// fact-check claims (Google Fact Check) jobs here.
+// burning rate budget. Other lanes add news (Google News RSS), topics (GDELT)
+// and fact-check claims (Google Fact Check) jobs below.
 crons.interval(
   "feed:trending-papers",
   { hours: 8 },
@@ -38,12 +38,14 @@ crons.interval(
   {},
 );
 
-// Lane A (news) — science news (Exa, paid). Low cadence + capped results to
-// control cost.
+// Lane A (news) — Google News RSS (free). Temporary standalone job on a 3h
+// cadence; Phase 2 (Slice 4) folds this into the feed:hydrate-cycle
+// orchestrator with staggered scheduling. The refresh self-schedules a
+// best-effort article-enrichment pass.
 crons.interval(
-  "feed:science-news",
-  { hours: 12 },
-  internal.feed.sources.refreshScienceNews,
+  "feed:google-news",
+  { hours: 3 },
+  internal.feed.sources.refreshGoogleNews,
   {},
 );
 

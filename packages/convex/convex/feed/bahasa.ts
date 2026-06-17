@@ -13,8 +13,14 @@ import { CHAT_LITE_MODEL } from "../agent/models";
 const SCAN_LIMIT = 80;
 const TRANSLATE_BATCH = 16;
 
-// Indonesian-native providers — already in Bahasa Indonesia, just mirror.
-const ID_NATIVE_PROVIDERS = new Set(["google_factcheck", "gdelt", "turnbackhoax"]);
+// Indonesian-native providers — already in Bahasa Indonesia, just mirror
+// (don't pay an LLM to translate ID→ID). Google News uses the hl=id edition.
+const ID_NATIVE_PROVIDERS = new Set([
+  "google_factcheck",
+  "gdelt",
+  "turnbackhoax",
+  "google_news",
+]);
 
 // ── Internal: find feed items still missing an Indonesian rendition ───────
 export const itemsMissingIndonesian = internalQuery({

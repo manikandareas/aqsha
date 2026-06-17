@@ -226,7 +226,7 @@ export function DiscoveryPage() {
   };
 
   const handlers: DiscoveryCardHandlers = {
-    onTeliti: (item) =>
+    onAskAstra: (item) =>
       void startResearch(buildSeed(item), {
         busyKey: discoveryItemKey(item),
         onSuccess: async () => {
@@ -470,7 +470,9 @@ function buildSeed(item: DiscoveryItem): string {
     ];
     return lines.filter(Boolean).join("\n");
   }
-  return `${item.title}\n\n${item.tldr ?? item.summary}\n\nSumber: ${item.url}`;
+  // Prefer the decoded publisher URL over the opaque Google News redirect so
+  // the research agent gets a readable source (parity with buildNewsSeed).
+  return `${item.title}\n\n${item.tldr ?? item.summary}\n\nSumber: ${item.resolvedUrl ?? item.url}`;
 }
 
 function CaughtUp() {
