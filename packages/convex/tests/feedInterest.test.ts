@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
-import { internal } from "../convex/_generated/api";
+import { api, internal } from "../convex/_generated/api";
 import schema from "../convex/schema";
 import { seedFeedInterests } from "../convex/feed/interests";
 import {
@@ -157,7 +157,6 @@ describe("userInterestTopics", () => {
     });
     expect(topics).toEqual([]);
   });
-
   it("normalizes topics on read and collapses case variants to the top weight", async () => {
     const t = convexTest(schema, modules);
     const owner = "user:variants";
@@ -192,5 +191,84 @@ describe("userInterestTopics", () => {
     // "machine learning" (collapsed, weight 7) ranks above "medicine" (5); no
     // duplicate, no leading/trailing whitespace, all lowercase.
     expect(topics).toEqual(["machine learning", "medicine"]);
+  });
+});
+
+describe("recordDiscoveryInteraction save bump (Isu 8)", () => {
+  const OWNER = "user:save-bump";
+  const IDENTITY = { tokenIdentifier: OWNER, subject: OWNER };
+  const NOW = 1_700_000_000_000;
+
+  async function insertFeedItem(t: ReturnType<typeof convexTest>) {
+    return await t.run(async (ctx) => {
+      // Mutations require a synced users row (queries fall back to the identity);
+      // requireCurrentUser maps user._id to ownerUserId for a synced doc.
+      await ctx.db.insert("users", {
+        ownerUserId: OWNER,
+        clerkUserId: OWNER,
+        email: "save-bump@example.com",
+        emailVerified: false,
+        name: null,
+        image: null,
+        createdAt: NOW,
+        updatedAt: NOW,
+      });
+      return ctx.db.insert("feedItems", {
+        kind: "news" as const,
+        title: "Vaksin terbaru",
+        summary: "Ringkasan",
+        url: "https://example.com/n",
+        provider: "google_news" as const,
+        sourceLabel: "Example",
+        topics: ["vaksin", "kesehatan"],
+        trendScore: 0,
+        dedupeKey: "feed:save-bump",
+        lastSeenAt: NOW,
+        createdAt: NOW,
+        orderAt: NOW,
+        searchText: "vaksin terbaru ringkasan vaksin kesehatan",
+      });
+    });
+  }
+
+  async function interestWeights(t: ReturnType<typeof convexTest>) {
+    const rows = await t.run(async (ctx) =>
+      ctx.db
+        .query("userFeedInterests")
+        .withIndex("by_owner_topic", (q) => q.eq("ownerUserId", OWNER))
+        .collect(),
+    );
+    return Object.fromEntries(rows.map((row) => [row.topic, row.weight]));
+  }
+
+  it("bumps interest +1 for the item's topics when saved to a workspace", async () => {
+    // Save-to-Workspace is the only save action after the bookmark cutover; the
+    // discovery surface records a `save` interaction on success to keep the
+    // personalization signal the old bookmark used to provide.
+    const t = convexTest(schema, modules);
+    const feedItemId = await insertFeedItem(t);
+
+    await t
+      .withIdentity(IDENTITY)
+      .mutation(api.feed.recordDiscoveryInteraction, {
+        itemRef: { kind: "feed", feedItemId },
+        kind: "save",
+      });
+
+    expect(await interestWeights(t)).toEqual({ vaksin: 1, kesehatan: 1 });
+  });
+
+  it("research stays a stronger +2 signal than save", async () => {
+    const t = convexTest(schema, modules);
+    const feedItemId = await insertFeedItem(t);
+
+    await t
+      .withIdentity(IDENTITY)
+      .mutation(api.feed.recordDiscoveryInteraction, {
+        itemRef: { kind: "feed", feedItemId },
+        kind: "research",
+      });
+
+    expect(await interestWeights(t)).toEqual({ vaksin: 2, kesehatan: 2 });
   });
 });

@@ -8,22 +8,19 @@ import {
   ExternalLinkIcon,
   FileTextIcon,
   LinkIcon,
-  PlusIcon,
 } from "@aqsha/ui/icons";
 import Link from "next/link";
-import { useState } from "react";
 import { CopyCitationButton } from "@/components/citation/copy-citation-button";
 import { PropertyLink, PropertyRow } from "@/components/detail/property-list";
 import { Button } from "@/components/ui/button";
 import { AppLoadingOverlay } from "@/components/app-loading-overlay";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { WorkspacePickerDialog } from "@/features/workspaces/components/workspace-picker-dialog";
+import { SaveToWorkspaceButton } from "@/features/workspaces/components/save-to-workspace-button";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
 import {
   useConvexActionQueryWithKey,
-  useConvexMutationState,
+  useConvexMutationFn,
 } from "@/lib/convex-query";
-import { toWorkspaceId } from "@/lib/convex-refs";
 import { formatCitation, type CitationFormat } from "../utils/citation";
 import { decodePaperRef } from "../utils/paper-ref";
 import { bestPaperIngestUrl } from "../utils/paper-ingest";
@@ -84,18 +81,7 @@ export function ExploreDetailPage({ paperRef }: { paperRef: string }) {
 function ExploreDetailContent({ paper }: { paper: ExplorePaper & { lastSeenAt?: number } }) {
   const abstract = paper.abstract ?? paper.snippet;
   const summary = summarizeAbstract(abstract);
-  const createUrl = useConvexMutationState(api.artifacts.createUrl);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  const handleSave = async (workspaceId: string) => {
-    await createUrl.mutateAsync({
-      workspaceId: toWorkspaceId(workspaceId),
-      url: bestPaperIngestUrl(paper),
-      title: paper.title,
-    });
-    setSaved(true);
-  };
+  const recordSave = useConvexMutationFn(api.feed.recordDiscoveryInteraction);
 
   return (
     <>
@@ -107,16 +93,24 @@ function ExploreDetailContent({ paper }: { paper: ExplorePaper & { lastSeenAt?: 
               <ExternalLinkIcon className="size-3" />
             </a>
           </Button>
-          <Button
-            type="button"
-            size="sm"
-            className="h-8 px-2.5 text-sm"
-            disabled={saved}
-            onClick={() => setPickerOpen(true)}
-          >
-            <PlusIcon className="size-3.5" />
-            {saved ? "Added to library" : "Add to library"}
-          </Button>
+          <SaveToWorkspaceButton
+            // Reset the saved state when navigating to another paper.
+            key={paper.key}
+            url={bestPaperIngestUrl(paper)}
+            title={paper.title}
+            onSaved={() =>
+              void recordSave({
+                itemRef: { kind: "paper", paperKey: paper.key },
+                kind: "save",
+              }).catch(() => {})
+            }
+            label="Simpan ke workspace"
+            savedLabel="Tersimpan"
+            iconClassName="size-3.5"
+            popoverTitle="Simpan paper"
+            popoverDescription="Pilih workspace tujuan. Paper akan otomatis diunduh dan metadatanya diekstrak."
+            className="h-8 rounded-[8px] bg-primary px-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover"
+          />
         </div>
 
         <header className="min-w-0">
@@ -174,14 +168,6 @@ function ExploreDetailContent({ paper }: { paper: ExplorePaper & { lastSeenAt?: 
       </section>
 
       <ExploreDetailSidebar paper={paper} />
-
-      <WorkspacePickerDialog
-        open={pickerOpen}
-        onOpenChange={setPickerOpen}
-        title="Simpan paper"
-        description="Pilih workspace tujuan. Paper akan otomatis diunduh dan metadatanya diekstrak."
-        onSelect={handleSave}
-      />
     </>
   );
 }

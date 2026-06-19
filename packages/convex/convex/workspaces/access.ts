@@ -52,6 +52,30 @@ export async function assertWorkspaceArtifactOwner(
   return artifact as Doc<"artifacts"> & { workspaceId: Id<"workspaces"> };
 }
 
+// An agent-generated artifact may be HEADLESS (no workspace, still thread-linked)
+// until the user files it, or already filed into a workspace. Authorize both:
+// always owner (+ active when asked), and workspace ownership only when filed.
+export async function assertAgentArtifactOwner(
+  ctx: QueryCtx | MutationCtx,
+  artifactId: Id<"artifacts">,
+  ownerUserId: string,
+  options: { requireActive?: boolean } = {},
+) {
+  const artifact = await ctx.db.get("artifacts", artifactId);
+  if (!artifact || artifact.ownerUserId !== ownerUserId) {
+    throw new ConvexError("Artifact not found");
+  }
+  if (options.requireActive && artifact.status !== "active") {
+    throw new ConvexError("Artifact not found");
+  }
+  if (artifact.workspaceId) {
+    await assertWorkspaceOwner(ctx, artifact.workspaceId, ownerUserId, {
+      requireActive: options.requireActive,
+    });
+  }
+  return artifact;
+}
+
 export async function assertThreadAttachmentOwner(
   ctx: QueryCtx | MutationCtx,
   artifactId: Id<"artifacts">,

@@ -990,11 +990,10 @@ describe("artifact↔thread link + listArtifacts (Step 3)", () => {
       .query(api.agent.queries.listArtifacts, { threadId: THREAD });
     expect(listed).toHaveLength(1);
     expect(listed[0]).toMatchObject({ title: "Laporan tertaut" });
-    // Fase 4 (answer-stream): the projection carries the artifact's own
-    // workspaceId so the in-chat artifact card can deep-link from a compact
-    // panel. An agent-created artifact always resolves a workspace (explicit →
-    // thread → default), so this is never null for these rows.
-    expect(typeof listed[0]!.workspaceId).toBe("string");
+    // Agent-created artifacts are now born HEADLESS (no workspace) — they only
+    // get one when the user links them from the chat artifact card. The thread
+    // link still holds (asserted above), but workspaceId is undefined until then.
+    expect(listed[0]!.workspaceId).toBeUndefined();
     // Fase 5 cleanup: the dead `currentVersionId` projection is gone.
     expect(listed[0]).not.toHaveProperty("currentVersionId");
 

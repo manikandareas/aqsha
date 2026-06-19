@@ -10,6 +10,13 @@ export function feedDetailHref(item: DiscoveryItem): string | null {
   return null;
 }
 
+// A `topic` (GDELT trend) item has no ingestible document — its url is a Google
+// News *search* page, not an article — so it isn't a valid Save-to-Workspace
+// target. Every other kind (paper/news/claim) points at a real document.
+export function isSavableToWorkspace(item: Pick<DiscoveryItem, "kind">): boolean {
+  return item.kind !== "topic";
+}
+
 export function kindLabel(kind: FeedItem["kind"]): string {
   switch (kind) {
     case "paper":

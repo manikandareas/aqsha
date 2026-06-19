@@ -136,3 +136,75 @@ describe("saveAttachmentToWorkspace (chatThreads-bound workspace)", () => {
     expect(result.workspaceId).toBe(ownWorkspaceId);
   });
 });
+
+async function seedAgentArtifact(
+  ctx: any,
+  args: { ownerUserId: string; threadId: string },
+) {
+  // Mirrors a HEADLESS agent-generated artifact: source "agent", no workspaceId,
+  // still thread-linked (createArtifactFromAgentInternal + the threadId patch).
+  const artifactId = await ctx.db.insert("artifacts", {
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+    source: "agent",
+    artifactType: "markdown",
+    title: "Laporan agen",
+    status: "active",
+    createdAt: 0,
+    updatedAt: 0,
+  });
+  await ctx.db.insert("artifactContents", {
+    ownerUserId: args.ownerUserId,
+    threadId: args.threadId,
+    artifactId,
+    plainText: "isi laporan",
+    createdAt: 0,
+    updatedAt: 0,
+  });
+  return artifactId;
+}
+
+describe("linkArtifactToWorkspace (headless agent artifact → workspace)", () => {
+  let t: ReturnType<typeof convexTest>;
+  beforeEach(() => {
+    t = convexTest(schema, modules);
+  });
+
+  it("files a headless agent artifact into the chosen workspace and releases its thread link", async () => {
+    const { workspaceId, artifactId } = await t.run(async (ctx) => {
+      await seedUser(ctx, OWNER);
+      const workspaceId = await ctx.db.insert("workspaces", {
+        ownerUserId: OWNER,
+        name: "Tujuan",
+        status: "active",
+        createdAt: 0,
+        updatedAt: 0,
+      });
+      const artifactId = await seedAgentArtifact(ctx, {
+        ownerUserId: OWNER,
+        threadId: "thr_agent",
+      });
+      return { workspaceId, artifactId };
+    });
+
+    // Precondition: born headless.
+    await t.run(async (ctx) => {
+      const artifact = await ctx.db.get("artifacts", artifactId);
+      expect(artifact?.workspaceId).toBeUndefined();
+      expect(artifact?.threadId).toBe("thr_agent");
+    });
+
+    const result = await t
+      .withIdentity(IDENTITY)
+      .mutation(api.artifacts.linkArtifactToWorkspace, { artifactId, workspaceId });
+
+    expect(result.workspaceId).toBe(workspaceId);
+
+    await t.run(async (ctx) => {
+      const artifact = await ctx.db.get("artifacts", artifactId);
+      expect(artifact?.workspaceId).toBe(workspaceId);
+      // The promote path releases the thread link once filed.
+      expect(artifact?.threadId).toBeUndefined();
+    });
+  });
+});

@@ -1,10 +1,10 @@
 # Rencana Implementasi: Revamp Fitur Explore (Jelajahi)
 
-> Status: **Fase 0–3 SELESAI & ter-commit** (Fase 0 `6e27a98`, Fase 1 `c9104d4`, Fase 2 `d427871`,
-> Fase 3 Slice 5 `1a51d83`, Slice 6+7 backend `334e9dc` + frontend `89fa042`), gate hijau ·
-> **hanya Fase 4 (Slice 8 Save-to-Workspace) tersisa**. Disusun 2026-06-16 dari riset codebase + eksternal
-> (multi-agent) + review adversarial. Setiap klaim file:line di bawah sudah diverifikasi langsung terhadap
-> kode, bukan asumsi.
+> Status: **SEMUA fase (0–4) SELESAI** — Fase 0–3 ter-commit (Fase 0 `6e27a98`, Fase 1 `c9104d4`,
+> Fase 2 `d427871`, Fase 3 Slice 5 `1a51d83`, Slice 6+7 backend `334e9dc` + frontend `89fa042`);
+> **Fase 4 (Slice 8 Save-to-Workspace) SELESAI 2026-06-18, uncommitted, gate hijau** (lihat
+> §"Yang dikerjakan di Fase 4"). Disusun 2026-06-16 dari riset codebase + eksternal (multi-agent) +
+> review adversarial. Setiap klaim file:line di bawah sudah diverifikasi langsung terhadap kode, bukan asumsi.
 > **Cakupan: 9 isu** — Bagian I (Isu 1–5: backend/feed — drop Exa, Google News RSS, interests, cron 3 jam,
 > infinite scroll) + Bagian II (Isu 6–9: UI/UX — nav For You/Top/Topics, search global, Save-to-Workspace,
 > Tanya Astra).
@@ -17,7 +17,7 @@
 | **Fase 1** (Slice 1 + 2, lepas Exa + Google News) | ✅ **SELESAI** + commit `c9104d4` | Gate hijau: `typecheck` (5 workspace), convex test **159 pass** (4 file tes baru), `lint` (convex + file web tersentuh bersih), `convex dev --once` (schema additive + fungsi + cron tervalidasi). |
 | **Fase 2** (Slice 3 + 4, hidrasi 3 jam + interest) | ✅ **SELESAI** + commit `d427871` | `hydrateCycle` orchestrator (5 lane staggered) menyerap `feed:google-news` + `enrichGoogleNewsArticles`; `feed/interestKeywords.ts` SSOT + `searchPapers` interest-seeded (cache-key isolated). Gate hijau: typecheck (5 ws), convex test 174 pass, lint, `convex dev --once`. Adversarial review (14 agen) → 4 temuan minor diperbaiki (read/write interest normalize, `openAlexRecommendationQuery` helper, action-level cache-isolation test). |
 | **Fase 3** (Slice 5–7, infinite scroll + nav + search) | ✅ **SELESAI** (Slice 5 `1a51d83`, Slice 6+7 backend `334e9dc` + frontend `89fa042` + review-fix `f008e68`) | **Slice 5** infinite scroll (`orderAt` non-optional + `by_order` + `getFeedPaginated` + auto-scroll); review 8 temuan (guard wedge diperbaiki). **Slice 6** nav For You/Top/Topics + `topicCategories.ts` (5 kategori sains/kesehatan, Keputusan #7). **Slice 7** search global lintas-konten (`searchText`+searchIndex+`searchDiscovery`) + augment `searchPapers` live (Keputusan #8). **Review adversarial Slice 6+7 → 14 temuan (3 major/6 minor/5 nit), semua aksiyonabel diperbaiki `f008e68`** (overlay gating, search mobile, fromYear publishedAt-only, Google News searchText recompute, Topics stranding → tombol manual, defer external papers, strip payload). Gate hijau: typecheck (5 ws), convex test **183 pass**, lint, `convex dev --once`, React Doctor. Sisa owner: verifikasi UI manual + `convex deploy` prod (schema-dulu) + push. |
-| **Fase 4** (Slice 8, Save-to-Workspace) | ⬜ belum | — |
+| **Fase 4** (Slice 8, Save-to-Workspace) | ✅ **SELESAI** 2026-06-18 (uncommitted) | Bookmark dihapus app-wide → Save-to-Workspace satu-satunya save untuk semua kind (ikon kanonik `FolderIcon`); `SaveToWorkspaceButton` + helper `saveUrlToWorkspace` (DRY); cold-start "Buat workspace baru & simpan"; interest +1 bump on save (parity bookmark lama); drop per-page `saved` compute di `getFeedPaginated`/`searchDiscovery`. Gate hijau: typecheck (5 ws), convex **185 pass** (+2 save-bump test), lint (app baseline 1 error pra-ada), `convex dev --once`. Adversarial review (14 agen) → 8 temuan; 4 diperbaiki (topic non-savable, cold-start error/double-toast, dead `active` prop, dedup save body), 3 ditunda terdokumentasi. |
 
 ### Yang dikerjakan di Fase 0 (2026-06-17)
 
@@ -224,6 +224,65 @@ aksiyonabel diperbaiki di `f008e68`:**
 + augment paper, clear search, **tombol Muat lebih banyak di Topics**, **search mobile**); `convex deploy`
 **prod** (schema-dulu: `searchText`/`search_text` additive, aman walau ada row lama — row lama tak tersearch
 sampai re-upsert); push.
+
+### Yang dikerjakan di Fase 4 (2026-06-18, Slice 8 — uncommitted)
+
+**Keputusan terkunci diterapkan:** D6/#11 (ganti bookmark penuh), #9 (ikon kanonik **`FolderIcon`**, bukan
+`FolderAddIcon`). Frontend-led + dua tweak `feed.ts`. **Tanpa perubahan schema/validator/index** (murni
+logika + UI) — beda dari Slice 5/6/7.
+
+**Backend (`feed.ts`):**
+- `recordFeedInteractionForUser` kini **bump interest +1** pada `kind:"save"` (mirror bump bookmark lama;
+  `research` tetap +2, `hide` −1). Save-to-Workspace memanggil `recordDiscoveryInteraction(itemRef,'save')`
+  on success → sinyal personalisasi tak hilang. `recordInteraction` publik tak punya pemanggil frontend →
+  tak ada double-bump.
+- `getFeedPaginated` + `searchDiscovery`: **hapus `loadSavedItemIds` per-halaman** (UI tak lagi baca `saved`;
+  `shapeFeedItem` kembalikan `saved:false`). Hemat satu read `savedFeedItems` tiap halaman. `getFeed`/
+  `getFeedItem`/`getRelatedFeedItems` **tak disentuh** (masih hitung `saved`, ada untuk collections/back-compat).
+- Tes baru `feedInterest.test.ts`: save bump +1, research +2. **Convex 185 pass**.
+
+**Frontend:**
+- BARU `features/workspaces/components/save-to-workspace-button.tsx` = kontrol Save-to-Workspace tunggal
+  (FolderIcon + `WorkspacePickerDialog` + `createUrl` + toast + callback `onSaved` untuk interest-bump).
+  `key={item._id}`/`key={paper.key}` di call-site → reset state `saved` saat App Router me-reuse halaman detail.
+- BARU helper `features/workspaces/lib/save-to-workspace.ts` `saveUrlToWorkspace(createUrl, {workspaceId,url,title})`
+  = body save bersama (createUrl + toast sukses/gagal + rethrow) dipakai button **dan** discovery-page →
+  string toast tak bisa drift (perbaikan temuan #8).
+- `WorkspacePickerDialog`: cold-start **"Buat workspace baru & simpan"** di empty-state (`api.workspaces.create`).
+- Discovery cards (`discovery-item-card`/`discovery-list-item`): hapus `onSave` dari `DiscoveryCardHandlers` +
+  `saved` dari `CardProps`; `LikeButton`(HeartIcon)/Bookmark/Check dihapus; **save-to-workspace (FolderIcon)
+  untuk semua kind** kecuali `topic` (lihat #1). Helper `isSavableToWorkspace(item)` (`kind !== "topic"`).
+- `discovery-page`: hapus seluruh wiring bookmark (`saveDiscoveryItem`/`unsave`/`savedOverride`/`isSaved`/
+  `handleSave`/`getSavedDiscoveryRefs`/`localError` mati); `handleSaveToWorkspace` pilih URL
+  `doi → pdfUrl → resolvedUrl → url` (parity berita), lewat helper, lalu record `save` + toast.
+- `reader-actions` + `explore-detail-page`: bookmark/`PlusIcon` "Add to library" → `SaveToWorkspaceButton`
+  (+ interest bump via `recordDiscoveryInteraction`). `home-explore-bento`: buang `onSave` + `saved` props.
+- `IconButton` (`discovery-item-card`): prop `active` (mati setelah bookmark hilang) dihapus.
+
+**Audit app-wide:** **tak ada** surface konsumen `getSavedItems`/`getSavedDiscoveryRefs` di `apps/web` →
+hapus bookmark tak menelantarkan "koleksi tersimpan" mana pun; **nol** UI bookmark/save toggle tersisa.
+
+**Review adversarial (14 agen, pipeline review→verify) → 8 temuan terkonfirmasi (0 major, 2 minor, 6 nit):**
+- **#1 (minor, DIPERBAIKI):** Save-to-Workspace universal membuat item `kind:"topic"` (GDELT) bisa di-save,
+  padahal `url`-nya halaman *pencarian* Google News (bukan dokumen) → `createUrl` meng-ingest sampah.
+  Fix: `isSavableToWorkspace` menyembunyikan tombol save untuk `topic`. claim/paper/news tetap savable.
+- **#2 (minor, DIPERBAIKI):** cold-start "Buat & simpan" — `createWorkspace` + `onSelect` dalam satu try/catch
+  → saat **save** gagal (workspace sudah terbuat), pesan salah "Gagal membuat workspace" + **double-toast**
+  (onSelect sudah toast). Fix: pisah try/catch; branch save tak re-toast; dialog tetap terbuka → workspace
+  baru muncul di list untuk retry (juga memitigasi #4).
+- **#6/#7 (nit, DIPERBAIKI):** prop `IconButton.active` jadi mati (satu-satunya pemanggil = bookmark) → dihapus.
+- **#8 (nit, DIPERBAIKI):** body save (createUrl+toast+record) terduplikasi button vs discovery-page →
+  diekstrak `saveUrlToWorkspace`.
+- **Ditunda (terdokumentasi, reviewer setuju defer):** **#3** field `DiscoveryItem.saved`/`FeedItem.saved` +
+  param `savedRefs` di `feed/model.ts` kini tak terbaca UI (model.ts di luar diff slice ini; masuk bucket
+  "cleanup terpisah" bersama fungsi bookmark mati). **#4** workspace kosong yatim bila save cold-start gagal
+  (recoverable via retry setelah fix #2). **#5** save berulang setelah remount me-`+1` lagi walau `createUrl`
+  dedup ke artifact lama (bookmark lama idempotent); perbaikan butuh `createUrl` mengembalikan `{created}` —
+  nit, "save berulang = niat berulang" dapat diterima.
+
+**Langkah owner tersisa (Fase 4):** verifikasi UI manual (save semua kind + tombol di reader paper/berita/
+fakta; popover picker; cold-start buat-workspace; topic **tak** punya tombol save; toast "Disimpan ke
+workspace"); `convex deploy` **prod** (tanpa perubahan schema — hanya logika `feed.ts`, aman); commit + push.
 
 ## Ringkasan eksekutif
 
@@ -917,7 +976,7 @@ dependency.
 | **1** ✅ | Lepas Exa & sumber berita gratis | 1, 2 | Backend | Explore tanpa Exa, berita via Google News — **SELESAI** `c9104d4` |
 | **2** ✅ | Hidrasi terpadu & personalisasi | 3, 4 | Backend | Cron 3 jam staggered + search interest-aware — **SELESAI** `d427871` |
 | **3** ✅ | Pengalaman jelajah baru | 5, 6, 7 | Backend + Frontend | Infinite scroll + nav For You/Top/Topics + search global — **SELESAI** `1a51d83`/`334e9dc`/`89fa042` |
-| **4** ⬜ | Aksi terpadu | 8 | Frontend-led | Save-to-Workspace konsisten (+ ikon app-wide) — **belum** |
+| **4** ✅ | Aksi terpadu | 8 | Frontend-led | Save-to-Workspace konsisten (+ ikon app-wide) — **SELESAI** 2026-06-18 (uncommitted) |
 
 > **Peta dependency:** Fase 0 & 1 & 2 saling independen (boleh paralel/urut bebas). Fase 3 berurutan
 > ketat: **5 → 6 → 7** (semua menyentuh `getFeedPaginated`/`nav`/header bersama). Fase 4 (Slice 8) butuh
@@ -1046,12 +1105,15 @@ insights/logs) — **bukan** bagian rencana ini.
 8. **Cakupan search global (Isu 7)**: hanya `feedItems` ter-cache (via `searchIndex`) — default — atau **+augment**
    `searchPapers` eksternal untuk paper yang belum ter-cache (hasil lebih kaya, latency lebih tinggi)?
 9. **Ikon kanonik Save-to-Workspace (Isu 8)**: `FolderIcon` (default, churn minimal) atau tambah `FolderAddIcon`
-   (`FolderAdd01Icon`) untuk semantik "+folder"?
+   (`FolderAdd01Icon`) untuk semantik "+folder"? _[Fase 4]_ **Diterapkan: `FolderIcon`** (default).
 10. **Ikon Tanya Astra (Isu 9)**: `MessageSquareIcon` (default) vs `MessageSquarePlusIcon` vs glyph Astra khusus?
     Apakah Sparkles dekoratif (`discovery-aside.tsx:209` "Sedang ramai", `onboarding-steps.tsx:161`) ikut diganti
     atau dibiarkan?
 11. **Save gantikan bookmark sepenuhnya (Isu 8/D6)**: konfirmasi menghilangkan toggle "Tersimpan" +
-    `savedFeedItems` jadi dead (vs mempertahankan keduanya). Default plan: ganti penuh.
+    `savedFeedItems` jadi dead (vs mempertahankan keduanya). Default plan: ganti penuh. _[Fase 4]_
+    **Diterapkan: ganti penuh.** Bookmark dihapus dari semua UI; `saveItem`/`saveDiscoveryItem`/
+    `savedFeedItems`/`getSavedDiscoveryRefs` jadi **dead** (tak dipanggil frontend mana pun; cleanup
+    backend ditunda — bucket "pekerjaan cleanup terpisah" bersama literal `exa`). `hiddenFeedItems` TETAP.
 12. **Rename handler (Isu 9)**: `onTeliti`→`onAskAstra` & `researchLabel`→`askLabel` (selaras prinsip "code
     terorganisir") atau biarkan nama handler lama? Default plan: rename.
 

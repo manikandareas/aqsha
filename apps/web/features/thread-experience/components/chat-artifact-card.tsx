@@ -1,10 +1,13 @@
 "use client";
 
 import type { ActivityEvent } from "@aqsha/agent-contracts";
+import { api } from "@aqsha/convex/api";
 import {
   ArtifactTypeIcon,
+  CheckIcon,
   ChevronRightIcon,
   ExternalLinkIcon,
+  FolderIcon,
 } from "@aqsha/ui/icons";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -14,6 +17,9 @@ import {
   artifactTypeLabel,
   provenanceLabel,
 } from "@/components/artifact-presentation";
+import { WorkspacePickerPopover } from "@/features/workspaces/components/workspace-picker-popover";
+import { linkArtifactToWorkspace } from "@/features/workspaces/lib/save-to-workspace";
+import { useConvexMutationState } from "@/lib/convex-query";
 import { cn } from "@/lib/utils";
 import { chatArtifactCardModel } from "../utils/turn-model";
 import { formatDate } from "../utils/datetime";
@@ -36,6 +42,8 @@ export function ChatArtifactCard({ node }: { node: ActivityEvent }) {
   const artifactById = ctx?.artifactById ?? emptyArtifacts;
   const compact = ctx?.compact ?? false;
   const model = chatArtifactCardModel(node, artifactById);
+  // Hook must run unconditionally (before the `model.live` early return below).
+  const linkMutation = useConvexMutationState(api.artifacts.linkArtifactToWorkspace);
 
   if (model.live) {
     return <LiveArtifactCard action={model.action} title={model.title} />;
@@ -52,7 +60,7 @@ export function ChatArtifactCard({ node }: { node: ActivityEvent }) {
   ].filter(Boolean) as string[];
 
   const body = (
-    <CardShell>
+    <>
       <ArtifactTypeIcon
         artifactType={model.artifactType}
         className="mt-0.5 size-4 shrink-0 text-muted-foreground"
@@ -65,7 +73,7 @@ export function ChatArtifactCard({ node }: { node: ActivityEvent }) {
           {metaParts.join(" · ")}
         </span>
       </span>
-    </CardShell>
+    </>
   );
 
   // Full surface → open the side panel; compact panel → deep-link to the full
@@ -77,37 +85,76 @@ export function ChatArtifactCard({ node }: { node: ActivityEvent }) {
     compact && artifactId && model.workspaceId
       ? `/app/workspaces/${model.workspaceId}/artifacts/${artifactId}`
       : undefined;
+  const interactive = canOpenPanel || deepLinkHref != null;
 
+  // Agent artifacts are born headless. Once the row resolves, offer to file it
+  // into a workspace; after it's filed, swap the action for a "Tersimpan" badge.
+  const canLink = model.found && artifactId != null && model.workspaceId == null;
+  const isLinked = model.found && model.workspaceId != null;
+
+  const handleLink = async (workspaceId: string) => {
+    if (!artifactId) return;
+    // Re-throws on failure (the helper toasts) so the picker stays open.
+    await linkArtifactToWorkspace(linkMutation.mutateAsync, { artifactId, workspaceId });
+  };
+
+  let main: ReactNode;
   if (canOpenPanel) {
-    return (
+    main = (
       <button
         type="button"
         onClick={() => panel.openArtifactPanel(artifactId)}
         aria-label={`Buka dokumen ${model.title}`}
-        className={interactiveCardClass}
+        className={mainInteractiveClass}
       >
         {body}
         <ChevronRightIcon className="size-4 shrink-0 self-center text-muted-foreground" />
       </button>
     );
-  }
-
-  if (deepLinkHref) {
-    return (
+  } else if (deepLinkHref) {
+    main = (
       <Link
         href={deepLinkHref}
         aria-label={`Buka dokumen ${model.title}`}
-        className={interactiveCardClass}
+        className={mainInteractiveClass}
       >
         {body}
         <ExternalLinkIcon className="size-4 shrink-0 self-center text-muted-foreground" />
       </Link>
     );
+  } else {
+    // No resolvable id/workspace yet — render without a click target rather than
+    // a dead link.
+    main = <div className={mainStaticClass}>{body}</div>;
   }
 
-  // No resolvable id/workspace (e.g. a chat-only artifact, or the row hasn't
-  // loaded yet) — render the card without a click target rather than a dead link.
-  return <div className={staticCardClass}>{body}</div>;
+  return (
+    <div className={cn(cardBaseClass, interactive && cardInteractiveClass)}>
+      {main}
+      {canLink ? (
+        <WorkspacePickerPopover
+          title="Simpan ke workspace"
+          description="Pilih workspace tujuan untuk dokumen ini."
+          align="end"
+          onSelect={handleLink}
+          trigger={
+            <button
+              type="button"
+              aria-label="Simpan ke workspace"
+              className={linkActionClass}
+            >
+              <FolderIcon className="size-4" />
+            </button>
+          }
+        />
+      ) : isLinked ? (
+        <span className={linkedBadgeClass} aria-label="Tersimpan di workspace">
+          <CheckIcon className="size-3.5" />
+          Tersimpan
+        </span>
+      ) : null}
+    </div>
+  );
 }
 
 function LiveArtifactCard({
@@ -133,14 +180,24 @@ function LiveArtifactCard({
   );
 }
 
+// The bordered container. It is NO LONGER the click target — the inner `main`
+// element (button/Link) is — so the trailing Save action can sit beside it as a
+// sibling without nesting a button inside a button.
 const cardBaseClass =
-  "flex w-full min-w-0 items-start gap-2.5 rounded-[10px] border border-border/80 bg-card/40 px-3 py-2.5 text-left text-[13px] leading-5";
-const interactiveCardClass = cn(
-  cardBaseClass,
-  "transition-colors hover:border-border hover:bg-card/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
-);
+  "flex w-full min-w-0 items-start gap-2 rounded-[10px] border border-border/80 bg-card/40 px-3 py-2.5 text-left text-[13px] leading-5";
+const cardInteractiveClass =
+  "transition-colors hover:border-border hover:bg-card/70";
+// `staticCardClass` is still used by the in-flight LiveArtifactCard (a plain,
+// non-interactive row with the same chrome).
 const staticCardClass = cardBaseClass;
-
-function CardShell({ children }: { children: ReactNode }) {
-  return <span className="flex min-w-0 flex-1 items-start gap-2.5">{children}</span>;
-}
+// The clickable region inside the card (fills it, carries the focus ring).
+const mainStaticClass = "flex min-w-0 flex-1 items-start gap-2.5";
+const mainInteractiveClass = cn(
+  mainStaticClass,
+  "rounded-[6px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+);
+// Trailing Save-to-workspace trigger + the post-save "Tersimpan" badge.
+const linkActionClass =
+  "inline-flex size-7 shrink-0 items-center justify-center self-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const linkedBadgeClass =
+  "inline-flex shrink-0 items-center gap-1 self-center rounded-md px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground";

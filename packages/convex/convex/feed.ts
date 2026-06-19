@@ -186,7 +186,9 @@ export const getFeedPaginated = query({
 
     const interests = await loadInterestWeights(ctx, user._id);
     const hidden = await loadHiddenItemIds(ctx, user._id);
-    const saved = await loadSavedItemIds(ctx, user._id);
+    // No saved lookup: the bookmark action was removed (Save-to-Workspace is now
+    // the only save). The `saved` flag the cards no longer read defaults to false
+    // via shapeFeedItem, so we skip the per-page savedFeedItems read entirely.
 
     const scored = page.page
       .filter((item) => !hidden.has(item._id))
@@ -211,7 +213,7 @@ export const getFeedPaginated = query({
               kindBoost(item.kind);
         return {
           shaped: {
-            ...shapeFeedItem(item, { saved: saved.has(item._id) }),
+            ...shapeFeedItem(item),
             relevanceScore: Math.round(Math.min(1, interest.normalized) * 100),
             reason: reasonFor(item, interest, false),
           },
@@ -259,7 +261,7 @@ export const searchDiscovery = query({
 
     const interests = await loadInterestWeights(ctx, user._id);
     const hidden = await loadHiddenItemIds(ctx, user._id);
-    const saved = await loadSavedItemIds(ctx, user._id);
+    // No saved lookup (bookmark removed — see getFeedPaginated).
 
     const items = page.page
       .filter((item) => !hidden.has(item._id))
@@ -275,7 +277,7 @@ export const searchDiscovery = query({
       .map((item) => {
         const interest = interestMatch(item.topics, interests);
         return {
-          ...shapeFeedItem(item, { saved: saved.has(item._id) }),
+          ...shapeFeedItem(item),
           relevanceScore: Math.round(Math.min(1, interest.normalized) * 100),
           reason: reasonFor(item, interest, false),
         };
@@ -943,7 +945,14 @@ async function recordFeedInteractionForUser(
   if (kind === "hide") {
     await hideFeedItemForUser(ctx, ownerUserId, feedItemId);
   }
-  // "Teliti ini" is a strong positive signal for the interest model.
+  // Saving is a positive interest signal. Save-to-Workspace (the only save action
+  // after the bookmark cutover) routes through here, so this is where the +1 bump
+  // that the old bookmark used to apply now lives.
+  if (kind === "save") {
+    const item = await ctx.db.get("feedItems", feedItemId);
+    if (item) await bumpInterests(ctx, ownerUserId, item.topics, 1);
+  }
+  // "Tanya Astra" (research) is a stronger positive signal for the interest model.
   if (kind === "research") {
     const item = await ctx.db.get("feedItems", feedItemId);
     if (item) await bumpInterests(ctx, ownerUserId, item.topics, 2);

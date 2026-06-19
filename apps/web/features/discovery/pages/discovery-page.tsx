@@ -18,8 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import { AppLoadingOverlay } from "@/components/app-loading-overlay";
 import { ExploreChatShell } from "@/features/explore/pages/explore-chat-shell";
 import { IdeaDialog, type IdeaSeed } from "@/features/discovery/components/idea-dialog";
-import { WorkspacePickerDialog } from "@/features/workspaces/components/workspace-picker-dialog";
-import { toWorkspaceId } from "@/lib/convex-refs";
+import { saveUrlToWorkspace } from "@/features/workspaces/lib/save-to-workspace";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
 import {
   useConvexActionFn,
@@ -116,26 +115,20 @@ export function DiscoveryPage() {
     limit: ASIDE_FEED_LIMIT,
   });
 
-  // Saved/hidden refs for the external (search) papers — feed items carry their
-  // own `saved` flag, but the augmented external papers need a lookup.
+  // Hidden refs for the external (search) papers so a hidden paper stays hidden
+  // across searches even before it materializes into a feed row.
   const paperItemRefs: DiscoveryItemRef[] = searchActive
     ? (externalPapers.data?.items ?? emptyPapers).map((paper) => ({
         kind: "paper" as const,
         paperKey: paper.key,
       }))
     : [];
-  const savedRefsData = useConvexQueryData(
-    api.feed.getSavedDiscoveryRefs,
-    searchActive ? { itemRefs: paperItemRefs } : "skip",
-  );
   const hiddenRefsData = useConvexQueryData(
     api.feed.getHiddenDiscoveryRefs,
     searchActive ? { itemRefs: paperItemRefs } : "skip",
   );
 
   // Mutations / actions.
-  const saveDiscoveryItem = useConvexMutationFn(api.feed.saveDiscoveryItem);
-  const unsaveDiscoveryItem = useConvexMutationFn(api.feed.unsaveDiscoveryItem);
   const hideDiscoveryItem = useConvexMutationFn(api.feed.hideDiscoveryItem);
   const recordDiscoveryInteraction = useConvexMutationFn(
     api.feed.recordDiscoveryInteraction,
@@ -149,27 +142,17 @@ export function DiscoveryPage() {
   } = useStartResearch();
 
   // Local UI state (keyed by the stable surrogate id `sid`).
-  const [localError, setLocalError] = useState<string | null>(null);
-  const [savedOverride, setSavedOverride] = useState<Map<string, boolean>>(new Map());
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [relevanceNotes, setRelevanceNotes] = useState<Map<string, string>>(new Map());
   const [whyLoading, setWhyLoading] = useState<Set<string>>(new Set());
   const [ideaSeed, setIdeaSeed] = useState<IdeaSeed | null>(null);
   const [ideaOpen, setIdeaOpen] = useState(false);
-  const [workspaceItem, setWorkspaceItem] = useState<DiscoveryItem | null>(null);
 
   // Auto infinite-scroll plumbing (Brief feed).
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const autoLoadCountRef = useRef(0);
   const prevResultsLenRef = useRef(0);
 
-  const savedRefs = (() => {
-    const set = new Set<string>();
-    for (const ref of (savedRefsData ?? []) as DiscoverySavedRef[]) {
-      set.add(savedRefKey(ref));
-    }
-    return set;
-  })();
   const hiddenRefs = (() => {
     const set = new Set<string>();
     for (const ref of (hiddenRefsData ?? []) as DiscoverySavedRef[]) {
@@ -197,7 +180,7 @@ export function DiscoveryPage() {
     searchActive && searchFeed.status === "Exhausted"
       ? (externalPapers.data?.items ?? emptyPapers)
           .filter((paper) => !feedPaperKeys.has(paper.key))
-          .map((paper) => paperToDiscoveryItem(paper, savedRefs))
+          .map((paper) => paperToDiscoveryItem(paper))
       : [];
   const mainRawItems: DiscoveryItem[] = [
     ...feedDiscoveryItems,
@@ -292,31 +275,11 @@ export function DiscoveryPage() {
       ? readableConvexErrorMessage(externalPapers.error, "Gagal mencari.")
       : null;
 
-  const isSaved = (item: DiscoveryItem) => {
-    const id = discoveryItemKey(item);
-    return savedOverride.has(id)
-      ? Boolean(savedOverride.get(id))
-      : item.saved;
-  };
-
   const recordItemInteraction = (
     item: DiscoveryItem,
     kind: "save" | "hide" | "research" | "open_evidence",
   ) => {
     return recordDiscoveryInteraction({ itemRef: item.itemRef, kind });
-  };
-
-  const handleSave = async (item: DiscoveryItem) => {
-    const id = discoveryItemKey(item);
-    const next = !isSaved(item);
-    setSavedOverride((prev) => new Map(prev).set(id, next));
-    try {
-      if (next) await saveDiscoveryItem({ itemRef: item.itemRef });
-      else await unsaveDiscoveryItem({ itemRef: item.itemRef });
-    } catch (caught) {
-      setSavedOverride((prev) => new Map(prev).set(id, !next));
-      setLocalError(readableConvexErrorMessage(caught, "Gagal menyimpan. Coba lagi."));
-    }
   };
 
   const handleWhyRelevant = async (item: DiscoveryItem) => {
@@ -344,16 +307,20 @@ export function DiscoveryPage() {
     }
   };
 
-  const handleSaveToWorkspace = async (workspaceId: string) => {
-    if (!workspaceItem) return;
-    await createUrl({
-      workspaceId: toWorkspaceId(workspaceId),
-      url: workspaceItem.doi
-        ? `https://doi.org/${workspaceItem.doi}`
-        : (workspaceItem.pdfUrl ?? workspaceItem.url),
-      title: workspaceItem.title,
+  const handleSaveToWorkspace = async (item: DiscoveryItem, workspaceId: string) => {
+    // Prefer the most identifier-rich URL: a canonical DOI, then a hosted PDF,
+    // then the decoded publisher URL over the opaque Google News redirect
+    // (parity with the research seed). Re-throws on failure (helper toasts) so
+    // the card's picker popover stays open.
+    await saveUrlToWorkspace(createUrl, {
+      workspaceId,
+      url: item.doi
+        ? `https://doi.org/${item.doi}`
+        : (item.pdfUrl ?? item.resolvedUrl ?? item.url),
+      title: item.title,
     });
-    setWorkspaceItem(null);
+    // Save is a positive interest signal (the +1 the old bookmark provided).
+    void recordItemInteraction(item, "save").catch(() => {});
   };
 
   const handlers: DiscoveryCardHandlers = {
@@ -364,8 +331,7 @@ export function DiscoveryPage() {
           await recordItemInteraction(item, "research").catch(() => {});
         },
       }),
-    onSave: (item) => void handleSave(item),
-    onSaveToWorkspace: (item) => setWorkspaceItem(item),
+    onSaveToWorkspace: handleSaveToWorkspace,
     onHide: (item) => {
       setHiddenIds((prev) => new Set(prev).add(discoveryItemKey(item)));
       void hideDiscoveryItem({ itemRef: item.itemRef }).catch(() => {});
@@ -424,9 +390,9 @@ export function DiscoveryPage() {
             />
           ) : null}
 
-          {localError || researchError || searchError ? (
+          {researchError || searchError ? (
             <div className="mt-4 max-w-[760px] rounded-[7px] border border-destructive/20 bg-destructive/10 px-4 py-3 text-[13px] font-medium text-destructive">
-              {localError ?? researchError ?? searchError}
+              {researchError ?? searchError}
             </div>
           ) : null}
 
@@ -445,7 +411,6 @@ export function DiscoveryPage() {
                     <DiscoveryHeroCard
                       item={hero}
                       lang={DISCOVERY_LANG}
-                      saved={isSaved(hero)}
                       busy={busyKey === discoveryItemKey(hero)}
                       relevanceNote={relevanceNotes.get(discoveryItemKey(hero))}
                       whyLoading={whyLoading.has(discoveryItemKey(hero))}
@@ -464,7 +429,6 @@ export function DiscoveryPage() {
                               <DiscoveryClaimCard
                                 item={item}
                                 lang={DISCOVERY_LANG}
-                                saved={isSaved(item)}
                                 busy={busyKey === discoveryItemKey(item)}
                                 relevanceNote={relevanceNotes.get(discoveryItemKey(item))}
                                 whyLoading={whyLoading.has(discoveryItemKey(item))}
@@ -474,7 +438,6 @@ export function DiscoveryPage() {
                               <DiscoveryStandardCard
                                 item={item}
                                 lang={DISCOVERY_LANG}
-                                saved={isSaved(item)}
                                 busy={busyKey === discoveryItemKey(item)}
                                 relevanceNote={relevanceNotes.get(discoveryItemKey(item))}
                                 whyLoading={whyLoading.has(discoveryItemKey(item))}
@@ -490,7 +453,6 @@ export function DiscoveryPage() {
                           item={row.item}
                           imageSide={row.side}
                           lang={DISCOVERY_LANG}
-                          saved={isSaved(row.item)}
                           busy={busyKey === discoveryItemKey(row.item)}
                           relevanceNote={relevanceNotes.get(discoveryItemKey(row.item))}
                           whyLoading={whyLoading.has(discoveryItemKey(row.item))}
@@ -518,7 +480,6 @@ export function DiscoveryPage() {
                         item={item}
                         index={index}
                         lang={DISCOVERY_LANG}
-                        saved={isSaved(item)}
                         busy={busyKey === discoveryItemKey(item)}
                         relevanceNote={relevanceNotes.get(discoveryItemKey(item))}
                         whyLoading={whyLoading.has(discoveryItemKey(item))}
@@ -561,14 +522,6 @@ export function DiscoveryPage() {
           void startResearch(questionText, { busyKey: "idea" });
         }}
         busy={busyKey === "idea"}
-      />
-
-      <WorkspacePickerDialog
-        open={Boolean(workspaceItem)}
-        onOpenChange={(open) => !open && setWorkspaceItem(null)}
-        title="Simpan ke workspace"
-        description="Pilih workspace tujuan. Paper akan otomatis diunduh dan metadatanya diekstrak."
-        onSelect={handleSaveToWorkspace}
       />
     </ExploreChatShell>
   );
