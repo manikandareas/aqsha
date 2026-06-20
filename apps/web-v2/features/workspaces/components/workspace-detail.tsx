@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Badge } from "@aqsha/ui/components/badge";
 import { Button } from "@aqsha/ui/components/button";
 import { ArchiveIcon, ArrowLeftIcon, Loader2Icon, PencilIcon } from "@aqsha/ui/icons";
+import { ArtifactLibrary } from "@/features/artifacts/components/artifact-library";
 import { useArchiveWorkspace, useUpdateWorkspace, useWorkspace } from "../api";
 import { isArchived } from "../types";
 import { ConfirmDialog, NameDialog } from "./common-dialogs";
@@ -77,6 +78,8 @@ export function WorkspaceDetail({ workspaceId }: { workspaceId: string }) {
       </div>
 
       <FolderSection workspaceId={workspace.id} workspaceActive={!archived} />
+
+      <ArtifactLibrary workspaceId={workspace.id} workspaceActive={!archived} />
 
       <NameDialog
         open={renameOpen}

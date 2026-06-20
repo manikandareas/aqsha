@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
   AppError,
+  ArtifactContentRepo,
+  ArtifactEmbeddingRepo,
+  ArtifactPaperMetadataRepo,
+  ArtifactRepo,
+  ArtifactUrlRepo,
   decodeKeysetCursor,
   encodeKeysetCursor,
   FolderRepo,
@@ -64,6 +69,14 @@ beforeEach(() => {
     fInsert: spyOn(FolderRepo, "insert").mockResolvedValue(undefined),
     fUpdate: spyOn(FolderRepo, "update").mockResolvedValue(undefined),
   };
+  // P3: FolderService.move/remove sekarang fan-out ke artifacts — mock repo-nya.
+  spyOn(ArtifactRepo, "listActiveIdsByFolder").mockResolvedValue([]);
+  spyOn(ArtifactRepo, "setWorkspaceForFolder").mockResolvedValue(undefined);
+  spyOn(ArtifactRepo, "clearFolderForFolder").mockResolvedValue(undefined);
+  spyOn(ArtifactContentRepo, "setWorkspaceByArtifactIds").mockResolvedValue(undefined);
+  spyOn(ArtifactUrlRepo, "setWorkspaceByArtifactIds").mockResolvedValue(undefined);
+  spyOn(ArtifactPaperMetadataRepo, "setWorkspaceByArtifactIds").mockResolvedValue(undefined);
+  spyOn(ArtifactEmbeddingRepo, "setWorkspaceByArtifactIds").mockResolvedValue(undefined);
   delete process.env.AQSHA_ADMIN_OWNER_USER_IDS;
   delete process.env.AQSHA_ADMIN_EMAILS;
 });

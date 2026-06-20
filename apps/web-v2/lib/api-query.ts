@@ -20,4 +20,11 @@ export const queryKeys = {
   folders: {
     list: (workspaceId: string) => ["folders", "list", workspaceId] as const,
   },
+  artifacts: {
+    all: ["artifacts"] as const,
+    list: (workspaceId: string, folderId: string | null) =>
+      ["artifacts", "list", workspaceId, folderId] as const,
+    detail: (id: string) => ["artifacts", "detail", id] as const,
+    render: (id: string) => ["artifacts", "render", id] as const,
+  },
 };

@@ -7,10 +7,12 @@ import { getRedis } from "../clients/redis";
  * Tambah rule baru di sini (mis. `artifacts:create`/`send`) lalu pakai macro
  * `rateLimit("<rule>")` di route.
  */
-export type RateLimitRule = "workspaces:create";
+export type RateLimitRule = "workspaces:create" | "artifacts:create" | "artifacts:upload";
 
 const RATE_LIMIT_RULES: Record<RateLimitRule, { points: number; duration: number }> = {
   "workspaces:create": { points: 3, duration: 3600 },
+  "artifacts:create": { points: 20, duration: 60 },
+  "artifacts:upload": { points: 5, duration: 60 },
 };
 
 const limiters = new Map<RateLimitRule, RateLimiterRedis>();

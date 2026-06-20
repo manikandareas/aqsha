@@ -25,7 +25,7 @@ async function checkRedis(): Promise<boolean> {
  * Rail health P0:
  * - GET /ping    → bukti api hidup + jam server untuk web-v2 (tanpa dependency).
  * - GET /healthz → real-check db (SELECT 1) + redis (PING). `ok = db && redis`.
- *   (GET /health/ready dengan cek R2 menyusul saat R2 ada — P3/P9.)
+ *   (GET /health/ready dengan cek object storage menyusul — P3/P9.)
  */
 export const health = new Elysia()
   .get("/ping", () => ({ pong: true, serverTime: Date.now() }))

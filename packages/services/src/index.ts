@@ -23,6 +23,37 @@ export {
   UNLIMITED,
 } from "./plan";
 
+// Artifacts (P3) — pure helpers + konstanta + capacity gate + storage/RAG/extract.
+export * from "./artifacts/model";
+export { assertLibraryCapacity } from "./artifacts/capacity";
+export { type ExtractedDocument, extractStoredDocument } from "./artifacts/extract";
+export { StorageService } from "./storage.service";
+export { ragEntryIdFor, RagService } from "./rag.service";
+export {
+  ArtifactService,
+  type ArtifactListItem,
+  type ArtifactRenderPayload,
+} from "./artifact.service";
+export { syncArtifactWorkspaceMove } from "./artifacts/move";
+export { PaperMetadataService, type PaperMetadataInput } from "./paper-metadata.service";
+export {
+  classifyPaperText,
+  classifyUrl,
+  type ClassifiedUrl,
+  downloadOaPdf,
+  isAcademicIdentifier,
+  pdfFileName,
+  readWithJinaReader,
+  resolvePaper,
+  type ResolvedPaper,
+} from "./papers";
+export {
+  ARTIFACT_QUEUES,
+  type ArtifactQueueName,
+  enqueue,
+  getQueueConnection,
+} from "./clients/queue";
+
 // Reference data + pure helpers (juga dipakai frontend lewat re-export bila perlu).
 export * from "./onboarding/options";
 export {

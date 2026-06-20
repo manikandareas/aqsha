@@ -1,8 +1,8 @@
 # Dijalankan DI VPS. api-v2/web-v2 (lokal saat dev, atau proses host saat prod)
-# menjangkau Postgres+Redis lewat Tailscale hostname/IP. Tidak ada api/web/minio di sini
-# (R2 = layanan cloud; api-v2/web-v2 = proses host/systemd).
+# menjangkau Postgres+Redis+MinIO lewat Tailscale hostname/IP. api/web TIDAK di sini
+# (proses host/systemd). MinIO = object storage S3-compatible (ganti Cloudflare R2).
 #
-# Ganti 100.x.y.z dengan Tailscale IP VPS supaya port TIDAK terekspos ke internet publik.
+# Ganti 100.x.y.z (BIND_HOST) dengan Tailscale IP VPS supaya port TIDAK terekspos publik.
 services:
   postgres:
     image: pgvector/pgvector:pg17
@@ -38,6 +38,47 @@ services:
       timeout: 3s
       retries: 5
 
+  minio:
+    # :latest demi simpel; pin ke tag RELEASE.* untuk produksi reproducible.
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    ports:
+      # 9000 = S3 API (api-v2 + presigned upload browser). 9001 = console web.
+      - "${BIND_HOST:-127.0.0.1}:9000:9000"
+      - "${BIND_HOST:-127.0.0.1}:9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # One-shot: tunggu MinIO siap (until-loop, tahan-banting tanpa gantung healthcheck)
+  # lalu bikin bucket. Idempotent (--ignore-existing); exit setelah selesai.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD}; do
+        echo 'menunggu MinIO...'; sleep 2;
+      done;
+      mc mb --ignore-existing local/$${MINIO_BUCKET};
+      echo 'bucket siap: '$${MINIO_BUCKET};
+      "
+    restart: "no"
+
 volumes:
   postgres_data:
   redis_data:
+  minio_data:

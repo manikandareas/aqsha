@@ -1,5 +1,6 @@
-import { FolderRepo, throwAppError, type WorkspaceFolder } from "@aqsha/db";
+import { ArtifactRepo, FolderRepo, throwAppError, type WorkspaceFolder } from "@aqsha/db";
 import type { Db, DbOrTx } from "@aqsha/db";
+import { syncArtifactWorkspaceMove } from "./artifacts/move";
 import { normalizeName } from "./workspaces/normalize";
 import { WorkspaceService } from "./workspace.service";
 
@@ -143,11 +144,29 @@ export const FolderService = {
           status: 409,
         });
       }
+      const now = Date.now();
+      const artifactIds = await ArtifactRepo.listActiveIdsByFolder(
+        tx,
+        input.ownerUserId,
+        input.folderId,
+      );
       await FolderRepo.update(tx, input.folderId, {
         workspaceId: input.targetWorkspaceId,
-        updatedAt: Date.now(),
+        updatedAt: now,
       });
-      // P3 seam: fan-out artifacts dalam folder → targetWorkspaceId di sini.
+      // P3: fan-out — re-point setiap artifact aktif folder ke target + cascade side-table.
+      await ArtifactRepo.setWorkspaceForFolder(
+        tx,
+        input.ownerUserId,
+        input.folderId,
+        input.targetWorkspaceId,
+        now,
+      );
+      await syncArtifactWorkspaceMove(tx, {
+        artifactIds,
+        targetWorkspaceId: input.targetWorkspaceId,
+        now,
+      });
       return { ok: true };
     });
   },
@@ -168,7 +187,8 @@ export const FolderService = {
         requireActive: true,
       });
       const now = Date.now();
-      // P3 seam: orphan artifacts aktif folder (clear folderId) di sini.
+      // P3: orphan artifacts aktif folder (clear folderId) sebelum folder soft-delete.
+      await ArtifactRepo.clearFolderForFolder(tx, input.ownerUserId, input.folderId, now);
       await FolderRepo.update(tx, input.folderId, {
         status: "deleted",
         deletedAt: now,
