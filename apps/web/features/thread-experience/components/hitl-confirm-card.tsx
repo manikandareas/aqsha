@@ -11,6 +11,7 @@ export function HitlConfirmCard({
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   disabled,
+  submitting,
   onReject,
   onConfirm,
 }: {
@@ -19,7 +20,10 @@ export function HitlConfirmCard({
   destructive?: boolean;
   confirmLabel?: string;
   cancelLabel?: string;
+  /** Non-interactive (a submit is in flight OR the run is terminal). */
   disabled?: boolean;
+  /** A response submit is actually in flight — drives the button spinner only. */
+  submitting?: boolean;
   onReject: () => void;
   onConfirm: () => void;
 }) {
@@ -49,7 +53,7 @@ export function HitlConfirmCard({
           disabled={disabled}
           onClick={onConfirm}
         >
-          {disabled ? <Loader2Icon className="size-3 animate-spin" /> : null}
+          {submitting ? <Loader2Icon className="size-3 animate-spin" /> : null}
           {confirmLabel}
         </Button>
       </div>

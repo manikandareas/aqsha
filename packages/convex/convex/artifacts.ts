@@ -33,6 +33,7 @@ import {
   titleFromUrl,
 } from "./artifacts/model";
 import {
+  assertAgentArtifactOwner,
   assertFolderOwner,
   assertThreadAttachmentOwner,
   assertUploadedArtifactOwner,
@@ -770,18 +771,30 @@ export const promoteAttachmentToWorkspaceInternal = internalMutation({
   },
 });
 
-export const saveAttachmentToWorkspace = mutation({
-  args: {
-    artifactId: v.id("artifacts"),
-    workspaceId: v.optional(v.id("workspaces")),
-  },
-  returns: v.object({
-    workspaceId: v.id("workspaces"),
-    artifactId: v.id("artifacts"),
-    workspaceName: v.string(),
-  }),
-  handler: async (ctx, args) => {
-    const user = await requireCurrentUser(ctx);
+// Shared contract for the two "link a headless artifact to a workspace" public
+// mutations below. A headless artifact is any owner-owned, active artifact with
+// no `workspaceId` and a `threadId` — covers both uploaded thread attachments
+// (`source:"upload"`) and agent-generated artifacts (`source:"agent"`), which
+// are now born headless and only filed when the user picks a workspace.
+const linkArtifactToWorkspaceArgs = {
+  artifactId: v.id("artifacts"),
+  workspaceId: v.optional(v.id("workspaces")),
+};
+const linkArtifactToWorkspaceReturns = v.object({
+  workspaceId: v.id("workspaces"),
+  artifactId: v.id("artifacts"),
+  workspaceName: v.string(),
+});
+
+async function linkHeadlessArtifactToWorkspace(
+  ctx: MutationCtx,
+  args: { artifactId: Id<"artifacts">; workspaceId?: Id<"workspaces"> },
+): Promise<{
+  workspaceId: Id<"workspaces">;
+  artifactId: Id<"artifacts">;
+  workspaceName: string;
+}> {
+  const user = await requireCurrentUser(ctx);
     const artifact = await ctx.db.get("artifacts", args.artifactId);
     if (!artifact || artifact.ownerUserId !== user._id) {
       throwAppError({
@@ -889,7 +902,21 @@ export const saveAttachmentToWorkspace = mutation({
       artifactId: promoted.artifactId,
       workspaceName: promoted.workspaceName,
     };
-  },
+}
+
+// Canonical name used by the chat artifact card to file a headless agent
+// artifact into a chosen workspace.
+export const linkArtifactToWorkspace = mutation({
+  args: linkArtifactToWorkspaceArgs,
+  returns: linkArtifactToWorkspaceReturns,
+  handler: (ctx, args) => linkHeadlessArtifactToWorkspace(ctx, args),
+});
+
+// Back-compat alias for the upload-attachment save flow (same behavior).
+export const saveAttachmentToWorkspace = mutation({
+  args: linkArtifactToWorkspaceArgs,
+  returns: linkArtifactToWorkspaceReturns,
+  handler: (ctx, args) => linkHeadlessArtifactToWorkspace(ctx, args),
 });
 
 export const createUploadedArtifactInternal = internalMutation({
@@ -1253,7 +1280,12 @@ export const markUrlPaperMetadataOnly = internalMutation({
 export const createArtifactFromAgentInternal = internalMutation({
   args: {
     ownerUserId: v.string(),
-    workspaceId: v.id("workspaces"),
+    // Optional: agent artifacts are born HEADLESS (no workspace) and only get
+    // one when the user links them later. When a workspace IS supplied (explicit
+    // SDK arg) it's validated + counts against library capacity, mirroring a
+    // filed artifact; headless rows skip both (capacity is enforced at link
+    // time in promoteAttachmentToWorkspaceInternal, same as thread attachments).
+    workspaceId: v.optional(v.id("workspaces")),
     folderId: v.optional(v.id("workspaceFolders")),
     title: v.string(),
     artifactType: generatedArtifactTypeValidator,
@@ -1262,11 +1294,13 @@ export const createArtifactFromAgentInternal = internalMutation({
     language: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await assertWorkspaceOwner(ctx, args.workspaceId, args.ownerUserId, { requireActive: true });
-    if (args.folderId) {
-      await assertFolderOwner(ctx, args.folderId, args.ownerUserId, args.workspaceId);
+    if (args.workspaceId) {
+      await assertWorkspaceOwner(ctx, args.workspaceId, args.ownerUserId, { requireActive: true });
+      if (args.folderId) {
+        await assertFolderOwner(ctx, args.folderId, args.ownerUserId, args.workspaceId);
+      }
+      await assertLibraryCapacityForOwner(ctx, args.ownerUserId);
     }
-    await assertLibraryCapacityForOwner(ctx, args.ownerUserId);
     const artifactType = artifactTypeFromAgentInput(args.artifactType);
     const now = Date.now();
     const title = normalizeName(args.title, "Artifact title");
@@ -1275,7 +1309,8 @@ export const createArtifactFromAgentInternal = internalMutation({
     const artifactId = await ctx.db.insert("artifacts", {
       ownerUserId: args.ownerUserId,
       workspaceId: args.workspaceId,
-      folderId: args.folderId,
+      // A folder only makes sense inside a workspace; drop it for headless rows.
+      folderId: args.workspaceId ? args.folderId : undefined,
       artifactType,
       artifactFamily: artifactFamilyForType(artifactType),
       source: "agent",
@@ -1313,10 +1348,11 @@ export const updateArtifactFromAgentInternal = internalMutation({
     language: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const artifact = await assertWorkspaceArtifactOwner(ctx, args.artifactId, args.ownerUserId, {
+    // Agent artifacts are headless until filed, so authorize via the agent-aware
+    // owner check (workspace ownership only enforced once a workspace exists).
+    const artifact = await assertAgentArtifactOwner(ctx, args.artifactId, args.ownerUserId, {
       requireActive: true,
     });
-    await assertWorkspaceOwner(ctx, artifact.workspaceId, args.ownerUserId, { requireActive: true });
     const artifactType = artifactTypeFromAgentInput(args.artifactType);
     if (!isAgentWritableArtifactType(artifactTypeForLegacyArtifact(artifact))) {
       throwAppError({
@@ -1359,10 +1395,10 @@ export const deleteArtifactFromAgentInternal = internalMutation({
     artifactId: v.id("artifacts"),
   },
   handler: async (ctx, args) => {
-    const artifact = await assertWorkspaceArtifactOwner(ctx, args.artifactId, args.ownerUserId, {
+    // Headless-tolerant authorization (see updateArtifactFromAgentInternal).
+    await assertAgentArtifactOwner(ctx, args.artifactId, args.ownerUserId, {
       requireActive: true,
     });
-    await assertWorkspaceOwner(ctx, artifact.workspaceId, args.ownerUserId, { requireActive: true });
     const now = Date.now();
     await ctx.db.patch("artifacts", args.artifactId, {
       status: "deleted",

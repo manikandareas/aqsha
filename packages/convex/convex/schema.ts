@@ -411,6 +411,10 @@ export default defineSchema(
         "updatedAt",
       ]),
     externalLookupCache: defineTable({
+      // Keep in sync with `providerValidator` in agent/providers/providerCache.ts
+      // (the getCache/putCache arg validator). This inline union is the stored
+      // column type; a missing literal here surfaces as an ArgumentValidationError
+      // when a cache write uses that provider.
       provider: v.union(
         v.literal("openalex"),
         v.literal("crossref"),
@@ -423,6 +427,7 @@ export default defineSchema(
         v.literal("paper_ingest"),
         v.literal("google_factcheck"),
         v.literal("gdelt"),
+        v.literal("google_news"),
       ),
       cacheKey: v.string(),
       status: v.union(v.literal("ready"), v.literal("empty"), v.literal("failed")),
@@ -453,10 +458,23 @@ export default defineSchema(
     // ── Feed surface ──────────────────────────────────────────────────────
     feedItems: defineTable({
       ...feedItemFields,
+      // Unified chronological sort key for the cross-kind paginated feed
+      // (getFeedPaginated). Non-optional so the by_order index is total — see
+      // deriveOrderAt (feed/model.ts), maintained in every feedItems write path.
+      orderAt: v.number(),
+      // Denormalized title+summary+topics blob for the global search index
+      // (Isu 7). Optional + additive: rows written before this lane simply
+      // aren't searchable until re-upserted. See deriveSearchText.
+      searchText: v.optional(v.string()),
     })
       .index("by_dedupe_key", ["dedupeKey"])
       .index("by_kind_trend", ["kind", "trendScore"])
-      .index("by_kind_published", ["kind", "publishedAt"]),
+      .index("by_kind_published", ["kind", "publishedAt"])
+      .index("by_order", ["orderAt"])
+      .searchIndex("search_text", {
+        searchField: "searchText",
+        filterFields: ["kind"],
+      }),
     feedSources: defineTable({
       provider: feedProviderValidator,
       label: v.string(),

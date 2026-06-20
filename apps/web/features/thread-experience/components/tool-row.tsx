@@ -65,7 +65,7 @@ export function ToolRow({ node }: { node: ActivityEvent }) {
   const header = (
     <span
       className={cn(
-        "flex min-w-0 flex-1 items-start gap-1.5 leading-5",
+        "flex min-w-0 items-start gap-1.5 leading-5",
         toneClass(node.status),
       )}
     >
@@ -109,7 +109,7 @@ export function ToolRow({ node }: { node: ActivityEvent }) {
       <CollapsibleTrigger className="group flex w-full min-w-0 items-start gap-1.5 rounded-[8px] px-1.5 py-1 -mx-1.5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         {header}
         {resultBadge}
-        <ChevronDownIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+        <ChevronDownIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 group-focus-visible:opacity-100 group-data-[state=open]:rotate-180 group-data-[state=open]:opacity-100" />
       </CollapsibleTrigger>
       <CollapsibleContent className="overflow-hidden">
         <div className="mt-1.5 grid gap-2 pl-3 text-[12px]">

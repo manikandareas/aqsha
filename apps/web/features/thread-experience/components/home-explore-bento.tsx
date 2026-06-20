@@ -39,12 +39,11 @@ export function HomeExploreBento() {
   const hero = items[3];
 
   const handlers: DiscoveryCardHandlers = {
-    onTeliti: (item) =>
+    onAskAstra: (item) =>
       void startResearch(
-        `${item.title}\n\n${item.tldr ?? item.summary}\n\nSumber: ${item.url}`,
+        `${item.title}\n\n${item.tldr ?? item.summary}\n\nSumber: ${item.resolvedUrl ?? item.url}`,
         { busyKey: discoveryItemKey(item) },
       ),
-    onSave: () => router.push("/app/explore"),
     onSaveToWorkspace: () => router.push("/app/explore"),
     onHide: () => router.push("/app/explore"),
     onOpenEvidence: (item) => {
@@ -75,7 +74,6 @@ export function HomeExploreBento() {
                       <DiscoveryClaimCard
                         item={item}
                         lang="id"
-                        saved={false}
                         busy={busyKey === discoveryItemKey(item)}
                         handlers={handlers}
                       />
@@ -83,7 +81,6 @@ export function HomeExploreBento() {
                       <DiscoveryStandardCard
                         item={item}
                         lang="id"
-                        saved={false}
                         busy={busyKey === discoveryItemKey(item)}
                         handlers={handlers}
                       />
@@ -96,7 +93,6 @@ export function HomeExploreBento() {
               <DiscoveryHeroCard
                 item={hero}
                 lang="id"
-                saved={false}
                 busy={busyKey === discoveryItemKey(hero)}
                 handlers={handlers}
               />

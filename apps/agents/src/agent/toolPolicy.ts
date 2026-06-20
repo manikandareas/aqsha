@@ -46,12 +46,16 @@ export const HITL_INITIAL_TOOL_NAMES = [
 export const EXECUTE_ARTIFACT_TOOL_NAME = "executeArtifact";
 
 // Tools that require a tool_approval interaction via canUseTool (plan §5.3).
+// `proposeResearchPlan` is the deep-research plan gate (plan §4.3): like
+// proposeArtifact it stays OFF allowedToolsForTurn so its permission request
+// falls through to canUseTool and parks the run for plan review.
 export const APPROVAL_GATED_TOOL_NAMES = [
   "proposeArtifact",
   "deleteArtifact",
   "createWorkspace",
   "renameWorkspace",
   "runComputation",
+  "proposeResearchPlan",
 ] as const;
 
 export const APPROVAL_GATED_TOOL_NAME_SET: ReadonlySet<string> = new Set(

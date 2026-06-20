@@ -5,6 +5,13 @@ import {
   useConvexAction,
   useConvexMutation,
 } from "@convex-dev/react-query";
+
+// usePaginatedQuery subscribes to Convex directly (NOT routed through the
+// TanStack Query cache, same accepted exception as useConvexAuth). Re-exported
+// here so feature code reaches the paginated adapter through this one sanctioned
+// module instead of importing convex/react. Returns { results, status, loadMore,
+// isLoading }; call with `args | "skip"` and `{ initialNumItems }`.
+export { useConvexPaginatedQuery as useConvexPaginatedQueryData } from "@convex-dev/react-query";
 import {
   useMutation,
   useQuery,

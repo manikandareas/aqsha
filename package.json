@@ -5,8 +5,11 @@
   "workspaces": [
     "apps/web",
     "apps/agents",
+    "apps/api-v2",
+    "apps/web-v2",
     "packages/agent-contracts",
     "packages/convex",
+    "packages/db",
     "packages/ui"
   ],
   "scripts": {
@@ -17,8 +20,17 @@
     "build:app": "bun run --filter '@aqsha/app' build",
     "dev:agents": "bun run --filter '@aqsha/agents' dev",
     "test:agents": "bun run --filter '@aqsha/agents' --filter '@aqsha/agent-contracts' test",
-    "lint": "bun run --parallel --filter '@aqsha/app' --filter '@aqsha/convex' lint",
-    "typecheck": "bun run --parallel --filter '@aqsha/app' --filter '@aqsha/convex' --filter '@aqsha/ui' --filter '@aqsha/agents' --filter '@aqsha/agent-contracts' typecheck"
+    "dev:api": "bun run --filter '@aqsha/api-v2' dev",
+    "dev:web-v2": "bun run --filter '@aqsha/web-v2' dev",
+    "db:generate": "bun run --filter '@aqsha/db' generate",
+    "db:migrate": "bun run --filter '@aqsha/db' migrate",
+    "db:studio": "bun run --filter '@aqsha/db' studio",
+    "test:v2": "bun run --filter '@aqsha/db' --filter '@aqsha/api-v2' test",
+    "lint": "bun run --parallel --filter '@aqsha/app' --filter '@aqsha/convex' --filter '@aqsha/api-v2' --filter '@aqsha/web-v2' lint",
+    "typecheck": "bun run --parallel --filter '@aqsha/app' --filter '@aqsha/convex' --filter '@aqsha/ui' --filter '@aqsha/agents' --filter '@aqsha/agent-contracts' --filter '@aqsha/api-v2' --filter '@aqsha/web-v2' --filter '@aqsha/db' typecheck"
+  },
+  "overrides": {
+    "elysia": "1.4.29"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

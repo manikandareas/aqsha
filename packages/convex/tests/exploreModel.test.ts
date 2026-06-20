@@ -9,6 +9,8 @@ import {
 import {
   candidatesToExplorePapers,
   exploreCacheKey,
+  openAlexRecommendationQuery,
+  recommendationProviderQuery,
 } from "../convex/explore/model";
 
 describe("explore paper model", () => {
@@ -164,7 +166,7 @@ describe("explore paper model", () => {
         url: "https://arxiv.org/html/1706.03762",
       }),
       candidate({
-        provider: "exa",
+        provider: "openalex",
         title: "URL duplicate",
         url: "https://www.example.com/a?utm_source=test#section",
       }),
@@ -204,6 +206,54 @@ describe("explore paper model", () => {
         now: Date.UTC(2026, 4, 27, 3),
       }),
     ).toBe("explore:v2:search:rag:12:2023:2026-05-27");
+  });
+
+  it("appends an interest seed so personalized recommendations are not shared", () => {
+    const base = exploreCacheKey({
+      mode: "recommendations",
+      query: "",
+      limit: 12,
+      now: Date.UTC(2026, 4, 27, 3),
+    });
+    // No seed → unchanged key (cold-start users share the generic cache).
+    expect(base).toBe("explore:v2:recommendations::12:all:2026-05-27");
+
+    const seeded = exploreCacheKey({
+      mode: "recommendations",
+      query: "",
+      limit: 12,
+      seed: "Medicine,Machine Learning",
+      now: Date.UTC(2026, 4, 27, 3),
+    });
+    expect(seeded).toBe(
+      "explore:v2:recommendations::12:all:2026-05-27:seed:medicine,machine learning",
+    );
+    expect(seeded).not.toBe(base);
+  });
+
+  it("builds the recommendation provider query from interest topics", () => {
+    expect(
+      recommendationProviderQuery(["machine learning", "medicine"], "fallback"),
+    ).toBe("machine learning medicine");
+    // Whitespace-only topics are dropped.
+    expect(recommendationProviderQuery(["  ", ""], "fallback")).toBe("fallback");
+    // No interests → fall back to the generic cold-start query.
+    expect(recommendationProviderQuery([], "fallback")).toBe("fallback");
+  });
+
+  it("keeps OpenAlex on its trending listing for cold-start recommendations", () => {
+    // Interests present → interest-relevance search seed.
+    expect(
+      openAlexRecommendationQuery("", ["machine learning", "medicine"]),
+    ).toBe("machine learning medicine");
+    // Cold start (no/blank interests) → empty query so OpenAlex stays on
+    // cited-by-count trending, NOT the generic recommendation string.
+    expect(openAlexRecommendationQuery("", [])).toBe("");
+    expect(openAlexRecommendationQuery("", ["  "])).toBe("");
+    // A real search query is passed through verbatim regardless of interests.
+    expect(openAlexRecommendationQuery("rag systems", ["medicine"])).toBe(
+      "rag systems",
+    );
   });
 });
 

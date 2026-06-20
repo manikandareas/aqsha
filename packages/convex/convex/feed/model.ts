@@ -147,6 +147,43 @@ export type DiscoveryItem = Omit<FeedItem, "_id"> & {
   saved: boolean;
 };
 
+// Re-export the discovery topic-category taxonomy so the web nav (Topics
+// popover) consumes the same source of truth via @aqsha/convex/feed.
+export {
+  DISCOVERY_TOPIC_CATEGORIES,
+  DISCOVERY_TOPIC_CATEGORY_LABELS,
+  type DiscoveryTopicCategory,
+} from "./topicCategories";
+
+// The unified chronological sort key for the cross-kind paginated feed
+// (getFeedPaginated, by_order index). Non-optional on the table so the index is
+// total — a row without publishedAt (claims, topics, un-enriched news) would
+// otherwise sort indeterminately. Derived + maintained at every feedItems write
+// path (upsertFeedItems / claims / paper materialization).
+export function deriveOrderAt(item: {
+  publishedAt?: number;
+  lastSeenAt: number;
+  createdAt: number;
+}): number {
+  return item.publishedAt ?? item.lastSeenAt ?? item.createdAt;
+}
+
+// Denormalized lowercase blob fed to the feedItems `search_text` search index
+// (Isu 7 global search). Convex search takes a single field, so title + summary +
+// topics are concatenated. Maintained at every feedItems write path alongside
+// orderAt. Capped so an unusually long summary can't bloat the index entry.
+export function deriveSearchText(item: {
+  title: string;
+  summary: string;
+  topics: string[];
+}): string {
+  return `${item.title} ${item.summary} ${item.topics.join(" ")}`
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 2000);
+}
+
 export function discoveryItemKey(item: Pick<DiscoveryItem, "itemRef">): string {
   return item.itemRef.kind === "paper"
     ? `paper:${item.itemRef.paperKey}`

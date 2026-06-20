@@ -52,6 +52,13 @@ const envSchema = z.object({
   AGENTS_STREAM_FLUSH_MS: z.coerce.number().int().positive().default(250),
   AGENTS_STREAM_FLUSH_CHARS: z.coerce.number().int().positive().default(800),
   AGENTS_MAX_CONCURRENT_RUNS: z.coerce.number().int().positive().default(4),
+  // Auto-retry a turn/phase whose stream dropped with a TRANSIENT connection
+  // fault (network switch, gateway idle-timeout, socket reset). Exponential
+  // backoff base→cap; 4 retries over ~2/4/8/15s covers a Wi-Fi handover. Set
+  // AGENTS_STREAM_MAX_RETRIES=0 to disable.
+  AGENTS_STREAM_MAX_RETRIES: z.coerce.number().int().nonnegative().default(4),
+  AGENTS_STREAM_RETRY_BASE_MS: z.coerce.number().int().positive().default(2000),
+  AGENTS_STREAM_RETRY_MAX_MS: z.coerce.number().int().positive().default(15000),
   // Session cwd must stay stable across restarts for SDK session resume.
   AGENTS_SESSION_CWD: z.string().optional(),
   // External providers (ported from packages/convex env surface).
@@ -85,6 +92,10 @@ export type AgentsConfig = {
   streamFlushMs: number;
   streamFlushChars: number;
   maxConcurrentRuns: number;
+  /** Auto-retry budget + backoff for transient stream-connection drops. */
+  streamMaxRetries: number;
+  streamRetryBaseMs: number;
+  streamRetryMaxMs: number;
   /** Stable cwd for SDK sessions + .claude/skills discovery. */
   appRoot: string;
   providers: {
@@ -131,6 +142,9 @@ export function loadConfig(
     streamFlushMs: parsed.AGENTS_STREAM_FLUSH_MS,
     streamFlushChars: parsed.AGENTS_STREAM_FLUSH_CHARS,
     maxConcurrentRuns: parsed.AGENTS_MAX_CONCURRENT_RUNS,
+    streamMaxRetries: parsed.AGENTS_STREAM_MAX_RETRIES,
+    streamRetryBaseMs: parsed.AGENTS_STREAM_RETRY_BASE_MS,
+    streamRetryMaxMs: parsed.AGENTS_STREAM_RETRY_MAX_MS,
     appRoot: parsed.AGENTS_SESSION_CWD ?? defaultAppRoot(),
     providers: {
       exaApiKey: parsed.EXA_API_KEY,

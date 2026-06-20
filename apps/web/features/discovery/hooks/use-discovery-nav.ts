@@ -5,12 +5,33 @@ import {
   parseAsStringLiteral,
   useQueryStates,
 } from "nuqs";
+import {
+  DISCOVERY_TOPIC_CATEGORIES,
+  DISCOVERY_TOPIC_CATEGORY_LABELS,
+  type DiscoveryTopicCategory,
+} from "@aqsha/convex/feed";
 
-// One unified discovery surface. The view + filters live in the URL so they
-// are deep-linkable and back-button friendly (same nuqs idiom as the workspace
-// library). `brief` is the default → the feed shows first on entry.
-export const discoveryViews = ["brief", "papers"] as const;
-export type DiscoveryView = (typeof discoveryViews)[number];
+// One unified discovery surface. The mode + filters live in the URL so they are
+// deep-linkable and back-button friendly (same nuqs idiom as the workspace
+// library). `foryou` is the default → the personalized feed shows first.
+//
+// Back-compat: the old `?view=brief|papers` param is simply ignored (no parser),
+// so `mode` defaults to `foryou`; an old `?view=papers&q=…` deep link still lands
+// in search via the preserved `q` param.
+export const discoveryModes = ["foryou", "top", "topics"] as const;
+export type DiscoveryMode = (typeof discoveryModes)[number];
+
+export const discoveryModeLabels: Record<DiscoveryMode, string> = {
+  foryou: "For You",
+  top: "Top",
+  topics: "Topics",
+};
+
+// Topic categories for the Topics popover — sourced from the backend taxonomy
+// (@aqsha/convex/feed) so the nav and the getFeedPaginated `topic` filter agree.
+export const discoveryTopicCategories = DISCOVERY_TOPIC_CATEGORIES;
+export const discoveryTopicCategoryLabels = DISCOVERY_TOPIC_CATEGORY_LABELS;
+export type { DiscoveryTopicCategory };
 
 export const discoveryRanges = ["all", "year", "threeYears", "fiveYears"] as const;
 export type DiscoveryRange = (typeof discoveryRanges)[number];
@@ -21,7 +42,9 @@ export type DiscoveryRange = (typeof discoveryRanges)[number];
 export const DISCOVERY_LANG = "id" as const;
 
 const discoveryParsers = {
-  view: parseAsStringLiteral(discoveryViews).withDefault("brief"),
+  mode: parseAsStringLiteral(discoveryModes).withDefault("foryou"),
+  // Nullable: only set while in Topics mode with a category chosen.
+  topic: parseAsStringLiteral(DISCOVERY_TOPIC_CATEGORIES),
   q: parseAsString.withDefault(""),
   range: parseAsStringLiteral(discoveryRanges).withDefault("all"),
 };

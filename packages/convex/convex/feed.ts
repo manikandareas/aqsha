@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { internal } from "./_generated/api";
 import {
   internalAction,
@@ -19,6 +20,12 @@ import {
   normalizeDoiLoose,
 } from "./feed/openAlex";
 import type { DiscoveryItemRef } from "./feed/model";
+import { deriveOrderAt, deriveSearchText } from "./feed/model";
+import { normalizeInterestTopic } from "./feed/interestKeywords";
+import {
+  isDiscoveryTopicCategory,
+  matchesTopicCategory,
+} from "./feed/topicCategories";
 
 const TRENDING_LIMIT = 24;
 const FEED_PAGE_LIMIT = 40;
@@ -46,8 +53,13 @@ const discoveryItemRefValidator = v.union(
 // `claim`. Shared by getFeed / getFeedItem / getRelatedFeedItems so every read
 // path returns an identically-shaped item.
 function shapeFeedItem(item: Doc<"feedItems">, options?: { saved?: boolean }) {
-  const { _creationTime, ...rest } = item;
+  // Strip storage-internal fields the client never reads: the denormalized
+  // search-index blob (searchText, up to 2000 chars) and the orderAt sort key.
+  // Multiplied across infinite-scroll pages, shipping these is pure bloat.
+  const { _creationTime, searchText, orderAt, ...rest } = item;
   void _creationTime;
+  void searchText;
+  void orderAt;
   return { ...rest, claim: item.primaryClaim, saved: Boolean(options?.saved) };
 }
 
@@ -131,6 +143,147 @@ export const getFeed = query({
     }
 
     return result;
+  },
+});
+
+// ── Public: paginated mixed feed for infinite scroll ──────────────────────
+// Chronological cursor over the cross-kind `by_order` index (orderAt desc),
+// re-ranked interest-aware *within each page*. Unlike getFeed (an in-memory
+// per-kind pool, no cursor), this supports true pagination for the discovery
+// surface's auto infinite scroll. getFeed stays for the stable aside cap +
+// home bento. Hidden + kind filtering happens post-paginate, so a page can
+// shrink below `numItems` — the cursor/isDone stay correct, and the client
+// guards the auto-loadMore loop. `returns` is omitted per AGENTS.md (the mapped
+// item shape isn't a single provable validator), matching getFeed.
+export const getFeedPaginated = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    kinds: v.optional(v.array(feedItemKindValidator)),
+    // Nav mode (Isu 6): "foryou" = interest-aware (default); "top" =
+    // popularity/recency, NOT personalized; "topics" = filter to `topic`
+    // category then rank foryou-style.
+    mode: v.optional(
+      v.union(v.literal("foryou"), v.literal("top"), v.literal("topics")),
+    ),
+    topic: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    const now = Date.now();
+    const mode = args.mode ?? "foryou";
+    const kindSet =
+      args.kinds && args.kinds.length > 0 ? new Set(args.kinds) : null;
+    const category =
+      mode === "topics" && args.topic && isDiscoveryTopicCategory(args.topic)
+        ? args.topic
+        : null;
+
+    const page = await ctx.db
+      .query("feedItems")
+      .withIndex("by_order")
+      .order("desc")
+      .paginate(args.paginationOpts);
+
+    const interests = await loadInterestWeights(ctx, user._id);
+    const hidden = await loadHiddenItemIds(ctx, user._id);
+    // No saved lookup: the bookmark action was removed (Save-to-Workspace is now
+    // the only save). The `saved` flag the cards no longer read defaults to false
+    // via shapeFeedItem, so we skip the per-page savedFeedItems read entirely.
+
+    const scored = page.page
+      .filter((item) => !hidden.has(item._id))
+      .filter((item) => !kindSet || kindSet.has(item.kind))
+      .filter(
+        (item) =>
+          !category || matchesTopicCategory(category, item.topics, item.title),
+      )
+      .map((item) => {
+        const interest = interestMatch(item.topics, interests);
+        const recency = recencyScore(item.publishedAt ?? item.lastSeenAt, now);
+        const popularity = popularityScore(item.trendScore);
+        // "Top" decouples interest and leans on popularity with a recency floor
+        // so high-citation-but-old papers don't dominate. "foryou"/"topics" keep
+        // the interest-aware composite.
+        const score =
+          mode === "top"
+            ? popularity * 1.0 + recency * 0.6 + kindBoost(item.kind)
+            : recency * 1.0 +
+              popularity * 0.5 +
+              interest.normalized * 1.5 +
+              kindBoost(item.kind);
+        return {
+          shaped: {
+            ...shapeFeedItem(item),
+            relevanceScore: Math.round(Math.min(1, interest.normalized) * 100),
+            reason: reasonFor(item, interest, false),
+          },
+          score,
+        };
+      });
+
+    scored.sort((a, b) => b.score - a.score);
+
+    return { ...page, page: scored.map((entry) => entry.shaped) };
+  },
+});
+
+// ── Public: global cross-content search over the feed (Isu 7) ─────────────
+// Relevance-ranked full-text search across cached feed items (paper + news +
+// claim + topic) via the `search_text` index. Results keep Convex's relevance
+// order (no interest re-rank). `kinds`/`fromYear`/hidden are filtered
+// post-fetch (page-shrink guard handled client-side, same as getFeedPaginated).
+// The frontend augments these with a live external `searchPapers` pass for
+// uncached papers. `returns` omitted (mapped shape), matching getFeed.
+export const searchDiscovery = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    q: v.string(),
+    kinds: v.optional(v.array(feedItemKindValidator)),
+    fromYear: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    const text = args.q.trim().slice(0, 256);
+    if (!text) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+    const kindSet =
+      args.kinds && args.kinds.length > 0 ? new Set(args.kinds) : null;
+    const fromMs =
+      args.fromYear && Number.isFinite(args.fromYear)
+        ? Date.UTC(args.fromYear, 0, 1)
+        : null;
+
+    const page = await ctx.db
+      .query("feedItems")
+      .withSearchIndex("search_text", (q) => q.search("searchText", text))
+      .paginate(args.paginationOpts);
+
+    const interests = await loadInterestWeights(ctx, user._id);
+    const hidden = await loadHiddenItemIds(ctx, user._id);
+    // No saved lookup (bookmark removed — see getFeedPaginated).
+
+    const items = page.page
+      .filter((item) => !hidden.has(item._id))
+      .filter((item) => !kindSet || kindSet.has(item.kind))
+      .filter((item) => {
+        if (!fromMs) return true;
+        // Year-range is a *publication-date* bound. Do NOT fall back to orderAt
+        // (publishedAt ?? lastSeenAt ?? createdAt) — that would let a freshly
+        // ingested, undated item slip past a "since 20XX" filter on its ingest
+        // time. Items with no known publish date are excluded once a range is set.
+        return (item.publishedAt ?? 0) >= fromMs;
+      })
+      .map((item) => {
+        const interest = interestMatch(item.topics, interests);
+        return {
+          ...shapeFeedItem(item),
+          relevanceScore: Math.round(Math.min(1, interest.normalized) * 100),
+          reason: reasonFor(item, interest, false),
+        };
+      });
+
+    return { ...page, page: items };
   },
 });
 
@@ -315,11 +468,23 @@ export const userInterestTopics = internalQuery({
       .query("userFeedInterests")
       .withIndex("by_owner_topic", (q) => q.eq("ownerUserId", args.ownerUserId))
       .take(100);
-    return rows
+    // Normalize on read so every consumer of the interest signal (feed scoring,
+    // search recommendations) shares one lowercase-trimmed contract, and collapse
+    // any case-variant rows (e.g. a seeded "machine learning" + an interaction-
+    // bumped one) to the highest-weight occurrence.
+    const limit = args.limit ?? 8;
+    const seen = new Set<string>();
+    const topics: string[] = [];
+    for (const row of rows
       .filter((row) => row.weight > 0)
-      .sort((a, b) => b.weight - a.weight)
-      .slice(0, args.limit ?? 8)
-      .map((row) => row.topic);
+      .sort((a, b) => b.weight - a.weight)) {
+      const topic = normalizeInterestTopic(row.topic);
+      if (!topic || seen.has(topic)) continue;
+      seen.add(topic);
+      topics.push(topic);
+      if (topics.length >= limit) break;
+    }
+    return topics;
   },
 });
 
@@ -482,6 +647,8 @@ export const upsertFeedItems = internalMutation({
     let inserted = 0;
     let updated = 0;
     for (const item of args.items) {
+      const orderAt = deriveOrderAt(item);
+      const searchText = deriveSearchText(item);
       const existing = await ctx.db
         .query("feedItems")
         .withIndex("by_dedupe_key", (q) => q.eq("dedupeKey", item.dedupeKey))
@@ -489,10 +656,16 @@ export const upsertFeedItems = internalMutation({
       if (existing) {
         const { createdAt, ...refreshFields } = item;
         void createdAt;
-        await ctx.db.patch("feedItems", existing._id, refreshFields);
+        // Refresh orderAt too so a re-seen item without publishedAt bubbles up
+        // by lastSeenAt (keeps the chronological by_order index live).
+        await ctx.db.patch("feedItems", existing._id, {
+          ...refreshFields,
+          orderAt,
+          searchText,
+        });
         updated += 1;
       } else {
-        await ctx.db.insert("feedItems", item);
+        await ctx.db.insert("feedItems", { ...item, orderAt, searchText });
         inserted += 1;
       }
     }
@@ -544,6 +717,56 @@ export const refreshTrendingPapers = internalAction({
     );
 
     return { fetched: papers.length, ...result };
+  },
+});
+
+// ── Internal: feed hydration orchestrator (single 3h cron) ────────────────
+// Replaces the five separate feed crons. `crons.interval` has no per-job
+// offset, so one parent cron fans the lanes out with `scheduler.runAfter`
+// staggers — spacing the providers apart to avoid a thundering herd and to
+// respect each provider's rate budget. Each child is scheduled (never awaited):
+// the orchestrator must finish in well under the action limit, and per-lane
+// failures are already soft-failed inside each child. The Bahasa Indonesia
+// backfill lane is intentionally omitted for now (the Google News lane is
+// already hl=id) — re-enable it later by adding one more runAfter.
+const HYDRATE_STAGGER = {
+  trendingPapers: 0,
+  trendingTopics: 20 * 60_000,
+  googleNews: 40 * 60_000,
+  factCheckClaims: 60 * 60_000,
+  enrichGoogleNews: 100 * 60_000,
+} as const;
+
+export const hydrateCycle = internalAction({
+  args: {},
+  returns: v.object({ scheduled: v.number() }),
+  handler: async (ctx): Promise<{ scheduled: number }> => {
+    await ctx.scheduler.runAfter(
+      HYDRATE_STAGGER.trendingPapers,
+      internal.feed.refreshTrendingPapers,
+      {},
+    );
+    await ctx.scheduler.runAfter(
+      HYDRATE_STAGGER.trendingTopics,
+      internal.feed.sources.refreshTrendingTopics,
+      {},
+    );
+    await ctx.scheduler.runAfter(
+      HYDRATE_STAGGER.googleNews,
+      internal.feed.sources.refreshGoogleNews,
+      {},
+    );
+    await ctx.scheduler.runAfter(
+      HYDRATE_STAGGER.factCheckClaims,
+      internal.feed.claims.refreshFactCheckClaims,
+      {},
+    );
+    await ctx.scheduler.runAfter(
+      HYDRATE_STAGGER.enrichGoogleNews,
+      internal.feed.sources.enrichGoogleNewsArticles,
+      {},
+    );
+    return { scheduled: 5 };
   },
 });
 
@@ -722,7 +945,14 @@ async function recordFeedInteractionForUser(
   if (kind === "hide") {
     await hideFeedItemForUser(ctx, ownerUserId, feedItemId);
   }
-  // "Teliti ini" is a strong positive signal for the interest model.
+  // Saving is a positive interest signal. Save-to-Workspace (the only save action
+  // after the bookmark cutover) routes through here, so this is where the +1 bump
+  // that the old bookmark used to apply now lives.
+  if (kind === "save") {
+    const item = await ctx.db.get("feedItems", feedItemId);
+    if (item) await bumpInterests(ctx, ownerUserId, item.topics, 1);
+  }
+  // "Tanya Astra" (research) is a stronger positive signal for the interest model.
   if (kind === "research") {
     const item = await ctx.db.get("feedItems", feedItemId);
     if (item) await bumpInterests(ctx, ownerUserId, item.topics, 2);
@@ -749,7 +979,11 @@ async function ensureFeedItemForPaperKey(
     Date.now(),
     new Set<string>(),
   );
-  return await ctx.db.insert("feedItems", item);
+  return await ctx.db.insert("feedItems", {
+    ...item,
+    orderAt: deriveOrderAt(item),
+    searchText: deriveSearchText(item),
+  });
 }
 
 async function existingFeedItemForPaperKey(
@@ -897,7 +1131,10 @@ async function bumpInterests(
 ): Promise<void> {
   const now = Date.now();
   for (const raw of topics.slice(0, 5)) {
-    const topic = raw.trim();
+    // Store normalized so interaction bumps share rows with the seeded topics
+    // (both go through the canonical normalizer) instead of forking a case
+    // variant; loadInterestWeights/interestMatch already look up lowercased.
+    const topic = normalizeInterestTopic(raw);
     if (!topic) continue;
     const existing = await ctx.db
       .query("userFeedInterests")

@@ -2,7 +2,7 @@
 
 import { api } from "@aqsha/convex/api";
 import type { FeedIdeaQuestion } from "@aqsha/convex/feed";
-import { CompassIcon, Loader2Icon, SparklesIcon } from "@aqsha/ui/icons";
+import { CompassIcon, Loader2Icon, MessageSquareIcon } from "@aqsha/ui/icons";
 import { useEffect, useRef, useState } from "react";
 import {
   Dialog,
@@ -171,9 +171,9 @@ function IdeaDialogInner({
                   {busy ? (
                     <Loader2Icon className="size-3.5 animate-spin" />
                   ) : (
-                    <SparklesIcon className="size-3.5" />
+                    <MessageSquareIcon className="size-3.5" />
                   )}
-                  Teliti pertanyaan ini
+                  Tanya Astra
                 </button>
               </div>
             ))}

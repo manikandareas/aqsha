@@ -64,7 +64,11 @@ type WorkspaceSummary = {
 
 const emptyWorkspaces: WorkspaceSummary[] = [];
 const MOBILE_THREAD_TITLE_MAX_CHARS = 42;
+const THREAD_ARCHIVE_THRESHOLD_DAYS = 1;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const THREADS_COLLAPSED_STORAGE_KEY = "aqsha:sidebar:threads-collapsed";
+const OLD_THREADS_COLLAPSED_STORAGE_KEY =
+  "aqsha:sidebar:old-threads-collapsed";
 const WORKSPACES_COLLAPSED_STORAGE_KEY = "aqsha:sidebar:workspaces-collapsed";
 const SIDEBAR_SECTION_EVENT = "aqsha:sidebar-section-toggle";
 const sidebarItemBaseClass =
@@ -103,12 +107,24 @@ export function AppSidebar({
   const router = useRouter();
   const [commandOpen, setCommandOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  // Deferred to a mount effect so the recent/older cutoff reads `Date.now()`
+  // only on the client, avoiding an SSR hydration mismatch.
+  const [activityGroupingNow, setActivityGroupingNow] = useState<number | null>(
+    null,
+  );
+  useEffect(() => {
+    setActivityGroupingNow(Date.now());
+  }, []);
   const { isMobile, setOpen, setOpenMobile } = useSidebar();
   const sortedWorkspaces = workspaces.toSorted(
     (left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0),
   );
   const sortedThreads = threads.toSorted(
     (left, right) => right.lastActivityAt - left.lastActivityAt,
+  );
+  const threadGroups = splitThreadsByActivity(
+    sortedThreads,
+    activityGroupingNow,
   );
   const isHomeActive = pathname === "/app" && !selectedThreadId;
   const isWorkspaceRoute = pathname.startsWith("/app/workspaces");
@@ -139,7 +155,6 @@ export function AppSidebar({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
-
   const runCreateThread = () => {
     setCommandOpen(false);
     onCreateThread();
@@ -265,20 +280,32 @@ export function AppSidebar({
                       storageKey={THREADS_COLLAPSED_STORAGE_KEY}
                     >
                       {sortedThreads.length > 0 ? (
-                        <SidebarMenu className="min-w-0 gap-1 overflow-hidden">
-                          {sortedThreads.map((thread) => (
-                            <RecentThreadRow
-                              key={thread.threadId}
-                              thread={thread}
-                              active={thread.threadId === selectedThreadId}
-                              onDelete={
-                                removeThread
-                                  ? () => handleDeleteThread(thread)
-                                  : undefined
-                              }
+                        <div className="grid min-w-0 gap-2 overflow-hidden">
+                          {threadGroups.recent.length > 0 ? (
+                            <SidebarMenu className="min-w-0 gap-1 overflow-hidden">
+                              {threadGroups.recent.map((thread) => (
+                                <RecentThreadRow
+                                  key={thread.threadId}
+                                  thread={thread}
+                                  active={thread.threadId === selectedThreadId}
+                                  onDelete={
+                                    removeThread
+                                      ? () => handleDeleteThread(thread)
+                                      : undefined
+                                  }
+                                />
+                              ))}
+                            </SidebarMenu>
+                          ) : null}
+                          {threadGroups.older.length > 0 ? (
+                            <ThreadArchiveGroup
+                              threads={threadGroups.older}
+                              selectedThreadId={selectedThreadId}
+                              removeThread={removeThread}
+                              onDeleteThread={handleDeleteThread}
                             />
-                          ))}
-                        </SidebarMenu>
+                          ) : null}
+                        </div>
                       ) : (
                         <EmptyThreadRow />
                       )}
@@ -429,7 +456,30 @@ function PrimaryNavLink({
   );
 }
 
-function usePersistentCollapse(storageKey: string | undefined) {
+function splitThreadsByActivity(threads: ThreadSummary[], now: number | null) {
+  if (now === null) {
+    return { recent: threads, older: [] };
+  }
+
+  const archiveCutoff = now - THREAD_ARCHIVE_THRESHOLD_DAYS * MS_PER_DAY;
+  const recent: ThreadSummary[] = [];
+  const older: ThreadSummary[] = [];
+
+  for (const thread of threads) {
+    if (thread.lastActivityAt <= archiveCutoff) {
+      older.push(thread);
+    } else {
+      recent.push(thread);
+    }
+  }
+
+  return { recent, older };
+}
+
+function usePersistentCollapse(
+  storageKey: string | undefined,
+  defaultCollapsed = false,
+) {
   const subscribe = (onStoreChange: () => void) => {
     if (!storageKey) return () => {};
     window.addEventListener("storage", onStoreChange);
@@ -442,8 +492,11 @@ function usePersistentCollapse(storageKey: string | undefined) {
 
   const collapsed = useSyncExternalStore(
     subscribe,
-    () =>
-      storageKey ? window.localStorage.getItem(storageKey) === "1" : false,
+    () => {
+      if (!storageKey) return false;
+      const stored = window.localStorage.getItem(storageKey);
+      return stored === null ? defaultCollapsed : stored === "1";
+    },
     () => false,
   );
 
@@ -532,6 +585,82 @@ function SidebarSection({
       ) : (
         children
       )}
+    </div>
+  );
+}
+
+function ThreadArchiveGroup({
+  threads,
+  selectedThreadId,
+  removeThread,
+  onDeleteThread,
+}: {
+  threads: ThreadSummary[];
+  selectedThreadId?: string;
+  removeThread?: RemoveThread;
+  onDeleteThread: (thread: ThreadSummary) => Promise<void>;
+}) {
+  const hasActiveThread = threads.some(
+    (thread) => thread.threadId === selectedThreadId,
+  );
+  const [persistedCollapsed, toggleCollapsed] = usePersistentCollapse(
+    OLD_THREADS_COLLAPSED_STORAGE_KEY,
+    true,
+  );
+  const [animate, setAnimate] = useState(false);
+  const collapsed = hasActiveThread ? false : persistedCollapsed;
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setAnimate(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  return (
+    <div className="min-w-0 overflow-hidden pt-1">
+      <button
+        type="button"
+        onClick={toggleCollapsed}
+        aria-expanded={!collapsed}
+        className="-ml-1 flex min-w-0 items-center gap-1 rounded-[5px] px-1 py-0.5 text-left transition-[background-color] duration-150 ease-out hover:bg-muted/50"
+      >
+        <ChevronRightIcon
+          className={cn(
+            "size-3 shrink-0 text-primary/55",
+            animate ? "transition-transform duration-200 ease-out" : null,
+            collapsed ? "rotate-0" : "rotate-90",
+          )}
+        />
+        <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-muted-foreground">
+          More
+        </span>
+        <span className="shrink-0 rounded-[5px] bg-muted/50 px-1.5 py-0.5 text-[10px] font-medium leading-none text-muted-foreground">
+          {threads.length}
+        </span>
+      </button>
+      <div
+        className={cn(
+          "grid",
+          animate
+            ? "transition-[grid-template-rows] duration-200 ease-out"
+            : null,
+          collapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]",
+        )}
+      >
+        <div className="min-h-0 overflow-hidden pt-1">
+          <SidebarMenu className="min-w-0 gap-1 overflow-hidden">
+            {threads.map((thread) => (
+              <RecentThreadRow
+                key={thread.threadId}
+                thread={thread}
+                active={thread.threadId === selectedThreadId}
+                onDelete={
+                  removeThread ? () => onDeleteThread(thread) : undefined
+                }
+              />
+            ))}
+          </SidebarMenu>
+        </div>
+      </div>
     </div>
   );
 }

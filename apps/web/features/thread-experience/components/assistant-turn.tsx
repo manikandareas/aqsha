@@ -83,6 +83,10 @@ export function AssistantTurn({
   const [manualProcessOpen, setManualProcessOpen] = useState<boolean | null>(null);
 
   const isActive = run ? isRunActive(run) : false;
+  // Terminal = the run settled (completed/failed/canceled); isRunActive already
+  // counts waiting_hitl as active, so !isActive is exactly the terminal set. Used
+  // to render any still-pending HITL card non-interactive (plan §7.3 zombie-card).
+  const runTerminal = Boolean(run) && !isActive;
   const isDeep = run?.mode === "deep";
   const parts = buildTurnParts(message, run);
   const pendingHitl = hitlMessages ?? [];
@@ -258,6 +262,7 @@ export function AssistantTurn({
                 message={item.message}
                 actions={hitlActions}
                 disabled={hitlDisabled}
+                runTerminal={runTerminal}
               />
             ),
           )}
@@ -323,10 +328,12 @@ function HitlExchangeQuestion({
   message,
   actions,
   disabled,
+  runTerminal,
 }: {
   message: ChatMessage;
   actions?: HitlActions;
   disabled?: boolean;
+  runTerminal?: boolean;
 }) {
   const part = messageHitlParts(message)[0];
   if (!part) return null;
@@ -344,7 +351,14 @@ function HitlExchangeQuestion({
     );
   }
   if (!actions) return null;
-  return <MessageHitlParts message={message} actions={actions} disabled={disabled} />;
+  return (
+    <MessageHitlParts
+      message={message}
+      actions={actions}
+      disabled={disabled}
+      runTerminal={runTerminal}
+    />
+  );
 }
 
 function ThreadActivityFallback() {
@@ -361,9 +375,9 @@ function RunHeader({
 }: {
   run: ResearchRun;
   sourceCount: number;
-  // When true, the summary doubles as the trigger that collapses the process
-  // timeline below it (a chevron is appended). The source chip stays a sibling
-  // control so it is not nested inside the button.
+  // When true, the whole header (summary + source chip + a hover-revealed
+  // chevron at the far right) is the trigger that collapses the process timeline
+  // below it.
   collapsible?: boolean;
   open?: boolean;
 }) {
@@ -396,41 +410,45 @@ function RunHeader({
           ? "Dihentikan"
           : `Berjalan · ${durationLabel}`;
 
+  const summaryNode = isActive ? (
+    <Shimmer as="span" className="min-w-0 font-medium">
+      {summaryText}
+    </Shimmer>
+  ) : (
+    <span className="min-w-0 font-medium text-foreground">{summaryText}</span>
+  );
+  const sourceBadge =
+    sourceCount > 0 ? (
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-[7px] border border-border/70 bg-muted/35 px-2 py-1 text-[11px] font-medium text-muted-foreground">
+        <FolderTreeIcon className="size-3.5" />
+        <span>{sourceCount}</span>
+      </span>
+    ) : null;
+
   return (
     <div className="text-[13px] text-muted-foreground">
-      <div className="flex items-center gap-2">
-        {collapsible ? (
-          <CollapsibleTrigger className="group flex min-w-0 flex-1 items-center gap-1.5 text-left transition-colors hover:text-foreground">
-            {isActive ? (
-              <Shimmer as="span" className="min-w-0 flex-1 font-medium">
-                {summaryText}
-              </Shimmer>
-            ) : (
-              <span className="min-w-0 flex-1 font-medium text-foreground">
-                {summaryText}
-              </span>
+      {collapsible ? (
+        // The chevron sits to the RIGHT of the source badge and stays hidden
+        // until the row is hovered/focused (always shown while expanded), so the
+        // header reads as plain text at rest and reveals the toggle on demand.
+        <CollapsibleTrigger className="group flex w-full min-w-0 items-center gap-1.5 text-left transition-colors hover:text-foreground">
+          {summaryNode}
+          {sourceBadge}
+          <ChevronDownIcon
+            className={cn(
+              "size-3.5 shrink-0 text-muted-foreground transition-all duration-200",
+              open
+                ? "rotate-180 opacity-100"
+                : "rotate-0 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
             )}
-            <ChevronDownIcon
-              className={cn(
-                "size-3.5 shrink-0 text-muted-foreground transition-transform duration-200",
-                open ? "rotate-180" : "rotate-0",
-              )}
-            />
-          </CollapsibleTrigger>
-        ) : isActive ? (
-          <Shimmer className="min-w-0 flex-1 font-medium">{summaryText}</Shimmer>
-        ) : (
-          <span className="min-w-0 flex-1 font-medium text-foreground">
-            {summaryText}
-          </span>
-        )}
-        {sourceCount > 0 ? (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-[7px] border border-border/70 bg-muted/35 px-2 py-1 text-[11px] font-medium text-muted-foreground">
-            <FolderTreeIcon className="size-3.5" />
-            <span>{sourceCount}</span>
-          </span>
-        ) : null}
-      </div>
+          />
+        </CollapsibleTrigger>
+      ) : (
+        <div className="flex min-w-0 items-center gap-1.5">
+          {summaryNode}
+          {sourceBadge}
+        </div>
+      )}
       {!isActive && run.status === "failed" && runNode?.description ? (
         <p className="mt-2 break-words text-[13px] text-coral-foreground">
           {runNode.description}

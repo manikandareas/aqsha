@@ -48,11 +48,43 @@ export function exploreCacheKey(args: {
   query: string;
   limit: number;
   fromYear?: number;
+  // Personalization discriminator. For interest-seeded recommendations the
+  // empty user query is the same for everyone, so the seed (the user's top
+  // interest topics) is appended to keep one profile's cache from leaking to
+  // another. Omitted (cold-start / search) → the key is unchanged.
+  seed?: string;
   now?: number;
 }) {
   const dateBucket = new Date(args.now ?? Date.now()).toISOString().slice(0, 10);
   const yearBucket = args.fromYear ?? "all";
-  return `explore:v2:${args.mode}:${normalizeExploreQuery(args.query).toLowerCase()}:${args.limit}:${yearBucket}:${dateBucket}`;
+  const base = `explore:v2:${args.mode}:${normalizeExploreQuery(args.query).toLowerCase()}:${args.limit}:${yearBucket}:${dateBucket}`;
+  const seed = args.seed?.trim().toLowerCase();
+  return seed ? `${base}:seed:${seed}` : base;
+}
+
+// Build the provider query for the explore "recommendations" mode. With interest
+// topics it returns them space-joined (a relevance search seed for OpenAlex /
+// arXiv / Jina); otherwise it falls back to the generic cold-start query.
+export function recommendationProviderQuery(
+  interestTopics: string[],
+  fallback: string,
+): string {
+  const cleaned = interestTopics
+    .map((topic) => topic.trim())
+    .filter((topic) => topic.length > 0);
+  return cleaned.length > 0 ? cleaned.join(" ") : fallback;
+}
+
+// The OpenAlex query specifically. Unlike arXiv/Jina (which take a generic
+// cold-start fallback), OpenAlex stays on its cited-by-count "trending" listing
+// for brand-new accounts — so an empty interest set yields an empty query
+// (trending) rather than the generic recommendation string. A real search query
+// is always passed through verbatim.
+export function openAlexRecommendationQuery(
+  query: string,
+  interestTopics: string[],
+): string {
+  return query || recommendationProviderQuery(interestTopics, "");
 }
 
 export function candidatesToExplorePapers(

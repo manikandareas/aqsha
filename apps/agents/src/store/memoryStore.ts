@@ -333,6 +333,17 @@ export class MemoryStore implements AgentStore {
       .sort((a, b) => a.createdAt - b.createdAt);
   }
 
+  async listPendingInteractionsByRun(
+    runId: string,
+  ): Promise<PendingInteraction[]> {
+    return [...this.interactions.values()]
+      .filter(
+        (interaction) =>
+          interaction.runId === runId && interaction.status === "pending",
+      )
+      .sort((a, b) => a.createdAt - b.createdAt);
+  }
+
   // ── context data ───────────────────────────────────────────────────────────
 
   /** Test/dev helper: seed an artifact the agent can reference. */

@@ -6,6 +6,7 @@ import {
   type ActionCtx,
 } from "../_generated/server";
 import { feedVerdictValidator } from "./validators";
+import { deriveOrderAt, deriveSearchText } from "./model";
 import { candidatesToExplorePapers } from "../explore/model";
 import { fetchOpenAlexWorksService } from "./openAlex";
 import { fetchArticlePreview, type ArticlePreview } from "../papers/articlePreview";
@@ -106,10 +107,22 @@ export const upsertClaimItems = internalMutation({
           : {}),
       };
 
+      const orderAt = deriveOrderAt({
+        publishedAt: itemFields.publishedAt,
+        lastSeenAt: itemFields.lastSeenAt,
+        createdAt: now,
+      });
+      const searchText = deriveSearchText({
+        title: itemFields.title,
+        summary: itemFields.summary,
+        topics: itemFields.topics,
+      });
       if (existing) {
         await ctx.db.patch("feedItems", existing._id, {
           ...itemFields,
           primaryClaim,
+          orderAt,
+          searchText,
         });
         updated += 1;
       } else {
@@ -117,6 +130,8 @@ export const upsertClaimItems = internalMutation({
           ...itemFields,
           primaryClaim,
           createdAt: now,
+          orderAt,
+          searchText,
         });
         inserted += 1;
       }

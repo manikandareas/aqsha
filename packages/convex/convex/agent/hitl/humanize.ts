@@ -21,7 +21,21 @@ type ApprovalResponse = {
   workspaceId?: string;
 };
 
-export type HitlResponse = AnswerResponse | ApprovalResponse;
+// Deep-research plan gate (plan §5.2). Mirrors the `plan_decision` branch of
+// `interactionResponseSchema` in @aqsha/agent-contracts; kept as a local type
+// because Convex code deliberately does not depend on that package (the web side
+// owns the contract adapters — see agent/queries.ts).
+type PlanDecisionResponse = {
+  kind: "plan_decision";
+  decision: "start" | "revise" | "reject";
+  editedPlan?: string;
+  revisionInstruction?: string;
+};
+
+export type HitlResponse =
+  | AnswerResponse
+  | ApprovalResponse
+  | PlanDecisionResponse;
 
 type AskUserOption = { id: string; label: string };
 type AskUserQuestion = { prompt: string; options?: AskUserOption[] };
@@ -79,6 +93,17 @@ export function humanizeInteractionResponse(input: {
       })
       .filter((line): line is string => Boolean(line));
     return lines.length ? lines.join("\n") : "Dilewati";
+  }
+  if (response.kind === "plan_decision") {
+    if (response.decision === "start") {
+      return response.editedPlan?.trim()
+        ? "Mulai riset dengan rencana ini. (dengan suntingan)"
+        : "Mulai riset dengan rencana ini.";
+    }
+    if (response.decision === "revise") {
+      return response.revisionInstruction?.trim() || "Minta revisi rencana riset.";
+    }
+    return "Tolak rencana riset.";
   }
   if (response.approved) {
     return response.note?.trim() ? `Setujui — ${response.note.trim()}` : "Setujui";

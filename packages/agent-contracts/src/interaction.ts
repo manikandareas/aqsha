@@ -51,6 +51,18 @@ export const interactionResponseSchema = z.discriminatedUnion("kind", [
     // previously smuggled through `note` as "workspaceId:<id>").
     workspaceId: z.string().max(128).optional(),
   }),
+  // Deep-research plan gate (docs/deep-research-plan-gate-plan.md §6.1). The user
+  // reviews the `proposeResearchPlan` card and decides: start (run the research,
+  // optionally with an edited plan), revise (model re-decomposes with an
+  // instruction), or reject (cancel the run). Carried on the same `tool_approval`
+  // interaction as `proposeResearchPlan`; the Convex guard restricts this kind to
+  // that tool only (no schema change to pendingInteractions).
+  z.object({
+    kind: z.literal("plan_decision"),
+    decision: z.enum(["start", "revise", "reject"]),
+    editedPlan: z.string().max(20_000).optional(),
+    revisionInstruction: z.string().max(2_000).optional(),
+  }),
 ]);
 export type InteractionResponse = z.infer<typeof interactionResponseSchema>;
 
@@ -77,4 +89,47 @@ export function isApproved(interaction: PendingInteraction): boolean {
     interaction.response?.kind === "approval" &&
     interaction.response.approved
   );
+}
+
+// ── deep-research plan payload (plan §6.1) ───────────────────────────────────
+//
+// Structure for the `proposeResearchPlan` tool: a typed contract over a fragile
+// Markdown parser (memory `code-organization-emphasis`). The card edits/renders
+// the same shape on every side; `renderResearchPlanMarkdown` is the SINGLE source
+// of truth for the prose format so the deep-research phase prompts read a
+// deterministic `priorOutputs.plan`. Bounds are slightly wider than the tool's
+// own input zod (questions 1–8 vs 3–6) so an edited or fallback plan still parses.
+export const researchPlanPayloadSchema = z.object({
+  title: z.string().min(1).max(120),
+  summary: z.string().max(500).optional(),
+  questions: z.array(z.string().min(1).max(500)).min(1).max(8),
+});
+export type ResearchPlanPayload = z.infer<typeof researchPlanPayloadSchema>;
+
+/**
+ * Parse a stored `proposeResearchPlan` payload defensively. Returns a graceful
+ * fallback (`{ title: "Rencana riset", questions: [] }`) rather than throwing, so
+ * a malformed/legacy payload still renders a non-crashing card.
+ */
+export function parseResearchPlanPayload(raw: unknown): ResearchPlanPayload {
+  const parsed = researchPlanPayloadSchema.safeParse(raw);
+  if (parsed.success) return parsed.data;
+  return { title: "Rencana riset", questions: [] };
+}
+
+/**
+ * The one canonical Markdown form of a research plan. Used by the web client
+ * (on `start`) AND the agent service (fallback + `start` without an edited plan)
+ * so the deep-research phases always read the same `section("Research plan", …)`.
+ */
+export function renderResearchPlanMarkdown(plan: ResearchPlanPayload): string {
+  const blocks: string[] = [`## ${plan.title}`];
+  const summary = plan.summary?.trim();
+  if (summary) blocks.push(summary);
+  if (plan.questions.length > 0) {
+    blocks.push(
+      plan.questions.map((question, i) => `${i + 1}. ${question}`).join("\n"),
+    );
+  }
+  return blocks.join("\n\n");
 }

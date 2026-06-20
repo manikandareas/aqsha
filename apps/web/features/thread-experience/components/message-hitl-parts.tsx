@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  parseResearchPlanPayload,
+  renderResearchPlanMarkdown,
+} from "@aqsha/agent-contracts";
 import { useState } from "react";
 import { toast } from "sonner";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
@@ -8,7 +12,12 @@ import { messageHitlParts, type HitlToolPart } from "../utils/hitl-parts";
 import { HitlConfirmCard } from "./hitl-confirm-card";
 import { HitlPlanReviewCard } from "./hitl-plan-review-card";
 import { HitlQuestionCard } from "./hitl-question-card";
-import type { HitlActions, HitlAnswer } from "./use-hitl-resume";
+import { ResearchPlanReviewCard } from "./research-plan-review-card";
+import type {
+  HitlActions,
+  HitlAnswer,
+  HitlPlanDecision,
+} from "./use-hitl-resume";
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
@@ -31,10 +40,13 @@ export function MessageHitlParts({
   message,
   actions,
   disabled,
+  runTerminal,
 }: {
   message: ChatMessage;
   actions: HitlActions;
   disabled?: boolean;
+  /** The run reached a terminal state — render cards non-interactive (no zombie). */
+  runTerminal?: boolean;
 }) {
   const parts = messageHitlParts(message);
   const pending = parts.filter(
@@ -54,6 +66,7 @@ export function MessageHitlParts({
           part={part}
           actions={actions}
           disabled={disabled}
+          runTerminal={runTerminal}
         />
       ))}
       {denied.map((part) => (
@@ -72,13 +85,17 @@ function HitlPartCard({
   part,
   actions,
   disabled,
+  runTerminal,
 }: {
   part: HitlToolPart;
   actions: HitlActions;
   disabled?: boolean;
+  runTerminal?: boolean;
 }) {
   const [submitting, setSubmitting] = useState(false);
-  const busy = Boolean(disabled) || submitting;
+  // A terminal run can no longer accept a response — gate the card so a still
+  // pending interaction never renders an interactive zombie card (plan §7.3).
+  const busy = Boolean(disabled) || submitting || Boolean(runTerminal);
   const input = part.input;
 
   if (part.toolName === "askUser") {
@@ -123,6 +140,17 @@ function HitlPartCard({
       toast.error(readableConvexErrorMessage(error, "Gagal membatalkan tindakan."));
     }
   };
+  const planDecision = async (payload: HitlPlanDecision) => {
+    setSubmitting(true);
+    try {
+      await actions.onPlanDecision(approvalId, payload);
+    } catch (error) {
+      setSubmitting(false);
+      toast.error(
+        readableConvexErrorMessage(error, "Gagal mengirim keputusan rencana."),
+      );
+    }
+  };
 
   if (part.toolName === "deleteArtifact") {
     return (
@@ -133,33 +161,35 @@ function HitlPartCard({
         confirmLabel="Hapus"
         cancelLabel="Batal"
         disabled={busy}
+        submitting={submitting}
         onConfirm={() => void approve()}
         onReject={() => void deny()}
       />
     );
   }
 
-  if (part.toolName === "startDeepResearch") {
-    const questions = asStringArray(input.questions) ?? [];
-    const bullets = [
-      ...questions.map((question) => `Pertanyaan: ${question}`),
-      asString(input.sourceStrategy)
-        ? `Strategi sumber: ${asString(input.sourceStrategy)}`
-        : null,
-      typeof input.maxRounds === "number"
-        ? `Maks. putaran: ${input.maxRounds}`
-        : null,
-    ]
-      .filter((bullet): bullet is string => Boolean(bullet))
-      .slice(0, 8);
+  if (part.toolName === "proposeResearchPlan") {
+    const plan = parseResearchPlanPayload(input);
     return (
-      <HitlPlanReviewCard
-        title={asString(input.title) ?? "Rencana riset mendalam"}
-        summary={asString(input.reportIntent)}
-        planBullets={bullets}
+      <ResearchPlanReviewCard
+        title={plan.title}
+        summary={plan.summary}
+        questions={plan.questions}
         disabled={busy}
-        onBuild={() => void approve()}
-        onReject={() => void deny()}
+        submitting={submitting}
+        onStart={(edited) =>
+          void planDecision({
+            decision: "start",
+            // renderResearchPlanMarkdown is the single source of truth for the
+            // plan format the backend re-reads (plan §6.1) — render the EDITED
+            // questions through it so the executed plan matches the card.
+            editedPlan: renderResearchPlanMarkdown({ ...plan, questions: edited }),
+          })
+        }
+        onRevise={(instruction) =>
+          void planDecision({ decision: "revise", revisionInstruction: instruction })
+        }
+        onReject={() => void planDecision({ decision: "reject" })}
       />
     );
   }
@@ -171,6 +201,7 @@ function HitlPartCard({
       summary={asString(input.summary)}
       planBullets={asStringArray(input.planBullets)}
       disabled={busy}
+      submitting={submitting}
       onBuild={(workspaceId) => void approve(workspaceId)}
       onReject={() => void deny()}
     />

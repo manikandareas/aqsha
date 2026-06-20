@@ -1,15 +1,13 @@
 "use client";
 
 import {
-  BookmarkIcon,
-  CheckIcon,
   CompassIcon,
   ExternalLinkIcon,
   FileDownIcon,
   FolderIcon,
   Loader2Icon,
+  MessageSquareIcon,
   Quote,
-  SparklesIcon,
   ThumbsDownIcon,
 } from "@aqsha/ui/icons";
 import type { DiscoveryItem } from "@aqsha/convex/feed";
@@ -22,11 +20,13 @@ import { VERDICT_STYLE } from "../utils/discovery-verdict-style";
 import {
   buildSourceLine,
   feedDetailHref,
+  isSavableToWorkspace,
   kindLabel,
   kindPanelClass,
 } from "../utils/discovery-card-utils";
 import {
   CardProps,
+  DiscoverySavePopover,
   IconButton,
   RetractionFlag,
   WhyRelevantNote,
@@ -39,7 +39,6 @@ export function DiscoveryListItem({
   item,
   index,
   lang,
-  saved,
   busy,
   relevanceNote,
   whyLoading,
@@ -133,16 +132,16 @@ export function DiscoveryListItem({
           ) : null}
           <button
             type="button"
-            onClick={() => handlers.onTeliti(item)}
+            onClick={() => handlers.onAskAstra(item)}
             disabled={busy}
             className="inline-flex h-7 items-center gap-1.5 rounded-[7px] bg-primary px-2.5 text-[12px] font-semibold text-primary-foreground transition-colors hover:bg-primary-hover disabled:opacity-60"
           >
             {busy ? (
               <Loader2Icon className="size-3.5 animate-spin" />
             ) : (
-              <SparklesIcon className="size-3.5" />
+              <MessageSquareIcon className="size-3.5" />
             )}
-            Teliti ini
+            Tanya Astra
           </button>
           {isClaim ? (
             <button
@@ -177,7 +176,6 @@ export function DiscoveryListItem({
         <WhyRelevantTrigger
           item={item}
           lang={lang}
-          saved={saved}
           busy={busy}
           relevanceNote={relevanceNote}
           whyLoading={whyLoading}
@@ -187,21 +185,17 @@ export function DiscoveryListItem({
 
       <div className="col-start-2 flex min-w-0 items-center justify-between gap-2 sm:col-start-auto sm:flex-col sm:items-end sm:justify-center sm:gap-3">
         <div className="flex shrink-0 items-center gap-1">
-          {isPaper ? (
-            <IconButton
-              label="Simpan ke workspace"
-              onClick={() => handlers.onSaveToWorkspace(item)}
-            >
-              <FolderIcon className="size-4" />
-            </IconButton>
+          {isSavableToWorkspace(item) ? (
+            <DiscoverySavePopover
+              item={item}
+              handlers={handlers}
+              trigger={
+                <IconButton label="Simpan ke workspace">
+                  <FolderIcon className="size-4" />
+                </IconButton>
+              }
+            />
           ) : null}
-          <IconButton
-            label={saved ? "Tersimpan" : "Simpan"}
-            active={saved}
-            onClick={() => handlers.onSave(item)}
-          >
-            {saved ? <CheckIcon className="size-4" /> : <BookmarkIcon className="size-4" />}
-          </IconButton>
           <a
             href={item.url}
             target="_blank"

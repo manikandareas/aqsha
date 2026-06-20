@@ -7,18 +7,17 @@ import {
   ExternalLinkIcon,
   FileDownIcon,
   FolderIcon,
-  HeartIcon,
   HelpCircleIcon,
   Loader2Icon,
+  MessageSquareIcon,
   MoreHorizontalIcon,
   Quote,
-  SparklesIcon,
   ThumbsDownIcon,
   TrendingUpIcon,
 } from "@aqsha/ui/icons";
 import Image from "next/image";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,12 +33,13 @@ import {
 import { cn } from "@/lib/utils";
 import { formatCitationCount } from "../utils/discovery-format";
 import {
-  buildSourceLine,
   feedDetailHref,
+  isSavableToWorkspace,
   kindLabel,
   kindPanelClass,
 } from "../utils/discovery-card-utils";
 import { VERDICT_STYLE } from "../utils/discovery-verdict-style";
+import { WorkspacePickerPopover } from "@/features/workspaces/components/workspace-picker-popover";
 import {
   Sparkline,
   StanceTally,
@@ -47,9 +47,8 @@ import {
 } from "./discovery-visuals";
 
 export type DiscoveryCardHandlers = {
-  onTeliti: (item: DiscoveryItem) => void;
-  onSave: (item: DiscoveryItem) => void;
-  onSaveToWorkspace: (item: DiscoveryItem) => void;
+  onAskAstra: (item: DiscoveryItem) => void;
+  onSaveToWorkspace: (item: DiscoveryItem, workspaceId: string) => void | Promise<void>;
   onHide: (item: DiscoveryItem) => void;
   onOpenEvidence: (item: DiscoveryItem) => void;
   onGenerateIdeas: (item: DiscoveryItem) => void;
@@ -59,7 +58,6 @@ export type DiscoveryCardHandlers = {
 export type CardProps = {
   item: DiscoveryItem;
   lang: "id" | "en";
-  saved: boolean;
   busy: boolean;
   relevanceNote?: string;
   whyLoading?: boolean;
@@ -217,7 +215,7 @@ export function DiscoveryStandardCard(props: CardProps) {
 
 // ── Claim card (Brief) — verdict-forward, image-top parity ─────────────────
 export function DiscoveryClaimCard(props: CardProps) {
-  const { item, saved, handlers } = props;
+  const { item, handlers } = props;
   const claim = item.claim;
   if (!claim) {
     return <DiscoveryStandardCard {...props} />;
@@ -260,7 +258,11 @@ export function DiscoveryClaimCard(props: CardProps) {
             <Quote className="size-3.5" /> Lihat bukti
           </CardLink>
           <div className="-mr-1 flex items-center gap-0.5">
-            <LikeButton saved={saved} onClick={() => handlers.onSave(item)} />
+            <DiscoverySavePopover
+              item={item}
+              handlers={handlers}
+              trigger={<SaveIconButton />}
+            />
             <CardOverflowMenu {...props} />
           </div>
         </div>
@@ -271,38 +273,60 @@ export function DiscoveryClaimCard(props: CardProps) {
 
 // ── Footer (source row + like + overflow) ─────────────────────────────────
 function CardFooter(props: CardProps) {
-  const { item, saved, handlers } = props;
+  const { item, handlers } = props;
   return (
     <div className="flex items-center justify-between gap-3">
       <SourceRow item={item} lang={props.lang} />
       <div className="-mr-1 flex shrink-0 items-center gap-0.5">
-        <LikeButton saved={saved} onClick={() => handlers.onSave(item)} />
+        {isSavableToWorkspace(item) ? (
+          <DiscoverySavePopover
+            item={item}
+            handlers={handlers}
+            trigger={<SaveIconButton />}
+          />
+        ) : null}
         <CardOverflowMenu {...props} />
       </div>
     </div>
   );
 }
 
-function LikeButton({
-  saved,
-  onClick,
-}: {
-  saved: boolean;
-  onClick: () => void;
-}) {
+// The single canonical save action (Isu 8): Save-to-Workspace, FolderIcon, all
+// kinds. Replaced the old bookmark/like (HeartIcon) toggle. Spreads `props` so
+// it can act as the `WorkspacePickerPopover` trigger (Radix injects onClick/ref
+// via asChild).
+function SaveIconButton(props: ComponentProps<"button">) {
   return (
     <button
       type="button"
-      onClick={onClick}
-      aria-label={saved ? "Hapus dari simpanan" : "Simpan"}
-      title={saved ? "Tersimpan" : "Simpan"}
-      className={cn(
-        "inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-        saved && "text-coral hover:text-coral",
-      )}
+      aria-label="Simpan ke workspace"
+      title="Simpan ke workspace"
+      className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      {...props}
     >
-      <HeartIcon className="size-[18px]" />
+      <FolderIcon className="size-[18px]" />
     </button>
+  );
+}
+
+// Anchors the workspace picker popover to a discovery card's save trigger. Each
+// card owns its own popover; selecting a workspace forwards to the page-level
+// `onSaveToWorkspace` (which computes the best ingest URL and records interest).
+export function DiscoverySavePopover({
+  item,
+  handlers,
+  trigger,
+}: {
+  item: DiscoveryItem;
+  handlers: DiscoveryCardHandlers;
+  trigger: ReactNode;
+}) {
+  return (
+    <WorkspacePickerPopover
+      description="Tautan akan otomatis diunduh dan metadatanya diekstrak."
+      onSelect={(workspaceId) => handlers.onSaveToWorkspace(item, workspaceId)}
+      trigger={trigger}
+    />
   );
 }
 
@@ -328,15 +352,15 @@ function CardOverflowMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuItem
-          onSelect={() => handlers.onTeliti(item)}
+          onSelect={() => handlers.onAskAstra(item)}
           disabled={busy}
         >
           {busy ? (
             <Loader2Icon className="animate-spin" />
           ) : (
-            <SparklesIcon />
+            <MessageSquareIcon />
           )}
-          Teliti ini
+          Tanya Astra
         </DropdownMenuItem>
         {isClaim ? (
           <DropdownMenuItem onSelect={() => handlers.onOpenEvidence(item)}>
@@ -361,11 +385,6 @@ function CardOverflowMenu({
 
         <DropdownMenuSeparator />
 
-        {isPaper ? (
-          <DropdownMenuItem onSelect={() => handlers.onSaveToWorkspace(item)}>
-            <FolderIcon /> Simpan ke workspace
-          </DropdownMenuItem>
-        ) : null}
         <DropdownMenuItem asChild>
           <a href={item.url} target="_blank" rel="noreferrer">
             <ExternalLinkIcon /> Buka sumber
@@ -611,25 +630,19 @@ function CardLink({
 
 export function IconButton({
   label,
-  active,
-  onClick,
   children,
+  ...props
 }: {
   label: string;
-  active?: boolean;
-  onClick: () => void;
   children: ReactNode;
-}) {
+} & ComponentProps<"button">) {
   return (
     <button
       type="button"
-      onClick={onClick}
-      className={cn(
-        "inline-flex size-7 items-center justify-center rounded-[7px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-        active && "text-mint-foreground",
-      )}
+      className="inline-flex size-7 items-center justify-center rounded-[7px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       aria-label={label}
       title={label}
+      {...props}
     >
       {children}
     </button>

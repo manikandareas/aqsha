@@ -288,7 +288,7 @@ function FactDetailContent({
 
       <ReaderActions
         item={item}
-        researchLabel="Teliti klaim ini"
+        askLabel="Tanya Astra"
         researchSeed={researchSeed}
       />
 

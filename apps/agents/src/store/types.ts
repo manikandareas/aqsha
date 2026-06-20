@@ -199,6 +199,13 @@ export interface AgentStore {
   ): Promise<PendingInteraction | null>;
   expireInteraction(interactionId: string): Promise<void>;
   listInteractions(threadId: string): Promise<PendingInteraction[]>;
+  /**
+   * Pending interactions for ONE run (deep-research plan-gate replay
+   * idempotency, plan §4.6c): lets executeDeepRun detect an already-parked
+   * proposeResearchPlan card on a durable re-dispatch and re-park instead of
+   * opening a second card. Backed by the Convex `by_run_status` index.
+   */
+  listPendingInteractionsByRun(runId: string): Promise<PendingInteraction[]>;
 
   // ── context data (RAG + manifests stay Convex-owned; memory store fakes) ─
   listContextArtifacts(

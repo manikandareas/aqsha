@@ -1,6 +1,11 @@
 "use client";
 
-import { FilterIcon, Loader2Icon, SearchIcon } from "@aqsha/ui/icons";
+import {
+  ChevronDownIcon,
+  FilterIcon,
+  Loader2Icon,
+  SearchIcon,
+} from "@aqsha/ui/icons";
 import { type FormEvent, useRef, useState } from "react";
 import {
   Popover,
@@ -9,60 +14,133 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import {
+  type DiscoveryMode,
   type DiscoveryRange,
-  type DiscoveryView,
+  type DiscoveryTopicCategory,
+  discoveryModeLabels,
   discoveryRangeLabels,
   discoveryRanges,
+  discoveryTopicCategories,
+  discoveryTopicCategoryLabels,
 } from "../hooks/use-discovery-nav";
 
-const VIEW_LABELS: Array<{ value: DiscoveryView; label: string }> = [
-  { value: "brief", label: "Brief" },
-  { value: "papers", label: "Papers" },
-];
-
-// Discover-style underline tabs. Plain text labels with a 2px indicator under the
-// active one, anchored to the header's bottom edge (buttons span the full header
-// height). Rendered in the shared Explore header's center slot so the page top
-// stays tidy: title left · tabs centered · chat toggle right.
-export function DiscoveryViewTabs({
-  view,
-  onViewChange,
+// Discover-style underline nav (For You · Top · Topics) rendered in the shared
+// Explore header's center slot. For You / Top are plain mode tabs; Topics is a
+// popover of the science/health categories — picking one switches to topics mode
+// with that category. The active tab carries a 2px indicator anchored to the
+// header's bottom edge (buttons span the full header height).
+export function DiscoveryModeNav({
+  mode,
+  topic,
+  onSelectMode,
+  onSelectTopic,
 }: {
-  view: DiscoveryView;
-  onViewChange: (view: DiscoveryView) => void;
+  mode: DiscoveryMode;
+  topic: DiscoveryTopicCategory | null;
+  onSelectMode: (mode: "foryou" | "top") => void;
+  onSelectTopic: (topic: DiscoveryTopicCategory) => void;
 }) {
+  const [topicsOpen, setTopicsOpen] = useState(false);
+
   return (
-    <nav className="flex h-14 items-stretch gap-6" aria-label="Tampilan jelajahi">
-      {VIEW_LABELS.map((entry) => {
-        const active = view === entry.value;
-        return (
+    <nav className="flex h-14 items-stretch gap-6" aria-label="Mode jelajahi">
+      <ModeTab
+        label={discoveryModeLabels.foryou}
+        active={mode === "foryou"}
+        onClick={() => onSelectMode("foryou")}
+      />
+      <ModeTab
+        label={discoveryModeLabels.top}
+        active={mode === "top"}
+        onClick={() => onSelectMode("top")}
+      />
+      <Popover open={topicsOpen} onOpenChange={setTopicsOpen}>
+        <PopoverTrigger asChild>
           <button
-            key={entry.value}
             type="button"
-            onClick={() => onViewChange(entry.value)}
-            aria-current={active ? "page" : undefined}
+            aria-current={mode === "topics" ? "page" : undefined}
             className={cn(
-              "relative inline-flex items-center text-[14px] font-medium transition-colors",
-              active
+              "relative inline-flex items-center gap-1 text-[14px] font-medium transition-colors",
+              mode === "topics"
                 ? "text-foreground"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            {entry.label}
-            {active ? (
+            {mode === "topics" && topic
+              ? discoveryTopicCategoryLabels[topic]
+              : discoveryModeLabels.topics}
+            <ChevronDownIcon className="size-3.5" />
+            {mode === "topics" ? (
               <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-foreground" />
             ) : null}
           </button>
-        );
-      })}
+        </PopoverTrigger>
+        <PopoverContent align="center" className="w-56 p-1.5">
+          <div className="px-2 py-1.5">
+            <p className="text-[12px] font-semibold text-muted-foreground">
+              Pilih topik
+            </p>
+          </div>
+          <div className="grid gap-1">
+            {discoveryTopicCategories.map((category) => (
+              <button
+                key={category}
+                type="button"
+                onClick={() => {
+                  onSelectTopic(category);
+                  setTopicsOpen(false);
+                }}
+                className={cn(
+                  "flex h-8 w-full items-center justify-between rounded-[7px] px-2.5 text-left text-[12.5px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                  mode === "topics" &&
+                    topic === category &&
+                    "bg-muted text-foreground",
+                )}
+              >
+                <span>{discoveryTopicCategoryLabels[category]}</span>
+                {mode === "topics" && topic === category ? (
+                  <span className="size-1.5 rounded-full bg-foreground" />
+                ) : null}
+              </button>
+            ))}
+          </div>
+        </PopoverContent>
+      </Popover>
     </nav>
   );
 }
 
-// Papers-only control row (search + time range). The Brief view needs no
-// controls, so the page renders this only for `papers` — keeping the feed flush
-// under the header otherwise.
-export function DiscoveryToolbar({
+function ModeTab({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "relative inline-flex items-center text-[14px] font-medium transition-colors",
+        active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {label}
+      {active ? (
+        <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-foreground" />
+      ) : null}
+    </button>
+  );
+}
+
+// Global search + time-range filter, rendered in the Explore header's right cell
+// (Isu 7). Search applies across every mode; submitting a non-empty query flips
+// the surface into cross-content search results.
+export function DiscoveryHeaderControls({
   query,
   onSubmitQuery,
   range,
@@ -84,29 +162,29 @@ export function DiscoveryToolbar({
   };
 
   return (
-    <div className="flex flex-wrap items-center justify-end gap-2 border-b border-border/70 pb-3">
+    <div className="flex items-center gap-1.5">
       <form
         onSubmit={handleSubmit}
-        className="flex h-9 w-full min-w-0 items-center rounded-[8px] border border-border/80 bg-card/50 px-2 sm:w-[280px]"
+        className="flex h-8 w-[150px] min-w-0 items-center rounded-[8px] border border-border/80 bg-card/50 px-2 sm:w-[220px]"
       >
         <label htmlFor="discovery-search" className="sr-only">
-          Cari paper
+          Cari
         </label>
+        <span className="inline-flex size-6 shrink-0 items-center justify-center text-muted-foreground">
+          {isSearching ? (
+            <Loader2Icon className="size-3.5 animate-spin" />
+          ) : (
+            <SearchIcon className="size-3.5" strokeWidth={2} />
+          )}
+        </span>
         <input
           key={query}
           id="discovery-search"
           ref={inputRef}
           defaultValue={query}
-          placeholder="Cari paper… Enter untuk mencari"
-          className="h-8 min-w-0 flex-1 bg-transparent text-[13px] font-medium text-foreground outline-none placeholder:text-muted-foreground"
+          placeholder="Cari…"
+          className="h-7 min-w-0 flex-1 bg-transparent text-[13px] font-medium text-foreground outline-none placeholder:text-muted-foreground"
         />
-        <span className="inline-flex size-7 shrink-0 items-center justify-center text-muted-foreground">
-          {isSearching ? (
-            <Loader2Icon className="size-4 animate-spin" />
-          ) : (
-            <SearchIcon className="size-4" strokeWidth={2} />
-          )}
-        </span>
       </form>
       <RangePopover
         range={range}
@@ -138,13 +216,13 @@ function RangePopover({
         <button
           type="button"
           className={cn(
-            "relative inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[8px] border border-border/80 px-2.5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+            "relative inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] border border-border/80 px-2 text-[12.5px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
             range !== "all" && "bg-muted text-foreground",
           )}
           aria-label={`Filter berdasarkan waktu: ${discoveryRangeLabels[range]}`}
         >
-          <FilterIcon className="size-4" strokeWidth={2} />
-          {discoveryRangeLabels[range]}
+          <FilterIcon className="size-3.5" strokeWidth={2} />
+          <span className="hidden sm:inline">{discoveryRangeLabels[range]}</span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-52 p-1.5">

@@ -126,6 +126,34 @@ describe("buildRunHooks", () => {
     expect(JSON.parse(events[0]?.payloadJson ?? "{}").agentType).toBe("planner");
   });
 
+  it("openNodes tracks the tool/sub-agent nodes still open at a transient drop", async () => {
+    const store = new MemoryStore();
+    const openNodes = { tools: new Map<string, string>(), subagents: new Set<string>() };
+    const hooks = buildRunHooks({ store, runId: "run1", threadId: "t1", openNodes });
+    const ctx = { signal: new AbortController().signal };
+
+    const preToolUse = hooks.PreToolUse?.[0]?.hooks[0]!;
+    const postToolUse = hooks.PostToolUse?.[0]?.hooks[0]!;
+    const subagentStart = hooks.SubagentStart?.[0]?.hooks[0]!;
+    const subagentStop = hooks.SubagentStop?.[0]?.hooks[0]!;
+
+    // Two tools start; one finishes. A sub-agent starts and does not finish.
+    await preToolUse({ hook_event_name: "PreToolUse", tool_name: qualifiedToolName("searchWeb") }, "tu_open", ctx);
+    await preToolUse({ hook_event_name: "PreToolUse", tool_name: qualifiedToolName("searchArxiv") }, "tu_done", ctx);
+    await postToolUse({ hook_event_name: "PostToolUse", tool_name: qualifiedToolName("searchArxiv") }, "tu_done", ctx);
+    await subagentStart({ hook_event_name: "SubagentStart", agent_type: "literature-searcher", agent_id: "ag_open" }, undefined, ctx);
+
+    // Only the unfinished tool + sub-agent remain open (these are what the run
+    // manager synthesizes a tool_end / subagent_stop for before retrying).
+    expect([...openNodes.tools.keys()]).toEqual(["tu_open"]);
+    expect(openNodes.tools.get("tu_open")).toBe("searchWeb");
+    expect([...openNodes.subagents]).toEqual(["ag_open"]);
+
+    // The sub-agent then stops → it deregisters.
+    await subagentStop({ hook_event_name: "SubagentStop", agent_id: "ag_open" }, undefined, ctx);
+    expect(openNodes.subagents.size).toBe(0);
+  });
+
   it("SubagentStop carries a sanitized last_assistant_message summary (Fase 5 v2)", async () => {
     const store = new MemoryStore();
     const hooks = buildRunHooks({ store, runId: "run1", threadId: "t1" });

@@ -22,6 +22,7 @@ export type ExploreBreadcrumb = {
 export function ExploreSurfaceHeader({
   breadcrumbs,
   centerSlot,
+  rightSlot,
   chatOpen,
   onToggleChat,
   showLeftTrigger,
@@ -29,6 +30,9 @@ export function ExploreSurfaceHeader({
 }: {
   breadcrumbs: ExploreBreadcrumb[];
   centerSlot?: ReactNode;
+  // Optional controls hosted in the right cell, left of the chat toggle (the
+  // discovery search + time-range filter on the index page).
+  rightSlot?: ReactNode;
   chatOpen?: boolean;
   onToggleChat?: () => void;
   showLeftTrigger: boolean;
@@ -79,7 +83,8 @@ export function ExploreSurfaceHeader({
 
         <div className="flex items-center justify-center">{centerSlot}</div>
 
-        <div className="flex items-center justify-end justify-self-end">
+        <div className="flex items-center justify-end gap-2 justify-self-end">
+          {rightSlot}
           {onToggleChat ? (
             <button
               type="button"

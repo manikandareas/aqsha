@@ -17,28 +17,30 @@ import {
   type TopTopic,
   type VerdictBreakdown,
 } from "../utils/discovery-format";
-import type { DiscoveryView } from "../hooks/use-discovery-nav";
+import type { DiscoveryMode } from "../hooks/use-discovery-nav";
 import { feedDetailHref } from "../utils/discovery-card-utils";
 import { VERDICT_FILL, VERDICT_STYLE } from "../utils/discovery-verdict-style";
 import { Donut, Sparkline } from "./discovery-visuals";
 
 // The fixed second sidebar for the discovery surface — a lean "widget deck" of
-// data-backed modules derived entirely from the items already loaded. Each view
-// shows its most useful modules, kept focused and within the sticky viewport:
-//   • Brief  → fact balance (donut) + topic momentum / most-cited + trending
-//   • Papers → trending topics + most-cited papers
-// The Brief middle slot prefers topic momentum (GDELT sparklines) but falls back
-// to most-cited papers when the topic lane is empty, so the rail keeps three
-// widgets instead of collapsing to two. Modules also self-hide without data.
+// data-backed modules derived entirely from the items already loaded. Modules
+// self-hide without data, so each nav mode (For You / Top / Topics) shows only
+// what it has, kept focused and within the sticky viewport:
+//   • Fact balance (donut) — For You only, where the personalized mix makes the
+//     verdict split meaningful.
+//   • Middle slot — prefers topic momentum (GDELT sparklines), falling back to
+//     most-cited papers when the momentum lane is empty, so the rail keeps three
+//     widgets instead of collapsing to two.
+//   • Trending topics — always.
 export function DiscoveryAside({
-  view,
+  mode,
   verdicts,
   momentum,
   topTopics,
   topCited,
   onSelectTopic,
 }: {
-  view: DiscoveryView;
+  mode: DiscoveryMode;
   verdicts: VerdictBreakdown;
   momentum: TopicMomentum[];
   topTopics: TopTopic[];
@@ -47,16 +49,14 @@ export function DiscoveryAside({
 }) {
   return (
     <div className="flex flex-col gap-5">
-      {view === "brief" ? <FactBalanceModule verdicts={verdicts} /> : null}
-      {view === "brief" ? (
-        momentum.length > 0 ? (
-          <MomentumModule momentum={momentum} onSelectTopic={onSelectTopic} />
-        ) : (
-          <MostCitedModule topCited={topCited} />
-        )
-      ) : null}
+      {/* Fact balance is most meaningful on the personalized feed. */}
+      {mode === "foryou" ? <FactBalanceModule verdicts={verdicts} /> : null}
+      {momentum.length > 0 ? (
+        <MomentumModule momentum={momentum} onSelectTopic={onSelectTopic} />
+      ) : (
+        <MostCitedModule topCited={topCited} />
+      )}
       <TrendingModule topTopics={topTopics} onSelectTopic={onSelectTopic} />
-      {view === "papers" ? <MostCitedModule topCited={topCited} /> : null}
     </div>
   );
 }

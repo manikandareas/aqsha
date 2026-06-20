@@ -4,10 +4,7 @@ import type { Id } from "../../_generated/dataModel";
 import { internalAction, type ActionCtx } from "../../_generated/server";
 import { ARTIFACT_BODY_INLINE_LIMIT } from "../../artifacts/model";
 import { rateLimiter } from "../../limits";
-import {
-  readWithExaContents,
-  readWithJinaReader,
-} from "../../agent/providers/externalProviders";
+import { readWithJinaReader } from "../../agent/providers/externalProviders";
 import { downloadOaPdf } from "./download";
 import { classifyUrl, isAcademicIdentifier } from "./identifiers";
 import { resolvePaper, type ResolvedPaper } from "./resolve";
@@ -26,7 +23,7 @@ type UrlTarget = {
  * academic paper (DOI / arXiv / PMID); if so it resolves bibliographic
  * metadata, downloads the open-access PDF when available, and runs the artifact
  * through the SAME extraction/GROBID pipeline as an uploaded PDF. Non-academic
- * URLs are crawled into readable markdown (Jina-first, Exa fallback).
+ * URLs are crawled into readable markdown (Jina Reader).
  */
 export const ingestUrl = internalAction({
   args: { artifactId: v.id("artifacts") },
@@ -128,17 +125,12 @@ async function crawlGeneric(
   artifactId: Id<"artifacts">,
   target: UrlTarget,
 ): Promise<void> {
-  // Jina Reader first (best single-URL → markdown), Exa as fallback.
-  let read = await readWithJinaReader(ctx, {
+  // Jina Reader (single-URL → markdown). Exa was removed from ingest (D3);
+  // Jina is the sole crawler now. Exa stays exported for the AI agent only.
+  const read = await readWithJinaReader(ctx, {
     ownerUserId: target.ownerUserId,
     url: target.normalizedUrl,
   });
-  if (!read.ok && process.env.EXA_API_KEY) {
-    read = await readWithExaContents(ctx, {
-      ownerUserId: target.ownerUserId,
-      url: target.normalizedUrl,
-    });
-  }
 
   if (!read.ok) {
     await ctx.runMutation(internal.artifacts.patchUrlExtractionFailed, {

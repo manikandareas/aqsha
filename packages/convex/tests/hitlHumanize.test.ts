@@ -72,4 +72,39 @@ describe("humanizeInteractionResponse", () => {
     });
     expect(text).toBe("a");
   });
+
+  it("renders plan_decision bubbles per decision", () => {
+    expect(
+      humanizeInteractionResponse({
+        payloadJson: "{}",
+        response: { kind: "plan_decision", decision: "start" },
+      }),
+    ).toBe("Mulai riset dengan rencana ini.");
+    expect(
+      humanizeInteractionResponse({
+        payloadJson: "{}",
+        response: {
+          kind: "plan_decision",
+          decision: "start",
+          editedPlan: "## Rencana\n\n1. a",
+        },
+      }),
+    ).toBe("Mulai riset dengan rencana ini. (dengan suntingan)");
+    expect(
+      humanizeInteractionResponse({
+        payloadJson: "{}",
+        response: {
+          kind: "plan_decision",
+          decision: "revise",
+          revisionInstruction: "fokuskan ke studi 2023",
+        },
+      }),
+    ).toBe("fokuskan ke studi 2023");
+    expect(
+      humanizeInteractionResponse({
+        payloadJson: "{}",
+        response: { kind: "plan_decision", decision: "reject" },
+      }),
+    ).toBe("Tolak rencana riset.");
+  });
 });

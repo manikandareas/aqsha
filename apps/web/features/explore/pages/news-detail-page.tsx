@@ -21,7 +21,10 @@ import { ReaderDetailState } from "./reader-detail-state";
 function buildNewsSeed(item: FeedItem) {
   const title = item.titleId ?? item.title;
   const body = item.articleText ?? item.summary;
-  return `${title}\n\n${body}\n\nSumber: ${item.url}`;
+  // Prefer the decoded publisher URL over the opaque Google News redirect so
+  // the research agent gets a readable source.
+  const sourceUrl = item.resolvedUrl ?? item.url;
+  return `${title}\n\n${body}\n\nSumber: ${sourceUrl}`;
 }
 
 export function NewsDetailPage({ feedItemId }: { feedItemId: string }) {
@@ -73,7 +76,10 @@ function NewsDetailContent({ item }: { item: FeedItem }) {
       ) : null}
 
       <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <ReaderSourceCard url={item.url} label={item.sourceLabel} />
+        <ReaderSourceCard
+          url={item.resolvedUrl ?? item.url}
+          label={item.sourceLabel}
+        />
         {time ? (
           <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
             <ClockIcon className="size-3.5" /> Diterbitkan {time}
@@ -105,7 +111,7 @@ function NewsDetailContent({ item }: { item: FeedItem }) {
         </div>
       ) : null}
 
-      <ReaderActions item={item} researchLabel="Teliti ini" researchSeed={seed} />
+      <ReaderActions item={item} askLabel="Tanya Astra" researchSeed={seed} />
 
       <ReaderRelatedGrid items={(related ?? []) as FeedItem[]} />
     </article>

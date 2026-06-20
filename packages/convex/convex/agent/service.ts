@@ -11,7 +11,6 @@ import {
 import { plainTextFromMarkdown } from "../artifacts/model";
 import { sourceCandidateValidator } from "./research/sourceCandidates";
 import { throwAppError } from "../lib/appError";
-import { ensureDefaultWorkspaceForOwner } from "../workspaces/defaults";
 import {
   bumpThreadOnMessage,
   findRun,
@@ -566,6 +565,24 @@ export const listInteractions = query({
   },
 });
 
+// Pending interactions for ONE run (deep-research plan gate replay-idempotency,
+// plan §4.6c): before re-running the plan phase on a durable replay, the service
+// checks whether a `proposeResearchPlan` interaction is still pending so it can
+// re-park instead of creating a duplicate card. Uses the by_run_status index.
+export const listPendingInteractionsByRun = query({
+  args: { serviceToken: v.string(), runId: v.string() },
+  handler: async (ctx, args) => {
+    requireServiceToken(args.serviceToken);
+    const docs = await ctx.db
+      .query("pendingInteractions")
+      .withIndex("by_run_status", (q) =>
+        q.eq("runId", args.runId).eq("status", "pending"),
+      )
+      .take(MAX_THREAD_INTERACTIONS);
+    return docs.map(interactionRecord);
+  },
+});
+
 // ── deep-research phase state (plan §5.5 durable orchestration, Step 4) ─────
 // Additive contract extension: SERVICE_FUNCTIONS grew from 25 to 27 endpoints
 // (recorded in plan §9.2).
@@ -897,18 +914,15 @@ export const applyArtifactAction = mutation({
         return { ok: true, artifactId: String(artifactId) };
       }
 
-      // create: resolve target workspace — explicit arg, then the thread's
-      // filed workspace, then the owner's default workspace.
-      let workspaceId = args.workspaceId
-        ? ctx.db.normalizeId("workspaces", args.workspaceId)
-        : null;
-      if (!workspaceId) {
-        const thread = await findThread(ctx, args.threadId);
-        workspaceId = thread?.workspaceId ?? null;
-      }
-      if (!workspaceId) {
-        workspaceId = await ensureDefaultWorkspaceForOwner(ctx, args.ownerUserId);
-      }
+      // create: agent-generated artifacts are born HEADLESS (no workspace).
+      // The user links one later from the chat artifact card (artifacts.
+      // linkArtifactToWorkspace). We still honor an explicit workspaceId arg if
+      // the SDK ever supplies one, but never fall back to the thread's workspace
+      // or a default — that auto-filing dumped every artifact into a random
+      // recently-touched workspace, which is the behavior we removed.
+      const workspaceId = args.workspaceId
+        ? (ctx.db.normalizeId("workspaces", args.workspaceId) ?? undefined)
+        : undefined;
       const artifactId: Id<"artifacts"> = await ctx.runMutation(
         internal.artifacts.createArtifactFromAgentInternal,
         {
@@ -921,8 +935,9 @@ export const applyArtifactAction = mutation({
         },
       );
       // Link the artifact to its originating thread so the per-thread artifact
-      // panel fills on the sdk backend (plan §9.4 Step 3). `artifacts.threadId`
-      // is a plain string column, so the `thr_*` id fits as-is.
+      // panel fills on the sdk backend (plan §9.4 Step 3) AND so the headless
+      // artifact can later be promoted to a workspace — the link path keys off
+      // `threadId`. `artifacts.threadId` is a plain string column.
       await ctx.db.patch("artifacts", artifactId, { threadId: args.threadId });
       return { ok: true, artifactId: String(artifactId) };
     } catch (error) {

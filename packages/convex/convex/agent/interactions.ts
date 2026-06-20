@@ -32,6 +32,18 @@ const responseValidator = v.union(
     // Structured workspace pick from the approval card (Step 3).
     workspaceId: v.optional(v.string()),
   }),
+  // Deep-research plan gate (plan §5.2). Carried on the `proposeResearchPlan`
+  // tool_approval interaction; the guard below restricts this kind to that tool.
+  v.object({
+    kind: v.literal("plan_decision"),
+    decision: v.union(
+      v.literal("start"),
+      v.literal("revise"),
+      v.literal("reject"),
+    ),
+    editedPlan: v.optional(v.string()),
+    revisionInstruction: v.optional(v.string()),
+  }),
 );
 
 export const respond = mutation({
@@ -56,13 +68,26 @@ export const respond = mutation({
         severity: "info",
       });
     }
-    if (interaction.type === "ask_user" && args.response.kind !== "answers") {
-      throwAppError({
-        message: "This interaction expects answers",
-        code: "interaction_response_mismatch",
-      });
-    }
-    if (interaction.type === "tool_approval" && args.response.kind !== "approval") {
+    // Guard the type↔kind contract by toolName, not just type (plan §5.2): the
+    // research-plan card uses a `tool_approval` row but expects a `plan_decision`,
+    // not an `approval`. Routing on `toolName` keeps every OTHER tool_approval
+    // (artifact/workspace cards) accepting only `approval`, so a stray
+    // `plan_decision` can never be smuggled into them.
+    if (interaction.type === "ask_user") {
+      if (args.response.kind !== "answers") {
+        throwAppError({
+          message: "This interaction expects answers",
+          code: "interaction_response_mismatch",
+        });
+      }
+    } else if (interaction.toolName === "proposeResearchPlan") {
+      if (args.response.kind !== "plan_decision") {
+        throwAppError({
+          message: "This interaction expects a research-plan decision",
+          code: "interaction_response_mismatch",
+        });
+      }
+    } else if (args.response.kind !== "approval") {
       throwAppError({
         message: "This interaction expects an approval decision",
         code: "interaction_response_mismatch",

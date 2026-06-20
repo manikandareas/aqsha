@@ -85,8 +85,8 @@ export function AgentSelector({
         <DropdownMenuItem
           onClick={() => setAgentKind("lite")}
           className={cn(
-            "gap-2 data-highlighted:bg-muted/60 data-highlighted:text-foreground",
-            agentKind === "lite" && "bg-muted/60 font-medium text-foreground",
+            "gap-2 rounded-lg data-highlighted:bg-sky-soft/60 data-highlighted:text-foreground",
+            agentKind === "lite" && "bg-sky-soft/60 font-medium text-foreground",
           )}
         >
           <ModeSelectorImage src="/general-agent.png" alt="" />
@@ -101,8 +101,8 @@ export function AgentSelector({
             }
           }}
           className={cn(
-            "gap-2 data-highlighted:bg-muted/60 data-highlighted:text-foreground",
-            agentKind === "pro" && "bg-muted/60 font-medium text-foreground",
+            "gap-2 rounded-lg data-highlighted:bg-sky-soft/60 data-highlighted:text-foreground",
+            agentKind === "pro" && "bg-sky-soft/60 font-medium text-foreground",
           )}
         >
           <ModeSelectorImage src="/pro-agent.png" alt="" />

@@ -285,6 +285,46 @@ describe("interactions (HITL)", () => {
     expect(listed).toHaveLength(1);
     expect(listed[0]).toMatchObject({ status: "expired" });
   });
+
+  it("lists only pending interactions for a run (replay idempotency)", async () => {
+    const t = setup();
+    await seedThread(t);
+    const plan = await t.mutation(api.agent.service.createInteraction, {
+      serviceToken: TOKEN,
+      ownerUserId: OWNER,
+      threadId: THREAD,
+      runId: RUN,
+      type: "tool_approval",
+      toolName: "proposeResearchPlan",
+      payloadJson: JSON.stringify({ title: "Rencana", questions: ["a", "b", "c"] }),
+    });
+    // A second, already-responded interaction on the same run must be excluded.
+    const other = await t.mutation(api.agent.service.createInteraction, {
+      serviceToken: TOKEN,
+      ownerUserId: OWNER,
+      threadId: THREAD,
+      runId: RUN,
+      type: "tool_approval",
+      toolName: "createWorkspace",
+      payloadJson: "{}",
+    });
+    await t.mutation(api.agent.service.respondInteraction, {
+      serviceToken: TOKEN,
+      interactionId: other.id,
+      responseJson: JSON.stringify({ kind: "approval", approved: true }),
+    });
+
+    const pending = await t.query(
+      api.agent.service.listPendingInteractionsByRun,
+      { serviceToken: TOKEN, runId: RUN },
+    );
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toMatchObject({
+      id: plan.id,
+      status: "pending",
+      toolName: "proposeResearchPlan",
+    });
+  });
 });
 
 describe("workspace + artifact actions", () => {
@@ -421,7 +461,14 @@ describe("getWorkspaceManifests", () => {
 describe("agent.interactions.respond (public)", () => {
   const IDENTITY = { tokenIdentifier: OWNER, subject: OWNER };
 
-  async function seedRespondFixture(t: ReturnType<typeof convexTest>) {
+  async function seedRespondFixture(
+    t: ReturnType<typeof convexTest>,
+    options?: {
+      type?: "ask_user" | "tool_approval";
+      toolName?: string;
+      payloadJson?: string;
+    },
+  ) {
     await t.run(async (ctx) => {
       const now = Date.now();
       await ctx.db.insert("users", {
@@ -460,9 +507,9 @@ describe("agent.interactions.respond (public)", () => {
         ownerUserId: OWNER,
         threadId: THREAD,
         runId: RUN,
-        type: "tool_approval",
-        toolName: "proposeArtifact",
-        payloadJson: "{}",
+        type: options?.type ?? "tool_approval",
+        toolName: options?.toolName ?? "proposeArtifact",
+        payloadJson: options?.payloadJson ?? "{}",
         status: "pending",
         createdAt: Date.now(),
       });
@@ -551,6 +598,76 @@ describe("agent.interactions.respond (public)", () => {
         response: { kind: "answers", answers: [{ prompt: "x" }] },
       }),
     ).rejects.toThrow(/expects an approval/);
+  });
+
+  // Deep-research plan gate (plan §5.2): the guard routes on toolName, so the
+  // proposeResearchPlan card accepts ONLY plan_decision while every other
+  // tool_approval card still accepts ONLY approval.
+  it("accepts the three plan_decision variants for proposeResearchPlan", async () => {
+    for (const decision of ["start", "revise", "reject"] as const) {
+      const t = setup();
+      const interactionId = await seedRespondFixture(t, {
+        toolName: "proposeResearchPlan",
+      });
+      await t.run(async (ctx) => {
+        const run = await ctx.db
+          .query("agentRuns")
+          .withIndex("by_run_id", (q) => q.eq("runId", RUN))
+          .unique();
+        await ctx.db.patch("agentRuns", run!._id, { status: "waiting_hitl" });
+      });
+      const result = await t
+        .withIdentity(IDENTITY)
+        .mutation(api.agent.interactions.respond, {
+          interactionId,
+          response: { kind: "plan_decision", decision },
+        });
+      expect(result).toEqual({ ok: true, resuming: true });
+      const row = await t.run(async (ctx) =>
+        ctx.db.get("pendingInteractions", interactionId),
+      );
+      expect(row).toMatchObject({ status: "responded" });
+    }
+  });
+
+  it("rejects plan_decision on a non-plan tool_approval card", async () => {
+    const t = setup();
+    const interactionId = await seedRespondFixture(t, {
+      toolName: "proposeArtifact",
+    });
+    await expect(
+      t.withIdentity(IDENTITY).mutation(api.agent.interactions.respond, {
+        interactionId,
+        response: { kind: "plan_decision", decision: "start" },
+      }),
+    ).rejects.toThrow(/expects an approval/);
+  });
+
+  it("rejects a plain approval on the proposeResearchPlan card", async () => {
+    const t = setup();
+    const interactionId = await seedRespondFixture(t, {
+      toolName: "proposeResearchPlan",
+    });
+    await expect(
+      t.withIdentity(IDENTITY).mutation(api.agent.interactions.respond, {
+        interactionId,
+        response: { kind: "approval", approved: true },
+      }),
+    ).rejects.toThrow(/expects a research-plan decision/);
+  });
+
+  it("rejects plan_decision on an ask_user interaction", async () => {
+    const t = setup();
+    const interactionId = await seedRespondFixture(t, {
+      type: "ask_user",
+      toolName: "askUser",
+    });
+    await expect(
+      t.withIdentity(IDENTITY).mutation(api.agent.interactions.respond, {
+        interactionId,
+        response: { kind: "plan_decision", decision: "start" },
+      }),
+    ).rejects.toThrow(/expects answers/);
   });
 });
 
@@ -873,11 +990,10 @@ describe("artifact↔thread link + listArtifacts (Step 3)", () => {
       .query(api.agent.queries.listArtifacts, { threadId: THREAD });
     expect(listed).toHaveLength(1);
     expect(listed[0]).toMatchObject({ title: "Laporan tertaut" });
-    // Fase 4 (answer-stream): the projection carries the artifact's own
-    // workspaceId so the in-chat artifact card can deep-link from a compact
-    // panel. An agent-created artifact always resolves a workspace (explicit →
-    // thread → default), so this is never null for these rows.
-    expect(typeof listed[0]!.workspaceId).toBe("string");
+    // Agent-created artifacts are now born HEADLESS (no workspace) — they only
+    // get one when the user links them from the chat artifact card. The thread
+    // link still holds (asserted above), but workspaceId is undefined until then.
+    expect(listed[0]!.workspaceId).toBeUndefined();
     // Fase 5 cleanup: the dead `currentVersionId` projection is gone.
     expect(listed[0]).not.toHaveProperty("currentVersionId");
 

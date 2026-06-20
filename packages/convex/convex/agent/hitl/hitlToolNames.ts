@@ -18,20 +18,21 @@ export const HITL_INITIAL_TOOL_NAMES = [
 
 // Every tool whose call can hold a turn pending a user action (approval or
 // answer): the initial set plus the resume-only `executeArtifact` write and the
-// `needsApproval` `startDeepResearch` / `runComputation`.
+// `needsApproval` `proposeResearchPlan` (deep-research plan gate) / `runComputation`.
 export const PENDING_HITL_TOOL_NAMES = [
   ...HITL_INITIAL_TOOL_NAMES,
   "executeArtifact",
-  "startDeepResearch",
+  "proposeResearchPlan",
   "runComputation",
 ] as const;
 
 // Tool parts the web client renders as HITL cards: the pending set minus
 // `executeArtifact`, which surfaces as a provenance chip (it runs post-approval).
+// `proposeResearchPlan` renders the editable research-plan review card;
 // `runComputation` renders via the generic Review-Plan fallback card.
 export const HITL_CARD_TOOL_NAMES = [
   ...HITL_INITIAL_TOOL_NAMES,
-  "startDeepResearch",
+  "proposeResearchPlan",
   "runComputation",
 ] as const;
 

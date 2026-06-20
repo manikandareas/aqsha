@@ -1,14 +1,27 @@
 import { v } from "convex/values";
-import { internalAction } from "../_generated/server";
+import { paginationOptsValidator } from "convex/server";
+import {
+  internalAction,
+  internalMutation,
+  internalQuery,
+} from "../_generated/server";
 import { internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
 import {
   fetchGdeltTopicTimeline,
   summarizeTimeline,
 } from "./providers/gdelt";
-import { fetchScienceNews } from "./providers/news";
+import {
+  buildGoogleNewsFeedItems,
+  dedupeGoogleNewsItems,
+  fetchGoogleNews,
+  googleNewsSearchUrl,
+  googleNewsTopicUrl,
+  type GoogleNewsItem,
+} from "./providers/googleNews";
+import { resolvePublisherUrl } from "./providers/googleNewsDecode";
+import { deriveSearchText } from "./model";
 import { fetchArticlePreview } from "../papers/articlePreview";
-
-const DAY_MS = 1000 * 60 * 60 * 24;
 
 // Research-relevant topics tracked for the "topik naik daun" lane.
 // GDELT rate-limits to ~1 request / 5s per IP, so we keep the seed list small
@@ -30,18 +43,30 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Indonesian-language science/health news seeds for the Exa news lane.
-const NEWS_SEEDS: Array<{ label: string; query: string }> = [
-  { label: "Sains", query: "penelitian sains terbaru Indonesia" },
-  { label: "Kesehatan", query: "kesehatan riset terbaru" },
-  { label: "Teknologi", query: "teknologi sains terbaru" },
-  { label: "Lingkungan", query: "perubahan iklim lingkungan riset" },
-];
-
 const TOPIC_TIMESPAN = "3m";
-const NEWS_WINDOW_DAYS = 21;
-const NEWS_PER_SEED = 4;
-const NEWS_TOTAL_CAP = 12;
+
+// Indonesian science/health news seeds for the Google News RSS lane. Search
+// seeds use Google News query operators (when:7d window, OR groups,
+// -exclusions); topic seeds pull the curated SCIENCE/HEALTH sections.
+const GOOGLE_NEWS_SEARCH_SEEDS: Array<{ label: string; query: string }> = [
+  { label: "Kesehatan", query: "kesehatan OR medis OR penyakit when:7d -hoaks" },
+  { label: "Sains", query: "sains OR penelitian OR riset when:7d" },
+  { label: "Lingkungan", query: "lingkungan OR iklim OR energi when:7d" },
+];
+const GOOGLE_NEWS_TOPIC_SEEDS: Array<{ label: string; topic: string }> = [
+  { label: "Sains", topic: "SCIENCE" },
+  { label: "Kesehatan", topic: "HEALTH" },
+];
+const GOOGLE_NEWS_PER_SEED = 6;
+const GOOGLE_NEWS_TOTAL_CAP = 16;
+// Polite spacing between Google News fetches (no official API/SLA).
+const GOOGLE_NEWS_SEED_SPACING_MS = 1_500;
+const GOOGLE_NEWS_ENRICH_BATCH = 6;
+const GOOGLE_NEWS_ENRICH_SPACING_MS = 1_200;
+// Cap enrichment retries per item so unresolvable links (the current Google URL
+// format rarely decodes) or body-less pages stop re-hitting external services
+// every cycle. The sweep converges once every item has been tried this many times.
+const MAX_ENRICH_ATTEMPTS = 2;
 
 // ── Internal: refresh trending topics (GDELT, free) ───────────────────────
 export const refreshTrendingTopics = internalAction({
@@ -95,8 +120,12 @@ export const refreshTrendingTopics = internalAction({
   },
 });
 
-// ── Internal: refresh science news (Exa, low cadence) ─────────────────────
-export const refreshScienceNews = internalAction({
+// ── Internal: refresh news (Google News RSS, free) ────────────────────────
+// Replaces the paid Exa news lane. Fetches the Indonesian-edition search +
+// topic feeds with polite spacing, dedupes across seeds, and upserts
+// `kind="news"` items. Article bodies + publisher URLs are filled separately by
+// enrichGoogleNewsArticles (decode is fragile, so it must not block ingestion).
+export const refreshGoogleNews = internalAction({
   args: { perSeed: v.optional(v.number()) },
   returns: v.object({
     fetched: v.number(),
@@ -108,71 +137,236 @@ export const refreshScienceNews = internalAction({
     args,
   ): Promise<{ fetched: number; inserted: number; updated: number }> => {
     const now = Date.now();
-    const startPublishedDate = new Date(now - NEWS_WINDOW_DAYS * DAY_MS)
-      .toISOString()
-      .slice(0, 10);
-    const perSeed = Math.min(args.perSeed ?? NEWS_PER_SEED, 8);
+    const perSeed = Math.min(args.perSeed ?? GOOGLE_NEWS_PER_SEED, 12);
+    const seeds: Array<{ label: string; url: string }> = [
+      ...GOOGLE_NEWS_SEARCH_SEEDS.map((seed) => ({
+        label: seed.label,
+        url: googleNewsSearchUrl(seed.query),
+      })),
+      ...GOOGLE_NEWS_TOPIC_SEEDS.map((seed) => ({
+        label: seed.label,
+        url: googleNewsTopicUrl(seed.topic),
+      })),
+    ];
 
-    // Gather deduped articles (capped) first so the body fetches can run
-    // concurrently afterwards.
-    const seen = new Set<string>();
-    const collected: Array<{
-      article: Awaited<ReturnType<typeof fetchScienceNews>>[number];
-      topicLabel: string;
-    }> = [];
-    for (const seed of NEWS_SEEDS) {
-      const news = await fetchScienceNews(ctx, {
-        query: seed.query,
-        limit: perSeed,
-        startPublishedDate,
-      });
-      for (const article of news) {
-        const key = article.url.trim().toLowerCase();
-        if (seen.has(key)) continue;
-        seen.add(key);
-        collected.push({ article, topicLabel: seed.label });
-        if (collected.length >= NEWS_TOTAL_CAP) break;
+    const bySeed: Array<{ label: string; items: GoogleNewsItem[] }> = [];
+    for (let i = 0; i < seeds.length; i += 1) {
+      if (i > 0) await sleep(GOOGLE_NEWS_SEED_SPACING_MS);
+      try {
+        const items = await fetchGoogleNews(ctx, {
+          url: seeds[i].url,
+          limit: perSeed,
+        });
+        bySeed.push({ label: seeds[i].label, items });
+      } catch {
+        bySeed.push({ label: seeds[i].label, items: [] });
       }
-      if (collected.length >= NEWS_TOTAL_CAP) break;
     }
 
+    const collected = dedupeGoogleNewsItems(bySeed, GOOGLE_NEWS_TOTAL_CAP);
     if (collected.length === 0) {
       return { fetched: 0, inserted: 0, updated: 0 };
     }
 
-    // Read each article page for a clean full-text body (readability extractor),
-    // falling back to Exa's raw text when extraction yields too little.
-    const previews = await Promise.all(
-      collected.map(({ article }) => fetchArticlePreview(article.url)),
-    );
-
-    const items = collected.map(({ article, topicLabel }, index) => {
-      const preview = previews[index];
-      const articleText = preview.articleText ?? article.articleText;
-      return {
-        kind: "news" as const,
-        title: article.title,
-        summary: article.summary,
-        tldr: firstSentence(article.summary),
-        url: article.url,
-        imageUrl: article.imageUrl ?? preview.imageUrl,
-        ...(articleText ? { articleText } : {}),
-        provider: "exa_news" as const,
-        sourceLabel: article.sourceLabel,
-        topics: [topicLabel],
-        trendScore: 0,
-        publishedAt: article.publishedAt ?? now,
-        dedupeKey: `news:${article.url.slice(0, 200)}`,
-        lastSeenAt: now,
-        createdAt: now,
-      };
-    });
-
+    const items = buildGoogleNewsFeedItems(collected, now);
     const result: { inserted: number; updated: number } = await ctx.runMutation(
       internal.feed.upsertFeedItems,
       { items },
     );
+
+    // Article enrichment (resolve publisher URL → extract body) is scheduled by
+    // the feed:hydrate-cycle orchestrator (internal.feed.hydrateCycle) on its
+    // own stagger, so this lane no longer self-schedules it.
     return { fetched: items.length, ...result };
+  },
+});
+
+// ── Internal: Google News items still missing an extracted article body ────
+export const googleNewsItemsNeedingEnrichment = internalQuery({
+  args: { limit: v.optional(v.number()) },
+  returns: v.array(
+    v.object({
+      feedItemId: v.id("feedItems"),
+      url: v.string(),
+      hasSummary: v.boolean(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const limit = Math.min(args.limit ?? GOOGLE_NEWS_ENRICH_BATCH, 20);
+    const recent = await ctx.db
+      .query("feedItems")
+      .withIndex("by_kind_published", (q) => q.eq("kind", "news"))
+      .order("desc")
+      .take(limit * 6);
+    return recent
+      .filter(
+        (row) =>
+          row.provider === "google_news" &&
+          row.articleText === undefined &&
+          (row.enrichAttempts ?? 0) < MAX_ENRICH_ATTEMPTS,
+      )
+      .slice(0, limit)
+      .map((row) => ({
+        feedItemId: row._id,
+        url: row.url,
+        hasSummary: row.summary.trim().length > 0,
+      }));
+  },
+});
+
+// ── Internal: persist resolved URL + extracted body for Google News items ──
+export const patchGoogleNewsEnrichment = internalMutation({
+  args: {
+    patches: v.array(
+      v.object({
+        feedItemId: v.id("feedItems"),
+        resolvedUrl: v.optional(v.string()),
+        articleText: v.optional(v.string()),
+        imageUrl: v.optional(v.string()),
+        summary: v.optional(v.string()),
+        tldr: v.optional(v.string()),
+      }),
+    ),
+  },
+  returns: v.object({ patched: v.number() }),
+  handler: async (ctx, args) => {
+    let patched = 0;
+    for (const update of args.patches) {
+      const existing = await ctx.db.get("feedItems", update.feedItemId);
+      if (!existing) continue;
+      // Always record the attempt so failed/body-less rows converge out of the
+      // enrichment predicate (bounds external IO). Body/URL fields are applied
+      // only when present, and never overwrite existing values.
+      const patch: {
+        enrichAttempts: number;
+        resolvedUrl?: string;
+        articleText?: string;
+        imageUrl?: string;
+        summary?: string;
+        tldr?: string;
+        searchText?: string;
+      } = { enrichAttempts: (existing.enrichAttempts ?? 0) + 1 };
+      if (update.resolvedUrl) patch.resolvedUrl = update.resolvedUrl;
+      if (update.articleText) {
+        patch.articleText = update.articleText;
+        patched += 1;
+      }
+      if (update.imageUrl && !existing.imageUrl) patch.imageUrl = update.imageUrl;
+      if (update.summary && existing.summary.trim().length === 0) {
+        patch.summary = update.summary;
+        // Google News rows ingest with a blank summary, so their initial
+        // searchText is title+topics only. Recompute it now the body lead lands
+        // or the enriched news body stays unsearchable (search_text index).
+        patch.searchText = deriveSearchText({
+          title: existing.title,
+          summary: update.summary,
+          topics: existing.topics,
+        });
+      }
+      if (update.tldr && existing.tldr === undefined) patch.tldr = update.tldr;
+      await ctx.db.patch("feedItems", update.feedItemId, patch);
+    }
+    return { patched };
+  },
+});
+
+// ── Internal: enrich Google News items (resolve URL + extract body) ────────
+export const enrichGoogleNewsArticles = internalAction({
+  args: { limit: v.optional(v.number()) },
+  returns: v.object({ scanned: v.number(), patched: v.number() }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ scanned: number; patched: number }> => {
+    const targets: Array<{
+      feedItemId: Id<"feedItems">;
+      url: string;
+      hasSummary: boolean;
+    }> = await ctx.runQuery(
+      internal.feed.sources.googleNewsItemsNeedingEnrichment,
+      { limit: args.limit },
+    );
+    if (targets.length === 0) {
+      return { scanned: 0, patched: 0 };
+    }
+
+    const patches: Array<{
+      feedItemId: Id<"feedItems">;
+      resolvedUrl?: string;
+      articleText?: string;
+      imageUrl?: string;
+      summary?: string;
+      tldr?: string;
+    }> = [];
+    for (let i = 0; i < targets.length; i += 1) {
+      if (i > 0) await sleep(GOOGLE_NEWS_ENRICH_SPACING_MS);
+      const target = targets[i];
+      // Always push a patch (even on resolve/extract failure) so the mutation
+      // records the attempt and the row eventually drops out of the sweep.
+      const patch: {
+        feedItemId: Id<"feedItems">;
+        resolvedUrl?: string;
+        articleText?: string;
+        imageUrl?: string;
+        summary?: string;
+        tldr?: string;
+      } = { feedItemId: target.feedItemId };
+      const resolvedUrl = await resolvePublisherUrl(target.url);
+      if (resolvedUrl) {
+        patch.resolvedUrl = resolvedUrl;
+        const preview = await fetchArticlePreview(resolvedUrl);
+        if (preview.imageUrl) patch.imageUrl = preview.imageUrl;
+        if (preview.articleText) {
+          patch.articleText = preview.articleText;
+          patch.tldr = firstSentence(preview.articleText);
+          if (!target.hasSummary) {
+            patch.summary = leadFromArticle(preview.articleText);
+          }
+        }
+      }
+      patches.push(patch);
+    }
+
+    const { patched }: { patched: number } = await ctx.runMutation(
+      internal.feed.sources.patchGoogleNewsEnrichment,
+      { patches },
+    );
+    return { scanned: targets.length, patched };
+  },
+});
+
+// ── Internal: purge legacy Exa news rows (one-time, owner-invoked) ─────────
+// The `exa_news` literal stays in the validators (additive); this only removes
+// the stale rows left from the Exa news lane. Paginated + self-scheduling
+// continuation per the bounded-read rule (never .collect() a growing table).
+export const purgeLegacyExaNews = internalMutation({
+  args: { paginationOpts: paginationOptsValidator },
+  returns: v.object({ deleted: v.number(), isDone: v.boolean() }),
+  handler: async (ctx, args) => {
+    const page = await ctx.db
+      .query("feedItems")
+      .withIndex("by_kind_published", (q) => q.eq("kind", "news"))
+      .paginate(args.paginationOpts);
+    let deleted = 0;
+    for (const row of page.page) {
+      if (row.provider === "exa_news") {
+        await ctx.db.delete("feedItems", row._id);
+        deleted += 1;
+      }
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.feed.sources.purgeLegacyExaNews,
+        {
+          paginationOpts: {
+            numItems: args.paginationOpts.numItems,
+            cursor: page.continueCursor,
+          },
+        },
+      );
+    }
+    return { deleted, isDone: page.isDone };
   },
 });
 
@@ -182,4 +376,11 @@ function firstSentence(text: string): string | undefined {
   const match = clean.match(/^.*?[.!?](?=\s|$)/);
   const value = match ? match[0] : clean;
   return value.length > 200 ? `${value.slice(0, 199).trimEnd()}…` : value;
+}
+
+// A longer card/reader lead derived from the extracted article body, used when
+// a Google News item has no summary yet (the RSS feed gives none).
+function leadFromArticle(text: string): string {
+  const clean = text.replace(/\s+/g, " ").trim();
+  return clean.length > 280 ? `${clean.slice(0, 279).trimEnd()}…` : clean;
 }

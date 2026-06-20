@@ -62,7 +62,7 @@ export function Reasoning({
         <span className={cn(previewClass, "line-clamp-2 hover:text-foreground")}>
           {preview}
         </span>
-        <ChevronDownIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+        <ChevronDownIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 group-focus-visible:opacity-100 group-data-[state=open]:rotate-180 group-data-[state=open]:opacity-100" />
       </CollapsibleTrigger>
       <CollapsibleContent className="overflow-hidden">
         <div className={cn(previewClass, "mt-1.5")}>{full}</div>

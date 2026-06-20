@@ -2,6 +2,10 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { ensureCurrentUser } from "./auth/userRepository";
 import { seedFeedInterests } from "./feed/interests";
+import {
+  isInterestFieldId,
+  topicsForInterestFields,
+} from "./feed/interestKeywords";
 import { throwAppError } from "./lib/appError";
 
 // ── Canonical option sets ────────────────────────────────────────────────────
@@ -32,26 +36,10 @@ const SOURCE_IDS = [
   "lainnya",
 ] as const;
 
-// Interest field id → lowercase topic strings seeded into userFeedInterests.
-// Topics mirror how papers/news are tagged (OpenAlex/arXiv domains) so the
-// feed's lowercase-exact interestMatch picks them up immediately.
-const INTEREST_FIELDS: Record<string, string[]> = {
-  ai_cs: ["artificial intelligence", "machine learning", "computer science"],
-  kesehatan: ["medicine", "health"],
-  biologi: ["biology", "genetics"],
-  fisika: ["physics"],
-  kimia: ["chemistry"],
-  matematika: ["mathematics", "statistics"],
-  teknik: ["engineering"],
-  ekonomi: ["economics", "business"],
-  psikologi: ["psychology"],
-  sosial_politik: ["sociology", "political science"],
-  pendidikan: ["education"],
-  lingkungan: ["environmental science", "climate"],
-  hukum: ["law"],
-  neuroscience: ["neuroscience"],
-  linguistik: ["linguistics"],
-};
+// The interest field id → topic taxonomy lives in feed/interestKeywords.ts (the
+// single source of truth, shared with the feed's interest scoring + search
+// recommendations). Onboarding only validates the picked ids and seeds the
+// resulting topics.
 
 const MIN_INTERESTS = 3;
 const SEED_INTEREST_WEIGHT = 2;
@@ -99,7 +87,7 @@ export const complete = mutation({
     }
 
     const interests = [...new Set(args.interests)].filter((id) =>
-      Object.prototype.hasOwnProperty.call(INTEREST_FIELDS, id),
+      isInterestFieldId(id),
     );
     if (interests.length < MIN_INTERESTS) {
       throwAppError({
@@ -153,7 +141,7 @@ export const complete = mutation({
 
     // Translate picked fields into feed signal so /app/explore is personalized
     // the moment the user lands there.
-    const topics = interests.flatMap((id) => INTEREST_FIELDS[id] ?? []);
+    const topics = topicsForInterestFields(interests);
     await seedFeedInterests(ctx, user._id, topics, SEED_INTEREST_WEIGHT);
 
     return { ok: true };

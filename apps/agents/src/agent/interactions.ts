@@ -23,7 +23,7 @@ export type ApprovalOutcome =
 export type RunInterruptState = {
   /** Set when askUser or an approval fired; the run loop interrupts. */
   pendingInteractionId?: string;
-  reason?: "ask_user" | "approval";
+  reason?: "ask_user" | "approval" | "plan_review";
 };
 
 export class InteractionBroker {
@@ -41,7 +41,14 @@ export class InteractionBroker {
    * One-shot: consumed by the first matching canUseTool call.
    */
   primeResolvedApproval(runId: string, interaction: PendingInteraction): void {
-    if (interaction.type === "tool_approval" && interaction.response) {
+    // Only prime a real approve/deny. A `plan_decision` (proposeResearchPlan
+    // gate) is NOT an approval the model retries — it is handled by runManager
+    // Branch B — so priming it would let takePrimedApproval consume it and
+    // silently no-op (plan §4.4 mis-fire fix).
+    if (
+      interaction.type === "tool_approval" &&
+      interaction.response?.kind === "approval"
+    ) {
       this.primedApprovals.set(runId, interaction);
     }
   }
@@ -131,10 +138,13 @@ export class InteractionBroker {
       payload: { interactionId: interaction.id, toolName: input.toolName },
     });
     // No hold-window: stop the run now and wait for the user's reply, which
-    // arrives via interactions.respond → resume.
+    // arrives via interactions.respond → resume. The plan gate uses a distinct
+    // reason so the run_status event carries `plan_review` (plan §4.4). Note
+    // input.toolName is the LOGICAL name (canUseTool passes it unqualified).
     this.flagInterrupt(input.runId, {
       pendingInteractionId: interaction.id,
-      reason: "approval",
+      reason:
+        input.toolName === "proposeResearchPlan" ? "plan_review" : "approval",
     });
     return { outcome: "interrupt", interaction };
   }
@@ -252,6 +262,22 @@ export function resumePromptForInteraction(interaction: PendingInteraction): str
       return `- "${answer.prompt}": ${parts.join("; ") || "(no answer)"}`;
     });
     return `The user answered your questions:\n${lines.join("\n")}\nContinue the task using these answers.`;
+  }
+  // Deep-research plan gate (plan §4.4). A plan_decision must be handled BEFORE
+  // the `response.approved` access below — plan_decision has no `approved` field.
+  // Only `revise` re-enters the plan phase via this prompt; `start`/`reject` are
+  // short-circuited in runManager Branch B and never reach here, so they get
+  // safe explicit text rather than falling through to the "declined" template.
+  if (response.kind === "plan_decision") {
+    if (response.decision === "revise") {
+      const instruction = response.revisionInstruction?.trim();
+      return `The user reviewed your research plan and requested revisions${
+        instruction ? `: ${instruction}` : "."
+      }. Revise the sub-questions accordingly, then call proposeResearchPlan again with the updated plan. Do not perform searches.`;
+    }
+    return response.decision === "start"
+      ? "The user approved the research plan. Proceed with the research."
+      : "The user rejected the research plan.";
   }
   if (response.approved) {
     const extras = [

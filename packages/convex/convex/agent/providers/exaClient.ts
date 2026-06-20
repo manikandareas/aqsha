@@ -1,10 +1,10 @@
 import Exa from "exa-js";
 
-// Single low-level Exa client constructor. Both the per-user candidate search
-// (`externalProviders.searchExaCandidates`), the global news cron path
-// (`newsProvider.fetchScienceNews`), and the Exa contents read
+// Single low-level Exa client constructor. The per-user candidate search
+// (`externalProviders.searchExaCandidates`) and the Exa contents read
 // (`externalProviders.readWithExaContents`) build their client here so there is
-// exactly one `new Exa(...)` call site / one place the API key is read.
+// exactly one `new Exa(...)` call site / one place the API key is read. Exa is
+// now agent-only (the feed/explore/ingest surfaces no longer use it).
 //
 // Callers keep their own rate buckets, result mapping, and `contents` char
 // caps, and invoke `exa.search(...)` / `exa.getContents(...)` directly so each

@@ -4,6 +4,7 @@ import { buildArtifactTools } from "./artifacts";
 import { buildAskUserTool } from "./askUser";
 import { buildCitationTools } from "./citations";
 import type { RunToolContext } from "./context";
+import { buildResearchPlanTool } from "./proposeResearchPlan";
 import { buildResearchTools } from "./research";
 import { buildSandboxTools } from "./sandbox";
 import { buildWorkspaceTools } from "./workspace";
@@ -23,6 +24,7 @@ export function buildAqshaMcpServer(ctx: RunToolContext) {
       ...buildArtifactTools(ctx),
       ...buildWorkspaceTools(ctx),
       buildAskUserTool(ctx),
+      buildResearchPlanTool(ctx),
       ...buildSandboxTools(ctx),
     ],
   });

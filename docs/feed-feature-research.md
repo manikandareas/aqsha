@@ -196,6 +196,7 @@ Feed harus *terlihat* berbeda dari Explore. Prinsip:
 - **AI fact-check butuh gate**: RAG bersumber + ambang keyakinan + oversight manusia; halusinasi di tahap mana pun mengontaminasi seluruh verdict.
 
 ### Anti-doomscroll (seluruh feed)
+> **Revisi (2026-06-17, Explore revamp D1 — `docs/explore-revamp-plan.md` Isu 5):** owner **membalik** rekomendasi "tombol Tampilkan lebih, bukan infinite scroll". Feed Jelajahi kini memakai **infinite scroll otomatis** (IntersectionObserver). Mitigasi anti-doomscroll yang dipertahankan: penanda "Kamu sudah update" + empty-state sebagai batas sesi, dan steer kejutan ke aksi ("Tanya Astra"). Catatan riset di bawah dipertahankan sebagai konteks keputusan asli.
 - **Optimalkan konversi inspirasi→riset, bukan dwell-time.** Infinite scroll = +50% waktu di app + dampak atensi/kecemasan/tidur; pull-to-refresh = "lotere dopamin".
 - **Desain berbatas**: penanda "Kamu sudah update", tombol "Tampilkan lebih", sesi/penanda waktu, rekap mingguan alih-alih aliran tanpa ujung.
 - **Steer kejutan ke aksi** ("Teliti ini"), bukan scroll pasif.
