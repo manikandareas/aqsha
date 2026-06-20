@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppToaster } from "@/components/app-toaster";
 import { AuthenticatedUserSync } from "@/components/authenticated-user-sync";
 import { MotionProvider } from "@/components/motion-provider";
+import { QueryProvider } from "@/lib/query-provider";
 import { siteName } from "@/lib/metadata";
 import "./globals.css";
 
@@ -52,20 +53,22 @@ export default function RootLayout({
     >
       <body className="min-h-full">
         <ClerkProvider appearance={{ theme: shadcn }}>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
-            <NuqsAdapter>
-              <MotionProvider>
-                <TooltipProvider>{children}</TooltipProvider>
-              </MotionProvider>
-            </NuqsAdapter>
-            <AppToaster />
-          </ThemeProvider>
-          <AuthenticatedUserSync />
+          <QueryProvider>
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="system"
+              enableSystem
+              disableTransitionOnChange
+            >
+              <NuqsAdapter>
+                <MotionProvider>
+                  <TooltipProvider>{children}</TooltipProvider>
+                </MotionProvider>
+              </NuqsAdapter>
+              <AppToaster />
+            </ThemeProvider>
+            <AuthenticatedUserSync />
+          </QueryProvider>
         </ClerkProvider>
       </body>
     </html>
