@@ -1,19 +1,27 @@
-import { bigint, pgTable, text } from "drizzle-orm/pg-core";
+import { bigint, boolean, pgTable, text } from "drizzle-orm/pg-core";
 
 /**
- * users — mirror lokal identitas Clerk + state-machine deletion.
+ * users — mirror lokal identitas Clerk + (kelak) state-machine deletion.
  *
- * - `ownerUserId` (PK) == Clerk `identity.tokenIdentifier` (owner key kanonik V1).
- * - `clerkUserId` (unique) == Clerk `identity.subject`.
- * - timestamp epoch-ms (`bigint`) supaya nilai di kontrak identik dengan V1 (`_creationTime`).
+ * - `ownerUserId` (PK) == Clerk `payload.sub` (owner key kanonik V2; lihat keputusan
+ *   Fase 1: ownerUserId == clerkUserId == sub).
+ * - `clerkUserId` (unique) == Clerk `payload.sub` (dipakai untuk linking webhook).
+ * - Profil (`email`/`name`/`image`/`emailVerified`) diisi oleh webhook Clerk
+ *   (`user.created`/`user.updated`) — token sesi default tidak membawanya.
+ * - timestamp epoch-ms (`bigint`) supaya nilai di kontrak identik dengan V1.
  *
- * P0 minimal: kolom profil (displayName/email/image) + relasi (workspaces, onboarding)
- * ditambah di fase berikutnya (P1+); state-machine deletion penuh landing P9.
+ * State-machine deletion penuh (deletedAt/deletionStatus/…) landing P9; di P1 cukup
+ * dua kolom request/complete yang sudah ada dari P0.
  */
 export const users = pgTable("users", {
   ownerUserId: text("owner_user_id").primaryKey(),
   clerkUserId: text("clerk_user_id").notNull().unique(),
+  email: text("email"),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  name: text("name"),
+  image: text("image"),
   createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull().default(0),
   deletionRequestedAt: bigint("deletion_requested_at", { mode: "number" }),
   deletionCompletedAt: bigint("deletion_completed_at", { mode: "number" }),
 });

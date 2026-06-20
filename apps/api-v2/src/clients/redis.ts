@@ -19,3 +19,12 @@ export function getRedis(): Redis {
   });
   return redis;
 }
+
+/**
+ * SET key 1 EX <ttl> NX. Mengembalikan `true` bila berhasil di-set (pertama kali),
+ * `false` bila key sudah ada (sudah diproses) — dasar idempotency webhook.
+ */
+export async function setNxWithTtl(key: string, ttlSeconds: number): Promise<boolean> {
+  const res = await getRedis().set(key, "1", "EX", ttlSeconds, "NX");
+  return res === "OK";
+}

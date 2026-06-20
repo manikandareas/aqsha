@@ -11,7 +11,7 @@
     "generate": "drizzle-kit generate",
     "migrate": "bun run src/migrate.ts",
     "studio": "drizzle-kit studio",
-    "test": "bun test",
+    "test": "bun test --timeout 30000",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

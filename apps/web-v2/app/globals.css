@@ -6,6 +6,12 @@
 @import "./styles/blocknote-aqsha.css";
 
 @source "../node_modules/@blocknote/shadcn";
+/* Tailwind v4 tidak memindai node_modules/workspace package by default. web-v2
+   memakai komponen @aqsha/ui (Button/Input/dll.) yang membawa utility class di
+   dalam source-nya; tanpa @source ini, class itu tak ter-generate → komponen
+   tampil tanpa styling. (apps/web lolos hanya karena codebase-nya sendiri sudah
+   memakai class yang sama.) */
+@source "../../../packages/ui/src";
 
 @custom-variant dark (&:is(.dark *));
 

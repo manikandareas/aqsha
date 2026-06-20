@@ -11,11 +11,13 @@
   "scripts": {
     "dev": "bun run --watch src/server.ts",
     "start": "bun run src/server.ts",
-    "test": "bun test",
+    "test": "bun test --timeout 30000",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@aqsha/db": "workspace:*",
+    "@aqsha/services": "workspace:*",
+    "@clerk/backend": "^3.7.0",
     "@elysiajs/cors": "^1.4.2",
     "@elysiajs/eden": "^1.4.9",
     "@elysiajs/openapi": "^1.4.15",

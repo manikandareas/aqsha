@@ -1,14 +1,17 @@
+import { ClerkProvider } from "@clerk/nextjs";
+import { shadcn } from "@clerk/themes";
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Instrument_Serif } from "next/font/google";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppToaster } from "@/components/app-toaster";
+import { AuthenticatedUserSync } from "@/components/authenticated-user-sync";
 import { MotionProvider } from "@/components/motion-provider";
 import { siteName } from "@/lib/metadata";
 import "./globals.css";
 
-// Disalin apa adanya dari apps/web; provider Clerk + Convex DI-DROP (P0 tanpa auth/data backend lama).
+// Disalin dari apps/web; provider Clerk dipasang lagi di P1 (Convex tetap di-drop).
 const inter = Inter({
   variable: "--font-sans",
   subsets: ["latin"],
@@ -48,19 +51,22 @@ export default function RootLayout({
       className={`${inter.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full">
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <NuqsAdapter>
-            <MotionProvider>
-              <TooltipProvider>{children}</TooltipProvider>
-            </MotionProvider>
-          </NuqsAdapter>
-          <AppToaster />
-        </ThemeProvider>
+        <ClerkProvider appearance={{ theme: shadcn }}>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <NuqsAdapter>
+              <MotionProvider>
+                <TooltipProvider>{children}</TooltipProvider>
+              </MotionProvider>
+            </NuqsAdapter>
+            <AppToaster />
+          </ThemeProvider>
+          <AuthenticatedUserSync />
+        </ClerkProvider>
       </body>
     </html>
   );
