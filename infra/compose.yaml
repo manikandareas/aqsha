@@ -15,7 +15,9 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./init-extensions.sql:/docker-entrypoint-initdb.d/01-extensions.sql
     ports:
-      - "100.x.y.z:5432:5432"
+      # Bind ke IP Tailscale VPS (BIND_HOST di infra/.env). Default loopback supaya
+      # tak pernah terekspos publik kalau BIND_HOST lupa diisi.
+      - "${BIND_HOST:-127.0.0.1}:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U aqsha"]
       interval: 10s
@@ -29,7 +31,7 @@ services:
     volumes:
       - redis_data:/data
     ports:
-      - "100.x.y.z:6379:6379"
+      - "${BIND_HOST:-127.0.0.1}:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
