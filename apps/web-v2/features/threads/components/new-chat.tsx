@@ -80,6 +80,7 @@ export function NewChat() {
           busy={busy}
           disabled={blocked}
           notice={notice}
+          threadId={sessionId}
         />
       </div>
     </div>

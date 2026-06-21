@@ -17,7 +17,7 @@
 | **6.4** | ⬜ plan | data tools READ (in-process) + RAG read path + research (Jina) |
 | **6.5** | ⬜ plan | data tools WRITE + HITL approval + artifact cards |
 | **6.6** | ⬜ plan | rich composer: token editor + `/slash` + `@context` |
-| **6.7** | ⬜ plan | thread attachment headless |
+| **6.7** | ✅ done | thread attachment headless (commit pending owner) |
 | **6.8** | ⬜ plan | title gen + continue-thread + switcher + cancel/retry + commands |
 | **6.9** | ⬜ plan | **testing terpusat** (service unit + eve integration + e2e + full `test:v2`) |
 
@@ -182,14 +182,20 @@ Bake ke implementasi:
 
 ---
 
-### Slice 6.7 — Thread attachment headless
-**Tujuan:** attach file di chat.
+### Slice 6.7 — Thread attachment headless ✅
+**Tujuan:** attach file di chat. **DONE (uncommitted→committed), gates green, ZERO migration.**
 
-1. **`artifactRepo.listByThread`** (index sudah ada) + **`ArtifactService`** thread-scoped presign+finalize (`workspaceId:null`, `threadId` set; gate **thread ownership** via `ThreadService.assertOwner` route-side — bukan workspace assert). Reuse `StorageService.generateUploadTarget` (workspace-agnostic).
-2. **api-v2** `POST /threads/:id/attachments/upload-url` + finalize, `GET /threads/:id/artifacts`.
-3. **web-v2 composer** — chip attachment (presign→PUT→finalize), prompt sintetik bila teks kosong. Promote ke workspace via `linkToWorkspace` (6.5).
+1. **`ArtifactService.generateThreadUploadUrl`** (thin, reuse `StorageService.generateUploadTarget`) + **`finalizeThreadUpload`** (BORN-HEADLESS: `workspaceId:null`+`threadId`, `source:'upload'`, **NO** workspace assert, **NO** capacity gate; tetap `validateUpload` trust-boundary + `extractIndexAndPatch(workspaceId:null)` RAG index inline). Widen `extractIndexAndPatch` arg `workspaceId: string→string|null`. `listByThread`/`getForAgent` headless-tolerant **sudah ada** (6.4).
+2. **api-v2** `POST /threads/:id/attachments/upload-url` (presign) + `POST /threads/:id/attachments` (finalize) + `GET /threads/:id/artifacts` (listByThread). Semua `auth:true` + `ThreadService.assertOwner` (gate THREAD ownership, bukan workspace).
+3. **web-v2** — `useThreadAttachments` (presign→PUT→finalize) + `useThreadArtifacts`; `composer-attachments.tsx` (paperclip picker→progress→chip; promote per-chip via FolderIcon→`WorkspacePicker`→`useLinkArtifactToWorkspace` 6.5). Composer: synthetic prompt "Tolong baca berkas terlampir." bila teks kosong + catatan filename ephemeral `clientContext`. `threadId` prop dari `new-chat` (=sessionId).
 
-**Gate:** build+typecheck+lint. **uiVisible:** attach PDF → Astra pakai (gotcha [[chat-attachment-workspaceid-null]]).
+**Agent baca attachment:** tool 6.4 `list_artifacts`/`search_thread_documents` filter `artifacts.threadId` via JOIN → headless (`workspaceId=null`) **tak** ter-exclude (gotcha [[chat-attachment-workspaceid-null]] dihindari).
+
+**Constraint terpenuhi:** eve forbids client-mint session id (`ClientSession.send` tanpa sessionId→CREATE/server-mint; dgn sessionId→CONTINUE/harus eksis) → attach **disabled sampai thread eksis** (NewChat setelah turn pertama). Brand-new-first-msg attach = arsitektur-forced, tak didukung.
+
+**Deviasi (owner sign-off pending sebelum commit):** (a) no first-msg attach (eve constraint); (b) **drop enqueue paper-enrichment** utk headless (worker mau `workspaceId:string`+scope ws; agen cuma butuh RAG text yg sudah ter-index; enrichment→promote-time); (c) **no attachmentIds di wire eve** (lampiran persist server-side dulu; agen nemu via thread-scope; cuma synthetic prompt+filename note); (d) **promote di chip composer** (clear saat send; re-promote dari panel thread-artifacts ditunda, `useThreadArtifacts` ready utk panel masa depan).
+
+**Gate:** typecheck (10 ws) ✓; eve `eve:build` ✓; web-v2 lint ✓; react-doctor --staged 100/100 (8 file) ✓.
 
 ---
 

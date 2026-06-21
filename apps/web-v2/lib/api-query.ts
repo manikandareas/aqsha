@@ -52,6 +52,7 @@ export const queryKeys = {
     detail: (id: string) => ["threads", "detail", id] as const,
     messages: (id: string) => ["threads", "messages", id] as const,
     sources: (id: string) => ["threads", "sources", id] as const,
+    artifacts: (id: string) => ["threads", "artifacts", id] as const,
     sendStatus: () => ["threads", "send-status"] as const,
   },
   user: {

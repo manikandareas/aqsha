@@ -1,4 +1,10 @@
-import { ContextService, MessageService, ResearchService, ThreadService } from "@aqsha/services";
+import {
+  ArtifactService,
+  ContextService,
+  MessageService,
+  ResearchService,
+  ThreadService,
+} from "@aqsha/services";
 import { SendQuotaService } from "@aqsha/services/quota";
 import { Elysia, t } from "elysia";
 import { getDb } from "../clients/db";
@@ -90,6 +96,53 @@ export const threads = new Elysia({ prefix: "/threads" })
       const { db } = getDb();
       await ThreadService.assertOwner(db, ownerUserId, params.id);
       const items = await ResearchService.listThreadSources(db, params.id);
+      return { items };
+    },
+    { auth: true },
+  )
+  // Lampiran thread (Slice 6.7) — file di-attach di chat, HEADLESS (workspaceId=null,
+  // threadId set). Ownership = THREAD (assertOwner), bukan workspace. Reuse presign +
+  // extract/RAG pipeline. Astra baca via tool list_artifacts/search_thread_documents
+  // (6.4, scope threadId → temukan headless attachment).
+  .post(
+    "/:id/attachments/upload-url",
+    async ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      await ThreadService.assertOwner(db, ownerUserId, params.id);
+      return ArtifactService.generateThreadUploadUrl(ownerUserId);
+    },
+    { auth: true },
+  )
+  .post(
+    "/:id/attachments",
+    async ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      await ThreadService.assertOwner(db, ownerUserId, params.id);
+      return ArtifactService.finalizeThreadUpload(db, {
+        ownerUserId,
+        threadId: params.id,
+        key: body.key,
+        fileName: body.fileName,
+        mimeType: body.mimeType,
+        size: body.size,
+      });
+    },
+    {
+      auth: true,
+      body: t.Object({
+        key: t.String(),
+        fileName: t.String(),
+        mimeType: t.String(),
+        size: t.Number(),
+      }),
+    },
+  )
+  .get(
+    "/:id/artifacts",
+    async ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      await ThreadService.assertOwner(db, ownerUserId, params.id);
+      const items = await ArtifactService.listByThread(db, ownerUserId, params.id);
       return { items };
     },
     { auth: true },

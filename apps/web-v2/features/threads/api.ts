@@ -2,6 +2,7 @@
 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import type { Artifact } from "@/features/artifacts/types";
 import { useApi } from "@/lib/api-client";
 import { readableApiErrorMessage } from "@/lib/api-error";
 import { queryKeys, unwrap } from "@/lib/api-query";
@@ -116,5 +117,46 @@ export function useDeleteThread() {
     mutationFn: async (input: { id: string }) => unwrap(await api.threads({ id: input.id }).delete()),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.threads.all }),
     onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal menghapus percakapan.")),
+  });
+}
+
+/** Artifact yang terlampir pada thread (Slice 6.7) — headless (workspaceId=null). */
+export function useThreadArtifacts(threadId: string | null) {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.threads.artifacts(threadId ?? ""),
+    enabled: Boolean(threadId),
+    queryFn: async () =>
+      (unwrap(await api.threads({ id: threadId ?? "" }).artifacts.get()) as { items: Artifact[] })
+        .items,
+  });
+}
+
+/**
+ * Lampiran thread 3-langkah (Slice 6.7): presign → PUT object storage → finalize
+ * (ekstrak inline + RAG index, headless). Mirror `useUploadArtifact` tapi thread-scoped:
+ * ownership = thread (assertOwner route-side), bukan workspace.
+ */
+export function useThreadAttachments(threadId: string) {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { file: File }) => {
+      const presign = unwrap(
+        await api.threads({ id: threadId }).attachments["upload-url"].post(),
+      );
+      const put = await fetch(presign.uploadUrl, { method: "PUT", body: input.file });
+      if (!put.ok) throw new Error("Gagal mengunggah berkas ke penyimpanan.");
+      return unwrap(
+        await api.threads({ id: threadId }).attachments.post({
+          key: presign.key,
+          fileName: input.file.name,
+          mimeType: input.file.type || "application/octet-stream",
+          size: input.file.size,
+        }),
+      ) as { artifactId: string; title: string; indexed: boolean };
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.threads.artifacts(threadId) }),
+    onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal melampirkan berkas.")),
   });
 }

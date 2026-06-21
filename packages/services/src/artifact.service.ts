@@ -522,6 +522,108 @@ export const ArtifactService = {
   },
 
   /**
+   * Slice 6.7 — presign upload untuk LAMPIRAN THREAD (chat). Workspace-agnostic:
+   * ownership di-gate via `ThreadService.assertOwner` ROUTE-side (bukan workspace
+   * assert), jadi method ini cuma reuse target presign. Validasi tipe/size di
+   * `finalizeThreadUpload`.
+   */
+  async generateThreadUploadUrl(ownerUserId: string): Promise<{ uploadUrl: string; key: string }> {
+    return StorageService.generateUploadTarget(ownerUserId);
+  },
+
+  /**
+   * Slice 6.7 — finalize lampiran thread: BORN-HEADLESS (`workspaceId:null`,
+   * `threadId` set, `source:'upload'`). Method terpisah dari `finalizeUpload`
+   * (workspace-scoped) seperti `applyAgentAction` vs `createDocument`: TANPA assert
+   * workspace & TANPA gate kapasitas (artifact headless belum menempati slot library
+   * sampai `linkToWorkspace`). Tetap `validateUpload` (trust boundary) + ekstrak/RAG
+   * index INLINE (scope thread → tool `list_artifacts`/`search_thread_documents` 6.4
+   * menemukannya). PDF → enqueue paper-enrichment.
+   */
+  async finalizeThreadUpload(
+    db: Db,
+    input: {
+      ownerUserId: string;
+      threadId: string;
+      key: string;
+      fileName: string;
+      mimeType: string;
+      size: number;
+    },
+  ): Promise<{ artifactId: string; title: string; indexed: boolean }> {
+    const artifactType = validateUpload({
+      fileName: input.fileName,
+      mimeType: input.mimeType,
+      size: input.size,
+    });
+    const title = titleFromFileName(input.fileName);
+    const artifactId = crypto.randomUUID();
+    const contentId = crypto.randomUUID();
+    const now = Date.now();
+
+    await db.transaction(async (tx) => {
+      await ArtifactRepo.insert(tx, {
+        id: artifactId,
+        ownerUserId: input.ownerUserId,
+        workspaceId: null,
+        folderId: null,
+        threadId: input.threadId,
+        artifactType,
+        artifactFamily: artifactFamilyForType(artifactType),
+        source: "upload",
+        title,
+        language: defaultLanguageForArtifactType(artifactType) ?? null,
+        mimeType: input.mimeType,
+        fileName: input.fileName,
+        byteSize: input.size,
+        indexingStatus: "pending",
+        indexingFailureReason: null,
+        detectedDocumentKind: null,
+        storageR2Key: input.key,
+        ragEntryId: null,
+        plainTextPreview: "Indexing is running.",
+        indexedAt: null,
+        status: "active",
+        deletedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ArtifactContentRepo.insert(tx, {
+        id: contentId,
+        ownerUserId: input.ownerUserId,
+        workspaceId: null,
+        threadId: input.threadId,
+        artifactId,
+        blocksJson: null,
+        markdown: "",
+        plainText: "",
+        contextText: "",
+        plainTextR2Key: null,
+        blocksJsonR2Key: null,
+        markdownR2Key: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+
+    // ponytail: skip paper-enrichment untuk lampiran headless — worker scope metadata
+    // ke workspace (`workspaceId: string`), yang null di sini; agen cuma butuh teks RAG
+    // (sudah ter-index di extractIndexAndPatch). Enrichment menyusul saat di-promote.
+    const { indexed } = await extractIndexAndPatch(db, {
+      ownerUserId: input.ownerUserId,
+      artifactId,
+      workspaceId: null,
+      key: input.key,
+      fileName: input.fileName,
+      mimeType: input.mimeType,
+      artifactType,
+      startedAt: now,
+    });
+
+    return { artifactId, title, indexed };
+  },
+
+  /**
    * Save-to-Workspace (createUrl): normalizeUrl + dedupe by (owner, workspace,
    * normalizedUrl) → idempotent. Insert artifact `url` (pending) + artifact_urls,
    * enqueue url-ingestion. UNIQUE constraint = backstop race (catch 23505 → existing).

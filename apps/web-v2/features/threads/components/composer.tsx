@@ -17,6 +17,7 @@ import {
   AgentSelector,
   useComposerAgentSelection,
 } from "./composer-agent-selector";
+import { type ComposerAttachment, ComposerAttachments } from "./composer-attachments";
 import {
   type ContextItemOption,
   type ContextWorkspaceOption,
@@ -65,6 +66,7 @@ export function Composer({
   busy,
   disabled,
   notice,
+  threadId = null,
   ambientWorkspaceId = null,
   placeholder = "Tulis pesan untuk Astra…",
 }: {
@@ -73,12 +75,15 @@ export function Composer({
   busy?: boolean;
   disabled?: boolean;
   notice?: ComposerNotice | null;
+  /** Thread aktif untuk lampiran (Slice 6.7); null = chat baru sebelum turn pertama → attach off. */
+  threadId?: string | null;
   ambientWorkspaceId?: string | null;
   placeholder?: string;
 }) {
   const [value, setValue] = useState("");
   const [commands, setCommands] = useState<PromptCommand[]>([]);
   const [contextRefs, setContextRefs] = useState<ContextRef[]>([]);
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [drillWorkspaceId, setDrillWorkspaceId] = useState<string | null>(null);
   const secondsLeft = useSecondsLeft(notice?.retryAt);
 
@@ -107,15 +112,29 @@ export function Composer({
     [itemsQuery.data, drillWorkspaceId],
   );
 
-  const canSend = value.trim().length > 0 && !busy && !disabled && !hydrate.isPending;
+  const hasText = value.trim().length > 0;
+  const canSend = (hasText || attachments.length > 0) && !busy && !disabled && !hydrate.isPending;
 
   async function submit() {
     if (!canSend) return;
-    const { displayText, dispatchPrompt } = resolveCommandDispatch(value, commands[0]?.id);
-    if (!displayText) return;
 
     const parts: string[] = [];
-    if (dispatchPrompt !== displayText) parts.push(dispatchPrompt);
+    let displayText: string;
+    if (hasText) {
+      const r = resolveCommandDispatch(value, commands[0]?.id);
+      if (!r.displayText) return;
+      displayText = r.displayText;
+      if (r.dispatchPrompt !== r.displayText) parts.push(r.dispatchPrompt);
+    } else {
+      // Lampiran tanpa teks → prompt sintetik supaya turn punya pesan (eve butuh non-empty).
+      displayText = "Tolong baca berkas terlampir.";
+    }
+
+    // Catatan ephemeral nama berkas: agen menemukan isinya via tool list_artifacts/
+    // search_thread_documents (scope thread), catatan ini cuma sinyal "ada lampiran".
+    if (attachments.length > 0) {
+      parts.push(`Berkas terlampir: ${attachments.map((a) => a.title).join(", ")}.`);
+    }
 
     if (contextRefs.length > 0) {
       const { workspaceIds, artifactIds } = splitContextRefs(contextRefs);
@@ -130,6 +149,7 @@ export function Composer({
     setValue("");
     setCommands([]);
     setContextRefs([]);
+    setAttachments([]);
     setDrillWorkspaceId(null);
     onSend({
       text: displayText,
@@ -166,6 +186,13 @@ export function Composer({
           onRequestWorkspaceItems={setDrillWorkspaceId}
         />
       </div>
+      <ComposerAttachments
+        threadId={threadId}
+        attachments={attachments}
+        onAdd={(a) => setAttachments((prev) => [...prev, a])}
+        onRemove={(id) => setAttachments((prev) => prev.filter((a) => a.artifactId !== id))}
+        disabled={disabled}
+      />
       <div className="flex items-center justify-between gap-2">
         <AgentSelector
           agentKind={agentSelection.agentKind}
