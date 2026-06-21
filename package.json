@@ -8,6 +8,7 @@
     "apps/api-v2",
     "apps/web-v2",
     "packages/agent-contracts",
+    "packages/chat-core",
     "packages/convex",
     "packages/db",
     "packages/services",
@@ -28,9 +29,9 @@
     "db:generate": "bun run --filter '@aqsha/db' generate",
     "db:migrate": "bun run --filter '@aqsha/db' migrate",
     "db:studio": "bun run --filter '@aqsha/db' studio",
-    "test:v2": "bun run --filter '@aqsha/db' --filter '@aqsha/services' --filter '@aqsha/api-v2' test",
+    "test:v2": "bun run --filter '@aqsha/db' --filter '@aqsha/chat-core' --filter '@aqsha/services' --filter '@aqsha/api-v2' test",
     "lint": "bun run --parallel --filter '@aqsha/app' --filter '@aqsha/convex' --filter '@aqsha/api-v2' --filter '@aqsha/web-v2' lint",
-    "typecheck": "bun run --parallel --filter '@aqsha/app' --filter '@aqsha/convex' --filter '@aqsha/ui' --filter '@aqsha/agents' --filter '@aqsha/agent-contracts' --filter '@aqsha/api-v2' --filter '@aqsha/web-v2' --filter '@aqsha/db' --filter '@aqsha/services' typecheck"
+    "typecheck": "bun run --parallel --filter '@aqsha/app' --filter '@aqsha/convex' --filter '@aqsha/ui' --filter '@aqsha/agents' --filter '@aqsha/agent-contracts' --filter '@aqsha/api-v2' --filter '@aqsha/web-v2' --filter '@aqsha/db' --filter '@aqsha/chat-core' --filter '@aqsha/services' typecheck"
   },
   "overrides": {
     "elysia": "1.4.29"

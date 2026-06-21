@@ -9,6 +9,8 @@ export * from "./artifactExtractions";
 export * from "./artifactPaperMetadata";
 export * from "./artifactUrls";
 export * from "./artifactEmbeddings";
+export * from "./chatThreads";
+export * from "./chatMessages";
 export * from "./explorePapers";
 export * from "./feedItems";
 export * from "./feedSources";

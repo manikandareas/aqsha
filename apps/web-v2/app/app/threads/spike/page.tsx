@@ -1,15 +1,20 @@
 "use client";
 
+import { useAuth } from "@clerk/nextjs";
 import { useEveAgent } from "eve/react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 /**
  * SPIKE Slice 6.0 — "hello Astra". Bukti eve streaming jalan E2E lewat proxy
- * `withEve` (browser → origin web-v2 → proses eve). Belum persist, belum auth
- * Clerk, belum billing — itu slice berikutnya. Route: /app/threads/spike.
+ * `withEve` (browser → origin web-v2 → proses eve). Route: /app/threads/spike.
+ *
+ * Slice 6.1 men-DROP `none()` di channel → spike WAJIB kirim bearer Clerk (sama
+ * seperti chat sungguhan); kalau tidak channel balas 401.
  */
 export default function AstraSpikePage() {
-  const agent = useEveAgent();
+  const { getToken } = useAuth();
+  const bearer = useCallback(async () => (await getToken()) ?? "", [getToken]);
+  const agent = useEveAgent({ auth: { bearer } });
   const [draft, setDraft] = useState("");
   const isBusy = agent.status === "submitted" || agent.status === "streaming";
 

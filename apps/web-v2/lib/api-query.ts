@@ -46,6 +46,12 @@ export const queryKeys = {
     plans: () => ["billing", "plans"] as const,
     usage: (days: number) => ["billing", "usage", days] as const,
   },
+  threads: {
+    all: ["threads"] as const,
+    list: () => ["threads", "list"] as const,
+    detail: (id: string) => ["threads", "detail", id] as const,
+    messages: (id: string) => ["threads", "messages", id] as const,
+  },
   user: {
     me: () => ["user", "me"] as const,
   },

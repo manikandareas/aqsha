@@ -1,7 +1,7 @@
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { Button } from "@aqsha/ui/components/button";
-import { CompassIcon, FolderIcon, SettingsIcon } from "@aqsha/ui/icons";
+import { CompassIcon, FolderIcon, SettingsIcon, SparklesIcon } from "@aqsha/ui/icons";
 import { HomeExploreBento } from "@/features/discovery/components/home-explore-bento";
 import { getServerApi } from "@/lib/api-server";
 
@@ -28,6 +28,12 @@ export default async function AppHome() {
       </div>
       <div className="flex flex-wrap gap-2">
         <Button asChild>
+          <Link href="/app/threads">
+            <SparklesIcon />
+            Tanya Astra
+          </Link>
+        </Button>
+        <Button asChild variant="outline">
           <Link href="/app/explore">
             <CompassIcon />
             Jelajahi

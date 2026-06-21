@@ -10,6 +10,7 @@ import { folders } from "./routes/folders";
 import { health } from "./routes/health";
 import { onboarding } from "./routes/onboarding";
 import { papers } from "./routes/papers";
+import { threads } from "./routes/threads";
 import { users } from "./routes/users";
 import { webhooks } from "./routes/webhooks";
 import { workspaces } from "./routes/workspaces";
@@ -26,6 +27,7 @@ export const app = new Elysia()
   .use(workspaces)
   .use(folders)
   .use(artifacts)
+  .use(threads)
   .use(feed)
   .use(papers)
   .use(admin);

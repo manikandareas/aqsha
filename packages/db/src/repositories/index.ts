@@ -9,6 +9,8 @@ export * from "./artifactExtractionRepo";
 export * from "./artifactPaperMetadataRepo";
 export * from "./artifactUrlRepo";
 export * from "./artifactEmbeddingRepo";
+export * from "./chatThreadRepo";
+export * from "./chatMessageRepo";
 export * from "./feedRepo";
 export * from "./paperCacheRepo";
 export * from "./feedInteractionRepo";
