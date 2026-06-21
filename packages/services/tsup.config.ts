@@ -12,7 +12,16 @@ import { defineConfig } from "tsup";
  * → tak ikut ter-bundle (mitigasi bloat; di-resolve runtime via node exports condition).
  */
 export default defineConfig({
-  entry: ["src/index.ts", "src/chat/index.ts", "src/billing.service.ts", "src/quota/index.ts"],
+  entry: [
+    "src/index.ts",
+    "src/chat/index.ts",
+    "src/billing.service.ts",
+    "src/quota/index.ts",
+    "src/rag.service.ts",
+    "src/research/index.ts",
+    "src/artifact.service.ts",
+    "src/workspace.service.ts",
+  ],
   outDir: "dist",
   format: ["esm"],
   platform: "node",

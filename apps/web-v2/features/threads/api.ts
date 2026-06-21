@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { useApi } from "@/lib/api-client";
 import { readableApiErrorMessage } from "@/lib/api-error";
 import { queryKeys, unwrap } from "@/lib/api-query";
-import type { ChatMessage, ChatThread } from "./types";
+import type { ChatMessage, ChatThread, ResearchSource } from "./types";
 
 const LIST_PAGE_SIZE = 30;
 
@@ -62,6 +62,22 @@ export function useSendStatus() {
     queryKey: queryKeys.threads.sendStatus(),
     staleTime: 10_000,
     queryFn: async () => unwrap(await api.threads["send-status"].get()),
+  });
+}
+
+/**
+ * Sumber riset thread (Slice 6.4) — dipersist tool Astra (`search_web`/`search_arxiv`/
+ * dst.) ke `research_sources`. Persisted per thread → tampil saat reload (panel Sources).
+ * `staleTime` pendek supaya sumber turn yang baru selesai muncul setelah `onFinish`.
+ */
+export function useThreadSources(id: string, enabled = true) {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.threads.sources(id),
+    enabled,
+    staleTime: 10_000,
+    queryFn: async () =>
+      (unwrap(await api.threads({ id }).sources.get()) as { items: ResearchSource[] }).items,
   });
 }
 

@@ -842,6 +842,40 @@ export const ArtifactService = {
   },
 
   /**
+   * List artifact aktif yang terlampir pada sebuah thread (Slice 6.4, tool
+   * `list_artifacts`). HEADLESS-TOLERANT: chat-attachment/agent `workspaceId=null`
+   * tetap masuk (beda dari `list` yang workspace-scoped + assert). Tanpa assert
+   * workspace; ownership di-enforce via filter `ownerUserId`.
+   */
+  async listByThread(
+    db: DbOrTx,
+    ownerUserId: string,
+    threadId: string,
+    limit = 50,
+  ): Promise<ArtifactListItem[]> {
+    const items = await ArtifactRepo.listByThread(db, ownerUserId, threadId, limit);
+    return items.map(toArtifactListItem);
+  },
+
+  /**
+   * Metadata satu artifact untuk tool agen (Slice 6.4, `get_artifact`).
+   * HEADLESS-TOLERANT: owner + active saja (chat-attachment `workspaceId=null`
+   * tetap resolve, beda dari `get` yang menuntut workspace). Return `null` bila
+   * missing/not-owned/not-active.
+   */
+  async getForAgent(
+    db: DbOrTx,
+    ownerUserId: string,
+    artifactId: string,
+  ): Promise<ArtifactListItem | null> {
+    const artifact = await ArtifactRepo.findById(db, artifactId);
+    if (!artifact || artifact.ownerUserId !== ownerUserId || artifact.status !== "active") {
+      return null;
+    }
+    return toArtifactListItem(artifact);
+  },
+
+  /**
    * Render payload (discriminated union on artifactType). Headless-tolerant: hanya
    * butuh owner + active (chat-attachment workspaceId=null tetap resolve). pdf/docx
    * → presigned R2 GET. Return `null` bila missing/not-owned/not-active/blob hilang.

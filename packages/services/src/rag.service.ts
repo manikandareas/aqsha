@@ -6,6 +6,16 @@ import {
 import { MAX_INDEXED_TEXT_CHARS } from "./artifacts/model";
 import { embedTexts, isEmbeddingEnabled } from "./clients/embeddings";
 
+/** Satu chunk dokumen yang relevan (untuk tool `search_thread_documents`). */
+export type ThreadDocumentMatch = {
+  artifactId: string;
+  title: string;
+  chunkIndex: number;
+  content: string;
+  /** Skor relevansi `[0..1]` (1 = paling mirip), diturunkan dari jarak cosine. */
+  score: number;
+};
+
 /**
  * RagService — index teks artifact ke pgvector (`artifact_embeddings`). Chunk teks
  * (cap `MAX_INDEXED_TEXT_CHARS`) → embed (OpenAI-compatible, model+dimensi V1) →
@@ -66,5 +76,42 @@ export const RagService = {
 
   async deleteByArtifact(db: DbOrTx, ownerUserId: string, artifactId: string): Promise<void> {
     await ArtifactEmbeddingRepo.deleteByArtifact(db, ownerUserId, artifactId);
+  },
+
+  /**
+   * RAG read (Slice 6.4) — embed query → ANN cosine search atas chunk artifact,
+   * di-scope owner + (thread atau workspace). Degrade GRACEFUL bila embedding
+   * disabled (mis. tanpa kredensial): return `[]` supaya tool tetap menjawab
+   * "tidak ada dokumen relevan", bukan melempar. Jarak cosine `[0..2]` dipetakan
+   * ke skor `[0..1]` (`1 - distance/2`).
+   */
+  async searchThreadDocuments(
+    db: DbOrTx,
+    input: {
+      ownerUserId: string;
+      threadId?: string;
+      workspaceId?: string;
+      query: string;
+      limit?: number;
+    },
+  ): Promise<ThreadDocumentMatch[]> {
+    const query = input.query.trim();
+    if (!query || !isEmbeddingEnabled()) return [];
+    const [vector] = await embedTexts([query]);
+    if (!vector) return [];
+    const matches = await ArtifactEmbeddingRepo.searchSimilar(db, {
+      ownerUserId: input.ownerUserId,
+      queryVector: vector,
+      threadId: input.threadId,
+      workspaceId: input.workspaceId,
+      limit: Math.min(Math.max(input.limit ?? 6, 1), 20),
+    });
+    return matches.map((m) => ({
+      artifactId: m.artifactId,
+      title: m.title,
+      chunkIndex: m.chunkIndex,
+      content: m.content,
+      score: Math.max(0, 1 - m.distance / 2),
+    }));
   },
 };

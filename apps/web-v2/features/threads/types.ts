@@ -27,6 +27,25 @@ export type ChatMessage = {
   createdAt: number;
 };
 
+/** Sumber riset yang dipersist tool Astra (Slice 6.4) — panel Sources. */
+export type ResearchSource = {
+  id: string;
+  threadId: string;
+  turnId: string;
+  citationNumber: number | null;
+  origin: string; // "web" | "arxiv" | "doi"
+  provider: string | null;
+  title: string;
+  locator: string;
+  url: string | null;
+  doi: string | null;
+  arxivId: string | null;
+  snippet: string;
+  evidenceStrength: string; // "strong" | "medium" | "weak"
+  discoveryQuery: string | null;
+  createdAt: number;
+};
+
 /** Judul tampil thread (fallback bila belum ada/auto-title belum jalan). */
 export const threadTitle = (t: Pick<ChatThread, "title">): string =>
   t.title?.trim() ? t.title : "Percakapan baru";

@@ -47,7 +47,11 @@ export function useAstraAgent() {
       qc.invalidateQueries({ queryKey: queryKeys.threads.all });
       qc.invalidateQueries({ queryKey: queryKeys.threads.sendStatus() });
       const id = sessionIdRef.current;
-      if (id) qc.invalidateQueries({ queryKey: queryKeys.threads.messages(id) });
+      if (id) {
+        qc.invalidateQueries({ queryKey: queryKeys.threads.messages(id) });
+        // Sumber riset yang dipersist tool search (Slice 6.4) → refresh panel Sources.
+        qc.invalidateQueries({ queryKey: queryKeys.threads.sources(id) });
+      }
     },
   });
 

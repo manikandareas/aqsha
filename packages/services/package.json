@@ -31,6 +31,34 @@
       "node": "./dist/quota/index.js",
       "import": "./dist/quota/index.js",
       "default": "./dist/quota/index.js"
+    },
+    "./rag": {
+      "types": "./src/rag.service.ts",
+      "bun": "./src/rag.service.ts",
+      "node": "./dist/rag.service.js",
+      "import": "./dist/rag.service.js",
+      "default": "./dist/rag.service.js"
+    },
+    "./research": {
+      "types": "./src/research/index.ts",
+      "bun": "./src/research/index.ts",
+      "node": "./dist/research/index.js",
+      "import": "./dist/research/index.js",
+      "default": "./dist/research/index.js"
+    },
+    "./artifact": {
+      "types": "./src/artifact.service.ts",
+      "bun": "./src/artifact.service.ts",
+      "node": "./dist/artifact.service.js",
+      "import": "./dist/artifact.service.js",
+      "default": "./dist/artifact.service.js"
+    },
+    "./workspace": {
+      "types": "./src/workspace.service.ts",
+      "bun": "./src/workspace.service.ts",
+      "node": "./dist/workspace.service.js",
+      "import": "./dist/workspace.service.js",
+      "default": "./dist/workspace.service.js"
     }
   },
   "scripts": {

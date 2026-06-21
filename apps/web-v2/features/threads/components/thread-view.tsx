@@ -7,6 +7,7 @@ import { useThread, useThreadMessages } from "../api";
 import { chatMessagesToTimeline } from "../lib/eve-timeline";
 import { threadTitle } from "../types";
 import { MessageList } from "./message-list";
+import { SourcesPanel } from "./sources-panel";
 
 /**
  * View history thread (Slice 6.1) — READ-ONLY. Membuka thread tersimpan menampilkan
@@ -55,6 +56,7 @@ export function ThreadView({ threadId }: { threadId: string }) {
 
       <div className="flex-1 overflow-y-auto p-4">
         <MessageList messages={timeline} />
+        <SourcesPanel threadId={threadId} />
         <p className="mt-6 text-center text-[11px] text-muted-foreground/70">
           {hasReasoning
             ? "Reasoning tersimpan. Detail langkah & alat hanya tampil saat percakapan berlangsung."

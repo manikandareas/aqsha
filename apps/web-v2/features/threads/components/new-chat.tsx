@@ -5,6 +5,7 @@ import { useSendStatus } from "../api";
 import { evePartsToTimeline } from "../lib/eve-timeline";
 import { useAstraAgent } from "../lib/use-astra-agent";
 import { MessageList } from "./message-list";
+import { SourcesPanel } from "./sources-panel";
 import { type ComposerNotice, Composer } from "./composer";
 
 /** Map status kirim terblok → notice composer (pesan ramah + retryAt untuk countdown). */
@@ -40,6 +41,9 @@ export function NewChat() {
   // pure. Sebelum 6.3 ini di-flatten ke teks saja; kini per-part (live-only, D-F).
   const messages = evePartsToTimeline(agent.data.messages);
   const partCount = messages.reduce((n, m) => n + m.parts.length, 0);
+  // Session id di-mint eve saat turn pertama selesai; panel Sources fetch sumber
+  // yang dipersist tool riset (kosong → tersembunyi). Pause fetch saat streaming.
+  const sessionId = agent.session?.sessionId ?? null;
 
   const bottomRef = useRef<HTMLDivElement>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll saat transkrip/parts berubah
@@ -51,6 +55,7 @@ export function NewChat() {
     <div className="mx-auto flex h-full w-full max-w-3xl flex-col">
       <div className="flex-1 overflow-y-auto p-4">
         <MessageList messages={messages} pending={busy} />
+        {sessionId ? <SourcesPanel threadId={sessionId} enabled={!busy} /> : null}
         {agent.error ? (
           // eve `agent.error` = `Error`/`ClientError` biasa (bukan error Eden ber-`.value`),
           // jadi tampilkan `.message` langsung — `readableApiErrorMessage` akan selalu fallback.

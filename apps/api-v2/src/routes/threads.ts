@@ -1,4 +1,4 @@
-import { MessageService, ThreadService } from "@aqsha/services";
+import { MessageService, ResearchService, ThreadService } from "@aqsha/services";
 import { SendQuotaService } from "@aqsha/services/quota";
 import { Elysia, t } from "elysia";
 import { getDb } from "../clients/db";
@@ -57,6 +57,18 @@ export const threads = new Elysia({ prefix: "/threads" })
       const { db } = getDb();
       await ThreadService.assertOwner(db, ownerUserId, params.id);
       const items = await MessageService.listByThread(db, params.id);
+      return { items };
+    },
+    { auth: true },
+  )
+  // Sumber riset yang dipersist tool Astra (Slice 6.4) — panel Sources. Ownership
+  // di-assert dulu (thread milik caller), lalu list by thread.
+  .get(
+    "/:id/sources",
+    async ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      await ThreadService.assertOwner(db, ownerUserId, params.id);
+      const items = await ResearchService.listThreadSources(db, params.id);
       return { items };
     },
     { auth: true },
