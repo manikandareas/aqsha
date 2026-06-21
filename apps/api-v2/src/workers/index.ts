@@ -1,8 +1,15 @@
-import { ARTIFACT_QUEUES, FEED_QUEUES, getQueueConnection, registerRepeatable } from "@aqsha/services";
+import {
+  ARTIFACT_QUEUES,
+  CHAT_QUEUES,
+  FEED_QUEUES,
+  getQueueConnection,
+  registerRepeatable,
+} from "@aqsha/services";
 import { Worker } from "bullmq";
 import { type ArtifactCleanupJob, processArtifactCleanup } from "./artifact-cleanup.worker";
 import { type FeedHydrationJob, processFeedHydration } from "./feed-hydration.worker";
 import { type PaperEnrichmentJob, processPaperEnrichment } from "./paper-enrichment.worker";
+import { type ThreadTitleJob, processThreadTitle } from "./thread-title.worker";
 import { type UrlIngestionJob, processUrlIngestion } from "./url-ingestion.worker";
 
 /**
@@ -31,6 +38,10 @@ const workers = [
   new Worker<FeedHydrationJob>(FEED_QUEUES.feedHydration, processFeedHydration, {
     connection,
     concurrency: 1,
+  }),
+  new Worker<ThreadTitleJob>(CHAT_QUEUES.threadTitle, processThreadTitle, {
+    connection,
+    concurrency: CONCURRENCY,
   }),
 ];
 

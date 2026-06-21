@@ -69,6 +69,7 @@ export function Composer({
   threadId = null,
   ambientWorkspaceId = null,
   placeholder = "Tulis pesan untuk Astra…",
+  errorDraft = null,
 }: {
   onSend: (payload: ComposerSendPayload) => void;
   onStop?: () => void;
@@ -79,6 +80,8 @@ export function Composer({
   threadId?: string | null;
   ambientWorkspaceId?: string | null;
   placeholder?: string;
+  /** Retry (Slice 6.8): teks turn terakhir untuk di-restore saat turn gagal. */
+  errorDraft?: string | null;
 }) {
   const [value, setValue] = useState("");
   const [commands, setCommands] = useState<PromptCommand[]>([]);
@@ -86,6 +89,20 @@ export function Composer({
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [drillWorkspaceId, setDrillWorkspaceId] = useState<string | null>(null);
   const secondsLeft = useSecondsLeft(notice?.retryAt);
+
+  // Retry (Slice 6.8): turn gagal → kembalikan draft terakhir ke editor (resend = turn baru).
+  // Derivasi saat render (pola "adjust state when a prop changes", bukan effect) — `seenDraft`
+  // mencegah loop & menghormati edit user setelah restore.
+  const [seenDraft, setSeenDraft] = useState<string | null>(null);
+  if (errorDraft) {
+    if (errorDraft !== seenDraft) {
+      setSeenDraft(errorDraft);
+      setValue(errorDraft);
+    }
+  } else if (seenDraft !== null) {
+    // Turn baru dimulai (error hilang) → reset supaya retry teks yang sama bisa restore lagi.
+    setSeenDraft(null);
+  }
 
   const agentSelection = useComposerAgentSelection();
   const hydrate = useHydrateContext();
@@ -161,7 +178,14 @@ export function Composer({
   return (
     // Bukan <form>: submit dipicu tombol + Enter (TokenizedPromptInput.onSubmit),
     // jadi tak perlu form/preventDefault (react-doctor no-prevent-default).
-    <div className="flex flex-col gap-2 rounded-2xl border bg-background p-2">
+    // Escape (Slice 6.8): batalkan turn berjalan. Bila palette terbuka, handler-nya
+    // sudah `stopPropagation` Escape (tutup palette) → tak sampai ke sini.
+    <div
+      className="flex flex-col gap-2 rounded-2xl border bg-background p-2"
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && !e.defaultPrevented && busy && onStop) onStop();
+      }}
+    >
       {notice ? (
         <p className="px-2 pt-1 text-amber-600 text-xs dark:text-amber-500">
           {notice.message}

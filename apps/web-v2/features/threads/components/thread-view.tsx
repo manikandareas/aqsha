@@ -3,22 +3,33 @@
 import { Button } from "@aqsha/ui/components/button";
 import { Loader2Icon, PlusIcon } from "@aqsha/ui/icons";
 import Link from "next/link";
+import { useState } from "react";
 import { useThread, useThreadMessages } from "../api";
-import { chatMessagesToTimeline } from "../lib/eve-timeline";
+import { chatMessagesToTimeline, type TimelineMessage } from "../lib/eve-timeline";
 import { threadTitle } from "../types";
-import { MessageList } from "./message-list";
-import { SourcesPanel } from "./sources-panel";
+import { ChatSurface } from "./chat-surface";
+import { ThreadRecentSwitcher } from "./thread-recent-switcher";
 
 /**
- * View history thread (Slice 6.1) — READ-ONLY. Membuka thread tersimpan menampilkan
- * transkrip persisted. Melanjutkan percakapan lama (resume eve session lintas-reload)
- * = slice lanjutan; di sini composer diarahkan ke "percakapan baru".
+ * View thread tersimpan (Slice 6.8) — kini LIVE: history persisted di-render lalu composer
+ * melanjutkan percakapan (turn baru di session eve durable, `sessionId == threadId`).
+ * History di-SNAPSHOT sekali (freeze) supaya refetch `onFinish` (yang kini memuat turn baru)
+ * tak duplikat dengan buffer live `ChatSurface`. Tool-parts tak persist (D-F live-only) →
+ * history = teks + reasoning saja; detail alat hanya tampil saat turn berjalan.
  */
 export function ThreadView({ threadId }: { threadId: string }) {
   const thread = useThread(threadId);
   const messages = useThreadMessages(threadId);
 
-  if (thread.isLoading || messages.isLoading) {
+  // Snapshot history SEKALI (setState saat render, guarded — bukan effect, bukan useMemo:
+  // useMemo akan recompute saat refetch `onFinish` dan menarik turn baru → duplikat dgn
+  // live buffer). Begitu data tersedia, freeze; refetch berikutnya diabaikan.
+  const [history, setHistory] = useState<TimelineMessage[] | null>(null);
+  if (history === null && messages.data) {
+    setHistory(chatMessagesToTimeline(messages.data));
+  }
+
+  if (thread.isLoading || messages.isLoading || (messages.data && history === null)) {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
@@ -40,42 +51,22 @@ export function ThreadView({ threadId }: { threadId: string }) {
     );
   }
 
-  // History persisted = teks + reasoning saja (D-F, live-only). Tool parts hanya
-  // tampil saat turn berjalan, jadi reload tak memuat detail alat.
-  const timeline = chatMessagesToTimeline(messages.data ?? []);
-  const hasReasoning = timeline.some((m) => m.parts.some((p) => p.kind === "reasoning"));
-
   return (
-    <div className="mx-auto flex h-full w-full max-w-3xl flex-col">
+    <div className="flex h-full flex-col">
       <header className="flex items-center justify-between border-b px-4 py-3">
         <p className="truncate font-medium text-sm">{threadTitle(thread.data)}</p>
-        {thread.data.status === "failed" ? (
-          <span className="text-red-500 text-xs">Gagal</span>
-        ) : null}
-      </header>
-
-      <div className="flex-1 overflow-y-auto p-4">
-        <MessageList messages={timeline} />
-        <SourcesPanel threadId={threadId} />
-        <p className="mt-6 text-center text-[11px] text-muted-foreground/70">
-          {hasReasoning
-            ? "Reasoning tersimpan. Detail langkah & alat hanya tampil saat percakapan berlangsung."
-            : "Detail langkah & alat hanya tampil saat percakapan berlangsung."}
-        </p>
-      </div>
-
-      <div className="p-4 pt-0">
-        <div className="flex items-center justify-between gap-3 rounded-2xl border bg-muted/30 px-4 py-3">
-          <p className="text-muted-foreground text-xs">
-            Lanjutkan percakapan ini akan tersedia segera. Mulai percakapan baru untuk bertanya.
-          </p>
-          <Button asChild size="sm" variant="outline">
-            <Link href="/app/threads">
-              <PlusIcon />
-              Baru
-            </Link>
-          </Button>
+        <div className="flex items-center gap-2">
+          {thread.data.status === "failed" ? (
+            <span className="text-red-500 text-xs">Gagal</span>
+          ) : null}
+          <ThreadRecentSwitcher activeId={threadId} />
         </div>
+      </header>
+      <div className="min-h-0 flex-1">
+        <ChatSurface
+          initialSession={{ sessionId: threadId, streamIndex: 0 }}
+          history={history ?? []}
+        />
       </div>
     </div>
   );

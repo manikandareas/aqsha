@@ -23,19 +23,23 @@ import { queryKeys } from "@/lib/api-query";
  * bukan `agent.reset()` in-place. Karena itu `boundRef` cukup sekali-pakai per mount; thread
  * row sudah dibuat hook proyeksi `session.started` jauh sebelum turn selesai.
  *
- * Catatan: surface ini live-only. Membuka thread lama (`/app/threads/[id]`) = view history
- * read-only; resume eve session lintas-reload = slice lanjutan.
+ * Continue-thread (Slice 6.8): `initialSession` mengikat hook ke session eve yang sudah
+ * ada (`sessionId == threadId`) → `agent.send()` memulai TURN BARU di thread lama (eve
+ * session durable). Saat `initialSession` diberikan, URL sudah di `/app/threads/[id]` →
+ * `boundRef` mulai `true` supaya tak ada `replaceState`. Resume turn IN-FLIGHT lintas-reload
+ * tetap deferred (known gap 6.1) — ini hanya start turn baru.
  */
-export function useAstraAgent() {
+export function useAstraAgent(initialSession?: { sessionId: string; streamIndex: number }) {
   const { getToken } = useAuth();
   const qc = useQueryClient();
-  const boundRef = useRef(false);
-  const sessionIdRef = useRef<string | null>(null);
+  const boundRef = useRef(initialSession != null);
+  const sessionIdRef = useRef<string | null>(initialSession?.sessionId ?? null);
 
   const bearer = useCallback(async () => (await getToken()) ?? "", [getToken]);
 
   const agent = useEveAgent({
     auth: { bearer },
+    ...(initialSession ? { initialSession } : {}),
     onSessionChange(session) {
       if (session.sessionId) sessionIdRef.current = session.sessionId;
       if (session.sessionId && !boundRef.current && typeof window !== "undefined") {

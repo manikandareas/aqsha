@@ -3,3 +3,4 @@
 // (dipakai bersama PROSES eve). Path TULIS proyeksi ada di `apps/web-v2/agent/lib/store.ts`.
 export { ThreadService } from "./thread.service";
 export { MessageService } from "./message.service";
+export { TitleService } from "./title.service";

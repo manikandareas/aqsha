@@ -1,4 +1,5 @@
 import { BillingService } from "@aqsha/services/billing";
+import { TitleService } from "@aqsha/services/chat";
 import { defineHook, type HookContext } from "eve/hooks";
 import { getServiceDb } from "../lib/db";
 import {
@@ -112,6 +113,11 @@ export default defineHook({
 
     async "turn.completed"(_event, ctx) {
       await swallow("turn.completed", () => setThreadStatus(ctx.session.id, "idle"));
+      // Auto-title (Slice 6.8): klaim atomik (turn-pertama + rename-guard) → enqueue worker.
+      // No-op untuk turn ke-2+ / thread sudah di-rename. Swallow: kegagalan tak racuni turn.
+      await swallow("title", async () => {
+        await TitleService.requestTitle(getServiceDb(), ctx.session.id);
+      });
     },
 
     async "turn.failed"(_event, ctx) {

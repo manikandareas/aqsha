@@ -3,7 +3,7 @@
 // Chat Astra (Fase 6) — path BACA + CRUD untuk route api-v2 (juga via subpath
 // `@aqsha/services/chat`). Logika murni di `@aqsha/chat-core`; path tulis proyeksi di
 // PROSES eve (`apps/web-v2/agent/lib/store.ts`).
-export { MessageService, ThreadService } from "./chat";
+export { MessageService, ThreadService, TitleService } from "./chat";
 
 export { InterestService } from "./interest.service";
 export { DEFAULT_WORKSPACE_NAME, WorkspaceService } from "./workspace.service";
@@ -158,6 +158,8 @@ export {
   type InteractionKind,
 } from "./feed-interaction.service";
 export {
+  CHAT_QUEUES,
+  type ChatQueueName,
   FEED_QUEUES,
   type FeedQueueName,
   type QueueName,

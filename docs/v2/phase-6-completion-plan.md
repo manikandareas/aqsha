@@ -18,7 +18,7 @@
 | **6.5** | ⬜ plan | data tools WRITE + HITL approval + artifact cards |
 | **6.6** | ⬜ plan | rich composer: token editor + `/slash` + `@context` |
 | **6.7** | ✅ done | thread attachment headless (commit pending owner) |
-| **6.8** | ⬜ plan | title gen + continue-thread + switcher + cancel/retry + commands |
+| **6.8** | ✅ done (uncommitted) | title gen async + continue-thread live + recent switcher + cancel/retry + infinite-scroll (commands route SKIP) |
 | **6.9** | ⬜ plan | **testing terpusat** (service unit + eve integration + e2e + full `test:v2`) |
 
 **Testing:** per keputusan owner, **TIDAK** ada test per-slice. Gate tiap slice 6.2–6.8 = `eve build` hijau + `bun run typecheck` (semua workspace) + `bun run lint` (web-v2) + smoke manual opsional. Seluruh unit/integration/e2e dikerjakan di **Slice 6.9** setelah fitur lengkap.
@@ -209,6 +209,15 @@ Bake ke implementasi:
 5. **`routes/commands.ts` `GET /commands`** + palette.
 
 **Gate:** build+typecheck+lint. **uiVisible:** judul async; lanjut thread lama; switcher; cancel/retry; palette commands.
+
+**IMPLEMENTASI (done, uncommitted):**
+- **Migration: ZERO.** `chat_threads.title_status` text + CHECK(`null|generating|ready`) sudah ada sejak mig 0007. Worker klaim by PK `id` → tak butuh index baru.
+- **Title gen async** — `clients/llm.ts` (`generateThreadTitle` via **`generateText`**, BUKAN `generateObject`: output 1 string, zod bukan dep langsung services; env `AQSHA_TITLE_MODEL` default `gpt-4o-mini`, provider sama agent). `ChatThreadRepo.claimTitleGeneration` (UPDATE…WHERE title_status IS NULL RETURNING = guard turn-pertama + rename) + `finalizeTitle` (WHERE status='generating' = guard rename antara claim↔generate). `TitleService` (`@aqsha/services/chat`, re-export root). Queue `CHAT_QUEUES.threadTitle`. Hook proyeksi `turn.completed` → `requestTitle` (claim+enqueue, swallow). Worker `thread-title.worker.ts` + daftar `workers/index.ts`.
+- **Continue-thread LIVE** — `useAstraAgent(initialSession?)` (boundRef awal true → skip URL-bump). Ekstrak `ChatSurface` (NewChat+ThreadView dedup). `ThreadView` = history snapshot **freeze** (setState saat render, guarded — bukan effect/useMemo, hindari refetch `onFinish` tarik turn baru → duplikat) + `[...history,...live]` + `ChatSurface initialSession={{sessionId:threadId,streamIndex:0}}`. Attach 6.7 aktif langsung di thread lama.
+- **Cancel/Retry** — tombol stop sudah ada (6.1); +Escape→onStop di wrapper composer (palette stopPropagation Escape → tak bentrok). Retry: `errorDraft` prop composer (restore saat `agent.error`, derivasi render-time + `seenDraft` reset-on-recovery). Resend=turn baru, tak ada debit natural.
+- **Switcher + infinite-scroll** — `ThreadRecentSwitcher` (4 recent, header ThreadView). Sidebar `fetchNextPage` di-wire via IntersectionObserver native (sentinel).
+- **Item 5 commands route — SKIP (ponytail):** `promptCommands` = const statik `@aqsha/chat-core`, sudah client-side, palette offline. GET /commands = re-serialize array sama + round-trip, nol konsumen. YAGNI.
+- **Gates:** eve:build ✓, typecheck (10 ws) ✓, lint web-v2 ✓. react-hooks lint (refs/set-state-in-effect) bersih.
 
 ---
 

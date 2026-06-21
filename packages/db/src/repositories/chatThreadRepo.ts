@@ -1,4 +1,4 @@
-import { and, desc, eq, lt, or } from "drizzle-orm";
+import { and, desc, eq, isNull, lt, or } from "drizzle-orm";
 import { type ChatThread, chatThreads, type NewChatThread } from "../schema/chatThreads";
 import { type KeysetCursor, encodeKeysetCursor } from "../cursor";
 import type { DbOrTx } from "../types";
@@ -25,6 +25,35 @@ export const ChatThreadRepo = {
 
   async update(db: DbOrTx, id: string, patch: Partial<NewChatThread>): Promise<void> {
     await db.update(chatThreads).set(patch).where(eq(chatThreads.id, id));
+  },
+
+  /**
+   * Klaim atomik generasi auto-title (Slice 6.8). `title_status: null → 'generating'`
+   * via guard `where title_status IS NULL` → `RETURNING` → hanya satu pemanggil yang
+   * "menang". `true` ⇒ klaim baru: turn pertama (status masih null) DAN belum di-rename
+   * manual (rename set 'ready'). Turn ke-2+ / sudah ready → 0 baris → `false` (skip enqueue).
+   */
+  async claimTitleGeneration(db: DbOrTx, id: string): Promise<boolean> {
+    const rows = await db
+      .update(chatThreads)
+      .set({ titleStatus: "generating", updatedAt: Date.now() })
+      .where(and(eq(chatThreads.id, id), isNull(chatThreads.titleStatus)))
+      .returning({ id: chatThreads.id });
+    return rows.length > 0;
+  },
+
+  /**
+   * Tulis judul hasil generasi (Slice 6.8) — guard `title_status = 'generating'` supaya
+   * rename manual yang terjadi ANTARA claim↔generate (sudah set 'ready') tak ketimpa.
+   * `false` ⇒ tak ada baris ber-status 'generating' (sudah di-rename) → judul dibuang.
+   */
+  async finalizeTitle(db: DbOrTx, id: string, title: string): Promise<boolean> {
+    const rows = await db
+      .update(chatThreads)
+      .set({ title, titleStatus: "ready", updatedAt: Date.now() })
+      .where(and(eq(chatThreads.id, id), eq(chatThreads.titleStatus, "generating")))
+      .returning({ id: chatThreads.id });
+    return rows.length > 0;
   },
 
   async deleteById(db: DbOrTx, id: string): Promise<void> {

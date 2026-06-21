@@ -11,7 +11,7 @@ import { Loader2Icon, MoreHorizontalIcon, PencilIcon, PlusIcon } from "@aqsha/ui
 import { cn } from "@aqsha/ui/lib/cn";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ConfirmDialog, NameDialog } from "@/features/workspaces/components/common-dialogs";
 import { useDeleteThread, useRenameThread, useThreadsList } from "../api";
 import { type ChatThread, threadTitle } from "../types";
@@ -27,6 +27,20 @@ export function ThreadSidebar() {
   const rename = useRenameThread();
   const remove = useDeleteThread();
   const router = useRouter();
+
+  // Infinite-scroll (Slice 6.8): sentinel di dasar daftar → muat halaman berikutnya saat
+  // terlihat. IntersectionObserver native (tanpa dep). `fetchNextPage` BullMQ-free.
+  const { fetchNextPage, hasNextPage, isFetchingNextPage } = list;
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !hasNextPage) return;
+    const obs = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting && !isFetchingNextPage) void fetchNextPage();
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   return (
     <aside className="flex w-64 shrink-0 flex-col gap-2 border-r p-3">
@@ -84,6 +98,13 @@ export function ThreadSidebar() {
             );
           })
         )}
+        {hasNextPage ? (
+          <div ref={sentinelRef} className="flex justify-center py-3">
+            {isFetchingNextPage ? (
+              <Loader2Icon className="size-4 animate-spin text-muted-foreground" />
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <NameDialog
