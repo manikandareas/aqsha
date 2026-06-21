@@ -2,8 +2,9 @@
 
 import { useEffect, useRef } from "react";
 import { useSendStatus } from "../api";
+import { evePartsToTimeline } from "../lib/eve-timeline";
 import { useAstraAgent } from "../lib/use-astra-agent";
-import { type ChatBubble, MessageList } from "./message-list";
+import { MessageList } from "./message-list";
 import { type ComposerNotice, Composer } from "./composer";
 
 /** Map status kirim terblok → notice composer (pesan ramah + retryAt untuk countdown). */
@@ -35,20 +36,16 @@ export function NewChat() {
   const notice = blockedNotice(sendStatus.data);
   const blocked = notice !== null;
 
-  const messages: ChatBubble[] = agent.data.messages.map((m) => ({
-    id: m.id,
-    role: m.role,
-    text: m.parts
-      .filter((p) => p.type === "text")
-      .map((p) => p.text)
-      .join(""),
-  }));
+  // Timeline penuh (text + reasoning + tool parts terurut) dari stream eve — adapter
+  // pure. Sebelum 6.3 ini di-flatten ke teks saja; kini per-part (live-only, D-F).
+  const messages = evePartsToTimeline(agent.data.messages);
+  const partCount = messages.reduce((n, m) => n + m.parts.length, 0);
 
   const bottomRef = useRef<HTMLDivElement>(null);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll saat transkrip berubah
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll saat transkrip/parts berubah
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages.length, agent.status]);
+  }, [messages.length, partCount, agent.status]);
 
   return (
     <div className="mx-auto flex h-full w-full max-w-3xl flex-col">
