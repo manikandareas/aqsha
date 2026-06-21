@@ -27,4 +27,17 @@ export const queryKeys = {
     detail: (id: string) => ["artifacts", "detail", id] as const,
     render: (id: string) => ["artifacts", "render", id] as const,
   },
+  feed: {
+    all: ["feed"] as const,
+    list: (params: { mode: string; topic: string | null }) =>
+      ["feed", "list", params] as const,
+    search: (params: { q: string; fromYear: number | null }) =>
+      ["feed", "search", params] as const,
+    item: (id: string) => ["feed", "item", id] as const,
+  },
+  papers: {
+    detail: (key: string) => ["papers", "detail", key] as const,
+    search: (params: { query: string; fromYear: number | null }) =>
+      ["papers", "search", params] as const,
+  },
 };

@@ -28,6 +28,7 @@ export function SaveToWorkspaceButton({
   variant = "outline",
   size = "sm",
   className,
+  onSaved,
 }: {
   url: string;
   title?: string;
@@ -35,6 +36,8 @@ export function SaveToWorkspaceButton({
   variant?: ButtonVariant;
   size?: ButtonSize;
   className?: string;
+  /** Dipanggil setelah saveUrl sukses — mis. feed discovery menembak interest bump +1. */
+  onSaved?: () => void;
 }) {
   const save = useSaveUrl();
   const [open, setOpen] = useState(false);
@@ -60,6 +63,7 @@ export function SaveToWorkspaceButton({
                   onSuccess: () => {
                     toast.success("Disimpan ke workspace");
                     setOpen(false);
+                    onSaved?.();
                   },
                 },
               )

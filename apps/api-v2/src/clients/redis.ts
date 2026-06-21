@@ -28,3 +28,12 @@ export async function setNxWithTtl(key: string, ttlSeconds: number): Promise<boo
   const res = await getRedis().set(key, "1", "EX", ttlSeconds, "NX");
   return res === "OK";
 }
+
+/** Hapus key (mis. lepas lock saat operasi gagal supaya retry tak terblok TTL). Best-effort. */
+export async function delKey(key: string): Promise<void> {
+  try {
+    await getRedis().del(key);
+  } catch {
+    // best-effort: lock akan kedaluwarsa sendiri via TTL
+  }
+}

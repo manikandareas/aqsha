@@ -1,6 +1,7 @@
-import { ARTIFACT_QUEUES, getQueueConnection } from "@aqsha/services";
+import { ARTIFACT_QUEUES, FEED_QUEUES, getQueueConnection, registerRepeatable } from "@aqsha/services";
 import { Worker } from "bullmq";
 import { type ArtifactCleanupJob, processArtifactCleanup } from "./artifact-cleanup.worker";
+import { type FeedHydrationJob, processFeedHydration } from "./feed-hydration.worker";
 import { type PaperEnrichmentJob, processPaperEnrichment } from "./paper-enrichment.worker";
 import { type UrlIngestionJob, processUrlIngestion } from "./url-ingestion.worker";
 
@@ -26,6 +27,11 @@ const workers = [
     connection,
     concurrency: CONCURRENCY,
   }),
+  // Feed hydration: concurrency 1 — lane provider di-pace (hindari hammer external API).
+  new Worker<FeedHydrationJob>(FEED_QUEUES.feedHydration, processFeedHydration, {
+    connection,
+    concurrency: 1,
+  }),
 ];
 
 for (const w of workers) {
@@ -35,6 +41,14 @@ for (const w of workers) {
   w.on("ready", () => console.log(`[worker:${w.name}] ready`));
 }
 console.log(`[workers] started ${workers.length} queue(s)`);
+
+// Cron feed-hydration 3h (ganti `internal.feed.hydrateCycle` Convex). Idempotent by jobId.
+registerRepeatable(FEED_QUEUES.feedHydration, { kind: "cycle" }, {
+  pattern: "0 */3 * * *",
+  jobId: "feed-hydration-cycle",
+})
+  .then(() => console.log("[workers] cron feed-hydration 0 */3 * * * terdaftar"))
+  .catch((err) => console.error("[workers] gagal daftar cron feed-hydration", err));
 
 async function shutdown() {
   console.log("[workers] shutting down…");

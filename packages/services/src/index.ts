@@ -62,3 +62,62 @@ export {
   normalizeInterestTopic,
   topicsForInterestFields,
 } from "./feed/interestKeywords";
+
+// Feed/Discovery (P4) — pure model + topic taxonomy. Service classes ditambah tiap slice.
+export {
+  buildFeedItemRow,
+  deriveOrderAt,
+  deriveSearchText,
+  type FeedClaim,
+  type FeedItemInput,
+  type FeedItemResponse,
+  type FeedItemRow,
+  type FeedKind,
+  type FeedProvider,
+  type FeedRetractionStatus,
+  paperToFeedInput,
+  shapeFeedItem,
+} from "./feed/model";
+export {
+  DISCOVERY_TOPIC_CATEGORIES,
+  DISCOVERY_TOPIC_CATEGORY_LABELS,
+  type DiscoveryTopicCategory,
+  isDiscoveryTopicCategory,
+  matchesTopicCategory,
+} from "./feed/topicCategories";
+export { upsertFeedItems } from "./feed/write";
+export { FeedService, type FeedMode } from "./feed.service";
+export {
+  FEED_HYDRATION_LANES,
+  type FeedHydrationLane,
+  FeedHydrationService,
+  type RefreshResult,
+} from "./feed-hydration.service";
+export { PaperCacheService, type PapersByKeysItem } from "./paper-cache.service";
+export { ExploreService } from "./explore.service";
+export {
+  type DiscoveryItemRef,
+  type DiscoveryResolvedRef,
+  FeedInteractionService,
+  type InteractionKind,
+} from "./feed-interaction.service";
+export {
+  FEED_QUEUES,
+  type FeedQueueName,
+  type QueueName,
+  registerRepeatable,
+} from "./clients/queue";
+
+// Explore paper cache model (P4) — key kanonik + cache helpers (dipakai route papers/explore P4.4).
+export {
+  canonicalPaperKey,
+  dedupeExplorePapers,
+  deriveKeyProbe,
+  exploreCacheKey,
+  type ExploreMode,
+  type ExplorePaperDetail,
+  type ExplorePaperInput,
+  type ExploreProvider,
+  type ExploreProviderStatus,
+  type ExploreSearchResponse,
+} from "./explore/model";
