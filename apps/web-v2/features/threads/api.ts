@@ -81,6 +81,20 @@ export function useThreadSources(id: string, enabled = true) {
   });
 }
 
+/**
+ * Hydrate konteks `@mention` (Slice 6.6) — resolve workspace/paper yang di-pin
+ * composer → catatan ringkas + id tervalidasi (ownership di-cek server). Dipanggil
+ * saat submit bila ada pin; hasilnya dikirim sebagai `clientContext` ephemeral ke
+ * proses eve. Mutation (bukan query): aksi sekali-jalan per turn.
+ */
+export function useHydrateContext() {
+  const api = useApi();
+  return useMutation({
+    mutationFn: async (input: { workspaceIds: string[]; artifactIds: string[] }) =>
+      unwrap(await api.threads.context.hydrate.post(input)),
+  });
+}
+
 export function useRenameThread() {
   const api = useApi();
   const qc = useQueryClient();

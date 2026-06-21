@@ -1,4 +1,4 @@
-import { MessageService, ResearchService, ThreadService } from "@aqsha/services";
+import { ContextService, MessageService, ResearchService, ThreadService } from "@aqsha/services";
 import { SendQuotaService } from "@aqsha/services/quota";
 import { Elysia, t } from "elysia";
 import { getDb } from "../clients/db";
@@ -25,6 +25,27 @@ export const threads = new Elysia({ prefix: "/threads" })
       return SendQuotaService.getSendStatus(db, { ownerUserId, ownerEmail: email });
     },
     { auth: true },
+  )
+  // Hydrate konteks `@mention` (Slice 6.6) — resolve workspace/paper yang di-pin
+  // composer → catatan ringkas + id tervalidasi. Per-user (bukan per-thread):
+  // ownership tiap id di-cek di ContextService. Static route → di atas `/:id`.
+  .post(
+    "/context/hydrate",
+    async ({ ownerUserId, body }) => {
+      const { db } = getDb();
+      return ContextService.hydrate(db, {
+        ownerUserId,
+        workspaceIds: body.workspaceIds,
+        artifactIds: body.artifactIds,
+      });
+    },
+    {
+      auth: true,
+      body: t.Object({
+        workspaceIds: t.Array(t.String()),
+        artifactIds: t.Array(t.String()),
+      }),
+    },
   )
   .get(
     "/",

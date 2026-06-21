@@ -15,12 +15,24 @@ export default defineTool({
   inputSchema: z.object({
     query: z.string().min(1).max(500).describe("Apa yang dicari di dalam dokumen."),
     limit: z.number().int().min(1).max(20).optional().describe("Jumlah cuplikan (default 6)."),
+    workspaceId: z
+      .string()
+      .optional()
+      .describe(
+        "Batasi pencarian ke satu workspace yang disematkan pengguna (workspaceId dari catatan konteks). Kosongkan untuk mencari dokumen yang dilampirkan ke percakapan.",
+      ),
   }),
   async execute(input, ctx) {
     const ownerUserId = callerId(ctx);
+    // Bila user menyematkan workspace (@mention), model mengoper workspaceId-nya →
+    // RAG di-scope ke workspace itu; jika tidak, default ke dokumen thread ini.
+    // ponytail: scoping bergantung model mengoper id dari catatan clientContext;
+    // upgrade ke default per-turn bila eve mengekspos clientContext ke ToolContext.
     const matches = await RagService.searchThreadDocuments(getServiceDb(), {
       ownerUserId,
-      threadId: ctx.session.id,
+      ...(input.workspaceId
+        ? { workspaceId: input.workspaceId }
+        : { threadId: ctx.session.id }),
       query: input.query,
       limit: input.limit,
     });

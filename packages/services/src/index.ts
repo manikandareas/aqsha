@@ -8,6 +8,7 @@ export { MessageService, ThreadService } from "./chat";
 export { InterestService } from "./interest.service";
 export { DEFAULT_WORKSPACE_NAME, WorkspaceService } from "./workspace.service";
 export { FolderService } from "./folder.service";
+export { ContextService, type HydratedContext } from "./context.service";
 export {
   type CurrentUserIdentity,
   ensureUserWithin,

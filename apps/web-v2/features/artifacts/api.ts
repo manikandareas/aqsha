@@ -33,6 +33,21 @@ export function useArtifacts(workspaceId: string, folderId?: string | null) {
   });
 }
 
+/**
+ * Artifact aktif workspace untuk `@mention` context picker (Slice 6.6) — top-50,
+ * non-paginated. `enabled` di-drive UI (hanya fetch saat user men-drill ke
+ * workspace di palette).
+ */
+export function useContextPickerArtifacts(workspaceId: string | null) {
+  const api = useApi();
+  return useQuery({
+    queryKey: ["artifacts", "context-picker", workspaceId] as const,
+    enabled: workspaceId !== null,
+    queryFn: async () =>
+      unwrap(await api.workspaces({ id: workspaceId ?? "" }).artifacts["context-picker"].get()),
+  });
+}
+
 /** Detail artifact (null bila tak ditemukan / bukan milik user). */
 export function useArtifact(id: string) {
   const api = useApi();

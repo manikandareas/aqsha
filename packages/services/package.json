@@ -59,6 +59,13 @@
       "node": "./dist/workspace.service.js",
       "import": "./dist/workspace.service.js",
       "default": "./dist/workspace.service.js"
+    },
+    "./context": {
+      "types": "./src/context.service.ts",
+      "bun": "./src/context.service.ts",
+      "node": "./dist/context.service.js",
+      "import": "./dist/context.service.js",
+      "default": "./dist/context.service.js"
     }
   },
   "scripts": {

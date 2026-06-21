@@ -70,7 +70,12 @@ export function NewChat() {
       </div>
       <div className="p-4 pt-0">
         <Composer
-          onSend={(text) => void agent.send({ message: text })}
+          onSend={(payload) =>
+            void agent.send({
+              message: payload.text,
+              ...(payload.clientContext ? { clientContext: payload.clientContext } : {}),
+            })
+          }
           onStop={() => agent.stop()}
           busy={busy}
           disabled={blocked}

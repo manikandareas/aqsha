@@ -21,6 +21,7 @@ export default defineConfig({
     "src/research/index.ts",
     "src/artifact.service.ts",
     "src/workspace.service.ts",
+    "src/context.service.ts",
   ],
   outDir: "dist",
   format: ["esm"],
