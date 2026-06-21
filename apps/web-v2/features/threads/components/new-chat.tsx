@@ -54,7 +54,12 @@ export function NewChat() {
   return (
     <div className="mx-auto flex h-full w-full max-w-3xl flex-col">
       <div className="flex-1 overflow-y-auto p-4">
-        <MessageList messages={messages} pending={busy} />
+        <MessageList
+          messages={messages}
+          pending={busy}
+          busy={busy}
+          onRespond={(r) => void agent.send({ inputResponses: [r] })}
+        />
         {sessionId ? <SourcesPanel threadId={sessionId} enabled={!busy} /> : null}
         {agent.error ? (
           // eve `agent.error` = `Error`/`ClientError` biasa (bukan error Eden ber-`.value`),

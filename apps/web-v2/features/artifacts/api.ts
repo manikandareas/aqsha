@@ -180,6 +180,26 @@ export function useUploadArtifact(workspaceId: string) {
   });
 }
 
+/**
+ * Save-to-Workspace untuk artifact HEADLESS (dibuat agen, `workspaceId=null`) — Slice 6.5.
+ * Beda dari `useMoveArtifact` (move artifact yang sudah ter-file): di sini parent
+ * `workspaceId` masih null, jadi pakai endpoint `linkToWorkspace` terpisah.
+ */
+export function useLinkArtifactToWorkspace() {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string; workspaceId: string }) =>
+      unwrap(
+        await api.artifacts({ id: input.id })["link-workspace"].post({
+          workspaceId: input.workspaceId,
+        }),
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.artifacts.all }),
+    onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal menyimpan ke workspace.")),
+  });
+}
+
 export function useDeleteArtifact() {
   const api = useApi();
   const qc = useQueryClient();

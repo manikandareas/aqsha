@@ -204,4 +204,26 @@ export const artifacts = new Elysia()
       return ArtifactService.remove(db, { ownerUserId, artifactId: params.id });
     },
     { auth: true },
+  )
+  // ----- Save-to-Workspace untuk artifact headless (agen, workspaceId=null) — Slice 6.5 -----
+  .post(
+    "/artifacts/:id/link-workspace",
+    ({ ownerUserId, email, params, body }) => {
+      const { db } = getDb();
+      return ArtifactService.linkToWorkspace(db, {
+        ownerUserId,
+        ownerEmail: email,
+        artifactId: params.id,
+        workspaceId: body.workspaceId,
+        folderId: body.folderId,
+      });
+    },
+    {
+      auth: true,
+      rateLimit: "artifacts:create",
+      body: t.Object({
+        workspaceId: t.String(),
+        folderId: t.Optional(t.String()),
+      }),
+    },
   );

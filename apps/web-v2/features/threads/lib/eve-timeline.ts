@@ -36,11 +36,53 @@ export type ToolRowModel = {
   rows: ToolRow[];
 };
 
+/** Opsi terpilih dalam satu input-request HITL (eve). */
+export type HitlOption = {
+  id: string;
+  label: string;
+  style?: "danger" | "default" | "primary";
+};
+
+/**
+ * Model presentasi satu kartu HITL (Slice 6.5) dari `EveDynamicToolPart` ber-`inputRequest`.
+ * `display` memilih kontrol; `responded` true setelah user menjawab (part →
+ * `approval-responded`). `toolName`/`input` dipakai kartu khusus (mis. preview
+ * `propose_artifact`).
+ */
+export type HitlCardModel = {
+  toolCallId: string;
+  requestId: string;
+  toolName: string;
+  prompt: string;
+  display: "confirmation" | "select" | "text";
+  options: HitlOption[];
+  allowFreeform: boolean;
+  /** Input mentah tool (untuk preview, mis. judul+markdown propose_artifact). */
+  input: unknown;
+  /** True bila sudah dijawab/diputuskan (kartu jadi read-only). */
+  responded: boolean;
+  /** Untuk approval: hasil keputusan setelah dijawab. */
+  approved?: boolean;
+  /** Jawaban terkirim (select/text) bila ada. */
+  answeredOptionId?: string;
+  answeredText?: string;
+};
+
+/** Model kartu artifact (Slice 6.5) dari output `propose_artifact` yang sukses. */
+export type ArtifactCardModel = {
+  toolCallId: string;
+  artifactId: string;
+  title: string;
+  artifactType: string;
+};
+
 /** Satu bagian terurut dalam timeline satu pesan asisten. */
 export type TimelinePart =
   | { kind: "text"; id: string; text: string; streaming: boolean }
   | { kind: "reasoning"; id: string; text: string; thinking: boolean }
-  | { kind: "tool"; id: string; model: ToolRowModel };
+  | { kind: "tool"; id: string; model: ToolRowModel }
+  | { kind: "hitl"; id: string; model: HitlCardModel }
+  | { kind: "artifact"; id: string; model: ArtifactCardModel };
 
 /** Pesan ter-normalisasi untuk renderer (user = bubble; assistant = parts terurut). */
 export type TimelineMessage = {
@@ -65,11 +107,63 @@ function mapPart(part: EveMessagePart, id: string): TimelinePart | null {
       if (!text.trim()) return null;
       return { kind: "reasoning", id, text, thinking: part.state === "streaming" };
     }
-    case "dynamic-tool":
+    case "dynamic-tool": {
+      // HITL park (Slice 6.5): part ber-`inputRequest` (approval ATAU ask_question) →
+      // kartu interaktif, BUKAN tool-row. Klasifikasi by `inputRequest`/`state`, BUKAN
+      // daftar nama tool (set V1 obsolete).
+      const hitl = hitlCardModel(part);
+      if (hitl) return { kind: "hitl", id: part.toolCallId, model: hitl };
+      // propose_artifact sukses → kartu artifact clickable + Save-to-workspace.
+      const artifact = artifactCardModel(part);
+      if (artifact) return { kind: "artifact", id: part.toolCallId, model: artifact };
       return { kind: "tool", id: part.toolCallId, model: toolPartModel(part) };
+    }
     default:
       return null; // step-start
   }
+}
+
+// ── HITL + artifact card model ─────────────────────────────────────────────────
+
+/** Kartu HITL bila part di state approval/answer ber-`inputRequest`, else null. */
+export function hitlCardModel(part: EveDynamicToolPart): HitlCardModel | null {
+  if (part.state !== "approval-requested" && part.state !== "approval-responded") return null;
+  const req = part.toolMetadata?.eve?.inputRequest;
+  if (!req) return null;
+  const inputResponse = part.toolMetadata?.eve?.inputResponse;
+  return {
+    toolCallId: part.toolCallId,
+    requestId: req.requestId,
+    toolName: part.toolMetadata?.eve?.name ?? part.toolName,
+    prompt: req.prompt,
+    display: req.display ?? "confirmation",
+    options: (req.options ?? []).map((o) => ({ id: o.id, label: o.label, style: o.style })),
+    allowFreeform: Boolean(req.allowFreeform),
+    input: part.input,
+    responded: part.state === "approval-responded",
+    approved: part.state === "approval-responded" ? part.approval?.approved : undefined,
+    answeredOptionId: inputResponse?.optionId,
+    answeredText: inputResponse?.text,
+  };
+}
+
+const ARTIFACT_TOOL_NAMES = new Set(["propose_artifact", "execute_artifact"]);
+
+/** Kartu artifact bila part = `propose_artifact` sukses ber-output {artifactId}, else null. */
+export function artifactCardModel(part: EveDynamicToolPart): ArtifactCardModel | null {
+  if (part.state !== "output-available") return null;
+  const name = part.toolMetadata?.eve?.name ?? part.toolName;
+  if (!ARTIFACT_TOOL_NAMES.has(name)) return null;
+  const out = part.output;
+  if (!out || typeof out !== "object") return null;
+  const o = out as Record<string, unknown>;
+  if (typeof o.artifactId !== "string") return null;
+  return {
+    toolCallId: part.toolCallId,
+    artifactId: o.artifactId,
+    title: typeof o.title === "string" ? o.title : "Dokumen",
+    artifactType: typeof o.artifactType === "string" ? o.artifactType : "markdown",
+  };
 }
 
 /** Map `EveMessage[]` (live, dari `agent.data.messages`) → timeline ter-normalisasi. */

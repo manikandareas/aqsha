@@ -6,6 +6,8 @@ import { Response } from "@/components/ai-elements/response";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { cn } from "@/lib/utils";
 import type { TimelineMessage, TimelinePart } from "../lib/eve-timeline";
+import { ChatArtifactCard } from "./chat-artifact-card";
+import { HitlCard, type HitlResponse } from "./hitl-card";
 import { ToolRow } from "./tool-row";
 
 /**
@@ -17,9 +19,15 @@ import { ToolRow } from "./tool-row";
 export function MessageList({
   messages,
   pending,
+  busy,
+  onRespond,
 }: {
   messages: TimelineMessage[];
   pending?: boolean;
+  /** Turn in-flight → matikan interaksi kartu HITL. */
+  busy?: boolean;
+  /** Jawab HITL native eve (`agent.send({ inputResponses })`). Absen = history read-only. */
+  onRespond?: (response: HitlResponse) => void;
 }) {
   if (messages.length === 0 && !pending) {
     return (
@@ -42,7 +50,7 @@ export function MessageList({
         m.role === "user" ? (
           <UserBubble key={m.id} parts={m.parts} />
         ) : (
-          <AssistantTurn key={m.id} message={m} />
+          <AssistantTurn key={m.id} message={m} busy={busy} onRespond={onRespond} />
         ),
       )}
       {showTyping ? <TypingRow /> : null}
@@ -73,7 +81,15 @@ function AstraAvatar() {
   );
 }
 
-function AssistantTurn({ message }: { message: TimelineMessage }) {
+function AssistantTurn({
+  message,
+  busy,
+  onRespond,
+}: {
+  message: TimelineMessage;
+  busy?: boolean;
+  onRespond?: (response: HitlResponse) => void;
+}) {
   const hasText = message.parts.some((p) => p.kind === "text");
   const empty = message.parts.length === 0;
   return (
@@ -81,7 +97,7 @@ function AssistantTurn({ message }: { message: TimelineMessage }) {
       <AstraAvatar />
       <div className="flex min-w-0 flex-1 flex-col gap-2.5">
         {message.parts.map((part) => (
-          <PartView key={part.id} part={part} />
+          <PartView key={part.id} part={part} busy={busy} onRespond={onRespond} />
         ))}
         {message.streaming && empty ? <TypingDots /> : null}
         {message.streaming && !empty && !hasText ? (
@@ -94,7 +110,15 @@ function AssistantTurn({ message }: { message: TimelineMessage }) {
   );
 }
 
-function PartView({ part }: { part: TimelinePart }) {
+function PartView({
+  part,
+  busy,
+  onRespond,
+}: {
+  part: TimelinePart;
+  busy?: boolean;
+  onRespond?: (response: HitlResponse) => void;
+}) {
   switch (part.kind) {
     case "reasoning":
       return <Reasoning text={part.text} thinking={part.thinking} />;
@@ -102,6 +126,17 @@ function PartView({ part }: { part: TimelinePart }) {
       return <ToolRow model={part.model} />;
     case "text":
       return <Response text={part.text} streaming={part.streaming} />;
+    case "hitl":
+      // History (no onRespond) → kartu read-only; jawaban hanya saat live.
+      return (
+        <HitlCard
+          model={part.model}
+          disabled={busy || !onRespond}
+          onRespond={onRespond ?? (() => {})}
+        />
+      );
+    case "artifact":
+      return <ChatArtifactCard model={part.model} />;
     default:
       return null;
   }
