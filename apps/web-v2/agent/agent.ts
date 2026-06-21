@@ -18,4 +18,12 @@ const liteModelId = process.env.AQSHA_LITE_MODEL ?? "gpt-4o";
 
 export default defineAgent({
   model: openai.chat(liteModelId),
+  // D-E (Slice 6.2): proses eve (Node v25) meng-`import` kode service ASLI in-process.
+  // `externalDependencies` membuat eve (1) MEMBIARKAN impor ini external saat meng-compile
+  // modul authored (tools/channels/hooks) — tak di-inline Rolldown → dep transitif tak
+  // ikut bundle; (2) men-trace paket ke output build hosted (`server/node_modules`). Node
+  // me-resolve `@aqsha/services`/`@aqsha/db` via exports condition `node` → `dist/*.js`.
+  build: {
+    externalDependencies: ["@aqsha/services", "@aqsha/db"],
+  },
 });

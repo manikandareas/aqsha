@@ -1,6 +1,8 @@
+import { SendQuotaService } from "@aqsha/services/quota";
 import { ForbiddenError } from "eve/channels/auth";
 import { eveChannel } from "eve/channels/eve";
 import { clerkAuth } from "../lib/clerk";
+import { getServiceDb } from "../lib/db";
 import { checkOwnership } from "../lib/store";
 
 /**
@@ -41,6 +43,17 @@ export default eveChannel({
         throw new ForbiddenError({ message: "Bukan percakapan kamu." });
       }
     }
+
+    // Backstop billing/cooldown OTORITATIF (Slice 6.2). Pre-check ramah ada di composer
+    // (`GET /threads/send-status`); ini menutup celah POST langsung ke channel. Blok →
+    // `return null` (terima-tanpa-dispatch, ~204) — BUKAN throw: `onMessage` tak bisa
+    // memetakan ke 402/429 (throw → 500 generik), dan turn tetap TIDAK jalan.
+    const email = caller.attributes?.email;
+    const quota = await SendQuotaService.check(getServiceDb(), {
+      ownerUserId: caller.principalId,
+      ownerEmail: typeof email === "string" ? email : null,
+    });
+    if (!quota.ok) return null;
 
     return { auth: caller };
   },

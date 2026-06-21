@@ -1,4 +1,6 @@
+import { BillingService } from "@aqsha/services/billing";
 import { defineHook, type HookContext } from "eve/hooks";
+import { getServiceDb } from "../lib/db";
 import {
   ensureThread,
   recordAssistantMessage,
@@ -20,7 +22,9 @@ import {
  *   (`on conflict` di `agent/lib/store.ts`).
  * - Handler WAJIB try/catch: hook yang melempar → `turn.failed`/`session.failed`. Kegagalan
  *   DB tak boleh meracuni turn.
- * - usage/billing (`step.completed`) = Slice 6.2 (belum di sini).
+ * - usage/billing: `step.completed` → `consumeCredits` (Slice 6.2). Debit per model-call,
+ *   IDEMPOTEN via `idempotencyKey = sessionId:turnId:stepIndex` (step ter-interrupt RE-RUN
+ *   saat resume tak double-debit, A9). Di-`swallow` — kegagalan billing tak boleh meracuni turn.
  */
 
 const AGENT_KIND = "lite" as const; // D-B: P6 ship satu agent (Lite).
@@ -83,6 +87,27 @@ export default defineHook({
           text,
         }),
       );
+    },
+
+    async "step.completed"(event, ctx) {
+      const ownerUserId = owner(ctx);
+      if (!ownerUserId) return;
+      const inputTokens = event.data.usage?.inputTokens ?? 0;
+      const outputTokens = event.data.usage?.outputTokens ?? 0;
+      await swallow("step.completed", async () => {
+        await BillingService.consumeCredits(getServiceDb(), {
+          ownerUserId,
+          feature: "normal_chat", // D-B: P6 Lite. (Pro → pro_chat saat agent Pro landing.)
+          provider: "openai", // agent pakai @ai-sdk/openai (lihat agent/agent.ts).
+          agentKind: AGENT_KIND,
+          threadId: ctx.session.id,
+          inputTokens,
+          outputTokens,
+          totalTokens: inputTokens + outputTokens,
+          // A9 idempotency: sessionId:turnId:stepIndex unik per model-call durable.
+          idempotencyKey: `${ctx.session.id}:${event.data.turnId}:${event.data.stepIndex}`,
+        });
+      });
     },
 
     async "turn.completed"(_event, ctx) {

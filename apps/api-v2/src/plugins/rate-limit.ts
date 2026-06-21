@@ -1,5 +1,5 @@
+import { getRateLimiter, type RateLimitRule } from "@aqsha/services/quota";
 import { Elysia } from "elysia";
-import { getRateLimiter, type RateLimitRule } from "../lib/rate-limits";
 
 /**
  * Macro rate-limit Redis reusable. Route opt-in via `{ auth: true, rateLimit: "<rule>" }`

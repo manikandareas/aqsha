@@ -1,9 +1,27 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useSendStatus } from "../api";
 import { useAstraAgent } from "../lib/use-astra-agent";
 import { type ChatBubble, MessageList } from "./message-list";
-import { Composer } from "./composer";
+import { type ComposerNotice, Composer } from "./composer";
+
+/** Map status kirim terblok → notice composer (pesan ramah + retryAt untuk countdown). */
+function blockedNotice(status: ReturnType<typeof useSendStatus>["data"]): ComposerNotice | null {
+  if (!status || status.canSend) return null;
+  switch (status.reason) {
+    case "cooldown":
+      return { message: "Terlalu cepat. Tunggu sebentar sebelum mengirim lagi.", retryAt: status.retryAt };
+    case "quota_exceeded":
+      return { message: "Kredit chat bulan ini sudah habis. Tingkatkan paket atau tunggu reset." };
+    case "subscription_required":
+      return { message: "Fitur ini butuh paket berbayar. Tingkatkan paket untuk melanjutkan." };
+    case "billing_inactive":
+      return { message: "Langganan tidak aktif. Perbarui pembayaran untuk melanjutkan." };
+    default:
+      return { message: "Pengiriman sedang tidak tersedia." };
+  }
+}
 
 /**
  * Surface chat BARU (Slice 6.1) — LIVE-only via `useAstraAgent` (stream eve). Saat turn
@@ -12,7 +30,10 @@ import { Composer } from "./composer";
  */
 export function NewChat() {
   const { agent } = useAstraAgent();
+  const sendStatus = useSendStatus();
   const busy = agent.status === "submitted" || agent.status === "streaming";
+  const notice = blockedNotice(sendStatus.data);
+  const blocked = notice !== null;
 
   const messages: ChatBubble[] = agent.data.messages.map((m) => ({
     id: m.id,
@@ -45,6 +66,8 @@ export function NewChat() {
           onSend={(text) => void agent.send({ message: text })}
           onStop={() => agent.stop()}
           busy={busy}
+          disabled={blocked}
+          notice={notice}
         />
       </div>
     </div>

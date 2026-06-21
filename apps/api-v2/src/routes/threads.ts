@@ -1,4 +1,5 @@
 import { MessageService, ThreadService } from "@aqsha/services";
+import { SendQuotaService } from "@aqsha/services/quota";
 import { Elysia, t } from "elysia";
 import { getDb } from "../clients/db";
 import { authMacro } from "../plugins/auth";
@@ -14,6 +15,17 @@ import { authMacro } from "../plugins/auth";
  */
 export const threads = new Elysia({ prefix: "/threads" })
   .use(authMacro)
+  // Pre-check kirim (Slice 6.2) — non-consuming preview entitlement + cooldown untuk UX
+  // composer. Backstop otoritatif tetap di `onMessage` proses eve. Static route → router
+  // Elysia memprioritaskan di atas `/:id`.
+  .get(
+    "/send-status",
+    ({ ownerUserId, email }) => {
+      const { db } = getDb();
+      return SendQuotaService.getSendStatus(db, { ownerUserId, ownerEmail: email });
+    },
+    { auth: true },
+  )
   .get(
     "/",
     ({ ownerUserId, query }) => {

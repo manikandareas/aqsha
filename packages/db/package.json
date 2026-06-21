@@ -4,10 +4,24 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./schema": "./src/schema/index.ts"
+    ".": {
+      "types": "./src/index.ts",
+      "bun": "./src/index.ts",
+      "node": "./dist/index.js",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./schema": {
+      "types": "./src/schema/index.ts",
+      "bun": "./src/schema/index.ts",
+      "node": "./dist/schema/index.js",
+      "import": "./dist/schema/index.js",
+      "default": "./dist/schema/index.js"
+    }
   },
   "scripts": {
+    "build": "tsup",
+    "build:watch": "tsup --watch",
     "generate": "drizzle-kit generate",
     "migrate": "bun run src/migrate.ts",
     "studio": "drizzle-kit studio",
@@ -21,6 +35,7 @@
   "devDependencies": {
     "bun-types": "^1.3.13",
     "drizzle-kit": "^0.31.5",
+    "tsup": "^8.5.0",
     "typescript": "^6.0.3"
   }
 }

@@ -51,6 +51,20 @@ export function useThreadMessages(id: string, enabled = true) {
   });
 }
 
+/**
+ * Status kirim (Slice 6.2) — pre-check UX-ramah: entitlement preview + cooldown rate-limit,
+ * non-consuming. Backstop otoritatif tetap di `onMessage` proses eve. Tipe hasil di-infer
+ * Eden dari route `GET /threads/send-status` (tanpa impor `@aqsha/services` di client).
+ */
+export function useSendStatus() {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.threads.sendStatus(),
+    staleTime: 10_000,
+    queryFn: async () => unwrap(await api.threads["send-status"].get()),
+  });
+}
+
 export function useRenameThread() {
   const api = useApi();
   const qc = useQueryClient();
