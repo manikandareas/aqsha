@@ -1,0 +1,138 @@
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { createDb } from "@aqsha/db";
+
+// Mock Clerk token verification: `tok_<sub>` → { sub, email:null }.
+mock.module("../src/clients/clerkToken", () => ({
+  verifyClerkToken: async (token: string) =>
+    token.startsWith("tok_") ? { sub: token.slice(4), email: null } : null,
+}));
+
+const DATABASE_URL = process.env.DATABASE_URL;
+const itest = DATABASE_URL ? test : test.skip;
+
+// Webhook tests baca POLAR_WEBHOOK_SECRET saat call → kontrol di sini.
+delete process.env.POLAR_WEBHOOK_SECRET;
+
+const suffix = Math.floor(Math.random() * 1e9);
+const OWNER = `itbillapi_${suffix}`;
+
+const { app } = await import("../src/index");
+
+const tok = (owner: string) => `tok_${owner}`;
+function req(method: string, path: string, token?: string, body?: unknown) {
+  const headers: Record<string, string> = {};
+  if (token) headers.authorization = `Bearer ${token}`;
+  if (body !== undefined) headers["content-type"] = "application/json";
+  return app.handle(
+    new Request(`http://localhost${path}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    }),
+  );
+}
+const get = (path: string, token?: string) => req("GET", path, token);
+// biome-ignore lint/suspicious/noExplicitAny: test reads dynamic JSON bodies
+function readJson(res: Response): Promise<any> {
+  return res.json();
+}
+
+async function cleanup() {
+  if (!DATABASE_URL) return;
+  const { client } = createDb(DATABASE_URL);
+  const like = "itbillapi_%";
+  await client`delete from provider_usage_ledger where owner_user_id like ${like}`;
+  await client`delete from usage_daily_rollup where owner_user_id like ${like}`;
+  await client`delete from billing_credit_periods where owner_user_id like ${like}`;
+  await client`delete from billing_subscriptions where owner_user_id like ${like}`;
+  await client`delete from workspaces where owner_user_id like ${like}`;
+  await client`delete from users where owner_user_id like ${like}`;
+  await client.end();
+}
+
+beforeAll(cleanup);
+afterAll(cleanup);
+
+describe("api-v2 billing — plans (public)", () => {
+  test("GET /billing/plans tanpa auth → 200, 3 plan", async () => {
+    const res = await get("/billing/plans");
+    expect(res.status).toBe(200);
+    const plans = await readJson(res);
+    expect(plans.map((p: { key: string }) => p.key)).toEqual(["free", "starter", "plus"]);
+  });
+});
+
+describe("api-v2 billing — auth gate", () => {
+  test("GET /billing/current tanpa Bearer → 401", async () => {
+    const res = await get("/billing/current");
+    expect(res.status).toBe(401);
+    expect((await readJson(res)).code).toBe("unauthenticated");
+  });
+});
+
+describe("api-v2 billing — read surface (free user)", () => {
+  itest("GET /billing/current → free, limit 50", async () => {
+    await req("POST", "/users/me/sync", tok(OWNER));
+    const res = await get("/billing/current", tok(OWNER));
+    expect(res.status).toBe(200);
+    const body = await readJson(res);
+    expect(body.planKey).toBe("free");
+    expect(body.creditsLimit).toBe(50);
+    expect(body.creditsRemaining).toBe(50);
+  });
+
+  itest("GET /billing/usage/activity?days=7 → 7 zero-filled days", async () => {
+    const res = await get("/billing/usage/activity?days=7", tok(OWNER));
+    expect(res.status).toBe(200);
+    const days = await readJson(res);
+    expect(days.length).toBe(7);
+    expect(days.every((d: { eventCount: number }) => d.eventCount === 0)).toBe(true);
+  });
+
+  itest("GET /billing/usage/current-period → free", async () => {
+    const res = await get("/billing/usage/current-period", tok(OWNER));
+    expect(res.status).toBe(200);
+    expect((await readJson(res)).planKey).toBe("free");
+  });
+});
+
+describe("api-v2 billing — checkout/portal gates", () => {
+  itest("POST /billing/checkout tanpa product env → 400 billing_product_not_configured", async () => {
+    const res = await req("POST", "/billing/checkout", tok(OWNER), {
+      productKey: "starterMonthly",
+      origin: "http://localhost:3000",
+      successUrl: "http://localhost:3000/app/settings",
+    });
+    expect(res.status).toBe(400);
+    expect((await readJson(res)).code).toBe("billing_product_not_configured");
+  });
+
+  itest("POST /billing/portal tanpa email → 400 billing_email_required", async () => {
+    const res = await req("POST", "/billing/portal", tok(OWNER), {});
+    expect(res.status).toBe(400);
+    expect((await readJson(res)).code).toBe("billing_email_required");
+  });
+});
+
+describe("api-v2 billing — webhook polar", () => {
+  test("POST /webhooks/polar tanpa secret → 500 billing_webhook_secret_missing", async () => {
+    delete process.env.POLAR_WEBHOOK_SECRET;
+    const res = await req("POST", "/webhooks/polar", undefined, { type: "subscription.created", data: {} });
+    expect(res.status).toBe(500);
+    expect((await readJson(res)).code).toBe("billing_webhook_secret_missing");
+  });
+
+  test("POST /webhooks/polar signature invalid → 400", async () => {
+    process.env.POLAR_WEBHOOK_SECRET = "whsec_test_secret";
+    try {
+      const res = await req("POST", "/webhooks/polar", undefined, {
+        type: "subscription.created",
+        data: { id: "sub_x" },
+      });
+      expect(res.status).toBe(400);
+      expect((await readJson(res)).code).toBe("billing_webhook_signature_invalid");
+    } finally {
+      delete process.env.POLAR_WEBHOOK_SECRET;
+    }
+  });
+});

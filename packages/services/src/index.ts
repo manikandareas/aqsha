@@ -13,15 +13,57 @@ export {
   OnboardingService,
 } from "./onboarding.service";
 
-// Plan catalog + resolver (stub P2; billing penuh P5).
+// Plan catalog + pricing SSOT (Fase 5).
 export {
+  type BillingInterval,
+  type BillingStatus,
+  billingStatusAllowsUsage,
+  type CreditFeature,
+  currentMonthPeriod,
+  estimateCredits,
+  estimateProviderCostCents,
+  featureForUsage,
+  intervalForProductKey,
+  isAdminEmail,
+  isAdminOwnerUserId,
+  isPlanAtLeast,
+  normalizeBillingStatus,
+  type PaidPlanKey,
   PLAN_CATALOG,
+  PLAN_ORDER,
   type PlanDefinition,
   type PlanKey,
+  planForProductKey,
+  PRODUCT_CATALOG,
+  PRODUCT_KEYS,
+  type ProductKey,
+  PUBLIC_PLAN_KEYS,
   type PublicPlanKey,
+  requiredPlanForFeature,
   resolvePlanKey,
   UNLIMITED,
 } from "./plan";
+
+// Billing service (Fase 5) — entitlement + usage write-path + Polar surface.
+export {
+  BillingService,
+  type BillingSnapshot,
+  type ConsumeCreditsArgs,
+  type CurrentBillingResponse,
+  type CurrentPeriodSummary,
+  type EntitlementResult,
+  type EntitlementSnapshot,
+  type PlanListItem,
+  type SyncSubscriptionPayload,
+  type UsageDay,
+} from "./billing.service";
+export {
+  getEntitlementSnapshot,
+  resolveAdminOverride,
+  resolveEffectivePlanKey,
+} from "./billing/snapshot";
+export { evaluateGate } from "./billing/period";
+export { configuredProductId, PolarClient } from "./clients/polar";
 
 // Artifacts (P3) — pure helpers + konstanta + capacity gate + storage/RAG/extract.
 export * from "./artifacts/model";

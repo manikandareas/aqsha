@@ -5,7 +5,9 @@ import {
   ArtifactRepo,
   ArtifactUrlRepo,
   AppError,
+  BillingRepo,
   FolderRepo,
+  UserRepo,
   WorkspaceRepo,
 } from "@aqsha/db";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
@@ -123,6 +125,10 @@ beforeEach(() => {
   spyOn(ArtifactRepo, "update").mockResolvedValue();
   spyOn(ArtifactContentRepo, "insert").mockResolvedValue();
   spyOn(ArtifactContentRepo, "updateByArtifact").mockResolvedValue();
+  // P5: assertLibraryCapacity kini resolveEffectivePlanKey (db-aware) — stub billing reads.
+  spyOn(BillingRepo, "findAdminEntitlement").mockResolvedValue(null);
+  spyOn(BillingRepo, "findLatestSubscriptionByOwner").mockResolvedValue(null);
+  spyOn(UserRepo, "findByOwnerUserId").mockResolvedValue(null);
   delete process.env.AQSHA_ADMIN_OWNER_USER_IDS;
   delete process.env.AQSHA_ADMIN_EMAILS;
 });

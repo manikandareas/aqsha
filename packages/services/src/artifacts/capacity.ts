@@ -1,5 +1,6 @@
 import { ArtifactRepo, type DbOrTx, throwAppError } from "@aqsha/db";
-import { PLAN_CATALOG, resolvePlanKey, UNLIMITED } from "../plan";
+import { PLAN_CATALOG, UNLIMITED } from "../plan";
+import { resolveEffectivePlanKey } from "../billing/snapshot";
 
 /**
  * Gate kapasitas library per-plan (mirror `WorkspaceService.create`). Hitung artifact
@@ -11,7 +12,7 @@ export async function assertLibraryCapacity(
   ownerUserId: string,
   ownerEmail?: string | null,
 ): Promise<void> {
-  const plan = resolvePlanKey({ ownerUserId, email: ownerEmail });
+  const plan = await resolveEffectivePlanKey(db, { ownerUserId, email: ownerEmail });
   const limit = PLAN_CATALOG[plan].libraryItemLimit;
   if (limit === UNLIMITED) return;
   const count = await ArtifactRepo.countActiveByOwner(db, ownerUserId, limit);

@@ -1,7 +1,7 @@
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { Button } from "@aqsha/ui/components/button";
-import { CompassIcon, FolderIcon } from "@aqsha/ui/icons";
+import { CompassIcon, FolderIcon, SettingsIcon } from "@aqsha/ui/icons";
 import { HomeExploreBento } from "@/features/discovery/components/home-explore-bento";
 import { getServerApi } from "@/lib/api-server";
 
@@ -37,6 +37,12 @@ export default async function AppHome() {
           <Link href="/app/workspaces">
             <FolderIcon />
             Buka workspace
+          </Link>
+        </Button>
+        <Button asChild variant="outline">
+          <Link href="/app/settings">
+            <SettingsIcon />
+            Pengaturan
           </Link>
         </Button>
       </div>

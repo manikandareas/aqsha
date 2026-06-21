@@ -40,4 +40,13 @@ export const queryKeys = {
     search: (params: { query: string; fromYear: number | null }) =>
       ["papers", "search", params] as const,
   },
+  billing: {
+    all: ["billing"] as const,
+    current: () => ["billing", "current"] as const,
+    plans: () => ["billing", "plans"] as const,
+    usage: (days: number) => ["billing", "usage", days] as const,
+  },
+  user: {
+    me: () => ["user", "me"] as const,
+  },
 };

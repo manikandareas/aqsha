@@ -4,6 +4,7 @@ import { Elysia } from "elysia";
 import { errorPlugin } from "./lib/errors";
 import { admin } from "./routes/admin";
 import { artifacts } from "./routes/artifacts";
+import { billing } from "./routes/billing";
 import { feed } from "./routes/feed";
 import { folders } from "./routes/folders";
 import { health } from "./routes/health";
@@ -21,6 +22,7 @@ export const app = new Elysia()
   .use(users)
   .use(onboarding)
   .use(webhooks)
+  .use(billing)
   .use(workspaces)
   .use(folders)
   .use(artifacts)

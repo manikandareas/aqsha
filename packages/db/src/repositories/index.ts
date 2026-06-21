@@ -12,3 +12,4 @@ export * from "./artifactEmbeddingRepo";
 export * from "./feedRepo";
 export * from "./paperCacheRepo";
 export * from "./feedInteractionRepo";
+export * from "./billingRepo";

@@ -1,7 +1,8 @@
 import { throwAppError, type Workspace, WorkspaceRepo } from "@aqsha/db";
 import type { Db, DbOrTx } from "@aqsha/db";
 import { decodeKeysetCursor } from "@aqsha/db";
-import { PLAN_CATALOG, resolvePlanKey, UNLIMITED } from "./plan";
+import { PLAN_CATALOG, UNLIMITED } from "./plan";
+import { resolveEffectivePlanKey } from "./billing/snapshot";
 import { normalizeName } from "./workspaces/normalize";
 import { normalizeWorkspaceEmoji, workspaceEmojiForNewWorkspace } from "./workspaces/emoji";
 
@@ -101,7 +102,7 @@ export const WorkspaceService = {
     input: { ownerUserId: string; ownerEmail?: string | null; name: string },
   ): Promise<{ id: string }> {
     const name = normalizeName(input.name, WORKSPACE_NAME_LABEL);
-    const plan = resolvePlanKey({ ownerUserId: input.ownerUserId, email: input.ownerEmail });
+    const plan = await resolveEffectivePlanKey(db, { ownerUserId: input.ownerUserId, email: input.ownerEmail });
     const limit = PLAN_CATALOG[plan].workspaceLimit;
     const now = Date.now();
     const id = crypto.randomUUID();

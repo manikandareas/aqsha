@@ -6,9 +6,11 @@ import {
   ArtifactPaperMetadataRepo,
   ArtifactRepo,
   ArtifactUrlRepo,
+  BillingRepo,
   decodeKeysetCursor,
   encodeKeysetCursor,
   FolderRepo,
+  UserRepo,
   WorkspaceRepo,
 } from "@aqsha/db";
 import { FolderService } from "../src/folder.service";
@@ -77,6 +79,11 @@ beforeEach(() => {
   spyOn(ArtifactUrlRepo, "setWorkspaceByArtifactIds").mockResolvedValue(undefined);
   spyOn(ArtifactPaperMetadataRepo, "setWorkspaceByArtifactIds").mockResolvedValue(undefined);
   spyOn(ArtifactEmbeddingRepo, "setWorkspaceByArtifactIds").mockResolvedValue(undefined);
+  // P5: capacity check kini resolveEffectivePlanKey (db-aware) — stub billing reads
+  // ke "tanpa override/subscription" → plan jatuh ke env-admin allowlist atau 'free'.
+  spyOn(BillingRepo, "findAdminEntitlement").mockResolvedValue(null);
+  spyOn(BillingRepo, "findLatestSubscriptionByOwner").mockResolvedValue(null);
+  spyOn(UserRepo, "findByOwnerUserId").mockResolvedValue(null);
   delete process.env.AQSHA_ADMIN_OWNER_USER_IDS;
   delete process.env.AQSHA_ADMIN_EMAILS;
 });
