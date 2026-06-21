@@ -135,32 +135,30 @@ function QuestionCard({
         </ul>
       ) : null}
       {showText ? (
-        <form
-          className="mt-2 flex items-center gap-1"
-          onSubmit={(e) => {
-            e.preventDefault();
-            submitText();
-          }}
-        >
+        <div className="mt-2 flex items-center gap-1">
           <input
             type="text"
             value={text}
             disabled={disabled}
             onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submitText();
+            }}
             placeholder="Tulis jawaban…"
             aria-label="Jawaban"
             className="min-w-0 flex-1 rounded-md border border-border/60 bg-background px-2 py-1 text-[12px] outline-none focus-visible:ring-1 focus-visible:ring-ring"
           />
           <Button
-            type="submit"
+            type="button"
             size="sm"
             className="h-7 gap-0.5 px-2.5 text-[12px]"
             disabled={disabled || !trimmed}
+            onClick={submitText}
           >
             Kirim
             <CornerDownLeftIcon className="size-2.5 opacity-60" />
           </Button>
-        </form>
+        </div>
       ) : null}
     </div>
   );
