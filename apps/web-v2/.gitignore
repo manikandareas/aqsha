@@ -6,3 +6,10 @@
 next-env.d.ts
 *.tsbuildinfo
 .DS_Store
+
+# eve (Fase 6): build artifacts + dev-server registry + durable runtime state
+/.eve/
+/.workflow-data/
+/.output/
+/.nitro/
+/.vercel/
