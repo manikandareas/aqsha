@@ -1,7 +1,7 @@
 import { ArtifactService } from "@aqsha/services/artifact";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
-import { callerId, getServiceDb } from "../lib/tools";
+import { callerId, getServiceDb } from "../lib/tools.ts";
 
 /**
  * get_artifact (Slice 6.4) — metadata satu artifact (headless-tolerant). READ,

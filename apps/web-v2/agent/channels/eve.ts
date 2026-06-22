@@ -1,9 +1,9 @@
 import { SendQuotaService } from "@aqsha/services/quota";
 import { ForbiddenError } from "eve/channels/auth";
 import { eveChannel } from "eve/channels/eve";
-import { clerkAuth } from "../lib/clerk";
-import { getServiceDb } from "../lib/db";
-import { checkOwnership } from "../lib/store";
+import { clerkAuth } from "../lib/clerk.ts";
+import { getServiceDb } from "../lib/db.ts";
+import { checkOwnership } from "../lib/store.ts";
 
 /**
  * Channel eve — Slice 6.1: Clerk AuthFn + ownership gate. Menggantikan auth SPIKE 6.0

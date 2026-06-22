@@ -6,7 +6,7 @@ import {
   chargeExternalSearch,
   persistResearch,
   toResearchToolOutput,
-} from "../lib/tools";
+} from "../lib/tools.ts";
 
 /**
  * lookup_doi (Slice 6.4) — metadata satu DOI via Crossref. READ, tanpa approval.

@@ -2,7 +2,7 @@ import { BillingService } from "@aqsha/services/billing";
 import { ResearchService } from "@aqsha/services/research";
 import type { ResearchCandidate } from "@aqsha/services/research";
 import type { ToolContext } from "eve/tools";
-import { getServiceDb } from "./db";
+import { getServiceDb } from "./db.ts";
 
 /**
  * Helper bersama untuk eve tools Astra (Slice 6.4). DILETAKKAN di `agent/lib/`,

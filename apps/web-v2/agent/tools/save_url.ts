@@ -2,7 +2,7 @@ import { ArtifactService } from "@aqsha/services/artifact";
 import { defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
-import { callerEmail, callerId, getServiceDb } from "../lib/tools";
+import { callerEmail, callerId, getServiceDb } from "../lib/tools.ts";
 
 /**
  * save_url (Slice 6.5) — WRITE, `needsApproval: always()`. Simpan tautan ke salah satu

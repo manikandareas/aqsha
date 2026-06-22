@@ -2,7 +2,7 @@ import { WorkspaceService } from "@aqsha/services/workspace";
 import { defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
-import { callerId, getServiceDb } from "../lib/tools";
+import { callerId, getServiceDb } from "../lib/tools.ts";
 
 /**
  * rename_workspace (Slice 6.5) — WRITE, `needsApproval: always()`. Ubah nama workspace

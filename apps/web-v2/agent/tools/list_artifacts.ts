@@ -1,7 +1,7 @@
 import { ArtifactService } from "@aqsha/services/artifact";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
-import { callerId, getServiceDb } from "../lib/tools";
+import { callerId, getServiceDb } from "../lib/tools.ts";
 
 /**
  * list_artifacts (Slice 6.4) — daftar dokumen yang terlampir pada percakapan ini

@@ -1,13 +1,13 @@
 import { BillingService } from "@aqsha/services/billing";
 import { TitleService } from "@aqsha/services/chat";
 import { defineHook, type HookContext } from "eve/hooks";
-import { getServiceDb } from "../lib/db";
+import { getServiceDb } from "../lib/db.ts";
 import {
   ensureThread,
   recordAssistantMessage,
   recordUserMessage,
   setThreadStatus,
-} from "../lib/store";
+} from "../lib/store.ts";
 
 /**
  * Hook proyeksi (Slice 6.1) — OBSERVE-ONLY. eve menjalankan handler SETELAH event

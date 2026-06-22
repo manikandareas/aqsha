@@ -19,7 +19,7 @@
 | **6.6** | ⬜ plan | rich composer: token editor + `/slash` + `@context` |
 | **6.7** | ✅ done | thread attachment headless (commit pending owner) |
 | **6.8** | ✅ done (uncommitted) | title gen async + continue-thread live + recent switcher + cancel/retry + infinite-scroll (commands route SKIP) |
-| **6.9** | ⬜ plan | **testing terpusat** (service unit + eve integration + e2e + full `test:v2`) |
+| **6.9** | ✅ done (uncommitted) | **testing terpusat** — service-unit + DB-itest + manual checklist (owner scope); gate akhir hijau |
 
 **Testing:** per keputusan owner, **TIDAK** ada test per-slice. Gate tiap slice 6.2–6.8 = `eve build` hijau + `bun run typecheck` (semua workspace) + `bun run lint` (web-v2) + smoke manual opsional. Seluruh unit/integration/e2e dikerjakan di **Slice 6.9** setelah fitur lengkap.
 
@@ -229,6 +229,29 @@ Bake ke implementasi:
 - **e2e:** kirim→answer+timeline; jawab HITL lanjut; approve artifact→card→link ws; attach PDF; cooldown 429; delete thread; continue thread lama.
 - **Test-isolation:** prefix user test baru (FK-child tabel baru `research_sources`) di luar `user_itest_%` broad cleanup (lihat [[v2-phase5-implementation]] gotcha).
 - **Gate akhir:** `eve build` hijau; `bun run typecheck` (9 ws); `bun run lint`; full `bun run test:v2` (`--timeout 30000`); resume `.workflow-data` pasca-crash.
+
+**IMPLEMENTASI (done, uncommitted) — SCOPE: owner pilih "service-unit + manual checklist" (2026-06-22):**
+
+> Grounding: TIDAK ada harness eve test (eve = proses node v25 terpisah, nol test util) + TIDAK ada Playwright/infra e2e di repo. Membangun harness eve-process / Playwright dari nol = infra besar + rapuh; substansi service-side tiap item eve-integration sudah ter-cover service-unit. Owner memilih: tulis SEMUA service-unit (repo-fake / DB-itest) + e2e & eve-runtime → **checklist manual** (di bawah). Dua koreksi temuan: (1) **`execute_artifact` tak ada** — di-collapse jadi `propose_artifact` `needsApproval: always()`; invariant "butuh propose approved" sekarang DIJAMIN eve native, bukan kode service → tak ada yang di-unit-test. (2) **`consumeCredits` A9 idempotency SUDAH** ter-test di `billing.test.ts:198` → tak diulang.
+
+- **Service unit BARU:**
+  - `packages/services/test/astra-chat-services.test.ts` — `SendQuotaService.check` (4: ok / quota_exceeded propagate tanpa bakar cooldown / cooldown reason / store-error fail-open); `TitleService` (4: claim menang→enqueue jobId=threadId / claim kalah→no enqueue / generate ber-guard collapse+unquote / tanpa user-msg→no finalize); `ResearchService.searchWeb` Jina (4: cache HIT no-fetch / MISS→parse+cache 'ready' / provider !ok→sentinel `[]`+cache 'failed' / query kosong). **Leaf deps di-`spyOn` namespace (file-local), BUKAN `mock.module`** — `mock.module` global meng-clobber sibling (queue→artifact-service, external-cache/http→feed/paper tests); itu sebab collision pertama.
+  - `packages/services/test/rag-extract.test.ts` (extend) — `RagService.searchThreadDocuments` (3: embedding disabled→`[]` no-repo / query kosong→`[]` / match→skor `1-dist/2` clamp≥0 + limit clamp 20 + threadId scope). Ditaruh di sini karena embeddings sudah di-`mock.module` + RagService sudah di-import.
+  - `packages/services/test/artifact-service.test.ts` (extend) — `applyAgentAction` (born-headless: workspaceId null + source agent + threadId set + TANPA gate kapasitas) + `linkToWorkspace` (3: headless→patch+cascade 4 side-table / sudah ter-file→`artifact_already_linked` no-patch / cross-owner→`artifact_not_found`).
+  - `packages/db/test/chat-retrieval-repos.test.ts` (BARU, DB-itest, skip tanpa `DATABASE_URL`) — `ResearchSourceRepo.insertMany` idempoten (re-run thread+turn+locator sama→1 baris; locator beda→tambah) + `ArtifactEmbeddingRepo.searchSimilar` (scope threadId via JOIN→hanya thread itu; tanpa threadId→scope owner, urut distance). Vektor 1536-dim one-hot.
+- **Test-isolation:** file DB-itest pakai prefix `itchat_<suffix>` (DI LUAR broad cleanup `user_itest_%` per gotcha [[v2-phase5-implementation]]); cleanup hapus FK-child (research_sources, artifact_embeddings, artifacts, chat_threads) SEBELUM users.
+- **Checklist manual (eve-integration + e2e — owner jalankan saat smoke):**
+  1. Kirim pesan baru → balasan stream + timeline reasoning/tool muncul (live); reload → bubble+reasoning saja (D-F live-only).
+  2. Kredit turun 1×/turn di Settings/usage (debit `step.completed` idempoten — resume `.workflow-data` tak double-debit).
+  3. `onMessage`: thread milik user lain → drop (tak bisa lanjut); user di-blok billing/cooldown → composer notice + send ter-backstop (return null).
+  4. Cooldown: kirim cepat berturut → notice countdown (pre-check) + 429 backstop.
+  5. HITL `ask_question` → kartu inline → jawab (`inputResponses`) → turn lanjut; jawaban jadi bubble user nyata.
+  6. `propose_artifact` → kartu approval → approve → artifact card → FolderIcon Save-to-workspace (`link_to_workspace`) muncul di library; deny → tak materialize.
+  7. Attach PDF (thread eksis) → Astra baca via `search_thread_documents`/`list_artifacts`; promote chip → workspace.
+  8. `stop()` (tombol + Escape) saat streaming → turn berhenti sticky; retry → draft kembali, resend = turn baru tanpa re-charge.
+  9. Delete thread → hilang dari sidebar + pesan ikut terhapus (cascade). Continue thread lama → follow-up live di ThreadView (tanpa duplikat history).
+  10. Title async: turn pertama → judul muncul beberapa detik kemudian; rename manual tak ketimpa.
+- **Gate akhir (semua HIJAU):** `bun run typecheck` (10 ws) ✓; full `bun run test:v2` (db incl. 2 itest baru + chat-core + services 185 + api-v2 74, 0 fail) ✓; `bun run --filter @aqsha/web-v2 lint` ✓; `eve:build` ✓. Lint root 1 error PRE-EXISTING di `@aqsha/app` (V1) — diabaikan. NOL migrasi (test-only). Services src tak disentuh → dist tak perlu rebuild.
 
 ---
 

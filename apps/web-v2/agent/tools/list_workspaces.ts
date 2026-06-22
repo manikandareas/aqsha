@@ -1,7 +1,7 @@
 import { WorkspaceService } from "@aqsha/services/workspace";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
-import { callerId, getServiceDb } from "../lib/tools";
+import { callerId, getServiceDb } from "../lib/tools.ts";
 
 /**
  * list_workspaces (Slice 6.4) — daftar workspace milik pengguna. READ, tanpa

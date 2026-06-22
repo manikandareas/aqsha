@@ -6,7 +6,7 @@ import {
   chargeExternalSearch,
   persistResearch,
   toResearchToolOutput,
-} from "../lib/tools";
+} from "../lib/tools.ts";
 
 /**
  * search_arxiv (Slice 6.4) — pencarian preprint arXiv (Atom). READ, tanpa approval.

@@ -6,7 +6,7 @@ import {
   chargeExternalSearch,
   persistResearch,
   toResearchToolOutput,
-} from "../lib/tools";
+} from "../lib/tools.ts";
 
 /**
  * search_papers (Slice 6.4) — pencarian karya akademik lintas-penerbit via OpenAlex

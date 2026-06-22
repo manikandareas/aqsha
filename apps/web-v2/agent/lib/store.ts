@@ -4,7 +4,7 @@ import {
   ownershipVerdict,
   userMessageId,
 } from "@aqsha/chat-core";
-import { getSql } from "./db";
+import { getSql } from "./db.ts";
 
 /**
  * Store proyeksi chat untuk PROSES eve (Slice 6.1) — tulisan raw SQL via postgres.js.

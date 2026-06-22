@@ -2,7 +2,7 @@ import { ArtifactService } from "@aqsha/services/artifact";
 import { defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
-import { callerId, getServiceDb } from "../lib/tools";
+import { callerId, getServiceDb } from "../lib/tools.ts";
 
 /**
  * propose_artifact (Slice 6.5) — WRITE. Buat dokumen Markdown atas nama user.
