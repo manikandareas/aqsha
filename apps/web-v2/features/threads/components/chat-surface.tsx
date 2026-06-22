@@ -35,9 +35,12 @@ function blockedNotice(status: ReturnType<typeof useSendStatus>["data"]): Compos
 export function ChatSurface({
   initialSession,
   history,
+  initialText,
 }: {
   initialSession?: { sessionId: string; streamIndex: number };
   history?: TimelineMessage[];
+  /** Seed composer sekali (Fase 8: Tanya Astra / idea→/deep dari discovery). */
+  initialText?: string;
 }) {
   const { agent } = useAstraAgent(initialSession);
   const sendStatus = useSendStatus();
@@ -90,6 +93,7 @@ export function ChatSurface({
           notice={notice}
           threadId={sessionId}
           errorDraft={agent.error ? lastSent : null}
+          initialText={initialText}
         />
       </div>
     </div>

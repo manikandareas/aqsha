@@ -14,6 +14,8 @@ export type FeedClaim = {
   supportingPaperKeys?: string[];
 };
 
+export type FeedVerdict = FeedClaim["verdict"];
+
 export type FeedItem = {
   _id: string;
   kind: FeedKind;
@@ -38,6 +40,14 @@ export type FeedItem = {
   relevanceScore?: number;
   reason?: string;
   publishedAt?: number;
+  // Editorial-mosaic extras (Fase 8). Optional: the feed route only populates
+  // them for the kinds that have them (topic→sparkline/trendScore, claim→stance,
+  // paper→pdfUrl). Signals/aside self-hide when absent.
+  pdfUrl?: string;
+  sparkline?: number[];
+  trendScore?: number;
+  stanceSupporting?: number;
+  stanceContrasting?: number;
 };
 
 export type DiscoveryItemRef =

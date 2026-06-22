@@ -72,6 +72,7 @@ export function Composer({
   ambientWorkspaceId = null,
   placeholder = "Tulis pesan untuk Astra…",
   errorDraft = null,
+  initialText,
 }: {
   onSend: (payload: ComposerSendPayload) => void;
   onStop?: () => void;
@@ -84,8 +85,10 @@ export function Composer({
   placeholder?: string;
   /** Retry (Slice 6.8): teks turn terakhir untuk di-restore saat turn gagal. */
   errorDraft?: string | null;
+  /** Seed editor sekali saat mount (Fase 8: Tanya Astra / idea→/deep dari discovery). */
+  initialText?: string;
 }) {
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState(initialText ?? "");
   const [commands, setCommands] = useState<PromptCommand[]>([]);
   const [contextRefs, setContextRefs] = useState<ContextRef[]>([]);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);

@@ -8,6 +8,6 @@ import { ChatSurface } from "./chat-surface";
  * `useAstraAgent.onSessionChange`). History persist lewat hook proyeksi; reload thread →
  * `ThreadView` (kini juga live, Slice 6.8).
  */
-export function NewChat() {
-  return <ChatSurface />;
+export function NewChat({ seed }: { seed?: string }) {
+  return <ChatSurface initialText={seed} />;
 }

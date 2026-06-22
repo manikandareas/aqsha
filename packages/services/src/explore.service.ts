@@ -8,15 +8,20 @@ import type { Db } from "@aqsha/db";
 import { throwAppError } from "@aqsha/db";
 import { getCache, putCache } from "./papers/external-cache";
 import { fetchOpenAlexWorks } from "./feed/openAlex";
+import { extractDoi } from "./papers/identifiers";
+import { ResearchService, type ResearchCandidate } from "./research";
 import { InterestService } from "./interest.service";
 import { PaperCacheService } from "./paper-cache.service";
 import {
+  canonicalPaperKey,
   clampExploreLimit,
   clampFromYear,
+  dedupeExplorePapers,
   deriveKeyProbe,
   type ExploreMode,
   type ExplorePaperDetail,
   type ExplorePaperInput,
+  type ExploreProvider,
   type ExploreProviderStatus,
   type ExploreSearchResponse,
   exploreCacheKey,
@@ -26,14 +31,92 @@ import {
 
 const RECOMMENDATION_INTEREST_LIMIT = 6;
 
-/** Fase 4: provider lain belum di-wire (Fase 8). Tandai skipped untuk transparansi UI. */
-function deferredProviderStatus(openAlex: ExploreProviderStatus): ExploreProviderStatus[] {
-  return [
-    openAlex,
-    { provider: "arXiv", status: "skipped" },
-    { provider: "Jina", status: "skipped" },
-    { provider: "Crossref", status: "skipped" },
-  ];
+/** ResearchCandidate (web/arxiv/doi) → ExplorePaperInput untuk dedup + cache explore_papers. */
+function candidateToPaperInput(candidate: ResearchCandidate, provider: ExploreProvider): ExplorePaperInput {
+  let meta: {
+    authors?: string[];
+    year?: number;
+    publicationDate?: string;
+    venue?: string;
+    pdfUrl?: string;
+    isOpenAccess?: boolean;
+  } = {};
+  if (candidate.metadataJson) {
+    try {
+      meta = JSON.parse(candidate.metadataJson) as typeof meta;
+    } catch {
+      // metadata best-effort
+    }
+  }
+  return {
+    key: canonicalPaperKey({
+      doi: candidate.doi,
+      arxivId: candidate.arxivId,
+      url: candidate.url,
+      locator: candidate.locator,
+      title: candidate.title,
+    }),
+    title: candidate.title,
+    snippet: candidate.snippet,
+    url: candidate.url ?? candidate.locator,
+    pdfUrl: meta.pdfUrl,
+    doi: candidate.doi,
+    arxivId: candidate.arxivId,
+    provider,
+    sourceLabel: meta.venue ?? provider,
+    authors: Array.isArray(meta.authors) ? meta.authors : [],
+    year: meta.year,
+    publicationDate: meta.publicationDate,
+    venue: meta.venue,
+    isOpenAccess: meta.isOpenAccess,
+    topics: [],
+  };
+}
+
+/**
+ * Waterfall fill (Fase 8): saat OpenAlex belum mengisi `limit`, lengkapi dari
+ * arXiv → Jina → Crossref(DOI). Tiap provider best-effort; status dilaporkan.
+ * Mengembalikan item gabungan (belum di-dedup) + status per-provider.
+ */
+async function waterfallFill(
+  query: string,
+  fromYear: number | undefined,
+  needed: number,
+): Promise<{ items: ExplorePaperInput[]; statuses: ExploreProviderStatus[] }> {
+  const items: ExplorePaperInput[] = [];
+  const statuses: ExploreProviderStatus[] = [];
+
+  const run = async (
+    provider: ExploreProvider,
+    fetcher: () => Promise<ResearchCandidate[]>,
+    enabled: boolean,
+  ) => {
+    if (!enabled || items.length >= needed) {
+      statuses.push({ provider, status: "skipped" });
+      return;
+    }
+    try {
+      const candidates = await fetcher();
+      const mapped = candidates
+        .map((c) => candidateToPaperInput(c, provider))
+        .filter((p) => (fromYear ? !p.year || p.year >= fromYear : true));
+      items.push(...mapped);
+      statuses.push({ provider, status: mapped.length > 0 ? "ready" : "fallback" });
+    } catch (error) {
+      statuses.push({
+        provider,
+        status: "error",
+        message: error instanceof Error ? error.message : `${provider} failed.`,
+      });
+    }
+  };
+
+  const doi = extractDoi(query);
+  await run("arXiv", () => ResearchService.searchArxiv({ query, limit: needed }), true);
+  await run("Jina", () => ResearchService.searchWeb({ query, limit: needed }), true);
+  await run("Crossref", () => ResearchService.lookupDoi({ doi: doi ?? "" }), Boolean(doi));
+
+  return { items, statuses };
 }
 
 export const ExploreService = {
@@ -97,11 +180,25 @@ export const ExploreService = {
       };
     }
 
+    // Waterfall fill (Fase 8): only for keyword search that OpenAlex left short.
+    const providerStatus: ExploreProviderStatus[] = [openAlexStatus];
+    if (mode === "search" && query && items.length < limit) {
+      const fill = await waterfallFill(query, fromYear, limit - items.length);
+      items = dedupeExplorePapers([...items, ...fill.items], limit);
+      providerStatus.push(...fill.statuses);
+    } else {
+      providerStatus.push(
+        { provider: "arXiv", status: "skipped" },
+        { provider: "Jina", status: "skipped" },
+        { provider: "Crossref", status: "skipped" },
+      );
+    }
+
     const response: ExploreSearchResponse = {
       items,
       mode,
       query,
-      providerStatus: deferredProviderStatus(openAlexStatus),
+      providerStatus,
       generatedAt: now,
       cached: false,
     };

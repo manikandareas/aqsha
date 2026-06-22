@@ -152,6 +152,11 @@ export {
 export { PaperCacheService, type PapersByKeysItem } from "./paper-cache.service";
 export { ExploreService } from "./explore.service";
 export {
+  FeedAiService,
+  type GenerateIdeasResult,
+  type IdeaSeed,
+} from "./feed-ai.service";
+export {
   type DiscoveryItemRef,
   type DiscoveryResolvedRef,
   FeedInteractionService,
