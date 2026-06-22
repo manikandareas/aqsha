@@ -98,8 +98,13 @@ export function assistantMessageId(sessionId: string, turnId: string, sequence: 
 // ---------------------------------------------------------------------------
 // Prompt commands (Slice 6.6) — SSOT dipindah dari packages/convex (V1) ke sini
 // supaya client (web-v2) DAN eve bundle pakai data yang sama. Pure, zero-dep,
-// tetap SATU FILE (constraint bundle eve). /deep DIBUANG (Lite-only, P7).
+// tetap SATU FILE (constraint bundle eve). /deep di-DROP saat 6.6 (Lite-only),
+// di-REAKTIFKAN Slice 7.0 (deep research): expand jadi instruksi pakai skill
+// deep-research; gate billing/cap = `propose_research_plan` + send-status?feature.
 // ---------------------------------------------------------------------------
+
+/** Command id `/deep` (Slice 7.0) — dipakai composer untuk pre-check send-status deep-aware. */
+export const DEEP_COMMAND_ID = "deep";
 
 export type PromptCommand = {
   id: string;
@@ -246,6 +251,24 @@ export const promptCommands = [
       ].join("\n"),
   },
   {
+    id: "deep",
+    slug: "/deep",
+    label: "Deep research",
+    description: "Riset mendalam multi-sumber: rencana, telaah literatur, bukti tandingan, sitasi terverifikasi.",
+    group: "Rancang Riset",
+    aliases: ["/deepresearch", "/riset"],
+    keywords: ["deep", "deep research", "riset mendalam", "penelitian", "tinjauan", "verifikasi sitasi", "literatur"],
+    placeholder: "Tulis pertanyaan riset yang ingin ditelusuri mendalam...",
+    buildPrompt: (argument) =>
+      [
+        "Lakukan deep research untuk pertanyaan di bawah. Gunakan skill deep-research sebagai metodologi.",
+        "WAJIB mulai dengan menyusun rencana riset lewat tool propose_research_plan (judul + 3-6 sub-pertanyaan) dan TUNGGU persetujuan user sebelum riset.",
+        "Setelah disetujui: telaah literatur per sub-pertanyaan, cari bukti tandingan, verifikasi sitasi, lalu tulis jawaban tercitasi [n] yang menyebut kekuatan bukti dan keterbatasan. Hanya kutip sumber dari hasil tool; jangan mengarang identifier.",
+        "",
+        withInput(argument, "[Pertanyaan riset belum diberikan]"),
+      ].join("\n"),
+  },
+  {
     id: "artifact",
     slug: "/artifact",
     label: "Kelola artifact workspace",
@@ -354,8 +377,9 @@ export type CommandDispatch = {
  * Split a composer turn into the friendly bubble text and the prompt dispatched
  * to the agent. A recognized command expands to its rich `buildPrompt`
  * instruction (so the model never sees a bare slash command). The slug is
- * stripped before building the argument, so it is never duplicated. /deep is
- * gone (Lite-only, P7) → there is no special deep branch.
+ * stripped before building the argument, so it is never duplicated. /deep (Slice
+ * 7.0) expands like any command — it tells the model to use the deep-research
+ * skill; the billing/cap gate lives in `propose_research_plan`, not here.
  */
 export function resolveCommandDispatch(content: string, commandId?: string | null): CommandDispatch {
   const displayText = content.trim();

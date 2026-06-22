@@ -53,7 +53,8 @@ export const queryKeys = {
     messages: (id: string) => ["threads", "messages", id] as const,
     sources: (id: string) => ["threads", "sources", id] as const,
     artifacts: (id: string) => ["threads", "artifacts", id] as const,
-    sendStatus: () => ["threads", "send-status"] as const,
+    sendStatus: (feature: "normal_chat" | "deep_research" = "normal_chat") =>
+      ["threads", "send-status", feature] as const,
   },
   user: {
     me: () => ["user", "me"] as const,

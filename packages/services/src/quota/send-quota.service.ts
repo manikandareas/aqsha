@@ -1,8 +1,39 @@
 import type { Db, DbOrTx } from "@aqsha/db";
 import type { RateLimiterRes } from "rate-limiter-flexible";
 import { BillingService } from "../billing.service";
-import type { PublicPlanKey } from "../plan";
+import { estimateCredits, type PublicPlanKey } from "../plan";
 import { getRateLimiter, rateLimitConfig } from "./rate-limits";
+
+/**
+ * Fitur kirim yang di-pre-check. `normal_chat` (default) = chat biasa (Lite); `deep_research`
+ * = entry `/deep` (Slice 7.0) → ikut sertakan cap bulanan `deepResearchRuns`. `requiredPlan:
+ * 'free'` untuk deep agar Free pakai kuota bulanannya (sejalan `propose_research_plan`), bukan
+ * ditolak `subscription_required`.
+ */
+export type SendFeature = "normal_chat" | "deep_research";
+
+/** Entitlement non-consuming untuk satu fitur kirim (deep ⇒ cap deep ikut terhitung). */
+function entitlementForFeature(
+  db: DbOrTx,
+  args: { ownerUserId: string; ownerEmail?: string | null; feature: SendFeature },
+) {
+  if (args.feature === "deep_research") {
+    return BillingService.requireEntitlement(db, {
+      ownerUserId: args.ownerUserId,
+      ownerEmail: args.ownerEmail,
+      feature: "deep_research",
+      credits: estimateCredits({ feature: "deep_research", agentKind: "lite" }),
+      requiredPlan: "free",
+    });
+  }
+  // `normal_chat` floor 1 kredit (Lite, D-B).
+  return BillingService.requireEntitlement(db, {
+    ownerUserId: args.ownerUserId,
+    ownerEmail: args.ownerEmail,
+    feature: "normal_chat",
+    credits: 1,
+  });
+}
 
 /** Alasan blok kirim — superset return-union billing (`EntitlementResult`) + cooldown rate-limit. */
 export type SendBlockReason =
@@ -43,14 +74,13 @@ const RULE = "chat:send" as const;
 export const SendQuotaService = {
   async check(
     db: Db,
-    args: { ownerUserId: string; ownerEmail?: string | null },
+    args: { ownerUserId: string; ownerEmail?: string | null; feature?: SendFeature },
   ): Promise<SendCheckResult> {
-    // 1) Entitlement (non-consuming). `normal_chat` floor 1 kredit (Lite, D-B).
-    const ent = await BillingService.requireEntitlement(db, {
+    // 1) Entitlement (non-consuming), feature-aware (default normal_chat).
+    const ent = await entitlementForFeature(db, {
       ownerUserId: args.ownerUserId,
       ownerEmail: args.ownerEmail,
-      feature: "normal_chat",
-      credits: 1,
+      feature: args.feature ?? "normal_chat",
     });
     if (!ent.ok) {
       return { ok: false, reason: ent.reason, retryAt: ent.resetAt };
@@ -73,13 +103,12 @@ export const SendQuotaService = {
 
   async getSendStatus(
     db: DbOrTx,
-    args: { ownerUserId: string; ownerEmail?: string | null },
+    args: { ownerUserId: string; ownerEmail?: string | null; feature?: SendFeature },
   ): Promise<SendStatus> {
-    const ent = await BillingService.requireEntitlement(db, {
+    const ent = await entitlementForFeature(db, {
       ownerUserId: args.ownerUserId,
       ownerEmail: args.ownerEmail,
-      feature: "normal_chat",
-      credits: 1,
+      feature: args.feature ?? "normal_chat",
     });
 
     // Cooldown preview — `.get()` non-consuming (null = belum ada record = penuh).

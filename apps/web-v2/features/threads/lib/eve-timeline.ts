@@ -318,6 +318,12 @@ const TOOL_LABELS: Record<string, string> = {
   link_to_workspace: "Menautkan ke workspace",
   delete_artifact: "Menghapus artefak",
   ask_question: "Bertanya",
+  search_papers: "Mencari paper",
+  propose_research_plan: "Menyusun rencana riset",
+  // Subagent deep-research (Slice 7.1) — nama dir subagent muncul sebagai `eve.name`.
+  "literature-searcher": "Menelaah literatur",
+  "counter-evidence": "Mencari bukti tandingan",
+  "citation-verifier": "Memverifikasi sitasi",
 };
 
 function toolTitle(rawName: string): string {
@@ -337,6 +343,8 @@ const KEY_LABELS: Record<string, string> = {
   workspaceId: "Workspace",
   artifactId: "Artefak",
   threadId: "Percakapan",
+  message: "Tugas",
+  summary: "Ringkasan",
 };
 
 function humanizeKey(key: string): string {

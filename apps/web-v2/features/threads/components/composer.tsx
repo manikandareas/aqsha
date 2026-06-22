@@ -2,6 +2,8 @@
 
 import {
   type ContextRef,
+  DEEP_COMMAND_ID,
+  matchPromptCommandInContent,
   type PromptCommand,
   resolveCommandDispatch,
   splitContextRefs,
@@ -11,7 +13,7 @@ import { ArrowUpIcon, SquareIcon } from "@aqsha/ui/icons";
 import { useEffect, useMemo, useState } from "react";
 import { useContextPickerArtifacts } from "@/features/artifacts/api";
 import { useWorkspacesList } from "@/features/workspaces/api";
-import { useHydrateContext } from "../api";
+import { useHydrateContext, useSendStatus } from "../api";
 import {
   type ComposerAgentKind,
   AgentSelector,
@@ -88,7 +90,25 @@ export function Composer({
   const [contextRefs, setContextRefs] = useState<ContextRef[]>([]);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [drillWorkspaceId, setDrillWorkspaceId] = useState<string | null>(null);
-  const secondsLeft = useSecondsLeft(notice?.retryAt);
+
+  // Pre-check deep (Slice 7.0): saat `/deep` aktif, cek cap bulanan deep research →
+  // notice ramah sebelum kirim. Gerbang OTORITATIF tetap `propose_research_plan`.
+  const deepActive =
+    (commands[0]?.id ?? matchPromptCommandInContent(value)?.id) === DEEP_COMMAND_ID;
+  const deepStatus = useSendStatus("deep_research", deepActive);
+  const deepNotice: ComposerNotice | null =
+    deepActive && deepStatus.data && !deepStatus.data.canSend
+      ? {
+          message:
+            deepStatus.data.reason === "subscription_required"
+              ? "Deep Research butuh paket yang sesuai. Tingkatkan paket untuk melanjutkan."
+              : "Kuota Deep Research bulan ini sudah habis. Tingkatkan paket atau tunggu reset.",
+        }
+      : null;
+
+  // Block normal_chat (prop) menang atas notice deep (informasional).
+  const shownNotice = notice ?? deepNotice;
+  const secondsLeft = useSecondsLeft(shownNotice?.retryAt);
 
   // Retry (Slice 6.8): turn gagal → kembalikan draft terakhir ke editor (resend = turn baru).
   // Derivasi saat render (pola "adjust state when a prop changes", bukan effect) — `seenDraft`
@@ -186,10 +206,10 @@ export function Composer({
         if (e.key === "Escape" && !e.defaultPrevented && busy && onStop) onStop();
       }}
     >
-      {notice ? (
+      {shownNotice ? (
         <p className="px-2 pt-1 text-amber-600 text-xs dark:text-amber-500">
-          {notice.message}
-          {notice.retryAt && secondsLeft > 0 ? ` (${secondsLeft} detik)` : null}
+          {shownNotice.message}
+          {shownNotice.retryAt && secondsLeft > 0 ? ` (${secondsLeft} detik)` : null}
         </p>
       ) : null}
       <div className="px-2 pt-1">

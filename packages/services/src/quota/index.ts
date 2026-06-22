@@ -9,6 +9,7 @@ export {
 export {
   type SendBlockReason,
   type SendCheckResult,
+  type SendFeature,
   SendQuotaService,
   type SendStatus,
 } from "./send-quota.service";

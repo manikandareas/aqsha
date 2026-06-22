@@ -56,13 +56,25 @@ export function useThreadMessages(id: string, enabled = true) {
  * Status kirim (Slice 6.2) — pre-check UX-ramah: entitlement preview + cooldown rate-limit,
  * non-consuming. Backstop otoritatif tetap di `onMessage` proses eve. Tipe hasil di-infer
  * Eden dari route `GET /threads/send-status` (tanpa impor `@aqsha/services` di client).
+ *
+ * `feature='deep_research'` (Slice 7.0) → status sadar-cap deep (untuk notice saat `/deep`
+ * aktif). Key di-scope per-feature → cache terpisah dari pre-check normal_chat.
  */
-export function useSendStatus() {
+export function useSendStatus(
+  feature: "normal_chat" | "deep_research" = "normal_chat",
+  enabled = true,
+) {
   const api = useApi();
   return useQuery({
-    queryKey: queryKeys.threads.sendStatus(),
+    queryKey: queryKeys.threads.sendStatus(feature),
+    enabled,
     staleTime: 10_000,
-    queryFn: async () => unwrap(await api.threads["send-status"].get()),
+    queryFn: async () =>
+      unwrap(
+        await api.threads["send-status"].get(
+          feature === "deep_research" ? { query: { feature } } : { query: {} },
+        ),
+      ),
   });
 }
 

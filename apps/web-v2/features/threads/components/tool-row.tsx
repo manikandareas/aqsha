@@ -1,7 +1,13 @@
 "use client";
 
 import { Badge } from "@aqsha/ui/components/badge";
-import { ChevronDownIcon, Loader2Icon, WrenchIcon, XCircleIcon } from "@aqsha/ui/icons";
+import {
+  ChevronDownIcon,
+  Loader2Icon,
+  TelescopeIcon,
+  WrenchIcon,
+  XCircleIcon,
+} from "@aqsha/ui/icons";
 import { useEffect, useRef, useState } from "react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -9,8 +15,18 @@ import { cn } from "@/lib/utils";
 import type { ToolRow as ToolRowData, ToolRowModel, ToolStatus } from "../lib/eve-timeline";
 
 // Glyph kunci = wrench ("ini pemanggilan alat" sekilas pandang). Afordans live/gagal
-// tetap: running → spinner; failed/denied → silang; selain itu → wrench.
-function ToolStatusIcon({ status, className }: { status: ToolStatus; className?: string }) {
+// tetap: running → spinner; failed/denied → silang; selain itu → wrench. Delegasi
+// subagent (kind "subagent-call", Slice 7.1) pakai teleskop agar terbaca sebagai
+// aktivitas riset terdelegasi, bukan tool biasa.
+function ToolStatusIcon({
+  status,
+  kind,
+  className,
+}: {
+  status: ToolStatus;
+  kind?: ToolRowModel["kind"];
+  className?: string;
+}) {
   switch (status) {
     case "running":
       return <Loader2Icon className={cn(className, "animate-spin text-primary")} />;
@@ -19,7 +35,11 @@ function ToolStatusIcon({ status, className }: { status: ToolStatus; className?:
     case "denied":
       return <XCircleIcon className={cn(className, "text-muted-foreground")} />;
     default:
-      return <WrenchIcon className={cn(className, "text-muted-foreground")} />;
+      return kind === "subagent-call" ? (
+        <TelescopeIcon className={cn(className, "text-muted-foreground")} />
+      ) : (
+        <WrenchIcon className={cn(className, "text-muted-foreground")} />
+      );
   }
 }
 
@@ -48,8 +68,9 @@ export function ToolRow({ model }: { model: ToolRowModel }) {
   const hasBody = model.rows.length > 0;
   const inputRows = model.rows.filter((row) => row.group === "input");
   const outputRows = model.rows.filter((row) => row.group === "output");
+  // Descriptor inline selagi running: kueri (tool) atau tugas (subagent, key "message").
   const liveQuery = model.isRunning
-    ? model.rows.find((row) => row.key === "query")?.value
+    ? model.rows.find((row) => row.key === "query" || row.key === "message")?.value
     : undefined;
 
   // null = ikut auto (open == isRunning); boolean = pilihan manual user yang sticky.
@@ -65,7 +86,11 @@ export function ToolRow({ model }: { model: ToolRowModel }) {
 
   const header = (
     <span className={cn("flex min-w-0 items-start gap-1.5 leading-5", toneClass(model.status))}>
-      <ToolStatusIcon status={model.status} className="mt-0.5 size-3.5 shrink-0" />
+      <ToolStatusIcon
+        status={model.status}
+        kind={model.kind}
+        className="mt-0.5 size-3.5 shrink-0"
+      />
       <span className="min-w-0">
         {model.isRunning ? <Shimmer as="span">{model.title}</Shimmer> : <span>{model.title}</span>}
         {liveQuery ? <span className="text-muted-foreground"> · {liveQuery}</span> : null}
