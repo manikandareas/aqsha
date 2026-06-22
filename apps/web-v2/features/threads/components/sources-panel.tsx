@@ -1,7 +1,19 @@
 "use client";
 
-import { ArrowUpRightIcon, BookOpenIcon, FileTextIcon, GlobeIcon } from "@aqsha/ui/icons";
-import { useThreadSources } from "../api";
+import {
+  ArrowUpRightIcon,
+  BookOpenIcon,
+  ChevronDownIcon,
+  FileTextIcon,
+  GlobeIcon,
+  Link2Icon,
+} from "@aqsha/ui/icons";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
 import type { ResearchSource } from "../types";
 
 /** Ikon + label per kelas sumber. */
@@ -27,7 +39,9 @@ function SourceRow({ source }: { source: ResearchSource }) {
           <p className="truncate font-medium text-xs">{source.title}</p>
           {href ? <ArrowUpRightIcon className="size-3 shrink-0 text-muted-foreground" /> : null}
         </div>
-        <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{source.snippet}</p>
+        {source.snippet ? (
+          <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{source.snippet}</p>
+        ) : null}
         <span className="mt-1 inline-block text-[10px] text-muted-foreground/70">{label}</span>
       </div>
     </div>
@@ -47,24 +61,34 @@ function SourceRow({ source }: { source: ResearchSource }) {
 }
 
 /**
- * Panel Sources (Slice 6.4) — daftar bukti yang dikumpulkan tool riset Astra
- * (`search_web`/`search_arxiv`/`search_papers`/`lookup_doi`), dipersist per thread
- * (`research_sources`) sehingga tetap tampil saat reload history. Disembunyikan
- * bila kosong.
+ * Daftar sumber riset inline per-turn (collapsible "N sumber") — ditampilkan tepat di
+ * bawah jawaban turn yang menghasilkannya. Sumber = bukti yang dikumpulkan tool Astra
+ * (`search_web`/`search_arxiv`/`lookup_doi`/dst.), dipersist per turn (`research_sources`,
+ * di-map via `turnId`) sehingga tetap muncul saat reload history. Pure: data di-fetch
+ * pemanggil (ChatSurface) lalu dikelompokkan per turn. Kosong → tak render.
  */
-export function SourcesPanel({ threadId, enabled = true }: { threadId: string; enabled?: boolean }) {
-  const sources = useThreadSources(threadId, enabled);
-  const items = sources.data ?? [];
-  if (items.length === 0) return null;
-
+export function InlineSources({
+  sources,
+  className,
+}: {
+  sources: ResearchSource[];
+  className?: string;
+}) {
+  if (sources.length === 0) return null;
   return (
-    <section className="mt-6 border-t pt-4">
-      <h2 className="mb-2 font-medium text-muted-foreground text-xs">Sumber ({items.length})</h2>
-      <div className="flex flex-col gap-1.5">
-        {items.map((source) => (
-          <SourceRow key={source.id} source={source} />
-        ))}
-      </div>
-    </section>
+    <Collapsible className={cn("min-w-0", className)}>
+      <CollapsibleTrigger className="group flex items-center gap-1.5 text-left text-muted-foreground text-xs transition-colors hover:text-foreground">
+        <Link2Icon className="size-3.5 shrink-0" />
+        <span className="font-medium">{sources.length} sumber</span>
+        <ChevronDownIcon className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-180" />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="overflow-hidden">
+        <div className="mt-2 flex flex-col gap-1.5">
+          {sources.map((source) => (
+            <SourceRow key={source.id} source={source} />
+          ))}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

@@ -7,6 +7,8 @@ import { readableApiErrorMessage } from "@/lib/api-error";
 import { queryKeys, unwrap } from "@/lib/api-query";
 
 type ProductKey = "starterMonthly" | "starterYearly" | "plusMonthly" | "plusYearly";
+export type PendingKey = ProductKey | "portal" | "cancel";
+export type { ProductKey };
 
 /** Snapshot billing berjalan (plan + saldo kredit + status langganan). */
 export function useBillingCurrent() {
@@ -121,5 +123,3 @@ export function useUpdateDisplayName() {
     onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal memperbarui nama.")),
   });
 }
-
-export type { ProductKey };

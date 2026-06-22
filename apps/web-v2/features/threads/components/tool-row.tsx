@@ -1,26 +1,78 @@
 "use client";
 
 import { Badge } from "@aqsha/ui/components/badge";
-import { ChevronDownIcon, Loader2Icon, WrenchIcon, XCircleIcon } from "@aqsha/ui/icons";
+import {
+  BookOpenIcon,
+  ChevronDownIcon,
+  FileTextIcon,
+  FolderIcon,
+  GlobeIcon,
+  Loader2Icon,
+  PenLineIcon,
+  SearchIcon,
+  Trash2Icon,
+  WrenchIcon,
+  XCircleIcon,
+} from "@aqsha/ui/icons";
 import { useEffect, useRef, useState } from "react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import type { ToolRow as ToolRowData, ToolRowModel, ToolStatus } from "../lib/eve-timeline";
 
-// Glyph kunci = wrench ("ini pemanggilan alat" sekilas pandang). Afordans live/gagal
-// tetap: running → spinner; failed/denied → silang; selain itu → wrench.
-function ToolStatusIcon({ status, className }: { status: ToolStatus; className?: string }) {
-  switch (status) {
-    case "running":
-      return <Loader2Icon className={cn(className, "animate-spin text-primary")} />;
-    case "failed":
-      return <XCircleIcon className={cn(className, "text-red-500")} />;
-    case "denied":
-      return <XCircleIcon className={cn(className, "text-muted-foreground")} />;
+// Ikon semantik per tool (kosmetik — data: `model.name` selalu ada). Switch mengembalikan
+// JSX konkret (bukan komponen dinamis) supaya lolos react-compiler. Tool tak dikenal → wrench.
+function ToolGlyph({ name, className }: { name: string; className?: string }) {
+  switch (name) {
+    case "search_web":
+      return <GlobeIcon className={className} />;
+    case "search_thread_documents":
+      return <SearchIcon className={className} />;
+    case "search_papers":
+    case "lookup_doi":
+      return <BookOpenIcon className={className} />;
+    case "search_arxiv":
+    case "list_artifacts":
+    case "get_artifact":
+    case "get_render_payload":
+      return <FileTextIcon className={className} />;
+    case "list_workspaces":
+    case "create_workspace":
+    case "rename_workspace":
+    case "link_to_workspace":
+    case "save_url":
+      return <FolderIcon className={className} />;
+    case "propose_artifact":
+    case "execute_artifact":
+      return <PenLineIcon className={className} />;
+    case "delete_artifact":
+      return <Trash2Icon className={className} />;
     default:
-      return <WrenchIcon className={cn(className, "text-muted-foreground")} />;
+      return <WrenchIcon className={className} />;
   }
+}
+
+// Afordans live/gagal selalu menang: running → spinner; failed/denied → silang; selain
+// itu → ikon semantik per nama tool (fallback wrench).
+function ToolStatusIcon({
+  status,
+  name,
+  className,
+}: {
+  status: ToolStatus;
+  name: string;
+  className?: string;
+}) {
+  if (status === "running") {
+    return <Loader2Icon className={cn(className, "animate-spin text-primary")} />;
+  }
+  if (status === "failed") {
+    return <XCircleIcon className={cn(className, "text-red-500")} />;
+  }
+  if (status === "denied") {
+    return <XCircleIcon className={cn(className, "text-muted-foreground")} />;
+  }
+  return <ToolGlyph name={name} className={cn(className, "text-muted-foreground")} />;
 }
 
 function toneClass(status: ToolStatus): string {
@@ -65,7 +117,7 @@ export function ToolRow({ model }: { model: ToolRowModel }) {
 
   const header = (
     <span className={cn("flex min-w-0 items-start gap-1.5 leading-5", toneClass(model.status))}>
-      <ToolStatusIcon status={model.status} className="mt-0.5 size-3.5 shrink-0" />
+      <ToolStatusIcon status={model.status} name={model.name} className="mt-0.5 size-3.5 shrink-0" />
       <span className="min-w-0">
         {model.isRunning ? <Shimmer as="span">{model.title}</Shimmer> : <span>{model.title}</span>}
         {liveQuery ? <span className="text-muted-foreground"> · {liveQuery}</span> : null}

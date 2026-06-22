@@ -26,6 +26,8 @@ export type ToolRow = {
 /** Model presentasi satu tool-row (collapsible). Default-deny: hanya scalar yang lolos. */
 export type ToolRowModel = {
   toolCallId: string;
+  /** Nama tool mentah (mis. "search_web") — dipakai memilih ikon semantik. */
+  name: string;
   title: string;
   kind: "tool-call" | "subagent-call" | "load-skill" | "unknown";
   status: ToolStatus;
@@ -90,6 +92,9 @@ export type TimelineMessage = {
   role: "assistant" | "user";
   /** True selagi turn pesan ini masih streaming (dari `metadata.status`). */
   streaming: boolean;
+  /** Runtime turn id (eve `metadata.turnId` / persisted `chat_messages.turnId`) — dipakai
+   * memetakan sumber riset (`research_sources.turnId`) ke turn yang menghasilkannya. */
+  turnId?: string;
   parts: TimelinePart[];
 };
 
@@ -178,6 +183,7 @@ export function evePartsToTimeline(messages: readonly EveMessage[]): TimelineMes
       id: m.id,
       role: m.role,
       streaming: m.metadata?.status === "streaming",
+      turnId: m.metadata?.turnId,
       parts,
     };
   });
@@ -200,6 +206,7 @@ export function chatMessagesToTimeline(messages: readonly ChatMessage[]): Timeli
       id: m.id,
       role: m.role === "user" ? "user" : "assistant",
       streaming: false,
+      turnId: m.turnId ?? undefined,
       parts,
     };
   });
@@ -246,6 +253,7 @@ export function toolPartModel(part: EveDynamicToolPart): ToolRowModel {
 
   return {
     toolCallId: part.toolCallId,
+    name: rawName,
     title: toolTitle(rawName),
     kind,
     status,

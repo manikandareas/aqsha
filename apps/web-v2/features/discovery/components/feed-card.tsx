@@ -6,7 +6,7 @@ import { Badge } from "@aqsha/ui/components/badge";
 import { Button } from "@aqsha/ui/components/button";
 import { SaveToWorkspaceButton } from "@/features/artifacts/components/save-to-workspace-button";
 import { useHideDiscovery, useRecordInteraction } from "../api";
-import { feedItemHref, type FeedItem, KIND_LABELS } from "../types";
+import { feedItemHref, type FeedItem, KIND_LABELS } from "@/features/discovery/types";
 
 /**
  * Kartu feed discovery (Slice 4.3). Save-to-Workspace (saveUrl P3) + interest bump +1,

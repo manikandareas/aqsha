@@ -14,6 +14,16 @@ export type FeedClaim = {
   supportingPaperKeys?: string[];
 };
 
+export type FeedVerdict = FeedClaim["verdict"];
+
+/** Alias kompatibel V1 discovery cards. */
+export type DiscoveryItem = FeedItem;
+
+export type FeedIdeaQuestion = {
+  question: string;
+  rationale?: string;
+};
+
 export type FeedItem = {
   _id: string;
   kind: FeedKind;
@@ -38,6 +48,27 @@ export type FeedItem = {
   relevanceScore?: number;
   reason?: string;
   publishedAt?: number;
+  titleId?: string;
+  sparkline?: number[];
+  trendScore?: number;
+};
+
+export const DISCOVERY_TOPIC_CATEGORIES = [
+  "sains_teknologi",
+  "kesehatan",
+  "lingkungan",
+  "sosial_ekonomi",
+  "pendidikan",
+] as const;
+
+export type DiscoveryTopicCategory = (typeof DISCOVERY_TOPIC_CATEGORIES)[number];
+
+export const DISCOVERY_TOPIC_CATEGORY_LABELS: Record<DiscoveryTopicCategory, string> = {
+  sains_teknologi: "Sains & Teknologi",
+  kesehatan: "Kesehatan",
+  lingkungan: "Lingkungan",
+  sosial_ekonomi: "Sosial & Ekonomi",
+  pendidikan: "Pendidikan",
 };
 
 export type DiscoveryItemRef =

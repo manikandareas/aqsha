@@ -11,7 +11,7 @@ import {
   type FeedItem,
   type FeedMode,
   type FeedTopic,
-} from "../types";
+} from "@/features/discovery/types";
 import { FeedCard } from "./feed-card";
 
 const MODES: { id: FeedMode; label: string }[] = [

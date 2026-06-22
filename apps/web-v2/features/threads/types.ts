@@ -9,6 +9,7 @@ export type ChatThread = {
   titleStatus: string | null; // "generating" | "ready" | null
   status: string; // "idle" | "streaming" | "failed"
   agentKind: string; // "lite" | "pro"
+  workspaceId?: string | null;
   lastMessagePreview: string | null;
   lastActivityAt: number;
   createdAt: number;

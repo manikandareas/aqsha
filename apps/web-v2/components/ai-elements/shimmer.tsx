@@ -1,29 +1,30 @@
 "use client";
 
-import { m } from "motion/react";
+ 
+
+import { cn } from "@/lib/utils";
 import type { MotionProps } from "motion/react";
+import { m } from "motion/react";
 import { createElement } from "react";
 import type { CSSProperties, ElementType, JSX } from "react";
-import { cn } from "@/lib/utils";
-
 type MotionHTMLProps = MotionProps & Record<string, unknown>;
 
-// Cache motion components di module level agar tak dibuat saat render.
+// Cache motion components at module level to avoid creating during render.
 const motionComponentCache = new Map<
   keyof JSX.IntrinsicElements,
   React.ComponentType<MotionHTMLProps>
 >();
 
-function getMotionComponent(element: keyof JSX.IntrinsicElements) {
+const getMotionComponent = (element: keyof JSX.IntrinsicElements) => {
   let component = motionComponentCache.get(element);
   if (!component) {
     component = m.create(element);
     motionComponentCache.set(element, component);
   }
   return component;
-}
+};
 
-export interface ShimmerProps {
+export interface TextShimmerProps {
   children: string;
   as?: ElementType;
   className?: string;
@@ -31,15 +32,17 @@ export interface ShimmerProps {
   spread?: number;
 }
 
-/** Teks bergerak (shimmer) untuk afordans "sedang berjalan" — mis. tool aktif / berpikir. */
-export function Shimmer({
+const ShimmerComponent = ({
   children,
   as: Component = "p",
   className,
   duration = 2,
   spread = 2,
-}: ShimmerProps) {
-  const motionComponent = getMotionComponent(Component as keyof JSX.IntrinsicElements);
+}: TextShimmerProps) => {
+  const motionComponent = getMotionComponent(
+    Component as keyof JSX.IntrinsicElements
+  );
+
   const dynamicSpread = (children?.length ?? 0) * spread;
 
   return createElement(
@@ -49,7 +52,7 @@ export function Shimmer({
       className: cn(
         "relative inline-block bg-[length:250%_100%,auto] bg-clip-text text-transparent",
         "[--bg:linear-gradient(90deg,#0000_calc(50%-var(--spread)),var(--color-background),#0000_calc(50%+var(--spread)))] [background-repeat:no-repeat,padding-box]",
-        className,
+        className
       ),
       initial: { backgroundPosition: "100% center" },
       style: {
@@ -65,4 +68,6 @@ export function Shimmer({
     } as MotionHTMLProps,
     children,
   );
-}
+};
+
+export const Shimmer = ShimmerComponent;

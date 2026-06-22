@@ -122,9 +122,16 @@ export function useMoveArtifact() {
   const api = useApi();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { id: string; targetWorkspaceId: string }) =>
+    mutationFn: async (input: {
+      id: string;
+      targetWorkspaceId?: string;
+      folderId?: string | null;
+    }) =>
       unwrap(
-        await api.artifacts({ id: input.id }).patch({ targetWorkspaceId: input.targetWorkspaceId }),
+        await api.artifacts({ id: input.id }).patch({
+          ...(input.targetWorkspaceId ? { targetWorkspaceId: input.targetWorkspaceId } : {}),
+          ...(input.folderId !== undefined ? { folderId: input.folderId } : {}),
+        }),
       ),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.artifacts.all }),
     onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal memindahkan artefak.")),

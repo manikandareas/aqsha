@@ -58,4 +58,7 @@ export const queryKeys = {
   user: {
     me: () => ["user", "me"] as const,
   },
+  onboarding: {
+    status: () => ["onboarding", "status"] as const,
+  },
 };
