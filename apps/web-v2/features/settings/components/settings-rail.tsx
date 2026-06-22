@@ -2,12 +2,20 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CreditCardIcon, GaugeIcon, UserRoundIcon } from "@aqsha/ui/icons";
+import {
+  CreditCardIcon,
+  GaugeIcon,
+  PaletteIcon,
+  ShieldIcon,
+  UserRoundIcon,
+} from "@aqsha/ui/icons";
 
 const ITEMS = [
   { href: "/app/settings", label: "Ringkasan", icon: GaugeIcon, exact: true },
   { href: "/app/settings/usage-billing", label: "Penggunaan & tagihan", icon: CreditCardIcon, exact: false },
   { href: "/app/settings/account", label: "Akun", icon: UserRoundIcon, exact: false },
+  { href: "/app/settings/security", label: "Keamanan", icon: ShieldIcon, exact: false },
+  { href: "/app/settings/appearance", label: "Tampilan", icon: PaletteIcon, exact: false },
 ];
 
 export function SettingsRail() {

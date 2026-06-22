@@ -1,6 +1,7 @@
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadBucketCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -94,4 +95,9 @@ export async function getObjectText(key: string): Promise<string> {
 
 export async function deleteObject(key: string): Promise<void> {
   await getS3().send(new DeleteObjectCommand({ Bucket: getBucket(), Key: key }));
+}
+
+/** Cek murah bucket reachable + akses ok (readiness probe). Throw bila gagal. */
+export async function headBucket(): Promise<void> {
+  await getS3().send(new HeadBucketCommand({ Bucket: getBucket() }));
 }

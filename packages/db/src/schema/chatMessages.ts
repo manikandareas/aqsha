@@ -26,7 +26,7 @@ export const chatMessages = pgTable(
       .references(() => chatThreads.id),
     ownerUserId: text("owner_user_id")
       .notNull()
-      .references(() => users.ownerUserId),
+      .references(() => users.ownerUserId, { onDelete: "cascade" }),
     role: text("role").notNull(),
     text: text("text").notNull(),
     reasoning: text("reasoning"),

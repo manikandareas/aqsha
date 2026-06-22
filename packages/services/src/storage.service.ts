@@ -80,4 +80,14 @@ export const StorageService = {
   deleteObject(key: string): Promise<void> {
     return s3.deleteObject(key);
   },
+
+  /** Readiness probe object-storage (HeadBucket). true = reachable + akses ok. */
+  async ping(): Promise<boolean> {
+    try {
+      await s3.headBucket();
+      return true;
+    } catch {
+      return false;
+    }
+  },
 };

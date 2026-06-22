@@ -24,10 +24,16 @@ export const CHAT_QUEUES = {
   threadTitle: "thread-title",
 } as const;
 
+/** Queue account (P9) — cascade hard-delete data owner async (blob sweep + DELETE users). */
+export const ACCOUNT_QUEUES = {
+  accountDeletion: "account-deletion",
+} as const;
+
 export type ArtifactQueueName = (typeof ARTIFACT_QUEUES)[keyof typeof ARTIFACT_QUEUES];
 export type FeedQueueName = (typeof FEED_QUEUES)[keyof typeof FEED_QUEUES];
 export type ChatQueueName = (typeof CHAT_QUEUES)[keyof typeof CHAT_QUEUES];
-export type QueueName = ArtifactQueueName | FeedQueueName | ChatQueueName;
+export type AccountQueueName = (typeof ACCOUNT_QUEUES)[keyof typeof ACCOUNT_QUEUES];
+export type QueueName = ArtifactQueueName | FeedQueueName | ChatQueueName | AccountQueueName;
 
 let connection: ConnectionOptions | null = null;
 const queues = new Map<QueueName, Queue>();

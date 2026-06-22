@@ -163,6 +163,8 @@ export {
   type InteractionKind,
 } from "./feed-interaction.service";
 export {
+  ACCOUNT_QUEUES,
+  type AccountQueueName,
   CHAT_QUEUES,
   type ChatQueueName,
   FEED_QUEUES,
@@ -170,6 +172,7 @@ export {
   type QueueName,
   registerRepeatable,
 } from "./clients/queue";
+export { AccountDeletionService } from "./account-deletion.service";
 
 // Explore paper cache model (P4) — key kanonik + cache helpers (dipakai route papers/explore P4.4).
 export {

@@ -1,5 +1,5 @@
 import { AppError } from "@aqsha/db";
-import { BillingService, PolarClient, UserService } from "@aqsha/services";
+import { AccountDeletionService, BillingService, PolarClient, UserService } from "@aqsha/services";
 import { Elysia, status } from "elysia";
 import { verifyClerkWebhook } from "../clients/clerkWebhook";
 import { getDb } from "../clients/db";
@@ -93,7 +93,8 @@ export const webhooks = new Elysia({ prefix: "/webhooks" }).post(
     const deleted = type === "user.deleted" || data.deleted === true;
     const { db } = getDb();
     if (deleted) {
-      await UserService.markUserDeletedFromWebhook(db, clerkUserId);
+      // Clerk sudah hapus user → enqueue cascade data owner (worker Clerk-delete jadi 404=ok).
+      await AccountDeletionService.requestByClerkId(db, clerkUserId);
     } else {
       await UserService.applyClerkUserUpsert(db, { clerkUserId, email: pickEmail(data) });
     }

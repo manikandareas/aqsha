@@ -23,7 +23,7 @@ export const chatThreads = pgTable(
     id: text("id").primaryKey(),
     ownerUserId: text("owner_user_id")
       .notNull()
-      .references(() => users.ownerUserId),
+      .references(() => users.ownerUserId, { onDelete: "cascade" }),
     title: text("title"),
     titleStatus: text("title_status"),
     status: text("status").notNull().default("idle"),

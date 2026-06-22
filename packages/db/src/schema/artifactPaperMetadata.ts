@@ -18,7 +18,7 @@ export const artifactPaperMetadata = pgTable(
     id: text("id").primaryKey(),
     ownerUserId: text("owner_user_id")
       .notNull()
-      .references(() => users.ownerUserId),
+      .references(() => users.ownerUserId, { onDelete: "cascade" }),
     artifactId: text("artifact_id")
       .notNull()
       .references(() => artifacts.id),

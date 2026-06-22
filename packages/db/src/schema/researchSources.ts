@@ -27,7 +27,7 @@ export const researchSources = pgTable(
       .references(() => chatThreads.id),
     ownerUserId: text("owner_user_id")
       .notNull()
-      .references(() => users.ownerUserId),
+      .references(() => users.ownerUserId, { onDelete: "cascade" }),
     turnId: text("turn_id").notNull(),
     citationNumber: integer("citation_number"),
     origin: text("origin").notNull(),

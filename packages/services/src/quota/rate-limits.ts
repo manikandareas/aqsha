@@ -11,7 +11,8 @@ export type RateLimitRule =
   | "workspaces:create"
   | "artifacts:create"
   | "artifacts:upload"
-  | "chat:send";
+  | "chat:send"
+  | "account:delete";
 
 const RATE_LIMIT_RULES: Record<RateLimitRule, { points: number; duration: number }> = {
   "workspaces:create": { points: 3, duration: 3600 },
@@ -20,6 +21,8 @@ const RATE_LIMIT_RULES: Record<RateLimitRule, { points: number; duration: number
   // Cooldown kirim chat Astra: 20 turn / menit per user (anti-spam + lindungi kuota +
   // beban model). `getSendStatus` membaca sisa non-consuming; `onMessage` meng-consume.
   "chat:send": { points: 20, duration: 60 },
+  // Hapus akun destruktif & irreversible — 5/jam cukup (guard anti-misfire, bukan throughput).
+  "account:delete": { points: 5, duration: 3600 },
 };
 
 /** Konfigurasi rule (points/duration) — dipakai `getSendStatus` untuk hitung cooldown. */

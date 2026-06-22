@@ -17,7 +17,7 @@ export const billingCreditPeriods = pgTable(
     id: text("id").primaryKey(),
     ownerUserId: text("owner_user_id")
       .notNull()
-      .references(() => users.ownerUserId),
+      .references(() => users.ownerUserId, { onDelete: "cascade" }),
     periodKey: text("period_key").notNull(),
     planKey: text("plan_key").notNull(),
     status: text("status").notNull(),
