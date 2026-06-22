@@ -15,7 +15,7 @@
 | **7.2** | ✅ **done** (branch yang sama) | Citation verify: `CitationService` (port integrity engine + bibliography, reuse provider research/*) + `similarity.ts` + tool `verify_identifiers`/`verify_citations` + subagent `citation-verifier`. Debit `citation_verify` via `chargeToolUsage` (generalisasi `chargeExternalSearch`). 0 diagnostics, root 24 tools. |
 | **7.3** | ✅ **done** (branch yang sama) | Writer **di root** + 10 domain-pack skills (port, frontmatter `description`-only) + **FLAG-2 FIXED** (`ctx.session.parent.rootSessionId` → `threadScopeId`) + UI: plan card editable (edit=deny-with-revision), verdict card, activity grouped (7.1), Sources panel live. |
 | **7.4** | ⬜ **deferred (opsional)** | Stats-verification sandbox (Docker deny-all + R bootstrap + `verify_statistics`/`run_computation` ROOT tools). **Owner men-defer** — `/deep` fungsional penuh tanpa ini. |
-| **7.5** | ⬜ plan | Testing terpusat (service-unit + manual checklist, scope owner = sama pola 6.9). |
+| **7.5** | ✅ **done** (branch yang sama, uncommitted) | Testing terpusat (service-unit + DB-itest + manual checklist, scope owner = sama pola 6.9). Gates hijau. |
 
 **Testing:** ikut keputusan owner P6 — **TIDAK** ada test per-slice. Gate tiap slice 7.0–7.4 = `eve build` hijau + `bun run typecheck` (semua ws) + `bun run --filter @aqsha/web-v2 lint` + smoke manual opsional. Unit/itest dikerjakan di **7.5**.
 
@@ -41,6 +41,19 @@ Tambahan kecil di luar plan + dua **flag owner** yang berdampak ke slice berikut
 - **Verdict card** (`verification-card.tsx`) utamanya untuk verify level-ROOT; verify dalam subagent ada di child stream → verdict ke user lewat jawaban akhir root. Kartu nested live = enhancement (deferred).
 - 10 domain-pack skill diport (frontmatter dipangkas → `description`-only, format eve). eve:info = 11 skills, 0 diagnostics. SKILL deep-research: writer=root `load_skill`.
 - skillDelegation scorer + citationNumber write-back = SKIP (default). **FLAG-1 (50<60) masih terbuka.**
+
+### Catatan progress (2026-06-22 — 7.5 as-built)
+
+Testing terpusat selesai (pola 6.9: service-unit + DB-itest + manual checklist; **TANPA** harness eve/Playwright). ZERO migration, ZERO perubahan kode produksi (tak ada bug ditemukan). Gates **semua hijau**: `bun run test:v2` (services 198 pass incl. unit baru; itest skip tanpa `DATABASE_URL`) + `typecheck` 10 ws + `lint` web-v2 + `eve:build`.
+
+- **`packages/services/test/citation-service.test.ts`** (service-unit, `spyOn` namespace `crossref`/`arxiv`/`openalex` — **bukan** `mock.module` global): `CitationService.verifyIdentifiers` 5 verdict (verified DOI / identifier_invalid judul-mismatch / metadata_mismatch tahun>1 / not_found openalex none-match / unverifiable `[]`-ambigu + provider-throw) + batch >4 (echo `[n]` passthrough) + tally summary + caveat netral; `verifyCitations` (ada/tanpa bagian References → note).
+- **`packages/services/test/deep-research-billing.test.ts`**: (A) unit `SendQuotaService.check(feature:'deep_research')` — ok propagate `feature`+`requiredPlan:'free'`, cap→`quota_exceeded` tanpa bakar cooldown; (B) DB-itest prefix **`itdeep_`** (di luar `user_itest_%`, cleanup `research_sources` sebelum `users`): `consumeCredits(deep_research)` key-sama = 1 debit (resume idempoten) + cap bulanan starter (3) blok run ke-4 `quota_exceeded` **TANPA** debit tambahan.
+- **Keputusan scope B** (`propose_research_plan.execute`): TIDAK di-import (tool di apps/web-v2, impor `eve/tools`, **di luar `test:v2`** + bukan dep `@aqsha/services`). Tool = passthrough tipis; dua perilakunya (gate-block-tanpa-consume + idempoten key `thread:turn:deep`) terbukti penuh di itest `consumeCredits(deep_research)` + unit `SendQuotaService` + `evaluateGate(deepLimitReached)` (pure, billing.test.ts). Diturunkan ke BillingService langsung sesuai klausa fallback plan.
+- **Tak diduplikasi**: `BillingRepo.countDeepResearchInWindow` sudah ter-itest di `packages/db/test/billing.test.ts` → cap di-cover end-to-end lewat `consumeCredits` (jalur nyata) ketimbang hitung-ulang ledger.
+- **Manual checklist (owner, eve-runtime E2E)** ada di §6 Slice 7.5. **Item #1 prioritas = propagasi auth/principal ke declared subagent** (FLAG-2 belum terverifikasi runtime: bila gagal, `callerId(ctx)` throw di tool subagent). Sisanya: full `/deep` (plan→edit deny-with-revision→re-propose→approve→literature paralel→counter→citation-verifier→jawaban tercitasi) + Sources panel terisi via `threadScopeId` + reload=teks+reasoning+Sources saja + cap bulanan block + resume tanpa double-charge.
+- **Skip (per scope, permanen sekarang)**: 7.4 stats sandbox + test-nya, skillDelegation scorer, citationNumber write-back, child-stream subscribe. **FLAG-1 (50<60)** = keputusan owner, bukan test.
+
+**Fase 7 COMPLETE** kecuali owner commit + manual /deep E2E + (opsional) 7.4 sandbox.
 
 ---
 
@@ -225,7 +238,8 @@ Dari `subagents.mdx`/`sandbox.mdx`/`skills.mdx`/`dynamic-workflows.md`:
   - (bila 7.4) classifier statcheck/grim/power + verificationReport verdict ladder (pure).
 - **DB-itest** (prefix `itdeep_`, di luar broad cleanup `user_itest_%` — gotcha [[v2-phase5-implementation]]; cleanup FK-child research_sources sebelum users): deep-run cap window (`billingRepo` count `deep_research` ledger dalam period); `consumeCredits(deep_research)` idempoten.
 - **Manual checklist (eve-runtime + e2e — owner saat smoke):**
-  1. `/deep <q>` → plan card → edit+approve → fan-out `literature-searcher` paralel → `counter-evidence` → `citation-verifier` verdict → jawaban tercitasi. deny plan → batal.
+  1. **(prioritas — FLAG-2)** Propagasi auth/principal ke declared subagent: di dalam `literature-searcher`/`counter-evidence`/`citation-verifier`, `callerId(ctx)` resolve (tak throw) + `threadScopeId(ctx)=ctx.session.parent.rootSessionId` → sumber subagent masuk Sources panel parent + RAG lihat attachment parent.
+  2. `/deep <q>` → plan card → edit+approve → fan-out `literature-searcher` paralel → `counter-evidence` → `citation-verifier` verdict → jawaban tercitasi. deny plan → batal.
   2. Activity grouped per subagent (live); reload thread → teks+reasoning+**Sources** saja (D-J live-only; activity tak persist).
   3. Cap deep bulanan tercapai → composer notice (pre-check) + `propose_research_plan` approve di-block (return ok:false). Kredit deep turun 1/run + external_search/citation_verify per-call.
   4. Resume `.workflow-data` pasca-crash mid-run → step durability lanjut tanpa double-charge (consumeCredits idempoten).
