@@ -128,22 +128,23 @@ describe("TitleService", () => {
   });
 });
 
-// ── ResearchService (Jina) cache hit/miss + failure sentinel ─────────────────
-describe("ResearchService.searchWeb (Jina, cache + failure)", () => {
+// ── ResearchService (Firecrawl) cache hit/miss + failure sentinel ────────────
+describe("ResearchService.searchWeb (Firecrawl, cache + failure)", () => {
   let getCache: ReturnType<typeof spyOn>;
   let putCache: ReturnType<typeof spyOn>;
   let fetchSpy: ReturnType<typeof spyOn>;
   beforeEach(() => {
+    process.env.FIRECRAWL_API_KEY = "fc-test";
     getCache = spyOn(cacheMod, "getCache").mockResolvedValue(null as never);
     putCache = spyOn(cacheMod, "putCache").mockResolvedValue(undefined as never);
     fetchSpy = spyOn(httpMod, "fetchWithTimeout").mockResolvedValue(
-      new Response(JSON.stringify({ data: [] }), { status: 200 }) as never,
+      new Response(JSON.stringify({ success: true, data: { web: [] } }), { status: 200 }) as never,
     );
   });
 
   test("cache HIT → kembalikan cached, tak fetch / tak tulis cache", async () => {
     getCache.mockResolvedValue({
-      valueJson: JSON.stringify([{ origin: "web", provider: "jina_search", title: "Cached" }]),
+      valueJson: JSON.stringify([{ origin: "web", provider: "firecrawl_search", title: "Cached" }]),
     } as never);
     const r = await ResearchService.searchWeb({ query: "energi surya" });
     expect(r[0]?.title).toBe("Cached");
@@ -154,7 +155,10 @@ describe("ResearchService.searchWeb (Jina, cache + failure)", () => {
   test("cache MISS + fetch sukses → parse + tulis cache 'ready'", async () => {
     fetchSpy.mockResolvedValue(
       new Response(
-        JSON.stringify({ data: [{ title: "Hasil A", url: "https://a.test", content: "isi" }] }),
+        JSON.stringify({
+          success: true,
+          data: { web: [{ title: "Hasil A", url: "https://a.test", description: "isi" }] },
+        }),
         { status: 200 },
       ) as never,
     );
@@ -168,6 +172,14 @@ describe("ResearchService.searchWeb (Jina, cache + failure)", () => {
     fetchSpy.mockResolvedValue(new Response("nope", { status: 503 }) as never);
     const r = await ResearchService.searchWeb({ query: "energi surya" });
     expect(r).toEqual([]);
+    expect((putCache.mock.calls[0] as unknown[])[2]).toBe("failed");
+  });
+
+  test("tanpa FIRECRAWL_API_KEY → [] + cache 'failed', tak fetch", async () => {
+    delete process.env.FIRECRAWL_API_KEY;
+    const r = await ResearchService.searchWeb({ query: "energi surya" });
+    expect(r).toEqual([]);
+    expect(fetchSpy).not.toHaveBeenCalled();
     expect((putCache.mock.calls[0] as unknown[])[2]).toBe("failed");
   });
 

@@ -1,15 +1,15 @@
 /**
  * ResearchService (Slice 6.4) — web/arxiv/doi/openalex discovery for Astra's
  * read-only research tools, plus persistence + read of `research_sources` for
- * the Sources panel. Search providers are Jina-only for the web (D-G); Exa is
- * dropped. Citation verification (verifyCitations/verifyIdentifiers + integrity
+ * the Sources panel. Web search uses Firecrawl (`/v2/search`); Exa/Jina dropped
+ * for the web lane. Citation verification (verifyCitations/verifyIdentifiers + integrity
  * engine) is deferred to P7 (D-H) — this slice is READ tools only.
  */
 
 import { type DbOrTx, type NewResearchSource, ResearchSourceRepo } from "@aqsha/db";
 import { searchArxiv } from "./arxiv";
 import { lookupDoi } from "./crossref";
-import { searchWebJina } from "./jina";
+import { searchWebFirecrawl } from "./firecrawl";
 import { searchOpenAlex } from "./openalex";
 import type { ResearchCandidate } from "./types";
 
@@ -39,9 +39,9 @@ export type ResearchSourceItem = {
 };
 
 export const ResearchService = {
-  /** Pencarian web (Jina-only, D-G). */
+  /** Pencarian web (Firecrawl `/v2/search`). */
   searchWeb(args: { query: string; limit?: number }): Promise<ResearchCandidate[]> {
-    return searchWebJina(args);
+    return searchWebFirecrawl(args);
   },
 
   /** Pencarian arXiv (Atom, multi-entry). */

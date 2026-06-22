@@ -9,12 +9,12 @@ import {
 } from "../lib/tools.ts";
 
 /**
- * search_web (Slice 6.4) — pencarian web Jina-only (D-G). READ, tanpa approval.
+ * search_web (Slice 6.4) — pencarian web via Firecrawl. READ, tanpa approval.
  * Debit `external_search` (2 kredit) + persist `research_sources` (panel Sources).
  */
 export default defineTool({
   description:
-    "Cari di web untuk bukti/informasi terkini (Jina). Kembalikan sumber bernomor dengan cuplikan; kutip sebagai [n].",
+    "Cari di web untuk bukti/informasi terkini. Kembalikan sumber bernomor dengan cuplikan; kutip sebagai [n].",
   inputSchema: z.object({
     query: z.string().min(1).max(500).describe("Kueri pencarian dalam bahasa alami."),
     limit: z.number().int().min(1).max(8).optional().describe("Jumlah hasil (default 5)."),
@@ -24,7 +24,7 @@ export default defineTool({
     const allowed = await chargeExternalSearch(ctx, {
       ownerUserId,
       tool: "search_web",
-      provider: "jina_search",
+      provider: "firecrawl_search",
       idemSuffix: input.query,
     });
     if (!allowed) {
