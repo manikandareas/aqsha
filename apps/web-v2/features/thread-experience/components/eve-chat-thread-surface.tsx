@@ -57,7 +57,12 @@ export function EveChatThreadSurface({
   // continuationToken harus sudah ada sebelum ChatSurface mount (kalau telat, store keburu
   // dibuat tanpa token → follow-up gagal).
   if (isLoading || historyQuery.isLoading || threadDetail.isLoading) {
-    return <CenteredLoading label="Memuat thread..." />;
+    // Bungkus kolom transkrip agar loading sejajar dengan message row (bukan full-bleed kiri).
+    return (
+      <div className={cn(threadTranscriptColumnClass, threadTranscriptBodyPaddingClass)}>
+        <CenteredLoading label="Memuat thread..." />
+      </div>
+    );
   }
 
   return (
@@ -65,9 +70,9 @@ export function EveChatThreadSurface({
       <main
         className={cn(
           "min-h-0 min-w-0 flex-1 overflow-hidden",
-          compact
-            ? cn("max-w-none", panelBodyPaddingClass)
-            : cn(threadTranscriptColumnClass, threadTranscriptBodyPaddingClass),
+          // Non-compact: full-bleed; kolom transkrip + gutter dipegang ChatSurface (scroll surface
+          // full-width → scrollbar di pojok kanan container). Compact: padding panel tetap di sini.
+          compact ? cn("max-w-none", panelBodyPaddingClass) : undefined,
         )}
       >
         <ChatSurface

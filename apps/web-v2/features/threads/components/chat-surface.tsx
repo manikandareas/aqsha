@@ -1,11 +1,14 @@
 "use client";
 
 import { m, useReducedMotion } from "motion/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
+import { ConversationContent } from "@/components/ai-elements/conversation-content";
+import { Conversation } from "@/components/ai-elements/conversation-root";
+import { ConversationScrollButton } from "@/components/ai-elements/conversation-scroll-button";
 import { HomeExploreBento } from "@/features/discovery/components/home-explore-bento";
 import { ComposerHeroState } from "@/features/thread-experience/components/composer-hero-state";
 import { ExploreHandwrittenCue } from "@/features/thread-experience/components/explore-handwritten-cue";
-import { panelBodyPaddingClass } from "@/lib/panel-surface";
+import { panelBodyPaddingClass, threadTranscriptColumnClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
 import { useSendStatus, useThreadSources, useThreadsList } from "../api";
 import { evePartsToTimeline, type TimelineMessage } from "../lib/eve-timeline";
@@ -74,7 +77,6 @@ export function ChatSurface({
 
   const live = evePartsToTimeline(agent.data.messages);
   const messages = history && history.length > 0 ? [...history, ...live] : live;
-  const partCount = messages.reduce((n, msg) => n + msg.parts.length, 0);
   const sessionId = agent.session?.sessionId ?? initialSession?.sessionId ?? null;
   const isEmpty = messages.length === 0 && !busy;
 
@@ -110,12 +112,6 @@ export function ChatSurface({
     void agent.send({ message: text });
   };
 
-  const bottomRef = useRef<HTMLDivElement>(null);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll saat transkrip/parts berubah
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages.length, partCount, agent.status]);
-
   const wiring: ComposerWiring = {
     onSend: (payload) => {
       setLastSent(payload.text);
@@ -138,22 +134,28 @@ export function ChatSurface({
   }
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-3xl flex-col">
-      <div className="flex-1 overflow-y-auto p-4">
-        <MessageList
-          messages={messages}
-          pending={busy}
-          busy={busy}
-          onRespond={(r) => void agent.send({ inputResponses: [r] })}
-          sourcesByTurn={sourcesByTurn}
-          onRegenerate={regenerate}
-        />
-        {agent.error ? (
-          <p className="mt-4 text-red-500 text-sm">{agent.error.message || "Terjadi kesalahan."}</p>
-        ) : null}
-        <div ref={bottomRef} />
-      </div>
-      <div className="p-4 pt-0">
+    <div className="flex h-full min-h-0 w-full flex-col">
+      <Conversation className="flex-1">
+        {/* Scroll surface full-bleed (max-w-none p-0) → scrollbar di pojok kanan container;
+            row & composer di-center lewat kolom transkrip (threadTranscriptColumnClass). */}
+        <ConversationContent className="max-w-none p-0">
+          <div className={cn(threadTranscriptColumnClass, "flex flex-col gap-4 pt-3 pb-8")}>
+            <MessageList
+              messages={messages}
+              pending={busy}
+              busy={busy}
+              onRespond={(r) => void agent.send({ inputResponses: [r] })}
+              sourcesByTurn={sourcesByTurn}
+              onRegenerate={regenerate}
+            />
+            {agent.error ? (
+              <p className="text-red-500 text-sm">{agent.error.message || "Terjadi kesalahan."}</p>
+            ) : null}
+          </div>
+        </ConversationContent>
+        <ConversationScrollButton />
+      </Conversation>
+      <div className={cn(threadTranscriptColumnClass, "pt-2.5 pb-4")}>
         <Composer
           onSend={(p) => wiring.onSend(p)}
           onStop={wiring.onStop}
