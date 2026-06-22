@@ -19,6 +19,17 @@ export type {
   ResearchOrigin,
 } from "./types";
 
+// CitationService (Slice 7.2) — citation-integrity engine, shares the same
+// `@aqsha/services/research` subpath (no new subpath; bundled by tsup entry).
+export {
+  CitationService,
+  type CitationInput,
+  type CitationVerdict,
+  type CitationVerifyRef,
+  type IntegrityStatus,
+  type VerificationResult,
+} from "./citation";
+
 /** Read model untuk panel Sources (api-v2 route + web hook). */
 export type ResearchSourceItem = {
   id: string;

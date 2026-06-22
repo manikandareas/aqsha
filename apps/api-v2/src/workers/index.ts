@@ -1,4 +1,5 @@
 import {
+  ACCOUNT_QUEUES,
   ARTIFACT_QUEUES,
   CHAT_QUEUES,
   FEED_QUEUES,
@@ -6,6 +7,7 @@ import {
   registerRepeatable,
 } from "@aqsha/services";
 import { Worker } from "bullmq";
+import { type AccountDeletionJob, processAccountDeletion } from "./account-deletion.worker";
 import { type ArtifactCleanupJob, processArtifactCleanup } from "./artifact-cleanup.worker";
 import { type FeedHydrationJob, processFeedHydration } from "./feed-hydration.worker";
 import { type PaperEnrichmentJob, processPaperEnrichment } from "./paper-enrichment.worker";
@@ -42,6 +44,10 @@ const workers = [
   new Worker<ThreadTitleJob>(CHAT_QUEUES.threadTitle, processThreadTitle, {
     connection,
     concurrency: CONCURRENCY,
+  }),
+  new Worker<AccountDeletionJob>(ACCOUNT_QUEUES.accountDeletion, processAccountDeletion, {
+    connection,
+    concurrency: 2,
   }),
 ];
 

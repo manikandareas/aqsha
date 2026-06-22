@@ -9,7 +9,7 @@ import { users } from "./users";
 export const userOnboarding = pgTable("user_onboarding", {
   ownerUserId: text("owner_user_id")
     .primaryKey()
-    .references(() => users.ownerUserId),
+    .references(() => users.ownerUserId, { onDelete: "cascade" }),
   background: text("background").notNull(),
   interests: text("interests").array().notNull(),
   heardAboutSource: text("heard_about_source").notNull(),

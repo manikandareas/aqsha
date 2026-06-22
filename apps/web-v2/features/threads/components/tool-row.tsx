@@ -10,6 +10,7 @@ import {
   Loader2Icon,
   PenLineIcon,
   SearchIcon,
+  TelescopeIcon,
   Trash2Icon,
   WrenchIcon,
   XCircleIcon,
@@ -53,14 +54,17 @@ function ToolGlyph({ name, className }: { name: string; className?: string }) {
 }
 
 // Afordans live/gagal selalu menang: running → spinner; failed/denied → silang; selain
-// itu → ikon semantik per nama tool (fallback wrench).
+// itu → ikon semantik per nama tool (fallback wrench). Delegasi subagent (kind
+// "subagent-call", Slice 7.1) pakai teleskop agar terbaca sebagai riset terdelegasi.
 function ToolStatusIcon({
   status,
   name,
+  kind,
   className,
 }: {
   status: ToolStatus;
   name: string;
+  kind?: ToolRowModel["kind"];
   className?: string;
 }) {
   if (status === "running") {
@@ -71,6 +75,9 @@ function ToolStatusIcon({
   }
   if (status === "denied") {
     return <XCircleIcon className={cn(className, "text-muted-foreground")} />;
+  }
+  if (kind === "subagent-call") {
+    return <TelescopeIcon className={cn(className, "text-muted-foreground")} />;
   }
   return <ToolGlyph name={name} className={cn(className, "text-muted-foreground")} />;
 }
@@ -100,8 +107,9 @@ export function ToolRow({ model }: { model: ToolRowModel }) {
   const hasBody = model.rows.length > 0;
   const inputRows = model.rows.filter((row) => row.group === "input");
   const outputRows = model.rows.filter((row) => row.group === "output");
+  // Descriptor inline selagi running: kueri (tool) atau tugas (subagent, key "message").
   const liveQuery = model.isRunning
-    ? model.rows.find((row) => row.key === "query")?.value
+    ? model.rows.find((row) => row.key === "query" || row.key === "message")?.value
     : undefined;
 
   // null = ikut auto (open == isRunning); boolean = pilihan manual user yang sticky.
@@ -117,7 +125,12 @@ export function ToolRow({ model }: { model: ToolRowModel }) {
 
   const header = (
     <span className={cn("flex min-w-0 items-start gap-1.5 leading-5", toneClass(model.status))}>
-      <ToolStatusIcon status={model.status} name={model.name} className="mt-0.5 size-3.5 shrink-0" />
+      <ToolStatusIcon
+        status={model.status}
+        name={model.name}
+        kind={model.kind}
+        className="mt-0.5 size-3.5 shrink-0"
+      />
       <span className="min-w-0">
         {model.isRunning ? <Shimmer as="span">{model.title}</Shimmer> : <span>{model.title}</span>}
         {liveQuery ? <span className="text-muted-foreground"> · {liveQuery}</span> : null}

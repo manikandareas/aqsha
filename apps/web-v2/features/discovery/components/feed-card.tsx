@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Badge } from "@aqsha/ui/components/badge";
 import { Button } from "@aqsha/ui/components/button";
@@ -14,11 +15,18 @@ import { feedItemHref, type FeedItem, KIND_LABELS } from "@/features/discovery/t
  * eksternal; reader internal menyusul (4.4).
  */
 export function FeedCard({ item, onHidden }: { item: FeedItem; onHidden: (id: string) => void }) {
+  const router = useRouter();
   const href = item.resolvedUrl ?? item.url;
   const link = feedItemHref(item);
   const hide = useHideDiscovery();
   const record = useRecordInteraction();
   const ref = { kind: "feed" as const, feedItemId: item._id };
+
+  const askAstra = () => {
+    record.mutate({ itemRef: ref, kind: "research" });
+    const seed = `${item.title}\n\n${item.tldr ?? item.summary}\n\nSumber: ${item.resolvedUrl ?? item.url}`;
+    router.push(`/app/threads?seed=${encodeURIComponent(seed)}`);
+  };
 
   const meta = [
     item.sourceLabel,
@@ -89,11 +97,7 @@ export function FeedCard({ item, onHidden }: { item: FeedItem; onHidden: (id: st
           title={item.title}
           onSaved={() => record.mutate({ itemRef: ref, kind: "save" })}
         />
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => toast.info("Chat Astra segera hadir.")}
-        >
+        <Button variant="ghost" size="sm" onClick={askAstra}>
           Tanya Astra
         </Button>
         <Button

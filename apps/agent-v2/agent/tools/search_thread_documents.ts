@@ -1,7 +1,7 @@
 import { RagService } from "@aqsha/services/rag";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
-import { callerId, getServiceDb } from "../lib/tools.ts";
+import { callerId, getServiceDb, threadScopeId } from "../lib/tools.ts";
 
 /**
  * search_thread_documents (Slice 6.4) — RAG read atas dokumen yang terlampir pada
@@ -32,7 +32,7 @@ export default defineTool({
       ownerUserId,
       ...(input.workspaceId
         ? { workspaceId: input.workspaceId }
-        : { threadId: ctx.session.id }),
+        : { threadId: threadScopeId(ctx) }),
       query: input.query,
       limit: input.limit,
     });

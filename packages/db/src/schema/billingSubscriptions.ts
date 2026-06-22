@@ -17,7 +17,7 @@ export const billingSubscriptions = pgTable(
     id: text("id").primaryKey(),
     ownerUserId: text("owner_user_id")
       .notNull()
-      .references(() => users.ownerUserId),
+      .references(() => users.ownerUserId, { onDelete: "cascade" }),
     polarSubscriptionId: text("polar_subscription_id").notNull(),
     polarProductId: text("polar_product_id").notNull(),
     productKey: text("product_key"),

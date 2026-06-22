@@ -24,7 +24,7 @@ export const usageDailyRollup = pgTable(
     id: text("id").primaryKey(),
     ownerUserId: text("owner_user_id")
       .notNull()
-      .references(() => users.ownerUserId),
+      .references(() => users.ownerUserId, { onDelete: "cascade" }),
     date: text("date").notNull(),
     credits: bigint("credits", { mode: "number" }).notNull().default(0),
     estimatedCostCents: bigint("estimated_cost_cents", { mode: "number" }).notNull().default(0),

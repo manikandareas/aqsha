@@ -71,6 +71,13 @@
       "when": 1782139021259,
       "tag": "0009_flashy_frank_castle",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1782145652646,
+      "tag": "0010_bizarre_shriek",
+      "breakpoints": true
     }
   ]
 }

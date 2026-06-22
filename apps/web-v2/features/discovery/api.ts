@@ -42,20 +42,53 @@ export function useFeedInfinite(mode: FeedMode, topic: FeedTopic | null) {
 }
 
 /** Global search lintas konten (tsvector). Enabled hanya saat `q` non-kosong. */
-export function useSearchDiscovery(q: string) {
+export function useSearchDiscovery(q: string, fromYear?: number) {
   const api = useApi();
   const trimmed = q.trim();
   return useInfiniteQuery({
-    queryKey: queryKeys.feed.search({ q: trimmed, fromYear: null }),
+    queryKey: queryKeys.feed.search({ q: trimmed, fromYear: fromYear ?? null }),
     enabled: trimmed.length > 0,
     initialPageParam: null as string | null,
     queryFn: async ({ pageParam }) =>
       unwrap(
         await api.feed.search.get({
-          query: { q: trimmed, limit: 20, ...(pageParam ? { cursor: pageParam } : {}) },
+          query: {
+            q: trimmed,
+            limit: 20,
+            ...(fromYear ? { fromYear } : {}),
+            ...(pageParam ? { cursor: pageParam } : {}),
+          },
         }),
       ) as FeedPage,
     getNextPageParam: (last) => last.nextCursor,
+  });
+}
+
+export type SearchPaper = Omit<ExplorePaper, "lastSeenAt">;
+export type PaperSearchResult = {
+  items: SearchPaper[];
+  cached?: boolean;
+  blocked?: { reason: string; resetAt: number };
+};
+
+/**
+ * Live external paper search (Fase 8 augmentation): waterfall OpenAlex→arXiv→Jina→Crossref
+ * via /papers/search (mode=search), credit-gated (external_search). Deferred — the page
+ * enables it only after the in-app tsvector index is exhausted. `blocked` = quota union.
+ */
+export function usePaperSearch(q: string, fromYear: number | undefined, enabled: boolean) {
+  const api = useApi();
+  const trimmed = q.trim();
+  return useQuery({
+    queryKey: ["papers", "search", trimmed, fromYear ?? null],
+    enabled: enabled && trimmed.length > 0,
+    staleTime: 5 * 60_000,
+    queryFn: async () =>
+      unwrap(
+        await api.papers.search.get({
+          query: { query: trimmed, mode: "search", limit: 12, ...(fromYear ? { fromYear } : {}) },
+        }),
+      ) as PaperSearchResult,
   });
 }
 
@@ -75,6 +108,19 @@ export function useHideDiscovery() {
   return useMutation({
     mutationFn: async (itemRef: DiscoveryItemRef) =>
       unwrap(await api.feed.discovery.hide.post({ itemRef })),
+  });
+}
+
+export type IdeaSeedInput = { title: string; context?: string; topics?: string[] };
+export type IdeasResult =
+  | { ok: true; ideas: string[]; cached: boolean }
+  | { ok: false; reason: string; resetAt: number };
+
+/** Generate 1–3 pertanyaan riset FINER (credit-gated). `ok:false` = kuota habis. */
+export function useIdeas() {
+  const api = useApi();
+  return useMutation({
+    mutationFn: async (seed: IdeaSeedInput) => unwrap(await api.feed.ideas.post(seed)) as IdeasResult,
   });
 }
 

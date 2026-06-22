@@ -9,7 +9,7 @@ import { users } from "./users";
 export const adminEntitlements = pgTable("admin_entitlements", {
   ownerUserId: text("owner_user_id")
     .primaryKey()
-    .references(() => users.ownerUserId),
+    .references(() => users.ownerUserId, { onDelete: "cascade" }),
   email: text("email"),
   enabled: boolean("enabled").notNull().default(false),
   createdAt: bigint("created_at", { mode: "number" }).notNull(),

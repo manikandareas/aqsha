@@ -1,0 +1,19 @@
+# Aqsha api-v2 — Elysia/Eden REST + /webhooks/clerk|polar + bull-board. Runtime: Bun.
+# Install: copy to /etc/systemd/system/, then `systemctl daemon-reload && systemctl enable --now aqsha-api-v2`.
+# Assumes repo checked out at /srv/aqsha and Bun at /usr/local/bin/bun (adjust paths).
+[Unit]
+Description=Aqsha api-v2 (Bun/Elysia)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aqsha
+WorkingDirectory=/srv/aqsha
+EnvironmentFile=/etc/aqsha/api-v2.env
+ExecStart=/usr/local/bin/bun run start:api
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -15,6 +15,7 @@ export default defineConfig({
   entry: [
     "src/index.ts",
     "src/chat/index.ts",
+    "src/plan.ts",
     "src/billing.service.ts",
     "src/quota/index.ts",
     "src/rag.service.ts",

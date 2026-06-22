@@ -4,58 +4,38 @@ import {
   CompassIcon,
   ExternalLinkIcon,
   FileDownIcon,
-  FolderIcon,
   Loader2Icon,
   MessageSquareIcon,
   Quote,
   ThumbsDownIcon,
 } from "@aqsha/ui/icons";
-import type { DiscoveryItem } from "../types";
 import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { formatCitationCount, topicBadgeClass } from "../utils/discovery-format";
-import { StanceTally, VerdictBadge } from "./discovery-visuals";
-import { VERDICT_STYLE } from "../utils/discovery-verdict-style";
 import {
-  buildSourceLine,
   feedDetailHref,
   isSavableToWorkspace,
   kindLabel,
   kindPanelClass,
-} from "../utils/discovery-card-utils";
-import {
-  CardProps,
-  DiscoverySavePopover,
-  IconButton,
-  RetractionFlag,
-  WhyRelevantNote,
-  WhyRelevantTrigger,
-} from "./discovery-item-card";
+  type DiscoveryItem,
+} from "../model";
+import { buildSourceLine, formatCitationCount, topicBadgeClass, VERDICT_STYLE } from "../format";
+import { StanceTally, VerdictBadge } from "./discovery-visuals";
+import { CardProps, CardSaveButton, IconButton, RetractionFlag } from "./discovery-item-card";
 
 const thumbnailLayouts = ["grid", "split", "figure", "columns", "dense"] as const;
 
-export function DiscoveryListItem({
-  item,
-  index,
-  lang,
-  busy,
-  relevanceNote,
-  whyLoading,
-  handlers,
-}: CardProps & { index: number }) {
-  const title = lang === "id" && item.titleId ? item.titleId : item.title;
-  const tldr =
-    lang === "id" ? item.tldrId ?? item.tldr ?? item.summary : item.tldr ?? item.summary;
+export function DiscoveryListItem({ item, index, busy, handlers }: CardProps & { index: number }) {
   const isPaper = item.kind === "paper";
   const isClaim = item.kind === "claim";
+  const tldr = item.tldr ?? item.summary;
   const citationLabel = isPaper ? formatCitationCount(item.citedByCount) : null;
   const detailHref = feedDetailHref(item);
 
   return (
     <article className="group grid grid-cols-[72px_minmax(0,1fr)] gap-4 py-4 sm:grid-cols-[76px_minmax(0,1fr)_auto] sm:gap-5">
       {detailHref ? (
-        <Link href={detailHref} className="mt-0.5 block" aria-label={title}>
+        <Link href={detailHref} className="mt-0.5 block" aria-label={item.title}>
           <ListThumbnail item={item} index={index} />
         </Link>
       ) : (
@@ -69,9 +49,7 @@ export function DiscoveryListItem({
           <div className="mb-1.5 flex flex-wrap items-center gap-2">
             <VerdictBadge verdict={item.claim.verdict} />
             {item.claim.publisher ? (
-              <span className="text-[11px] text-muted-foreground">
-                Diperiksa {item.claim.publisher}
-              </span>
+              <span className="text-[11px] text-muted-foreground">Diperiksa {item.claim.publisher}</span>
             ) : null}
           </div>
         ) : null}
@@ -82,7 +60,7 @@ export function DiscoveryListItem({
               href={detailHref}
               className="line-clamp-2 break-words underline-offset-3 hover:underline focus-visible:underline focus:outline-none"
             >
-              {title}
+              {item.title}
             </Link>
           ) : (
             <a
@@ -91,7 +69,7 @@ export function DiscoveryListItem({
               rel="noreferrer"
               className="line-clamp-2 break-words underline-offset-3 hover:underline focus-visible:underline focus:outline-none"
             >
-              {title}
+              {item.title}
             </a>
           )}
         </h2>
@@ -136,11 +114,7 @@ export function DiscoveryListItem({
             disabled={busy}
             className="inline-flex h-7 items-center gap-1.5 rounded-[7px] bg-primary px-2.5 text-[12px] font-semibold text-primary-foreground transition-colors hover:bg-primary-hover disabled:opacity-60"
           >
-            {busy ? (
-              <Loader2Icon className="size-3.5 animate-spin" />
-            ) : (
-              <MessageSquareIcon className="size-3.5" />
-            )}
+            {busy ? <Loader2Icon className="size-3.5 animate-spin" /> : <MessageSquareIcon className="size-3.5" />}
             Tanya Astra
           </button>
           {isClaim ? (
@@ -171,31 +145,11 @@ export function DiscoveryListItem({
             </a>
           ) : null}
         </div>
-
-        <WhyRelevantNote note={relevanceNote} />
-        <WhyRelevantTrigger
-          item={item}
-          lang={lang}
-          busy={busy}
-          relevanceNote={relevanceNote}
-          whyLoading={whyLoading}
-          handlers={handlers}
-        />
       </div>
 
       <div className="col-start-2 flex min-w-0 items-center justify-between gap-2 sm:col-start-auto sm:flex-col sm:items-end sm:justify-center sm:gap-3">
         <div className="flex shrink-0 items-center gap-1">
-          {isSavableToWorkspace(item) ? (
-            <DiscoverySavePopover
-              item={item}
-              handlers={handlers}
-              trigger={
-                <IconButton label="Simpan ke workspace">
-                  <FolderIcon className="size-4" />
-                </IconButton>
-              }
-            />
-          ) : null}
+          {isSavableToWorkspace(item) ? <CardSaveButton item={item} handlers={handlers} /> : null}
           <a
             href={item.url}
             target="_blank"
@@ -219,13 +173,7 @@ export function DiscoveryListItem({
   );
 }
 
-function ListThumbnail({
-  item,
-  index,
-}: {
-  item: DiscoveryItem;
-  index: number;
-}) {
+function ListThumbnail({ item, index }: { item: DiscoveryItem; index: number }) {
   if (item.kind === "paper") {
     return <PaperThumbnail layout={thumbnailLayouts[index % thumbnailLayouts.length]} />;
   }
@@ -247,9 +195,7 @@ function ListThumbnail({
         )}
       >
         <Icon className="size-6" />
-        <span className="text-[10px] font-bold leading-none">
-          {verdictShortLabel(item.claim.verdict)}
-        </span>
+        <span className="text-[10px] font-bold leading-none">{verdictShortLabel(item.claim.verdict)}</span>
       </div>
     );
   }
@@ -260,18 +206,12 @@ function ListThumbnail({
         kindPanelClass(item.kind),
       )}
     >
-      <span className="font-heading text-[10px] font-bold tracking-[0.06em] text-foreground/40">
-        {kindLabel(item.kind)}
-      </span>
+      <span className="font-heading text-[10px] font-bold tracking-[0.06em] text-foreground/40">{kindLabel(item.kind)}</span>
     </div>
   );
 }
 
-function PaperThumbnail({
-  layout,
-}: {
-  layout: (typeof thumbnailLayouts)[number];
-}) {
+function PaperThumbnail({ layout }: { layout: (typeof thumbnailLayouts)[number] }) {
   return (
     <div className="h-[98px] w-[72px] overflow-hidden rounded-[6px] border border-border bg-primary shadow-sm sm:h-[104px] sm:w-[76px]">
       <div className="h-full w-full p-[5px]">

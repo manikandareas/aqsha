@@ -1,6 +1,7 @@
 import { throwAppError } from "@aqsha/db";
 import {
   type DiscoveryItemRef,
+  FeedAiService,
   FeedInteractionService,
   FeedService,
   PaperCacheService,
@@ -197,6 +198,26 @@ export const feed = new Elysia({ prefix: "/feed" })
           t.Literal("research"),
           t.Literal("open_evidence"),
         ]),
+      }),
+    },
+  )
+  // POST /feed/ideas — generate 1–3 pertanyaan riset FINER (credit-gated normal_chat).
+  .post(
+    "/ideas",
+    ({ ownerUserId, email, body }) => {
+      const { db } = getDb();
+      return FeedAiService.generateIdeas(db, ownerUserId, email, {
+        title: body.title,
+        context: body.context,
+        topics: body.topics,
+      });
+    },
+    {
+      auth: true,
+      body: t.Object({
+        title: t.String(),
+        context: t.Optional(t.String()),
+        topics: t.Optional(t.Array(t.String())),
       }),
     },
   )

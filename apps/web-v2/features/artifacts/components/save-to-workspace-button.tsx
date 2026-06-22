@@ -25,6 +25,7 @@ export function SaveToWorkspaceButton({
   url,
   title,
   label = "Simpan",
+  ariaLabel,
   variant = "outline",
   size = "sm",
   className,
@@ -33,6 +34,8 @@ export function SaveToWorkspaceButton({
   url: string;
   title?: string;
   label?: string;
+  /** For icon-only use (empty label): accessible name + tooltip. */
+  ariaLabel?: string;
   variant?: ButtonVariant;
   size?: ButtonSize;
   className?: string;
@@ -44,7 +47,14 @@ export function SaveToWorkspaceButton({
 
   return (
     <>
-      <Button variant={variant} size={size} className={className} onClick={() => setOpen(true)}>
+      <Button
+        variant={variant}
+        size={size}
+        className={className}
+        aria-label={ariaLabel}
+        title={ariaLabel}
+        onClick={() => setOpen(true)}
+      >
         <FolderIcon />
         {label}
       </Button>

@@ -1,37 +1,18 @@
 "use client";
 
-import {
-  ArrowUpRightIcon,
-  GaugeIcon,
-  Quote,
-  SparklesIcon,
-  TrendingUpIcon,
-} from "@aqsha/ui/icons";
+import { ArrowUpRightIcon, GaugeIcon, Quote, SparklesIcon, TrendingUpIcon } from "@aqsha/ui/icons";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import {
-  formatCitationCount,
-  type TopCitedPaper,
-  type TopicMomentum,
-  type TopTopic,
-  type VerdictBreakdown,
-} from "../utils/discovery-format";
-import type { DiscoveryMode } from "../hooks/use-discovery-nav";
-import { feedDetailHref } from "../utils/discovery-card-utils";
-import { VERDICT_FILL, VERDICT_STYLE } from "../utils/discovery-verdict-style";
+import type { TopCitedPaper, TopicMomentum, TopTopic, VerdictBreakdown } from "../aggregate";
+import { formatCitationCount, VERDICT_FILL, VERDICT_STYLE } from "../format";
+import { feedDetailHref } from "../model";
+import type { FeedMode } from "../types";
 import { Donut, Sparkline } from "./discovery-visuals";
 
-// The fixed second sidebar for the discovery surface — a lean "widget deck" of
-// data-backed modules derived entirely from the items already loaded. Modules
-// self-hide without data, so each nav mode (For You / Top / Topics) shows only
-// what it has, kept focused and within the sticky viewport:
-//   • Fact balance (donut) — For You only, where the personalized mix makes the
-//     verdict split meaningful.
-//   • Middle slot — prefers topic momentum (GDELT sparklines), falling back to
-//     most-cited papers when the momentum lane is empty, so the rail keeps three
-//     widgets instead of collapsing to two.
-//   • Trending topics — always.
+// Fixed right rail: a lean widget deck derived entirely from the loaded items.
+// Modules self-hide without data. Fact balance shows on For You; the middle slot
+// prefers topic momentum and falls back to most-cited; trending always shows.
 export function DiscoveryAside({
   mode,
   verdicts,
@@ -40,7 +21,7 @@ export function DiscoveryAside({
   topCited,
   onSelectTopic,
 }: {
-  mode: DiscoveryMode;
+  mode: FeedMode;
   verdicts: VerdictBreakdown;
   momentum: TopicMomentum[];
   topTopics: TopTopic[];
@@ -49,7 +30,6 @@ export function DiscoveryAside({
 }) {
   return (
     <div className="flex flex-col gap-5">
-      {/* Fact balance is most meaningful on the personalized feed. */}
       {mode === "foryou" ? <FactBalanceModule verdicts={verdicts} /> : null}
       {momentum.length > 0 ? (
         <MomentumModule momentum={momentum} onSelectTopic={onSelectTopic} />
@@ -61,7 +41,6 @@ export function DiscoveryAside({
   );
 }
 
-// ── Shared chrome ─────────────────────────────────────────────────────────
 function SectionHeader({ title, icon }: { title: string; icon?: ReactNode }) {
   return (
     <h2 className="mb-3 flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
@@ -71,55 +50,29 @@ function SectionHeader({ title, icon }: { title: string; icon?: ReactNode }) {
   );
 }
 
-function WidgetCard({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <section className={cn("rounded-[14px] border border-border bg-card p-4", className)}>
-      {children}
-    </section>
-  );
+function WidgetCard({ children, className }: { children: ReactNode; className?: string }) {
+  return <section className={cn("rounded-[14px] border border-border bg-card p-4", className)}>{children}</section>;
 }
 
-// ── Module 1: fact-balance hero card (donut + legend) ─────────────────────
 function FactBalanceModule({ verdicts }: { verdicts: VerdictBreakdown }) {
   if (verdicts.total === 0) return null;
   return (
     <WidgetCard>
-      <SectionHeader
-        title="Timbangan fakta hari ini"
-        icon={<GaugeIcon className="size-3.5" />}
-      />
+      <SectionHeader title="Timbangan fakta hari ini" icon={<GaugeIcon className="size-3.5" />} />
       <div className="flex items-center gap-4">
         <Donut
           total={verdicts.total}
           size={92}
           centerLabel={String(verdicts.total)}
           centerCaption="klaim"
-          segments={verdicts.segments.map((segment) => ({
-            color: VERDICT_FILL[segment.verdict],
-            count: segment.count,
-          }))}
+          segments={verdicts.segments.map((segment) => ({ color: VERDICT_FILL[segment.verdict], count: segment.count }))}
         />
         <ul className="grid min-w-0 flex-1 gap-1.5">
           {verdicts.segments.map((segment) => (
             <li key={segment.verdict} className="flex items-center gap-2 text-[12px]">
-              <span
-                className={cn(
-                  "size-2 shrink-0 rounded-full",
-                  VERDICT_STYLE[segment.verdict].accent,
-                )}
-              />
-              <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                {VERDICT_STYLE[segment.verdict].label}
-              </span>
-              <span className="font-mono text-[11px] tabular-nums text-foreground/80">
-                {segment.count}
-              </span>
+              <span className={cn("size-2 shrink-0 rounded-full", VERDICT_STYLE[segment.verdict].accent)} />
+              <span className="min-w-0 flex-1 truncate text-muted-foreground">{VERDICT_STYLE[segment.verdict].label}</span>
+              <span className="font-mono text-[11px] tabular-nums text-foreground/80">{segment.count}</span>
             </li>
           ))}
         </ul>
@@ -128,17 +81,7 @@ function FactBalanceModule({ verdicts }: { verdicts: VerdictBreakdown }) {
   );
 }
 
-// ── Module 2: topic momentum (sparkline movers, 2-up tiles) ───────────────
-// Mirrors the reference's market-outlook tiles: a small grid of name + delta +
-// sparkline cards. Rising series read mint, falling read coral. Clicking a tile
-// searches papers for that topic.
-function MomentumModule({
-  momentum,
-  onSelectTopic,
-}: {
-  momentum: TopicMomentum[];
-  onSelectTopic: (name: string) => void;
-}) {
+function MomentumModule({ momentum, onSelectTopic }: { momentum: TopicMomentum[]; onSelectTopic: (name: string) => void }) {
   if (momentum.length === 0) return null;
   return (
     <div>
@@ -146,18 +89,15 @@ function MomentumModule({
       <div className="grid grid-cols-2 gap-2.5">
         {momentum.map(({ item, values, changePct }) => {
           const up = changePct >= 0;
-          const name = item.titleId ?? item.title;
           return (
             <button
-              key={item._id ?? item.title}
+              key={item._id}
               type="button"
               onClick={() => onSelectTopic(item.title)}
-              title={`Cari paper tentang ${name}`}
+              title={`Cari paper tentang ${item.title}`}
               className="rounded-[12px] border border-border bg-card p-3 text-left transition-colors hover:border-foreground/25"
             >
-              <span className="line-clamp-1 text-[12px] font-semibold text-foreground">
-                {name}
-              </span>
+              <span className="line-clamp-1 text-[12px] font-semibold text-foreground">{item.title}</span>
               <span
                 className={cn(
                   "mt-1 inline-flex items-center gap-0.5 text-[11px] font-semibold tabular-nums",
@@ -181,9 +121,6 @@ function MomentumModule({
   );
 }
 
-// ── Module 3: trending topics (ranked list, clickable) ────────────────────
-// Avatar tint cycles through the palette so each row reads like a distinct
-// "ticker", mirroring the reference's trending-companies list.
 const AVATAR_TINTS = [
   "bg-mint-soft text-mint-foreground",
   "bg-sky-soft text-sky-foreground",
@@ -192,22 +129,13 @@ const AVATAR_TINTS = [
   "bg-lemon-soft text-lemon-foreground",
 ];
 
-function TrendingModule({
-  topTopics,
-  onSelectTopic,
-}: {
-  topTopics: TopTopic[];
-  onSelectTopic: (name: string) => void;
-}) {
+function TrendingModule({ topTopics, onSelectTopic }: { topTopics: TopTopic[]; onSelectTopic: (name: string) => void }) {
   if (topTopics.length === 0) return null;
   const rows = topTopics.slice(0, 6);
   return (
     <WidgetCard className="p-3">
       <div className="px-1">
-        <SectionHeader
-          title="Sedang ramai"
-          icon={<SparklesIcon className="size-3.5" />}
-        />
+        <SectionHeader title="Sedang ramai" icon={<SparklesIcon className="size-3.5" />} />
       </div>
       <ul className="space-y-0.5">
         {rows.map((topic, index) => (
@@ -216,7 +144,7 @@ function TrendingModule({
               type="button"
               onClick={() => onSelectTopic(topic.name)}
               title={`Cari paper tentang ${topic.name} · ${topic.count}`}
-              className="flex w-full items-center gap-2.5 rounded-[9px] px-1.5 py-1.5 text-left transition-colors hover:bg-muted"
+              className="flex w-full items-center gap-2.5 rounded-[9px] p-1.5 text-left transition-colors hover:bg-muted"
             >
               <span
                 className={cn(
@@ -227,12 +155,8 @@ function TrendingModule({
               >
                 {topic.name.trim()[0] ?? "•"}
               </span>
-              <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-foreground">
-                {topic.name}
-              </span>
-              <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
-                {topic.count}
-              </span>
+              <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-foreground">{topic.name}</span>
+              <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">{topic.count}</span>
             </button>
           </li>
         ))}
@@ -241,7 +165,6 @@ function TrendingModule({
   );
 }
 
-// ── Module 4: most-cited papers (ranked list) ─────────────────────────────
 function MostCitedModule({ topCited }: { topCited: TopCitedPaper[] }) {
   if (topCited.length === 0) return null;
   return (
@@ -254,7 +177,7 @@ function MostCitedModule({ topCited }: { topCited: TopCitedPaper[] }) {
           <li key={item.paperKey ?? item.title}>
             <Link
               href={feedDetailHref(item) ?? item.url}
-              className="group flex items-center gap-2.5 rounded-[9px] px-1.5 py-1.5 transition-colors hover:bg-muted"
+              className="group flex items-center gap-2.5 rounded-[9px] p-1.5 transition-colors hover:bg-muted"
             >
               <span
                 className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-mint-soft font-mono text-[12px] font-bold tabular-nums text-mint-foreground"
@@ -281,10 +204,8 @@ function MostCitedModule({ topCited }: { topCited: TopCitedPaper[] }) {
   );
 }
 
-// Compact citation count for the inline label ("1.2k"); the full
-// "1,234 citations" text lives in the row's title attribute.
 function compactCount(value: number): string {
   return value >= 1_000
-    ? `${(value / 1_000).toLocaleString("en", { maximumFractionDigits: 1 })}k`
-    : value.toLocaleString("en");
+    ? `${(value / 1_000).toLocaleString("id-ID", { maximumFractionDigits: 1 })}rb`
+    : value.toLocaleString("id-ID");
 }

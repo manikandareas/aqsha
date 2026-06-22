@@ -26,11 +26,16 @@ export const threads = new Elysia({ prefix: "/threads" })
   // Elysia memprioritaskan di atas `/:id`.
   .get(
     "/send-status",
-    ({ ownerUserId, email }) => {
+    ({ ownerUserId, email, query }) => {
       const { db } = getDb();
-      return SendQuotaService.getSendStatus(db, { ownerUserId, ownerEmail: email });
+      // feature=deep_research (Slice 7.0) ⇒ pre-check `/deep` ikut sertakan cap bulanan deep.
+      return SendQuotaService.getSendStatus(db, {
+        ownerUserId,
+        ownerEmail: email,
+        feature: query.feature === "deep_research" ? "deep_research" : "normal_chat",
+      });
     },
-    { auth: true },
+    { auth: true, query: t.Object({ feature: t.Optional(t.String()) }) },
   )
   // Hydrate konteks `@mention` (Slice 6.6) — resolve workspace/paper yang di-pin
   // composer → catatan ringkas + id tervalidasi. Per-user (bukan per-thread):

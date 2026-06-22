@@ -18,6 +18,13 @@
       "import": "./dist/chat/index.js",
       "default": "./dist/chat/index.js"
     },
+    "./plan": {
+      "types": "./src/plan.ts",
+      "bun": "./src/plan.ts",
+      "node": "./dist/plan.js",
+      "import": "./dist/plan.js",
+      "default": "./dist/plan.js"
+    },
     "./billing": {
       "types": "./src/billing.service.ts",
       "bun": "./src/billing.service.ts",

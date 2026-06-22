@@ -11,6 +11,7 @@ import {
   Library,
   NotebookIcon,
   Quote,
+  TelescopeIcon,
 } from "@aqsha/ui/icons";
 import type { ComponentType } from "react";
 import {
@@ -32,6 +33,7 @@ const promptCommandIconMap: Record<PromptCommandId, ComponentType<{ className?: 
   "research-question": HelpCircleIcon,
   methodology: LayersIcon,
   "literature-review": Library,
+  deep: TelescopeIcon,
   artifact: NotebookIcon,
   workspace: FolderIcon,
 };

@@ -14,6 +14,7 @@ import { HitlCard, type HitlResponse } from "./hitl-card";
 import { InlineSources } from "./sources-panel";
 import { SubagentCard } from "./subagent-card";
 import { ToolRow } from "./tool-row";
+import { VerificationCard } from "./verification-card";
 
 /**
  * Timeline pesan (Slice 6.3 → message-list V1-inspired). User = bubble teks (tanpa avatar);
@@ -146,6 +147,12 @@ function AssistantTurn({
 
       {message.parts.map((part) =>
         part.kind === "artifact" ? <ChatArtifactCard key={part.id} model={part.model} /> : null,
+      )}
+
+      {message.parts.map((part) =>
+        part.kind === "verification" ? (
+          <VerificationCard key={part.id} model={part.model} />
+        ) : null,
       )}
 
       {!message.streaming && sources.length > 0 ? <InlineSources sources={sources} /> : null}

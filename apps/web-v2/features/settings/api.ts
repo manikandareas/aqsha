@@ -1,5 +1,6 @@
 "use client";
 
+import { useClerk } from "@clerk/nextjs";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useApi } from "@/lib/api-client";
@@ -121,5 +122,18 @@ export function useUpdateDisplayName() {
       toast.success("Nama tampilan diperbarui.");
     },
     onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal memperbarui nama.")),
+  });
+}
+
+/** Hapus akun → tombstone+enqueue cascade di server, lalu sign-out Clerk → "/". */
+export function useDeleteAccount() {
+  const api = useApi();
+  const { signOut } = useClerk();
+  return useMutation({
+    mutationFn: async () => unwrap(await api.users.me.delete()),
+    onSuccess: async () => {
+      await signOut({ redirectUrl: "/" });
+    },
+    onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal menghapus akun.")),
   });
 }

@@ -22,7 +22,7 @@ export const providerUsageLedger = pgTable(
     id: text("id").primaryKey(),
     ownerUserId: text("owner_user_id")
       .notNull()
-      .references(() => users.ownerUserId),
+      .references(() => users.ownerUserId, { onDelete: "cascade" }),
     threadId: text("thread_id"),
     feature: text("feature").notNull(),
     provider: text("provider").notNull(),

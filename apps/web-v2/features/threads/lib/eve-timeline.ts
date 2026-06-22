@@ -78,13 +78,41 @@ export type ArtifactCardModel = {
   artifactType: string;
 };
 
+/** Status integritas satu referensi (Slice 7.2) — sejajar `IntegrityStatus` service. */
+export type VerdictStatus =
+  | "verified"
+  | "metadata_mismatch"
+  | "identifier_invalid"
+  | "not_found"
+  | "unverifiable";
+
+/** Satu baris verdict sitasi (di-keyed `[n]`). */
+export type VerificationVerdict = {
+  citation?: number;
+  reference: string;
+  status: VerdictStatus;
+  issues: string[];
+  matchedTitle?: string;
+};
+
+/** Model kartu verifikasi sitasi (Slice 7.2) dari output `verify_identifiers`/`verify_citations`. */
+export type VerificationCardModel = {
+  toolCallId: string;
+  checked: number;
+  verified: number;
+  flagged: number;
+  items: VerificationVerdict[];
+  note?: string;
+};
+
 /** Satu bagian terurut dalam timeline satu pesan asisten. */
 export type TimelinePart =
   | { kind: "text"; id: string; text: string; streaming: boolean }
   | { kind: "reasoning"; id: string; text: string; thinking: boolean }
   | { kind: "tool"; id: string; model: ToolRowModel }
   | { kind: "hitl"; id: string; model: HitlCardModel }
-  | { kind: "artifact"; id: string; model: ArtifactCardModel };
+  | { kind: "artifact"; id: string; model: ArtifactCardModel }
+  | { kind: "verification"; id: string; model: VerificationCardModel };
 
 /** Pesan ter-normalisasi untuk renderer (user = bubble; assistant = parts terurut). */
 export type TimelineMessage = {
@@ -121,6 +149,9 @@ function mapPart(part: EveMessagePart, id: string): TimelinePart | null {
       // propose_artifact sukses → kartu artifact clickable + Save-to-workspace.
       const artifact = artifactCardModel(part);
       if (artifact) return { kind: "artifact", id: part.toolCallId, model: artifact };
+      // verify_identifiers/verify_citations sukses → kartu tabel verdict [n]→status (Slice 7.2).
+      const verification = verificationCardModel(part);
+      if (verification) return { kind: "verification", id: part.toolCallId, model: verification };
       return { kind: "tool", id: part.toolCallId, model: toolPartModel(part) };
     }
     default:
@@ -168,6 +199,52 @@ export function artifactCardModel(part: EveDynamicToolPart): ArtifactCardModel |
     artifactId: o.artifactId,
     title: typeof o.title === "string" ? o.title : "Dokumen",
     artifactType: typeof o.artifactType === "string" ? o.artifactType : "markdown",
+  };
+}
+
+const VERIFY_TOOL_NAMES = new Set(["verify_identifiers", "verify_citations"]);
+const VERDICT_STATUSES = new Set<VerdictStatus>([
+  "verified",
+  "metadata_mismatch",
+  "identifier_invalid",
+  "not_found",
+  "unverifiable",
+]);
+
+/** Satu verdict dari item output verify (default-deny: butuh reference + status valid). */
+function toVerdict(raw: unknown): VerificationVerdict | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.reference !== "string") return null;
+  if (typeof o.status !== "string" || !VERDICT_STATUSES.has(o.status as VerdictStatus)) return null;
+  return {
+    reference: o.reference,
+    status: o.status as VerdictStatus,
+    citation: typeof o.citation === "number" ? o.citation : undefined,
+    issues: Array.isArray(o.issues) ? o.issues.filter((i): i is string => typeof i === "string") : [],
+    matchedTitle: typeof o.matchedTitle === "string" ? o.matchedTitle : undefined,
+  };
+}
+
+/** Kartu verifikasi bila part = verify tool sukses ber-output `{ items[], summary }`, else null. */
+export function verificationCardModel(part: EveDynamicToolPart): VerificationCardModel | null {
+  if (part.state !== "output-available") return null;
+  const name = part.toolMetadata?.eve?.name ?? part.toolName;
+  if (!VERIFY_TOOL_NAMES.has(name)) return null;
+  const out = part.output;
+  if (!out || typeof out !== "object") return null;
+  const o = out as Record<string, unknown>;
+  if (!Array.isArray(o.items)) return null;
+  const items = o.items.map(toVerdict).filter((v): v is VerificationVerdict => v !== null);
+  const summary = (o.summary ?? {}) as Record<string, unknown>;
+  const num = (v: unknown, fallback: number) => (typeof v === "number" ? v : fallback);
+  return {
+    toolCallId: part.toolCallId,
+    checked: num(summary.checked, items.length),
+    verified: num(summary.verified, 0),
+    flagged: num(summary.flagged, 0),
+    items,
+    note: typeof o.note === "string" ? o.note : undefined,
   };
 }
 
@@ -326,6 +403,12 @@ const TOOL_LABELS: Record<string, string> = {
   link_to_workspace: "Menautkan ke workspace",
   delete_artifact: "Menghapus artefak",
   ask_question: "Bertanya",
+  search_papers: "Mencari paper",
+  propose_research_plan: "Menyusun rencana riset",
+  // Subagent deep-research (Slice 7.1) — nama dir subagent muncul sebagai `eve.name`.
+  "literature-searcher": "Menelaah literatur",
+  "counter-evidence": "Mencari bukti tandingan",
+  "citation-verifier": "Memverifikasi sitasi",
 };
 
 function toolTitle(rawName: string): string {
@@ -345,6 +428,8 @@ const KEY_LABELS: Record<string, string> = {
   workspaceId: "Workspace",
   artifactId: "Artefak",
   threadId: "Percakapan",
+  message: "Tugas",
+  summary: "Ringkasan",
 };
 
 function humanizeKey(key: string): string {

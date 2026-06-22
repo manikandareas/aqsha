@@ -13,7 +13,7 @@ export const feedInteractions = pgTable(
     id: text("id").primaryKey(),
     ownerUserId: text("owner_user_id")
       .notNull()
-      .references(() => users.ownerUserId),
+      .references(() => users.ownerUserId, { onDelete: "cascade" }),
     feedItemId: text("feed_item_id")
       .notNull()
       .references(() => feedItems.id),

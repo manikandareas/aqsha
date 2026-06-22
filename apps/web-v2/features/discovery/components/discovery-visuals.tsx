@@ -1,16 +1,10 @@
 "use client";
 
-import type { FeedVerdict } from "../types";
 import { cn } from "@/lib/utils";
-import { VERDICT_STYLE } from "../utils/discovery-verdict-style";
+import { VERDICT_STYLE } from "../format";
+import type { FeedVerdict } from "../types";
 
-export function VerdictBadge({
-  verdict,
-  className,
-}: {
-  verdict: FeedVerdict;
-  className?: string;
-}) {
+export function VerdictBadge({ verdict, className }: { verdict: FeedVerdict; className?: string }) {
   const style = VERDICT_STYLE[verdict];
   const Icon = style.icon;
   return (
@@ -27,7 +21,6 @@ export function VerdictBadge({
   );
 }
 
-// ── Evidence / stance tally (supporting vs contrasting) ───────────────────
 export function StanceTally({
   supporting,
   contrasting,
@@ -55,7 +48,6 @@ export function StanceTally({
   );
 }
 
-// ── Sparkline (tiny inline trend chart for topic cards) ───────────────────
 export function Sparkline({
   values,
   className,
@@ -83,64 +75,10 @@ export function Sparkline({
     .join(" ");
   const areaPoints = `0,${height} ${points} ${width},${height}`;
   return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      preserveAspectRatio="none"
-      className={cn("h-8 w-full", className)}
-      aria-hidden
-    >
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className={cn("h-8 w-full", className)} aria-hidden>
       <polyline points={areaPoints} fill={fill} stroke="none" opacity={0.5} />
-      <polyline
-        points={points}
-        fill="none"
-        stroke={stroke}
-        strokeWidth={1.5}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
+      <polyline points={points} fill="none" stroke={stroke} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
     </svg>
-  );
-}
-
-// ── Relevance dot (Scholar Inbox style triage signal) ─────────────────────
-function RelevanceDot({ score }: { score?: number }) {
-  if (score === undefined || score <= 0) return null;
-  const opacity = Math.max(0.35, Math.min(1, score / 100));
-  return (
-    <span
-      className="inline-block size-2 shrink-0 rounded-full bg-mint"
-      style={{ opacity }}
-      title={`Relevansi untukmu: ${score}%`}
-      aria-label={`Relevansi ${score} persen`}
-    />
-  );
-}
-
-// ── Score bar (idea novelty / feasibility) ────────────────────────────────
-export function ScoreBar({
-  label,
-  value,
-  tone = "mint",
-}: {
-  label: string;
-  value: number;
-  tone?: "mint" | "sky" | "lemon";
-}) {
-  const fill =
-    tone === "sky" ? "bg-sky-foreground" : tone === "lemon" ? "bg-lemon" : "bg-mint";
-  return (
-    <div className="min-w-0 flex-1">
-      <div className="mb-1 flex items-center justify-between text-[10.5px] font-medium text-muted-foreground">
-        <span>{label}</span>
-        <span className="font-mono tabular-nums">{value}</span>
-      </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        <div
-          className={cn("h-full rounded-full", fill)}
-          style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
-        />
-      </div>
-    </div>
   );
 }
 
@@ -168,11 +106,7 @@ export function Donut({
     total > 0
       ? segments.map((segment) => {
           const fraction = segment.count / total;
-          const arc = {
-            color: segment.color,
-            dash: fraction * circumference,
-            dashOffset: -(consumed * circumference),
-          };
+          const arc = { color: segment.color, dash: fraction * circumference, dashOffset: -(consumed * circumference) };
           consumed += fraction;
           return arc;
         })
@@ -181,14 +115,7 @@ export function Donut({
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
       <svg viewBox={`0 0 ${size} ${size}`} className="size-full" aria-hidden>
-        <circle
-          cx={center}
-          cy={center}
-          r={radius}
-          fill="none"
-          stroke="var(--muted)"
-          strokeWidth={stroke}
-        />
+        <circle cx={center} cy={center} r={radius} fill="none" stroke="var(--muted)" strokeWidth={stroke} />
         {arcs.map((arc, index) => (
           <circle
             key={index}
@@ -206,14 +133,8 @@ export function Donut({
       </svg>
       {centerLabel ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="font-heading text-[20px] font-bold leading-none text-foreground">
-            {centerLabel}
-          </span>
-          {centerCaption ? (
-            <span className="mt-0.5 text-[10px] font-medium text-muted-foreground">
-              {centerCaption}
-            </span>
-          ) : null}
+          <span className="font-heading text-[20px] font-bold leading-none text-foreground">{centerLabel}</span>
+          {centerCaption ? <span className="mt-0.5 text-[10px] font-medium text-muted-foreground">{centerCaption}</span> : null}
         </div>
       ) : null}
     </div>

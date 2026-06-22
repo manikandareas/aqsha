@@ -13,7 +13,7 @@ export const userFeedInterests = pgTable(
   {
     ownerUserId: text("owner_user_id")
       .notNull()
-      .references(() => users.ownerUserId),
+      .references(() => users.ownerUserId, { onDelete: "cascade" }),
     topic: text("topic").notNull(),
     weight: integer("weight").notNull(),
     updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
