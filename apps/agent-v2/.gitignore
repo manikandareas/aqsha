@@ -1,0 +1,11 @@
+/node_modules/
+.env
+.env.local
+*.tsbuildinfo
+
+# eve: build artifacts + dev-server registry + durable runtime state
+/.eve/
+/.workflow-data/
+/.output/
+/.nitro/
+/.vercel/

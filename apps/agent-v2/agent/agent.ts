@@ -16,8 +16,19 @@ const openai = createOpenAI(
 
 const liteModelId = process.env.AQSHA_LITE_MODEL ?? "gpt-4o";
 
+// Escape hatch context window untuk compaction eve. Compaction (selalu on) butuh ukuran
+// context window model untuk memutuskan kapan men-summarize. eve me-resolve via katalog
+// AI Gateway dari model id — model id KUSTOM lewat gateway (mis. LiteLLM
+// `openai/deepseek/...`) TAK ada di katalog → eve gagal compile & tak boot. Set
+// `AQSHA_LITE_CONTEXT_WINDOW` (jumlah token) agar eve pakai nilai ini, lewati lookup.
+// Kosong = model dikenal eve (mis. `gpt-4o`) → biarkan katalog yang resolve (lebih akurat).
+const liteContextWindow = process.env.AQSHA_LITE_CONTEXT_WINDOW
+  ? Number(process.env.AQSHA_LITE_CONTEXT_WINDOW)
+  : undefined;
+
 export default defineAgent({
   model: openai.chat(liteModelId),
+  ...(liteContextWindow ? { modelContextWindowTokens: liteContextWindow } : {}),
   // D-E (Slice 6.2): proses eve (Node v25) meng-`import` kode service ASLI in-process.
   // `externalDependencies` membuat eve (1) MEMBIARKAN impor ini external saat meng-compile
   // modul authored (tools/channels/hooks) — tak di-inline Rolldown → dep transitif tak

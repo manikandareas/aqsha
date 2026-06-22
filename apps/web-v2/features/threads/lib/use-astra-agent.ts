@@ -29,7 +29,11 @@ import { queryKeys } from "@/lib/api-query";
  * `boundRef` mulai `true` supaya tak ada `replaceState`. Resume turn IN-FLIGHT lintas-reload
  * tetap deferred (known gap 6.1) — ini hanya start turn baru.
  */
-export function useAstraAgent(initialSession?: { sessionId: string; streamIndex: number }) {
+export function useAstraAgent(initialSession?: {
+  sessionId: string;
+  streamIndex: number;
+  continuationToken?: string | null;
+}) {
   const { getToken } = useAuth();
   const qc = useQueryClient();
   const boundRef = useRef(initialSession != null);
@@ -37,9 +41,21 @@ export function useAstraAgent(initialSession?: { sessionId: string; streamIndex:
 
   const bearer = useCallback(async () => (await getToken()) ?? "", [getToken]);
 
+  // eve SessionState: continuationToken `string | undefined` (bukan null). Tanpa token,
+  // continue route ditolak ("Missing or empty continuationToken") → wajib teruskan saat ada.
+  const eveInitialSession = initialSession
+    ? {
+        sessionId: initialSession.sessionId,
+        streamIndex: initialSession.streamIndex,
+        ...(initialSession.continuationToken
+          ? { continuationToken: initialSession.continuationToken }
+          : {}),
+      }
+    : undefined;
+
   const agent = useEveAgent({
     auth: { bearer },
-    ...(initialSession ? { initialSession } : {}),
+    ...(eveInitialSession ? { initialSession: eveInitialSession } : {}),
     onSessionChange(session) {
       if (session.sessionId) sessionIdRef.current = session.sessionId;
       if (session.sessionId && !boundRef.current && typeof window !== "undefined") {

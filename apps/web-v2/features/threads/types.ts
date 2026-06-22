@@ -11,6 +11,7 @@ export type ChatThread = {
   agentKind: string; // "lite" | "pro"
   workspaceId?: string | null;
   lastMessagePreview: string | null;
+  continuationToken?: string | null; // resume handle eve (rehydrate initialSession saat lanjut thread)
   lastActivityAt: number;
   createdAt: number;
   updatedAt: number;

@@ -1,6 +1,13 @@
 import type { NextConfig } from "next";
 import path from "node:path";
-import { withEve } from "eve/next";
+
+// Agent Astra (eve) kini app TERPISAH `@aqsha/agent-v2` yang jalan sebagai service
+// sendiri (`eve dev`/`eve start`). web-v2 = pure consumer: rewrite same-origin
+// `/eve/v1/*` → origin agent-v2 supaya `useEveAgent` tetap same-origin (TANPA CORS;
+// eve tak punya CORS bawaan) dan bearer Clerk diteruskan apa adanya — channel eve
+// (`agent/channels/eve.ts` di agent-v2) yang verifikasi. Server-side env (bukan
+// NEXT_PUBLIC): browser tak pernah melihat origin agent-v2.
+const AGENT_ORIGIN = process.env.AGENT_ORIGIN ?? "http://localhost:4317";
 
 // Base disalin dari apps/web; DROP redirects V1 + @aqsha/convex.
 const nextConfig: NextConfig = {
@@ -11,9 +18,9 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(__dirname, "../.."),
   },
+  async rewrites() {
+    return [{ source: "/eve/v1/:path*", destination: `${AGENT_ORIGIN}/eve/v1/:path*` }];
+  },
 };
 
-// withEve (P6): omit `eveRoot` (agent/ ada di root web-v2 = cwd saat `next dev`).
-// Inject Next rewrites yang mem-proxy /eve/v1/* ke PROSES eve terpisah
-// (`eve dev --no-ui --port 0` di dev). Stream chat TIDAK lewat api-v2.
-export default withEve(nextConfig);
+export default nextConfig;

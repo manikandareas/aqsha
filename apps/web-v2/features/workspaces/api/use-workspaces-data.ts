@@ -70,6 +70,7 @@ function flattenThreads(
           agentKind: string;
           createdAt: number;
           workspaceId?: string | null;
+          bucket?: "recent" | "older";
         }>;
       }>
     | undefined,
@@ -85,6 +86,7 @@ function flattenThreads(
       status: thread.status as "idle" | "streaming" | "failed",
       lastAgentKind: thread.agentKind as "lite" | "pro" | undefined,
       workspaceId: thread.workspaceId ?? undefined,
+      bucket: thread.bucket,
     })),
   );
 }

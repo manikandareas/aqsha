@@ -29,6 +29,10 @@ export const chatThreads = pgTable(
     status: text("status").notNull().default("idle"),
     agentKind: text("agent_kind").notNull().default("lite"),
     lastMessagePreview: text("last_message_preview"),
+    // Resume handle eve (Slice fix): dipersist tiap `session.waiting` oleh channel agent.
+    // Follow-up di thread yang di-reload WAJIB continuationToken (eve menolak tanpa-token);
+    // di-rehydrate ke `initialSession` saat ThreadView mount. Null sampai turn pertama parkir.
+    continuationToken: text("continuation_token"),
     lastActivityAt: bigint("last_activity_at", { mode: "number" }).notNull(),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
     updatedAt: bigint("updated_at", { mode: "number" }).notNull(),

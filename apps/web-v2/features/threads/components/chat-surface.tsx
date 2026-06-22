@@ -60,7 +60,7 @@ export function ChatSurface({
   seed,
   ambientWorkspaceId = null,
 }: {
-  initialSession?: { sessionId: string; streamIndex: number };
+  initialSession?: { sessionId: string; streamIndex: number; continuationToken?: string | null };
   history?: TimelineMessage[];
   compact?: boolean;
   seed?: string;

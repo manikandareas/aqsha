@@ -44,6 +44,16 @@ export async function setThreadStatus(sessionId: string, status: ThreadStatus): 
   await sql`update chat_threads set status = ${status}, updated_at = ${Date.now()} where id = ${sessionId}`;
 }
 
+/**
+ * Persist resume handle eve (continuationToken) saat sesi parkir (`session.waiting`).
+ * Dibutuhkan agar follow-up di thread yang di-reload bisa lanjut — eve menolak continue
+ * tanpa continuationToken. No-op bila thread belum ada.
+ */
+export async function saveContinuationToken(sessionId: string, token: string): Promise<void> {
+  const sql = getSql();
+  await sql`update chat_threads set continuation_token = ${token}, updated_at = ${Date.now()} where id = ${sessionId}`;
+}
+
 /** Upsert pesan user + bump aktivitas thread (satu transaksi). */
 export async function recordUserMessage(input: {
   sessionId: string;

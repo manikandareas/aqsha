@@ -12,6 +12,11 @@ import { collapse } from "../lib/text";
 const DEFAULT_LIST_LIMIT = 30;
 const MAX_LIST_LIMIT = 100;
 const TITLE_MAX = 120;
+const ARCHIVE_THRESHOLD_MS = 24 * 60 * 60 * 1000; // >1 hari sejak aktivitas terakhir → "older"
+
+/** Bucket aktivitas thread untuk pengelompokan sidebar — dihitung server-side (BE). */
+export type ThreadBucket = "recent" | "older";
+export type ThreadListItem = ChatThread & { bucket: ThreadBucket };
 
 /**
  * ThreadService — path BACA + CRUD non-stream thread Astra (Fase 6), dipakai route
@@ -41,17 +46,25 @@ export const ThreadService = {
     return thread;
   },
 
-  /** List keyset milik owner, DESC aktivitas. */
+  /** List keyset milik owner, DESC aktivitas. Bucket recent/older dihitung di BE. */
   async list(
     db: DbOrTx,
     ownerUserId: string,
     args: { cursor?: string | null; limit?: number },
-  ): Promise<{ items: ChatThread[]; nextCursor: string | null }> {
-    return ChatThreadRepo.listByOwner(db, {
+  ): Promise<{ items: ThreadListItem[]; nextCursor: string | null }> {
+    const { items, nextCursor } = await ChatThreadRepo.listByOwner(db, {
       ownerUserId,
       limit: clampLimit(args.limit),
       cursor: decodeKeysetCursor(args.cursor),
     });
+    const cutoff = Date.now() - ARCHIVE_THRESHOLD_MS;
+    return {
+      items: items.map((t) => ({
+        ...t,
+        bucket: t.lastActivityAt <= cutoff ? "older" : "recent",
+      })),
+      nextCursor,
+    };
   },
 
   /** Rename manual (judul terminal → `titleStatus: "ready"` supaya auto-title tak menimpa). */

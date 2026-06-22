@@ -27,10 +27,11 @@ export function useThreadsList() {
 }
 
 /** Detail satu thread (null bila tak ditemukan / bukan milik user). */
-export function useThread(id: string) {
+export function useThread(id: string, enabled = true) {
   const api = useApi();
   return useQuery({
     queryKey: queryKeys.threads.detail(id),
+    enabled,
     queryFn: async () => (unwrap(await api.threads({ id }).get()) as ChatThread | null) ?? null,
   });
 }

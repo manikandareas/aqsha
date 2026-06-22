@@ -3,15 +3,15 @@ import { ForbiddenError } from "eve/channels/auth";
 import { eveChannel } from "eve/channels/eve";
 import { clerkAuth } from "../lib/clerk.ts";
 import { getServiceDb } from "../lib/db.ts";
-import { checkOwnership } from "../lib/store.ts";
+import { checkOwnership, saveContinuationToken } from "../lib/store.ts";
 
 /**
  * Channel eve — Slice 6.1: Clerk AuthFn + ownership gate. Menggantikan auth SPIKE 6.0
- * (`[localDev(), none()]`). Channel `/eve/v1/*` di-host PROSES eve (bukan api-v2);
- * `withEve` mem-proxy dari origin web-v2.
+ * (`[localDev(), none()]`). Channel `/eve/v1/*` di-host app TERPISAH `@aqsha/agent-v2`
+ * (proses eve sendiri); web-v2 mem-proxy same-origin via Next `rewrites()` ke origin agent-v2.
  *
  * - `auth`: HANYA `clerkAuth()`, di SEMUA environment. `localDev()` SENGAJA TIDAK dipakai:
- *   di balik proxy `withEve` SEMUA request masuk sebagai loopback (`127.0.0.1`), jadi
+ *   di balik rewrite Next SEMUA request masuk sebagai loopback (`127.0.0.1`), jadi
  *   `localDev()` akan menerima request TANPA token sebagai principal `local-dev` bersama —
  *   bypass auth pada deploy non-`production` mana pun. Browser ber-Clerk selalu kirim bearer
  *   → tak butuh fallback; curl dev cukup pakai token Clerk. (`none()` juga sudah di-DROP.)
@@ -56,5 +56,21 @@ export default eveChannel({
     if (!quota.ok) return null;
 
     return { auth: caller };
+  },
+  events: {
+    // Persist resume handle saat sesi parkir. `session.waiting` = turn selesai, sesi
+    // menunggu input berikutnya; `channel.continuationToken` = handle untuk turn berikut.
+    // Disimpan ke chat_threads → ThreadView me-rehydrate `initialSession.continuationToken`
+    // saat reload supaya follow-up bisa lanjut (eve wajib continuationToken di continue).
+    async "session.waiting"(_event, channel, ctx) {
+      const token = channel.continuationToken;
+      if (!token) return;
+      try {
+        await saveContinuationToken(ctx.session.id, token);
+      } catch {
+        // Best-effort: jangan gagalkan turn kalau persist gagal (mis. migration 0009
+        // belum diterapkan). Follow-up lintas-reload baru jalan setelah kolom ada.
+      }
+    },
   },
 });
