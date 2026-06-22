@@ -1,4 +1,5 @@
 import { BillingService } from "@aqsha/services/billing";
+import type { CreditFeature } from "@aqsha/services/plan";
 import { ResearchService } from "@aqsha/services/research";
 import type { ResearchCandidate } from "@aqsha/services/research";
 import type { ToolContext } from "eve/tools";
@@ -34,24 +35,51 @@ export function callerEmail(ctx: ToolContext): string | null {
 export { getServiceDb };
 
 /**
- * Gerbang + debit `external_search` (flat 2 kredit) untuk satu pemanggilan tool
- * riset. IDEMPOTEN saat resume eve: `idempotencyKey` stabil per (thread,turn,tool,
- * suffix) → step yang RE-RUN tak double-debit (A9). Return `false` bila kuota
- * habis → tool melapor ke model tanpa melakukan pencarian.
+ * Thread id untuk scoping data per-percakapan (research_sources + RAG). Saat tool
+ * dipanggil DI DALAM subagent terdeklarasi, `ctx.session.id` = CHILD session, bukan
+ * thread user-facing (FLAG-2 §0). eve mendenormalisasi puncak rantai dispatch di
+ * `ctx.session.parent.rootSessionId` → pakai itu bila ada agar sumber subagent masuk
+ * panel Sources thread induk + RAG melihat lampiran induk. Di root, `parent` undefined.
  */
-export async function chargeExternalSearch(
+export function threadScopeId(ctx: ToolContext): string {
+  return ctx.session.parent?.rootSessionId ?? ctx.session.id;
+}
+
+/**
+ * Gerbang + debit kredit untuk satu pemanggilan tool yang merekam usage. IDEMPOTEN
+ * saat resume eve: `idempotencyKey` stabil per (session,turn,tool,suffix) → step yang
+ * RE-RUN tak double-debit (A9). Return `false` bila kuota habis → tool melapor ke model
+ * tanpa menjalankan operasi. `feature` menentukan rate (mis. `external_search`=2 kredit,
+ * `citation_verify`=0 → usage-tracked, selalu ok). Idempotency tetap pakai child session
+ * id di dalam subagent — billing owner benar (callerId), key unik per child.
+ */
+export async function chargeToolUsage(
   ctx: ToolContext,
-  args: { ownerUserId: string; tool: string; provider: string; idemSuffix: string },
+  args: {
+    ownerUserId: string;
+    feature: CreditFeature;
+    tool: string;
+    provider: string;
+    idemSuffix: string;
+  },
 ): Promise<boolean> {
   const result = await BillingService.consumeCredits(getServiceDb(), {
     ownerUserId: args.ownerUserId,
     ownerEmail: callerEmail(ctx),
-    feature: "external_search",
+    feature: args.feature,
     provider: args.provider,
-    threadId: ctx.session.id,
+    threadId: threadScopeId(ctx),
     idempotencyKey: `${ctx.session.id}:${ctx.session.turn.id}:${args.tool}:${args.idemSuffix}`,
   });
   return result.ok;
+}
+
+/** Wrapper tipis: debit `external_search` (2 kredit) untuk tool riset (search_*). */
+export function chargeExternalSearch(
+  ctx: ToolContext,
+  args: { ownerUserId: string; tool: string; provider: string; idemSuffix: string },
+): Promise<boolean> {
+  return chargeToolUsage(ctx, { ...args, feature: "external_search" });
 }
 
 /**
@@ -64,7 +92,7 @@ export async function persistResearch(
 ): Promise<void> {
   try {
     await ResearchService.persistSources(getServiceDb(), {
-      threadId: ctx.session.id,
+      threadId: threadScopeId(ctx),
       ownerUserId: args.ownerUserId,
       turnId: ctx.session.turn.id,
       discoveryQuery: args.discoveryQuery,

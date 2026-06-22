@@ -9,6 +9,7 @@ import type { TimelineMessage, TimelinePart } from "../lib/eve-timeline";
 import { ChatArtifactCard } from "./chat-artifact-card";
 import { HitlCard, type HitlResponse } from "./hitl-card";
 import { ToolRow } from "./tool-row";
+import { VerificationCard } from "./verification-card";
 
 /**
  * Timeline pesan (Slice 6.3) — renderer PER-PART terurut. User = bubble teks;
@@ -137,6 +138,8 @@ function PartView({
       );
     case "artifact":
       return <ChatArtifactCard model={part.model} />;
+    case "verification":
+      return <VerificationCard model={part.model} />;
     default:
       return null;
   }
