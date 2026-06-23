@@ -75,7 +75,7 @@ export function ChatSurface({
   const notice = blockedNotice(sendStatus.data);
   const blocked = notice !== null;
 
-  const live = evePartsToTimeline(agent.data.messages);
+  const live = evePartsToTimeline(agent.data.messages, busy);
   const messages = history && history.length > 0 ? [...history, ...live] : live;
   const sessionId = agent.session?.sessionId ?? initialSession?.sessionId ?? null;
   const isEmpty = messages.length === 0 && !busy;

@@ -128,17 +128,20 @@ export type TimelineMessage = {
 
 // ── konversi part eve ────────────────────────────────────────────────────────
 
-function mapPart(part: EveMessagePart, id: string): TimelinePart | null {
+function mapPart(part: EveMessagePart, id: string, active: boolean): TimelinePart | null {
   switch (part.type) {
     case "text": {
       const text = part.text ?? "";
       if (!text.trim()) return null;
-      return { kind: "text", id, text, streaming: part.state === "streaming" };
+      return { kind: "text", id, text, streaming: active && part.state === "streaming" };
     }
     case "reasoning": {
       const text = part.text ?? "";
       if (!text.trim()) return null;
-      return { kind: "reasoning", id, text, thinking: part.state === "streaming" };
+      // Gate by `active` like text/tool below: a dropped/failed turn never settles
+      // `part.state`, so an ungated reasoning part shimmers forever AND stays
+      // un-expandable (reasoning.tsx forces the live preview while isThinking).
+      return { kind: "reasoning", id, text, thinking: active && part.state === "streaming" };
     }
     case "dynamic-tool": {
       // HITL park (Slice 6.5): part ber-`inputRequest` (approval ATAU ask_question) →
@@ -152,7 +155,14 @@ function mapPart(part: EveMessagePart, id: string): TimelinePart | null {
       // verify_identifiers/verify_citations sukses → kartu tabel verdict [n]→status (Slice 7.2).
       const verification = verificationCardModel(part);
       if (verification) return { kind: "verification", id: part.toolCallId, model: verification };
-      return { kind: "tool", id: part.toolCallId, model: toolPartModel(part) };
+      const model = toolPartModel(part);
+      // `active` false → store sudah settle (ready/error); paksa isRunning false agar
+      // tool yang ter-orphan di state "running" tak shimmer selamanya (lihat evePartsToTimeline).
+      return {
+        kind: "tool",
+        id: part.toolCallId,
+        model: active ? model : { ...model, isRunning: false },
+      };
     }
     default:
       return null; // step-start
@@ -248,18 +258,31 @@ export function verificationCardModel(part: EveDynamicToolPart): VerificationCar
   };
 }
 
-/** Map `EveMessage[]` (live, dari `agent.data.messages`) → timeline ter-normalisasi. */
-export function evePartsToTimeline(messages: readonly EveMessage[]): TimelineMessage[] {
+/**
+ * Map `EveMessage[]` (live, dari `agent.data.messages`) → timeline ter-normalisasi.
+ *
+ * `active` = turn benar-benar berjalan (`agent.status` submitted/streaming). Per-message
+ * `metadata.status` TAK ANDAL sebagai sinyal loading: saat turn di-drop (mis. backstop billing
+ * `onMessage → return null`, ~204) atau gagal, reducer eve TAK men-settle `metadata.status`
+ * (turn.failed = no-op untuk status message), jadi message ter-park selamanya di "streaming".
+ * Store-level `status` DI-settle (→ ready saat stream kosong, → error saat gagal), jadi kita
+ * gate semua indikator live (`streaming`, tool `isRunning`) dengan `active` supaya shimmer
+ * berhenti begitu turn berhenti — bukan menunggu sinyal message yang tak pernah datang.
+ */
+export function evePartsToTimeline(
+  messages: readonly EveMessage[],
+  active: boolean,
+): TimelineMessage[] {
   return messages.map((m) => {
     const parts: TimelinePart[] = [];
     m.parts.forEach((part, i) => {
-      const mapped = mapPart(part, `${m.id}:${i}`);
+      const mapped = mapPart(part, `${m.id}:${i}`, active);
       if (mapped) parts.push(mapped);
     });
     return {
       id: m.id,
       role: m.role,
-      streaming: m.metadata?.status === "streaming",
+      streaming: active && m.metadata?.status === "streaming",
       turnId: m.metadata?.turnId,
       parts,
     };

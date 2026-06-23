@@ -7,7 +7,6 @@ import {
   FileTextIcon,
   FolderIcon,
   GlobeIcon,
-  Loader2Icon,
   PenLineIcon,
   SearchIcon,
   TelescopeIcon,
@@ -18,6 +17,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import type { ToolRow as ToolRowData, ToolRowModel, ToolStatus } from "../lib/eve-timeline";
 
@@ -68,7 +68,7 @@ function ToolStatusIcon({
   className?: string;
 }) {
   if (status === "running") {
-    return <Loader2Icon className={cn(className, "animate-spin text-primary")} />;
+    return <Spinner className={cn(className, "text-primary")} />;
   }
   if (status === "failed") {
     return <XCircleIcon className={cn(className, "text-red-500")} />;

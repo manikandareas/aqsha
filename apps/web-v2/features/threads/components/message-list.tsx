@@ -6,7 +6,7 @@ import { Reasoning } from "@/components/ai-elements/reasoning";
 import { Response } from "@/components/ai-elements/response";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { cn } from "@/lib/utils";
+import { Spinner } from "@/components/ui/spinner";
 import type { TimelineMessage, TimelinePart } from "../lib/eve-timeline";
 import type { ResearchSource } from "../types";
 import { ChatArtifactCard } from "./chat-artifact-card";
@@ -72,7 +72,7 @@ export function MessageList({
           />
         ),
       )}
-      {showTyping ? <TypingDots /> : null}
+      {showTyping ? <ThinkingRow label="Astra sedang berpikir…" /> : null}
     </div>
   );
 }
@@ -161,11 +161,9 @@ function AssistantTurn({
         <MessageActions text={answer?.text ?? ""} onRegenerate={onRegenerate} />
       ) : null}
 
-      {message.streaming && empty ? <TypingDots /> : null}
+      {message.streaming && empty ? <ThinkingRow label="Astra sedang berpikir…" /> : null}
       {message.streaming && !empty && !hasAnswer ? (
-        <Shimmer as="span" className="text-[13px]">
-          Astra sedang menyusun jawaban…
-        </Shimmer>
+        <ThinkingRow label="Astra sedang menyusun jawaban…" />
       ) : null}
     </div>
   );
@@ -197,9 +195,12 @@ function ProcessBlock({ parts, streaming }: { parts: TimelinePart[]; streaming: 
     <Collapsible className="min-w-0" open={open} onOpenChange={(next) => setOverride(next)}>
       <CollapsibleTrigger className="-mx-1.5 group flex w-full min-w-0 items-center gap-1.5 rounded-[8px] px-1.5 py-1 text-left text-[13px] transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         {streaming ? (
-          <Shimmer as="span" className="font-medium">
-            {label}
-          </Shimmer>
+          <>
+            <Spinner className="size-3.5 shrink-0 text-primary" />
+            <Shimmer as="span" className="font-medium">
+              {label}
+            </Shimmer>
+          </>
         ) : (
           <span className="font-medium text-muted-foreground">{label}</span>
         )}
@@ -270,21 +271,15 @@ function MessageActions({ text, onRegenerate }: { text: string; onRegenerate?: (
   );
 }
 
-function TypingDots() {
+/** Indikator live V1: FlickerSpinner (kiri) + label shimmer (kanan). Dipakai untuk "berpikir"
+ *  (sebelum token pertama) maupun "menyusun jawaban" (tool sudah jalan, jawaban belum mengalir). */
+function ThinkingRow({ label }: { label: string }) {
   return (
-    <div className="mt-1.5 flex items-center gap-1">
-      <Dot delay="0ms" />
-      <Dot delay="150ms" />
-      <Dot delay="300ms" />
-    </div>
-  );
-}
-
-function Dot({ delay }: { delay: string }) {
-  return (
-    <span
-      className={cn("size-1.5 animate-bounce rounded-full bg-muted-foreground/60")}
-      style={{ animationDelay: delay }}
-    />
+    <span className="mt-1.5 flex items-center gap-1.5">
+      <Spinner className="size-3.5 shrink-0 text-primary" />
+      <Shimmer as="span" className="text-[13px]">
+        {label}
+      </Shimmer>
+    </span>
   );
 }

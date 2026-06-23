@@ -175,7 +175,7 @@ function PlanCard({
               rows={1}
               placeholder="Sub-pertanyaan riset…"
               aria-label={`Sub-pertanyaan ${i + 1}`}
-              className="min-h-[2rem] min-w-0 flex-1 resize-y rounded-md border border-border/60 bg-background px-2 py-1 text-[12px] outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              className="min-h-[2rem] min-w-0 flex-1 resize-none rounded-md border border-border/60 bg-background px-2 py-1 text-[12px] outline-none field-sizing-content focus-visible:ring-1 focus-visible:ring-ring"
             />
             <Button
               type="button"
