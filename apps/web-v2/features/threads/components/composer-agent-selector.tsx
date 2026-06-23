@@ -6,7 +6,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@aqsha/ui/components/dropdown-menu";
-import { ChevronDownIcon, LockIcon, SparklesIcon } from "@aqsha/ui/icons";
+import { ChevronDownIcon, LockIcon } from "@aqsha/ui/icons";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -55,7 +56,13 @@ export function AgentSelector({
           disabled={disabled}
           className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-full bg-muted/20 px-2.5 py-1 font-semibold text-[11px] text-muted-foreground transition-all duration-150 hover:bg-muted/40 hover:text-foreground disabled:opacity-50"
         >
-          <SparklesIcon className="size-3.5" />
+          <Image
+            src={agentKind === "pro" ? "/pro-agent.png" : "/general-agent.png"}
+            alt=""
+            width={16}
+            height={16}
+            className="size-4 rounded-full object-cover"
+          />
           <span>{agentKind === "pro" ? "Pro" : "Lite"}</span>
           <ChevronDownIcon className="size-3 text-muted-foreground/60" />
         </button>
@@ -65,7 +72,13 @@ export function AgentSelector({
           onClick={() => setAgentKind("lite")}
           className={cn("gap-2 rounded-lg", agentKind === "lite" && "bg-sky-soft/60 font-medium")}
         >
-          <SparklesIcon className="size-3.5" />
+          <Image
+            src="/general-agent.png"
+            alt=""
+            width={20}
+            height={20}
+            className="size-5 rounded-full object-cover"
+          />
           <span className="font-semibold text-[11px]">Astra Lite</span>
         </DropdownMenuItem>
         <DropdownMenuItem
@@ -75,7 +88,13 @@ export function AgentSelector({
           }}
           className={cn("gap-2 rounded-lg", agentKind === "pro" && "bg-sky-soft/60 font-medium")}
         >
-          <SparklesIcon className="size-3.5" />
+          <Image
+            src="/pro-agent.png"
+            alt=""
+            width={20}
+            height={20}
+            className="size-5 rounded-full object-cover"
+          />
           <span className="font-semibold text-[11px]">Astra Pro</span>
           {!canUsePro ? <LockIcon className="ml-auto size-3 text-muted-foreground/70" /> : null}
         </DropdownMenuItem>
