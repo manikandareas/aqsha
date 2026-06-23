@@ -4,6 +4,7 @@ import { m, useReducedMotion } from "motion/react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { HeroComparisonCard } from "@/features/marketing/components/hero-comparison-card";
 import { LandingDemoSessionPreview } from "@/features/marketing/components/landing-demo-session-preview";
 
 function HeroResearchShowcase() {
@@ -11,7 +12,7 @@ function HeroResearchShowcase() {
 
   return (
     <div
-      className="mt-24 w-full [perspective:1400px] sm:mt-28"
+      className="w-full [perspective:1400px]"
       style={{ perspectiveOrigin: "50% 0%" }}
     >
       <m.div
@@ -80,17 +81,18 @@ export function LandingHeroSection() {
             animate={{ opacity: 1, y: 0, letterSpacing: "0em" }}
             transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
           >
-            Research workspace for source-backed answers
+            Asisten AI buat skripsi, tesis &amp; paper
           </m.p>
           <div className="grid gap-10 sm:gap-12 lg:grid-cols-2 lg:items-start lg:gap-x-14 xl:gap-x-20">
             <div className="min-w-0 max-w-xl lg:max-w-none">
               <m.h1
-                className="font-heading max-w-[20rem] text-[2.75rem] font-normal leading-[1.08] tracking-normal text-foreground sm:max-w-[22rem] sm:text-5xl sm:leading-[1.06] lg:max-w-[min(100%,26rem)] lg:text-[3.25rem] lg:leading-[1.05] xl:text-[3.5rem]"
+                className="font-heading max-w-[min(100%,28rem)] text-[2.75rem] font-normal leading-[1.08] tracking-normal text-foreground sm:text-5xl sm:leading-[1.06] lg:text-[3.25rem] lg:leading-[1.05] xl:text-[3.5rem]"
                 initial={reduce ? false : { clipPath: "inset(0 100% 0 0)", opacity: 0.2 }}
                 animate={{ clipPath: "inset(0 0% 0 0)", opacity: 1 }}
                 transition={{ duration: 0.95, ease: [0.22, 1, 0.36, 1] }}
               >
-                Build answers you can trace back to the source
+                AI buat nulis riset — yang{" "}
+                <em className="not-italic text-foreground/80">nggak ngarang sumber.</em>
               </m.h1>
               <m.div
                 className="mt-8 flex flex-wrap gap-3 sm:mt-10"
@@ -100,7 +102,7 @@ export function LandingHeroSection() {
               >
                 <m.div variants={buttonItem(reduce)}>
                   <Button asChild className="h-14 rounded-full px-7 text-base">
-                    <Link href="/sign-up">Start a research workspace</Link>
+                    <Link href="/sign-up">Mulai gratis →</Link>
                   </Button>
                 </m.div>
                 <m.div variants={buttonItem(reduce)}>
@@ -109,10 +111,18 @@ export function LandingHeroSection() {
                     variant="outline"
                     className="h-14 rounded-full border-border/80 bg-card px-7 text-base text-card-foreground shadow-sm hover:bg-muted"
                   >
-                    <Link href="/app">Open the app</Link>
+                    <Link href="#bandingin">Bandingin sama yang lain</Link>
                   </Button>
                 </m.div>
               </m.div>
+              <m.p
+                className="mt-6 text-sm text-muted-foreground sm:mt-8"
+                initial={reduce ? false : { opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.35, duration: 0.5 }}
+              >
+                Buat mahasiswa S1 · pascasarjana · peneliti
+              </m.p>
             </div>
             <m.div
               className="min-w-0"
@@ -129,15 +139,45 @@ export function LandingHeroSection() {
               }}
             >
               <p className="text-pretty text-lg leading-snug text-foreground/85 sm:text-xl sm:leading-snug lg:max-w-[26rem]">
-                Aqsha keeps your threads, papers, notes, and citations in one
-                workspace, so every answer carries the context and evidence that
-                shaped it.
+                Perplexity, ChatGPT, dan kawan-kawannya sering ngasih referensi palsu:
+                judul yang nggak ada, kutipan yang nggak pernah ditulis.{" "}
+                <strong className="font-medium text-foreground">
+                  Aqsha ngecek tiap sumber ke aslinya dulu
+                </strong>{" "}
+                — jadi kamu nggak ketahuan pas sidang atau direview dosen.
               </p>
             </m.div>
           </div>
         </div>
 
-        <HeroResearchShowcase />
+        <m.div
+          className="mt-20 w-full sm:mt-24 lg:mt-28"
+          initial={reduce ? false : { opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{
+            type: "spring",
+            stiffness: 95,
+            damping: 20,
+            mass: 0.85,
+            delay: 0.2,
+          }}
+        >
+          <HeroResearchShowcase />
+        </m.div>
+
+        <m.div
+          className="mt-10 w-full sm:mt-12"
+          initial={reduce ? false : { opacity: 0, y: 28 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{
+            type: "spring",
+            stiffness: 120,
+            damping: 22,
+            delay: 0.35,
+          }}
+        >
+          <HeroComparisonCard />
+        </m.div>
       </div>
     </section>
   );

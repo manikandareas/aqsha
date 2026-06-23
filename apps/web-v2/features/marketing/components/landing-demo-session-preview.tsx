@@ -1,43 +1,42 @@
 import {
+  BookOpen,
   CheckCircle2,
-  Code2,
   Library,
+  MessageSquare,
   Search,
-  SquareTerminal,
 } from "@aqsha/ui/icons";
 
 import { cn } from "@/lib/utils";
 
 const demoSteps = [
   {
-    eyebrow: "Question",
-    title: "Frame the inquiry",
-    body: "How do recent retrieval papers evaluate grounded answers?",
-    icon: SquareTerminal,
+    eyebrow: "Langkah 1",
+    title: "Mulai dari pertanyaan riset",
+    body: "Cari paper soal motivasi intrinsik untuk skripsi — semua disimpan di satu workspace.",
+    icon: MessageSquare,
   },
   {
-    eyebrow: "Sources",
-    title: "Bring the evidence in",
-    body: "3 papers imported\n2 web sources saved\nnotes linked to the thread",
-    icon: Code2,
+    eyebrow: "Langkah 2",
+    title: "Kumpulin sumber & catatan",
+    body: "3 jurnal diimport\n2 catatan disimpan\nreferensi siap dipakai",
+    icon: BookOpen,
   },
   {
-    eyebrow: "Synthesis",
-    title: "Write with citations attached",
-    body: "Claims mapped to source passages\nopen questions kept for follow-up",
-    icon: CheckCircle2,
-  },
-  {
-    eyebrow: "Workspace",
-    title: "Save what is worth reusing",
-    body: "Answer, papers, and notes saved to: RAG Evaluation",
+    eyebrow: "Langkah 3",
+    title: "Nulis bareng Astra",
+    body: "Tiap poin ditandai sumbernya\nklaim tetap punyamu, bukan AI yang ngerjain",
     icon: Library,
+  },
+  {
+    eyebrow: "Langkah 4",
+    title: "Cek sebelum submit",
+    body: "Kutipan dicek ke paper aslinya\nyang cocok ditandai hijau — siap sidang",
+    icon: CheckCircle2,
   },
 ] as const;
 
 type LandingDemoSessionPreviewProps = {
   className?: string;
-  /** Fills parent height; use inside a 16:9 frame with fluid step animation */
   variant?: "default" | "hero";
 };
 
@@ -61,23 +60,19 @@ export function LandingDemoSessionPreview({
           isHero && "mb-3 shrink-0 sm:mb-4",
         )}
       >
-        <span>workspace-rag</span>
+        <span>skripsi-psikologi</span>
         <span className="flex items-center gap-1.5">
           <Search className="size-3" />
-          inquiry active
+          riset aktif
         </span>
       </div>
       <div
         className={cn(
           "landing-demo-stage overflow-hidden",
-          isHero
-            ? "landing-demo-stage--hero flex-1 min-h-0"
-            : "h-[330px]",
+          isHero ? "landing-demo-stage--hero min-h-0 flex-1" : "h-[330px]",
         )}
       >
-        <div
-          className={cn("landing-demo-track", isHero && "landing-demo-track--hero")}
-        >
+        <div className={cn("landing-demo-track", isHero && "landing-demo-track--hero")}>
           {demoSteps.map((step) => {
             const Icon = step.icon;
 
@@ -109,14 +104,15 @@ export function LandingDemoSessionPreview({
                 >
                   {step.title}
                 </h3>
-                <pre
+                <div
                   className={cn(
-                    "mt-5 whitespace-pre-wrap rounded-md bg-primary-foreground/10 p-4 font-mono text-xs leading-6 text-primary-foreground/85",
-                    isHero && "mt-3 min-h-0 flex-1 overflow-auto p-3 text-[11px] leading-5 sm:mt-4 sm:p-4 sm:text-xs sm:leading-6",
+                    "mt-5 whitespace-pre-wrap rounded-md bg-primary-foreground/10 p-4 text-xs leading-6 text-primary-foreground/90",
+                    isHero &&
+                      "mt-3 min-h-0 flex-1 overflow-auto p-3 text-[11px] leading-5 sm:mt-4 sm:p-4 sm:text-xs sm:leading-6",
                   )}
                 >
                   {step.body}
-                </pre>
+                </div>
               </section>
             );
           })}

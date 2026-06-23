@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 const TECHNICAL_FRAME_LINE_OUT = 48;
 const TECHNICAL_FRAME_LINE_COLOR = "bg-border";
 
-/** Garis horizontal di dalam frame: selebar konten + overflow kiri/kanan; titik di persimpangan dengan garis vertikal frame. */
 export function TechnicalFrameHorizontalRule() {
   const o = TECHNICAL_FRAME_LINE_OUT;
 
@@ -20,10 +19,7 @@ export function TechnicalFrameHorizontalRule() {
         marginRight: -o,
       }}
     >
-      <div
-        aria-hidden
-        className={cn("h-px w-full", TECHNICAL_FRAME_LINE_COLOR)}
-      />
+      <div aria-hidden className={cn("h-px w-full", TECHNICAL_FRAME_LINE_COLOR)} />
       <span
         aria-hidden
         className="pointer-events-none absolute top-1/2 z-[1] size-[3px] -translate-x-1/2 -translate-y-1/2 bg-foreground"

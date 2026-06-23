@@ -6,11 +6,11 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 const navItems = [
-  { href: "#demo", label: "Demo" },
-  { href: "#features", label: "Features" },
-  { href: "#workflow", label: "Workflow" },
-  { href: "#pricing", label: "Pricing" },
-  { href: "/app", label: "App" },
+  { href: "#bandingin", label: "Bandingin" },
+  { href: "#cara-kerja", label: "Cara kerja" },
+  { href: "#fitur", label: "Fitur" },
+  { href: "#buat-siapa", label: "Buat siapa" },
+  { href: "#pricing", label: "Harga" },
 ] as const;
 
 export function LandingHeader() {
@@ -84,9 +84,9 @@ export function LandingHeader() {
               asChild
               variant="ghost"
               size="sm"
-              className="h-9 rounded-full px-4 text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="hidden h-9 rounded-full px-4 text-muted-foreground hover:bg-muted hover:text-foreground sm:inline-flex"
             >
-              <Link href="/sign-in">Sign in</Link>
+              <Link href="/sign-in">Masuk</Link>
             </Button>
           </m.div>
           <m.div
@@ -95,7 +95,7 @@ export function LandingHeader() {
             transition={{ type: "spring", stiffness: 400, damping: 18 }}
           >
             <Button asChild size="sm" className="h-9 rounded-full">
-              <Link href="/sign-up">Start free</Link>
+              <Link href="/sign-up">Coba gratis</Link>
             </Button>
           </m.div>
         </m.div>
