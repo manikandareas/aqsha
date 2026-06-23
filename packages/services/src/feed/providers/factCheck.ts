@@ -5,6 +5,7 @@
  * external-cache; tanpa `GOOGLE_FACTCHECK_API_KEY` → lane degrade kosong (graceful).
  */
 import { getCache, putCache } from "../../papers/external-cache";
+import { fetchWithTimeout } from "../../papers/http";
 
 const FACTCHECK_ENDPOINT = "https://factchecktools.googleapis.com/v1alpha1/claims:search";
 
@@ -172,7 +173,7 @@ export async function searchFactCheckClaims(args: {
 
   let claims: FactCheckClaim[] = [];
   try {
-    const response = await fetch(url.toString(), { headers: { Accept: "application/json" } });
+    const response = await fetchWithTimeout(url.toString(), { headers: { Accept: "application/json" } });
     if (!response.ok) {
       await putCache("google_factcheck", cacheKey, "failed", "[]");
       return [];

@@ -6,6 +6,7 @@
  * credit (cron tak punya user); cache = pacer.
  */
 import { getCache, putCache } from "../papers/external-cache";
+import { fetchWithTimeout } from "../papers/http";
 import { reconstructOpenAlexAbstract } from "../papers/providers";
 import { normalizeDoi } from "../papers/identifiers";
 import { collapse, firstNonEmpty, numberOrUndefined, uniqueCompact } from "../lib/text";
@@ -213,7 +214,7 @@ export async function fetchOpenAlexWorks(args: {
   if (!apiKey) throw new Error("OPENALEX_API_KEY is not configured");
 
   const url = buildOpenAlexWorksUrl({ apiKey, query, limit, includeRetracted, fromYear: args.fromYear });
-  const response = await fetch(url.toString(), { headers: { Accept: "application/json" } });
+  const response = await fetchWithTimeout(url.toString(), { headers: { Accept: "application/json" } });
   if (!response.ok) throw new Error(`OpenAlex returned ${response.status}`);
   const json = (await response.json()) as { results?: OpenAlexWork[] };
   const works = json.results ?? [];

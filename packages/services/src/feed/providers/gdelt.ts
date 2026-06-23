@@ -4,6 +4,7 @@
  * 24h via external-cache; pacing ~5.2s antar-call dilakukan di lane (refreshTrendingTopics).
  */
 import { getCache, putCache } from "../../papers/external-cache";
+import { fetchWithTimeout } from "../../papers/http";
 
 const GDELT_ENDPOINT = "https://api.gdeltproject.org/api/v2/doc/doc";
 
@@ -42,7 +43,7 @@ export async function fetchGdeltTopicTimeline(args: {
 
   let timeline: GdeltTimeline = { values: [], dates: [] };
   try {
-    const response = await fetch(url.toString(), { headers: { Accept: "application/json" } });
+    const response = await fetchWithTimeout(url.toString(), { headers: { Accept: "application/json" } });
     if (!response.ok) return timeline;
     // GDELT mengembalikan plain-text warning (bukan JSON) saat rate-limited; toleransi.
     const raw = await response.text();

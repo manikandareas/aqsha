@@ -26,12 +26,14 @@ export async function fetchWithTimeout(
   url: string,
   init: RequestInit & { timeoutMs?: number } = {},
 ): Promise<Response> {
-  const { timeoutMs = FETCH_TIMEOUT_MS, ...rest } = init;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...rest, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
+  const { timeoutMs = FETCH_TIMEOUT_MS, signal, ...rest } = init;
+  // `AbortSignal.timeout` stays armed for the whole Response lifetime, so the
+  // deadline also covers body consumption (`.json()`/`.text()`) the caller does
+  // AFTER this returns. The old controller+`clearTimeout(finally)` disarmed on
+  // headers, leaving a host that stalls its body to hang the read forever.
+  const deadline = AbortSignal.timeout(timeoutMs);
+  return fetch(url, {
+    ...rest,
+    signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
+  });
 }
