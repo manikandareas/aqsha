@@ -5,7 +5,7 @@ import {
   intersectingTargetIds,
   normalizeMarqueeRect,
   rectsIntersect,
-} from "./workspace-marquee-selection";
+} from "./utils/workspace-marquee-selection";
 
 describe("workspace marquee selection", () => {
   it("normalizes a rectangle from any drag direction", () => {

@@ -198,7 +198,8 @@ export function useUploadArtifact(workspaceId: string) {
       return res as { artifactId: string; title: string; indexed: boolean };
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.artifacts.all }),
-    onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal mengunggah berkas.")),
+    // Error surfacing is owned by the caller (workspace upload toast shows per-file
+    // failures + retry); mutateAsync still rejects so batch drivers mark the file failed.
   });
 }
 

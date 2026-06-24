@@ -52,8 +52,7 @@ type LibraryDataProps = Pick<
   createDocument: WorkspaceLibraryData["createDocument"];
   createUrl: WorkspaceLibraryData["createUrl"];
   renameFolder: WorkspaceLibraryData["renameFolder"];
-  generateUploadUrl: WorkspaceLibraryData["generateUploadUrl"];
-  createUploadedArtifact: WorkspaceLibraryData["createUploadedArtifact"];
+  uploadArtifact: WorkspaceLibraryData["uploadArtifact"];
   renameArtifact: WorkspaceLibraryData["renameArtifact"];
   removeFolder: WorkspaceLibraryData["removeFolder"];
   removeArtifact: WorkspaceLibraryData["removeArtifact"];
@@ -182,10 +181,11 @@ export function WorkspaceLibrarySurface({
         onUploadFiles={async (files, folderId, options) => {
           return await uploadWorkspaceFiles({
             files,
-            workspaceId,
-            folderId,
-            generateUploadUrl: libraryData.generateUploadUrl,
-            createUploadedArtifact: libraryData.createUploadedArtifact,
+            uploadFile: ({ file }) =>
+              libraryData.uploadArtifact.mutateAsync({
+                file,
+                folderId: folderId === "root" ? undefined : folderId,
+              }),
             onFileChange: options?.onFileChange,
           });
         }}
@@ -196,7 +196,7 @@ export function WorkspaceLibrarySurface({
         onToggleLeftSidebar={onToggleLeftSidebar}
         showCreateActions={showCreateActions}
         showWorkspaceSettings={showWorkspaceSettings}
-        renderDialogs={(activeFolderId, activeFolderName) => (
+        renderDialogs={(activeFolderId, activeFolderName, onUploadFiles) => (
           <WorkspaceLibraryDialogsStack
             workspaceId={workspaceId}
             activeFolderId={activeFolderId}
@@ -204,6 +204,7 @@ export function WorkspaceLibrarySurface({
             mutations={libraryMutations}
             dialogState={dialogState}
             onAfterArchive={onAfterArchive}
+            onUploadFiles={onUploadFiles}
           />
         )}
       />

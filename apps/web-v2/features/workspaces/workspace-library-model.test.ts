@@ -13,7 +13,7 @@ import {
   ROOT_FOLDER_LABEL,
   type WorkspaceArtifact,
   type WorkspaceFolder,
-} from "./workspace-library-model";
+} from "./utils/workspace-library-model";
 
 const folders: WorkspaceFolder[] = [
   { _id: "folder-b", name: "Reading", status: "active", updatedAt: 20 },

@@ -4,7 +4,7 @@ import {
   blockNotePlainText,
   parseBlockNoteJson,
   type AutosaveState,
-} from "./artifact-editor-model";
+} from "./utils/artifact-editor-model";
 
 describe("artifact editor model", () => {
   it("parses valid BlockNote JSON and ignores invalid payloads", () => {

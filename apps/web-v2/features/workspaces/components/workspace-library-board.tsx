@@ -15,6 +15,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
+import { useFileDropzone } from "../hooks/use-file-dropzone";
 import { useWorkspaceFolderNav } from "../hooks/use-workspace-folder-nav";
 import {
   applyWorkspaceArtifactControls,
@@ -129,7 +130,11 @@ export function WorkspaceLibraryBoard({
   onClosePanel?: () => void;
   showLeftSidebarTrigger?: boolean;
   onToggleLeftSidebar?: () => void;
-  renderDialogs?: (activeFolderId: "root" | string, activeFolderName: string) => ReactNode;
+  renderDialogs?: (
+    activeFolderId: "root" | string,
+    activeFolderName: string,
+    onUploadFiles: (files: File[]) => void,
+  ) => ReactNode;
   showCreateActions?: boolean;
   showWorkspaceSettings?: boolean;
 }) {
@@ -157,7 +162,6 @@ export function WorkspaceLibraryBoard({
     name: target.label,
   }));
   const [dragArtifactId, setDragArtifactId] = useState<string | null>(null);
-  const [isUploadDragOver, setIsUploadDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadToast = useWorkspaceUploadToast({ onUploadFiles });
 
@@ -192,8 +196,11 @@ export function WorkspaceLibraryBoard({
       files,
       getUploadTargetFolderId(folderView.activeFolderId) ?? "root",
     );
-    setIsUploadDragOver(false);
   };
+
+  const { isDragOver: isUploadDragOver, dropzoneProps } = useFileDropzone(
+    (files) => void uploadToActiveFolder(files),
+  );
 
   const openUploadPicker = () => fileInputRef.current?.click();
 
@@ -237,38 +244,13 @@ export function WorkspaceLibraryBoard({
         <ContextMenu>
           <ContextMenuTrigger asChild>
             <div
+              {...dropzoneProps}
               className={cn(
                 "relative min-h-0 flex-1 overflow-y-auto bg-background",
                 panelBodyPaddingClass,
                 isUploadDragOver &&
                   "bg-muted/25 ring-2 ring-inset ring-primary/30",
               )}
-              onDragEnter={(event) => {
-                if (event.dataTransfer.types.includes("Files")) {
-                  event.preventDefault();
-                  setIsUploadDragOver(true);
-                }
-              }}
-              onDragOver={(event) => {
-                if (event.dataTransfer.types.includes("Files")) {
-                  event.preventDefault();
-                  event.dataTransfer.dropEffect = "copy";
-                }
-              }}
-              onDragLeave={(event) => {
-                if (
-                  !event.currentTarget.contains(
-                    event.relatedTarget as Node | null,
-                  )
-                ) {
-                  setIsUploadDragOver(false);
-                }
-              }}
-              onDrop={(event) => {
-                if (!event.dataTransfer.types.includes("Files")) return;
-                event.preventDefault();
-                void uploadToActiveFolder(event.dataTransfer.files);
-              }}
             >
               {isEmpty ? (
                 isFilteredEmpty ? (
@@ -362,6 +344,7 @@ export function WorkspaceLibraryBoard({
         folderView.activeFolderId === "root"
           ? ""
           : (folderView.breadcrumb.at(-1)?.label ?? ""),
+        uploadToActiveFolder,
       )}
     </>
   );

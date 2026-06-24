@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { derivePaperMetadataView } from "./paper-metadata-model";
+import { derivePaperMetadataView } from "./utils/paper-metadata-model";
 import type { PaperExtractionStatus } from "../components/artifact-render-panels";
 
 function extraction(

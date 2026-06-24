@@ -251,12 +251,6 @@ export function useWorkspaceLibraryData(workspaceId: string | WorkspaceId) {
         workspaceId: args.workspaceId ?? activeWorkspaceId,
       });
     },
-    generateUploadUrl: async () => {
-      throw new Error("use uploadArtifact mutation directly");
-    },
-    createUploadedArtifact: async () => {
-      throw new Error("use uploadArtifact mutation directly");
-    },
     createDocument: async (args: { workspaceId: string; folderId?: string; title?: string }) => {
       const result = await createDocumentMutation.mutateAsync({
         folderId: args.folderId,
@@ -332,8 +326,6 @@ export function useWorkspaceDetailData(workspaceId: string) {
     renameFolder: library.renameFolder,
     moveFolder: library.moveFolder,
     removeFolder: library.removeFolder,
-    generateUploadUrl: library.generateUploadUrl,
-    createUploadedArtifact: library.createUploadedArtifact,
     createDocument: library.createDocument,
     createUrl: library.createUrl,
     renameArtifact: library.renameArtifact,
