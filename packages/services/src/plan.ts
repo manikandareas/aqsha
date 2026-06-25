@@ -2,15 +2,21 @@
 //
 // Pure module (TANPA import db). Port lengkap dari V1
 // `packages/convex/convex/billing/catalog.ts` → satu sumber kebenaran untuk
-// plan, produk Polar, estimasi kredit, dan status billing. Resolver plan
+// plan, produk Mayar, estimasi kredit, dan status billing. Resolver plan
 // admin-allowlist (env-only) tetap di sini; resolver db-aware (admin_entitlements +
 // subscription mirror) hidup di `billing/snapshot.ts` (butuh db).
 
-export type PlanKey = "free" | "starter" | "plus" | "admin";
+export type PlanKey = "free" | "starter" | "plus" | "ultra" | "admin";
 export type PublicPlanKey = Exclude<PlanKey, "admin">;
 export type PaidPlanKey = Exclude<PlanKey, "free" | "admin">;
 export type BillingInterval = "month" | "year";
-export type ProductKey = "starterMonthly" | "starterYearly" | "plusMonthly" | "plusYearly";
+export type ProductKey =
+  | "starterMonthly"
+  | "starterYearly"
+  | "plusMonthly"
+  | "plusYearly"
+  | "ultraMonthly"
+  | "ultraYearly";
 export type BillingStatus =
   | "admin"
   | "free"
@@ -45,11 +51,15 @@ export type PlanDefinition = {
   features: string[];
 };
 
+/** Batas tak-terhingga (admin + Ultra non-credit) ditandai `Number.MAX_SAFE_INTEGER`. */
+export const UNLIMITED = Number.MAX_SAFE_INTEGER;
+
 export const PLAN_ORDER: Record<PlanKey, number> = {
   free: 0,
   starter: 1,
   plus: 2,
-  admin: 3,
+  ultra: 3,
+  admin: 4,
 };
 
 export const PLAN_CATALOG: Record<PlanKey, PlanDefinition> = {
@@ -107,6 +117,25 @@ export const PLAN_CATALOG: Record<PlanKey, PlanDefinition> = {
       "1.000 library items",
     ],
   },
+  ultra: {
+    key: "ultra",
+    label: "Ultra",
+    monthlyPriceIdr: 349_000,
+    annualPriceIdr: 3_490_000,
+    monthlyCredits: 10_000,
+    deepResearchRuns: UNLIMITED,
+    workspaceLimit: UNLIMITED,
+    libraryItemLimit: UNLIMITED,
+    // Tunable: ceiling spend provider naik dari Plus (400). Retune setelah ukur usage Ultra.
+    providerSpendCeilingCents: 2_000,
+    features: [
+      "Astra Lite + Astra Pro",
+      "10.000 credits per bulan",
+      "Deep Research tanpa batas (fair-use)",
+      "Workspace tanpa batas",
+      "Library tanpa batas",
+    ],
+  },
   admin: {
     key: "admin",
     label: "Admin",
@@ -135,13 +164,12 @@ export const PRODUCT_CATALOG: Record<
   starterYearly: { key: "starterYearly", planKey: "starter", interval: "year", displayPriceIdr: 490_000 },
   plusMonthly: { key: "plusMonthly", planKey: "plus", interval: "month", displayPriceIdr: 99_000 },
   plusYearly: { key: "plusYearly", planKey: "plus", interval: "year", displayPriceIdr: 990_000 },
+  ultraMonthly: { key: "ultraMonthly", planKey: "ultra", interval: "month", displayPriceIdr: 349_000 },
+  ultraYearly: { key: "ultraYearly", planKey: "ultra", interval: "year", displayPriceIdr: 3_490_000 },
 };
 
 export const PRODUCT_KEYS = Object.keys(PRODUCT_CATALOG) as ProductKey[];
-export const PUBLIC_PLAN_KEYS: PublicPlanKey[] = ["free", "starter", "plus"];
-
-/** Batas tak-terhingga (admin) ditandai `Number.MAX_SAFE_INTEGER`. */
-export const UNLIMITED = Number.MAX_SAFE_INTEGER;
+export const PUBLIC_PLAN_KEYS: PublicPlanKey[] = ["free", "starter", "plus", "ultra"];
 
 export function planForProductKey(productKey: string | undefined): PlanKey {
   if (!productKey) return "free";

@@ -3,13 +3,14 @@ import { bigint, boolean, check, index, jsonb, pgTable, text, uniqueIndex } from
 import { users } from "./users";
 
 /**
- * billing_subscriptions — mirror langganan Polar (SoT fallback snapshot saat live
- * Polar tak tersedia). Port V1 `billingSubscriptions`. Ditulis oleh
- * `syncSubscriptionFromPolar` (webhook). Hanya plan BERBAYAR yang di-mirror
- * (free/admin ditolak di sync) → CHECK plan_key in (starter, plus).
+ * billing_subscriptions — mirror langganan provider (SoT fallback snapshot saat
+ * live provider tak tersedia). Ditulis oleh `syncSubscriptionFromMayar` (webhook).
+ * Hanya plan BERBAYAR yang di-mirror (free/admin ditolak di sync) → CHECK plan_key
+ * in (starter, plus, ultra).
  *
- * - `polar_subscription_id` unique → upsert by-subscription idempotent.
- * - `raw_json` jsonb = payload Polar mentah (audit / re-derive).
+ * - `provider_subscription_id` unique → upsert by-subscription idempotent. Mayar
+ *   tak memberi subscription id → synthetic `mayar:${productId}:${customerEmail}`.
+ * - `raw_json` jsonb = payload provider mentah (audit / re-derive).
  */
 export const billingSubscriptions = pgTable(
   "billing_subscriptions",
@@ -18,8 +19,8 @@ export const billingSubscriptions = pgTable(
     ownerUserId: text("owner_user_id")
       .notNull()
       .references(() => users.ownerUserId, { onDelete: "cascade" }),
-    polarSubscriptionId: text("polar_subscription_id").notNull(),
-    polarProductId: text("polar_product_id").notNull(),
+    providerSubscriptionId: text("provider_subscription_id").notNull(),
+    providerProductId: text("provider_product_id").notNull(),
     productKey: text("product_key"),
     planKey: text("plan_key").notNull(),
     billingInterval: text("billing_interval").notNull(),
@@ -33,9 +34,9 @@ export const billingSubscriptions = pgTable(
     updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
   },
   (t) => [
-    check("billing_subscriptions_plan_check", sql`${t.planKey} in ('starter', 'plus')`),
+    check("billing_subscriptions_plan_check", sql`${t.planKey} in ('starter', 'plus', 'ultra')`),
     check("billing_subscriptions_interval_check", sql`${t.billingInterval} in ('month', 'year')`),
-    uniqueIndex("billing_subscriptions_by_subscription").on(t.polarSubscriptionId),
+    uniqueIndex("billing_subscriptions_by_provider").on(t.providerSubscriptionId),
     index("billing_subscriptions_by_owner_updated").on(t.ownerUserId, t.updatedAt),
   ],
 );

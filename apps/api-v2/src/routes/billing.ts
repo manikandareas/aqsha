@@ -8,17 +8,23 @@ const productKeySchema = t.Union([
   t.Literal("starterYearly"),
   t.Literal("plusMonthly"),
   t.Literal("plusYearly"),
+  t.Literal("ultraMonthly"),
+  t.Literal("ultraYearly"),
 ]);
 
 /**
  * Route billing (Domain 3). Tipis: auth → 1 service call. Logic (entitlement,
- * Polar, mirror) hidup di `BillingService`; error → `appError` (errorPlugin global).
+ * Mayar, mirror) hidup di `BillingService`; error → `appError` (errorPlugin global).
  * Block kuota = return-union (bukan throw) — tapi P5 belum punya caller consume.
  * `/billing/plans` publik (tanpa auth).
+ *
+ * Catatan model Mayar: `/portal` & `/subscription/cancel` mengirim magic-link ke
+ * email → return `{ emailed: true }` (bukan redirect). `/subscription/change`
+ * mengembalikan `{ url }` checkout tier baru (Mayar tak punya API change).
  */
 export const billing = new Elysia({ prefix: "/billing" })
   .use(authMacro)
-  // Publik — katalog plan deterministik dari PLAN_CATALOG + produk Polar terkonfigurasi.
+  // Publik — katalog plan deterministik dari PLAN_CATALOG + produk Mayar terkonfigurasi.
   .get("/plans", () => BillingService.listPlans())
   .get(
     "/current",
@@ -48,33 +54,30 @@ export const billing = new Elysia({ prefix: "/billing" })
     "/checkout",
     ({ ownerUserId, email, body }) => {
       const { db } = getDb();
+      // `origin`/`successUrl` diterima utk kompat frontend, diabaikan (Mayar pakai
+      // redirectUrl produk + reconcile by-email).
       return BillingService.createCheckout(db, {
         ownerUserId,
         ownerEmail: email,
         productKey: body.productKey,
-        successUrl: body.successUrl,
       });
     },
     {
       auth: true,
       body: t.Object({
         productKey: productKeySchema,
-        origin: t.String(),
-        successUrl: t.String(),
+        origin: t.Optional(t.String()),
+        successUrl: t.Optional(t.String()),
       }),
     },
   )
   .post(
     "/portal",
-    ({ ownerUserId, email, body }) => {
+    ({ ownerUserId, email }) => {
       const { db } = getDb();
-      return BillingService.createPortalSession(db, {
-        ownerUserId,
-        ownerEmail: email,
-        returnUrl: body?.returnUrl,
-      });
+      return BillingService.createPortalSession(db, { ownerUserId, ownerEmail: email });
     },
-    { auth: true, body: t.Optional(t.Object({ returnUrl: t.Optional(t.String()) })) },
+    { auth: true },
   )
   .post(
     "/subscription/change",
@@ -90,15 +93,11 @@ export const billing = new Elysia({ prefix: "/billing" })
   )
   .post(
     "/subscription/cancel",
-    ({ ownerUserId, email, body }) => {
+    ({ ownerUserId, email }) => {
       const { db } = getDb();
-      return BillingService.cancelSubscription(db, {
-        ownerUserId,
-        ownerEmail: email,
-        revokeImmediately: body?.revokeImmediately,
-      });
+      return BillingService.cancelSubscription(db, { ownerUserId, ownerEmail: email });
     },
-    { auth: true, body: t.Optional(t.Object({ revokeImmediately: t.Optional(t.Boolean()) })) },
+    { auth: true },
   )
   .post(
     "/products/sync",

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, boolean, check, pgTable, text } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, index, pgTable, text } from "drizzle-orm/pg-core";
 
 /**
  * users — mirror lokal identitas Clerk + (kelak) state-machine deletion.
@@ -35,6 +35,8 @@ export const users = pgTable(
       "users_deletion_status_check",
       sql`${t.deletionStatus} in ('active', 'deleting', 'deleted', 'failed')`,
     ),
+    // Atribusi webhook Mayar by-email (customerEmail → owner). Non-unique: email nullable.
+    index("users_by_email").on(t.email),
   ],
 );
 

@@ -28,7 +28,7 @@ import {
 } from "./plan";
 import { getEntitlementSnapshot, resolveAdminOverride } from "./billing/snapshot";
 import { ensureAndLockPeriod, ensureCreditPeriod, evaluateGate, utcDateString } from "./billing/period";
-import { configuredProductId, PolarClient } from "./clients/polar";
+import { configuredProductId, MayarClient } from "./clients/mayar";
 import type { ConsumeCreditsArgs, EntitlementResult } from "./billing/types";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -95,18 +95,23 @@ export type PlanListItem = {
   features: string[];
   products: Array<{
     key: ProductKey;
-    polarProductId: string | null;
+    providerProductId: string | null;
     interval: BillingInterval;
     displayPriceIdr: number;
     configured: boolean;
   }>;
 };
 
-/** Payload sync subscription (derived dari event Polar di route /webhooks/polar). */
+/**
+ * Payload sync subscription (derived dari event Mayar di route /webhooks/mayar).
+ * Mayar tak beri subscription id/owner → atribusi by `customerEmail`, period-end
+ * & status sudah diturunkan route. Owner di-resolve di service (UserRepo.findByEmail);
+ * email tak cocok → simpan pending (matched=false).
+ */
 export type SyncSubscriptionPayload = {
-  ownerUserId: string;
-  polarSubscriptionId: string;
-  polarProductId: string;
+  customerEmail: string;
+  event: string;
+  providerProductId: string;
   productKey?: string;
   status: string;
   currentPeriodStart?: number;
@@ -136,7 +141,7 @@ function tryParseJson(value: string): unknown {
   }
 }
 
-/** Email owner untuk Polar (passed JWT email → users table). Throw bila absen. */
+/** Email owner untuk billing (passed JWT email → users table). Throw bila absen. */
 async function resolveOwnerEmail(db: DbOrTx, ownerUserId: string, passed?: string | null): Promise<string> {
   const email = passed ?? (await UserRepo.findByOwnerUserId(db, ownerUserId))?.email ?? null;
   if (!email) {
@@ -150,7 +155,7 @@ async function resolveOwnerEmail(db: DbOrTx, ownerUserId: string, passed?: strin
   return email;
 }
 
-/** Domain email yang dilarang untuk checkout Polar (port V1 `isReservedEmail`). */
+/** Domain email yang dilarang untuk checkout Mayar (port V1 `isReservedEmail`). */
 function isReservedEmail(email: string): boolean {
   const domain = email.split("@")[1]?.toLowerCase() ?? "";
   return (
@@ -170,7 +175,7 @@ function resolveProductForPurchase(productKey: ProductKey): { product: (typeof P
   }
   const productId = configuredProductId(productKey);
   if (!productId) {
-    throwAppError({ code: "billing_product_not_configured", message: "Polar product is not configured", severity: "error" });
+    throwAppError({ code: "billing_product_not_configured", message: "Mayar product is not configured", severity: "error" });
   }
   return { product, productId };
 }
@@ -192,8 +197,8 @@ async function deepLimitReached(
 /**
  * BillingService — write-path entitlement + usage (Fase 5). `consumeCredits` =
  * SATU transaksi (debit period row-locked + ledger + rollup) atau none; idempotent
- * saat resume (A9). Block kuota = return-union, BUKAN throw. Polar surface
- * (snapshot live / checkout / portal / sync) ditambah P5.3/P5.4.
+ * saat resume (A9). Block kuota = return-union, BUKAN throw. Mayar surface
+ * (snapshot mirror / checkout / portal / sync) ditambah P5.3/P5.4.
  */
 export const BillingService = {
   /**
@@ -404,8 +409,8 @@ export const BillingService = {
 
   /**
    * Snapshot subscription kaya (mirror + admin override). Mirror (billing_subscriptions)
-   * = source webhook-synced (cermin perilaku komponen Polar V1); saat Polar down,
-   * mirror tetap melayani snapshot tanpa gagal keras. Port V1 `getBillingSnapshot`.
+   * = source webhook-synced; saat provider (Mayar) down, mirror tetap melayani
+   * snapshot tanpa gagal keras. Port V1 `getBillingSnapshot`.
    */
   async getBillingSnapshot(db: DbOrTx, ownerUserId: string, ownerEmail?: string | null): Promise<BillingSnapshot> {
     const admin = await resolveAdminOverride(db, ownerUserId, ownerEmail);
@@ -485,7 +490,7 @@ export const BillingService = {
     };
   },
 
-  /** Katalog plan publik + produk Polar terkonfigurasi (port V1 `billing.products.list`). */
+  /** Katalog plan publik + produk Mayar terkonfigurasi (port V1 `billing.products.list`). */
   listPlans(): PlanListItem[] {
     return PUBLIC_PLAN_KEYS.map((planKey) => {
       const plan = PLAN_CATALOG[planKey];
@@ -496,141 +501,134 @@ export const BillingService = {
           planKey === "free"
             ? []
             : PRODUCT_KEYS.filter((key) => PRODUCT_CATALOG[key].planKey === planKey).map((key) => {
-                const polarProductId = configuredProductId(key);
+                const providerProductId = configuredProductId(key);
                 return {
                   key,
-                  polarProductId,
+                  providerProductId,
                   interval: PRODUCT_CATALOG[key].interval,
                   displayPriceIdr: PRODUCT_CATALOG[key].displayPriceIdr,
-                  configured: Boolean(polarProductId),
+                  configured: Boolean(providerProductId),
                 };
               }),
       };
     });
   },
 
-  /** Checkout Polar (port V1 `billing.checkout.create`). */
+  /**
+   * Checkout Mayar = redirect ke payment link produk Membership. Mayar tak punya
+   * sesi checkout per-user; atribusi owner by-email di webhook (email di-prefill).
+   */
   async createCheckout(
     db: DbOrTx,
-    args: { ownerUserId: string; ownerEmail?: string | null; productKey: ProductKey; successUrl: string },
+    args: { ownerUserId: string; ownerEmail?: string | null; productKey: ProductKey },
   ): Promise<{ url: string }> {
-    const { product, productId } = resolveProductForPurchase(args.productKey);
+    const { productId } = resolveProductForPurchase(args.productKey);
     const email = await resolveOwnerEmail(db, args.ownerUserId, args.ownerEmail);
     if (isReservedEmail(email)) {
       throwAppError({
         code: "billing_email_invalid",
         message:
-          "Polar checkout requires a real email domain. Update your account email before subscribing.",
+          "Mayar checkout requires a real email domain. Update your account email before subscribing.",
         severity: "error",
         field: "email",
       });
     }
-    return PolarClient.createCheckoutSession({
-      productId,
-      userId: args.ownerUserId,
-      email,
-      successUrl: args.successUrl,
-      metadata: {
-        userId: args.ownerUserId,
-        productKey: args.productKey,
-        planKey: product.planKey,
-        interval: product.interval,
-      },
-    });
-  },
-
-  /** Customer portal Polar (port V1 `billing.portal.create`). */
-  async createPortalSession(
-    db: DbOrTx,
-    args: { ownerUserId: string; ownerEmail?: string | null; returnUrl?: string },
-  ): Promise<{ url: string }> {
-    await resolveOwnerEmail(db, args.ownerUserId, args.ownerEmail); // parity: butuh email verified
-    return PolarClient.createCustomerPortalSession({ userId: args.ownerUserId, returnUrl: args.returnUrl });
-  },
-
-  /** Ganti langganan (port V1 `billing.subscription.change`). */
-  async changeSubscription(
-    db: DbOrTx,
-    args: { ownerUserId: string; ownerEmail?: string | null; productKey: ProductKey },
-  ): Promise<{ ok: true }> {
-    const { productId } = resolveProductForPurchase(args.productKey);
-    await resolveOwnerEmail(db, args.ownerUserId, args.ownerEmail);
-    const sub = await BillingRepo.findLatestSubscriptionByOwner(db, args.ownerUserId);
-    if (!sub) {
-      throwAppError({
-        code: "billing_subscription_not_found",
-        message: "No active subscription to change.",
-        severity: "warning",
-        status: 404,
-      });
-    }
-    await PolarClient.changeSubscription({ subscriptionId: sub.polarSubscriptionId, productId });
-    return { ok: true };
-  },
-
-  /** Batalkan langganan (port V1 `billing.subscription.cancel`). */
-  async cancelSubscription(
-    db: DbOrTx,
-    args: { ownerUserId: string; ownerEmail?: string | null; revokeImmediately?: boolean },
-  ): Promise<{ ok: true }> {
-    await resolveOwnerEmail(db, args.ownerUserId, args.ownerEmail);
-    const sub = await BillingRepo.findLatestSubscriptionByOwner(db, args.ownerUserId);
-    if (!sub) {
-      throwAppError({
-        code: "billing_subscription_not_found",
-        message: "No active subscription to cancel.",
-        severity: "warning",
-        status: 404,
-      });
-    }
-    await PolarClient.cancelSubscription({
-      subscriptionId: sub.polarSubscriptionId,
-      revokeImmediately: args.revokeImmediately ?? false,
-    });
-    return { ok: true };
-  },
-
-  /** Sinkronisasi produk Polar (admin/cron, deferred). */
-  async syncProducts(): Promise<{ ok: boolean }> {
-    return PolarClient.syncProducts();
+    return MayarClient.createCheckoutSession({ productId, email });
   },
 
   /**
-   * Upsert mirror subscription dari event Polar (port V1 `syncSubscriptionFromPolar`).
-   * Idempotent by polar_subscription_id. Produk free/admin (tak dikenal) → 422.
-   * Dedupe event-level (Redis SETNX by eventKey) dilakukan di route /webhooks/polar.
+   * Portal pelanggan Mayar = magic-link dikirim ke email (bukan redirect URL).
+   * Return `{ emailed: true }`; frontend menampilkan toast "cek email".
    */
-  async syncSubscriptionFromPolar(db: DbOrTx, payload: SyncSubscriptionPayload): Promise<{ ok: true }> {
+  async createPortalSession(
+    db: DbOrTx,
+    args: { ownerUserId: string; ownerEmail?: string | null },
+  ): Promise<{ emailed: true }> {
+    const email = await resolveOwnerEmail(db, args.ownerUserId, args.ownerEmail);
+    return MayarClient.createCustomerPortalSession({ email });
+  },
+
+  /**
+   * Ganti langganan (upgrade/downgrade). Mayar tak punya API change → arahkan ke
+   * checkout tier baru; Mayar memancarkan `membership.changeTierMemberRegistered`.
+   */
+  async changeSubscription(
+    db: DbOrTx,
+    args: { ownerUserId: string; ownerEmail?: string | null; productKey: ProductKey },
+  ): Promise<{ url: string }> {
+    return BillingService.createCheckout(db, args);
+  },
+
+  /**
+   * Batalkan langganan. Mayar tak punya API cancel → kirim magic-link portal agar
+   * user berhenti dari portal Mayar. Return `{ emailed: true }`.
+   */
+  async cancelSubscription(
+    db: DbOrTx,
+    args: { ownerUserId: string; ownerEmail?: string | null },
+  ): Promise<{ emailed: true }> {
+    return BillingService.createPortalSession(db, args);
+  },
+
+  /** Sinkronisasi produk Mayar (admin/cron) — validasi konektivitas. */
+  async syncProducts(): Promise<{ ok: boolean }> {
+    return MayarClient.syncProducts();
+  },
+
+  /**
+   * Upsert mirror subscription dari event Mayar (atribusi by `customerEmail`).
+   * Owner di-resolve via UserRepo.findByEmail; email tak cocok → simpan pending
+   * (matched=false). Produk free/admin (tak dikenal) → 422. Synthetic
+   * `provider_subscription_id = mayar:${productId}:${email}` (stabil lintas-renewal).
+   * Dedupe event-level (Redis SETNX) dilakukan di route /webhooks/mayar.
+   */
+  async syncSubscriptionFromMayar(db: DbOrTx, payload: SyncSubscriptionPayload): Promise<{ matched: boolean }> {
     const planKey = planForProductKey(payload.productKey);
     if (planKey === "free" || planKey === "admin") {
       throwAppError({
         code: "billing_subscription_product_unknown",
-        message: "Unknown Polar product for subscription",
+        message: "Unknown Mayar product for subscription",
         severity: "error",
         status: 422,
       });
     }
-    const billingInterval = intervalForProductKey(payload.productKey) ?? "month";
     const now = Date.now();
-    const existing = await BillingRepo.findSubscriptionByPolarId(db, payload.polarSubscriptionId);
+    const owner = await UserRepo.findByEmail(db, payload.customerEmail);
+    if (!owner) {
+      // Email pembayar tak cocok user mana pun → simpan untuk rekonsiliasi manual.
+      await BillingRepo.insertPendingWebhook(db, {
+        id: crypto.randomUUID(),
+        event: payload.event,
+        customerEmail: payload.customerEmail,
+        productId: payload.providerProductId,
+        rawJson: payload.rawJson ?? null,
+        createdAt: now,
+      });
+      return { matched: false };
+    }
+    const billingInterval = intervalForProductKey(payload.productKey) ?? "month";
+    const providerSubscriptionId = `mayar:${payload.providerProductId}:${payload.customerEmail}`;
+    const existing = await BillingRepo.findSubscriptionByProviderId(db, providerSubscriptionId);
     await BillingRepo.upsertSubscription(db, {
       id: existing?.id ?? crypto.randomUUID(),
-      ownerUserId: payload.ownerUserId,
-      polarSubscriptionId: payload.polarSubscriptionId,
-      polarProductId: payload.polarProductId,
+      ownerUserId: owner.ownerUserId,
+      providerSubscriptionId,
+      providerProductId: payload.providerProductId,
       productKey: payload.productKey ?? null,
       planKey,
       billingInterval,
       status: payload.status,
-      currentPeriodStart: payload.currentPeriodStart ?? null,
-      currentPeriodEnd: payload.currentPeriodEnd ?? null,
+      // memberUnsubscribed tak kirim period → pertahankan period existing (akses
+      // berlanjut sampai expiry yang sebenarnya; memberExpired baru memotongnya).
+      currentPeriodStart: payload.currentPeriodStart ?? existing?.currentPeriodStart ?? null,
+      currentPeriodEnd: payload.currentPeriodEnd ?? existing?.currentPeriodEnd ?? null,
       cancelAtPeriodEnd: payload.cancelAtPeriodEnd ?? null,
       canceledAt: payload.canceledAt ?? null,
       rawJson: payload.rawJson ?? null,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     });
-    return { ok: true };
+    return { matched: true };
   },
 };
 

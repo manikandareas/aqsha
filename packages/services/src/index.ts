@@ -51,7 +51,7 @@ export {
   UNLIMITED,
 } from "./plan";
 
-// Billing service (Fase 5) — entitlement + usage write-path + Polar surface.
+// Billing service (Fase 5) — entitlement + usage write-path + Mayar surface.
 export {
   BillingService,
   type BillingSnapshot,
@@ -70,7 +70,7 @@ export {
   resolveEffectivePlanKey,
 } from "./billing/snapshot";
 export { evaluateGate } from "./billing/period";
-export { configuredProductId, PolarClient } from "./clients/polar";
+export { deriveMayarMembershipEvent, MayarClient } from "./clients/mayar";
 
 // Artifacts (P3) — pure helpers + konstanta + capacity gate + storage/RAG/extract.
 export * from "./artifacts/model";

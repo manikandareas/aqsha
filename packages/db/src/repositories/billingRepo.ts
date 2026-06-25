@@ -9,6 +9,10 @@ import {
   billingCreditPeriods,
 } from "../schema/billingCreditPeriods";
 import {
+  type NewBillingPendingWebhook,
+  billingPendingWebhooks,
+} from "../schema/billingPendingWebhooks";
+import {
   type BillingSubscription,
   type NewBillingSubscription,
   billingSubscriptions,
@@ -33,14 +37,14 @@ import type { DbOrTx } from "../types";
  */
 export const BillingRepo = {
   // ── subscriptions (mirror) ────────────────────────────────────────────────
-  async findSubscriptionByPolarId(
+  async findSubscriptionByProviderId(
     db: DbOrTx,
-    polarSubscriptionId: string,
+    providerSubscriptionId: string,
   ): Promise<BillingSubscription | null> {
     const rows = await db
       .select()
       .from(billingSubscriptions)
-      .where(eq(billingSubscriptions.polarSubscriptionId, polarSubscriptionId))
+      .where(eq(billingSubscriptions.providerSubscriptionId, providerSubscriptionId))
       .limit(1);
     return rows[0] ?? null;
   },
@@ -59,16 +63,16 @@ export const BillingRepo = {
     return rows[0] ?? null;
   },
 
-  /** Upsert by polar_subscription_id (idempotent webhook). createdAt dipertahankan saat update. */
+  /** Upsert by provider_subscription_id (idempotent webhook). createdAt dipertahankan saat update. */
   async upsertSubscription(db: DbOrTx, row: NewBillingSubscription): Promise<void> {
     await db
       .insert(billingSubscriptions)
       .values(row)
       .onConflictDoUpdate({
-        target: billingSubscriptions.polarSubscriptionId,
+        target: billingSubscriptions.providerSubscriptionId,
         set: {
           ownerUserId: row.ownerUserId,
-          polarProductId: row.polarProductId,
+          providerProductId: row.providerProductId,
           productKey: row.productKey,
           planKey: row.planKey,
           billingInterval: row.billingInterval,
@@ -81,6 +85,11 @@ export const BillingRepo = {
           updatedAt: row.updatedAt,
         },
       });
+  },
+
+  /** Simpan webhook tak-ter-atribusi (email tak cocok user) untuk rekonsiliasi manual. */
+  async insertPendingWebhook(db: DbOrTx, row: NewBillingPendingWebhook): Promise<void> {
+    await db.insert(billingPendingWebhooks).values(row);
   },
 
   // ── admin entitlements ─────────────────────────────────────────────────────

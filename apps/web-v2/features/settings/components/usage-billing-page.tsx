@@ -86,7 +86,7 @@ export function UsageBillingPage() {
             {billing.data?.billingPortalAvailable ? (
               <Button variant="outline" size="sm" onClick={() => portal.mutate()} disabled={portal.isPending}>
                 {portal.isPending ? <Loader2Icon className="size-4 animate-spin" /> : <ExternalLinkIcon className="size-4" />}
-                Portal billing
+                Kelola tagihan
               </Button>
             ) : null}
             {billing.data?.canCancelSubscription ? (
@@ -100,13 +100,13 @@ export function UsageBillingPage() {
       </Card>
 
       {/* Daftar plan + produk */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {plans.isPending ? (
-          Array.from({ length: 3 }).map((_, i) => (
+          Array.from({ length: 4 }).map((_, i) => (
             <Card key={i} className="h-48 animate-pulse bg-muted/40" />
           ))
         ) : !plans.data ? (
-          <p className="text-sm text-destructive md:col-span-3">
+          <p className="text-sm text-destructive sm:col-span-2 lg:col-span-4">
             {readableApiErrorMessage(plans.error, "Tidak dapat memuat daftar paket.")}
           </p>
         ) : (

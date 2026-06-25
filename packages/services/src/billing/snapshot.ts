@@ -33,8 +33,9 @@ export async function resolveAdminOverride(
 
 /**
  * Snapshot entitlement HOT-PATH (consumeCredits/requireEntitlement): admin override
- * → subscription mirror (billing_subscriptions) → free. **Tanpa network** — live
- * Polar refresh hanya di `getBillingSnapshot` (route /billing/current, P5.3).
+ * → subscription mirror (billing_subscriptions) → free. **Tanpa network** — di V2
+ * mirror ini satu-satunya sumber entitlement (Mayar webhook-synced, tak ada live
+ * refresh ke provider; `getBillingSnapshot` membaca mirror yang sama).
  */
 export async function getEntitlementSnapshot(
   db: DbOrTx,

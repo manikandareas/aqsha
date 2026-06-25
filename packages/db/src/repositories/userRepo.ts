@@ -14,6 +14,12 @@ export const UserRepo = {
     return rows[0] ?? null;
   },
 
+  /** Atribusi webhook Mayar by-email. Index `users_by_email`. Ambil 1 (email seharusnya unik per akun). */
+  async findByEmail(db: DbOrTx, email: string): Promise<User | null> {
+    const rows = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    return rows[0] ?? null;
+  },
+
   async insert(db: DbOrTx, row: NewUser): Promise<void> {
     await db.insert(users).values(row);
   },

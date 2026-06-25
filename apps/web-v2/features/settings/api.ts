@@ -7,7 +7,13 @@ import { useApi } from "@/lib/api-client";
 import { readableApiErrorMessage } from "@/lib/api-error";
 import { queryKeys, unwrap } from "@/lib/api-query";
 
-type ProductKey = "starterMonthly" | "starterYearly" | "plusMonthly" | "plusYearly";
+type ProductKey =
+  | "starterMonthly"
+  | "starterYearly"
+  | "plusMonthly"
+  | "plusYearly"
+  | "ultraMonthly"
+  | "ultraYearly";
 export type PendingKey = ProductKey | "portal" | "cancel";
 export type { ProductKey };
 
@@ -20,7 +26,7 @@ export function useBillingCurrent() {
   });
 }
 
-/** Katalog plan publik + produk Polar. */
+/** Katalog plan publik + produk Mayar. */
 export function useBillingPlans() {
   const api = useApi();
   return useQuery({
@@ -48,7 +54,7 @@ export function useProfile() {
   });
 }
 
-/** Mulai checkout Polar → redirect ke hosted URL. */
+/** Mulai checkout Mayar → redirect ke payment link membership. */
 export function useCheckout() {
   const api = useApi();
   return useMutation({
@@ -69,45 +75,40 @@ export function useCheckout() {
   });
 }
 
-/** Buka customer portal Polar → redirect. */
+/** Kelola tagihan: Mayar mengirim magic-link portal ke email (bukan redirect). */
 export function usePortal() {
   const api = useApi();
   return useMutation({
-    mutationFn: async () =>
-      unwrap(await api.billing.portal.post({ returnUrl: `${window.location.origin}/app/settings/usage-billing` })),
-    onSuccess: (res) => {
-      if (res?.url) window.location.href = res.url;
+    mutationFn: async () => unwrap(await api.billing.portal.post()),
+    onSuccess: () => {
+      toast.success("Tautan kelola tagihan dikirim ke email kamu.");
     },
-    onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal membuka portal billing.")),
+    onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal mengirim tautan portal.")),
   });
 }
 
-/** Ganti paket (upgrade/downgrade). */
+/** Ganti paket (upgrade/downgrade) → redirect ke checkout tier baru (Mayar). */
 export function useChangeSubscription() {
   const api = useApi();
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: async (productKey: ProductKey) =>
       unwrap(await api.billing.subscription.change.post({ productKey })),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.billing.all });
-      toast.success("Permintaan ganti paket dikirim.");
+    onSuccess: (res) => {
+      if (res?.url) window.location.href = res.url;
     },
     onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal mengganti paket.")),
   });
 }
 
-/** Batalkan langganan (di akhir periode). */
+/** Batalkan langganan: Mayar tak punya API cancel → kirim magic-link portal. */
 export function useCancelSubscription() {
   const api = useApi();
-  const qc = useQueryClient();
   return useMutation({
-    mutationFn: async () => unwrap(await api.billing.subscription.cancel.post({})),
+    mutationFn: async () => unwrap(await api.billing.subscription.cancel.post()),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.billing.all });
-      toast.success("Langganan akan dibatalkan di akhir periode.");
+      toast.success("Cek email untuk kelola/batalkan langganan di portal Mayar.");
     },
-    onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal membatalkan langganan.")),
+    onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal mengirim tautan portal.")),
   });
 }
 
