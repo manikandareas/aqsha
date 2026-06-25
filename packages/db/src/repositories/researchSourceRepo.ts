@@ -31,4 +31,9 @@ export const ResearchSourceRepo = {
       .where(eq(researchSources.threadId, threadId))
       .orderBy(asc(researchSources.createdAt), asc(researchSources.id));
   },
+
+  // FK `thread_id` tanpa onDelete cascade → wajib dihapus sebelum threadnya (lihat ThreadService.remove).
+  async deleteByThread(db: DbOrTx, threadId: string): Promise<void> {
+    await db.delete(researchSources).where(eq(researchSources.threadId, threadId));
+  },
 };

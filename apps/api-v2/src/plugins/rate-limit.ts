@@ -1,5 +1,6 @@
 import { getRateLimiter, type RateLimitRule } from "@aqsha/services/quota";
 import { Elysia } from "elysia";
+import { logger } from "../lib/log";
 
 /**
  * Macro rate-limit Redis reusable. Route opt-in via `{ auth: true, rateLimit: "<rule>" }`
@@ -27,7 +28,7 @@ export const rateLimitMacro = new Elysia({ name: "rateLimitMacro" }).macro({
           await getRateLimiter(rule).consume(ownerUserId);
         } catch (rejected) {
           if (rejected instanceof Error) {
-            console.error(`[api-v2] rate-limit ${rule} store error (fail-open)`, rejected);
+            logger.warn({ rule, err: rejected }, "rate_limit_store_error_fail_open");
             return;
           }
           const msBeforeNext = (rejected as { msBeforeNext?: number }).msBeforeNext ?? 1000;

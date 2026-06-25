@@ -5,6 +5,7 @@ import {
   type Db,
   type DbOrTx,
   decodeKeysetCursor,
+  ResearchSourceRepo,
   throwAppError,
 } from "@aqsha/db";
 import { collapse } from "../lib/text";
@@ -138,11 +139,16 @@ export const ThreadService = {
     return { ok: true };
   },
 
-  /** Hapus thread + cascade pesan (FK no-action → pesan dihapus dulu, satu tx). */
+  /**
+   * Hapus thread, satu tx. FK `chat_messages` + `research_sources` ber-`onDelete` no-action
+   * → wajib dihapus dulu (kalau tidak, thread hasil `/deep` yang punya sumber → FK violation
+   * → 500 "tak terduga"). `chat_thread_events` punya cascade, jadi tak perlu manual.
+   */
   async remove(db: Db, input: { ownerUserId: string; threadId: string }): Promise<{ ok: true }> {
     await this.assertOwner(db, input.ownerUserId, input.threadId);
     await db.transaction(async (tx) => {
       await ChatMessageRepo.deleteByThread(tx, input.threadId);
+      await ResearchSourceRepo.deleteByThread(tx, input.threadId);
       await ChatThreadRepo.deleteById(tx, input.threadId);
     });
     return { ok: true };

@@ -2,6 +2,7 @@ import { cors } from "@elysiajs/cors";
 import { openapi } from "@elysiajs/openapi";
 import { Elysia } from "elysia";
 import { errorPlugin } from "./lib/errors";
+import { observability } from "./plugins/observability";
 import { admin } from "./routes/admin";
 import { artifacts } from "./routes/artifacts";
 import { billing } from "./routes/billing";
@@ -16,6 +17,7 @@ import { webhooks } from "./routes/webhooks";
 import { workspaces } from "./routes/workspaces";
 
 export const app = new Elysia()
+  .use(observability)
   .use(errorPlugin)
   .use(cors())
   .use(openapi())
