@@ -6,22 +6,14 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { readableApiErrorMessage } from "@/lib/api-error";
 import {
-  type IdeaSeedInput,
   useFeedHome,
   useFeedInfinite,
   useHideDiscovery,
-  useIdeas,
   usePaperSearch,
   useRecordInteraction,
   useSearchDiscovery,
 } from "../api";
-import { VERDICT_STYLE } from "../format";
-import {
-  deriveTopCited,
-  deriveTopicMomentum,
-  deriveTopTopics,
-  deriveVerdictBreakdown,
-} from "../aggregate";
+import { deriveTopCited } from "../aggregate";
 import {
   discoveryItemKey,
   feedItemToDiscoveryItem,
@@ -32,7 +24,6 @@ import { rangeToFromYear, type DiscoveryRange } from "../nav";
 import type { FeedItem, FeedMode, FeedTopic } from "../types";
 import { DiscoveryAside } from "./discovery-aside";
 import {
-  DiscoveryClaimCard,
   DiscoveryFeatureCard,
   DiscoveryHeroCard,
   DiscoveryStandardCard,
@@ -40,7 +31,6 @@ import {
 } from "./discovery-item-card";
 import { DiscoveryListItem } from "./discovery-list-item";
 import { DiscoveryHeaderControls, DiscoveryModeNav } from "./discovery-toolbar";
-import { IdeaDialog } from "./idea-dialog";
 
 // Bound consecutive auto-loads between scrolls so a run of locally-hidden items
 // (page shrinks below limit without advancing) can't spin the observer.
@@ -54,8 +44,6 @@ export function DiscoveryPage() {
   const [q, setQ] = useState("");
   const [range, setRange] = useState<DiscoveryRange>("all");
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
-  const [ideaSeed, setIdeaSeed] = useState<IdeaSeedInput | null>(null);
-  const [ideaOpen, setIdeaOpen] = useState(false);
 
   const searchActive = q.trim().length > 0;
   const activeTopic = mode === "topics" ? topic : null;
@@ -66,7 +54,6 @@ export function DiscoveryPage() {
 
   const hide = useHideDiscovery();
   const record = useRecordInteraction();
-  const ideas = useIdeas();
 
   // Derived values below are auto-memoized by React Compiler — no manual useMemo.
   // Flatten → dedupe → map to DiscoveryItem (feed ref) → drop locally-hidden.
@@ -89,10 +76,7 @@ export function DiscoveryPage() {
   // list) so the right rail stays put across loadMore and search.
   const homeQuery = useFeedHome();
   const asideItems = (homeQuery.data ?? []).map((raw) => feedItemToDiscoveryItem(raw));
-  const verdictBreakdown = deriveVerdictBreakdown(asideItems);
-  const topTopics = deriveTopTopics(asideItems, 8);
   const topCited = deriveTopCited(asideItems, 4);
-  const topicMomentum = deriveTopicMomentum(asideItems, 4);
 
   // Live external augmentation: once the in-app index is exhausted, append
   // uncached external papers as one block (deferred so the dedup against feed
@@ -169,22 +153,11 @@ export function DiscoveryPage() {
       record.mutate({ itemRef: item.itemRef, kind: "research" });
       router.push(`/app/threads?seed=${encodeURIComponent(buildSeed(item))}`);
     },
-    onGenerateIdeas: (item) => {
-      const seed = { title: item.title, context: item.tldr ?? item.summary, topics: item.topics };
-      setIdeaSeed(seed);
-      setIdeaOpen(true);
-      ideas.reset();
-      ideas.mutate(seed);
-    },
     onSaved: (item) => record.mutate({ itemRef: item.itemRef, kind: "save" }),
     onHide: (item) => {
       const key = discoveryItemKey(item);
       setHiddenIds((prev) => new Set(prev).add(key));
       hide.mutate(item.itemRef, { onError: () => toast.error("Gagal menyembunyikan.") });
-    },
-    onOpenEvidence: (item) => {
-      record.mutate({ itemRef: item.itemRef, kind: "open_evidence" });
-      router.push(`/app/explore/f/${item._id}`);
     },
   };
 
@@ -244,11 +217,7 @@ export function DiscoveryPage() {
                   <div key={row.key} className="grid grid-cols-1 gap-x-5 gap-y-8 @md/feed:grid-cols-2 @2xl/feed:grid-cols-3">
                     {row.items.map((item) => (
                       <div key={discoveryItemKey(item)}>
-                        {item.kind === "claim" ? (
-                          <DiscoveryClaimCard item={item} busy={false} handlers={handlers} />
-                        ) : (
-                          <DiscoveryStandardCard item={item} busy={false} handlers={handlers} />
-                        )}
+                        <DiscoveryStandardCard item={item} busy={false} handlers={handlers} />
                       </div>
                     ))}
                   </div>
@@ -280,51 +249,16 @@ export function DiscoveryPage() {
         </div>
 
         <aside className="min-w-0 @4xl/explore:sticky @4xl/explore:top-20 @4xl/explore:self-start">
-          <DiscoveryAside
-            mode={mode}
-            verdicts={verdictBreakdown}
-            momentum={topicMomentum}
-            topTopics={topTopics}
-            topCited={topCited}
-            onSelectTopic={(name) => setQ(name)}
-          />
+          <DiscoveryAside topCited={topCited} />
         </aside>
         </section>
       </main>
-
-      <IdeaDialog
-        seedTitle={ideaSeed?.title}
-        open={ideaOpen}
-        onOpenChange={(o) => {
-          setIdeaOpen(o);
-          if (!o) ideas.reset();
-        }}
-        pending={ideas.isPending}
-        isError={ideas.isError}
-        result={ideas.data}
-        onLaunch={(q) => {
-          setIdeaOpen(false);
-          router.push(`/app/threads?seed=${encodeURIComponent(`/deep ${q}`)}`);
-        }}
-      />
     </div>
   );
 }
 
-// Seed teks untuk Tanya Astra: klaim → telaah bukti; lainnya → judul + tldr + sumber.
+// Seed teks untuk Tanya Astra: judul + tldr + sumber.
 function buildSeed(item: DiscoveryItem): string {
-  if (item.kind === "claim" && item.claim) {
-    const verdict = VERDICT_STYLE[item.claim.verdict].label;
-    return [
-      `Klaim viral: ${item.claim.claim}`,
-      `Verdict pemeriksa fakta: ${verdict}${item.claim.publisher ? ` (${item.claim.publisher})` : ""}`,
-      "",
-      "Telaah bukti ilmiah di balik klaim ini: apa kata literatur, seberapa kuat buktinya, dan konteks apa yang penting.",
-      item.claim.reviewUrl ? `Sumber pemeriksa: ${item.claim.reviewUrl}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
-  }
   return `${item.title}\n\n${item.tldr ?? item.summary}\n\nSumber: ${item.resolvedUrl ?? item.url}`;
 }
 

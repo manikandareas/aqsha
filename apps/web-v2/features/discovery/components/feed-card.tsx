@@ -65,12 +65,6 @@ export function FeedCard({ item, onHidden }: { item: FeedItem; onHidden: (id: st
         </Link>
       )}
 
-      {item.claim ? (
-        <p className="mt-1 text-sm">
-          <span className="font-medium">Putusan:</span> {item.claim.verdictLabelRaw}
-        </p>
-      ) : null}
-
       {item.tldr || item.summary ? (
         <p className="mt-1 line-clamp-3 text-sm text-muted-foreground">
           {item.tldr ?? item.summary}

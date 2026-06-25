@@ -2,15 +2,12 @@
 
 import {
   AlertCircleIcon,
-  CompassIcon,
   ExternalLinkIcon,
   FileDownIcon,
   Loader2Icon,
   MessageSquareIcon,
   MoreHorizontalIcon,
-  Quote,
   ThumbsDownIcon,
-  TrendingUpIcon,
 } from "@aqsha/ui/icons";
 import {
   DropdownMenu,
@@ -27,27 +24,17 @@ import { cn } from "@/lib/utils";
 import {
   bestIngestUrl,
   feedDetailHref,
-  isSavableToWorkspace,
   kindLabel,
   kindPanelClass,
   type DiscoveryItem,
 } from "../model";
-import {
-  domainFromUrl,
-  formatCitationCount,
-  relativeTime,
-  sourceName,
-  VERDICT_STYLE,
-} from "../format";
+import { domainFromUrl, formatCitationCount, relativeTime, sourceName } from "../format";
 import type { FeedItem } from "../types";
-import { Sparkline, StanceTally, VerdictBadge } from "./discovery-visuals";
 
 export type DiscoveryCardHandlers = {
   onAskAstra: (item: DiscoveryItem) => void;
   onSaved: (item: DiscoveryItem) => void;
   onHide: (item: DiscoveryItem) => void;
-  onOpenEvidence: (item: DiscoveryItem) => void;
-  onGenerateIdeas: (item: DiscoveryItem) => void;
 };
 
 export type CardProps = {
@@ -63,7 +50,6 @@ function DiscoverySpotlightCard(props: SpotlightProps) {
   const { item, imageSide, size } = props;
   const title = item.title;
   const tldr = item.tldr ?? item.summary;
-  const isClaim = item.kind === "claim";
 
   const titleClass =
     size === "hero"
@@ -95,15 +81,6 @@ function DiscoverySpotlightCard(props: SpotlightProps) {
             imageSide === "left" ? "@xl/feed:order-2" : "@xl/feed:order-1",
           )}
         >
-          {isClaim && item.claim ? (
-            <div className="mb-2.5 flex flex-wrap items-center gap-2">
-              <VerdictBadge verdict={item.claim.verdict} />
-              {item.claim.publisher ? (
-                <span className="text-[11px] text-muted-foreground">Diperiksa {item.claim.publisher}</span>
-              ) : null}
-            </div>
-          ) : null}
-
           <h2 className={cn("font-heading font-bold tracking-tight text-foreground", titleClass)}>
             <CardLink item={item} className="hover:underline underline-offset-4">
               {title}
@@ -115,8 +92,6 @@ function DiscoverySpotlightCard(props: SpotlightProps) {
           {tldr ? (
             <p className="mt-3 line-clamp-3 text-[14px] leading-6 text-ink-soft sm:line-clamp-4">{tldr}</p>
           ) : null}
-
-          <SpotlightSignals item={item} />
 
           <div className="mt-5 border-t border-border/50 pt-3">
             <CardFooter {...props} />
@@ -139,7 +114,6 @@ export function DiscoveryFeatureCard(props: CardProps & { imageSide: "left" | "r
 // ── Standard card (3-up editorial grid) ───────────────────────────────────
 export function DiscoveryStandardCard(props: CardProps) {
   const { item } = props;
-  const isClaim = item.kind === "claim";
 
   return (
     <article className="group flex flex-col">
@@ -152,12 +126,6 @@ export function DiscoveryStandardCard(props: CardProps) {
       </CardLink>
 
       <div className="flex min-w-0 flex-1 flex-col pt-2.5">
-        {isClaim && item.claim ? (
-          <div className="mb-1.5">
-            <VerdictBadge verdict={item.claim.verdict} />
-          </div>
-        ) : null}
-
         <h3 className="font-heading text-[15px] font-bold leading-[1.25] tracking-tight text-foreground">
           <CardLink item={item} className="line-clamp-3 break-words hover:underline underline-offset-4">
             {item.title}
@@ -174,53 +142,6 @@ export function DiscoveryStandardCard(props: CardProps) {
   );
 }
 
-// ── Claim card (Brief) — verdict-forward, image-top ───────────────────────
-export function DiscoveryClaimCard(props: CardProps) {
-  const { item, handlers } = props;
-  const claim = item.claim;
-  if (!claim) return <DiscoveryStandardCard {...props} />;
-
-  return (
-    <article className="group flex flex-col">
-      <CardLink item={item} hidden className="block overflow-hidden rounded-[12px]">
-        <CardMedia
-          item={item}
-          title={claim.claim}
-          className="aspect-[16/10] w-full transition-opacity duration-200 group-hover:opacity-90"
-        />
-      </CardLink>
-
-      <div className="flex min-w-0 flex-1 flex-col pt-2.5">
-        <div className="mb-1.5 flex flex-wrap items-center gap-2">
-          <VerdictBadge verdict={claim.verdict} />
-          {claim.publisher ? (
-            <span className="text-[11px] text-muted-foreground">Diperiksa {claim.publisher}</span>
-          ) : null}
-        </div>
-
-        <h3 className="font-heading text-[15px] font-bold leading-[1.25] tracking-tight text-foreground">
-          <CardLink item={item} className="line-clamp-3 break-words hover:underline underline-offset-4">
-            {claim.claim}
-          </CardLink>
-        </h3>
-
-        <div className="mt-auto flex items-center justify-between gap-3 pt-3">
-          <CardLink
-            item={item}
-            className="inline-flex h-8 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[12.5px] font-semibold text-primary-foreground transition-transform duration-150 ease-out hover:bg-primary-hover active:scale-[0.97]"
-          >
-            <Quote className="size-3.5" /> Lihat bukti
-          </CardLink>
-          <div className="-mr-1 flex items-center gap-0.5">
-            <CardSaveButton item={item} handlers={handlers} />
-            <CardOverflowMenu {...props} />
-          </div>
-        </div>
-      </div>
-    </article>
-  );
-}
-
 // ── Footer (source row + save + overflow) ─────────────────────────────────
 function CardFooter(props: CardProps) {
   const { item, handlers } = props;
@@ -228,15 +149,14 @@ function CardFooter(props: CardProps) {
     <div className="flex items-center justify-between gap-3">
       <SourceRow item={item} />
       <div className="-mr-1 flex shrink-0 items-center gap-0.5">
-        {isSavableToWorkspace(item) ? <CardSaveButton item={item} handlers={handlers} /> : null}
+        <CardSaveButton item={item} handlers={handlers} />
         <CardOverflowMenu {...props} />
       </div>
     </div>
   );
 }
 
-// Save-to-Workspace, all kinds. Computes the best ingest URL, fires interest +1
-// via `onSaved`. Reuses the shared SaveToWorkspaceButton (dialog picker).
+// Save-to-Workspace. Computes the best ingest URL, fires interest +1 via `onSaved`.
 export function CardSaveButton({ item, handlers }: { item: DiscoveryItem; handlers: DiscoveryCardHandlers }) {
   return (
     <SaveToWorkspaceButton
@@ -253,7 +173,6 @@ export function CardSaveButton({ item, handlers }: { item: DiscoveryItem; handle
 }
 
 function CardOverflowMenu({ item, busy, handlers }: CardProps) {
-  const isClaim = item.kind === "claim";
   const isPaper = item.kind === "paper";
   return (
     <DropdownMenu>
@@ -271,15 +190,6 @@ function CardOverflowMenu({ item, busy, handlers }: CardProps) {
           {busy ? <Loader2Icon className="animate-spin" /> : <MessageSquareIcon />}
           Tanya Astra
         </DropdownMenuItem>
-        {isClaim ? (
-          <DropdownMenuItem onSelect={() => handlers.onOpenEvidence(item)}>
-            <Quote /> Lihat bukti
-          </DropdownMenuItem>
-        ) : (
-          <DropdownMenuItem onSelect={() => handlers.onGenerateIdeas(item)}>
-            <CompassIcon /> Cari celah
-          </DropdownMenuItem>
-        )}
 
         <DropdownMenuSeparator />
 
@@ -323,15 +233,6 @@ function SourceRow({ item }: { item: DiscoveryItem }) {
 }
 
 function SourceAvatar({ item }: { item: DiscoveryItem }) {
-  if (item.kind === "claim" && item.claim) {
-    const style = VERDICT_STYLE[item.claim.verdict];
-    const Icon = style.icon;
-    return (
-      <span className={cn("inline-flex size-5 shrink-0 items-center justify-center rounded-full border", style.className)}>
-        <Icon className="size-3" />
-      </span>
-    );
-  }
   const domain = item.kind === "news" ? domainFromUrl(item.url) : null;
   const letter = (sourceName(item).trim()[0] ?? "•").toUpperCase();
   return (
@@ -353,50 +254,11 @@ function SourceAvatar({ item }: { item: DiscoveryItem }) {
   );
 }
 
-function SpotlightSignals({ item }: { item: DiscoveryItem }) {
-  const hasSparkline = item.kind === "topic" && item.sparkline && item.sparkline.length > 1;
-  const hasStance =
-    item.stanceSupporting !== undefined &&
-    item.stanceContrasting !== undefined &&
-    item.stanceSupporting + item.stanceContrasting > 0;
-  if (!hasSparkline && !hasStance) return null;
-
-  return (
-    <div className="mt-4 space-y-3">
-      {hasSparkline ? (
-        <div className="max-w-[280px]">
-          <Sparkline values={item.sparkline as number[]} />
-          <p className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
-            <TrendingUpIcon className="size-3" /> Volume 3 bulan terakhir
-          </p>
-        </div>
-      ) : null}
-      {hasStance ? (
-        <StanceTally
-          supporting={item.stanceSupporting as number}
-          contrasting={item.stanceContrasting as number}
-          className="max-w-[280px]"
-        />
-      ) : null}
-    </div>
-  );
-}
-
 function CardMedia({ item, title, className }: { item: DiscoveryItem; title: string; className?: string }) {
   if (item.imageUrl) {
     return (
       <div className={cn("relative overflow-hidden rounded-[12px] bg-muted", className)}>
         <Image src={item.imageUrl} alt={title} fill unoptimized sizes="(max-width: 640px) 100vw, 400px" className="object-cover" />
-      </div>
-    );
-  }
-  if (item.kind === "claim" && item.claim) {
-    const style = VERDICT_STYLE[item.claim.verdict];
-    const Icon = style.icon;
-    return (
-      <div className={cn("flex flex-col items-center justify-center gap-2 overflow-hidden rounded-[12px] border", style.className, className)}>
-        <Icon className="size-8" />
-        <span className="font-heading text-[15px] font-bold">{style.label}</span>
       </div>
     );
   }
@@ -473,16 +335,7 @@ export function IconButton({
 }
 
 function kindAvatarClass(kind: FeedItem["kind"]): string {
-  switch (kind) {
-    case "claim":
-      return "bg-coral-soft text-coral-foreground";
-    case "topic":
-      return "bg-sky-soft text-sky-foreground";
-    case "paper":
-      return "bg-mint-soft text-mint-foreground";
-    case "idea":
-      return "bg-lavender-soft text-lavender-foreground";
-    default:
-      return "bg-lemon-soft text-lemon-foreground";
-  }
+  return kind === "paper"
+    ? "bg-mint-soft text-mint-foreground"
+    : "bg-lemon-soft text-lemon-foreground";
 }

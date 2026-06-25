@@ -19,7 +19,7 @@ import {
   formatCitation,
   type CitationFormat,
   type CitationInput,
-} from "@/features/explore/utils/citation";
+} from "@/features/artifacts/utils/citation";
 import type {
   ArtifactRenderPayload,
   PaperExtractionStatus,

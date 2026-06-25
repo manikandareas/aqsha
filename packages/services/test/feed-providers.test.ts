@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { summarizeTimeline } from "../src/feed/providers/gdelt";
 import {
   buildGoogleNewsFeedInputs,
   dedupeGoogleNewsItems,
@@ -8,26 +7,9 @@ import {
 } from "../src/feed/providers/googleNews";
 import { parseBatchExecuteUrl } from "../src/feed/providers/googleNewsDecode";
 import {
-  deriveClaimTopics,
-  isScienceHealthClaim,
-  mapTextualRatingToVerdict,
-} from "../src/feed/providers/factCheck";
-import {
   extractArticlePreviewFromHtml,
   extractArticleTextFromHtml,
 } from "../src/papers/articlePreview";
-
-describe("gdelt summarizeTimeline", () => {
-  test("downsample ke 24 + trendScore momentum", () => {
-    const values = Array.from({ length: 100 }, (_, i) => (i + 1) / 100);
-    const { sparkline, trendScore } = summarizeTimeline(values);
-    expect(sparkline.length).toBe(24);
-    expect(trendScore).toBeGreaterThan(0);
-  });
-  test("kosong → 0", () => {
-    expect(summarizeTimeline([])).toEqual({ sparkline: [], trendScore: 0 });
-  });
-});
 
 describe("googleNews parseGoogleNewsRss", () => {
   const xml = `<?xml version="1.0"?><rss><channel>
@@ -86,28 +68,6 @@ describe("googleNewsDecode parseBatchExecuteUrl", () => {
   });
   test("tanpa Fbv4je → null", () => {
     expect(parseBatchExecuteUrl(")]}'\n[]")).toBeNull();
-  });
-});
-
-describe("factCheck verdict + topics", () => {
-  test("mapTextualRatingToVerdict graduasi", () => {
-    expect(mapTextualRatingToVerdict("Hoaks")).toEqual({ verdict: "contradicted", severity: "high" });
-    expect(mapTextualRatingToVerdict("Sebagian benar")).toEqual({
-      verdict: "partially_supported",
-      severity: "warning",
-    });
-    expect(mapTextualRatingToVerdict("Menyesatkan")).toEqual({
-      verdict: "needs_context",
-      severity: "warning",
-    });
-    expect(mapTextualRatingToVerdict("Benar")).toEqual({ verdict: "supported", severity: "info" });
-    expect(mapTextualRatingToVerdict("xyz")).toEqual({ verdict: "unverified", severity: "info" });
-  });
-  test("isScienceHealthClaim + deriveClaimTopics", () => {
-    expect(isScienceHealthClaim("vaksin covid aman")).toBe(true);
-    expect(isScienceHealthClaim("pemilu 2024")).toBe(false);
-    expect(deriveClaimTopics("vaksin covid")).toContain("COVID-19");
-    expect(deriveClaimTopics("xyz tanpa kata kunci")).toEqual(["Sains"]);
   });
 });
 

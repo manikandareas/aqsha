@@ -1,10 +1,8 @@
 import { throwAppError } from "@aqsha/db";
 import {
   type DiscoveryItemRef,
-  FeedAiService,
   FeedInteractionService,
   FeedService,
-  PaperCacheService,
 } from "@aqsha/services";
 import { Elysia, t } from "elysia";
 import { getDb } from "../clients/db";
@@ -196,39 +194,9 @@ export const feed = new Elysia({ prefix: "/feed" })
           t.Literal("save"),
           t.Literal("hide"),
           t.Literal("research"),
-          t.Literal("open_evidence"),
         ]),
       }),
     },
-  )
-  // POST /feed/ideas — generate 1–3 pertanyaan riset FINER (credit-gated normal_chat).
-  .post(
-    "/ideas",
-    ({ ownerUserId, email, body }) => {
-      const { db } = getDb();
-      return FeedAiService.generateIdeas(db, ownerUserId, email, {
-        title: body.title,
-        context: body.context,
-        topics: body.topics,
-      });
-    },
-    {
-      auth: true,
-      body: t.Object({
-        title: t.String(),
-        context: t.Optional(t.String()),
-        topics: t.Optional(t.Array(t.String())),
-      }),
-    },
-  )
-  // GET /feed/papers-by-keys — resolve paper pendukung (evidence drawer) by key.
-  .get(
-    "/papers-by-keys",
-    ({ query }) => {
-      const { db } = getDb();
-      return PaperCacheService.papersByKeys(db, query.keys ?? []).then((papers) => ({ papers }));
-    },
-    { auth: true, query: t.Object({ keys: t.Optional(t.Array(t.String())) }) },
   )
   // GET /feed/:id/related — same-kind related ("Discover more").
   .get(

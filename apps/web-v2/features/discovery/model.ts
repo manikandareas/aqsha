@@ -51,14 +51,7 @@ export function feedDetailHref(item: DiscoveryItem): string | null {
     return `/app/explore/${encodeURIComponent(item.paperKey)}`;
   }
   if (item.kind === "news") return `/app/explore/n/${item._id}`;
-  if (item.kind === "claim") return `/app/explore/f/${item._id}`;
   return null;
-}
-
-// A `topic` (GDELT trend) item's url is a Google News *search* page, not a real
-// document — so it isn't a valid Save-to-Workspace target. Every other kind is.
-export function isSavableToWorkspace(item: Pick<DiscoveryItem, "kind">): boolean {
-  return item.kind !== "topic";
 }
 
 // Most identifier-rich URL for ingestion: canonical DOI > hosted PDF > decoded
@@ -69,31 +62,11 @@ export function bestIngestUrl(item: DiscoveryItem): string {
 }
 
 export function kindLabel(kind: FeedItem["kind"]): string {
-  switch (kind) {
-    case "paper":
-      return "Paper";
-    case "news":
-      return "Berita";
-    case "claim":
-      return "Klaim";
-    case "topic":
-      return "Topik";
-    default:
-      return "Ide";
-  }
+  return kind === "paper" ? "Paper" : "Berita";
 }
 
 export function kindPanelClass(kind: FeedItem["kind"]): string {
-  switch (kind) {
-    case "claim":
-      return "bg-gradient-to-br from-coral-soft to-lemon-soft";
-    case "topic":
-      return "bg-gradient-to-br from-sky-soft to-lavender-soft";
-    case "paper":
-      return "bg-gradient-to-br from-sky-soft to-mint-soft";
-    case "idea":
-      return "bg-gradient-to-br from-lavender-soft to-mint-soft";
-    default:
-      return "bg-gradient-to-br from-lemon-soft to-coral-soft";
-  }
+  return kind === "paper"
+    ? "bg-gradient-to-br from-sky-soft to-mint-soft"
+    : "bg-gradient-to-br from-lemon-soft to-coral-soft";
 }
