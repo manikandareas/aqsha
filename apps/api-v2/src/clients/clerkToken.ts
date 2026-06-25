@@ -14,14 +14,16 @@ function requireSecretKey(): string {
  */
 export async function verifyClerkToken(
   token: string,
-): Promise<{ sub: string; email: string | null } | null> {
+): Promise<{ sub: string; email: string | null; sessionId: string | null } | null> {
   try {
     const payload = await verifyToken(token, { secretKey: requireSecretKey() });
     if (!payload?.sub) return null;
     // email bukan claim standar token sesi; best-effort (source-of-truth = webhook).
     const claims = payload as unknown as Record<string, unknown>;
     const email = typeof claims.email === "string" ? claims.email : null;
-    return { sub: payload.sub, email };
+    // `sid` = id sesi token ini → menandai "perangkat ini" di daftar sesi aktif.
+    const sessionId = typeof payload.sid === "string" ? payload.sid : null;
+    return { sub: payload.sub, email, sessionId };
   } catch {
     return null;
   }

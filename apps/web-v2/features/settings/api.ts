@@ -126,6 +126,29 @@ export function useUpdateDisplayName() {
   });
 }
 
+/** Daftar perangkat/sesi aktif (diproksi ke Clerk Backend lewat api-v2). */
+export function useSessions() {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.security.sessions(),
+    queryFn: async () => unwrap(await api.security.sessions.get()),
+  });
+}
+
+/** Keluarkan satu perangkat (revoke sesi). Sesi sendiri ditolak server. */
+export function useRevokeSession() {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => unwrap(await api.security.sessions({ id }).revoke.post()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.security.sessions() });
+      toast.success("Perangkat dikeluarkan.");
+    },
+    onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal mengeluarkan perangkat.")),
+  });
+}
+
 /** Hapus akun → tombstone+enqueue cascade di server, lalu sign-out Clerk → "/". */
 export function useDeleteAccount() {
   const api = useApi();

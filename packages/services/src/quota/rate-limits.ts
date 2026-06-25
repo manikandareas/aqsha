@@ -12,7 +12,8 @@ export type RateLimitRule =
   | "artifacts:create"
   | "artifacts:upload"
   | "chat:send"
-  | "account:delete";
+  | "account:delete"
+  | "security:sessions-revoke";
 
 const RATE_LIMIT_RULES: Record<RateLimitRule, { points: number; duration: number }> = {
   "workspaces:create": { points: 3, duration: 3600 },
@@ -23,6 +24,8 @@ const RATE_LIMIT_RULES: Record<RateLimitRule, { points: number; duration: number
   "chat:send": { points: 20, duration: 60 },
   // Hapus akun destruktif & irreversible — 5/jam cukup (guard anti-misfire, bukan throughput).
   "account:delete": { points: 5, duration: 3600 },
+  // Keluarkan perangkat — 10/menit cukup (klik tombol manual, bukan throughput).
+  "security:sessions-revoke": { points: 10, duration: 60 },
 };
 
 /** Konfigurasi rule (points/duration) — dipakai `getSendStatus` untuk hitung cooldown. */

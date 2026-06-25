@@ -25,6 +25,7 @@ export const authMacro = new Elysia({ name: "authMacro" }).macro({
         ownerUserId: verified.sub,
         clerkUserId: verified.sub,
         email: verified.email,
+        sessionId: verified.sessionId,
       };
     },
   },

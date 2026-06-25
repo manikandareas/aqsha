@@ -11,6 +11,7 @@ import { folders } from "./routes/folders";
 import { health } from "./routes/health";
 import { onboarding } from "./routes/onboarding";
 import { papers } from "./routes/papers";
+import { security } from "./routes/security";
 import { threads } from "./routes/threads";
 import { users } from "./routes/users";
 import { webhooks } from "./routes/webhooks";
@@ -23,6 +24,7 @@ export const app = new Elysia()
   .use(openapi())
   .use(health)
   .use(users)
+  .use(security)
   .use(onboarding)
   .use(webhooks)
   .use(billing)
