@@ -1,7 +1,14 @@
 // @aqsha/services — service layer framework-agnostic (route/MCP/worker callable).
+
+// Chat Astra (Fase 6) — path BACA + CRUD untuk route api-v2 (juga via subpath
+// `@aqsha/services/chat`). Logika murni di `@aqsha/chat-core`; path tulis proyeksi di
+// PROSES eve (`apps/web-v2/agent/lib/store.ts`).
+export { EventService, MessageService, ThreadService, TitleService } from "./chat";
+
 export { InterestService } from "./interest.service";
 export { DEFAULT_WORKSPACE_NAME, WorkspaceService } from "./workspace.service";
 export { FolderService } from "./folder.service";
+export { ContextService, type HydratedContext } from "./context.service";
 export {
   type CurrentUserIdentity,
   ensureUserWithin,
@@ -13,22 +20,71 @@ export {
   OnboardingService,
 } from "./onboarding.service";
 
-// Plan catalog + resolver (stub P2; billing penuh P5).
+// Plan catalog + pricing SSOT (Fase 5).
 export {
+  type BillingInterval,
+  type BillingStatus,
+  billingStatusAllowsUsage,
+  type CreditFeature,
+  currentMonthPeriod,
+  estimateCredits,
+  estimateProviderCostCents,
+  featureForUsage,
+  intervalForProductKey,
+  isAdminEmail,
+  isAdminOwnerUserId,
+  isPlanAtLeast,
+  normalizeBillingStatus,
+  type PaidPlanKey,
   PLAN_CATALOG,
+  PLAN_ORDER,
   type PlanDefinition,
   type PlanKey,
+  planForProductKey,
+  PRODUCT_CATALOG,
+  PRODUCT_KEYS,
+  type ProductKey,
+  PUBLIC_PLAN_KEYS,
   type PublicPlanKey,
+  requiredPlanForFeature,
   resolvePlanKey,
   UNLIMITED,
 } from "./plan";
+
+// Billing service (Fase 5) — entitlement + usage write-path + Polar surface.
+export {
+  BillingService,
+  type BillingSnapshot,
+  type ConsumeCreditsArgs,
+  type CurrentBillingResponse,
+  type CurrentPeriodSummary,
+  type EntitlementResult,
+  type EntitlementSnapshot,
+  type PlanListItem,
+  type SyncSubscriptionPayload,
+  type UsageDay,
+} from "./billing.service";
+export {
+  getEntitlementSnapshot,
+  resolveAdminOverride,
+  resolveEffectivePlanKey,
+} from "./billing/snapshot";
+export { evaluateGate } from "./billing/period";
+export { configuredProductId, PolarClient } from "./clients/polar";
 
 // Artifacts (P3) — pure helpers + konstanta + capacity gate + storage/RAG/extract.
 export * from "./artifacts/model";
 export { assertLibraryCapacity } from "./artifacts/capacity";
 export { type ExtractedDocument, extractStoredDocument } from "./artifacts/extract";
 export { StorageService } from "./storage.service";
-export { ragEntryIdFor, RagService } from "./rag.service";
+export { ragEntryIdFor, RagService, type ThreadDocumentMatch } from "./rag.service";
+export {
+  type EvidenceStrength,
+  type ResearchCandidate,
+  type ResearchOrigin,
+  ResearchService,
+  type ResearchSourceItem,
+} from "./research";
 export {
   ArtifactService,
   type ArtifactListItem,
@@ -62,3 +118,72 @@ export {
   normalizeInterestTopic,
   topicsForInterestFields,
 } from "./feed/interestKeywords";
+
+// Feed/Discovery (P4) — pure model + topic taxonomy. Service classes ditambah tiap slice.
+export {
+  buildFeedItemRow,
+  deriveOrderAt,
+  deriveSearchText,
+  type FeedClaim,
+  type FeedItemInput,
+  type FeedItemResponse,
+  type FeedItemRow,
+  type FeedKind,
+  type FeedProvider,
+  type FeedRetractionStatus,
+  paperToFeedInput,
+  shapeFeedItem,
+} from "./feed/model";
+export {
+  DISCOVERY_TOPIC_CATEGORIES,
+  DISCOVERY_TOPIC_CATEGORY_LABELS,
+  type DiscoveryTopicCategory,
+  isDiscoveryTopicCategory,
+  matchesTopicCategory,
+} from "./feed/topicCategories";
+export { upsertFeedItems } from "./feed/write";
+export { FeedService, type FeedMode } from "./feed.service";
+export {
+  FEED_HYDRATION_LANES,
+  type FeedHydrationLane,
+  FeedHydrationService,
+  type RefreshResult,
+} from "./feed-hydration.service";
+export { PaperCacheService, type PapersByKeysItem } from "./paper-cache.service";
+export { ExploreService } from "./explore.service";
+export {
+  FeedAiService,
+  type GenerateIdeasResult,
+  type IdeaSeed,
+} from "./feed-ai.service";
+export {
+  type DiscoveryItemRef,
+  type DiscoveryResolvedRef,
+  FeedInteractionService,
+  type InteractionKind,
+} from "./feed-interaction.service";
+export {
+  ACCOUNT_QUEUES,
+  type AccountQueueName,
+  CHAT_QUEUES,
+  type ChatQueueName,
+  FEED_QUEUES,
+  type FeedQueueName,
+  type QueueName,
+  registerRepeatable,
+} from "./clients/queue";
+export { AccountDeletionService } from "./account-deletion.service";
+
+// Explore paper cache model (P4) — key kanonik + cache helpers (dipakai route papers/explore P4.4).
+export {
+  canonicalPaperKey,
+  dedupeExplorePapers,
+  deriveKeyProbe,
+  exploreCacheKey,
+  type ExploreMode,
+  type ExplorePaperDetail,
+  type ExplorePaperInput,
+  type ExploreProvider,
+  type ExploreProviderStatus,
+  type ExploreSearchResponse,
+} from "./explore/model";

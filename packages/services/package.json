@@ -4,26 +4,101 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./src/index.ts",
+      "bun": "./src/index.ts",
+      "node": "./dist/index.js",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./chat": {
+      "types": "./src/chat/index.ts",
+      "bun": "./src/chat/index.ts",
+      "node": "./dist/chat/index.js",
+      "import": "./dist/chat/index.js",
+      "default": "./dist/chat/index.js"
+    },
+    "./plan": {
+      "types": "./src/plan.ts",
+      "bun": "./src/plan.ts",
+      "node": "./dist/plan.js",
+      "import": "./dist/plan.js",
+      "default": "./dist/plan.js"
+    },
+    "./billing": {
+      "types": "./src/billing.service.ts",
+      "bun": "./src/billing.service.ts",
+      "node": "./dist/billing.service.js",
+      "import": "./dist/billing.service.js",
+      "default": "./dist/billing.service.js"
+    },
+    "./quota": {
+      "types": "./src/quota/index.ts",
+      "bun": "./src/quota/index.ts",
+      "node": "./dist/quota/index.js",
+      "import": "./dist/quota/index.js",
+      "default": "./dist/quota/index.js"
+    },
+    "./rag": {
+      "types": "./src/rag.service.ts",
+      "bun": "./src/rag.service.ts",
+      "node": "./dist/rag.service.js",
+      "import": "./dist/rag.service.js",
+      "default": "./dist/rag.service.js"
+    },
+    "./research": {
+      "types": "./src/research/index.ts",
+      "bun": "./src/research/index.ts",
+      "node": "./dist/research/index.js",
+      "import": "./dist/research/index.js",
+      "default": "./dist/research/index.js"
+    },
+    "./artifact": {
+      "types": "./src/artifact.service.ts",
+      "bun": "./src/artifact.service.ts",
+      "node": "./dist/artifact.service.js",
+      "import": "./dist/artifact.service.js",
+      "default": "./dist/artifact.service.js"
+    },
+    "./workspace": {
+      "types": "./src/workspace.service.ts",
+      "bun": "./src/workspace.service.ts",
+      "node": "./dist/workspace.service.js",
+      "import": "./dist/workspace.service.js",
+      "default": "./dist/workspace.service.js"
+    },
+    "./context": {
+      "types": "./src/context.service.ts",
+      "bun": "./src/context.service.ts",
+      "node": "./dist/context.service.js",
+      "import": "./dist/context.service.js",
+      "default": "./dist/context.service.js"
+    }
   },
   "scripts": {
-    "test": "bun test",
+    "build": "tsup",
+    "build:watch": "tsup --watch",
+    "test": "bun test --timeout 30000",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.73",
     "@aqsha/db": "workspace:*",
+    "@polar-sh/sdk": "^0.48.1",
     "@aws-sdk/client-s3": "^3.1073.0",
     "@aws-sdk/s3-request-presigner": "^3.1073.0",
     "ai": "^6.0.208",
     "bullmq": "^5.79.0",
     "drizzle-orm": "^0.45.2",
+    "fast-xml-parser": "^5.7.3",
     "ioredis": "^5.11.1",
     "mammoth": "^1.12.0",
+    "rate-limiter-flexible": "^11.2.0",
     "unpdf": "^1.6.2"
   },
   "devDependencies": {
     "bun-types": "^1.3.13",
+    "tsup": "^8.5.0",
     "typescript": "^6.0.3"
   }
 }

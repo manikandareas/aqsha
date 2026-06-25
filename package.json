@@ -7,7 +7,9 @@
     "apps/agents",
     "apps/api-v2",
     "apps/web-v2",
+    "apps/agent-v2",
     "packages/agent-contracts",
+    "packages/chat-core",
     "packages/convex",
     "packages/db",
     "packages/services",
@@ -24,13 +26,21 @@
     "dev:api": "bun run --filter '@aqsha/api-v2' dev",
     "dev:web-v2": "bun run --filter '@aqsha/web-v2' dev",
     "dev:worker": "bun run --filter '@aqsha/api-v2' worker",
-    "dev:v2": "bun run dev:api & bun run dev:worker & bun run dev:web-v2 & wait",
+    "dev:eve": "bun run --filter '@aqsha/agent-v2' dev",
+    "build:v2-dist": "bun run --filter '@aqsha/db' --filter '@aqsha/services' build",
+    "watch:v2-dist": "bun run --parallel --filter '@aqsha/db' --filter '@aqsha/services' build:watch",
+    "dev:v2": "bun run build:v2-dist && (bun run watch:v2-dist & bun run dev:api & bun run dev:worker & bun run dev:eve & bun run dev:web-v2 & wait)",
+    "build:web-v2": "bun run build:v2-dist && bun run --filter '@aqsha/agent-v2' build && bun run --filter '@aqsha/web-v2' build",
+    "start:api": "bun run --filter '@aqsha/api-v2' start",
+    "start:worker": "bun run --filter '@aqsha/api-v2' worker:start",
+    "start:eve": "bun run --filter '@aqsha/agent-v2' start",
+    "start:web-v2": "bun run --filter '@aqsha/web-v2' start",
     "db:generate": "bun run --filter '@aqsha/db' generate",
     "db:migrate": "bun run --filter '@aqsha/db' migrate",
     "db:studio": "bun run --filter '@aqsha/db' studio",
-    "test:v2": "bun run --filter '@aqsha/db' --filter '@aqsha/services' --filter '@aqsha/api-v2' test",
+    "test:v2": "bun run --filter '@aqsha/db' --filter '@aqsha/chat-core' --filter '@aqsha/services' --filter '@aqsha/api-v2' test",
     "lint": "bun run --parallel --filter '@aqsha/app' --filter '@aqsha/convex' --filter '@aqsha/api-v2' --filter '@aqsha/web-v2' lint",
-    "typecheck": "bun run --parallel --filter '@aqsha/app' --filter '@aqsha/convex' --filter '@aqsha/ui' --filter '@aqsha/agents' --filter '@aqsha/agent-contracts' --filter '@aqsha/api-v2' --filter '@aqsha/web-v2' --filter '@aqsha/db' --filter '@aqsha/services' typecheck"
+    "typecheck": "bun run --parallel --filter '@aqsha/app' --filter '@aqsha/convex' --filter '@aqsha/ui' --filter '@aqsha/agents' --filter '@aqsha/agent-contracts' --filter '@aqsha/api-v2' --filter '@aqsha/web-v2' --filter '@aqsha/agent-v2' --filter '@aqsha/db' --filter '@aqsha/chat-core' --filter '@aqsha/services' typecheck"
   },
   "overrides": {
     "elysia": "1.4.29"
@@ -43,6 +53,5 @@
     "globals": "^17.5.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.0"
-  },
-  "dependencies": {}
+  }
 }

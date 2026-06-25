@@ -33,3 +33,34 @@ export function decodeKeysetCursor(value: string | null | undefined): KeysetCurs
     return null;
   }
 }
+
+/**
+ * Cursor relevance keyset untuk searchDiscovery: `(rank, orderAt, id)` — primary sort `ts_rank`
+ * desc (port relevance-order V1), tiebreaker kronologis. `r` deterministik per (query,row),
+ * jadi keyset stabil sepanjang query yang sama.
+ */
+export type SearchKeysetCursor = { r: number; u: number; i: string };
+
+export function encodeSearchCursor(cursor: SearchKeysetCursor): string {
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64");
+}
+
+export function decodeSearchCursor(value: string | null | undefined): SearchKeysetCursor | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(value, "base64").toString("utf8")) as unknown;
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      typeof (parsed as SearchKeysetCursor).r === "number" &&
+      typeof (parsed as SearchKeysetCursor).u === "number" &&
+      typeof (parsed as SearchKeysetCursor).i === "string"
+    ) {
+      const c = parsed as SearchKeysetCursor;
+      return { r: c.r, u: c.u, i: c.i };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}

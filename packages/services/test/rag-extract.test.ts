@@ -66,3 +66,44 @@ describe("RagService.index", () => {
     expect(rows[0]?.artifactId).toBe("a");
   });
 });
+
+describe("RagService.searchThreadDocuments (Slice 6.4 read, degrade-graceful)", () => {
+  test("embedding disabled → [] tanpa query repo", async () => {
+    embeddingEnabled = false;
+    const sim = spyOn(ArtifactEmbeddingRepo, "searchSimilar").mockResolvedValue([] as never);
+    const r = await RagService.searchThreadDocuments({} as never, {
+      ownerUserId: "u",
+      threadId: "t1",
+      query: "apa isi dokumen",
+    });
+    expect(r).toEqual([]);
+    expect(sim).not.toHaveBeenCalled();
+    embeddingEnabled = true;
+  });
+
+  test("query kosong → [] tanpa query repo", async () => {
+    const sim = spyOn(ArtifactEmbeddingRepo, "searchSimilar").mockResolvedValue([] as never);
+    expect(
+      await RagService.searchThreadDocuments({} as never, { ownerUserId: "u", threadId: "t1", query: "  " }),
+    ).toEqual([]);
+    expect(sim).not.toHaveBeenCalled();
+  });
+
+  test("match → skor = 1 - distance/2 (clamp ≥0), limit clamp 20, threadId di-scope", async () => {
+    spyOn(ArtifactEmbeddingRepo, "searchSimilar").mockResolvedValue([
+      { artifactId: "a", title: "T", chunkIndex: 0, content: "isi", distance: 0.5 },
+      { artifactId: "b", title: "T2", chunkIndex: 1, content: "isi2", distance: 3 }, // >2 → clamp 0
+    ] as never);
+    const r = await RagService.searchThreadDocuments({} as never, {
+      ownerUserId: "u",
+      threadId: "t1",
+      query: "x",
+      limit: 999,
+    });
+    expect(r[0]?.score).toBeCloseTo(0.75);
+    expect(r[1]?.score).toBe(0);
+    const args = (ArtifactEmbeddingRepo.searchSimilar as ReturnType<typeof spyOn>).mock.calls[0]?.[1];
+    expect(args.limit).toBe(20);
+    expect(args.threadId).toBe("t1");
+  });
+});

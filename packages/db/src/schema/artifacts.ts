@@ -21,7 +21,7 @@ export const artifacts = pgTable(
     id: text("id").primaryKey(),
     ownerUserId: text("owner_user_id")
       .notNull()
-      .references(() => users.ownerUserId),
+      .references(() => users.ownerUserId, { onDelete: "cascade" }),
     workspaceId: text("workspace_id").references(() => workspaces.id),
     folderId: text("folder_id").references(() => workspaceFolders.id),
     threadId: text("thread_id"),

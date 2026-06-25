@@ -1,11 +1,37 @@
 import { AppError } from "@aqsha/db";
-import { UserService } from "@aqsha/services";
+import { AccountDeletionService, BillingService, PolarClient, UserService } from "@aqsha/services";
 import { Elysia, status } from "elysia";
 import { verifyClerkWebhook } from "../clients/clerkWebhook";
 import { getDb } from "../clients/db";
 import { setNxWithTtl } from "../clients/redis";
 
 const WEBHOOK_TTL_SECONDS = 60 * 60 * 24; // 24 jam ≥ jendela retry svix
+
+/** Subset event subscription Polar yang dipakai (`subscription.created`/`updated`). */
+type PolarSubscriptionEvent = {
+  type: string;
+  data: {
+    id: string;
+    productId?: string;
+    status?: string;
+    currentPeriodStart?: Date | string | null;
+    currentPeriodEnd?: Date | string | null;
+    cancelAtPeriodEnd?: boolean | null;
+    canceledAt?: Date | string | null;
+    metadata?: Record<string, unknown> | null;
+    customer?: { externalId?: string | null } | null;
+  };
+};
+
+function parseEpochMs(value: Date | string | null | undefined): number | undefined {
+  if (!value) return undefined;
+  const ms = value instanceof Date ? value.getTime() : Date.parse(value);
+  return Number.isFinite(ms) ? ms : undefined;
+}
+
+function stringField(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
 
 type ClerkUserData = {
   id?: string;
@@ -67,11 +93,60 @@ export const webhooks = new Elysia({ prefix: "/webhooks" }).post(
     const deleted = type === "user.deleted" || data.deleted === true;
     const { db } = getDb();
     if (deleted) {
-      await UserService.markUserDeletedFromWebhook(db, clerkUserId);
+      // Clerk sudah hapus user → enqueue cascade data owner (worker Clerk-delete jadi 404=ok).
+      await AccountDeletionService.requestByClerkId(db, clerkUserId);
     } else {
       await UserService.applyClerkUserUpsert(db, { clerkUserId, email: pickEmail(data) });
     }
     return { ok: true };
+  },
+  { parse: "none" },
+).post(
+  "/polar",
+  async ({ request, headers }) => {
+    const body = await request.text();
+    // verifyWebhook melempar AppError (signature invalid→400 / secret missing→500),
+    // di-map errorPlugin global. Header svix lower-case (cocok standardwebhooks).
+    const headerRecord: Record<string, string> = {};
+    for (const [k, v] of Object.entries(headers)) if (typeof v === "string") headerRecord[k] = v;
+    const event = PolarClient.verifyWebhook(body, headerRecord) as PolarSubscriptionEvent;
+
+    if (event.type !== "subscription.created" && event.type !== "subscription.updated") {
+      return { ok: true, ignored: true };
+    }
+
+    const data = event.data;
+    const ownerUserId = stringField(data.metadata?.userId) ?? stringField(data.customer?.externalId);
+    if (!ownerUserId) {
+      return status(400, {
+        message: "Polar subscription event is missing metadata.userId",
+        code: "billing_event_missing_owner",
+        severity: "error",
+      });
+    }
+
+    const currentPeriodEnd = parseEpochMs(data.currentPeriodEnd);
+    const status_ = data.status ?? "unknown";
+    const eventKey = `${event.type}:${data.id}:${currentPeriodEnd ?? ""}:${status_}`;
+    const acquired = await setNxWithTtl(`polar:webhook:${eventKey}`, WEBHOOK_TTL_SECONDS);
+    if (!acquired) {
+      return { ok: true, deduped: true }; // event sama sudah diproses
+    }
+
+    const { db } = getDb();
+    await BillingService.syncSubscriptionFromPolar(db, {
+      ownerUserId,
+      polarSubscriptionId: data.id,
+      polarProductId: stringField(data.productId) ?? "",
+      productKey: stringField(data.metadata?.productKey),
+      status: status_,
+      currentPeriodStart: parseEpochMs(data.currentPeriodStart),
+      currentPeriodEnd,
+      cancelAtPeriodEnd: data.cancelAtPeriodEnd ?? undefined,
+      canceledAt: parseEpochMs(data.canceledAt),
+      rawJson: data,
+    });
+    return { ok: true, deduped: false };
   },
   { parse: "none" },
 );

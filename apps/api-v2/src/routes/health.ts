@@ -1,3 +1,4 @@
+import { StorageService } from "@aqsha/services";
 import { Elysia } from "elysia";
 import { getDb } from "../clients/db";
 import { getRedis } from "../clients/redis";
@@ -22,14 +23,22 @@ async function checkRedis(): Promise<boolean> {
 }
 
 /**
- * Rail health P0:
- * - GET /ping    → bukti api hidup + jam server untuk web-v2 (tanpa dependency).
- * - GET /healthz → real-check db (SELECT 1) + redis (PING). `ok = db && redis`.
- *   (GET /health/ready dengan cek object storage menyusul — P3/P9.)
+ * Rail health:
+ * - GET /ping         → bukti api hidup + jam server untuk web-v2 (tanpa dependency).
+ * - GET /healthz      → real-check db (SELECT 1) + redis (PING). `ok = db && redis`.
+ * - GET /health/ready → readiness probe lengkap db + redis + object storage (HeadBucket).
  */
 export const health = new Elysia()
   .get("/ping", () => ({ pong: true, serverTime: Date.now() }))
   .get("/healthz", async () => {
     const [db, redis] = await Promise.all([checkDb(), checkRedis()]);
     return { ok: db && redis, db, redis };
+  })
+  .get("/health/ready", async () => {
+    const [db, redis, storage] = await Promise.all([
+      checkDb(),
+      checkRedis(),
+      StorageService.ping(),
+    ]);
+    return { ok: db && redis && storage, db, redis, storage };
   });

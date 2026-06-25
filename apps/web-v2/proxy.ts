@@ -13,7 +13,10 @@ export default clerkMiddleware(async (auth, req) => {
 
 export const config = {
   matcher: [
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    // `eve/v1` di-exclude: rewrite Next (next.config) mem-proxy route eve ke app
+    // `@aqsha/agent-v2` (punya auth channel Clerk sendiri). Tanpa exclude, Clerk
+    // middleware akan 307-redirect fetch/stream (bukan 401) → biarkan eve yang auth.
+    "/((?!eve/v1|_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
     "/(api|trpc)(.*)",
     "/__clerk/(.*)",
   ],

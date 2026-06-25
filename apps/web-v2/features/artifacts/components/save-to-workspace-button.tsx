@@ -25,23 +25,36 @@ export function SaveToWorkspaceButton({
   url,
   title,
   label = "Simpan",
+  ariaLabel,
   variant = "outline",
   size = "sm",
   className,
+  onSaved,
 }: {
   url: string;
   title?: string;
   label?: string;
+  /** For icon-only use (empty label): accessible name + tooltip. */
+  ariaLabel?: string;
   variant?: ButtonVariant;
   size?: ButtonSize;
   className?: string;
+  /** Dipanggil setelah saveUrl sukses — mis. feed discovery menembak interest bump +1. */
+  onSaved?: () => void;
 }) {
   const save = useSaveUrl();
   const [open, setOpen] = useState(false);
 
   return (
     <>
-      <Button variant={variant} size={size} className={className} onClick={() => setOpen(true)}>
+      <Button
+        variant={variant}
+        size={size}
+        className={className}
+        aria-label={ariaLabel}
+        title={ariaLabel}
+        onClick={() => setOpen(true)}
+      >
         <FolderIcon />
         {label}
       </Button>
@@ -60,6 +73,7 @@ export function SaveToWorkspaceButton({
                   onSuccess: () => {
                     toast.success("Disimpan ke workspace");
                     setOpen(false);
+                    onSaved?.();
                   },
                 },
               )

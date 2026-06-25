@@ -5,7 +5,9 @@ import {
   ArtifactRepo,
   ArtifactUrlRepo,
   AppError,
+  BillingRepo,
   FolderRepo,
+  UserRepo,
   WorkspaceRepo,
 } from "@aqsha/db";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
@@ -123,6 +125,10 @@ beforeEach(() => {
   spyOn(ArtifactRepo, "update").mockResolvedValue();
   spyOn(ArtifactContentRepo, "insert").mockResolvedValue();
   spyOn(ArtifactContentRepo, "updateByArtifact").mockResolvedValue();
+  // P5: assertLibraryCapacity kini resolveEffectivePlanKey (db-aware) — stub billing reads.
+  spyOn(BillingRepo, "findAdminEntitlement").mockResolvedValue(null);
+  spyOn(BillingRepo, "findLatestSubscriptionByOwner").mockResolvedValue(null);
+  spyOn(UserRepo, "findByOwnerUserId").mockResolvedValue(null);
   delete process.env.AQSHA_ADMIN_OWNER_USER_IDS;
   delete process.env.AQSHA_ADMIN_EMAILS;
 });
@@ -248,6 +254,77 @@ describe("update (move) + remove", () => {
     const patch = (ArtifactRepo.update as ReturnType<typeof spyOn>).mock.calls.at(-1)?.[2];
     expect(patch.status).toBe("deleted");
     expect(enqueued).toEqual([{ name: "artifact-cleanup", data: { ownerUserId: "u", artifactId: "a" } }]);
+  });
+});
+
+describe("applyAgentAction (Slice 6.5 born-headless)", () => {
+  test("insert artifact + content headless (workspaceId null, source agent, threadId set)", async () => {
+    const res = await ArtifactService.applyAgentAction(fakeDb, {
+      ownerUserId: "u",
+      threadId: "thr1",
+      title: "Ringkasan",
+      markdown: "# Hi",
+    });
+    expect(res.artifactType).toBe("markdown");
+    const artifact = (ArtifactRepo.insert as ReturnType<typeof spyOn>).mock.calls[0]?.[1];
+    expect(artifact).toMatchObject({
+      workspaceId: null,
+      folderId: null,
+      threadId: "thr1",
+      source: "agent",
+      indexingStatus: "ready",
+      status: "active",
+    });
+    // headless = TIDAK gate kapasitas library (beda dari createDocument)
+    expect(ArtifactRepo.countActiveByOwner).not.toHaveBeenCalled();
+    const content = (ArtifactContentRepo.insert as ReturnType<typeof spyOn>).mock.calls[0]?.[1];
+    expect(content).toMatchObject({ workspaceId: null, threadId: "thr1", markdown: "# Hi" });
+  });
+});
+
+describe("linkToWorkspace (Slice 6.5 promote headless → workspace)", () => {
+  beforeEach(() => {
+    spyOn(ArtifactContentRepo, "setWorkspaceByArtifactIds").mockResolvedValue();
+    spyOn(ArtifactUrlRepo, "setWorkspaceByArtifactIds").mockResolvedValue();
+    spyOn(ArtifactPaperMetadataRepo, "setWorkspaceByArtifactIds").mockResolvedValue();
+    spyOn(ArtifactEmbeddingRepo, "setWorkspaceByArtifactIds").mockResolvedValue();
+  });
+
+  test("headless artifact → patch workspaceId + cascade 4 side-table", async () => {
+    spyOn(ArtifactRepo, "findById").mockResolvedValue(makeArtifact({ workspaceId: null }));
+    await ArtifactService.linkToWorkspace(fakeDb, { ownerUserId: "u", artifactId: "a", workspaceId: "w2" });
+    const patch = (ArtifactRepo.update as ReturnType<typeof spyOn>).mock.calls.at(-1)?.[2];
+    expect(patch.workspaceId).toBe("w2");
+    expect(ArtifactContentRepo.setWorkspaceByArtifactIds).toHaveBeenCalledWith(
+      expect.anything(),
+      ["a"],
+      "w2",
+      expect.anything(),
+    );
+    expect(ArtifactEmbeddingRepo.setWorkspaceByArtifactIds).toHaveBeenCalledWith(
+      expect.anything(),
+      ["a"],
+      "w2",
+    );
+  });
+
+  test("artifact sudah ter-file (workspaceId set) → artifact_already_linked, no patch", async () => {
+    spyOn(ArtifactRepo, "findById").mockResolvedValue(makeArtifact({ workspaceId: "w1" }));
+    expect(
+      await appErrorCode(() =>
+        ArtifactService.linkToWorkspace(fakeDb, { ownerUserId: "u", artifactId: "a", workspaceId: "w2" }),
+      ),
+    ).toBe("artifact_already_linked");
+    expect(ArtifactRepo.update).not.toHaveBeenCalled();
+  });
+
+  test("cross-owner → artifact_not_found", async () => {
+    spyOn(ArtifactRepo, "findById").mockResolvedValue(makeArtifact({ ownerUserId: "other", workspaceId: null }));
+    expect(
+      await appErrorCode(() =>
+        ArtifactService.linkToWorkspace(fakeDb, { ownerUserId: "u", artifactId: "a", workspaceId: "w2" }),
+      ),
+    ).toBe("artifact_not_found");
   });
 });
 

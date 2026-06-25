@@ -14,10 +14,29 @@ export const ARTIFACT_QUEUES = {
   artifactCleanup: "artifact-cleanup",
 } as const;
 
+/** Queue feed (P4) — lane hydration discovery (ganti cron 3h Convex). */
+export const FEED_QUEUES = {
+  feedHydration: "feed-hydration",
+} as const;
+
+/** Queue chat (P6) — auto-title async thread (Slice 6.8). */
+export const CHAT_QUEUES = {
+  threadTitle: "thread-title",
+} as const;
+
+/** Queue account (P9) — cascade hard-delete data owner async (blob sweep + DELETE users). */
+export const ACCOUNT_QUEUES = {
+  accountDeletion: "account-deletion",
+} as const;
+
 export type ArtifactQueueName = (typeof ARTIFACT_QUEUES)[keyof typeof ARTIFACT_QUEUES];
+export type FeedQueueName = (typeof FEED_QUEUES)[keyof typeof FEED_QUEUES];
+export type ChatQueueName = (typeof CHAT_QUEUES)[keyof typeof CHAT_QUEUES];
+export type AccountQueueName = (typeof ACCOUNT_QUEUES)[keyof typeof ACCOUNT_QUEUES];
+export type QueueName = ArtifactQueueName | FeedQueueName | ChatQueueName | AccountQueueName;
 
 let connection: ConnectionOptions | null = null;
-const queues = new Map<ArtifactQueueName, Queue>();
+const queues = new Map<QueueName, Queue>();
 
 export function getQueueConnection(): ConnectionOptions {
   if (connection) return connection;
@@ -36,7 +55,7 @@ export function getQueueConnection(): ConnectionOptions {
   return connection;
 }
 
-function getQueue(name: ArtifactQueueName): Queue {
+function getQueue(name: QueueName): Queue {
   const existing = queues.get(name);
   if (existing) return existing;
   const queue = new Queue(name, { connection: getQueueConnection() });
@@ -44,16 +63,36 @@ function getQueue(name: ArtifactQueueName): Queue {
   return queue;
 }
 
+/** Enqueue job; mengembalikan BullMQ job id (untuk surface ke caller, mis. admin hydrate response). */
 export async function enqueue<T extends Record<string, unknown>>(
-  name: ArtifactQueueName,
+  name: QueueName,
   data: T,
-  opts?: { jobId?: string },
-): Promise<void> {
-  await getQueue(name).add(name, data, {
+  opts?: { jobId?: string; delay?: number },
+): Promise<string | undefined> {
+  const job = await getQueue(name).add(name, data, {
     attempts: 3,
     backoff: { type: "exponential", delay: 20_000 },
     removeOnComplete: { count: 100 },
     removeOnFail: { count: 500 },
     ...(opts?.jobId ? { jobId: opts.jobId } : {}),
+    ...(opts?.delay !== undefined ? { delay: opts.delay } : {}),
+  });
+  return job.id;
+}
+
+/**
+ * Daftarkan repeatable job (cron) idempotent — BullMQ men-dedupe by `jobId` + pattern.
+ * Dipakai cron feed-hydration (setiap 3 jam, ganti hydrateCycle Convex).
+ */
+export async function registerRepeatable<T extends Record<string, unknown>>(
+  name: QueueName,
+  data: T,
+  opts: { pattern: string; jobId: string },
+): Promise<void> {
+  await getQueue(name).add(name, data, {
+    repeat: { pattern: opts.pattern },
+    jobId: opts.jobId,
+    removeOnComplete: { count: 50 },
+    removeOnFail: { count: 100 },
   });
 }

@@ -138,15 +138,4 @@ export const UserService = {
       });
     }
   },
-
-  /** Webhook user.deleted — P1 minimal: rekam tombstone. Cascade penuh P9. */
-  async markUserDeletedFromWebhook(db: DbOrTx, clerkUserId: string): Promise<void> {
-    const existing = await UserRepo.findByClerkUserId(db, clerkUserId);
-    if (!existing) return;
-    const now = Date.now();
-    await UserRepo.patch(db, existing.ownerUserId, {
-      deletionRequestedAt: now,
-      updatedAt: now,
-    });
-  },
 };

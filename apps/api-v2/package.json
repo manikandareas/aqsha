@@ -13,6 +13,7 @@
     "start": "bun run src/server.ts",
     "worker": "bun run --watch src/workers/index.ts",
     "worker:start": "bun run src/workers/index.ts",
+    "seed:feed": "bun run scripts/seed-feed.ts",
     "test": "bun test --timeout 30000",
     "typecheck": "tsc --noEmit"
   },

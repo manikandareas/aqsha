@@ -7,6 +7,7 @@
  */
 
 import { getCache, putCache } from "./external-cache";
+import { fetchWithTimeout } from "./http";
 
 const JINA_READER_ENDPOINT = "https://r.jina.ai";
 const CACHE_PROVIDER = "jina_read";
@@ -44,7 +45,7 @@ export async function readWithJinaReader(input: {
   if (cached) return cached;
 
   try {
-    const response = await fetch(`${JINA_READER_ENDPOINT}/${url}`, {
+    const response = await fetchWithTimeout(`${JINA_READER_ENDPOINT}/${url}`, {
       headers: jinaHeaders({
         Accept: "application/json",
         "X-Return-Format": "markdown",
@@ -53,6 +54,9 @@ export async function readWithJinaReader(input: {
         "X-Max-Tokens": "18000",
         "X-Timeout": "20",
       }),
+      // Client deadline above Jina's own `X-Timeout: 20` so the server-side cap
+      // normally wins, but a stalled connection/body can't hang us past this.
+      timeoutMs: 25_000,
     });
     if (!response.ok) {
       throw new Error(`Jina Reader returned ${response.status}`);

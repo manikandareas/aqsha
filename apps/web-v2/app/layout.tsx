@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppToaster } from "@/components/app-toaster";
 import { AuthenticatedUserSync } from "@/components/authenticated-user-sync";
 import { MotionProvider } from "@/components/motion-provider";
+import { OnboardingGate } from "@/components/onboarding-gate";
 import { QueryProvider } from "@/lib/query-provider";
 import { siteName } from "@/lib/metadata";
 import "./globals.css";
@@ -60,14 +61,16 @@ export default function RootLayout({
               enableSystem
               disableTransitionOnChange
             >
-              <NuqsAdapter>
-                <MotionProvider>
-                  <TooltipProvider>{children}</TooltipProvider>
-                </MotionProvider>
-              </NuqsAdapter>
+              <OnboardingGate>
+                <NuqsAdapter>
+                  <MotionProvider>
+                    <TooltipProvider>{children}</TooltipProvider>
+                  </MotionProvider>
+                </NuqsAdapter>
+              </OnboardingGate>
               <AppToaster />
+              <AuthenticatedUserSync />
             </ThemeProvider>
-            <AuthenticatedUserSync />
           </QueryProvider>
         </ClerkProvider>
       </body>

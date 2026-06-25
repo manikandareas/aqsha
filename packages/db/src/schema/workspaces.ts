@@ -16,7 +16,7 @@ export const workspaces = pgTable(
     id: text("id").primaryKey(),
     ownerUserId: text("owner_user_id")
       .notNull()
-      .references(() => users.ownerUserId),
+      .references(() => users.ownerUserId, { onDelete: "cascade" }),
     name: text("name").notNull(),
     emoji: text("emoji"),
     description: text("description"),

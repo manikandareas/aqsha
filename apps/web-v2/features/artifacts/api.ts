@@ -33,6 +33,21 @@ export function useArtifacts(workspaceId: string, folderId?: string | null) {
   });
 }
 
+/**
+ * Artifact aktif workspace untuk `@mention` context picker (Slice 6.6) — top-50,
+ * non-paginated. `enabled` di-drive UI (hanya fetch saat user men-drill ke
+ * workspace di palette).
+ */
+export function useContextPickerArtifacts(workspaceId: string | null) {
+  const api = useApi();
+  return useQuery({
+    queryKey: ["artifacts", "context-picker", workspaceId] as const,
+    enabled: workspaceId !== null,
+    queryFn: async () =>
+      unwrap(await api.workspaces({ id: workspaceId ?? "" }).artifacts["context-picker"].get()),
+  });
+}
+
 /** Detail artifact (null bila tak ditemukan / bukan milik user). */
 export function useArtifact(id: string) {
   const api = useApi();
@@ -107,9 +122,16 @@ export function useMoveArtifact() {
   const api = useApi();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { id: string; targetWorkspaceId: string }) =>
+    mutationFn: async (input: {
+      id: string;
+      targetWorkspaceId?: string;
+      folderId?: string | null;
+    }) =>
       unwrap(
-        await api.artifacts({ id: input.id }).patch({ targetWorkspaceId: input.targetWorkspaceId }),
+        await api.artifacts({ id: input.id }).patch({
+          ...(input.targetWorkspaceId ? { targetWorkspaceId: input.targetWorkspaceId } : {}),
+          ...(input.folderId !== undefined ? { folderId: input.folderId } : {}),
+        }),
       ),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.artifacts.all }),
     onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal memindahkan artefak.")),
@@ -177,6 +199,26 @@ export function useUploadArtifact(workspaceId: string) {
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.artifacts.all }),
     onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal mengunggah berkas.")),
+  });
+}
+
+/**
+ * Save-to-Workspace untuk artifact HEADLESS (dibuat agen, `workspaceId=null`) — Slice 6.5.
+ * Beda dari `useMoveArtifact` (move artifact yang sudah ter-file): di sini parent
+ * `workspaceId` masih null, jadi pakai endpoint `linkToWorkspace` terpisah.
+ */
+export function useLinkArtifactToWorkspace() {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string; workspaceId: string }) =>
+      unwrap(
+        await api.artifacts({ id: input.id })["link-workspace"].post({
+          workspaceId: input.workspaceId,
+        }),
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.artifacts.all }),
+    onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal menyimpan ke workspace.")),
   });
 }
 

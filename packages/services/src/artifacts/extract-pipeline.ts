@@ -24,7 +24,7 @@ export async function extractIndexAndPatch(
   args: {
     ownerUserId: string;
     artifactId: string;
-    workspaceId: string;
+    workspaceId: string | null;
     key: string;
     fileName: string;
     mimeType: string;

@@ -1,0 +1,30 @@
+# Aqsha web-v2 — Next 16 front-of-house. `next start` boots the web server; `withEve`
+# spawns the eve agent as a CHILD Node process (no separate unit needed).
+#
+# !! SINGLE REPLICA ONLY (D1) !!  eve persists durable runtime state to `.workflow-data/`
+# (file-backed, relative to apps/web-v2). It is single-machine on-disk — running a second
+# instance corrupts/races it. Do NOT template or autoscale this unit until Workflow
+# non-local (Postgres/Redis-backed) is GA. The Next layer could scale separately only if
+# eve is first split into its own service — it is not, today.
+#
+# Persistence: symlink apps/web-v2/.workflow-data -> /var/lib/aqsha/workflow-data so it
+# survives redeploys. Back it up manually (no automatic backup).
+# Prereq: `bun run build:web-v2` (build:v2-dist + eve build + next build) ran at deploy time.
+# Needs node>=24 on PATH for next + the eve child.
+[Unit]
+Description=Aqsha web-v2 (Next 16 + eve, single replica)
+After=network-online.target aqsha-api-v2.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aqsha
+WorkingDirectory=/srv/aqsha
+EnvironmentFile=/etc/aqsha/web-v2.env
+ExecStart=/usr/local/bin/bun run start:web-v2
+ReadWritePaths=/var/lib/aqsha/workflow-data
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

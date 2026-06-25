@@ -262,6 +262,144 @@ export const ArtifactService = {
   },
 
   /**
+   * Slice 6.5: materialize dokumen yang DIBUAT AGEN (tool `propose_artifact`, post-approval
+   * HITL). BORN-HEADLESS: `source:'agent'`, `workspaceId:null`, `threadId` set — beda dari
+   * `createDocument` yang workspace-scoped (assert owner + kapasitas). TANPA assert workspace
+   * & TANPA gate kapasitas: artifact headless belum menempati slot library sampai
+   * `linkToWorkspace`. Markdown ready langsung (plainText = teks markdown apa adanya).
+   */
+  async applyAgentAction(
+    db: Db,
+    input: { ownerUserId: string; threadId: string; title?: string; markdown: string },
+  ): Promise<{ artifactId: string; title: string; artifactType: "markdown" }> {
+    const title = input.title?.trim() ? normalizeArtifactTitle(input.title) : MARKDOWN_TITLE_FALLBACK;
+    const markdown = input.markdown ?? "";
+    const now = Date.now();
+    const artifactId = crypto.randomUUID();
+    const contentId = crypto.randomUUID();
+
+    await db.transaction(async (tx) => {
+      await ArtifactRepo.insert(tx, {
+        id: artifactId,
+        ownerUserId: input.ownerUserId,
+        workspaceId: null,
+        folderId: null,
+        threadId: input.threadId,
+        artifactType: "markdown",
+        artifactFamily: "text",
+        source: "agent",
+        title,
+        language: "markdown",
+        mimeType: null,
+        fileName: null,
+        byteSize: null,
+        indexingStatus: "ready",
+        indexingFailureReason: null,
+        detectedDocumentKind: null,
+        storageR2Key: null,
+        ragEntryId: null,
+        plainTextPreview: previewFromText(markdown),
+        indexedAt: null,
+        status: "active",
+        deletedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ArtifactContentRepo.insert(tx, {
+        id: contentId,
+        ownerUserId: input.ownerUserId,
+        workspaceId: null,
+        threadId: input.threadId,
+        artifactId,
+        blocksJson: null,
+        markdown,
+        plainText: markdown,
+        contextText: contextFromText(markdown),
+        plainTextR2Key: null,
+        blocksJsonR2Key: null,
+        markdownR2Key: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+
+    return { artifactId, title, artifactType: "markdown" };
+  },
+
+  /**
+   * Slice 6.5: Save-to-Workspace untuk artifact HEADLESS (agen/chat-attachment,
+   * `workspaceId=null`). HARUS method terpisah dari `update()`: `update()` lewat
+   * `assertWorkspaceArtifact` yang menolak `workspaceId=null`. Di sini artifact valid =
+   * owner + active + BELUM ter-file (`workspaceId=null`); sudah ter-file → pakai `update()`
+   * (move). Gate workspace owner (requireActive) + kapasitas library (slot dipakai SAAT ini),
+   * patch parent, cascade 4 side-table (`syncArtifactWorkspaceMove`).
+   */
+  async linkToWorkspace(
+    db: Db,
+    input: {
+      ownerUserId: string;
+      ownerEmail?: string | null;
+      artifactId: string;
+      workspaceId: string;
+      folderId?: string;
+    },
+  ): Promise<{ ok: true }> {
+    const now = Date.now();
+    await db
+      .transaction(async (tx) => {
+        const artifact = await ArtifactRepo.findById(tx, input.artifactId);
+        if (!artifact || artifact.ownerUserId !== input.ownerUserId || artifact.status !== "active") {
+          throwAppError({
+            message: "Artifact not found",
+            code: "artifact_not_found",
+            severity: "error",
+            status: 404,
+          });
+        }
+        if (artifact.workspaceId) {
+          throwAppError({
+            message: "Artifact already filed in a workspace",
+            code: "artifact_already_linked",
+            severity: "warning",
+            status: 409,
+          });
+        }
+        await WorkspaceService.assertWorkspaceOwner(tx, input.ownerUserId, input.workspaceId, {
+          requireActive: true,
+        });
+        if (input.folderId) {
+          await FolderService.assertFolderOwner(tx, input.ownerUserId, input.folderId, {
+            workspaceId: input.workspaceId,
+          });
+        }
+        await assertLibraryCapacity(tx, input.ownerUserId, input.ownerEmail);
+        await ArtifactRepo.update(tx, input.artifactId, {
+          workspaceId: input.workspaceId,
+          folderId: input.folderId ?? null,
+          updatedAt: now,
+        });
+        await syncArtifactWorkspaceMove(tx, {
+          artifactIds: [input.artifactId],
+          targetWorkspaceId: input.workspaceId,
+          now,
+        });
+      })
+      .catch((err) => {
+        // URL headless ber-normalizedUrl bentrok di workspace tujuan → UNIQUE(owner,ws,url).
+        if ((err as { code?: string }).code === "23505") {
+          throwAppError({
+            message: "Tautan ini sudah tersimpan di workspace tujuan.",
+            code: "artifact_url_already_in_target_workspace",
+            severity: "warning",
+            status: 409,
+          });
+        }
+        throw err;
+      });
+    return { ok: true };
+  },
+
+  /**
    * Step 1 upload: presign PUT (workspace-scoped, P3). Thread-attachment headless
    * upload menyusul P6. Assert owner + active dulu (tanpa cek tipe/size — itu di finalize).
    */
@@ -379,6 +517,108 @@ export const ArtifactService = {
         text: enrichText,
       });
     }
+
+    return { artifactId, title, indexed };
+  },
+
+  /**
+   * Slice 6.7 — presign upload untuk LAMPIRAN THREAD (chat). Workspace-agnostic:
+   * ownership di-gate via `ThreadService.assertOwner` ROUTE-side (bukan workspace
+   * assert), jadi method ini cuma reuse target presign. Validasi tipe/size di
+   * `finalizeThreadUpload`.
+   */
+  async generateThreadUploadUrl(ownerUserId: string): Promise<{ uploadUrl: string; key: string }> {
+    return StorageService.generateUploadTarget(ownerUserId);
+  },
+
+  /**
+   * Slice 6.7 — finalize lampiran thread: BORN-HEADLESS (`workspaceId:null`,
+   * `threadId` set, `source:'upload'`). Method terpisah dari `finalizeUpload`
+   * (workspace-scoped) seperti `applyAgentAction` vs `createDocument`: TANPA assert
+   * workspace & TANPA gate kapasitas (artifact headless belum menempati slot library
+   * sampai `linkToWorkspace`). Tetap `validateUpload` (trust boundary) + ekstrak/RAG
+   * index INLINE (scope thread → tool `list_artifacts`/`search_thread_documents` 6.4
+   * menemukannya). PDF → enqueue paper-enrichment.
+   */
+  async finalizeThreadUpload(
+    db: Db,
+    input: {
+      ownerUserId: string;
+      threadId: string;
+      key: string;
+      fileName: string;
+      mimeType: string;
+      size: number;
+    },
+  ): Promise<{ artifactId: string; title: string; indexed: boolean }> {
+    const artifactType = validateUpload({
+      fileName: input.fileName,
+      mimeType: input.mimeType,
+      size: input.size,
+    });
+    const title = titleFromFileName(input.fileName);
+    const artifactId = crypto.randomUUID();
+    const contentId = crypto.randomUUID();
+    const now = Date.now();
+
+    await db.transaction(async (tx) => {
+      await ArtifactRepo.insert(tx, {
+        id: artifactId,
+        ownerUserId: input.ownerUserId,
+        workspaceId: null,
+        folderId: null,
+        threadId: input.threadId,
+        artifactType,
+        artifactFamily: artifactFamilyForType(artifactType),
+        source: "upload",
+        title,
+        language: defaultLanguageForArtifactType(artifactType) ?? null,
+        mimeType: input.mimeType,
+        fileName: input.fileName,
+        byteSize: input.size,
+        indexingStatus: "pending",
+        indexingFailureReason: null,
+        detectedDocumentKind: null,
+        storageR2Key: input.key,
+        ragEntryId: null,
+        plainTextPreview: "Indexing is running.",
+        indexedAt: null,
+        status: "active",
+        deletedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ArtifactContentRepo.insert(tx, {
+        id: contentId,
+        ownerUserId: input.ownerUserId,
+        workspaceId: null,
+        threadId: input.threadId,
+        artifactId,
+        blocksJson: null,
+        markdown: "",
+        plainText: "",
+        contextText: "",
+        plainTextR2Key: null,
+        blocksJsonR2Key: null,
+        markdownR2Key: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+
+    // ponytail: skip paper-enrichment untuk lampiran headless — worker scope metadata
+    // ke workspace (`workspaceId: string`), yang null di sini; agen cuma butuh teks RAG
+    // (sudah ter-index di extractIndexAndPatch). Enrichment menyusul saat di-promote.
+    const { indexed } = await extractIndexAndPatch(db, {
+      ownerUserId: input.ownerUserId,
+      artifactId,
+      workspaceId: null,
+      key: input.key,
+      fileName: input.fileName,
+      mimeType: input.mimeType,
+      artifactType,
+      startedAt: now,
+    });
 
     return { artifactId, title, indexed };
   },
@@ -839,6 +1079,40 @@ export const ArtifactService = {
     await WorkspaceService.assertWorkspaceOwner(db, ownerUserId, workspaceId);
     const items = await ArtifactRepo.listActiveForContextPicker(db, ownerUserId, workspaceId);
     return { items: items.map(toArtifactListItem) };
+  },
+
+  /**
+   * List artifact aktif yang terlampir pada sebuah thread (Slice 6.4, tool
+   * `list_artifacts`). HEADLESS-TOLERANT: chat-attachment/agent `workspaceId=null`
+   * tetap masuk (beda dari `list` yang workspace-scoped + assert). Tanpa assert
+   * workspace; ownership di-enforce via filter `ownerUserId`.
+   */
+  async listByThread(
+    db: DbOrTx,
+    ownerUserId: string,
+    threadId: string,
+    limit = 50,
+  ): Promise<ArtifactListItem[]> {
+    const items = await ArtifactRepo.listByThread(db, ownerUserId, threadId, limit);
+    return items.map(toArtifactListItem);
+  },
+
+  /**
+   * Metadata satu artifact untuk tool agen (Slice 6.4, `get_artifact`).
+   * HEADLESS-TOLERANT: owner + active saja (chat-attachment `workspaceId=null`
+   * tetap resolve, beda dari `get` yang menuntut workspace). Return `null` bila
+   * missing/not-owned/not-active.
+   */
+  async getForAgent(
+    db: DbOrTx,
+    ownerUserId: string,
+    artifactId: string,
+  ): Promise<ArtifactListItem | null> {
+    const artifact = await ArtifactRepo.findById(db, artifactId);
+    if (!artifact || artifact.ownerUserId !== ownerUserId || artifact.status !== "active") {
+      return null;
+    }
+    return toArtifactListItem(artifact);
   },
 
   /**

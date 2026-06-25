@@ -83,6 +83,30 @@ export const ArtifactRepo = {
       .limit(limit);
   },
 
+  /**
+   * Artifact aktif yang terlampir ke sebuah thread (chat-attachment/agent, headless
+   * `workspace_id` boleh null). Index `by_owner_thread_created` sudah ada. DESC terbaru.
+   */
+  async listByThread(
+    db: DbOrTx,
+    ownerUserId: string,
+    threadId: string,
+    limit = 50,
+  ): Promise<Artifact[]> {
+    return await db
+      .select()
+      .from(artifacts)
+      .where(
+        and(
+          eq(artifacts.ownerUserId, ownerUserId),
+          eq(artifacts.threadId, threadId),
+          eq(artifacts.status, "active"),
+        ),
+      )
+      .orderBy(desc(artifacts.createdAt))
+      .limit(limit);
+  },
+
   /** ID artifact aktif dalam sebuah folder (untuk fan-out move/orphan). */
   async listActiveIdsByFolder(
     db: DbOrTx,

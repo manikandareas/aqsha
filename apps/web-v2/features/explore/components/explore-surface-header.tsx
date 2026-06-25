@@ -1,0 +1,108 @@
+"use client";
+
+import {
+  ChevronRightIcon,
+  MessageSquareIcon,
+  PanelLeftIcon,
+} from "@aqsha/ui/icons";
+import Link from "next/link";
+import type { ReactNode } from "react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+export type ExploreBreadcrumb = {
+  label: string;
+  href?: string;
+};
+
+// Shared header for every Explore surface. The optional `centerSlot` hosts a
+// centered control (the discovery view tabs on the index page); detail surfaces
+// omit it and the three-cell grid collapses the empty center to zero width, so
+// the breadcrumb and chat toggle still sit flush at the edges.
+export function ExploreSurfaceHeader({
+  breadcrumbs,
+  centerSlot,
+  rightSlot,
+  chatOpen,
+  onToggleChat,
+  showLeftTrigger,
+  onToggleLeftSidebar,
+}: {
+  breadcrumbs: ExploreBreadcrumb[];
+  centerSlot?: ReactNode;
+  // Optional controls hosted in the right cell, left of the chat toggle (the
+  // discovery search + time-range filter on the index page).
+  rightSlot?: ReactNode;
+  chatOpen?: boolean;
+  onToggleChat?: () => void;
+  showLeftTrigger: boolean;
+  onToggleLeftSidebar: () => void;
+}) {
+  return (
+    <header className="shrink-0 bg-background">
+      <div
+        className={cn(
+          "grid min-h-14 w-full grid-cols-[1fr_auto_1fr] items-center gap-2 px-5 sm:px-8 lg:px-10",
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-2 justify-self-start">
+          {showLeftTrigger ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={onToggleLeftSidebar}
+              aria-label="Buka sidebar kiri"
+            >
+              <PanelLeftIcon className="size-3.5" />
+            </Button>
+          ) : null}
+          <nav
+            aria-label="Breadcrumb"
+            className="flex min-w-0 items-center gap-1 text-[12px] font-medium text-muted-foreground"
+          >
+            {breadcrumbs.map((item, index) => {
+              const isLast = index === breadcrumbs.length - 1;
+              return (
+                <span key={`${item.label}-${index}`} className="flex min-w-0 items-center gap-1">
+                  {index > 0 ? <ChevronRightIcon className="size-3 shrink-0" /> : null}
+                  {item.href && !isLast ? (
+                    <Link href={item.href} className="truncate hover:text-foreground">
+                      {item.label}
+                    </Link>
+                  ) : (
+                    <span className={cn("truncate", isLast && "font-semibold text-foreground")}>
+                      {item.label}
+                    </span>
+                  )}
+                </span>
+              );
+            })}
+          </nav>
+        </div>
+
+        <div className="flex items-center justify-center">{centerSlot}</div>
+
+        <div className="flex items-center justify-end gap-2 justify-self-end">
+          {rightSlot}
+          {onToggleChat ? (
+            <button
+              type="button"
+              onClick={onToggleChat}
+              className={cn(
+                "flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold transition-colors",
+                chatOpen
+                  ? "bg-primary/15 text-primary"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+              aria-label="Toggle panel chat"
+            >
+              <MessageSquareIcon className="size-3.5" />
+              Chat
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </header>
+  );
+}

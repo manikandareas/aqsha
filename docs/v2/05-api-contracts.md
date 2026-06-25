@@ -593,6 +593,7 @@ type Response = { ok: true };
   - `400` `{ message: "A verified email is required for billing", code: "billing_email_required", severity: "error", field: "email" }`
   - `400` `{ message: "Unknown billing product", code: "billing_product_unknown", severity: "error" }`
   - `400` `{ message: "Polar product is not configured", code: "billing_product_not_configured", severity: "error" }`
+  - `404` `{ message: "No active subscription to change.", code: "billing_subscription_not_found", severity: "warning" }` — V2-only: mirror-based snapshot needs an explicit Polar subscription id (the V1 `@convex-dev/polar` component resolved it internally). Returned when no mirror row exists for the owner.
 
 ---
 
@@ -618,6 +619,7 @@ type Response = { ok: true };
 - Errors:
   - `401` `{ message: "Authentication required", code: "unauthenticated", severity: "error" }`
   - `400` `{ message: "A verified email is required for billing", code: "billing_email_required", severity: "error", field: "email" }`
+  - `404` `{ message: "No active subscription to cancel.", code: "billing_subscription_not_found", severity: "warning" }` — V2-only: see `/billing/subscription/change` note (mirror-based snapshot needs an explicit Polar subscription id).
 
 ---
 
