@@ -1,17 +1,12 @@
 import { ArtifactService } from "@aqsha/services/artifact";
 import { defineTool } from "eve/tools";
-import { always } from "eve/tools/approval";
 import { z } from "zod";
 import { callerId, getServiceDb } from "../lib/tools.ts";
 
 /**
- * propose_artifact (Slice 6.5) — WRITE. Buat dokumen Markdown atas nama user.
- *
- * HITL native eve: `needsApproval: always()` → eve PARK turn di `approval-requested`
- * SEBELUM `execute()`; client menampilkan input (judul + isi) untuk di-review; baru saat
- * user approve, `execute()` jalan dan materialize. Satu tool = propose+approve+write
- * (eve `needsApproval` sudah menjamin tak ada tulis tanpa approval — tak perlu tool
- * `execute_artifact` terpisah seperti V1 yang bergantung tool-gating per-turn).
+ * propose_artifact (Slice 6.5 → konfirmasi percakapan) — WRITE. Buat dokumen Markdown atas
+ * nama user. HITL = PERCAKAPAN: tawarkan dulu lewat teks ("mau saya simpan sebagai dokumen?")
+ * dan tunggu jawaban user sebelum memanggil tool ini; eksekusi langsung membuat dokumen.
  *
  * Artifact BORN-HEADLESS (`source:'agent'`, `workspaceId:null`, `threadId` set). Save ke
  * workspace menyusul lewat kartu (`link_to_workspace`/api-v2). Debit = `normal_chat`
@@ -19,12 +14,11 @@ import { callerId, getServiceDb } from "../lib/tools.ts";
  */
 export default defineTool({
   description:
-    "Buat dokumen Markdown baru untuk user (mis. ringkasan, draf, catatan). Sertakan judul singkat dan isi Markdown lengkap. Dokumen dibuat hanya setelah user menyetujui.",
+    "Buat dokumen Markdown baru untuk user (mis. ringkasan, draf, catatan). Sertakan judul singkat dan isi Markdown lengkap. Tawarkan & minta persetujuan user lewat percakapan SEBELUM memanggil tool ini.",
   inputSchema: z.object({
     title: z.string().min(1).max(200).optional().describe("Judul dokumen yang ringkas."),
     markdown: z.string().min(1).describe("Isi dokumen dalam format Markdown."),
   }),
-  needsApproval: always(),
   async execute(input, ctx) {
     const ownerUserId = callerId(ctx);
     return ArtifactService.applyAgentAction(getServiceDb(), {

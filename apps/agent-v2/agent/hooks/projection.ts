@@ -3,6 +3,7 @@ import { TitleService } from "@aqsha/services/chat";
 import { defineHook, type HookContext } from "eve/hooks";
 import { getServiceDb } from "../lib/db.ts";
 import {
+  appendThreadEvent,
   ensureThread,
   recordAssistantMessage,
   recordUserMessage,
@@ -45,6 +46,18 @@ async function swallow(label: string, fn: () => Promise<void>): Promise<void> {
 
 export default defineHook({
   events: {
+    // Capture timeline (fix persist) — append SETIAP event stream ke `chat_thread_events`
+    // 1:1 (TANPA filter: termasuk delta `*.appended` + lifecycle `session.*`), supaya replay
+    // == stream live. `"*"` jalan SETELAH handler bertipe (doc hooks: typed dulu, lalu `*`),
+    // jadi `session.started` → `ensureThread` sudah commit → thread dijamin ada (FK aman).
+    async "*"(event, ctx) {
+      const ownerUserId = owner(ctx);
+      if (!ownerUserId) return;
+      await swallow("event", () =>
+        appendThreadEvent({ sessionId: ctx.session.id, ownerUserId, event }),
+      );
+    },
+
     async "session.started"(_event, ctx) {
       const ownerUserId = owner(ctx);
       if (!ownerUserId) return;

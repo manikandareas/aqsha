@@ -33,6 +33,11 @@ export const chatThreads = pgTable(
     // Follow-up di thread yang di-reload WAJIB continuationToken (eve menolak tanpa-token);
     // di-rehydrate ke `initialSession` saat ThreadView mount. Null sampai turn pertama parkir.
     continuationToken: text("continuation_token"),
+    // Recovery pesan terkirim yang turn-nya belum settle (baseline template eve-chat). Ditulis
+    // klien sebelum `agent.send()`; di-null-kan saat ada event settled setelah `_created_at`
+    // (lihat ThreadService.getActiveChat) → render bubble user optimistik lintas-reload.
+    pendingUserMessage: text("pending_user_message"),
+    pendingUserMessageCreatedAt: bigint("pending_user_message_created_at", { mode: "number" }),
     lastActivityAt: bigint("last_activity_at", { mode: "number" }).notNull(),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
     updatedAt: bigint("updated_at", { mode: "number" }).notNull(),

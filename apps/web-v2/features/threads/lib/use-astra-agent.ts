@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEveAgent } from "eve/react";
 import { useCallback, useRef } from "react";
+import { useApi } from "@/lib/api-client";
 import { queryKeys } from "@/lib/api-query";
 
 /**
@@ -36,6 +37,7 @@ export function useAstraAgent(initialSession?: {
 }) {
   const { getToken } = useAuth();
   const qc = useQueryClient();
+  const api = useApi();
   const boundRef = useRef(initialSession != null);
   const sessionIdRef = useRef<string | null>(initialSession?.sessionId ?? null);
 
@@ -61,6 +63,16 @@ export function useAstraAgent(initialSession?: {
       if (session.sessionId && !boundRef.current && typeof window !== "undefined") {
         boundRef.current = true;
         window.history.replaceState(window.history.state, "", `/app/threads/${session.sessionId}`);
+      }
+      // Persist handle-resume eve KLIEN (ter-namespace SEKALI) → approval HITL `inputResponses`
+      // + follow-up lintas-reload bisa di-`deliver`. eve menamespace lagi saat dikirim balik;
+      // token server (`channel.continuationToken`) ganda → `deliver` gagal (lihat ThreadService
+      // .saveContinuation). Best-effort; turn settle berikutnya menulis ulang token terbaru.
+      if (session.sessionId && session.continuationToken) {
+        void api
+          .threads({ id: session.sessionId })
+          .session.post({ continuationToken: session.continuationToken })
+          .catch(() => {});
       }
     },
     onFinish() {

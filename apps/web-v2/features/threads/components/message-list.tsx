@@ -10,33 +10,27 @@ import { Spinner } from "@/components/ui/spinner";
 import type { TimelineMessage, TimelinePart } from "../lib/eve-timeline";
 import type { ResearchSource } from "../types";
 import { ChatArtifactCard } from "./chat-artifact-card";
-import { HitlCard, type HitlResponse } from "./hitl-card";
 import { InlineSources } from "./sources-panel";
-import { SubagentCard } from "./subagent-card";
 import { ToolRow } from "./tool-row";
-import { VerificationCard } from "./verification-card";
 
 /**
- * Timeline pesan (Slice 6.3 → message-list V1-inspired). User = bubble teks (tanpa avatar);
- * assistant = reasoning glimpse → blok "Proses" collapsible (tool + sub-agen) → jawaban →
- * artifact → sumber inline (per-turn via `turnId`) → aksi (salin/ulangi). Mengikuti FLOW eve:
- * part sudah terurut reducer; blok Proses auto-collapse saat `metadata.status` settle. Fitur
- * yang tak punya data eve (durasi, nested sub-agen, citation integrity) sengaja tak dipaksakan.
+ * Timeline pesan (simplifikasi eve-chat-template) — render DATAR per pesan, mengikuti urutan
+ * `defaultMessageReducer`. User = bubble; assistant = reasoning → blok "Proses" collapsible
+ * (tool generik) → jawaban → artifact → sumber inline (per `turnId`) → aksi. TAK ADA grouping
+ * run berfase / kartu HITL / kartu verifikasi-subagen (HITL = percakapan; verify+subagen =
+ * tool-row generik). `/deep` multi-turn = beberapa pesan asisten berurutan — itu wajar.
  */
 export function MessageList({
   messages,
   pending,
   busy,
-  onRespond,
   sourcesByTurn,
   onRegenerate,
 }: {
   messages: TimelineMessage[];
   pending?: boolean;
-  /** Turn in-flight → matikan interaksi kartu HITL + sembunyikan aksi ulangi. */
+  /** Turn in-flight → sembunyikan aksi ulangi. */
   busy?: boolean;
-  /** Jawab HITL native eve (`agent.send({ inputResponses })`). Absen = history read-only. */
-  onRespond?: (response: HitlResponse) => void;
   /** Sumber riset dikelompokkan per `turnId` (dari `research_sources`). */
   sourcesByTurn?: Map<string, ResearchSource[]>;
   /** Ulangi (regenerate) turn terakhir — kirim ulang pesan user terakhir sebagai turn baru. */
@@ -62,12 +56,10 @@ export function MessageList({
         m.role === "user" ? (
           <UserBubble key={m.id} parts={m.parts} />
         ) : (
-          <AssistantTurn
+          <AssistantMessage
             key={m.id}
             message={m}
-            busy={busy}
-            onRespond={onRespond}
-            sources={m.turnId ? sourcesByTurn?.get(m.turnId) ?? [] : []}
+            sources={m.turnId ? sourcesByTurn?.get(m.turnId) : undefined}
             onRegenerate={!busy && m.id === lastAssistantId ? onRegenerate : undefined}
           />
         ),
@@ -92,33 +84,37 @@ function UserBubble({ parts }: { parts: TimelinePart[] }) {
   );
 }
 
-function AssistantTurn({
+/**
+ * Satu pesan asisten (satu eve-turn). Reasoning → blok "Proses" (tool + teks antara) → jawaban
+ * (teks TERAKHIR) → artifact → sumber → aksi. `message.streaming` (sudah di-gate `busy` di adapter)
+ * mengatur shimmer + sembunyi sumber/aksi selagi mengalir.
+ */
+function AssistantMessage({
   message,
-  busy,
-  onRespond,
   sources,
   onRegenerate,
 }: {
   message: TimelineMessage;
-  busy?: boolean;
-  onRespond?: (response: HitlResponse) => void;
-  sources: ResearchSource[];
+  sources?: ResearchSource[];
   onRegenerate?: () => void;
 }) {
-  const reasoningParts = message.parts.filter((p) => p.kind === "reasoning");
-  const textParts = message.parts.filter(
+  const streaming = Boolean(message.streaming);
+  const texts = message.parts.filter(
     (p): p is Extract<TimelinePart, { kind: "text" }> => p.kind === "text",
   );
-  const answer = textParts.at(-1);
-  const intermediateIds = new Set(textParts.slice(0, -1).map((p) => p.id));
-  // Aktivitas yang dibungkus blok "Proses": tool/sub-agen + teks antara (intermediate),
-  // mempertahankan urutan asli. Reasoning dirender di atas (glimpse-nya sendiri).
-  const processParts = message.parts.filter(
-    (p) => p.kind === "tool" || (p.kind === "text" && intermediateIds.has(p.id)),
-  );
+  const answer = texts.at(-1);
+  const answerId = answer?.id;
 
-  const empty = message.parts.length === 0;
+  const reasoningParts = message.parts.filter((p) => p.kind === "reasoning");
+  const artifactParts = message.parts.filter((p) => p.kind === "artifact");
+  // Proses = tool + teks antara (semua teks kecuali jawaban final), urut asli.
+  const processParts = message.parts.filter(
+    (p) => p.kind === "tool" || (p.kind === "text" && p.id !== answerId),
+  );
+  const toolSteps = processParts.filter((p) => p.kind === "tool").length;
+
   const hasAnswer = Boolean(answer);
+  const isEmpty = message.parts.length === 0;
 
   return (
     <div className="flex min-w-0 flex-col gap-2.5">
@@ -129,40 +125,23 @@ function AssistantTurn({
       )}
 
       {processParts.length > 0 ? (
-        <ProcessBlock parts={processParts} streaming={message.streaming} />
+        <ProcessBlock parts={processParts} streaming={streaming} toolSteps={toolSteps} />
       ) : null}
-
-      {message.parts.map((part) =>
-        part.kind === "hitl" ? (
-          <HitlCard
-            key={part.id}
-            model={part.model}
-            disabled={busy || !onRespond}
-            onRespond={onRespond ?? (() => {})}
-          />
-        ) : null,
-      )}
 
       {answer ? <Response text={answer.text} streaming={answer.streaming} /> : null}
 
-      {message.parts.map((part) =>
+      {artifactParts.map((part) =>
         part.kind === "artifact" ? <ChatArtifactCard key={part.id} model={part.model} /> : null,
       )}
 
-      {message.parts.map((part) =>
-        part.kind === "verification" ? (
-          <VerificationCard key={part.id} model={part.model} />
-        ) : null,
-      )}
+      {!streaming && sources && sources.length > 0 ? <InlineSources sources={sources} /> : null}
 
-      {!message.streaming && sources.length > 0 ? <InlineSources sources={sources} /> : null}
-
-      {hasAnswer && !message.streaming ? (
+      {hasAnswer && !streaming ? (
         <MessageActions text={answer?.text ?? ""} onRegenerate={onRegenerate} />
       ) : null}
 
-      {message.streaming && empty ? <ThinkingRow label="Astra sedang berpikir…" /> : null}
-      {message.streaming && !empty && !hasAnswer ? (
+      {streaming && isEmpty ? <ThinkingRow label="Astra sedang berpikir…" /> : null}
+      {streaming && !isEmpty && !hasAnswer ? (
         <ThinkingRow label="Astra sedang menyusun jawaban…" />
       ) : null}
     </div>
@@ -170,25 +149,29 @@ function AssistantTurn({
 }
 
 /**
- * Blok "Proses" collapsible — membungkus tool-row + kartu sub-agen satu turn. Terbuka +
- * shimmer selagi streaming; saat settle auto-collapse jadi ringkasan "Selesai · N langkah"
- * (kecuali user membuka manual). Mengikuti `model.isRunning` pola tool-row (override sticky).
+ * Blok "Proses" collapsible — tool-row + teks antara satu pesan. Terbuka + shimmer selagi streaming;
+ * saat settle auto-collapse jadi "Selesai · N langkah" kecuali user membuka manual.
  */
-function ProcessBlock({ parts, streaming }: { parts: TimelinePart[]; streaming: boolean }) {
-  const stepCount = parts.filter((p) => p.kind === "tool").length;
+function ProcessBlock({
+  parts,
+  streaming,
+  toolSteps,
+}: {
+  parts: TimelinePart[];
+  streaming: boolean;
+  toolSteps: number;
+}) {
   const [override, setOverride] = useState<boolean | null>(null);
   const prevStreaming = useRef(streaming);
   useEffect(() => {
-    // Reset override saat transisi streaming → settle agar auto-collapse berlaku lagi
-    // untuk user yang tak pernah menggeser.
     if (prevStreaming.current && !streaming) setOverride((cur) => (cur === true ? cur : null));
     prevStreaming.current = streaming;
   }, [streaming]);
   const open = override ?? streaming;
   const label = streaming
     ? "Sedang bekerja…"
-    : stepCount > 0
-      ? `Selesai · ${stepCount} langkah`
+    : toolSteps > 0
+      ? `Selesai · ${toolSteps} langkah`
       : "Proses";
 
   return (
@@ -207,7 +190,7 @@ function ProcessBlock({ parts, streaming }: { parts: TimelinePart[]; streaming: 
         <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
       </CollapsibleTrigger>
       <CollapsibleContent className="overflow-hidden">
-        <div className="mt-2 flex flex-col gap-2.5 border-border/60 border-l pl-3 text-[13px]">
+        <div className="mt-2 flex min-w-0 flex-col gap-2.5 border-border/60 border-l pl-3 text-[13px]">
           {parts.map((part) => (
             <ProcessPartView key={part.id} part={part} />
           ))}
@@ -218,13 +201,7 @@ function ProcessBlock({ parts, streaming }: { parts: TimelinePart[]; streaming: 
 }
 
 function ProcessPartView({ part }: { part: TimelinePart }) {
-  if (part.kind === "tool") {
-    return part.model.kind === "subagent-call" ? (
-      <SubagentCard model={part.model} />
-    ) : (
-      <ToolRow model={part.model} />
-    );
-  }
+  if (part.kind === "tool") return <ToolRow model={part.model} />;
   if (part.kind === "text") {
     // Teks antara (intermediate) yang diucapkan agen sebelum jawaban final.
     return <div className="whitespace-pre-wrap break-words text-muted-foreground">{part.text}</div>;
@@ -239,7 +216,6 @@ function MessageActions({ text, onRegenerate }: { text: string; onRegenerate?: (
   const copy = () => {
     void navigator.clipboard?.writeText(text);
     setCopied(true);
-    // ponytail: reset label tanpa cleanup — handler sekali jalan, tak ada race berarti.
     setTimeout(() => setCopied(false), 1500);
   };
 
@@ -271,8 +247,7 @@ function MessageActions({ text, onRegenerate }: { text: string; onRegenerate?: (
   );
 }
 
-/** Indikator live V1: FlickerSpinner (kiri) + label shimmer (kanan). Dipakai untuk "berpikir"
- *  (sebelum token pertama) maupun "menyusun jawaban" (tool sudah jalan, jawaban belum mengalir). */
+/** Indikator live V1: FlickerSpinner (kiri) + label shimmer (kanan). */
 function ThinkingRow({ label }: { label: string }) {
   return (
     <span className="mt-1.5 flex items-center gap-1.5">

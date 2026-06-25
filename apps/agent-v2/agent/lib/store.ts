@@ -45,13 +45,44 @@ export async function setThreadStatus(sessionId: string, status: ThreadStatus): 
 }
 
 /**
- * Persist resume handle eve (continuationToken) saat sesi parkir (`session.waiting`).
- * Dibutuhkan agar follow-up di thread yang di-reload bisa lanjut — eve menolak continue
- * tanpa continuationToken. No-op bila thread belum ada.
+ * Append satu event stream eve ke `chat_thread_events` (resume streaming lintas-refresh).
+ *
+ * Persist **1:1** dengan stream eve (baseline template `chat_event`): SETIAP event, termasuk
+ * delta `*.appended` + lifecycle `session.*`. Konsekuensinya log = prefix setia stream eve →
+ * klien resume turn aktif via `ClientSession.stream({ startIndex: max(event_index)+1 })` dan
+ * me-render token-demi-token (visual reload == live).
+ *
+ * `event_index` = `max(event_index)+1` per-thread, dihitung di statement insert. Hook eve
+ * fire per event BERURUTAN + di-await per session (jaminan eve) → tiap insert commit sebelum
+ * yang berikut → `max` selalu mutakhir, tanpa race + tanpa state in-memory (bebas leak/seed).
+ * `on conflict (thread_id, event_index) do update` = jaga idempoten (defensif). JANGAN pakai
+ * `event.data.sequence` (ORDINAL TURN, sama untuk semua event satu turn).
+ *
+ * Beban: insert per-token (delta) ~1ms (Postgres se-VPS) << interval kedatangan token model →
+ * await per event tak mem-backpressure stream. Thread dijamin ada (handler `session.started`
+ * → `ensureThread` jalan SEBELUM `"*"` untuk event yang sama); kegagalan tetap di-`swallow`.
  */
-export async function saveContinuationToken(sessionId: string, token: string): Promise<void> {
+export async function appendThreadEvent(input: {
+  sessionId: string;
+  ownerUserId: string;
+  event: { type: string; data?: unknown };
+}): Promise<void> {
+  const type = input.event.type;
+  const data = (input.event.data ?? {}) as { turnId?: unknown };
+  const turnId = typeof data.turnId === "string" ? data.turnId : null;
   const sql = getSql();
-  await sql`update chat_threads set continuation_token = ${token}, updated_at = ${Date.now()} where id = ${sessionId}`;
+  await sql`
+    insert into chat_thread_events
+      (thread_id, owner_user_id, event_index, type, turn_id, payload, created_at)
+    values
+      (
+        ${input.sessionId}, ${input.ownerUserId},
+        (select coalesce(max(event_index), -1) + 1 from chat_thread_events where thread_id = ${input.sessionId}),
+        ${type}, ${turnId}, ${sql.json(input.event as never)}, ${Date.now()}
+      )
+    on conflict (thread_id, event_index) do update
+      set payload = excluded.payload, type = excluded.type, turn_id = excluded.turn_id
+  `;
 }
 
 /** Upsert pesan user + bump aktivitas thread (satu transaksi). */

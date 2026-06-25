@@ -1,6 +1,7 @@
 import {
   ArtifactService,
   ContextService,
+  EventService,
   MessageService,
   ResearchService,
   ThreadService,
@@ -93,6 +94,20 @@ export const threads = new Elysia({ prefix: "/threads" })
     },
     { auth: true },
   )
+  // Event stream eve mentah per thread (fix timeline persist) — klien me-replay lewat
+  // `defaultMessageReducer` supaya timeline reload == live, dan poll endpoint ini selagi
+  // turn berjalan agar progress in-flight tetap terlihat setelah refresh. Ownership
+  // di-assert dulu (thread milik caller), lalu list by thread (urut seq).
+  .get(
+    "/:id/events",
+    async ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      await ThreadService.assertOwner(db, ownerUserId, params.id);
+      const items = await EventService.listByThread(db, params.id);
+      return { items };
+    },
+    { auth: true },
+  )
   // Sumber riset yang dipersist tool Astra (Slice 6.4) — panel Sources. Ownership
   // di-assert dulu (thread milik caller), lalu list by thread.
   .get(
@@ -151,6 +166,44 @@ export const threads = new Elysia({ prefix: "/threads" })
       return { items };
     },
     { auth: true },
+  )
+  // Pending user message (Slice resume) — recovery pesan terkirim yang turn-nya belum settle.
+  // Ditulis klien sebelum `agent.send()` follow-up; di-DELETE saat kirim gagal. Recovery
+  // (null saat sudah settle) dihitung klien dari `events`. Owner-gated di service.
+  .post(
+    "/:id/pending",
+    ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      return ThreadService.markPending(db, {
+        ownerUserId,
+        threadId: params.id,
+        message: body.message,
+      });
+    },
+    { auth: true, body: t.Object({ message: t.String() }) },
+  )
+  .delete(
+    "/:id/pending",
+    ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      return ThreadService.clearPending(db, { ownerUserId, threadId: params.id });
+    },
+    { auth: true },
+  )
+  // Handle-resume eve (continuationToken) dari KLIEN (`useAstraAgent onSessionChange`).
+  // Token KLIEN (ter-namespace sekali) — bukan `channel.continuationToken` server (ganda) →
+  // approval HITL `inputResponses` lintas-reload bisa di-`deliver`. Owner-gated di service.
+  .post(
+    "/:id/session",
+    ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      return ThreadService.saveContinuation(db, {
+        ownerUserId,
+        threadId: params.id,
+        continuationToken: body.continuationToken,
+      });
+    },
+    { auth: true, body: t.Object({ continuationToken: t.String() }) },
   )
   .patch(
     "/:id",

@@ -3,7 +3,7 @@ import { ForbiddenError } from "eve/channels/auth";
 import { eveChannel } from "eve/channels/eve";
 import { clerkAuth } from "../lib/clerk.ts";
 import { getServiceDb } from "../lib/db.ts";
-import { checkOwnership, saveContinuationToken } from "../lib/store.ts";
+import { checkOwnership } from "../lib/store.ts";
 
 /**
  * Channel eve — Slice 6.1: Clerk AuthFn + ownership gate. Menggantikan auth SPIKE 6.0
@@ -57,20 +57,11 @@ export default eveChannel({
 
     return { auth: caller };
   },
-  events: {
-    // Persist resume handle saat sesi parkir. `session.waiting` = turn selesai, sesi
-    // menunggu input berikutnya; `channel.continuationToken` = handle untuk turn berikut.
-    // Disimpan ke chat_threads → ThreadView me-rehydrate `initialSession.continuationToken`
-    // saat reload supaya follow-up bisa lanjut (eve wajib continuationToken di continue).
-    async "session.waiting"(_event, channel, ctx) {
-      const token = channel.continuationToken;
-      if (!token) return;
-      try {
-        await saveContinuationToken(ctx.session.id, token);
-      } catch {
-        // Best-effort: jangan gagalkan turn kalau persist gagal (mis. migration 0009
-        // belum diterapkan). Follow-up lintas-reload baru jalan setelah kolom ada.
-      }
-    },
-  },
+  // CATATAN: continuationToken TIDAK lagi dipersist di sini. `channel.continuationToken`
+  // server = bentuk ter-namespace GANDA (`eve:eve:<token>`) = target `deliver` internal;
+  // bila dikirim balik klien, `createSendFn` menamespace lagi (`eve:${d}`) → TRIPLE → tak
+  // cocok → `deliver` gagal. Pesan follow-up selamat (fallback `t.run`), TAPI inputResponses
+  // (approval HITL) TAK punya fallback → "Cannot deliver inputResponses" sesudah reload.
+  // FIX: klien yang mem-persist `session.continuationToken`-nya sendiri (nilai yang dipakai
+  // live, ter-namespace SEKALI) via `POST /threads/:id/session` (lihat `useAstraAgent`).
 });

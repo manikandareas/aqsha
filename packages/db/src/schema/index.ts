@@ -11,6 +11,7 @@ export * from "./artifactUrls";
 export * from "./artifactEmbeddings";
 export * from "./chatThreads";
 export * from "./chatMessages";
+export * from "./chatThreadEvents";
 export * from "./researchSources";
 export * from "./explorePapers";
 export * from "./feedItems";

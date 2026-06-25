@@ -9,8 +9,14 @@
 // Tanpa DB / tanpa service / tanpa React → murni fungsi, unit-testable (test di 6.9).
 // Klasifikasi tool by `state` + `toolMetadata.eve.kind`, BUKAN daftar nama tool hardcoded.
 
-import type { EveDynamicToolPart, EveMessage, EveMessagePart } from "eve/react";
-import type { ChatMessage } from "../types";
+import { defaultMessageReducer } from "eve/react";
+import type {
+  EveAgentReducerEvent,
+  EveDynamicToolPart,
+  EveMessage,
+  EveMessagePart,
+} from "eve/react";
+import type { ChatMessage, ChatThreadEvent } from "../types";
 
 /** Status tampil satu tool-call, dipetakan dari `EveDynamicToolPart.state`. */
 export type ToolStatus = "running" | "pending" | "completed" | "failed" | "denied";
@@ -38,38 +44,6 @@ export type ToolRowModel = {
   rows: ToolRow[];
 };
 
-/** Opsi terpilih dalam satu input-request HITL (eve). */
-export type HitlOption = {
-  id: string;
-  label: string;
-  style?: "danger" | "default" | "primary";
-};
-
-/**
- * Model presentasi satu kartu HITL (Slice 6.5) dari `EveDynamicToolPart` ber-`inputRequest`.
- * `display` memilih kontrol; `responded` true setelah user menjawab (part →
- * `approval-responded`). `toolName`/`input` dipakai kartu khusus (mis. preview
- * `propose_artifact`).
- */
-export type HitlCardModel = {
-  toolCallId: string;
-  requestId: string;
-  toolName: string;
-  prompt: string;
-  display: "confirmation" | "select" | "text";
-  options: HitlOption[];
-  allowFreeform: boolean;
-  /** Input mentah tool (untuk preview, mis. judul+markdown propose_artifact). */
-  input: unknown;
-  /** True bila sudah dijawab/diputuskan (kartu jadi read-only). */
-  responded: boolean;
-  /** Untuk approval: hasil keputusan setelah dijawab. */
-  approved?: boolean;
-  /** Jawaban terkirim (select/text) bila ada. */
-  answeredOptionId?: string;
-  answeredText?: string;
-};
-
 /** Model kartu artifact (Slice 6.5) dari output `propose_artifact` yang sukses. */
 export type ArtifactCardModel = {
   toolCallId: string;
@@ -78,41 +52,12 @@ export type ArtifactCardModel = {
   artifactType: string;
 };
 
-/** Status integritas satu referensi (Slice 7.2) — sejajar `IntegrityStatus` service. */
-export type VerdictStatus =
-  | "verified"
-  | "metadata_mismatch"
-  | "identifier_invalid"
-  | "not_found"
-  | "unverifiable";
-
-/** Satu baris verdict sitasi (di-keyed `[n]`). */
-export type VerificationVerdict = {
-  citation?: number;
-  reference: string;
-  status: VerdictStatus;
-  issues: string[];
-  matchedTitle?: string;
-};
-
-/** Model kartu verifikasi sitasi (Slice 7.2) dari output `verify_identifiers`/`verify_citations`. */
-export type VerificationCardModel = {
-  toolCallId: string;
-  checked: number;
-  verified: number;
-  flagged: number;
-  items: VerificationVerdict[];
-  note?: string;
-};
-
 /** Satu bagian terurut dalam timeline satu pesan asisten. */
 export type TimelinePart =
   | { kind: "text"; id: string; text: string; streaming: boolean }
   | { kind: "reasoning"; id: string; text: string; thinking: boolean }
   | { kind: "tool"; id: string; model: ToolRowModel }
-  | { kind: "hitl"; id: string; model: HitlCardModel }
-  | { kind: "artifact"; id: string; model: ArtifactCardModel }
-  | { kind: "verification"; id: string; model: VerificationCardModel };
+  | { kind: "artifact"; id: string; model: ArtifactCardModel };
 
 /** Pesan ter-normalisasi untuk renderer (user = bubble; assistant = parts terurut). */
 export type TimelineMessage = {
@@ -144,17 +89,11 @@ function mapPart(part: EveMessagePart, id: string, active: boolean): TimelinePar
       return { kind: "reasoning", id, text, thinking: active && part.state === "streaming" };
     }
     case "dynamic-tool": {
-      // HITL park (Slice 6.5): part ber-`inputRequest` (approval ATAU ask_question) →
-      // kartu interaktif, BUKAN tool-row. Klasifikasi by `inputRequest`/`state`, BUKAN
-      // daftar nama tool (set V1 obsolete).
-      const hitl = hitlCardModel(part);
-      if (hitl) return { kind: "hitl", id: part.toolCallId, model: hitl };
-      // propose_artifact sukses → kartu artifact clickable + Save-to-workspace.
+      // propose_artifact sukses → kartu artifact clickable + Save-to-workspace (satu-satunya
+      // kartu khusus yang disisakan). Sisanya — subagen, verify_*, semua tool — jadi tool-row
+      // generik. HITL = percakapan murni (tak ada lagi inputRequest card; agent tanya via teks).
       const artifact = artifactCardModel(part);
       if (artifact) return { kind: "artifact", id: part.toolCallId, model: artifact };
-      // verify_identifiers/verify_citations sukses → kartu tabel verdict [n]→status (Slice 7.2).
-      const verification = verificationCardModel(part);
-      if (verification) return { kind: "verification", id: part.toolCallId, model: verification };
       const model = toolPartModel(part);
       // `active` false → store sudah settle (ready/error); paksa isRunning false agar
       // tool yang ter-orphan di state "running" tak shimmer selamanya (lihat evePartsToTimeline).
@@ -169,29 +108,7 @@ function mapPart(part: EveMessagePart, id: string, active: boolean): TimelinePar
   }
 }
 
-// ── HITL + artifact card model ─────────────────────────────────────────────────
-
-/** Kartu HITL bila part di state approval/answer ber-`inputRequest`, else null. */
-export function hitlCardModel(part: EveDynamicToolPart): HitlCardModel | null {
-  if (part.state !== "approval-requested" && part.state !== "approval-responded") return null;
-  const req = part.toolMetadata?.eve?.inputRequest;
-  if (!req) return null;
-  const inputResponse = part.toolMetadata?.eve?.inputResponse;
-  return {
-    toolCallId: part.toolCallId,
-    requestId: req.requestId,
-    toolName: part.toolMetadata?.eve?.name ?? part.toolName,
-    prompt: req.prompt,
-    display: req.display ?? "confirmation",
-    options: (req.options ?? []).map((o) => ({ id: o.id, label: o.label, style: o.style })),
-    allowFreeform: Boolean(req.allowFreeform),
-    input: part.input,
-    responded: part.state === "approval-responded",
-    approved: part.state === "approval-responded" ? part.approval?.approved : undefined,
-    answeredOptionId: inputResponse?.optionId,
-    answeredText: inputResponse?.text,
-  };
-}
+// ── artifact card model ────────────────────────────────────────────────────────
 
 const ARTIFACT_TOOL_NAMES = new Set(["propose_artifact", "execute_artifact"]);
 
@@ -209,52 +126,6 @@ export function artifactCardModel(part: EveDynamicToolPart): ArtifactCardModel |
     artifactId: o.artifactId,
     title: typeof o.title === "string" ? o.title : "Dokumen",
     artifactType: typeof o.artifactType === "string" ? o.artifactType : "markdown",
-  };
-}
-
-const VERIFY_TOOL_NAMES = new Set(["verify_identifiers", "verify_citations"]);
-const VERDICT_STATUSES = new Set<VerdictStatus>([
-  "verified",
-  "metadata_mismatch",
-  "identifier_invalid",
-  "not_found",
-  "unverifiable",
-]);
-
-/** Satu verdict dari item output verify (default-deny: butuh reference + status valid). */
-function toVerdict(raw: unknown): VerificationVerdict | null {
-  if (!raw || typeof raw !== "object") return null;
-  const o = raw as Record<string, unknown>;
-  if (typeof o.reference !== "string") return null;
-  if (typeof o.status !== "string" || !VERDICT_STATUSES.has(o.status as VerdictStatus)) return null;
-  return {
-    reference: o.reference,
-    status: o.status as VerdictStatus,
-    citation: typeof o.citation === "number" ? o.citation : undefined,
-    issues: Array.isArray(o.issues) ? o.issues.filter((i): i is string => typeof i === "string") : [],
-    matchedTitle: typeof o.matchedTitle === "string" ? o.matchedTitle : undefined,
-  };
-}
-
-/** Kartu verifikasi bila part = verify tool sukses ber-output `{ items[], summary }`, else null. */
-export function verificationCardModel(part: EveDynamicToolPart): VerificationCardModel | null {
-  if (part.state !== "output-available") return null;
-  const name = part.toolMetadata?.eve?.name ?? part.toolName;
-  if (!VERIFY_TOOL_NAMES.has(name)) return null;
-  const out = part.output;
-  if (!out || typeof out !== "object") return null;
-  const o = out as Record<string, unknown>;
-  if (!Array.isArray(o.items)) return null;
-  const items = o.items.map(toVerdict).filter((v): v is VerificationVerdict => v !== null);
-  const summary = (o.summary ?? {}) as Record<string, unknown>;
-  const num = (v: unknown, fallback: number) => (typeof v === "number" ? v : fallback);
-  return {
-    toolCallId: part.toolCallId,
-    checked: num(summary.checked, items.length),
-    verified: num(summary.verified, 0),
-    flagged: num(summary.flagged, 0),
-    items,
-    note: typeof o.note === "string" ? o.note : undefined,
   };
 }
 
@@ -289,9 +160,137 @@ export function evePartsToTimeline(
   });
 }
 
+// ── gabung event log di LEVEL EVENT (port eve-chat-template) ───────────────────
+//
+// SATU event log mentah → gabung prefix-aware → `defaultMessageReducer` SEKALI → pesan.
+// Menggantikan merge 3-sumber + dedup turnId di level render (akar flicker/stale-card).
+
+/** Dua event stream sama bila JSON-nya identik (eve emit event immutable per posisi). */
+function areSameStreamEvent(a: EveAgentReducerEvent, b: EveAgentReducerEvent): boolean {
+  return a === b || JSON.stringify(a) === JSON.stringify(b);
+}
+
+/**
+ * Gabung log persisted (`events`) dengan event live (`streamed`) → satu log. `streamed` yang
+ * sudah ada di `events` (prefix yang ter-refetch usai turn) di-skip → tak dobel. `events` =
+ * prefix server-authoritative; `streamed` = buffer live `agent.events`. Pola template
+ * `mergeStreamEventLogs`/`appendUniqueStreamEvent`. Resume pakai overlay `[...events,...resumed]`
+ * langsung (range disjoint), bukan fungsi ini.
+ */
+export function mergeStreamEventLogs(
+  events: readonly EveAgentReducerEvent[],
+  streamed: readonly EveAgentReducerEvent[],
+): EveAgentReducerEvent[] {
+  if (streamed.length === 0) return events.slice();
+  const merged = events.slice();
+  for (const ev of streamed) {
+    if (!merged.some((existing) => areSameStreamEvent(existing, ev))) merged.push(ev);
+  }
+  return merged;
+}
+
+/** Reduce satu event log → data pesan, lewat `defaultMessageReducer` SEKALI (jalur tunggal). */
+export function reduceEventsToMessageData(events: readonly EveAgentReducerEvent[]) {
+  const reducer = defaultMessageReducer();
+  let data = reducer.initial();
+  for (const ev of events) data = reducer.reduce(data, ev);
+  return data;
+}
+
+// ── replay event stream persisted (fix timeline persist) ──────────────────────
+//
+// `chat_thread_events` menyimpan event stream eve MENTAH per thread. Me-replay-nya
+// lewat `defaultMessageReducer` (reducer YANG SAMA dengan live `useEveAgent`) →
+// `EveMessage[]` identik dengan buffer live, lalu `evePartsToTimeline` → timeline penuh
+// (tool, load-skill, subagent, HITL, hasil). Inilah yang membuat timeline reload == live
+// SECARA KONSTRUKSI (bukan reimplementasi paralel), dan memungkinkan progress in-flight
+// tetap terlihat setelah refresh (klien poll endpoint events selagi turn berjalan).
+
+/** Event terakhir yang berarti turn SELESAI/parkir (idle): `turn.*` final + lifecycle
+ *  `session.*` (tiap turn diakhiri `session.waiting`). Dipakai `recoverPending` + basis
+ *  `SETTLED_OR_PARKED_LAST`. */
+const SETTLED_EVENT_TYPES = new Set([
+  "turn.completed",
+  "turn.failed",
+  "session.completed",
+  "session.failed",
+  "session.waiting",
+]);
+
+/**
+ * Settled ATAU parkir-menunggu-input. `input.requested` ditambahkan: walau HITL kini
+ * percakapan, `ask_question` masih di harness → bila model memakainya, stream eve parkir di
+ * `session.waiting` dan `agent.status` jadi `ready` (composer terbuka). Kalau reload
+ * menganggapnya "berjalan", `busy` mengunci composer → user tak bisa menjawab.
+ */
+const SETTLED_OR_PARKED_LAST = new Set([...SETTLED_EVENT_TYPES, "input.requested"]);
+
+/**
+ * True bila turn sedang BERJALAN (sedang eksekusi), bukan selesai/parkir. Heuristik =
+ * tipe event TERAKHIR di log persisted (event tersimpan urut stream eve via identity `id`):
+ * - `turn.completed`/`turn.failed` → selesai.
+ * - `input.requested` → parkir menunggu jawaban user (lihat `SETTLED_OR_PARKED_LAST`).
+ * - selain itu (`actions.requested`/`action.result`/`step.*`/`reasoning.*`/`message.*`/
+ *   `subagent.*`/`turn.started`) → masih eksekusi → aktif.
+ *
+ * Dipakai (a) menyalakan poll endpoint events (progress in-flight terlihat setelah refresh),
+ * (b) gate indikator live + lock composer (`resuming`). Turn berurutan (eve serial per
+ * session) → event terakhir mencerminkan state turn terbaru. (`session.*` tak dipersist,
+ * jadi `turn.completed`/`input.requested` adalah penanda terakhir yang tersimpan.)
+ *
+ * Catatan: turn yang MACET (proses mati tanpa `turn.completed`) tetap tampak aktif →
+ * poll sampai user pindah thread; reconciler server-side adalah peningkatannya.
+ */
+export function isStreamActive(events: readonly Pick<ChatThreadEvent, "type">[]): boolean {
+  const last = events[events.length - 1];
+  if (!last) return false;
+  return !SETTLED_OR_PARKED_LAST.has(last.type);
+}
+
+/**
+ * Replay satu event log mentah → timeline (reduce SEKALI + map). `active` = ada turn in-flight
+ * → diteruskan ke `evePartsToTimeline` agar tool shimmer & berhenti begitu settle. Dipakai
+ * surface untuk merender `base` (overlay/merge) jadi pesan.
+ */
+export function eventsToTimeline(
+  events: readonly EveAgentReducerEvent[],
+  active: boolean,
+): TimelineMessage[] {
+  return evePartsToTimeline(reduceEventsToMessageData(events).messages, active);
+}
+
+/**
+ * Cursor resume = `max(event_index)+1` → `startIndex` stream eve ("reconnect by event count").
+ * `event_index` kontigu dari 0 (di-assign `max+1` per insert), jadi ini SELALU sama dengan
+ * `events.length`; loop max dipertahankan sebagai bentuk defensif eksplisit. 0 bila kosong.
+ * ponytail: drop event mid-stream (insert ter-`swallow`) menggeser cursor < posisi eve sebenarnya
+ * → resume bisa replay delta yang sudah diterapkan; reconciler server-side adalah upgrade-nya.
+ */
+export function streamIndexFromEvents(events: readonly Pick<ChatThreadEvent, "eventIndex">[]): number {
+  let max = -1;
+  for (const e of events) if (e.eventIndex > max) max = e.eventIndex;
+  return max + 1;
+}
+
+/**
+ * Recovery pesan pending lintas-reload (port `getChatForUser` template) — `message` bila turn-nya
+ * BELUM settle, `null` bila ada event settled SETELAH `createdAt` (turn sudah selesai → pesan
+ * sudah masuk timeline; bubble basi jangan ditampilkan). Klien-side: `events` sudah di-fetch.
+ */
+export function recoverPending(
+  events: readonly Pick<ChatThreadEvent, "type" | "createdAt">[],
+  message: string | null | undefined,
+  createdAt: number | null | undefined,
+): string | null {
+  if (!message || createdAt == null) return null;
+  const settled = events.some((e) => SETTLED_EVENT_TYPES.has(e.type) && e.createdAt > createdAt);
+  return settled ? null : message;
+}
+
 /**
  * Map transkrip persisted (`ChatMessage[]` dari api-v2) → timeline. History = teks +
- * reasoning saja (dipersist 6.1); **tanpa** tool parts (live-only, D-F).
+ * reasoning saja (fallback thread LAMA pra-migration event log). Thread baru pakai
+ * `eventsToTimeline` (timeline penuh).
  */
 export function chatMessagesToTimeline(messages: readonly ChatMessage[]): TimelineMessage[] {
   return messages.map((m) => {
@@ -427,7 +426,9 @@ const TOOL_LABELS: Record<string, string> = {
   delete_artifact: "Menghapus artefak",
   ask_question: "Bertanya",
   search_papers: "Mencari paper",
-  propose_research_plan: "Menyusun rencana riset",
+  begin_deep_research: "Memulai riset mendalam",
+  propose_research_plan: "Menyusun rencana riset", // legacy (event lama); tool diganti begin_deep_research
+
   // Subagent deep-research (Slice 7.1) — nama dir subagent muncul sebagai `eve.name`.
   "literature-searcher": "Menelaah literatur",
   "counter-evidence": "Mencari bukti tandingan",

@@ -12,6 +12,10 @@ export type ChatThread = {
   workspaceId?: string | null;
   lastMessagePreview: string | null;
   continuationToken?: string | null; // resume handle eve (rehydrate initialSession saat lanjut thread)
+  // Recovery pesan terkirim yang turn-nya belum settle (baseline template) — bubble user
+  // optimistik lintas-reload; di-null-kan klien saat ada event settled setelah `_createdAt`.
+  pendingUserMessage?: string | null;
+  pendingUserMessageCreatedAt?: number | null;
   lastActivityAt: number;
   createdAt: number;
   updatedAt: number;
@@ -26,6 +30,22 @@ export type ChatMessage = {
   reasoning: string | null;
   status: string; // "streaming" | "complete" | "error"
   turnId: string | null;
+  createdAt: number;
+};
+
+/**
+ * Event stream eve mentah persisted (fix timeline persist) — di-replay lewat
+ * `defaultMessageReducer` untuk merekonstruksi timeline penuh saat reload + poll progress
+ * in-flight. `payload` = `HandleMessageStreamEvent` utuh. Struktural — cocok shape Eden.
+ */
+export type ChatThreadEvent = {
+  id: number;
+  threadId: string;
+  ownerUserId: string;
+  eventIndex: number; // posisi stream eve (1:1) → cursor resume = max(eventIndex)+1
+  type: string;
+  turnId: string | null;
+  payload: unknown;
   createdAt: number;
 };
 

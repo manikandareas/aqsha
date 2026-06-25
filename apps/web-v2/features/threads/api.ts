@@ -6,7 +6,7 @@ import type { Artifact } from "@/features/artifacts/types";
 import { useApi } from "@/lib/api-client";
 import { readableApiErrorMessage } from "@/lib/api-error";
 import { queryKeys, unwrap } from "@/lib/api-query";
-import type { ChatMessage, ChatThread, ResearchSource } from "./types";
+import type { ChatMessage, ChatThread, ChatThreadEvent, ResearchSource } from "./types";
 
 const LIST_PAGE_SIZE = 30;
 
@@ -50,6 +50,25 @@ export function useThreadMessages(id: string, enabled = true) {
     staleTime: Number.POSITIVE_INFINITY,
     queryFn: async () =>
       (unwrap(await api.threads({ id }).messages.get()) as { items: ChatMessage[] }).items,
+  });
+}
+
+/**
+ * Event stream eve mentah per thread (1:1) — di-replay lewat `defaultMessageReducer` untuk
+ * merekonstruksi timeline PENUH (tool/skill/subagent/HITL) saat reload. Snapshot SEKALI di
+ * mount (TANPA poll): turn in-flight di-resume lewat durable stream eve (`useThreadResume`,
+ * `ClientSession.stream`) — token streaming sejati, bukan poll granular. Refetch dipicu saat
+ * resume settle (invalidate di chat-surface) → turn baru selesai pindah ke history.
+ * `staleTime: 0` supaya invalidate selalu ambil event terbaru.
+ */
+export function useThreadEvents(id: string, enabled = true) {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.threads.events(id),
+    enabled,
+    staleTime: 0,
+    queryFn: async () =>
+      (unwrap(await api.threads({ id }).events.get()) as { items: ChatThreadEvent[] }).items,
   });
 }
 

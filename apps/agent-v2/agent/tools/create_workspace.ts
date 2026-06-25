@@ -1,20 +1,18 @@
 import { WorkspaceService } from "@aqsha/services/workspace";
 import { defineTool } from "eve/tools";
-import { always } from "eve/tools/approval";
 import { z } from "zod";
 import { callerEmail, callerId, getServiceDb } from "../lib/tools.ts";
 
 /**
- * create_workspace (Slice 6.5) — WRITE, `needsApproval: always()`. Buat workspace baru
- * (gate kapasitas per-plan di service). Debit = `normal_chat` (hook) → tanpa debit ekstra.
+ * create_workspace (Slice 6.5 → konfirmasi percakapan) — WRITE (gate kapasitas per-plan di
+ * service). Konfirmasi user lewat percakapan sebelum memanggil. Debit = `normal_chat` (hook).
  */
 export default defineTool({
   description:
-    "Buat workspace (ruang kerja) baru untuk user. Dibuat hanya setelah user menyetujui.",
+    "Buat workspace (ruang kerja) baru untuk user. Konfirmasi lewat percakapan sebelum memanggil tool ini.",
   inputSchema: z.object({
     name: z.string().min(1).max(120).describe("Nama workspace."),
   }),
-  needsApproval: always(),
   async execute(input, ctx) {
     const ownerUserId = callerId(ctx);
     return WorkspaceService.create(getServiceDb(), {
