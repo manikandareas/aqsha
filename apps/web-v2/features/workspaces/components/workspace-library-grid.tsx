@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, type ReactNode } from "react";
-import { FolderIcon } from "@aqsha/ui/icons";
+import { FileTextIcon, FolderIcon, NotebookIcon } from "@aqsha/ui/icons";
 import { LibraryArtifactCard } from "@/components/library-artifact-card";
 import { useLibraryItemClick } from "../hooks/use-library-item-click";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
@@ -11,6 +11,7 @@ import {
   ArtifactContextMenuContent,
   FolderContextMenuContent,
 } from "./workspace-library-context-menus";
+import { WorkspaceLibraryEmpty } from "./workspace-library-empty";
 import {
   partitionArtifactsByCategory,
   type FolderSummary,
@@ -153,7 +154,14 @@ export function WorkspaceLibraryGrid({
             selectedIds={selectedIds}
             controls={controls}
             emptyState={
-              <SectionEmpty message="Belum ada bahan riset di sini. Tambahkan dokumen, file, atau URL untuk mulai." />
+              <WorkspaceLibraryEmpty
+                variant="root"
+                icon={FileTextIcon}
+                title="Mulai bangun pustakamu"
+                description="Tambahkan dokumen, file, atau URL untuk mulai mengumpulkan bahan risetmu."
+                showActions={false}
+                showSamples
+              />
             }
             {...itemHandlers}
           />
@@ -163,7 +171,14 @@ export function WorkspaceLibraryGrid({
             artifacts={output}
             selectedIds={selectedIds}
             emptyState={
-              <SectionEmpty message="Belum ada artifact. Minta agent membuat laporan atau visualisasi lewat chat." />
+              <WorkspaceLibraryEmpty
+                variant="root"
+                icon={NotebookIcon}
+                title="Hasil kerja agent muncul di sini"
+                description="Minta agent membuat laporan, ringkasan, atau visualisasi lewat chat — semuanya tersimpan otomatis di sini."
+                showActions={false}
+                showSamples
+              />
             }
             {...itemHandlers}
           />
@@ -360,14 +375,6 @@ function ArtifactSection({
         emptyState
       )}
     </section>
-  );
-}
-
-function SectionEmpty({ message }: { message: string }) {
-  return (
-    <div className="grid place-items-center rounded-xl border border-dashed border-border bg-muted/15 px-6 py-10 text-center">
-      <p className="max-w-sm text-[13px] font-medium text-muted-foreground">{message}</p>
-    </div>
   );
 }
 

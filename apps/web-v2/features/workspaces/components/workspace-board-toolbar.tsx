@@ -8,11 +8,11 @@ import {
   ChevronRightIcon,
   FileTextIcon,
   FolderIcon,
-  LinkIcon,
   MessageSquareIcon,
   MoreHorizontalIcon,
   PanelLeftIcon,
   PlusIcon,
+  UploadIcon,
 } from "@aqsha/ui/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -144,8 +144,8 @@ export function WorkspaceBoardToolbar({
                   Dokumen
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={onCreateUrl}>
-                  <LinkIcon className="size-4" />
-                  URL
+                  <UploadIcon className="size-4" />
+                  Upload
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

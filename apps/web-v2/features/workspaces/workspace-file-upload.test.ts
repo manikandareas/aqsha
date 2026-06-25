@@ -8,7 +8,7 @@ import {
   runLimitedConcurrency,
   uploadWorkspaceFiles,
   validateWorkspaceUploadBatch,
-} from "./workspace-file-upload";
+} from "./utils/workspace-file-upload";
 
 function makeFile(name: string, content = "content") {
   return new File([content], name, { type: "text/plain" });
@@ -51,30 +51,17 @@ describe("workspace file upload", () => {
     expect(maxActive).toBe(WORKSPACE_UPLOAD_CONCURRENCY);
   });
 
-  it("reports progress for the matching file", async () => {
+  it("reports processing and complete for each uploaded file", async () => {
     const file = makeFile("progress.txt");
-    const events: Array<{ name: string; index: number; progress: number }> = [];
+    const statuses: string[] = [];
 
     await uploadWorkspaceFiles({
       files: [file],
-      workspaceId: "workspace-a",
-      folderId: "root",
-      generateUploadUrl: async () => "https://upload.example",
-      createUploadedArtifact: async () => undefined,
-      uploadToStorage: async ({ file: uploadFile, onProgress }) => {
-        onProgress?.(47);
-        return `${uploadFile.name}-storage` as never;
-      },
-      onFileChange: (event) => {
-        events.push({
-          name: event.file.name,
-          index: event.index,
-          progress: event.progress,
-        });
-      },
+      uploadFile: async () => undefined,
+      onFileChange: (event) => statuses.push(event.status),
     });
 
-    expect(events).toContainEqual({ name: "progress.txt", index: 0, progress: 47 });
+    expect(statuses).toEqual(["processing", "complete"]);
   });
 
   it("keeps uploading other files when one file fails", async () => {
@@ -82,15 +69,11 @@ describe("workspace file upload", () => {
 
     const results = await uploadWorkspaceFiles({
       files,
-      workspaceId: "workspace-a",
-      folderId: "root",
-      generateUploadUrl: async () => "https://upload.example",
-      createUploadedArtifact: async () => undefined,
-      uploadToStorage: async ({ file }) => {
+      uploadFile: async ({ file }) => {
         if (file.name === "bad.txt") {
           throw new Error("Storage rejected bad.txt.");
         }
-        return `${file.name}-storage` as never;
+        return undefined;
       },
     });
 
@@ -115,17 +98,13 @@ describe("workspace file upload", () => {
     expect(isAllowedWorkspaceUploadFile(makeTypedFile("script.py", "text/x-python"))).toBe(false);
   });
 
-  it("fails disallowed files without hitting storage", async () => {
+  it("fails disallowed files without invoking uploadFile", async () => {
     const uploaded: string[] = [];
     const results = await uploadWorkspaceFiles({
       files: [makeFile("ok.pdf"), makeTypedFile("logo.svg", "image/svg+xml")],
-      workspaceId: "workspace-a",
-      folderId: "root",
-      generateUploadUrl: async () => "https://upload.example",
-      createUploadedArtifact: async () => undefined,
-      uploadToStorage: async ({ file }) => {
+      uploadFile: async ({ file }) => {
         uploaded.push(file.name);
-        return `${file.name}-storage` as never;
+        return undefined;
       },
     });
 
@@ -135,7 +114,7 @@ describe("workspace file upload", () => {
     ]);
     const rejected = results[1];
     expect(rejected.ok === false && rejected.error).toBe(UPLOAD_REJECTED_MESSAGE);
-    // Disallowed file never reaches storage upload.
+    // Disallowed file never reaches the upload step.
     expect(uploaded).toEqual(["ok.pdf"]);
   });
 

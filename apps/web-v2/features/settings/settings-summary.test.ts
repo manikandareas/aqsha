@@ -5,7 +5,7 @@ import {
   formatProviderSpend,
   getSetupCompletion,
   usagePercentage,
-} from "./settings-summary";
+} from "./utils/settings-summary";
 import type { Plan } from "../lib/types";
 
 const plans: Plan[] = [
