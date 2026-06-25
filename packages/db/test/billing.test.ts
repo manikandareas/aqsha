@@ -36,12 +36,12 @@ afterAll(async () => {
 });
 
 describe("BillingRepo — subscription mirror", () => {
-  itest("upsert idempotent by polar_subscription_id (update, createdAt preserved)", async () => {
+  itest("upsert idempotent by provider_subscription_id (update, createdAt preserved)", async () => {
     await BillingRepo.upsertSubscription(db, {
       id: crypto.randomUUID(),
       ownerUserId: OWNER,
-      polarSubscriptionId: SUB,
-      polarProductId: "prod_x",
+      providerSubscriptionId: SUB,
+      providerProductId: "prod_x",
       productKey: "starterMonthly",
       planKey: "starter",
       billingInterval: "month",
@@ -54,14 +54,14 @@ describe("BillingRepo — subscription mirror", () => {
       createdAt: 111,
       updatedAt: 111,
     });
-    const first = await BillingRepo.findSubscriptionByPolarId(db, SUB);
+    const first = await BillingRepo.findSubscriptionByProviderId(db, SUB);
     expect(first?.planKey).toBe("starter");
 
     await BillingRepo.upsertSubscription(db, {
-      id: crypto.randomUUID(), // id baru diabaikan (conflict on polar id)
+      id: crypto.randomUUID(), // id baru diabaikan (conflict on provider id)
       ownerUserId: OWNER,
-      polarSubscriptionId: SUB,
-      polarProductId: "prod_y",
+      providerSubscriptionId: SUB,
+      providerProductId: "prod_y",
       productKey: "plusMonthly",
       planKey: "plus",
       billingInterval: "month",
@@ -74,14 +74,14 @@ describe("BillingRepo — subscription mirror", () => {
       createdAt: 999, // diabaikan saat update
       updatedAt: 222,
     });
-    const updated = await BillingRepo.findSubscriptionByPolarId(db, SUB);
+    const updated = await BillingRepo.findSubscriptionByProviderId(db, SUB);
     expect(updated?.id).toBe(first!.id); // baris sama
     expect(updated?.planKey).toBe("plus");
     expect(updated?.status).toBe("canceled");
     expect(updated?.createdAt).toBe(111); // createdAt tetap
 
     const latest = await BillingRepo.findLatestSubscriptionByOwner(db, OWNER);
-    expect(latest?.polarSubscriptionId).toBe(SUB);
+    expect(latest?.providerSubscriptionId).toBe(SUB);
   });
 });
 

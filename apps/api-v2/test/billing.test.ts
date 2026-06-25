@@ -10,8 +10,12 @@ mock.module("../src/clients/clerkToken", () => ({
 const DATABASE_URL = process.env.DATABASE_URL;
 const itest = DATABASE_URL ? test : test.skip;
 
-// Webhook tests baca POLAR_WEBHOOK_SECRET saat call → kontrol di sini.
-delete process.env.POLAR_WEBHOOK_SECRET;
+// Webhook + checkout tests baca env Mayar saat call → kontrol determinstik di sini
+// (jangan bergantung pada .env developer yang mungkin sudah meng-isi product id).
+delete process.env.MAYAR_WEBHOOK_SECRET;
+for (const key of Object.keys(process.env)) {
+  if (key.startsWith("MAYAR_") && key.endsWith("_PRODUCT_ID")) delete process.env[key];
+}
 
 const suffix = Math.floor(Math.random() * 1e9);
 const OWNER = `itbillapi_${suffix}`;
@@ -54,11 +58,11 @@ beforeAll(cleanup);
 afterAll(cleanup);
 
 describe("api-v2 billing — plans (public)", () => {
-  test("GET /billing/plans tanpa auth → 200, 3 plan", async () => {
+  test("GET /billing/plans tanpa auth → 200, 4 plan", async () => {
     const res = await get("/billing/plans");
     expect(res.status).toBe(200);
     const plans = await readJson(res);
-    expect(plans.map((p: { key: string }) => p.key)).toEqual(["free", "starter", "plus"]);
+    expect(plans.map((p: { key: string }) => p.key)).toEqual(["free", "starter", "plus", "ultra"]);
   });
 });
 
@@ -108,31 +112,48 @@ describe("api-v2 billing — checkout/portal gates", () => {
   });
 
   itest("POST /billing/portal tanpa email → 400 billing_email_required", async () => {
-    const res = await req("POST", "/billing/portal", tok(OWNER), {});
+    const res = await req("POST", "/billing/portal", tok(OWNER));
     expect(res.status).toBe(400);
     expect((await readJson(res)).code).toBe("billing_email_required");
   });
 });
 
-describe("api-v2 billing — webhook polar", () => {
-  test("POST /webhooks/polar tanpa secret → 500 billing_webhook_secret_missing", async () => {
-    delete process.env.POLAR_WEBHOOK_SECRET;
-    const res = await req("POST", "/webhooks/polar", undefined, { type: "subscription.created", data: {} });
+describe("api-v2 billing — webhook mayar", () => {
+  test("POST /webhooks/mayar/<secret> tanpa env secret → 500 billing_webhook_secret_missing", async () => {
+    delete process.env.MAYAR_WEBHOOK_SECRET;
+    const res = await req("POST", "/webhooks/mayar/anything", undefined, {
+      event: "membership.newMemberRegistered",
+      data: {},
+    });
     expect(res.status).toBe(500);
     expect((await readJson(res)).code).toBe("billing_webhook_secret_missing");
   });
 
-  test("POST /webhooks/polar signature invalid → 400", async () => {
-    process.env.POLAR_WEBHOOK_SECRET = "whsec_test_secret";
+  test("POST /webhooks/mayar/<wrong> secret salah → 400 signature invalid", async () => {
+    process.env.MAYAR_WEBHOOK_SECRET = "real_secret";
     try {
-      const res = await req("POST", "/webhooks/polar", undefined, {
-        type: "subscription.created",
-        data: { id: "sub_x" },
+      const res = await req("POST", "/webhooks/mayar/wrong_secret", undefined, {
+        event: "membership.newMemberRegistered",
+        data: { id: "tx_x" },
       });
       expect(res.status).toBe(400);
       expect((await readJson(res)).code).toBe("billing_webhook_signature_invalid");
     } finally {
-      delete process.env.POLAR_WEBHOOK_SECRET;
+      delete process.env.MAYAR_WEBHOOK_SECRET;
+    }
+  });
+
+  test("POST /webhooks/mayar/<secret> event tak relevan → 200 ignored", async () => {
+    process.env.MAYAR_WEBHOOK_SECRET = "real_secret";
+    try {
+      const res = await req("POST", "/webhooks/mayar/real_secret", undefined, {
+        event: "payment.reminder",
+        data: { id: "tx_y", customerEmail: "x@y.test", productId: "prod_unknown" },
+      });
+      expect(res.status).toBe(200);
+      expect((await readJson(res)).ignored).toBe(true);
+    } finally {
+      delete process.env.MAYAR_WEBHOOK_SECRET;
     }
   });
 });

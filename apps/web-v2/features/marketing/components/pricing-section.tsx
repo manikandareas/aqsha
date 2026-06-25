@@ -5,6 +5,7 @@ import {
   PLAN_CATALOG,
   PUBLIC_PLAN_KEYS,
   type PublicPlanKey,
+  UNLIMITED,
 } from "@aqsha/services/plan";
 import {
   ArrowDownIcon,
@@ -45,6 +46,11 @@ const gradientPanelStyles = {
       "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.13) 1px, transparent 0), radial-gradient(circle at 18% 14%, #ffd08a 0, transparent 29%), radial-gradient(circle at 78% 78%, #ff8ab3 0, transparent 31%), linear-gradient(135deg, #8a2f55 0%, #bd463f 51%, #3f2438 100%)",
     backgroundSize: "7px 7px, 100% 100%, 100% 100%, 100% 100%",
   },
+  ultra: {
+    backgroundImage:
+      "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.14) 1px, transparent 0), radial-gradient(circle at 20% 12%, #c5b8ff 0, transparent 30%), radial-gradient(circle at 80% 80%, #7ce0d0 0, transparent 30%), linear-gradient(135deg, #3a2f7a 0%, #5b3aa6 50%, #18203f 100%)",
+    backgroundSize: "7px 7px, 100% 100%, 100% 100%, 100% 100%",
+  },
 } satisfies Record<string, CSSProperties>;
 
 const pricingPills = [
@@ -76,6 +82,13 @@ const planPresentation = {
     badge: null,
     includes: "Semua di Starter, plus",
   },
+  ultra: {
+    gradient: gradientPanelStyles.ultra,
+    href: "/sign-up?plan=ultra",
+    cta: "Pilih Ultra",
+    badge: "Power",
+    includes: "Semua di Plus, plus",
+  },
 } satisfies Record<
   PublicPlanKey,
   {
@@ -104,25 +117,34 @@ function formatCount(value: number) {
 
 function planFeatureRows(planKey: PublicPlanKey) {
   const plan = PLAN_CATALOG[planKey];
+  const isTopTier = planKey === "plus" || planKey === "ultra";
   return [
     {
-      icon: planKey === "plus" ? GaugeIcon : MessageSquare,
-      label: `${formatCount(plan.monthlyCredits)} credits per month`,
+      icon: isTopTier ? GaugeIcon : MessageSquare,
+      label: `${formatCount(plan.monthlyCredits)} credits per bulan`,
     },
     {
       icon: plan.deepResearchRuns > 0 ? Sparkles : Search,
       label:
-        plan.deepResearchRuns > 0
-          ? `${formatCount(plan.deepResearchRuns)} Deep Research runs per month`
-          : "Deep Research not included",
+        plan.deepResearchRuns === UNLIMITED
+          ? "Deep Research tanpa batas"
+          : plan.deepResearchRuns > 0
+            ? `${formatCount(plan.deepResearchRuns)} Deep Research per bulan`
+            : "Deep Research tidak termasuk",
     },
     {
       icon: Library,
-      label: `${formatCount(plan.workspaceLimit)} ${plan.workspaceLimit === 1 ? "workspace" : "workspaces"}`,
+      label:
+        plan.workspaceLimit === UNLIMITED
+          ? "Workspace tanpa batas"
+          : `${formatCount(plan.workspaceLimit)} ${plan.workspaceLimit === 1 ? "workspace" : "workspaces"}`,
     },
     {
-      icon: planKey === "plus" ? BookOpen : FileText,
-      label: `${formatCount(plan.libraryItemLimit)} library items`,
+      icon: isTopTier ? BookOpen : FileText,
+      label:
+        plan.libraryItemLimit === UNLIMITED
+          ? "Library tanpa batas"
+          : `${formatCount(plan.libraryItemLimit)} library items`,
     },
   ];
 }
@@ -206,7 +228,7 @@ export function PricingSection() {
 
         <div className="relative -mx-4 w-[calc(100%+2rem)] overflow-visible sm:-mx-6 sm:w-[calc(100%+3rem)] lg:-mx-8 lg:w-[calc(100%+4rem)]">
           <div className="px-4 sm:px-6 lg:px-8">
-            <div className="grid divide-y divide-border bg-background lg:grid-cols-3 lg:divide-x lg:divide-y-0">
+            <div className="grid divide-y divide-border bg-background lg:grid-cols-4 lg:divide-x lg:divide-y-0">
               {plans.map((plan, index) => (
                 <m.article
                   key={plan.name}

@@ -61,13 +61,15 @@ describe("billingStatusAllowsUsage", () => {
 });
 
 describe("BillingService.listPlans (pure katalog)", () => {
-  test("3 plan publik; free tanpa produk; starter/plus punya produk (unconfigured)", () => {
+  test("4 plan publik; free tanpa produk; starter/plus/ultra punya produk (unconfigured)", () => {
     const plans = BillingService.listPlans();
-    expect(plans.map((p) => p.key)).toEqual(["free", "starter", "plus"]);
+    expect(plans.map((p) => p.key)).toEqual(["free", "starter", "plus", "ultra"]);
     expect(plans.find((p) => p.key === "free")!.products).toEqual([]);
     const starter = plans.find((p) => p.key === "starter")!;
     expect(starter.products.map((p) => p.key).sort()).toEqual(["starterMonthly", "starterYearly"]);
-    expect(starter.products.every((p) => p.configured === false)).toBe(true); // tanpa env POLAR_*
+    expect(starter.products.every((p) => p.configured === false)).toBe(true); // tanpa env MAYAR_*
+    const ultra = plans.find((p) => p.key === "ultra")!;
+    expect(ultra.products.map((p) => p.key).sort()).toEqual(["ultraMonthly", "ultraYearly"]);
   });
 });
 
@@ -256,8 +258,8 @@ describe("BillingService.consumeCredits (integration)", () => {
     await BillingRepo.upsertSubscription(db, {
       id: crypto.randomUUID(),
       ownerUserId: owner,
-      polarSubscriptionId: `sub_${owner}`,
-      polarProductId: "prod",
+      providerSubscriptionId: `sub_${owner}`,
+      providerProductId: "prod",
       productKey: "starterMonthly",
       planKey: "starter",
       billingInterval: "month",
@@ -322,12 +324,14 @@ describe("BillingService.consumeCredits (integration)", () => {
     expect(current.canChangeSubscription).toBe(false);
   });
 
-  itest("syncSubscriptionFromPolar: upsert mirror + snapshot reflect; idempotent", async () => {
+  itest("syncSubscriptionFromMayar: match by email, upsert mirror + snapshot reflect; idempotent", async () => {
     const owner = await freshOwner();
+    const email = `${owner}@mayar.test`;
+    await client`update users set email = ${email} where owner_user_id = ${owner}`;
     const payload = {
-      ownerUserId: owner,
-      polarSubscriptionId: `sub_sync_${owner}`,
-      polarProductId: "prod",
+      customerEmail: email,
+      event: "membership.newMemberRegistered",
+      providerProductId: "prod",
       productKey: "starterMonthly",
       status: "active",
       currentPeriodStart: 0,
@@ -335,8 +339,9 @@ describe("BillingService.consumeCredits (integration)", () => {
       cancelAtPeriodEnd: false,
       rawJson: { foo: "bar" },
     };
-    await BillingService.syncSubscriptionFromPolar(db, payload);
-    await BillingService.syncSubscriptionFromPolar(db, { ...payload, status: "active" }); // idempotent
+    const r1 = await BillingService.syncSubscriptionFromMayar(db, payload);
+    expect(r1.matched).toBe(true);
+    await BillingService.syncSubscriptionFromMayar(db, payload); // idempotent (synthetic key sama)
 
     const snap = await BillingService.getBillingSnapshot(db, owner);
     expect(snap.planKey).toBe("starter");
@@ -346,18 +351,31 @@ describe("BillingService.consumeCredits (integration)", () => {
     expect(snap.canCancelSubscription).toBe(true);
 
     const all = await client`select count(*)::int as n from billing_subscriptions where owner_user_id = ${owner}`;
-    expect(all[0]!.n).toBe(1); // satu baris (idempotent by polar id)
+    expect(all[0]!.n).toBe(1); // satu baris (idempotent by synthetic provider id)
   });
 
-  itest("syncSubscriptionFromPolar: produk tak dikenal (→free/admin) → 422", async () => {
-    const owner = await freshOwner();
+  itest("syncSubscriptionFromMayar: email tak cocok user → pending (matched=false)", async () => {
+    const email = `nobody_${SUFFIX}_${seq}@nope.test`;
+    const r = await BillingService.syncSubscriptionFromMayar(db, {
+      customerEmail: email,
+      event: "membership.newMemberRegistered",
+      providerProductId: "prod",
+      productKey: "starterMonthly",
+      status: "active",
+    });
+    expect(r.matched).toBe(false);
+    const pending = await client`select count(*)::int as n from billing_pending_webhooks where customer_email = ${email}`;
+    expect(pending[0]!.n).toBe(1);
+  });
+
+  itest("syncSubscriptionFromMayar: produk tak dikenal (→free/admin) → 422", async () => {
     let code: string | undefined;
     try {
-      await BillingService.syncSubscriptionFromPolar(db, {
-        ownerUserId: owner,
-        polarSubscriptionId: `sub_x_${owner}`,
-        polarProductId: "prod",
-        // productKey undefined → planForProductKey === "free" → reject
+      await BillingService.syncSubscriptionFromMayar(db, {
+        customerEmail: "x@y.test",
+        event: "membership.newMemberRegistered",
+        providerProductId: "prod",
+        // productKey undefined → planForProductKey === "free" → reject (sebelum resolve owner)
         status: "active",
       });
     } catch (e) {

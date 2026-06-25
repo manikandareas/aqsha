@@ -80,8 +80,8 @@ async function starterOwner(): Promise<string> {
   await BillingRepo.upsertSubscription(db, {
     id: crypto.randomUUID(),
     ownerUserId: owner,
-    polarSubscriptionId: `sub_${owner}`,
-    polarProductId: "prod",
+    providerSubscriptionId: `sub_${owner}`,
+    providerProductId: "prod",
     productKey: "starterMonthly",
     planKey: "starter",
     billingInterval: "month",

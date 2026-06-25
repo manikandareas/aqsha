@@ -1,33 +1,29 @@
 import { AppError } from "@aqsha/db";
-import { AccountDeletionService, BillingService, PolarClient, UserService } from "@aqsha/services";
+import {
+  AccountDeletionService,
+  BillingService,
+  deriveMayarMembershipEvent,
+  MayarClient,
+  UserService,
+} from "@aqsha/services";
 import { Elysia, status } from "elysia";
 import { verifyClerkWebhook } from "../clients/clerkWebhook";
 import { getDb } from "../clients/db";
-import { setNxWithTtl } from "../clients/redis";
+import { delKey, setNxWithTtl } from "../clients/redis";
 
 const WEBHOOK_TTL_SECONDS = 60 * 60 * 24; // 24 jam ≥ jendela retry svix
 
-/** Subset event subscription Polar yang dipakai (`subscription.created`/`updated`). */
-type PolarSubscriptionEvent = {
-  type: string;
-  data: {
-    id: string;
+/** Payload webhook Mayar (`{ event, data }`). data bawa customerEmail + productId. */
+type MayarWebhookEvent = {
+  event?: string;
+  data?: {
+    id?: string;
+    transactionId?: string;
+    customerEmail?: string;
     productId?: string;
-    status?: string;
-    currentPeriodStart?: Date | string | null;
-    currentPeriodEnd?: Date | string | null;
-    cancelAtPeriodEnd?: boolean | null;
-    canceledAt?: Date | string | null;
-    metadata?: Record<string, unknown> | null;
-    customer?: { externalId?: string | null } | null;
-  };
+    productType?: string;
+  } | null;
 };
-
-function parseEpochMs(value: Date | string | null | undefined): number | undefined {
-  if (!value) return undefined;
-  const ms = value instanceof Date ? value.getTime() : Date.parse(value);
-  return Number.isFinite(ms) ? ms : undefined;
-}
 
 function stringField(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
@@ -102,51 +98,82 @@ export const webhooks = new Elysia({ prefix: "/webhooks" }).post(
   },
   { parse: "none" },
 ).post(
-  "/polar",
-  async ({ request, headers }) => {
+  "/mayar/:secret",
+  async ({ request, params }) => {
+    // Mayar tak menandatangani payload → otentisitas via secret di path
+    // (constant-time vs MAYAR_WEBHOOK_SECRET). verifyWebhook melempar AppError
+    // (mismatch→400 / secret missing→500), di-map errorPlugin global.
+    MayarClient.verifyWebhook(params.secret);
+
     const body = await request.text();
-    // verifyWebhook melempar AppError (signature invalid→400 / secret missing→500),
-    // di-map errorPlugin global. Header svix lower-case (cocok standardwebhooks).
-    const headerRecord: Record<string, string> = {};
-    for (const [k, v] of Object.entries(headers)) if (typeof v === "string") headerRecord[k] = v;
-    const event = PolarClient.verifyWebhook(body, headerRecord) as PolarSubscriptionEvent;
-
-    if (event.type !== "subscription.created" && event.type !== "subscription.updated") {
-      return { ok: true, ignored: true };
-    }
-
-    const data = event.data;
-    const ownerUserId = stringField(data.metadata?.userId) ?? stringField(data.customer?.externalId);
-    if (!ownerUserId) {
+    let event: MayarWebhookEvent;
+    try {
+      event = JSON.parse(body) as MayarWebhookEvent;
+    } catch {
       return status(400, {
-        message: "Polar subscription event is missing metadata.userId",
-        code: "billing_event_missing_owner",
+        message: "Invalid Mayar webhook payload.",
+        code: "billing_webhook_invalid_payload",
         severity: "error",
       });
     }
 
-    const currentPeriodEnd = parseEpochMs(data.currentPeriodEnd);
-    const status_ = data.status ?? "unknown";
-    const eventKey = `${event.type}:${data.id}:${currentPeriodEnd ?? ""}:${status_}`;
-    const acquired = await setNxWithTtl(`polar:webhook:${eventKey}`, WEBHOOK_TTL_SECONDS);
+    // Semua derivasi protokol Mayar (event→status, produk→key, period) ada di
+    // adapter `deriveMayarMembershipEvent`. Route = transport murni.
+    const eventName = stringField(event.event);
+    const data = event.data ?? {};
+    const resolved = eventName
+      ? deriveMayarMembershipEvent(eventName, stringField(data.productId), Date.now())
+      : null;
+    if (!eventName || !resolved) {
+      return { ok: true, ignored: true }; // event tak relevan / produk tak terkonfigurasi
+    }
+
+    const customerEmail = stringField(data.customerEmail);
+    if (!customerEmail) {
+      return status(400, {
+        message: "Mayar webhook is missing data.customerEmail",
+        code: "billing_event_missing_email",
+        severity: "error",
+      });
+    }
+
+    // Dedupe by (event, id); status deterministik dari event → tak perlu di key.
+    // Fallback bila Mayar tak kirim id: identitas langganan (email+produk). JANGAN
+    // string kosong — itu menyatukan event beda-user ber-event-name sama ke 1 key
+    // (user kedua ke-dedupe → hilang).
+    const dedupId =
+      stringField(data.id) ??
+      stringField(data.transactionId) ??
+      `${customerEmail}:${resolved.providerProductId}`;
+    const dedupKey = `mayar:webhook:${eventName}:${dedupId}`;
+    const acquired = await setNxWithTtl(dedupKey, WEBHOOK_TTL_SECONDS);
     if (!acquired) {
       return { ok: true, deduped: true }; // event sama sudah diproses
     }
 
+    // Period derivation pakai `now` → non-idempotent saat replay, jadi lock di atas
+    // load-bearing. Lepas lock bila sync gagal supaya retry Mayar (svix) bisa proses
+    // ulang alih-alih ke-dedupe dan event hilang sampai TTL.
     const { db } = getDb();
-    await BillingService.syncSubscriptionFromPolar(db, {
-      ownerUserId,
-      polarSubscriptionId: data.id,
-      polarProductId: stringField(data.productId) ?? "",
-      productKey: stringField(data.metadata?.productKey),
-      status: status_,
-      currentPeriodStart: parseEpochMs(data.currentPeriodStart),
-      currentPeriodEnd,
-      cancelAtPeriodEnd: data.cancelAtPeriodEnd ?? undefined,
-      canceledAt: parseEpochMs(data.canceledAt),
-      rawJson: data,
-    });
-    return { ok: true, deduped: false };
+    let result: { matched: boolean };
+    try {
+      result = await BillingService.syncSubscriptionFromMayar(db, {
+        customerEmail,
+        event: eventName,
+        providerProductId: resolved.providerProductId,
+        productKey: resolved.productKey,
+        status: resolved.status,
+        currentPeriodStart: resolved.currentPeriodStart,
+        currentPeriodEnd: resolved.currentPeriodEnd,
+        cancelAtPeriodEnd: resolved.cancelAtPeriodEnd,
+        canceledAt: resolved.canceledAt,
+        rawJson: data,
+      });
+    } catch (err) {
+      await delKey(dedupKey);
+      throw err;
+    }
+    return { ok: true, matched: result.matched };
   },
   { parse: "none" },
 );

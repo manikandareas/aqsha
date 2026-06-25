@@ -7,7 +7,7 @@ import { defineConfig } from "tsup";
  * Emit ESM ber-ekstensi + subpath granular supaya proses eve hanya me-resolve irisan
  * yang dipakai (mis. `@aqsha/services/billing`) bukan barrel penuh.
  *
- * `@aqsha/db` + semua npm dep (drizzle-orm, ai, bullmq, ioredis, @polar-sh/sdk,
+ * `@aqsha/db` + semua npm dep (drizzle-orm, ai, bullmq, ioredis,
  * @aws-sdk/*, unpdf, mammoth, fast-xml-parser) di-external otomatis dari `dependencies`
  * → tak ikut ter-bundle (mitigasi bloat; di-resolve runtime via node exports condition).
  */

@@ -5,7 +5,8 @@ const planOrder: Record<BillingCurrent["planKey"], number> = {
   free: 0,
   starter: 1,
   plus: 2,
-  admin: 3,
+  ultra: 3,
+  admin: 4,
 };
 
 export function usagePercentage(
