@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { AppError, ChatMessageRepo, ChatThreadRepo } from "@aqsha/db";
+import { AppError, ChatMessageRepo, ChatThreadRepo, ResearchSourceRepo } from "@aqsha/db";
 import { MessageService, ThreadService } from "../src/chat";
 
 // fakeDb.transaction(fn) menjalankan fn dengan tx=fakeDb; repo di-spy jadi tx tak dipakai.
@@ -30,6 +30,7 @@ let s: {
   listByOwner: ReturnType<typeof spyOn>;
   msgList: ReturnType<typeof spyOn>;
   msgDelete: ReturnType<typeof spyOn>;
+  srcDelete: ReturnType<typeof spyOn>;
 };
 
 beforeEach(() => {
@@ -43,6 +44,7 @@ beforeEach(() => {
     } as never),
     msgList: spyOn(ChatMessageRepo, "listByThread").mockResolvedValue([] as never),
     msgDelete: spyOn(ChatMessageRepo, "deleteByThread").mockResolvedValue(undefined),
+    srcDelete: spyOn(ResearchSourceRepo, "deleteByThread").mockResolvedValue(undefined),
   };
 });
 
@@ -105,9 +107,10 @@ describe("ThreadService.rename", () => {
 });
 
 describe("ThreadService.remove", () => {
-  test("deletes messages then thread (cascade)", async () => {
+  test("deletes messages + research sources then thread (FK no-cascade)", async () => {
     await ThreadService.remove(fakeDb, { ownerUserId: OWNER, threadId: SID });
     expect(s.msgDelete).toHaveBeenCalledTimes(1);
+    expect(s.srcDelete).toHaveBeenCalledTimes(1);
     expect(s.deleteById).toHaveBeenCalledTimes(1);
   });
   test("cross-owner → thread_not_found, no delete", async () => {

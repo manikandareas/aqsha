@@ -7,6 +7,7 @@ import {
   registerRepeatable,
 } from "@aqsha/services";
 import { Worker } from "bullmq";
+import { logger } from "../lib/log";
 import { type AccountDeletionJob, processAccountDeletion } from "./account-deletion.worker";
 import { type ArtifactCleanupJob, processArtifactCleanup } from "./artifact-cleanup.worker";
 import { type FeedHydrationJob, processFeedHydration } from "./feed-hydration.worker";
@@ -52,23 +53,22 @@ const workers = [
 ];
 
 for (const w of workers) {
-  w.on("failed", (job, err) =>
-    console.error(`[worker:${w.name}] job ${job?.id ?? "?"} failed`, err),
-  );
-  w.on("ready", () => console.log(`[worker:${w.name}] ready`));
+  const log = logger.child({ worker: w.name });
+  w.on("failed", (job, err) => log.error({ jobId: job?.id ?? null, err }, "job_failed"));
+  w.on("ready", () => log.info("worker_ready"));
 }
-console.log(`[workers] started ${workers.length} queue(s)`);
+logger.info({ queues: workers.length }, "workers_started");
 
 // Cron feed-hydration 3h (ganti `internal.feed.hydrateCycle` Convex). Idempotent by jobId.
 registerRepeatable(FEED_QUEUES.feedHydration, { kind: "cycle" }, {
   pattern: "0 */3 * * *",
   jobId: "feed-hydration-cycle",
 })
-  .then(() => console.log("[workers] cron feed-hydration 0 */3 * * * terdaftar"))
-  .catch((err) => console.error("[workers] gagal daftar cron feed-hydration", err));
+  .then(() => logger.info({ pattern: "0 */3 * * *" }, "cron_feed_hydration_registered"))
+  .catch((err) => logger.error({ err }, "cron_feed_hydration_register_failed"));
 
 async function shutdown() {
-  console.log("[workers] shutting down…");
+  logger.info("workers_shutting_down");
   await Promise.all(workers.map((w) => w.close()));
   process.exit(0);
 }
