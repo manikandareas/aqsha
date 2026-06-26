@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Badge } from "@aqsha/ui/components/badge";
 import { Button } from "@aqsha/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@aqsha/ui/components/card";
 import { CheckIcon, ExternalLinkIcon, Loader2Icon } from "@aqsha/ui/icons";
 import { readableApiErrorMessage } from "@/lib/api-error";
+import { cn } from "@/lib/utils";
 import {
   type ProductKey,
   useBillingCurrent,
@@ -17,6 +16,15 @@ import {
   useUsageActivity,
 } from "../api";
 import { CreditMeter, formatIdr, UsageChart } from "./bits";
+import {
+  SettingsPanel,
+  SettingsPanelBody,
+  SettingsPanelFooter,
+  SettingsPanelHeader,
+  SettingsPill,
+  SettingsSegmentedControl,
+} from "./settings-card";
+import { SettingsHeader } from "./settings-header";
 
 const WINDOWS = [30, 90, 365] as const;
 
@@ -40,32 +48,27 @@ export function UsageBillingPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="font-serif text-3xl">Penggunaan & tagihan</h1>
-        <p className="text-sm text-muted-foreground">Kelola paket, pantau kredit, dan buka portal billing.</p>
-      </div>
+    <>
+      <SettingsHeader
+        section="usage-billing"
+        title="Penggunaan & tagihan"
+        description="Kelola paket, pantau kredit, dan buka portal billing."
+      />
 
       {/* Paket aktif + aksi */}
-      <Card>
-        <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
-          <div>
-            <CardTitle>Paket aktif</CardTitle>
-            <CardDescription>
-              {billing.isPending ? "Memuat…" : billing.data ? billing.data.planLabel : "Tidak tersedia"}
-            </CardDescription>
-          </div>
-          {billing.data ? (
-            <Badge variant={billing.data.planKey === "free" ? "secondary" : "default"}>
-              {billing.data.isAdmin ? "Admin" : billing.data.status}
-            </Badge>
-          ) : null}
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <SettingsPanel>
+        <SettingsPanelHeader
+          title="Paket aktif"
+          description={billing.isPending ? "Memuat…" : billing.data ? billing.data.planLabel : "Tidak tersedia"}
+          action={
+            billing.data ? (
+              <SettingsPill>{billing.data.isAdmin ? "Admin" : billing.data.status}</SettingsPill>
+            ) : null
+          }
+        />
+        <SettingsPanelBody className="space-y-3">
           {billing.isPending ? (
-            <div className="flex justify-center py-6 text-muted-foreground">
-              <Loader2Icon className="size-5 animate-spin" />
-            </div>
+            <p className="text-[13px] text-muted-foreground">Memuat billing…</p>
           ) : billing.data ? (
             <CreditMeter
               creditsUsed={billing.data.creditsUsed}
@@ -75,17 +78,25 @@ export function UsageBillingPage() {
               resetAt={billing.data.resetAt}
             />
           ) : (
-            <p className="text-sm text-destructive">
+            <p className="text-[13px] text-destructive">
               {readableApiErrorMessage(billing.error, "Tidak dapat memuat billing.")}
             </p>
           )}
           {billing.data?.cancelAtPeriodEnd ? (
-            <p className="text-xs text-amber-600">Langganan akan berakhir pada akhir periode berjalan.</p>
+            <p className="text-[12px] text-coral-foreground">
+              Langganan akan berakhir pada akhir periode berjalan.
+            </p>
           ) : null}
-          <div className="flex flex-wrap gap-2">
+        </SettingsPanelBody>
+        {billing.data?.billingPortalAvailable || billing.data?.canCancelSubscription ? (
+          <SettingsPanelFooter>
             {billing.data?.billingPortalAvailable ? (
               <Button variant="outline" size="sm" onClick={() => portal.mutate()} disabled={portal.isPending}>
-                {portal.isPending ? <Loader2Icon className="size-4 animate-spin" /> : <ExternalLinkIcon className="size-4" />}
+                {portal.isPending ? (
+                  <Loader2Icon className="size-4 animate-spin" />
+                ) : (
+                  <ExternalLinkIcon className="size-4" />
+                )}
                 Kelola tagihan
               </Button>
             ) : null}
@@ -95,101 +106,125 @@ export function UsageBillingPage() {
                 Batalkan langganan
               </Button>
             ) : null}
-          </div>
-        </CardContent>
-      </Card>
+          </SettingsPanelFooter>
+        ) : null}
+      </SettingsPanel>
 
       {/* Daftar plan + produk */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {plans.isPending ? (
-          Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i} className="h-48 animate-pulse bg-muted/40" />
-          ))
-        ) : !plans.data ? (
-          <p className="text-sm text-destructive sm:col-span-2 lg:col-span-4">
-            {readableApiErrorMessage(plans.error, "Tidak dapat memuat daftar paket.")}
-          </p>
-        ) : (
-          plans.data.map((plan) => {
-              const isCurrent = billing.data?.planKey === plan.key;
-              return (
-                <Card key={plan.key} className={isCurrent ? "border-primary" : undefined}>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle>{plan.label}</CardTitle>
-                      {isCurrent ? <Badge>Saat ini</Badge> : null}
+      <SettingsPanel>
+        <SettingsPanelHeader title="Paket tersedia" description="Pilih paket yang sesuai kebutuhan riset kamu." />
+        <SettingsPanelBody>
+          {plans.isPending ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-44 animate-pulse rounded-xl border border-border/60 bg-muted/40" />
+              ))}
+            </div>
+          ) : !plans.data ? (
+            <p className="text-[13px] text-destructive">
+              {readableApiErrorMessage(plans.error, "Tidak dapat memuat daftar paket.")}
+            </p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {plans.data.map((plan) => {
+                const isCurrent = billing.data?.planKey === plan.key;
+                return (
+                  <div
+                    key={plan.key}
+                    className={cn(
+                      "flex flex-col gap-3 rounded-xl border bg-card p-4",
+                      isCurrent ? "border-primary/50 ring-1 ring-primary/20" : "border-border/70",
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-[14px] font-semibold tracking-tight text-foreground">{plan.label}</p>
+                        <p className="mt-0.5 text-[12px] text-muted-foreground">
+                          {formatIdr(plan.monthlyPriceIdr)}
+                          {plan.monthlyPriceIdr > 0 ? "/bln" : ""}
+                        </p>
+                      </div>
+                      {isCurrent ? <SettingsPill className="border-primary/40 text-primary">Saat ini</SettingsPill> : null}
                     </div>
-                    <CardDescription>{formatIdr(plan.monthlyPriceIdr)}{plan.monthlyPriceIdr > 0 ? "/bln" : ""}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <ul className="space-y-1.5 text-sm text-muted-foreground">
+
+                    <ul className="space-y-1.5 text-[12px] text-muted-foreground">
                       {plan.features.map((f) => (
                         <li key={f} className="flex items-start gap-2">
-                          <CheckIcon className="mt-0.5 size-4 shrink-0 text-primary" />
+                          <CheckIcon className="mt-0.5 size-3.5 shrink-0 text-primary" />
                           {f}
                         </li>
                       ))}
                     </ul>
+
                     {plan.products.length > 0 ? (
-                      <div className="flex flex-col gap-2 pt-1">
+                      <div className="mt-auto flex flex-col gap-2 pt-1">
                         {plan.products.map((product) => (
                           <Button
                             key={product.key}
                             variant={product.interval === "month" ? "default" : "outline"}
                             size="sm"
-                            disabled={!product.configured || pendingPurchase || (isCurrent && product.key === billing.data?.productKey)}
+                            disabled={
+                              !product.configured ||
+                              pendingPurchase ||
+                              (isCurrent && product.key === billing.data?.productKey)
+                            }
                             onClick={() => onSelectProduct(product.key)}
                           >
                             {pendingPurchase ? <Loader2Icon className="size-4 animate-spin" /> : null}
-                            {product.interval === "month"
-                              ? `${formatIdr(product.displayPriceIdr)}/bln`
-                              : `${formatIdr(product.displayPriceIdr)}/thn`}
+                            {`${formatIdr(product.displayPriceIdr)}/${product.interval === "month" ? "bln" : "thn"}`}
                             {!product.configured ? " (belum tersedia)" : ""}
                           </Button>
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-muted-foreground">Paket dasar — tidak perlu pembayaran.</p>
+                      <p className="mt-auto text-[12px] text-muted-foreground">Paket dasar — tidak perlu pembayaran.</p>
                     )}
-                  </CardContent>
-                </Card>
-              );
-            })
-        )}
-      </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </SettingsPanelBody>
+      </SettingsPanel>
 
       {/* Usage timeseries dengan toggle window */}
-      <Card>
-        <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
-          <div>
-            <CardTitle>Penggunaan</CardTitle>
-            <CardDescription>Kredit terpakai per hari</CardDescription>
-          </div>
-          <div className="flex gap-1">
-            {WINDOWS.map((w) => (
-              <Button
-                key={w}
-                variant={days === w ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setDays(w)}
-              >
-                {w}h
-              </Button>
-            ))}
-          </div>
-        </CardHeader>
-        <CardContent>
+      <SettingsPanel>
+        <SettingsPanelHeader
+          title="Penggunaan"
+          description="Kredit terpakai per hari"
+          action={
+            <SettingsSegmentedControl>
+              {WINDOWS.map((w) => {
+                const active = days === w;
+                return (
+                  <button
+                    key={w}
+                    type="button"
+                    onClick={() => setDays(w)}
+                    className={cn(
+                      "rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors duration-150",
+                      active
+                        ? "border border-border/40 bg-card text-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {w}h
+                  </button>
+                );
+              })}
+            </SettingsSegmentedControl>
+          }
+        />
+        <SettingsPanelBody>
           {usage.isPending ? (
-            <div className="flex justify-center py-6 text-muted-foreground">
-              <Loader2Icon className="size-5 animate-spin" />
-            </div>
+            <p className="text-[13px] text-muted-foreground">Memuat penggunaan…</p>
           ) : usage.data ? (
             <UsageChart days={usage.data} />
           ) : (
-            <p className="text-sm text-muted-foreground">Tidak dapat memuat penggunaan.</p>
+            <p className="text-[13px] text-muted-foreground">Tidak dapat memuat penggunaan.</p>
           )}
-        </CardContent>
-      </Card>
-    </div>
+        </SettingsPanelBody>
+      </SettingsPanel>
+    </>
   );
 }

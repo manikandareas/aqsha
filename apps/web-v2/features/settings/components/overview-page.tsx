@@ -1,12 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { Badge } from "@aqsha/ui/components/badge";
 import { Button } from "@aqsha/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@aqsha/ui/components/card";
-import { ArrowUpRightIcon, Loader2Icon } from "@aqsha/ui/icons";
+import { ArrowUpRightIcon } from "@aqsha/ui/icons";
 import { useBillingCurrent, useProfile, useUsageActivity } from "../api";
 import { CreditMeter, UsageChart } from "./bits";
+import {
+  SettingsPanel,
+  SettingsPanelBody,
+  SettingsPanelFooter,
+  SettingsPanelHeader,
+  SettingsPill,
+} from "./settings-card";
+import { SettingsHeader } from "./settings-header";
 
 export function SettingsOverviewPage() {
   const billing = useBillingCurrent();
@@ -14,31 +20,30 @@ export function SettingsOverviewPage() {
   const profile = useProfile();
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="font-serif text-3xl">Ringkasan</h1>
-        <p className="text-sm text-muted-foreground">
-          Halo{profile.data?.name ? `, ${profile.data.name}` : ""} — pantau paket dan penggunaan kamu.
-        </p>
-      </div>
+    <>
+      <SettingsHeader
+        section="overview"
+        title="Ringkasan"
+        description={
+          profile.data?.name
+            ? `Halo, ${profile.data.name} — pantau paket dan penggunaan kamu.`
+            : "Pantau paket dan penggunaan kamu."
+        }
+      />
 
-      <Card>
-        <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
-          <div>
-            <CardTitle>Paket aktif</CardTitle>
-            <CardDescription>{billing.data ? billing.data.planLabel : "Memuat…"}</CardDescription>
-          </div>
-          {billing.data ? (
-            <Badge variant={billing.data.planKey === "free" ? "secondary" : "default"}>
-              {billing.data.isAdmin ? "Admin" : billing.data.status}
-            </Badge>
-          ) : null}
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <SettingsPanel>
+        <SettingsPanelHeader
+          title="Paket aktif"
+          description={billing.data?.planLabel ?? "Memuat…"}
+          action={
+            billing.data ? (
+              <SettingsPill>{billing.data.isAdmin ? "Admin" : billing.data.status}</SettingsPill>
+            ) : null
+          }
+        />
+        <SettingsPanelBody>
           {billing.isPending ? (
-            <div className="flex justify-center py-6 text-muted-foreground">
-              <Loader2Icon className="size-5 animate-spin" />
-            </div>
+            <p className="text-[13px] text-muted-foreground">Memuat billing…</p>
           ) : billing.data ? (
             <CreditMeter
               creditsUsed={billing.data.creditsUsed}
@@ -48,45 +53,39 @@ export function SettingsOverviewPage() {
               resetAt={billing.data.resetAt}
             />
           ) : (
-            <p className="text-sm text-muted-foreground">Tidak dapat memuat billing.</p>
+            <p className="text-[13px] text-muted-foreground">Tidak dapat memuat billing.</p>
           )}
+        </SettingsPanelBody>
+        <SettingsPanelFooter>
           <Button asChild variant="outline" size="sm">
             <Link href="/app/settings/usage-billing">
               Kelola langganan
               <ArrowUpRightIcon className="size-4" />
             </Link>
           </Button>
-        </CardContent>
-      </Card>
+        </SettingsPanelFooter>
+      </SettingsPanel>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Penggunaan</CardTitle>
-          <CardDescription>Kredit terpakai per hari (365 hari terakhir)</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <SettingsPanel>
+        <SettingsPanelHeader title="Penggunaan" description="Kredit terpakai per hari (365 hari terakhir)" />
+        <SettingsPanelBody>
           {usage.isPending ? (
-            <div className="flex justify-center py-6 text-muted-foreground">
-              <Loader2Icon className="size-5 animate-spin" />
-            </div>
+            <p className="text-[13px] text-muted-foreground">Memuat penggunaan…</p>
           ) : usage.data ? (
             <UsageChart days={usage.data} />
           ) : (
-            <p className="text-sm text-muted-foreground">Tidak dapat memuat penggunaan.</p>
+            <p className="text-[13px] text-muted-foreground">Tidak dapat memuat penggunaan.</p>
           )}
-        </CardContent>
-      </Card>
+        </SettingsPanelBody>
+      </SettingsPanel>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Percakapan</CardTitle>
-          <CardDescription>Total percakapan dengan Astra</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-2xl font-semibold tabular-nums text-muted-foreground">—</p>
-          <p className="text-xs text-muted-foreground">Tersedia setelah chat Astra aktif.</p>
-        </CardContent>
-      </Card>
-    </div>
+      <SettingsPanel>
+        <SettingsPanelHeader title="Percakapan" description="Total percakapan dengan Astra" />
+        <SettingsPanelBody>
+          <p className="font-heading text-[2rem] font-bold leading-none tabular-nums text-muted-foreground">—</p>
+          <p className="mt-2 text-[12px] text-muted-foreground">Tersedia setelah chat Astra aktif.</p>
+        </SettingsPanelBody>
+      </SettingsPanel>
+    </>
   );
 }
