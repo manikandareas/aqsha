@@ -28,7 +28,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { readableConvexErrorMessage } from "@/lib/convex-error";
-import { panelHeaderPaddingClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
 import type { BreadcrumbSegment } from "../utils/workspace-library-model";
 
@@ -92,7 +91,7 @@ export function WorkspaceBoardToolbar({
   const showTitleControls = showWorkspaceSettings && !titleSlot;
 
   return (
-    <div className={cn("flex shrink-0 flex-col gap-3 border-border bg-background", panelHeaderPaddingClass)}>
+    <div className="sticky top-0 z-20 flex shrink-0 flex-col gap-2 bg-background/70 px-5 py-2.5 backdrop-blur-xl sm:px-6">
       <div className="flex min-w-0 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-1.5">
           {showLeftSidebarTrigger && onToggleLeftSidebar ? (
@@ -118,7 +117,7 @@ export function WorkspaceBoardToolbar({
               onRenameWorkspace={onRenameWorkspace}
             />
           ) : (
-            <h1 className="self-center truncate font-sans text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">
+            <h1 className="self-center truncate font-sans text-base font-semibold leading-tight tracking-tight text-foreground sm:text-lg">
               {workspaceName}
             </h1>
           ))}
@@ -272,7 +271,7 @@ function WorkspaceEmojiPopover({
         <Button
           type="button"
           variant="ghost"
-          className="size-10 shrink-0 self-center rounded-full text-[26px] leading-none hover:bg-muted"
+          className="size-8 shrink-0 self-center rounded-full text-[20px] leading-none hover:bg-muted"
           aria-label="Ubah emoji workspace"
           disabled={isSaving}
         >
@@ -337,7 +336,7 @@ function WorkspaceTitlePopover({
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
-      <h1 className="min-w-0 self-center font-sans text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">
+      <h1 className="min-w-0 self-center font-sans text-base font-semibold leading-tight tracking-tight text-foreground sm:text-lg">
         <PopoverTrigger asChild>
           <button
             type="button"
