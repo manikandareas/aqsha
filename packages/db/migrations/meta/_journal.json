@@ -92,6 +92,13 @@
       "when": 1782361846134,
       "tag": "0012_mayar_billing",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1782461996490,
+      "tag": "0013_wise_the_renegades",
+      "breakpoints": true
     }
   ]
 }

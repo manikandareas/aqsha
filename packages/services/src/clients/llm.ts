@@ -11,7 +11,8 @@ import { generateText } from "ai";
  */
 let provider: ReturnType<typeof createOpenAI> | null = null;
 
-function getProvider() {
+/** Provider OpenAI bersama (singleton) untuk semua utilitas LLM teks-pendek non-stream. */
+export function getLlmProvider() {
   if (provider) return provider;
   provider = createOpenAI(
     process.env.OPENAI_BASE_URL ? { baseURL: process.env.OPENAI_BASE_URL } : {},
@@ -24,7 +25,7 @@ const TITLE_MODEL = process.env.AQSHA_TITLE_MODEL ?? "gpt-4o-mini";
 /** Judul ringkas (3–6 kata) Bahasa Indonesia dari pesan pertama. Throw bila model gagal. */
 export async function generateThreadTitle(firstMessage: string): Promise<string> {
   const { text } = await generateText({
-    model: getProvider().chat(TITLE_MODEL),
+    model: getLlmProvider().chat(TITLE_MODEL),
     prompt:
       "Buat judul percakapan yang ringkas (3–6 kata) dalam Bahasa Indonesia untuk pesan berikut. " +
       "Balas HANYA judulnya, tanpa tanda kutip, tanpa tanda baca akhir.\n\n" +

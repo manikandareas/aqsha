@@ -91,7 +91,7 @@ function FactBalanceModule({ verdicts }: { verdicts: VerdictBreakdown }) {
   return (
     <WidgetCard>
       <SectionHeader
-        title="Timbangan fakta hari ini"
+        title="Rekap fakta hari ini"
         icon={<GaugeIcon className="size-3.5" />}
       />
       <div className="flex items-center gap-4">
@@ -247,7 +247,7 @@ function MostCitedModule({ topCited }: { topCited: TopCitedPaper[] }) {
   return (
     <WidgetCard className="p-3">
       <div className="px-1">
-        <SectionHeader title="Paling disitir" icon={<Quote className="size-3.5" />} />
+        <SectionHeader title="Paling banyak dikutip" icon={<Quote className="size-3.5" />} />
       </div>
       <ul className="space-y-0.5">
         {topCited.map(({ item, count }, index) => (

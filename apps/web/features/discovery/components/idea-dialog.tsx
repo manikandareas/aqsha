@@ -107,7 +107,7 @@ function IdeaDialogInner({
 
         {loading ? (
           <div className="flex items-center justify-center gap-2 py-12 text-[13px] text-muted-foreground">
-            <Loader2Icon className="size-4 animate-spin" /> Menambang celah riset…
+            <Loader2Icon className="size-4 animate-spin" /> Menggali celah riset…
           </div>
         ) : error ? (
           <div className="rounded-[8px] border border-destructive/20 bg-destructive/10 px-4 py-3 text-[13px] font-medium text-destructive">
@@ -178,7 +178,7 @@ function IdeaDialogInner({
               </div>
             ))}
             <p className="px-1 text-[11px] text-muted-foreground">
-              Skor dihasilkan AI sebagai panduan kasar, bukan penilaian final.
+              Skor dihasilkan AI sebagai panduan awal, bukan penilaian final.
               Sunting pertanyaan sebelum meneliti bila perlu.
             </p>
           </div>

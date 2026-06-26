@@ -6,14 +6,16 @@ import type { GlobeArc, GlobeNode } from "../types";
 
 type PointFeature = {
   type: "Feature";
+  id: number;
   geometry: { type: "Point"; coordinates: [number, number] };
-  properties: { label: string; emerging: number };
+  properties: { label: string; emerging: number; count: number; country: string };
 };
 
 type LineFeature = {
   type: "Feature";
+  id: number;
   geometry: { type: "LineString"; coordinates: [number, number][] };
-  properties: Record<string, never>;
+  properties: { weight: number; pair: string };
 };
 
 export type FeatureCollection<F> = { type: "FeatureCollection"; features: F[] };
@@ -21,10 +23,16 @@ export type FeatureCollection<F> = { type: "FeatureCollection"; features: F[] };
 export function nodesToGeoJSON(nodes: GlobeNode[]): FeatureCollection<PointFeature> {
   return {
     type: "FeatureCollection",
-    features: nodes.map((n) => ({
+    features: nodes.map((n, i) => ({
       type: "Feature",
+      id: i,
       geometry: { type: "Point", coordinates: [n.lon, n.lat] },
-      properties: { label: n.label, emerging: n.emerging ? 1 : 0 },
+      properties: {
+        label: n.label,
+        emerging: n.emerging ? 1 : 0,
+        count: n.count ?? 0,
+        country: n.country ?? "",
+      },
     })),
   };
 }
@@ -35,14 +43,16 @@ export function arcsToGeoJSON(
   steps = 48,
 ): FeatureCollection<LineFeature> {
   const features: LineFeature[] = [];
-  for (const [a, b] of arcs) {
+  let id = 0;
+  for (const [a, b, weight] of arcs) {
     const na = nodes[a];
     const nb = nodes[b];
     if (!na || !nb) continue;
     features.push({
       type: "Feature",
+      id: id++,
       geometry: { type: "LineString", coordinates: greatCircle(na, nb, steps) },
-      properties: {},
+      properties: { weight: weight ?? 1, pair: `${na.label} ↔ ${nb.label}` },
     });
   }
   return { type: "FeatureCollection", features };

@@ -57,14 +57,14 @@ const A = mkRow({ id: "A", trendScore: 100_000, publishedAt: OLD, topics: ["clim
 const B = mkRow({ id: "B", trendScore: 0, publishedAt: NOW, topics: ["machine learning"] });
 
 afterEach(() => {
-  spyOn(FeedRepo, "paginateByOrder").mockRestore();
+  spyOn(FeedRepo, "paginateBalanced").mockRestore();
   spyOn(FeedRepo, "searchByTsvector").mockRestore();
   spyOn(FeedInteractionRepo, "hiddenItemIds").mockRestore();
   spyOn(InterestService, "loadWeights").mockRestore();
 });
 
 function stub(page: unknown[], hidden: string[], weights: Map<string, number>) {
-  spyOn(FeedRepo, "paginateByOrder").mockResolvedValue({
+  spyOn(FeedRepo, "paginateBalanced").mockResolvedValue({
     items: page as never,
     nextCursor: null,
   });
@@ -92,7 +92,7 @@ describe("FeedService.getFeedPaginated re-rank", () => {
   });
 
   test("nextCursor diteruskan dari repo (page boleh menyusut)", async () => {
-    spyOn(FeedRepo, "paginateByOrder").mockResolvedValue({
+    spyOn(FeedRepo, "paginateBalanced").mockResolvedValue({
       items: [A, B] as never,
       nextCursor: "CURSOR",
     });

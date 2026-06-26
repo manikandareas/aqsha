@@ -67,6 +67,12 @@ export type OpenAlexWork = {
   authorships?: Array<{
     author?: { display_name?: string | null } | null;
     raw_author_name?: string | null;
+    countries?: string[] | null;
+    institutions?: Array<{
+      id?: string | null;
+      display_name?: string | null;
+      country_code?: string | null;
+    }> | null;
   }> | null;
   primary_topic?: OpenAlexTopic | null;
   topics?: OpenAlexTopic[] | null;
@@ -221,6 +227,78 @@ export async function fetchOpenAlexWorks(args: {
 
   await putCache("openalex", cacheKey, works.length > 0 ? "ready" : "empty", JSON.stringify(works));
   return { works, papers: worksToPapers(works, limit) };
+}
+
+/** Satu bucket agregat OpenAlex `group_by` (key + label + count). */
+export type OpenAlexGroup = { key: string; label: string; count: number };
+
+/**
+ * Agregat OpenAlex `group_by` (faceting) — dipakai Explore facets: tren per-tahun
+ * (`publication_year`) untuk Pulse chart & sebaran negara (`authorships.institutions.country_code`)
+ * untuk Globe. Empty query → seluruh korpus (trending). Cache 24h via external-cache.
+ */
+export async function fetchOpenAlexGroupBy(args: {
+  query: string;
+  groupBy: string;
+  fromYear?: number;
+  now?: number;
+}): Promise<OpenAlexGroup[]> {
+  const query = args.query.trim();
+  const now = args.now ?? Date.now();
+  const dateBucket = new Date(now).toISOString().slice(0, 10);
+  const fromYear = normalizeFromYear(args.fromYear);
+  const cacheKey = `feed:groupby:${args.groupBy}:${fromYear ?? ""}:${query}:${dateBucket}`;
+
+  const cached = await getCache("openalex", cacheKey);
+  if (cached) {
+    try {
+      return JSON.parse(cached.valueJson) as OpenAlexGroup[];
+    } catch {
+      // fall through
+    }
+  }
+
+  const apiKey = process.env.OPENALEX_API_KEY;
+  if (!apiKey) throw new Error("OPENALEX_API_KEY is not configured");
+
+  const url = new URL(OPENALEX_ENDPOINT);
+  url.searchParams.set("api_key", apiKey);
+  url.searchParams.set("group_by", args.groupBy);
+  url.searchParams.set("per_page", "1"); // hanya butuh agregat group_by, bukan daftar works
+  const filters = ["is_paratext:false"];
+  if (fromYear) filters.push(`from_publication_date:${fromYear}-01-01`);
+  url.searchParams.set("filter", filters.join(","));
+  if (query) url.searchParams.set("search", query);
+
+  const response = await fetchWithTimeout(url.toString(), { headers: { Accept: "application/json" } });
+  if (!response.ok) throw new Error(`OpenAlex group_by returned ${response.status}`);
+  const json = (await response.json()) as {
+    group_by?: Array<{ key?: string | number; key_display_name?: string | null; count?: number }>;
+  };
+  const groups: OpenAlexGroup[] = (json.group_by ?? [])
+    .filter((g) => g.key != null)
+    .map((g) => ({
+      key: String(g.key),
+      label: g.key_display_name ?? String(g.key),
+      count: g.count ?? 0,
+    }));
+
+  await putCache("openalex", cacheKey, groups.length > 0 ? "ready" : "empty", JSON.stringify(groups));
+  return groups;
+}
+
+/** Tren volume publikasi per tahun untuk sebuah topik (Pulse chart). */
+export function fetchOpenAlexYearCounts(args: { query: string; fromYear?: number }) {
+  return fetchOpenAlexGroupBy({ query: args.query, groupBy: "publication_year", fromYear: args.fromYear });
+}
+
+/** Sebaran riset per negara untuk sebuah topik (Globe nodes). */
+export function fetchOpenAlexCountryCounts(args: { query: string; fromYear?: number }) {
+  return fetchOpenAlexGroupBy({
+    query: args.query,
+    groupBy: "authorships.institutions.country_code",
+    fromYear: args.fromYear,
+  });
 }
 
 function worksToPapers(works: OpenAlexWork[], limit: number): ExplorePaperInput[] {

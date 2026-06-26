@@ -15,5 +15,6 @@ export * from "./chatThreadEventRepo";
 export * from "./researchSourceRepo";
 export * from "./feedRepo";
 export * from "./paperCacheRepo";
+export * from "./exploreAnalysesRepo";
 export * from "./feedInteractionRepo";
 export * from "./billingRepo";

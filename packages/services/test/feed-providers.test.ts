@@ -51,12 +51,27 @@ describe("googleNews dedupe + build", () => {
     expect(out.map((o) => o.item.guid)).toEqual(["g1", "g3"]);
   });
 
-  test("buildGoogleNewsFeedInputs → kind news, summary kosong, dedupeKey", () => {
-    const inputs = buildGoogleNewsFeedInputs([{ item: mk({ guid: "g9" }), topicLabel: "Sains" }], 100);
+  test("buildGoogleNewsFeedInputs → kind news, summary kosong, dedupeKey kanonik title", () => {
+    const inputs = buildGoogleNewsFeedInputs(
+      [{ item: mk({ guid: "g9", title: "Vaksin Baru", publisherDomain: "kompas.com" }), topicLabel: "Sains" }],
+      100,
+    );
     expect(inputs[0]!.kind).toBe("news");
     expect(inputs[0]!.summary).toBe("");
-    expect(inputs[0]!.dedupeKey).toBe("news:gnews:g9");
+    expect(inputs[0]!.dedupeKey).toBe("news:kompas.com:vaksin baru");
     expect(inputs[0]!.topics).toEqual(["Sains"]);
+  });
+
+  test("dedupeKey kanonik meng-collapse story tersindikasi (guid beda, title+domain sama)", () => {
+    // Fix bug duplikat: guid berbeda (RSS/seed beda) TAPI cerita sama → satu dedupeKey.
+    const [a, b] = buildGoogleNewsFeedInputs(
+      [
+        { item: mk({ guid: "gA", title: "Gempa Bumi M5", publisherDomain: "detik.com" }), topicLabel: "Sains" },
+        { item: mk({ guid: "gB", title: "Gempa Bumi M5", publisherDomain: "detik.com" }), topicLabel: "Lingkungan" },
+      ],
+      100,
+    );
+    expect(a!.dedupeKey).toBe(b!.dedupeKey); // upsertByDedupeKey → satu baris, bukan dua
   });
 });
 

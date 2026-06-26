@@ -9,14 +9,22 @@ import type { FeedTopic } from "@/features/discovery/types";
 export type TrustStatus = "peer-reviewed" | "preprint" | "corrected" | "retracted";
 export type CitationStance = "mostly-supported" | "mostly-disputed" | "mixed" | "unknown";
 
-// ── Hero — interest pills + trending ───────────────────────────────────────
+// ── Hero — interest pills ──────────────────────────────────────────────────
 // Pill = FeedTopic asli sehingga klik pill men-scope feed Zona 4 (perilaku nyata).
 export type InterestPill = { id: FeedTopic | null; label: string };
-export type TrendingTopic = { topic: string; pct: number };
 
 // ── Globe (Mapbox) ─────────────────────────────────────────────────────────
-export type GlobeNode = { lat: number; lon: number; label: string; emerging: boolean };
-export type GlobeArc = [number, number]; // pasangan index ke daftar node
+// Node = negara penghasil riset (count = jumlah paper). Arc = kolaborasi antar-negara
+// (weight = ko-publikasi). count/country/weight datang dari /explore/facets (OpenAlex).
+export type GlobeNode = {
+  lat: number;
+  lon: number;
+  label: string;
+  emerging: boolean;
+  count?: number;
+  country?: string;
+};
+export type GlobeArc = [number, number, number?]; // [indexA, indexB, weight?]
 
 // ── Pulse (streamgraph) ────────────────────────────────────────────────────
 export type PulseSeries = { name: string; values: number[] };

@@ -23,10 +23,11 @@ type FeedPage = { items: FeedItem[]; nextCursor: string | null };
  * Catatan: page bisa menyusut < limit (filter hidden/kind/topic server-side) sementara
  * nextCursor tetap benar → komponen auto-load lanjut selama `hasNextPage`.
  */
-export function useFeedInfinite(mode: FeedMode, topic: FeedTopic | null) {
+export function useFeedInfinite(mode: FeedMode, topic: FeedTopic | null, enabled = true) {
   const api = useApi();
   return useInfiniteQuery({
     queryKey: queryKeys.feed.list({ mode, topic }),
+    enabled,
     initialPageParam: null as string | null,
     queryFn: async ({ pageParam }) =>
       unwrap(

@@ -6,6 +6,7 @@
 // jadi split (DetailSplitLayout) dengan panel chat Astra workspace-less.
 
 import { ChevronRightIcon, MessageSquareIcon, PanelLeftIcon } from "@aqsha/ui/icons";
+import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useState } from "react";
 import { DetailSplitLayout } from "@/components/layout/detail-split-layout";
 import { ResponsiveSidePanel } from "@/components/layout/responsive-side-panel";
@@ -15,19 +16,47 @@ import { ComposerMentionsProvider } from "@/features/thread-experience/component
 import { FEED_TOPIC_LABELS, type FeedTopic } from "@/features/discovery/types";
 import { panelHeaderBarClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
+import { useExploreAnalysis, useExploreFacets } from "../api";
 import { ExploreChatSidePanel } from "./explore-chat-side-panel";
 import { ExploreFindings } from "./explore-findings";
 import { ExploreHero } from "./explore-hero";
-import { GapFinder } from "./gap-finder";
+import { GapFinder, type GapStatus } from "./gap-finder";
 import { PulseStream } from "./pulse-stream";
 import { SectionHeader } from "./section-header";
 import { TensionMap } from "./tension-map";
 
+const TOPIC_VALUES = [
+  "sains_teknologi",
+  "kesehatan",
+  "lingkungan",
+  "sosial_ekonomi",
+  "pendidikan",
+] as const;
+
 export function ExplorePage() {
   const leftSidebar = useSidebar();
-  const [topic, setTopic] = useState<FeedTopic | null>(null);
+  // `q` & `topic` di URL (nuqs) — single source of truth, menggerakkan SEMUA section + shareable.
+  const [q, setQ] = useQueryState("q", { defaultValue: "" });
+  const [topic, setTopic] = useQueryState("topic", parseAsStringLiteral(TOPIC_VALUES));
   const [chatOpen, setChatOpen] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
+
+  const facets = useExploreFacets(q);
+  const analysis = useExploreAnalysis(q);
+
+  const trimmedQ = q.trim();
+  const analysisStatus: GapStatus =
+    trimmedQ.length < 2
+      ? "idle"
+      : analysis.data?.status === "ready"
+        ? "ready"
+        : analysis.isError || analysis.data?.status === "error"
+          ? "error"
+          : "loading";
+
+  const submitQuery = (next: string) => {
+    void setQ(next.trim() ? next.trim() : "");
+  };
 
   const isLeftSidebarOpen = leftSidebar.isMobile
     ? leftSidebar.openMobile
@@ -55,9 +84,17 @@ export function ExplorePage() {
                 onToggleLeftSidebar={leftSidebar.toggleSidebar}
               />
               <div className="mx-auto w-full max-w-[1180px] px-6 pb-24 sm:px-7">
-                <ExploreHero activeTopic={topic} onSelectTopic={setTopic} />
+                <ExploreHero
+                  activeTopic={topic}
+                  onSelectTopic={(next) => void setTopic(next)}
+                  query={q}
+                  onSubmitQuery={submitQuery}
+                  globeNodes={facets.data?.globe.nodes ?? []}
+                  globeArcs={facets.data?.globe.arcs ?? []}
+                  globeLoading={facets.isPending}
+                />
 
-                <PulseStream />
+                <PulseStream pulse={facets.data?.pulse} loading={facets.isPending} />
 
                 <section className="pt-16">
                   <SectionHeader
@@ -65,12 +102,17 @@ export function ExplorePage() {
                     subtitle="Tiap klaim menempel ke sitasi yang bisa dicek"
                   />
                   <div className="mt-5 grid grid-cols-1 border-y border-border @3xl/explore:grid-cols-[1.1fr_1fr] @3xl/explore:divide-x @3xl/explore:divide-border">
-                    <GapFinder />
-                    <TensionMap />
+                    <GapFinder
+                      q={q}
+                      status={analysisStatus}
+                      gaps={analysis.data?.gap ?? []}
+                      onSubmitQuery={submitQuery}
+                    />
+                    <TensionMap status={analysisStatus} tension={analysis.data?.tension ?? null} />
                   </div>
                 </section>
 
-                <ExploreFindings topic={topic} />
+                <ExploreFindings topic={topic} query={q} />
               </div>
             </div>
           }

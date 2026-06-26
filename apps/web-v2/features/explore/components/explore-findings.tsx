@@ -13,7 +13,12 @@ import {
   DiscoveryStandardCard,
   type DiscoveryCardHandlers,
 } from "@/features/discovery/components/discovery-item-card";
-import { useFeedInfinite, useHideDiscovery, useRecordInteraction } from "@/features/discovery/api";
+import {
+  useFeedInfinite,
+  useHideDiscovery,
+  useRecordInteraction,
+  useSearchDiscovery,
+} from "@/features/discovery/api";
 import {
   discoveryItemKey,
   feedItemToDiscoveryItem,
@@ -28,12 +33,17 @@ type FeedStatus = "LoadingMore" | "CanLoadMore" | "Exhausted";
 // Bound auto-loads between scrolls so a run of locally-hidden items can't spin.
 const MAX_AUTO_LOADS = 4;
 
-export function ExploreFindings({ topic }: { topic: FeedTopic | null }) {
+export function ExploreFindings({ topic, query }: { topic: FeedTopic | null; query: string }) {
   const router = useRouter();
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
 
+  const q = query.trim();
+  const searchMode = q.length > 0;
   const mode = topic ? "topics" : "foryou";
-  const feed = useFeedInfinite(mode, topic);
+  // Query disubmit → feed switch ke hasil pencarian (paper+news); kosong → feed personal.
+  const feedQuery = useFeedInfinite(mode, topic, !searchMode);
+  const searchQuery = useSearchDiscovery(q);
+  const feed = searchMode ? searchQuery : feedQuery;
   const hide = useHideDiscovery();
   const record = useRecordInteraction();
 
@@ -63,7 +73,7 @@ export function ExploreFindings({ topic }: { topic: FeedTopic | null }) {
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const autoLoadCountRef = useRef(0);
   const prevRawRef = useRef(0);
-  const sessionKey = `explore:${mode}:${topic ?? ""}`;
+  const sessionKey = searchMode ? `explore:search:${q}` : `explore:${mode}:${topic ?? ""}`;
 
   useEffect(() => {
     autoLoadCountRef.current = 0;
@@ -116,8 +126,8 @@ export function ExploreFindings({ topic }: { topic: FeedTopic | null }) {
   return (
     <section className="pt-16">
       <SectionHeader
-        title="Temuan untukmu"
-        subtitle="Scroll terus untuk paper & berita berikutnya"
+        title={searchMode ? `Hasil untuk “${q}”` : "Temuan untukmu"}
+        subtitle={searchMode ? "Paper & berita yang cocok dengan pencarianmu" : "Scroll terus untuk paper & berita berikutnya"}
         right={<span className="shrink-0 font-mono text-[11px] text-muted-foreground">{items.length} item</span>}
       />
 
@@ -129,7 +139,7 @@ export function ExploreFindings({ topic }: { topic: FeedTopic | null }) {
         ) : feed.isPending ? (
           <Loader />
         ) : items.length === 0 ? (
-          <EmptyState topic={topic} />
+          <EmptyState topic={topic} searchQuery={searchMode ? q : null} />
         ) : (
           <div className="space-y-10">
             {hero ? <DiscoveryHeroCard item={hero} busy={false} handlers={handlers} /> : null}
@@ -170,9 +180,9 @@ function FeedFooter({ status, onLoadMore }: { status: FeedStatus; onLoadMore: ()
         <div className="flex size-9 items-center justify-center rounded-full bg-mint-soft text-mint-foreground">
           <CheckCircle2Icon className="size-5" />
         </div>
-        <p className="text-[14px] font-semibold text-foreground">Kamu sudah update</p>
+        <p className="text-[14px] font-semibold text-foreground">Kamu sudah baca semua</p>
         <p className="max-w-[320px] text-[12.5px] text-muted-foreground">
-          Itu semua untuk sekarang. Feed disegarkan berkala — simpan beberapa item untuk diteliti.
+          Segini dulu untuk saat ini. Feed diperbarui berkala — simpan beberapa item untuk diteliti.
         </p>
       </div>
     );
@@ -197,17 +207,21 @@ function FeedFooter({ status, onLoadMore }: { status: FeedStatus; onLoadMore: ()
   );
 }
 
-function EmptyState({ topic }: { topic: FeedTopic | null }) {
+function EmptyState({ topic, searchQuery }: { topic: FeedTopic | null; searchQuery: string | null }) {
   return (
     <div className="max-w-[560px] rounded-2xl border border-border bg-card px-5 py-8 text-center">
       <div className="mx-auto mb-3 flex size-10 items-center justify-center rounded-full bg-mint-soft text-mint-foreground">
         <SparklesIcon className="size-5" />
       </div>
-      <h3 className="text-[15px] font-semibold text-foreground">Belum ada item</h3>
+      <h3 className="text-[15px] font-semibold text-foreground">
+        {searchQuery ? "Tak ada hasil" : "Belum ada item"}
+      </h3>
       <p className="mx-auto mt-1.5 max-w-[380px] text-[13px] font-medium leading-5 text-muted-foreground">
-        {topic
-          ? "Belum ada konten untuk bidang ini. Coba bidang lain atau kembali setelah penyegaran berikutnya."
-          : "Konten akan muncul setelah penyegaran terjadwal berikutnya."}
+        {searchQuery
+          ? `Tak ada paper atau berita yang cocok dengan “${searchQuery}”. Coba kata kunci lain.`
+          : topic
+            ? "Belum ada konten untuk bidang ini. Coba bidang lain atau kembali setelah pembaruan berikutnya."
+            : "Konten akan muncul setelah pembaruan terjadwal berikutnya."}
       </p>
     </div>
   );
