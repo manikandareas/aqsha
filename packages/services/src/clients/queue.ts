@@ -92,6 +92,16 @@ export async function enqueue<T extends Record<string, unknown>>(
 }
 
 /**
+ * Buang job by id. Dipakai SEBELUM re-enqueue jobId STABIL yang mungkin masih ditahan
+ * BullMQ (removeOnComplete/Fail) — tanpa ini `add()` dengan jobId yang sudah ada = no-op
+ * diam-diam (job tak pernah jalan lagi). Job tak ada → resolve biasa; job terkunci/aktif →
+ * throw (caller yang putuskan: di-`catch` saat kita tahu tak ada job aktif).
+ */
+export async function removeJob(name: QueueName, jobId: string): Promise<void> {
+  await getQueue(name).remove(jobId);
+}
+
+/**
  * Daftarkan repeatable job (cron) idempotent — BullMQ men-dedupe by `jobId` + pattern.
  * Dipakai cron feed-hydration (setiap 3 jam, ganti hydrateCycle Convex).
  */

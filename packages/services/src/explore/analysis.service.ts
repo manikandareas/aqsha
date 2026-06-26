@@ -13,6 +13,7 @@
 import {
   enqueue,
   EXPLORE_QUEUES,
+  removeJob,
 } from "../clients/queue";
 import { embedTexts, isEmbeddingEnabled } from "../clients/embeddings";
 import { normalizeKey } from "../lib/text";
@@ -124,7 +125,11 @@ export const ExploreAnalysisService = {
       }
     }
 
-    // 3. Insert pending + enqueue (dedupe by queryNorm)
+    // 3. Insert pending + enqueue. jobId = queryNorm men-dedup REQUEST BERSAMAAN, tapi
+    // BullMQ menahan job completed/failed → re-add jobId yang sama = no-op. Buang job lama
+    // dulu supaya recompute (row stale / status "error") BENAR dijalankan worker. Aman:
+    // alur hanya sampai sini saat row TIDAK pending-fresh (short-circuit di atas), jadi
+    // tak ada job aktif yang dibatalkan; job terkunci tak terduga → catch → biarkan.
     const row = await ExploreAnalysesRepo.upsertPending(db, {
       id: exact?.id ?? crypto.randomUUID(),
       query,
@@ -137,6 +142,7 @@ export const ExploreAnalysisService = {
       createdAt: now,
       lastUsedAt: now,
     });
+    await removeJob(EXPLORE_QUEUES.exploreAnalysis, norm).catch(() => {});
     await enqueue(
       EXPLORE_QUEUES.exploreAnalysis,
       { id: row.id, query, seedPapers } satisfies ExploreAnalysisJob,
