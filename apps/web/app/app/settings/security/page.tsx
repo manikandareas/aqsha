@@ -1,11 +1,5 @@
-import { SettingsSecurityPage } from "@/features/settings/pages/security-page";
-import { createPageMetadata } from "@/lib/metadata";
+import { SecurityPage } from "@/features/settings/security-page";
 
-export const metadata = createPageMetadata({
-  title: "Keamanan",
-  description: "Kelola sesi aktif dan akses perangkat untuk akun Aqsha.",
-});
-
-export default function SecurityPage() {
-  return <SettingsSecurityPage />;
+export default function SettingsSecurityPageRoute() {
+  return <SecurityPage />;
 }

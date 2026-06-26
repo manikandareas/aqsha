@@ -19,7 +19,7 @@ import {
   formatCitation,
   type CitationFormat,
   type CitationInput,
-} from "@/features/explore/utils/citation";
+} from "@/features/artifacts/utils/citation";
 import type {
   ArtifactRenderPayload,
   PaperExtractionStatus,
@@ -30,14 +30,14 @@ export type ArtifactSidebarRecord = {
   artifactType: string;
   artifactFamily?: string;
   source?: string;
-  language?: string;
-  mimeType?: string;
-  fileName?: string;
-  byteSize?: number;
+  language?: string | null;
+  mimeType?: string | null;
+  fileName?: string | null;
+  byteSize?: number | null;
   indexingStatus?: "not_indexed" | "pending" | "ready" | "failed";
-  indexingFailureReason?: string;
-  detectedDocumentKind?: "generic" | "scholarly_paper";
-  indexedAt?: number;
+  indexingFailureReason?: string | null;
+  detectedDocumentKind?: "generic" | "scholarly_paper" | null;
+  indexedAt?: number | null;
   createdAt: number;
   updatedAt: number;
 };
@@ -421,7 +421,7 @@ function IndexStatusRow({
   reason,
 }: {
   status?: "not_indexed" | "pending" | "ready" | "failed";
-  reason?: string;
+  reason?: string | null;
 }) {
   const { label, tone } = indexingDisplay(status);
   return (

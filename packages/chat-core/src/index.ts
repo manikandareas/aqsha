@@ -2,7 +2,7 @@
  * @aqsha/chat-core — logika MURNI chat Astra (Fase 6), zero-dep & SATU FILE
  * (tanpa relative import).
  *
- * Kenapa paket sendiri: PROSES eve (`apps/web-v2/agent/*`) di-bundle Rolldown dan
+ * Kenapa paket sendiri: PROSES eve (`apps/web/agent/*`) di-bundle Rolldown dan
  * TIDAK bisa mengonsumsi paket workspace TS-mentah dengan relative-import tanpa
  * ekstensi (`@aqsha/db`/`@aqsha/services`) — bundler-nya gagal resolve, dan runtime
  * Node tak bisa import `.ts` mentah bila di-externalize. Paket satu-file tanpa relative
@@ -97,7 +97,7 @@ export function assistantMessageId(sessionId: string, turnId: string, sequence: 
 
 // ---------------------------------------------------------------------------
 // Prompt commands (Slice 6.6) — SSOT dipindah dari packages/convex (V1) ke sini
-// supaya client (web-v2) DAN eve bundle pakai data yang sama. Pure, zero-dep,
+// supaya client (web) DAN eve bundle pakai data yang sama. Pure, zero-dep,
 // tetap SATU FILE (constraint bundle eve). /deep di-DROP saat 6.6 (Lite-only),
 // di-REAKTIFKAN Slice 7.0 (deep research): expand jadi instruksi pakai skill
 // deep-research; gate billing/cap = `propose_research_plan` + send-status?feature.

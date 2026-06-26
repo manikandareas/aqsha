@@ -1,17 +1,9 @@
-import {
-  toStorageId,
-  toWorkspaceFolderId,
-  toWorkspaceId,
-  type StorageId,
-  type WorkspaceFolderId,
-  type WorkspaceId,
-} from "@/lib/convex-refs";
-import { readableConvexErrorMessage } from "@/lib/convex-error";
+import { readableApiErrorMessage } from "@/lib/api-error";
 import {
   isAllowedWorkspaceUploadFile,
   UPLOAD_REJECTED_MESSAGE,
   WORKSPACE_UPLOAD_ACCEPT,
-} from "@aqsha/convex/artifact-upload-policy";
+} from "@/lib/artifact-upload-policy";
 
 export {
   isAllowedWorkspaceUploadFile,
@@ -29,17 +21,6 @@ export type WorkspaceUploadStatus =
   | "complete"
   | "failed";
 
-type GenerateUploadUrl = (args: { workspaceId: WorkspaceId }) => Promise<string>;
-
-type CreateUploadedArtifact = (args: {
-  workspaceId: WorkspaceId;
-  folderId?: WorkspaceFolderId;
-  storageId: StorageId;
-  fileName: string;
-  mimeType: string;
-  size: number;
-}) => Promise<unknown>;
-
 export type WorkspaceUploadProgressEvent = {
   file: File;
   index: number;
@@ -51,12 +32,6 @@ export type WorkspaceUploadProgressEvent = {
 export type WorkspaceUploadResult =
   | { ok: true; file: File; index: number }
   | { ok: false; file: File; index: number; error: string };
-
-type UploadToStorage = (args: {
-  file: File;
-  uploadUrl: string;
-  onProgress?: (progress: number) => void;
-}) => Promise<StorageId>;
 
 export function validateWorkspaceUploadBatch(files: File[]) {
   if (files.length > MAX_WORKSPACE_UPLOAD_FILES) {
@@ -92,63 +67,20 @@ export async function runLimitedConcurrency<T>(
   );
 }
 
-async function uploadWorkspaceFile({
-  file,
-  workspaceId,
-  folderId,
-  generateUploadUrl,
-  createUploadedArtifact,
-  onProgress,
-  onStorageComplete,
-  uploadToStorage = uploadFileToStorage,
-}: {
-  file: File;
-  workspaceId: string;
-  folderId: "root" | string;
-  generateUploadUrl: GenerateUploadUrl;
-  createUploadedArtifact: CreateUploadedArtifact;
-  onProgress?: (progress: number) => void;
-  onStorageComplete?: () => void;
-  uploadToStorage?: UploadToStorage;
-}) {
-  const convexWorkspaceId = toWorkspaceId(workspaceId);
-  const targetFolderId =
-    folderId === "root" ? undefined : toWorkspaceFolderId(folderId);
-
-  const uploadUrl = await generateUploadUrl({ workspaceId: convexWorkspaceId });
-  const storageId = await uploadToStorage({
-    file,
-    uploadUrl,
-    onProgress,
-  });
-  onStorageComplete?.();
-
-  await createUploadedArtifact({
-    workspaceId: convexWorkspaceId,
-    folderId: targetFolderId,
-    storageId,
-    fileName: file.name,
-    mimeType: file.type || "application/octet-stream",
-    size: file.size,
-  });
-}
-
+/**
+ * Multi-file upload: validasi batch + gating tipe + konkurensi terbatas, lalu
+ * delegasikan tiap file ke `uploadFile` (V2: presign → PUT → finalize via mutation
+ * `uploadArtifact`). Progress biner (uploading → complete) karena `fetch` PUT tak
+ * mengekspos progress byte.
+ */
 export async function uploadWorkspaceFiles({
   files,
-  workspaceId,
-  folderId,
-  generateUploadUrl,
-  createUploadedArtifact,
+  uploadFile,
   onFileChange,
-  uploadToStorage,
 }: {
   files: File[];
-  workspaceId: string;
-  folderId: "root" | string;
-  generateUploadUrl: GenerateUploadUrl;
-  createUploadedArtifact: CreateUploadedArtifact;
+  uploadFile: (args: { file: File }) => Promise<unknown>;
   onFileChange?: (event: WorkspaceUploadProgressEvent) => void;
-  uploadToStorage?: UploadToStorage;
 }) {
   validateWorkspaceUploadBatch(files);
 
@@ -175,82 +107,21 @@ export async function uploadWorkspaceFiles({
         return;
       }
       try {
-        onFileChange?.({ file, index, status: "uploading", progress: 0 });
-        await uploadWorkspaceFile({
-          file,
-          workspaceId,
-          folderId,
-          generateUploadUrl,
-          createUploadedArtifact,
-          uploadToStorage,
-          onProgress: (progress) => {
-            onFileChange?.({ file, index, status: "uploading", progress });
-          },
-          onStorageComplete: () => {
-            onFileChange?.({ file, index, status: "processing", progress: 100 });
-          },
-        });
+        // Satu fase in-flight: presign + PUT + finalize (yang meng-ekstrak teks +
+        // RAG inline) jalan sebagai satu await. `fetch` PUT tak mengekspos progress
+        // byte, jadi labelnya "processing" (bukan "uploading 0%" yang menyesatkan).
+        // ponytail: split uploading/indexing kalau byte-upload file besar perlu bar.
+        onFileChange?.({ file, index, status: "processing", progress: 0 });
+        await uploadFile({ file });
         onFileChange?.({ file, index, status: "complete", progress: 100 });
         results[index] = { ok: true, file, index };
       } catch (error) {
-        const message = readableConvexErrorMessage(error, "Upload gagal.");
-        onFileChange?.({
-          file,
-          index,
-          status: "failed",
-          progress: 0,
-          error: message,
-        });
+        const message = readableApiErrorMessage(error, "Upload gagal.");
+        onFileChange?.({ file, index, status: "failed", progress: 0, error: message });
         results[index] = { ok: false, file, index, error: message };
       }
     },
   );
 
   return results;
-}
-
-function uploadFileToStorage({
-  file,
-  uploadUrl,
-  onProgress,
-}: {
-  file: File;
-  uploadUrl: string;
-  onProgress?: (progress: number) => void;
-}): Promise<StorageId> {
-  return new Promise((resolve, reject) => {
-    const request = new XMLHttpRequest();
-    request.open("POST", uploadUrl);
-    request.setRequestHeader(
-      "Content-Type",
-      file.type || "application/octet-stream",
-    );
-
-    request.upload.onprogress = (event) => {
-      if (!event.lengthComputable) return;
-      onProgress?.(Math.round((event.loaded / event.total) * 100));
-    };
-
-    request.onerror = () => reject(new Error(`Upload gagal untuk ${file.name}.`));
-    request.onabort = () => reject(new Error(`Upload dibatalkan untuk ${file.name}.`));
-    request.onload = () => {
-      if (request.status < 200 || request.status >= 300) {
-        reject(new Error(`Upload gagal untuk ${file.name}.`));
-        return;
-      }
-
-      try {
-        const body = JSON.parse(request.responseText) as { storageId?: string };
-        if (!body.storageId) {
-          reject(new Error(`Storage ID tidak tersedia untuk ${file.name}.`));
-          return;
-        }
-        resolve(toStorageId(body.storageId));
-      } catch {
-        reject(new Error(`Respons upload tidak valid untuk ${file.name}.`));
-      }
-    };
-
-    request.send(file);
-  });
 }

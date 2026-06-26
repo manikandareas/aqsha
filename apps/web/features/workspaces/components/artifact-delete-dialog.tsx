@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { readableConvexErrorMessage } from "@/lib/convex-error";
+import { readableApiErrorMessage } from "@/lib/api-error";
 
 export function DeleteArtifactDialog({
   open,
@@ -55,7 +55,7 @@ export function DeleteArtifactDialog({
                 await onConfirm();
               } catch (deleteError) {
                 setError(
-                  readableConvexErrorMessage(deleteError, "We couldn't delete this artifact."),
+                  readableApiErrorMessage(deleteError, "We couldn't delete this artifact."),
                 );
                 setIsDeleting(false);
               }

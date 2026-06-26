@@ -1,11 +1,5 @@
-import { SettingsAppearancePage } from "@/features/settings/pages/appearance-page";
-import { createPageMetadata } from "@/lib/metadata";
+import { AppearancePage } from "@/features/settings/appearance-page";
 
-export const metadata = createPageMetadata({
-  title: "Tampilan",
-  description: "Atur tema terang, gelap, atau mengikuti sistem di Aqsha.",
-});
-
-export default function AppearancePage() {
-  return <SettingsAppearancePage />;
+export default function SettingsAppearancePage() {
+  return <AppearancePage />;
 }

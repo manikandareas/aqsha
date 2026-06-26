@@ -1,23 +1,28 @@
 # Aqsha
 
-Aqsha is a Convex-backed personal research chatbot with a Next.js product app.
+Aqsha is a Postgres-backed personal research product: a Next.js app, an Elysia REST API, and an eve agent runtime (Astra + `/deep` deep research).
 
 ## Monorepo Structure
 
 ```txt
 apps/
-  web/      Next.js public landing and authenticated product app
+  web/      Next.js public landing + authenticated product app
+  api/      Elysia REST API + BullMQ workers
+  agent/    eve agent runtime (Astra, deep research)
 packages/
-  convex/   Convex functions, schema, components, and tests
+  db/       Drizzle ORM schema + migrations (Postgres/pgvector)
+  services/ Domain services (business logic) shared by api, workers, agent
+  chat-core/ Shared chat/timeline primitives
   ui/       Shared React UI primitives and styles
 ```
 
 ## Tech Stack
 
-- **Runtime and package manager**: Bun
+- **Runtime and package manager**: Bun (web + agent run on Node ≥24)
 - **Product app**: Next.js 16, React 19, Tailwind CSS 4
-- **Backend**: Convex, Clerk Auth, `@convex-dev/agent`, rate limiting, workflow, internal provenance storage
-- **AI**: AI SDK with OpenAI-compatible chat and embedding providers through Convex functions
+- **API**: Elysia + Eden Treaty (type-safe client, no codegen), Clerk auth, Mayar billing, BullMQ workers, pino logging
+- **Agent**: eve runtime, AI SDK with OpenAI-compatible providers
+- **Data**: Postgres + Drizzle (pgvector), Redis, S3-compatible object storage (MinIO/R2)
 - **Shared UI**: Radix primitives and shadcn-style components in `packages/ui`
 
 ## Getting Started
@@ -28,42 +33,44 @@ Install dependencies from the repository root:
 bun install
 ```
 
-Run the active product app and Convex backend together:
+Start local infrastructure (Postgres/Redis/MinIO), apply migrations, then run the stack:
 
 ```bash
-bun dev
+docker compose -f infra/compose.dev.yaml up -d
+bun run db:migrate
+bun dev          # api + worker + agent + web
 ```
 
-Or run a single workspace:
+Or run a single process:
 
 ```bash
-bun run dev:app
-bun run dev:convex
+bun run dev:api
+bun run dev:web
+bun run dev:agent
+bun run dev:worker
 ```
 
 ## Scripts
 
 ```bash
-bun run build       # Build app
-bun run lint        # Lint app and Convex package
-bun run typecheck   # Type-check app, Convex, and UI package
+bun run build       # build dist packages + agent + web
+bun run lint        # lint api + web
+bun run typecheck   # type-check all workspaces
+bun run test        # db + chat-core + services + api
 ```
 
-Convex workspace commands:
+Database (Drizzle) commands:
 
 ```bash
-bun run --filter '@aqsha/convex' codegen
-bun run --filter '@aqsha/convex' deploy
-bun run --filter '@aqsha/convex' logs
-bun run --filter '@aqsha/convex' test
+bun run db:generate
+bun run db:migrate
+bun run db:studio
 ```
 
 ## Development Notes
 
-- `apps/web` imports generated Convex bindings from `@aqsha/convex/api` and `@aqsha/convex/server`.
-- `apps/web` consumes shared UI from `@aqsha/ui`.
-- Convex environment is managed by `convex dev` and the Convex dashboard.
-- Convex AI chat env can be routed independently with `AQSHA_CHAT_API_KEY`, `AQSHA_CHAT_BASE_URL`, and `AQSHA_CHAT_PROVIDER_NAME`.
-- Convex RAG embedding env can be routed independently with `AQSHA_EMBEDDING_API_KEY`, `AQSHA_EMBEDDING_BASE_URL`, `AQSHA_EMBEDDING_PROVIDER_NAME`, `AQSHA_RAG_EMBEDDING_MODEL`, and `AQSHA_RAG_EMBEDDING_DIMENSION`.
-- Legacy `OPENAI_API_KEY` and `OPENAI_BASE_URL` still work as fallback values, but provider-specific routing should use the `AQSHA_*` namespaced env vars.
-- Only `packages/convex` has a test runner configured.
+- `apps/web` imports the API's `App` type for the Eden Treaty client (no codegen) and consumes `@aqsha/ui`. It must not import `@aqsha/db` / `@aqsha/services`.
+- Business logic lives once in `packages/services`; API routes, workers, and the agent are thin callers.
+- `@aqsha/db` and `@aqsha/services` build to `dist/` (tsup); the API and agent import from there.
+- Each app reads its own `.env` (see each app's `.env.example`).
+- Deployment is Docker via Dokploy: per-app `Dockerfile` + the root `compose.yaml` (apps + infra). `infra/compose.dev.yaml` is local-dev infrastructure only.

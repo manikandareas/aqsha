@@ -23,7 +23,7 @@ export function BottomCtaSection() {
                   viewport={{ once: true, amount: 0.85 }}
                   transition={{ type: "spring", stiffness: 280, damping: 24 }}
                 >
-                  Start here
+                  Mulai sekarang
                 </m.p>
                 <m.h2
                   className="font-heading max-w-[min(100%,38rem)] text-[2.75rem] font-normal leading-[1.08] tracking-normal text-foreground sm:text-5xl sm:leading-[1.06] lg:text-[3.25rem] lg:leading-[1.05] xl:max-w-[min(100%,40rem)] xl:text-[3.5rem]"
@@ -32,14 +32,12 @@ export function BottomCtaSection() {
                       ? false
                       : {
                           opacity: 0,
-                          letterSpacing: "0em",
                           y: 18,
                           filter: "blur(8px)",
                         }
                   }
                   whileInView={{
                     opacity: 1,
-                    letterSpacing: "0em",
                     y: 0,
                     filter: "blur(0px)",
                   }}
@@ -49,8 +47,18 @@ export function BottomCtaSection() {
                     ease: [0.16, 1, 0.3, 1],
                   }}
                 >
-                  Stop losing the thread between sources and answers
+                  Nulis riset yang bisa kamu pertahanin.
                 </m.h2>
+                <m.p
+                  className="max-w-xl text-pretty text-lg leading-snug text-foreground/85 sm:text-xl sm:leading-snug"
+                  initial={reduce ? false : { opacity: 0, y: 12 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, amount: 0.75 }}
+                  transition={{ delay: 0.1, duration: 0.55 }}
+                >
+                  Daftar gratis hari ini, buka satu tempat buat semua risetmu, dan biarin
+                  tiap sumbermu kecek bener — langsung dari browser, tanpa instal apa-apa.
+                </m.p>
               </div>
               <m.div
                 className="flex flex-col gap-3 sm:flex-row lg:justify-end"
@@ -69,7 +77,11 @@ export function BottomCtaSection() {
               >
                 <m.div
                   variants={{
-                    hidden: { opacity: reduce ? 1 : 0, y: reduce ? 0 : 24, rotate: reduce ? 0 : -1.2 },
+                    hidden: {
+                      opacity: reduce ? 1 : 0,
+                      y: reduce ? 0 : 24,
+                      rotate: reduce ? 0 : -1.2,
+                    },
                     show: {
                       opacity: 1,
                       y: 0,
@@ -85,12 +97,16 @@ export function BottomCtaSection() {
                     variant="outline"
                     className="h-14 shrink-0 rounded-full px-7 text-base font-medium shadow-sm"
                   >
-                    <Link href="/sign-in">Sign in</Link>
+                    <Link href="#cara-kerja">Lihat cara kerjanya</Link>
                   </Button>
                 </m.div>
                 <m.div
                   variants={{
-                    hidden: { opacity: reduce ? 1 : 0, y: reduce ? 0 : 28, rotate: reduce ? 0 : 1.4 },
+                    hidden: {
+                      opacity: reduce ? 1 : 0,
+                      y: reduce ? 0 : 28,
+                      rotate: reduce ? 0 : 1.4,
+                    },
                     show: {
                       opacity: 1,
                       y: 0,
@@ -102,7 +118,7 @@ export function BottomCtaSection() {
                   whileTap={reduce ? undefined : { scale: 0.98 }}
                 >
                   <Button asChild className="h-14 shrink-0 rounded-full px-7 text-base font-medium">
-                    <Link href="/sign-up">Create your workspace</Link>
+                    <Link href="/sign-up">Coba gratis →</Link>
                   </Button>
                 </m.div>
               </m.div>

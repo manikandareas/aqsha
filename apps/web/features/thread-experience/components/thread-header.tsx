@@ -4,7 +4,7 @@ import { LayersIcon, PanelLeftIcon } from "@aqsha/ui/icons";
 import { PanelTitleLabel } from "@/components/panel-title-dropdown-trigger";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { panelHeaderPaddingClass } from "@/lib/panel-surface";
+import { panelHeaderBarClass } from "@/lib/panel-surface";
 import type { ThreadSummary } from "./component-types";
 import { ThreadDeleteActions } from "./thread-actions-menu";
 import { ThreadRecentSwitcher } from "./thread-recent-switcher";
@@ -37,12 +37,7 @@ export function ThreadHeader({
   const showThreadSwitcher = Boolean(threadId && onSelectThread && onCreateThread && threads);
 
   return (
-    <div
-      className={cn(
-        "flex shrink-0 items-center justify-between gap-3 border-border bg-background",
-        panelHeaderPaddingClass,
-      )}
-    >
+    <div className={panelHeaderBarClass}>
       <div className="flex min-w-0 items-center gap-1.5">
         {showLeftTrigger ? (
           <Button

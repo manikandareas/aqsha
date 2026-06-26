@@ -25,7 +25,7 @@ export function LibraryCardFrame({
   return (
     <Component
       className={cn(
-        "group relative aspect-[8/9] min-h-[300px] rounded-[20px] [perspective:900px]",
+        "group relative aspect-[8/9] w-full min-w-0 min-h-[240px] sm:min-h-[300px] rounded-[20px] [perspective:900px]",
         selected && "ring-2 ring-primary/25",
         className,
       )}

@@ -2,7 +2,7 @@
 
 import { useEffect, useReducer, useRef } from "react";
 import { toast } from "sonner";
-import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@aqsha/convex/artifact-upload-limits";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@/lib/artifact-upload-limits";
 import {
   MAX_WORKSPACE_UPLOAD_FILES,
   type WorkspaceUploadProgressEvent,

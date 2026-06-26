@@ -4,7 +4,7 @@ import { type ConnectionOptions, Queue } from "bullmq";
  * Producer-side BullMQ (enqueue dari service layer). Connection di-parse dari
  * `REDIS_URL` jadi options-object (bukan instance ioredis) supaya BullMQ memakai
  * ioredis bundled-nya sendiri — menghindari clash dua versi ioredis. BullMQ wajib
- * `maxRetriesPerRequest: null`. Worker (consumer) di `apps/api-v2/src/workers`
+ * `maxRetriesPerRequest: null`. Worker (consumer) di `apps/api/src/workers`
  * reuse `getQueueConnection()` ini. Default job opts (attempt-guard + backoff)
  * tinggal di sini supaya semua caller seragam.
  */

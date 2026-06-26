@@ -32,8 +32,7 @@ export function AppShell({
   const selectedWorkspaceId =
     params?.workspaceId ??
     (selectedThreadId
-      ? threads.find((thread) => thread.threadId === selectedThreadId)
-          ?.workspaceId
+      ? undefined
       : undefined);
 
   return (

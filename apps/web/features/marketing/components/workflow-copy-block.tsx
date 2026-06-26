@@ -1,15 +1,20 @@
 export function WorkflowCopyBlock({
+  phase,
   title,
   body,
   items,
 }: {
+  phase: string;
   title: string;
   body: string;
   items: [string, string][];
 }) {
   return (
     <article className="min-w-0">
-      <h3 className="font-heading text-xl font-normal leading-tight tracking-normal text-foreground sm:text-2xl">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {phase}
+      </p>
+      <h3 className="font-heading mt-2 text-xl font-normal leading-tight tracking-normal text-foreground sm:text-2xl">
         {title}
       </h3>
       <p className="mt-3 max-w-[31rem] text-pretty text-base leading-snug text-muted-foreground sm:mt-4 sm:text-lg sm:leading-snug">

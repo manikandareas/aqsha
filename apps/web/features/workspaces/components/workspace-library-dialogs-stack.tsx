@@ -10,7 +10,7 @@ import {
   type WorkspaceId,
 } from "@/lib/convex-refs";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { NameDialog, UrlDialog } from "./workspace-dialogs";
+import { AddItemDialog, NameDialog } from "./workspace-dialogs";
 import type { useWorkspaceLibraryDialogState } from "../hooks/use-workspace-library-dialogs";
 
 type DialogState = ReturnType<typeof useWorkspaceLibraryDialogState>;
@@ -42,6 +42,7 @@ export function WorkspaceLibraryDialogsStack({
   mutations,
   dialogState,
   onAfterArchive,
+  onUploadFiles,
 }: {
   workspaceId: string;
   activeFolderId: "root" | string;
@@ -49,6 +50,7 @@ export function WorkspaceLibraryDialogsStack({
   mutations: WorkspaceLibraryMutations;
   dialogState: DialogState;
   onAfterArchive?: () => void;
+  onUploadFiles: (files: File[]) => void;
 }) {
   const router = useRouter();
   const folderIdForCreate =
@@ -104,10 +106,11 @@ export function WorkspaceLibraryDialogsStack({
           openCreatedArtifact(artifactId);
         }}
       />
-      <UrlDialog
+      <AddItemDialog
         open={createUrlOpen}
         folderName={activeFolderName}
         onOpenChange={setCreateUrlOpen}
+        onUploadFiles={onUploadFiles}
         onSubmit={async ({ url, title }) => {
           // Stay on the workspace board: the new card appears immediately in a
           // loading state and "matures" in place once ingestion completes.

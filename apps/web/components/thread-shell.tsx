@@ -1,3 +1,3 @@
 "use client";
 
-export { ThreadExperience as ThreadShell } from "@/features/thread-experience";
+export { ThreadDetailShell as ThreadShell } from "@/features/thread-experience/components/thread-detail-shell";

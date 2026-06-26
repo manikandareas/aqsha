@@ -10,7 +10,7 @@ import {
 } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
 import { AccessDeniedState } from "./access-denied-state";
-import { ThreadChatSurface } from "./chat-thread-state";
+import { EveChatThreadSurface } from "./eve-chat-thread-surface";
 import { ThreadDeleteActions } from "./thread-actions-menu";
 import { ThreadRecentSwitcher } from "./thread-recent-switcher";
 import type {
@@ -139,35 +139,25 @@ export function CompactThreadChatPanel({
               <AccessDeniedState />
             </div>
           ) : (
-            <ThreadChatSurface
+            <EveChatThreadSurface
               threadId={activeThreadId}
               isLoading={activeThread === undefined}
               title={activeThread?.title}
               rateStatus={rateStatus}
-              startThread={startThread}
-              onSend={onSend}
-              runs={runs}
-              artifacts={artifacts}
-              sources={sources}
-              onCancelRun={onCancelRun}
-              onRetryRun={onRetryRun}
+              threads={threads}
               contextArtifacts={contextArtifacts}
               onRemoveContextArtifact={onRemoveContextArtifact}
-              threadWorkspaceId={threadWorkspaceId ?? activeThread?.workspaceId}
               compact
             />
           )
         ) : (
-          <ThreadChatSurface
+          <EveChatThreadSurface
             isLoading={false}
             rateStatus={rateStatus}
-            startThread={startThread}
             threads={threads}
             contextArtifacts={contextArtifacts}
             onRemoveContextArtifact={onRemoveContextArtifact}
-            onThreadCreated={onActiveThreadIdChange}
             draftContextLabel={draftContextLabel}
-            threadWorkspaceId={threadWorkspaceId}
             seed={seed}
             compact
           />

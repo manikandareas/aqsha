@@ -10,75 +10,58 @@ Untuk setiap proses brainstorming dan planning, gunakan **bahasa Indonesia**. Is
 ## Monorepo Boundaries
 | Package | Path | Runtime | Key Tech |
 |---|---|---|---|
-| `@aqsha/app` | `apps/web` | Next.js 16 (App Router) | React 19, Tailwind v4, Convex client |
-| `@aqsha/agents` | `apps/agents` | Node/Bun service (Hono) | Claude Agent SDK runtime for Astra — see `apps/agents/AGENTS.md` |
-| `@aqsha/convex` | `packages/convex` | Convex | Convex functions/components, Clerk Auth, Agent/Workflow, internal provenance |
-| `@aqsha/agent-contracts` | `packages/agent-contracts` | shared | zod contracts shared by convex + agents (+ web later) |
-| `@aqsha/ui` | `packages/ui` | shared | React UI primitives and shared token CSS |
+| `@aqsha/web` | `apps/web` | Next.js 16 (App Router) | React 19, Tailwind v4, Eden Treaty + TanStack Query; proxies `/eve/v1/*` to the agent |
+| `@aqsha/api` | `apps/api` | Bun (Elysia) | REST API + BullMQ workers, Clerk auth, Mayar billing, pino |
+| `@aqsha/agent` | `apps/agent` | Node ≥24 (eve) | eve agent runtime for Astra + `/deep` deep research |
+| `@aqsha/db` | `packages/db` | shared (Drizzle) | Postgres schema + migrations (pgvector), structured `appError` |
+| `@aqsha/services` | `packages/services` | shared | domain services consumed by API, workers, and agent |
+| `@aqsha/chat-core` | `packages/chat-core` | shared | chat/timeline primitives |
+| `@aqsha/ui` | `packages/ui` | shared | React UI primitives and token CSS |
 
 ## Exact Dev Commands
 ```bash
-# Run active app and Convex backend in parallel
+# Run the full stack in parallel (api + worker + agent + web)
 bun dev
 
-# Run one workspace
-bun run dev:app
-bun run dev:convex
-bun run dev:agents      # Claude Agent SDK service (apps/agents)
-bun run test:agents     # vitest for apps/agents + packages/agent-contracts
+# Run one process
+bun run dev:api
+bun run dev:web
+bun run dev:agent
+bun run dev:worker
+
+# Database (Drizzle)
+bun run db:generate
+bun run db:migrate
+bun run db:studio
 
 # Verification
 bun run lint
 bun run typecheck
+bun run test
 bun run build
 ```
 
-## App-Specific Instructions
-- **App**: UI rules and Next.js 16 caveats live in `apps/web/AGENTS.md`. Read that before touching product UI.
-- **Detail/panel parity**: Thread detail and workspace detail each have a main view and an embedded side panel of the other surface. See `apps/web/AGENTS.md` → **Detail / Panel Parity** before changing either.
-- **Convex**: Convex rules live in `packages/convex/AGENTS.md`. Read `packages/convex/convex/_generated/ai/guidelines.md` before editing Convex functions.
+Local infra (Postgres/Redis/MinIO): `docker compose -f infra/compose.dev.yaml up`.
+
+## Build Pipeline
+- `@aqsha/db` and `@aqsha/services` build to `dist/` via tsup (`bun run build:dist`, `watch:dist`).
+- `apps/api` (Bun) runs `src/server.ts` directly; `apps/agent` runs `eve start`; `apps/web` runs `next start`.
 
 ## Icons
 - Use `@aqsha/ui/icons` for all app icon imports in `apps/web`.
 - Use the local `packages/ui/src/icons.tsx` adapter for shared UI package icons, with relative imports such as `../icons`.
 - Do not add direct `lucide-react` imports or direct `lucide-react` package dependencies in Aqsha code. `lucide-react` may still appear transitively when required by third-party packages such as BlockNote.
-- When a needed icon name is missing, add a Lucide-compatible export to `packages/ui/src/icons.tsx` backed by the official Hugeicons packages (`@hugeicons/react` and `@hugeicons/core-free-icons`).
-
-## Convex Client State
-- `apps/web` uses TanStack Query through `@convex-dev/react-query` for Convex client state.
-- Prefer shared helpers from `apps/web/lib/convex-query.ts`:
-  - `useConvexQueryData` for reactive Convex queries.
-  - `useConvexMutationState` / `useConvexMutationFn` for Convex mutations.
-  - `useConvexActionState` / `useConvexActionFn` for Convex actions that are submit/side-effect operations.
-- Do not add new direct `convex/react` `useQuery`, `useMutation`, or `useAction` usage in `apps/web`.
-- Direct `convex/react` imports are still acceptable for provider/client setup and Convex utilities that do not have a TanStack adapter equivalent.
-- Keep UI-only state local with React state: dialog open/close, form drafts, selected rows/folders, composer text, and upload progress.
-- Server-state loading/error/success should come from TanStack Query mutation/query state unless there is a deliberate local UX state, such as a persistent notice.
+- When a needed icon name is missing, add a Lucide-compatible export to `packages/ui/src/icons.tsx` backed by the official Hugeicons packages.
 
 ## Error Handling
-- Client-side Convex errors should be normalized through `apps/web/lib/convex-error.ts`.
-- Prefer `readableConvexErrorMessage(error, fallback)` or `readableConvexError(error, fallback)` instead of exposing generic `error.message` directly in UI.
-- Plain `Error` from backend/system failures should fall back to a safe user-facing message.
-- For new or touched Convex functions, use structured application errors from `packages/convex/convex/lib/appError.ts`:
-  - `{ message: string; code: string; severity?: "info" | "warning" | "error"; field?: string }`
-- Preserve return-union flows when failure is part of normal product behavior, such as rate-limit/blocking results from message send.
-- Existing string `ConvexError` values are still valid, but structured errors are preferred for new/touched code.
-
-## Convex Commands
-Run from the repo root with a workspace filter:
-```bash
-bun run --filter '@aqsha/convex' codegen
-bun run --filter '@aqsha/convex' deploy
-bun run --filter '@aqsha/convex' logs
-bun run --filter '@aqsha/convex' test
-```
+- Normalize client-side API errors through `apps/web/lib/api-error.ts` (`readableApiErrorMessage(error, fallback)`); never expose raw `error.message`.
+- For new or touched backend code, return structured application errors from `packages/db/src/appError.ts`: `{ message, code, severity?, field? }`.
+- Preserve return-union flows when failure is part of normal product behavior, such as rate-limit / billing-block results.
 
 ## TypeScript
-- Base config: `tsconfig.base.json` (ES2022, Bundler resolution, strict, noEmit).
-- `apps/web/tsconfig.json` is app-specific.
-- `packages/convex/tsconfig.json` and `packages/ui/tsconfig.json` own their package checks.
+- Base config: `tsconfig.base.json` (ES2022, Bundler resolution, strict, noEmit). Each workspace owns its `tsconfig.json`.
 
 ## Notable Defaults
-- `apps/web` consumes generated Convex exports through `@aqsha/convex/api` and `@aqsha/convex/server`.
-- `apps/web` consumes `@aqsha/ui`.
-- `packages/convex`, `apps/agents`, and `packages/agent-contracts` have `vitest` test runners configured.
+- `apps/web` consumes the API's `App` type for Eden Treaty (no codegen) and `@aqsha/ui`. It must not import `@aqsha/db` / `@aqsha/services`.
+- Business logic lives once in `packages/services`; routes, workers, and the agent are thin callers.
+- Test runners: `packages/db`, `packages/chat-core`, `packages/services`, `apps/api`.

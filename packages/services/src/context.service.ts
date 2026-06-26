@@ -23,7 +23,7 @@ export type HydratedContext = {
  * ke proses eve. Sisi eve, tool `search_thread_documents` bisa men-scope RAG ke
  * `workspaceIds` yang dikembalikan di catatan.
  *
- * Diakses dari api-v2 (bun, src). Subpath `./context` + entri tsup ditambah agar
+ * Diakses dari api (bun, src). Subpath `./context` + entri tsup ditambah agar
  * konsisten dengan service lain (D-E) bila kelak dipakai dari proses eve.
  */
 export const ContextService = {

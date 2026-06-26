@@ -22,9 +22,8 @@ bun install
 bun dev
 ```
 
-`link-env.sh` cari semua file `.env*` yang gitignored di worktree utama (saat ini
-ada 8: `apps/agent-v2`, `apps/agents`, `apps/api-v2`, `apps/web-v2`, `apps/web`,
-`packages/convex`, `packages/db`, `packages/services`) lalu bikin symlink ke
+`link-env.sh` cari semua file `.env*` yang gitignored di worktree utama (mis.
+`apps/agent`, `apps/api`, `apps/web`, `packages/db`, `packages/services`) lalu bikin symlink ke
 worktree target. Symlink = satu sumber kebenaran: edit `.env` di worktree utama,
 semua worktree langsung ikut. Idempotent, aman dijalankan ulang.
 
@@ -43,7 +42,7 @@ yang sudah kamu lokalkan — jalankan sekali saja di worktree yang punya overrid
 ## Catatan
 
 - **`bun install` tetap perlu** di tiap worktree — `node_modules` tidak di-share.
-- **Convex/eve** punya runtime state lokal (`.eve/`, deploy keys). Untuk parallel
+- **eve** punya runtime state lokal (`.eve/`, `.workflow-data/`). Untuk parallel
   dev backend, pastikan tiap worktree menunjuk ke deployment yang benar lewat env.
 - Worktree tidak boleh checkout branch yang sudah dipakai worktree lain.
 
