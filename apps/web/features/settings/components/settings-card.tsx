@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-const panelClass =
-  "overflow-hidden rounded-xl border border-border bg-card";
+const panelClass = "overflow-hidden rounded-xl border border-border/70 bg-card";
 
 export function SettingsPanel({
   className,
@@ -17,18 +16,28 @@ export function SettingsPanel({
 export function SettingsPanelHeader({
   title,
   description,
+  action,
   className,
 }: {
   title: string;
   description?: string;
+  action?: ReactNode;
   className?: string;
 }) {
   return (
-    <header className={cn("border-b border-border/60 px-5 py-4 sm:px-6", className)}>
-      <h2 className="text-[15px] font-semibold tracking-tight text-foreground">{title}</h2>
-      {description ? (
-        <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{description}</p>
-      ) : null}
+    <header
+      className={cn(
+        "flex items-start justify-between gap-3 border-b border-border/60 px-5 py-4 sm:px-6",
+        className,
+      )}
+    >
+      <div className="min-w-0">
+        <h2 className="text-[15px] font-semibold tracking-tight text-foreground">{title}</h2>
+        {description ? (
+          <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{description}</p>
+        ) : null}
+      </div>
+      {action ? <div className="shrink-0">{action}</div> : null}
     </header>
   );
 }
@@ -53,12 +62,62 @@ export function SettingsPanelFooter({
   return (
     <footer
       className={cn(
-        "flex flex-wrap items-center gap-2 border-t border-border/60 bg-muted/20 px-5 py-4 sm:px-6",
+        "flex flex-wrap items-center gap-2 border-t border-border/60 bg-muted/20 px-5 py-3.5 sm:px-6",
         className,
       )}
     >
       {children}
     </footer>
+  );
+}
+
+/** Baris label/nilai full-bleed. Susun beberapa di dalam `divide-y divide-border/60`. */
+export function SettingsRow({
+  label,
+  description,
+  children,
+  className,
+}: {
+  label: string;
+  description?: string;
+  children?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 px-5 py-4 sm:px-6",
+        className,
+      )}
+    >
+      <div className="min-w-0">
+        <p className="text-[13px] font-medium text-foreground">{label}</p>
+        {description ? (
+          <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">{description}</p>
+        ) : null}
+      </div>
+      {children != null ? <div className="shrink-0 text-[13px]">{children}</div> : null}
+    </div>
+  );
+}
+
+/** Chip status netral berbasis token (mis. status langganan, "Saat ini"). */
+export function SettingsPill({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full border border-border/70 bg-muted/40 px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground",
+        className,
+      )}
+    >
+      {children}
+    </span>
   );
 }
 
@@ -72,7 +131,7 @@ export function SettingsSegmentedControl({
   return (
     <div
       className={cn(
-        "inline-flex flex-wrap gap-1 rounded-lg border border-border/60 bg-muted/30 p-1",
+        "inline-flex gap-0.5 rounded-lg border border-border/60 bg-muted/30 p-0.5",
         className,
       )}
     >
@@ -102,83 +161,5 @@ export function SettingsField({
       </div>
       {children}
     </div>
-  );
-}
-export function SettingsSummaryCard({
-  label,
-  description,
-  footer,
-  children,
-}: {
-  label: string;
-  description?: string;
-  footer?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <SettingsPanel>
-      <SettingsPanelHeader title={label} description={description} />
-      <SettingsPanelBody className="min-h-[108px]">{children}</SettingsPanelBody>
-      {footer ? <SettingsPanelFooter>{footer}</SettingsPanelFooter> : null}
-    </SettingsPanel>
-  );
-}
-
-export function CreditsUsageSection({
-  isUnlimitedCredits,
-  usagePercent,
-  creditsUsed,
-  creditsRemaining,
-  creditsLimit,
-  unlimitedLabel = "Kredit tercatat",
-  limitedLabel = "Total kredit dipakai",
-  billingLimitedLabel = "Total",
-}: {
-  isUnlimitedCredits: boolean;
-  usagePercent: number;
-  creditsUsed: number;
-  creditsRemaining: number;
-  creditsLimit: number;
-  unlimitedLabel?: string;
-  limitedLabel?: string;
-  billingLimitedLabel?: string;
-}) {
-  return (
-    <>
-      {isUnlimitedCredits ? (
-        <div className="flex items-center justify-between gap-4 text-sm font-medium">
-          <span className="text-foreground">{unlimitedLabel}</span>
-          <span className="rounded-md border border-border/60 bg-muted/60 px-2 py-1 font-mono text-[11px] text-muted-foreground">
-            Tanpa batas
-          </span>
-        </div>
-      ) : (
-        <>
-          <div className="flex items-center justify-between gap-4 text-sm font-medium">
-            <span className="text-foreground">{billingLimitedLabel ?? limitedLabel}</span>
-            <span className="font-mono text-sm font-semibold text-primary">{usagePercent}%</span>
-          </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted/70">
-            <div
-              className="h-full rounded-full bg-primary transition-all duration-300"
-              style={{ width: `${usagePercent}%` }}
-            />
-          </div>
-        </>
-      )}
-      <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">
-        {isUnlimitedCredits
-          ? `${creditsUsed} kredit tercatat periode ini. Tidak ada kuota bulanan.`
-          : `${creditsUsed} dipakai dan ${creditsRemaining} tersisa dari ${creditsLimit} kredit.`}
-      </p>
-    </>
-  );
-}
-
-export function PlanChip({ label, status }: { label: string; status: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/50 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-      {label} · {status}
-    </span>
   );
 }

@@ -20,6 +20,7 @@ Tambahkan halaman **Feed** (`/app/feed`) sejajar Explore yang mengubah Aqsha dar
 - **P1 — Jangan auto-melabeli "hoax".** Verdict badge hanya dari pemeriksa fakta manusia (ClaimReview/Mafindo) atau setelah HITL. Klaim hasil AI default ke `needs_context`/`unverified`.
 - **P2 — Bukti dulu, bukan label telanjang.** Setiap verdict tampilkan kalimat bukti + sumber + penjelasan + tanggal + provenance.
 - **P3 — Desain tenang & berbatas.** Optimalkan konversi inspirasi→riset, bukan dwell-time. Ada penanda "Kamu sudah update", tanpa infinite scroll murni.
+  > **Revisi (2026-06-17, Explore revamp D1 — `docs/explore-revamp-plan.md` Isu 5):** keputusan owner **membalik** "tanpa infinite scroll murni" → feed Jelajahi kini memakai **infinite scroll otomatis** (IntersectionObserver). Penanda "Kamu sudah update" + empty-state dipertahankan sebagai batas; tombol "Tampilkan lebih" dihapus.
 - **P4 — Reuse, jangan duplikasi.** Bangun di atas `explore`, `citationChecks` (taksonomi), provider+cache eksternal, runtime agent, dan flow `startThread` yang sudah ada.
 
 ## 3. Cakupan MVP
@@ -143,7 +144,7 @@ Genuinely baru: **hanya Google Fact Check & GDELT.** Keduanya daftar bucket rate
 4. **Verdict AI = jangan jadi label keras di MVP** → `verdictBy:"human"` untuk badge tampil; klaim `aqsha_ai` default `needs_context`/`unverified` + wajib HITL.
 5. **Rate-limit/billing pada fetch cron** → `limitExternal`/`limitOpenAlex` memotong kredit per-user; cron tak punya user → butuh service ownerUserId atau jalur cron yang skip `consumeCredits` tapi tetap pakai bucket global. **Putuskan sebelum Fase 1 backend.**
 6. **Ranking/serendipity** → MVP cukup `trendScore`+recency+interest; model serendipity penuh ke v2.
-7. **Doomscroll/biaya render bento** → feed berbatas ("Kamu sudah update" + "Tampilkan lebih"), bukan infinite scroll.
+7. **Doomscroll/biaya render bento** → feed berbatas ("Kamu sudah update" + "Tampilkan lebih"), bukan infinite scroll. _(Revisi 2026-06-17, Explore revamp D1: kini **infinite scroll otomatis** dengan batas "Kamu sudah update"/empty-state; tombol "Tampilkan lebih" dihapus.)_
 
 ## 10. Lampiran — file kunci
 `packages/convex/convex/schema.ts` · `agent/externalProviders.ts` · `agent/openalexProvider.ts` · `agent/messages.ts` · `agent/researchTools.ts` · `agent/hitlTools.ts` · `agent/runtime.ts` · `explore.ts`/`exploreModel.ts`/`exploreValidators.ts` · `lib/appError.ts` · `apps/web/features/explore/` · `apps/web/components/app-sidebar.tsx` · `apps/web/lib/convex-query.ts`

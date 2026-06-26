@@ -1,4 +1,10 @@
-export type ProductKey = "starterMonthly" | "starterYearly" | "plusMonthly" | "plusYearly";
+export type ProductKey =
+  | "starterMonthly"
+  | "starterYearly"
+  | "plusMonthly"
+  | "plusYearly"
+  | "ultraMonthly"
+  | "ultraYearly";
 export type BillingInterval = "month" | "year";
 
 export type Viewer = {
@@ -10,7 +16,7 @@ export type Viewer = {
 };
 
 export type BillingCurrent = {
-  planKey: "free" | "starter" | "plus" | "admin";
+  planKey: "free" | "starter" | "plus" | "ultra" | "admin";
   planLabel: string;
   status: string;
   productKey: string | null;
@@ -33,7 +39,7 @@ export type BillingCurrent = {
 };
 
 export type Plan = {
-  key: "free" | "starter" | "plus";
+  key: "free" | "starter" | "plus" | "ultra";
   label: string;
   monthlyPriceIdr: number;
   annualPriceIdr: number;
@@ -45,7 +51,7 @@ export type Plan = {
   features: string[];
   products: Array<{
     key: ProductKey;
-    polarProductId: string | null;
+    providerProductId: string | null;
     interval: BillingInterval;
     displayPriceIdr: number;
     configured: boolean;

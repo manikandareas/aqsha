@@ -65,7 +65,7 @@ export function WorkspaceChatSidePanel({
   );
 }
 
-export function WorkspaceLoading() {
+function WorkspaceLoading() {
   return (
     <div className={cn("grid gap-4", panelBodyPaddingClass)}>
       <p className="text-[12px] font-medium text-muted-foreground">

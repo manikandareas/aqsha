@@ -1,13 +1,6 @@
-import { redirect } from "next/navigation";
+import type { ReactNode } from "react";
 import { SettingsShell } from "@/features/settings/components/settings-shell";
-import { isAuthenticated } from "@/lib/auth-server";
 
-export default async function SettingsLayout({
-  children,
-}: Readonly<{ children: React.ReactNode }>) {
-  if (!(await isAuthenticated())) {
-    redirect("/sign-in");
-  }
-
+export default function SettingsLayout({ children }: { children: ReactNode }) {
   return <SettingsShell>{children}</SettingsShell>;
 }

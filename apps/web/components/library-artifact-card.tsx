@@ -1,18 +1,13 @@
 "use client";
 
-import {
-  AlertCircleIcon,
-  BracesIcon,
-  Code2Icon,
-  FileIcon,
-  FileTextIcon,
-  GitBranchIcon,
-  ImageIcon,
-  LinkIcon,
-  TableIcon,
-} from "@aqsha/ui/icons";
+import { AlertCircleIcon, ArtifactTypeIcon } from "@aqsha/ui/icons";
 import { LibraryCardFrame } from "@/components/library-card-frame";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  artifactTypeLabel,
+  formatArtifactYear,
+  provenanceLabel,
+} from "@/components/artifact-presentation";
 
 function LibraryArtifactCardComponent({
   title,
@@ -35,9 +30,8 @@ function LibraryArtifactCardComponent({
   onClick: () => void;
   onDoubleClick?: () => void;
 }) {
-  const presentation = getArtifactCardPresentation(artifactType);
-  const Icon = presentation.Icon;
-  const year = formatYear(createdAt);
+  const label = artifactTypeLabel(artifactType);
+  const year = formatArtifactYear(createdAt);
   const provenance = provenanceLabel(source);
 
   const header = (
@@ -120,8 +114,11 @@ function LibraryArtifactCardComponent({
             <span className="absolute left-0 top-0.5 size-3 rotate-[-14deg] rounded-[4px] bg-muted-foreground/45" />
             <span className="relative size-3.5 rounded-[4px] border border-card bg-muted-foreground/70" />
           </span>
-          <span className="text-[12px] font-semibold leading-none">{presentation.label}</span>
-          <Icon className="ml-auto size-3.5 text-muted-foreground" />
+          <span className="text-[12px] font-semibold leading-none">{label}</span>
+          <ArtifactTypeIcon
+            artifactType={artifactType}
+            className="ml-auto size-3.5 text-muted-foreground"
+          />
         </div>
       </button>
     </LibraryCardFrame>
@@ -129,76 +126,3 @@ function LibraryArtifactCardComponent({
 }
 
 export const LibraryArtifactCard = LibraryArtifactCardComponent;
-
-function formatYear(timestamp: number) {
-  const year = new Date(timestamp).getFullYear();
-  return Number.isFinite(year) ? String(year) : "----";
-}
-
-// Provenance marker only for outputs, where origin is otherwise ambiguous.
-// Sources (upload/url) are already conveyed by the type label (PDF/URL/...).
-function provenanceLabel(source?: "manual" | "upload" | "agent" | "url") {
-  if (source === "agent") return "Agent";
-  if (source === "manual") return "Catatan";
-  return null;
-}
-
-function getArtifactCardPresentation(artifactType: string | undefined) {
-  switch (artifactType) {
-    case "url":
-      return {
-        Icon: LinkIcon,
-        label: "URL",
-      };
-    case "pdf":
-      return {
-        Icon: FileTextIcon,
-        label: "PDF",
-      };
-    case "docx":
-      return {
-        Icon: FileIcon,
-        label: "DOCX",
-      };
-    case "html":
-      return {
-        Icon: Code2Icon,
-        label: "HTML",
-      };
-    case "svg":
-      return {
-        Icon: ImageIcon,
-        label: "SVG",
-      };
-    case "mermaid":
-      return {
-        Icon: GitBranchIcon,
-        label: "Mermaid",
-      };
-    case "json":
-      return {
-        Icon: BracesIcon,
-        label: "JSON",
-      };
-    case "csv":
-      return {
-        Icon: TableIcon,
-        label: "CSV",
-      };
-    case "code":
-      return {
-        Icon: Code2Icon,
-        label: "Code",
-      };
-    case "plain_text":
-      return {
-        Icon: FileTextIcon,
-        label: "Text",
-      };
-    default:
-      return {
-        Icon: FileTextIcon,
-        label: "Markdown",
-      };
-  }
-}

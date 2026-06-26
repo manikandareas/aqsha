@@ -1,189 +1,74 @@
-import type { ActivityEvent } from "@aqsha/agent-contracts";
-import type { PromptCommand } from "@aqsha/convex/prompt-commands";
-
-export type SendResult =
-  | {
-      ok: true;
-      threadId?: string;
-      messageId: string;
-      runId?: string;
-      workflowId?: string;
-    }
-  | {
-      ok: false;
-      reason:
-        | "rate_limited"
-        | "quota_exceeded"
-        | "subscription_required"
-        | "billing_inactive"
-        | "reply_in_progress";
-      retryAt?: number;
-      resetAt?: number;
-      requiredPlan?: "free" | "starter" | "plus";
-      creditsRemaining?: number;
-    };
-
 export type RateStatus = {
   ok: boolean;
-  retryAt: number | null;
   serverTime: number;
-};
-
-export type ChatMessage = {
-  id: string;
-  key: string;
-  role: "system" | "user" | "assistant" | "tool";
-  status: "pending" | "success" | "failed" | "streaming";
-  order: number;
-  stepOrder: number;
-  text?: string;
-  parts?: Array<{
-    type: string;
-    text?: string;
-    // AI SDK tool-part fields (present on `tool-<name>` / `dynamic-tool` parts).
-    toolCallId?: string;
-    toolName?: string;
-    state?: string;
-    input?: unknown;
-    output?: unknown;
-    errorText?: string;
-    approval?: { id: string; isAutomatic?: boolean; approved?: boolean; reason?: string };
-  }>;
+  canSend?: boolean;
+  reason?: string;
+  retryAt?: number;
 };
 
 export type ResearchRun = {
   _id: string;
-  promptMessageId?: string;
-  mode: "normal" | "deep";
-  executionKind: "inline" | "workflow";
-  status:
-    | "queued"
-    | "running"
-    | "waiting"
-    | "waiting_hitl"
-    | "completed"
-    | "failed"
-    | "canceled";
-  currentStep?: string;
-  sufficiencyStatus?:
-    | "unknown"
-    | "insufficient"
-    | "partial"
-    | "sufficient"
-    | "budget_exhausted";
-  verificationStatus?:
-    | "not_started"
-    | "checking"
-    | "passed"
-    | "revised"
-    | "partial"
-    | "failed";
-  activeArtifactId?: string;
-  // Unified statistical verification summary (serialized VerificationReport),
-  // written by the sandbox stat path (Track 2B / on-demand sandbox_compute).
-  // Null for citation-only runs until a stat pass runs.
-  verificationReportJson?: string;
-  retryable: boolean;
-  errorMessage?: string;
-  createdAt?: number;
-  completedAt?: number;
-  canceledAt?: number;
-  // Normalized activity timeline rendered by AgentRunBlock (plan §3) — the only
-  // run-progress representation. The orphaned `steps`/`events` mirror (unread by
-  // any component) was removed in the Fase-3 cleanup (plan §12).
-  activity: ActivityEvent[];
+  status: string;
+  activity?: unknown[];
 };
 
 export type ResearchArtifact = {
   _id: string;
-  runId?: string;
-  artifactType?:
-    | "markdown"
-    | "plain_text"
-    | "pdf"
-    | "docx"
-    | "html"
-    | "svg"
-    | "mermaid"
-    | "json"
-    | "csv"
-    | "code"
-    | "url";
   title: string;
-  currentVersionId?: string;
-  version?: {
-    _id: string;
-    versionNumber: number;
-    contentFormat: "markdown" | "html" | "plain" | "code" | "json";
-    title: string;
-    body?: string;
-    changeSummary?: string;
-    createdAt: number;
-  } | null;
-  createdAt: number;
+  artifactType?: string;
 };
 
 export type ResearchSource = {
   _id: string;
-  messageId?: string;
-  runId?: string;
-  usage: "candidate" | "cited" | "accepted" | "rejected";
-  origin: "web" | "arxiv" | "doi";
-  provider?: string;
+  runId: string;
   title: string;
-  locator: string;
-  url?: string;
-  doi?: string;
-  arxivId?: string;
-  snippet: string;
-  evidenceStrength: "strong" | "medium" | "weak";
-  // 4-step citation integrity verdict (Track 2A). Unset until the auto-verify
-  // pass completes after the run (the panel shows a pending state meanwhile).
-  integrityStatus?:
-    | "verified"
-    | "metadata_mismatch"
-    | "identifier_invalid"
-    | "not_found"
-    | "unverifiable";
-  integrityCheckedAt?: number;
-  readStatus?: "not_needed" | "ready" | "failed";
-  qualityReason?: string;
-  bucketName?: string;
-  discoveryQuery?: string;
-  createdAt: number;
+  url?: string | null;
 };
 
-export type SourceFocus =
-  | { type: "message"; messageId: string }
-  | { type: "run"; runId: string };
-
-export type TranscriptEntry =
-  | { kind: "message"; message: ChatMessage; assistantRun?: ResearchRun }
-  | { kind: "run"; run: ResearchRun };
-
-export type ResearchPanelState = {
-  activeArtifactId: string | null;
-  rightPanelOpen: boolean;
-  activeTab: "artifacts" | "sources";
-  sourceFocus: SourceFocus | null;
-  seenArtifactCount: number;
-};
-
-export type ThreadExperienceState = {
+export type SendResult = {
+  ok: boolean;
+  reason?: string;
   threadId?: string;
-  panel: ResearchPanelState;
-  activeRun?: ResearchRun;
 };
 
-export type ThreadExperienceAction =
-  | { type: "openArtifact"; artifactId: string }
-  | { type: "setPanelOpen"; open: boolean }
-  | { type: "markArtifactsSeen" };
+// Activity-timeline view-model. The eve timeline adapter
+// (`features/threads/lib/eve-timeline.ts`) derives `ActivityEvent[]` from eve
+// parts; the run-progress / subagent-detail components render it.
+export type ActivityStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "waiting_approval";
 
-export type ComposerSubmission = {
-  content: string;
-  agentKind: "lite" | "pro";
-  commandId?: string;
+export type ActivityActor = "main" | "subagent" | "tool" | "system";
+
+export type ActivityVisibility = "user" | "developer" | "hidden";
+
+export type ActivityType =
+  | "run"
+  | "tool"
+  | "subagent"
+  | "phase"
+  | "approval"
+  | "system";
+
+export type ActivityEvent = {
+  id: string;
+  runId: string;
+  parentId?: string;
+  seq: number;
+  type: ActivityType;
+  status: ActivityStatus;
+  actor: ActivityActor;
+  title: string;
+  description?: string;
+  summary?: string;
+  metadata?: Record<string, string | number | boolean>;
+  startedAt: number;
+  endedAt?: number;
+  durationMs?: number;
+  visibility: ActivityVisibility;
+  children?: ActivityEvent[];
 };
-
-export type ComposerCommand = PromptCommand | null;

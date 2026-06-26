@@ -16,7 +16,10 @@ export function SidebarProCard({ className }: { className?: string }) {
         className,
       )}
     >
-      <div className="relative aspect-[16/9] w-full overflow-hidden bg-white">
+      {/* The hero image is the tallest element. On mobile the sidebar is a
+          full-height sheet, so hide it there to keep the footer short and stop
+          it from pushing the thread list up. Shown again from md upward. */}
+      <div className="relative hidden aspect-[16/9] w-full overflow-hidden bg-white md:block">
         <Image
           src="/pro-card.png"
           alt=""
@@ -26,12 +29,12 @@ export function SidebarProCard({ className }: { className?: string }) {
         />
       </div>
 
-      <div className="grid gap-2.5 p-3">
+      <div className="grid gap-2 p-2.5 md:gap-2.5 md:p-3">
         <div className="grid gap-1">
           <p className="font-heading text-[13px] font-semibold leading-tight text-card-foreground">
             Buka Aqsha Pro
           </p>
-          <p className="text-[12px] leading-relaxed text-muted-foreground">
+          <p className="line-clamp-2 text-[12px] leading-relaxed text-muted-foreground md:line-clamp-none">
             Riset tanpa batas dan model paling kuat untuk menelaah paper.
           </p>
         </div>

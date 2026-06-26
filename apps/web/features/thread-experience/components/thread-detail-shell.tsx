@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { ResponsiveSidePanel } from "@/components/layout/responsive-side-panel";
 import { PanelBoardTitleDropdownTrigger } from "@/components/panel-title-dropdown-trigger";
@@ -20,11 +20,14 @@ import {
 import { WorkspaceLibrarySurface } from "@/features/workspaces/components/workspace-library-surface";
 import { WorkspaceBoardToolbar } from "@/features/workspaces/components/workspace-board-toolbar";
 import { useWorkspaceLibraryDialogState } from "@/features/workspaces/hooks/use-workspace-library-dialogs";
+import { ArtifactDetailPanel } from "@/features/workspaces/components/artifact-detail-view";
 import { useThreadExperienceData } from "../api/use-thread-experience-data";
+import type { ThreadShellLayoutProps } from "./component-types";
 import {
   ComposerMentionsProvider,
   usePanelContextSelection,
 } from "./composer-context-mentions";
+import { ThreadPanelProvider, useThreadPanel } from "./thread-panel-context";
 import { ThreadShellLayout } from "./thread-shell-layout";
 
 export function ThreadDetailShell({ threadId }: { threadId?: string }) {
@@ -43,7 +46,6 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
     retryRun,
     removeThread,
   } = useThreadExperienceData(threadId);
-  const [contextPanelOpen, setContextPanelOpen] = useState(false);
   const title = threadId
     ? (selectedThread?.title ?? "Thread tidak ditemukan")
     : "Thread baru";
@@ -63,49 +65,123 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
     ? (workspaceNameById.get(panelWorkspaceId) ?? "Workspace")
     : undefined;
 
-  const sidePanelContent = !threadId
-    ? <ThreadGlobalContextPanel workspaces={workspaces} />
-    : selectedThread != null
-      ? selectedThread.workspaceId
-        ? (
-            <ThreadWorkspaceLibraryPanel
-              workspaceId={selectedThread.workspaceId}
-              workspaceName={workspaceName ?? "Workspace"}
-            />
-          )
-        : <ThreadGlobalContextPanel workspaces={workspaces} />
-      : null;
-
-  const sidePanel = sidePanelContent ? (
-    <ResponsiveSidePanel open={contextPanelOpen}>{sidePanelContent}</ResponsiveSidePanel>
-  ) : undefined;
-
   return (
     <ComposerMentionsProvider
       threadId={threadId}
       ambientWorkspaceId={selectedThread?.workspaceId ?? null}
     >
-      <ThreadShellLayout
-        threads={threads}
-        onCreateThread={() => router.push("/app")}
-        onSelectThread={(id) => router.push(`/app/threads/${id}`)}
-        title={title}
-        threadId={threadId}
-        selectedThread={selectedThread}
-        rateStatus={rateStatus}
-        startThread={startThread}
-        sendMessage={sendMessage}
-        runs={runs}
-        artifacts={artifacts}
-        sources={sources}
-        rightPanelOpen={contextPanelOpen}
-        onRightPanelOpenChange={setContextPanelOpen}
-        onCancelRun={cancelRun}
-        onRetryRun={retryRun}
-        onDeleteThread={threadId ? handleDeleteThread : undefined}
-        sidePanel={sidePanel}
-      />
+      <ThreadPanelProvider key={threadId ?? "__draft__"}>
+        <ThreadDetailShellView
+          threadId={threadId}
+          title={title}
+          threads={threads}
+          selectedThread={selectedThread}
+          workspaces={workspaces}
+          workspaceName={workspaceName}
+          rateStatus={rateStatus}
+          startThread={startThread}
+          sendMessage={sendMessage}
+          runs={runs}
+          artifacts={artifacts}
+          sources={sources}
+          onCreateThread={() => router.push("/app")}
+          onSelectThread={(id) => router.push(`/app/threads/${id}`)}
+          onCancelRun={cancelRun}
+          onRetryRun={retryRun}
+          onDeleteThread={threadId ? handleDeleteThread : undefined}
+        />
+      </ThreadPanelProvider>
     </ComposerMentionsProvider>
+  );
+}
+
+type ThreadDetailShellViewProps = Omit<
+  ThreadShellLayoutProps,
+  "rightPanelOpen" | "onRightPanelOpenChange" | "sidePanel"
+> & {
+  workspaces: WorkspacePickerOption[];
+  workspaceName?: string;
+};
+
+// Inside `ThreadPanelProvider`: derives the single side-panel slot from the panel
+// mode. The artifact panel (a card was clicked) REPLACES the workspace-library /
+// global-context panel, with a back affordance to return to it. Open/close stay
+// in sync with `DetailSplitLayout` via `panel.isOpen` / `panel.setOpen` (so the
+// mobile close + header toggle keep working — answer-stream redesign Fase 4 §7).
+function ThreadDetailShellView({
+  threadId,
+  title,
+  threads,
+  selectedThread,
+  workspaces,
+  workspaceName,
+  rateStatus,
+  startThread,
+  sendMessage,
+  runs,
+  artifacts,
+  sources,
+  onCreateThread,
+  onSelectThread,
+  onCancelRun,
+  onRetryRun,
+  onDeleteThread,
+}: ThreadDetailShellViewProps) {
+  const panel = useThreadPanel();
+  const mode = panel?.mode ?? { kind: "closed" as const };
+
+  const contextContent = !threadId ? (
+    <ThreadGlobalContextPanel workspaces={workspaces} />
+  ) : selectedThread != null ? (
+    selectedThread.workspaceId ? (
+      <ThreadWorkspaceLibraryPanel
+        workspaceId={selectedThread.workspaceId}
+        workspaceName={workspaceName ?? "Workspace"}
+      />
+    ) : (
+      <ThreadGlobalContextPanel workspaces={workspaces} />
+    )
+  ) : null;
+
+  const subagentPanel = null; // Stub: subagent drill-down belum dipersist di eve V2.
+
+  const panelContent =
+    mode.kind === "artifact" ? (
+      <ArtifactDetailPanel
+        artifactId={mode.artifactId}
+        onClose={panel?.closePanel}
+      />
+    ) : mode.kind === "subagent" ? (
+      subagentPanel ?? contextContent
+    ) : (
+      contextContent
+    );
+
+  const sidePanel = panelContent ? (
+    <ResponsiveSidePanel open={panel?.isOpen ?? false}>{panelContent}</ResponsiveSidePanel>
+  ) : undefined;
+
+  return (
+    <ThreadShellLayout
+      threads={threads}
+      onCreateThread={onCreateThread}
+      onSelectThread={onSelectThread}
+      title={title}
+      threadId={threadId}
+      selectedThread={selectedThread}
+      rateStatus={rateStatus}
+      startThread={startThread}
+      sendMessage={sendMessage}
+      runs={runs}
+      artifacts={artifacts}
+      sources={sources}
+      rightPanelOpen={panel?.isOpen ?? false}
+      onRightPanelOpenChange={(open) => panel?.setOpen(open)}
+      onCancelRun={onCancelRun}
+      onRetryRun={onRetryRun}
+      onDeleteThread={onDeleteThread}
+      sidePanel={sidePanel}
+    />
   );
 }
 
@@ -121,13 +197,13 @@ function ThreadWorkspaceLibraryPanel({
   const router = useRouter();
   const libraryData = useWorkspaceLibraryData(workspaceId);
   const dialogState = useWorkspaceLibraryDialogState();
-  const titleById = useMemo(() => {
+  const titleById = (() => {
     const map = new Map<string, string>();
     for (const artifact of libraryData.artifacts) {
       map.set(artifact._id, artifact.title);
     }
     return map;
-  }, [libraryData.artifacts]);
+  })();
   const contextSelection = usePanelContextSelection({
     workspaceId,
     workspaceName,

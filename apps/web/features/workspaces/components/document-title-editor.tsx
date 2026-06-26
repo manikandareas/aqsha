@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /**
  * Notion-style document title: a large, flush, editable heading that sits above
@@ -37,19 +37,24 @@ export function DocumentTitleEditor({
     autosize();
   }, [value]);
 
-  const save = useCallback((next: string) => {
+  const save = (next: string) => {
     const trimmed = next.trim();
     if (!trimmed || trimmed === lastSavedRef.current) return;
     lastSavedRef.current = trimmed;
     void onRenameRef.current(trimmed);
-  }, []);
+  };
 
   useEffect(() => {
     const trimmed = value.trim();
     if (!trimmed || trimmed === lastSavedRef.current) return;
-    const timeout = window.setTimeout(() => save(value), 700);
+    const timeout = window.setTimeout(() => {
+      const t = value.trim();
+      if (!t || t === lastSavedRef.current) return;
+      lastSavedRef.current = t;
+      void onRenameRef.current(t);
+    }, 700);
     return () => window.clearTimeout(timeout);
-  }, [value, save]);
+  }, [value]);
 
   return (
     <textarea

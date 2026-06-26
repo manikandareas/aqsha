@@ -25,6 +25,7 @@ export type ThreadSummary = {
   messageCount: number;
   status: "idle" | "streaming" | "failed";
   lastAgentKind?: "lite" | "pro";
+  bucket?: "recent" | "older"; // dihitung BE (ThreadService.list) untuk grouping sidebar
 };
 
 export type ViewerSummary =

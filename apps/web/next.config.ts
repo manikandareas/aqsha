@@ -1,63 +1,21 @@
 import type { NextConfig } from "next";
 import path from "node:path";
 
+// Agent Astra (eve) = app TERPISAH `@aqsha/agent` (`eve dev`/`eve start`). web = pure
+// consumer: proxy same-origin `/eve/v1/*` → origin agent supaya `useEveAgent` tetap
+// same-origin (TANPA CORS; eve tak punya CORS bawaan) dan bearer Clerk diteruskan apa adanya.
+//
+// Proxy `/eve/v1/*` ADA DI Route Handler streaming (`app/eve/v1/[...path]/route.ts`), BUKAN
+// `rewrites()`: rewrites menahan stream long-lived (turn in-flight) → progres beku, boundary
+// `session.waiting` tak sampai (token resume hilang → HITL tak bisa dijawab), resume nav-balik macet.
+
 const nextConfig: NextConfig = {
   output: "standalone",
   outputFileTracingRoot: path.resolve(__dirname, "../.."),
   reactCompiler: true,
-  transpilePackages: ["@aqsha/ui", "@aqsha/convex"],
+  transpilePackages: ["@aqsha/ui", "@aqsha/api"],
   turbopack: {
     root: path.resolve(__dirname, "../.."),
-  },
-  async redirects() {
-    return [
-      {
-        // Feed merged into the unified discovery surface (feed-first default).
-        source: "/app/feed",
-        destination: "/app/explore?view=brief",
-        permanent: false,
-      },
-      {
-        source: "/feed",
-        destination: "/app/explore?view=brief",
-        permanent: false,
-      },
-      {
-        source: "/explore",
-        destination: "/app/explore",
-        permanent: false,
-      },
-      {
-        source: "/settings",
-        destination: "/app/settings",
-        permanent: false,
-      },
-      {
-        source: "/settings/:path*",
-        destination: "/app/settings/:path*",
-        permanent: false,
-      },
-      {
-        source: "/threads/:threadId",
-        destination: "/app/threads/:threadId",
-        permanent: false,
-      },
-      {
-        source: "/workspaces",
-        destination: "/app/workspaces",
-        permanent: false,
-      },
-      {
-        source: "/workspaces/:workspaceId",
-        destination: "/app/workspaces/:workspaceId",
-        permanent: false,
-      },
-      {
-        source: "/workspaces/:workspaceId/artifacts/:artifactId",
-        destination: "/app/workspaces/:workspaceId/artifacts/:artifactId",
-        permanent: false,
-      },
-    ];
   },
 };
 

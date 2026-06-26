@@ -2,11 +2,12 @@
 
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect } from "react";
+import { useEffect } from "react";
 import { ArrowLeftIcon, ArrowRight, Loader2Icon } from "@aqsha/ui/icons";
-import { api } from "@aqsha/convex/api";
+import { useQuery } from "@tanstack/react-query";
+import { useApi } from "@/lib/api-client";
+import { queryKeys, unwrap } from "@/lib/api-query";
 import { Button } from "@/components/ui/button";
-import { useConvexQueryData } from "@/lib/convex-query";
 import { OnboardingLayout } from "../components/onboarding-layout";
 import { OnboardingStepIndicator } from "../components/onboarding-step-indicator";
 import {
@@ -46,6 +47,7 @@ const BACK_TARGET: Partial<Record<OnboardingStep, OnboardingStep>> = {
 export function OnboardingPage() {
   const router = useRouter();
   const reduce = useReducedMotion();
+  const api = useApi();
   const flow = useOnboardingFlow();
   const {
     step,
@@ -63,7 +65,11 @@ export function OnboardingPage() {
     totalQuestions,
   } = flow;
 
-  const status = useConvexQueryData(api.onboarding.getStatus, {});
+  const statusQuery = useQuery({
+    queryKey: queryKeys.onboarding.status(),
+    queryFn: async () => unwrap(await api.onboarding.status.get()),
+  });
+  const status = statusQuery.data;
 
   // Only relevant at mount: bounce an already-onboarded user who lands here
   // directly. Once the flow advances past "welcome", status is ignored — so a
@@ -74,12 +80,12 @@ export function OnboardingPage() {
     }
   }, [status, step, router]);
 
-  const handleBack = useCallback(() => {
+  const handleBack = () => {
     const target = BACK_TARGET[step];
     if (target) setStep(target);
-  }, [step, setStep]);
+  };
 
-  const handlePrimary = useCallback(async () => {
+  const handlePrimary = async () => {
     switch (step) {
       case "welcome":
         setStep("background");
@@ -99,7 +105,7 @@ export function OnboardingPage() {
         router.replace(HOME_AFTER_ONBOARDING);
         return;
     }
-  }, [step, submit, setStep, router]);
+  };
 
   const isQuestionStep = questionIndex >= 0;
   const canPrimary =

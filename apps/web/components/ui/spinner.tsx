@@ -1,10 +1,11 @@
 import { cn } from "@/lib/utils"
-import { Loader2Icon } from "@aqsha/ui/icons"
+import { FlickerSpinner } from "./flicker-spinner"
 
-function Spinner({ className, ...props }: React.ComponentProps<"svg">) {
-  return (
-    <Loader2Icon role="status" aria-label="Loading" className={cn("size-4 animate-spin", className)} {...props} />
-  )
+// Canonical loading spinner. Renders the brand `FlickerSpinner` (a theme-aware
+// dot-grid that self-animates and respects reduced-motion): color follows the
+// `text-*` className via currentColor, size follows the `size-*` className.
+function Spinner({ className }: { className?: string }) {
+  return <FlickerSpinner className={cn("size-4", className)} />
 }
 
 export { Spinner }

@@ -8,6 +8,6 @@ node_modules
 **/dist
 **/.env
 **/.env.*
-.astra-artifacts
-.astra
+**/.eve
+**/.workflow-data
 coverage

@@ -1,0 +1,2 @@
+DROP INDEX "provider_usage_ledger_by_idempotency_key";--> statement-breakpoint
+CREATE UNIQUE INDEX "provider_usage_ledger_by_owner_idempotency_key" ON "provider_usage_ledger" USING btree ("owner_user_id","idempotency_key") WHERE "provider_usage_ledger"."idempotency_key" is not null;

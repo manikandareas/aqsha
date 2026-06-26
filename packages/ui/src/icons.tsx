@@ -49,6 +49,7 @@ import {
   FolderTreeIcon as HugeFolderTreeIcon,
   GaugeIcon as HugeGaugeIcon,
   GitBranchIcon as HugeGitBranchIcon,
+  GlobeIcon as HugeGlobeIcon,
   HandshakeIcon as HugeHandshakeIcon,
   HelpCircleIcon as HugeHelpCircleIcon,
   Home01Icon,
@@ -87,33 +88,38 @@ import {
   SquareIcon as HugeSquareIcon,
   Sun01Icon,
   TableIcon as HugeTableIcon,
+  Telescope01Icon,
   TerminalIcon,
   ThumbsDownIcon as HugeThumbsDownIcon,
   ThumbsUpIcon as HugeThumbsUpIcon,
   Upload01Icon,
   CloudUploadIcon,
   UserIcon,
+  Wrench01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { forwardRef } from "react";
+import type { Ref } from "react";
 
 import type { HugeiconsIconProps, IconSvgElement } from "@hugeicons/react";
 
 type IconProps = Omit<HugeiconsIconProps, "icon" | "altIcon" | "strokeWidth"> & {
   strokeWidth?: string | number;
+  ref?: Ref<SVGSVGElement>;
 };
 
 const createIcon = (icon: IconSvgElement) =>
-  forwardRef<SVGSVGElement, IconProps>(({ strokeWidth, ...props }, ref) => (
-    <HugeiconsIcon
-      ref={ref}
-      icon={icon}
-      strokeWidth={
-        typeof strokeWidth === "string" ? Number(strokeWidth) : strokeWidth
-      }
-      {...props}
-    />
-  ));
+  function Icon({ ref, strokeWidth, ...props }: IconProps) {
+    return (
+      <HugeiconsIcon
+        ref={ref}
+        icon={icon}
+        strokeWidth={
+          typeof strokeWidth === "string" ? Number(strokeWidth) : strokeWidth
+        }
+        {...props}
+      />
+    );
+  };
 
 export const AlertCircleIcon = createIcon(HugeAlertCircleIcon);
 export const ArchiveIcon = createIcon(HugeArchiveIcon);
@@ -160,11 +166,13 @@ export const FileText = createIcon(FileScriptIcon);
 export const FileTextIcon = createIcon(FileScriptIcon);
 export const FilterIcon = createIcon(HugeFilterIcon);
 export const Flag = createIcon(Flag01Icon);
+export const FlagIcon = createIcon(Flag01Icon);
 export const FolderIcon = createIcon(Folder01Icon);
 export const FolderTreeIcon = createIcon(HugeFolderTreeIcon);
 export const GaugeIcon = createIcon(HugeGaugeIcon);
 export const GitBranch = createIcon(HugeGitBranchIcon);
 export const GitBranchIcon = createIcon(HugeGitBranchIcon);
+export const GlobeIcon = createIcon(HugeGlobeIcon);
 export const Handshake = createIcon(HugeHandshakeIcon);
 export const HeartIcon = createIcon(FavouriteIcon);
 export const HelpCircleIcon = createIcon(HugeHelpCircleIcon);
@@ -217,6 +225,7 @@ export const SquareIcon = createIcon(HugeSquareIcon);
 export const Sun = createIcon(Sun01Icon);
 export const SunIcon = createIcon(Sun01Icon);
 export const TableIcon = createIcon(HugeTableIcon);
+export const TelescopeIcon = createIcon(Telescope01Icon);
 export const ThumbsDownIcon = createIcon(HugeThumbsDownIcon);
 export const ThumbsUpIcon = createIcon(HugeThumbsUpIcon);
 export const Trash2Icon = createIcon(Delete02Icon);
@@ -224,6 +233,49 @@ export const TrendingUpIcon = createIcon(ChartUpIcon);
 export const UploadCloudIcon = createIcon(CloudUploadIcon);
 export const UploadIcon = createIcon(Upload01Icon);
 export const UserRoundIcon = createIcon(UserIcon);
+export const WrenchIcon = createIcon(Wrench01Icon);
 export const RotateCcwIcon = createIcon(ArrowReloadHorizontalIcon);
 export const XCircleIcon = createIcon(CancelCircleIcon);
 export const XIcon = createIcon(Cancel01Icon);
+
+// Shared icon-per-artifact-type mapping (used by the workspace library card and
+// the in-chat artifact card). Lives here so every artifact surface draws from the
+// same Hugeicons-backed set; the textual label / provenance copy stays app-side.
+function getArtifactTypeIcon(artifactType: string | undefined): typeof FileTextIcon {
+  switch (artifactType) {
+    case "url":
+      return LinkIcon;
+    case "pdf":
+      return FileTextIcon;
+    case "docx":
+      return FileIcon;
+    case "html":
+    case "code":
+      return Code2Icon;
+    case "svg":
+      return ImageIcon;
+    case "mermaid":
+      return GitBranchIcon;
+    case "json":
+      return BracesIcon;
+    case "csv":
+      return TableIcon;
+    case "plain_text":
+      return FileTextIcon;
+    default:
+      return FileTextIcon;
+  }
+}
+
+/** Renders the icon for an artifact type (markdown/pdf/url/…). Exposed as a
+ *  component so consumers don't resolve a component during render. */
+export function ArtifactTypeIcon({
+  artifactType,
+  className,
+}: {
+  artifactType: string | undefined;
+  className?: string;
+}) {
+  const Icon = getArtifactTypeIcon(artifactType);
+  return <Icon className={className} />;
+}
