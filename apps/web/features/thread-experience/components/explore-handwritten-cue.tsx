@@ -11,7 +11,7 @@ export function ExploreHandwrittenCue({
 }) {
   return (
     <m.div
-      className="absolute bottom-7 left-4 flex items-center gap-1.5 sm:left-8"
+      className="absolute bottom-7 left-4 flex items-center gap-1.5 md:left-0 lg:-left-10 xl:-left-16"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5, ease: HOME_EASE_OUT, delay: 0.5 }}
