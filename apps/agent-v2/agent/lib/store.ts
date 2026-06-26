@@ -68,20 +68,64 @@ export async function appendThreadEvent(input: {
   event: { type: string; data?: unknown };
 }): Promise<void> {
   const type = input.event.type;
-  const data = (input.event.data ?? {}) as { turnId?: unknown };
+  const data = (input.event.data ?? {}) as { turnId?: unknown; stepIndex?: unknown };
   const turnId = typeof data.turnId === "string" ? data.turnId : null;
+  // `step_index` di-lift ke kolom (Phase 3, fix C) → compaction baca GROUP BY kolom, bukan
+  // ekspresi JSON yang men-detoast payload. Null untuk event non-step (lifecycle/dll.).
+  const stepIndex = typeof data.stepIndex === "number" ? data.stepIndex : null;
   const sql = getSql();
   await sql`
     insert into chat_thread_events
-      (thread_id, owner_user_id, event_index, type, turn_id, payload, created_at)
+      (thread_id, owner_user_id, event_index, type, turn_id, step_index, payload, created_at)
     values
       (
         ${input.sessionId}, ${input.ownerUserId},
         (select coalesce(max(event_index), -1) + 1 from chat_thread_events where thread_id = ${input.sessionId}),
-        ${type}, ${turnId}, ${sql.json(input.event as never)}, ${Date.now()}
+        ${type}, ${turnId}, ${stepIndex}, ${sql.json(input.event as never)}, ${Date.now()}
       )
     on conflict (thread_id, event_index) do update
-      set payload = excluded.payload, type = excluded.type, turn_id = excluded.turn_id
+      set payload = excluded.payload, type = excluded.type, turn_id = excluded.turn_id,
+          step_index = excluded.step_index
+  `;
+}
+
+/**
+ * B-strip (Phase 6, deploy ATOMIC) — saat sebuah step selesai, kosongkan payload delta
+ * `*.appended` yang SUDAH disusul untuk step itu, sisakan hanya delta TERAKHIR per (type, turn,
+ * step). Hasilnya: teks final + reasoning final tetap UTUH (delta terakhir tak di-strip), tapi
+ * delta kumulatif besar di tengah (sumber O(n²) 32MB) jadi `{"stripped":true}` → at-rest KB.
+ *
+ * Baris TIDAK dihapus (event_index tak berubah) → cursor resume = max(event_index)+1 NOL berubah
+ * (event terakhir thread = lifecycle non-delta, selalu disimpan). Read-path (`listByThread`) sudah
+ * mem-filter delta tersusul, jadi payload-nya tak pernah dibaca → aman dikosongkan. Token-level
+ * realtime tetap dari stream durable eve (bukan tabel ini). 1 UPDATE/step.
+ *
+ * Idempoten (`payload->>'stripped' is null` → skip yang sudah di-strip saat step RE-RUN durable);
+ * EXISTS(later) = "ada delta tipe sama yang lebih baru" = tersusul. Di-`swallow` di hook. JANGAN
+ * pengaruhi idempotency-key billing `step.completed` (operasi terpisah).
+ */
+export async function stripSupersededDeltas(input: {
+  sessionId: string;
+  turnId: string;
+  stepIndex: number;
+}): Promise<void> {
+  const sql = getSql();
+  await sql`
+    update chat_thread_events e
+    set payload = ${sql.json({ stripped: true } as never)}
+    where e.thread_id = ${input.sessionId}
+      and e.turn_id = ${input.turnId}
+      and e.step_index = ${input.stepIndex}
+      and e.type in ('message.appended', 'reasoning.appended')
+      and e.payload ->> 'stripped' is null
+      and exists (
+        select 1 from chat_thread_events l
+        where l.thread_id = ${input.sessionId}
+          and l.turn_id = ${input.turnId}
+          and l.step_index = ${input.stepIndex}
+          and l.type = e.type
+          and l.event_index > e.event_index
+      )
   `;
 }
 

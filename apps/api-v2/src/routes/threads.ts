@@ -203,14 +203,15 @@ export const threads = new Elysia({ prefix: "/threads" })
     },
     { auth: true },
   )
-  // Handle-resume eve (continuationToken) dari KLIEN (`useAstraAgent onSessionChange`).
-  // Token KLIEN (ter-namespace sekali) — bukan `channel.continuationToken` server (ganda) →
-  // approval HITL `inputResponses` lintas-reload bisa di-`deliver`. Owner-gated di service.
+  // Handle-resume eve (continuationToken) — di-upsert SERVER-SIDE oleh proxy-tee respons
+  // create/continue eve (`web-v2 app/eve/v1/[...path]/route.ts`), BUKAN klien. Token dari
+  // respons create-POST = ber-namespace TUNGGAL (`eve:<uuid>`); RACE-PROOF (insert-if-absent,
+  // owner-guard di repo) karena respons create (202) bisa mendahului hook `session.started`.
   .post(
-    "/:id/session",
+    "/:id/session-token",
     ({ ownerUserId, params, body }) => {
       const { db } = getDb();
-      return ThreadService.saveContinuation(db, {
+      return ThreadService.upsertContinuationToken(db, {
         ownerUserId,
         threadId: params.id,
         continuationToken: body.continuationToken,

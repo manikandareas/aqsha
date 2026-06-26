@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNull, lt, or } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
 import { type ChatThread, chatThreads, type NewChatThread } from "../schema/chatThreads";
 import { type KeysetCursor, encodeKeysetCursor } from "../cursor";
 import type { DbOrTx } from "../types";
@@ -55,6 +55,38 @@ export const ChatThreadRepo = {
   },
 
   /**
+   * Upsert continuation token RACE-PROOF (Phase 2 proxy-tee). Respons create-POST eve (202)
+   * mendahului hook `session.started` yang membuat row, jadi row bisa BELUM ada → insert-if-absent
+   * (row minimal milik caller; owner = Clerk sub = eve principalId). Bila row sudah ada → update
+   * token saja, `setWhere owner` mencegah caller lain menimpa token thread bukan miliknya
+   * (id = ULID tak-bisa-ditebak; defensif). TIDAK menyentuh `status` saat update (jangan timpa
+   * lifecycle turn). Idempoten + tanpa assertOwner (row mungkin belum ada).
+   */
+  async upsertContinuationToken(
+    db: DbOrTx,
+    input: { id: string; ownerUserId: string; continuationToken: string },
+  ): Promise<void> {
+    const now = Date.now();
+    await db
+      .insert(chatThreads)
+      .values({
+        id: input.id,
+        ownerUserId: input.ownerUserId,
+        status: "streaming",
+        agentKind: "lite",
+        continuationToken: input.continuationToken,
+        lastActivityAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: chatThreads.id,
+        set: { continuationToken: input.continuationToken, updatedAt: now },
+        setWhere: eq(chatThreads.ownerUserId, input.ownerUserId),
+      });
+  },
+
+  /**
    * Klaim atomik generasi auto-title (Slice 6.8). `title_status: null → 'generating'`
    * via guard `where title_status IS NULL` → `RETURNING` → hanya satu pemanggil yang
    * "menang". `true` ⇒ klaim baru: turn pertama (status masih null) DAN belum di-rename
@@ -85,6 +117,31 @@ export const ChatThreadRepo = {
 
   async deleteById(db: DbOrTx, id: string): Promise<void> {
     await db.delete(chatThreads).where(eq(chatThreads.id, id));
+  },
+
+  /**
+   * Thread "zombie" (Phase 5, fix E): `status='streaming'` yang turn-nya MATI mid-stream (crash /
+   * ENOSPC / dev restart) tanpa menulis event terminal → klien `isStreamActive` true selamanya
+   * (composer terkunci, refresh tak menolong). Kandidat = `streaming` + `last_activity_at < cutoff`
+   * (plan: ambang 30 mnt > gap subagent sah ~5,7 mnt).
+   *
+   * Guard `not exists (event >= cutoff)`: cegah FALSE-POSITIVE — `last_activity_at` hanya di-bump
+   * oleh message.completed, jadi turn yang masih hidup tapi sedang stream token (delta `*.appended`
+   * tiap ~330ms) atau tool/subagent bisa terlihat "basi" oleh last_activity_at saja. Event-recency
+   * memastikan kita hanya reconcile turn yang BENAR-BENAR diam (tak ada event apa pun sejak cutoff)
+   * — reconcile turn hidup = data loss (turn mahal ter-corrupt), jadi guard ini wajib.
+   */
+  async findStaleStreaming(db: DbOrTx, cutoff: number): Promise<ChatThread[]> {
+    return db
+      .select()
+      .from(chatThreads)
+      .where(
+        and(
+          eq(chatThreads.status, "streaming"),
+          lt(chatThreads.lastActivityAt, cutoff),
+          sql`not exists (select 1 from chat_thread_events e where e.thread_id = ${chatThreads.id} and e.created_at >= ${cutoff})`,
+        ),
+      );
   },
 
   /** List keyset milik owner, DESC `(lastActivityAt, id)`. `{ items, nextCursor }`. */

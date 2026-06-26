@@ -8,6 +8,7 @@ import {
   recordAssistantMessage,
   recordUserMessage,
   setThreadStatus,
+  stripSupersededDeltas,
 } from "../lib/store.ts";
 
 /**
@@ -122,6 +123,15 @@ export default defineHook({
           idempotencyKey: `${ctx.session.id}:${event.data.turnId}:${event.data.stepIndex}`,
         });
       });
+      // B-strip (Phase 6): step selesai → kosongkan payload delta tersusul step ini (at-rest KB).
+      // Swallow TERPISAH dari billing — gagal-strip tak boleh ganggu debit (dan sebaliknya).
+      await swallow("strip", () =>
+        stripSupersededDeltas({
+          sessionId: ctx.session.id,
+          turnId: event.data.turnId,
+          stepIndex: event.data.stepIndex,
+        }),
+      );
     },
 
     async "turn.completed"(_event, ctx) {

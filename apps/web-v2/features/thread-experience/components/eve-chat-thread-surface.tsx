@@ -63,12 +63,10 @@ export function EveChatThreadSurface({
   // Event stream eve persisted (1:1) = sumber timeline reload + cursor resume. `useThreadMessages`
   // = fallback thread LAMA (pra-event). `useThread` = resume handle (continuationToken) + pending.
   const threadDetail = useThread(threadId ?? "", Boolean(threadId));
-  const eventsQuery = useThreadEvents(threadId ?? "", {
-    enabled: Boolean(threadId),
-    poll: (latestEvents) =>
-      isStreamActive(latestEvents) ||
-      (latestEvents.length === 0 && threadDetail.data?.status === "streaming"),
-  });
+  // Snapshot SEKALI (cold-load). Turn in-flight di-stream live oleh resume stream di
+  // `ChatSurface` (`use-thread-resume`), bukan poll. `streamActive` (status + event terakhir
+  // snapshot) menentukan apakah resume dibuka; settle → invalidate → snapshot refetch.
+  const eventsQuery = useThreadEvents(threadId ?? "", Boolean(threadId));
   const messagesQuery = useThreadMessages(threadId ?? "", Boolean(threadId));
   const events = useMemo(() => eventsQuery.data ?? [], [eventsQuery.data]);
   const streamActive = useMemo(

@@ -10,6 +10,7 @@ import { Spinner } from "@/components/ui/spinner";
 import type { TimelineMessage, TimelinePart } from "../lib/eve-timeline";
 import type { ResearchSource } from "../types";
 import { ChatArtifactCard } from "./chat-artifact-card";
+import { ElapsedLabel } from "./elapsed-label";
 import { InlineSources } from "./sources-panel";
 import { ToolRow } from "./tool-row";
 
@@ -241,29 +242,6 @@ function MessageActions({ text, onRegenerate }: { text: string; onRegenerate?: (
         </button>
       ) : null}
     </div>
-  );
-}
-
-/**
- * Label "bekerja" dengan elapsed yang berdetak (muncul setelah 10 dtk). Riset mendalam yang
- * menunggu subagent task-mode bisa diam bermenit-menit tanpa event; timer yang jalan meyakinkan
- * "masih bekerja", bukan beku. Terisolasi → hanya komponen ini yang re-render tiap detik.
- */
-function ElapsedLabel({ base }: { base: string }) {
-  const [start] = useState(() => Date.now());
-  const [now, setNow] = useState(start);
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-  const secs = Math.floor((now - start) / 1000);
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  const label = secs < 10 ? `${base}…` : `${base}… ${m > 0 ? `${m}m ` : ""}${s}s`;
-  return (
-    <Shimmer as="span" className="font-medium">
-      {label}
-    </Shimmer>
   );
 }
 

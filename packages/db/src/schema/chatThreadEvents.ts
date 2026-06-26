@@ -1,4 +1,13 @@
-import { bigint, bigserial, integer, jsonb, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
+import {
+  bigint,
+  bigserial,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 import { chatThreads } from "./chatThreads";
 import { users } from "./users";
 
@@ -42,11 +51,20 @@ export const chatThreadEvents = pgTable(
     eventIndex: integer("event_index").notNull(),
     type: text("type").notNull(),
     turnId: text("turn_id"),
+    // `payload.data.stepIndex` di-lift ke kolom (Phase 3): compaction jalur-baca (`listByThread`)
+    // GROUP BY kolom ini, bukan ekspresi JSON `payload->'data'->>'stepIndex'` yang men-DETOAST
+    // SELURUH payload (32MB) tiap panggil hanya untuk membaca satu int → cold-load ~2 dtk. Nullable
+    // (event non-step / event lama pra-backfill).
+    stepIndex: integer("step_index"),
     payload: jsonb("payload").$type<unknown>().notNull(),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
-  // UNIQUE (thread_id, event_index) sekaligus melayani lookup + ordering replay per thread.
-  (t) => [uniqueIndex("chat_thread_events_thread_event_index").on(t.threadId, t.eventIndex)],
+  (t) => [
+    // UNIQUE (thread_id, event_index) sekaligus melayani lookup + ordering replay per thread.
+    uniqueIndex("chat_thread_events_thread_event_index").on(t.threadId, t.eventIndex),
+    // Mendukung GROUP BY compaction delta (`listByThread`) tanpa detoast payload (Phase 3).
+    index("chat_thread_events_thread_type_step").on(t.threadId, t.type, t.stepIndex),
+  ],
 );
 
 export type ChatThreadEvent = typeof chatThreadEvents.$inferSelect;

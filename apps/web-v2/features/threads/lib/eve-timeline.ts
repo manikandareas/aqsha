@@ -277,7 +277,14 @@ export function acceptsFreeformText(
 export function pendingInputRequests(
   events: readonly EveAgentReducerEvent[],
 ): PendingInputRequest[] {
-  const { messages } = reduceEventsToMessageData(events);
+  return pendingRequestsFromMessages(reduceEventsToMessageData(events).messages);
+}
+
+/** Scan pesan ter-reduce untuk request HITL parkir. Dipakai langsung saat `messages`
+ *  sudah di-reduce (hindari reduce ganda dgn `eventsToTimeline`). */
+export function pendingRequestsFromMessages(
+  messages: readonly EveMessage[],
+): PendingInputRequest[] {
   let last: EveMessage | undefined;
   for (const m of messages) if (m.role === "assistant") last = m;
   if (!last) return [];
@@ -330,10 +337,11 @@ const SETTLED_OR_PARKED_LAST = new Set([...SETTLED_EVENT_TYPES, "input.requested
  * - selain itu (`actions.requested`/`action.result`/`step.*`/`reasoning.*`/`message.*`/
  *   `subagent.*`/`turn.started`) → masih eksekusi → aktif.
  *
- * Dipakai (a) menyalakan poll endpoint events (progress in-flight terlihat setelah refresh),
+ * Dipakai (a) memutuskan membuka resume stream (turn in-flight terlihat setelah refresh),
  * (b) gate indikator live + lock composer (`resuming`). Turn berurutan (eve serial per
- * session) → event terakhir mencerminkan state turn terbaru. (`session.*` tak dipersist,
- * jadi `turn.completed`/`input.requested` adalah penanda terakhir yang tersimpan.)
+ * session) → event terakhir mencerminkan state turn terbaru. (`session.*` DIPERSIST 1:1 —
+ * lihat hook proyeksi `"*"` + DB; `session.waiting` parkir HITL = penanda terakhir tersimpan,
+ * jadi resume yang menariknya bersih → `isStreamActive` false → composer unlock.)
  *
  * Catatan: turn yang MACET (proses mati tanpa `turn.completed`) tetap tampak aktif →
  * poll sampai user pindah thread; reconciler server-side adalah peningkatannya.

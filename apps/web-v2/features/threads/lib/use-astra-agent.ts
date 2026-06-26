@@ -64,22 +64,30 @@ export function useAstraAgent(initialSession?: {
   const discoverFirstTurnSession = useCallback(async () => {
     if (discoveringRef.current || boundRef.current) return;
     discoveringRef.current = true;
-    const since = Date.now() - DISCOVER_SINCE_BUFFER_MS;
-    for (let attempt = 0; attempt < DISCOVER_ATTEMPTS && !boundRef.current; attempt += 1) {
-      const thread = await api.threads["recent-active"]
-        .get({ query: { since } })
-        .then((r) => unwrap(r) as ChatThread | null)
-        .catch(() => null);
-      if (thread?.id) {
-        sessionIdRef.current = thread.id;
-        if (!boundRef.current && typeof window !== "undefined") {
-          boundRef.current = true;
-          window.history.replaceState(window.history.state, "", `/app/threads/${thread.id}`);
-          qc.invalidateQueries({ queryKey: queryKeys.threads.all });
+    try {
+      const since = Date.now() - DISCOVER_SINCE_BUFFER_MS;
+      for (let attempt = 0; attempt < DISCOVER_ATTEMPTS && !boundRef.current; attempt += 1) {
+        const thread = await api.threads["recent-active"]
+          .get({ query: { since } })
+          .then((r) => unwrap(r) as ChatThread | null)
+          .catch(() => null);
+        if (thread?.id) {
+          sessionIdRef.current = thread.id;
+          if (!boundRef.current && typeof window !== "undefined") {
+            boundRef.current = true;
+            window.history.replaceState(window.history.state, "", `/app/threads/${thread.id}`);
+            qc.invalidateQueries({ queryKey: queryKeys.threads.all });
+          }
+          return;
         }
-        return;
+        await new Promise((resolve) => setTimeout(resolve, DISCOVER_DELAY_MS));
       }
-      await new Promise((resolve) => setTimeout(resolve, DISCOVER_DELAY_MS));
+    } finally {
+      // Lepas guard tiap ronde selesai: bila SEMUA attempt gagal (hook `session.started`
+      // lambat) tanpa ini `discoveringRef` macet `true` → `onEvent` berikutnya early-return →
+      // discovery mati permanen untuk mount ini (URL baru terkoreksi saat turn selesai). Pada
+      // jalur sukses `boundRef` sudah `true` jadi guard tetap short-circuit.
+      discoveringRef.current = false;
     }
   }, [api, qc]);
 
@@ -121,16 +129,10 @@ export function useAstraAgent(initialSession?: {
         boundRef.current = true;
         window.history.replaceState(window.history.state, "", `/app/threads/${session.sessionId}`);
       }
-      // Persist handle-resume eve KLIEN (ter-namespace SEKALI) → approval HITL `inputResponses`
-      // + follow-up lintas-reload bisa di-`deliver`. eve menamespace lagi saat dikirim balik;
-      // token server (`channel.continuationToken`) ganda → `deliver` gagal (lihat ThreadService
-      // .saveContinuation). Best-effort; turn settle berikutnya menulis ulang token terbaru.
-      if (session.sessionId && session.continuationToken) {
-        void api
-          .threads({ id: session.sessionId })
-          .session.post({ continuationToken: session.continuationToken })
-          .catch(() => {});
-      }
+      // Token continuation TIDAK lagi ditangkap di sini: proxy-tee respons create/continue eve
+      // (`app/eve/v1/[...path]/route.ts` → upsert race-proof api-v2) yang menyimpannya server-side,
+      // andal walau turn parkir SEBELUM klien bind sessionId (akar fix B). onSessionChange cuma
+      // mengoreksi URL ke id eve otoritatif.
     },
     onFinish() {
       qc.invalidateQueries({ queryKey: queryKeys.threads.all });

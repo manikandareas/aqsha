@@ -17,11 +17,12 @@ import { useSendStatus, useThreadSources, useThreadsList } from "../api";
 import {
   acceptsFreeformText,
   buildOrderedLog,
-  eventsToTimeline,
+  evePartsToTimeline,
   type IndexedEvent,
   isApprovalRequest,
   isStreamActive,
-  pendingInputRequests,
+  pendingRequestsFromMessages,
+  reduceEventsToMessageData,
   type InputResponsePayload,
   type TimelineMessage,
 } from "../lib/eve-timeline";
@@ -165,28 +166,33 @@ export function ChatSurface({
     [initialEvents, live, liveStartIndex],
   );
 
-  // `busy` (loading + gate composer/HITL) diturunkan dari BASE (sudah memuat event live resume),
-  // bukan dari `streamActive` prop yang lag di belakang poll persisted. Efek: kartu HITL muncul
-  // SEKETIKA turn parkir (`session.waiting`/`input.requested` di base), tanpa jeda ≤2 dtk.
-  // `agent.status` tetap perlu untuk awal warm-send (base masih kosong sebelum event pertama).
+  // `busy` (loading + gate composer/HITL) diturunkan dari BASE (snapshot ⊕ ekor live: resume
+  // stream cold-load atau `agent.events` warm-send), bukan dari `streamActive` prop. Efek: kartu
+  // HITL muncul SEKETIKA turn parkir (`session.waiting`/`input.requested` masuk base — refresh
+  // ke turn parkir langsung dari snapshot karena `session.*` dipersist 1:1; turn yang berjalan
+  // saat refresh → resume menarik boundary). `agent.status` tetap perlu untuk awal warm-send
+  // (base masih kosong sebelum event pertama).
   const busy =
     agent.status === "submitted" ||
     agent.status === "streaming" ||
     resuming ||
     isStreamActive(base);
-  // Reduce event log → timeline SEKALI per perubahan log/busy (bukan tiap render — keystroke
-  // composer, toggle status, dll. tak memicu replay reducer + merge O(n) ulang).
+  // Reduce event log → pesan SEKALI per perubahan `base` (lewat `defaultMessageReducer`).
+  // Dipakai bersama oleh timeline + scan HITL → tak ada replay reducer ganda.
+  const reduced = useMemo(() => reduceEventsToMessageData(base), [base]);
+  // Timeline di-derive SEKALI per perubahan pesan/busy (bukan tiap render — keystroke
+  // composer, toggle status, dll. tak memicu reduce + merge O(n) ulang).
   const messages = useMemo(
     () =>
       appendPendingUserMessage(
-        [...legacyHistory, ...eventsToTimeline(base, busy)],
+        [...legacyHistory, ...evePartsToTimeline(reduced.messages, busy)],
         pendingUserMessage,
       ),
-    [legacyHistory, base, busy, pendingUserMessage],
+    [legacyHistory, reduced, busy, pendingUserMessage],
   );
   const hitlRequests = useMemo(
-    () => (!busy ? pendingInputRequests(base) : []),
-    [base, busy],
+    () => (!busy ? pendingRequestsFromMessages(reduced.messages) : []),
+    [reduced, busy],
   );
   const hasHitlPrompt = hitlRequests.length > 0;
   const hasApprovalPrompt = hitlRequests.some(isApprovalRequest);
@@ -205,9 +211,10 @@ export function ChatSurface({
     prevResuming.current = resuming;
   }, [resuming, sessionId, qc]);
 
-  // Poll fallback bisa melihat event terminal/parked sebelum resume stream selesai. Saat state
-  // persisted berubah dari active → settled, sinkronkan detail/sidebar/sources tanpa menunggu
-  // stream hook.
+  // Snapshot persisted (di-refetch saat invalidate) bisa berubah active → settled tanpa lewat
+  // siklus `resuming` (mis. refresh ke turn yang sudah parkir). Saat itu, sinkronkan
+  // detail/sidebar/sources. Redundan dgn efek `prevResuming` untuk jalur resume, tapi murah +
+  // menutup jalur non-resume.
   const prevStreamActive = useRef(false);
   useEffect(() => {
     if (prevStreamActive.current && !streamActive && sessionId) {
@@ -221,6 +228,10 @@ export function ChatSurface({
   // Retry (Slice 6.8): simpan teks turn terakhir; saat error, kembalikan ke composer
   // (resend = turn baru; turn gagal tanpa step.completed = tak ada debit → no re-charge).
   const [lastSent, setLastSent] = useState("");
+  // Kegagalan `agent.send()` (mis. eve menolak saat status≠ready akibat double-click/race, token
+  // kedaluwarsa, continuationToken hilang). `agent.error` HANYA terisi dari gagal stream, BUKAN
+  // dari promise send yang reject → tanpa ini jawaban HITL/pesan hilang sunyi tanpa umpan balik.
+  const [sendError, setSendError] = useState<string | null>(null);
 
   // Sumber riset per-turn (research_sources, di-map via turnId) → InlineSources di bawah
   // jawaban turn yang menghasilkannya. Refetch saat turn selesai (gated !busy).
@@ -240,12 +251,14 @@ export function ChatSurface({
   // `clearPending` saat kirim gagal. eve men-stream user message-nya sendiri (`message.received`).
   const sendTurn = (text: string, clientContext?: string[]) => {
     setLastSent(text);
+    setSendError(null);
     if (sessionId) {
       void api.threads({ id: sessionId }).pending.post({ message: text }).catch(() => {});
     }
     void agent
       .send({ message: text, ...(clientContext ? { clientContext } : {}) })
       .catch(() => {
+        setSendError("Gagal mengirim pesan. Coba lagi.");
         if (sessionId) void api.threads({ id: sessionId }).pending.delete().catch(() => {});
       });
   };
@@ -259,7 +272,10 @@ export function ChatSurface({
   };
 
   const respondToInput = (response: InputResponsePayload) => {
-    void agent.send({ inputResponses: [response] }).catch(() => {});
+    setSendError(null);
+    void agent.send({ inputResponses: [response] }).catch(() => {
+      setSendError("Gagal mengirim jawaban. Coba lagi.");
+    });
   };
 
   // Kirim dari composer. Bila ada pertanyaan freeform yang sedang parkir (BUKAN approval),
@@ -272,9 +288,12 @@ export function ChatSurface({
       ? hitlRequests.filter((r) => !isApprovalRequest(r) && acceptsFreeformText(r))
       : [];
     if (freeformTargets.length > 0) {
+      setSendError(null);
       void agent
         .send({ inputResponses: freeformTargets.map((r) => ({ requestId: r.requestId, text })) })
-        .catch(() => {});
+        .catch(() => {
+          setSendError("Gagal mengirim jawaban. Coba lagi.");
+        });
       return;
     }
     sendTurn(payload.text, payload.clientContext);
@@ -309,8 +328,10 @@ export function ChatSurface({
               sourcesByTurn={sourcesByTurn}
               onRegenerate={regenerate}
             />
-            {agent.error ? (
-              <p className="text-red-500 text-sm">{agent.error.message || "Terjadi kesalahan."}</p>
+            {agent.error || sendError ? (
+              <p className="text-red-500 text-sm">
+                {agent.error?.message || sendError || "Terjadi kesalahan."}
+              </p>
             ) : null}
           </div>
         </ConversationContent>
