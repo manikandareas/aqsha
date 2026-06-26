@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { readableApiErrorMessage } from "@/lib/api-error";
 import { useApi } from "@/lib/api-client";
-import { unwrap } from "@/lib/api-query";
+import { queryKeys, unwrap } from "@/lib/api-query";
 import { MIN_INTERESTS, SOURCE_OTHER } from "./onboarding-options";
 
 const ONBOARDING_STEPS = ["welcome", "background", "interests", "source", "finish"] as const;
@@ -21,6 +21,7 @@ export type OnboardingAnswers = {
 
 export function useOnboardingFlow() {
   const api = useApi();
+  const queryClient = useQueryClient();
   const [step, setStep] = useState<OnboardingStep>("welcome");
   const [answers, setAnswers] = useState<OnboardingAnswers>({
     background: null,
@@ -40,6 +41,12 @@ export function useOnboardingFlow() {
             answers.source === SOURCE_OTHER.id ? answers.sourceOther.trim() : undefined,
         }),
       ),
+    // Tandai cache status=completed segera (sinkron, tanpa window refetch). Tanpa ini
+    // OnboardingGate masih baca `{completed:false}` lama → `router.replace("/app/explore")`
+    // dari step finish dipantul balik ke /onboarding → wizard remount ke step 1.
+    onSuccess: () => {
+      queryClient.setQueryData(queryKeys.onboarding.status(), { completed: true });
+    },
   });
 
   const setBackground = (id: string) => setAnswers((a) => ({ ...a, background: id }));
