@@ -17,8 +17,9 @@ import { ToolRow } from "./tool-row";
  * Timeline pesan (simplifikasi eve-chat-template) — render DATAR per pesan, mengikuti urutan
  * `defaultMessageReducer`. User = bubble; assistant = reasoning → blok "Proses" collapsible
  * (tool generik) → jawaban → artifact → sumber inline (per `turnId`) → aksi. TAK ADA grouping
- * run berfase / kartu HITL / kartu verifikasi-subagen (HITL = percakapan; verify+subagen =
- * tool-row generik). `/deep` multi-turn = beberapa pesan asisten berurutan — itu wajar.
+ * run berfase / kartu verifikasi-subagen (verify+subagen = tool-row generik). HITL approval /
+ * ask_question yang MENUNGGU jawaban dirender sebagai kartu di atas composer
+ * (`InputRequestPrompt`); jejak yang sudah diresolve tetap tampil sebagai tool-row.
  */
 export function MessageList({
   messages,
@@ -168,11 +169,7 @@ function ProcessBlock({
     prevStreaming.current = streaming;
   }, [streaming]);
   const open = override ?? streaming;
-  const label = streaming
-    ? "Sedang bekerja…"
-    : toolSteps > 0
-      ? `Selesai · ${toolSteps} langkah`
-      : "Proses";
+  const settledLabel = toolSteps > 0 ? `Selesai · ${toolSteps} langkah` : "Proses";
 
   return (
     <Collapsible className="min-w-0" open={open} onOpenChange={(next) => setOverride(next)}>
@@ -180,12 +177,12 @@ function ProcessBlock({
         {streaming ? (
           <>
             <Spinner className="size-3.5 shrink-0 text-primary" />
-            <Shimmer as="span" className="font-medium">
-              {label}
-            </Shimmer>
+            {/* Riset mendalam menunggu subagent (task mode) bisa diam bermenit-menit tanpa
+                event; elapsed yang berdetak meyakinkan "masih bekerja", bukan beku. */}
+            <ElapsedLabel base="Sedang bekerja" />
           </>
         ) : (
-          <span className="font-medium text-muted-foreground">{label}</span>
+          <span className="font-medium text-muted-foreground">{settledLabel}</span>
         )}
         <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
       </CollapsibleTrigger>
@@ -244,6 +241,29 @@ function MessageActions({ text, onRegenerate }: { text: string; onRegenerate?: (
         </button>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Label "bekerja" dengan elapsed yang berdetak (muncul setelah 10 dtk). Riset mendalam yang
+ * menunggu subagent task-mode bisa diam bermenit-menit tanpa event; timer yang jalan meyakinkan
+ * "masih bekerja", bukan beku. Terisolasi → hanya komponen ini yang re-render tiap detik.
+ */
+function ElapsedLabel({ base }: { base: string }) {
+  const [start] = useState(() => Date.now());
+  const [now, setNow] = useState(start);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const secs = Math.floor((now - start) / 1000);
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  const label = secs < 10 ? `${base}…` : `${base}… ${m > 0 ? `${m}m ` : ""}${s}s`;
+  return (
+    <Shimmer as="span" className="font-medium">
+      {label}
+    </Shimmer>
   );
 }
 

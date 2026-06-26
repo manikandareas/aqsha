@@ -6,10 +6,10 @@ import { callerEmail, callerId, getServiceDb } from "../lib/tools.ts";
 
 /**
  * begin_deep_research — gerbang billing satu run `/deep` saat EKSEKUSI (bukan approval).
- * Menggantikan `propose_research_plan` (HITL terstruktur dibuang; plan kini prosa percakapan).
+ * Menggantikan `propose_research_plan` (plan kini prosa + konfirmasi via `ask_question`).
  *
  * Skill deep-research memanggil tool ini SEKALI, setelah user mengonfirmasi rencana lewat
- * percakapan dan TEPAT sebelum mulai mendelegasikan ke subagent. Ini titik commit alami satu
+ * `ask_question` dan TEPAT sebelum mulai mendelegasikan ke subagent. Ini titik commit alami satu
  * deep-run:
  * - GATE `requireEntitlement(feature:'deep_research', requiredPlan:'free')` — Free pakai kuota
  *   bulanan `deepResearchRuns` (plan.ts), bukan ditolak `subscription_required`. Blok = stop.
@@ -18,11 +18,11 @@ import { callerEmail, callerId, getServiceDb } from "../lib/tools.ts";
  *
  * Blok = return-union `{ ok:false, reason }` (model relay "kuota deep habis" lalu HENTIKAN —
  * JANGAN riset). Sukses = `{ ok:true }` → model lanjut delegasi subagent. TANPA `needsApproval`
- * (composer selalu aktif; konfirmasi rencana terjadi di percakapan, bukan kartu).
+ * (konfirmasi rencana terjadi via `ask_question`, bukan approval tool).
  */
 export default defineTool({
   description:
-    "Mulai eksekusi riset mendalam (deep research) untuk run ini. Panggil SEKALI setelah user mengonfirmasi rencana riset lewat percakapan, TEPAT sebelum mendelegasikan ke subagent. Mengunci kuota deep research; bila `{ ok:false }`, sampaikan alasannya ke user dan hentikan (jangan riset).",
+    "Mulai eksekusi riset mendalam (deep research) untuk run ini. Panggil SEKALI setelah user mengonfirmasi rencana riset lewat `ask_question`, TEPAT sebelum mendelegasikan ke subagent. Mengunci kuota deep research; bila `{ ok:false }`, sampaikan alasannya ke user dan hentikan (jangan riset).",
   inputSchema: z.object({}),
   async execute(_input, ctx) {
     const ownerUserId = callerId(ctx);

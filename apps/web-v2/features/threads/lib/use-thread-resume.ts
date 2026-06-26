@@ -21,19 +21,42 @@ import { useEffect, useRef, useState } from "react";
  * (zod/workflow → `node:module`) yang tak bisa di-bundle ke browser — persis seperti template yang
  * juga hand-roll `streamSessionEvents`.
  *
- * **Stop = body-close BERSIH dari server ATAU idle-timeout**, BUKAN tipe event. Kontrak eve
- * `openStreamIterable`: server menutup body saat turn benar-benar usai (incl. saat agent bertanya →
- * turn settle). `/deep` multi-turn auto-lanjut: `session.waiting` transien muncul di batas turn tapi
- * server MENJAGA body terbuka → kita ride sampai close. (Dulu stop di `session.waiting`/`input.requested`
- * → resume putus tiap batas → KEDIP. HITL kini percakapan → tak ada `input.requested`.)
+ * **EOF bersih ≠ turn selesai.** eve dev bisa MENUTUP body stream per-snapshot (bukan satu tail
+ * panjang yang dijaga terbuka sampai turn usai). Jadi resume meniru jalur SEND eve: setelah EOF
+ * tanpa boundary, buka lagi dari `nextIndex`. Bila snapshot tadi berisi event baru, reconnect
+ * langsung supaya token jawaban akhir tetap terasa realtime setelah refresh/nav-balik. Bila EOF
+ * kosong, pakai backoff pendek supaya thread yang lama diam (mis. subagent /deep) tidak hot-loop.
+ * Resume berhenti HANYA saat event terakhir = boundary turn
+ * (`session.waiting`/`session.completed`/`session.failed`). Idle-timeout = pengaman turn yang
+ * benar-benar mati/hang.
  */
-const IDLE_TIMEOUT_MS = 120_000;
+const IDLE_TIMEOUT_MS = 600_000; // 10 mnt: tahan gap subagent /deep yang panjang (tanpa event), tetap stop turn mati
+const EOF_AFTER_PROGRESS_DELAY_MS = 0; // token sudah bergerak → reconnect segera agar resume tetap realtime
+const EOF_EMPTY_INITIAL_DELAY_MS = 150; // snapshot kosong → tunggu singkat sebelum long-poll ulang
+const EOF_EMPTY_MAX_DELAY_MS = 1_000; // cap backoff saat turn aktif tapi parent stream lama diam
 const RECONNECT_DELAY_MS = 300;
 const MAX_RECONNECTS = 3;
 const RETRYABLE_OPEN = new Set([404, 409, 425, 500, 502, 503, 504]);
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
+/** Event terakhir menandai turn benar-benar settle/parkir → resume boleh berhenti. */
+const TERMINAL_EVENT_TYPES = new Set(["session.waiting", "session.completed", "session.failed"]);
+function lastEventIsTerminal(events: readonly EveAgentReducerEvent[]): boolean {
+  const last = events[events.length - 1] as { type?: string } | undefined;
+  return last != null && TERMINAL_EVENT_TYPES.has(last.type ?? "");
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (ms <= 0 || signal?.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(done, ms);
+    const onAbort = () => done();
+    function done() {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 /** Baca body NDJSON eve → yield tiap event (satu JSON per baris). */
@@ -83,8 +106,6 @@ export function useThreadResume(params: {
     getTokenRef.current = getToken;
     startIndexRef.current = startIndex;
   });
-  // Sekali-resume per sessionId. Self-managing lintas-thread: sessionId baru ≠ key → buka lagi.
-  const startedKeyRef = useRef<string | null>(null);
 
   // Pindah thread → buang buffer resume thread lama (pola "adjust state during render", bukan
   // effect → tak ada cascading-render warning; konvergen saat trackedSession == sessionId).
@@ -95,10 +116,14 @@ export function useThreadResume(params: {
     setResuming(false);
   }
 
+  // Buka resume HANYA saat aktif. JANGAN pakai ref-guard "sekali per sessionId": React
+  // StrictMode (dev) mount→cleanup→mount, jadi guard ref yang bertahan lintas cleanup
+  // membuat invocation KEDUA early-return → stream tak pernah benar-benar terbuka (resume
+  // mati di dev). Cleanup effect SUDAH meng-abort loop lama sebelum re-run, jadi guard tak
+  // diperlukan: deps `[enabled, sessionId]` → re-run hanya saat keduanya berubah, idempoten
+  // (dedup by event_index di surface).
   useEffect(() => {
     if (!enabled || !sessionId) return;
-    if (startedKeyRef.current === sessionId) return;
-    startedKeyRef.current = sessionId;
 
     const abort = new AbortController();
     let cancelled = false;
@@ -108,12 +133,15 @@ export function useThreadResume(params: {
       idleTimer = setTimeout(() => abort.abort(), IDLE_TIMEOUT_MS);
     };
 
-    setResuming(true);
     const acc: EveAgentReducerEvent[] = [];
 
+    // `setResuming(true)` di dalam IIFE (bukan langsung di badan effect) → tak memicu
+    // cascading-render sinkron (react-hooks/set-state-in-effect).
     void (async () => {
+      setResuming(true);
       let nextIndex = startIndexRef.current;
       let reconnects = MAX_RECONNECTS;
+      let emptyEofDelay = EOF_EMPTY_INITIAL_DELAY_MS;
       let stop = false;
       try {
         bumpIdle();
@@ -126,26 +154,38 @@ export function useThreadResume(params: {
           );
           if (!res.ok || !res.body) {
             if (RETRYABLE_OPEN.has(res.status) && reconnects-- > 0) {
-              await sleep(RECONNECT_DELAY_MS);
+              await sleep(RECONNECT_DELAY_MS, abort.signal);
               continue;
             }
             break;
           }
           try {
+            let sawEvent = false;
             for await (const ev of readNdjson(res.body)) {
               if (cancelled) return;
               bumpIdle();
               reconnects = MAX_RECONNECTS; // progress → pulihkan budget reconnect
+              sawEvent = true;
+              emptyEofDelay = EOF_EMPTY_INITIAL_DELAY_MS;
               nextIndex += 1;
               acc.push(ev as EveAgentReducerEvent);
               setResumedEvents(acc.slice());
             }
-            // Body ditutup server tanpa boundary = turn selesai (eve menutup body usai turn).
-            stop = true;
+            // EOF bersih. Berhenti HANYA bila turn sudah settle/parkir; selain itu reconnect dari
+            // nextIndex. Setelah snapshot yang berisi event, jangan tidur: delay itulah yang dulu
+            // membuat jawaban akhir terasa batch per 1-2 detik setelah refresh/nav-balik.
+            if (lastEventIsTerminal(acc)) stop = true;
+            else {
+              const delay = sawEvent ? EOF_AFTER_PROGRESS_DELAY_MS : emptyEofDelay;
+              if (!sawEvent) {
+                emptyEofDelay = Math.min(EOF_EMPTY_MAX_DELAY_MS, Math.round(emptyEofDelay * 1.5));
+              }
+              await sleep(delay, abort.signal);
+            }
           } catch {
             if (cancelled || abort.signal.aborted) return;
             if (reconnects-- <= 0) stop = true; // putus transient → reconnect dari nextIndex
-            else await sleep(RECONNECT_DELAY_MS);
+            else await sleep(RECONNECT_DELAY_MS, abort.signal);
           }
         }
       } catch {

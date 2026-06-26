@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, lt, or } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lt, or } from "drizzle-orm";
 import { type ChatThread, chatThreads, type NewChatThread } from "../schema/chatThreads";
 import { type KeysetCursor, encodeKeysetCursor } from "../cursor";
 import type { DbOrTx } from "../types";
@@ -7,6 +7,33 @@ import type { DbOrTx } from "../types";
 export const ChatThreadRepo = {
   async findById(db: DbOrTx, id: string): Promise<ChatThread | null> {
     const rows = await db.select().from(chatThreads).where(eq(chatThreads.id, id)).limit(1);
+    return rows[0] ?? null;
+  },
+
+  /**
+   * Thread `streaming` TERMUDA milik owner (DESC `lastActivityAt`). Dipakai klien untuk
+   * menemukan sessionId turn PERTAMA segera setelah `send()` — `useEveAgent` baru surface
+   * sessionId di akhir turn (`onSessionChange`), jadi tanpa ini refresh saat menyusun plan
+   * mendarat di halaman kosong. Karena composer serial (satu turn aktif per user), thread
+   * streaming termuda == yang baru dibuat hook `session.started`.
+   *
+   * `since` (opsional, epoch ms) menyaring `lastActivityAt >= since` supaya thread `streaming`
+   * BASI lama (turn mati tanpa settle) tak salah dikira thread baru → klien teruskan timestamp
+   * SEBELUM `send()`.
+   */
+  async findRecentActiveByOwner(
+    db: DbOrTx,
+    ownerUserId: string,
+    since?: number,
+  ): Promise<ChatThread | null> {
+    const filters = [eq(chatThreads.ownerUserId, ownerUserId), eq(chatThreads.status, "streaming")];
+    if (since !== undefined) filters.push(gte(chatThreads.lastActivityAt, since));
+    const rows = await db
+      .select()
+      .from(chatThreads)
+      .where(and(...filters))
+      .orderBy(desc(chatThreads.lastActivityAt), desc(chatThreads.id))
+      .limit(1);
     return rows[0] ?? null;
   },
 

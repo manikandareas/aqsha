@@ -9,6 +9,28 @@ import { queryKeys, unwrap } from "@/lib/api-query";
 import type { ChatMessage, ChatThread, ChatThreadEvent, ResearchSource } from "./types";
 
 const LIST_PAGE_SIZE = 30;
+const ACTIVE_THREAD_EVENTS_POLL_MS = 2_000;
+
+/** Tipe delta kumulatif eve — hanya yang TERAKHIR per (type, turn, step) yang berarti. */
+const STREAMING_DELTA_TYPES = new Set(["message.appended", "reasoning.appended"]);
+
+/**
+ * Buang delta streaming yang sudah disusul dari log terakumulasi klien (jaga `prev` mungil
+ * di akumulasi poll). Kunci = (type, turn_id, stepIndex); simpan index tertinggi. Array masuk
+ * sudah urut `event_index` (poll selalu `> afterIndex`), jadi yang terakhir = terbaru.
+ */
+function compactThreadEvents(events: ChatThreadEvent[]): ChatThreadEvent[] {
+  const keyOf = (e: ChatThreadEvent) =>
+    `${e.type}:${e.turnId}:${String((e.payload as { data?: { stepIndex?: unknown } })?.data?.stepIndex)}`;
+  const lastAt = new Map<string, number>();
+  events.forEach((e, i) => {
+    if (STREAMING_DELTA_TYPES.has(e.type)) lastAt.set(keyOf(e), i);
+  });
+  if (lastAt.size === 0) return events;
+  return events.filter(
+    (e, i) => !STREAMING_DELTA_TYPES.has(e.type) || lastAt.get(keyOf(e)) === i,
+  );
+}
 
 /** List thread (infinite/keyset, DESC aktivitas). */
 export function useThreadsList() {
@@ -55,20 +77,53 @@ export function useThreadMessages(id: string, enabled = true) {
 
 /**
  * Event stream eve mentah per thread (1:1) — di-replay lewat `defaultMessageReducer` untuk
- * merekonstruksi timeline PENUH (tool/skill/subagent/HITL) saat reload. Snapshot SEKALI di
- * mount (TANPA poll): turn in-flight di-resume lewat durable stream eve (`useThreadResume`,
- * `ClientSession.stream`) — token streaming sejati, bukan poll granular. Refetch dipicu saat
- * resume settle (invalidate di chat-surface) → turn baru selesai pindah ke history.
- * `staleTime: 0` supaya invalidate selalu ambil event terbaru.
+ * merekonstruksi timeline PENUH (tool/skill/subagent/HITL) saat reload. Default = snapshot
+ * saat mount. Thread yang masih aktif boleh menyalakan polling pendek sebagai fallback durable
+ * untuk mengejar event persisted bila resume-stream putus/tertahan; polling berhenti begitu
+ * predicate active mengembalikan false. `staleTime: 0` supaya invalidate selalu ambil event
+ * terbaru.
  */
-export function useThreadEvents(id: string, enabled = true) {
+export function useThreadEvents(
+  id: string,
+  options: boolean | {
+    enabled?: boolean;
+    poll?: boolean | ((events: readonly ChatThreadEvent[]) => boolean);
+  } = true,
+) {
   const api = useApi();
+  const qc = useQueryClient();
+  const enabled = typeof options === "boolean" ? options : (options.enabled ?? true);
+  const poll = typeof options === "boolean" ? false : (options.poll ?? false);
   return useQuery({
     queryKey: queryKeys.threads.events(id),
     enabled,
     staleTime: 0,
-    queryFn: async () =>
-      (unwrap(await api.threads({ id }).events.get()) as { items: ChatThreadEvent[] }).items,
+    refetchInterval: (query) => {
+      if (!poll) return false;
+      const events = (query.state.data ?? []) as ChatThreadEvent[];
+      const shouldPoll = typeof poll === "function" ? poll(events) : poll;
+      return shouldPoll ? ACTIVE_THREAD_EVENTS_POLL_MS : false;
+    },
+    refetchIntervalInBackground: Boolean(poll),
+    // Akumulasi INCREMENTAL: poll mengejar hanya delta (`afterIndex` = event_index terakhir)
+    // lalu append — run `/deep` bisa ribuan event, re-fetch penuh tiap 2 dtk itu berat & jadi
+    // sumber "beku" (heavy reduce). Cold mount (cache kosong) → full snapshot. Delta kosong →
+    // kembalikan ref lama (tanpa re-render). Server meng-compact delta kumulatif (lihat
+    // `ChatThreadEventRepo.listByThread`); klien JUGA compact tiap append supaya `prev` tetap
+    // mungil — poll mengembalikan delta-terakhir step aktif tiap tick di index baru, tanpa
+    // dedup `prev` akan tumbuh O(n²) lagi.
+    queryFn: async () => {
+      const prev = (qc.getQueryData(queryKeys.threads.events(id)) ?? []) as ChatThreadEvent[];
+      const afterIndex = prev.length > 0 ? prev[prev.length - 1].eventIndex : undefined;
+      const { items } = unwrap(
+        await api.threads({ id }).events.get({
+          query: afterIndex !== undefined ? { afterIndex } : {},
+        }),
+      ) as { items: ChatThreadEvent[] };
+      if (afterIndex === undefined) return items;
+      if (items.length === 0) return prev;
+      return compactThreadEvents([...prev, ...items]);
+    },
   });
 }
 

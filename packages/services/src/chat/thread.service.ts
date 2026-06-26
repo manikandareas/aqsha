@@ -33,6 +33,20 @@ export const ThreadService = {
     return thread;
   },
 
+  /**
+   * Thread `streaming` termuda milik caller — klien memakai ini untuk menemukan sessionId
+   * turn PERTAMA segera setelah `send()` (lihat `ChatThreadRepo.findRecentActiveByOwner`),
+   * lalu bump URL → refresh saat menyusun plan tak lagi kehilangan thread. `null` bila
+   * belum ada (klien retry singkat sampai hook `session.started` membuat thread).
+   */
+  async recentActive(
+    db: DbOrTx,
+    ownerUserId: string,
+    since?: number,
+  ): Promise<ChatThread | null> {
+    return ChatThreadRepo.findRecentActiveByOwner(db, ownerUserId, since);
+  },
+
   /** Assert kepemilikan (rename/delete/messages). Missing/not-owned → 404. */
   async assertOwner(db: DbOrTx, ownerUserId: string, threadId: string): Promise<ChatThread> {
     const thread = await ChatThreadRepo.findById(db, threadId);

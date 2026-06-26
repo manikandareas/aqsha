@@ -13,13 +13,23 @@ import { useApi } from "@/lib/api-client";
 import { queryKeys } from "@/lib/api-query";
 import { panelBodyPaddingClass, threadTranscriptColumnClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
-import type { EveAgentReducerEvent } from "eve/react";
 import { useSendStatus, useThreadSources, useThreadsList } from "../api";
-import { eventsToTimeline, mergeStreamEventLogs, type TimelineMessage } from "../lib/eve-timeline";
+import {
+  acceptsFreeformText,
+  buildOrderedLog,
+  eventsToTimeline,
+  type IndexedEvent,
+  isApprovalRequest,
+  isStreamActive,
+  pendingInputRequests,
+  type InputResponsePayload,
+  type TimelineMessage,
+} from "../lib/eve-timeline";
 import { useAstraAgent } from "../lib/use-astra-agent";
 import { useThreadResume } from "../lib/use-thread-resume";
 import { threadTitle, type ResearchSource } from "../types";
 import { type ComposerNotice, Composer, type RecentThread } from "./composer";
+import { InputRequestPrompt } from "./input-request-prompt";
 import { MessageList } from "./message-list";
 
 /** Teks user terakhir di timeline (untuk dedup bubble pending lintas-reload). */
@@ -112,11 +122,11 @@ export function ChatSurface({
   ambientWorkspaceId = null,
 }: {
   initialSession?: { sessionId: string; streamIndex: number; continuationToken?: string | null };
-  /** Event log mentah persisted (1:1) — sumber timeline tunggal (digabung level event). */
-  initialEvents?: readonly EveAgentReducerEvent[];
+  /** Event log persisted (ber-`event_index`) — snapshot timeline + dasar gabung by-index. */
+  initialEvents?: readonly IndexedEvent[];
   /** Timeline thread PRA-event (teks `chat_messages` saja) → prefix read-only, kosong utk thread normal. */
   legacyHistory?: TimelineMessage[];
-  /** `isStreamActive(events)` saat mount → ada turn in-flight yang perlu di-resume. */
+  /** Event/status persisted menunjukkan ada turn in-flight yang perlu di-resume/di-poll. */
   streamActive?: boolean;
   /** Recovery pesan terkirim yang turn-nya belum settle (baseline template). */
   pendingUserMessage?: string | null;
@@ -131,7 +141,7 @@ export function ChatSurface({
   const sessionId = agent.session?.sessionId ?? initialSession?.sessionId ?? null;
 
   // Resume turn in-flight lintas-refresh: buka ULANG durable stream eve dari ekor turn aktif
-  // (`startIndex = max(event_index)+1`). Aktif HANYA saat reload masuk ke turn berjalan
+  // (`startIndex = max(event_index)+1`). Aktif HANYA saat persisted state masih berjalan
   // (`streamActive`) DAN tab ini tak sedang mengirim (`agent.status === "ready"`).
   const resume = useThreadResume({
     sessionId,
@@ -139,23 +149,31 @@ export function ChatSurface({
     enabled: streamActive && agent.status === "ready",
   });
   const resuming = resume.resuming;
-  const busy = agent.status === "submitted" || agent.status === "streaming" || resuming;
   const notice = blockedNotice(sendStatus.data);
   const blocked = notice !== null;
 
-  // Overlay swap (port template): saat resume aktif (atau punya buffer resume & tab ini tak kirim),
-  // base = prefix persisted ++ ekor resume (disjoint by `startIndex`). Selain itu, gabung event live
-  // (`agent.events`) ke prefix di level event (dedup). Reduce SEKALI → satu daftar pesan.
-  // ponytail: overlay = concat; invarian `useThreadEvents` tak di-refetch selagi resuming (chat-surface
-  // invalidate hanya saat settle) → disjoint. Pakai mergeStreamEventLogs di sini bila race refetch muncul.
+  // Posisi awal ekor live (= event_index turn aktif pertama), DIKUNCI di mount: cocok dengan
+  // `startIndex` resume DAN dengan offset `agent.events` (eve store baca streamIndex sekali).
+  const [liveStartIndex] = useState(() => initialSession?.streamIndex ?? 0);
+
+  // Base = snapshot persisted + ekor LIVE (resume cold-load ATAU `agent.events` warm-send),
+  // digabung by-`event_index` (O(n), overlap poll↔resume aman). Reduce SEKALI → satu daftar pesan.
   const hasResumeOverlay = resuming || (resume.resumedEvents.length > 0 && agent.events.length === 0);
+  const live = hasResumeOverlay ? resume.resumedEvents : agent.events;
   const base = useMemo(
-    () =>
-      hasResumeOverlay
-        ? [...initialEvents, ...resume.resumedEvents]
-        : mergeStreamEventLogs(initialEvents, agent.events),
-    [hasResumeOverlay, initialEvents, resume.resumedEvents, agent.events],
+    () => buildOrderedLog(initialEvents, live, liveStartIndex),
+    [initialEvents, live, liveStartIndex],
   );
+
+  // `busy` (loading + gate composer/HITL) diturunkan dari BASE (sudah memuat event live resume),
+  // bukan dari `streamActive` prop yang lag di belakang poll persisted. Efek: kartu HITL muncul
+  // SEKETIKA turn parkir (`session.waiting`/`input.requested` di base), tanpa jeda ≤2 dtk.
+  // `agent.status` tetap perlu untuk awal warm-send (base masih kosong sebelum event pertama).
+  const busy =
+    agent.status === "submitted" ||
+    agent.status === "streaming" ||
+    resuming ||
+    isStreamActive(base);
   // Reduce event log → timeline SEKALI per perubahan log/busy (bukan tiap render — keystroke
   // composer, toggle status, dll. tak memicu replay reducer + merge O(n) ulang).
   const messages = useMemo(
@@ -166,6 +184,12 @@ export function ChatSurface({
       ),
     [legacyHistory, base, busy, pendingUserMessage],
   );
+  const hitlRequests = useMemo(
+    () => (!busy ? pendingInputRequests(base) : []),
+    [base, busy],
+  );
+  const hasHitlPrompt = hitlRequests.length > 0;
+  const hasApprovalPrompt = hitlRequests.some(isApprovalRequest);
   const isEmpty = messages.length === 0 && !busy;
 
   // Resume settle → events/sources/detail di-refetch supaya turn yang baru selesai pindah ke
@@ -180,6 +204,19 @@ export function ChatSurface({
     }
     prevResuming.current = resuming;
   }, [resuming, sessionId, qc]);
+
+  // Poll fallback bisa melihat event terminal/parked sebelum resume stream selesai. Saat state
+  // persisted berubah dari active → settled, sinkronkan detail/sidebar/sources tanpa menunggu
+  // stream hook.
+  const prevStreamActive = useRef(false);
+  useEffect(() => {
+    if (prevStreamActive.current && !streamActive && sessionId) {
+      qc.invalidateQueries({ queryKey: queryKeys.threads.sources(sessionId) });
+      qc.invalidateQueries({ queryKey: queryKeys.threads.detail(sessionId) });
+      qc.invalidateQueries({ queryKey: queryKeys.threads.all });
+    }
+    prevStreamActive.current = streamActive;
+  }, [streamActive, sessionId, qc]);
 
   // Retry (Slice 6.8): simpan teks turn terakhir; saat error, kembalikan ke composer
   // (resend = turn baru; turn gagal tanpa step.completed = tak ada debit → no re-charge).
@@ -221,8 +258,30 @@ export function ChatSurface({
     sendTurn(text);
   };
 
+  const respondToInput = (response: InputResponsePayload) => {
+    void agent.send({ inputResponses: [response] }).catch(() => {});
+  };
+
+  // Kirim dari composer. Bila ada pertanyaan freeform yang sedang parkir (BUKAN approval),
+  // jawab sebagai `inputResponse` terstruktur — bukan turn baru (yang membuat `ask_question`
+  // tercatat "ignored" + pesan ekstra). Approval sengaja TIDAK diauto-route: mengetik = lanjut
+  // tanpa menyetujui (eve auto-deny) — aksi destruktif wajib lewat tombol eksplisit di kartu.
+  const onComposerSend = (payload: { text: string; clientContext?: string[] }) => {
+    const text = payload.text.trim();
+    const freeformTargets = text
+      ? hitlRequests.filter((r) => !isApprovalRequest(r) && acceptsFreeformText(r))
+      : [];
+    if (freeformTargets.length > 0) {
+      void agent
+        .send({ inputResponses: freeformTargets.map((r) => ({ requestId: r.requestId, text })) })
+        .catch(() => {});
+      return;
+    }
+    sendTurn(payload.text, payload.clientContext);
+  };
+
   const wiring: ComposerWiring = {
-    onSend: (payload) => sendTurn(payload.text, payload.clientContext),
+    onSend: onComposerSend,
     onStop: () => agent.stop(),
     busy,
     disabled: blocked,
@@ -258,6 +317,9 @@ export function ChatSurface({
         <ConversationScrollButton />
       </Conversation>
       <div className={cn(threadTranscriptColumnClass, "pt-2.5 pb-4")}>
+        {hasHitlPrompt ? (
+          <InputRequestPrompt requests={hitlRequests} onRespond={respondToInput} />
+        ) : null}
         <Composer
           onSend={(p) => wiring.onSend(p)}
           onStop={wiring.onStop}
@@ -267,7 +329,13 @@ export function ChatSurface({
           threadId={wiring.threadId}
           errorDraft={wiring.errorDraft}
           ambientWorkspaceId={wiring.ambientWorkspaceId}
-          placeholder="Tulis pesan untuk Astra…"
+          placeholder={
+            hasApprovalPrompt
+              ? "Pilih opsi di atas untuk melanjutkan…"
+              : hasHitlPrompt
+                ? "Ketik jawaban atau pilih opsi di atas…"
+                : "Tulis pesan untuk Astra…"
+          }
         />
       </div>
     </div>

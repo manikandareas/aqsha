@@ -13,6 +13,7 @@ import { useThread, useThreadEvents, useThreadMessages } from "@/features/thread
 import { ChatSurface } from "@/features/threads/components/chat-surface";
 import {
   chatMessagesToTimeline,
+  type IndexedEvent,
   isStreamActive,
   recoverPending,
   streamIndexFromEvents,
@@ -61,15 +62,25 @@ export function EveChatThreadSurface({
 }) {
   // Event stream eve persisted (1:1) = sumber timeline reload + cursor resume. `useThreadMessages`
   // = fallback thread LAMA (pra-event). `useThread` = resume handle (continuationToken) + pending.
-  const eventsQuery = useThreadEvents(threadId ?? "", Boolean(threadId));
-  const messagesQuery = useThreadMessages(threadId ?? "", Boolean(threadId));
   const threadDetail = useThread(threadId ?? "", Boolean(threadId));
+  const eventsQuery = useThreadEvents(threadId ?? "", {
+    enabled: Boolean(threadId),
+    poll: (latestEvents) =>
+      isStreamActive(latestEvents) ||
+      (latestEvents.length === 0 && threadDetail.data?.status === "streaming"),
+  });
+  const messagesQuery = useThreadMessages(threadId ?? "", Boolean(threadId));
   const events = useMemo(() => eventsQuery.data ?? [], [eventsQuery.data]);
+  const streamActive = useMemo(
+    () => isStreamActive(events) || (events.length === 0 && threadDetail.data?.status === "streaming"),
+    [events, threadDetail.data?.status],
+  );
 
-  // Log mentah = SATU sumber timeline (event-level overlay di ChatSurface). Tak ada lagi
-  // splitActiveTurn: turn aktif & selesai di log yang sama; resume melanjutkan dari ekornya.
-  const initialEvents = useMemo<EveAgentReducerEvent[]>(
-    () => events.map((e) => e.payload as EveAgentReducerEvent),
+  // Snapshot persisted ber-`event_index` = sumber timeline + dasar gabung by-index di
+  // ChatSurface. Tak ada splitActiveTurn: turn aktif & selesai di log yang sama; resume
+  // melanjutkan dari ekornya (`liveStartIndex`).
+  const initialEvents = useMemo<IndexedEvent[]>(
+    () => events.map((e) => ({ index: e.eventIndex, event: e.payload as EveAgentReducerEvent })),
     [events],
   );
   const legacy = useMemo(
@@ -108,7 +119,7 @@ export function EveChatThreadSurface({
           }}
           initialEvents={initialEvents}
           legacyHistory={legacy}
-          streamActive={isStreamActive(events)}
+          streamActive={streamActive}
           pendingUserMessage={recoverPending(
             events,
             threadDetail.data?.pendingUserMessage,
