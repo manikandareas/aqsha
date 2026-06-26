@@ -5,6 +5,11 @@
 FROM oven/bun:1.3.10 AS build
 WORKDIR /app
 COPY . .
+# eve build runs Nitro, which auto-picks its server preset from the BUILD runtime. Building
+# under Bun (this image) would bake the Bun preset (`Bun.serve`) into `.output`, then crash
+# under `node` at runtime ("Bun is not defined"). Pin the Node preset so the output serves on
+# Node regardless of build runtime. Override = NITRO_PRESET (Nitro CLI docs).
+ENV NITRO_PRESET=node-server
 RUN bun install --frozen-lockfile \
  && bun run build:dist \
  && bun run --filter '@aqsha/agent' build
