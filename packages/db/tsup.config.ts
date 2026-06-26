@@ -9,7 +9,7 @@ import { defineConfig } from "tsup";
  * langsung dari proses eve meski di-externalize. tsup meng-emit ESM ber-ekstensi yang
  * di-resolve Node, di-`externalDependencies` di `agent/agent.ts`.
  *
- * api-v2 (bun) + test (bun) tetap baca `src` lewat exports condition `bun`/`types`.
+ * api (bun) + test (bun) tetap baca `src` lewat exports condition `bun`/`types`.
  */
 export default defineConfig({
   entry: ["src/index.ts", "src/schema/index.ts"],

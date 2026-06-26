@@ -5,7 +5,8 @@ import {
   PLAN_CATALOG,
   PUBLIC_PLAN_KEYS,
   type PublicPlanKey,
-} from "@aqsha/convex/billing-catalog";
+  UNLIMITED,
+} from "@aqsha/services/plan";
 import {
   ArrowDownIcon,
   BookOpen,
@@ -45,29 +46,48 @@ const gradientPanelStyles = {
       "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.13) 1px, transparent 0), radial-gradient(circle at 18% 14%, #ffd08a 0, transparent 29%), radial-gradient(circle at 78% 78%, #ff8ab3 0, transparent 31%), linear-gradient(135deg, #8a2f55 0%, #bd463f 51%, #3f2438 100%)",
     backgroundSize: "7px 7px, 100% 100%, 100% 100%, 100% 100%",
   },
+  ultra: {
+    backgroundImage:
+      "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.14) 1px, transparent 0), radial-gradient(circle at 20% 12%, #c5b8ff 0, transparent 30%), radial-gradient(circle at 80% 80%, #7ce0d0 0, transparent 30%), linear-gradient(135deg, #3a2f7a 0%, #5b3aa6 50%, #18203f 100%)",
+    backgroundSize: "7px 7px, 100% 100%, 100% 100%, 100% 100%",
+  },
 } satisfies Record<string, CSSProperties>;
+
+const pricingPills = [
+  "Mulai gratis",
+  "Tagihan jelas",
+  "Batal kapan aja",
+  "Buka di browser",
+] as const;
 
 const planPresentation = {
   free: {
     gradient: gradientPanelStyles.free,
     href: "/sign-up",
-    cta: "Build for free",
+    cta: "Mulai gratis",
     badge: null,
     includes: null,
   },
   starter: {
     gradient: gradientPanelStyles.starter,
     href: "/sign-up?plan=starter",
-    cta: "Choose Starter",
-    badge: "Popular",
-    includes: "Everything in Free, plus",
+    cta: "Pilih Starter",
+    badge: "Populer",
+    includes: "Semua di Free, plus",
   },
   plus: {
     gradient: gradientPanelStyles.plus,
     href: "/sign-up?plan=plus",
-    cta: "Choose Plus",
+    cta: "Pilih Plus",
     badge: null,
-    includes: "Everything in Starter, plus",
+    includes: "Semua di Starter, plus",
+  },
+  ultra: {
+    gradient: gradientPanelStyles.ultra,
+    href: "/sign-up?plan=ultra",
+    cta: "Pilih Ultra",
+    badge: "Power",
+    includes: "Semua di Plus, plus",
   },
 } satisfies Record<
   PublicPlanKey,
@@ -97,25 +117,34 @@ function formatCount(value: number) {
 
 function planFeatureRows(planKey: PublicPlanKey) {
   const plan = PLAN_CATALOG[planKey];
+  const isTopTier = planKey === "plus" || planKey === "ultra";
   return [
     {
-      icon: planKey === "plus" ? GaugeIcon : MessageSquare,
-      label: `${formatCount(plan.monthlyCredits)} credits per month`,
+      icon: isTopTier ? GaugeIcon : MessageSquare,
+      label: `${formatCount(plan.monthlyCredits)} credits per bulan`,
     },
     {
       icon: plan.deepResearchRuns > 0 ? Sparkles : Search,
       label:
-        plan.deepResearchRuns > 0
-          ? `${formatCount(plan.deepResearchRuns)} Deep Research runs per month`
-          : "Deep Research not included",
+        plan.deepResearchRuns === UNLIMITED
+          ? "Deep Research tanpa batas"
+          : plan.deepResearchRuns > 0
+            ? `${formatCount(plan.deepResearchRuns)} Deep Research per bulan`
+            : "Deep Research tidak termasuk",
     },
     {
       icon: Library,
-      label: `${formatCount(plan.workspaceLimit)} ${plan.workspaceLimit === 1 ? "workspace" : "workspaces"}`,
+      label:
+        plan.workspaceLimit === UNLIMITED
+          ? "Workspace tanpa batas"
+          : `${formatCount(plan.workspaceLimit)} ${plan.workspaceLimit === 1 ? "workspace" : "workspaces"}`,
     },
     {
-      icon: planKey === "plus" ? BookOpen : FileText,
-      label: `${formatCount(plan.libraryItemLimit)} library items`,
+      icon: isTopTier ? BookOpen : FileText,
+      label:
+        plan.libraryItemLimit === UNLIMITED
+          ? "Library tanpa batas"
+          : `${formatCount(plan.libraryItemLimit)} library items`,
     },
   ];
 }
@@ -127,11 +156,11 @@ const plans = PUBLIC_PLAN_KEYS.map((planKey) => {
     ...presentation,
     name: plan.label,
     price: formatIdr(plan.monthlyPriceIdr),
-    priceSuffix: "per month",
+    priceSuffix: "per bulan",
     supportingPrice:
       plan.annualPriceIdr > 0
-        ? `${formatIdr(plan.annualPriceIdr)} per year`
-        : "Always free",
+        ? `${formatIdr(plan.annualPriceIdr)} per tahun`
+        : "Gratis selamanya",
     features: planFeatureRows(planKey),
   };
 });
@@ -158,16 +187,48 @@ export function PricingSection() {
   return (
     <section
       id="pricing"
-      aria-labelledby="pricing-title"
+      aria-labelledby="pricing-heading"
       className="w-full scroll-mt-[72px] bg-background py-12 sm:py-16 lg:py-20"
     >
       <h2 id="pricing-title" className="sr-only">
-        Pricing
+        Harga
       </h2>
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+        <m.div
+          className="mb-10 max-w-2xl sm:mb-12"
+          initial={reduce ? false : { opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={inView}
+          transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <p className="text-[15px] leading-snug text-muted-foreground sm:text-base">
+            Harga jujur
+          </p>
+          <h2
+            id="pricing-heading"
+            className="font-heading mt-3 text-[2.75rem] font-normal leading-[1.08] tracking-normal text-foreground sm:mt-4 sm:text-5xl sm:leading-[1.06] lg:text-[3.25rem] lg:leading-[1.05]"
+          >
+            Tanpa kejutan. Batal kapan aja.
+          </h2>
+          <p className="mt-5 text-pretty text-lg leading-snug text-foreground/85 sm:text-xl sm:leading-snug">
+            Aqsha jalan di browser — dibuka dari mana aja, kapan aja, tanpa instal
+            apa-apa. Kamu tahu persis yang dibayar dan bisa berhenti tanpa drama.
+          </p>
+          <div className="mt-6 flex flex-wrap gap-2">
+            {pricingPills.map((pill) => (
+              <span
+                key={pill}
+                className="rounded-full border border-border bg-muted/50 px-3.5 py-1.5 text-sm text-foreground"
+              >
+                {pill}
+              </span>
+            ))}
+          </div>
+        </m.div>
+
         <div className="relative -mx-4 w-[calc(100%+2rem)] overflow-visible sm:-mx-6 sm:w-[calc(100%+3rem)] lg:-mx-8 lg:w-[calc(100%+4rem)]">
           <div className="px-4 sm:px-6 lg:px-8">
-            <div className="grid divide-y divide-border bg-background lg:grid-cols-3 lg:divide-x lg:divide-y-0">
+            <div className="grid divide-y divide-border bg-background lg:grid-cols-4 lg:divide-x lg:divide-y-0">
               {plans.map((plan, index) => (
                 <m.article
                   key={plan.name}

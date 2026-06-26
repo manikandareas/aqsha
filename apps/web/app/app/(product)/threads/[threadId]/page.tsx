@@ -1,23 +1,10 @@
-import { redirect } from "next/navigation";
-import { isAuthenticated } from "@/lib/auth-server";
-import { ThreadDetailShell } from "@/features/thread-experience/components/thread-detail-shell";
-import { createPageMetadata } from "@/lib/metadata";
+import { ThreadView } from "@/features/threads/components/thread-view";
 
-export const metadata = createPageMetadata({
-  title: "Thread",
-  description: "Continue a focused research thread with context, sources, and workspace artifacts in Aqsha.",
-});
-
-export default async function ThreadPage({
+export default async function ThreadDetailPage({
   params,
 }: {
   params: Promise<{ threadId: string }>;
 }) {
-  if (!(await isAuthenticated())) {
-    redirect("/sign-in");
-  }
-
   const { threadId } = await params;
-
-  return <ThreadDetailShell threadId={threadId} />;
+  return <ThreadView threadId={threadId} />;
 }

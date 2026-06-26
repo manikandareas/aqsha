@@ -1,150 +1,117 @@
 "use client";
 
-import { uiRunFromRow, type AgentRunRow } from "@aqsha/agent-contracts";
-import { api } from "@aqsha/convex/api";
-import { useConvexMutationFn, useConvexQueryData } from "@/lib/convex-query";
-import type { WorkspaceId } from "@/lib/convex-refs";
+import { useAuth } from "@clerk/nextjs";
+import { useMemo } from "react";
+import { useProfile } from "@/features/settings/api";
+import {
+  useDeleteThread,
+  useSendStatus,
+  useThread,
+  useThreadArtifacts,
+  useThreadSources,
+  useThreadsList,
+} from "@/features/threads/api";
 import type { SendMessage, StartThread } from "../components/component-types";
-import type {
-  ResearchArtifact,
-  ResearchRun,
-  ResearchSource,
-  SendResult,
-} from "../types";
-import { useConvexAuth } from "convex/react";
+import type { ResearchArtifact, ResearchRun, ResearchSource, SendResult } from "../types";
+import { useWorkspaceIndexData } from "@/features/workspaces/api/use-workspaces-data";
 
-// The canonical thread-experience data hook: it reads/writes the first-party
-// agent tables written by the apps/agents SDK service (api.agent.*).
-//
-// Remaining gap (plan §9.3): the per-thread sources panel stays empty until
-// deep research runs durably on this backend (Step 4).
-
-export function useThreadExperienceData(
-  threadId: string | undefined,
-  enabled = true,
+function mapThreadSummary(
+  thread: {
+    id: string;
+    title: string | null;
+    lastActivityAt: number;
+    lastMessagePreview: string | null;
+    status: string;
+    agentKind: string;
+    createdAt: number;
+  },
 ) {
-  const { isAuthenticated } = useConvexAuth();
-  const active = enabled && isAuthenticated;
-  const viewer = useConvexQueryData(
-    api.auth.getCurrentUser,
-    active ? {} : "skip",
+  return {
+    threadId: thread.id,
+    title: thread.title?.trim() ? thread.title : "Percakapan baru",
+    createdAt: thread.createdAt,
+    lastActivityAt: thread.lastActivityAt,
+    lastMessagePreview: thread.lastMessagePreview ?? "",
+    messageCount: 0,
+    status: thread.status as "idle" | "streaming" | "failed",
+    lastAgentKind: thread.agentKind as "lite" | "pro" | undefined,
+  };
+}
+
+export function useThreadExperienceData(threadId: string | undefined, enabled = true) {
+  const { isLoaded, isSignedIn } = useAuth();
+  const active = enabled && isLoaded && isSignedIn;
+  const profile = useProfile();
+  const index = useWorkspaceIndexData();
+  const threadsQuery = useThreadsList();
+  const selectedThreadQuery = useThread(threadId ?? "");
+  const rateStatus = useSendStatus();
+  const sourcesQuery = useThreadSources(threadId ?? "", Boolean(threadId && active));
+  const artifactsQuery = useThreadArtifacts(threadId ?? null);
+  const removeThreadMutation = useDeleteThread();
+
+  const threads = useMemo(
+    () =>
+      (threadsQuery.data?.pages ?? [])
+        .flatMap((page) => page.items)
+        .map(mapThreadSummary),
+    [threadsQuery.data],
   );
-  const threads = useConvexQueryData(
-    api.agent.queries.listThreads,
-    active ? {} : "skip",
-  );
-  const workspacePage = useConvexQueryData(
-    api.workspaces.list,
-    active ? { paginationOpts: { cursor: null, numItems: 50 } } : "skip",
-  );
-  const selectedThreadRaw = useConvexQueryData(
-    api.agent.queries.getThread,
-    active && threadId ? { threadId } : "skip",
-  );
-  // The backend stores workspace ids as plain strings; downstream panels expect
-  // the branded Id<"workspaces"> this hook returns.
+
   const selectedThread =
-    selectedThreadRaw === undefined
-      ? undefined
-      : selectedThreadRaw === null
-        ? null
-        : {
-            ...selectedThreadRaw,
-            workspaceId: selectedThreadRaw.workspaceId as
-              | WorkspaceId
-              | undefined,
-          };
-  const threadQueriesEnabled = Boolean(
-    active && threadId && selectedThread !== null,
-  );
-  const rateStatus = useConvexQueryData(
-    api.agent.rateLimits.getSendStatus,
-    active ? {} : "skip",
-  );
-  const runRows = useConvexQueryData(
-    api.agent.queries.listRuns,
-    threadQueriesEnabled ? { threadId: threadId! } : "skip",
-  );
-  const artifactRows = useConvexQueryData(
-    api.agent.queries.listArtifacts,
-    threadQueriesEnabled ? { threadId: threadId! } : "skip",
-  );
-  const sourceRows = useConvexQueryData(
-    api.agent.queries.listSourcesByThread,
-    threadQueriesEnabled ? { threadId: threadId! } : "skip",
-  );
+    threadId && selectedThreadQuery.data
+      ? {
+          threadId: selectedThreadQuery.data.id,
+          title: selectedThreadQuery.data.title?.trim()
+            ? selectedThreadQuery.data.title
+            : "Percakapan baru",
+          workspaceId: selectedThreadQuery.data.workspaceId ?? undefined,
+          status: selectedThreadQuery.data.status,
+        }
+      : threadId
+        ? selectedThreadQuery.isLoading
+          ? undefined
+          : null
+        : undefined;
 
-  const createWorkspace = useConvexMutationFn(api.workspaces.create);
-  const startThreadMutation = useConvexMutationFn(api.agent.startThread);
-  const sendMessageMutation = useConvexMutationFn(api.agent.sendMessage);
-  const cancelRunMutation = useConvexMutationFn(api.agent.cancelRun);
-  const retryRunMutation = useConvexMutationFn(api.agent.retryRun);
-  const removeThreadMutation = useConvexMutationFn(api.agent.removeThread);
+  const startThread: StartThread = async () =>
+    ({ ok: false, reason: "use_eve_bridge" }) as unknown as SendResult;
 
-  // Typed against the shared StartThread/SendMessage contracts so this hook IS
-  // the canonical thread-experience surface. Fields the backend doesn't use
-  // (pendingAttachments) are accepted and ignored — pinned context rides
-  // contextArtifactIds.
-  const startThread: StartThread = async (args) => {
-    return (await startThreadMutation({
-      content: args.content,
-      commandId: args.commandId,
-      agentKind: args.agentKind,
-      workspaceId: args.workspaceId as never,
-      contextArtifactIds: [
-        ...(args.selectedContextArtifactIds ?? []),
-        ...(args.messageAttachmentArtifactIds ?? []),
-      ],
-      contextWorkspaceIds: args.selectedContextWorkspaceIds ?? [],
-    })) as SendResult;
-  };
-
-  const sendMessage: SendMessage = async (args) => {
-    return (await sendMessageMutation({
-      threadId: args.threadId,
-      content: args.content,
-      commandId: args.commandId,
-      contextArtifactIds: [
-        ...(args.selectedContextArtifactIds ?? []),
-        ...(args.messageAttachmentArtifactIds ?? []),
-      ],
-      contextWorkspaceIds: args.selectedContextWorkspaceIds ?? [],
-    })) as SendResult;
-  };
-
-  const cancelRun = async (runId: string) => {
-    try {
-      return await cancelRunMutation({ runId });
-    } catch (error) {
-      console.error("Failed to cancel run", error);
-    }
-  };
-
-  const runs = ((runRows ?? []) as AgentRunRow[]).map(
-    (row) => uiRunFromRow(row) as unknown as ResearchRun,
-  );
+  const sendMessage: SendMessage = async () =>
+    ({ ok: false, reason: "use_eve_bridge" }) as unknown as SendResult;
 
   return {
-    isAuthenticated,
-    viewer,
-    workspaces: workspacePage?.page ?? [],
-    threads: threads ?? [],
+    isAuthenticated: active,
+    viewer: profile.data
+      ? {
+          name: profile.data.name,
+          email: profile.data.email,
+          image: profile.data.image,
+        }
+      : undefined,
+    workspaces: index.workspaces,
+    threads,
     selectedThread,
-    createWorkspace,
+    createWorkspace: index.createWorkspace,
     startThread,
     sendMessage,
-    rateStatus,
-    runs,
-    artifacts: (artifactRows ?? []) as ResearchArtifact[],
-    sources: (sourceRows ?? []) as ResearchSource[],
-    cancelRun,
-    retryRun: async (args: { runId: string }) => {
-      try {
-        return await retryRunMutation({ runId: args.runId });
-      } catch (error) {
-        console.error("Failed to retry run", error);
-      }
+    rateStatus: rateStatus.data
+      ? ({
+          ok: rateStatus.data.canSend,
+          serverTime: 0,
+          canSend: rateStatus.data.canSend,
+          reason: rateStatus.data.reason,
+          retryAt: rateStatus.data.retryAt,
+        } as const)
+      : undefined,
+    runs: [] as ResearchRun[],
+    artifacts: (artifactsQuery.data ?? []) as ResearchArtifact[],
+    sources: (sourcesQuery.data ?? []) as unknown as ResearchSource[],
+    cancelRun: async () => undefined,
+    retryRun: async () => undefined,
+    removeThread: async (args: { threadId: string }) => {
+      await removeThreadMutation.mutateAsync({ id: args.threadId });
+      return { ok: true as const };
     },
-    removeThread: removeThreadMutation,
   };
 }

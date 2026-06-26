@@ -1,0 +1,149 @@
+# Full deployment stack (apps + infra) — the file Dokploy points at.
+# Apps build from per-app Dockerfiles (context = repo ROOT). For LOCAL DEV infra only
+# (Postgres/Redis/MinIO without the apps), use infra/compose.dev.yaml instead.
+#
+# Config/secrets come from the Dokploy dashboard (or a root .env). The internal service-to-
+# service wiring below is hardcoded; everything else (CLERK_*, MAYAR_*, AQSHA_*, research API
+# keys, NEXT_PUBLIC_*) follows each app's .env.example and is injected by Dokploy.
+name: aqsha
+
+# Shared backend env: the API, worker, and agent all reach the same Postgres/Redis/MinIO
+# over the compose network by service name. Secrets interpolate from the Dokploy env.
+x-backend-env: &backend-env
+  DATABASE_URL: postgres://aqsha:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/aqsha
+  REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379
+  S3_ENDPOINT: http://minio:9000
+  S3_BUCKET: ${MINIO_BUCKET:-aqsha}
+  S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+  S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+  S3_FORCE_PATH_STYLE: "true"
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?set NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_MAPBOX_TOKEN: ${NEXT_PUBLIC_MAPBOX_TOKEN:-}
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:?set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:?set CLERK_SECRET_KEY}
+      # web proxies /eve/v1/* to the agent container.
+      AGENT_ORIGIN: http://agent:4317
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on: [api, agent]
+
+  api:
+    image: aqsha-api
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+      PORT: "3001"
+    ports:
+      - "${API_PORT:-3001}:3001"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio: { condition: service_healthy }
+
+  # Reuses the api image (built above) with the worker entrypoint.
+  worker:
+    image: aqsha-api
+    restart: unless-stopped
+    command: ["bun", "run", "start:worker"]
+    environment:
+      <<: *backend-env
+    depends_on:
+      api: { condition: service_started }
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  agent:
+    build:
+      context: .
+      dockerfile: apps/agent/Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+      PORT: "4317"
+    volumes:
+      # eve durable run state — file-backed; MUST persist across restarts (single replica).
+      - agent_workflow_data:/app/apps/agent/.workflow-data
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio: { condition: service_healthy }
+
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aqsha
+      POSTGRES_USER: aqsha
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/init-extensions.sql:/docker-entrypoint-initdb.d/01-extensions.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aqsha"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # One-shot bucket create (idempotent), then exits.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio: { condition: service_healthy }
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET:-aqsha}
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD};
+      mc mb --ignore-existing local/$${MINIO_BUCKET};
+      echo 'bucket siap: '$${MINIO_BUCKET};
+      "
+    restart: "no"
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  agent_workflow_data:

@@ -2,8 +2,8 @@ import { RateLimiterRedis } from "rate-limiter-flexible";
 import { getServiceRedis } from "../clients/redis";
 
 /**
- * Registry rate-limit per-rule (Slice 6.2: dipindah dari `apps/api-v2/src/lib/rate-limits.ts`
- * ke service layer supaya dipanggil dari api-v2 (bun) DAN proses eve (node, via dist) —
+ * Registry rate-limit per-rule (Slice 6.2: dipindah dari `apps/api/src/lib/rate-limits.ts`
+ * ke service layer supaya dipanggil dari api (bun) DAN proses eve (node, via dist) —
  * mis. backstop `chat:send` di `onMessage`). Fixed-window: `points` permintaan per
  * `duration` detik, scoped per-user (key = `ownerUserId`).
  */

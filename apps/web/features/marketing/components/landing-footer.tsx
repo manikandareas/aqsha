@@ -5,19 +5,20 @@ import Link from "next/link";
 
 const footerColumns = [
   {
-    heading: "Product",
+    heading: "Produk",
     links: [
-      { label: "Demo", href: "/#demo" },
-      { label: "Features", href: "/#features" },
-      { label: "Workflow", href: "/#workflow" },
-      { label: "Open app", href: "/app" },
+      { label: "Bandingin", href: "/#bandingin" },
+      { label: "Cara kerja", href: "/#cara-kerja" },
+      { label: "Fitur", href: "/#fitur" },
+      { label: "Buat siapa", href: "/#buat-siapa" },
+      { label: "Harga", href: "/#pricing" },
     ],
   },
   {
-    heading: "Account",
+    heading: "Akun",
     links: [
-      { label: "Sign in", href: "/sign-in" },
-      { label: "Create workspace", href: "/sign-up" },
+      { label: "Masuk", href: "/sign-in" },
+      { label: "Coba gratis", href: "/sign-up" },
     ],
   },
 ] as const;
@@ -26,7 +27,7 @@ export function LandingFooter() {
   const reduce = useReducedMotion();
 
   return (
-    <footer className="w-full bg-background">
+    <footer className="w-full border-t border-border bg-background">
       <div className="mx-auto w-full max-w-7xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8 lg:py-20">
         <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 sm:gap-x-10 sm:gap-y-12 lg:grid-cols-[1fr_auto_auto] lg:gap-x-16">
           <m.div
@@ -47,8 +48,7 @@ export function LandingFooter() {
               </Link>
             </m.div>
             <p className="mt-4 max-w-sm text-sm leading-6 text-muted-foreground">
-              A research workspace for keeping questions, sources, and cited
-              answers connected.
+              Asisten AI buat riset — sumbernya beneran ada.
             </p>
           </m.div>
 

@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { readableConvexErrorMessage } from "@/lib/convex-error";
+import { readableApiErrorMessage } from "@/lib/api-error";
 
 export function ConfirmDialog({
   open,
@@ -41,7 +41,7 @@ export function ConfirmDialog({
       onOpenChange(false);
       setIsSubmitting(false);
     } catch (submitError) {
-      setError(readableConvexErrorMessage(submitError, "Aksi gagal."));
+      setError(readableApiErrorMessage(submitError, "Aksi gagal."));
       setIsSubmitting(false);
     }
   };

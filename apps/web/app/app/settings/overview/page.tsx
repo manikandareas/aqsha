@@ -1,11 +1,5 @@
-import { SettingsOverviewPage } from "@/features/settings/pages/overview-page";
-import { createPageMetadata } from "@/lib/metadata";
+import { SettingsOverviewPage } from "@/features/settings/components/overview-page";
 
-export const metadata = createPageMetadata({
-  title: "Ringkasan",
-  description: "Lihat rangkuman akun dan aktivitas riset Aqsha.",
-});
-
-export default function OverviewPage() {
+export default function SettingsOverviewPageRoute() {
   return <SettingsOverviewPage />;
 }

@@ -3,7 +3,7 @@ import { generateText } from "ai";
 
 /**
  * LLM teks-pendek untuk utilitas non-stream (Slice 6.8: auto-title thread). Provider
- * OpenAI DISAMAKAN dgn agent (`apps/web-v2/agent/agent.ts`): OpenAI langsung
+ * OpenAI DISAMAKAN dgn agent (`apps/web/agent/agent.ts`): OpenAI langsung
  * (`OPENAI_API_KEY`) ATAU gateway OpenAI-compatible (`OPENAI_BASE_URL`). Model
  * di-override `AQSHA_TITLE_MODEL` (default `gpt-4o-mini` — judul = tugas murah,
  * tak perlu model utama). `generateText` (bukan `generateObject`): output = satu

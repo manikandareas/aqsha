@@ -23,8 +23,8 @@ export type ThreadListItem = ChatThread & { bucket: ThreadBucket };
 
 /**
  * ThreadService — path BACA + CRUD non-stream thread Astra (Fase 6), dipakai route
- * api-v2 (Bun, tanpa bundling). Path TULIS proyeksi (ensure/record/status) hidup di
- * PROSES eve (`apps/web-v2/agent/lib/store.ts`, raw SQL) karena bundle eve tak bisa
+ * api (Bun, tanpa bundling). Path TULIS proyeksi (ensure/record/status) hidup di
+ * PROSES eve (`apps/web/agent/lib/store.ts`, raw SQL) karena bundle eve tak bisa
  * mengonsumsi paket workspace TS-mentah — tak ada operasi yang tumpang-tindih.
  */
 export const ThreadService = {

@@ -2,7 +2,7 @@
 
 import { DetailSplitLayout } from "@/components/layout/detail-split-layout";
 import { useSidebar } from "@/components/ui/sidebar";
-import { ThreadChatSurface } from "./chat-thread-state";
+import { EveChatThreadSurface } from "./eve-chat-thread-surface";
 import type { ThreadShellLayoutProps } from "./component-types";
 import { AccessDeniedState } from "./access-denied-state";
 import { ThreadHeader } from "./thread-header";
@@ -59,22 +59,14 @@ export function ThreadShellLayout({
                 {threadId && selectedThread === null ? (
                   <AccessDeniedState />
                 ) : (
-                  <ThreadChatSurface
+                  <EveChatThreadSurface
                     threadId={threadId}
                     isLoading={threadId ? selectedThread === undefined : false}
                     title={threadId ? selectedThread?.title : undefined}
                     rateStatus={rateStatus}
-                    startThread={startThread}
-                    onSend={sendMessage}
-                    runs={runs}
-                    artifacts={artifacts}
-                    sources={sources}
                     threads={threads}
-                    onCancelRun={onCancelRun}
-                    onRetryRun={onRetryRun}
                     contextArtifacts={contextArtifacts}
                     onRemoveContextArtifact={onRemoveContextArtifact}
-                    threadWorkspaceId={selectedThread?.workspaceId}
                   />
                 )}
               </main>

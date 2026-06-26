@@ -19,6 +19,15 @@ export function panelSurfaceClass({ framed = true }: { framed?: boolean } = {}) 
 /** Toolbar / page header row inside a panel or detail main. */
 export const panelHeaderPaddingClass = "px-5 py-5 sm:px-6 sm:py-6";
 
+/**
+ * Compact glass header bar — sticky, translucent + backdrop-blur, no border.
+ * Shared by single-row page headers (explore, thread). The blur only reveals
+ * scrolling content where this bar is sticky *inside* the scroll container
+ * (explore); elsewhere it reads as a clean borderless compact bar.
+ */
+export const panelHeaderBarClass =
+  "sticky top-0 z-20 flex h-11 shrink-0 items-center justify-between gap-3 bg-background/70 px-5 backdrop-blur-xl sm:px-6";
+
 /** Scrollable library or transcript body below a panel header. */
 export const panelBodyPaddingClass = "px-5 pb-8 pt-3 sm:px-6";
 

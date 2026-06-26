@@ -2,7 +2,7 @@
  * AppError — error terstruktur framework-agnostic (pengganti ConvexError V1).
  *
  * Hidup di `@aqsha/db` karena package ini sudah jadi dependency BERSAMA
- * `@aqsha/services` (yang melempar) dan `@aqsha/api-v2` (yang menangkap +
+ * `@aqsha/services` (yang melempar) dan `@aqsha/api` (yang menangkap +
  * memetakan ke HTTP). Satu definisi = satu identitas `instanceof` lintas-boundary.
  *
  * Payload mengikuti kontrak frontend: { message, code, severity?, field? } + `status`

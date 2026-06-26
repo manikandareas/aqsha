@@ -30,7 +30,7 @@ export {
   type VerificationResult,
 } from "./citation";
 
-/** Read model untuk panel Sources (api-v2 route + web hook). */
+/** Read model untuk panel Sources (api route + web hook). */
 export type ResearchSourceItem = {
   id: string;
   threadId: string;

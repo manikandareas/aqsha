@@ -1,23 +1,10 @@
-import { redirect } from "next/navigation";
-import { NewsDetailPage } from "@/features/explore/pages/news-detail-page";
-import { isAuthenticated } from "@/lib/auth-server";
-import { createPageMetadata } from "@/lib/metadata";
+import { NewsReader } from "@/features/discovery/components/news-reader";
 
-export const metadata = createPageMetadata({
-  title: "Berita",
-  description: "Baca berita sains pilihan dengan sumber dan bacaan terkait.",
-});
-
-export default async function ExploreNewsRoute({
+export default async function NewsReaderPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  if (!(await isAuthenticated())) {
-    redirect("/sign-in");
-  }
-
   const { id } = await params;
-
-  return <NewsDetailPage feedItemId={id} />;
+  return <NewsReader id={id} />;
 }

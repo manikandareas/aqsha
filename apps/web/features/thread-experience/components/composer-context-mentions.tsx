@@ -1,243 +1,95 @@
 "use client";
 
-import {
-  createContext,
-  use,
-  useState,
-  type ReactNode,
-} from "react";
-import { api } from "@aqsha/convex/api";
-import { toWorkspaceId } from "@/lib/convex-refs";
-import {
-  buildPaperMentionLabel,
-  buildWorkspaceMentionLabel,
-  contextRefKey,
-  countContextRefs,
-  MAX_CONTEXT_PAPERS,
-  MAX_CONTEXT_WORKSPACES,
-  type ContextRef,
-} from "@/lib/context-refs";
-import { useConvexQueryData } from "@/lib/convex-query";
-import type {
-  ContextItemOption,
-  ContextWorkspaceOption,
-} from "./composer-token-input";
+import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 
-type ComposerMentionsValue = {
-  pinnedContextRefs: ContextRef[];
-  setContextRefs: (refs: ContextRef[]) => void;
-  appendContextRef: (ref: ContextRef) => void;
-  contextWorkspaces: ContextWorkspaceOption[];
-  ambientWorkspaceId: string | null;
-  workspaceItems: ContextItemOption[] | undefined;
-  workspaceItemsLoading: boolean;
-  requestWorkspaceItems: (workspaceId: string | null) => void;
+type DraftContextArtifact = { artifactId: string; title: string };
+
+type ComposerMentionsContextValue = {
+  contextArtifacts: DraftContextArtifact[];
+  addContextArtifact: (artifact: DraftContextArtifact) => void;
+  removeContextArtifact: (artifactId: string) => void;
 };
 
-const ComposerMentionsContext = createContext<ComposerMentionsValue | null>(null);
-
-export function useComposerMentions() {
-  return use(ComposerMentionsContext);
-}
-
-function truncate(value: string, max: number) {
-  const compact = value.replace(/\s+/g, " ").trim();
-  return compact.length > max ? `${compact.slice(0, max - 1)}…` : compact;
-}
+const ComposerMentionsContext = createContext<ComposerMentionsContextValue | null>(null);
 
 export function ComposerMentionsProvider({
-  threadId,
-  ambientWorkspaceId = null,
   children,
 }: {
+  children: ReactNode;
   threadId?: string;
   ambientWorkspaceId?: string | null;
-  children: ReactNode;
 }) {
-  // Remount per thread so local edits reset cleanly when switching threads,
-  // without a reset effect or ref-in-render (both barred by the lint config).
+  const [contextArtifacts, setContextArtifacts] = useState<DraftContextArtifact[]>([]);
+  const value = useMemo(
+    () => ({
+      contextArtifacts,
+      addContextArtifact: (artifact: DraftContextArtifact) =>
+        setContextArtifacts((current) =>
+          current.some((item) => item.artifactId === artifact.artifactId)
+            ? current
+            : [...current, artifact],
+        ),
+      removeContextArtifact: (artifactId: string) =>
+        setContextArtifacts((current) =>
+          current.filter((item) => item.artifactId !== artifactId),
+        ),
+    }),
+    [contextArtifacts],
+  );
   return (
-    <ComposerMentionsProviderInner
-      key={threadId ?? "__draft__"}
-      ambientWorkspaceId={ambientWorkspaceId}
-    >
-      {children}
-    </ComposerMentionsProviderInner>
+    <ComposerMentionsContext.Provider value={value}>{children}</ComposerMentionsContext.Provider>
   );
 }
 
-function ComposerMentionsProviderInner({
-  ambientWorkspaceId,
-  children,
-}: {
-  ambientWorkspaceId: string | null;
-  children: ReactNode;
-}) {
-  const workspacesPage = useConvexQueryData(api.workspaces.list, {
-    paginationOpts: { numItems: 50, cursor: null },
-  });
-  const contextWorkspaces: ContextWorkspaceOption[] = (workspacesPage?.page ?? []).map((workspace) => ({
-    workspaceId: String(workspace._id),
-    name: workspace.name,
-    emoji: workspace.emoji,
-  }));
-
-  // The composer draft: the pills the user is adding for the CURRENT compose.
-  // Starts empty and is cleared after each send — the composer never re-seeds
-  // previously-pinned context, so navigating into a thread leaves it empty.
-  // Pinned context lives server-side (threadContextWorkspaces / *Artifacts) and
-  // the agent reads it regardless of what the composer shows.
-  const [contextRefs, setContextRefs] = useState<ContextRef[]>([]);
-
-  const appendContextRef = (ref: ContextRef) => {
-    setContextRefs((current) => {
-      const key = contextRefKey(ref);
-      if (current.some((existing) => contextRefKey(existing) === key)) {
-        return current;
-      }
-      const counts = countContextRefs(current);
-      if (ref.kind === "workspace" && counts.workspaces >= MAX_CONTEXT_WORKSPACES) {
-        return current;
-      }
-      if (ref.kind === "paper" && counts.papers >= MAX_CONTEXT_PAPERS) {
-        return current;
-      }
-      return [...current, ref];
-    });
-  };
-
-  const [pickerWorkspaceId, setPickerWorkspaceId] = useState<string | null>(null);
-  const pickerItems = useConvexQueryData(
-    api.artifacts.listForContextPicker,
-    pickerWorkspaceId ? { workspaceId: toWorkspaceId(pickerWorkspaceId) } : "skip",
-  );
-  const workspaceItems: ContextItemOption[] | undefined = (() => {
-    if (!pickerWorkspaceId || pickerItems === undefined) {
-      return undefined;
-    }
-    return pickerItems.map((item) => ({
-      workspaceId: String(item.workspaceId ?? pickerWorkspaceId),
-      artifactId: String(item._id),
-      title: item.title,
-    }));
-  })();
-
-  const requestWorkspaceItems = (workspaceId: string | null) => {
-    setPickerWorkspaceId(workspaceId);
-  };
-
-  const value: ComposerMentionsValue = {
-    pinnedContextRefs: contextRefs,
-    setContextRefs,
-    appendContextRef,
-    contextWorkspaces,
-    ambientWorkspaceId,
-    workspaceItems,
-    workspaceItemsLoading: pickerWorkspaceId !== null && pickerItems === undefined,
-    requestWorkspaceItems,
-  };
-
-  return (
-    <ComposerMentionsContext.Provider value={value}>
-      {children}
-    </ComposerMentionsContext.Provider>
-  );
+export function useComposerMentions() {
+  const context = useContext(ComposerMentionsContext);
+  if (!context) {
+    throw new Error("useComposerMentions must be used within ComposerMentionsProvider");
+  }
+  return context;
 }
 
-/** Build a paper context ref (used by side panels inserting the same token). */
-function buildPaperContextRef(args: {
-  workspaceId: string;
-  workspaceName: string;
-  artifactId: string;
-  title: string;
-}): ContextRef {
-  return {
-    kind: "paper",
-    workspaceId: args.workspaceId,
-    artifactId: args.artifactId,
-    label: buildPaperMentionLabel(
-      truncate(args.workspaceName, 16),
-      truncate(args.title, 20),
-    ),
-  };
-}
-
-/** Build a workspace context ref (used by side panels). */
-function buildWorkspaceContextRef(args: {
-  workspaceId: string;
-  workspaceName: string;
-}): ContextRef {
-  return {
-    kind: "workspace",
-    workspaceId: args.workspaceId,
-    label: buildWorkspaceMentionLabel(args.workspaceName),
-  };
-}
-
-/**
- * Adapter so a workspace library grid can drive the inline context pills:
- * clicking a paper inserts the same `@workspace:paper` token the composer
- * produces. Returns null-safe handlers when no mention provider is mounted.
- */
 export function usePanelContextSelection(args: {
   workspaceId: string;
   workspaceName: string;
   titleById: Map<string, string>;
 }) {
-  const mentions = useComposerMentions();
-  const refs = mentions?.pinnedContextRefs ?? [];
-  const selectedArtifactIds = new Set(
-    refs.flatMap((ref) => (ref.kind === "paper" ? [ref.artifactId] : [])),
-  );
-
-  const getArtifactSelected = (artifactId: string) =>
-    selectedArtifactIds.has(artifactId);
-
-  const onToggleArtifactContext = (artifactId: string) => {
-    if (!mentions) {
-      return;
-    }
-    if (selectedArtifactIds.has(artifactId)) {
-      mentions.setContextRefs(
-        refs.filter(
-          (ref) => !(ref.kind === "paper" && ref.artifactId === artifactId),
-        ),
-      );
-      return;
-    }
-    mentions.appendContextRef(
-      buildPaperContextRef({
-        workspaceId: args.workspaceId,
-        workspaceName: args.workspaceName,
-        artifactId,
-        title: args.titleById.get(artifactId) ?? "Paper",
-      }),
-    );
-  };
-
-  const onSetArtifactContextSelection = (artifactIds: string[]) => {
-    if (!mentions) {
-      return;
-    }
-    const otherRefs = refs.filter(
-      (ref) => !(ref.kind === "paper" && ref.workspaceId === args.workspaceId),
-    );
-    const nextPaperRefs = artifactIds
-      .slice(0, MAX_CONTEXT_PAPERS)
-      .map((artifactId) =>
-        buildPaperContextRef({
-          workspaceId: args.workspaceId,
-          workspaceName: args.workspaceName,
-          artifactId,
-          title: args.titleById.get(artifactId) ?? "Paper",
-        }),
-      );
-    mentions.setContextRefs([...otherRefs, ...nextPaperRefs]);
-  };
+  const { contextArtifacts, addContextArtifact, removeContextArtifact } = useComposerMentions();
+  const selectedIds = new Set(contextArtifacts.map((item) => item.artifactId));
 
   return {
-    getArtifactSelected,
-    onToggleArtifactContext,
-    onSetArtifactContextSelection,
+    contextArtifacts,
+    toggleArtifact: (artifact: DraftContextArtifact) => {
+      const exists = contextArtifacts.some((item) => item.artifactId === artifact.artifactId);
+      if (exists) removeContextArtifact(artifact.artifactId);
+      else addContextArtifact(artifact);
+    },
+    removeContextArtifact,
+    getArtifactSelected: (artifactId: string) => selectedIds.has(artifactId),
+    onToggleArtifactContext: (artifactId: string) => {
+      const existing = contextArtifacts.find((item) => item.artifactId === artifactId);
+      if (existing) {
+        removeContextArtifact(artifactId);
+        return;
+      }
+      addContextArtifact({
+        artifactId,
+        title: args.titleById.get(artifactId) ?? "Paper",
+      });
+    },
+    onSetArtifactContextSelection: (artifactIds: string[]) => {
+      const keep = new Set(artifactIds);
+      for (const item of contextArtifacts) {
+        if (!keep.has(item.artifactId)) removeContextArtifact(item.artifactId);
+      }
+      for (const artifactId of artifactIds) {
+        if (!selectedIds.has(artifactId)) {
+          addContextArtifact({
+            artifactId,
+            title: args.titleById.get(artifactId) ?? "Paper",
+          });
+        }
+      }
+    },
   };
 }

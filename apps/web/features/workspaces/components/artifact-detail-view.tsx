@@ -7,7 +7,6 @@ import {
   PanelLeftIcon,
   Trash2Icon,
 } from "@aqsha/ui/icons";
-import { api } from "@aqsha/convex/api";
 import { useRouter } from "next/navigation";
 import {
   useEffect,
@@ -23,8 +22,8 @@ import { AppLoadingOverlay } from "@/components/app-loading-overlay";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toArtifactId, type ArtifactId } from "@/lib/convex-refs";
-import { readableConvexErrorMessage } from "@/lib/convex-error";
-import { useConvexActionQueryWithKey } from "@/lib/convex-query";
+import { readableApiErrorMessage } from "@/lib/api-error";
+import { useArtifactRender } from "@/features/artifacts/api";
 import { panelHeaderPaddingClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
 import { useArtifactDetailData } from "../api/use-workspaces-data";
@@ -36,6 +35,7 @@ import {
   MarkdownArtifactDetails,
   MarkdownArtifactInfo,
   PaperStatusBanner,
+  type ArtifactSidebarRecord,
 } from "./artifact-detail-sidebar";
 import {
   ArtifactHeaderActions,
@@ -93,6 +93,7 @@ export function ArtifactDetailView({
   const router = useRouter();
 
   const detail = data.artifact;
+  const sidebarArtifact = detail?.artifact as ArtifactSidebarRecord | undefined;
   const detailIsMarkdown = detail?.artifact.artifactType === "markdown";
   const resolvedWorkspaceId = workspaceIdProp ?? detail?.artifact.workspaceId ?? "";
   // For markdown on the PAGE the render payload is only the initial seed: once
@@ -118,19 +119,12 @@ export function ArtifactDetailView({
           artifactId,
           detail.artifact.updatedAt,
           detail.content?.updatedAt ?? "no-content",
-          detail.url?.updatedAt ?? "no-url",
+          detail.url?.extractedAt ?? "no-url",
         ].join(":");
-  const renderPayloadQuery = useConvexActionQueryWithKey(
-    api.artifacts.getRenderPayload,
-    ["artifactRenderPayload", artifactId, renderPayloadVersionKey],
-    renderPayloadVersionKey
-      ? { artifactId: toArtifactId(artifactId) }
-      : "skip",
-  );
-
-  const activeRenderPayload = (renderPayloadQuery.data ?? null) as ArtifactRenderPayload | null;
+  const renderPayloadQuery = useArtifactRender(artifactId);
+  const activeRenderPayload = (renderPayloadQuery.data ?? data.renderPayload ?? null) as ArtifactRenderPayload | null;
   const activeContentError = renderPayloadQuery.error
-    ? readableConvexErrorMessage(renderPayloadQuery.error, "We couldn't load this content.")
+    ? readableApiErrorMessage(renderPayloadQuery.error, "We couldn't load this content.")
     : null;
   // The page route guards against a workspace/artifact mismatch in the URL; the
   // panel always shows the artifact's own workspace, so there is nothing to
@@ -174,7 +168,7 @@ export function ArtifactDetailView({
   const metadataPopover =
     ready && detail && activeRenderPayload && activeRenderPayload.artifactType !== "markdown" ? (
       <ArtifactMetadataPopover
-        artifact={detail.artifact}
+        artifact={sidebarArtifact!}
         payload={activeRenderPayload}
         title={detail.artifact.title}
         paperExtraction={data.paperExtraction as PaperExtractionStatus}
@@ -195,7 +189,7 @@ export function ArtifactDetailView({
         <MarkdownArtifactInfo artifact={detail.artifact} />
       ) : (
         <ArtifactMetadataPanel
-          artifact={detail.artifact}
+          artifact={sidebarArtifact!}
           payload={activeRenderPayload}
           title={detail.artifact.title}
           paperExtraction={data.paperExtraction as PaperExtractionStatus}
@@ -582,7 +576,7 @@ async function saveLatestDocumentContent({
   } catch (error: unknown) {
     dispatch({
       type: "failed",
-      message: readableConvexErrorMessage(error, "We couldn't save your changes."),
+      message: readableApiErrorMessage(error, "We couldn't save your changes."),
     });
   } finally {
     saveInFlightRef.current = false;

@@ -27,10 +27,8 @@ import {
   ComposerMentionsProvider,
   usePanelContextSelection,
 } from "./composer-context-mentions";
-import { SubagentDetailPanel } from "./subagent-detail-panel";
 import { ThreadPanelProvider, useThreadPanel } from "./thread-panel-context";
 import { ThreadShellLayout } from "./thread-shell-layout";
-import { findSubagentNode } from "../utils/subagent-detail-model";
 
 export function ThreadDetailShell({ threadId }: { threadId?: string }) {
   const router = useRouter();
@@ -145,23 +143,7 @@ function ThreadDetailShellView({
     )
   ) : null;
 
-  const subagentPanel =
-    mode.kind === "subagent"
-      ? (() => {
-          const run = runs.find((candidate) => candidate._id === mode.runId);
-          const node = run
-            ? findSubagentNode(run.activity, mode.subagentId)
-            : undefined;
-          if (!node) return null;
-          return (
-            <SubagentDetailPanel
-              node={node}
-              sources={sources.filter((source) => source.runId === mode.runId)}
-              onClose={panel?.closePanel}
-            />
-          );
-        })()
-      : null;
+  const subagentPanel = null; // Stub: subagent drill-down belum dipersist di eve V2.
 
   const panelContent =
     mode.kind === "artifact" ? (
@@ -170,7 +152,6 @@ function ThreadDetailShellView({
         onClose={panel?.closePanel}
       />
     ) : mode.kind === "subagent" ? (
-      // Resolved node missing (run/sources not loaded yet) → fall back to context.
       subagentPanel ?? contextContent
     ) : (
       contextContent

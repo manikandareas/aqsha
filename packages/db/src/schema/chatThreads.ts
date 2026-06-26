@@ -9,7 +9,7 @@ import { users } from "./users";
  *   pada turn pertama; klien menerimanya lewat `onSessionChange`. Memakai session id
  *   sebagai PK menghilangkan friksi join thread↔session (tanpa kolom `eve_session_id`
  *   terpisah + tanpa race rekonsiliasi). Thread di-CREATE oleh hook proyeksi eve
- *   (observe-only) saat `session.started`, BUKAN oleh route api-v2.
+ *   (observe-only) saat `session.started`, BUKAN oleh route api.
  * - `status` text + CHECK (idle|streaming|failed) — `streaming` mengunci composer,
  *   `failed` memunculkan banner retry.
  * - `titleStatus` text + CHECK (null|generating|ready) — klaim siklus auto-title
@@ -31,7 +31,7 @@ export const chatThreads = pgTable(
     lastMessagePreview: text("last_message_preview"),
     // Resume handle eve = continuation token ber-namespace TUNGGAL (`eve:<uuid>`). Ditangkap
     // SERVER-SIDE oleh proxy-tee respons create/continue eve (`app/eve/v1/[...path]/route.ts`
-    // → upsert race-proof api-v2), BUKAN oleh channel agent (`channel.continuationToken` =
+    // → upsert race-proof api), BUKAN oleh channel agent (`channel.continuationToken` =
     // double-namespace `eve:eve:…` → `deliver` gagal). Follow-up + jawab HITL di thread yang
     // di-reload WAJIB token ini (eve menolak tanpa-token); di-rehydrate ke `initialSession`
     // saat ThreadView mount. Null sampai create-POST turn pertama ter-tee.

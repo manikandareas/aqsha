@@ -59,7 +59,7 @@ export const settingsMenu: SettingsMenuItem[] = [
     key: "security",
     href: "/app/settings/security",
     label: "Keamanan",
-    description: "Sesi aktif dan keluar dari perangkat ini.",
+    description: "Kata sandi dan perangkat aktif.",
     group: "Riset",
     icon: ShieldIcon,
   },

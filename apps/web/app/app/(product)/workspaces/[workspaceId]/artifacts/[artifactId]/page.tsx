@@ -1,23 +1,16 @@
-import { redirect } from "next/navigation";
-import { ArtifactDetailPage } from "@/features/workspaces/pages/artifact-detail-page";
-import { isAuthenticated } from "@/lib/auth-server";
-import { createPageMetadata } from "@/lib/metadata";
+import { ArtifactDetailView } from "@/features/workspaces/components/artifact-detail-view";
 
-export const metadata = createPageMetadata({
-  title: "Artifact",
-  description: "Inspect a research artifact, its content, and related workspace context in Aqsha.",
-});
-
-export default async function WorkspaceArtifactPage({
+export default async function ArtifactReaderPage({
   params,
 }: {
   params: Promise<{ workspaceId: string; artifactId: string }>;
 }) {
-  if (!(await isAuthenticated())) {
-    redirect("/sign-in");
-  }
-
   const { workspaceId, artifactId } = await params;
-
-  return <ArtifactDetailPage workspaceId={workspaceId} artifactId={artifactId} />;
+  return (
+    <ArtifactDetailView
+      artifactId={artifactId}
+      workspaceId={workspaceId}
+      variant="page"
+    />
+  );
 }

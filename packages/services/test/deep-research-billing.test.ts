@@ -11,7 +11,7 @@
  *     debit tambahan.
  *
  * Keputusan scope B: `propose_research_plan.execute` TAK di-import langsung —
- * tool ada di apps/web-v2 (impor `eve/tools`, di luar `test:v2`; bukan dep
+ * tool ada di apps/web (impor `eve/tools`, di luar `test:v2`; bukan dep
  * @aqsha/services). Tool = passthrough tipis ke BillingService; dua perilakunya
  * (gate-block tanpa consume + idempoten key `thread:turn:deep`) terbukti penuh di
  * itest `consumeCredits(deep_research)` + unit SendQuotaService di bawah, dan

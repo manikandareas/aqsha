@@ -10,7 +10,7 @@ const TITLE_MAX = 120;
  * - `requestTitle` dipanggil hook proyeksi eve di `turn.completed` (PROSES eve, dist).
  *   Klaim atomik (`title_status: null → 'generating'`) = guard turn-pertama + rename-manual,
  *   lalu enqueue job (dedup `jobId = threadId`). Hanya enqueue bila klaim menang.
- * - `generate` dijalankan worker BullMQ (PROSES api-v2). Ambil pesan user pertama →
+ * - `generate` dijalankan worker BullMQ (PROSES api). Ambil pesan user pertama →
  *   LLM → tulis judul ber-guard `title_status = 'generating'` (rename antara claim↔generate
  *   tak ketimpa).
  */

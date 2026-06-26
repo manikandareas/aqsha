@@ -1,11 +1,5 @@
-import { SettingsAccountPage } from "@/features/settings/pages/account-page";
-import { createPageMetadata } from "@/lib/metadata";
+import { AccountPage } from "@/features/settings/components/account-page";
 
-export const metadata = createPageMetadata({
-  title: "Akun",
-  description: "Kelola profil dan identitas yang dipakai di Aqsha.",
-});
-
-export default function AccountPage() {
-  return <SettingsAccountPage />;
+export default function SettingsAccountPage() {
+  return <AccountPage />;
 }

@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // eve (Fase 6) generated artifacts — bundles here OOM eslint if traversed.
+    ".eve/**",
+    ".output/**",
+    ".workflow-data/**",
+    ".nitro/**",
+    ".vercel/**",
   ]),
 ]);
 

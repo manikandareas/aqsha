@@ -1,5 +1,5 @@
 // Quota subpath (`@aqsha/services/quota`) — rate-limit registry + send-gate. Bundle-safe
-// (rate-limiter-flexible + ioredis = npm terkompilasi) → dipakai api-v2 (bun) DAN proses
+// (rate-limiter-flexible + ioredis = npm terkompilasi) → dipakai api (bun) DAN proses
 // eve (node v25, dist). Granular agar eve tak menarik barrel penuh.
 export {
   getRateLimiter,

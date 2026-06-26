@@ -1,7 +1,6 @@
 "use client";
 
 import { type ComponentType } from "react";
-import { type ActivityEvent } from "@aqsha/agent-contracts";
 import {
   BookOpenIcon,
   Code2Icon,
@@ -26,7 +25,7 @@ import {
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
-import type { ResearchRun } from "../types";
+import type { ActivityEvent, ResearchRun } from "../types";
 import { formatCompactDuration } from "../utils/datetime";
 import {
   type CompletedNodeIcon,

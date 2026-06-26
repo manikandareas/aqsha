@@ -64,8 +64,6 @@ type WorkspaceSummary = {
 
 const emptyWorkspaces: WorkspaceSummary[] = [];
 const MOBILE_THREAD_TITLE_MAX_CHARS = 42;
-const THREAD_ARCHIVE_THRESHOLD_DAYS = 1;
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const THREADS_COLLAPSED_STORAGE_KEY = "aqsha:sidebar:threads-collapsed";
 const OLD_THREADS_COLLAPSED_STORAGE_KEY =
   "aqsha:sidebar:old-threads-collapsed";
@@ -107,14 +105,6 @@ export function AppSidebar({
   const router = useRouter();
   const [commandOpen, setCommandOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  // Deferred to a mount effect so the recent/older cutoff reads `Date.now()`
-  // only on the client, avoiding an SSR hydration mismatch.
-  const [activityGroupingNow, setActivityGroupingNow] = useState<number | null>(
-    null,
-  );
-  useEffect(() => {
-    setActivityGroupingNow(Date.now());
-  }, []);
   const { isMobile, setOpen, setOpenMobile } = useSidebar();
   const sortedWorkspaces = workspaces.toSorted(
     (left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0),
@@ -122,10 +112,11 @@ export function AppSidebar({
   const sortedThreads = threads.toSorted(
     (left, right) => right.lastActivityAt - left.lastActivityAt,
   );
-  const threadGroups = splitThreadsByActivity(
-    sortedThreads,
-    activityGroupingNow,
-  );
+  // Grouping recent/older dari BE (ThreadService.list `bucket`) — FE tinggal pisah by field.
+  const threadGroups = {
+    recent: sortedThreads.filter((t) => t.bucket !== "older"),
+    older: sortedThreads.filter((t) => t.bucket === "older"),
+  };
   const isHomeActive = pathname === "/app" && !selectedThreadId;
   const isWorkspaceRoute = pathname.startsWith("/app/workspaces");
   const isExploreActive = pathname.startsWith("/app/explore");
@@ -454,26 +445,6 @@ function PrimaryNavLink({
       </SidebarMenuButton>
     </SidebarMenuItem>
   );
-}
-
-function splitThreadsByActivity(threads: ThreadSummary[], now: number | null) {
-  if (now === null) {
-    return { recent: threads, older: [] };
-  }
-
-  const archiveCutoff = now - THREAD_ARCHIVE_THRESHOLD_DAYS * MS_PER_DAY;
-  const recent: ThreadSummary[] = [];
-  const older: ThreadSummary[] = [];
-
-  for (const thread of threads) {
-    if (thread.lastActivityAt <= archiveCutoff) {
-      older.push(thread);
-    } else {
-      recent.push(thread);
-    }
-  }
-
-  return { recent, older };
 }
 
 function usePersistentCollapse(

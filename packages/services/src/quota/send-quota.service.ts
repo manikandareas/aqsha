@@ -68,7 +68,7 @@ const RULE = "chat:send" as const;
  *   poin `chat:send`. Blok → return-union (channel `return null` = drop turn).
  * - `getSendStatus` (non-consuming) — preview UX-ramah untuk composer. Tak mengubah state.
  *
- * Fail-OPEN saat Redis error (sama semantik macro api-v2): hiccup infra tak boleh memblok
+ * Fail-OPEN saat Redis error (sama semantik macro api): hiccup infra tak boleh memblok
  * user; `rate-limiter-flexible` reject `Error` untuk store-error vs `RateLimiterRes` untuk limit.
  */
 export const SendQuotaService = {

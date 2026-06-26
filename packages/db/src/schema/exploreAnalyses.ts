@@ -10,7 +10,7 @@ import { ARTIFACT_EMBEDDING_DIMENSION } from "./artifactEmbeddings";
  *
  * `query_embedding` NULLABLE: bila kredensial embedding tak ada, baris tetap tersimpan (pulse/gap
  * tetap jalan) tapi tak ikut semantic-reuse. `papers` = korpus mentah (judul/abstrak/sitasi) =
- * "bahan" untuk reuse. `gap` = GapResult[]; `tension` = TensionData (lihat web-v2 types.ts).
+ * "bahan" untuk reuse. `gap` = GapResult[]; `tension` = TensionData (lihat web types.ts).
  */
 export const EXPLORE_ANALYSIS_DIMENSION = ARTIFACT_EMBEDDING_DIMENSION;
 

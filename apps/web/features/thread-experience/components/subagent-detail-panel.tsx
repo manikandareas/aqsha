@@ -1,6 +1,5 @@
 "use client";
 
-import { type ActivityEvent } from "@aqsha/agent-contracts";
 import {
   ChevronDownIcon,
   PanelLeftIcon,
@@ -14,7 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { panelBodyPaddingClass, panelHeaderPaddingClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
-import type { ResearchSource } from "../types";
+import type { ActivityEvent, ResearchSource } from "../types";
 import {
   type SubagentQueryGroup,
   subagentDetailModel,

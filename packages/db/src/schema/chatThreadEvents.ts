@@ -35,8 +35,8 @@ import { users } from "./users";
  * - `id` bigserial dipertahankan sebagai ordering sisip stabil (tie-break) + PK.
  * - `payload` = `HandleMessageStreamEvent` utuh (jsonb), diumpankan apa adanya ke reducer.
  *   Di-`unknown` agar `@aqsha/db` tak bergantung pada tipe eve.
- * - Path TULIS = PROSES eve (`apps/agent-v2/agent/lib/store.ts`, raw SQL). Path BACA =
- *   route api-v2 via `@aqsha/services` (`EventService`).
+ * - Path TULIS = PROSES eve (`apps/agent/agent/lib/store.ts`, raw SQL). Path BACA =
+ *   route api via `@aqsha/services` (`EventService`).
  */
 export const chatThreadEvents = pgTable(
   "chat_thread_events",
