@@ -127,10 +127,10 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
     # DB management (Drizzle Studio / psql) over Tailscale. Default 127.0.0.1 = not exposed;
     # set POSTGRES_BIND_IP to the VPS Tailscale IP in Dokploy to reach it from a Tailscale peer.
-    # Host port 5433 (not 5432) to avoid colliding with the separate dev Postgres on this host.
+    # Host port 5434 (not 5432) to avoid colliding with the separate dev Postgres on this host.
     # ponytail: never bind 0.0.0.0 here — that publishes the DB to the internet.
     ports:
-      - "${POSTGRES_BIND_IP:-127.0.0.1}:5433:5432"
+      - "${POSTGRES_BIND_IP:-127.0.0.1}:5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infra/init-extensions.sql:/docker-entrypoint-initdb.d/01-extensions.sql
