@@ -25,7 +25,7 @@ function requireAdmin(ownerUserId: string, email?: string | null): void {
 
 export const admin = new Elysia({ prefix: "/admin" })
   .use(authMacro)
-  // POST /admin/feed/hydrate — fan-out 5 lane (ganti hydrateCycle). Throttle lock 60s.
+  // POST /admin/feed/hydrate — fan-out lane hidrasi (ganti hydrateCycle). Throttle lock 60s.
   .post(
     "/feed/hydrate",
     async ({ ownerUserId, email, body }) => {
@@ -63,9 +63,7 @@ export const admin = new Elysia({ prefix: "/admin" })
           t.Array(
             t.Union([
               t.Literal("refreshTrendingPapers"),
-              t.Literal("refreshTrendingTopics"),
               t.Literal("refreshGoogleNews"),
-              t.Literal("refreshFactCheckClaims"),
               t.Literal("enrichGoogleNewsArticles"),
             ]),
           ),

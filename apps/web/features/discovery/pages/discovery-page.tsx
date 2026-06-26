@@ -579,7 +579,7 @@ function buildSeed(item: DiscoveryItem): string {
     const verdict = VERDICT_STYLE[item.claim.verdict].label;
     const lines = [
       `Klaim viral: ${item.claim.claim}`,
-      `Verdict pemeriksa fakta: ${verdict}${item.claim.publisher ? ` (${item.claim.publisher})` : ""}`,
+      `Hasil cek fakta: ${verdict}${item.claim.publisher ? ` (${item.claim.publisher})` : ""}`,
       "",
       "Telaah bukti ilmiah di balik klaim ini: apa yang dikatakan literatur, seberapa kuat buktinya, dan konteks apa yang penting.",
       item.claim.reviewUrl ? `Sumber pemeriksa: ${item.claim.reviewUrl}` : "",
@@ -597,9 +597,9 @@ function CaughtUp() {
       <div className="flex size-9 items-center justify-center rounded-full bg-mint-soft text-mint-foreground">
         <CheckCircle2Icon className="size-5" />
       </div>
-      <p className="text-[14px] font-semibold text-foreground">Kamu sudah update</p>
+      <p className="text-[14px] font-semibold text-foreground">Kamu sudah baca semua</p>
       <p className="max-w-[320px] text-[12.5px] text-muted-foreground">
-        Itu semua untuk sekarang. Feed disegarkan berkala — kembali lagi nanti
+        Segini dulu untuk saat ini. Feed diperbarui berkala — kembali lagi nanti
         atau simpan beberapa item untuk diteliti.
       </p>
     </div>
@@ -692,7 +692,7 @@ function DiscoveryEmptyState({
       ? `Tidak ada hasil untuk “${query}”. Coba kata kunci lain atau perlebar rentang waktu.`
       : mode === "topics"
         ? "Belum ada konten untuk topik ini. Coba topik lain atau kembali nanti."
-        : "Konten untuk lajur ini akan muncul setelah penyegaran terjadwal berikutnya.";
+        : "Konten untuk feed ini akan muncul setelah pembaruan terjadwal berikutnya.";
   return (
     <div className="mt-2 max-w-[560px] rounded-[10px] border border-border bg-card px-5 py-8 text-center">
       <div className="mx-auto mb-3 flex size-10 items-center justify-center rounded-full bg-mint-soft text-mint-foreground">

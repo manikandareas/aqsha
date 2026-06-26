@@ -36,7 +36,7 @@ function buildFactSeed(claim: FactClaim) {
   const verdict = VERDICT_STYLE[claim.verdict].label;
   return [
     `Klaim viral: ${claim.claim}`,
-    `Verdict pemeriksa fakta: ${verdict}${claim.publisher ? ` (${claim.publisher})` : ""}`,
+    `Hasil cek fakta: ${verdict}${claim.publisher ? ` (${claim.publisher})` : ""}`,
     "",
     "Telaah bukti ilmiah di balik klaim ini: apa yang dikatakan literatur, seberapa kuat buktinya, dan konteks apa yang penting.",
     claim.reviewUrl ? `Sumber pemeriksa: ${claim.reviewUrl}` : "",
@@ -151,7 +151,7 @@ function FactDetailContent({
       <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] font-medium text-muted-foreground">
         {claim.publisher ? <span>Diperiksa {claim.publisher}</span> : null}
         {claim.verdictLabelRaw ? (
-          <span>· Rating asli: “{claim.verdictLabelRaw}”</span>
+          <span>· Label asli: “{claim.verdictLabelRaw}”</span>
         ) : null}
         {reviewedDate ? <span>· Ditinjau {reviewedDate}</span> : null}
         {time ? (

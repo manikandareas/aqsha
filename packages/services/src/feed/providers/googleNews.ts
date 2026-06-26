@@ -150,6 +150,17 @@ export function dedupeGoogleNewsItems(
   return out;
 }
 
+/**
+ * Dedup-key kanonik news = `news:[domain:]normalizedTitle` (BUKAN guid). Fix bug duplikat:
+ * story tersindikasi muncul di seed/RSS berbeda dgn guid berbeda → guid-key bikin baris baru
+ * tiap run; title+domain meng-collapse-nya di `upsertByDedupeKey`. `normalizeNewsTitle` sama
+ * dgn dedup sekunder in-memory, jadi konsisten. Tanpa domain → title saja.
+ */
+function newsDedupeKey(item: GoogleNewsItem): string {
+  const title = normalizeNewsTitle(item.title);
+  return item.publisherDomain ? `news:${item.publisherDomain}:${title}` : `news:${title}`;
+}
+
 /** Map → FeedItemInput kind=news (summary kosong; enrichment mengisi). Port buildGoogleNewsFeedItems. */
 export function buildGoogleNewsFeedInputs(
   collected: Array<{ item: GoogleNewsItem; topicLabel: string }>,
@@ -165,7 +176,7 @@ export function buildGoogleNewsFeedInputs(
     topics: [topicLabel],
     trendScore: 0,
     publishedAt: item.pubDate ?? now,
-    dedupeKey: `news:gnews:${item.guid}`,
+    dedupeKey: newsDedupeKey(item),
     lastSeenAt: now,
   }));
 }

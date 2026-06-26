@@ -107,6 +107,8 @@ export {
   ARTIFACT_QUEUES,
   type ArtifactQueueName,
   enqueue,
+  EXPLORE_QUEUES,
+  type ExploreQueueName,
   getQueueConnection,
 } from "./clients/queue";
 
@@ -151,11 +153,26 @@ export {
 } from "./feed-hydration.service";
 export { PaperCacheService, type PapersByKeysItem } from "./paper-cache.service";
 export { ExploreService } from "./explore.service";
+export { deriveSubtopics, suggestQueries } from "./explore/suggest";
 export {
-  FeedAiService,
-  type GenerateIdeasResult,
-  type IdeaSeed,
-} from "./feed-ai.service";
+  type ExploreFacets,
+  type FacetGlobe,
+  type FacetGlobeArc,
+  type FacetGlobeNode,
+  type FacetPulse,
+  FacetsService,
+} from "./explore/facets.service";
+export {
+  type AnalysisPaper,
+  type ExploreAnalysisJob,
+  type ExploreAnalysisResult,
+  type ExploreAnalysisStatus,
+  ExploreAnalysisService,
+  type GapResult,
+  parseAnalysis,
+  type TensionClaim,
+  type TensionData,
+} from "./explore/analysis.service";
 export {
   type DiscoveryItemRef,
   type DiscoveryResolvedRef,

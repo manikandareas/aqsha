@@ -168,13 +168,6 @@ describe("api-v2 feed routes", () => {
     expect(ids).not.toContain(idA); // hidden
   });
 
-  itest("GET /feed/papers-by-keys → resolve paper cache by key", async () => {
-    const r = await req("GET", `/feed/papers-by-keys?keys=${encodeURIComponent(PAPER_KEY)}`, tok(OWNER));
-    expect(r.status).toBe(200);
-    const papers = (await readJson(r)).papers as Array<{ key: string; title: string }>;
-    expect(papers.some((p) => p.key === PAPER_KEY && p.title === "Cached Paper")).toBe(true);
-  });
-
   itest("GET /feed/search (tsvector) → match judul; q kosong → kosong", async () => {
     const r = await req("GET", "/feed/search?q=gamma&limit=40", tok(OWNER));
     expect(r.status).toBe(200);

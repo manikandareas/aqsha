@@ -6,6 +6,7 @@ import { observability } from "./plugins/observability";
 import { admin } from "./routes/admin";
 import { artifacts } from "./routes/artifacts";
 import { billing } from "./routes/billing";
+import { explore } from "./routes/explore";
 import { feed } from "./routes/feed";
 import { folders } from "./routes/folders";
 import { health } from "./routes/health";
@@ -33,6 +34,7 @@ export const app = new Elysia()
   .use(artifacts)
   .use(threads)
   .use(feed)
+  .use(explore)
   .use(papers)
   .use(admin);
 

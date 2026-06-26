@@ -64,7 +64,7 @@ export function formatCitationCount(value: number | undefined): string | null {
     value >= 1_000
       ? `${(value / 1_000).toLocaleString("en", { maximumFractionDigits: 1 })}k`
       : value.toLocaleString("en");
-  return `${count} citations`;
+  return `${count} sitasi`;
 }
 
 export function topicBadgeClass(topic: string): string {

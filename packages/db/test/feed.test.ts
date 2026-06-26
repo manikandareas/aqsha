@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createDb } from "../src/client";
 import { decodeKeysetCursor } from "../src/cursor";
 import { FeedInteractionRepo } from "../src/repositories/feedInteractionRepo";
-import { FeedRepo } from "../src/repositories/feedRepo";
+import { FeedRepo, mergeBalancedLanes } from "../src/repositories/feedRepo";
 import { PaperCacheRepo } from "../src/repositories/paperCacheRepo";
 import type { NewExplorePaper } from "../src/schema/explorePapers";
 import type { NewFeedItem } from "../src/schema/feedItems";
@@ -102,6 +102,43 @@ describe("FeedRepo — paginateByOrder keyset", () => {
     const page2 = await FeedRepo.paginateByOrder(db, { limit: 2, cursor: cur });
     const ids1 = new Set(page1.items.map((i) => i.id));
     for (const it of page2.items) expect(ids1.has(it.id)).toBe(false); // no overlap
+  });
+});
+
+describe("mergeBalancedLanes (pure)", () => {
+  test("interleave paper↔news 50/50", () => {
+    const r = mergeBalancedLanes(["p1", "p2", "p3", "p4"], ["n1", "n2"], 4);
+    expect(r.items).toEqual(["p1", "n1", "p2", "n2"]);
+    expect(r.consumedPaper).toBe(2);
+    expect(r.consumedNews).toBe(2);
+  });
+  test("backfill dari lane lain saat satu kosong", () => {
+    const r = mergeBalancedLanes(["p1", "p2", "p3"], [], 2);
+    expect(r.items).toEqual(["p1", "p2"]);
+    expect(r.consumedNews).toBe(0);
+  });
+  test("kedua kind tetap muncul walau papers minoritas", () => {
+    const r = mergeBalancedLanes(["p1"], ["n1", "n2", "n3", "n4"], 4);
+    expect(r.items).toContain("p1");
+    expect(r.items.filter((x) => x.startsWith("n")).length).toBe(3);
+  });
+});
+
+describe("FeedRepo — paginateBalanced (paper↔news seimbang)", () => {
+  itest("page memuat paper & news walau news jauh lebih baru (fix bug paper hilang)", async () => {
+    for (const o of [9000, 9001, 9002, 9003]) {
+      await FeedRepo.upsertByDedupeKey(
+        db,
+        mkFeed({ dedupeKey: DEDUPE(`bn${o}`), orderAt: o, kind: "news", provider: "google_news" }),
+      );
+    }
+    for (const o of [100, 101, 102, 103]) {
+      await FeedRepo.upsertByDedupeKey(db, mkFeed({ dedupeKey: DEDUPE(`bp${o}`), orderAt: o, kind: "paper" }));
+    }
+    const page = await FeedRepo.paginateBalanced(db, { limit: 4, cursor: null });
+    const kinds = new Set(page.items.map((i) => i.kind));
+    expect(kinds.has("paper")).toBe(true);
+    expect(kinds.has("news")).toBe(true);
   });
 });
 

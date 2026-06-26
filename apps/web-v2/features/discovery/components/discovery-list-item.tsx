@@ -1,33 +1,23 @@
 "use client";
 
 import {
-  CompassIcon,
   ExternalLinkIcon,
   FileDownIcon,
   Loader2Icon,
   MessageSquareIcon,
-  Quote,
   ThumbsDownIcon,
 } from "@aqsha/ui/icons";
 import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import {
-  feedDetailHref,
-  isSavableToWorkspace,
-  kindLabel,
-  kindPanelClass,
-  type DiscoveryItem,
-} from "../model";
-import { buildSourceLine, formatCitationCount, topicBadgeClass, VERDICT_STYLE } from "../format";
-import { StanceTally, VerdictBadge } from "./discovery-visuals";
+import { feedDetailHref, kindLabel, kindPanelClass, type DiscoveryItem } from "../model";
+import { buildSourceLine, formatCitationCount, topicBadgeClass } from "../format";
 import { CardProps, CardSaveButton, IconButton, RetractionFlag } from "./discovery-item-card";
 
 const thumbnailLayouts = ["grid", "split", "figure", "columns", "dense"] as const;
 
 export function DiscoveryListItem({ item, index, busy, handlers }: CardProps & { index: number }) {
   const isPaper = item.kind === "paper";
-  const isClaim = item.kind === "claim";
   const tldr = item.tldr ?? item.summary;
   const citationLabel = isPaper ? formatCitationCount(item.citedByCount) : null;
   const detailHref = feedDetailHref(item);
@@ -45,15 +35,6 @@ export function DiscoveryListItem({ item, index, busy, handlers }: CardProps & {
       )}
 
       <div className="min-w-0 overflow-hidden">
-        {isClaim && item.claim ? (
-          <div className="mb-1.5 flex flex-wrap items-center gap-2">
-            <VerdictBadge verdict={item.claim.verdict} />
-            {item.claim.publisher ? (
-              <span className="text-[11px] text-muted-foreground">Diperiksa {item.claim.publisher}</span>
-            ) : null}
-          </div>
-        ) : null}
-
         <h2 className="text-[15px] font-semibold leading-[1.2] text-foreground sm:text-[16px]">
           {detailHref ? (
             <Link
@@ -86,17 +67,6 @@ export function DiscoveryListItem({ item, index, busy, handlers }: CardProps & {
 
         <RetractionFlag item={item} />
 
-        {isClaim &&
-        item.stanceSupporting !== undefined &&
-        item.stanceContrasting !== undefined &&
-        item.stanceSupporting + item.stanceContrasting > 0 ? (
-          <StanceTally
-            supporting={item.stanceSupporting}
-            contrasting={item.stanceContrasting}
-            className="mt-2.5 max-w-[260px]"
-          />
-        ) : null}
-
         <div className="mt-2.5 flex flex-wrap items-center gap-2">
           {item.topics[0] ? (
             <span
@@ -117,23 +87,6 @@ export function DiscoveryListItem({ item, index, busy, handlers }: CardProps & {
             {busy ? <Loader2Icon className="size-3.5 animate-spin" /> : <MessageSquareIcon className="size-3.5" />}
             Tanya Astra
           </button>
-          {isClaim ? (
-            <button
-              type="button"
-              onClick={() => handlers.onOpenEvidence(item)}
-              className="inline-flex h-7 items-center gap-1.5 rounded-[7px] border border-border px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-muted"
-            >
-              <Quote className="size-3.5" /> Lihat bukti
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => handlers.onGenerateIdeas(item)}
-              className="inline-flex h-7 items-center gap-1.5 rounded-[7px] border border-border px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-muted"
-            >
-              <CompassIcon className="size-3.5" /> Cari celah
-            </button>
-          )}
           {isPaper && item.pdfUrl ? (
             <a
               href={item.pdfUrl}
@@ -149,7 +102,7 @@ export function DiscoveryListItem({ item, index, busy, handlers }: CardProps & {
 
       <div className="col-start-2 flex min-w-0 items-center justify-between gap-2 sm:col-start-auto sm:flex-col sm:items-end sm:justify-center sm:gap-3">
         <div className="flex shrink-0 items-center gap-1">
-          {isSavableToWorkspace(item) ? <CardSaveButton item={item} handlers={handlers} /> : null}
+          <CardSaveButton item={item} handlers={handlers} />
           <a
             href={item.url}
             target="_blank"
@@ -181,21 +134,6 @@ function ListThumbnail({ item, index }: { item: DiscoveryItem; index: number }) 
     return (
       <div className="relative h-[98px] w-[72px] overflow-hidden rounded-[6px] border border-border bg-muted shadow-sm sm:h-[104px] sm:w-[76px]">
         <Image src={item.imageUrl} alt={item.title} fill unoptimized sizes="76px" className="object-cover" />
-      </div>
-    );
-  }
-  if (item.kind === "claim" && item.claim) {
-    const style = VERDICT_STYLE[item.claim.verdict];
-    const Icon = style.icon;
-    return (
-      <div
-        className={cn(
-          "flex h-[98px] w-[72px] flex-col items-center justify-center gap-1.5 rounded-[6px] border px-1 text-center shadow-sm sm:h-[104px] sm:w-[76px]",
-          style.className,
-        )}
-      >
-        <Icon className="size-6" />
-        <span className="text-[10px] font-bold leading-none">{verdictShortLabel(item.claim.verdict)}</span>
       </div>
     );
   }
@@ -266,19 +204,4 @@ function PaperLines({ count }: { count: number }) {
       ))}
     </div>
   );
-}
-
-function verdictShortLabel(verdict: keyof typeof VERDICT_STYLE): string {
-  switch (verdict) {
-    case "supported":
-      return "Fakta";
-    case "partially_supported":
-      return "Sebagian";
-    case "needs_context":
-      return "Konteks";
-    case "contradicted":
-      return "Hoaks";
-    default:
-      return "Tak tentu";
-  }
 }

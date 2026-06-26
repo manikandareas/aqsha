@@ -6,7 +6,7 @@
  */
 import {
   type Db,
-  decodeKeysetCursor,
+  decodeBalancedCursor,
   decodeSearchCursor,
   FeedInteractionRepo,
   type FeedItem,
@@ -94,9 +94,10 @@ export const FeedService = {
   },
 
   /**
-   * Paginated cross-kind feed (infinite scroll) keyset by_order desc, re-rank per-page.
-   * mode top = popularity-lean (no interest); foryou/topics = interest-aware; topics filter
-   * kategori. Port V1 getFeedPaginated. `saved` di-omit (Save-to-Workspace satu-satunya save).
+   * Paginated cross-kind feed (infinite scroll) — page BERIMBANG paper↔news (paginateBalanced,
+   * dua lane keyset), lalu re-rank per-page + deClump (anti dua kind beruntun). mode top =
+   * popularity-lean (no interest); foryou/topics = interest-aware; topics filter kategori.
+   * Port V1 getFeedPaginated + fix bug "paper tak pernah muncul". `saved` di-omit.
    */
   async getFeedPaginated(
     db: Db,
@@ -116,9 +117,9 @@ export const FeedService = {
     const category: DiscoveryTopicCategory | null =
       mode === "topics" && args.topic && isDiscoveryTopicCategory(args.topic) ? args.topic : null;
 
-    const page = await FeedRepo.paginateByOrder(db, {
+    const page = await FeedRepo.paginateBalanced(db, {
       limit,
-      cursor: decodeKeysetCursor(args.cursor),
+      cursor: decodeBalancedCursor(args.cursor),
     });
 
     const interests = await InterestService.loadWeights(db, ownerUserId);
@@ -137,16 +138,19 @@ export const FeedService = {
             ? popularity * 1.0 + recency * 0.6 + kindBoost(item.kind)
             : recency * 1.0 + popularity * 0.5 + interest.normalized * 1.5 + kindBoost(item.kind);
         return {
+          item,
+          score,
           shaped: shapeFeedItem(item, {
             relevanceScore: Math.round(Math.min(1, interest.normalized) * 100),
             reason: reasonFor(item, interest, false),
           }),
-          score,
         };
       });
     scored.sort((a, b) => b.score - a.score);
+    // deClump tanpa truncate (page sudah ≤ limit dari lane berimbang) → paper & news selang-seling.
+    const ordered = deClump(scored, scored.length);
 
-    return { items: scored.map((s) => s.shaped), nextCursor: page.nextCursor };
+    return { items: ordered.map((s) => s.shaped), nextCursor: page.nextCursor };
   },
 
   /**
@@ -180,16 +184,21 @@ export const FeedService = {
     const interests = await InterestService.loadWeights(db, ownerUserId);
     const hidden = new Set(await FeedInteractionRepo.hiddenItemIds(db, ownerUserId, HIDDEN_CAP));
 
-    const items = page.items
+    const scored = page.items
       .filter((item) => !hidden.has(item.id))
       .map((item) => {
         const interest = interestMatch(item.topics, interests);
-        return shapeFeedItem(item, {
-          relevanceScore: Math.round(Math.min(1, interest.normalized) * 100),
-          reason: reasonFor(item, interest, false),
-        });
+        return {
+          item,
+          shaped: shapeFeedItem(item, {
+            relevanceScore: Math.round(Math.min(1, interest.normalized) * 100),
+            reason: reasonFor(item, interest, false),
+          }),
+        };
       });
-    return { items, nextCursor: page.nextCursor };
+    // deClump (tanpa truncate): jaga urutan relevansi ts_rank tapi paper & news tak menggumpal.
+    const ordered = deClump(scored, scored.length);
+    return { items: ordered.map((s) => s.shaped), nextCursor: page.nextCursor };
   },
 
   /** Satu feed item + flag saved viewer. Port V1 getFeedItem. */

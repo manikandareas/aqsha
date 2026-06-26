@@ -9,10 +9,12 @@ import type {
   FeedItem,
   FeedMode,
   FeedTopic,
-  SupportingPaper,
 } from "./types";
 
 const FEED_PAGE_SIZE = 20;
+
+// Hanya paper + berita sains yang punya value riset; claim/topic/idea dipangkas.
+const VISIBLE_KINDS = ["paper", "news"] as const;
 
 type FeedPage = { items: FeedItem[]; nextCursor: string | null };
 
@@ -21,10 +23,11 @@ type FeedPage = { items: FeedItem[]; nextCursor: string | null };
  * Catatan: page bisa menyusut < limit (filter hidden/kind/topic server-side) sementara
  * nextCursor tetap benar → komponen auto-load lanjut selama `hasNextPage`.
  */
-export function useFeedInfinite(mode: FeedMode, topic: FeedTopic | null) {
+export function useFeedInfinite(mode: FeedMode, topic: FeedTopic | null, enabled = true) {
   const api = useApi();
   return useInfiniteQuery({
     queryKey: queryKeys.feed.list({ mode, topic }),
+    enabled,
     initialPageParam: null as string | null,
     queryFn: async ({ pageParam }) =>
       unwrap(
@@ -32,6 +35,7 @@ export function useFeedInfinite(mode: FeedMode, topic: FeedTopic | null) {
           query: {
             limit: FEED_PAGE_SIZE,
             mode,
+            kinds: [...VISIBLE_KINDS],
             ...(topic ? { topic } : {}),
             ...(pageParam ? { cursor: pageParam } : {}),
           },
@@ -55,6 +59,7 @@ export function useSearchDiscovery(q: string, fromYear?: number) {
           query: {
             q: trimmed,
             limit: 20,
+            kinds: [...VISIBLE_KINDS],
             ...(fromYear ? { fromYear } : {}),
             ...(pageParam ? { cursor: pageParam } : {}),
           },
@@ -98,7 +103,11 @@ export function useFeedHome() {
   return useQuery({
     queryKey: queryKeys.feed.list({ mode: "home", topic: null }),
     queryFn: async () =>
-      (unwrap(await api.feed.home.get({ query: {} })) as { items: FeedItem[] }).items,
+      (
+        unwrap(await api.feed.home.get({ query: { kinds: [...VISIBLE_KINDS] } })) as {
+          items: FeedItem[];
+        }
+      ).items,
   });
 }
 
@@ -111,26 +120,13 @@ export function useHideDiscovery() {
   });
 }
 
-export type IdeaSeedInput = { title: string; context?: string; topics?: string[] };
-export type IdeasResult =
-  | { ok: true; ideas: string[]; cached: boolean }
-  | { ok: false; reason: string; resetAt: number };
-
-/** Generate 1–3 pertanyaan riset FINER (credit-gated). `ok:false` = kuota habis. */
-export function useIdeas() {
-  const api = useApi();
-  return useMutation({
-    mutationFn: async (seed: IdeaSeedInput) => unwrap(await api.feed.ideas.post(seed)) as IdeasResult,
-  });
-}
-
-/** Catat interaksi discovery (save +1 / research +2 / open_evidence). */
+/** Catat interaksi discovery (save +1 / research +2). */
 export function useRecordInteraction() {
   const api = useApi();
   return useMutation({
     mutationFn: async (input: {
       itemRef: DiscoveryItemRef;
-      kind: "save" | "hide" | "research" | "open_evidence";
+      kind: "save" | "hide" | "research";
     }) => unwrap(await api.feed.discovery.interaction.post(input)),
   });
 }
@@ -160,20 +156,5 @@ export function useRelated(id: string) {
     queryKey: [...queryKeys.feed.item(id), "related"],
     queryFn: async () =>
       (unwrap(await api.feed({ id }).related.get({ query: {} })) as { items: FeedItem[] }).items,
-  });
-}
-
-/** Paper pendukung klaim (evidence drawer). */
-export function usePapersByKeys(keys: string[]) {
-  const api = useApi();
-  return useQuery({
-    queryKey: ["papers", "by-keys", keys],
-    enabled: keys.length > 0,
-    queryFn: async () =>
-      (
-        unwrap(await api.feed["papers-by-keys"].get({ query: { keys } })) as {
-          papers: SupportingPaper[];
-        }
-      ).papers,
   });
 }

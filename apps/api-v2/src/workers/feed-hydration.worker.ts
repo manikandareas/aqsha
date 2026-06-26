@@ -4,8 +4,8 @@ import { getDb } from "../clients/db";
 
 /**
  * Worker feed-hydration (ganti cron 3h Convex `hydrateCycle`). Dua jenis job:
- *  - `cycle`: di-fire repeatable cron (setiap 3 jam) → fan-out 5 lane dengan stagger.
- *  - `lane`: satu lane provider (OpenAlex/GDELT/GoogleNews/FactCheck/enrich).
+ *  - `cycle`: di-fire repeatable cron (setiap 3 jam) → fan-out lane dengan stagger.
+ *  - `lane`: satu lane provider (OpenAlex papers / GoogleNews RSS + enrich).
  * Business logic di `FeedHydrationService`; worker hanya dispatch + log.
  */
 export type FeedHydrationJob =

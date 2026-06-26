@@ -1,5 +1,5 @@
-import { DiscoveryPage } from "@/features/discovery/components/discovery-page";
+import { ExplorePage } from "@/features/explore/components/explore-page";
 
-export default function ExplorePage() {
-  return <DiscoveryPage />;
+export default function Page() {
+  return <ExplorePage />;
 }

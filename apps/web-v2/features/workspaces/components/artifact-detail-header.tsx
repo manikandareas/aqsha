@@ -22,25 +22,23 @@ export function ArtifactDetailHeader({
   trailing?: ReactNode;
 }) {
   return (
-    <header className="sticky top-0 z-30 bg-background px-5 py-3 sm:px-7 sm:py-4">
-      <div className="flex min-w-0 items-center justify-between gap-2 sm:gap-4">
-        <nav
-          aria-label="Breadcrumb"
-          className="flex min-w-0 items-center gap-1.5 text-[13px]"
+    <header className="sticky top-0 z-30 flex h-11 items-center justify-between gap-2 bg-background/70 px-5 backdrop-blur-xl sm:gap-4 sm:px-7">
+      <nav
+        aria-label="Breadcrumb"
+        className="flex min-w-0 items-center gap-1.5 text-[13px]"
+      >
+        <Link
+          href={`/app/workspaces/${workspaceId}`}
+          className="hidden max-w-[12rem] shrink-0 truncate font-medium text-muted-foreground transition-colors hover:text-foreground sm:block"
         >
-          <Link
-            href={`/app/workspaces/${workspaceId}`}
-            className="hidden max-w-[12rem] shrink-0 truncate font-medium text-muted-foreground transition-colors hover:text-foreground sm:block"
-          >
-            {workspaceName ?? "Workspace"}
-          </Link>
-          <ChevronRightIcon className="hidden size-3.5 shrink-0 text-muted-foreground/60 sm:block" />
-          <ArtifactTitleBreadcrumb title={artifactTitle} onRename={onRenameArtifact} />
-        </nav>
-        {trailing ? (
-          <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">{trailing}</div>
-        ) : null}
-      </div>
+          {workspaceName ?? "Workspace"}
+        </Link>
+        <ChevronRightIcon className="hidden size-3.5 shrink-0 text-muted-foreground/60 sm:block" />
+        <ArtifactTitleBreadcrumb title={artifactTitle} onRename={onRenameArtifact} />
+      </nav>
+      {trailing ? (
+        <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">{trailing}</div>
+      ) : null}
     </header>
   );
 }

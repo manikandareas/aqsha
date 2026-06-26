@@ -30,11 +30,22 @@ export const ACCOUNT_QUEUES = {
   accountDeletion: "account-deletion",
 } as const;
 
+/** Queue Explore — analisis gap/tension berat (baca abstrak paper → LLM), per-query. */
+export const EXPLORE_QUEUES = {
+  exploreAnalysis: "explore-analysis",
+} as const;
+
 export type ArtifactQueueName = (typeof ARTIFACT_QUEUES)[keyof typeof ARTIFACT_QUEUES];
 export type FeedQueueName = (typeof FEED_QUEUES)[keyof typeof FEED_QUEUES];
 export type ChatQueueName = (typeof CHAT_QUEUES)[keyof typeof CHAT_QUEUES];
 export type AccountQueueName = (typeof ACCOUNT_QUEUES)[keyof typeof ACCOUNT_QUEUES];
-export type QueueName = ArtifactQueueName | FeedQueueName | ChatQueueName | AccountQueueName;
+export type ExploreQueueName = (typeof EXPLORE_QUEUES)[keyof typeof EXPLORE_QUEUES];
+export type QueueName =
+  | ArtifactQueueName
+  | FeedQueueName
+  | ChatQueueName
+  | AccountQueueName
+  | ExploreQueueName;
 
 let connection: ConnectionOptions | null = null;
 const queues = new Map<QueueName, Queue>();
@@ -79,6 +90,16 @@ export async function enqueue<T extends Record<string, unknown>>(
     ...(opts?.delay !== undefined ? { delay: opts.delay } : {}),
   });
   return job.id;
+}
+
+/**
+ * Buang job by id. Dipakai SEBELUM re-enqueue jobId STABIL yang mungkin masih ditahan
+ * BullMQ (removeOnComplete/Fail) — tanpa ini `add()` dengan jobId yang sudah ada = no-op
+ * diam-diam (job tak pernah jalan lagi). Job tak ada → resolve biasa; job terkunci/aktif →
+ * throw (caller yang putuskan: di-`catch` saat kita tahu tak ada job aktif).
+ */
+export async function removeJob(name: QueueName, jobId: string): Promise<void> {
+  await getQueue(name).remove(jobId);
 }
 
 /**

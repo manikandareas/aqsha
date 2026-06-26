@@ -1,8 +1,11 @@
-import { and, desc, eq, getTableColumns, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, gte, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import {
+  type BalancedCursor,
+  encodeBalancedCursor,
   encodeKeysetCursor,
   encodeSearchCursor,
   type KeysetCursor,
+  type LaneCursor,
   type SearchKeysetCursor,
 } from "../cursor";
 import { type FeedItem, type NewFeedItem, feedItems } from "../schema/feedItems";
@@ -102,6 +105,45 @@ export const FeedRepo = {
     const last = items[items.length - 1];
     const nextCursor =
       hasMore && last ? encodeKeysetCursor({ u: last.orderAt, i: last.id }) : null;
+    return { items, nextCursor };
+  },
+
+  /**
+   * Page feed BERIMBANG paper↔news (getFeedPaginated). Dua lane keyset `(order_at, id)` DESC
+   * TERPISAH — lane paper (`kind='paper'`) & lane non-paper — lalu interleave kuota ~50/50.
+   * Fix bug "paper tak pernah muncul": single keyset by_order lama selalu kebanjiran news
+   * (orderAt≈now, refresh tiap 20m) → paper (publication date lama) tak masuk window. Lane
+   * terpisah menjamin paper ikut ter-fetch. Cursor komposit (lihat BalancedCursor): per-lane
+   * lanjut/`"end"`/mulai, supaya lane habis tak ke-restart.
+   */
+  async paginateBalanced(
+    db: DbOrTx,
+    args: { limit: number; cursor: BalancedCursor | null },
+  ): Promise<{ items: FeedItem[]; nextCursor: string | null }> {
+    const limit = Math.max(args.limit, 1);
+    const fetchN = limit + 1; // +1 → deteksi "masih ada lagi" per lane
+    const pc = args.cursor?.p ?? null;
+    const nc = args.cursor?.n ?? null;
+
+    const [paperRows, newsRows] = await Promise.all([
+      pc === "end" ? Promise.resolve<FeedItem[]>([]) : laneByOrder(db, "paper", pc, fetchN),
+      nc === "end" ? Promise.resolve<FeedItem[]>([]) : laneByOrder(db, "nonpaper", nc, fetchN),
+    ]);
+
+    const paperMore = paperRows.length > limit;
+    const newsMore = newsRows.length > limit;
+    const papers = paperMore ? paperRows.slice(0, limit) : paperRows;
+    const news = newsMore ? newsRows.slice(0, limit) : newsRows;
+
+    const { items, consumedPaper, consumedNews } = mergeBalancedLanes(papers, news, limit);
+
+    const pNext = laneNext(consumedPaper, papers, paperMore, pc);
+    const nNext = laneNext(consumedNews, news, newsMore, nc);
+    const nextCursor =
+      pNext === "end" && nNext === "end"
+        ? null
+        : encodeBalancedCursor({ p: pNext, n: nNext });
+
     return { items, nextCursor };
   },
 
@@ -225,3 +267,70 @@ export const FeedRepo = {
     return { items, nextCursor };
   },
 };
+
+/**
+ * Interleave dua lane pre-sorted jadi maksimal `limit` item, kuota ~50/50, backfill dari
+ * lane lain bila satu kosong. PURE (unit-tested tanpa DB). Alternasi: ambil paper saat
+ * `pi <= ni` (paper duluan), else news. Kembalikan jumlah DIKONSUMSI per lane (untuk cursor).
+ */
+export function mergeBalancedLanes<T>(
+  papers: T[],
+  news: T[],
+  limit: number,
+): { items: T[]; consumedPaper: number; consumedNews: number } {
+  const items: T[] = [];
+  let pi = 0;
+  let ni = 0;
+  while (items.length < limit && (pi < papers.length || ni < news.length)) {
+    const takePaper = pi < papers.length && (ni >= news.length || pi <= ni);
+    if (takePaper) {
+      items.push(papers[pi]!);
+      pi += 1;
+    } else {
+      items.push(news[ni]!);
+      ni += 1;
+    }
+  }
+  return { items, consumedPaper: pi, consumedNews: ni };
+}
+
+/** Satu lane keyset `(order_at, id)` DESC, filter kind paper / non-paper. */
+function laneByOrder(
+  db: DbOrTx,
+  lane: "paper" | "nonpaper",
+  cursor: KeysetCursor | null,
+  limit: number,
+): Promise<FeedItem[]> {
+  const kindCond =
+    lane === "paper" ? eq(feedItems.kind, "paper") : ne(feedItems.kind, "paper");
+  const keyset = cursor
+    ? or(
+        lt(feedItems.orderAt, cursor.u),
+        and(eq(feedItems.orderAt, cursor.u), lt(feedItems.id, cursor.i)),
+      )
+    : undefined;
+  return db
+    .select()
+    .from(feedItems)
+    .where(keyset ? and(kindCond, keyset) : kindCond)
+    .orderBy(desc(feedItems.orderAt), desc(feedItems.id))
+    .limit(limit);
+}
+
+/**
+ * Posisi lanjut sebuah lane: `"end"` (habis), keyset baris terakhir dikonsumsi, atau `prev`
+ * (lane belum maju — slot terisi penuh oleh lane lain; `null` = mulai dari atas lagi).
+ */
+function laneNext(
+  consumed: number,
+  rows: FeedItem[],
+  more: boolean,
+  prev: LaneCursor | null,
+): LaneCursor | null {
+  if (rows.length === 0) return "end";
+  const hasMore = consumed < rows.length || more;
+  if (!hasMore) return "end";
+  if (consumed === 0) return prev;
+  const last = rows[consumed - 1]!;
+  return { u: last.orderAt, i: last.id };
+}

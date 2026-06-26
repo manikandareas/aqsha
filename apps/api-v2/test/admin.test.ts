@@ -58,12 +58,12 @@ describe("api-v2 admin feed hydrate", () => {
     expect(r.status).toBe(401);
   });
 
-  rltest("admin → 200 fan-out 5 lane; panggilan kedua → 409 (lock)", async () => {
+  rltest("admin → 200 fan-out 3 lane; panggilan kedua → 409 (lock)", async () => {
     const r = await req("POST", "/admin/feed/hydrate", tok(ADMIN), {});
     expect(r.status).toBe(200);
     const body = await readJson(r);
-    expect(body.scheduled).toBe(5);
-    expect(body.jobs).toHaveLength(5);
+    expect(body.scheduled).toBe(3);
+    expect(body.jobs).toHaveLength(3);
     // kontrak: tiap job {lane, jobId, delayMs}
     for (const job of body.jobs) {
       expect(typeof job.jobId).toBe("string");

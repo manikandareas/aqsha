@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { summarizeTimeline } from "../src/feed/providers/gdelt";
 import {
   buildGoogleNewsFeedInputs,
   dedupeGoogleNewsItems,
@@ -8,26 +7,9 @@ import {
 } from "../src/feed/providers/googleNews";
 import { parseBatchExecuteUrl } from "../src/feed/providers/googleNewsDecode";
 import {
-  deriveClaimTopics,
-  isScienceHealthClaim,
-  mapTextualRatingToVerdict,
-} from "../src/feed/providers/factCheck";
-import {
   extractArticlePreviewFromHtml,
   extractArticleTextFromHtml,
 } from "../src/papers/articlePreview";
-
-describe("gdelt summarizeTimeline", () => {
-  test("downsample ke 24 + trendScore momentum", () => {
-    const values = Array.from({ length: 100 }, (_, i) => (i + 1) / 100);
-    const { sparkline, trendScore } = summarizeTimeline(values);
-    expect(sparkline.length).toBe(24);
-    expect(trendScore).toBeGreaterThan(0);
-  });
-  test("kosong → 0", () => {
-    expect(summarizeTimeline([])).toEqual({ sparkline: [], trendScore: 0 });
-  });
-});
 
 describe("googleNews parseGoogleNewsRss", () => {
   const xml = `<?xml version="1.0"?><rss><channel>
@@ -69,12 +51,27 @@ describe("googleNews dedupe + build", () => {
     expect(out.map((o) => o.item.guid)).toEqual(["g1", "g3"]);
   });
 
-  test("buildGoogleNewsFeedInputs → kind news, summary kosong, dedupeKey", () => {
-    const inputs = buildGoogleNewsFeedInputs([{ item: mk({ guid: "g9" }), topicLabel: "Sains" }], 100);
+  test("buildGoogleNewsFeedInputs → kind news, summary kosong, dedupeKey kanonik title", () => {
+    const inputs = buildGoogleNewsFeedInputs(
+      [{ item: mk({ guid: "g9", title: "Vaksin Baru", publisherDomain: "kompas.com" }), topicLabel: "Sains" }],
+      100,
+    );
     expect(inputs[0]!.kind).toBe("news");
     expect(inputs[0]!.summary).toBe("");
-    expect(inputs[0]!.dedupeKey).toBe("news:gnews:g9");
+    expect(inputs[0]!.dedupeKey).toBe("news:kompas.com:vaksin baru");
     expect(inputs[0]!.topics).toEqual(["Sains"]);
+  });
+
+  test("dedupeKey kanonik meng-collapse story tersindikasi (guid beda, title+domain sama)", () => {
+    // Fix bug duplikat: guid berbeda (RSS/seed beda) TAPI cerita sama → satu dedupeKey.
+    const [a, b] = buildGoogleNewsFeedInputs(
+      [
+        { item: mk({ guid: "gA", title: "Gempa Bumi M5", publisherDomain: "detik.com" }), topicLabel: "Sains" },
+        { item: mk({ guid: "gB", title: "Gempa Bumi M5", publisherDomain: "detik.com" }), topicLabel: "Lingkungan" },
+      ],
+      100,
+    );
+    expect(a!.dedupeKey).toBe(b!.dedupeKey); // upsertByDedupeKey → satu baris, bukan dua
   });
 });
 
@@ -86,28 +83,6 @@ describe("googleNewsDecode parseBatchExecuteUrl", () => {
   });
   test("tanpa Fbv4je → null", () => {
     expect(parseBatchExecuteUrl(")]}'\n[]")).toBeNull();
-  });
-});
-
-describe("factCheck verdict + topics", () => {
-  test("mapTextualRatingToVerdict graduasi", () => {
-    expect(mapTextualRatingToVerdict("Hoaks")).toEqual({ verdict: "contradicted", severity: "high" });
-    expect(mapTextualRatingToVerdict("Sebagian benar")).toEqual({
-      verdict: "partially_supported",
-      severity: "warning",
-    });
-    expect(mapTextualRatingToVerdict("Menyesatkan")).toEqual({
-      verdict: "needs_context",
-      severity: "warning",
-    });
-    expect(mapTextualRatingToVerdict("Benar")).toEqual({ verdict: "supported", severity: "info" });
-    expect(mapTextualRatingToVerdict("xyz")).toEqual({ verdict: "unverified", severity: "info" });
-  });
-  test("isScienceHealthClaim + deriveClaimTopics", () => {
-    expect(isScienceHealthClaim("vaksin covid aman")).toBe(true);
-    expect(isScienceHealthClaim("pemilu 2024")).toBe(false);
-    expect(deriveClaimTopics("vaksin covid")).toContain("COVID-19");
-    expect(deriveClaimTopics("xyz tanpa kata kunci")).toEqual(["Sains"]);
   });
 });
 
