@@ -20,6 +20,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import type { ToolRow as ToolRowData, ToolRowModel, ToolStatus } from "../lib/eve-timeline";
+import { ElapsedLabel } from "./elapsed-label";
 
 // Ikon semantik per tool (kosmetik — data: `model.name` selalu ada). Switch mengembalikan
 // JSX konkret (bukan komponen dinamis) supaya lolos react-compiler. Tool tak dikenal → wrench.
@@ -123,6 +124,10 @@ export function ToolRow({ model }: { model: ToolRowModel }) {
   }, [model.isRunning]);
   const open = override ?? model.isRunning;
 
+  // Subagent task-mode (kind "subagent-call") berjalan di child-session sendiri yang event-nya
+  // TIDAK di-forward ke stream induk (childSessionId 0 baris) → induk diam 2–3 mnt = "frozen" semu.
+  // Elapsed berdetak (M:SS) menggantikan rasa beku selagi subagent bekerja. Tool biasa = Shimmer.
+  const isSubagentRunning = model.kind === "subagent-call" && model.isRunning;
   const header = (
     <span className={cn("flex min-w-0 items-start gap-1.5 leading-5", toneClass(model.status))}>
       <ToolStatusIcon
@@ -132,7 +137,13 @@ export function ToolRow({ model }: { model: ToolRowModel }) {
         className="mt-0.5 size-3.5 shrink-0"
       />
       <span className="min-w-0">
-        {model.isRunning ? <Shimmer as="span">{model.title}</Shimmer> : <span>{model.title}</span>}
+        {isSubagentRunning ? (
+          <ElapsedLabel base={model.title} />
+        ) : model.isRunning ? (
+          <Shimmer as="span">{model.title}</Shimmer>
+        ) : (
+          <span>{model.title}</span>
+        )}
         {liveQuery ? <span className="text-muted-foreground"> · {liveQuery}</span> : null}
       </span>
     </span>

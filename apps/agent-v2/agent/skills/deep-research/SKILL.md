@@ -1,5 +1,5 @@
 ---
-description: Use when the user runs /deep or asks for a thorough, citation-verified research report. Gather context conversationally first, present a prose plan, confirm, then delegate literature search and counter-evidence to subagents and write a cited synthesis.
+description: Use when the user runs /deep or asks for a thorough, citation-verified research report. Gather context with ask_question first, present a prose plan, confirm via ask_question, then delegate literature search and counter-evidence to subagents and write a cited synthesis.
 ---
 
 # Deep research
@@ -7,33 +7,85 @@ description: Use when the user runs /deep or asks for a thorough, citation-verif
 Metodologi untuk menjawab pertanyaan riset secara mendalam dan jujur. Kamu (root)
 adalah orkestrator DAN penulis akhir. Alur di bawah adalah panduan, bukan loop kaku —
 gunakan penilaianmu, berhenti saat bukti sudah cukup, dan sampaikan ketidakpastian apa
-adanya. **Semua interaksi dengan user lewat PERCAKAPAN biasa** — tak ada kartu/tombol/form.
-Composer user selalu aktif; saat kamu bertanya, turn-mu selesai dan user menjawab di composer.
+adanya.
+
+**Klarifikasi & konfirmasi rencana** memakai tool built-in **`ask_question`** — user
+menjawab lewat kartu di atas composer (opsi) atau teks bebas di composer (`allowFreeform`).
+Setiap panggilan `ask_question` **mengakhiri turn-mu** sampai user menjawab; jangan
+menumpuk banyak pertanyaan dalam teks biasa lalu berharap user menjawab sekaligus.
 
 ## 1. Gali konteks dulu (JANGAN langsung membuat rencana)
 
 Saat `/deep` dimulai, JANGAN langsung menyusun rencana atau meriset. Pertama:
 
-- Beri tanggapan singkat yang menunjukkan kamu memahami topiknya (1-2 kalimat).
-- Ajukan **2-3 pertanyaan lanjutan** untuk mempersempit ruang lingkup: tujuan/penggunaan
-  hasil, batasan (rentang tahun, populasi, domain, geografi), kedalaman yang diinginkan,
-  definisi istilah yang ambigu, atau sudut pandang yang harus/ tak boleh disertakan.
-- Lalu **berhenti** (akhiri turn) dan tunggu jawaban user. Jangan meriset apa pun di tahap ini.
+- Beri tanggapan singkat yang menunjukkan kamu memahami topiknya (1-2 kalimat di teks).
+- Panggil **`ask_question`** untuk menggali konteks yang masih kurang. Satu panggilan per
+  turn — turn parkir sampai user menjawab.
 
-Bila pertanyaan user sudah sangat spesifik, cukup satu pertanyaan konfirmasi singkat —
-jangan memaksakan tiga.
+**Apa yang perlu digali** (pilih yang relevan, jangan memaksakan semuanya):
+
+- Tujuan/penggunaan hasil riset
+- Batasan: rentang tahun, populasi, domain, geografi
+- Kedalaman yang diinginkan (survey cepat vs tinjauan sistematis)
+- Definisi istilah yang ambigu
+- Sudut pandang yang harus / tak boleh disertakan
+
+**Cara memakai `ask_question`:**
+
+- **`prompt`**: satu pertanyaan jelas, spesifik, dalam bahasa user.
+- **`options`**: tawarkan 3-5 pilihan umum bila membantu mempersempit ruang lingkup (mis.
+  rentang tahun, jenis sumber, audiens). Setiap opsi punya `id` singkat + `label` ramah.
+- **`allowFreeform: true`** hampir selalu — user boleh menjawab di luar opsi lewat composer.
+- Bila topik user **sudah sangat spesifik**, satu `ask_question` konfirmasi singkat cukup
+  (mis. "Apakah fokus X sudah tepat, atau ada batasan lain?") — jangan memaksakan tiga
+  putaran.
+
+**Putaran lanjutan:** setelah user menjawab, evaluasi apakah konteks sudah cukup. Bila masih
+ada celah penting, panggil `ask_question` lagi (maks. 2-3 putaran total untuk gali konteks).
+Bila sudah cukup → langsung ke langkah 2. **Jangan meriset apa pun** sebelum rencana
+disetujui.
+
+Contoh opsi untuk pertanyaan ruang lingkup:
+
+```json
+{
+  "prompt": "Rentang tahun mana yang paling relevan untuk tinjauan ini?",
+  "options": [
+    { "id": "5y", "label": "5 tahun terakhir" },
+    { "id": "10y", "label": "10 tahun terakhir" },
+    { "id": "classic", "label": "Termasuk studi klasik/landmark" },
+    { "id": "open", "label": "Tanpa batas tahun khusus" }
+  ],
+  "allowFreeform": true
+}
+```
 
 ## 2. Sajikan rencana sebagai PROSA + minta konfirmasi
 
-Setelah user menjawab, susun rencana riset sebagai **teks deskriptif mengalir** (prosa),
+Setelah konteks cukup, susun rencana riset sebagai **teks deskriptif mengalir** (prosa),
 BUKAN daftar Q1-Q5 dan BUKAN form. Jelaskan dalam beberapa kalimat: apa yang akan kamu
 selidiki, sub-arah/aspek utama yang akan ditelusuri terpisah, jenis sumber yang dicari, dan
-bagaimana kamu akan memverifikasi. Lalu **minta konfirmasi lewat percakapan** ("Boleh saya
-mulai riset dengan rencana ini, atau ada yang ingin disesuaikan?") dan **berhenti**.
+bagaimana kamu akan memverifikasi.
 
-- Bila user minta revisi → perbarui rencana prosa sesuai masukannya, konfirmasi lagi.
-- Bila user membatalkan → hentikan, jangan riset.
-- Hanya setelah user menyetujui (mis. "ya", "lanjut", "boleh") → ke langkah 3.
+Lalu panggil **`ask_question`** untuk konfirmasi rencana — jangan hanya minta "ya/tidak"
+lewat teks tanpa tool:
+
+```json
+{
+  "prompt": "Boleh saya mulai riset dengan rencana di atas, atau ada yang ingin disesuaikan?",
+  "options": [
+    { "id": "proceed", "label": "Ya, lanjutkan riset", "style": "primary" },
+    { "id": "revise", "label": "Revisi rencana dulu" },
+    { "id": "cancel", "label": "Batalkan", "style": "danger" }
+  ],
+  "allowFreeform": true
+}
+```
+
+- Jawaban **proceed** / setara ("ya", "lanjut", "boleh") → langkah 3.
+- Jawaban **revise** atau teks bebas berisi masukan → perbarui rencana prosa, konfirmasi
+  lagi dengan `ask_question` (boleh opsi yang sama).
+- Jawaban **cancel** / batalkan → hentikan, jangan riset.
 
 ## 3. Mulai eksekusi (gerbang kuota) lalu delegasikan riset
 
@@ -92,5 +144,5 @@ demikian. Bila ingin pemeriksaan akhir atas draftmu, panggil `verify_citations` 
 ## Catatan
 
 - Berhenti saat bukti sudah cukup; jangan mencari tanpa henti.
-- Bila user ingin laporan disimpan sebagai dokumen, tawarkan `propose_artifact` (konfirmasi lewat
-  percakapan) setelah jawaban siap.
+- Bila user ingin laporan disimpan sebagai dokumen, tawarkan `propose_artifact` setelah
+  jawaban siap (konfirmasi lewat percakapan atau `ask_question` bila perlu).

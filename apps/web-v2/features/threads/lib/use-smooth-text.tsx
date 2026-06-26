@@ -27,7 +27,12 @@ export function useSmoothText(
     targetRef.current = text;
   }, [text]);
 
-  const [shown, setShown] = useState(enabled ? "" : text);
+  // Mulai dari teks yang SUDAH ada (bukan ""). Kalau cold-load/refresh saat turn in-flight,
+  // jawaban-sejauh-ini bisa puluhan ribu char — reveal dari 0 @ ~180 char/dtk = crawl
+  // bermenit-menit (gejala "token per token sangat lama" setelah refresh). Kita tampilkan
+  // teks yang ada SEKETIKA, animasi hanya untuk PERTUMBUHAN baru. Fresh turn: text="" → 0
+  // → tetap mengetik dari awal.
+  const [shown, setShown] = useState(text);
 
   useEffect(() => {
     if (!enabled) {
@@ -35,7 +40,7 @@ export function useSmoothText(
       return;
     }
     let raf = 0;
-    let shownLen = 0;
+    let shownLen = targetRef.current.length;
     let lastSet = -1;
     let last = 0;
     const step = (ts: number) => {

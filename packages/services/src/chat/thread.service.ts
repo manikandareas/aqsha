@@ -1,6 +1,7 @@
 import {
   type ChatThread,
   ChatMessageRepo,
+  ChatThreadEventRepo,
   ChatThreadRepo,
   type Db,
   type DbOrTx,
@@ -14,6 +15,7 @@ const DEFAULT_LIST_LIMIT = 30;
 const MAX_LIST_LIMIT = 100;
 const TITLE_MAX = 120;
 const ARCHIVE_THRESHOLD_MS = 24 * 60 * 60 * 1000; // >1 hari sejak aktivitas terakhir → "older"
+const STALE_STREAMING_THRESHOLD_MS = 30 * 60_000; // 30 mnt > gap subagent sah (~5,7 mnt); tunable
 
 /** Bucket aktivitas thread untuk pengelompokan sidebar — dihitung server-side (BE). */
 export type ThreadBucket = "recent" | "older";
@@ -31,6 +33,20 @@ export const ThreadService = {
     const thread = await ChatThreadRepo.findById(db, threadId);
     if (!thread || thread.ownerUserId !== ownerUserId) return null;
     return thread;
+  },
+
+  /**
+   * Thread `streaming` termuda milik caller — klien memakai ini untuk menemukan sessionId
+   * turn PERTAMA segera setelah `send()` (lihat `ChatThreadRepo.findRecentActiveByOwner`),
+   * lalu bump URL → refresh saat menyusun plan tak lagi kehilangan thread. `null` bila
+   * belum ada (klien retry singkat sampai hook `session.started` membuat thread).
+   */
+  async recentActive(
+    db: DbOrTx,
+    ownerUserId: string,
+    since?: number,
+  ): Promise<ChatThread | null> {
+    return ChatThreadRepo.findRecentActiveByOwner(db, ownerUserId, since);
   },
 
   /** Assert kepemilikan (rename/delete/messages). Missing/not-owned → 404. */
@@ -121,20 +137,23 @@ export const ThreadService = {
   },
 
   /**
-   * Persist handle-resume eve (`continuationToken`) dari KLIEN (`onSessionChange`). WAJIB
-   * pakai token KLIEN, bukan `channel.continuationToken` server: yang server ter-namespace
-   * GANDA (`eve:eve:…`) → `createSendFn` menamespace lagi saat dikirim balik → `deliver`
-   * gagal (approval HITL `inputResponses` TAK punya fallback → "Cannot deliver"). Token klien
-   * = nilai yang dipakai live (ter-namespace sekali) → cocok sesudah reload.
+   * Upsert handle-resume eve (`continuationToken`) RACE-PROOF — dipanggil proxy-tee respons
+   * create/continue eve (Phase 2), BUKAN klien. Token dari respons create-POST = ber-namespace
+   * TUNGGAL (`eve:<uuid>`, nilai yang dipakai live) → approval HITL `inputResponses` + follow-up
+   * lintas-reload bisa di-`deliver`. JANGAN pakai `channel.continuationToken` server (ganda
+   * `eve:eve:…` → `createSendFn` menamespace lagi → `deliver` gagal "Cannot deliver").
+   *
+   * TANPA assertOwner: respons create (202) bisa mendahului hook `session.started` yang membuat
+   * row → repo insert-if-absent (owner-guard di `setWhere`). Idempoten.
    */
-  async saveContinuation(
+  async upsertContinuationToken(
     db: DbOrTx,
     input: { ownerUserId: string; threadId: string; continuationToken: string },
   ): Promise<{ ok: true }> {
-    await this.assertOwner(db, input.ownerUserId, input.threadId);
-    await ChatThreadRepo.update(db, input.threadId, {
+    await ChatThreadRepo.upsertContinuationToken(db, {
+      id: input.threadId,
+      ownerUserId: input.ownerUserId,
       continuationToken: input.continuationToken,
-      updatedAt: Date.now(),
     });
     return { ok: true };
   },
@@ -152,6 +171,34 @@ export const ThreadService = {
       await ChatThreadRepo.deleteById(tx, input.threadId);
     });
     return { ok: true };
+  },
+
+  /**
+   * Reconciler thread "zombie" (Phase 5, fix E) — dipanggil cron worker `reconcile-stale-threads`.
+   * Turn crash (ENOSPC / restart / dev) meninggalkan `status='streaming'` TANPA event terminal →
+   * composer terkunci selamanya (klien tebak status dari event terakhir, refresh tak menolong).
+   * Untuk tiap thread basi (`findStaleStreaming`: streaming + last_activity basi + tanpa event sejak
+   * cutoff): (1) append event terminal sintetik `turn.failed` → `isStreamActive(base)` false (klien
+   * unlock composer), (2) `status='failed'` → DB & heuristik klien selaras. KEDUANYA wajib — status
+   * saja → heuristik event-terakhir klien & DB divergen (plan Traps). Per-thread satu tx (idempoten).
+   */
+  async reconcileStaleStreaming(
+    db: Db,
+    opts?: { thresholdMs?: number },
+  ): Promise<{ reconciled: number }> {
+    const cutoff = Date.now() - (opts?.thresholdMs ?? STALE_STREAMING_THRESHOLD_MS);
+    const stale = await ChatThreadRepo.findStaleStreaming(db, cutoff);
+    for (const thread of stale) {
+      await db.transaction(async (tx) => {
+        await ChatThreadEventRepo.appendTerminal(tx, {
+          threadId: thread.id,
+          ownerUserId: thread.ownerUserId,
+          type: "turn.failed",
+        });
+        await ChatThreadRepo.update(tx, thread.id, { status: "failed", updatedAt: Date.now() });
+      });
+    }
+    return { reconciled: stale.length };
   },
 };
 

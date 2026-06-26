@@ -14,6 +14,7 @@ import type {
   EveAgentReducerEvent,
   EveDynamicToolPart,
   EveMessage,
+  EveMessageInputRequest,
   EveMessagePart,
 } from "eve/react";
 import type { ChatMessage, ChatThreadEvent } from "../types";
@@ -89,9 +90,12 @@ function mapPart(part: EveMessagePart, id: string, active: boolean): TimelinePar
       return { kind: "reasoning", id, text, thinking: active && part.state === "streaming" };
     }
     case "dynamic-tool": {
+      // HITL yang MASIH parkir (approval/ask_question menunggu jawaban) dirender sebagai kartu
+      // di atas composer (`InputRequestPrompt`), bukan di transkrip — hindari tampil ganda.
+      // Setelah diresolve (`output-*`) tampil normal sebagai tool-row (jejak audit).
+      if (part.state === "approval-requested") return null;
       // propose_artifact sukses → kartu artifact clickable + Save-to-workspace (satu-satunya
-      // kartu khusus yang disisakan). Sisanya — subagen, verify_*, semua tool — jadi tool-row
-      // generik. HITL = percakapan murni (tak ada lagi inputRequest card; agent tanya via teks).
+      // kartu khusus yang disisakan). Sisanya — subagen, verify_*, semua tool — jadi tool-row generik.
       const artifact = artifactCardModel(part);
       if (artifact) return { kind: "artifact", id: part.toolCallId, model: artifact };
       const model = toolPartModel(part);
@@ -160,41 +164,141 @@ export function evePartsToTimeline(
   });
 }
 
-// ── gabung event log di LEVEL EVENT (port eve-chat-template) ───────────────────
+// ── gabung event log di LEVEL EVENT (indexed by event_index) ───────────────────
 //
-// SATU event log mentah → gabung prefix-aware → `defaultMessageReducer` SEKALI → pesan.
-// Menggantikan merge 3-sumber + dedup turnId di level render (akar flicker/stale-card).
+// SATU event log mentah → `defaultMessageReducer` SEKALI → pesan. Menggantikan merge
+// 3-sumber + dedup turnId (akar flicker/stale-card).
 
-/** Dua event stream sama bila JSON-nya identik (eve emit event immutable per posisi). */
-function areSameStreamEvent(a: EveAgentReducerEvent, b: EveAgentReducerEvent): boolean {
-  return a === b || JSON.stringify(a) === JSON.stringify(b);
+/** Event persisted dengan posisi durable-nya (`event_index` = posisi stream eve). */
+export type IndexedEvent = { readonly index: number; readonly event: EveAgentReducerEvent };
+
+/**
+ * Gabung snapshot persisted (`snapshot`, ber-`index`) dengan ekor LIVE (`live`, dari resume
+ * stream ATAU `agent.events`, kontigu mulai `liveStartIndex`) → satu log terurut.
+ *
+ * Dedup **by `event_index`** (posisi durable di stream eve), BUKAN `JSON.stringify` — bekas
+ * implementasi O(n²) `JSON.stringify` per-banding × tiap event yang membuat run besar (ribuan
+ * event `/deep`) nge-jank seakan beku. Map by-index → O(n). Snapshot & live boleh overlap
+ * (poll re-fetch ↔ resume) tanpa duplikat; live menimpa snapshot di index sama (event identik).
+ */
+export function buildOrderedLog(
+  snapshot: readonly IndexedEvent[],
+  live: readonly EveAgentReducerEvent[],
+  liveStartIndex: number,
+): EveAgentReducerEvent[] {
+  if (live.length === 0) return snapshot.map((s) => s.event);
+  const byIndex = new Map<number, EveAgentReducerEvent>();
+  for (const s of snapshot) byIndex.set(s.index, s.event);
+  for (let i = 0; i < live.length; i += 1) byIndex.set(liveStartIndex + i, live[i]);
+  return [...byIndex.keys()].sort((a, b) => a - b).map((i) => byIndex.get(i) as EveAgentReducerEvent);
 }
 
 /**
- * Gabung log persisted (`events`) dengan event live (`streamed`) → satu log. `streamed` yang
- * sudah ada di `events` (prefix yang ter-refetch usai turn) di-skip → tak dobel. `events` =
- * prefix server-authoritative; `streamed` = buffer live `agent.events`. Pola template
- * `mergeStreamEventLogs`/`appendUniqueStreamEvent`. Resume pakai overlay `[...events,...resumed]`
- * langsung (range disjoint), bukan fungsi ini.
+ * Buang delta streaming yang SUDAH disusul: simpan hanya `message.appended`/`reasoning.appended`
+ * TERAKHIR per (type, turnId, stepIndex). Reducer eve men-`upsert` part teks dengan `messageSoFar`
+ * (KUMULATIF) tiap delta → hanya delta terakhir yang menentukan teks final, sisanya redundan.
+ * Riset `/deep` bisa ribuan delta × teks-kumulatif = O(n²) (terukur 18MB) → reduce penuh tiap
+ * token nge-jank (gejala "token per token sangat lama"). Compaction → reduce hanya teks-final
+ * per langkah (O(n) byte). Aman: part teks di-REPLACE (bukan di-append), hasil reduksi identik.
+ * Scan murah (hanya baca type/turnId/stepIndex, tak menyentuh string besar).
  */
-export function mergeStreamEventLogs(
+const STREAMING_DELTA_TYPES = new Set(["message.appended", "reasoning.appended"]);
+
+function deltaKey(e: EveAgentReducerEvent): string {
+  const d = (e as { data?: { turnId?: unknown; stepIndex?: unknown } }).data;
+  return `${e.type}:${String(d?.turnId)}:${String(d?.stepIndex)}`;
+}
+
+export function compactStreamingDeltas(
   events: readonly EveAgentReducerEvent[],
-  streamed: readonly EveAgentReducerEvent[],
-): EveAgentReducerEvent[] {
-  if (streamed.length === 0) return events.slice();
-  const merged = events.slice();
-  for (const ev of streamed) {
-    if (!merged.some((existing) => areSameStreamEvent(existing, ev))) merged.push(ev);
-  }
-  return merged;
+): readonly EveAgentReducerEvent[] {
+  const lastAt = new Map<string, number>();
+  events.forEach((e, i) => {
+    if (STREAMING_DELTA_TYPES.has(e.type)) lastAt.set(deltaKey(e), i);
+  });
+  if (lastAt.size === 0) return events;
+  return events.filter(
+    (e, i) => !STREAMING_DELTA_TYPES.has(e.type) || lastAt.get(deltaKey(e)) === i,
+  );
 }
 
 /** Reduce satu event log → data pesan, lewat `defaultMessageReducer` SEKALI (jalur tunggal). */
 export function reduceEventsToMessageData(events: readonly EveAgentReducerEvent[]) {
   const reducer = defaultMessageReducer();
   let data = reducer.initial();
-  for (const ev of events) data = reducer.reduce(data, ev);
+  for (const ev of compactStreamingDeltas(events)) data = reducer.reduce(data, ev);
   return data;
+}
+
+/** Proyeksi UI pending HITL dari reducer eve (approval / ask_question), + nama tool pemicu
+ *  (`eve.name`) untuk melokalkan copy approval yang di-generate eve dalam bahasa Inggris. */
+export type PendingInputRequest = EveMessageInputRequest & { readonly toolName: string };
+
+/** Payload jawaban HITL → `agent.send({ inputResponses })`. */
+export type InputResponsePayload = {
+  requestId: string;
+  optionId?: string;
+  text?: string;
+};
+
+/** Approval eve = persis dua opsi ber-id `approve`/`deny` (lihat harness `isApprovalRequest`).
+ *  Bukan approval → `ask_question` model (prompt/opsi sudah ditulis model, dipakai apa adanya). */
+export function isApprovalRequest(req: Pick<PendingInputRequest, "options">): boolean {
+  const opts = req.options;
+  return (
+    opts !== undefined && opts.length === 2 && opts[0]?.id === "approve" && opts[1]?.id === "deny"
+  );
+}
+
+/** Boleh dijawab teks bebas: model set `allowFreeform`, atau tak ada opsi untuk dipilih. */
+export function acceptsFreeformText(
+  req: Pick<PendingInputRequest, "allowFreeform" | "options">,
+): boolean {
+  return req.allowFreeform === true || req.options === undefined || req.options.length === 0;
+}
+
+/**
+ * Permintaan input yang BENAR-BENAR menunggu user = part `approval-requested` di PESAN ASISTEN
+ * TERAKHIR saja (turn terakhir). Alasannya halus tapi krusial:
+ *
+ * - `ask_question` TIDAK pernah meng-emit `action.result` ke event-log server, dan
+ *   `eve.inputResponse` HANYA di-set event proyeksi klien (`client.input.responded`) yang tak
+ *   pernah masuk event-log/persisted. Jadi part `ask_question` **nyangkut di `approval-requested`
+ *   SELAMANYA** di turn-turn lama. Kalau dipindai lintas semua pesan, tiap pertanyaan lama
+ *   menumpuk jadi kartu basi (persis bug: 3 kartu menumpuk + muncul lagi setelah turn selesai).
+ *   (Cek state saja TIDAK cukup — beda dgn approval yg dapat `action.result` → `output-*`.)
+ * - eve serial per session: begitu user menjawab, turn BARU dimulai → pesan asisten baru jadi
+ *   yang terakhir → pertanyaan lama otomatis bukan "terakhir" lagi = tidak pending.
+ * - Approval yang sudah diresolve mid-turn → `action.result` → `output-*` (bukan
+ *   `approval-requested`) → tetap terfilter walau berada di turn terakhir.
+ *
+ * Batch paralel (>1 pertanyaan dalam satu step) tetap didukung: semuanya ada di pesan terakhir.
+ */
+export function pendingInputRequests(
+  events: readonly EveAgentReducerEvent[],
+): PendingInputRequest[] {
+  return pendingRequestsFromMessages(reduceEventsToMessageData(events).messages);
+}
+
+/** Scan pesan ter-reduce untuk request HITL parkir. Dipakai langsung saat `messages`
+ *  sudah di-reduce (hindari reduce ganda dgn `eventsToTimeline`). */
+export function pendingRequestsFromMessages(
+  messages: readonly EveMessage[],
+): PendingInputRequest[] {
+  let last: EveMessage | undefined;
+  for (const m of messages) if (m.role === "assistant") last = m;
+  if (!last) return [];
+
+  const out: PendingInputRequest[] = [];
+  const seen = new Set<string>();
+  for (const part of last.parts) {
+    if (part.type !== "dynamic-tool" || part.state !== "approval-requested") continue;
+    const req = part.toolMetadata?.eve?.inputRequest;
+    if (!req || seen.has(req.requestId)) continue;
+    seen.add(req.requestId);
+    out.push({ ...req, toolName: part.toolMetadata?.eve?.name ?? part.toolName });
+  }
+  return out;
 }
 
 // ── replay event stream persisted (fix timeline persist) ──────────────────────
@@ -218,8 +322,8 @@ const SETTLED_EVENT_TYPES = new Set([
 ]);
 
 /**
- * Settled ATAU parkir-menunggu-input. `input.requested` ditambahkan: walau HITL kini
- * percakapan, `ask_question` masih di harness → bila model memakainya, stream eve parkir di
+ * Settled ATAU parkir-menunggu-input. `input.requested` ditambahkan: bila model memakai
+ * `ask_question` atau tool ber-`needsApproval`, stream eve parkir di
  * `session.waiting` dan `agent.status` jadi `ready` (composer terbuka). Kalau reload
  * menganggapnya "berjalan", `busy` mengunci composer → user tak bisa menjawab.
  */
@@ -233,10 +337,11 @@ const SETTLED_OR_PARKED_LAST = new Set([...SETTLED_EVENT_TYPES, "input.requested
  * - selain itu (`actions.requested`/`action.result`/`step.*`/`reasoning.*`/`message.*`/
  *   `subagent.*`/`turn.started`) → masih eksekusi → aktif.
  *
- * Dipakai (a) menyalakan poll endpoint events (progress in-flight terlihat setelah refresh),
+ * Dipakai (a) memutuskan membuka resume stream (turn in-flight terlihat setelah refresh),
  * (b) gate indikator live + lock composer (`resuming`). Turn berurutan (eve serial per
- * session) → event terakhir mencerminkan state turn terbaru. (`session.*` tak dipersist,
- * jadi `turn.completed`/`input.requested` adalah penanda terakhir yang tersimpan.)
+ * session) → event terakhir mencerminkan state turn terbaru. (`session.*` DIPERSIST 1:1 —
+ * lihat hook proyeksi `"*"` + DB; `session.waiting` parkir HITL = penanda terakhir tersimpan,
+ * jadi resume yang menariknya bersih → `isStreamActive` false → composer unlock.)
  *
  * Catatan: turn yang MACET (proses mati tanpa `turn.completed`) tetap tampak aktif →
  * poll sampai user pindah thread; reconciler server-side adalah peningkatannya.

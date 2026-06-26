@@ -55,11 +55,13 @@ export function useThreadMessages(id: string, enabled = true) {
 
 /**
  * Event stream eve mentah per thread (1:1) — di-replay lewat `defaultMessageReducer` untuk
- * merekonstruksi timeline PENUH (tool/skill/subagent/HITL) saat reload. Snapshot SEKALI di
- * mount (TANPA poll): turn in-flight di-resume lewat durable stream eve (`useThreadResume`,
- * `ClientSession.stream`) — token streaming sejati, bukan poll granular. Refetch dipicu saat
- * resume settle (invalidate di chat-surface) → turn baru selesai pindah ke history.
- * `staleTime: 0` supaya invalidate selalu ambil event terbaru.
+ * merekonstruksi timeline PENUH (tool/skill/subagent/HITL) saat reload. **Snapshot SEKALI**
+ * saat mount (cold-load); turn in-flight di-stream live token-demi-token oleh resume stream
+ * (`use-thread-resume`, satu-satunya sumber live), BUKAN poll 2 dtk (dibuang — redundan dgn
+ * stream durable eve + sumber query berat). `staleTime: 0` + invalidate (resume settle / turn
+ * selesai, lihat `chat-surface`) → ambil snapshot terbaru yang kini memuat event terminal →
+ * `isStreamActive` false → composer unlock. Route masih dukung `afterIndex` (backfill manual
+ * bila perlu), tapi tak ada lagi loop poll yang men-detoast log tiap tick.
  */
 export function useThreadEvents(id: string, enabled = true) {
   const api = useApi();
@@ -68,7 +70,8 @@ export function useThreadEvents(id: string, enabled = true) {
     enabled,
     staleTime: 0,
     queryFn: async () =>
-      (unwrap(await api.threads({ id }).events.get()) as { items: ChatThreadEvent[] }).items,
+      (unwrap(await api.threads({ id }).events.get({ query: {} })) as { items: ChatThreadEvent[] })
+        .items,
   });
 }
 

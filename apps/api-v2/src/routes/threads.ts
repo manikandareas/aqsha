@@ -76,6 +76,17 @@ export const threads = new Elysia({ prefix: "/threads" })
       }),
     },
   )
+  // Thread `streaming` termuda milik caller (Layer C2) — klien memakai ini untuk menemukan
+  // sessionId turn PERTAMA segera setelah `send()` (eve baru surface sessionId di akhir turn),
+  // lalu bump URL → refresh saat menyusun plan tak kehilangan thread. Static route → di atas `/:id`.
+  .get(
+    "/recent-active",
+    ({ ownerUserId, query }) => {
+      const { db } = getDb();
+      return ThreadService.recentActive(db, ownerUserId, query.since);
+    },
+    { auth: true, query: t.Object({ since: t.Optional(t.Numeric()) }) },
+  )
   .get(
     "/:id",
     ({ ownerUserId, params }) => {
@@ -100,13 +111,15 @@ export const threads = new Elysia({ prefix: "/threads" })
   // di-assert dulu (thread milik caller), lalu list by thread (urut seq).
   .get(
     "/:id/events",
-    async ({ ownerUserId, params }) => {
+    async ({ ownerUserId, params, query }) => {
       const { db } = getDb();
       await ThreadService.assertOwner(db, ownerUserId, params.id);
-      const items = await EventService.listByThread(db, params.id);
+      // `afterIndex` → fetch INCREMENTAL (hanya delta) untuk reconciliation klien; tanpa
+      // itu → seluruh log (cold-start snapshot saat reload).
+      const items = await EventService.listByThread(db, params.id, query.afterIndex);
       return { items };
     },
-    { auth: true },
+    { auth: true, query: t.Object({ afterIndex: t.Optional(t.Numeric()) }) },
   )
   // Sumber riset yang dipersist tool Astra (Slice 6.4) — panel Sources. Ownership
   // di-assert dulu (thread milik caller), lalu list by thread.
@@ -190,14 +203,15 @@ export const threads = new Elysia({ prefix: "/threads" })
     },
     { auth: true },
   )
-  // Handle-resume eve (continuationToken) dari KLIEN (`useAstraAgent onSessionChange`).
-  // Token KLIEN (ter-namespace sekali) — bukan `channel.continuationToken` server (ganda) →
-  // approval HITL `inputResponses` lintas-reload bisa di-`deliver`. Owner-gated di service.
+  // Handle-resume eve (continuationToken) — di-upsert SERVER-SIDE oleh proxy-tee respons
+  // create/continue eve (`web-v2 app/eve/v1/[...path]/route.ts`), BUKAN klien. Token dari
+  // respons create-POST = ber-namespace TUNGGAL (`eve:<uuid>`); RACE-PROOF (insert-if-absent,
+  // owner-guard di repo) karena respons create (202) bisa mendahului hook `session.started`.
   .post(
-    "/:id/session",
+    "/:id/session-token",
     ({ ownerUserId, params, body }) => {
       const { db } = getDb();
-      return ThreadService.saveContinuation(db, {
+      return ThreadService.upsertContinuationToken(db, {
         ownerUserId,
         threadId: params.id,
         continuationToken: body.continuationToken,

@@ -7,8 +7,16 @@ import { type ChatThreadEvent, ChatThreadEventRepo, type DbOrTx } from "@aqsha/d
  * turn jalan). Path TULIS hidup di PROSES eve (`apps/agent-v2/agent/lib/store.ts`, raw SQL).
  */
 export const EventService = {
-  /** Event stream thread (urut `event_index`). UNGATED — route memanggil `ThreadService.assertOwner` dulu. */
-  async listByThread(db: DbOrTx, threadId: string): Promise<ChatThreadEvent[]> {
-    return ChatThreadEventRepo.listByThread(db, threadId);
+  /**
+   * Event stream thread (urut `event_index`). UNGATED — route memanggil `ThreadService.assertOwner` dulu.
+   * `afterIndex` (opsional) = fetch INCREMENTAL hanya delta `> afterIndex` (reconciliation klien,
+   * hindari re-fetch seluruh log).
+   */
+  async listByThread(
+    db: DbOrTx,
+    threadId: string,
+    afterIndex?: number,
+  ): Promise<ChatThreadEvent[]> {
+    return ChatThreadEventRepo.listByThread(db, threadId, afterIndex);
   },
 };
