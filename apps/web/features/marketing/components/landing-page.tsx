@@ -1,6 +1,7 @@
 import { AudienceSection } from "@/features/marketing/components/audience-section";
 import { BottomCtaSection } from "@/features/marketing/components/bottom-cta-section";
 import { ComparisonTableSection } from "@/features/marketing/components/comparison-table-section";
+import { FaqSection } from "@/features/marketing/components/faq-section";
 import { FeatureSections } from "@/features/marketing/components/feature-sections";
 import { HowItWorksSection } from "@/features/marketing/components/how-it-works-section";
 import { LandingFooter } from "@/features/marketing/components/landing-footer";
@@ -24,6 +25,7 @@ export function LandingPage() {
       <FeatureSections />
       <AudienceSection />
       <PricingSection />
+      <FaqSection />
       <BottomCtaSection />
       <LandingFooter />
     </>
