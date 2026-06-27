@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, type ReactNode } from "react";
-import { FileTextIcon, FolderIcon, NotebookIcon } from "@aqsha/ui/icons";
+import { FolderIcon } from "@aqsha/ui/icons";
 import { LibraryArtifactCard } from "@/components/library-artifact-card";
 import { useLibraryItemClick } from "../hooks/use-library-item-click";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
@@ -11,7 +11,6 @@ import {
   ArtifactContextMenuContent,
   FolderContextMenuContent,
 } from "./workspace-library-context-menus";
-import { WorkspaceLibraryEmpty } from "./workspace-library-empty";
 import {
   partitionArtifactsByCategory,
   type FolderSummary,
@@ -68,7 +67,6 @@ export function WorkspaceLibraryGrid({
   onDragArtifactStart,
   onDragArtifactEnd,
   onDropArtifactOnFolder,
-  controls,
 }: {
   folders: FolderSummary[];
   artifacts: WorkspaceArtifact[];
@@ -91,15 +89,10 @@ export function WorkspaceLibraryGrid({
   onDragArtifactStart: (artifactId: string) => void;
   onDragArtifactEnd: () => void;
   onDropArtifactOnFolder: (folderId: string) => void;
-  controls?: ReactNode;
 }) {
-  const { library, output } = partitionArtifactsByCategory(artifacts);
-  // When there are no artifacts at all (folders-only view) we skip the two
-  // section shells so the board doesn't show a double "empty" — the fully-empty
-  // workspace case is handled upstream by WorkspaceLibraryEmpty.
-  const hasAnyArtifacts = library.length > 0 || output.length > 0;
-  // Full selection across both sections, used as marquee `currentIds` so a
-  // marquee in one section never wipes the other section's selection.
+  // Grid ini sekarang khusus tab "Pustaka": hanya folder + artifak kategori
+  // library. Output agent ditampilkan terpisah sebagai linimasa di tab Artifact.
+  const { library } = partitionArtifactsByCategory(artifacts);
   const selectedIds = artifacts.flatMap((artifact) =>
     getArtifactSelected(artifact._id) ? [artifact._id] : [],
   );
@@ -146,49 +139,18 @@ export function WorkspaceLibraryGrid({
         </section>
       ) : null}
 
-      {hasAnyArtifacts ? (
-        <>
-          <ArtifactSection
-            title={`Pustaka (${library.length})`}
-            artifacts={library}
-            selectedIds={selectedIds}
-            controls={controls}
-            emptyState={
-              <WorkspaceLibraryEmpty
-                variant="root"
-                icon={FileTextIcon}
-                title="Mulai bangun pustakamu"
-                description="Tambahkan dokumen, file, atau URL untuk mulai mengumpulkan bahan risetmu."
-                showActions={false}
-                showSamples
-              />
-            }
-            {...itemHandlers}
-          />
-
-          <ArtifactSection
-            title={`Artifact (${output.length})`}
-            artifacts={output}
-            selectedIds={selectedIds}
-            emptyState={
-              <WorkspaceLibraryEmpty
-                variant="root"
-                icon={NotebookIcon}
-                title="Hasil kerja agent muncul di sini"
-                description="Minta agent membuat laporan, ringkasan, atau visualisasi lewat chat — semuanya tersimpan otomatis di sini."
-                showActions={false}
-                showSamples
-              />
-            }
-            {...itemHandlers}
-          />
-        </>
+      {library.length > 0 ? (
+        <ArtifactSection
+          artifacts={library}
+          selectedIds={selectedIds}
+          {...itemHandlers}
+        />
       ) : null}
     </div>
   );
 }
 
-function ArtifactSection({
+export function ArtifactSection({
   title,
   artifacts,
   selectedIds,
@@ -209,11 +171,11 @@ function ArtifactSection({
   onDragArtifactStart,
   onDragArtifactEnd,
 }: ArtifactItemHandlers & {
-  title: string;
+  title?: string;
   artifacts: WorkspaceArtifact[];
   selectedIds: string[];
   controls?: ReactNode;
-  emptyState: ReactNode;
+  emptyState?: ReactNode;
 }) {
   const gridRef = useRef<HTMLDivElement | null>(null);
   const tileRefs = useRef<Map<string, HTMLDivElement> | null>(null);
@@ -273,7 +235,9 @@ function ArtifactSection({
 
   return (
     <section className="flex flex-col gap-5">
-      <LibrarySectionHeader title={title} controls={controls} />
+      {title || controls ? (
+        <LibrarySectionHeader title={title ?? ""} controls={controls} />
+      ) : null}
       {artifacts.length > 0 ? (
         <div className="relative">
           {sectionSelectedCount > 0 || marquee ? (
@@ -490,7 +454,7 @@ function FolderTile({
   );
 }
 
-function ArtifactTile({
+export function ArtifactTile({
   refCallback,
   artifact,
   workspaceId,

@@ -98,12 +98,20 @@ function flattenArtifacts(
           _id: string;
           title: string;
           artifactType: string;
+          artifactFamily?: string | null;
+          // `source` membedakan output agent vs library — wajib di-carry, kalau
+          // tidak SEMUA artifak jatuh ke kategori library (tab Artifact kosong).
+          source?: string | null;
           workspaceId: string | null;
           folderId: string | null;
           createdAt: number;
           updatedAt: number;
           mimeType?: string | null;
           url?: string | null;
+          indexingStatus?: string | null;
+          indexingFailureReason?: string | null;
+          plainTextPreview?: string | null;
+          status?: string | null;
         }>;
       }>
     | undefined,
@@ -114,12 +122,18 @@ function flattenArtifacts(
       title: artifact.title,
       kind: artifact.artifactType,
       artifactType: artifact.artifactType,
+      artifactFamily: artifact.artifactFamily ?? undefined,
+      source: artifact.source ?? undefined,
       workspaceId: artifact.workspaceId ?? "",
       folderId: artifact.folderId ?? undefined,
       createdAt: artifact.createdAt,
       updatedAt: artifact.updatedAt,
       mimeType: artifact.mimeType ?? undefined,
       url: artifact.url ?? undefined,
+      indexingStatus: artifact.indexingStatus ?? undefined,
+      indexingFailureReason: artifact.indexingFailureReason ?? undefined,
+      plainTextPreview: artifact.plainTextPreview ?? undefined,
+      status: artifact.status ?? undefined,
     })),
   ) as WorkspaceArtifact[];
 }

@@ -33,10 +33,14 @@ const workspaceArtifactSortOptions = [
   "title-desc",
 ] as const satisfies readonly WorkspaceArtifactSort[];
 
+const workspaceLibraryTabs = ["pustaka", "artifact"] as const;
+export type WorkspaceLibraryTab = (typeof workspaceLibraryTabs)[number];
+
 const workspaceLibraryQueryParsers = {
   q: parseAsString.withDefault(""),
   type: parseAsArrayOf(parseAsStringLiteral(workspaceArtifactTypes)).withDefault([]),
   sort: parseAsStringLiteral(workspaceArtifactSortOptions).withDefault(defaultWorkspaceArtifactSort),
+  tab: parseAsStringLiteral(workspaceLibraryTabs).withDefault("pustaka"),
 };
 
 type LibraryDataProps = Pick<
@@ -139,6 +143,10 @@ export function WorkspaceLibrarySurface({
         }}
         onSortChange={(sort) => {
           void setLibraryControls({ sort });
+        }}
+        activeTab={libraryControls.tab}
+        onTabChange={(tab) => {
+          void setLibraryControls({ tab });
         }}
         workspaces={libraryData.workspaces}
         {...dialogState.libraryHandlers}
