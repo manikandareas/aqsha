@@ -13,7 +13,11 @@ import { delKey, setNxWithTtl } from "../clients/redis";
 
 const WEBHOOK_TTL_SECONDS = 60 * 60 * 24; // 24 jam ≥ jendela retry svix
 
-/** Payload webhook Mayar (`{ event, data }`). data bawa customerEmail + productId. */
+/**
+ * Payload webhook Mayar (`{ event, data }`). data bawa customerEmail + productId
+ * (ambigu: tier id ATAU parent product id) + amount (untuk disambiguasi tier saat
+ * productId = parent — lihat resolveWebhookProductKey).
+ */
 type MayarWebhookEvent = {
   event?: string;
   data?: {
@@ -22,11 +26,19 @@ type MayarWebhookEvent = {
     customerEmail?: string;
     productId?: string;
     productType?: string;
+    amount?: number | string;
   } | null;
 };
 
 function stringField(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+/** Mayar bisa kirim amount sebagai number atau string numerik. undefined bila bukan keduanya. */
+function numberField(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))) return Number(value);
+  return undefined;
 }
 
 type ClerkUserData = {
@@ -122,7 +134,7 @@ export const webhooks = new Elysia({ prefix: "/webhooks" }).post(
     const eventName = stringField(event.event);
     const data = event.data ?? {};
     const resolved = eventName
-      ? deriveMayarMembershipEvent(eventName, stringField(data.productId), Date.now())
+      ? deriveMayarMembershipEvent(eventName, stringField(data.productId), numberField(data.amount), Date.now())
       : null;
     if (!eventName || !resolved) {
       return { ok: true, ignored: true }; // event tak relevan / produk tak terkonfigurasi

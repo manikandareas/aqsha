@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { AppError, createDb } from "@aqsha/db";
 import { BillingRepo } from "@aqsha/db";
 import { users } from "@aqsha/db/schema";
@@ -61,15 +61,32 @@ describe("billingStatusAllowsUsage", () => {
 });
 
 describe("BillingService.listPlans (pure katalog)", () => {
-  test("4 plan publik; free tanpa produk; starter/plus/ultra punya produk (unconfigured)", () => {
+  const KEY = "MAYAR_API_KEY";
+  const prevKey = process.env[KEY];
+  afterEach(() => {
+    if (prevKey === undefined) delete process.env[KEY];
+    else process.env[KEY] = prevKey;
+  });
+
+  test("4 plan publik; free tanpa produk; starter/plus/ultra punya produk", () => {
+    delete process.env[KEY];
     const plans = BillingService.listPlans();
     expect(plans.map((p) => p.key)).toEqual(["free", "starter", "plus", "ultra"]);
     expect(plans.find((p) => p.key === "free")!.products).toEqual([]);
     const starter = plans.find((p) => p.key === "starter")!;
     expect(starter.products.map((p) => p.key).sort()).toEqual(["starterMonthly", "starterYearly"]);
-    expect(starter.products.every((p) => p.configured === false)).toBe(true); // tanpa env MAYAR_*
     const ultra = plans.find((p) => p.key === "ultra")!;
     expect(ultra.products.map((p) => p.key).sort()).toEqual(["ultraMonthly", "ultraYearly"]);
+  });
+
+  test("configured = ada/tidaknya MAYAR_API_KEY (link bayar dinamis), bukan tier-id", () => {
+    delete process.env[KEY];
+    const off = BillingService.listPlans().find((p) => p.key === "starter")!;
+    expect(off.products.every((p) => p.configured === false)).toBe(true);
+
+    process.env[KEY] = "eyJ.test";
+    const on = BillingService.listPlans().find((p) => p.key === "ultra")!;
+    expect(on.products.every((p) => p.configured === true)).toBe(true);
   });
 });
 
@@ -383,5 +400,37 @@ describe("BillingService.consumeCredits (integration)", () => {
       code = (e as AppError).code;
     }
     expect(code).toBe("billing_subscription_product_unknown");
+  });
+
+  itest("one-time expired: currentPeriodEnd lewat → effective/snapshot plan = free", async () => {
+    const owner = await freshOwner();
+    await BillingRepo.upsertSubscription(db, {
+      id: crypto.randomUUID(),
+      ownerUserId: owner,
+      providerSubscriptionId: `sub_exp_${owner}`,
+      providerProductId: "tier_sm",
+      productKey: "starterMonthly",
+      planKey: "starter",
+      billingInterval: "month",
+      status: "active",
+      currentPeriodStart: 0,
+      currentPeriodEnd: Date.now() - 1000, // single payment sudah lewat
+      cancelAtPeriodEnd: true,
+      canceledAt: null,
+      rawJson: null,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    expect(await resolveEffectivePlanKey(db, { ownerUserId: owner })).toBe("free");
+    expect((await BillingService.getBillingSnapshot(db, owner)).planKey).toBe("free");
+    // pro feature → subscription_required (akses berbayar tak berlaku lagi)
+    const pro = await BillingService.consumeCredits(db, {
+      ownerUserId: owner,
+      feature: "pro_chat",
+      provider: "test",
+      credits: 1,
+    });
+    expect(pro.ok).toBe(false);
+    if (!pro.ok) expect(pro.reason).toBe("subscription_required");
   });
 });

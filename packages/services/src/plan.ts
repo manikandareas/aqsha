@@ -291,6 +291,16 @@ export function normalizeBillingStatus(status: string | undefined): BillingStatu
   return status ? "unknown" : "free";
 }
 
+/**
+ * Langganan one-time (single payment) sudah lewat masa berlaku → akses efektif
+ * free. Dipakai snapshot entitlement + UI agar pembayar one-time tidak dapat akses
+ * permanen (Mayar tak mengirim event expired untuk single payment). `end` null =
+ * tak ada batas (admin/free) → tak pernah expired.
+ */
+export function isSubscriptionExpired(currentPeriodEnd: number | null | undefined, now = Date.now()): boolean {
+  return currentPeriodEnd != null && currentPeriodEnd <= now;
+}
+
 export function billingStatusAllowsUsage(args: {
   planKey: PlanKey;
   status: BillingStatus;

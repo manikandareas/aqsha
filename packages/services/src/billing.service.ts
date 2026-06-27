@@ -15,6 +15,7 @@ import {
   estimateCredits,
   estimateProviderCostCents,
   intervalForProductKey,
+  isSubscriptionExpired,
   normalizeBillingStatus,
   PLAN_CATALOG,
   type PlanKey,
@@ -28,7 +29,7 @@ import {
 } from "./plan";
 import { getEntitlementSnapshot, resolveAdminOverride } from "./billing/snapshot";
 import { ensureAndLockPeriod, ensureCreditPeriod, evaluateGate, utcDateString } from "./billing/period";
-import { configuredProductId, MayarClient } from "./clients/mayar";
+import { configuredTierId, isCheckoutConfigured, MayarClient } from "./clients/mayar";
 import type { ConsumeCreditsArgs, EntitlementResult } from "./billing/types";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -155,6 +156,11 @@ async function resolveOwnerEmail(db: DbOrTx, ownerUserId: string, passed?: strin
   return email;
 }
 
+/** Sisipkan nonce ke URL (anti-dedup 429 Mayar `payment/create` utk body identik). */
+function withCacheBuster(url: string): string {
+  return `${url}${url.includes("?") ? "&" : "?"}cb=${crypto.randomUUID()}`;
+}
+
 /** Domain email yang dilarang untuk checkout Mayar (port V1 `isReservedEmail`). */
 function isReservedEmail(email: string): boolean {
   const domain = email.split("@")[1]?.toLowerCase() ?? "";
@@ -166,18 +172,6 @@ function isReservedEmail(email: string): boolean {
     domain.endsWith(".invalid") ||
     domain.endsWith(".example")
   );
-}
-
-function resolveProductForPurchase(productKey: ProductKey): { product: (typeof PRODUCT_CATALOG)[ProductKey]; productId: string } {
-  const product = PRODUCT_CATALOG[productKey];
-  if (!product) {
-    throwAppError({ code: "billing_product_unknown", message: "Unknown billing product", severity: "error" });
-  }
-  const productId = configuredProductId(productKey);
-  if (!productId) {
-    throwAppError({ code: "billing_product_not_configured", message: "Mayar product is not configured", severity: "error" });
-  }
-  return { product, productId };
 }
 
 async function deepLimitReached(
@@ -434,7 +428,9 @@ export const BillingService = {
       };
     }
 
-    if (!mirrored) {
+    // Tanpa mirror ATAU one-time payment sudah lewat masa berlaku → tampil free
+    // (konsisten dengan entitlement). Portal tetap tersedia bila ada histori.
+    if (!mirrored || isSubscriptionExpired(mirrored.currentPeriodEnd)) {
       return {
         planKey: "free",
         status: "free",
@@ -446,7 +442,7 @@ export const BillingService = {
         canceledAt: null,
         isAdmin: false,
         isUnlimitedCredits: false,
-        billingPortalAvailable: false,
+        billingPortalAvailable: Boolean(mirrored),
         canChangeSubscription: false,
         canCancelSubscription: false,
       };
@@ -501,13 +497,15 @@ export const BillingService = {
           planKey === "free"
             ? []
             : PRODUCT_KEYS.filter((key) => PRODUCT_CATALOG[key].planKey === planKey).map((key) => {
-                const providerProductId = configuredProductId(key);
                 return {
                   key,
-                  providerProductId,
+                  providerProductId: configuredTierId(key),
                   interval: PRODUCT_CATALOG[key].interval,
                   displayPriceIdr: PRODUCT_CATALOG[key].displayPriceIdr,
-                  configured: Boolean(providerProductId),
+                  // "Tersedia untuk dibeli" = MAYAR_API_KEY terkonfigurasi (link bayar
+                  // dibuat dinamis dari harga plan, sama untuk semua produk). Tier-id
+                  // per-produk hanya fallback webhook, BUKAN syarat checkout.
+                  configured: isCheckoutConfigured(),
                 };
               }),
       };
@@ -515,14 +513,16 @@ export const BillingService = {
   },
 
   /**
-   * Checkout Mayar = redirect ke payment link produk Membership. Mayar tak punya
-   * sesi checkout per-user; atribusi owner by-email di webhook (email di-prefill).
+   * Checkout Mayar = link pembayaran LANGSUNG per-produk (single payment). User
+   * diarahkan ke halaman bayar produk yang dipilih (nominal terkunci dari harga
+   * plan, email/nama prefilled), lalu balik ke `successUrl` setelah bayar. Atribusi
+   * owner by-email + plan by-amount di webhook `payment.received`. `successUrl`
+   * disisipi nonce karena Mayar men-dedup body identik 1 menit (429).
    */
   async createCheckout(
     db: DbOrTx,
-    args: { ownerUserId: string; ownerEmail?: string | null; productKey: ProductKey },
+    args: { ownerUserId: string; ownerEmail?: string | null; productKey: ProductKey; successUrl?: string | null },
   ): Promise<{ url: string }> {
-    const { productId } = resolveProductForPurchase(args.productKey);
     const email = await resolveOwnerEmail(db, args.ownerUserId, args.ownerEmail);
     if (isReservedEmail(email)) {
       throwAppError({
@@ -533,7 +533,14 @@ export const BillingService = {
         field: "email",
       });
     }
-    return MayarClient.createCheckoutSession({ productId, email });
+    const product = PRODUCT_CATALOG[args.productKey];
+    const intervalLabel = product.interval === "year" ? "Tahunan" : "Bulanan";
+    return MayarClient.createPaymentLink({
+      email,
+      amountIdr: product.displayPriceIdr,
+      description: `Langganan Aqsha ${PLAN_CATALOG[product.planKey].label} — ${intervalLabel}`,
+      redirectUrl: args.successUrl ? withCacheBuster(args.successUrl) : undefined,
+    });
   },
 
   /**

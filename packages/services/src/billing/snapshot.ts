@@ -2,6 +2,7 @@ import { BillingRepo, type DbOrTx, UserRepo } from "@aqsha/db";
 import {
   isAdminEmail,
   isAdminOwnerUserId,
+  isSubscriptionExpired,
   normalizeBillingStatus,
   type PlanKey,
 } from "../plan";
@@ -54,7 +55,9 @@ export async function getEntitlementSnapshot(
   }
 
   const sub = await BillingRepo.findLatestSubscriptionByOwner(db, ownerUserId);
-  if (!sub) {
+  // One-time payment lewat masa berlaku → efektif free (limit/akses/cap turun ke
+  // free). Tak ada event Mayar yang menurunkannya, jadi dihitung dari period-end.
+  if (!sub || isSubscriptionExpired(sub.currentPeriodEnd)) {
     return {
       planKey: "free",
       status: "free",
