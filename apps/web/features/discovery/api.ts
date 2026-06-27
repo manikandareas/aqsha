@@ -131,12 +131,17 @@ export function useRecordInteraction() {
   });
 }
 
-/** Reader paper (getOrFetchPaper cold-resolve). `null` = tak teresolve. */
+/**
+ * Reader paper (getPaperDetail: cache/cold-resolve + enrichment OpenAlex). `null` = tak
+ * teresolve. Key dibawa sebagai QUERY PARAM — kunci kanonik mengandung `/` (DOI/url) yang
+ * akan memecah path segment kalau dikirim sebagai path param Eden.
+ */
 export function usePaper(key: string) {
   const api = useApi();
   return useQuery({
     queryKey: queryKeys.papers.detail(key),
-    queryFn: async () => (unwrap(await api.papers({ key }).get({ query: {} })) ?? null) as ExplorePaper | null,
+    queryFn: async () =>
+      (unwrap(await api.papers.detail.get({ query: { key } })) ?? null) as ExplorePaper | null,
   });
 }
 
