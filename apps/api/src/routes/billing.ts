@@ -54,12 +54,13 @@ export const billing = new Elysia({ prefix: "/billing" })
     "/checkout",
     ({ ownerUserId, email, body }) => {
       const { db } = getDb();
-      // `origin`/`successUrl` diterima utk kompat frontend, diabaikan (Mayar pakai
-      // redirectUrl produk + reconcile by-email).
+      // `successUrl` = redirect balik setelah bayar (Mayar `redirectUrl`). `origin`
+      // diabaikan. Plan direkonsiliasi by-amount/email di webhook payment.received.
       return BillingService.createCheckout(db, {
         ownerUserId,
         ownerEmail: email,
         productKey: body.productKey,
+        successUrl: body.successUrl ?? null,
       });
     },
     {

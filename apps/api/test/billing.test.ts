@@ -11,10 +11,9 @@ const DATABASE_URL = process.env.DATABASE_URL;
 const itest = DATABASE_URL ? test : test.skip;
 
 // Webhook + checkout tests baca env Mayar saat call → kontrol determinstik di sini
-// (jangan bergantung pada .env developer yang mungkin sudah meng-isi product id).
-delete process.env.MAYAR_WEBHOOK_SECRET;
+// (jangan bergantung pada .env developer yang mungkin sudah meng-isi tier/url).
 for (const key of Object.keys(process.env)) {
-  if (key.startsWith("MAYAR_") && key.endsWith("_PRODUCT_ID")) delete process.env[key];
+  if (key.startsWith("MAYAR_")) delete process.env[key];
 }
 
 const suffix = Math.floor(Math.random() * 1e9);
@@ -101,14 +100,15 @@ describe("api billing — read surface (free user)", () => {
 });
 
 describe("api billing — checkout/portal gates", () => {
-  itest("POST /billing/checkout tanpa product env → 400 billing_product_not_configured", async () => {
+  itest("POST /billing/checkout (email user belum di-set) → 400 billing_email_required", async () => {
+    await req("POST", "/users/me/sync", tok(OWNER));
     const res = await req("POST", "/billing/checkout", tok(OWNER), {
       productKey: "starterMonthly",
       origin: "http://localhost:3000",
       successUrl: "http://localhost:3000/app/settings",
     });
     expect(res.status).toBe(400);
-    expect((await readJson(res)).code).toBe("billing_product_not_configured");
+    expect((await readJson(res)).code).toBe("billing_email_required");
   });
 
   itest("POST /billing/portal tanpa email → 400 billing_email_required", async () => {
