@@ -5,12 +5,14 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 
+// Absolute (/#...) supaya tetap jalan saat header dipakai di luar landing (mis. /blog).
 const navItems = [
-  { href: "#bandingin", label: "Bandingin" },
-  { href: "#cara-kerja", label: "Cara kerja" },
-  { href: "#fitur", label: "Fitur" },
-  { href: "#buat-siapa", label: "Buat siapa" },
-  { href: "#pricing", label: "Harga" },
+  { href: "/#bandingin", label: "Bandingin" },
+  { href: "/#cara-kerja", label: "Cara kerja" },
+  { href: "/#fitur", label: "Fitur" },
+  { href: "/#buat-siapa", label: "Buat siapa" },
+  { href: "/#pricing", label: "Harga" },
+  { href: "/blog", label: "Blog" },
 ] as const;
 
 export function LandingHeader() {
