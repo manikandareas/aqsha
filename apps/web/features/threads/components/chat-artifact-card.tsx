@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useLinkArtifactToWorkspace } from "@/features/artifacts/api";
 import { WorkspacePicker } from "@/features/workspaces/components/workspace-picker";
-import type { ArtifactCardModel } from "../lib/eve-timeline";
+import type { ArtifactCardModel } from "../lib/timeline-types";
 
 /**
  * Kartu dokumen yang dibuat agen (Slice 6.5) — `propose_artifact` sukses. Artifact

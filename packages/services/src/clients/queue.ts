@@ -19,10 +19,9 @@ export const FEED_QUEUES = {
   feedHydration: "feed-hydration",
 } as const;
 
-/** Queue chat (P6) — auto-title async thread (Slice 6.8) + reconciler zombie (Phase 5). */
+/** Queue chat (P6) — auto-title async thread (Slice 6.8). */
 export const CHAT_QUEUES = {
   threadTitle: "thread-title",
-  reconcileStale: "reconcile-stale-threads",
 } as const;
 
 /** Queue account (P9) — cascade hard-delete data owner async (blob sweep + DELETE users). */

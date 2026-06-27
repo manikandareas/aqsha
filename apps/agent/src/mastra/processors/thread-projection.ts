@@ -1,0 +1,72 @@
+import { messagePreview } from "@aqsha/chat-core";
+import { ThreadService, TitleService } from "@aqsha/services/chat";
+import type { ProcessOutputResultArgs } from "@mastra/core/processors";
+import {
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+  type RequestContext,
+} from "@mastra/core/request-context";
+import { getServiceDb } from "../lib/db";
+
+/**
+ * Proyeksi thread (Fase 3 cutover) — menggantikan hook `projection.ts` eve untuk jalur Mastra.
+ *
+ * Mastra Memory = SoT pesan (auto-save `mastra_messages`), tapi sidebar + billing list app
+ * membaca `chat_threads`. Mastra TAK punya projection hook, jadi outputProcessor ini meng-upsert
+ * baris `chat_threads` TIPIS (owner/status/preview/agent_kind) per turn dan men-trigger title-gen
+ * async (`TitleService.requestTitle` → worker BullMQ). TIDAK menulis `chat_messages`/
+ * `chat_thread_events` (di-deprecate; Memory yang menyimpan isi pesan).
+ *
+ * Owner + threadId dibaca dari pesan tersimpan (`MastraDBMessage.threadId`/`.resourceId` —
+ * SoT yang selalu terisi saat memory thread aktif), fallback ke RequestContext. Tak bergantung
+ * pada `MASTRA_THREAD_ID_KEY` semata (Mastra bisa menyimpan threadId di memoryContext, bukan
+ * RequestContext, saat klien mengirimnya via opsi `memory`). Best-effort: kegagalan proyeksi tak
+ * boleh meracuni turn.
+ */
+function ctxValue(rc: RequestContext | undefined, key: string): string | null {
+  const raw = rc?.get(key);
+  return typeof raw === "string" && raw.length > 0 ? raw : null;
+}
+
+/** Teks pesan user PERTAMA (seed judul thread). `content.content` string atau gabung part `text`. */
+function firstUserText(messages: ProcessOutputResultArgs["messages"]): string | null {
+  const user = messages.find((m) => m.role === "user");
+  if (!user) return null;
+  const content = user.content as { content?: unknown; parts?: Array<{ type?: string; text?: unknown }> };
+  if (typeof content?.content === "string" && content.content.trim()) return content.content;
+  const text = (content?.parts ?? [])
+    .filter((p) => p.type === "text" && typeof p.text === "string")
+    .map((p) => p.text as string)
+    .join("\n")
+    .trim();
+  return text || null;
+}
+
+export const threadProjectionProcessor = {
+  id: "thread-projection" as const,
+  async processOutputResult({ requestContext, result, messages, messageList }: ProcessOutputResultArgs) {
+    const threadId =
+      messages.find((m) => m.threadId)?.threadId ?? ctxValue(requestContext, MASTRA_THREAD_ID_KEY);
+    const ownerUserId =
+      messages.find((m) => m.resourceId)?.resourceId ??
+      ctxValue(requestContext, MASTRA_RESOURCE_ID_KEY);
+    if (ownerUserId && threadId) {
+      const preview = result.text ? messagePreview(result.text) : null;
+      try {
+        const db = getServiceDb();
+        await ThreadService.ensureProjected(db, {
+          threadId,
+          ownerUserId,
+          agentKind: "lite",
+          preview,
+        });
+        // Title async (GAP-c): klaim atomik turn-pertama + enqueue worker (membawa seed pesan
+        // user pertama — Mastra Memory = SoT pesan); no-op turn ke-2+.
+        await TitleService.requestTitle(db, threadId, firstUserText(messages));
+      } catch (err) {
+        console.error("[thread-projection] failed", err);
+      }
+    }
+    return messageList;
+  },
+};

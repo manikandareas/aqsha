@@ -14,7 +14,7 @@
  * di billing.test.ts (A9) → tak diulang.
  */
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { ChatMessageRepo, ChatThreadRepo } from "@aqsha/db";
+import { ChatThreadRepo } from "@aqsha/db";
 import { BillingService } from "../src/billing.service";
 import * as llmMod from "../src/clients/llm";
 import * as queueMod from "../src/clients/queue";
@@ -88,13 +88,13 @@ describe("TitleService", () => {
     enqueueSpy = spyOn(queueMod, "enqueue").mockResolvedValue(undefined as never);
   });
 
-  test("requestTitle: klaim menang → enqueue threadTitle jobId=threadId, true", async () => {
+  test("requestTitle: klaim menang → enqueue threadTitle jobId=threadId (+seed), true", async () => {
     spyOn(ChatThreadRepo, "claimTitleGeneration").mockResolvedValue(true as never);
-    const ok = await TitleService.requestTitle(fakeDb, "t1");
+    const ok = await TitleService.requestTitle(fakeDb, "t1", "Tolong jelaskan riset ini");
     expect(ok).toBe(true);
     expect(enqueueSpy).toHaveBeenCalledWith(
       queueMod.CHAT_QUEUES.threadTitle,
-      { threadId: "t1" },
+      { threadId: "t1", titleSeed: "Tolong jelaskan riset ini" },
       { jobId: "t1" },
     );
   });
@@ -105,25 +105,18 @@ describe("TitleService", () => {
     expect(enqueueSpy).not.toHaveBeenCalled();
   });
 
-  test("generate: ada pesan user → finalizeTitle (ber-guard) judul collapsed+unquoted", async () => {
-    spyOn(ChatMessageRepo, "listByThread").mockResolvedValue([
-      { role: "assistant", text: "halo" },
-      { role: "user", text: "Tolong jelaskan riset ini" },
-    ] as never);
+  test("generate: ada seed → finalizeTitle (ber-guard) judul collapsed+unquoted", async () => {
     spyOn(llmMod, "generateThreadTitle").mockResolvedValue('  "Riset Energi"  ' as never);
     const fin = spyOn(ChatThreadRepo, "finalizeTitle").mockResolvedValue(undefined as never);
-    await TitleService.generate(fakeDb, "t1");
+    await TitleService.generate(fakeDb, { threadId: "t1", titleSeed: "Tolong jelaskan riset ini" });
     expect(fin).toHaveBeenCalledTimes(1);
     expect((fin.mock.calls[0] as unknown[])[2]).toBe("Riset Energi");
   });
 
-  test("generate: tanpa pesan user → finalizeTitle TIDAK dipanggil (status tetap generating)", async () => {
-    spyOn(ChatMessageRepo, "listByThread").mockResolvedValue([
-      { role: "assistant", text: "halo" },
-    ] as never);
+  test("generate: tanpa seed → finalizeTitle TIDAK dipanggil (status tetap generating)", async () => {
     spyOn(llmMod, "generateThreadTitle").mockResolvedValue("apa pun" as never);
     const fin = spyOn(ChatThreadRepo, "finalizeTitle").mockResolvedValue(undefined as never);
-    await TitleService.generate(fakeDb, "t1");
+    await TitleService.generate(fakeDb, { threadId: "t1" });
     expect(fin).not.toHaveBeenCalled();
   });
 });

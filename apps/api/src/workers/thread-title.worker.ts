@@ -4,14 +4,16 @@ import { getDb } from "../clients/db";
 
 export type ThreadTitleJob = {
   threadId: string;
+  titleSeed?: string;
 };
 
 /**
- * Worker `thread-title` (Slice 6.8) — generate judul thread async. Trigger: hook eve
- * `turn.completed` turn pertama (enqueue + claim 'generating'). Guard rename-manual
- * ada di `TitleService.generate` (`finalizeTitle` where status='generating').
+ * Worker `thread-title` (Slice 6.8) — generate judul thread async. Trigger:
+ * `threadProjectionProcessor` agent Mastra di akhir turn pertama (enqueue + claim 'generating',
+ * membawa seed pesan user pertama). Guard rename-manual di `TitleService.generate`
+ * (`finalizeTitle` where status='generating').
  */
 export async function processThreadTitle(job: Job<ThreadTitleJob>): Promise<void> {
   const { db } = getDb();
-  await TitleService.generate(db, job.data.threadId);
+  await TitleService.generate(db, { threadId: job.data.threadId, titleSeed: job.data.titleSeed });
 }

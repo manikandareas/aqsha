@@ -10,9 +10,9 @@ Untuk setiap proses brainstorming dan planning, gunakan **bahasa Indonesia**. Is
 ## Monorepo Boundaries
 | Package | Path | Runtime | Key Tech |
 |---|---|---|---|
-| `@aqsha/web` | `apps/web` | Next.js 16 (App Router) | React 19, Tailwind v4, Eden Treaty + TanStack Query; proxies `/eve/v1/*` to the agent |
+| `@aqsha/web` | `apps/web` | Next.js 16 (App Router) | React 19, Tailwind v4, Eden Treaty + TanStack Query; proxies `/mastra-api/*` to the agent |
 | `@aqsha/api` | `apps/api` | Bun (Elysia) | REST API + BullMQ workers, Clerk auth, Mayar billing, pino |
-| `@aqsha/agent` | `apps/agent` | Node ≥24 (eve) | eve agent runtime for Astra + `/deep` deep research |
+| `@aqsha/agent` | `apps/agent` | Node ≥24 (Mastra) | Mastra agent runtime for Astra (chat agent + `/deep` workflow) |
 | `@aqsha/db` | `packages/db` | shared (Drizzle) | Postgres schema + migrations (pgvector), structured `appError` |
 | `@aqsha/services` | `packages/services` | shared | domain services consumed by API, workers, and agent |
 | `@aqsha/chat-core` | `packages/chat-core` | shared | chat/timeline primitives |
@@ -45,7 +45,7 @@ Local infra (Postgres/Redis/MinIO): `docker compose -f infra/compose.dev.yaml up
 
 ## Build Pipeline
 - `@aqsha/db` and `@aqsha/services` build to `dist/` via tsup (`bun run build:dist`, `watch:dist`).
-- `apps/api` (Bun) runs `src/server.ts` directly; `apps/agent` runs `eve start`; `apps/web` runs `next start`.
+- `apps/api` (Bun) runs `src/server.ts` directly; `apps/agent` builds the Mastra server (`mastra build` → `.mastra/output`, run with `node`); `apps/web` runs `next start`.
 
 ## Icons
 - Use `@aqsha/ui/icons` for all app icon imports in `apps/web`.

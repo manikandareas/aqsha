@@ -1,0 +1,40 @@
+import { Mastra } from "@mastra/core/mastra";
+import { astraLite } from "./agents/astra-lite";
+import { createClerkAuth } from "./auth";
+import { userContextMiddleware } from "./middleware/user-context";
+import { storage, vector } from "./storage";
+import { deepResearch } from "./workflows/deep-research";
+
+/**
+ * Instance Mastra runtime Astra (Fase 0 spike).
+ *
+ * Topologi: server Mastra (Hono) berdiri sendiri sebagai `@aqsha/agent`; `apps/web` akan
+ * mem-proxy same-origin ke sini (Fase 1). `apps/api` Elysia tetap REST non-agent.
+ *
+ * - `agents`: key = id agent (dipakai di route `/api/agents/:id/*`).
+ * - `storage` + `vectors`: satu Postgres bersama (tabel `mastra_*`); juga dipakai Memory.
+ * - `server.auth`: MastraAuthClerk — memverifikasi bearer Clerk DI SEMUA route (termasuk
+ *   stream/subscribe), menutup celah eve stream-GET yang tak ber-ownership. resourceId
+ *   diturunkan dari Clerk `sub` (lihat `./auth.ts`).
+ *
+ * OPEN-Q-1 (resolusi Fase 0): route agent STANDAR Mastra (`/api/agents/:id/stream*`,
+ * memory thread/resource, tool-approval) + `@mastra/client-js` (reconnect) sudah memenuhi
+ * gate chat (stream+persist+auth+resume) TANPA membungkus Harness/AgentController.
+ *
+ * `/deep` = Workflow `deep-research` (Fase 2), diekspos di route standar
+ * `/api/workflows/deep-research/*` (start/stream/resume/observe), dijaga `server.auth` yang
+ * sama. `server.auth` menjaga SEMUA route (agent + workflow).
+ */
+export const mastra = new Mastra({
+  agents: { "astra-lite": astraLite },
+  workflows: { "deep-research": deepResearch },
+  storage,
+  vectors: { pg: vector },
+  server: {
+    port: Number(process.env.PORT ?? 4111),
+    host: process.env.HOST ?? "0.0.0.0",
+    auth: createClerkAuth(),
+    // userContextMiddleware: ekstrak email Clerk → RequestContext (gate admin billing).
+    middleware: [userContextMiddleware],
+  },
+});

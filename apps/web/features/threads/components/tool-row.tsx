@@ -19,7 +19,7 @@ import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
-import type { ToolRow as ToolRowData, ToolRowModel, ToolStatus } from "../lib/eve-timeline";
+import type { ToolRow as ToolRowData, ToolRowModel, ToolStatus } from "../lib/timeline-types";
 import { ElapsedLabel } from "./elapsed-label";
 
 // Ikon semantik per tool (kosmetik — data: `model.name` selalu ada). Switch mengembalikan

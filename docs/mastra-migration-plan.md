@@ -3,6 +3,29 @@
 > Status: PLAN (2026-06-27). Brainstorm & riset selesai; semua keputusan arsitektur terkunci.
 > Bahasa: Indonesia (istilah teknis Inggris). Companion: `docs/architecture/`, memory `eve-to-mastra-migration-brainstorm.md`.
 
+## STATUS RINGKAS (dievaluasi 2026-06-27, branch `feat/mastra-agent`, BELUM commit)
+
+| Fase | Status | Catatan |
+|---|---|---|
+| **Fase 0 — Spike** | ✅ **SELESAI & terverifikasi** | gate hijau di infra NYATA (DB VPS): scaffold + auth 401 + 35 tabel `mastra_*` + stream + persist. Lihat §5.1. |
+| **Fase 1 — Chat parity** | ✅ **Kode SELESAI** (backend terverifikasi; FE core typecheck+lint hijau) | 17 tool + 11 skills + memory/recall + billing + FE (proxy/client/adapter/hook/surface/flag). Lihat §6.1. **Sisa = E2E visual + 3 gap (di bawah)**. |
+| **Fase 2 — `/deep` Workflow** | ✅ **SELESAI & terverifikasi (backend)** | Workflow `deep-research` (6 step linear) + 3 subagent + `deep-writer` + gerbang billing. Smoke DB VPS HIJAU. Lihat §7.1. |
+| **Fase 3 — Cutover & cleanup** | ✅ **SELESAI (kode)** | eve dihapus TOTAL (app+FE+proxy+deps), composer KAYA di Mastra, projection thread+title, tabel `chat_messages`/`chat_thread_events` DI-DROP (mig 0016, applied dev). Gate typecheck+lint hijau; test db/chat-core/services hijau + api fixed. Sisa = owner E2E + deploy + migrate prod. Lihat §8.1. |
+
+**Gate terverifikasi sekarang:** `bun run typecheck` SEMUA workspace **HIJAU** · `bun run lint` **0 error** (warning lama saja) · eve tetap utuh (koeksistensi).
+
+**Yang BELUM terverifikasi di Fase 0–1 (butuh owner / sesi browser Clerk) — JANGAN dianggap selesai:**
+1. **E2E visual chat** (kirim→stream→render→tool→HITL→reload history) via `NEXT_PUBLIC_AGENT_RUNTIME=mastra` + `mastra dev` (:4111) + web. Lapisan storage/stream/billing-debit sudah dibuktikan via smoke skrip; render UI belum.
+2. **Billing BLOCK** (precheck `abort()` saat kuota habis): smoke memakai email admin (unlimited) → jalur blok **belum dieksekusi**. Hanya jalur DEBIT yang terbukti (`provider_usage_ledger`).
+3. **Ownership thread** (user A tak bisa baca thread user B): **AUTH** (401 tanpa token) terbukti; tapi enforcement thread↔resource pada read (`getMemoryThread().listMessages` / stream dgn threadId milik orang lain) **belum diuji** — andalkan `mapUserToResourceId` Mastra; verifikasi di Fase 1 E2E.
+4. **Resume saat refresh** (Fase 0 gate #5): persist+`observe(runId)` tersedia, tapi reconnect lintas-refresh belum diuji di browser.
+5. **`mastra build` (produksi)**: hanya `mastra dev` yang dibuktikan; build + externalize `@aqsha/services`/`@aqsha/db` + bundling skill files (path cwd-relative) diverifikasi saat Fase 3 deploy.
+
+**3 GAP integrasi terbuka (perlu keputusan owner, lintas api+web):**
+- **Sumber daftar thread + judul:** eve mengisi `chat_threads` via projection hook; Mastra TIDAK punya projection → daftar thread sidebar & judul auto untuk thread Mastra perlu sumber baru (baca `mastra_threads` ATAU tulis tipis `chat_threads`). **Belum diputuskan/diimplement.**
+- **Composer Mastra masih MINIMAL** (textarea) — composer kaya (tokenized /slash @context, attachments) belum diport ke jalur Mastra.
+- **Title-gen async** (eve `TitleService` via worker BullMQ) belum disambung ke turn Mastra.
+
 ## 0. Prinsip rencana ini
 
 1. **Setiap keputusan dirujuk ke dokumentasi resmi Mastra** (lihat `[doc:...]` inline + §10). Tidak ada API yang dikarang.
@@ -31,6 +54,8 @@
 | dibuang | `eve`, `just-bash`, `@aqsha/chat-core`(sebagian) | — | di Fase 3 |
 
 > **Catatan ai@5:** ini satu-satunya downgrade berisiko. Fase 0 wajib `bun run typecheck` seluruh workspace setelah pin, karena BlockNote/komponen lain di `apps/web` ikut menyentuh `ai`.
+>
+> **REVISI Fase 0 (terverifikasi 2026-06-27):** asumsi "downgrade ke ai@5" **SUDAH USANG → DIBATALKAN**. `@mastra/core@1.47.0` membundel `@ai-sdk/provider-v5/v6/v7` sekaligus (provider@2/3/4) → Mastra menerima model AI SDK v5, v6, **dan v7** secara native. Kita **tetap di `ai@7` + `@ai-sdk/openai@4`** (versi yang sudah ada untuk eve), TANPA mengubah `apps/web`. `MastraModelConfig` menerima `LanguageModelV4` (= `openai.chat()` v7). **Risiko R1 LENYAP** — `bun run typecheck` seluruh workspace HIJAU tanpa sentuhan apa pun ke web/api. Versi terpasang: `@mastra/core@^1.47`, `@mastra/pg@^1.14`, `@mastra/memory@^1.21`, `@mastra/auth-clerk@^1.2`, `@mastra/ai-sdk@^1.6`, CLI `mastra@^1.16`.
 
 ## 2. Arsitektur target
 
@@ -104,7 +129,9 @@ export const memory = new Memory({
   - `POST /api/agents/:id/resume-stream`, `/queue-message`, `/signals`
 - **Klien** `@mastra/client-js`: `subscribeToThread({ reconnect:true })`, `sendMessage`, `sendToolApproval`, `approveToolCall` `[doc:reference/client-js/agents]`.
 
-> **OPEN-Q-1 (spike Fase 0):** apakah `modes` di-drive lewat server routes standar di atas, atau perlu `registerApiRoute` tipis yang membungkus `Harness` `[doc:server/custom-api-routes]`. Putuskan dengan kode, bukan asumsi.
+> **OPEN-Q-1 (spike Fase 0) — RESOLVED:** route agent STANDAR Mastra cukup; **TIDAK** membungkus Harness. Bukti kode: `mastra dev` mengekspos `/api/agents/:id/stream*` + memory thread/resource + tool-approval, dan `server.auth` menjaga SEMUA route. `chat` = `agent.stream`; `deep` = Workflow (Fase 2). Harness/AgentController tetap tersedia bila kelak butuh orkestrasi multi-mode dalam satu sesi, tapi tak diperlukan untuk paritas. Lihat catatan di `src/mastra/index.ts`.
+>
+> **resourceId — RESOLVED (lebih sederhana dari plan):** middleware resourceId manual TAK diperlukan. `MastraAuthProvider.mapUserToResourceId(user)` (opsi `MastraAuthClerk`) men-set `MASTRA_RESOURCE_ID_KEY` di RequestContext otomatis, dan ia **MENIMPA** `resource` dari klien demi keamanan. Kita set `mapUserToResourceId: (u) => u.sub` (Clerk userId = `owner_user_id` app). Tool baca owner via `callerId(ctx)` = `requestContext.get(MASTRA_RESOURCE_ID_KEY)`.
 
 ### 2.6 HITL — pakai mekanisme resmi
 | Kasus HITL Astra | Mekanisme Mastra | Rujukan |
@@ -151,6 +178,27 @@ Tugas:
 
 Exit gate: kirim pesan → stream token → pesan tersimpan (`mastra_messages`) → refresh lanjut → auth tertegak. Plus 1 tool jalan.
 
+### 5.1 HASIL Fase 0 (2026-06-27) — GATE HIJAU ✅
+
+Branch `feat/mastra-agent`. Struktur baru `apps/agent/src/mastra/` KOEKSISTENSI dengan `apps/agent/agent/` (eve) — kedua tetap utuh.
+
+| Item | Status | Bukti |
+|---|---|---|
+| Scaffold (`index.ts`, agent `astra-lite`, `storage.ts`, `memory.ts`, `model.ts`, `auth.ts`, 1 tool) | ✅ | files di `src/mastra/` |
+| Pin versi + `bun run typecheck` SEMUA workspace | ✅ HIJAU | tanpa downgrade `ai`; web/api tak tersentuh (R1 lenyap) |
+| `PostgresStore.init()` → tabel `mastra_*` | ✅ | 35 tabel `mastra_*` auto-migrate di Postgres VPS, koeksistensi dgn `chat_*`/`artifacts` (R3) |
+| Stream token dari gateway model | ✅ | smoke: "Halo! Saya Astra…", usage 522/71 (deepseek via `OPENAI_BASE_URL`) |
+| Persist pesan (Memory auto-save) | ✅ | `mastra_threads`+`mastra_messages`: thread→(user,assistant), `resourceId` benar |
+| Auth tertegak (`MastraAuthClerk`) di SEMUA route agent | ✅ | `POST /api/agents/astra-lite/stream` tanpa/za-bogus-token → **401**; `GET /api/agents` → 401 (tutup celah eve stream-GET) |
+| Node build konsumsi `@aqsha/services`/`@aqsha/db` in-process | ✅ | tool `list_workspaces` import + bundle `mastra dev` sukses (masalah `externalDependencies` eve hilang) |
+| Bundler `mastra dev` menangani workspace TS + import tanpa-ekstensi | ✅ | "Initial bundle complete", ready 1.2s |
+
+**Catatan implementasi (deviasi sah dari plan):**
+- **Embedder/semantic recall DITUNDA ke Fase 1.** `@mastra/memory@1.21.2` belum menerima `EmbeddingModelV4` (era v7 dari `@ai-sdk/openai@4`) — hanya V2/V3/string. Memory Fase 0 = `lastMessages` (history persist, cukup untuk gate). Fase 1: pakai `@mastra/fastembed` (embedder lokal, tanpa API key, lepas isu versi) ATAU model embedding v6 kompatibel. Index recall ini TERPISAH dari RAG dokumen app.
+- **Env baru:** `CLERK_PUBLISHABLE_KEY` WAJIB (MastraAuthClerk verifikasi via JWKS; jwksUri diturunkan dari publishableKey). Owner sync ke `.env` VPS. Lihat `.env.example`.
+- **Belum diuji di sesi ini (owner E2E, butuh sesi browser Clerk hidup):** stream ber-auth penuh lewat HTTP + resume saat refresh via `@mastra/client-js` `subscribeToThread({reconnect:true})` (mekanisme persist + reconnect sudah terbukti di lapisan storage; tinggal wiring FE Fase 1).
+- **OPEN-Q (#2 billing, #3 migrasi tabel):** tabel `mastra_*` dibuat via auto-init `PostgresStore` (terbukti). Billing per-turn vs per-step diputus di Fase 1.
+
 ## 6. FASE 1 — Chat parity (Astra Lite)
 
 **Backend**
@@ -174,6 +222,35 @@ Exit gate: kirim pesan → stream token → pesan tersimpan (`mastra_messages`) 
 - Flag `NEXT_PUBLIC_AGENT_RUNTIME` memilih eve vs mastra.
 
 Gate Fase 1: paritas chat Lite vs eve (kirim, stream, tool, HITL artifact, history reload, billing turun, kuota mem-block).
+
+### 6.1 HASIL Fase 1 — BACKEND ✅ terverifikasi · FE CORE ✅ typecheck+lint
+
+| Item backend | Status | Bukti |
+|---|---|---|
+| 17 tool `createTool` (5 read / 6 write / 6 research+verify) | ✅ | `src/mastra/tools/*` (17 entri di `astraTools`); smoke: model panggil `list_workspaces` → data NYATA ("Research" workspace) |
+| owner/email/thread via RequestContext | ✅ | `callerId`=`MASTRA_RESOURCE_ID_KEY`; `callerEmail`=`userContextMiddleware` (verifikasi Clerk → `AQSHA_EMAIL_KEY`); `threadScopeId`=`ctx.agent.threadId` |
+| 11 skills `SKILL.md` (+`name` frontmatter) | ✅ | `resolveAgentSkills` → 11/11; auto-tool `skill`/`skill_read`/`skill_search`, NO sandbox |
+| Memory + semantic recall | ✅ | `@mastra/fastembed` (BGE 384-dim lokal, no key) → index `memory_messages_384_vector_idx` |
+| Processors: TokenLimiter + billing precheck | ✅ | `TokenLimiterProcessor(ctxWindow*0.75)` + `billingPrecheckProcessor` (`SendQuotaService.check`→`abort()` tripwire) |
+| Billing debit PER-TURN (`processOutputResult`) | ✅ | `provider_usage_ledger`: row `normal_chat`/`openai` total_tokens cocok; ganti hook `step.completed` |
+| HITL: hanya `delete_artifact` `requireApproval:true`; write lain konfirmasi percakapan | ✅ | parity eve (`needsApproval` cuma delete); selaras memory owner "HITL percakapan murni" |
+| typecheck SEMUA workspace | ✅ HIJAU | — |
+
+**Deviasi sah:** (1) web_search built-in eve = `disableTool` → TAK diport (search_web Firecrawl cukup); filesystem builtins/sandbox eve TAK diport (Mastra tanpa sandbox). (2) Billing idempotencyKey TAK dipakai (resume Mastra = replay buffer, bukan re-generate → tak ada double-debit, beda dari durable-step eve). (3) `ask_question`/`load_skill` eve → konvensi Mastra (tanya teks; skill auto-tools). instructions diadaptasi.
+
+**FE Fase 1 — CORE SELESAI ✅ (typecheck+lint hijau; E2E visual = owner):**
+
+| FE item | Status | File |
+|---|---|---|
+| Proxy `/mastra-api/*` → server Mastra (node:http, no idle-timeout) | ✅ | `app/mastra-api/[...path]/route.ts` + `proxy.ts` exclude + Clerk bearer passthrough |
+| Klien `@mastra/client-js` (same-origin, bearer Clerk segar via custom fetch, signal stop) | ✅ | `features/threads/lib/mastra-client.ts` |
+| Adapter chunk→`TimelineMessage` (text/reasoning/tool/artifact) + HITL approval | ✅ | `features/threads/lib/mastra-timeline.ts` (reuse type eve, helper self-contained) |
+| Adapter history (`MastraDBMessage[]`→timeline) | ✅ | `mastraMessagesToTimeline` |
+| Hook `useMastraAgent` (send/stop/approve/decline, status, invalidate) | ✅ | `features/threads/lib/use-mastra-agent.ts` |
+| Surface Mastra (load history via `getMemoryThread().listMessages()`, MessageList reuse) | ✅ | `features/thread-experience/components/mastra-chat-thread-surface.tsx` |
+| Flag `NEXT_PUBLIC_AGENT_RUNTIME` + factory pemilih | ✅ | `lib/agent-runtime.ts` + `chat-thread-surface.tsx` (parent panel/shell pakai factory) |
+
+**FE follow-up (owner-gated):** (1) E2E visual butuh sesi Clerk browser (set `NEXT_PUBLIC_AGENT_RUNTIME=mastra`, jalankan `mastra dev` + web). (2) Composer Mastra masih MINIMAL (textarea) — port composer kaya (tokenized /slash @context) menyusul. (3) **Sumber daftar thread + judul**: eve mengandalkan projection ke `chat_threads`; Mastra tak punya projection → daftar thread/judul baru perlu keputusan (baca `mastra_threads` vs tulis tipis `chat_threads`), lintas api+web. (4) panel Sources tetap via API `research_sources` (tool mem-persist) — tak berubah.
 
 ## 7. FASE 2 — `/deep` sebagai Workflow
 
@@ -211,6 +288,29 @@ const workflow = createWorkflow({ id:'deep-research', inputSchema, outputSchema 
 
 Gate Fase 2: `/deep` deterministik, observable per step, plan-gate suspend/resume jalan lintas-refresh, tak ada beku.
 
+### 7.1 HASIL Fase 2 (2026-06-27) — backend SELESAI & terverifikasi ✅
+
+Branch `feat/mastra-agent` (koeksist eve). API Workflow diverifikasi dari `@mastra/core@1.47.0` (node_modules, otoritatif).
+
+| Item | Status | Bukti / catatan |
+|---|---|---|
+| Workflow `deep-research` registered di `Mastra({ workflows })` | ✅ | `src/mastra/workflows/deep-research.ts` + `index.ts`; route standar `/api/workflows/deep-research/*` dijaga `server.auth` |
+| 6 step linear `.then` (draftPlan → approvePlan → search → counter → verify → synthesize) | ✅ | observable per fase; resume-safe; konteks mengalir lewat output tiap step |
+| 3 subagent + `deep-writer` (planner/penulis "root") | ✅ | `agents/{literature-searcher,counter-evidence,citation-verifier,deep-writer}.ts`; **REUSE** tool root (search/doi/verify); TANPA memory/billing-processor |
+| HITL plan-gate `suspend()`/`run.resume({step,resumeData})` | ✅ | smoke: `start`→**suspended** di `approve-plan`; `resume({approved:false})`→**cancelled**; `resume({approved:true})`→**completed** |
+| Gerbang billing di `approvePlan` (commit point) | ✅ | port `begin_deep_research.ts`: `requireEntitlement` + `consumeCredits(feature:'deep_research', idempotencyKey:`​`${runId}:deep`​`)` + precheck `SendQuotaService` di `draftPlan` |
+| Snapshot persist (`mastra_workflow_snapshot`) | ✅ | smoke DB VPS: row status `suspended` lalu `success` |
+| Ledger debit (`provider_usage_ledger`) | ✅ | smoke DB VPS: row `feature=deep_research, provider=openai, idempotency_key=runId:deep` |
+| `research_sources` ter-scope thread chat dari subagent | ✅ | threadId dialirkan via `RequestContext` (`MASTRA_THREAD_ID_KEY`); `threadScopeId` fallback ke RequestContext (chat tetap pakai `ctx.agent.threadId`) |
+| Skill `deep-research/SKILL.md` selaras Workflow | ✅ | hapus referensi `ask_question`/`begin_deep_research`; jadi panduan mutu rencana + sintesis |
+| typecheck SEMUA workspace + lint 0-error | ✅ | — |
+
+**Deviasi sah (dicatat):**
+- **Fan-out di dalam `searchStep`** (`Promise.all` per sub-pertanyaan) alih-alih builder `.foreach`/`.map` — rantai linear menjaga konteks (question/plan) utuh tanpa `getStepResult`, hindari hazard generik foreach, tetap observable per fase.
+- **Plan parsing manual** (`parsePlan`, ekstrak blok ```json) ganti `structuredOutput` native — model gateway (deepseek/OpenRouter) tak mengisi `object` lewat response_format; manual andal (smoke: 6 sub-pertanyaan bersih).
+- **Sintesis `toolChoice:"none"`** — paksa penulis menghasilkan TEKS (bukan berhenti di tool-call kosong); jaminan `report` terisi (smoke: laporan tercitasi `finishReason:stop`).
+- **Billing deep di-bill SEKALI** di plan-gate (bukan per-turn); tool `search_*` tetap debit `external_search` per pemanggilan (parity eve).
+
 ## 8. FASE 3 — Cutover & cleanup
 
 1. Flip `NEXT_PUBLIC_AGENT_RUNTIME=mastra` (atau hapus flag), arahkan deploy ke server Mastra.
@@ -218,6 +318,20 @@ Gate Fase 2: `/deep` deterministik, observable per step, plan-gate suspend/resum
 3. **Drop deps**: `eve`, `just-bash`; rapikan `@aqsha/chat-core` (sisakan command/mention murni bila masih dipakai FE).
 4. **Update dokumen**: `AGENTS.md`, `docs/architecture/01-tech-stack.md` & `03-architecture.md`, `CLAUDE.md` (companion docs: ganti referensi skill `eve`), `.mcp.json` (docs-server Mastra sudah ada).
 5. Gate: `bun run typecheck` + `bun run test` + `bun run lint` hijau; E2E chat + `/deep`; eve hilang total.
+
+### 8.1 HASIL Fase 3 (2026-06-27) — CUTOVER SELESAI (kode) ✅ · eve HILANG TOTAL
+
+**SELESAI & ter-gate (typecheck SEMUA workspace + lint 0-error HIJAU; test db/chat-core/services 0-fail + api threads fixed):**
+- **Composer KAYA di Mastra.** `MastraChatThreadSurface` ditulis ulang memakai `<Composer>` (tokenized /slash @context) + landing hero (`ComposerHeroState` + `HomeExploreBento`) + transkrip (`Conversation`/`MessageList`) — sama V1, wired ke `useMastraAgent`. `useMastraAgent.send(text, clientContext?)` mengalirkan konteks ephemeral via `context` (tak dipersist). URL bump (`history.replaceState`) saat kirim pertama (thread id klien-side). Factory `chat-thread-surface.tsx` → render Mastra langsung (flag dibuang).
+- **Modul FE bersama diekstrak.** Tipe `TimelineMessage`/`TimelinePart`/`ToolRowModel`/dll. → `lib/timeline-types.ts` (netral); `use-smooth-text.tsx` (no-eve) tetap util. `mastra-timeline`/`message-list`/`tool-row`/`chat-artifact-card` impor dari modul netral.
+- **eve dihapus TOTAL.** Dihapus: `apps/agent/agent/**` + `.workflow-data`/`.eve`, `apps/web/app/eve/v1/*`, `eve-chat-thread-surface.tsx`/`chat-surface.tsx`/`new-chat.tsx`(dead)/`use-astra-agent.ts`/`use-thread-resume.ts`/`eve-timeline.ts`(+test)/`input-request-prompt.tsx`/`agent-runtime.ts`, deps `eve`+`just-bash` (agent+web package.json + bun.lock), `eve/v1` di `proxy.ts`. **`grep eve/react` = 0 di source.** Dockerfile + compose + .gitignore + .env.example → Mastra (CMD `node .mastra/output/index.mjs`, `MASTRA_AGENT_ORIGIN`, CLERK_PUBLISHABLE_KEY). Scripts agent → `mastra dev/build/start`.
+- **GAP daftar-thread (a) + title async (c) RESOLVED.** `ThreadService.ensureProjected` (upsert tipis `chat_threads`) + `threadProjectionProcessor` astraLite + `TitleService.requestTitle(threadId, titleSeed)` (seed pesan user dibawa di payload job — Mastra Memory = SoT pesan). Smoke DB VPS: turn → row `chat_threads` (preview + `title_status=generating`).
+- **Tabel `chat_messages` + `chat_thread_events` DI-DROP** (mig `0016`, **applied dev :5432**). Dihapus: `MessageService`/`EventService` + repo + schema, `reconcileStaleStreaming` + worker `reconcile-stale`, endpoint api `/:id/messages`+`/:id/events`, hook web `useThreadMessages`/`useThreadEvents`. `ThreadService.remove` tak lagi hapus chat_messages; `TitleService.generate` baca seed (bukan chat_messages). Tests diperbaiki (FK-floor 21→20).
+- **Sisa eve di `chat_threads` DIBERSIHKAN TUNTAS** (mig `0017`, applied dev): drop kolom `continuation_token`/`pending_user_message`/`pending_user_message_created_at`; hapus endpoint dead `recent-active`/`pending`×2/`session-token` + method `ThreadService.{recentActive,markPending,clearPending,upsertContinuationToken}` + `ChatThreadRepo.{findRecentActiveByOwner,upsertContinuationToken,findStaleStreaming}` + web type `ChatMessage`/`ChatThreadEvent`. **`grep eve/react` = 0; 0 dep eve/just-bash; `apps/agent/agent` GONE.** `chat_threads` = 10 kolom bersih.
+
+**Sisa owner-gated (BUKAN kode — aksi owner):**
+1. **E2E visual** chat + `/deep` (`mastra dev` :4111 + web + sesi Clerk) — verifikasi render/stream/HITL.
+2. **Migrate prod** (`db:migrate` 0016+0017 di Postgres prod :5435) + `bun run build` web/agent (`mastra build` butuh `CLERK_PUBLISHABLE_KEY`) + redeploy agent/api/web (Dokploy).
 
 ## 9. Risiko & open questions
 

@@ -3,9 +3,5 @@
 .env.local
 *.tsbuildinfo
 
-# eve: build artifacts + dev-server registry + durable runtime state
-/.eve/
-/.workflow-data/
-/.output/
-/.nitro/
-/.vercel/
+# mastra: build output (.mastra/output) + dev server cache
+/.mastra/
