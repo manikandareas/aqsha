@@ -1,3 +1,4 @@
+import { withContentCollections } from "@content-collections/next";
 import type { NextConfig } from "next";
 import path from "node:path";
 
@@ -11,4 +12,7 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// withContentCollections menjalankan generate saat `next dev`/`next build`
+// (lapisan Next config, bukan webpack plugin → aman dgn Turbopack). Cast krn
+// return type-nya belum persis NextConfig di Next 16.
+export default withContentCollections(nextConfig) as NextConfig;

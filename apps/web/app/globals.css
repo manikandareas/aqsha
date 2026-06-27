@@ -569,6 +569,20 @@
   text-decoration-color: var(--primary);
 }
 
+/* Heading anchors (rehype-autolink-headings, behavior: wrap) inherit the heading
+   color and drop the link underline; the deep-link affordance shows on hover only. */
+:where(.aqsha-prose, .artifact-prose) :is(h1, h2, h3, h4) a {
+  color: inherit;
+  font: inherit;
+  text-decoration: none;
+}
+
+:where(.aqsha-prose, .artifact-prose) :is(h1, h2, h3, h4) a:hover {
+  text-decoration-line: underline;
+  text-decoration-color: color-mix(in srgb, var(--foreground) 25%, transparent);
+  text-underline-offset: 6px;
+}
+
 :where(.aqsha-prose, .artifact-prose) blockquote {
   margin: 1.35rem 0;
   border-left: 2px solid var(--border);
@@ -608,6 +622,24 @@
   padding: 0;
   font-family: var(--font-mono), monospace;
   color: var(--foreground);
+}
+
+/* Blog code block — shiki menambah background gelap, jadi band prose default
+   (padding X = 0, border atas/bawah) bikin kode nempel ke tepi. Scope ke blog
+   saja (jangan ubah prose chat/artifact): kartu membulat + padding X proper.
+   Padding ditaruh di <code> (bukan <pre>) supaya padding kiri & kanan tetap
+   terjaga saat baris panjang overflow-scroll. */
+.blog-prose pre {
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
+
+.blog-prose pre code {
+  display: block;
+  width: fit-content;
+  min-width: 100%;
+  padding: 0.95rem 1.15rem;
 }
 
 :where(.aqsha-prose, .artifact-prose) table {
