@@ -33,10 +33,14 @@ const workspaceArtifactSortOptions = [
   "title-desc",
 ] as const satisfies readonly WorkspaceArtifactSort[];
 
+const workspaceLibraryTabs = ["pustaka", "artifact"] as const;
+export type WorkspaceLibraryTab = (typeof workspaceLibraryTabs)[number];
+
 const workspaceLibraryQueryParsers = {
   q: parseAsString.withDefault(""),
   type: parseAsArrayOf(parseAsStringLiteral(workspaceArtifactTypes)).withDefault([]),
   sort: parseAsStringLiteral(workspaceArtifactSortOptions).withDefault(defaultWorkspaceArtifactSort),
+  tab: parseAsStringLiteral(workspaceLibraryTabs).withDefault("pustaka"),
 };
 
 type LibraryDataProps = Pick<
@@ -67,6 +71,7 @@ export function WorkspaceLibrarySurface({
   getArtifactSelected,
   onToggleArtifactContext,
   onSetArtifactContextSelection,
+  contextCount,
   onAfterArchive,
   showLeftSidebarTrigger,
   onToggleLeftSidebar,
@@ -84,6 +89,7 @@ export function WorkspaceLibrarySurface({
   getArtifactSelected: (artifactId: string) => boolean;
   onToggleArtifactContext: (artifactId: string) => void;
   onSetArtifactContextSelection: (artifactIds: string[]) => void;
+  contextCount?: number;
   onAfterArchive: () => void;
   showLeftSidebarTrigger?: boolean;
   onToggleLeftSidebar?: () => void;
@@ -140,6 +146,10 @@ export function WorkspaceLibrarySurface({
         onSortChange={(sort) => {
           void setLibraryControls({ sort });
         }}
+        activeTab={libraryControls.tab}
+        onTabChange={(tab) => {
+          void setLibraryControls({ tab });
+        }}
         workspaces={libraryData.workspaces}
         {...dialogState.libraryHandlers}
         onRenameWorkspace={async (name) => {
@@ -157,6 +167,7 @@ export function WorkspaceLibrarySurface({
         getArtifactSelected={getArtifactSelected}
         onToggleArtifactContext={onToggleArtifactContext}
         onSetArtifactContextSelection={onSetArtifactContextSelection}
+        contextCount={contextCount}
         onOpenArtifact={(artifactId) =>
           router.push(`/app/workspaces/${workspaceId}/artifacts/${artifactId}`)
         }

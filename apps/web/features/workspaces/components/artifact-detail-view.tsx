@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  DownloadIcon,
   InfoIcon,
   Loader2Icon,
   MoreHorizontalIcon,
@@ -23,6 +24,10 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toArtifactId, type ArtifactId } from "@/lib/convex-refs";
 import { readableApiErrorMessage } from "@/lib/api-error";
+import {
+  resolveArtifactDownload,
+  triggerArtifactDownload,
+} from "@/lib/artifact-download";
 import { useArtifactRender } from "@/features/artifacts/api";
 import { panelHeaderPaddingClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
@@ -34,7 +39,6 @@ import {
   ArtifactMetadataPopover,
   MarkdownArtifactDetails,
   MarkdownArtifactInfo,
-  PaperStatusBanner,
   type ArtifactSidebarRecord,
 } from "./artifact-detail-sidebar";
 import {
@@ -59,10 +63,20 @@ const initialAutosaveState: AutosaveState = {
   error: null,
 };
 
-const readerColumnClass =
-  "mx-auto w-full max-w-[940px] px-4 pb-16 pt-2 sm:px-6";
-const singleColumnGridClass =
-  "mx-auto w-full max-w-[1080px] px-5 pb-12 pt-4 sm:px-8 lg:px-10";
+// Content-first reading measure — markdown docs, pdf pages, url/plain-text
+// readers. Every "read this" surface shares it so the page rhymes top to bottom.
+const proseColumnClass = "mx-auto w-full max-w-[860px] px-4 pb-16 pt-3 sm:px-6";
+// Roomier column for framed embedded viewers (html/svg/diagram/data/code).
+const mediaColumnClass = "mx-auto w-full max-w-[1040px] px-4 pb-16 pt-3 sm:px-6";
+// Types that read as documents rather than embedded media: they get the narrow
+// prose column and stay borderless/centered like the markdown reference.
+const contentFirstTypes = new Set([
+  "markdown",
+  "plain_text",
+  "url",
+  "pdf",
+  "docx",
+]);
 
 export type ArtifactDetailVariant = "page" | "panel";
 
@@ -96,31 +110,6 @@ export function ArtifactDetailView({
   const sidebarArtifact = detail?.artifact as ArtifactSidebarRecord | undefined;
   const detailIsMarkdown = detail?.artifact.artifactType === "markdown";
   const resolvedWorkspaceId = workspaceIdProp ?? detail?.artifact.workspaceId ?? "";
-  // For markdown on the PAGE the render payload is only the initial seed: once
-  // loaded, the BlockNote editor owns the content and autosave pushes to Convex.
-  // Keeping the key stable per-artifact stops our own saves (which bump
-  // content.updatedAt) from churning the query key, which would otherwise blank
-  // the payload and remount the editor on every keystroke-batch. The PANEL is a
-  // read-only viewer (no editor → no autosave churn), so it CAN track updatedAt —
-  // and must, so the agent re-writing a markdown doc refreshes the open panel
-  // (plan §7 "panel ikut update saat agen selesai menulis"). Papers/URLs always
-  // track updatedAt (extraction retries + agent writes refresh the reader).
-  const markdownKey =
-    variant === "panel"
-      ? `${artifactId}:markdown:${detail?.artifact.updatedAt ?? 0}:${
-          detail?.content?.updatedAt ?? "no-content"
-        }`
-      : `${artifactId}:markdown`;
-  const renderPayloadVersionKey = !detail
-    ? null
-    : detailIsMarkdown
-      ? markdownKey
-      : [
-          artifactId,
-          detail.artifact.updatedAt,
-          detail.content?.updatedAt ?? "no-content",
-          detail.url?.extractedAt ?? "no-url",
-        ].join(":");
   const renderPayloadQuery = useArtifactRender(artifactId);
   const activeRenderPayload = (renderPayloadQuery.data ?? data.renderPayload ?? null) as ArtifactRenderPayload | null;
   const activeContentError = renderPayloadQuery.error
@@ -161,6 +150,7 @@ export function ArtifactDetailView({
     ready && detail && activeRenderPayload ? (
       <ArtifactHeaderActions
         payload={activeRenderPayload}
+        title={detail.artifact.title}
         onDelete={() => setDeleteOpen(true)}
       />
     ) : null;
@@ -203,8 +193,10 @@ export function ArtifactDetailView({
   // The side panel collapses every action into one More menu (Info + Delete),
   // sitting next to the close toggle. The full page keeps its richer `trailing`.
   const panelActions =
-    ready && detail && infoContent ? (
+    ready && detail && activeRenderPayload && infoContent ? (
       <ArtifactPanelActions
+        payload={activeRenderPayload}
+        title={detail.artifact.title}
         infoContent={infoContent}
         onDelete={() => setDeleteOpen(true)}
       />
@@ -243,8 +235,15 @@ export function ArtifactDetailView({
       <ArtifactPanelToolbar onClose={onClose} />
     ) : null;
 
+  // Content-first types (incl. pdf pages) stay in the narrow prose column; framed
+  // embedded viewers (html/svg/diagram/data/code) get the roomier media column.
+  const bodyColumnClass =
+    !activeRenderPayload || contentFirstTypes.has(activeRenderPayload.artifactType)
+      ? proseColumnClass
+      : mediaColumnClass;
+
   const body = (
-    <div className={isMarkdown ? singleColumnGridClass : readerColumnClass}>
+    <div className={bodyColumnClass}>
       {data.isLoading ? (
         <AppLoadingOverlay variant="absolute" />
       ) : !ready || !detail ? (
@@ -280,19 +279,14 @@ export function ArtifactDetailView({
           )}
         </div>
       ) : (
-        <section className="min-w-0 space-y-5">
-          <PaperStatusBanner
-            payload={activeRenderPayload}
-            paperExtraction={data.paperExtraction as PaperExtractionStatus}
-            artifactId={artifactId}
-            retryGrobidExtraction={data.retryGrobidExtraction}
-            retryUrlExtraction={data.retryUrlExtraction}
-          />
+        // Body stays content-only (extraction status + retry live in the header
+        // Info popover) so every reader matches the markdown reference.
+        <div className="min-w-0">
           <ArtifactReadingColumn
             payload={activeRenderPayload}
             title={detail.artifact.title}
           />
-        </section>
+        </div>
       )}
     </div>
   );
@@ -372,28 +366,36 @@ function ArtifactPanelToolbar({
 /**
  * Side-panel header actions: a single More popover next to the close toggle.
  *
- * One overlay, two views. The "menu" view lists Info + Delete; choosing Info
- * swaps the SAME popover to the metadata "info" view (the panel the page header
- * shows in its own popover). This deliberately avoids nesting a Popover inside a
- * DropdownMenu — two dismissable layers sharing an anchor fight each other (the
- * menu closing dismisses the just-opened popover → flicker), which is the bug we
- * hit before. A single controlled surface sidesteps that entirely.
+ * One overlay, two views. The "menu" view lists Info + Download + Delete;
+ * choosing Info swaps the SAME popover to the metadata "info" view (the panel the
+ * page header shows in its own popover). This deliberately avoids nesting a
+ * Popover inside a DropdownMenu — two dismissable layers sharing an anchor fight
+ * each other (the menu closing dismisses the just-opened popover → flicker),
+ * which is the bug we hit before. A single controlled surface sidesteps that.
  */
 function ArtifactPanelActions({
+  payload,
+  title,
   infoContent,
   onDelete,
 }: {
+  payload: ArtifactRenderPayload;
+  title: string;
   infoContent: ReactNode;
   onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"menu" | "info">("menu");
+  const download = resolveArtifactDownload(payload, title);
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
     // Always reopen on the menu view, never stuck on a stale info panel.
     if (!next) setView("menu");
   };
+
+  const menuItemClass =
+    "flex w-full items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] text-foreground transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none";
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
@@ -420,11 +422,34 @@ function ArtifactPanelActions({
             <button
               type="button"
               onClick={() => setView("info")}
-              className="flex w-full items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] text-foreground transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+              className={menuItemClass}
             >
               <InfoIcon className="size-4 text-muted-foreground" />
               Info
             </button>
+            {download.kind === "url" ? (
+              <a
+                href={download.href}
+                download={download.fileName}
+                onClick={() => setOpen(false)}
+                className={menuItemClass}
+              >
+                <DownloadIcon className="size-4 text-muted-foreground" />
+                Download
+              </a>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  triggerArtifactDownload(download);
+                }}
+                className={menuItemClass}
+              >
+                <DownloadIcon className="size-4 text-muted-foreground" />
+                Download
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
