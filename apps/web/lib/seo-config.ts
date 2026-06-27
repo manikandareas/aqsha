@@ -11,7 +11,7 @@
 
 // ── Identitas situs ────────────────────────────────────────────────────────
 export const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://app.aqsha.app";
+  process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://aqshara.com";
 
 export const siteName = "Aqsha";
 
@@ -27,7 +27,7 @@ export const locale = "id_ID";
 export const htmlLang = "id";
 
 // ── Kontak ─────────────────────────────────────────────────────────────────
-export const contactEmail = "halo@aqsha.app"; // TODO: email kontak/support resmi
+export const contactEmail = "vitoandareas15@gmail.com"; // TODO: email kontak/support resmi
 
 // ── Social profiles (untuk Organization.sameAs & twitter:site) ─────────────
 // Isi yang ada, kosongkan ("") yang belum punya — yang kosong di-skip otomatis.

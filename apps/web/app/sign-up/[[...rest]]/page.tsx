@@ -6,6 +6,7 @@ import { createPageMetadata } from "@/lib/metadata";
 export const metadata = createPageMetadata({
   title: "Create account",
   description: "Create an Aqsha account to start building research workspaces.",
+  path: "/sign-up",
 });
 
 export default async function SignUpPage() {

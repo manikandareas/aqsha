@@ -1,6 +1,6 @@
 # SEO Audit & Research — Aqsha (`apps/web`)
 
-> Tanggal: 2026-06-27 · Scope: `apps/web` (Next.js 16.2.6, App Router) · Domain produksi: `app.aqsha.app`
+> Tanggal: 2026-06-27 · Scope: `apps/web` (Next.js 16.2.6, App Router) · Domain produksi: `aqshara.com`
 > Status: audit selesai, implementasi belum (lihat [implementation-plan-a-b.md](./implementation-plan-a-b.md)).
 
 ## Ringkasan eksekutif
@@ -8,7 +8,7 @@
 Aqsha punya **dua masalah SEO yang terpisah**:
 
 1. **Infrastruktur SEO teknis nyaris kosong.** Tidak ada `sitemap`, `robots`, `metadataBase`, Open Graph, structured data, atau canonical. Akibatnya Google kesulitan meng-crawl, meng-index, dan menampilkan bahkan satu landing page dengan benar. Selain itu `<html lang="en">` padahal seluruh copy berbahasa Indonesia, dan root `description` masih placeholder dev.
-2. **Surface konten = satu halaman.** Seluruh navigasi landing adalah anchor `#`, dan konten riset paling berharga (paper pages) terkunci di balik auth. Untuk sebuah *research product*, ini menyia-nyiakan lever pertumbuhan organik terbesar: ribuan halaman paper/topik yang seharusnya bisa di-index (programmatic SEO).
+2. **Surface konten = satu halaman.** Seluruh navigasi landing adalah anchor `#`, dan konten riset paling berharga (paper pages) terkunci di balik auth. Untuk sebuah _research product_, ini menyia-nyiakan lever pertumbuhan organik terbesar: ribuan halaman paper/topik yang seharusnya bisa di-index (programmatic SEO).
 
 Masalah #1 diselesaikan oleh **Opsi A + B** (cheap, high ROI). Masalah #2 adalah **Opsi C** — inisiatif produk tersendiri, ROI terbesar tapi butuh keputusan expose data.
 
@@ -16,26 +16,26 @@ Masalah #1 diselesaikan oleh **Opsi A + B** (cheap, high ROI). Masalah #2 adalah
 
 - Audit kode `apps/web`: struktur `app/`, `lib/metadata.ts`, `app/layout.tsx`, `app/page.tsx`, `app/manifest.json`, `next.config.ts`, komponen `features/marketing/*`.
 - Verifikasi API metadata terhadap **docs Next.js 16.2.6 terinstal** (`node_modules/next/dist/docs/01-app/.../metadata/{sitemap,robots,...}.md`) sesuai mandat CLAUDE.md.
-- Cek domain produksi via `docs/architecture/phase-10-plan.md` (`app.aqsha.app`).
+- Cek domain produksi via `docs/architecture/phase-10-plan.md` (`aqshara.com`).
 
 ## Scorecard kondisi sekarang
 
-| Area | Status | Detail |
-|---|---|---|
-| Metadata dasar (title/description) | 🟡 Sebagian | `lib/metadata.ts` hanya title+description; banyak halaman tanpa metadata sendiri |
-| `metadataBase` | 🔴 Tidak ada | OG/canonical URL resolve relatif/rusak; Next.js memunculkan warning |
-| `sitemap.xml` | 🔴 Tidak ada | Crawler tidak punya peta URL |
-| `robots.txt` | 🔴 Tidak ada | Tidak ada arahan crawl, tidak ada pointer sitemap, route app/auth tidak di-`noindex` |
-| Open Graph / Twitter Card | 🔴 Tidak ada | Share ke WhatsApp/X/LinkedIn polos tanpa preview |
-| OG image (`opengraph-image`) | 🔴 Tidak ada | — |
-| Structured data (JSON-LD) | 🔴 Tidak ada | Tidak ada Organization/WebSite/SoftwareApplication/FAQ → tidak ada rich result |
-| Canonical URL | 🔴 Tidak ada | — |
-| `lang` attribute | 🔴 Salah | `<html lang="en">` padahal copy 100% bahasa Indonesia |
-| Root `description` | 🔴 Placeholder | "Aqsha V2 — research workspace (foundations rail)." |
-| Heading hierarchy | 🟢 Sehat | `m.h1` (hero) → `h2` (section) → `h3` |
-| Image alt | 🟢 N/A | Landing pakai SVG/CSS gradient, bukan raster |
-| Manifest PWA | 🟡 Lemah | `theme_color` hardcoded putih (abaikan dark mode), icon hanya `maskable` (tanpa `any`), statis |
-| Indexable content surface | 🔴 1 halaman | Semua nav = anchor `#`; konten riset terkunci di balik auth |
+| Area                               | Status         | Detail                                                                                         |
+| ---------------------------------- | -------------- | ---------------------------------------------------------------------------------------------- |
+| Metadata dasar (title/description) | 🟡 Sebagian    | `lib/metadata.ts` hanya title+description; banyak halaman tanpa metadata sendiri               |
+| `metadataBase`                     | 🔴 Tidak ada   | OG/canonical URL resolve relatif/rusak; Next.js memunculkan warning                            |
+| `sitemap.xml`                      | 🔴 Tidak ada   | Crawler tidak punya peta URL                                                                   |
+| `robots.txt`                       | 🔴 Tidak ada   | Tidak ada arahan crawl, tidak ada pointer sitemap, route app/auth tidak di-`noindex`           |
+| Open Graph / Twitter Card          | 🔴 Tidak ada   | Share ke WhatsApp/X/LinkedIn polos tanpa preview                                               |
+| OG image (`opengraph-image`)       | 🔴 Tidak ada   | —                                                                                              |
+| Structured data (JSON-LD)          | 🔴 Tidak ada   | Tidak ada Organization/WebSite/SoftwareApplication/FAQ → tidak ada rich result                 |
+| Canonical URL                      | 🔴 Tidak ada   | —                                                                                              |
+| `lang` attribute                   | 🔴 Salah       | `<html lang="en">` padahal copy 100% bahasa Indonesia                                          |
+| Root `description`                 | 🔴 Placeholder | "Aqsha V2 — research workspace (foundations rail)."                                            |
+| Heading hierarchy                  | 🟢 Sehat       | `m.h1` (hero) → `h2` (section) → `h3`                                                          |
+| Image alt                          | 🟢 N/A         | Landing pakai SVG/CSS gradient, bukan raster                                                   |
+| Manifest PWA                       | 🟡 Lemah       | `theme_color` hardcoded putih (abaikan dark mode), icon hanya `maskable` (tanpa `any`), statis |
+| Indexable content surface          | 🔴 1 halaman   | Semua nav = anchor `#`; konten riset terkunci di balik auth                                    |
 
 ## Temuan detail
 
@@ -63,10 +63,10 @@ Masalah #1 diselesaikan oleh **Opsi A + B** (cheap, high ROI). Masalah #2 adalah
 
 ## Tiga opsi improvement
 
-| Opsi | Fokus | Impact | Effort | Status di plan |
-|---|---|---|---|---|
-| **A** | Fondasi SEO teknis (metadataBase, robots, sitemap, OG, lang, canonical) | Tinggi | ~½ hari | ✅ dirinci |
-| **B** | Rich results + sosial (JSON-LD, FAQ, OG image dinamis, manifest, verification) | Sedang–tinggi | ~1 hari | ✅ dirinci |
+| Opsi  | Fokus                                                                          | Impact            | Effort     | Status di plan              |
+| ----- | ------------------------------------------------------------------------------ | ----------------- | ---------- | --------------------------- |
+| **A** | Fondasi SEO teknis (metadataBase, robots, sitemap, OG, lang, canonical)        | Tinggi            | ~½ hari    | ✅ dirinci                  |
+| **B** | Rich results + sosial (JSON-LD, FAQ, OG image dinamis, manifest, verification) | Sedang–tinggi     | ~1 hari    | ✅ dirinci                  |
 | **C** | Programmatic SEO engine (public paper pages dari Postgres + sitemap DB-driven) | **Sangat tinggi** | Multi-hari | ⏸ inisiatif produk terpisah |
 
 Detail langkah A & B: lihat [implementation-plan-a-b.md](./implementation-plan-a-b.md).
@@ -82,4 +82,4 @@ Variabel yang perlu diisi (domain, email, social, verification token): lihat `ap
 
 ## Catatan domain
 
-Landing saat ini menempel di `app.aqsha.app` (subdomain produk). Untuk marketing idealnya apex `aqsha.app`/`www`, tapi itu keputusan infra terpisah. Snippet memakai `NEXT_PUBLIC_SITE_URL` (lihat `seo-config.ts`) agar gampang dipindah tanpa ubah kode.
+Landing saat ini menempel di `aqshara.com` (subdomain produk). Untuk marketing idealnya apex `aqsha.app`/`www`, tapi itu keputusan infra terpisah. Snippet memakai `NEXT_PUBLIC_SITE_URL` (lihat `seo-config.ts`) agar gampang dipindah tanpa ubah kode.
