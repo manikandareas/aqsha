@@ -1,7 +1,6 @@
-import { allPosts } from "content-collections";
-
 import { createPageMetadata } from "@/lib/metadata";
 import { BlogList } from "@/features/blog/components/blog-list";
+import { publishedPosts } from "@/features/blog/lib/posts";
 
 export const metadata = createPageMetadata({
   title: "Blog",
@@ -11,9 +10,5 @@ export const metadata = createPageMetadata({
 });
 
 export default function BlogIndexPage() {
-  const posts = allPosts
-    .filter((post) => !post.draft)
-    .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
-
-  return <BlogList posts={posts} />;
+  return <BlogList posts={publishedPosts()} />;
 }

@@ -1,11 +1,9 @@
 import type { MetadataRoute } from "next";
-import { allPosts } from "content-collections";
 import { siteUrl } from "@/lib/seo-config";
+import { publishedPosts } from "@/features/blog/lib/posts";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const posts = allPosts
-    .filter((post) => !post.draft)
-    .map((post) => ({
+  const posts = publishedPosts().map((post) => ({
       url: `${siteUrl}${post.url}`,
       lastModified: new Date(post.updated ?? post.publishedAt),
       changeFrequency: "monthly" as const,

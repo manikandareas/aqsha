@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { allPosts } from "content-collections";
 import { MDXContent } from "@content-collections/mdx/react";
 
 import { createPageMetadata } from "@/lib/metadata";
@@ -9,21 +8,20 @@ import { siteUrl } from "@/lib/seo-config";
 import { BlogPostHeader } from "@/features/blog/components/blog-post-header";
 import { mdxComponents } from "@/features/blog/components/mdx-components";
 import { blogColumn, blogGutter } from "@/features/blog/lib/layout";
+import { getPublishedPost, publishedPosts } from "@/features/blog/lib/posts";
 
 // Blog 100% statis: hanya slug dari generateStaticParams yang valid.
 export const dynamicParams = false;
 
 type PageParams = { params: Promise<{ slug: string }> };
 
-const getPost = (slug: string) => allPosts.find((post) => post.slug === slug && !post.draft);
-
 export function generateStaticParams() {
-  return allPosts.filter((post) => !post.draft).map((post) => ({ slug: post.slug }));
+  return publishedPosts().map((post) => ({ slug: post.slug }));
 }
 
 export async function generateMetadata({ params }: PageParams): Promise<Metadata> {
   const { slug } = await params;
-  const post = getPost(slug);
+  const post = getPublishedPost(slug);
   if (!post) return {};
 
   const base = createPageMetadata({
@@ -47,7 +45,7 @@ export async function generateMetadata({ params }: PageParams): Promise<Metadata
 
 export default async function BlogPostPage({ params }: PageParams) {
   const { slug } = await params;
-  const post = getPost(slug);
+  const post = getPublishedPost(slug);
   if (!post) notFound();
 
   // BlogPosting JSON-LD — referensi Organization existing (structured-data.tsx),
