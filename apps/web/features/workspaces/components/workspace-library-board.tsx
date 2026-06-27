@@ -42,6 +42,7 @@ import { WorkspaceArtifactTimeline } from "./workspace-artifact-timeline";
 import { WorkspaceBoardToolbar } from "./workspace-board-toolbar";
 import { WorkspaceLibraryControls } from "./workspace-library-controls";
 import { WorkspaceLibraryEmpty } from "./workspace-library-empty";
+import { WorkspaceLibraryFootnote } from "./workspace-library-footnote";
 import { WorkspaceLibraryGrid } from "./workspace-library-grid";
 import { WorkspaceLibraryTabs } from "./workspace-library-tabs";
 import { useWorkspaceUploadToast } from "./workspace-upload-toast";
@@ -65,6 +66,7 @@ export function WorkspaceLibraryBoard({
   getArtifactSelected,
   onToggleArtifactContext,
   onSetArtifactContextSelection,
+  contextCount,
   onOpenArtifact,
   onRenameFolder,
   onDeleteFolder,
@@ -107,6 +109,7 @@ export function WorkspaceLibraryBoard({
   getArtifactSelected: (artifactId: string) => boolean;
   onToggleArtifactContext: (artifactId: string) => void;
   onSetArtifactContextSelection: (artifactIds: string[]) => void;
+  contextCount?: number;
   onOpenArtifact: (artifactId: string) => void;
   onRenameFolder: (folder: WorkspaceFolder) => void;
   onDeleteFolder: (folder: WorkspaceFolder) => void;
@@ -189,6 +192,9 @@ export function WorkspaceLibraryBoard({
   const pustakaFilteredEmpty =
     pustakaEmpty && hasFilter && rawLibraryCount > 0;
   const artifactFilteredEmpty = allOutput.length === 0 && hasFilter;
+  // Footnote panduan hanya relevan saat ada item untuk di-gesture; di state
+  // kosong ia disembunyikan agar layar kosong tetap bersih.
+  const showFootnote = isPustaka ? !pustakaEmpty : allOutput.length > 0;
 
   const canCreate = (showCreateActions ?? true) && isPustaka;
   const libraryControls = (
@@ -278,6 +284,7 @@ export function WorkspaceLibraryBoard({
               className={cn(
                 "relative min-h-0 flex-1 overflow-y-auto bg-background",
                 panelBodyPaddingClass,
+                "pt-6",
                 isUploadDragOver &&
                   "bg-muted/25 ring-2 ring-inset ring-primary/30",
               )}
@@ -360,6 +367,7 @@ export function WorkspaceLibraryBoard({
             className={cn(
               "relative min-h-0 flex-1 overflow-y-auto bg-background",
               panelBodyPaddingClass,
+              "pt-6",
             )}
           >
             {allOutput.length === 0 ? (
@@ -396,6 +404,13 @@ export function WorkspaceLibraryBoard({
             )}
           </div>
         )}
+        {showFootnote ? (
+          <WorkspaceLibraryFootnote
+            activeTab={activeTab}
+            contextCount={contextCount}
+            onClearContext={() => onSetArtifactContextSelection([])}
+          />
+        ) : null}
       </div>
       {renderDialogs?.(
         activeFolderId,

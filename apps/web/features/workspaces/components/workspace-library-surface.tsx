@@ -71,6 +71,7 @@ export function WorkspaceLibrarySurface({
   getArtifactSelected,
   onToggleArtifactContext,
   onSetArtifactContextSelection,
+  contextCount,
   onAfterArchive,
   showLeftSidebarTrigger,
   onToggleLeftSidebar,
@@ -88,6 +89,7 @@ export function WorkspaceLibrarySurface({
   getArtifactSelected: (artifactId: string) => boolean;
   onToggleArtifactContext: (artifactId: string) => void;
   onSetArtifactContextSelection: (artifactIds: string[]) => void;
+  contextCount?: number;
   onAfterArchive: () => void;
   showLeftSidebarTrigger?: boolean;
   onToggleLeftSidebar?: () => void;
@@ -165,6 +167,7 @@ export function WorkspaceLibrarySurface({
         getArtifactSelected={getArtifactSelected}
         onToggleArtifactContext={onToggleArtifactContext}
         onSetArtifactContextSelection={onSetArtifactContextSelection}
+        contextCount={contextCount}
         onOpenArtifact={(artifactId) =>
           router.push(`/app/workspaces/${workspaceId}/artifacts/${artifactId}`)
         }

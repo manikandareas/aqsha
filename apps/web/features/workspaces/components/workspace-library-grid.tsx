@@ -115,27 +115,24 @@ export function WorkspaceLibraryGrid({
   };
 
   return (
-    <div className="flex flex-col gap-9">
+    <div className="flex flex-col gap-6">
       {folders.length > 0 ? (
-        <section className="flex flex-col gap-5">
-          <LibrarySectionHeader title="Folders" />
-          <div className="flex flex-wrap gap-2">
-            {folders.map((folder) => (
-              <FolderTile
-                key={folder._id}
-                folder={folder}
-                isDropTarget={dragArtifactId !== null}
-                onOpen={() => onOpenFolder(folder._id)}
-                onRename={() => onRenameFolder(folder)}
-                onDelete={() => onDeleteFolder(folder)}
-                onMoveToWorkspace={(targetWorkspaceId) =>
-                  onMoveFolderToWorkspace(folder._id, targetWorkspaceId)
-                }
-                onDrop={() => onDropArtifactOnFolder(folder._id)}
-                workspaces={workspaces}
-              />
-            ))}
-          </div>
+        <section className="flex flex-wrap gap-2">
+          {folders.map((folder) => (
+            <FolderTile
+              key={folder._id}
+              folder={folder}
+              isDropTarget={dragArtifactId !== null}
+              onOpen={() => onOpenFolder(folder._id)}
+              onRename={() => onRenameFolder(folder)}
+              onDelete={() => onDeleteFolder(folder)}
+              onMoveToWorkspace={(targetWorkspaceId) =>
+                onMoveFolderToWorkspace(folder._id, targetWorkspaceId)
+              }
+              onDrop={() => onDropArtifactOnFolder(folder._id)}
+              workspaces={workspaces}
+            />
+          ))}
         </section>
       ) : null}
 
@@ -196,10 +193,6 @@ export function ArtifactSection({
     height: number;
   } | null>(null);
 
-  const sectionSelectedCount = artifacts.reduce(
-    (count, artifact) => (getArtifactSelected(artifact._id) ? count + 1 : count),
-    0,
-  );
   const visibleArtifactIds = artifacts.map((artifact) => artifact._id);
   const previewIdSet = new Set(previewIds);
   const updatePreview = (rect: MarqueeRect) => {
@@ -239,101 +232,83 @@ export function ArtifactSection({
         <LibrarySectionHeader title={title ?? ""} controls={controls} />
       ) : null}
       {artifacts.length > 0 ? (
-        <div className="relative">
-          {sectionSelectedCount > 0 || marquee ? (
-            <div className="pointer-events-none absolute right-0 top-0 z-10 flex translate-y-[-calc(100%+0.5rem)] items-center gap-2 rounded-lg border border-border bg-card/95 px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground shadow-sm">
-              <span>
-                {selectionCountLabel(marquee ? previewIds.length : sectionSelectedCount)}
-              </span>
-              {sectionSelectedCount > 0 ? (
-                <button
-                  type="button"
-                  className="pointer-events-auto rounded-md px-1.5 py-0.5 text-foreground transition-colors hover:bg-muted"
-                  onClick={() => onSetArtifactContextSelection([])}
-                >
-                  Bersihkan
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-          <div
-            ref={gridRef}
-            className={cn(libraryArtifactGridClass, "relative")}
-            onPointerDown={(event) => {
-              if (event.button !== 0 || event.target !== event.currentTarget) return;
-              event.preventDefault();
-              event.currentTarget.setPointerCapture(event.pointerId);
-              const point = { x: event.clientX, y: event.clientY };
-              setMarquee({
-                start: point,
-                current: point,
-                mode: event.metaKey || event.ctrlKey ? "toggle" : "add",
-              });
-              setLocalSelectionRect(
-                toLocalRect(
-                  normalizeMarqueeRect(point, point),
-                  event.currentTarget.getBoundingClientRect(),
-                ),
-              );
-              setPreviewIds([]);
-            }}
-            onPointerMove={(event) => {
-              if (!marquee) return;
-              const current = { x: event.clientX, y: event.clientY };
-              const rect = normalizeMarqueeRect(marquee.start, current);
-              setMarquee((state) => (state ? { ...state, current } : state));
-              setLocalSelectionRect(
-                toLocalRect(rect, event.currentTarget.getBoundingClientRect()),
-              );
-              updatePreview(rect);
-            }}
-            onPointerUp={endMarquee}
-            onPointerCancel={endMarquee}
-          >
-            {artifacts.map((artifact) => (
-              <ArtifactTile
-                key={artifact._id}
-                refCallback={(element) => {
-                  if (element) {
-                    tileElementRefs.set(artifact._id, element);
-                  } else {
-                    tileElementRefs.delete(artifact._id);
-                  }
-                }}
-                artifact={artifact}
-                workspaceId={workspaceId}
-                moveTargets={moveTargets}
-                isDragging={dragArtifactId === artifact._id}
-                isSelected={getPreviewSelectedState({
-                  selected: getArtifactSelected(artifact._id),
-                  previewed: previewIdSet.has(artifact._id),
-                  mode: marquee?.mode ?? "add",
-                })}
-                onSelect={() => onToggleArtifactContext(artifact._id)}
-                onOpen={() => onOpenArtifact(artifact._id)}
-                onRename={() => onRenameArtifact(artifact)}
-                onDelete={() => onDeleteArtifact(artifact)}
-                onMove={(target) => onMoveArtifact(artifact._id, target)}
-                onMoveToWorkspace={(targetWorkspaceId) =>
-                  onMoveArtifactToWorkspace(artifact._id, targetWorkspaceId)
+        <div
+          ref={gridRef}
+          className={cn(libraryArtifactGridClass, "relative")}
+          onPointerDown={(event) => {
+            if (event.button !== 0 || event.target !== event.currentTarget) return;
+            event.preventDefault();
+            event.currentTarget.setPointerCapture(event.pointerId);
+            const point = { x: event.clientX, y: event.clientY };
+            setMarquee({
+              start: point,
+              current: point,
+              mode: event.metaKey || event.ctrlKey ? "toggle" : "add",
+            });
+            setLocalSelectionRect(
+              toLocalRect(
+                normalizeMarqueeRect(point, point),
+                event.currentTarget.getBoundingClientRect(),
+              ),
+            );
+            setPreviewIds([]);
+          }}
+          onPointerMove={(event) => {
+            if (!marquee) return;
+            const current = { x: event.clientX, y: event.clientY };
+            const rect = normalizeMarqueeRect(marquee.start, current);
+            setMarquee((state) => (state ? { ...state, current } : state));
+            setLocalSelectionRect(
+              toLocalRect(rect, event.currentTarget.getBoundingClientRect()),
+            );
+            updatePreview(rect);
+          }}
+          onPointerUp={endMarquee}
+          onPointerCancel={endMarquee}
+        >
+          {artifacts.map((artifact) => (
+            <ArtifactTile
+              key={artifact._id}
+              refCallback={(element) => {
+                if (element) {
+                  tileElementRefs.set(artifact._id, element);
+                } else {
+                  tileElementRefs.delete(artifact._id);
                 }
-                onDragStart={() => onDragArtifactStart(artifact._id)}
-                onDragEnd={onDragArtifactEnd}
-                workspaces={workspaces}
-              />
-            ))}
-            {localSelectionRect ? (
-              <div
-                className="pointer-events-none absolute z-20 rounded-md border border-primary/60 bg-primary/10"
-                style={{
-                  left: localSelectionRect.left,
-                  top: localSelectionRect.top,
-                  width: localSelectionRect.width,
-                  height: localSelectionRect.height,
-                }}
-              />
-            ) : null}
-          </div>
+              }}
+              artifact={artifact}
+              workspaceId={workspaceId}
+              moveTargets={moveTargets}
+              isDragging={dragArtifactId === artifact._id}
+              isSelected={getPreviewSelectedState({
+                selected: getArtifactSelected(artifact._id),
+                previewed: previewIdSet.has(artifact._id),
+                mode: marquee?.mode ?? "add",
+              })}
+              onSelect={() => onToggleArtifactContext(artifact._id)}
+              onOpen={() => onOpenArtifact(artifact._id)}
+              onRename={() => onRenameArtifact(artifact)}
+              onDelete={() => onDeleteArtifact(artifact)}
+              onMove={(target) => onMoveArtifact(artifact._id, target)}
+              onMoveToWorkspace={(targetWorkspaceId) =>
+                onMoveArtifactToWorkspace(artifact._id, targetWorkspaceId)
+              }
+              onDragStart={() => onDragArtifactStart(artifact._id)}
+              onDragEnd={onDragArtifactEnd}
+              workspaces={workspaces}
+            />
+          ))}
+          {localSelectionRect ? (
+            <div
+              className="pointer-events-none absolute z-20 rounded-md border border-primary/60 bg-primary/10"
+              style={{
+                left: localSelectionRect.left,
+                top: localSelectionRect.top,
+                width: localSelectionRect.width,
+                height: localSelectionRect.height,
+              }}
+            />
+          ) : null}
         </div>
       ) : (
         emptyState
@@ -386,10 +361,6 @@ function getPreviewSelectedState({
 }) {
   if (!previewed) return selected;
   return mode === "toggle" ? !selected : true;
-}
-
-function selectionCountLabel(count: number) {
-  return `${count} dipilih untuk konteks`;
 }
 
 function FolderTile({
