@@ -241,13 +241,16 @@ export async function fetchOpenAlexGroupBy(args: {
   query: string;
   groupBy: string;
   fromYear?: number;
+  /** Klausa filter ekstra (mis. `primary_topic.subfield.id:1702`), di-AND ke filter dasar. */
+  filter?: string;
   now?: number;
 }): Promise<OpenAlexGroup[]> {
   const query = args.query.trim();
   const now = args.now ?? Date.now();
   const dateBucket = new Date(now).toISOString().slice(0, 10);
   const fromYear = normalizeFromYear(args.fromYear);
-  const cacheKey = `feed:groupby:${args.groupBy}:${fromYear ?? ""}:${query}:${dateBucket}`;
+  const extraFilter = args.filter?.trim() ?? "";
+  const cacheKey = `feed:groupby:${args.groupBy}:${fromYear ?? ""}:${extraFilter}:${query}:${dateBucket}`;
 
   const cached = await getCache("openalex", cacheKey);
   if (cached) {
@@ -264,9 +267,13 @@ export async function fetchOpenAlexGroupBy(args: {
   const url = new URL(OPENALEX_ENDPOINT);
   url.searchParams.set("api_key", apiKey);
   url.searchParams.set("group_by", args.groupBy);
-  url.searchParams.set("per_page", "1"); // hanya butuh agregat group_by, bukan daftar works
+  // group_by membatasi jumlah bucket ke `per_page` saat ada filter/search → 1 akan
+  // mengkerutkan tren multi-tahun jadi satu titik. 200 = max group_by OpenAlex; daftar
+  // `results` tetap kosong untuk query group_by, jadi tanpa biaya payload.
+  url.searchParams.set("per_page", "200");
   const filters = ["is_paratext:false"];
   if (fromYear) filters.push(`from_publication_date:${fromYear}-01-01`);
+  if (extraFilter) filters.push(extraFilter);
   url.searchParams.set("filter", filters.join(","));
   if (query) url.searchParams.set("search", query);
 

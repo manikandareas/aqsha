@@ -16,7 +16,15 @@ const PAD_TOP = 18;
 const PAD_BOTTOM = 26;
 const COLORS = ["var(--sky-foreground)", "var(--coral)", "var(--lemon-foreground)", "var(--mint)"];
 
-export function PulseStream({ pulse, loading }: { pulse?: PulseData; loading?: boolean }) {
+export function PulseStream({
+  pulse,
+  loading,
+  query,
+}: {
+  pulse?: PulseData;
+  loading?: boolean;
+  query?: string;
+}) {
   const hasData = !!pulse && pulse.series.length > 0 && pulse.years.length > 1;
 
   const graph = useMemo(
@@ -57,7 +65,11 @@ export function PulseStream({ pulse, loading }: { pulse?: PulseData; loading?: b
     <section className="pt-16">
       <SectionHeader
         title="Tren riset"
-        subtitle="Topik ini sedang naik, mendatar, atau menurun?"
+        subtitle={
+          query?.trim()
+            ? "Topik ini sedang naik, mendatar, atau menurun?"
+            : "Bidang riset yang paling aktif belakangan"
+        }
         right={
           <div className="flex flex-wrap gap-1.5">
             {TRUST_LEGEND.map((status) => (

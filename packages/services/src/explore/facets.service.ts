@@ -1,12 +1,15 @@
 /**
  * Facets Explore (MURAH, cached, tanpa job) — menggerakkan Pulse chart + Globe dari OpenAlex
- * `group_by`. Pulse = tren volume per-tahun (multi-series via subtopik LLM); Globe = sebaran
+ * `group_by`. Pulse = tren volume per-tahun multi-series, di-seed dari subfield NYATA korpus
+ * (`primary_topic.subfield.id`): `q` ada → subfield korpus yg match; `q` kosong → minat user
+ * (tiap minat satu pita) atau subfield paling aktif global bila tak ada minat. Globe = sebaran
  * riset per-negara (nodes) + kolaborasi internasional (arcs, ko-okurensi country_code dlm
- * korpus yg sudah di-fetch — TANPA call ekstra). `q` kosong → korpus trending. Soft-fail:
- * tiap sisi di-try/catch → struktur kosong (UI degrade ke empty-state, tak pernah 500).
+ * korpus yg sudah di-fetch — TANPA call ekstra). Soft-fail: tiap sisi di-try/catch → struktur
+ * kosong (UI degrade ke empty-state, tak pernah 500).
  */
 import {
   fetchOpenAlexCountryCounts,
+  fetchOpenAlexGroupBy,
   fetchOpenAlexWorks,
   fetchOpenAlexYearCounts,
   type OpenAlexGroup,
@@ -14,7 +17,6 @@ import {
 } from "../feed/openAlex";
 import { getCache, putCache } from "../papers/external-cache";
 import { normalizeKey } from "../lib/text";
-import { deriveSubtopics } from "./suggest";
 import { centroidFor } from "./country-centroids";
 
 export type FacetPulse = { years: number[]; series: Array<{ name: string; values: number[] }> };
@@ -42,9 +44,18 @@ const EMPTY_FACETS: ExploreFacets = {
 };
 
 export const FacetsService = {
-  async getFacets(q: string): Promise<ExploreFacets> {
+  /**
+   * `interests` (topik minat user, lowercase) dipakai HANYA saat `q` kosong untuk
+   * mempersonalisasi seri Pulse; cache di-kunci per-set minat supaya tetap shareable.
+   */
+  async getFacets(q: string, interests: string[] = []): Promise<ExploreFacets> {
     const query = q.trim();
-    const cacheKey = `facets:${normalizeKey(query)}`;
+    const seedKey = query
+      ? normalizeKey(query)
+      : interests.length > 0
+        ? `int:${interests.map(normalizeKey).filter(Boolean).sort().join("|")}`
+        : "trending";
+    const cacheKey = `facets:${seedKey}`;
     const cached = await getCache("explore_facets", cacheKey);
     if (cached) {
       try {
@@ -55,7 +66,7 @@ export const FacetsService = {
     }
 
     const [pulse, globe] = await Promise.all([
-      buildPulse(query).catch(() => EMPTY_FACETS.pulse),
+      buildPulse(query, interests).catch(() => EMPTY_FACETS.pulse),
       buildGlobe(query).catch(() => EMPTY_FACETS.globe),
     ]);
     const facets: ExploreFacets = { pulse, globe };
@@ -84,37 +95,87 @@ function seriesFromYearCounts(counts: OpenAlexGroup[], years: number[]): number[
   return years.map((y) => byYear.get(y) ?? 0);
 }
 
-async function buildPulse(query: string): Promise<FacetPulse> {
+/** Satu lapisan stream: label + cara memfilter korpusnya (search teks dan/atau filter subfield). */
+type PulseSeed = { name: string; search?: string; filter?: string };
+
+/** "https://openalex.org/subfields/3312" → "3312" (id pendek untuk klausa filter OpenAlex). */
+export function subfieldId(key: string): string {
+  return key.split("/").pop() ?? key;
+}
+
+/** Title-case label minat ("machine learning" → "Machine Learning") agar selaras label subfield. */
+function titleCase(s: string): string {
+  return s.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** Top-N subfield (group_by sudah desc by count) → seed pita, opsional dibatasi `search`. */
+export function topSubfieldSeeds(groups: OpenAlexGroup[], search?: string): PulseSeed[] {
+  return groups
+    .filter((g) => g.count > 0)
+    .slice(0, MAX_SERIES)
+    .map((g) => ({ name: g.label, search, filter: `primary_topic.subfield.id:${subfieldId(g.key)}` }));
+}
+
+/**
+ * Pilih hingga MAX_SERIES seri Pulse, urut prioritas:
+ *  1. ada `query` → subfield nyata dari korpus yang match (subtopik faktual, bukan LLM).
+ *  2. kosong + ada minat → tiap minat = satu pita (personal).
+ *  3. kosong tanpa minat → subfield paling aktif belakangan (global).
+ */
+async function pickPulseSeeds(
+  query: string,
+  interests: string[],
+  recentFrom: number,
+): Promise<PulseSeed[]> {
+  if (query) {
+    const groups = await fetchOpenAlexGroupBy({
+      query,
+      groupBy: "primary_topic.subfield.id",
+      fromYear: recentFrom,
+    }).catch(() => []);
+    return topSubfieldSeeds(groups, query);
+  }
+
+  const picks = interests.map((t) => t.trim()).filter(Boolean).slice(0, MAX_SERIES);
+  if (picks.length >= 2) {
+    return picks.map((t) => ({ name: titleCase(t), search: t }));
+  }
+
+  const groups = await fetchOpenAlexGroupBy({
+    query: "",
+    groupBy: "primary_topic.subfield.id",
+    fromYear: recentFrom,
+  }).catch(() => []);
+  return topSubfieldSeeds(groups);
+}
+
+async function buildPulse(query: string, interests: string[]): Promise<FacetPulse> {
   const years = yearRange();
   const fromYear = years[0];
+  const recentFrom = currentYear() - 2;
 
-  if (!query) {
-    const counts = await fetchOpenAlexYearCounts({ query: "", fromYear });
-    return { years, series: [{ name: "Semua riset", values: seriesFromYearCounts(counts, years) }] };
-  }
+  const seeds = await pickPulseSeeds(query, interests, recentFrom);
 
-  let subtopics: string[] = [];
-  try {
-    subtopics = (await deriveSubtopics(query)).slice(0, MAX_SERIES);
-  } catch {
-    subtopics = [];
-  }
-  const facets = subtopics.length > 0 ? subtopics : [query];
+  const single = async (): Promise<FacetPulse> => {
+    const counts = await fetchOpenAlexYearCounts({ query, fromYear }).catch(() => []);
+    return { years, series: [{ name: query || "Semua riset", values: seriesFromYearCounts(counts, years) }] };
+  };
+  if (seeds.length < 2) return single();
 
   const series = await Promise.all(
-    facets.map(async (name) => {
-      const sub = name === query ? query : `${query} ${name}`;
-      const counts = await fetchOpenAlexYearCounts({ query: sub, fromYear }).catch(() => []);
-      return { name, values: seriesFromYearCounts(counts, years) };
+    seeds.map(async (s) => {
+      const counts = await fetchOpenAlexGroupBy({
+        query: s.search ?? "",
+        groupBy: "publication_year",
+        filter: s.filter,
+        fromYear,
+      }).catch(() => []);
+      return { name: s.name, values: seriesFromYearCounts(counts, years) };
     }),
   );
 
-  // Bila semua subtopik nol (mis. label LLM tak match korpus), fallback ke total topik.
-  const allZero = series.every((s) => s.values.every((v) => v === 0));
-  if (allZero) {
-    const total = await fetchOpenAlexYearCounts({ query, fromYear }).catch(() => []);
-    return { years, series: [{ name: query, values: seriesFromYearCounts(total, years) }] };
-  }
+  // Jaga-jaga: semua seri nol (mis. korpus terlalu sempit) → degrade ke satu tren total.
+  if (series.every((s) => s.values.every((v) => v === 0))) return single();
   return { years, series };
 }
 

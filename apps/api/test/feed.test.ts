@@ -38,7 +38,9 @@ function readJson(res: Response): Promise<any> {
 const ITEM_A = DEDUPE("a");
 const ITEM_B = DEDUPE("b");
 const ITEM_C = DEDUPE("c");
-const PAPER_KEY = `feedtest_${suffix}:paper`;
+// Slash + colon di key (mirip `doi:10.x/y`) → regression guard transport: key WAJIB lewat
+// query param, bukan path segment (lihat papers route).
+const PAPER_KEY = `doi:10.${suffix}/feedtest`;
 let idA = "";
 let idB = "";
 let idC = "";
@@ -181,10 +183,10 @@ describe("api feed routes", () => {
     expect(emptyBody.nextCursor).toBeNull();
   });
 
-  itest("GET /papers/:key cache-only (fetchOnMiss=false) → paper ter-cache", async () => {
+  itest("GET /papers/detail cache-only (fetchOnMiss=false) → paper ter-cache", async () => {
     const r = await req(
       "GET",
-      `/papers/${encodeURIComponent(PAPER_KEY)}?fetchOnMiss=false`,
+      `/papers/detail?key=${encodeURIComponent(PAPER_KEY)}&fetchOnMiss=false`,
       tok(OWNER),
     );
     expect(r.status).toBe(200);

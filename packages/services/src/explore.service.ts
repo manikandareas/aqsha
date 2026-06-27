@@ -24,12 +24,24 @@ import {
   type ExploreProvider,
   type ExploreProviderStatus,
   type ExploreSearchResponse,
+  type PaperEnrichment,
   exploreCacheKey,
   normalizeExploreQuery,
   openAlexRecommendationQuery,
 } from "./explore/model";
+import { fetchPaperEnrichment } from "./explore/paperEnrichment";
 
 const RECOMMENDATION_INTEREST_LIMIT = 6;
+
+/** Enrichment OpenAlex single-work best-effort; null saat tak ada openalexId / fetch gagal. */
+async function enrichFromOpenAlex(base: ExplorePaperDetail): Promise<PaperEnrichment | null> {
+  if (!base.openalexId) return null;
+  try {
+    return await fetchPaperEnrichment(base.openalexId);
+  } catch {
+    return null;
+  }
+}
 
 /** ResearchCandidate (web/arxiv/doi) → ExplorePaperInput untuk dedup + cache explore_papers. */
 function candidateToPaperInput(candidate: ResearchCandidate, provider: ExploreProvider): ExplorePaperInput {
@@ -210,6 +222,22 @@ export const ExploreService = {
   /** Baca paper by key (cache-only). Port V1 explore.getPaper. */
   async getPaper(db: Db, key: string): Promise<ExplorePaperDetail | null> {
     return PaperCacheService.getByKey(db, key);
+  },
+
+  /**
+   * Detail paper untuk reader: cache/cold-resolve (getOrFetchPaper) + enrichment OpenAlex
+   * single-work (referensi, dikutip-oleh, tren sitasi, afiliasi, dst.) best-effort & Redis-cached.
+   * `enriched` absen bila tak ada `openalexId` atau fetch gagal — reader tetap render base.
+   */
+  async getPaperDetail(
+    db: Db,
+    key: string,
+    opts?: { fetchOnMiss?: boolean },
+  ): Promise<ExplorePaperDetail | null> {
+    const base = await this.getOrFetchPaper(db, key, opts);
+    if (!base) return null;
+    const enriched = await enrichFromOpenAlex(base);
+    return enriched ? { ...base, enriched } : base;
   },
 
   /**

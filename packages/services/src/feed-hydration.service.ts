@@ -21,6 +21,8 @@ import { deriveSearchText, paperToFeedInput } from "./feed/model";
 import { upsertFeedItems } from "./feed/write";
 import { PaperCacheService } from "./paper-cache.service";
 import { enqueue, FEED_QUEUES } from "./clients/queue";
+import { generateText } from "ai";
+import { fastModel } from "./clients/fast-model";
 
 // ── konstanta lane (port V1) ─────────────────────────────────────────────────
 const TRENDING_LIMIT = 24;
@@ -71,6 +73,29 @@ function firstSentence(text: string): string | undefined {
 function leadFromArticle(text: string): string {
   const clean = text.replace(/\s+/g, " ").trim();
   return clean.length > 280 ? `${clean.slice(0, 279).trimEnd()}…` : clean;
+}
+
+const TLDR_MAX_INPUT_CHARS = 4_000;
+
+/**
+ * TL;DR 2–3 kalimat Bahasa Indonesia dari badan artikel (fast-model murah, env-configurable).
+ * Best-effort: tanpa API key / gagal → `undefined`, pemanggil fallback ke firstSentence.
+ */
+async function summarizeArticleId(title: string, articleText: string): Promise<string | undefined> {
+  try {
+    const { text } = await generateText({
+      model: fastModel(),
+      prompt:
+        "Ringkas artikel berita berikut menjadi 2–3 kalimat padat dalam Bahasa Indonesia. " +
+        "Fokus pada inti peristiwa atau temuan; hindari kalimat pembuka basa-basi. " +
+        "Balas HANYA ringkasannya, tanpa awalan seperti 'Ringkasan:'.\n\n" +
+        `Judul: ${title}\n\nIsi:\n${articleText.slice(0, TLDR_MAX_INPUT_CHARS)}`,
+    });
+    const clean = text.replace(/\s+/g, " ").trim();
+    return clean.length > 0 ? clean : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export const FeedHydrationService = {
@@ -144,7 +169,11 @@ export const FeedHydrationService = {
         if (preview.articleText) {
           patch.articleText = preview.articleText;
           patched += 1;
-          if (target.tldr === null) patch.tldr = firstSentence(preview.articleText);
+          if (target.tldr === null) {
+            patch.tldr =
+              (await summarizeArticleId(target.title, preview.articleText)) ??
+              firstSentence(preview.articleText);
+          }
           if (target.summary.trim().length === 0) {
             const summary = leadFromArticle(preview.articleText);
             patch.summary = summary;
