@@ -94,7 +94,7 @@ export function ExplorePage() {
                   globeLoading={facets.isPending}
                 />
 
-                <PulseStream pulse={facets.data?.pulse} loading={facets.isPending} />
+                <PulseStream pulse={facets.data?.pulse} loading={facets.isPending} query={q} />
 
                 <section className="pt-16">
                   <SectionHeader

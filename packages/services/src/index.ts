@@ -153,7 +153,7 @@ export {
 } from "./feed-hydration.service";
 export { PaperCacheService, type PapersByKeysItem } from "./paper-cache.service";
 export { ExploreService } from "./explore.service";
-export { deriveSubtopics, suggestQueries } from "./explore/suggest";
+export { suggestQueries } from "./explore/suggest";
 export {
   type ExploreFacets,
   type FacetGlobe,
