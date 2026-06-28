@@ -22,20 +22,26 @@ import {
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { bentoTileClass } from "@/lib/panel-surface";
+import { TileHeader } from "./section-header";
 import type { PaperEdge, PaperNode } from "../types";
 
-// Warna node per-field — selaras token Pulse (sky/coral/lemon/mint + turunannya).
-const FIELD_VARS = [
-  "--sky-foreground",
-  "--coral",
-  "--lemon-foreground",
-  "--mint",
-  "--coral-foreground",
-  "--mint-foreground",
-  "--lemon",
-  "--primary",
-];
+// Tema ini sengaja warm/restrained: hanya coral/mint/lavender yang benar-benar jenuh.
+// Maka 3 bidang TERSERING dapat hue khas (pop di gelap), sisanya netral — encoding
+// terbaca tanpa keluar dari palet editorial (varian `*-foreground` = near-white, dihindari).
+const VIVID_VARS = ["--coral", "--mint", "--lavender"];
+const NEUTRAL_VAR = "--muted-foreground";
 const LEGEND_MAX = 6;
+
+/** field → CSS var, diurut frekuensi (paling banyak node dulu) → bidang dominan dapat warna pop. */
+function fieldVarMapFor(nodes: PaperNode[]): Map<string, string> {
+  const count = new Map<string, number>();
+  for (const n of nodes) count.set(n.field, (count.get(n.field) ?? 0) + 1);
+  const ordered = [...count.entries()].sort((a, b) => b[1] - a[1]).map(([f]) => f);
+  const m = new Map<string, string>();
+  ordered.forEach((f, i) => m.set(f, i < VIVID_VARS.length ? VIVID_VARS[i]! : NEUTRAL_VAR));
+  return m;
+}
 
 type SimNode = SimulationNodeDatum & { idx: number; r: number; data: PaperNode };
 type SimLink = SimulationLinkDatum<SimNode> & { w: number };
@@ -109,18 +115,12 @@ function shortLabel(title: string): string {
   return `${(sp > 16 ? cut.slice(0, sp) : cut).trimEnd()}…`;
 }
 
-function buildPalette(): Palette {
-  const colors = FIELD_VARS.map(resolveVar);
-  const byField = new Map<string, string>();
+function buildPalette(fieldVarMap: Map<string, string>): Palette {
+  const rgbByField = new Map<string, string>();
+  for (const [f, varName] of fieldVarMap) rgbByField.set(f, resolveVar(varName));
+  const neutral = resolveVar(NEUTRAL_VAR);
   return {
-    field: (f) => {
-      let c = byField.get(f);
-      if (!c) {
-        c = colors[byField.size % colors.length] ?? "rgb(136, 136, 136)";
-        byField.set(f, c);
-      }
-      return c;
-    },
+    field: (f) => rgbByField.get(f) ?? neutral,
     edge: resolveVar("--muted-foreground"),
     stroke: resolveVar("--background"),
     text: resolveVar("--foreground"),
@@ -161,14 +161,13 @@ export function ExploreConstellation({
   const hoverIdxRef = useRef<number | null>(null);
   const drawRef = useRef<() => void>(() => {});
 
-  // Legend warna-field (urutan kemunculan = persis assignment palet canvas).
-  const fieldLegend = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const n of nodes) {
-      if (!seen.has(n.field)) seen.set(n.field, FIELD_VARS[seen.size % FIELD_VARS.length]!);
-    }
-    return [...seen.entries()].map(([field, varName]) => ({ field, varName }));
-  }, [nodes]);
+  // Satu sumber field→warna (frekuensi-terurut) dipakai legend DAN palet canvas.
+  const fieldVarMap = useMemo(() => fieldVarMapFor(nodes), [nodes]);
+
+  const fieldLegend = useMemo(
+    () => [...fieldVarMap.entries()].map(([field, varName]) => ({ field, varName })),
+    [fieldVarMap],
+  );
 
   useEffect(() => {
     const node = containerRef.current;
@@ -194,7 +193,7 @@ export function ExploreConstellation({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    paletteRef.current = buildPalette();
+    paletteRef.current = buildPalette(fieldVarMap);
     const rs = radiiFor(nodes);
     let W = container.clientWidth || 900;
     let H = container.clientHeight || 440;
@@ -431,23 +430,35 @@ export function ExploreConstellation({
       window.removeEventListener("pointerup", onUp);
       canvas.removeEventListener("pointerleave", onLeave);
     };
-  }, [visible, sig, nodes, edges, router]);
+  }, [visible, sig, nodes, edges, router, fieldVarMap]);
 
   // Ganti tema → re-resolve palet + redraw (warna dihitung saat draw, node tak dimutasi).
   useEffect(() => {
     if (!visible || simNodesRef.current.length === 0) return;
-    paletteRef.current = buildPalette();
+    paletteRef.current = buildPalette(fieldVarMap);
     drawRef.current();
-  }, [dark, visible, sig]);
+  }, [dark, visible, sig, fieldVarMap]);
 
   const hovered = hover ? nodes[hover.idx] : null;
   const isEmpty = nodes.length === 0;
 
   return (
-    <div className="flex flex-col">
+    <div className={bentoTileClass("h-full min-h-[420px] sm:min-h-[460px]")}>
+      <TileHeader
+        title="Peta paper terkait"
+        subtitle="titik = paper · garis = kemiripan makna"
+        right={
+          !isEmpty ? (
+            <span className="font-mono text-[11px] text-muted-foreground">
+              {nodes.length} paper · {edges.length} kaitan
+            </span>
+          ) : null
+        }
+      />
+
       <div
         ref={containerRef}
-        className="relative h-[420px] w-full border-y border-border sm:h-[460px]"
+        className="relative mt-3 min-h-0 flex-1 overflow-hidden rounded-xl bg-[color-mix(in_oklch,var(--foreground)_3%,transparent)]"
       >
         {isEmpty ? (
           <ConstellationPlaceholder loading={loading} />
@@ -481,26 +492,21 @@ export function ExploreConstellation({
       </div>
 
       {!isEmpty ? (
-        <div className="mt-3.5 flex flex-wrap items-center justify-between gap-x-5 gap-y-2">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-            {fieldLegend.slice(0, LEGEND_MAX).map((f) => (
-              <span key={f.field} className="inline-flex items-center gap-1.5">
-                <span
-                  className="size-2 shrink-0 rounded-full"
-                  style={{ background: `var(${f.varName})` }}
-                />
-                <span className="text-[12px] text-muted-foreground">{f.field}</span>
-              </span>
-            ))}
-            {fieldLegend.length > LEGEND_MAX ? (
-              <span className="font-mono text-[11px] text-muted-foreground/70">
-                +{fieldLegend.length - LEGEND_MAX} bidang
-              </span>
-            ) : null}
-          </div>
-          <p className="font-mono text-[11px] text-muted-foreground">
-            {nodes.length} paper · {edges.length} kaitan · arahkan kursor untuk judul
-          </p>
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          {fieldLegend.slice(0, LEGEND_MAX).map((f) => (
+            <span key={f.field} className="inline-flex items-center gap-1.5">
+              <span
+                className="size-2 shrink-0 rounded-full"
+                style={{ background: `var(${f.varName})` }}
+              />
+              <span className="text-[12px] text-muted-foreground">{f.field}</span>
+            </span>
+          ))}
+          {fieldLegend.length > LEGEND_MAX ? (
+            <span className="font-mono text-[11px] text-muted-foreground/70">
+              +{fieldLegend.length - LEGEND_MAX} bidang
+            </span>
+          ) : null}
         </div>
       ) : null}
     </div>

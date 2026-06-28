@@ -263,8 +263,25 @@ function CardMedia({ item, title, className }: { item: DiscoveryItem; title: str
     );
   }
   return (
-    <div className={cn("flex items-center justify-center overflow-hidden rounded-[12px]", kindPanelClass(item.kind), className)} aria-hidden>
-      <span className="font-heading text-[14px] font-bold tracking-[0.08em] text-foreground/35">{kindLabel(item.kind)}</span>
+    <div
+      className={cn(
+        "flex flex-col items-center justify-center gap-2 overflow-hidden rounded-[12px]",
+        kindPanelClass(item.kind),
+        className,
+      )}
+      aria-hidden
+    >
+      {/* Motif linked-nodes (metafora brand) → fallback terbaca disengaja, bukan kotak kosong. */}
+      <svg width="42" height="22" viewBox="0 0 42 22" fill="none" className="text-foreground/25">
+        <line x1="8" y1="11" x2="21" y2="6" stroke="currentColor" strokeWidth="1.2" />
+        <line x1="21" y1="6" x2="34" y2="15" stroke="currentColor" strokeWidth="1.2" />
+        <circle cx="8" cy="11" r="3" fill="currentColor" />
+        <circle cx="21" cy="6" r="3.5" fill="currentColor" />
+        <circle cx="34" cy="15" r="3" fill="currentColor" />
+      </svg>
+      <span className="font-heading text-[13px] font-bold tracking-[0.08em] text-foreground/40">
+        {kindLabel(item.kind)}
+      </span>
     </div>
   );
 }

@@ -46,3 +46,11 @@ export function detailSplitMainSurfaceClass(framed: boolean) {
     panelSurfaceClass({ framed }),
   );
 }
+
+/** Shell tile bento (Explore) — bingkai tunggal halus, bukan kartu dekoratif tebal. */
+export function bentoTileClass(extra?: string) {
+  return cn(
+    "flex min-h-0 min-w-0 flex-col rounded-2xl border border-border/60 bg-card/30 p-4 sm:p-5",
+    extra,
+  );
+}

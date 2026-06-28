@@ -1,12 +1,13 @@
 "use client";
 
-// Hero kanan · "Tren riset" (compact). Streamgraph (d3-shape) volume riset per subtopik × tahun
-// + scrubber hover. Data NYATA dari /explore/facets (OpenAlex group_by). Versi ringkas untuk slot
-// hero yang sempit: double-bezel card, chart mengisi tinggi, legend padat. Badge trust &
-// section-header besar SENGAJA dibuang (tak penting di widget kecil).
+// Tile bento (kanan-atas) · "Tren riset". Streamgraph (d3-shape) volume riset per subtopik × tahun
+// + scrubber hover. Data NYATA dari /explore/facets (OpenAlex group_by). Chart mengisi tinggi tile,
+// legend padat. Bingkai tile tunggal (selaras tile bento lain) — bukan kartu double-bezel.
 
 import { useMemo, useRef, useState } from "react";
+import { bentoTileClass } from "@/lib/panel-surface";
 import { buildStreamgraph } from "../lib/streamgraph";
+import { TileHeader } from "./section-header";
 import type { PulseData } from "../types";
 
 const W = 460;
@@ -72,18 +73,17 @@ export function PulseStream({
     : [];
 
   return (
-    <div className="flex h-full min-h-[420px] flex-col rounded-[1.75rem] border border-border/70 bg-card/40 p-1.5">
-      <div className="flex h-full flex-col rounded-[calc(1.75rem-0.375rem)] border border-border/40 bg-card/55 p-5 shadow-[inset_0_1px_0_color-mix(in_oklch,var(--foreground)_6%,transparent)]">
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="font-heading text-lg font-semibold tracking-tight text-foreground">
-            Tren riset
-          </h2>
-          <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+    <div className={bentoTileClass("h-full min-h-[280px]")}>
+      <TileHeader
+        title="Tren riset"
+        right={
+          <span className="font-mono text-[11px] text-muted-foreground">
             {query?.trim() ? "topik ini" : "paling aktif"}
           </span>
-        </div>
+        }
+      />
 
-        <div className="relative mt-3 min-h-0 flex-1">
+      <div className="relative mt-3 min-h-0 flex-1">
           {loading && !hasData ? (
             <div className="aqsha-shimmer size-full rounded-xl" />
           ) : !hasData || !graph ? (
@@ -163,7 +163,6 @@ export function PulseStream({
             </div>
           </div>
         ) : null}
-      </div>
     </div>
   );
 }

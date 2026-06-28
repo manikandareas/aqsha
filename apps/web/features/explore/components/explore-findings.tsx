@@ -145,8 +145,12 @@ export function ExploreFindings({ topic, query }: { topic: FeedTopic | null; que
             {hero ? <DiscoveryHeroCard item={hero} busy={false} handlers={handlers} /> : null}
             {rest.length > 0 ? (
               <div className="grid grid-cols-1 gap-x-5 gap-y-8 @md/feed:grid-cols-2 @2xl/feed:grid-cols-3">
-                {rest.map((item) => (
-                  <div key={discoveryItemKey(item)}>
+                {rest.map((item, idx) => (
+                  <div
+                    key={discoveryItemKey(item)}
+                    className="animate-in duration-300 ease-out fade-in-0 slide-in-from-bottom-2"
+                    style={{ animationDelay: `${Math.min(idx, 8) * 40}ms` }}
+                  >
                     <DiscoveryStandardCard item={item} busy={false} handlers={handlers} />
                   </div>
                 ))}

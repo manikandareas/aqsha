@@ -7,9 +7,27 @@
 
 import { SearchIcon } from "@aqsha/ui/icons";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { GAP_EXAMPLES, noveltyTag } from "../data/explore-dummy";
 import type { GapResult } from "../types";
+
+/** Render emphasis markdown ringan (`**tebal**`, `*miring*`) — pertanyaan LLM kerap memuatnya. */
+function renderEmphasis(text: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const re = /\*\*([^*]+)\*\*|\*([^*]+)\*/g;
+  let last = 0;
+  let key = 0;
+  let m: RegExpExecArray | null = re.exec(text);
+  while (m !== null) {
+    if (m.index > last) nodes.push(text.slice(last, m.index));
+    if (m[1] != null) nodes.push(<strong key={key++} className="font-semibold">{m[1]}</strong>);
+    else nodes.push(<em key={key++} className="italic">{m[2]}</em>);
+    last = re.lastIndex;
+    m = re.exec(text);
+  }
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes;
+}
 
 export type GapStatus = "idle" | "loading" | "ready" | "error";
 
@@ -72,7 +90,7 @@ export function GapFinder({
           type="button"
           onClick={() => submit()}
           aria-label="Temukan celah"
-          className="inline-flex w-[46px] shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground transition-all hover:-translate-y-px hover:brightness-105"
+          className="inline-flex w-[46px] shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground transition-[transform,filter] duration-150 ease-out hover:-translate-y-px hover:brightness-105 active:translate-y-0 active:scale-[0.97]"
         >
           <SearchIcon className="size-[19px]" />
         </button>
@@ -137,7 +155,7 @@ function GapRow({ g, onBridge }: { g: GapResult; onBridge: () => void }) {
     <div className="border-t border-border py-[17px]">
       <div className="mb-3 flex items-start gap-2.5">
         <span className="shrink-0 font-heading text-[17px] font-semibold leading-tight text-primary">{g.num}</span>
-        <p className="flex-1 text-[14.5px] font-medium leading-snug text-foreground">{g.question}</p>
+        <p className="flex-1 text-[14.5px] font-medium leading-snug text-foreground">{renderEmphasis(g.question)}</p>
       </div>
 
       <div className="mb-3 flex items-center gap-2.5 pl-7">
@@ -168,7 +186,7 @@ function GapRow({ g, onBridge }: { g: GapResult; onBridge: () => void }) {
         <button
           type="button"
           onClick={onBridge}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-[12px] font-medium text-primary transition-colors hover:bg-primary hover:text-primary-foreground"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-[12px] font-medium text-primary transition-[color,background-color,transform] duration-150 ease-out hover:bg-primary hover:text-primary-foreground active:scale-[0.97]"
         >
           Jembatani celah ini →
         </button>
