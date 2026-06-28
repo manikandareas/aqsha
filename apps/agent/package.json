@@ -7,10 +7,9 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "eve dev --no-ui --port 4317",
-    "build": "eve build",
-    "start": "eve start",
-    "info": "eve info",
+    "dev": "mastra dev --dir src/mastra",
+    "build": "mastra build --dir src/mastra",
+    "start": "node .mastra/output/index.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -19,14 +18,19 @@
     "@aqsha/db": "workspace:*",
     "@aqsha/services": "workspace:*",
     "@clerk/backend": "^3.7.0",
+    "@mastra/ai-sdk": "^1.6.0",
+    "@mastra/auth-clerk": "^1.2.1",
+    "@mastra/core": "^1.47.0",
+    "@mastra/fastembed": "^1.2.0",
+    "@mastra/memory": "^1.21.2",
+    "@mastra/pg": "^1.14.2",
     "ai": "7.0.0-beta.178",
-    "eve": "0.11.6",
-    "just-bash": "^3.0.2",
     "postgres": "^3.4.9",
     "zod": "4.4.3"
   },
   "devDependencies": {
     "@types/node": "^20",
+    "mastra": "^1.16.0",
     "typescript": "^5"
   }
 }

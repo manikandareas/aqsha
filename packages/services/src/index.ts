@@ -1,9 +1,8 @@
 // @aqsha/services — service layer framework-agnostic (route/MCP/worker callable).
 
-// Chat Astra (Fase 6) — path BACA + CRUD untuk route api (juga via subpath
-// `@aqsha/services/chat`). Logika murni di `@aqsha/chat-core`; path tulis proyeksi di
-// PROSES eve (`apps/web/agent/lib/store.ts`).
-export { EventService, MessageService, ThreadService, TitleService } from "./chat";
+// Chat Astra — CRUD thread untuk route api + proyeksi tipis `chat_threads` (agent Mastra) +
+// auto-title (juga via subpath `@aqsha/services/chat`). Isi pesan = Mastra Memory.
+export { ThreadService, TitleService } from "./chat";
 
 export { InterestService } from "./interest.service";
 export { DEFAULT_WORKSPACE_NAME, WorkspaceService } from "./workspace.service";

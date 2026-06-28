@@ -44,8 +44,8 @@ services:
       PORT: "3000"
       HOSTNAME: 0.0.0.0
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:?set CLERK_SECRET_KEY}
-      # web proxies /eve/v1/* to the agent container (internal network).
-      AGENT_ORIGIN: http://agent:4317
+      # web proxies /mastra-api/* to the Mastra agent container (internal network).
+      MASTRA_AGENT_ORIGIN: http://agent:4317
     expose:
       - "3000"
     depends_on: [api, agent]
@@ -102,15 +102,15 @@ services:
     environment:
       <<: *backend-env
       PORT: "4317"
+      # Mastra server.auth (MastraAuthClerk) verifies via JWKS derived from the publishable key.
+      CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:?set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY:?set OPENAI_API_KEY}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       AQSHA_LITE_MODEL: ${AQSHA_LITE_MODEL:-gpt-4o}
       AQSHA_LITE_CONTEXT_WINDOW: ${AQSHA_LITE_CONTEXT_WINDOW:-128000}
       FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY:-}
       CROSSREF_MAILTO: ${CROSSREF_MAILTO:-}
-    volumes:
-      # eve durable run state — file-backed; MUST persist across restarts (single replica).
-      - agent_workflow_data:/app/apps/agent/.workflow-data
+    # Mastra runtime state lives in Postgres (mastra_* tables) — no file-backed durable volume.
     expose:
       - "4317"
     depends_on:
@@ -193,4 +193,3 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
-  agent_workflow_data:

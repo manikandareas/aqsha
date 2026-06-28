@@ -7,7 +7,7 @@ import { Response } from "@/components/ai-elements/response";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Spinner } from "@/components/ui/spinner";
-import type { TimelineMessage, TimelinePart } from "../lib/eve-timeline";
+import type { TimelineMessage, TimelinePart } from "../lib/timeline-types";
 import type { ResearchSource } from "../types";
 import { ChatArtifactCard } from "./chat-artifact-card";
 import { ElapsedLabel } from "./elapsed-label";

@@ -10,7 +10,7 @@ import {
 } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
 import { AccessDeniedState } from "./access-denied-state";
-import { EveChatThreadSurface } from "./eve-chat-thread-surface";
+import { ChatThreadSurface } from "./chat-thread-surface";
 import { ThreadDeleteActions } from "./thread-actions-menu";
 import { ThreadRecentSwitcher } from "./thread-recent-switcher";
 import type {
@@ -139,7 +139,7 @@ export function CompactThreadChatPanel({
               <AccessDeniedState />
             </div>
           ) : (
-            <EveChatThreadSurface
+            <ChatThreadSurface
               threadId={activeThreadId}
               isLoading={activeThread === undefined}
               title={activeThread?.title}
@@ -151,7 +151,7 @@ export function CompactThreadChatPanel({
             />
           )
         ) : (
-          <EveChatThreadSurface
+          <ChatThreadSurface
             isLoading={false}
             rateStatus={rateStatus}
             threads={threads}

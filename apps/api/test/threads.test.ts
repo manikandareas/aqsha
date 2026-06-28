@@ -40,7 +40,6 @@ function readJson(res: Response): Promise<any> {
 async function cleanup() {
   if (!DATABASE_URL) return;
   const { client } = createDb(DATABASE_URL);
-  await client`delete from chat_messages where owner_user_id like 'user_itest_thr_%'`;
   await client`delete from chat_threads where owner_user_id like 'user_itest_thr_%'`;
   await client`delete from users where owner_user_id like 'user_itest_thr_%'`;
   await client.end();
@@ -54,17 +53,11 @@ async function seed() {
     await client`insert into users (owner_user_id, clerk_user_id, created_at, updated_at)
       values (${owner}, ${owner}, ${now}, ${now}) on conflict do nothing`;
   }
-  // Seed langsung (mirror proyeksi hook eve `agent/lib/store.ts`): thread (id == eve
-  // session id) milik OWNER + transkrip user+assistant.
+  // Seed langsung (mirror proyeksi tipis `threadProjectionProcessor` Mastra): baris metadata
+  // `chat_threads` milik OWNER. Isi pesan = Mastra Memory (`mastra_*`), tak di-seed di sini.
   await client`insert into chat_threads
       (id, owner_user_id, status, agent_kind, last_message_preview, last_activity_at, created_at, updated_at)
     values (${SID}, ${OWNER}, 'idle', 'lite', 'Halo! Ada yang bisa kubantu?', ${now}, ${now}, ${now})`;
-  await client`insert into chat_messages
-      (id, thread_id, owner_user_id, role, text, status, turn_id, created_at)
-    values (${`${SID}:t1:user`}, ${SID}, ${OWNER}, 'user', 'Halo Astra', 'complete', 't1', ${now})`;
-  await client`insert into chat_messages
-      (id, thread_id, owner_user_id, role, text, status, turn_id, created_at)
-    values (${`${SID}:t1:0:assistant`}, ${SID}, ${OWNER}, 'assistant', 'Halo! Ada yang bisa kubantu?', 'complete', 't1', ${now + 1})`;
   await client.end();
 }
 
@@ -95,19 +88,6 @@ describe("api threads — auth + ownership", () => {
     expect(crossText === "" || crossText === "null").toBe(true);
   });
 
-  itest("GET /threads/:id/messages returns chronological transcript", async () => {
-    const body = await readJson(await get(`/threads/${SID}/messages`, tok(OWNER)));
-    expect(body.items.length).toBe(2);
-    expect(body.items[0].role).toBe("user");
-    expect(body.items[1].role).toBe("assistant");
-  });
-
-  itest("GET messages cross-owner → 404 thread_not_found", async () => {
-    const r = await get(`/threads/${SID}/messages`, tok(OTHER));
-    expect(r.status).toBe(404);
-    expect((await readJson(r)).code).toBe("thread_not_found");
-  });
-
   itest("PATCH rename → title applied; cross-owner → 404", async () => {
     const ok = await req("PATCH", `/threads/${SID}`, tok(OWNER), { title: "Diskusi metode" });
     expect(ok.status).toBe(200);
@@ -119,13 +99,16 @@ describe("api threads — auth + ownership", () => {
     expect(hijack.status).toBe(404);
   });
 
-  itest("DELETE thread → cascade removes messages; cross-owner → 404 first", async () => {
+  itest("DELETE thread → row gone; cross-owner → 404 first", async () => {
     const hijack = await req("DELETE", `/threads/${SID}`, tok(OTHER));
     expect(hijack.status).toBe(404);
 
     const del = await req("DELETE", `/threads/${SID}`, tok(OWNER));
     expect(del.status).toBe(200);
-    const after = await get(`/threads/${SID}/messages`, tok(OWNER));
-    expect(after.status).toBe(404); // thread gone → assertOwner 404
+    // Thread hilang → GET detail mengembalikan null.
+    const after = await get(`/threads/${SID}`, tok(OWNER));
+    expect(after.status).toBe(200);
+    const afterText = await after.text();
+    expect(afterText === "" || afterText === "null").toBe(true);
   });
 });

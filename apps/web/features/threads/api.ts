@@ -6,7 +6,7 @@ import type { Artifact } from "@/features/artifacts/types";
 import { useApi } from "@/lib/api-client";
 import { readableApiErrorMessage } from "@/lib/api-error";
 import { queryKeys, unwrap } from "@/lib/api-query";
-import type { ChatMessage, ChatThread, ChatThreadEvent, ResearchSource } from "./types";
+import type { ChatThread, ResearchSource } from "./types";
 
 const LIST_PAGE_SIZE = 30;
 
@@ -37,48 +37,9 @@ export function useThread(id: string, enabled = true) {
 }
 
 /**
- * Transkrip thread (history persisted). `staleTime: Infinity` + tanpa refetch fokus:
- * dalam sesi live, buffer eve (`useAstraAgent`) yang jadi sumber turn berjalan; history
- * = snapshot mount supaya tak duplikat dengan live. Switch thread (queryKey berubah)
- * memuat ulang.
- */
-export function useThreadMessages(id: string, enabled = true) {
-  const api = useApi();
-  return useQuery({
-    queryKey: queryKeys.threads.messages(id),
-    enabled,
-    staleTime: Number.POSITIVE_INFINITY,
-    queryFn: async () =>
-      (unwrap(await api.threads({ id }).messages.get()) as { items: ChatMessage[] }).items,
-  });
-}
-
-/**
- * Event stream eve mentah per thread (1:1) — di-replay lewat `defaultMessageReducer` untuk
- * merekonstruksi timeline PENUH (tool/skill/subagent/HITL) saat reload. **Snapshot SEKALI**
- * saat mount (cold-load); turn in-flight di-stream live token-demi-token oleh resume stream
- * (`use-thread-resume`, satu-satunya sumber live), BUKAN poll 2 dtk (dibuang — redundan dgn
- * stream durable eve + sumber query berat). `staleTime: 0` + invalidate (resume settle / turn
- * selesai, lihat `chat-surface`) → ambil snapshot terbaru yang kini memuat event terminal →
- * `isStreamActive` false → composer unlock. Route masih dukung `afterIndex` (backfill manual
- * bila perlu), tapi tak ada lagi loop poll yang men-detoast log tiap tick.
- */
-export function useThreadEvents(id: string, enabled = true) {
-  const api = useApi();
-  return useQuery({
-    queryKey: queryKeys.threads.events(id),
-    enabled,
-    staleTime: 0,
-    queryFn: async () =>
-      (unwrap(await api.threads({ id }).events.get({ query: {} })) as { items: ChatThreadEvent[] })
-        .items,
-  });
-}
-
-/**
  * Status kirim (Slice 6.2) — pre-check UX-ramah: entitlement preview + cooldown rate-limit,
- * non-consuming. Backstop otoritatif tetap di `onMessage` proses eve. Tipe hasil di-infer
- * Eden dari route `GET /threads/send-status` (tanpa impor `@aqsha/services` di client).
+ * non-consuming. Backstop otoritatif = billing precheck processor server Mastra. Tipe hasil
+ * di-infer Eden dari route `GET /threads/send-status` (tanpa impor `@aqsha/services` di client).
  *
  * `feature='deep_research'` (Slice 7.0) → status sadar-cap deep (untuk notice saat `/deep`
  * aktif). Key di-scope per-feature → cache terpisah dari pre-check normal_chat.
