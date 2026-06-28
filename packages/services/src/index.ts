@@ -154,10 +154,10 @@ export { PaperCacheService, type PapersByKeysItem } from "./paper-cache.service"
 export { ExploreService } from "./explore.service";
 export { suggestQueries } from "./explore/suggest";
 export {
+  type ConstellationData,
+  type ConstellationEdge,
+  type ConstellationNode,
   type ExploreFacets,
-  type FacetGlobe,
-  type FacetGlobeArc,
-  type FacetGlobeNode,
   type FacetPulse,
   FacetsService,
 } from "./explore/facets.service";

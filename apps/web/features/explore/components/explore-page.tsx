@@ -18,10 +18,10 @@ import { panelHeaderBarClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
 import { useExploreAnalysis, useExploreFacets } from "../api";
 import { ExploreChatSidePanel } from "./explore-chat-side-panel";
+import { ExploreConstellation } from "./explore-constellation";
 import { ExploreFindings } from "./explore-findings";
 import { ExploreHero } from "./explore-hero";
 import { GapFinder, type GapStatus } from "./gap-finder";
-import { PulseStream } from "./pulse-stream";
 import { SectionHeader } from "./section-header";
 import { TensionMap } from "./tension-map";
 
@@ -89,12 +89,23 @@ export function ExplorePage() {
                   onSelectTopic={(next) => void setTopic(next)}
                   query={q}
                   onSubmitQuery={submitQuery}
-                  globeNodes={facets.data?.globe.nodes ?? []}
-                  globeArcs={facets.data?.globe.arcs ?? []}
-                  globeLoading={facets.isPending}
+                  pulse={facets.data?.pulse}
+                  pulseLoading={facets.isPending}
                 />
 
-                <PulseStream pulse={facets.data?.pulse} loading={facets.isPending} query={q} />
+                <section className="pt-16">
+                  <SectionHeader
+                    title="Peta paper terkait"
+                    subtitle="Tiap titik satu paper · garis = kemiripan makna"
+                  />
+                  <div className="mt-5">
+                    <ExploreConstellation
+                      nodes={facets.data?.constellation?.nodes ?? []}
+                      edges={facets.data?.constellation?.edges ?? []}
+                      loading={facets.isPending}
+                    />
+                  </div>
+                </section>
 
                 <section className="pt-16">
                   <SectionHeader

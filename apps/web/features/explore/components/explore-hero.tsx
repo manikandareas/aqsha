@@ -1,16 +1,16 @@
 "use client";
 
 // Zona 0+1 · Hero. Kiri: greeting + ask-bar + interest pills.
-// Kanan: globe Mapbox. Interest pill = FeedTopic asli → klik men-scope feed Zona 4.
+// Kanan: "Tren riset" (compact Pulse). Interest pill = FeedTopic asli → klik men-scope feed Zona 4.
 
 import { PlusIcon } from "@aqsha/ui/icons";
 import { useViewerDisplay } from "@/lib/use-viewer-identity";
 import { FEED_TOPIC_LABELS, type FeedTopic } from "@/features/discovery/types";
 import { DISCOVERY_TOPICS } from "@/features/discovery/nav";
 import { cn } from "@/lib/utils";
-import type { GlobeArc, GlobeNode, InterestPill } from "../types";
+import type { InterestPill, PulseData } from "../types";
 import { ExploreAskBar } from "./explore-ask-bar";
-import { ExploreGlobe } from "./explore-globe";
+import { PulseStream } from "./pulse-stream";
 
 const PILLS: InterestPill[] = [
   { id: null, label: "Semua" },
@@ -22,17 +22,15 @@ export function ExploreHero({
   onSelectTopic,
   query,
   onSubmitQuery,
-  globeNodes,
-  globeArcs,
-  globeLoading,
+  pulse,
+  pulseLoading,
 }: {
   activeTopic: FeedTopic | null;
   onSelectTopic: (topic: FeedTopic | null) => void;
   query: string;
   onSubmitQuery: (q: string) => void;
-  globeNodes: GlobeNode[];
-  globeArcs: GlobeArc[];
-  globeLoading: boolean;
+  pulse?: PulseData;
+  pulseLoading: boolean;
 }) {
   const { name } = useViewerDisplay(undefined, { name: "", email: "" });
   const firstName = name.trim().split(/\s+/)[0] ?? "";
@@ -77,7 +75,7 @@ export function ExploreHero({
       </div>
 
       <div className="relative min-h-[420px] self-stretch">
-        <ExploreGlobe nodes={globeNodes} arcs={globeArcs} loading={globeLoading} />
+        <PulseStream pulse={pulse} loading={pulseLoading} query={query} />
       </div>
     </section>
   );

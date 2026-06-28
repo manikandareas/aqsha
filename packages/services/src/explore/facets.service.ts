@@ -1,46 +1,49 @@
 /**
- * Facets Explore (MURAH, cached, tanpa job) — menggerakkan Pulse chart + Globe dari OpenAlex
- * `group_by`. Pulse = tren volume per-tahun multi-series, di-seed dari subfield NYATA korpus
+ * Facets Explore (MURAH, cached, tanpa job) — menggerakkan Pulse chart + Constellation. Pulse =
+ * tren volume per-tahun multi-series dari OpenAlex `group_by`, di-seed dari subfield NYATA korpus
  * (`primary_topic.subfield.id`): `q` ada → subfield korpus yg match; `q` kosong → minat user
- * (tiap minat satu pita) atau subfield paling aktif global bila tak ada minat. Globe = sebaran
- * riset per-negara (nodes) + kolaborasi internasional (arcs, ko-okurensi country_code dlm
- * korpus yg sudah di-fetch — TANPA call ekstra). Soft-fail: tiap sisi di-try/catch → struktur
- * kosong (UI degrade ke empty-state, tak pernah 500).
+ * (tiap minat satu pita) atau subfield paling aktif global bila tak ada minat. Constellation =
+ * paper relevan-secara-makna (node, dari OpenAlex `search.semantic`) + edge kemiripan
+ * (related_works ∪ tumpang-tindih topik — TANPA call ekstra). Soft-fail: tiap sisi di-try/catch
+ * → struktur kosong (UI degrade ke empty-state, tak pernah 500).
  */
 import {
-  fetchOpenAlexCountryCounts,
   fetchOpenAlexGroupBy,
+  fetchOpenAlexSemantic,
   fetchOpenAlexWorks,
   fetchOpenAlexYearCounts,
   type OpenAlexGroup,
   type OpenAlexWork,
+  openAlexWorkToExplorePaper,
 } from "../feed/openAlex";
 import { getCache, putCache } from "../papers/external-cache";
-import { normalizeKey } from "../lib/text";
-import { centroidFor } from "./country-centroids";
+import { collapse, normalizeKey } from "../lib/text";
 
 export type FacetPulse = { years: number[]; series: Array<{ name: string; values: number[] }> };
-export type FacetGlobeNode = {
-  lat: number;
-  lon: number;
-  label: string;
-  count: number;
-  country: string;
-  emerging: boolean;
+/** Satu paper di Constellation (node). `key` = key kanonik → route /app/explore/[paperRef]. */
+export type ConstellationNode = {
+  key: string;
+  title: string;
+  field: string;
+  year?: number;
+  citedBy?: number;
+  score?: number;
 };
-/** [indexNodeA, indexNodeB, weight] — busur kolaborasi antar-negara. */
-export type FacetGlobeArc = [number, number, number];
-export type FacetGlobe = { nodes: FacetGlobeNode[]; arcs: FacetGlobeArc[] };
-export type ExploreFacets = { pulse: FacetPulse; globe: FacetGlobe };
+/** [indexNodeA, indexNodeB, weight 0..1] — edge kemiripan makna antar-paper. */
+export type ConstellationEdge = [number, number, number];
+export type ConstellationData = { nodes: ConstellationNode[]; edges: ConstellationEdge[] };
+export type ExploreFacets = { pulse: FacetPulse; constellation: ConstellationData };
 
 const PULSE_YEARS = 7;
-const MAX_NODES = 30;
-const MAX_ARCS = 14;
+const MAX_NODES = 28;
+const MAX_EDGES = 60;
+const EDGE_MIN_WEIGHT = 0.12;
+const RELATED_WEIGHT = 0.7;
 const MAX_SERIES = 4;
 
 const EMPTY_FACETS: ExploreFacets = {
   pulse: { years: [], series: [] },
-  globe: { nodes: [], arcs: [] },
+  constellation: { nodes: [], edges: [] },
 };
 
 export const FacetsService = {
@@ -65,12 +68,12 @@ export const FacetsService = {
       }
     }
 
-    const [pulse, globe] = await Promise.all([
+    const [pulse, constellation] = await Promise.all([
       buildPulse(query, interests).catch(() => EMPTY_FACETS.pulse),
-      buildGlobe(query).catch(() => EMPTY_FACETS.globe),
+      buildConstellation(query, interests).catch(() => EMPTY_FACETS.constellation),
     ]);
-    const facets: ExploreFacets = { pulse, globe };
-    const nonEmpty = pulse.series.length > 0 || globe.nodes.length > 0;
+    const facets: ExploreFacets = { pulse, constellation };
+    const nonEmpty = pulse.series.length > 0 || constellation.nodes.length > 0;
     await putCache("explore_facets", cacheKey, nonEmpty ? "ready" : "empty", JSON.stringify(facets));
     return facets;
   },
@@ -179,77 +182,103 @@ async function buildPulse(query: string, interests: string[]): Promise<FacetPuls
   return { years, series };
 }
 
-/** Negara (uppercase ISO-2) yang muncul di authorships sebuah work. */
-function workCountryCodes(work: OpenAlexWork): string[] {
-  const codes = new Set<string>();
-  for (const a of work.authorships ?? []) {
-    for (const c of a.countries ?? []) if (c) codes.add(c.toUpperCase());
-    for (const inst of a.institutions ?? []) {
-      if (inst.country_code) codes.add(inst.country_code.toUpperCase());
-    }
-  }
-  return [...codes];
+/** ID OpenAlex sebuah work ("https://openalex.org/W…") untuk mencocokkan related_works. */
+function workOpenAlexId(work: OpenAlexWork): string {
+  return work.ids?.openalex ?? work.id ?? "";
 }
 
-async function buildGlobe(query: string): Promise<FacetGlobe> {
-  const recentFrom = currentYear() - 2;
-  const [allCounts, recentCounts, fetched] = await Promise.all([
-    fetchOpenAlexCountryCounts({ query }),
-    fetchOpenAlexCountryCounts({ query, fromYear: recentFrom }),
-    fetchOpenAlexWorks({ query, limit: 24 }),
-  ]);
+/** Jaccard dua set topik (irisan / gabungan) → kekuatan kemiripan tematik 0..1. */
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  for (const x of a) if (b.has(x)) inter++;
+  const union = a.size + b.size - inter;
+  return union === 0 ? 0 : inter / union;
+}
 
-  const totalAll = allCounts.reduce((s, g) => s + g.count, 0);
-  const totalRecent = recentCounts.reduce((s, g) => s + g.count, 0) || 1;
-  const recentByCode = new Map(recentCounts.map((g) => [g.key.toUpperCase(), g.count]));
+/** Fitur node untuk perhitungan edge (di-export untuk unit test). */
+export type NodeFeat = { oaId: string; topics: Set<string>; related: Set<string> };
 
-  // OpenAlex group_by sudah desc by count → top-N negara yang punya centroid.
-  const nodes: FacetGlobeNode[] = [];
-  const codeToIndex = new Map<string, number>();
-  for (const g of allCounts) {
+/**
+ * Edge constellation = kemiripan MAKNA antar-paper, dihitung dari objek yang sudah di-fetch
+ * (nol call ekstra): related_works OpenAlex (algoritmik) → edge "kuat"; tumpang-tindih topik
+ * (Jaccard) → bobot tematik. Tiap node dijamin ≥1 edge terkuat (anti-orphan), lalu diisi
+ * global desc s/d MAX_EDGES.
+ */
+export function buildEdges(feats: NodeFeat[]): ConstellationEdge[] {
+  const n = feats.length;
+  const candidates: ConstellationEdge[] = [];
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const a = feats[i]!;
+      const b = feats[j]!;
+      const related =
+        (a.oaId !== "" && b.related.has(a.oaId)) || (b.oaId !== "" && a.related.has(b.oaId));
+      let weight = jaccard(a.topics, b.topics);
+      if (related) weight = Math.max(weight, RELATED_WEIGHT);
+      if (weight < EDGE_MIN_WEIGHT) continue;
+      candidates.push([i, j, Math.round(weight * 1000) / 1000]);
+    }
+  }
+  candidates.sort((x, y) => y[2] - x[2]);
+
+  const selected = new Map<string, ConstellationEdge>();
+  const keyOf = (e: ConstellationEdge) => `${e[0]}:${e[1]}`;
+  // Edge terkuat per node → graf tak terputus (k-NN, k=1).
+  const bestForNode: Array<ConstellationEdge | undefined> = new Array(n);
+  for (const e of candidates) {
+    bestForNode[e[0]] ??= e;
+    bestForNode[e[1]] ??= e;
+  }
+  for (const e of bestForNode) if (e) selected.set(keyOf(e), e);
+  for (const e of candidates) {
+    if (selected.size >= MAX_EDGES) break;
+    selected.set(keyOf(e), e);
+  }
+  return [...selected.values()];
+}
+
+/**
+ * Constellation = paper relevan-secara-makna (node) + edge kemiripan. Node dari OpenAlex
+ * `search.semantic` (seed = `q`, atau frasa minat user saat `q` kosong); tanpa seed → trending.
+ * Warna node = `primary_topic.field`; ukuran ∝ sitasi. Dedup per key kanonik.
+ */
+async function buildConstellation(query: string, interests: string[]): Promise<ConstellationData> {
+  const seed = query.trim() || interests.map((t) => t.trim()).filter(Boolean).join(", ");
+  // Utama: semantic (paling "makna"). Degradasi: pencarian keyword (tetap ada node, edge dari
+  // tumpang-tindih topik saja). Terakhir: trending — supaya constellation tak pernah kosong
+  // hanya karena semantic gagal/transient.
+  let works: OpenAlexWork[] = [];
+  if (seed) {
+    works = await fetchOpenAlexSemantic({ query: seed, limit: MAX_NODES })
+      .then((r) => r.works)
+      .catch(() => []);
+    if (works.length === 0) works = (await fetchOpenAlexWorks({ query: seed, limit: MAX_NODES })).works;
+  }
+  if (works.length === 0) works = (await fetchOpenAlexWorks({ query: "", limit: MAX_NODES })).works;
+
+  const nodes: ConstellationNode[] = [];
+  const feats: NodeFeat[] = [];
+  const seenKey = new Set<string>();
+  for (const work of works) {
     if (nodes.length >= MAX_NODES) break;
-    if (g.count <= 0) continue;
-    const code = g.key.toUpperCase();
-    const centroid = centroidFor(code);
-    if (!centroid) continue;
-    const allShare = totalAll ? g.count / totalAll : 0;
-    const recentShare = (recentByCode.get(code) ?? 0) / totalRecent;
-    const emerging = recentShare > allShare * 1.2 && recentShare > 0.01;
-    codeToIndex.set(code, nodes.length);
+    const paper = openAlexWorkToExplorePaper(work);
+    if (!paper || seenKey.has(paper.key)) continue;
+    seenKey.add(paper.key);
     nodes.push({
-      lat: centroid.lat,
-      lon: centroid.lon,
-      label: centroid.name,
-      count: g.count,
-      country: code,
-      emerging,
+      key: paper.key,
+      title: paper.title,
+      field: collapse(work.primary_topic?.field?.display_name ?? "") || "Lainnya",
+      year: paper.year,
+      citedBy: paper.citedByCount,
+      score: paper.score,
+    });
+    feats.push({
+      oaId: workOpenAlexId(work),
+      topics: new Set(paper.topics.map((t) => t.toLowerCase())),
+      related: new Set(work.related_works ?? []),
     });
   }
 
-  // Arcs = ko-okurensi negara pada satu work (kolaborasi). Tanpa call ekstra.
-  const edge = new Map<string, number>();
-  for (const work of fetched.works) {
-    const idxs = [
-      ...new Set(
-        workCountryCodes(work)
-          .map((c) => codeToIndex.get(c))
-          .filter((i): i is number => i !== undefined),
-      ),
-    ].sort((a, b) => a - b);
-    for (let a = 0; a < idxs.length; a++) {
-      for (let b = a + 1; b < idxs.length; b++) {
-        const key = `${idxs[a]}:${idxs[b]}`;
-        edge.set(key, (edge.get(key) ?? 0) + 1);
-      }
-    }
-  }
-  const arcs: FacetGlobeArc[] = [...edge.entries()]
-    .map(([key, weight]): FacetGlobeArc => {
-      const [i, j] = key.split(":").map(Number);
-      return [i!, j!, weight];
-    })
-    .sort((a, b) => b[2] - a[2])
-    .slice(0, MAX_ARCS);
-
-  return { nodes, arcs };
+  return { nodes, edges: buildEdges(feats) };
 }

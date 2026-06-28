@@ -1,7 +1,6 @@
 // Tipe view-model halaman Explore (redesign editorial 4-zona). Zona feed (Zona 4)
-// memakai FeedItem dari features/discovery; tipe di sini hanya untuk zona
-// visual/prototype (globe, pulse, gap, tension) yang datanya masih dummy —
-// lihat plan §7 untuk path data nyata.
+// memakai FeedItem dari features/discovery; tipe di sini untuk zona visual
+// (constellation, pulse, gap, tension). Leaf type di-reuse oleh ./api (sumber tunggal).
 
 import type { FeedTopic } from "@/features/discovery/types";
 
@@ -13,18 +12,19 @@ export type CitationStance = "mostly-supported" | "mostly-disputed" | "mixed" | 
 // Pill = FeedTopic asli sehingga klik pill men-scope feed Zona 4 (perilaku nyata).
 export type InterestPill = { id: FeedTopic | null; label: string };
 
-// ── Globe (Mapbox) ─────────────────────────────────────────────────────────
-// Node = negara penghasil riset (count = jumlah paper). Arc = kolaborasi antar-negara
-// (weight = ko-publikasi). count/country/weight datang dari /explore/facets (OpenAlex).
-export type GlobeNode = {
-  lat: number;
-  lon: number;
-  label: string;
-  emerging: boolean;
-  count?: number;
-  country?: string;
+// ── Constellation (force-directed paper graph) ─────────────────────────────
+// Node = paper NYATA, relevan-secara-makna ke minat user / `q`. Edge = kemiripan makna
+// (related_works ∪ tumpang-tindih topik). Data dari /explore/facets (OpenAlex `search.semantic`).
+export type PaperNode = {
+  key: string; // key kanonik → /app/explore/[paperRef]
+  title: string;
+  field: string; // primary_topic.field — grup warna
+  year?: number;
+  citedBy?: number;
+  score?: number; // relevansi/topik 0..1
 };
-export type GlobeArc = [number, number, number?]; // [indexA, indexB, weight?]
+export type PaperEdge = [number, number, number]; // [indexA, indexB, weight 0..1]
+export type ConstellationData = { nodes: PaperNode[]; edges: PaperEdge[] };
 
 // ── Pulse (streamgraph) ────────────────────────────────────────────────────
 export type PulseSeries = { name: string; values: number[] };

@@ -2,19 +2,19 @@
 
 // Hooks data Explore (driven by query `q`). Tiga lapis sesuai biaya:
 //  - useExploreSuggest  → typeahead saran kueri (LLM murah, cached).
-//  - useExploreFacets   → Pulse chart + Globe (OpenAlex group_by, cepat, cached).
+//  - useExploreFacets   → Pulse chart + Constellation (OpenAlex, cepat, cached).
 //  - useExploreAnalysis → Gap + Tension (background job; polling saat status "pending").
 
 import { useQuery } from "@tanstack/react-query";
 import { useApi } from "@/lib/api-client";
 import { unwrap } from "@/lib/api-query";
-import type { GapResult, GlobeArc, GlobeNode, PulseData, TensionData } from "./types";
+import type { ConstellationData, GapResult, PulseData, TensionData } from "./types";
 
-// Bentuk respons /explore/* — tipe leaf (globe/pulse/gap/tension) di-reuse dari ./types
+// Bentuk respons /explore/* — tipe leaf (constellation/pulse/gap/tension) di-reuse dari ./types
 // (sumber tunggal, dipakai komponen) supaya tak ada keluarga tipe paralel yang drift.
 export type ExploreFacetsData = {
   pulse: PulseData;
-  globe: { nodes: GlobeNode[]; arcs: GlobeArc[] };
+  constellation: ConstellationData;
 };
 export type ExploreAnalysisData = {
   status: "idle" | "pending" | "ready" | "error";
@@ -36,7 +36,7 @@ export function useExploreSuggest(term: string) {
   });
 }
 
-/** Pulse + Globe untuk `q` (kosong → korpus trending). Cached server-side. */
+/** Pulse + Constellation untuk `q` (kosong → minat user / trending). Cached server-side. */
 export function useExploreFacets(q: string) {
   const api = useApi();
   const t = q.trim();
