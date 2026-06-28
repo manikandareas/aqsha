@@ -91,13 +91,15 @@ aqsha/
 
 ## eve di Monorepo
 
-Agent eve **tidak** menjadi service tersendiri. Ia di-*mount* ke dalam `apps/web-v2` (Next.js):
+Agent eve **tidak** menjadi service tersendiri. Ia di-_mount_ ke dalam `apps/web-v2` (Next.js):
 
 ```ts
 // apps/web-v2/next.config.ts
-import { withEve } from 'eve/next'
-const nextConfig = { /* ... */ }
-export default withEve(nextConfig, { eveRoot: 'agent/' })
+import { withEve } from "eve/next";
+const nextConfig = {
+  /* ... */
+};
+export default withEve(nextConfig, { eveRoot: "agent/" });
 ```
 
 Folder `apps/web-v2/agent/` adalah definisi agent (tools, skills, subagents, schedules, channels, hooks, sandbox, connections). Untuk **data milik Aqsha sendiri**, eve agent **bukan** in-process service caller: tool data dijangkau lewat MCP connection (`agent/connections/aqsha.ts` + `aqsha_write.ts`) ke Aqsha MCP server di `api-v2` `POST /mcp` (B7). Owner menerima HTTP hop yang diperkenalkan kembali demi boundary MCP yang bersih, decoupled, dan reusable. Tool yang **tetap in-process** (import langsung `@aqsha/services` / `ctx.getSandbox()`) terbatas pada sandbox/HITL-gate: `verifyStatistics`/`runComputation` (butuh sandbox) dan `proposeResearchPlan` (HITL gate murni). Service di `@aqsha/services` tetap **modul yang sama** yang dipakai route Elysia, MCP server, & worker (lihat [04-service-layer.md](04-service-layer.md)). Durabilitas run disimpan eve (Workflow SDK) di `.workflow-data` pada volume persisten (self-host) — bukan di Postgres. Postgres hanya menyimpan proyeksi product (chat history, run events, sources, HITL) lewat hook observe-only eve.
@@ -156,6 +158,7 @@ volumes:
 ```
 
 ### `infra/init-extensions.sql`
+
 ```sql
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "vector";     -- pgvector (RAG)
@@ -169,6 +172,7 @@ CREATE EXTENSION IF NOT EXISTS "unaccent";
 ## Environment Variables
 
 ### `infra/.env.example` (di VPS, untuk Compose)
+
 ```bash
 # Database
 POSTGRES_PASSWORD=changeme_strong_password
@@ -177,6 +181,7 @@ REDIS_PASSWORD=changeme_redis_password
 ```
 
 ### `apps/api-v2/.env.example`
+
 ```bash
 # Konek ke infra via Tailscale (hostname MagicDNS atau IP 100.x.y.z)
 DATABASE_URL=postgresql://aqsha:${POSTGRES_PASSWORD}@vps-aqsha.tailnet.ts.net:5432/aqsha
@@ -207,6 +212,7 @@ PORT=3001
 ```
 
 ### `apps/web-v2/.env.example`
+
 ```bash
 NEXT_PUBLIC_API_URL=https://api.aqsha.app        # atau Tailscale host saat dev
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_xxx
@@ -287,6 +293,7 @@ bun run --filter '@aqsha/web-v2' start          # Next.js + eve (withEve)
 ```
 
 ### Reverse Proxy (Nginx, contoh untuk api-v2 + web-v2)
+
 ```nginx
 server {
   server_name api.aqsha.app;
@@ -303,7 +310,7 @@ server {
   }
 }
 server {
-  server_name app.aqsha.app;
+  server_name aqshara.com;
   location / {
     proxy_pass http://127.0.0.1:3000;   # web-v2 + eve
     proxy_set_header Host $host;
@@ -325,23 +332,23 @@ server {
 
 ```ts
 // apps/web-v2/lib/api.ts
-import { treaty } from '@elysiajs/eden'
-import type { App } from '@aqsha/api-v2'
+import { treaty } from "@elysiajs/eden";
+import type { App } from "@aqsha/api-v2";
 
 export const api = treaty<App>(
-  process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001',
-  { headers: () => ({ Authorization: `Bearer ${getClerkToken()}` }) }
-)
+  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001",
+  { headers: () => ({ Authorization: `Bearer ${getClerkToken()}` }) },
+);
 
 // Penggunaan dengan TanStack Query:
 const { data } = useQuery({
-  queryKey: ['workspaces'],
+  queryKey: ["workspaces"],
   queryFn: async () => {
-    const { data, error } = await api.workspaces.get()
-    if (error) throw error
-    return data
+    const { data, error } = await api.workspaces.get();
+    if (error) throw error;
+    return data;
   },
-})
+});
 ```
 
 Chat agent memakai `useEveAgent` (bukan Eden) — lihat [01-tech-stack.md](01-tech-stack.md).

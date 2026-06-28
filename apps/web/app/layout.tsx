@@ -10,7 +10,14 @@ import { AuthenticatedUserSync } from "@/components/authenticated-user-sync";
 import { MotionProvider } from "@/components/motion-provider";
 import { OnboardingGate } from "@/components/onboarding-gate";
 import { QueryProvider } from "@/lib/query-provider";
-import { siteName } from "@/lib/metadata";
+import {
+  defaultDescription,
+  htmlLang,
+  locale,
+  siteName,
+  siteUrl,
+  verification,
+} from "@/lib/seo-config";
 import "./globals.css";
 
 // Disalin dari apps/web; provider Clerk dipasang lagi di P1 (Convex tetap di-drop).
@@ -33,12 +40,28 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   applicationName: siteName,
   title: {
     default: siteName,
     template: `%s | ${siteName}`,
   },
-  description: "Aqsha V2 — research workspace (foundations rail).",
+  description: defaultDescription,
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    siteName,
+    locale,
+    url: "/",
+    title: siteName,
+    description: defaultDescription,
+  },
+  twitter: { card: "summary_large_image" },
+  // ponytail: spread hanya token non-kosong; verification:{} valid bila keduanya kosong.
+  verification: {
+    ...(verification.google ? { google: verification.google } : {}),
+    ...(verification.bing ? { other: { "msvalidate.01": verification.bing } } : {}),
+  },
 };
 
 export default function RootLayout({
@@ -48,7 +71,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang={htmlLang}
       suppressHydrationWarning
       className={`${inter.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >

@@ -1,4 +1,9 @@
-import { ExploreAnalysisService, FacetsService, suggestQueries } from "@aqsha/services";
+import {
+  ExploreAnalysisService,
+  FacetsService,
+  InterestService,
+  suggestQueries,
+} from "@aqsha/services";
 import { Elysia, t } from "elysia";
 import { getDb } from "../clients/db";
 import { authMacro } from "../plugins/auth";
@@ -16,10 +21,18 @@ export const explore = new Elysia({ prefix: "/explore" })
     ({ query }) => suggestQueries(query.q ?? "").then((suggestions) => ({ suggestions })),
     { auth: true, query: t.Object({ q: t.Optional(t.String()) }) },
   )
-  .get("/facets", ({ query }) => FacetsService.getFacets(query.q ?? ""), {
-    auth: true,
-    query: t.Object({ q: t.Optional(t.String()) }),
-  })
+  .get(
+    "/facets",
+    async ({ query, ownerUserId }) => {
+      const q = query.q ?? "";
+      // Personalisasi seri Pulse hanya saat q kosong (default landing); 1 read murah.
+      const interests = q.trim()
+        ? []
+        : await InterestService.topInterestTopics(getDb().db, ownerUserId, 4).catch(() => []);
+      return FacetsService.getFacets(q, interests);
+    },
+    { auth: true, query: t.Object({ q: t.Optional(t.String()) }) },
+  )
   .get(
     "/analysis",
     ({ query }) => {

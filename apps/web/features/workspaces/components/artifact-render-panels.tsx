@@ -34,6 +34,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { resolveArtifactDownload, triggerArtifactDownload } from "@/lib/artifact-download";
 import { MermaidArtifactViewer } from "./mermaid-artifact-viewer";
 
 const PdfArtifactViewer = dynamic(
@@ -53,7 +54,22 @@ const tabsListClass =
   "h-10 w-full justify-start gap-5 rounded-none border-0 border-b border-border bg-transparent p-0";
 const tabsTriggerClass =
   "h-10 min-w-0 gap-2 rounded-none border-b-2 border-transparent bg-transparent px-0 text-[13px] font-semibold text-muted-foreground shadow-none data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none";
-const insetSurfaceClass = "rounded-[8px] border border-border/80 bg-card/40";
+const ARTIFACT_SURFACE_CLASS =
+  "overflow-hidden rounded-[10px] border border-border/80 bg-card/40";
+// One height for every framed embedded viewer (html/svg/diagram/code/source) so
+// they read as a single family instead of a grab-bag of bespoke heights.
+const VIEWER_HEIGHT_CLASS = "h-[64svh] min-h-[480px]";
+
+/** Framed container shared by all embedded (non-prose) artifact viewers. */
+function ArtifactSurface({
+  className,
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}) {
+  return <div className={cn(ARTIFACT_SURFACE_CLASS, className)}>{children}</div>;
+}
 
 export type ArtifactRenderPayload =
   | {
@@ -127,7 +143,7 @@ export function ArtifactReadingColumn({
 
   if (payload.artifactType === "docx") {
     return (
-      <div className="grid min-h-[420px] place-items-center gap-3 p-8 text-center">
+      <ArtifactSurface className="grid min-h-[420px] place-items-center gap-3 p-8 text-center">
         <FileIcon className="size-10 text-muted-foreground" />
         <div className="grid gap-1">
           <p className="text-[14px] font-semibold text-foreground">{title}</p>
@@ -138,7 +154,7 @@ export function ArtifactReadingColumn({
             Open or download this document from the actions above.
           </p>
         </div>
-      </div>
+      </ArtifactSurface>
     );
   }
 
@@ -151,7 +167,7 @@ export function ArtifactReadingColumn({
       <SandboxFrame
         title="HTML preview"
         srcDoc={buildSandboxedHtmlDocument(payload.source)}
-        heightClass="h-[60svh] min-h-[480px]"
+        heightClass={VIEWER_HEIGHT_CLASS}
       />
     );
   }
@@ -161,16 +177,16 @@ export function ArtifactReadingColumn({
       <SandboxFrame
         title="SVG preview"
         srcDoc={buildSandboxedSvgDocument(payload.source)}
-        heightClass="h-[52svh] min-h-[420px]"
+        heightClass={VIEWER_HEIGHT_CLASS}
       />
     );
   }
 
   if (payload.artifactType === "mermaid") {
     return (
-      <div className={cn("h-[52svh] min-h-[420px] overflow-hidden", insetSurfaceClass)}>
+      <ArtifactSurface className={VIEWER_HEIGHT_CLASS}>
         <MermaidArtifactViewer source={payload.source} />
-      </div>
+      </ArtifactSurface>
     );
   }
 
@@ -272,21 +288,21 @@ function SandboxFrame({
   heightClass: string;
 }) {
   return (
-    <div className={cn("overflow-hidden", insetSurfaceClass)}>
+    <ArtifactSurface>
       <iframe
         title={title}
         sandbox=""
         srcDoc={srcDoc}
         className={cn("w-full border-0 bg-background", heightClass)}
       />
-    </div>
+    </ArtifactSurface>
   );
 }
 
 function SourceBlock({ source, language }: { source: string; language: string }) {
   const normalizedLanguage = normalizeCodeBlockLanguage(language);
   return (
-    <div className={cn("h-[60svh] min-h-[420px] overflow-hidden", insetSurfaceClass)}>
+    <ArtifactSurface className={VIEWER_HEIGHT_CLASS}>
       <CodeBlock
         code={source || "No source content."}
         language={normalizedLanguage}
@@ -303,7 +319,7 @@ function SourceBlock({ source, language }: { source: string; language: string })
           </CodeBlockActions>
         </CodeBlockHeader>
       </CodeBlock>
-    </div>
+    </ArtifactSurface>
   );
 }
 
@@ -312,14 +328,14 @@ function JsonStructuredViewer({ source }: { source: string }) {
 
   if (parsed.error) {
     return (
-      <section className={cn("grid min-h-[260px] place-items-center p-8 text-center", insetSurfaceClass)}>
+      <ArtifactSurface className="grid min-h-[260px] place-items-center p-8 text-center">
         <div className="grid max-w-sm gap-2">
           <h2 className="text-[14px] font-semibold text-foreground">JSON preview unavailable</h2>
           <p className="text-[12px] leading-5 text-muted-foreground">
             {sourceLineCount(source)} lines / {formatByteSize(new Blob([source]).size)}
           </p>
         </div>
-      </section>
+      </ArtifactSurface>
     );
   }
 
@@ -327,7 +343,7 @@ function JsonStructuredViewer({ source }: { source: string }) {
   const rows = jsonPreviewRows(value).slice(0, 24);
 
   return (
-    <section className={cn("overflow-hidden", insetSurfaceClass)}>
+    <ArtifactSurface>
       <div className="flex items-center justify-between border-b border-border/70 px-3 py-2">
         <h2 className="text-[13px] font-semibold text-foreground">JSON viewer</h2>
         <span className="text-[11px] font-medium text-muted-foreground">
@@ -345,7 +361,7 @@ function JsonStructuredViewer({ source }: { source: string }) {
           </div>
         ))}
       </div>
-    </section>
+    </ArtifactSurface>
   );
 }
 
@@ -355,7 +371,7 @@ function CsvArtifactViewer({ source }: { source: string }) {
   const body = rows.slice(1, 11);
 
   return (
-    <div className={cn("overflow-hidden", insetSurfaceClass)}>
+    <ArtifactSurface>
       <div className="flex items-center justify-between border-b border-border/70 px-3 py-2">
         <h2 className="text-[13px] font-semibold text-foreground">CSV viewer</h2>
         <span className="text-[11px] font-medium text-muted-foreground">
@@ -392,7 +408,7 @@ function CsvArtifactViewer({ source }: { source: string }) {
           </tbody>
         </table>
       </div>
-    </div>
+    </ArtifactSurface>
   );
 }
 
@@ -407,9 +423,11 @@ function csvRowKey(row: string[], rowIndex: number) {
 
 export function ArtifactHeaderActions({
   payload,
+  title,
   onDelete,
 }: {
   payload: ArtifactRenderPayload;
+  title: string;
   onDelete: () => void;
 }) {
   const isFile = payload.artifactType === "pdf" || payload.artifactType === "docx";
@@ -424,32 +442,18 @@ export function ArtifactHeaderActions({
           </HeaderLinkButton>
         ) : null}
         {isFile ? (
-          <>
-            <HeaderLinkButton label="Open file" href={payload.url}>
-              <ExternalLinkIcon className="size-4" />
-            </HeaderLinkButton>
-            <HeaderLinkButton label="Download" href={payload.url} download={payload.fileName}>
-              <DownloadIcon className="size-4" />
-            </HeaderLinkButton>
-          </>
+          <HeaderLinkButton label="Open file" href={payload.url}>
+            <ExternalLinkIcon className="size-4" />
+          </HeaderLinkButton>
         ) : null}
+        <ArtifactDownloadButton payload={payload} title={title} />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button type="button" variant="ghost" size="icon-sm" aria-label="More actions">
               <MoreHorizontalIcon className="size-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-64">
-            {isFile ? (
-              <DropdownMenuItem className="pointer-events-none flex-col items-start gap-0.5">
-                <span className="max-w-full truncate font-medium text-foreground">
-                  {payload.fileName}
-                </span>
-                <span className="text-muted-foreground">
-                  {payload.mimeType} / {formatByteSize(payload.byteSize)}
-                </span>
-              </DropdownMenuItem>
-            ) : null}
+          <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuItem
               onClick={onDelete}
               className="text-destructive focus:text-destructive"
@@ -461,6 +465,46 @@ export function ArtifactHeaderActions({
         </DropdownMenu>
       </div>
     </TooltipProvider>
+  );
+}
+
+/**
+ * Universal download affordance. File-backed artifacts (pdf/docx) download the
+ * object-storage file directly; every other type is synthesized into a Blob on
+ * click (see `resolveArtifactDownload`), so every artifact is savable.
+ */
+function ArtifactDownloadButton({
+  payload,
+  title,
+}: {
+  payload: ArtifactRenderPayload;
+  title: string;
+}) {
+  const download = resolveArtifactDownload(payload, title);
+
+  if (download.kind === "url") {
+    return (
+      <HeaderLinkButton label="Download" href={download.href} download={download.fileName}>
+        <DownloadIcon className="size-4" />
+      </HeaderLinkButton>
+    );
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Download"
+          onClick={() => triggerArtifactDownload(download)}
+        >
+          <DownloadIcon className="size-4" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>Download</TooltipContent>
+    </Tooltip>
   );
 }
 

@@ -51,6 +51,7 @@ export function WorkspaceLibraryControls({
   selectedTypes,
   sort,
   className,
+  showSort = true,
   onQueryChange,
   onToggleType,
   onSortChange,
@@ -59,6 +60,8 @@ export function WorkspaceLibraryControls({
   selectedTypes: WorkspaceArtifactType[];
   sort: WorkspaceArtifactSort;
   className?: string;
+  // Linimasa Artifact selalu urut per-tanggal, jadi kontrol sort disembunyikan di sana.
+  showSort?: boolean;
   onQueryChange: (query: string) => void;
   onToggleType: (type: WorkspaceArtifactType) => void;
   onSortChange: (sort: WorkspaceArtifactSort) => void;
@@ -120,35 +123,37 @@ export function WorkspaceLibraryControls({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            className={cn(
-              "size-8 border-border/70 bg-muted/20 text-muted-foreground shadow-none transition-transform duration-150 ease-out hover:text-foreground active:scale-[0.97]",
-              hasActiveSort && "border-primary/45 bg-primary/10 text-primary hover:text-primary",
-            )}
-            aria-label={`Urutkan dokumen: ${activeSortLabel}`}
-          >
-            <ArrowDownAZIcon className="size-3.5" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-52">
-          <DropdownMenuLabel>Urutkan</DropdownMenuLabel>
-          <DropdownMenuRadioGroup
-            value={sort}
-            onValueChange={(value) => onSortChange(value as WorkspaceArtifactSort)}
-          >
-            {workspaceArtifactSortOptions.map((option) => (
-              <DropdownMenuRadioItem key={option.value} value={option.value}>
-                {option.label}
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {showSort ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              className={cn(
+                "size-8 border-border/70 bg-muted/20 text-muted-foreground shadow-none transition-transform duration-150 ease-out hover:text-foreground active:scale-[0.97]",
+                hasActiveSort && "border-primary/45 bg-primary/10 text-primary hover:text-primary",
+              )}
+              aria-label={`Urutkan dokumen: ${activeSortLabel}`}
+            >
+              <ArrowDownAZIcon className="size-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-52">
+            <DropdownMenuLabel>Urutkan</DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={sort}
+              onValueChange={(value) => onSortChange(value as WorkspaceArtifactSort)}
+            >
+              {workspaceArtifactSortOptions.map((option) => (
+                <DropdownMenuRadioItem key={option.value} value={option.value}>
+                  {option.label}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
     </div>
   );
 }

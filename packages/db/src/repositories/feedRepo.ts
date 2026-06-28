@@ -44,13 +44,23 @@ export const FeedRepo = {
    * Upsert by `dedupe_key` (port V1 upsertFeedItems). On conflict update SEMUA field mutable
    * kecuali `id`+`created_at` (preserve baris asli yang dirujuk saved/hidden FK). `search_tsv`
    * GENERATED — tak di-set. Mengembalikan baris hasil (inserted/updated).
+   *
+   * GUARD enrichment: re-ingest RSS Google News membawa `summary: ""` (string kosong eksplisit)
+   * → tanpa guard, CONFLICT meng-clobber `summary` hasil enrichment tiap siklus 3 jam. CASE di
+   * bawah hanya menimpa `summary` bila nilai masuk non-kosong. Field enrichment lain
+   * (article_text/tldr/image_url/resolved_url/enrich_attempts) datang `undefined` di row RSS →
+   * Drizzle skip dari SET → otomatis preserved.
    */
   async upsertByDedupeKey(db: DbOrTx, row: NewFeedItem): Promise<FeedItem> {
     const { id: _id, createdAt: _createdAt, ...mutable } = row;
+    const set = {
+      ...mutable,
+      summary: sql`case when excluded.summary = '' then ${feedItems.summary} else excluded.summary end`,
+    };
     const rows = await db
       .insert(feedItems)
       .values(row)
-      .onConflictDoUpdate({ target: feedItems.dedupeKey, set: mutable })
+      .onConflictDoUpdate({ target: feedItems.dedupeKey, set })
       .returning();
     return rows[0]!;
   },

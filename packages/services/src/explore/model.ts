@@ -35,8 +35,62 @@ export type ExplorePaperInput = {
   score?: number;
 };
 
-/** Paper detail (input + lastSeenAt) — kontrak GET /papers/:key. */
-export type ExplorePaperDetail = ExplorePaperInput & { lastSeenAt: number };
+/** Paper detail (input + lastSeenAt + enrichment OpenAlex opsional) — kontrak GET /papers/detail. */
+export type ExplorePaperDetail = ExplorePaperInput & {
+  lastSeenAt: number;
+  enriched?: PaperEnrichment;
+};
+
+/** Satu paper terkait (referensi / dikutip-oleh) — judul + identitas untuk tautan eksternal. */
+export type PaperEnrichmentRef = {
+  openalexId: string;
+  title: string;
+  year?: number;
+  doi?: string;
+  citedByCount?: number;
+};
+
+/** Penulis dengan afiliasi (dari authorships OpenAlex). */
+export type PaperEnrichmentAuthor = {
+  name: string;
+  institution?: string;
+  country?: string;
+};
+
+/** Skor sitasi per tahun (counts_by_year) untuk sparkline tren. */
+export type PaperYearCount = { year: number; citedByCount: number };
+
+/** Konsep/topik atau SDG berbobot. */
+export type PaperWeighted = { name: string; score?: number };
+
+/**
+ * Enrichment paper dari OpenAlex single-work (`GET /works/{id}`). Best-effort & Redis-cached;
+ * `enriched` di-omit kalau tak ada `openalexId` atau fetch gagal. Field tambahan yang TIDAK ada
+ * di cache `explore_papers`: tren sitasi, afiliasi, referensi/dikutip-oleh ber-judul, SDG, funding.
+ */
+export type PaperEnrichment = {
+  oaStatus?: string;
+  oaUrl?: string;
+  license?: string;
+  journal?: string;
+  issn?: string[];
+  type?: string;
+  language?: string;
+  fwci?: number;
+  citationPercentile?: number;
+  countsByYear: PaperYearCount[];
+  authors: PaperEnrichmentAuthor[];
+  institutions: string[];
+  countries: string[];
+  concepts: PaperWeighted[];
+  sdgs: PaperWeighted[];
+  funders: string[];
+  referencedCount: number;
+  references: PaperEnrichmentRef[];
+  citedByCount?: number;
+  citedBy: PaperEnrichmentRef[];
+  relatedCount: number;
+};
 
 export type ExploreProviderStatus = {
   provider: ExploreProvider;

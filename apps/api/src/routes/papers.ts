@@ -6,8 +6,12 @@ import { authMacro } from "../plugins/auth";
 /**
  * Route papers/explore (Domain 9, P4 + Fase 8). `GET /papers/search` (waterfall
  * OpenAlex→arXiv→Jina→Crossref + cache; live keyword search debit `external_search`),
- * `GET /papers/:key` (getOrFetchPaper cold-resolve). Key kanonik (`doi:`/`arxiv:`/`url:`/`title:`)
- * dibawa Eden ter-encode di path param → Elysia decode jadi `params.key` utuh.
+ * `GET /papers/detail?key=…` (getPaperDetail: cache + OpenAlex single-work enrichment).
+ *
+ * Kunci kanonik (`doi:`/`arxiv:`/`url:`/`title:`) DIBAWA SEBAGAI QUERY PARAM, bukan path:
+ * hampir semua key mengandung `/` (DOI `10.x/y`, `url:https://…`) yang akan memecah path
+ * segment dan menjadikan rute `:key` tak match (404). Eden encode query param + Elysia decode
+ * query → round-trip aman; juga menghindari jebakan `%2F` di reverse-proxy.
  */
 export const papers = new Elysia({ prefix: "/papers" })
   .use(authMacro)
@@ -56,15 +60,18 @@ export const papers = new Elysia({ prefix: "/papers" })
     },
   )
   .get(
-    "/:key",
-    ({ ownerUserId, params, query }) => {
+    "/detail",
+    ({ query }) => {
       const { db } = getDb();
-      return ExploreService.getOrFetchPaper(db, params.key, {
+      return ExploreService.getPaperDetail(db, query.key, {
         fetchOnMiss: query.fetchOnMiss,
       });
     },
     {
       auth: true,
-      query: t.Object({ fetchOnMiss: t.Optional(t.Boolean()) }),
+      query: t.Object({
+        key: t.String(),
+        fetchOnMiss: t.Optional(t.Boolean()),
+      }),
     },
   );

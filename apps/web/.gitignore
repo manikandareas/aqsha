@@ -13,3 +13,6 @@ next-env.d.ts
 /.output/
 /.nitro/
 /.vercel/
+
+# Content Collections — generated type-safe content layer (blog MDX)
+/.content-collections/

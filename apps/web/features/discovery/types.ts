@@ -30,6 +30,8 @@ export type FeedItem = {
   publishedAt?: number;
   // paper-only hosted PDF; absent for news.
   pdfUrl?: string;
+  // news-only: badan artikel ter-ekstrak (enrichment lane). Dirender di NewsReader.
+  articleText?: string;
 };
 
 export type DiscoveryItemRef =
@@ -57,6 +59,44 @@ export type ExplorePaper = {
   topics: string[];
   score?: number;
   lastSeenAt: number;
+  enriched?: PaperEnrichment;
+};
+
+// ── Enrichment OpenAlex single-work (mirror @aqsha/services PaperEnrichment) ──
+// web tak boleh import @aqsha/services (boundary client); tipe ini cermin kontrak
+// GET /papers/detail untuk prop komponen PaperReader.
+export type PaperEnrichmentRef = {
+  openalexId: string;
+  title: string;
+  year?: number;
+  doi?: string;
+  citedByCount?: number;
+};
+export type PaperEnrichmentAuthor = { name: string; institution?: string; country?: string };
+export type PaperYearCount = { year: number; citedByCount: number };
+export type PaperWeighted = { name: string; score?: number };
+export type PaperEnrichment = {
+  oaStatus?: string;
+  oaUrl?: string;
+  license?: string;
+  journal?: string;
+  issn?: string[];
+  type?: string;
+  language?: string;
+  fwci?: number;
+  citationPercentile?: number;
+  countsByYear: PaperYearCount[];
+  authors: PaperEnrichmentAuthor[];
+  institutions: string[];
+  countries: string[];
+  concepts: PaperWeighted[];
+  sdgs: PaperWeighted[];
+  funders: string[];
+  referencedCount: number;
+  references: PaperEnrichmentRef[];
+  citedByCount?: number;
+  citedBy: PaperEnrichmentRef[];
+  relatedCount: number;
 };
 
 /** Tautan reader internal per-kind. paper→/[key], news→/n/[id]; lain→eksternal. */
