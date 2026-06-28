@@ -124,14 +124,16 @@ export function ExploreFindings({ topic, query }: { topic: FeedTopic | null; que
   const rest = items.slice(1);
 
   return (
-    <section className="pt-16">
-      <SectionHeader
-        title={searchMode ? `Hasil untuk “${q}”` : "Temuan untukmu"}
-        subtitle={searchMode ? "Paper & berita yang cocok dengan pencarianmu" : "Scroll terus untuk paper & berita berikutnya"}
-        right={<span className="shrink-0 font-mono text-[11px] text-muted-foreground">{items.length} item</span>}
-      />
+    <section className={searchMode ? "pt-16" : "pt-8"}>
+      {searchMode ? (
+        <SectionHeader
+          title={`Hasil untuk “${q}”`}
+          subtitle="Paper & berita yang cocok dengan pencarianmu"
+          right={<span className="shrink-0 font-mono text-[11px] text-muted-foreground">{items.length} item</span>}
+        />
+      ) : null}
 
-      <div className="@container/feed mt-5">
+      <div className={searchMode ? "@container/feed mt-5" : "@container/feed"}>
         {feed.isError ? (
           <div className="max-w-[760px] rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-[13px] font-medium text-destructive">
             {readableApiErrorMessage(feed.error, "Gagal memuat.")}

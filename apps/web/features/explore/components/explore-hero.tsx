@@ -22,17 +22,29 @@ export function ExploreHero({
   onSelectTopic,
   query,
   onSubmitQuery,
+  compact = false,
 }: {
   activeTopic: FeedTopic | null;
   onSelectTopic: (topic: FeedTopic | null) => void;
   query: string;
   onSubmitQuery: (q: string) => void;
+  // State Selidiki (ada query): ask-bar jadi query header, greeting + pills disembunyikan
+  // (topik tak relevan saat mode pencarian — feed memakai hasil, bukan filter topik).
+  compact?: boolean;
 }) {
   const { name } = useViewerDisplay(undefined, { name: "", email: "" });
   const firstName = name.trim().split(/\s+/)[0] ?? "";
   const greeting = firstName
     ? `${firstName}, mulai dari topik yang lagi hangat.`
     : "Mulai dari topik yang lagi hangat.";
+
+  if (compact) {
+    return (
+      <section className="pt-6 pb-2">
+        <ExploreAskBar value={query} onSubmit={onSubmitQuery} />
+      </section>
+    );
+  }
 
   return (
     <section className="pt-10 pb-2 sm:pt-12">

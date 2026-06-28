@@ -47,6 +47,9 @@ export function ExplorePage() {
   const analysis = useExploreAnalysis(q);
 
   const trimmedQ = q.trim();
+  // State machine: q kosong → Jelajah (browse), q terisi → Selidiki (investigate).
+  // Ambang ≥2 selaras gating useExploreAnalysis (job LLM tak jalan saat Jelajah).
+  const investigate = trimmedQ.length >= 2;
   const analysisStatus: GapStatus =
     trimmedQ.length < 2
       ? "idle"
@@ -86,51 +89,65 @@ export function ExplorePage() {
                 onToggleLeftSidebar={leftSidebar.toggleSidebar}
               />
               <div className="mx-auto w-full max-w-[1180px] px-6 pb-24 sm:px-7">
-                {/* Row 0 — command bar */}
+                {/* Command bar — persisten. Selidiki: compact (ask-bar = query header). */}
                 <ExploreHero
                   activeTopic={topic}
                   onSelectTopic={(next) => void setTopic(next)}
                   query={q}
                   onSubmitQuery={submitQuery}
+                  compact={investigate}
                 />
 
-                {/* Row 1 — hero bento: peta paper (besar) + tren riset / topik hangat */}
-                <section className="grid gap-4 pt-8 @3xl/explore:grid-cols-[1.55fr_1fr] @3xl/explore:items-stretch">
-                  <ExploreConstellation
-                    nodes={facets.data?.constellation?.nodes ?? []}
-                    edges={facets.data?.constellation?.edges ?? []}
-                    loading={facets.isPending}
-                  />
-                  <div className="grid min-h-0 gap-4 @3xl/explore:grid-rows-[1fr_auto]">
-                    <PulseStream pulse={facets.data?.pulse} loading={facets.isPending} query={q} />
-                    <HotTopics
-                      pulse={facets.data?.pulse}
-                      loading={facets.isPending}
-                      activeQuery={q}
-                      onSelect={submitQuery}
-                    />
-                  </div>
-                </section>
+                {/* Body dua-state; key per-mode → cross-fade halus saat transisi. */}
+                <div
+                  key={investigate ? "investigate" : "browse"}
+                  className="animate-in duration-300 ease-out fade-in-0"
+                >
+                  {investigate ? (
+                    <>
+                      {/* Selidiki · USP dulu — Gap + Tension dipromosikan ke atas */}
+                      <section className="pt-10">
+                        <SectionHeader
+                          title="Masuk lebih dalam"
+                          subtitle="Tiap klaim menempel ke sitasi yang bisa dicek"
+                        />
+                        <div className="mt-5 grid grid-cols-1 border-y border-border @3xl/explore:grid-cols-[1.1fr_1fr] @3xl/explore:divide-x @3xl/explore:divide-border">
+                          <GapFinder
+                            q={q}
+                            status={analysisStatus}
+                            gaps={analysis.data?.gap ?? []}
+                            onSubmitQuery={submitQuery}
+                          />
+                          <TensionMap status={analysisStatus} tension={analysis.data?.tension ?? null} />
+                        </div>
+                      </section>
 
-                {/* Row 2 — analisis berpasangan (USP) */}
-                <section className="pt-16">
-                  <SectionHeader
-                    title="Masuk lebih dalam"
-                    subtitle="Tiap klaim menempel ke sitasi yang bisa dicek"
-                  />
-                  <div className="mt-5 grid grid-cols-1 border-y border-border @3xl/explore:grid-cols-[1.1fr_1fr] @3xl/explore:divide-x @3xl/explore:divide-border">
-                    <GapFinder
-                      q={q}
-                      status={analysisStatus}
-                      gaps={analysis.data?.gap ?? []}
-                      onSubmitQuery={submitQuery}
-                    />
-                    <TensionMap status={analysisStatus} tension={analysis.data?.tension ?? null} />
-                  </div>
-                </section>
+                      {/* Pendukung · peta scoped + tren riset / topik hangat */}
+                      <section className="grid gap-4 pt-12 @3xl/explore:grid-cols-[1.55fr_1fr] @3xl/explore:items-stretch">
+                        <ExploreConstellation
+                          nodes={facets.data?.constellation?.nodes ?? []}
+                          edges={facets.data?.constellation?.edges ?? []}
+                          loading={facets.isPending}
+                        />
+                        <div className="grid min-h-0 gap-4 @3xl/explore:grid-rows-[1fr_auto]">
+                          <PulseStream pulse={facets.data?.pulse} loading={facets.isPending} query={q} />
+                          <HotTopics
+                            pulse={facets.data?.pulse}
+                            loading={facets.isPending}
+                            activeQuery={q}
+                            onSelect={submitQuery}
+                          />
+                        </div>
+                      </section>
 
-                {/* Row 3 — feed */}
-                <ExploreFindings topic={topic} query={q} />
+                      {/* Hasil — feed pencarian (kartu) */}
+                      <ExploreFindings topic={topic} query={q} />
+                    </>
+                  ) : (
+                    /* Jelajah · feed editorial */
+                    <ExploreFindings topic={topic} query={q} />
+                  )}
+                </div>
               </div>
             </div>
           }
