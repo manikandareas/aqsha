@@ -2,6 +2,7 @@
 
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { FlickerSpinner } from "@/components/ui/flicker-spinner";
+import { threadTranscriptColumnClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
 
 export function ThreadActivityIndicator({
@@ -27,7 +28,7 @@ export function ThreadActivityIndicator({
 
 export function CenteredLoading({ label }: { label: string }) {
   return (
-    <div className="flex w-full min-w-0 items-start py-6 sm:py-8">
+    <div className={cn(threadTranscriptColumnClass, "flex items-start py-6 sm:py-8")}>
       <ThreadActivityIndicator label={label} />
     </div>
   );
