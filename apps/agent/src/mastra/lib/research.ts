@@ -3,7 +3,7 @@ import type { CreditFeature } from "@aqsha/services/plan";
 import { ResearchService } from "@aqsha/services/research";
 import type { ResearchCandidate } from "@aqsha/services/research";
 import { getServiceDb } from "./db";
-import { type AstraToolCtx, callerEmail, threadScopeId, toolCallId } from "./tool-context";
+import { type AstraToolCtx, callerEmail, deepRunId, threadScopeId, toolCallId } from "./tool-context";
 
 /**
  * Helper riset/billing bersama untuk tool Mastra Astra (port dari eve `agent/lib/tools.ts`).
@@ -39,9 +39,9 @@ export function chargeExternalSearch(
 }
 
 /**
- * Persist kandidat sumber riset (best-effort) — kegagalan persist tak boleh meracuni hasil
- * tool. `turnId` = `toolCallId` (Mastra tak mengekspos turn id ke tool; per-pemanggilan
- * cukup untuk panel Sources thread).
+ * Persist kandidat sumber riset (best-effort) — kegagalan persist tak boleh meracuni hasil tool.
+ * `turnId` = run id deep-research bila ada (semua sumber satu run berbagi turn → dedupe + penomoran
+ * sitasi `[n]` global, G4), jatuh ke `toolCallId` di jalur chat biasa (per-pemanggilan).
  */
 export async function persistResearch(
   ctx: AstraToolCtx,
@@ -51,7 +51,7 @@ export async function persistResearch(
     await ResearchService.persistSources(getServiceDb(), {
       threadId: threadScopeId(ctx),
       ownerUserId: args.ownerUserId,
-      turnId: toolCallId(ctx),
+      turnId: deepRunId(ctx) ?? toolCallId(ctx),
       discoveryQuery: args.discoveryQuery,
       candidates: args.candidates,
       now: Date.now(),

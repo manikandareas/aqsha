@@ -7,10 +7,11 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "mastra dev --dir src/mastra",
-    "build": "mastra build --dir src/mastra",
+    "skills:gen": "bun run scripts/gen-inline-skills.ts",
+    "dev": "bun run skills:gen && mastra dev --dir src/mastra",
+    "build": "bun run skills:gen && mastra build --dir src/mastra",
     "start": "node .mastra/output/index.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "bun run skills:gen && tsc --noEmit"
   },
   "dependencies": {
     "@ai-sdk/openai": "4.0.0-beta.74",

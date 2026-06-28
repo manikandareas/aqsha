@@ -13,3 +13,6 @@ packages/convex/.env.local
 packages/convex/.convex/
 apps/agents/.env
 apps/agents/.env.local
+
+# TestSprite transient run scratch (config w/ keys, mcp.log, generated summaries)
+testsprite_tests/tmp/

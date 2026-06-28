@@ -21,6 +21,13 @@ import {
  */
 export const AQSHA_EMAIL_KEY = "aqsha__email";
 
+/**
+ * Run id deep-research aktif (di-set step Workflow lewat `withDeepRun`). Saat ada, tool riset
+ * memakai INI sebagai `turnId` `research_sources` (bukan `toolCallId` per-pemanggilan) → semua
+ * sumber satu run berbagi turn → dedupe + penomoran sitasi `[n]` global (G4).
+ */
+export const AQSHA_DEEP_RUN_KEY = "aqsha__deep_run_id";
+
 export type AstraToolCtx = {
   requestContext?: RequestContext;
   agent?: { threadId?: string; resourceId?: string; toolCallId?: string };
@@ -66,4 +73,10 @@ export function threadScopeId(ctx: AstraToolCtx): string {
 
 export function toolCallId(ctx: AstraToolCtx): string {
   return ctx.agent?.toolCallId ?? "no-tool-call-id";
+}
+
+/** Run id deep-research aktif dari RequestContext (`null` di jalur chat biasa). */
+export function deepRunId(ctx: AstraToolCtx): string | null {
+  const raw = ctx.requestContext?.get(AQSHA_DEEP_RUN_KEY);
+  return typeof raw === "string" && raw ? raw : null;
 }

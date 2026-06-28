@@ -1,22 +1,14 @@
 /**
- * Skills Astra (Fase 1) — 11 `SKILL.md` metodologi diport apa adanya dari eve
- * `agent/skills/`. Mastra menyediakan tool bawaan (`skill`/`skill_read`/`skill_search`,
- * progressive disclosure) saat `skills` terdaftar — TANPA sandbox (mematikan bug `load_skill`
- * eve). Path di-resolve relatif `process.cwd()` (`resolve(cwd, path)`); `mastra dev` + Docker
- * WORKDIR = `apps/agent`, jadi `src/mastra/skills/<name>` valid di kedua lingkungan.
+ * Skills Astra — 11 `SKILL.md` metodologi sebagai **INLINE skill** (`createSkill`), di-compile ke
+ * bundle via codegen (`scripts/gen-inline-skills.ts`, re-run di `dev`/`build`/`typecheck`).
+ *
+ * KENAPA inline (bukan path filesystem): `mastra build` mem-bundle ke `.mastra/output` TANPA menyalin
+ * folder `skills/`, dan runtime cwd = `<mastraDir>/public` (BUKAN `apps/agent`) → path relatif
+ * `src/mastra/skills/<name>` tak ke-resolve → tool `skill` balas "Available skills: (kosong)".
+ * Inline melepas skill dari cwd/fs sehingga jalan sama di `mastra dev` maupun Docker prod.
+ * SKILL.md tetap SUMBER KEBENARAN; ubah file lalu `bun run skills:gen` (otomatis di dev/build).
+ *
+ * Mastra menyediakan tool bawaan (`skill`/`skill_read`/`skill_search`, progressive disclosure)
+ * saat `skills` terdaftar — TANPA sandbox.
  */
-const SKILL_NAMES = [
-  "cite-apa7",
-  "deep-research",
-  "meta-analysis-synthesis",
-  "replication-readiness",
-  "research-cs-ml",
-  "research-education",
-  "research-general",
-  "research-medicine",
-  "verify-citations",
-  "verify-statistics",
-  "write-academic-id",
-] as const;
-
-export const skillPaths: string[] = SKILL_NAMES.map((name) => `src/mastra/skills/${name}`);
+export { inlineSkills } from "./skills-inline";

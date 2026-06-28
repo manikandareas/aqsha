@@ -12,8 +12,11 @@ export const ASTRA_AGENT_ID = "astra-lite";
  * `app/mastra-api/[...path]/route.ts`) → server Mastra `@aqsha/agent`. Bearer Clerk di-inject
  * SEGAR per-request lewat `fetch` kustom (`getToken()`), bukan header statis (token pendek-umur);
  * `server.auth` Mastra (MastraAuthClerk) yang memverifikasi.
+ *
+ * Stop turn TIDAK lagi lewat AbortController di sini — durable-thread memakai `abortThread`
+ * (cancel server-side); langganan/run terlepas dari koneksi fetch (lihat `use-mastra-agent.ts`).
  */
-export function useMastraClient(getSignal?: () => AbortSignal | undefined): MastraClient {
+export function useMastraClient(): MastraClient {
   const { getToken } = useAuth();
   return useMemo(
     () =>
@@ -24,14 +27,9 @@ export function useMastraClient(getSignal?: () => AbortSignal | undefined): Mast
           const token = await getToken();
           const headers = new Headers(init?.headers);
           if (token) headers.set("authorization", `Bearer ${token}`);
-          // Gabung signal klien-js dengan signal stop() hook (bila ada) → tombol stop
-          // membatalkan stream berjalan.
-          const extra = getSignal?.();
-          const signals = [init?.signal, extra].filter(Boolean) as AbortSignal[];
-          const signal = signals.length > 1 ? AbortSignal.any(signals) : signals[0];
-          return fetch(input as RequestInfo, { ...init, headers, signal });
+          return fetch(input as RequestInfo, { ...init, headers });
         },
       }),
-    [getToken, getSignal],
+    [getToken],
   );
 }

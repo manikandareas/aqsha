@@ -1,12 +1,26 @@
 import { messagePreview } from "@aqsha/chat-core";
 import { ThreadService, TitleService } from "@aqsha/services/chat";
-import type { ProcessOutputResultArgs } from "@mastra/core/processors";
+import type { ProcessInputArgs, ProcessOutputResultArgs } from "@mastra/core/processors";
 import {
   MASTRA_RESOURCE_ID_KEY,
   MASTRA_THREAD_ID_KEY,
   type RequestContext,
 } from "@mastra/core/request-context";
 import { getServiceDb } from "../lib/db";
+
+type MessageLike = { threadId?: string; resourceId?: string };
+
+/** Owner + threadId dari pesan tersimpan (SoT) → fallback RequestContext. */
+function resolveOwnerThread(
+  rc: RequestContext | undefined,
+  messages: readonly MessageLike[],
+): { ownerUserId: string | null; threadId: string | null } {
+  return {
+    threadId: messages.find((m) => m.threadId)?.threadId ?? ctxValue(rc, MASTRA_THREAD_ID_KEY),
+    ownerUserId:
+      messages.find((m) => m.resourceId)?.resourceId ?? ctxValue(rc, MASTRA_RESOURCE_ID_KEY),
+  };
+}
 
 /**
  * Proyeksi thread (Fase 3 cutover) — menggantikan hook `projection.ts` eve untuk jalur Mastra.
@@ -42,14 +56,36 @@ function firstUserText(messages: ProcessOutputResultArgs["messages"]): string | 
   return text || null;
 }
 
+/**
+ * Proyeksi DINI (turn-start) — upsert `chat_threads` TIPIS sebelum agentic loop supaya thread BARU
+ * durable sejak token pertama: refresh saat turn-pertama streaming tak lagi "Akses ditolak"
+ * (`chat_threads` baru terisi di onFinish via `processOutputResult` → ada jendela kosong). Tanpa
+ * preview/title (itu di output). Idempoten + best-effort.
+ */
+export const threadProjectionInputProcessor = {
+  id: "thread-projection-input" as const,
+  async processInput({ requestContext, messages }: ProcessInputArgs) {
+    const { ownerUserId, threadId } = resolveOwnerThread(requestContext, messages);
+    if (ownerUserId && threadId) {
+      try {
+        await ThreadService.ensureProjected(getServiceDb(), {
+          threadId,
+          ownerUserId,
+          agentKind: "lite",
+          preview: null,
+        });
+      } catch (err) {
+        console.error("[thread-projection-input] failed", err);
+      }
+    }
+    return messages;
+  },
+};
+
 export const threadProjectionProcessor = {
   id: "thread-projection" as const,
   async processOutputResult({ requestContext, result, messages, messageList }: ProcessOutputResultArgs) {
-    const threadId =
-      messages.find((m) => m.threadId)?.threadId ?? ctxValue(requestContext, MASTRA_THREAD_ID_KEY);
-    const ownerUserId =
-      messages.find((m) => m.resourceId)?.resourceId ??
-      ctxValue(requestContext, MASTRA_RESOURCE_ID_KEY);
+    const { ownerUserId, threadId } = resolveOwnerThread(requestContext, messages);
     if (ownerUserId && threadId) {
       const preview = result.text ? messagePreview(result.text) : null;
       try {

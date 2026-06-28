@@ -14,6 +14,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
+import { useMemo } from "react";
 import type { ResearchSource } from "../types";
 
 /** Ikon + label per kelas sumber. */
@@ -33,6 +34,11 @@ function SourceRow({ source }: { source: ResearchSource }) {
   const href = source.url ?? (source.doi ? `https://doi.org/${source.doi}` : null);
   const body = (
     <div className="flex gap-2.5">
+      {source.citationNumber != null ? (
+        <span className="mt-0.5 shrink-0 font-medium text-[11px] text-muted-foreground tabular-nums">
+          [{source.citationNumber}]
+        </span>
+      ) : null}
       <Icon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
@@ -74,17 +80,27 @@ export function InlineSources({
   sources: ResearchSource[];
   className?: string;
 }) {
-  if (sources.length === 0) return null;
+  // Urut sesuai nomor sitasi [n] (yang belum bernomor di belakang) supaya cocok urutan prosa.
+  // useMemo sebelum early-return (rules-of-hooks) → sort hanya saat `sources` berubah, bukan tiap render.
+  const sorted = useMemo(
+    () =>
+      [...sources].sort(
+        (a, b) =>
+          (a.citationNumber ?? Number.MAX_SAFE_INTEGER) - (b.citationNumber ?? Number.MAX_SAFE_INTEGER),
+      ),
+    [sources],
+  );
+  if (sorted.length === 0) return null;
   return (
     <Collapsible className={cn("min-w-0", className)}>
       <CollapsibleTrigger className="group flex items-center gap-1.5 text-left text-muted-foreground text-xs transition-colors hover:text-foreground">
         <Link2Icon className="size-3.5 shrink-0" />
-        <span className="font-medium">{sources.length} sumber</span>
+        <span className="font-medium">{sorted.length} sumber</span>
         <ChevronDownIcon className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-180" />
       </CollapsibleTrigger>
       <CollapsibleContent className="overflow-hidden">
         <div className="mt-2 flex flex-col gap-1.5">
-          {sources.map((source) => (
+          {sorted.map((source) => (
             <SourceRow key={source.id} source={source} />
           ))}
         </div>

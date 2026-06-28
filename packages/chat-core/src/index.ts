@@ -259,11 +259,14 @@ export const promptCommands = [
     aliases: ["/deepresearch", "/riset"],
     keywords: ["deep", "deep research", "riset mendalam", "penelitian", "tinjauan", "verifikasi sitasi", "literatur"],
     placeholder: "Tulis pertanyaan riset yang ingin ditelusuri mendalam...",
+    // CATATAN: `/deep` dijalankan FE sebagai Workflow `deep-research` (lihat composer/use-mastra-agent),
+    // jadi `buildPrompt` ini TAK dipakai untuk /deep. Disimpan sebagai fallback netral (tanpa tool
+    // yang tak ada) seandainya dispatch chat biasa pernah menerimanya.
     buildPrompt: (argument) =>
       [
-        "Lakukan deep research untuk pertanyaan di bawah. Gunakan skill deep-research sebagai metodologi.",
-        "WAJIB mulai dengan menyusun rencana riset lewat tool propose_research_plan (judul + 3-6 sub-pertanyaan) dan TUNGGU persetujuan user sebelum riset.",
-        "Setelah disetujui: telaah literatur per sub-pertanyaan, cari bukti tandingan, verifikasi sitasi, lalu tulis jawaban tercitasi [n] yang menyebut kekuatan bukti dan keterbatasan. Hanya kutip sumber dari hasil tool; jangan mengarang identifier.",
+        "Lakukan riset mendalam untuk pertanyaan di bawah: susun rencana ringkas, telaah literatur,",
+        "pertimbangkan bukti tandingan, lalu tulis jawaban tercitasi [n] yang menyebut kekuatan bukti",
+        "dan keterbatasan. Hanya kutip sumber dari hasil tool; jangan mengarang identifier.",
         "",
         withInput(argument, "[Pertanyaan riset belum diberikan]"),
       ].join("\n"),

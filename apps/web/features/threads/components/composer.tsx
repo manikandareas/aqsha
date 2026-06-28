@@ -2,9 +2,13 @@
 
 import {
   type ContextRef,
+  DEEP_COMMAND_ID,
+  getPromptCommand,
+  matchPromptCommandInContent,
   type PromptCommand,
   resolveCommandDispatch,
   splitContextRefs,
+  stripPromptCommandSlug,
 } from "@aqsha/chat-core";
 import {
   AlertCircleIcon,
@@ -53,6 +57,8 @@ export type ComposerSendPayload = {
   text: string;
   clientContext?: string[];
   agentKind: ComposerAgentKind;
+  /** `"deep"` → jalankan Workflow deep-research (bukan turn chat); `text` = pertanyaan riset. */
+  command?: "deep";
 };
 
 /** Thread ringkas untuk panel "Thread terbaru" (start panel landing). */
@@ -223,14 +229,27 @@ export function Composer({
 
     const parts: string[] = [];
     let displayText: string;
+    let command: "deep" | undefined;
     if (hasText) {
-      const r = resolveCommandDispatch(content, commands[0]?.id);
-      if (!r.displayText) {
-        setIsSending(false);
-        return;
+      const matched = getPromptCommand(commands[0]?.id) ?? matchPromptCommandInContent(content);
+      if (matched?.id === DEEP_COMMAND_ID) {
+        // `/deep` → Workflow deep-research: kirim PERTANYAAN (slug di-strip), bukan ekspansi skill.
+        const question = stripPromptCommandSlug(content, matched);
+        if (!question.trim()) {
+          setIsSending(false);
+          return;
+        }
+        displayText = question;
+        command = "deep";
+      } else {
+        const r = resolveCommandDispatch(content, commands[0]?.id);
+        if (!r.displayText) {
+          setIsSending(false);
+          return;
+        }
+        displayText = r.displayText;
+        if (r.dispatchPrompt !== r.displayText) parts.push(r.dispatchPrompt);
       }
-      displayText = r.displayText;
-      if (r.dispatchPrompt !== r.displayText) parts.push(r.dispatchPrompt);
     } else {
       // Lampiran tanpa teks → prompt sintetik supaya turn punya pesan (eve butuh non-empty).
       displayText = "Tolong baca berkas terlampir.";
@@ -262,6 +281,7 @@ export function Composer({
       text: displayText,
       clientContext: parts.length > 0 ? parts : undefined,
       agentKind: agentSelection.agentKind,
+      command,
     });
   }
 

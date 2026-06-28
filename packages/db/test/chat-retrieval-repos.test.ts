@@ -131,6 +131,34 @@ describe("ResearchSourceRepo.insertMany — idempoten (resume tak gandakan)", ()
   });
 });
 
+describe("ResearchSourceRepo.listByThreadTurn + setCitationNumbers (penomoran sitasi G4)", () => {
+  itest("list per turn (runId) + set citation_number batch tanpa menyentuh turn lain", async () => {
+    const run = "run-cite";
+    const a = srcRow({ turnId: run, locator: "https://c1.test", title: "A" });
+    const b = srcRow({ turnId: run, locator: "https://c2.test", title: "B" });
+    const other = srcRow({ turnId: "turn-other", locator: "https://c3.test", title: "C" });
+    await ResearchSourceRepo.insertMany(db, [a, b, other]);
+
+    const byTurn = await ResearchSourceRepo.listByThreadTurn(db, T1, run);
+    expect(byTurn.length).toBe(2);
+    expect(byTurn.every((r) => r.turnId === run)).toBe(true);
+    expect(byTurn.every((r) => r.citationNumber === null)).toBe(true);
+
+    await ResearchSourceRepo.setCitationNumbers(db, [
+      { id: a.id, citationNumber: 1 },
+      { id: b.id, citationNumber: 2 },
+    ]);
+    const after = await ResearchSourceRepo.listByThreadTurn(db, T1, run);
+    const numById = new Map(after.map((r) => [r.id, r.citationNumber]));
+    expect(numById.get(a.id)).toBe(1);
+    expect(numById.get(b.id)).toBe(2);
+
+    // turn lain tak tersentuh oleh UPDATE…CASE (scope inArray).
+    const otherRows = await ResearchSourceRepo.listByThreadTurn(db, T1, "turn-other");
+    expect(otherRows[0]?.citationNumber).toBe(null);
+  });
+});
+
 describe("ArtifactEmbeddingRepo.searchSimilar — ANN + scope threadId via JOIN", () => {
   itest("scope threadId → hanya artifact thread itu (lintas-thread excluded)", async () => {
     await seedArtifact(`${SUFFIX}-artA`, T1, 0);

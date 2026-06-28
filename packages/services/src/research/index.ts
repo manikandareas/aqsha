@@ -6,7 +6,8 @@
  * engine) is deferred to P7 (D-H) — this slice is READ tools only.
  */
 
-import { type DbOrTx, type NewResearchSource, ResearchSourceRepo } from "@aqsha/db";
+import { type DbOrTx, type NewResearchSource, type ResearchSource, ResearchSourceRepo } from "@aqsha/db";
+import { normalizeDoi } from "../papers/identifiers";
 import { searchArxiv } from "./arxiv";
 import { lookupDoi } from "./crossref";
 import { searchWebFirecrawl } from "./firecrawl";
@@ -111,22 +112,55 @@ export const ResearchService = {
   /** Daftar sumber riset yang dipersist untuk sebuah thread (panel Sources). */
   async listThreadSources(db: DbOrTx, threadId: string): Promise<ResearchSourceItem[]> {
     const rows = await ResearchSourceRepo.listByThread(db, threadId);
-    return rows.map((r) => ({
-      id: r.id,
-      threadId: r.threadId,
-      turnId: r.turnId,
-      citationNumber: r.citationNumber,
-      origin: r.origin as ResearchSourceItem["origin"],
-      provider: r.provider,
-      title: r.title,
-      locator: r.locator,
-      url: r.url,
-      doi: r.doi,
-      arxivId: r.arxivId,
-      snippet: r.snippet,
-      evidenceStrength: r.evidenceStrength as ResearchSourceItem["evidenceStrength"],
-      discoveryQuery: r.discoveryQuery,
-      createdAt: r.createdAt,
-    }));
+    return rows.map(toResearchSourceItem);
+  },
+
+  /**
+   * Nomori sumber satu run deep (`turnId` = workflow runId) → `citation_number` 1..N (G4).
+   * Dedupe paper yang sama lintas sub-pertanyaan/penyedia via kunci `normalizeDoi ?? arxivId ??
+   * locator` (baris berbeda dgn DOI/URL beda dapat NOMOR SAMA). Dipanggil step `assign-citations`
+   * SEBELUM verify/synthesize → writer mengutip `[n]` global yang stabil. Mengembalikan item
+   * bernomor (urut createdAt) untuk menyusun inventory.
+   */
+  async assignCitationNumbers(
+    db: DbOrTx,
+    args: { threadId: string; turnId: string },
+  ): Promise<ResearchSourceItem[]> {
+    const rows = await ResearchSourceRepo.listByThreadTurn(db, args.threadId, args.turnId);
+    if (rows.length === 0) return [];
+    const numberByKey = new Map<string, number>();
+    let next = 1;
+    const updates = rows.map((r) => {
+      const key = (r.doi && normalizeDoi(r.doi)) || r.arxivId || r.locator;
+      let n = numberByKey.get(key);
+      if (n === undefined) {
+        n = next++;
+        numberByKey.set(key, n);
+      }
+      return { id: r.id, citationNumber: n };
+    });
+    await ResearchSourceRepo.setCitationNumbers(db, updates);
+    return rows.map((r, i) => toResearchSourceItem({ ...r, citationNumber: updates[i]!.citationNumber }));
   },
 };
+
+/** Row `research_sources` → read model `ResearchSourceItem`. */
+function toResearchSourceItem(r: ResearchSource): ResearchSourceItem {
+  return {
+    id: r.id,
+    threadId: r.threadId,
+    turnId: r.turnId,
+    citationNumber: r.citationNumber,
+    origin: r.origin as ResearchSourceItem["origin"],
+    provider: r.provider,
+    title: r.title,
+    locator: r.locator,
+    url: r.url,
+    doi: r.doi,
+    arxivId: r.arxivId,
+    snippet: r.snippet,
+    evidenceStrength: r.evidenceStrength as ResearchSourceItem["evidenceStrength"],
+    discoveryQuery: r.discoveryQuery,
+    createdAt: r.createdAt,
+  };
+}

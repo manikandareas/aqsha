@@ -1,6 +1,6 @@
 import { Agent } from "@mastra/core/agent";
 import { liteModel } from "../model";
-import { skillPaths } from "../skills";
+import { inlineSkills } from "../skills";
 import { astraTools } from "../tools";
 
 /**
@@ -41,5 +41,5 @@ export const deepWriter = new Agent({
   instructions,
   model: liteModel,
   tools: astraTools,
-  skills: skillPaths,
+  skills: inlineSkills,
 });

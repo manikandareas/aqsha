@@ -2,18 +2,23 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { readableApiErrorMessage } from "@/lib/api-error";
 import { queryKeys } from "../../../lib/api-query";
 import type { TimelineMessage } from "./timeline-types";
 import { ASTRA_AGENT_ID, useMastraClient } from "./mastra-client";
 import {
   type MastraApproval,
   type MastraChunk,
+  type MastraPlanGate,
   type MastraTimelineState,
   initialMastraTimeline,
   reduceMastraChunk,
+  reduceWorkflowChunk,
+  seedWorkflowProgress,
   settleAssistantTurn,
   startAssistantTurn,
+  startRegenerate,
 } from "./mastra-timeline";
 
 export type MastraAgentStatus = "ready" | "submitted" | "streaming";
@@ -22,124 +27,513 @@ export type MastraAgent = {
   status: MastraAgentStatus;
   messages: TimelineMessage[];
   approvals: MastraApproval[];
+  planGate: MastraPlanGate | null;
   error: { message: string } | null;
   send: (text: string, clientContext?: string[]) => Promise<void>;
+  sendDeep: (question: string, clientContext?: string[]) => Promise<void>;
+  resolvePlan: (approved: boolean, edits?: string) => Promise<void>;
+  regenerate: () => Promise<void>;
   approve: (toolCallId: string) => Promise<void>;
   decline: (toolCallId: string) => Promise<void>;
   stop: () => void;
 };
 
-type ApprovalStream = {
-  processDataStream: (o: { onChunk: (c: unknown) => void }) => Promise<void>;
+/** Id Workflow `/deep` (key di `new Mastra({ workflows })`). */
+const DEEP_WORKFLOW_ID = "deep-research";
+
+/** Run Workflow (subset client-js yang dipakai) — stream/resume/observe = `ReadableStream` chunk. */
+type DeepRun = {
+  readonly runId: string;
+  stream: (p: {
+    inputData: Record<string, unknown>;
+    closeOnSuspend?: boolean;
+  }) => Promise<ReadableStream<MastraChunk>>;
+  resumeStream: (p: {
+    step?: string | string[];
+    resumeData?: Record<string, unknown>;
+  }) => Promise<ReadableStream<MastraChunk>>;
+  observe: (p?: { offset?: number }) => Promise<ReadableStream<MastraChunk>>;
 };
 
+/** Iterasi `ReadableStream` via reader (async-iterator ReadableStream belum universal di browser). */
+async function* iterateStream<T>(stream: ReadableStream<T>): AsyncGenerator<T> {
+  const reader = stream.getReader();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value !== undefined) yield value;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+// Pemetaan thread→runId Workflow `/deep` aktif (localStorage) — tak ada get-run-by-thread di
+// client-js, jadi FE simpan sendiri untuk re-attach (`observe`) / rehydrate plan-gate saat refresh.
+const deepRunKey = (threadId: string) => `aqsha:deep-run:${threadId}`;
+function getDeepRunId(threadId: string): string | null {
+  try {
+    return typeof window !== "undefined" ? window.localStorage.getItem(deepRunKey(threadId)) : null;
+  } catch {
+    return null;
+  }
+}
+function setDeepRunId(threadId: string, runId: string): void {
+  try {
+    window.localStorage.setItem(deepRunKey(threadId), runId);
+  } catch {
+    /* localStorage tak tersedia → re-attach refresh dilewati (bukan fatal) */
+  }
+}
+function clearDeepRunId(threadId: string): void {
+  try {
+    window.localStorage.removeItem(deepRunKey(threadId));
+  } catch {
+    /* no-op */
+  }
+}
+
+/** Pesan server (memory thread) — minimal untuk menemukan pasangan terakhir saat regenerate. */
+type ServerMessageLike = { id: string; role?: string };
+
+/** Teks pesan user terakhir di timeline (untuk regenerate). */
+function lastUserText(messages: readonly TimelineMessage[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const msg = messages[i];
+    if (msg?.role !== "user") continue;
+    const text = msg.parts
+      .filter((p) => p.kind === "text")
+      .map((p) => (p as { text: string }).text)
+      .join("\n")
+      .trim();
+    return text || null;
+  }
+  return null;
+}
+
 /**
- * Hook agent Mastra (Fase 1) — pengganti `useAstraAgent` (eve) di belakang flag
- * `NEXT_PUBLIC_AGENT_RUNTIME=mastra`. Mengelola stream `@mastra/client-js` → `TimelineMessage[]`
- * (adapter `mastra-timeline`), HITL approval (`approveToolCall`/`declineToolCall`), dan stop.
+ * Id pasangan [user, assistant] terakhir di memory server (untuk dihapus saat regenerate).
+ * Durable-thread `sendMessage` menyimpan input user sebagai SIGNAL (`role:"signal"`, BUKAN
+ * `role:"user"`) → mencocokkan `role==="user"` akan MELEWATKANNYA, menyisakan baris user lama saat
+ * kirim ulang → bubble user kembar setelah refresh (G6). Cocokkan berbasis POSISI: hapus pesan
+ * assistant terakhir + semua pesan non-assistant tepat sebelumnya (turn user), apa pun label role.
+ */
+function lastTurnMessageIds(messages: readonly ServerMessageLike[]): string[] {
+  let lastAssistant = -1;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i]!.role === "assistant") {
+      lastAssistant = i;
+      break;
+    }
+  }
+  if (lastAssistant < 0) return [];
+  const ids: string[] = [messages[lastAssistant]!.id];
+  for (let i = lastAssistant - 1; i >= 0; i -= 1) {
+    if (messages[i]!.role === "assistant") break;
+    ids.push(messages[i]!.id);
+  }
+  return ids;
+}
+
+/** Handle langganan thread (`subscribeToThread`) — abort=cancel run server-side; unsubscribe=tutup. */
+type ThreadSubscription = {
+  processDataStream: (o: {
+    onChunk: (c: unknown) => void;
+    reconnect?: boolean | { maxRetries?: number; delayMs?: number };
+  }) => Promise<void>;
+  abort: () => Promise<boolean>;
+  unsubscribe: () => void;
+};
+
+const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Hook agent Mastra (durable-thread). Menggantikan pola `agent.stream()` terikat-koneksi.
  *
- * Memory = SoT pesan: klien hanya kirim pesan BARU (string); Mastra memuat history dari storage.
- * `resource` di-override server (`mapUserToResourceId`) — kirim Clerk userId apa adanya. `thread`
- * = id thread (klien yang menentukan; thread baru pakai id yang sudah disiapkan pemanggil).
+ * - Mount: SATU `subscribeToThread` panjang (`reconnect:true`) → menerima SEMUA run thread + replay
+ *   buffer run in-flight saat refresh (G1: progres lanjut + jawaban tak terpotong; run terlepas dari
+ *   koneksi via `sendMessage`, disconnect klien tak meng-abort generasi).
+ * - Kirim: `sendMessage` (run durable) — output mengalir via langganan, BUKAN ditunggu di sini.
+ * - Stop: `subscription.abort()` (= `abortThread`, cancel server-side) → chunk `abort` bersih, tanpa
+ *   `AbortError` (G5).
+ * - HITL: `sendToolApproval` (non-stream) → output resume via langganan, tanpa error urutan
+ *   `tool_result must be preceded by a tool_call` (G8).
+ *
+ * Memory = SoT pesan: klien hanya kirim pesan BARU; `resource` di-override server
+ * (`mapUserToResourceId`). Status diturunkan dari chunk di reducer (sumber kebenaran tunggal).
  */
 export function useMastraAgent(opts: {
   threadId: string;
   seedMessages?: TimelineMessage[];
 }): MastraAgent {
-  const abortRef = useRef<AbortController | null>(null);
-  const getSignal = useCallback(() => abortRef.current?.signal, []);
-  const client = useMastraClient(getSignal);
+  const client = useMastraClient();
   const { userId } = useAuth();
   const qc = useQueryClient();
 
   const [state, setState] = useState<MastraTimelineState>(() =>
     initialMastraTimeline(opts.seedMessages ?? []),
   );
-  const [status, setStatus] = useState<MastraAgentStatus>("ready");
+
+  const clientRef = useRef(client);
+  clientRef.current = client;
+  const subRef = useRef<ThreadSubscription | null>(null);
+  const deepRunRef = useRef<DeepRun | null>(null);
+  const statusRef = useRef(state.status);
+  statusRef.current = state.status;
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   const onChunk = useCallback((chunk: unknown) => {
     setState((s) => reduceMastraChunk(s, chunk as MastraChunk));
   }, []);
 
-  const pump = useCallback(
-    async (stream: ApprovalStream) => {
-      setStatus("streaming");
-      await stream.processDataStream({ onChunk });
-    },
-    [onChunk],
-  );
+  // Langganan thread tunggal & panjang. Self-healing: subscribe awal bisa gagal untuk thread baru
+  // (belum ada di server) → retry tiap 1 dtk sampai `sendMessage` pertama membuatnya; buffer di-replay
+  // dari index 0 saat tersambung → tak ada chunk yang hilang.
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    const loop = async () => {
+      while (!cancelled) {
+        try {
+          const agent = clientRef.current.getAgent(ASTRA_AGENT_ID);
+          const sub = (await agent.subscribeToThread({
+            threadId: opts.threadId,
+            resourceId: userId,
+          })) as unknown as ThreadSubscription;
+          if (cancelled) {
+            sub.unsubscribe();
+            return;
+          }
+          subRef.current = sub;
+          await sub.processDataStream({ onChunk, reconnect: true });
+          if (cancelled) return;
+          await delay(1000); // langganan berakhir tak terduga → tunggu lalu ulang
+        } catch {
+          if (cancelled) return;
+          await delay(1000); // subscribe awal gagal (thread belum ada) → retry
+        }
+      }
+    };
+    void loop();
+    return () => {
+      cancelled = true;
+      subRef.current?.unsubscribe();
+      subRef.current = null;
+    };
+  }, [opts.threadId, userId, onChunk]);
 
-  const finishTurn = useCallback(() => {
-    setState((s) => settleAssistantTurn(s));
-    setStatus("ready");
-    abortRef.current = null;
-    void qc.invalidateQueries({ queryKey: queryKeys.threads.all });
-  }, [qc]);
+  // Sidebar (judul/preview) + send-status di-refresh saat turn beralih streaming→ready.
+  const prevStatusRef = useRef(state.status);
+  useEffect(() => {
+    if (prevStatusRef.current !== "ready" && state.status === "ready") {
+      void qc.invalidateQueries({ queryKey: queryKeys.threads.all });
+    }
+    prevStatusRef.current = state.status;
+  }, [state.status, qc]);
 
   const send = useCallback(
     async (text: string, clientContext?: string[]) => {
-      if (!text.trim() || status !== "ready") return;
-      setStatus("submitted");
+      if (!text.trim() || !userId || statusRef.current !== "ready") return;
       const turnSeed = `${opts.threadId}:${Date.now()}`;
       setState((s) => startAssistantTurn(s, text, turnSeed));
-      abortRef.current = new AbortController();
       try {
-        const agent = client.getAgent(ASTRA_AGENT_ID);
-        // `clientContext` (ekspansi command + catatan @mention) = konteks EPHEMERAL: dikirim
-        // sebagai `context` per-call (tak dipersist ke memory thread), parity eve clientContext.
-        const res = await agent.stream(text, {
-          memory: { thread: opts.threadId, resource: userId ?? undefined },
+        const agent = clientRef.current.getAgent(ASTRA_AGENT_ID);
+        // `clientContext` (ekspansi command + catatan @mention) = konteks EPHEMERAL per-call (tak
+        // dipersist ke memory thread), pindah ke `ifIdle.streamOptions.context` (parity eve).
+        await agent.sendMessage({
+          message: text,
+          resourceId: userId,
+          threadId: opts.threadId,
           ...(clientContext && clientContext.length > 0
-            ? { context: clientContext.map((c) => ({ role: "user" as const, content: c })) }
+            ? {
+                ifIdle: {
+                  streamOptions: {
+                    context: clientContext.map((c) => ({ role: "user" as const, content: c })),
+                  },
+                },
+              }
             : {}),
         });
-        await pump(res as unknown as ApprovalStream);
       } catch (err) {
-        setState((s) => ({ ...s, error: (err as Error).message }));
-      } finally {
-        finishTurn();
+        setState((s) => ({
+          ...settleAssistantTurn(s),
+          error: readableApiErrorMessage(err, "Gagal mengirim pesan."),
+        }));
       }
     },
-    [client, opts.threadId, userId, status, pump, finishTurn],
+    [opts.threadId, userId],
   );
 
   const respond = useCallback(
     async (toolCallId: string, approved: boolean) => {
-      const runId = state.runId;
-      if (!runId) return;
+      if (!userId) return;
       setState((s) => ({ ...s, approvals: s.approvals.filter((a) => a.toolCallId !== toolCallId) }));
-      abortRef.current = new AbortController();
       try {
-        const agent = client.getAgent(ASTRA_AGENT_ID);
-        const res = approved
-          ? await agent.approveToolCall({ runId, toolCallId })
-          : await agent.declineToolCall({ runId, toolCallId });
-        await pump(res as unknown as ApprovalStream);
+        const agent = clientRef.current.getAgent(ASTRA_AGENT_ID);
+        await agent.sendToolApproval({
+          resourceId: userId,
+          threadId: opts.threadId,
+          toolCallId,
+          approved,
+        });
       } catch (err) {
-        setState((s) => ({ ...s, error: (err as Error).message }));
-      } finally {
-        finishTurn();
+        setState((s) => ({ ...s, error: readableApiErrorMessage(err, "Gagal memproses persetujuan.") }));
       }
     },
-    [client, state.runId, pump, finishTurn],
+    [opts.threadId, userId],
   );
 
   const approve = useCallback((toolCallId: string) => respond(toolCallId, true), [respond]);
   const decline = useCallback((toolCallId: string) => respond(toolCallId, false), [respond]);
 
+  // ── `/deep` = Workflow `deep-research` (G2). Run terlepas dari koneksi; FE simpan runId untuk
+  //    re-attach saat refresh. Plan-gate = suspend `approve-plan` → kartu → `resumeStream`. ──────
+  const consumeWorkflow = useCallback(
+    async (stream: ReadableStream<MastraChunk>) => {
+      // `closeOnSuspend` (default) menutup stream saat plan-gate dengan chunk terminal `workflow-finish`.
+      // Bedakan SUSPEND-close (run TETAP hidup untuk resume) dari finish sungguhan: bila stream ini
+      // sempat suspend di `approve-plan`, JANGAN bersihkan runId/runRef — kartu rencana + `resolvePlan`
+      // (resume) + re-attach saat refresh (G2/G7) bergantung padanya.
+      let suspended = false;
+      for await (const chunk of iterateStream(stream)) {
+        setState((s) => reduceWorkflowChunk(s, chunk));
+        const stepId = (chunk.payload as { id?: unknown } | undefined)?.id;
+        if (chunk.type === "workflow-step-suspended" && stepId === "approve-plan") {
+          suspended = true;
+        }
+        if (
+          !suspended &&
+          (chunk.type === "workflow-finish" || chunk.type === "workflow-canceled")
+        ) {
+          clearDeepRunId(opts.threadId);
+          deepRunRef.current = null;
+          // Sumber baru (citation_number) sudah dipersist → refresh panel Sumber + sidebar.
+          void qc.invalidateQueries({ queryKey: queryKeys.threads.sources(opts.threadId) });
+          void qc.invalidateQueries({ queryKey: queryKeys.threads.all });
+        }
+      }
+    },
+    [opts.threadId, qc],
+  );
+
+  // Saat stream `/deep` gagal/putus: pertahankan runId bila run masih HIDUP server-side (running/
+  // suspended/waiting) → re-attach poll memulihkannya saat refresh (durable). Hanya clear bila run
+  // tak jalan (terminal/pending) atau status tak bisa diverifikasi (default aman = clear).
+  const clearDeepRunIdUnlessAlive = useCallback(
+    async (runId: string | undefined) => {
+      if (runId) {
+        try {
+          const st = (await clientRef.current.getWorkflow(DEEP_WORKFLOW_ID).runById(runId)) as unknown as {
+            status?: string;
+          };
+          if (st.status === "running" || st.status === "suspended" || st.status === "waiting") return;
+        } catch {
+          /* tak bisa verifikasi → jatuh ke clear */
+        }
+      }
+      clearDeepRunId(opts.threadId);
+      deepRunRef.current = null;
+    },
+    [opts.threadId],
+  );
+
+  const sendDeep = useCallback(
+    async (question: string, clientContext?: string[]) => {
+      if (!userId || !question.trim() || statusRef.current !== "ready") return;
+      const turnSeed = `${opts.threadId}:${Date.now()}`;
+      setState((s) => startAssistantTurn(s, question, turnSeed));
+      try {
+        const wf = clientRef.current.getWorkflow(DEEP_WORKFLOW_ID);
+        const run = (await wf.createRun({ resourceId: userId })) as unknown as DeepRun;
+        deepRunRef.current = run;
+        setDeepRunId(opts.threadId, run.runId);
+        const inputData: Record<string, unknown> = { question, threadId: opts.threadId };
+        if (clientContext && clientContext.length > 0) inputData.context = clientContext.join("\n\n");
+        const stream = await run.stream({ inputData, closeOnSuspend: true });
+        await consumeWorkflow(stream);
+      } catch (err) {
+        // Stream gagal/putus (mis. agent hang sesaat saat fase berat) TAPI run mungkin sudah HIDUP
+        // server-side → pertahankan runId supaya refresh me-resume via poll re-attach (durable).
+        await clearDeepRunIdUnlessAlive(deepRunRef.current?.runId);
+        setState((s) => ({
+          ...settleAssistantTurn(s),
+          error: readableApiErrorMessage(err, "Gagal memulai riset mendalam."),
+        }));
+      }
+    },
+    [opts.threadId, userId, consumeWorkflow, clearDeepRunIdUnlessAlive],
+  );
+
+  const resolvePlan = useCallback(
+    async (approved: boolean, edits?: string) => {
+      const run = deepRunRef.current;
+      if (!run) {
+        // Ref run hilang (mis. setelah error tak terduga) → tak bisa resume; settle bersih supaya
+        // UI tak menggantung di status "streaming" tanpa jalan keluar.
+        setState((s) => ({ ...settleAssistantTurn(s), planGate: undefined }));
+        return;
+      }
+      setState((s) => ({ ...s, planGate: undefined, status: approved ? "streaming" : "ready" }));
+      try {
+        const stream = await run.resumeStream({
+          step: "approve-plan",
+          resumeData: { approved, ...(edits ? { edits } : {}) },
+        });
+        await consumeWorkflow(stream);
+      } catch (err) {
+        // Sama seperti sendDeep: bila run masih hidup server-side, pertahankan runId (durable refresh).
+        await clearDeepRunIdUnlessAlive(run.runId);
+        setState((s) => ({
+          ...settleAssistantTurn(s),
+          error: readableApiErrorMessage(err, "Gagal melanjutkan riset mendalam."),
+        }));
+      }
+    },
+    [consumeWorkflow, clearDeepRunIdUnlessAlive],
+  );
+
+  // Regenerate (G6): re-run pesan user terakhir TANPA duplikat. Buang jawaban lama dari timeline +
+  // hapus pasangan [user, assistant] terakhir di memory server, lalu kirim ulang (re-add SEKALI) →
+  // tak ada bubble user kembar (live maupun setelah refresh).
+  // Re-attach `/deep` saat refresh: cek runId tersimpan → POLL `runById`. suspended → kartu rencana
+  // lagi (G7); running/waiting/pending → seed stepper dari snapshot tiap poll (progres lanjut tampil);
+  // success → seed laporan + settle; failed/canceled → settle; semua bersihkan runId saat terminal.
+  // (laporan akhir juga tersimpan di history via persistReport → rehydrate normal tanpa runId.)
+  useEffect(() => {
+    if (!userId) return;
+    const runId = getDeepRunId(opts.threadId);
+    if (!runId) return;
+    let cancelled = false;
+    // Indikator "sedang bekerja" SEGERA (sebelum poll pertama resolve) bila turn benar-benar
+    // menggantung (pesan terakhir = user, jawaban belum dipersist) → hilangkan jeda layar kosong.
+    // Untuk run yang sudah selesai (history sudah memuat laporan), JANGAN tampilkan shimmer prematur.
+    setState((s) => {
+      if (s.status !== "ready") return s;
+      const last = s.messages[s.messages.length - 1];
+      return last && last.role === "user" ? { ...s, status: "submitted" } : s;
+    });
+    void (async () => {
+      const wf = clientRef.current.getWorkflow(DEEP_WORKFLOW_ID);
+      // Re-attach via POLL `runById` (BUKAN `observe()`): granularitas `/deep` = step-level (subagent
+      // pakai `.generate()`, tak ada token delta), dan `observe()` Workflow tak andal me-replay
+      // step yang sudah lewat (→ layar kosong) serta bisa mengirim `workflow-finish` tanpa marker
+      // suspend (→ salah meng-clear runId). Poll snapshot men-seed stepper idempoten sampai
+      // suspended/terminal. Re-seed memetakan ke turn ber-`turnId` yang sama (tanpa duplikat bubble).
+      let errors = 0;
+      while (!cancelled) {
+        let wfState: {
+          status?: string;
+          steps?: Record<
+            string,
+            { status?: unknown; output?: unknown; suspendPayload?: Record<string, unknown> }
+          >;
+        };
+        try {
+          wfState = (await wf.runById(runId)) as typeof wfState;
+        } catch {
+          if (cancelled) return;
+          // Error transien (agent single-thread sempat hang saat fase berat / restart dev) → JANGAN
+          // clear runId; coba lagi. Run tetap hidup server-side. Menyerah hanya setelah lama tak
+          // responsif — TANPA clear runId, agar refresh berikutnya bisa re-attach lagi.
+          errors += 1;
+          if (errors >= 8) {
+            setState((s) => settleAssistantTurn(s));
+            return;
+          }
+          await delay(2500);
+          continue;
+        }
+        errors = 0;
+        if (cancelled) return;
+        const status = wfState.status;
+        const steps = wfState.steps ?? {};
+        if (status === "suspended") {
+          // Plan-gate (HITL): siapkan runRef untuk `resolvePlan` + tampilkan kartu rencana (G7).
+          deepRunRef.current ??= (await wf.createRun({
+            runId,
+            resourceId: userId,
+          })) as unknown as DeepRun;
+          const sp = steps["approve-plan"]?.suspendPayload ?? {};
+          const subQuestions = Array.isArray(sp.subQuestions)
+            ? sp.subQuestions.filter((x): x is string => typeof x === "string")
+            : [];
+          setState((s) => ({
+            ...seedWorkflowProgress(s, runId, steps),
+            planGate: { plan: typeof sp.plan === "string" ? sp.plan : "", subQuestions },
+          }));
+          return;
+        }
+        if (status === "success") {
+          setState((s) => settleAssistantTurn(seedWorkflowProgress(s, runId, steps)));
+          clearDeepRunId(opts.threadId);
+          deepRunRef.current = null;
+          // Sumber baru (citation_number) + judul/preview → refresh panel Sumber & sidebar.
+          void qc.invalidateQueries({ queryKey: queryKeys.threads.sources(opts.threadId) });
+          void qc.invalidateQueries({ queryKey: queryKeys.threads.all });
+          return;
+        }
+        if (status === "failed" || status === "canceled") {
+          setState((s) => settleAssistantTurn(seedWorkflowProgress(s, runId, steps)));
+          clearDeepRunId(opts.threadId);
+          deepRunRef.current = null;
+          return;
+        }
+        // running / waiting / pending → render progres terkini lalu poll lagi (step-level).
+        setState((s) => seedWorkflowProgress(s, runId, steps));
+        await delay(2500);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [opts.threadId, userId, qc]);
+
+  const regenerate = useCallback(async () => {
+    if (!userId || statusRef.current !== "ready") return;
+    const text = lastUserText(stateRef.current.messages);
+    if (!text) return;
+    setState((s) => startRegenerate(s));
+    try {
+      const agent = clientRef.current.getAgent(ASTRA_AGENT_ID);
+      const thread = clientRef.current.getMemoryThread({
+        threadId: opts.threadId,
+        agentId: ASTRA_AGENT_ID,
+      });
+      // Hapus pasangan [user, assistant] lama DULU lalu kirim ulang → generasi baru berjalan atas
+      // history yang BERSIH (tanpa Q&A lama yang mencemari konteks) + tak ada bubble user kembar.
+      // (Urutan kirim-dulu-baru-hapus akan menutup celah kehilangan-data sempit bila kirim gagal, TAPI
+      // membuat setiap regenerate melihat turn lama di konteks → regresi jalur-umum. Perbaikan tuntas =
+      // endpoint regenerate atomik sisi-server; di luar cakupan FE ini.)
+      const res = await thread.listMessages();
+      const staleIds = lastTurnMessageIds((res.messages ?? []) as ServerMessageLike[]);
+      if (staleIds.length > 0) await thread.deleteMessages(staleIds);
+      await agent.sendMessage({ message: text, resourceId: userId, threadId: opts.threadId });
+    } catch (err) {
+      setState((s) => ({
+        ...settleAssistantTurn(s),
+        error: readableApiErrorMessage(err, "Gagal membuat ulang jawaban."),
+      }));
+    }
+  }, [opts.threadId, userId]);
+
   const stop = useCallback(() => {
-    abortRef.current?.abort();
-    abortRef.current = null;
+    // Cancel run server-side; server kirim chunk `abort` → reducer men-settle bersih (tanpa AbortError).
+    void subRef.current?.abort().catch(() => {});
     setState((s) => settleAssistantTurn(s));
-    setStatus("ready");
   }, []);
 
   return {
-    status,
+    status: state.status,
     messages: state.messages,
     approvals: state.approvals,
+    planGate: state.planGate ?? null,
     error: state.error ? { message: state.error } : null,
     send,
+    sendDeep,
+    resolvePlan,
+    regenerate,
     approve,
     decline,
     stop,

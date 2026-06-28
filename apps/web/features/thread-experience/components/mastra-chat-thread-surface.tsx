@@ -3,18 +3,34 @@
 import { Button } from "@aqsha/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { m, useReducedMotion } from "motion/react";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ConversationContent } from "@/components/ai-elements/conversation-content";
 import { Conversation } from "@/components/ai-elements/conversation-root";
 import { ConversationScrollButton } from "@/components/ai-elements/conversation-scroll-button";
+import {
+  Plan,
+  PlanAction,
+  PlanContent,
+  PlanDescription,
+  PlanFooter,
+  PlanHeader,
+  PlanTitle,
+  PlanTrigger,
+} from "@/components/ai-elements/plan";
 import { HomeExploreBento } from "@/features/discovery/components/home-explore-bento";
-import { useSendStatus, useThreadsList } from "@/features/threads/api";
-import { Composer, type ComposerNotice, type RecentThread } from "@/features/threads/components/composer";
+import { useSendStatus, useThreadsList, useThreadSources } from "@/features/threads/api";
+import {
+  Composer,
+  type ComposerNotice,
+  type ComposerSendPayload,
+  type RecentThread,
+} from "@/features/threads/components/composer";
 import { MessageList } from "@/features/threads/components/message-list";
 import { ASTRA_AGENT_ID, useMastraClient } from "@/features/threads/lib/mastra-client";
 import type { TimelineMessage } from "@/features/threads/lib/timeline-types";
 import { mastraMessagesToTimeline } from "@/features/threads/lib/mastra-timeline";
 import { useMastraAgent } from "@/features/threads/lib/use-mastra-agent";
+import type { ResearchSource } from "@/features/threads/types";
 import { threadTitle } from "@/features/threads/types";
 import { queryKeys } from "@/lib/api-query";
 import { panelBodyPaddingClass, threadTranscriptColumnClass } from "@/lib/panel-surface";
@@ -131,24 +147,43 @@ function MastraChatInner({
   const blocked = notice !== null;
   const isEmpty = agent.messages.length === 0 && !busy;
 
+  // Sumber riset `/deep` (research_sources, citation_number) → dikelompokkan per turn (runId) untuk
+  // dirender di bawah jawaban (G4). Fetch saat thread mapan (ready + ada pesan) → hindari 404 thread
+  // baru; invalidasi otomatis saat run deep selesai (lihat useMastraAgent).
+  const { data: sources } = useThreadSources(threadId, !busy && agent.messages.length > 0);
+  const sourcesByTurn = useMemo(() => {
+    const map = new Map<string, ResearchSource[]>();
+    for (const s of sources ?? []) {
+      if (s.citationNumber == null) continue;
+      const list = map.get(s.turnId);
+      if (list) list.push(s);
+      else map.set(s.turnId, [s]);
+    }
+    return map;
+  }, [sources]);
+
   // Kirim pertama dari thread baru → bump URL ke /app/threads/<id> (history.replaceState, tanpa
   // navigasi Next → komponen tetap mounted) supaya refresh me-resume thread. Klien sudah tahu id.
-  const send = (text: string, clientContext?: string[]) => {
+  const bumpUrl = () => {
     if (!boundRef.current && typeof window !== "undefined") {
       boundRef.current = true;
       window.history.replaceState(window.history.state, "", `/app/threads/${threadId}`);
     }
-    void agent.send(text, clientContext).then(() => {
+  };
+
+  const onComposerSend = (payload: ComposerSendPayload) => {
+    bumpUrl();
+    const run =
+      payload.command === "deep"
+        ? agent.sendDeep(payload.text, payload.clientContext)
+        : agent.send(payload.text, payload.clientContext);
+    void run.then(() => {
       void qc.invalidateQueries({ queryKey: queryKeys.threads.sendStatus() });
     });
   };
 
-  const onComposerSend = (payload: { text: string; clientContext?: string[] }) =>
-    send(payload.text, payload.clientContext);
-
   const regenerate = () => {
-    const text = lastUserText(agent.messages);
-    if (text) send(text);
+    void agent.regenerate();
   };
 
   const approvalCards =
@@ -177,6 +212,49 @@ function MastraChatInner({
       </div>
     ) : null;
 
+  // Plan-gate `/deep` (Workflow suspended di `approve-plan`) — kartu rencana HITL: AI Elements `Plan`
+  // (collapsible) + tombol aksi di footer, dirender DI ATAS composer (sejajar approvalCards).
+  const planGateCard = agent.planGate ? (
+    <div className={cn(threadTranscriptColumnClass)}>
+      <Plan defaultOpen>
+        <PlanHeader>
+          <div className="grid gap-1">
+            <PlanTitle>Rencana riset</PlanTitle>
+            <PlanDescription>
+              {`${agent.planGate.subQuestions.length} sub-pertanyaan riset · tinjau sebelum menyetujui`}
+            </PlanDescription>
+          </div>
+          <PlanAction>
+            <PlanTrigger />
+          </PlanAction>
+        </PlanHeader>
+        <PlanContent className="space-y-3">
+          <p className="whitespace-pre-wrap text-muted-foreground text-sm">{agent.planGate.plan}</p>
+          {agent.planGate.subQuestions.length > 0 ? (
+            <ul className="list-disc space-y-1 pl-4 text-[13px] text-muted-foreground">
+              {agent.planGate.subQuestions.map((q, i) => (
+                <li key={`${i}-${q.slice(0, 24)}`}>{q}</li>
+              ))}
+            </ul>
+          ) : null}
+        </PlanContent>
+        <PlanFooter className="flex-col items-start gap-2">
+          <p className="text-[13px] text-muted-foreground">
+            Setujui untuk memulai riset, atau tolak untuk membatalkan.
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => void agent.resolvePlan(true)}>
+              Setujui
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => void agent.resolvePlan(false)}>
+              Tolak
+            </Button>
+          </div>
+        </PlanFooter>
+      </Plan>
+    </div>
+  ) : null;
+
   if (isEmpty) {
     return (
       <MastraComposerLanding
@@ -201,6 +279,7 @@ function MastraChatInner({
               messages={agent.messages}
               pending={agent.status === "submitted"}
               busy={busy}
+              sourcesByTurn={sourcesByTurn}
               onRegenerate={regenerate}
             />
             {agent.error ? <p className="text-red-500 text-sm">{agent.error.message}</p> : null}
@@ -209,6 +288,7 @@ function MastraChatInner({
         <ConversationScrollButton />
       </Conversation>
       <div className={cn(threadTranscriptColumnClass, "flex flex-col gap-2.5 pt-2.5 pb-4")}>
+        {planGateCard}
         {approvalCards}
         <Composer
           onSend={onComposerSend}
@@ -242,7 +322,7 @@ function MastraComposerLanding({
   disabled: boolean;
   notice: ComposerNotice | null;
   errorDraft: string | null;
-  onSend: (payload: { text: string; clientContext?: string[] }) => void;
+  onSend: (payload: ComposerSendPayload) => void;
   onStop: () => void;
 }) {
   const shouldReduceMotion = useReducedMotion();

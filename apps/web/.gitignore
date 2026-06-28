@@ -16,3 +16,5 @@ next-env.d.ts
 
 # Content Collections — generated type-safe content layer (blog MDX)
 /.content-collections/
+
+testsprite_tests/tmp/config.json

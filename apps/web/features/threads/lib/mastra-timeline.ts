@@ -28,55 +28,142 @@ export type MastraApproval = {
   args: Record<string, unknown>;
 };
 
+/** Status turn — diturunkan dari chunk (durable-thread: satu langganan panjang, banyak run). */
+export type MastraStatus = "ready" | "submitted" | "streaming";
+
+/** Plan-gate `/deep` (Workflow suspended di step `approve-plan`) → kartu rencana Setujui/Tolak. */
+export type MastraPlanGate = { plan: string; subQuestions: string[] };
+
 export type MastraTimelineState = {
   messages: TimelineMessage[];
   approvals: MastraApproval[];
+  /** Plan-gate `/deep` aktif (Workflow suspended) — dirender sebagai kartu di atas composer. */
+  planGate?: MastraPlanGate;
+  /** Run terakhir terlihat (dipakai memanggil approval bila perlu). */
   runId?: string;
+  /** Run yang sedang menghasilkan output (status=streaming). */
+  activeRunId?: string;
+  /** Status turn aktif — sumber kebenaran tunggal untuk busy/Stop di FE. */
+  status: MastraStatus;
   error?: string;
 };
 
 export function initialMastraTimeline(seed: TimelineMessage[] = []): MastraTimelineState {
-  return { messages: seed, approvals: [] };
+  return { messages: seed, approvals: [], status: "ready" };
 }
 
 /** Pesan dari client-js memory-thread (`MastraDBMessage[]`). */
 type MastraDBMessageLike = {
   id: string;
   role?: string;
-  content?: { parts?: Array<Record<string, unknown>>; content?: unknown; reasoning?: unknown };
+  /** Kolom `type` Mastra: `"user"` utk input user (durable-thread = signal), `"v2"` utk assistant. */
+  type?: string;
+  content?: {
+    parts?: Array<Record<string, unknown>>;
+    content?: unknown;
+    reasoning?: unknown;
+    metadata?: Record<string, unknown>;
+  };
+};
+
+/**
+ * Pesan user? Durable-thread `sendMessage` menyimpan input user sebagai SIGNAL
+ * (`role:"signal"`, `type:"user"`, `content.metadata.signal.type:"user"`) — BUKAN `role:"user"`.
+ * `/deep` (persistReport) menyimpannya sebagai `role:"user"` biasa. Cocokkan keduanya supaya bubble
+ * user tetap di sisi kanan setelah refresh (tanpa ini, signal user → di-render sebagai assistant).
+ */
+function isUserDbMessage(m: MastraDBMessageLike): boolean {
+  if (m.role === "user") return true;
+  if (m.role === "assistant") return false;
+  const signal = m.content?.metadata?.signal as { type?: unknown } | undefined;
+  return m.type === "user" || str(signal?.type) === "user";
+}
+
+/** Bentuk persist `tool-invocation` di `mastra_messages.content.parts` (UI-message v2). */
+type ToolInvocationLike = {
+  state?: unknown;
+  toolCallId?: unknown;
+  toolName?: unknown;
+  args?: unknown;
+  result?: unknown;
 };
 
 /**
  * History thread Mastra (`getMemoryThread().listMessages()` → `MastraDBMessage[]`) →
- * `TimelineMessage[]` seed (teks + reasoning; tool/artifact tak direplay di history, sama
- * seperti fallback eve `chatMessagesToTimeline`).
+ * `TimelineMessage[]` seed. Rekonstruksi part TERURUT: teks, reasoning, DAN tool/artifact
+ * (`tool-invocation`) — supaya kartu artefak + jejak proses tetap muncul setelah refresh (G7),
+ * konsisten dengan tampilan live.
  */
 export function mastraMessagesToTimeline(messages: readonly MastraDBMessageLike[]): TimelineMessage[] {
   return messages.map((m) => {
     const parts: TimelinePart[] = [];
     const raw = m.content?.parts ?? [];
-    let textAcc = "";
-    let reasoningAcc = "";
-    for (const p of raw) {
+    raw.forEach((p, i) => {
       const type = str(p.type);
-      if (type === "text") textAcc += str(p.text);
-      else if (type === "reasoning") reasoningAcc += str(p.text) || str(p.reasoning);
+      if (type === "text") {
+        const text = str(p.text);
+        if (text.trim()) parts.push({ kind: "text", id: `${m.id}:t${i}`, text, streaming: false });
+      } else if (type === "reasoning") {
+        const text = str(p.text) || str(p.reasoning);
+        if (text.trim()) parts.push({ kind: "reasoning", id: `${m.id}:r${i}`, text, thinking: false });
+      } else if (type === "tool-invocation") {
+        const inv = (p.toolInvocation ?? {}) as ToolInvocationLike;
+        const toolName = str(inv.toolName);
+        const toolCallId = str(inv.toolCallId) || `${m.id}:${i}`;
+        // propose_artifact/execute_artifact sukses → kartu artifact (parity live).
+        const artifact = artifactFromResult(toolName, toolCallId, inv.result);
+        if (artifact) {
+          parts.push({ kind: "artifact", id: `artifact:${toolCallId}`, model: artifact });
+        } else {
+          parts.push({
+            kind: "tool",
+            id: `tool:${toolCallId}`,
+            model: toolModelFromInvocation(toolCallId, toolName, inv),
+          });
+        }
+      }
+    });
+    // Fallback pesan polos (tanpa `parts`): isi `content.content`/`reasoning` string.
+    if (parts.length === 0) {
+      if (typeof m.content?.reasoning === "string" && m.content.reasoning.trim()) {
+        parts.push({ kind: "reasoning", id: `${m.id}:r`, text: m.content.reasoning, thinking: false });
+      }
+      if (typeof m.content?.content === "string" && m.content.content.trim()) {
+        parts.push({ kind: "text", id: `${m.id}:t`, text: m.content.content, streaming: false });
+      }
     }
-    if (!textAcc && typeof m.content?.content === "string") textAcc = m.content.content;
-    if (!reasoningAcc && typeof m.content?.reasoning === "string") reasoningAcc = m.content.reasoning;
-    if (reasoningAcc.trim()) {
-      parts.push({ kind: "reasoning", id: `${m.id}:r`, text: reasoningAcc, thinking: false });
-    }
-    if (textAcc.trim()) {
-      parts.push({ kind: "text", id: `${m.id}:t`, text: textAcc, streaming: false });
-    }
+    // `turnId` dari metadata laporan `/deep` (`deepRunId`) → memetakan Sumber per-turn (G4).
+    const deepRunId = m.content?.metadata?.deepRunId;
     return {
       id: m.id,
-      role: m.role === "user" ? "user" : "assistant",
+      role: isUserDbMessage(m) ? "user" : "assistant",
       streaming: false,
+      ...(typeof deepRunId === "string" && deepRunId ? { turnId: deepRunId } : {}),
       parts,
     };
   });
+}
+
+/** ToolRowModel dari `tool-invocation` terpersist (rehydrate). `state==='result'` = selesai. */
+function toolModelFromInvocation(
+  toolCallId: string,
+  toolName: string,
+  inv: ToolInvocationLike,
+): ToolRowModel {
+  const completed = inv.state === "result";
+  const rows: ToolRow[] = [];
+  appendScalarRows(rows, inv.args, "input");
+  if (completed) appendScalarRows(rows, inv.result, "output");
+  return {
+    toolCallId,
+    name: toolName,
+    title: toolTitle(toolName),
+    kind: "tool-call",
+    status: completed ? "completed" : "running",
+    isRunning: !completed,
+    description: completed ? describeOutput(inv.result) : undefined,
+    rows,
+  };
 }
 
 /** Buat pesan user optimistik + pesan assistant kosong (streaming) untuk turn baru. */
@@ -97,69 +184,144 @@ export function startAssistantTurn(
     streaming: true,
     parts: [],
   };
-  return { ...state, messages: [...state.messages, userMsg, assistantMsg], error: undefined };
+  return {
+    ...state,
+    messages: [...state.messages, userMsg, assistantMsg],
+    status: "submitted",
+    error: undefined,
+  };
 }
 
-/** Tandai turn assistant aktif selesai streaming. */
+/** Tandai turn assistant aktif selesai streaming + kembalikan status (kecuali approval menggantung). */
 export function settleAssistantTurn(state: MastraTimelineState): MastraTimelineState {
-  const idx = lastAssistantIndex(state.messages);
-  const messages = state.messages.map((m, i) => (i === idx ? { ...m, streaming: false } : m));
-  return { ...state, messages };
+  const idx = lastStreamingAssistantIndex(state.messages);
+  const messages =
+    idx < 0 ? state.messages : state.messages.map((m, i) => (i === idx ? { ...m, streaming: false } : m));
+  const status: MastraStatus = state.approvals.length > 0 ? state.status : "ready";
+  return { ...state, messages, status, activeRunId: undefined };
 }
 
-function lastAssistantIndex(messages: TimelineMessage[]): number {
+/**
+ * Mulai regenerate (G6): buang pesan assistant terakhir (jawaban lama) lalu tambah placeholder
+ * assistant streaming baru — TANPA menambah bubble user duplikat (pertahankan pesan user terakhir).
+ */
+export function startRegenerate(state: MastraTimelineState): MastraTimelineState {
+  const messages = [...state.messages];
   for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i]!.role === "assistant") return i;
+    if (messages[i]!.role === "assistant") {
+      messages.splice(i, 1);
+      break;
+    }
+  }
+  messages.push({
+    id: `regen:${messages.length}:${Date.now()}`,
+    role: "assistant",
+    streaming: true,
+    parts: [],
+  });
+  return { ...state, messages, status: "submitted", error: undefined };
+}
+
+function lastStreamingAssistantIndex(messages: TimelineMessage[]): number {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]!;
+    if (m.role === "assistant" && m.streaming) return i;
   }
   return -1;
 }
 
-/** Reduksi satu chunk Mastra ke state timeline. Immutable (aman untuk React state). */
+/**
+ * Pastikan ada pesan assistant streaming aktif untuk menerima chunk. Pada kirim optimistik,
+ * `startAssistantTurn` sudah membuatnya. Pada RESUME saat refresh (langganan me-replay buffer run
+ * in-flight tanpa kirim optimistik), pesan terakhir = bubble user / turn lama yang sudah settle →
+ * buat placeholder baru. Mengembalikan [state, index].
+ */
+function ensureActiveAssistant(state: MastraTimelineState): [MastraTimelineState, number] {
+  const idx = lastStreamingAssistantIndex(state.messages);
+  if (idx >= 0) return [state, idx];
+  const assistant: TimelineMessage = {
+    id: `resume:${state.runId ?? state.messages.length}:assistant`,
+    role: "assistant",
+    streaming: true,
+    parts: [],
+  };
+  const messages = [...state.messages, assistant];
+  return [{ ...state, messages }, messages.length - 1];
+}
+
+/**
+ * Reduksi satu chunk Mastra ke state timeline. Immutable (aman untuk React state).
+ *
+ * Durable-thread: satu langganan `subscribeToThread` panjang menerima banyak run (chunk membawa
+ * `runId`). Status diturunkan dari chunk di sini (bukan per-promise di hook): `start`→streaming,
+ * `finish`(reason≠tool-calls)/`abort`→ready. `ensureActiveAssistant` membuat placeholder saat
+ * RESUME refresh (buffer run in-flight di-replay tanpa kirim optimistik).
+ */
 export function reduceMastraChunk(
   state: MastraTimelineState,
   chunk: MastraChunk,
 ): MastraTimelineState {
-  const idx = lastAssistantIndex(state.messages);
-  if (idx < 0) return state;
   const payload = chunk.payload ?? {};
 
   switch (chunk.type) {
     case "start":
-    case "step-start":
-      return chunk.runId ? { ...state, runId: chunk.runId } : state;
+    case "step-start": {
+      const withRun: MastraTimelineState = {
+        ...state,
+        status: "streaming",
+        ...(chunk.runId ? { runId: chunk.runId, activeRunId: chunk.runId } : {}),
+      };
+      const [next] = ensureActiveAssistant(withRun);
+      return next;
+    }
 
-    case "text-start":
-      return upsertPart(state, idx, textPart(strId(payload.id), ""), true);
-    case "text-delta":
-      return appendText(state, idx, "text", strId(payload.id), str(payload.text));
+    case "text-start": {
+      const [s, idx] = ensureActiveAssistant(streaming(state));
+      return upsertPart(s, idx, textPart(strId(payload.id), ""), true);
+    }
+    case "text-delta": {
+      const [s, idx] = ensureActiveAssistant(streaming(state));
+      return appendText(s, idx, "text", strId(payload.id), str(payload.text));
+    }
 
-    case "reasoning-start":
-      return upsertPart(state, idx, reasoningPart(strId(payload.id), ""), true);
-    case "reasoning-delta":
-      return appendText(state, idx, "reasoning", strId(payload.id), str(payload.text));
-    case "reasoning-end":
-      return setReasoningThinking(state, idx, strId(payload.id), false);
+    case "reasoning-start": {
+      const [s, idx] = ensureActiveAssistant(streaming(state));
+      return upsertPart(s, idx, reasoningPart(strId(payload.id), ""), true);
+    }
+    case "reasoning-delta": {
+      const [s, idx] = ensureActiveAssistant(streaming(state));
+      return appendText(s, idx, "reasoning", strId(payload.id), str(payload.text));
+    }
+    case "reasoning-end": {
+      const [s, idx] = ensureActiveAssistant(streaming(state));
+      return setReasoningThinking(s, idx, strId(payload.id), false);
+    }
 
     case "tool-call-input-streaming-start":
-    case "tool-call":
-      return upsertToolPart(state, idx, {
+    case "tool-call": {
+      const [s, idx] = ensureActiveAssistant(streaming(state));
+      return upsertToolPart(s, idx, {
         toolCallId: str(payload.toolCallId),
         toolName: str(payload.toolName),
         args: asRecord(payload.args),
         status: "running",
       });
+    }
 
     case "tool-result":
     case "tool-output": {
+      const [s, idx] = ensureActiveAssistant(state);
       const toolName = str(payload.toolName);
       const result = payload.result ?? payload.output;
       // propose_artifact sukses → kartu artifact (parity eve).
       const artifact = artifactFromResult(toolName, str(payload.toolCallId), result);
-      if (artifact) return replaceWithArtifact(state, idx, artifact);
-      return completeToolPart(state, idx, str(payload.toolCallId), result, payload.isError === true);
+      if (artifact) return replaceWithArtifact(s, idx, artifact);
+      return completeToolPart(s, idx, str(payload.toolCallId), result, payload.isError === true);
     }
-    case "tool-error":
-      return completeToolPart(state, idx, str(payload.toolCallId), undefined, true);
+    case "tool-error": {
+      const [s, idx] = ensureActiveAssistant(state);
+      return completeToolPart(s, idx, str(payload.toolCallId), undefined, true);
+    }
 
     case "tool-call-approval":
       return {
@@ -172,14 +334,263 @@ export function reduceMastraChunk(
         }),
       };
 
+    case "finish": {
+      // Finish terminal: reason≠tool-calls → turn selesai. reason=tool-calls = masih ada langkah/
+      // approval menggantung → biarkan streaming (chunk berikutnya menyusul / menunggu user).
+      const reason = finishReason(payload);
+      if (reason === "tool-calls") return state;
+      return settleAssistantTurn(state);
+    }
+
+    case "abort":
+      // Stop bersih (server cancel via abortThread) → settle, tanpa error. (G5)
+      return settleAssistantTurn(state);
+
     case "error":
-      return { ...state, error: extractError(payload.error) };
+      return { ...settleAssistantTurn(state), error: extractError(payload.error) };
     case "tripwire":
-      return { ...state, error: str(payload.reason) || "Permintaan diblokir (kuota/kebijakan)." };
+      return {
+        ...settleAssistantTurn(state),
+        error: str(payload.reason) || "Permintaan diblokir (kuota/kebijakan).",
+      };
 
     default:
-      return state; // source/finish/lifecycle lain → tak mempengaruhi timeline
+      return state; // step-finish/source/lifecycle lain → tak mempengaruhi timeline
   }
+}
+
+/** Set status streaming tanpa menyentuh pesan (dipakai sebelum menerapkan chunk konten). */
+function streaming(state: MastraTimelineState): MastraTimelineState {
+  return state.status === "streaming" ? state : { ...state, status: "streaming" };
+}
+
+/** Reason dari chunk `finish` (`payload.stepResult.reason` atau `payload.reason`). */
+function finishReason(payload: Record<string, unknown>): string {
+  const stepResult = payload.stepResult;
+  if (stepResult && typeof stepResult === "object" && "reason" in stepResult) {
+    return str((stepResult as { reason?: unknown }).reason);
+  }
+  return str(payload.reason);
+}
+
+// ── adapter Workflow `/deep` (G2) ──────────────────────────────────────────────
+//
+// Stream Workflow (`run.stream`/`resumeStream`/`observe`) memancarkan `StreamVNextChunkType`
+// {type,payload,runId,from:'WORKFLOW'} STEP-LEVEL (subagent pakai `.generate()`, tak ada token
+// delta). Adapter ini memetakan langkah → tool-row "Proses" + laporan akhir, terpisah dari
+// `reduceMastraChunk` (chat). Laporan diambil dari `workflow-step-result` step `synthesize`
+// (`workflow-finish` TAK membawa report); plan-gate dari `workflow-step-suspended` `approve-plan`.
+
+const WF_STEP_LABELS: Record<string, string> = {
+  "draft-plan": "Menyusun rencana",
+  "approve-plan": "Menunggu persetujuan rencana",
+  "search-literature": "Menelaah literatur",
+  "counter-evidence": "Mencari bukti tandingan",
+  "assign-citations": "Menomori sumber",
+  "verify-citations": "Memverifikasi sitasi",
+  synthesize: "Menulis sintesis",
+};
+
+function wfStepLabel(stepId: string): string {
+  return WF_STEP_LABELS[stepId] ?? humanizeSlug(stepId);
+}
+
+/**
+ * Urutan step user-facing Workflow `/deep` (cocokkan rantai `.then()` di `deep-research.ts`).
+ * Dipakai untuk menyeed stepper saat re-attach refresh. Step `input` (mapping) sengaja dilewati.
+ */
+const WF_STEP_ORDER = [
+  "draft-plan",
+  "approve-plan",
+  "search-literature",
+  "counter-evidence",
+  "assign-citations",
+  "verify-citations",
+  "synthesize",
+] as const;
+
+/** Status step Mastra (`runById().steps[id].status`) → `ToolStatus` baris "Proses". */
+function wfStepStatusToTool(status: string): ToolStatus {
+  switch (status) {
+    case "success":
+      return "completed";
+    case "failed":
+      return "failed";
+    case "suspended":
+    case "waiting":
+    case "paused":
+      return "pending";
+    default:
+      return "running"; // running / pending / lainnya = sedang berjalan
+  }
+}
+
+type WorkflowStepSnapshot = { status?: unknown; output?: unknown };
+
+/**
+ * Seed progres Workflow `/deep` dari snapshot `runById().steps` saat re-attach refresh fase RUNNING.
+ * Tanpa ini, `observe()` hanya memancarkan chunk BARU sesudah titik observasi sehingga step yang
+ * sudah lewat tak pernah dirender → layar progres kosong sampai run selesai. Membangun ulang
+ * stepper (step selesai + step berjalan) dan, bila `synthesize` sudah sukses, teks laporan akhir.
+ * Idempoten (key `wf:<stepId>` / `wf:report`) → aman dipanggil ulang saat rekonsiliasi terminal.
+ */
+export function seedWorkflowProgress(
+  state: MastraTimelineState,
+  runId: string,
+  steps: Record<string, WorkflowStepSnapshot | WorkflowStepSnapshot[]>,
+): MastraTimelineState {
+  const base: MastraTimelineState = { ...state, status: "streaming", runId, activeRunId: runId };
+  // Sasar turn assistant yang SUDAH ber-`turnId === runId` (poll re-seed = idempoten, tak menduplikat
+  // bubble). Bila belum ada (seed pertama saat re-attach), buat placeholder lalu tandai turnId =
+  // runId → memetakan Sumber per-turn (G4), konsisten dengan `workflow-start` live.
+  const existing = base.messages.findIndex((m) => m.role === "assistant" && m.turnId === runId);
+  let idx: number;
+  let next: MastraTimelineState;
+  if (existing >= 0) {
+    idx = existing;
+    next = base;
+  } else {
+    const [seeded, ai] = ensureActiveAssistant(base);
+    idx = ai;
+    next = { ...seeded, messages: seeded.messages.map((m, i) => (i === idx ? { ...m, turnId: runId } : m)) };
+  }
+  for (const stepId of WF_STEP_ORDER) {
+    const raw = steps[stepId];
+    if (!raw) continue;
+    const sr = Array.isArray(raw) ? raw[raw.length - 1] : raw;
+    const status = str(sr?.status);
+    if (!status) continue;
+    next = upsertWorkflowStep(next, idx, stepId, wfStepStatusToTool(status));
+    if (stepId === "synthesize" && status === "success") {
+      const report = reportFromOutput(sr?.output);
+      if (report) next = setReportText(next, idx, report);
+    }
+  }
+  return next;
+}
+
+export function reduceWorkflowChunk(
+  state: MastraTimelineState,
+  chunk: MastraChunk,
+): MastraTimelineState {
+  const payload = chunk.payload ?? {};
+  switch (chunk.type) {
+    case "workflow-start": {
+      const runId = chunk.runId;
+      const withRun: MastraTimelineState = {
+        ...state,
+        status: "streaming",
+        ...(runId ? { runId, activeRunId: runId } : {}),
+      };
+      const [s, idx] = ensureActiveAssistant(withRun);
+      // Tandai turn assistant dgn runId → memetakan Sumber per-turn live (G4).
+      if (!runId) return s;
+      return { ...s, messages: s.messages.map((m, i) => (i === idx ? { ...m, turnId: runId } : m)) };
+    }
+
+    case "workflow-step-start": {
+      const id = str(payload.id);
+      if (!id) return streaming(state);
+      const [s, idx] = ensureActiveAssistant(streaming(state));
+      return upsertWorkflowStep(s, idx, id, "running");
+    }
+
+    case "workflow-step-result": {
+      const id = str(payload.id);
+      const [s, idx] = ensureActiveAssistant(state);
+      const failed = str(payload.status) === "failed";
+      let next = upsertWorkflowStep(s, idx, id, failed ? "failed" : "completed");
+      if (id === "synthesize") {
+        const report = reportFromOutput(payload.output);
+        if (report) next = setReportText(next, idx, report);
+      }
+      return next;
+    }
+
+    case "workflow-step-suspended": {
+      if (str(payload.id) !== "approve-plan") return state;
+      const sp = asRecord(payload.suspendPayload);
+      const [s, idx] = ensureActiveAssistant(streaming(state));
+      const withStep = upsertWorkflowStep(s, idx, "approve-plan", "pending");
+      return {
+        ...withStep,
+        planGate: { plan: str(sp.plan), subQuestions: strArray(sp.subQuestions) },
+      };
+    }
+
+    case "workflow-finish":
+    case "workflow-canceled":
+      // `closeOnSuspend` (default) menutup stream saat plan-gate dengan chunk terminal ini. Bila
+      // plan-gate masih aktif (`planGate` terisi), ini SUSPEND-close — BUKAN finish sungguhan →
+      // PERTAHANKAN kartu rencana + status streaming (tunggu Setujui/Tolak), jangan settle. `resolvePlan`
+      // yang membersihkan `planGate` saat user memutuskan, jadi finish berikutnya (resume) baru settle (G2).
+      if (state.planGate) return state;
+      return settleAssistantTurn({ ...state, planGate: undefined });
+
+    case "error":
+      return { ...settleAssistantTurn({ ...state, planGate: undefined }), error: extractError(payload.error) };
+
+    default:
+      return state; // step-output/progress/waiting/step-finish → diabaikan (granularitas)
+  }
+}
+
+/** Tool-row "Proses" untuk satu langkah Workflow (keyed `wf:<stepId>`). */
+function upsertWorkflowStep(
+  state: MastraTimelineState,
+  msgIdx: number,
+  stepId: string,
+  status: ToolStatus,
+): MastraTimelineState {
+  const toolCallId = `wf:${stepId}`;
+  const isRunning = status === "running" || status === "pending";
+  return mutateMessage(state, msgIdx, (parts) => {
+    const i = parts.findIndex((p) => p.kind === "tool" && p.model.toolCallId === toolCallId);
+    if (i < 0) {
+      const model: ToolRowModel = {
+        toolCallId,
+        name: stepId,
+        title: wfStepLabel(stepId),
+        kind: "tool-call",
+        status,
+        isRunning,
+        description: undefined,
+        rows: [],
+      };
+      return [...parts, { kind: "tool", id: `tool:${toolCallId}`, model }];
+    }
+    return parts.map((p, j) =>
+      j === i && p.kind === "tool" ? { ...p, model: { ...p.model, status, isRunning } } : p,
+    );
+  });
+}
+
+/** Set teks laporan akhir `/deep` (satu blok, bukan delta) sebagai jawaban (text part terakhir). */
+function setReportText(
+  state: MastraTimelineState,
+  msgIdx: number,
+  report: string,
+): MastraTimelineState {
+  return mutateMessage(state, msgIdx, (parts) => {
+    const part: TimelinePart = { kind: "text", id: "wf:report", text: report, streaming: false };
+    const i = parts.findIndex((p) => p.kind === "text" && p.id === "wf:report");
+    return i < 0 ? [...parts, part] : parts.map((p, j) => (j === i ? part : p));
+  });
+}
+
+function reportFromOutput(output: unknown): string {
+  if (!output || typeof output !== "object") return "";
+  const o = output as Record<string, unknown>;
+  if (typeof o.report === "string") return o.report;
+  const r = o.result;
+  if (r && typeof r === "object" && typeof (r as Record<string, unknown>).report === "string") {
+    return (r as Record<string, unknown>).report as string;
+  }
+  return "";
+}
+
+function strArray(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 }
 
 // ── part builders ────────────────────────────────────────────────────────────

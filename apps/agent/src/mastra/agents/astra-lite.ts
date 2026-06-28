@@ -5,8 +5,11 @@ import { memory } from "../memory";
 import { liteModel } from "../model";
 import { billingDebitProcessor, billingPrecheckProcessor } from "../processors/billing";
 import { EnsureFinalResponseProcessor } from "../processors/ensure-final-response";
-import { threadProjectionProcessor } from "../processors/thread-projection";
-import { skillPaths } from "../skills";
+import {
+  threadProjectionInputProcessor,
+  threadProjectionProcessor,
+} from "../processors/thread-projection";
+import { inlineSkills } from "../skills";
 import { astraTools } from "../tools";
 
 /**
@@ -37,12 +40,13 @@ export const astraLite = new Agent({
   instructions: astraInstructions,
   model: liteModel,
   tools: astraTools,
-  skills: skillPaths,
+  skills: inlineSkills,
   memory,
   // Default opsi `stream()` (vNext) → FE tak perlu mengirim `maxSteps`; satu sumber kebenaran.
   defaultOptions: { maxSteps: MAX_STEPS },
   inputProcessors: [
     new TokenLimiterProcessor(TOKEN_LIMIT),
+    threadProjectionInputProcessor,
     billingPrecheckProcessor,
     new EnsureFinalResponseProcessor(MAX_STEPS),
   ],
