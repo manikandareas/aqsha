@@ -12,7 +12,6 @@ export * from "./artifactEmbeddings";
 export * from "./chatThreads";
 export * from "./researchSources";
 export * from "./explorePapers";
-export * from "./exploreAnalyses";
 export * from "./feedItems";
 export * from "./feedSources";
 export * from "./savedFeedItems";

@@ -11,5 +11,6 @@ export {
   type ClassifiedUrl,
 } from "./identifiers";
 export { resolvePaper, type ResolvedPaper, type PaperAuthor } from "./resolve";
+export { BlockedUrlError, followRedirectsSafely, isBlockedHost } from "./http";
 export { downloadOaPdf, pdfFileName } from "./download";
 export { readWithJinaReader, type JinaReadResult } from "./jina";

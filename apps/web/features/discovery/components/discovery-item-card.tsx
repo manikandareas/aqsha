@@ -16,20 +16,26 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@aqsha/ui/components/dropdown-menu";
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import type { ComponentProps, ReactNode } from "react";
+import { useState, type ComponentProps, type ReactNode } from "react";
 import { SaveToWorkspaceButton } from "@/features/artifacts/components/save-to-workspace-button";
 import { cn } from "@/lib/utils";
 import {
   bestIngestUrl,
   feedDetailHref,
   kindLabel,
-  kindPanelClass,
   type DiscoveryItem,
 } from "../model";
 import { domainFromUrl, formatCitationCount, relativeTime, sourceName } from "../format";
 import type { FeedItem } from "../types";
+
+// pdfjs tak boleh dieval saat SSR → muat klien-only. Cover generatif tampil
+// sebagai latar sampai (kalau) PDF page-1 selesai render menutupinya.
+const PdfThumb = dynamic(() => import("./pdf-thumb").then((m) => m.PdfThumb), {
+  ssr: false,
+});
 
 export type DiscoveryCardHandlers = {
   onAskAstra: (item: DiscoveryItem) => void;
@@ -234,7 +240,7 @@ function SourceRow({ item }: { item: DiscoveryItem }) {
 
 function SourceAvatar({ item }: { item: DiscoveryItem }) {
   const domain = item.kind === "news" ? domainFromUrl(item.url) : null;
-  const letter = (sourceName(item).trim()[0] ?? "•").toUpperCase();
+  const letter = firstInitial(sourceName(item));
   return (
     <span
       className={cn(
@@ -255,6 +261,7 @@ function SourceAvatar({ item }: { item: DiscoveryItem }) {
 }
 
 function CardMedia({ item, title, className }: { item: DiscoveryItem; title: string; className?: string }) {
+  // Berita / item ber-OG image → foto langsung.
   if (item.imageUrl) {
     return (
       <div className={cn("relative overflow-hidden rounded-[12px] bg-muted", className)}>
@@ -262,26 +269,67 @@ function CardMedia({ item, title, className }: { item: DiscoveryItem; title: str
       </div>
     );
   }
+  // Paper / item tanpa gambar → cover generatif; paper open-access overlay preview PDF.
+  return <PaperCover item={item} className={className} />;
+}
+
+// Cover berlapis: GenerativeCover sebagai latar (selalu terbaca, tak pernah blank);
+// untuk paper ber-PDF, PdfThumb di-overlay & menutupi latar begitu page-1 ter-render.
+// Simpan URL yang GAGAL (bukan boolean) + `key={pdfUrl}` pada PdfThumb → saat slot ini
+// dipakai ulang untuk paper lain (mis. hero tak ber-key yang berganti), state lama tak
+// ikut: URL baru ≠ failedUrl → tampil lagi, dan PdfThumb remount bersih per URL.
+function PaperCover({ item, className }: { item: DiscoveryItem; className?: string }) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const pdfUrl = item.kind === "paper" ? item.pdfUrl : undefined;
   return (
-    <div
-      className={cn(
-        "flex flex-col items-center justify-center gap-2 overflow-hidden rounded-[12px]",
-        kindPanelClass(item.kind),
-        className,
-      )}
-      aria-hidden
-    >
-      {/* Motif linked-nodes (metafora brand) → fallback terbaca disengaja, bukan kotak kosong. */}
-      <svg width="42" height="22" viewBox="0 0 42 22" fill="none" className="text-foreground/25">
-        <line x1="8" y1="11" x2="21" y2="6" stroke="currentColor" strokeWidth="1.2" />
-        <line x1="21" y1="6" x2="34" y2="15" stroke="currentColor" strokeWidth="1.2" />
-        <circle cx="8" cy="11" r="3" fill="currentColor" />
-        <circle cx="21" cy="6" r="3.5" fill="currentColor" />
-        <circle cx="34" cy="15" r="3" fill="currentColor" />
-      </svg>
-      <span className="font-heading text-[13px] font-bold tracking-[0.08em] text-foreground/40">
-        {kindLabel(item.kind)}
+    <div className={cn("relative overflow-hidden rounded-[12px]", className)} aria-hidden>
+      <GenerativeCover item={item} />
+      {pdfUrl && failedUrl !== pdfUrl ? (
+        <PdfThumb key={pdfUrl} pdfUrl={pdfUrl} onFail={() => setFailedUrl(pdfUrl)} />
+      ) : null}
+    </div>
+  );
+}
+
+// Cover deterministik (warna brand dari hash judul + inisial ghost + motif node +
+// label kind + chip open-access). Mengganti kotak fallback datar lama.
+const COVER_GRADIENTS = [
+  "linear-gradient(145deg, oklch(0.55 0.15 154), oklch(0.31 0.10 154))", // mint
+  "linear-gradient(145deg, oklch(0.52 0.14 248), oklch(0.30 0.10 248))", // sky
+  "linear-gradient(145deg, oklch(0.52 0.13 305), oklch(0.30 0.10 305))", // lavender
+  "linear-gradient(145deg, oklch(0.56 0.15 34), oklch(0.33 0.11 34))", // coral
+  "linear-gradient(145deg, oklch(0.50 0.07 70), oklch(0.30 0.05 70))", // warm gold/ink
+];
+
+function hashIndex(value: string, mod: number): number {
+  let h = 0;
+  for (let i = 0; i < value.length; i += 1) h = (h * 31 + value.charCodeAt(i)) | 0;
+  return Math.abs(h) % mod;
+}
+
+/** Inisial pertama (huruf besar) dari teks; fallback "•" untuk teks kosong. */
+function firstInitial(text: string): string {
+  return (text.trim()[0] ?? "•").toUpperCase();
+}
+
+function GenerativeCover({ item }: { item: DiscoveryItem }) {
+  const initial = firstInitial(item.title);
+  const gradient = COVER_GRADIENTS[hashIndex(item.title, COVER_GRADIENTS.length)];
+  return (
+    <div className="absolute inset-0 flex flex-col justify-end p-3 text-white" style={{ background: gradient }}>
+      <span className="pointer-events-none absolute -top-7 right-1 select-none font-heading text-[150px] font-black leading-none text-white/15">
+        {initial}
       </span>
+      <div className="relative flex items-center gap-1.5">
+        <span className="rounded-full bg-white/90 px-2 py-0.5 text-[10.5px] font-bold tracking-wide text-zinc-900">
+          {kindLabel(item.kind)}
+        </span>
+        {item.isOpenAccess ? (
+          <span className="rounded-full bg-black/35 px-2 py-0.5 text-[10.5px] font-semibold text-white backdrop-blur-sm">
+            Open access
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 }

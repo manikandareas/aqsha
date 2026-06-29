@@ -34,7 +34,7 @@ export function parseSuggestions(text: string): string[] {
 
 /**
  * Satu pemanggilan LLM saran ber-cache (namespace `openai_suggest`) + soft-fail → [].
- * Inti bersama deriveSubtopics & suggestQueries: cache get → generate → parse → cache put.
+ * Inti dari suggestQueries: cache get → generate → parse → cache put.
  */
 async function cachedSuggest(cacheKey: string, prompt: string, cap: number): Promise<string[]> {
   const cached = await getCache("openai_suggest", cacheKey);

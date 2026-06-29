@@ -79,6 +79,16 @@ export const FeedRepo = {
     return rows[0] ?? null;
   },
 
+  /** Provenance: apakah `url` benar-benar pdf_url salah satu feed item (guard pdf-proxy, anti-SSRF). */
+  async pdfUrlExists(db: DbOrTx, url: string): Promise<boolean> {
+    const rows = await db
+      .select({ one: sql`1` })
+      .from(feedItems)
+      .where(eq(feedItems.pdfUrl, url))
+      .limit(1);
+    return rows.length > 0;
+  },
+
   /** Baris feed paper yang sudah ter-materialisasi untuk sebuah paper_key (ensureFeedItemForPaperKey). */
   async findByPaperKey(db: DbOrTx, paperKey: string): Promise<FeedItem | null> {
     const rows = await db

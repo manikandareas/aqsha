@@ -14,8 +14,8 @@ import {
   XIcon,
 } from "@aqsha/ui/icons";
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import { Document, Page, pdfjs } from "react-pdf";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Document, Page } from "@/lib/pdf-worker";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -24,14 +24,6 @@ import { cn } from "@/lib/utils";
 // (citation links) over the canvas.
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
-
-// Worker is resolved from the installed pdfjs-dist so the API and worker
-// versions always match. This module is only imported client-side (the viewer
-// is a `dynamic(..., { ssr: false })` import), so `import.meta.url` is safe.
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/build/pdf.worker.min.mjs",
-  import.meta.url,
-).toString();
 
 // cMaps + standard fonts are copied into /public/pdf by scripts/copy-pdf-assets.mjs.
 const documentOptions = {

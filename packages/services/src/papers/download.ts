@@ -7,7 +7,7 @@
  *    See the TODO below; the caller/worker is the new place to gate fan-out.
  */
 
-import { fetchWithTimeout, userAgent } from "./http";
+import { fetchWithTimeout, followRedirectsSafely, userAgent } from "./http";
 import type { ResolvedPaper } from "./model";
 
 const PDF_FETCH_TIMEOUT_MS = 30_000;
@@ -33,11 +33,16 @@ async function downloadPdfCandidate(
   candidate: string,
 ): Promise<{ bytes: Uint8Array; sourceUrl: string; byteSize: number } | null> {
   try {
-    const res = await fetchWithTimeout(candidate, {
-      redirect: "follow",
-      timeoutMs: PDF_FETCH_TIMEOUT_MS,
-      headers: { "User-Agent": userAgent(), Accept: "application/pdf,*/*" },
-    });
+    // Redirect manual + guard host (anti-SSRF): candidate berasal dari metadata provider,
+    // jadi URL/redirect-nya tak tepercaya. followRedirectsSafely throw utk host internal →
+    // catch di bawah melewatkan candidate. Timeout per-hop tetap dari fetchWithTimeout.
+    const res = await followRedirectsSafely(candidate, (url) =>
+      fetchWithTimeout(url.toString(), {
+        redirect: "manual",
+        timeoutMs: PDF_FETCH_TIMEOUT_MS,
+        headers: { "User-Agent": userAgent(), Accept: "application/pdf,*/*" },
+      }),
+    );
     if (!res.ok) return null;
 
     const buf = await res.arrayBuffer();

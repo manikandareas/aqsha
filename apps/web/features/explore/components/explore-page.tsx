@@ -1,9 +1,13 @@
 "use client";
 
-// Halaman Explore (redesign editorial 4-zona). Header (breadcrumb kiri + toggle
+// Halaman Explore — fokus pencarian paper + berita. Header (breadcrumb kiri + toggle
 // Chat kanan) selaras dengan /app & workspace detail; sticky + glass (low-opacity
 // bg + backdrop-blur) di atas feed yang scroll. Saat Chat dibuka, surface pecah
 // jadi split (DetailSplitLayout) dengan panel chat Astra workspace-less.
+//
+// `q` kosong → feed personal/topik (Jelajah). `q` terisi → hasil pencarian paper +
+// berita (Selidiki). Keduanya dirender oleh ExploreFindings; ask-bar jadi compact
+// saat ada query. Widget analitik (konstelasi/tren/gap/tension) sengaja dihilangkan.
 
 import { ChevronRightIcon, MessageSquareIcon, PanelLeftIcon } from "@aqsha/ui/icons";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
@@ -16,16 +20,9 @@ import { ComposerMentionsProvider } from "@/features/thread-experience/component
 import { FEED_TOPIC_LABELS, type FeedTopic } from "@/features/discovery/types";
 import { panelHeaderBarClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
-import { useExploreAnalysis, useExploreFacets } from "../api";
 import { ExploreChatSidePanel } from "./explore-chat-side-panel";
-import { ExploreConstellation } from "./explore-constellation";
 import { ExploreFindings } from "./explore-findings";
 import { ExploreHero } from "./explore-hero";
-import { GapFinder, type GapStatus } from "./gap-finder";
-import { HotTopics } from "./hot-topics";
-import { PulseStream } from "./pulse-stream";
-import { SectionHeader } from "./section-header";
-import { TensionMap } from "./tension-map";
 
 const TOPIC_VALUES = [
   "sains_teknologi",
@@ -43,21 +40,9 @@ export function ExplorePage() {
   const [chatOpen, setChatOpen] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
 
-  const facets = useExploreFacets(q);
-  const analysis = useExploreAnalysis(q);
-
-  const trimmedQ = q.trim();
-  // State machine: q kosong → Jelajah (browse), q terisi → Selidiki (investigate).
-  // Ambang ≥2 selaras gating useExploreAnalysis (job LLM tak jalan saat Jelajah).
-  const investigate = trimmedQ.length >= 2;
-  const analysisStatus: GapStatus =
-    trimmedQ.length < 2
-      ? "idle"
-      : analysis.data?.status === "ready"
-        ? "ready"
-        : analysis.isError || analysis.data?.status === "error"
-          ? "error"
-          : "loading";
+  // q kosong → Jelajah (feed personal); q terisi → Selidiki (hasil pencarian).
+  // Ambang ≥2 char: ask-bar jadi compact (query header) saat menyelidiki.
+  const investigate = q.trim().length >= 2;
 
   const submitQuery = (next: string) => {
     void setQ(next.trim() ? next.trim() : "");
@@ -98,56 +83,8 @@ export function ExplorePage() {
                   compact={investigate}
                 />
 
-                {/* Body dua-state; key per-mode → cross-fade halus saat transisi. */}
-                <div
-                  key={investigate ? "investigate" : "browse"}
-                  className="animate-in duration-300 ease-out fade-in-0"
-                >
-                  {investigate ? (
-                    <>
-                      {/* Selidiki · USP dulu — Gap + Tension dipromosikan ke atas */}
-                      <section className="pt-10">
-                        <SectionHeader
-                          title="Masuk lebih dalam"
-                          subtitle="Tiap klaim menempel ke sitasi yang bisa dicek"
-                        />
-                        <div className="mt-5 grid grid-cols-1 border-y border-border @3xl/explore:grid-cols-[1.1fr_1fr] @3xl/explore:divide-x @3xl/explore:divide-border">
-                          <GapFinder
-                            q={q}
-                            status={analysisStatus}
-                            gaps={analysis.data?.gap ?? []}
-                            onSubmitQuery={submitQuery}
-                          />
-                          <TensionMap status={analysisStatus} tension={analysis.data?.tension ?? null} />
-                        </div>
-                      </section>
-
-                      {/* Pendukung · peta scoped + tren riset / topik hangat */}
-                      <section className="grid gap-4 pt-12 @3xl/explore:grid-cols-[1.55fr_1fr] @3xl/explore:items-stretch">
-                        <ExploreConstellation
-                          nodes={facets.data?.constellation?.nodes ?? []}
-                          edges={facets.data?.constellation?.edges ?? []}
-                          loading={facets.isPending}
-                        />
-                        <div className="grid min-h-0 gap-4 @3xl/explore:grid-rows-[1fr_auto]">
-                          <PulseStream pulse={facets.data?.pulse} loading={facets.isPending} query={q} />
-                          <HotTopics
-                            pulse={facets.data?.pulse}
-                            loading={facets.isPending}
-                            activeQuery={q}
-                            onSelect={submitQuery}
-                          />
-                        </div>
-                      </section>
-
-                      {/* Hasil — feed pencarian (kartu) */}
-                      <ExploreFindings topic={topic} query={q} />
-                    </>
-                  ) : (
-                    /* Jelajah · feed editorial */
-                    <ExploreFindings topic={topic} query={q} />
-                  )}
-                </div>
+                {/* Feed paper + berita — jelajah (personal/topik) atau hasil pencarian. */}
+                <ExploreFindings topic={topic} query={q} />
               </div>
             </div>
           }
