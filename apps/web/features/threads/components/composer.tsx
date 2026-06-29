@@ -549,9 +549,7 @@ function ComposerStartPanel({
             </m.button>
           ))
         ) : (
-          <p className="rounded-xl bg-background/45 p-3 text-[12px] leading-5 text-muted-foreground">
-            Belum ada thread terbaru.
-          </p>
+          <ThreadListEmpty />
         )}
       </ComposerStartColumn>
 
@@ -583,6 +581,49 @@ function ComposerStartPanel({
           </m.button>
         ))}
       </ComposerStartColumn>
+    </div>
+  );
+}
+
+// Placeholder rows mirror the real thread item shape so the frosted base reads
+// as "this is where your threads land" — varied widths avoid a too-regular grid.
+const THREAD_EMPTY_ROW_WIDTHS = ["74%", "56%", "82%", "44%"];
+
+function ThreadListEmpty() {
+  return (
+    <div className="relative isolate min-h-[8.75rem] overflow-hidden rounded-xl border border-dashed border-border/70 bg-muted/15">
+      <div
+        inert={true}
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 grid select-none gap-1.5 p-2"
+      >
+        {THREAD_EMPTY_ROW_WIDTHS.map((width) => (
+          <div
+            key={width}
+            className="grid min-h-8 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-lg bg-background/45 px-2.5"
+          >
+            <MessageSquareIcon className="size-3.5 shrink-0 text-muted-foreground/40" aria-hidden />
+            <span
+              className="block h-2 justify-self-start self-center rounded-full bg-muted-foreground/15"
+              style={{ width }}
+            />
+            <ArrowUpRightIcon className="size-3.5 shrink-0 text-muted-foreground/40" aria-hidden />
+          </div>
+        ))}
+      </div>
+
+      {/* Frosted glass: blur the placeholder rows + a top→bottom vignette so the
+          hint stays legible and the rows dissolve toward the bottom edge. */}
+      <div className="absolute inset-0 bg-gradient-to-b from-background/45 via-background/65 to-background/85 backdrop-blur-[2px]" />
+
+      <div className="relative grid min-h-[inherit] place-items-center p-4 text-center">
+        <div className="grid max-w-[15rem] justify-items-center gap-2">
+          <span className="grid size-9 place-items-center rounded-xl border border-border/70 bg-background/80 text-muted-foreground backdrop-blur-sm">
+            <MessageSquareIcon className="size-4" />
+          </span>
+          <p className="text-[13px] font-semibold text-foreground">Mulai percakapan sekarang</p>
+        </div>
+      </div>
     </div>
   );
 }

@@ -116,7 +116,7 @@ export function WorkspaceLibraryEmpty({
 
       <div className="relative grid min-h-[inherit] place-items-center p-12 text-center">
         <div className="grid max-w-sm justify-items-center gap-4">
-          <span className="grid size-14 place-items-center rounded-2xl border border-border/70 bg-background/80 text-muted-foreground shadow-sm backdrop-blur-sm">
+          <span className="grid size-14 place-items-center rounded-2xl border border-border/70 bg-background/80 text-muted-foreground backdrop-blur-sm">
             <Icon className="size-7" />
           </span>
           <h2 className="font-heading text-xl font-semibold">{resolvedTitle}</h2>
