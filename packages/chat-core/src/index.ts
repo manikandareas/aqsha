@@ -457,6 +457,9 @@ export function wrapMentionLabel(label: string): string {
 
 /** Remove inline mention markers, keeping the readable label inside. */
 export function stripMentionMarkers(text: string): string {
+  // Common case (teks tanpa marker) → kembalikan apa adanya tanpa alokasi split/join. Penting:
+  // processor input men-strip TIAP pesan user TIAP giliran, mayoritas tak ber-mention.
+  if (!text.includes(MENTION_MARKER_OPEN) && !text.includes(MENTION_MARKER_CLOSE)) return text;
   return text.split(MENTION_MARKER_OPEN).join("").split(MENTION_MARKER_CLOSE).join("");
 }
 

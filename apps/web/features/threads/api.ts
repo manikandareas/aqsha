@@ -142,6 +142,24 @@ export function useThreadArtifacts(
 }
 
 /**
+ * Cabut lampiran thread yang masih di-stage (sebelum kirim) — soft-delete headless.
+ * Dipanggil saat user menghapus chip composer supaya berkas yang ditarik tak ikut terlihat
+ * di message row (join sisi-baca per pesan memetakan lampiran via thread + waktu).
+ */
+export function useRemoveThreadAttachment(threadId: string) {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { artifactId: string }) =>
+      unwrap(
+        await api.threads({ id: threadId }).attachments({ artifactId: input.artifactId }).delete(),
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.threads.artifacts(threadId) }),
+    onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal mencabut lampiran.")),
+  });
+}
+
+/**
  * Lampiran thread 3-langkah (Slice 6.7): presign → PUT object storage → finalize
  * (ekstrak inline + RAG index, headless). Mirror `useUploadArtifact` tapi thread-scoped:
  * ownership = thread (assertOwner route-side), bukan workspace.

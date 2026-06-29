@@ -5,6 +5,7 @@ import {
   DEEP_COMMAND_ID,
   getPromptCommand,
   matchPromptCommandInContent,
+  MENTION_MARKER_OPEN,
   type PromptCommand,
   resolveCommandDispatch,
   splitContextRefs,
@@ -14,12 +15,10 @@ import {
   AlertCircleIcon,
   ArrowUpIcon,
   ArrowUpRightIcon,
-  FileTextIcon,
   Loader2Icon,
   MessageSquareIcon,
   PaperclipIcon,
   SquareIcon,
-  XIcon,
 } from "@aqsha/ui/icons";
 import { LayoutGroup, m, useReducedMotion } from "motion/react";
 import Link from "next/link";
@@ -30,12 +29,18 @@ import { useContextPickerArtifacts } from "@/features/artifacts/api";
 import { UPLOAD_ACCEPT } from "@/features/artifacts/types";
 import { useWorkspacesList } from "@/features/workspaces/api";
 import { cn } from "@/lib/utils";
-import { useHydrateContext, useThreadArtifacts, useThreadAttachments } from "../api";
+import {
+  useHydrateContext,
+  useRemoveThreadAttachment,
+  useThreadArtifacts,
+  useThreadAttachments,
+} from "../api";
 import {
   AgentSelector,
   type ComposerAgentKind,
   useComposerAgentSelection,
 } from "./composer-agent-selector";
+import { FileChip } from "./file-chip";
 import {
   type ContextItemOption,
   type ContextWorkspaceOption,
@@ -56,10 +61,17 @@ export type ComposerNotice = {
  * yang TIDAK dipersist. */
 export type ComposerSendPayload = {
   text: string;
+  /** Varian `text` yang menyimpan penanda `@mention` (U+E000/E001) untuk DITAMPILKAN + DIPERSIST
+   * sebagai pill. Hanya ada bila pesan memuat mention; agen menerima `text` yang bersih (penanda
+   * di-strip server-side). */
+  richText?: string;
   clientContext?: string[];
   agentKind: ComposerAgentKind;
   /** `"deep"` → jalankan Workflow deep-research (bukan turn chat); `text` = pertanyaan riset. */
   command?: "deep";
+  /** Id artifact lampiran yang dikirim bersama pesan ini → dipetakan EKSAK ke bubble user live
+   * (tanpa menebak via jendela waktu). Undefined bila tak ada lampiran. */
+  attachmentIds?: string[];
 };
 
 /** Thread ringkas untuk panel "Thread terbaru" (start panel landing). */
@@ -148,6 +160,10 @@ export function Composer({
   const shouldReduceMotion = useReducedMotion();
 
   const [content, setContent] = useState(initialContent ?? "");
+  // Varian `content` dengan penanda `@mention` (dari `serializeComposerEditorWithMarkers`) — dipakai
+  // membangun teks tampil/persist ber-pill. Di-sync dari editor lewat `onRichValueChange`. Di-seed
+  // dari `initialContent` (teks polos, tanpa marker) supaya tak drift dari `content` sebelum edit.
+  const [richContent, setRichContent] = useState(initialContent ?? "");
   const [commands, setCommands] = useState<PromptCommand[]>([]);
   const [contextRefs, setContextRefs] = useState<ContextRef[]>(EMPTY_CONTEXT_REFS);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
@@ -161,6 +177,7 @@ export function Composer({
   const agentSelection = useComposerAgentSelection();
   const hydrate = useHydrateContext();
   const attachmentUpload = useThreadAttachments(threadId ?? "");
+  const removeAttachment = useRemoveThreadAttachment(threadId ?? "");
 
   // D5: lampiran besar di-index async (status awal `pending`). Poll daftar artifact thread HANYA
   // selama ada upload pending; status chip LIVE diturunkan dari hasil poll (derive, tak mirror ke
@@ -256,6 +273,10 @@ export function Composer({
 
     const parts: string[] = [];
     let displayText: string;
+    // Varian ber-marker sejajar `displayText` (sama persis, hanya menyisipkan `label` di
+    // posisi mention) — untuk ditampilkan + dipersist sebagai pill. `content` (bersih) tetap dasar
+    // deteksi command; `richContent` cuma beda di penanda mention, jadi logika slug-strip identik.
+    let displayMarked: string;
     let command: "deep" | undefined;
     if (hasText) {
       const matched = getPromptCommand(commands[0]?.id) ?? matchPromptCommandInContent(content);
@@ -267,6 +288,7 @@ export function Composer({
           return;
         }
         displayText = question;
+        displayMarked = stripPromptCommandSlug(richContent, matched);
         command = "deep";
       } else {
         const r = resolveCommandDispatch(content, commands[0]?.id);
@@ -275,11 +297,13 @@ export function Composer({
           return;
         }
         displayText = r.displayText;
+        displayMarked = richContent.trim();
         if (r.dispatchPrompt !== r.displayText) parts.push(r.dispatchPrompt);
       }
     } else {
       // Lampiran tanpa teks → prompt sintetik supaya turn punya pesan (eve butuh non-empty).
       displayText = "Tolong baca berkas terlampir.";
+      displayMarked = displayText;
     }
 
     // Catatan ephemeral nama berkas: agen menemukan isinya via tool list_artifacts/
@@ -298,7 +322,10 @@ export function Composer({
       }
     }
 
+    // Snapshot id lampiran SEBELUM clear → dipetakan eksak ke bubble user live.
+    const attachmentIds = attachments.map((a) => a.artifactId);
     setContent("");
+    setRichContent("");
     setCommands([]);
     setContextRefs([]);
     setAttachments([]);
@@ -306,9 +333,13 @@ export function Composer({
     setIsSending(false);
     onSend({
       text: displayText,
+      // Hanya kirim varian ber-marker bila benar ada mention (mengandung penanda) → selain itu
+      // identik dengan `text`, tak perlu dikirim.
+      richText: displayMarked.includes(MENTION_MARKER_OPEN) ? displayMarked : undefined,
       clientContext: parts.length > 0 ? parts : undefined,
       agentKind: agentSelection.agentKind,
       command,
+      attachmentIds: attachmentIds.length > 0 ? attachmentIds : undefined,
     });
   }
 
@@ -361,9 +392,25 @@ export function Composer({
           <LayoutGroup id="composer-prompt">
             <ComposerChipRow
               attachments={attachmentsView}
-              onRemoveAttachment={(id) =>
-                setAttachments((prev) => prev.filter((a) => a.artifactId !== id))
-              }
+              onRemoveAttachment={(id) => {
+                // Cabut staged: buang dari komposer + soft-delete artifact-nya supaya berkas yang
+                // ditarik tak ikut terpetakan ke pesan saat join sisi-baca (message row). Bila
+                // soft-delete GAGAL, artifact tetap aktif → kembalikan chip (rollback) supaya UI
+                // jujur dan user bisa coba lagi (idempoten di service → aman re-try).
+                const removed = attachments.find((a) => a.artifactId === id);
+                setAttachments((prev) => prev.filter((a) => a.artifactId !== id));
+                if (threadId && removed) {
+                  removeAttachment.mutate(
+                    { artifactId: id },
+                    {
+                      onError: () =>
+                        setAttachments((prev) =>
+                          prev.some((a) => a.artifactId === id) ? prev : [...prev, removed],
+                        ),
+                    },
+                  );
+                }
+              }}
               uploadError={uploadError}
               isSending={isSending}
             />
@@ -395,6 +442,7 @@ export function Composer({
                   <TokenizedPromptInput
                     value={content}
                     onValueChange={setContent}
+                    onRichValueChange={setRichContent}
                     onCommandsChange={setCommands}
                     onHeightChange={setEditorHeight}
                     onSubmit={() => void submit()}
@@ -692,31 +740,15 @@ function ComposerChipRow({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5 px-3.5 pb-1 pt-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
+    <div className="flex flex-wrap items-center gap-2 px-3.5 pb-1 pt-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
       {attachments.map((file) => (
-        <div
-          key={file.artifactId}
-          className="inline-flex h-7 animate-in items-center gap-1.5 rounded-full border border-border bg-card px-2.5 text-[11px] font-semibold text-foreground shadow-sm zoom-in-95 duration-150"
-        >
-          {file.indexingStatus === "pending" ? (
-            <Loader2Icon className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
-          ) : (
-            <FileTextIcon className="size-3.5 shrink-0 text-muted-foreground" />
-          )}
-          <span className="max-w-[9rem] truncate">{file.title}</span>
-          {file.indexingStatus === "pending" ? (
-            <span className="text-[10px] font-medium text-muted-foreground">memproses…</span>
-          ) : null}
-          {!isSending ? (
-            <button
-              type="button"
-              onClick={() => onRemoveAttachment(file.artifactId)}
-              className="rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-label={`Hapus ${file.title}`}
-            >
-              <XIcon className="size-3" />
-            </button>
-          ) : null}
+        <div key={file.artifactId} className="animate-in zoom-in-95 duration-150">
+          <FileChip
+            id={file.artifactId}
+            title={file.title}
+            indexingStatus={file.indexingStatus}
+            onRemove={isSending ? undefined : () => onRemoveAttachment(file.artifactId)}
+          />
         </div>
       ))}
       {uploadError ? (

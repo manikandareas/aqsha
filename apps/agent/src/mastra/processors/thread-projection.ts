@@ -1,4 +1,4 @@
-import { messagePreview } from "@aqsha/chat-core";
+import { messagePreview, stripMentionMarkers } from "@aqsha/chat-core";
 import { ThreadService, TitleService } from "@aqsha/services/chat";
 import type { ProcessInputArgs, ProcessOutputResultArgs } from "@mastra/core/processors";
 import { getServiceDb } from "../lib/db";
@@ -17,18 +17,23 @@ import { resolveOwnerThread } from "../lib/owner-thread";
  * Best-effort: kegagalan proyeksi tak boleh meracuni turn.
  */
 
-/** Teks pesan user PERTAMA (seed judul thread). `content.content` string atau gabung part `text`. */
+/**
+ * Teks pesan user PERTAMA (seed judul thread). `content.content` string atau gabung part `text`.
+ * Penanda `@mention` (U+E000/E001) di-strip supaya tak bocor ke judul yang dihasilkan LLM.
+ */
 function firstUserText(messages: ProcessOutputResultArgs["messages"]): string | null {
   const user = messages.find((m) => m.role === "user");
   if (!user) return null;
   const content = user.content as { content?: unknown; parts?: Array<{ type?: string; text?: unknown }> };
-  if (typeof content?.content === "string" && content.content.trim()) return content.content;
-  const text = (content?.parts ?? [])
-    .filter((p) => p.type === "text" && typeof p.text === "string")
-    .map((p) => p.text as string)
-    .join("\n")
-    .trim();
-  return text || null;
+  const raw =
+    typeof content?.content === "string" && content.content.trim()
+      ? content.content
+      : (content?.parts ?? [])
+          .filter((p) => p.type === "text" && typeof p.text === "string")
+          .map((p) => p.text as string)
+          .join("\n")
+          .trim();
+  return raw ? stripMentionMarkers(raw) : null;
 }
 
 /**

@@ -15,8 +15,19 @@ import { cn } from "@/lib/utils";
 const CHIP_SELECTOR = '[data-chip="command"]';
 const CONTEXT_CHIP_SELECTOR = '[data-chip="context"]';
 
-const INLINE_PILL_BASE =
-  "inline-flex cursor-pointer select-none items-center rounded-[5px] px-0.5 font-semibold leading-[18px] underline decoration-2 underline-offset-4 transition-[background-color,text-decoration-color] duration-150";
+/**
+ * Bentuk dasar pill `@mention` / command — TANPA warna & interaksi. Diekspor agar bubble pesan user
+ * (`message-list.tsx`) merender mention dengan treatment yang sama (rounded + underline + bobot)
+ * sebagai SATU sumber kebenaran, walau tone warnanya beda (composer di atas card, bubble di atas
+ * `bg-primary`).
+ */
+export const MENTION_PILL_SHAPE =
+  "rounded-[5px] px-0.5 font-semibold underline decoration-2 underline-offset-4";
+
+const INLINE_PILL_BASE = cn(
+  "inline-flex cursor-pointer select-none items-center leading-[18px] transition-[background-color,text-decoration-color] duration-150",
+  MENTION_PILL_SHAPE,
+);
 const INLINE_PILL_TONE = {
   default:
     "bg-primary/8 text-primary decoration-primary/60 hover:bg-primary/12 hover:decoration-primary",

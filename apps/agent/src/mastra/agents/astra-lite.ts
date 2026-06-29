@@ -5,6 +5,7 @@ import { memory } from "../memory";
 import { liteModel } from "../model";
 import { billingDebitProcessor, billingPrecheckProcessor } from "../processors/billing";
 import { EnsureFinalResponseProcessor } from "../processors/ensure-final-response";
+import { stripMentionMarkersProcessor } from "../processors/strip-mention-markers";
 import { threadArtifactManifestProcessor } from "../processors/thread-artifact-manifest";
 import {
   threadProjectionInputProcessor,
@@ -46,6 +47,9 @@ export const astraLite = new Agent({
   // Default opsi `stream()` (vNext) → FE tak perlu mengirim `maxSteps`; satu sumber kebenaran.
   defaultOptions: { maxSteps: MAX_STEPS },
   inputProcessors: [
+    // Strip penanda @mention (U+E000/E001) dari teks user PALING AWAL → token-count & semua
+    // processor/LLM di bawahnya melihat teks bersih (penanda cuma untuk render pill di FE).
+    stripMentionMarkersProcessor,
     new TokenLimiterProcessor(TOKEN_LIMIT),
     threadProjectionInputProcessor,
     billingPrecheckProcessor,

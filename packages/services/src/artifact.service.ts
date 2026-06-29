@@ -65,6 +65,13 @@ export type ArtifactListItem = {
   updatedAt: number;
 };
 
+/**
+ * Cap teks ekstraksi yang dikembalikan ke AGEN via `get_render_payload` (~20k token). Dokumen
+ * panjang (mis. survey 180k+ char) penuh akan membengkakkan konteks LLM / berisiko melewati window
+ * → turn gagal. Potong + beri penanda; bagian spesifik tetap dijangkau lewat `search_thread_documents`.
+ */
+const MAX_RENDER_EXTRACTED_TEXT_CHARS = 80_000;
+
 export type ArtifactRenderPayload =
   | { artifactType: "markdown"; blocksJson: string; markdown: string; plainText: string }
   | {
@@ -75,6 +82,9 @@ export type ArtifactRenderPayload =
       url: string;
       indexingStatus: IndexingStatus;
       indexingFailureReason?: string;
+      /** Teks hasil ekstraksi indexing (pdf/docx) — agar agen bisa MEMBACA isinya (URL presigned
+       * tak dapat diparse agen). Absen untuk image / dokumen yang belum/ gagal terindeks. */
+      extractedText?: string;
     }
   | {
       artifactType: "url";
@@ -184,6 +194,18 @@ async function deleteStaleR2Keys(keys: Array<string | null | undefined>): Promis
       console.error("[artifact] stale R2 delete failed", key, err);
     }
   }
+}
+
+/** Soft-delete satu artifact (status=deleted + tombstone timestamps). Dipakai `remove` (dalam tx) +
+ * `removeThreadAttachment`. Enqueue cleanup TERPISAH (harus setelah tx commit). */
+async function softDeleteArtifactRow(db: DbOrTx, artifactId: string): Promise<void> {
+  const now = Date.now();
+  await ArtifactRepo.update(db, artifactId, { status: "deleted", deletedAt: now, updatedAt: now });
+}
+
+/** Enqueue worker `artifact-cleanup` (hard-delete blob R2 + embeddings + child rows). */
+async function enqueueArtifactCleanup(ownerUserId: string, artifactId: string): Promise<void> {
+  await enqueue(ARTIFACT_QUEUES.artifactCleanup, { ownerUserId, artifactId });
 }
 
 export const ArtifactService = {
@@ -1168,12 +1190,14 @@ export const ArtifactService = {
   /**
    * Render payload (discriminated union on artifactType). Headless-tolerant: hanya
    * butuh owner + active (chat-attachment workspaceId=null tetap resolve). pdf/docx
-   * → presigned R2 GET. Return `null` bila missing/not-owned/not-active/blob hilang.
+   * → presigned R2 GET + `extractedText` (teks hasil indexing, agar agen bisa membaca
+   * isinya tanpa parse PDF). Return `null` bila missing/not-owned/not-active/blob hilang.
    */
   async getRenderPayload(
     db: DbOrTx,
     ownerUserId: string,
     artifactId: string,
+    opts?: { includeExtractedText?: boolean },
   ): Promise<ArtifactRenderPayload | null> {
     const artifact = await ArtifactRepo.findById(db, artifactId);
     if (!artifact || artifact.ownerUserId !== ownerUserId || artifact.status !== "active") return null;
@@ -1201,6 +1225,23 @@ export const ArtifactService = {
     if (type === "pdf" || type === "docx" || type === "image") {
       if (!artifact.storageR2Key) return null;
       const signedUrl = await StorageService.getSignedReadUrl(artifact.storageR2Key);
+      // pdf/docx: sertakan teks hasil ekstraksi indexing (inline / fallback R2) supaya agen bisa
+      // membaca ISI dokumen — URL presigned saja tak dapat diparse agen (tak ada web_fetch). Hanya
+      // saat diminta (`includeExtractedText`, dipakai tool agen) → viewer web tak terbebani ~ratusan
+      // KB teks yang tak dipakainya. Image tak punya teks → biarkan kosong.
+      let extractedText: string | undefined;
+      if (opts?.includeExtractedText && type !== "image") {
+        const content = await ArtifactContentRepo.findByArtifact(db, ownerUserId, artifactId);
+        const resolved =
+          content?.plainText ??
+          (content?.plainTextR2Key ? await StorageService.readText(content.plainTextR2Key) : "");
+        if (resolved.trim()) {
+          extractedText =
+            resolved.length > MAX_RENDER_EXTRACTED_TEXT_CHARS
+              ? `${resolved.slice(0, MAX_RENDER_EXTRACTED_TEXT_CHARS)}\n\n[…teks dipotong karena dokumen panjang; bagian ini sudah cukup untuk ringkasan umum. Untuk detail bagian tertentu yang belum tercakup, panggil search_thread_documents (scope workspaceId) dengan kueri spesifik.]`
+              : resolved;
+        }
+      }
       return {
         artifactType: type,
         fileName: artifact.fileName ?? artifact.title,
@@ -1211,6 +1252,7 @@ export const ArtifactService = {
         ...(artifact.indexingFailureReason
           ? { indexingFailureReason: artifact.indexingFailureReason }
           : {}),
+        ...(extractedText ? { extractedText } : {}),
       };
     }
 
@@ -1430,17 +1472,42 @@ export const ArtifactService = {
       await WorkspaceService.assertWorkspaceOwner(tx, input.ownerUserId, artifact.workspaceId, {
         requireActive: true,
       });
-      const now = Date.now();
-      await ArtifactRepo.update(tx, input.artifactId, {
-        status: "deleted",
-        deletedAt: now,
-        updatedAt: now,
+      await softDeleteArtifactRow(tx, input.artifactId);
+    });
+    await enqueueArtifactCleanup(input.ownerUserId, input.artifactId);
+    return { ok: true };
+  },
+
+  /**
+   * Hapus lampiran thread (HEADLESS, `workspaceId=null`) — dipakai saat user mencabut chip
+   * di composer SEBELUM kirim. Beda dari `remove` yang workspace-scoped: di sini ownership =
+   * owner + artifact benar-benar lampiran upload milik thread ini (`source='upload'`,
+   * `threadId` cocok). Soft-delete + enqueue cleanup. Idempoten (sudah hilang/non-aktif → no-op).
+   */
+  async removeThreadAttachment(
+    db: Db,
+    input: { ownerUserId: string; threadId: string; artifactId: string },
+  ): Promise<{ ok: true }> {
+    const artifact = await ArtifactRepo.findById(db, input.artifactId);
+    // Idempoten: sudah hilang → no-op (mis. double-click / retry setelah sukses).
+    if (!artifact) return { ok: true };
+    // Bukan lampiran upload milik thread ini / milik owner lain → 404 (cegah numpang/hapus salah).
+    if (
+      artifact.ownerUserId !== input.ownerUserId ||
+      artifact.threadId !== input.threadId ||
+      artifact.source !== "upload"
+    ) {
+      throwAppError({
+        message: "Attachment not found",
+        code: "artifact_not_found",
+        severity: "error",
+        status: 404,
       });
-    });
-    await enqueue(ARTIFACT_QUEUES.artifactCleanup, {
-      ownerUserId: input.ownerUserId,
-      artifactId: input.artifactId,
-    });
+    }
+    // Sudah non-aktif (terhapus sebelumnya) → no-op idempoten, tak perlu update/enqueue ulang.
+    if (artifact.status !== "active") return { ok: true };
+    await softDeleteArtifactRow(db, input.artifactId);
+    await enqueueArtifactCleanup(input.ownerUserId, input.artifactId);
     return { ok: true };
   },
 

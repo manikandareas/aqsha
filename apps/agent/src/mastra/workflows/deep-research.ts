@@ -50,6 +50,12 @@ const InputSchema = z.object({
   question: z.string().min(1).describe("Pertanyaan riset utama dari pengguna."),
   context: z.string().optional().describe("Konteks tambahan hasil klarifikasi (opsional)."),
   threadId: z.string().min(1).describe("Thread chat untuk men-scope sumber + billing."),
+  displayQuestion: z
+    .string()
+    .optional()
+    .describe(
+      "Varian `question` ber-penanda @mention (U+E000/E001) untuk DITAMPILKAN/DIPERSIST sebagai pill. Hanya pengaruhi teks pesan user yang disimpan; planner & subagen tetap pakai `question` bersih.",
+    ),
 });
 
 const PlanSchema = z.object({
@@ -231,7 +237,7 @@ function buildMastraMessage(args: {
 async function ensureDeepThread(
   mastra: Mastra | undefined,
   requestContext: RequestContext,
-  args: { threadId: string; question: string },
+  args: { threadId: string; question: string; displayQuestion?: string },
 ): Promise<void> {
   if (!mastra) return;
   const resourceId = ownerFromRequestContext(requestContext).id ?? undefined;
@@ -252,8 +258,11 @@ async function ensureDeepThread(
     await memory.saveMessages({
       messages: [
         buildMastraMessage({
+          // Teks PERSIST = varian ber-marker (bila ada) → bubble user `/deep` tampil ber-pill setelah
+          // refresh. Penanda di-strip server-side saat giliran chat berikutnya membaca riwayat
+          // (`stripMentionMarkersProcessor`); judul/preview di atas tetap dari `question` bersih.
           role: "user",
-          text: args.question,
+          text: args.displayQuestion ?? args.question,
           threadId: args.threadId,
           resourceId,
         }),
@@ -445,6 +454,7 @@ const approvePlanStep = createStep({
       await ensureDeepThread(mastra, requestContext, {
         threadId: inputData.threadId,
         question: inputData.question,
+        displayQuestion: inputData.displayQuestion,
       });
       return await suspend({ plan: inputData.plan, subQuestions: inputData.subQuestions });
     }

@@ -137,9 +137,26 @@ export const threads = new Elysia({ prefix: "/threads" })
     "/:id/artifacts",
     async ({ ownerUserId, params }) => {
       const { db } = getDb();
-      await ThreadService.assertOwner(db, ownerUserId, params.id);
+      // D6: percakapan baru (belum terproyeksi) tetap boleh — lampiran pesan-1 di-render live
+      // sebelum projection. Tolak thread milik lain.
+      await ThreadService.assertOwnerOrAbsent(db, ownerUserId, params.id);
       const items = await ArtifactService.listByThread(db, ownerUserId, params.id);
       return { items };
+    },
+    { auth: true },
+  )
+  // Cabut lampiran thread yang masih di-stage (sebelum kirim). Headless-tolerant: ownership =
+  // owner + lampiran upload milik thread ini (di-assert di service). Soft-delete + cleanup.
+  .delete(
+    "/:id/attachments/:artifactId",
+    async ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      await ThreadService.assertOwnerOrAbsent(db, ownerUserId, params.id);
+      return ArtifactService.removeThreadAttachment(db, {
+        ownerUserId,
+        threadId: params.id,
+        artifactId: params.artifactId,
+      });
     },
     { auth: true },
   )

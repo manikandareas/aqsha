@@ -18,7 +18,12 @@ import {
   PlanTrigger,
 } from "@/components/ai-elements/plan";
 import { HomeExploreBento } from "@/features/discovery/components/home-explore-bento";
-import { useSendStatus, useThreadsList, useThreadSources } from "@/features/threads/api";
+import {
+  useSendStatus,
+  useThreadArtifacts,
+  useThreadsList,
+  useThreadSources,
+} from "@/features/threads/api";
 import {
   Composer,
   type ComposerNotice,
@@ -26,6 +31,7 @@ import {
   type RecentThread,
 } from "@/features/threads/components/composer";
 import { MessageList } from "@/features/threads/components/message-list";
+import { bucketMessageAttachments } from "@/features/threads/lib/attachment-buckets";
 import { ASTRA_AGENT_ID, useMastraClient } from "@/features/threads/lib/mastra-client";
 import type { TimelineMessage } from "@/features/threads/lib/timeline-types";
 import { mastraMessagesToTimeline } from "@/features/threads/lib/mastra-timeline";
@@ -162,6 +168,16 @@ function MastraChatInner({
     return map;
   }, [sources]);
 
+  // Lampiran upload thread → dipetakan ke pesan user (join sisi-baca thread↔waktu) supaya berkas
+  // yang dikirim user tampil sebagai kartu di message row. Poll selama ada index `pending`.
+  const { data: threadArtifacts } = useThreadArtifacts(
+    agent.messages.length > 0 ? threadId : null,
+    { pollWhilePending: true },
+  );
+  // React Compiler (next.config `reactCompiler: true`) meng-cache turunan ini — recompute hanya saat
+  // input berubah, jadi tak perlu memo manual. Scan-nya kecil (O(pesan-user × upload), array mungil).
+  const attachmentsByMessage = bucketMessageAttachments(agent.messages, threadArtifacts);
+
   // Kirim pertama dari thread baru → bump URL ke /app/threads/<id> (history.replaceState, tanpa
   // navigasi Next → komponen tetap mounted) supaya refresh me-resume thread. Klien sudah tahu id.
   const bumpUrl = () => {
@@ -175,8 +191,8 @@ function MastraChatInner({
     bumpUrl();
     const run =
       payload.command === "deep"
-        ? agent.sendDeep(payload.text, payload.clientContext)
-        : agent.send(payload.text, payload.clientContext);
+        ? agent.sendDeep(payload.text, payload.clientContext, payload.richText, payload.attachmentIds)
+        : agent.send(payload.text, payload.clientContext, payload.richText, payload.attachmentIds);
     void run.then(() => {
       void qc.invalidateQueries({ queryKey: queryKeys.threads.sendStatus() });
     });
@@ -281,6 +297,7 @@ function MastraChatInner({
               pending={agent.status === "submitted"}
               busy={busy}
               sourcesByTurn={sourcesByTurn}
+              attachmentsByMessage={attachmentsByMessage}
               onRegenerate={regenerate}
             />
             {agent.error ? <p className="text-red-500 text-sm">{agent.error.message}</p> : null}

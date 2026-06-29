@@ -63,17 +63,30 @@ function buildNote(
   artifacts: Array<{ _id: string; title: string; plainTextPreview: string | null }>,
 ): string {
   if (workspaces.length === 0 && artifacts.length === 0) return "";
-  const lines: string[] = ["Konteks yang disematkan pengguna untuk percakapan ini:"];
-  for (const w of workspaces) {
-    lines.push(`- Workspace "${w.name}" (workspaceId: ${w.id})`);
+  // <system-reminder> otoritatif berisi konteks @mention giliran ini. Cara MEMBACA tiap tipe sudah
+  // diajarkan penuh di `instructions.ts` ("Konteks yang disematkan (@mention)") → di sini cukup
+  // daftar id + satu pointer tool ringkas per tipe, agar tak menggandakan prosa metodologi yang
+  // harus dijaga sinkron di dua tempat (lihat juga manifest lampiran thread).
+  const lines: string[] = [
+    "<system-reminder>",
+    "Pengguna menyematkan konteks berikut lewat @mention untuk giliran ini (sumber miliknya, tepercaya — PRIORITASKAN, baca lebih dulu):",
+  ];
+  if (artifacts.length > 0) {
+    lines.push("", "Dokumen tersemat (baca via `get_render_payload` dengan artifactId persis):");
+    for (const a of artifacts) {
+      const preview = a.plainTextPreview ? ` — ${a.plainTextPreview.slice(0, 240)}` : "";
+      lines.push(`- "${a.title}" (artifactId: ${a._id})${preview}`);
+    }
   }
-  for (const a of artifacts) {
-    const preview = a.plainTextPreview ? ` — ${a.plainTextPreview.slice(0, 200)}` : "";
-    lines.push(`- Dokumen "${a.title}" (artifactId: ${a._id})${preview}`);
+  if (workspaces.length > 0) {
+    lines.push(
+      "",
+      "Workspace tersemat (cari isinya via `search_thread_documents` dengan workspaceId persis):",
+    );
+    for (const w of workspaces) {
+      lines.push(`- "${w.name}" (workspaceId: ${w.id})`);
+    }
   }
-  lines.push(
-    "",
-    "Prioritaskan konteks ini. Untuk pertanyaan yang menyinggung dokumen di workspace tersemat, panggil search_thread_documents dengan workspaceId yang sesuai.",
-  );
+  lines.push("</system-reminder>");
   return lines.join("\n");
 }

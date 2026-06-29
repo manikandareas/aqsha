@@ -61,6 +61,8 @@ type MastraDBMessageLike = {
   role?: string;
   /** Kolom `type` Mastra: `"user"` utk input user (durable-thread = signal), `"v2"` utk assistant. */
   type?: string;
+  /** Epoch-ms / ISO / Date pembuatan pesan (kolom `mastra_messages.createdAt`). */
+  createdAt?: unknown;
   content?: {
     parts?: Array<Record<string, unknown>>;
     content?: unknown;
@@ -68,6 +70,32 @@ type MastraDBMessageLike = {
     metadata?: Record<string, unknown>;
   };
 };
+
+/** Normalisasi epoch-ms dari number | ISO-string | Date. 0 bila tak terbaca. */
+function toEpochMs(v: unknown): number {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const t = Date.parse(v);
+    if (Number.isFinite(t)) return t;
+  }
+  if (v instanceof Date) {
+    const t = v.getTime();
+    if (Number.isFinite(t)) return t;
+  }
+  return 0;
+}
+
+/** createdAt pesan: kolom top-level → part pertama bertanggal → `signal.acceptedAt/createdAt` → 0. */
+function messageCreatedAt(m: MastraDBMessageLike): number {
+  const top = toEpochMs(m.createdAt);
+  if (top) return top;
+  for (const p of m.content?.parts ?? []) {
+    const t = toEpochMs(p.createdAt);
+    if (t) return t;
+  }
+  const signal = m.content?.metadata?.signal as { acceptedAt?: unknown; createdAt?: unknown } | undefined;
+  return toEpochMs(signal?.acceptedAt) || toEpochMs(signal?.createdAt);
+}
 
 /**
  * Pesan user? Durable-thread `sendMessage` menyimpan input user sebagai SIGNAL
@@ -148,6 +176,7 @@ export function mastraMessagesToTimeline(messages: readonly MastraDBMessageLike[
       id: m.id,
       role: isUserDbMessage(m) ? "user" : "assistant",
       streaming: false,
+      createdAt: messageCreatedAt(m),
       ...(typeof deepRunId === "string" && deepRunId ? { turnId: deepRunId } : {}),
       parts: deepParts.length > 0 ? [...deepParts, ...parts] : parts,
     };
@@ -183,17 +212,23 @@ export function startAssistantTurn(
   state: MastraTimelineState,
   userText: string,
   turnSeed: string,
+  attachmentIds?: string[],
 ): MastraTimelineState {
+  const now = Date.now();
   const userMsg: TimelineMessage = {
     id: `${turnSeed}:user`,
     role: "user",
     streaming: false,
+    createdAt: now,
+    // Lampiran yang dikirim turn ini → ditampilkan EKSAK pada bubble live (tanpa tebak jendela waktu).
+    ...(attachmentIds && attachmentIds.length > 0 ? { attachmentIds } : {}),
     parts: [{ kind: "text", id: `${turnSeed}:user:t`, text: userText, streaming: false }],
   };
   const assistantMsg: TimelineMessage = {
     id: `${turnSeed}:assistant`,
     role: "assistant",
     streaming: true,
+    createdAt: now,
     parts: [],
   };
   return {
@@ -229,6 +264,7 @@ export function startRegenerate(state: MastraTimelineState): MastraTimelineState
     id: `regen:${messages.length}:${Date.now()}`,
     role: "assistant",
     streaming: true,
+    createdAt: Date.now(),
     parts: [],
   });
   return { ...state, messages, status: "submitted", error: undefined };
@@ -255,6 +291,7 @@ function ensureActiveAssistant(state: MastraTimelineState): [MastraTimelineState
     id: `resume:${state.runId ?? state.messages.length}:assistant`,
     role: "assistant",
     streaming: true,
+    createdAt: Date.now(),
     parts: [],
   };
   const messages = [...state.messages, assistant];

@@ -1,5 +1,6 @@
 "use client";
 
+import { parseMentionSegments, stripMentionMarkers } from "@aqsha/chat-core";
 import { CheckIcon, ChevronDownIcon, CopyIcon, RotateCcwIcon, SparklesIcon } from "@aqsha/ui/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Reasoning } from "@/components/ai-elements/reasoning";
@@ -7,10 +8,14 @@ import { Response } from "@/components/ai-elements/response";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
+import type { MessageAttachment } from "../lib/attachment-buckets";
+import { MENTION_PILL_SHAPE } from "../lib/composer-inline-editor";
 import { dedupeCards, researchSourceToCard } from "../lib/source-card";
 import type { SourceCardData, TimelineMessage, TimelinePart } from "../lib/timeline-types";
 import type { ResearchSource } from "../types";
 import { ChatArtifactCard } from "./chat-artifact-card";
+import { FileChip } from "./file-chip";
 import { ElapsedLabel } from "./elapsed-label";
 import { InlineSources } from "./sources-panel";
 import { ToolRow } from "./tool-row";
@@ -28,6 +33,7 @@ export function MessageList({
   pending,
   busy,
   sourcesByTurn,
+  attachmentsByMessage,
   onRegenerate,
 }: {
   messages: TimelineMessage[];
@@ -36,6 +42,8 @@ export function MessageList({
   busy?: boolean;
   /** Sumber riset dikelompokkan per `turnId` (dari `research_sources`). */
   sourcesByTurn?: Map<string, ResearchSource[]>;
+  /** Lampiran upload dikelompokkan per id pesan user (join sisi-baca thread↔waktu). */
+  attachmentsByMessage?: Map<string, MessageAttachment[]>;
   /** Ulangi (regenerate) turn terakhir — kirim ulang pesan user terakhir sebagai turn baru. */
   onRegenerate?: () => void;
 }) {
@@ -57,7 +65,7 @@ export function MessageList({
     <div className="flex flex-col gap-6">
       {messages.map((m) =>
         m.role === "user" ? (
-          <UserBubble key={m.id} parts={m.parts} />
+          <UserBubble key={m.id} parts={m.parts} attachments={attachmentsByMessage?.get(m.id)} />
         ) : (
           <AssistantMessage
             key={m.id}
@@ -72,18 +80,76 @@ export function MessageList({
   );
 }
 
-function UserBubble({ parts }: { parts: TimelinePart[] }) {
+function UserBubble({
+  parts,
+  attachments,
+}: {
+  parts: TimelinePart[];
+  attachments?: MessageAttachment[];
+}) {
   const text = parts
     .filter((p): p is Extract<TimelinePart, { kind: "text" }> => p.kind === "text")
     .map((p) => p.text)
     .join("");
-  if (!text) return null;
+  const hasAttachments = (attachments?.length ?? 0) > 0;
+  if (!text && !hasAttachments) return null;
   return (
-    <div className="flex justify-end">
-      <div className="max-w-[80%] whitespace-pre-wrap rounded-2xl bg-primary px-4 py-2 text-primary-foreground text-sm">
-        {text}
-      </div>
+    <div className="flex flex-col items-end gap-1.5">
+      {hasAttachments ? (
+        <div className="flex max-w-[80%] flex-wrap justify-end gap-2">
+          {attachments?.map((a) => (
+            <FileChip
+              key={a.id}
+              id={a.id}
+              title={a.title}
+              mimeType={a.mimeType}
+              indexingStatus={a.indexingStatus}
+            />
+          ))}
+        </div>
+      ) : null}
+      {text ? (
+        <div className="max-w-[80%] whitespace-pre-wrap rounded-2xl bg-primary px-4 py-2 text-primary-foreground text-sm">
+          <UserMessageText text={text} />
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * Teks pesan user → segmen teks + pill `@mention`. Penanda mention (U+E000/E001) disuntik composer
+ * (`serializeComposerEditorWithMarkers`) saat kirim dan ikut dipersist; `parseMentionSegments`
+ * memecahnya lagi di sini supaya mention tampil sebagai pill — treatment SAMA dengan composer
+ * (`MENTION_PILL_SHAPE`), tone-nya disesuaikan ke bubble `bg-primary`.
+ */
+function UserMessageText({ text }: { text: string }) {
+  // React Compiler meng-cache turunan ini (keyed `text`). Segmen mention pakai `label` (sudah bersih
+  // dari parse); segmen teks di-strip dari sisa penanda yatim (open tanpa close, mis. teks ter-truncate)
+  // agar char private-use tak ter-render.
+  const segments = parseMentionSegments(text).map((seg) =>
+    seg.type === "text" ? { type: "text" as const, value: stripMentionMarkers(seg.value) } : seg,
+  );
+  return (
+    <>
+      {segments.map((seg, i) =>
+        seg.type === "mention" ? (
+          <span
+            // biome-ignore lint/suspicious/noArrayIndexKey: segmen statis hasil parse satu string
+            key={i}
+            className={cn(
+              MENTION_PILL_SHAPE,
+              "bg-primary-foreground/15 decoration-primary-foreground/45",
+            )}
+          >
+            {seg.label}
+          </span>
+        ) : (
+          // biome-ignore lint/suspicious/noArrayIndexKey: segmen statis hasil parse satu string
+          <span key={i}>{seg.value}</span>
+        ),
+      )}
+    </>
   );
 }
 

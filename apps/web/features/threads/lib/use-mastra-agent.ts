@@ -29,8 +29,18 @@ export type MastraAgent = {
   approvals: MastraApproval[];
   planGate: MastraPlanGate | null;
   error: { message: string } | null;
-  send: (text: string, clientContext?: string[]) => Promise<void>;
-  sendDeep: (question: string, clientContext?: string[]) => Promise<void>;
+  send: (
+    text: string,
+    clientContext?: string[],
+    richText?: string,
+    attachmentIds?: string[],
+  ) => Promise<void>;
+  sendDeep: (
+    question: string,
+    clientContext?: string[],
+    richText?: string,
+    attachmentIds?: string[],
+  ) => Promise<void>;
   resolvePlan: (approved: boolean, edits?: string) => Promise<void>;
   regenerate: () => Promise<void>;
   approve: (toolCallId: string) => Promise<void>;
@@ -234,16 +244,20 @@ export function useMastraAgent(opts: {
   }, [state.status, qc]);
 
   const send = useCallback(
-    async (text: string, clientContext?: string[]) => {
+    async (text: string, clientContext?: string[], richText?: string, attachmentIds?: string[]) => {
       if (!text.trim() || !userId || statusRef.current !== "ready") return;
       const turnSeed = `${opts.threadId}:${Date.now()}`;
-      setState((s) => startAssistantTurn(s, text, turnSeed));
+      // `richText` = `text` + penanda `@mention` (U+E000/E001) untuk DITAMPILKAN & DIPERSIST sebagai
+      // pill. Agen (LLM) tak melihat penanda: `stripMentionMarkersProcessor` (input) men-strip-nya
+      // tiap giliran. Tanpa mention, `richText` undefined → pakai `text` apa adanya.
+      const display = richText ?? text;
+      setState((s) => startAssistantTurn(s, display, turnSeed, attachmentIds));
       try {
         const agent = clientRef.current.getAgent(ASTRA_AGENT_ID);
         // `clientContext` (ekspansi command + catatan @mention) = konteks EPHEMERAL per-call (tak
         // dipersist ke memory thread), pindah ke `ifIdle.streamOptions.context` (parity eve).
         await agent.sendMessage({
-          message: text,
+          message: display,
           resourceId: userId,
           threadId: opts.threadId,
           ...(clientContext && clientContext.length > 0
@@ -349,16 +363,26 @@ export function useMastraAgent(opts: {
   );
 
   const sendDeep = useCallback(
-    async (question: string, clientContext?: string[]) => {
+    async (
+      question: string,
+      clientContext?: string[],
+      richText?: string,
+      attachmentIds?: string[],
+    ) => {
       if (!userId || !question.trim() || statusRef.current !== "ready") return;
       const turnSeed = `${opts.threadId}:${Date.now()}`;
-      setState((s) => startAssistantTurn(s, question, turnSeed));
+      // Bubble user `/deep` ber-pill = `richText` (ber-marker) untuk TAMPIL + PERSIST; planner +
+      // semua prompt subagen tetap pakai `question` BERSIH. `displayQuestion` hanya dipakai workflow
+      // saat menyimpan pesan user ke memory (penanda di-strip server-side untuk LLM).
+      const display = richText ?? question;
+      setState((s) => startAssistantTurn(s, display, turnSeed, attachmentIds));
       try {
         const wf = clientRef.current.getWorkflow(DEEP_WORKFLOW_ID);
         const run = (await wf.createRun({ resourceId: userId })) as unknown as DeepRun;
         deepRunRef.current = run;
         setDeepRunId(opts.threadId, run.runId);
         const inputData: Record<string, unknown> = { question, threadId: opts.threadId };
+        if (richText && richText !== question) inputData.displayQuestion = richText;
         if (clientContext && clientContext.length > 0) inputData.context = clientContext.join("\n\n");
         const stream = await run.stream({ inputData, closeOnSuspend: true });
         await consumeWorkflow(stream);

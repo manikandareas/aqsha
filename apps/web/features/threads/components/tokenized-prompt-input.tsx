@@ -496,6 +496,26 @@ export function TokenizedPromptInput({
     }
   };
 
+  // Paste = teks polos saja. Default contentEditable menempel HTML kaya (mewarisi font/warna/ukuran
+  // dari sumber copy) → tampilan komposer rusak. Cegah default HANYA bila ada teks polos yang benar
+  // tersisip; kalau tidak (paste non-teks, atau tak ada caret/selection), biarkan default agar paste
+  // tak tertelan (teks hilang). Setelah sisip → `updateEditorFromInput` (serialize + clamp + sync).
+  const handlePaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
+    const text = event.clipboardData.getData("text/plain");
+    if (!text) {
+      return;
+    }
+    // Tanpa caret/selection, `insertPlainTextAtSelection` no-op → jangan `preventDefault` (biar
+    // paste native jalan) supaya teks tak hilang.
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return;
+    }
+    event.preventDefault();
+    insertPlainTextAtSelection(text);
+    updateEditorFromInput();
+  };
+
   const handleChipClick = (event: React.MouseEvent<HTMLDivElement>) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) {
@@ -555,6 +575,7 @@ export function TokenizedPromptInput({
             onInput={updateEditorFromInput}
             onBlur={syncEditorState}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             onClick={handleChipClick}
             tabIndex={0}
             suppressContentEditableWarning

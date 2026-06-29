@@ -95,5 +95,12 @@ export type TimelineMessage = {
   streaming: boolean;
   /** Runtime turn id — dipakai memetakan sumber riset (`research_sources.turnId`) ke turn. */
   turnId?: string;
+  /** Epoch-ms pesan dibuat — memetakan lampiran upload (artifact `createdAt`) ke pesan user
+   * (join sisi-baca per jendela waktu antar-pesan). 0 bila tak diketahui. */
+  createdAt: number;
+  /** Id artifact lampiran yang DIKIRIM bersama pesan ini (hanya pesan optimistik sesi ini). Bila ada,
+   * dipakai langsung untuk menampilkan kartu lampiran live — EKSAK, tanpa menebak via jendela waktu
+   * (lihat `bucketMessageAttachments`). Pesan rehydrate tak punya ini → pakai jendela waktu server. */
+  attachmentIds?: string[];
   parts: TimelinePart[];
 };
