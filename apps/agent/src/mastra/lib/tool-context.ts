@@ -28,6 +28,15 @@ export const AQSHA_EMAIL_KEY = "aqsha__email";
  */
 export const AQSHA_DEEP_RUN_KEY = "aqsha__deep_run_id";
 
+/**
+ * Sub-pertanyaan `/deep` aktif (index + teks) yang sedang dijawab `literatureSearcher`. Di-set
+ * step `search-literature` pada RequestContext yang DI-CLONE per sub-pertanyaan (`Promise.all`),
+ * supaya tool riset menstempel `research_sources.subQuestionIndex/Text` → FE mengelompokkan kartu
+ * sumber per sub-agen pencarian. Null di jalur chat biasa & step deep lain.
+ */
+export const AQSHA_DEEP_SUBQ_INDEX_KEY = "aqsha__deep_subq_index";
+export const AQSHA_DEEP_SUBQ_TEXT_KEY = "aqsha__deep_subq_text";
+
 export type AstraToolCtx = {
   requestContext?: RequestContext;
   agent?: { threadId?: string; resourceId?: string; toolCallId?: string };
@@ -79,4 +88,21 @@ export function toolCallId(ctx: AstraToolCtx): string {
 export function deepRunId(ctx: AstraToolCtx): string | null {
   const raw = ctx.requestContext?.get(AQSHA_DEEP_RUN_KEY);
   return typeof raw === "string" && raw ? raw : null;
+}
+
+/**
+ * Sub-pertanyaan `/deep` aktif (index + teks) dari RequestContext (`null` di jalur chat biasa).
+ * Dipakai `persistResearch` untuk men-tag `research_sources` per sub-agen pencarian.
+ */
+export function deepSubQuestion(ctx: AstraToolCtx): { index: number; text: string } | null {
+  const rawIndex = ctx.requestContext?.get(AQSHA_DEEP_SUBQ_INDEX_KEY);
+  const index =
+    typeof rawIndex === "number"
+      ? rawIndex
+      : typeof rawIndex === "string" && rawIndex
+        ? Number(rawIndex)
+        : Number.NaN;
+  if (!Number.isInteger(index) || index < 0) return null;
+  const rawText = ctx.requestContext?.get(AQSHA_DEEP_SUBQ_TEXT_KEY);
+  return { index, text: typeof rawText === "string" ? rawText : "" };
 }

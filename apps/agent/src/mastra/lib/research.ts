@@ -3,7 +3,14 @@ import type { CreditFeature } from "@aqsha/services/plan";
 import { ResearchService } from "@aqsha/services/research";
 import type { ResearchCandidate } from "@aqsha/services/research";
 import { getServiceDb } from "./db";
-import { type AstraToolCtx, callerEmail, deepRunId, threadScopeId, toolCallId } from "./tool-context";
+import {
+  type AstraToolCtx,
+  callerEmail,
+  deepRunId,
+  deepSubQuestion,
+  threadScopeId,
+  toolCallId,
+} from "./tool-context";
 
 /**
  * Helper riset/billing bersama untuk tool Mastra Astra (port dari eve `agent/lib/tools.ts`).
@@ -48,11 +55,13 @@ export async function persistResearch(
   args: { ownerUserId: string; candidates: ResearchCandidate[]; discoveryQuery?: string },
 ): Promise<void> {
   try {
+    const subQ = deepSubQuestion(ctx);
     await ResearchService.persistSources(getServiceDb(), {
       threadId: threadScopeId(ctx),
       ownerUserId: args.ownerUserId,
       turnId: deepRunId(ctx) ?? toolCallId(ctx),
       discoveryQuery: args.discoveryQuery,
+      ...(subQ ? { subQuestionIndex: subQ.index, subQuestionText: subQ.text } : {}),
       candidates: args.candidates,
       now: Date.now(),
     });

@@ -7,6 +7,7 @@
  */
 
 import { type DbOrTx, type NewResearchSource, type ResearchSource, ResearchSourceRepo } from "@aqsha/db";
+import { fetchArticlePreview } from "../papers/articlePreview";
 import { normalizeDoi } from "../papers/identifiers";
 import { searchArxiv } from "./arxiv";
 import { lookupDoi } from "./crossref";
@@ -31,6 +32,16 @@ export {
   type VerificationResult,
 } from "./citation";
 
+/**
+ * Preview OG image untuk satu sumber web (best-effort, time-boxed di `fetchArticlePreview`).
+ * Dipakai step `search-literature` `/deep` untuk enrich `research_sources.imageUrl` (kartu sumber).
+ * Hanya `imageUrl` yang dipakai di sini; favicon/domain diturunkan client-side dari `url`.
+ */
+export async function fetchSourcePreview(url: string): Promise<{ imageUrl?: string }> {
+  const preview = await fetchArticlePreview(url);
+  return preview.imageUrl ? { imageUrl: preview.imageUrl } : {};
+}
+
 /** Read model untuk panel Sources (api route + web hook). */
 export type ResearchSourceItem = {
   id: string;
@@ -47,6 +58,12 @@ export type ResearchSourceItem = {
   snippet: string;
   evidenceStrength: "strong" | "medium" | "weak";
   discoveryQuery: string | null;
+  /** Index sub-pertanyaan `/deep` yang menemukan sumber ini (null di chat biasa). */
+  subQuestionIndex: number | null;
+  /** Teks sub-pertanyaan `/deep` (null di chat biasa). */
+  subQuestionText: string | null;
+  /** OG image (best-effort) untuk kartu sumber (null bila tak ada/belum di-enrich). */
+  imageUrl: string | null;
   createdAt: number;
 };
 
@@ -83,6 +100,9 @@ export const ResearchService = {
       ownerUserId: string;
       turnId: string;
       discoveryQuery?: string;
+      /** Sub-pertanyaan `/deep` yang sedang dijawab — seragam untuk semua kandidat satu panggilan. */
+      subQuestionIndex?: number;
+      subQuestionText?: string;
       candidates: ResearchCandidate[];
       now: number;
     },
@@ -104,14 +124,35 @@ export const ResearchService = {
       snippet: candidate.snippet,
       evidenceStrength: candidate.evidenceStrength,
       discoveryQuery: input.discoveryQuery ?? null,
+      subQuestionIndex: input.subQuestionIndex ?? null,
+      subQuestionText: input.subQuestionText ?? null,
+      imageUrl: null,
       createdAt: input.now,
     }));
     await ResearchSourceRepo.insertMany(db, rows);
   },
 
+  /**
+   * Set OG image (`image_url`) batch untuk sumber yang sudah dipersist (hasil enrichment step
+   * search `/deep`). Best-effort di pemanggil — kegagalan tak boleh menggagalkan run. Update
+   * by id (run-scoped), aman dipanggil setelah `persistSources`.
+   */
+  async setSourceImages(db: DbOrTx, updates: Array<{ id: string; imageUrl: string }>): Promise<void> {
+    await ResearchSourceRepo.setImages(db, updates);
+  },
+
   /** Daftar sumber riset yang dipersist untuk sebuah thread (panel Sources). */
   async listThreadSources(db: DbOrTx, threadId: string): Promise<ResearchSourceItem[]> {
     const rows = await ResearchSourceRepo.listByThread(db, threadId);
+    return rows.map(toResearchSourceItem);
+  },
+
+  /** Sumber satu run deep (`turnId` = workflow runId) — untuk enrichment OG image step search. */
+  async listTurnSources(
+    db: DbOrTx,
+    args: { threadId: string; turnId: string },
+  ): Promise<ResearchSourceItem[]> {
+    const rows = await ResearchSourceRepo.listByThreadTurn(db, args.threadId, args.turnId);
     return rows.map(toResearchSourceItem);
   },
 
@@ -161,6 +202,9 @@ function toResearchSourceItem(r: ResearchSource): ResearchSourceItem {
     snippet: r.snippet,
     evidenceStrength: r.evidenceStrength as ResearchSourceItem["evidenceStrength"],
     discoveryQuery: r.discoveryQuery,
+    subQuestionIndex: r.subQuestionIndex,
+    subQuestionText: r.subQuestionText,
+    imageUrl: r.imageUrl,
     createdAt: r.createdAt,
   };
 }

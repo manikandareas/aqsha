@@ -62,6 +62,24 @@ export const ResearchSourceRepo = {
       );
   },
 
+  /** Set image_url batch (OG image hasil enrichment step search) via satu UPDATE…CASE. */
+  async setImages(db: DbOrTx, updates: Array<{ id: string; imageUrl: string }>): Promise<void> {
+    if (updates.length === 0) return;
+    const cases = sql.join(
+      updates.map((u) => sql`when ${researchSources.id} = ${u.id} then ${u.imageUrl}::text`),
+      sql` `,
+    );
+    await db
+      .update(researchSources)
+      .set({ imageUrl: sql`case ${cases} end` })
+      .where(
+        inArray(
+          researchSources.id,
+          updates.map((u) => u.id),
+        ),
+      );
+  },
+
   // FK `thread_id` tanpa onDelete cascade → wajib dihapus sebelum threadnya (lihat ThreadService.remove).
   async deleteByThread(db: DbOrTx, threadId: string): Promise<void> {
     await db.delete(researchSources).where(eq(researchSources.threadId, threadId));

@@ -1,7 +1,7 @@
 "use client";
 
 import { CheckIcon, ChevronDownIcon, CopyIcon, RotateCcwIcon, SparklesIcon } from "@aqsha/ui/icons";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Reasoning } from "@/components/ai-elements/reasoning";
 import { Response } from "@/components/ai-elements/response";
 import { Shimmer } from "@/components/ai-elements/shimmer";
@@ -115,6 +115,20 @@ function AssistantMessage({
   );
   const toolSteps = processParts.filter((p) => p.kind === "tool").length;
 
+  // Sumber `/deep` dikelompokkan per `subQuestionIndex` → kartu sub-agen pencarian (step
+  // search-literature). Hanya sumber bertanda sub-pertanyaan (chat biasa = null → dilewati).
+  const sourcesBySubQ = useMemo(() => {
+    if (!sources || sources.length === 0) return undefined;
+    const map = new Map<number, ResearchSource[]>();
+    for (const s of sources) {
+      if (s.subQuestionIndex == null) continue;
+      const list = map.get(s.subQuestionIndex);
+      if (list) list.push(s);
+      else map.set(s.subQuestionIndex, [s]);
+    }
+    return map.size > 0 ? map : undefined;
+  }, [sources]);
+
   const hasAnswer = Boolean(answer);
   const isEmpty = message.parts.length === 0;
 
@@ -127,7 +141,12 @@ function AssistantMessage({
       )}
 
       {processParts.length > 0 ? (
-        <ProcessBlock parts={processParts} streaming={streaming} toolSteps={toolSteps} />
+        <ProcessBlock
+          parts={processParts}
+          streaming={streaming}
+          toolSteps={toolSteps}
+          sourcesBySubQ={sourcesBySubQ}
+        />
       ) : null}
 
       {answer ? <Response text={answer.text} streaming={answer.streaming} /> : null}
@@ -158,10 +177,12 @@ function ProcessBlock({
   parts,
   streaming,
   toolSteps,
+  sourcesBySubQ,
 }: {
   parts: TimelinePart[];
   streaming: boolean;
   toolSteps: number;
+  sourcesBySubQ?: Map<number, ResearchSource[]>;
 }) {
   const [override, setOverride] = useState<boolean | null>(null);
   const prevStreaming = useRef(streaming);
@@ -188,9 +209,9 @@ function ProcessBlock({
         <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
       </CollapsibleTrigger>
       <CollapsibleContent className="overflow-hidden">
-        <div className="mt-2 flex min-w-0 flex-col gap-2.5 border-border/60 border-l pl-3 text-[13px]">
+        <div className="mt-2 flex min-w-0 flex-col gap-2.5 text-[13px]">
           {parts.map((part) => (
-            <ProcessPartView key={part.id} part={part} />
+            <ProcessPartView key={part.id} part={part} sourcesBySubQ={sourcesBySubQ} />
           ))}
         </div>
       </CollapsibleContent>
@@ -198,8 +219,14 @@ function ProcessBlock({
   );
 }
 
-function ProcessPartView({ part }: { part: TimelinePart }) {
-  if (part.kind === "tool") return <ToolRow model={part.model} />;
+function ProcessPartView({
+  part,
+  sourcesBySubQ,
+}: {
+  part: TimelinePart;
+  sourcesBySubQ?: Map<number, ResearchSource[]>;
+}) {
+  if (part.kind === "tool") return <ToolRow model={part.model} sourcesBySubQ={sourcesBySubQ} />;
   if (part.kind === "text") {
     // Teks antara (intermediate) yang diucapkan agen sebelum jawaban final.
     return <div className="whitespace-pre-wrap break-words text-muted-foreground">{part.text}</div>;

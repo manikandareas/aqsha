@@ -1,5 +1,7 @@
 import type {
   ArtifactCardModel,
+  DeepStepDetail,
+  DeepSubSearch,
   TimelineMessage,
   TimelinePart,
   ToolRow,
@@ -134,12 +136,19 @@ export function mastraMessagesToTimeline(messages: readonly MastraDBMessageLike[
     }
     // `turnId` dari metadata laporan `/deep` (`deepRunId`) → memetakan Sumber per-turn (G4).
     const deepRunId = m.content?.metadata?.deepRunId;
+    // Jejak proses `/deep` (`metadata.deepProcess`) → bangun ulang langkah + detail DI DEPAN laporan
+    // (process block sebelum jawaban), agar tetap muncul di riwayat & setelah refresh (G7).
+    const deepProcessRaw = m.content?.metadata?.deepProcess;
+    const deepParts =
+      deepProcessRaw && typeof deepProcessRaw === "object" && !Array.isArray(deepProcessRaw)
+        ? deepProcessParts(deepProcessRaw as Record<string, unknown>)
+        : [];
     return {
       id: m.id,
       role: isUserDbMessage(m) ? "user" : "assistant",
       streaming: false,
       ...(typeof deepRunId === "string" && deepRunId ? { turnId: deepRunId } : {}),
-      parts,
+      parts: deepParts.length > 0 ? [...deepParts, ...parts] : parts,
     };
   });
 }
@@ -461,6 +470,10 @@ export function seedWorkflowProgress(
     const status = str(sr?.status);
     if (!status) continue;
     next = upsertWorkflowStep(next, idx, stepId, wfStepStatusToTool(status));
+    // Rekonstruksi detail dari nilai return step (tersedia saat step selesai) → body expandable
+    // tetap terisi setelah refresh fase RUNNING (rencana, kartu sub-agen, bukti tandingan, dll.).
+    const detail = detailFromStepOutput(stepId, sr?.output);
+    if (detail) next = setStepDetail(next, idx, stepId, detail);
     if (stepId === "synthesize" && status === "success") {
       const report = reportFromOutput(sr?.output);
       if (report) next = setReportText(next, idx, report);
@@ -527,11 +540,20 @@ export function reduceWorkflowChunk(
       if (state.planGate) return state;
       return settleAssistantTurn({ ...state, planGate: undefined });
 
+    case "workflow-step-output": {
+      // Detail proses yang dipancarkan step via `writer.write` (`payload.output`, `payload.stepName`).
+      // Lampirkan ke body expandable step terkait (rencana, kartu sub-agen pencarian, dll.).
+      const stepId = str(payload.stepName);
+      if (!stepId) return state;
+      const [s, idx] = ensureActiveAssistant(streaming(state));
+      return applyStepOutputDetail(s, idx, stepId, payload.output);
+    }
+
     case "error":
       return { ...settleAssistantTurn({ ...state, planGate: undefined }), error: extractError(payload.error) };
 
     default:
-      return state; // step-output/progress/waiting/step-finish → diabaikan (granularitas)
+      return state; // step-progress/waiting/step-finish → diabaikan (granularitas)
   }
 }
 
@@ -591,6 +613,175 @@ function reportFromOutput(output: unknown): string {
 
 function strArray(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+}
+
+// ── detail proses `/deep` (DeepStepDetail) ─────────────────────────────────────
+//
+// Tiga sumber detail, satu bentuk akhir (`ToolRowModel.detail`):
+//   1) live — chunk `workflow-step-output` (`writer.write`) → `applyStepOutputDetail`/`mergeLiveDetail`.
+//   2) refresh poll — snapshot `steps[id].output` (nilai return step) → `detailFromStepOutput`.
+//   3) riwayat — `metadata.deepProcess` pesan asisten → `deepProcessParts`.
+// Daftar sumber kartu search di-resolve TERPISAH dari `research_sources` (join `subQuestionIndex`).
+
+/** ToolRowModel satu langkah Workflow (keyed `wf:<stepId>`) dengan detail opsional. */
+function buildStepModel(stepId: string, status: ToolStatus, detail?: DeepStepDetail): ToolRowModel {
+  return {
+    toolCallId: `wf:${stepId}`,
+    name: stepId,
+    title: wfStepLabel(stepId),
+    kind: "tool-call",
+    status,
+    isRunning: status === "running" || status === "pending",
+    description: undefined,
+    rows: [],
+    ...(detail ? { detail } : {}),
+  };
+}
+
+/** Upsert satu sub-pencarian (keyed `index`) lalu urut sesuai index sub-pertanyaan. */
+function upsertSubSearch(list: DeepSubSearch[], sub: DeepSubSearch): DeepSubSearch[] {
+  const i = list.findIndex((s) => s.index === sub.index);
+  const next = i < 0 ? [...list, sub] : list.map((s, j) => (j === i ? sub : s));
+  return [...next].sort((a, b) => a.index - b.index);
+}
+
+/** Gabung emit live (`workflow-step-output`) ke detail step. `prev` = detail terkumpul (akumulatif). */
+function mergeLiveDetail(
+  prev: DeepStepDetail | undefined,
+  data: Record<string, unknown>,
+): DeepStepDetail | undefined {
+  switch (str(data.kind)) {
+    case "plan":
+      return { kind: "plan", plan: str(data.plan), subQuestions: strArray(data.subQuestions) };
+    case "search-sub": {
+      const sub: DeepSubSearch = {
+        index: num(data.subIndex),
+        subQuestion: str(data.subQuestion),
+        status: str(data.status) === "done" ? "completed" : "running",
+      };
+      const existing = prev?.kind === "search" ? prev.subSearches : [];
+      return { kind: "search", subSearches: upsertSubSearch(existing, sub) };
+    }
+    case "counter":
+    case "verify":
+      return { kind: "text", text: str(data.text) };
+    case "citations":
+      return { kind: "citations", count: num(data.count) };
+    default:
+      return prev;
+  }
+}
+
+/** Set/gabung `detail` ke tool-row `wf:<stepId>` (buat row bila belum ada — live aman). */
+function setStepDetailWith(
+  state: MastraTimelineState,
+  msgIdx: number,
+  stepId: string,
+  fn: (prev: DeepStepDetail | undefined) => DeepStepDetail | undefined,
+): MastraTimelineState {
+  const toolCallId = `wf:${stepId}`;
+  return mutateMessage(state, msgIdx, (parts) => {
+    const i = parts.findIndex((p) => p.kind === "tool" && p.model.toolCallId === toolCallId);
+    if (i < 0) {
+      const detail = fn(undefined);
+      return [...parts, { kind: "tool", id: `tool:${toolCallId}`, model: buildStepModel(stepId, "running", detail) }];
+    }
+    return parts.map((p, j) => {
+      if (j !== i || p.kind !== "tool") return p;
+      const detail = fn(p.model.detail);
+      return { ...p, model: { ...p.model, ...(detail ? { detail } : {}) } };
+    });
+  });
+}
+
+/** Live: lampirkan detail dari chunk `workflow-step-output` (`payload.output`) ke step. */
+function applyStepOutputDetail(
+  state: MastraTimelineState,
+  msgIdx: number,
+  stepId: string,
+  output: unknown,
+): MastraTimelineState {
+  const data = asRecord(output);
+  return setStepDetailWith(state, msgIdx, stepId, (prev) => mergeLiveDetail(prev, data));
+}
+
+/** Set detail final (seed/rehydrate) ke step — overwrite. */
+function setStepDetail(
+  state: MastraTimelineState,
+  msgIdx: number,
+  stepId: string,
+  detail: DeepStepDetail,
+): MastraTimelineState {
+  return setStepDetailWith(state, msgIdx, stepId, () => detail);
+}
+
+/** Jumlah sitasi unik `[n]` dari inventory bernomor (baris bisa berbagi nomor karena dedupe). */
+function countInventory(inventory: string): number {
+  const nums = new Set<string>();
+  for (const m of inventory.matchAll(/^\[(\d+)\]/gm)) if (m[1]) nums.add(m[1]);
+  return nums.size;
+}
+
+/** Refresh poll: rekonstruksi detail dari nilai RETURN step (`steps[id].output`). */
+function detailFromStepOutput(stepId: string, output: unknown): DeepStepDetail | null {
+  const o = asRecord(output);
+  switch (stepId) {
+    case "draft-plan": {
+      const plan = str(o.plan);
+      const subQuestions = strArray(o.subQuestions);
+      return plan || subQuestions.length > 0 ? { kind: "plan", plan, subQuestions } : null;
+    }
+    case "search-literature": {
+      const subQuestions = strArray(o.subQuestions);
+      if (subQuestions.length === 0) return null;
+      return {
+        kind: "search",
+        subSearches: subQuestions.map((q, i) => ({ index: i, subQuestion: q, status: "completed" as ToolStatus })),
+      };
+    }
+    case "counter-evidence": {
+      const text = str(o.counter);
+      return text ? { kind: "text", text } : null;
+    }
+    case "assign-citations": {
+      const inventory = str(o.numberedInventory);
+      return inventory ? { kind: "citations", count: countInventory(inventory) } : null;
+    }
+    case "verify-citations": {
+      const text = str(o.verification);
+      return text ? { kind: "text", text } : null;
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * Riwayat: bangun tool-row "Proses" + detail dari `metadata.deepProcess` pesan asisten `/deep`
+ * (dipersist `persistDeepReport`). Semua step = completed (laporan ada → run sukses). approve-plan
+ * & synthesize sengaja dilewati (synthesize = jawaban itu sendiri).
+ */
+function deepProcessParts(deepProcess: Record<string, unknown>): TimelinePart[] {
+  const plan = str(deepProcess.plan);
+  const subQuestions = strArray(deepProcess.subQuestions);
+  const counter = str(deepProcess.counter);
+  const verification = str(deepProcess.verification);
+  const citationCount = num(deepProcess.citationCount);
+  const parts: TimelinePart[] = [];
+  const push = (stepId: string, detail: DeepStepDetail) => {
+    parts.push({ kind: "tool", id: `tool:wf:${stepId}`, model: buildStepModel(stepId, "completed", detail) });
+  };
+  if (plan || subQuestions.length > 0) push("draft-plan", { kind: "plan", plan, subQuestions });
+  if (subQuestions.length > 0) {
+    push("search-literature", {
+      kind: "search",
+      subSearches: subQuestions.map((q, i) => ({ index: i, subQuestion: q, status: "completed" as ToolStatus })),
+    });
+  }
+  if (counter) push("counter-evidence", { kind: "text", text: counter });
+  if (citationCount > 0) push("assign-citations", { kind: "citations", count: citationCount });
+  if (verification) push("verify-citations", { kind: "text", text: verification });
+  return parts;
 }
 
 // ── part builders ────────────────────────────────────────────────────────────
@@ -855,6 +1046,14 @@ function str(v: unknown): string {
 }
 function strId(v: unknown): string {
   return typeof v === "string" && v ? v : "0";
+}
+function num(v: unknown): number {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim()) {
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return 0;
 }
 function asRecord(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};

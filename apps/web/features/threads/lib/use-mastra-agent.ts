@@ -303,6 +303,15 @@ export function useMastraAgent(opts: {
         if (chunk.type === "workflow-step-suspended" && stepId === "approve-plan") {
           suspended = true;
         }
+        // Sumber terisi selagi run lanjut: setelah search-literature (subQuestionIndex + OG image
+        // sudah dipersist) & assign-citations (citation_number) → refresh kartu sumber per sub-agen
+        // tanpa menunggu workflow-finish.
+        if (
+          chunk.type === "workflow-step-result" &&
+          (stepId === "search-literature" || stepId === "assign-citations")
+        ) {
+          void qc.invalidateQueries({ queryKey: queryKeys.threads.sources(opts.threadId) });
+        }
         if (
           !suspended &&
           (chunk.type === "workflow-finish" || chunk.type === "workflow-canceled")
@@ -422,6 +431,7 @@ export function useMastraAgent(opts: {
       // suspend (→ salah meng-clear runId). Poll snapshot men-seed stepper idempoten sampai
       // suspended/terminal. Re-seed memetakan ke turn ber-`turnId` yang sama (tanpa duplikat bubble).
       let errors = 0;
+      let sourcesRefreshed = false;
       while (!cancelled) {
         let wfState: {
           status?: string;
@@ -482,6 +492,12 @@ export function useMastraAgent(opts: {
         }
         // running / waiting / pending → render progres terkini lalu poll lagi (step-level).
         setState((s) => seedWorkflowProgress(s, runId, steps));
+        // Sekali, saat search-literature selesai: refresh sumber → kartu per sub-agen terisi
+        // (subQuestionIndex + OG image) walau run masih lanjut ke fase berikutnya.
+        if (!sourcesRefreshed && steps["search-literature"]?.status === "success") {
+          sourcesRefreshed = true;
+          void qc.invalidateQueries({ queryKey: queryKeys.threads.sources(opts.threadId) });
+        }
         await delay(2500);
       }
     })();

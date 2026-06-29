@@ -14,6 +14,26 @@ export type ToolRow = {
   group: "input" | "output";
 };
 
+/** Satu sub-agen pencarian (`/deep` step `search-literature`) — satu kartu per sub-pertanyaan. */
+export type DeepSubSearch = {
+  index: number;
+  subQuestion: string;
+  /** "running" selagi sub-agen bekerja; "completed" saat selesai. */
+  status: ToolStatus;
+};
+
+/**
+ * Detail proses satu langkah Workflow `/deep` (body expandable tool-row "Proses"). Diisi dari
+ * chunk `workflow-step-output` (live), snapshot step output (refresh poll), atau `metadata.deepProcess`
+ * (riwayat). Untuk `kind:"search"`, daftar sumber per sub-pertanyaan di-resolve terpisah dari
+ * `research_sources` (di-join via `subQuestionIndex` saat render).
+ */
+export type DeepStepDetail =
+  | { kind: "plan"; plan: string; subQuestions: string[] }
+  | { kind: "search"; subSearches: DeepSubSearch[] }
+  | { kind: "text"; text: string }
+  | { kind: "citations"; count: number };
+
 /** Model presentasi satu tool-row (collapsible). Default-deny: hanya scalar yang lolos. */
 export type ToolRowModel = {
   toolCallId: string;
@@ -27,6 +47,8 @@ export type ToolRowModel = {
   description?: string;
   /** Body rows curated (scalar saja). Kosong → render header-only. */
   rows: ToolRow[];
+  /** Detail proses `/deep` (rencana, kartu sub-agen pencarian, bukti tandingan, dll.). */
+  detail?: DeepStepDetail;
 };
 
 /** Model kartu artifact dari output `propose_artifact` yang sukses. */

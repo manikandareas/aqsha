@@ -32,6 +32,11 @@ export type ResearchSource = {
   snippet: string;
   evidenceStrength: string; // "strong" | "medium" | "weak"
   discoveryQuery: string | null;
+  /** Index sub-pertanyaan `/deep` yang menemukan sumber (null di chat biasa) — pengelompokan kartu. */
+  subQuestionIndex: number | null;
+  subQuestionText: string | null;
+  /** OG image (best-effort) untuk kartu sumber (null bila tak ada). */
+  imageUrl: string | null;
   createdAt: number;
 };
 

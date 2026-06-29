@@ -2,13 +2,21 @@
 
 import { Badge } from "@aqsha/ui/components/badge";
 import {
+  BookmarkIcon,
   BookOpenIcon,
+  CheckCircle2Icon,
   ChevronDownIcon,
   FileTextIcon,
   FolderIcon,
   GlobeIcon,
+  Library,
+  NotebookIcon,
+  PencilIcon,
   PenLineIcon,
+  Quote,
+  Scale,
   SearchIcon,
+  ShieldCheckIcon,
   TelescopeIcon,
   Trash2Icon,
   WrenchIcon,
@@ -17,23 +25,49 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
-import type { ToolRow as ToolRowData, ToolRowModel, ToolStatus } from "../lib/timeline-types";
+import type {
+  DeepStepDetail,
+  ToolRow as ToolRowData,
+  ToolRowModel,
+  ToolStatus,
+} from "../lib/timeline-types";
+import type { ResearchSource } from "../types";
+import { DeepSearchCards } from "./deep-search-cards";
 import { ElapsedLabel } from "./elapsed-label";
 
 // Ikon semantik per tool (kosmetik — data: `model.name` selalu ada). Switch mengembalikan
 // JSX konkret (bukan komponen dinamis) supaya lolos react-compiler. Tool tak dikenal → wrench.
 function ToolGlyph({ name, className }: { name: string; className?: string }) {
   switch (name) {
+    // ── Langkah deep-research (`name` = stepId) — tiap fase ikon khasnya sendiri ──
+    case "draft-plan":
+      return <NotebookIcon className={className} />;
+    case "approve-plan":
+      return <CheckCircle2Icon className={className} />;
+    case "search-literature":
+      return <Library className={className} />;
+    case "counter-evidence":
+      return <Scale className={className} />;
+    case "assign-citations":
+      return <Quote className={className} />;
+    case "verify-citations":
+    case "verify_citations":
+    case "verify_identifiers":
+      return <ShieldCheckIcon className={className} />;
+    case "synthesize":
+      return <PencilIcon className={className} />;
+    // ── Tool normal ──
     case "search_web":
       return <GlobeIcon className={className} />;
     case "search_thread_documents":
       return <SearchIcon className={className} />;
     case "search_papers":
     case "lookup_doi":
-      return <BookOpenIcon className={className} />;
     case "search_arxiv":
+      return <BookOpenIcon className={className} />;
     case "list_artifacts":
     case "get_artifact":
     case "get_render_payload":
@@ -42,8 +76,9 @@ function ToolGlyph({ name, className }: { name: string; className?: string }) {
     case "create_workspace":
     case "rename_workspace":
     case "link_to_workspace":
-    case "save_url":
       return <FolderIcon className={className} />;
+    case "save_url":
+      return <BookmarkIcon className={className} />;
     case "propose_artifact":
     case "execute_artifact":
       return <PenLineIcon className={className} />;
@@ -104,8 +139,16 @@ function toneClass(status: ToolStatus): string {
  * Auto-open selagi aktif, auto-collapse saat settle — kecuali user menggeser manual
  * (override sticky).
  */
-export function ToolRow({ model }: { model: ToolRowModel }) {
-  const hasBody = model.rows.length > 0;
+export function ToolRow({
+  model,
+  sourcesBySubQ,
+}: {
+  model: ToolRowModel;
+  /** Sumber `/deep` per `subQuestionIndex` (untuk detail step `search-literature`). */
+  sourcesBySubQ?: Map<number, ResearchSource[]>;
+}) {
+  const detail = model.detail;
+  const hasBody = model.rows.length > 0 || Boolean(detail);
   const inputRows = model.rows.filter((row) => row.group === "input");
   const outputRows = model.rows.filter((row) => row.group === "output");
   // Descriptor inline selagi running: kueri (tool) atau tugas (subagent, key "message").
@@ -175,17 +218,84 @@ export function ToolRow({ model }: { model: ToolRowModel }) {
         <ChevronDownIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 group-focus-visible:opacity-100 group-data-[state=open]:rotate-180 group-data-[state=open]:opacity-100" />
       </CollapsibleTrigger>
       <CollapsibleContent className="overflow-hidden">
-        <div className="mt-1.5 grid gap-2 pl-3 text-[12px]">
-          <ToolRowSection label="Masukan" rows={inputRows} />
-          <ToolRowSection
-            label="Hasil"
-            rows={outputRows}
-            tone={model.status === "failed" ? "danger" : "default"}
-          />
-        </div>
+        {detail && detail.kind === "search" ? (
+          // Step pencarian: JANGAN bungkus seluruh body — tiap kartu sub-agen punya scroll sendiri
+          // (daftar sumber di-scroll per kartu), supaya beberapa kartu tetap kebaca bersamaan.
+          <div className="mt-1.5 text-[12px]">
+            <DeepSearchCards subSearches={detail.subSearches} sourcesBySubQ={sourcesBySubQ} />
+          </div>
+        ) : detail && (detail.kind === "plan" || detail.kind === "text") ? (
+          // Prosa panjang (rencana / bukti tandingan / verifikasi): box ber-scroll (max-h) + vignette.
+          <ScrollArea
+            vignette
+            className="mt-1.5 rounded-lg border bg-background"
+            viewportClassName="max-h-[140px]"
+          >
+            <div className="text-[12px]">
+              <DeepDetailBody detail={detail} />
+            </div>
+          </ScrollArea>
+        ) : (
+          // Sitasi (teks sebaris) & tool biasa (scalar): polos tanpa box scroll — terlalu pendek.
+          <div className="mt-1.5 grid gap-2 text-[12px]">
+            <ToolRowSection label="Masukan" rows={inputRows} />
+            <ToolRowSection
+              label="Hasil"
+              rows={outputRows}
+              tone={model.status === "failed" ? "danger" : "default"}
+            />
+            {detail ? <DeepDetailBody detail={detail} /> : null}
+          </div>
+        )}
       </CollapsibleContent>
     </Collapsible>
   );
+}
+
+/**
+ * Body detail proses `/deep` non-search (rencana, bukti tandingan, verifikasi, sitasi). Kasus
+ * `search` ditangani langsung di `ToolRow` (kartu sub-agen ber-scroll sendiri, tak dibungkus).
+ */
+function DeepDetailBody({
+  detail,
+}: {
+  detail: Exclude<DeepStepDetail, { kind: "search" }>;
+}) {
+  switch (detail.kind) {
+    case "plan":
+      return (
+        <div className="grid gap-2">
+          {detail.plan ? (
+            <p className="whitespace-pre-wrap break-words text-muted-foreground leading-5">
+              {detail.plan}
+            </p>
+          ) : null}
+          {detail.subQuestions.length > 0 ? (
+            <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">
+              {detail.subQuestions.map((q, i) => (
+                <li key={`${i}-${q.slice(0, 24)}`}>{q}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      );
+    case "text":
+      return (
+        <p className="whitespace-pre-wrap break-words text-muted-foreground leading-5">
+          {detail.text}
+        </p>
+      );
+    case "citations":
+      return (
+        <p className="text-muted-foreground">
+          {detail.count > 0
+            ? `${detail.count} sumber diberi nomor sitasi [n].`
+            : "Belum ada sumber bernomor."}
+        </p>
+      );
+    default:
+      return null;
+  }
 }
 
 function ToolRowSection({

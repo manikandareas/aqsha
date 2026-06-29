@@ -3,11 +3,11 @@ import { BillingService } from "@aqsha/services/billing";
 import { ThreadService, TitleService } from "@aqsha/services/chat";
 import { estimateCredits } from "@aqsha/services/plan";
 import { SendQuotaService } from "@aqsha/services/quota";
-import { ResearchService } from "@aqsha/services/research";
+import { ResearchService, fetchSourcePreview } from "@aqsha/services/research";
 import type { Mastra } from "@mastra/core/mastra";
 import {
   MASTRA_THREAD_ID_KEY,
-  type RequestContext,
+  RequestContext,
 } from "@mastra/core/request-context";
 import { createStep, createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
@@ -16,7 +16,12 @@ import { counterEvidence } from "../agents/counter-evidence";
 import { deepWriter } from "../agents/deep-writer";
 import { literatureSearcher } from "../agents/literature-searcher";
 import { getServiceDb } from "../lib/db";
-import { AQSHA_DEEP_RUN_KEY, ownerFromRequestContext } from "../lib/tool-context";
+import {
+  AQSHA_DEEP_RUN_KEY,
+  AQSHA_DEEP_SUBQ_INDEX_KEY,
+  AQSHA_DEEP_SUBQ_TEXT_KEY,
+  ownerFromRequestContext,
+} from "../lib/tool-context";
 
 /**
  * Workflow `deep-research` (Fase 2) — port `/deep` eve ke orkestrasi deterministik Mastra.
@@ -95,6 +100,83 @@ function withDeepRun(rc: RequestContext, threadId: string, runId: string): Reque
   rc.set(MASTRA_THREAD_ID_KEY, threadId);
   rc.set(AQSHA_DEEP_RUN_KEY, runId);
   return rc;
+}
+
+const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+// ── Detail proses (writer.write) ──────────────────────────────────────────────────────────
+//
+// Tiap step memancarkan detailnya lewat `writer.write(data)` → chunk `workflow-step-output`
+// (`payload.output=data`, `payload.stepName=<id>`) di stream Workflow. FE (`reduceWorkflowChunk`)
+// memetakan ke body expandable per step ("Proses"). Step `search-literature` memancarkan status per
+// sub-pertanyaan (kartu sub-agen); daftar sumbernya di-resolve FE dari `research_sources` (DB).
+// Best-effort: writer non-fatal — emit dilewati bila tak tersedia.
+
+/** Subset `writer` (ToolStream) yang dipakai step — write data ke stream Workflow. */
+type StepWriter = { write: (data: unknown) => Promise<void> } | undefined;
+
+/** Bentuk detail yang dipancarkan tiap step (dibaca FE via `payload.output`). */
+type StepDetailEmit =
+  | { kind: "plan"; plan: string; subQuestions: string[] }
+  | { kind: "search-sub"; subIndex: number; subQuestion: string; status: "searching" | "done" }
+  | { kind: "counter"; text: string }
+  | { kind: "citations"; count: number }
+  | { kind: "verify"; text: string };
+
+async function emitDetail(writer: StepWriter, data: StepDetailEmit): Promise<void> {
+  if (!writer) return;
+  try {
+    await writer.write(data);
+  } catch (err) {
+    // Stream bisa sudah ditutup (mis. plan-gate close-on-suspend) — emit detail tak boleh fatal.
+    console.error("[deep-research] emitDetail failed", err);
+  }
+}
+
+/** Potong teks panjang (counter/verify) untuk detail FE — narasi penuh tetap ada di laporan. */
+function clampDetail(text: string, max = 1200): string {
+  const trimmed = text.trim();
+  return trimmed.length > max ? `${trimmed.slice(0, max - 1)}…` : trimmed;
+}
+
+/**
+ * Enrich OG image sumber satu run (best-effort, time-boxed) → `research_sources.imageUrl` untuk
+ * kartu sumber FE. Ambil sumber run, fetch preview paralel (concurrency-capped, per-URL timeout di
+ * `fetchSourcePreview`), persist via `setSourceImages`. Dibatasi deadline global agar tak menambah
+ * latensi besar ke run (deep run sudah bermenit-menit; ini bonus visual). Tak pernah throw.
+ */
+async function enrichSourceImages(threadId: string, runId: string): Promise<void> {
+  const CONCURRENCY = 8;
+  const MAX_TARGETS = 24;
+  const DEADLINE_MS = 12_000;
+  try {
+    const db = getServiceDb();
+    const sources = await ResearchService.listTurnSources(db, { threadId, turnId: runId });
+    const targets = sources
+      .filter((s) => !s.imageUrl && s.url && /^https?:\/\//i.test(s.url))
+      .slice(0, MAX_TARGETS);
+    if (targets.length === 0) return;
+    const updates: Array<{ id: string; imageUrl: string }> = [];
+    let cursor = 0;
+    const worker = async (): Promise<void> => {
+      while (cursor < targets.length) {
+        const target = targets[cursor++];
+        if (!target?.url) continue;
+        try {
+          const { imageUrl } = await fetchSourcePreview(target.url);
+          if (imageUrl) updates.push({ id: target.id, imageUrl });
+        } catch {
+          // satu URL gagal → lanjut (best-effort)
+        }
+      }
+    };
+    const pool = Array.from({ length: Math.min(CONCURRENCY, targets.length) }, () => worker());
+    // Deadline global: persist apa pun yang terkumpul saat batas tercapai (worker sisa diabaikan).
+    await Promise.race([Promise.all(pool), delay(DEADLINE_MS)]);
+    if (updates.length > 0) await ResearchService.setSourceImages(db, updates.slice());
+  } catch (err) {
+    console.error("[deep-research] enrichSourceImages failed", err);
+  }
 }
 
 /**
@@ -202,7 +284,13 @@ async function ensureDeepThread(
 async function persistDeepReport(
   mastra: Mastra | undefined,
   requestContext: RequestContext,
-  args: { threadId: string; report: string; runId: string },
+  args: {
+    threadId: string;
+    report: string;
+    runId: string;
+    /** Jejak proses untuk rehydrate (FE bangun ulang langkah + detail saat refresh/riwayat, G7). */
+    deepProcess?: Record<string, unknown>;
+  },
 ): Promise<void> {
   if (!mastra) return;
   try {
@@ -231,13 +319,25 @@ async function persistDeepReport(
           text: args.report,
           threadId: args.threadId,
           resourceId,
-          metadata: { deepRunId: args.runId },
+          metadata: {
+            deepRunId: args.runId,
+            ...(args.deepProcess ? { deepProcess: args.deepProcess } : {}),
+          },
         }),
       ],
     });
   } catch (err) {
     console.error("[deep-research] persistReport failed", err);
   }
+}
+
+/** Jumlah sitasi unik `[n]` di inventory bernomor (baris bisa berbagi nomor karena dedupe). */
+function parseCitationCount(numberedInventory: string): number {
+  const nums = new Set<string>();
+  for (const m of numberedInventory.matchAll(/^\[(\d+)\]/gm)) {
+    if (m[1]) nums.add(m[1]);
+  }
+  return nums.size;
 }
 
 // ── Prompt builders ────────────────────────────────────────────────────────────────────
@@ -305,7 +405,7 @@ const draftPlanStep = createStep({
   id: "draft-plan",
   inputSchema: InputSchema,
   outputSchema: PlannedSchema,
-  execute: async ({ inputData, requestContext, bail, runId }) => {
+  execute: async ({ inputData, requestContext, bail, runId, writer }) => {
     const { id: ownerUserId, email: ownerEmail } = ownerFromRequestContext(requestContext);
     if (ownerUserId) {
       const quota = await SendQuotaService.check(getServiceDb(), {
@@ -327,6 +427,7 @@ const draftPlanStep = createStep({
     const plan = parsed?.plan ?? out.text;
     const subQuestions =
       parsed && parsed.subQuestions.length > 0 ? parsed.subQuestions : [inputData.question];
+    await emitDetail(writer, { kind: "plan", plan, subQuestions });
     return { ...inputData, plan, subQuestions };
   },
 });
@@ -404,16 +505,26 @@ const searchStep = createStep({
   id: "search-literature",
   inputSchema: PlannedSchema,
   outputSchema: SearchedSchema,
-  execute: async ({ inputData, requestContext, runId }) => {
-    const rc = withDeepRun(requestContext, inputData.threadId, runId);
+  execute: async ({ inputData, requestContext, runId, writer }) => {
+    // Tanam thread+run di rc induk dulu → entries() yang DI-CLONE per sub-Q sudah membawanya.
+    withDeepRun(requestContext, inputData.threadId, runId);
     const evidence = await Promise.all(
-      inputData.subQuestions.map(async (subQuestion) => {
+      inputData.subQuestions.map(async (subQuestion, subIndex) => {
+        // Clone rc per sub-pertanyaan (Promise.all paralel) lalu stempel index/teks → tool riset
+        // men-tag `research_sources.subQuestionIndex` tanpa balapan antar-sub-Q (rc induk dibagi).
+        const subRc = new RequestContext(requestContext.entries());
+        subRc.set(AQSHA_DEEP_SUBQ_INDEX_KEY, subIndex);
+        subRc.set(AQSHA_DEEP_SUBQ_TEXT_KEY, subQuestion);
+        await emitDetail(writer, { kind: "search-sub", subIndex, subQuestion, status: "searching" });
         const out = await literatureSearcher.generate(searcherPrompt(subQuestion, inputData), {
-          requestContext: rc,
+          requestContext: subRc,
         });
+        await emitDetail(writer, { kind: "search-sub", subIndex, subQuestion, status: "done" });
         return { subQuestion, findings: out.text };
       }),
     );
+    // Enrich OG image (best-effort, time-boxed) SETELAH semua sumber dipersist → kartu sumber kaya.
+    await enrichSourceImages(inputData.threadId, runId);
     return { ...inputData, evidence };
   },
 });
@@ -423,10 +534,11 @@ const counterEvidenceStep = createStep({
   id: "counter-evidence",
   inputSchema: SearchedSchema,
   outputSchema: CounteredSchema,
-  execute: async ({ inputData, requestContext, runId }) => {
+  execute: async ({ inputData, requestContext, runId, writer }) => {
     const out = await counterEvidence.generate(counterPrompt(inputData), {
       requestContext: withDeepRun(requestContext, inputData.threadId, runId),
     });
+    await emitDetail(writer, { kind: "counter", text: clampDetail(out.text) });
     return { ...inputData, counter: out.text };
   },
 });
@@ -439,13 +551,13 @@ const assignCitationsStep = createStep({
   id: "assign-citations",
   inputSchema: CounteredSchema,
   outputSchema: CitedSchema,
-  execute: async ({ inputData, runId }) => {
+  execute: async ({ inputData, runId, writer }) => {
     const items = await ResearchService.assignCitationNumbers(getServiceDb(), {
       threadId: inputData.threadId,
       turnId: runId,
     });
-    const numberedInventory = items
-      .filter((s) => s.citationNumber !== null)
+    const numbered = items.filter((s) => s.citationNumber !== null);
+    const numberedInventory = numbered
       .map(
         (s) =>
           `[${s.citationNumber}] ${s.title} — ${s.doi ?? s.arxivId ?? s.url ?? s.locator}${
@@ -453,6 +565,9 @@ const assignCitationsStep = createStep({
           } (${s.evidenceStrength})`,
       )
       .join("\n");
+    // Jumlah sitasi unik [n] (dedupe by DOI/arXiv/locator) — sumber penomoran ditampilkan FE.
+    const uniqueCitations = new Set(numbered.map((s) => s.citationNumber)).size;
+    await emitDetail(writer, { kind: "citations", count: uniqueCitations });
     return { ...inputData, numberedInventory };
   },
 });
@@ -462,10 +577,11 @@ const citationVerifyStep = createStep({
   id: "verify-citations",
   inputSchema: CitedSchema,
   outputSchema: VerifiedSchema,
-  execute: async ({ inputData, requestContext, runId }) => {
+  execute: async ({ inputData, requestContext, runId, writer }) => {
     const out = await citationVerifier.generate(verifyPrompt(inputData), {
       requestContext: withDeepRun(requestContext, inputData.threadId, runId),
     });
+    await emitDetail(writer, { kind: "verify", text: clampDetail(out.text) });
     return { ...inputData, verification: out.text };
   },
 });
@@ -483,11 +599,19 @@ const synthesizeStep = createStep({
       toolChoice: "none",
     });
     // Persist verbatim ke memory thread chat → muncul di history + rehydrate saat refresh (G1/G2).
-    // (Pertanyaan user sudah dipersist di `ensureDeepThread` pada plan-gate.)
+    // (Pertanyaan user sudah dipersist di `ensureDeepThread` pada plan-gate.) `deepProcess` =
+    // jejak proses ringkas agar FE bangun ulang langkah + detail tanpa runId (riwayat/refresh, G7).
     await persistDeepReport(mastra, requestContext, {
       threadId: inputData.threadId,
       report: out.text,
       runId,
+      deepProcess: {
+        plan: inputData.plan,
+        subQuestions: inputData.subQuestions,
+        counter: clampDetail(inputData.counter),
+        verification: clampDetail(inputData.verification),
+        citationCount: parseCitationCount(inputData.numberedInventory),
+      },
     });
     return {
       status: "completed" as const,

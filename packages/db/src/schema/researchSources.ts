@@ -14,6 +14,11 @@ import { users } from "./users";
  * - `evidence_strength` text + CHECK (strong|medium|weak) — port dari ExternalCandidate V1.
  * - `citation_number` opsional — penomoran [n] global ditunda ke P7 (citation verify, D-H);
  *   di 6.4 dibiarkan null, panel Sources menomori berdasar urutan.
+ * - `sub_question_index`/`sub_question_text` opsional — asosiasi sumber ke sub-pertanyaan riset
+ *   `/deep` (di-set step `search-literature` via RequestContext) → FE mengelompokkan kartu per
+ *   sub-agen pencarian. Null di jalur chat biasa (bukan `/deep`).
+ * - `image_url` opsional — OG image best-effort yang di-enrich step search (`fetchSourcePreview`)
+ *   untuk kartu sumber. Favicon + domain TIDAK disimpan (diturunkan client-side dari `url`).
  * - Idempotensi insert: unique (`thread_id`,`turn_id`,`locator`) → step tool yang RE-RUN
  *   saat resume eve tak menggandakan baris (ON CONFLICT DO NOTHING di repo).
  * - timestamp epoch-ms (`bigint`) seragam dengan tabel V2 lain.
@@ -40,6 +45,9 @@ export const researchSources = pgTable(
     snippet: text("snippet").notNull(),
     evidenceStrength: text("evidence_strength").notNull(),
     discoveryQuery: text("discovery_query"),
+    subQuestionIndex: integer("sub_question_index"),
+    subQuestionText: text("sub_question_text"),
+    imageUrl: text("image_url"),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
   (t) => [
