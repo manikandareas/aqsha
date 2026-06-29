@@ -7,7 +7,8 @@ import { Response } from "@/components/ai-elements/response";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Spinner } from "@/components/ui/spinner";
-import type { TimelineMessage, TimelinePart } from "../lib/timeline-types";
+import { dedupeCards, researchSourceToCard } from "../lib/source-card";
+import type { SourceCardData, TimelineMessage, TimelinePart } from "../lib/timeline-types";
 import type { ResearchSource } from "../types";
 import { ChatArtifactCard } from "./chat-artifact-card";
 import { ElapsedLabel } from "./elapsed-label";
@@ -117,6 +118,7 @@ function AssistantMessage({
 
   // Sumber `/deep` dikelompokkan per `subQuestionIndex` → kartu sub-agen pencarian (step
   // search-literature). Hanya sumber bertanda sub-pertanyaan (chat biasa = null → dilewati).
+  // Fallback DB untuk jalur refresh/riwayat; live = `sub.sources` yang dipancarkan step.
   const sourcesBySubQ = useMemo(() => {
     if (!sources || sources.length === 0) return undefined;
     const map = new Map<number, ResearchSource[]>();
@@ -128,6 +130,18 @@ function AssistantMessage({
     }
     return map.size > 0 ? map : undefined;
   }, [sources]);
+
+  // Panel "Sumber" (collapsible di bawah jawaban). Deep = baris `research_sources` bernomor `[n]`;
+  // chat normal = agregasi kartu dari hasil tiap tool `search_*` di pesan ini (stream + rehydrate,
+  // tanpa DB). Dedup lintas-tool by url/doi.
+  const panelSources = useMemo<SourceCardData[]>(() => {
+    if (sources && sources.length > 0) return sources.map(researchSourceToCard);
+    const flat: SourceCardData[] = [];
+    for (const p of message.parts) {
+      if (p.kind === "tool" && p.model.detail?.kind === "search-flat") flat.push(...p.model.detail.sources);
+    }
+    return dedupeCards(flat);
+  }, [sources, message.parts]);
 
   const hasAnswer = Boolean(answer);
   const isEmpty = message.parts.length === 0;
@@ -155,7 +169,7 @@ function AssistantMessage({
         part.kind === "artifact" ? <ChatArtifactCard key={part.id} model={part.model} /> : null,
       )}
 
-      {!streaming && sources && sources.length > 0 ? <InlineSources sources={sources} /> : null}
+      {!streaming && panelSources.length > 0 ? <InlineSources sources={panelSources} /> : null}
 
       {hasAnswer && !streaming ? (
         <MessageActions text={answer?.text ?? ""} onRegenerate={onRegenerate} />

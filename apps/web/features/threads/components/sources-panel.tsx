@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { useMemo } from "react";
-import type { ResearchSource } from "../types";
+import type { SourceCardData } from "../lib/timeline-types";
 
 /** Ikon + label per kelas sumber. */
 function originMeta(origin: string): { Icon: typeof GlobeIcon; label: string } {
@@ -29,7 +29,7 @@ function originMeta(origin: string): { Icon: typeof GlobeIcon; label: string } {
   }
 }
 
-function SourceRow({ source }: { source: ResearchSource }) {
+function SourceRow({ source }: { source: SourceCardData }) {
   const { Icon, label } = originMeta(source.origin);
   const href = source.url ?? (source.doi ? `https://doi.org/${source.doi}` : null);
   const body = (
@@ -67,17 +67,16 @@ function SourceRow({ source }: { source: ResearchSource }) {
 }
 
 /**
- * Daftar sumber riset inline per-turn (collapsible "N sumber") — ditampilkan tepat di
- * bawah jawaban turn yang menghasilkannya. Sumber = bukti yang dikumpulkan tool Astra
- * (`search_web`/`search_arxiv`/`lookup_doi`/dst.), dipersist per turn (`research_sources`,
- * di-map via `turnId`) sehingga tetap muncul saat reload history. Pure: data di-fetch
- * pemanggil (ChatSurface) lalu dikelompokkan per turn. Kosong → tak render.
+ * Daftar sumber inline per-turn (collapsible "N sumber") — ditampilkan tepat di bawah jawaban yang
+ * menghasilkannya. Sumber = bukti yang dikumpulkan tool Astra (`search_web`/`search_arxiv`/dst.).
+ * Pure: pemanggil menyiapkan kartu (agregasi hasil tool untuk chat normal, atau `research_sources`
+ * bernomor `[n]` untuk deep). Kosong → tak render.
  */
 export function InlineSources({
   sources,
   className,
 }: {
-  sources: ResearchSource[];
+  sources: SourceCardData[];
   className?: string;
 }) {
   // Urut sesuai nomor sitasi [n] (yang belum bernomor di belakang) supaya cocok urutan prosa.
@@ -101,7 +100,7 @@ export function InlineSources({
       <CollapsibleContent className="overflow-hidden">
         <div className="mt-2 flex flex-col gap-1.5">
           {sorted.map((source) => (
-            <SourceRow key={source.id} source={source} />
+            <SourceRow key={source.key} source={source} />
           ))}
         </div>
       </CollapsibleContent>

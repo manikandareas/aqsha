@@ -3,7 +3,7 @@ import { BillingService } from "@aqsha/services/billing";
 import { ThreadService, TitleService } from "@aqsha/services/chat";
 import { estimateCredits } from "@aqsha/services/plan";
 import { SendQuotaService } from "@aqsha/services/quota";
-import { ResearchService, fetchSourcePreview } from "@aqsha/services/research";
+import { ResearchService } from "@aqsha/services/research";
 import type { Mastra } from "@mastra/core/mastra";
 import {
   MASTRA_THREAD_ID_KEY,
@@ -102,15 +102,13 @@ function withDeepRun(rc: RequestContext, threadId: string, runId: string): Reque
   return rc;
 }
 
-const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-
 // ── Detail proses (writer.write) ──────────────────────────────────────────────────────────
 //
 // Tiap step memancarkan detailnya lewat `writer.write(data)` → chunk `workflow-step-output`
 // (`payload.output=data`, `payload.stepName=<id>`) di stream Workflow. FE (`reduceWorkflowChunk`)
 // memetakan ke body expandable per step ("Proses"). Step `search-literature` memancarkan status per
-// sub-pertanyaan (kartu sub-agen); daftar sumbernya di-resolve FE dari `research_sources` (DB).
-// Best-effort: writer non-fatal — emit dilewati bila tak tersedia.
+// sub-pertanyaan (kartu sub-agen) + daftar sumbernya saat selesai (kartu live FE); `research_sources`
+// (DB) jadi fallback jalur refresh/riwayat. Best-effort: writer non-fatal — emit dilewati bila tak tersedia.
 
 /** Subset `writer` (ToolStream) yang dipakai step — write data ke stream Workflow. */
 type StepWriter = { write: (data: unknown) => Promise<void> } | undefined;
@@ -118,7 +116,14 @@ type StepWriter = { write: (data: unknown) => Promise<void> } | undefined;
 /** Bentuk detail yang dipancarkan tiap step (dibaca FE via `payload.output`). */
 type StepDetailEmit =
   | { kind: "plan"; plan: string; subQuestions: string[] }
-  | { kind: "search-sub"; subIndex: number; subQuestion: string; status: "searching" | "done" }
+  | {
+      kind: "search-sub";
+      subIndex: number;
+      subQuestion: string;
+      status: "searching" | "done";
+      /** Sumber sub-pertanyaan (hanya pada `status:"done"`) → kartu live FE. */
+      sources?: EmittedSource[];
+    }
   | { kind: "counter"; text: string }
   | { kind: "citations"; count: number }
   | { kind: "verify"; text: string };
@@ -139,43 +144,27 @@ function clampDetail(text: string, max = 1200): string {
   return trimmed.length > max ? `${trimmed.slice(0, max - 1)}…` : trimmed;
 }
 
+/** Bentuk sumber kompak yang dipancarkan ke FE (kartu live) — favicon diturunkan client-side dari url/doi. */
+type EmittedSource = { title: string; url: string | null; doi: string | null; origin: string; snippet: string };
+
 /**
- * Enrich OG image sumber satu run (best-effort, time-boxed) → `research_sources.imageUrl` untuk
- * kartu sumber FE. Ambil sumber run, fetch preview paralel (concurrency-capped, per-URL timeout di
- * `fetchSourcePreview`), persist via `setSourceImages`. Dibatasi deadline global agar tak menambah
- * latensi besar ke run (deep run sudah bermenit-menit; ini bonus visual). Tak pernah throw.
+ * Sumber yang baru dipersist satu sub-pertanyaan (turn = `runId`, di-tag `subQuestionIndex`) →
+ * kartu live FE. Dibaca SETELAH sub-agen selesai (tool sudah persist) lalu dipancarkan via writer →
+ * kartu muncul realtime per sub-pertanyaan tanpa nunggu run settle / fetch DB. Tak pernah throw.
  */
-async function enrichSourceImages(threadId: string, runId: string): Promise<void> {
-  const CONCURRENCY = 8;
-  const MAX_TARGETS = 24;
-  const DEADLINE_MS = 12_000;
+async function subQuestionSources(
+  threadId: string,
+  runId: string,
+  subIndex: number,
+): Promise<EmittedSource[]> {
   try {
-    const db = getServiceDb();
-    const sources = await ResearchService.listTurnSources(db, { threadId, turnId: runId });
-    const targets = sources
-      .filter((s) => !s.imageUrl && s.url && /^https?:\/\//i.test(s.url))
-      .slice(0, MAX_TARGETS);
-    if (targets.length === 0) return;
-    const updates: Array<{ id: string; imageUrl: string }> = [];
-    let cursor = 0;
-    const worker = async (): Promise<void> => {
-      while (cursor < targets.length) {
-        const target = targets[cursor++];
-        if (!target?.url) continue;
-        try {
-          const { imageUrl } = await fetchSourcePreview(target.url);
-          if (imageUrl) updates.push({ id: target.id, imageUrl });
-        } catch {
-          // satu URL gagal → lanjut (best-effort)
-        }
-      }
-    };
-    const pool = Array.from({ length: Math.min(CONCURRENCY, targets.length) }, () => worker());
-    // Deadline global: persist apa pun yang terkumpul saat batas tercapai (worker sisa diabaikan).
-    await Promise.race([Promise.all(pool), delay(DEADLINE_MS)]);
-    if (updates.length > 0) await ResearchService.setSourceImages(db, updates.slice());
+    const all = await ResearchService.listTurnSources(getServiceDb(), { threadId, turnId: runId });
+    return all
+      .filter((s) => s.subQuestionIndex === subIndex)
+      .map((s) => ({ title: s.title, url: s.url, doi: s.doi, origin: s.origin, snippet: s.snippet }));
   } catch (err) {
-    console.error("[deep-research] enrichSourceImages failed", err);
+    console.error("[deep-research] subQuestionSources failed", err);
+    return [];
   }
 }
 
@@ -519,12 +508,12 @@ const searchStep = createStep({
         const out = await literatureSearcher.generate(searcherPrompt(subQuestion, inputData), {
           requestContext: subRc,
         });
-        await emitDetail(writer, { kind: "search-sub", subIndex, subQuestion, status: "done" });
+        // Sumber yang baru dipersist sub-agen ini → pancarkan live (kartu muncul realtime di FE).
+        const sources = await subQuestionSources(inputData.threadId, runId, subIndex);
+        await emitDetail(writer, { kind: "search-sub", subIndex, subQuestion, status: "done", sources });
         return { subQuestion, findings: out.text };
       }),
     );
-    // Enrich OG image (best-effort, time-boxed) SETELAH semua sumber dipersist → kartu sumber kaya.
-    await enrichSourceImages(inputData.threadId, runId);
     return { ...inputData, evidence };
   },
 });

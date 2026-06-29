@@ -35,7 +35,7 @@ import type {
   ToolStatus,
 } from "../lib/timeline-types";
 import type { ResearchSource } from "../types";
-import { DeepSearchCards } from "./deep-search-cards";
+import { DeepSearchCards, SourceCardList } from "./deep-search-cards";
 import { ElapsedLabel } from "./elapsed-label";
 
 // Ikon semantik per tool (kosmetik — data: `model.name` selalu ada). Switch mengembalikan
@@ -219,10 +219,15 @@ export function ToolRow({
       </CollapsibleTrigger>
       <CollapsibleContent className="overflow-hidden">
         {detail && detail.kind === "search" ? (
-          // Step pencarian: JANGAN bungkus seluruh body — tiap kartu sub-agen punya scroll sendiri
+          // Step pencarian deep: JANGAN bungkus seluruh body — tiap kartu sub-agen punya scroll sendiri
           // (daftar sumber di-scroll per kartu), supaya beberapa kartu tetap kebaca bersamaan.
           <div className="mt-1.5 text-[12px]">
             <DeepSearchCards subSearches={detail.subSearches} sourcesBySubQ={sourcesBySubQ} />
+          </div>
+        ) : detail && detail.kind === "search-flat" ? (
+          // Tool `search_*` chat normal: kartu sumber hasil satu pencarian (live + rehydrate).
+          <div className="mt-1.5 text-[12px]">
+            <SourceCardList sources={detail.sources} />
           </div>
         ) : detail && (detail.kind === "plan" || detail.kind === "text") ? (
           // Prosa panjang (rencana / bukti tandingan / verifikasi): box ber-scroll (max-h) + vignette.
@@ -259,7 +264,7 @@ export function ToolRow({
 function DeepDetailBody({
   detail,
 }: {
-  detail: Exclude<DeepStepDetail, { kind: "search" }>;
+  detail: Exclude<DeepStepDetail, { kind: "search" | "search-flat" }>;
 }) {
   switch (detail.kind) {
     case "plan":

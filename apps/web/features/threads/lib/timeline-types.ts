@@ -14,23 +14,44 @@ export type ToolRow = {
   group: "input" | "output";
 };
 
+/**
+ * Sumber sebagai kartu — kontrak presentasi netral (favicon konsisten, tanpa OG image). Diisi dari
+ * hasil tool `search_*` (stream/rehydrate) ATAU baris `research_sources` (DB, `citationNumber`).
+ * Adapter di `lib/source-card.ts`.
+ */
+export type SourceCardData = {
+  /** Kunci dedup + react-key stabil (doi/url/arxivId/judul atau id baris DB). */
+  key: string;
+  title: string;
+  url: string | null;
+  doi: string | null;
+  /** Kelas sumber: "web" | "arxiv" | "doi" → ikon + label. */
+  origin: string;
+  snippet?: string;
+  /** Nomor sitasi `[n]` — hanya jalur DB deep (chat normal/live = undefined). */
+  citationNumber?: number | null;
+};
+
 /** Satu sub-agen pencarian (`/deep` step `search-literature`) — satu kartu per sub-pertanyaan. */
 export type DeepSubSearch = {
   index: number;
   subQuestion: string;
   /** "running" selagi sub-agen bekerja; "completed" saat selesai. */
   status: ToolStatus;
+  /** Sumber live yang dipancarkan step saat sub-agen selesai (`writer.write`). Fallback: DB. */
+  sources?: SourceCardData[];
 };
 
 /**
  * Detail proses satu langkah Workflow `/deep` (body expandable tool-row "Proses"). Diisi dari
  * chunk `workflow-step-output` (live), snapshot step output (refresh poll), atau `metadata.deepProcess`
- * (riwayat). Untuk `kind:"search"`, daftar sumber per sub-pertanyaan di-resolve terpisah dari
- * `research_sources` (di-join via `subQuestionIndex` saat render).
+ * (riwayat). `kind:"search"` (deep) membawa sumber live per sub-pertanyaan + fallback DB via
+ * `subQuestionIndex`; `kind:"search-flat"` (chat normal) = kartu hasil satu tool `search_*`.
  */
 export type DeepStepDetail =
   | { kind: "plan"; plan: string; subQuestions: string[] }
   | { kind: "search"; subSearches: DeepSubSearch[] }
+  | { kind: "search-flat"; sources: SourceCardData[] }
   | { kind: "text"; text: string }
   | { kind: "citations"; count: number };
 

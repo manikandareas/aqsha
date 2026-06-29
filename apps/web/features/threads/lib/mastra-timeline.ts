@@ -1,3 +1,4 @@
+import { toCards } from "./source-card";
 import type {
   ArtifactCardModel,
   DeepStepDetail,
@@ -163,6 +164,7 @@ function toolModelFromInvocation(
   const rows: ToolRow[] = [];
   appendScalarRows(rows, inv.args, "input");
   if (completed) appendScalarRows(rows, inv.result, "output");
+  const detail = completed ? searchFlatDetail(toolName, inv.result) : undefined;
   return {
     toolCallId,
     name: toolName,
@@ -172,6 +174,7 @@ function toolModelFromInvocation(
     isRunning: !completed,
     description: completed ? describeOutput(inv.result) : undefined,
     rows,
+    ...(detail ? { detail } : {}),
   };
 }
 
@@ -654,10 +657,12 @@ function mergeLiveDetail(
     case "plan":
       return { kind: "plan", plan: str(data.plan), subQuestions: strArray(data.subQuestions) };
     case "search-sub": {
+      const liveSources = toCards(data.sources);
       const sub: DeepSubSearch = {
         index: num(data.subIndex),
         subQuestion: str(data.subQuestion),
         status: str(data.status) === "done" ? "completed" : "running",
+        ...(liveSources.length > 0 ? { sources: liveSources } : {}),
       };
       const existing = prev?.kind === "search" ? prev.subSearches : [];
       return { kind: "search", subSearches: upsertSubSearch(existing, sub) };
@@ -865,6 +870,7 @@ function completeToolPart(
       if (p.kind !== "tool" || p.model.toolCallId !== toolCallId) return p;
       const rows = [...p.model.rows];
       if (!isError) appendScalarRows(rows, result, "output");
+      const detail = isError ? undefined : searchFlatDetail(p.model.name, result);
       return {
         ...p,
         model: {
@@ -873,6 +879,7 @@ function completeToolPart(
           isRunning: false,
           description: isError ? p.model.description : describeOutput(result),
           rows,
+          ...(detail ? { detail } : {}),
         },
       };
     }),
@@ -984,6 +991,16 @@ function describeOutput(output: unknown): string | undefined {
     for (const k of LIST_KEYS) if (Array.isArray(o[k])) return `${(o[k] as unknown[]).length} hasil`;
   }
   return undefined;
+}
+
+/** Tool riset eksternal yang hasilnya (`{results:[...]}`) jadi kartu sumber inline (chat normal). */
+const SEARCH_TOOLS = new Set(["search_web", "search_arxiv", "search_papers", "lookup_doi"]);
+
+/** Detail kartu sumber dari hasil tool `search_*` (stream/rehydrate) → body tool-row `search-flat`. */
+function searchFlatDetail(toolName: string, result: unknown): DeepStepDetail | undefined {
+  if (!SEARCH_TOOLS.has(toolName)) return undefined;
+  const cards = toCards(asRecord(result).results);
+  return cards.length > 0 ? { kind: "search-flat", sources: cards } : undefined;
 }
 
 const TOOL_LABELS: Record<string, string> = {
