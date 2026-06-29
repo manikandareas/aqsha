@@ -3,25 +3,44 @@ import { Memory } from "@mastra/memory";
 import { storage, vector } from "./storage";
 
 /**
+ * Template working memory thread-scoped — ringkasan berjalan yang dipelihara model lintas-giliran
+ * dalam SATU percakapan (mode tool-call `updateWorkingMemory`, dilipat ke system message). Menjaga
+ * konteks implisit thread panjang tanpa harus membesarkan `lastMessages` berlebihan.
+ */
+const WORKING_MEMORY_TEMPLATE = `# Memori kerja percakapan
+- **Tujuan / topik riset pengguna:**
+- **Dokumen & artefak relevan (judul/artifactId):**
+- **Preferensi pengguna (bahasa, gaya, format keluaran):**
+- **Temuan & keputusan kunci sejauh ini:**
+- **Langkah berikutnya / pertanyaan yang masih terbuka:**`;
+
+/**
  * Mastra Memory = Source of Truth pesan/history Astra (menggantikan proyeksi eve:
  * `chat_thread_events` + B-strip + hook projection). Pesan tersimpan OTOMATIS saat
  * `agent.stream(msg, { memory: { thread, resource } })`; klien hanya mengirim pesan BARU,
  * Mastra memuat history dari storage.
  *
  * - `storage`/`vector`: dibagi dengan instance Mastra (satu Postgres, tabel `mastra_*`).
- * - `lastMessages`: jendela history non-semantik per turn.
- * - `semanticRecall`: tarik pesan relevan lintas-turn via embedding. Embedder = `fastembed`
- *   (BGE lokal, TANPA API key, lepas dari isu versi `EmbeddingModelV4`/`@ai-sdk/openai@4`
- *   yang ditolak Memory). Model di-unduh & di-cache saat init pertama. Index recall ini
- *   TERPISAH dari RAG dokumen app (`research_sources`).
+ * - `lastMessages` (16): jendela history non-semantik per turn (~8 giliran verbatim).
+ * - `semanticRecall`: tarik pesan relevan lintas-turn via embedding. `topK: 6` hit ×
+ *   `messageRange: 2` (2 pesan sebelum+sesudah tiap hit) → hingga ~30 pesan recall.
+ *   `scope: "thread"` EKSPLISIT: default Mastra = `"resource"` (lintas-thread); kita kunci ke
+ *   thread aktif sesuai keputusan produk (tak ada recall antar-percakapan). Embedder = `fastembed`
+ *   (BGE lokal, TANPA API key, lepas dari isu versi `EmbeddingModelV4`/`@ai-sdk/openai@4` yang
+ *   ditolak Memory). Index recall ini TERPISAH dari RAG dokumen app (`research_sources`).
+ * - `workingMemory` (thread-scoped): ringkasan berjalan per-percakapan; biaya = 1 tool + sedikit
+ *   token/latensi per turn, ditebus konteks thread panjang yang lebih stabil.
+ *
+ * Anggaran token aman: `TokenLimiterProcessor` membatasi input ~96k (75% dari 128k); worst-case
+ * memory (16 + ~30 pesan) ≈ 40–50k token → menyisakan ruang untuk instruksi, tool result, output.
  */
 export const memory = new Memory({
   storage,
   vector,
   embedder: fastembed,
   options: {
-    lastMessages: 10,
-    semanticRecall: { topK: 3, messageRange: 2 },
-    workingMemory: { enabled: false },
+    lastMessages: 16,
+    semanticRecall: { topK: 6, messageRange: 2, scope: "thread" },
+    workingMemory: { enabled: true, scope: "thread", template: WORKING_MEMORY_TEMPLATE },
   },
 });

@@ -25,11 +25,12 @@ import { LayoutGroup, m, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { useContextPickerArtifacts } from "@/features/artifacts/api";
 import { UPLOAD_ACCEPT } from "@/features/artifacts/types";
 import { useWorkspacesList } from "@/features/workspaces/api";
 import { cn } from "@/lib/utils";
-import { useHydrateContext, useThreadAttachments } from "../api";
+import { useHydrateContext, useThreadArtifacts, useThreadAttachments } from "../api";
 import {
   AgentSelector,
   type ComposerAgentKind,
@@ -64,8 +65,9 @@ export type ComposerSendPayload = {
 /** Thread ringkas untuk panel "Thread terbaru" (start panel landing). */
 export type RecentThread = { threadId: string; title: string; lastActivityAt: number };
 
-/** Lampiran composer ter-finalize pada thread (Slice 6.7). */
-type ComposerAttachment = { artifactId: string; title: string };
+/** Lampiran composer ter-finalize pada thread (Slice 6.7). `indexingStatus` melacak index async
+ * (D5): `pending` = file besar masih diproses worker; `ready`/`failed` setelah selesai. */
+type ComposerAttachment = { artifactId: string; title: string; indexingStatus?: string };
 
 const EMPTY_CONTEXT_REFS: ContextRef[] = [];
 
@@ -159,6 +161,31 @@ export function Composer({
   const agentSelection = useComposerAgentSelection();
   const hydrate = useHydrateContext();
   const attachmentUpload = useThreadAttachments(threadId ?? "");
+
+  // D5: lampiran besar di-index async (status awal `pending`). Poll daftar artifact thread HANYA
+  // selama ada upload pending; status chip LIVE diturunkan dari hasil poll (derive, tak mirror ke
+  // state → hindari cascading render) + toast sekali per artifact bila index gagal.
+  const hasPendingUpload = attachments.some((a) => a.indexingStatus === "pending");
+  const threadArtifacts = useThreadArtifacts(hasPendingUpload ? (threadId ?? null) : null, {
+    pollWhilePending: true,
+  });
+  const attachmentsView = useMemo(
+    () =>
+      attachments.map((a) => {
+        const live = threadArtifacts.data?.find((it) => it._id === a.artifactId)?.indexingStatus;
+        return live ? { ...a, indexingStatus: live } : a;
+      }),
+    [attachments, threadArtifacts.data],
+  );
+  const toastedFailuresRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const a of attachmentsView) {
+      if (a.indexingStatus === "failed" && !toastedFailuresRef.current.has(a.artifactId)) {
+        toastedFailuresRef.current.add(a.artifactId);
+        toast.warning(`"${a.title}" gagal diindeks; Astra mungkin tak bisa membaca isinya.`);
+      }
+    }
+  }, [attachmentsView]);
 
   // Re-seed pre-seeded text (e.g. an Explore item) only while the user hasn't
   // diverged from the previously seeded text.
@@ -290,7 +317,10 @@ export function Composer({
     setUploadError(null);
     const res = await attachmentUpload.mutateAsync({ file }).catch(() => null);
     if (res) {
-      setAttachments((prev) => [...prev, { artifactId: res.artifactId, title: res.title }]);
+      setAttachments((prev) => [
+        ...prev,
+        { artifactId: res.artifactId, title: res.title, indexingStatus: res.indexingStatus },
+      ]);
     } else {
       setUploadError(`Gagal melampirkan ${file.name}.`);
     }
@@ -330,7 +360,7 @@ export function Composer({
           {notice ? <ComposerBlockingNotice notice={notice} secondsLeft={secondsLeft} /> : null}
           <LayoutGroup id="composer-prompt">
             <ComposerChipRow
-              attachments={attachments}
+              attachments={attachmentsView}
               onRemoveAttachment={(id) =>
                 setAttachments((prev) => prev.filter((a) => a.artifactId !== id))
               }
@@ -668,8 +698,15 @@ function ComposerChipRow({
           key={file.artifactId}
           className="inline-flex h-7 animate-in items-center gap-1.5 rounded-full border border-border bg-card px-2.5 text-[11px] font-semibold text-foreground shadow-sm zoom-in-95 duration-150"
         >
-          <FileTextIcon className="size-3.5 shrink-0 text-muted-foreground" />
+          {file.indexingStatus === "pending" ? (
+            <Loader2Icon className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
+          ) : (
+            <FileTextIcon className="size-3.5 shrink-0 text-muted-foreground" />
+          )}
           <span className="max-w-[9rem] truncate">{file.title}</span>
+          {file.indexingStatus === "pending" ? (
+            <span className="text-[10px] font-medium text-muted-foreground">memproses…</span>
+          ) : null}
           {!isSending ? (
             <button
               type="button"

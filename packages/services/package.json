@@ -86,6 +86,7 @@
     "@aqsha/db": "workspace:*",
     "@aws-sdk/client-s3": "^3.1073.0",
     "@aws-sdk/s3-request-presigner": "^3.1073.0",
+    "@mistralai/mistralai": "^2.3.0",
     "ai": "^6.0.208",
     "bullmq": "^5.79.0",
     "drizzle-orm": "^0.45.2",

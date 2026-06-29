@@ -16,11 +16,19 @@ export const PAPER_ENRICHMENT_TEXT_CHARS = 8_000;
 export const MAX_UPLOAD_MB = 50;
 export const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 
+/**
+ * Ambang inline vs async untuk index lampiran thread (D5). File ≤ ambang diekstrak+di-index
+ * INLINE saat finalize (umumnya cepat, `indexed` langsung diketahui). File > ambang di-offload
+ * ke worker `artifact-indexing` (finalize balik cepat dgn status `pending`, FE poll → ready/failed).
+ */
+export const INLINE_INDEX_MAX_BYTES = 2 * 1024 * 1024;
+
 export const artifactTypes = [
   "markdown",
   "plain_text",
   "pdf",
   "docx",
+  "image",
   "html",
   "svg",
   "mermaid",
@@ -66,6 +74,7 @@ export type AgentWritableArtifactType = (typeof agentWritableArtifactTypes)[numb
 export const uploadAllowedArtifactTypes = [
   "pdf",
   "docx",
+  "image",
   "markdown",
   "plain_text",
   "csv",
@@ -88,6 +97,10 @@ export const UPLOAD_ALLOWED_EXTENSIONS = [
   ".markdown",
   ".csv",
   ".json",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
 ] as const;
 
 export const UPLOAD_ALLOWED_MIME_TYPES = [
@@ -97,6 +110,9 @@ export const UPLOAD_ALLOWED_MIME_TYPES = [
   "text/markdown",
   "text/csv",
   "application/json",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
 ] as const;
 
 export const WORKSPACE_UPLOAD_ACCEPT = [
@@ -105,7 +121,7 @@ export const WORKSPACE_UPLOAD_ACCEPT = [
 ].join(",");
 
 export const UPLOAD_REJECTED_MESSAGE =
-  "Tipe file tidak didukung. Unggah PDF, DOCX, TXT, Markdown, CSV, atau JSON.";
+  "Tipe file tidak didukung. Unggah PDF, DOCX, gambar (PNG/JPG/WebP), TXT, Markdown, CSV, atau JSON.";
 
 export function normalizeUploadMimeType(mimeType: string | undefined | null): string {
   return (mimeType ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
@@ -116,6 +132,7 @@ const extensionTypeMap: Array<{ extensions: string[]; artifactType: ArtifactType
   { extensions: [".docx"], artifactType: "docx" },
   { extensions: [".md", ".markdown"], artifactType: "markdown" },
   { extensions: [".txt"], artifactType: "plain_text" },
+  { extensions: [".png", ".jpg", ".jpeg", ".webp"], artifactType: "image" },
   { extensions: [".html", ".htm"], artifactType: "html" },
   { extensions: [".svg"], artifactType: "svg" },
   { extensions: [".mmd", ".mermaid"], artifactType: "mermaid" },
@@ -148,6 +165,9 @@ const mimeTypeMap = new Map<string, ArtifactType>([
   ["text/plain", "plain_text"],
   ["text/html", "html"],
   ["image/svg+xml", "svg"],
+  ["image/png", "image"],
+  ["image/jpeg", "image"],
+  ["image/webp", "image"],
   ["application/json", "json"],
   ["text/csv", "csv"],
 ]);
@@ -209,6 +229,8 @@ export function artifactFamilyForType(artifactType: ArtifactType): ArtifactFamil
     case "pdf":
     case "docx":
       return "file";
+    case "image":
+      return "visual";
     case "html":
       return "interactive";
     case "svg":

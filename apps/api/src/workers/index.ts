@@ -1,6 +1,7 @@
 import {
   ACCOUNT_QUEUES,
   ARTIFACT_QUEUES,
+  assertEmbeddingEnabled,
   CHAT_QUEUES,
   EXPLORE_QUEUES,
   FEED_QUEUES,
@@ -9,8 +10,13 @@ import {
 } from "@aqsha/services";
 import { Worker } from "bullmq";
 import { logger } from "../lib/log";
+
+// Fail-fast (D1): worker meng-index dokumen (artifact-indexing, url-ingestion) via embedding.
+// Kredensial yang hilang digagalkan saat boot, bukan job gagal senyap.
+assertEmbeddingEnabled();
 import { type AccountDeletionJob, processAccountDeletion } from "./account-deletion.worker";
 import { type ArtifactCleanupJob, processArtifactCleanup } from "./artifact-cleanup.worker";
+import { type ArtifactIndexingJob, processArtifactIndexing } from "./artifact-indexing.worker";
 import { type ExploreAnalysisJob, processExploreAnalysis } from "./explore-analysis.worker";
 import { type FeedHydrationJob, processFeedHydration } from "./feed-hydration.worker";
 import { type PaperEnrichmentJob, processPaperEnrichment } from "./paper-enrichment.worker";
@@ -32,6 +38,10 @@ const workers = [
     concurrency: CONCURRENCY,
   }),
   new Worker<UrlIngestionJob>(ARTIFACT_QUEUES.urlIngestion, processUrlIngestion, {
+    connection,
+    concurrency: CONCURRENCY,
+  }),
+  new Worker<ArtifactIndexingJob>(ARTIFACT_QUEUES.artifactIndexing, processArtifactIndexing, {
     connection,
     concurrency: CONCURRENCY,
   }),

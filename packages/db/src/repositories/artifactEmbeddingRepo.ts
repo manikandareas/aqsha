@@ -1,4 +1,4 @@
-import { and, cosineDistance, eq, inArray } from "drizzle-orm";
+import { and, cosineDistance, desc, eq, inArray, sql } from "drizzle-orm";
 import { artifacts } from "../schema/artifacts";
 import {
   artifactEmbeddings,
@@ -14,6 +14,15 @@ export type ArtifactEmbeddingMatch = {
   title: string;
   /** Jarak cosine (`0` identik, `2` berlawanan). */
   distance: number;
+};
+
+/** Satu chunk hasil FTS leksikal (hybrid search D4); `rank` = `ts_rank` (besar = lebih relevan). */
+export type ArtifactEmbeddingLexicalMatch = {
+  artifactId: string;
+  chunkIndex: number;
+  content: string;
+  title: string;
+  rank: number;
 };
 
 /**
@@ -68,6 +77,52 @@ export const ArtifactEmbeddingRepo = {
       content: r.content,
       title: r.title,
       distance: Number(r.distance),
+    }));
+  },
+
+  /**
+   * Full-text lexical search (D4 hybrid) — GIN `content_tsv` + `websearch_to_tsquery('simple')`,
+   * di-rank `ts_rank` DESC. Scope IDENTIK `searchSimilar` (owner + thread/workspace + artifact aktif)
+   * supaya fusi RRF di RagService membandingkan kandidat dari ruang yang sama.
+   */
+  async searchLexical(
+    db: DbOrTx,
+    args: {
+      ownerUserId: string;
+      query: string;
+      threadId?: string;
+      workspaceId?: string;
+      limit: number;
+    },
+  ): Promise<ArtifactEmbeddingLexicalMatch[]> {
+    const tsq = sql`websearch_to_tsquery('simple', ${args.query})`;
+    const rank = sql<number>`ts_rank(${artifactEmbeddings.contentTsv}, ${tsq})`;
+    const where = [
+      eq(artifactEmbeddings.ownerUserId, args.ownerUserId),
+      eq(artifacts.status, "active"),
+      sql`${artifactEmbeddings.contentTsv} @@ ${tsq}`,
+    ];
+    if (args.threadId) where.push(eq(artifacts.threadId, args.threadId));
+    if (args.workspaceId) where.push(eq(artifactEmbeddings.workspaceId, args.workspaceId));
+    const rows = await db
+      .select({
+        artifactId: artifactEmbeddings.artifactId,
+        chunkIndex: artifactEmbeddings.chunkIndex,
+        content: artifactEmbeddings.content,
+        title: artifacts.title,
+        rank,
+      })
+      .from(artifactEmbeddings)
+      .innerJoin(artifacts, eq(artifacts.id, artifactEmbeddings.artifactId))
+      .where(and(...where))
+      .orderBy(desc(rank))
+      .limit(args.limit);
+    return rows.map((r) => ({
+      artifactId: r.artifactId,
+      chunkIndex: r.chunkIndex,
+      content: r.content,
+      title: r.title,
+      rank: Number(r.rank),
     }));
   },
 

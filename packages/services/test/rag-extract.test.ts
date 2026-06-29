@@ -89,10 +89,14 @@ describe("RagService.searchThreadDocuments (Slice 6.4 read, degrade-graceful)", 
     expect(sim).not.toHaveBeenCalled();
   });
 
-  test("match → skor = 1 - distance/2 (clamp ≥0), limit clamp 20, threadId di-scope", async () => {
-    spyOn(ArtifactEmbeddingRepo, "searchSimilar").mockResolvedValue([
-      { artifactId: "a", title: "T", chunkIndex: 0, content: "isi", distance: 0.5 },
-      { artifactId: "b", title: "T2", chunkIndex: 1, content: "isi2", distance: 3 }, // >2 → clamp 0
+  test("hybrid (D4): fusi RRF vektor+leksikal — chunk di kedua jalur naik; kandidat + scope", async () => {
+    const sim = spyOn(ArtifactEmbeddingRepo, "searchSimilar").mockResolvedValue([
+      { artifactId: "a", title: "T", chunkIndex: 0, content: "isi-a", distance: 0.1 }, // vektor rank 0
+      { artifactId: "b", title: "T2", chunkIndex: 0, content: "isi-b", distance: 0.4 }, // vektor rank 1
+    ] as never);
+    const lex = spyOn(ArtifactEmbeddingRepo, "searchLexical").mockResolvedValue([
+      { artifactId: "b", title: "T2", chunkIndex: 0, content: "isi-b", rank: 0.9 }, // leksikal rank 0
+      { artifactId: "c", title: "T3", chunkIndex: 0, content: "isi-c", rank: 0.5 }, // leksikal rank 1
     ] as never);
     const r = await RagService.searchThreadDocuments({} as never, {
       ownerUserId: "u",
@@ -100,10 +104,16 @@ describe("RagService.searchThreadDocuments (Slice 6.4 read, degrade-graceful)", 
       query: "x",
       limit: 999,
     });
-    expect(r[0]?.score).toBeCloseTo(0.75);
-    expect(r[1]?.score).toBe(0);
-    const args = (ArtifactEmbeddingRepo.searchSimilar as ReturnType<typeof spyOn>).mock.calls[0]?.[1];
-    expect(args.limit).toBe(20);
-    expect(args.threadId).toBe("t1");
+    // b muncul di vektor (rank 1) DAN leksikal (rank 0) → skor RRF tertinggi → urutan pertama.
+    expect(r[0]?.artifactId).toBe("b");
+    expect(r.map((m) => m.artifactId).sort()).toEqual(["a", "b", "c"]);
+    // Tiap jalur dipanggil dgn limit KANDIDAT (final 20 → kandidat min(60,50)=50) + scope thread.
+    const simArgs = sim.mock.calls[0]?.[1];
+    const lexArgs = lex.mock.calls[0]?.[1];
+    expect(simArgs.limit).toBe(50);
+    expect(lexArgs.limit).toBe(50);
+    expect(simArgs.threadId).toBe("t1");
+    expect(lexArgs.threadId).toBe("t1");
+    expect(lexArgs.query).toBe("x");
   });
 });

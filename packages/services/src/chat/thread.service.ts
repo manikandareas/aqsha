@@ -84,6 +84,25 @@ export const ThreadService = {
     return thread;
   },
 
+  /**
+   * Assert kepemilikan TOLERAN-absen (D6, lampiran pesan pertama). `chat_threads` baru terbentuk
+   * saat pesan pertama (proyeksi outputProcessor agent), tapi user bisa melampirkan file SEBELUM
+   * itu di percakapan baru. `artifacts.thread_id` tak ber-FK → artifact boleh menunjuk thread yang
+   * proyeksinya menyusul. Aman: thread yang SUDAH ada tapi BUKAN milik caller → 404 (cegah numpang
+   * thread orang lain); absen → lolos (caller akan jadi pemilik saat pesan pertama).
+   */
+  async assertOwnerOrAbsent(db: DbOrTx, ownerUserId: string, threadId: string): Promise<void> {
+    const thread = await ChatThreadRepo.findById(db, threadId);
+    if (thread && thread.ownerUserId !== ownerUserId) {
+      throwAppError({
+        message: "Percakapan tidak ditemukan",
+        code: "thread_not_found",
+        severity: "error",
+        status: 404,
+      });
+    }
+  },
+
   /** List keyset milik owner, DESC aktivitas. Bucket recent/older dihitung di BE. */
   async list(
     db: DbOrTx,

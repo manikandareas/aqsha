@@ -5,6 +5,7 @@ import { memory } from "../memory";
 import { liteModel } from "../model";
 import { billingDebitProcessor, billingPrecheckProcessor } from "../processors/billing";
 import { EnsureFinalResponseProcessor } from "../processors/ensure-final-response";
+import { threadArtifactManifestProcessor } from "../processors/thread-artifact-manifest";
 import {
   threadProjectionInputProcessor,
   threadProjectionProcessor,
@@ -48,6 +49,9 @@ export const astraLite = new Agent({
     new TokenLimiterProcessor(TOKEN_LIMIT),
     threadProjectionInputProcessor,
     billingPrecheckProcessor,
+    // Manifest lampiran thread (durable, anti-"linglung"): setelah billingPrecheck supaya turn
+    // yang diblok kuota tak menjalankan query artifact; sebelum EnsureFinalResponse (per-step).
+    threadArtifactManifestProcessor,
     new EnsureFinalResponseProcessor(MAX_STEPS),
   ],
   outputProcessors: [billingDebitProcessor, threadProjectionProcessor],

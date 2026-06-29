@@ -40,6 +40,13 @@ export const searchThreadDocuments = createTool({
         score: Number(m.score.toFixed(3)),
         content: m.content,
       })),
+      // Fallback (B4): kosong ≠ tidak ada dokumen. Arahkan model membaca langsung alih-alih
+      // menyimpulkan dokumennya tak ada / meminta unggah ulang.
+      ...(matches.length === 0
+        ? {
+            note: "Tidak ada cuplikan yang cocok secara makna. Ini BUKAN berarti dokumennya tidak ada. Jika dokumen relevan tercantum di manifest lampiran, baca isinya langsung via get_render_payload (pakai artifactId), atau panggil list_artifacts untuk melihat lampiran yang tersedia.",
+          }
+        : {}),
     };
   },
 });

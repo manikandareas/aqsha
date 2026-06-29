@@ -4,7 +4,13 @@ import {
   type NewArtifactEmbedding,
 } from "@aqsha/db";
 import { MAX_INDEXED_TEXT_CHARS } from "./artifacts/model";
-import { embedTexts, isEmbeddingEnabled } from "./clients/embeddings";
+import { assertEmbeddingEnabled, embedTexts, isEmbeddingEnabled } from "./clients/embeddings";
+
+/**
+ * Re-export fail-fast startup guard (D1) lewat subpath `@aqsha/services/rag` — dipanggil entry
+ * runtime agent + api supaya kredensial embedding yang hilang gagal keras saat boot.
+ */
+export { assertEmbeddingEnabled };
 
 /** Satu chunk dokumen yang relevan (untuk tool `search_thread_documents`). */
 export type ThreadDocumentMatch = {
@@ -54,6 +60,8 @@ export const RagService = {
     db: DbOrTx,
     input: { ownerUserId: string; artifactId: string; workspaceId: string | null; text: string },
   ): Promise<string | null> {
+    // Defensif: di prod, proses meng-index sudah `assertEmbeddingEnabled()` saat boot (D1), jadi
+    // cabang ini tak terjangkau. Dipertahankan untuk konteks non-asserted (mis. unit test tanpa key).
     if (!isEmbeddingEnabled()) return null;
     const chunks = chunkText(input.text);
     if (chunks.length === 0) return null;
@@ -79,11 +87,11 @@ export const RagService = {
   },
 
   /**
-   * RAG read (Slice 6.4) — embed query → ANN cosine search atas chunk artifact,
-   * di-scope owner + (thread atau workspace). Degrade GRACEFUL bila embedding
-   * disabled (mis. tanpa kredensial): return `[]` supaya tool tetap menjawab
-   * "tidak ada dokumen relevan", bukan melempar. Jarak cosine `[0..2]` dipetakan
-   * ke skor `[0..1]` (`1 - distance/2`).
+   * RAG read (Slice 6.4 + D4 hybrid) — gabung pencarian VEKTOR (ANN cosine) dan LEKSIKAL (FTS
+   * `websearch_to_tsquery`) atas chunk artifact, di-scope owner + (thread atau workspace), lalu
+   * fusi via Reciprocal Rank Fusion. Hybrid menutup kelemahan vektor murni: kueri kaya kata-kunci
+   * (nama, istilah, angka) yang meleset secara makna tetap tertangkap leksikal. Degrade GRACEFUL
+   * bila embedding disabled: return `[]` (tool menjawab "tak ada dokumen relevan", bukan melempar).
    */
   async searchThreadDocuments(
     db: DbOrTx,
@@ -99,19 +107,57 @@ export const RagService = {
     if (!query || !isEmbeddingEnabled()) return [];
     const [vector] = await embedTexts([query]);
     if (!vector) return [];
-    const matches = await ArtifactEmbeddingRepo.searchSimilar(db, {
+    const limit = Math.min(Math.max(input.limit ?? 6, 1), 20);
+    // Ambil lebih banyak kandidat per-jalur (limit×3) supaya RRF punya ruang re-rank.
+    const candidates = Math.min(limit * 3, 50);
+    const scope = {
       ownerUserId: input.ownerUserId,
-      queryVector: vector,
       threadId: input.threadId,
       workspaceId: input.workspaceId,
-      limit: Math.min(Math.max(input.limit ?? 6, 1), 20),
-    });
-    return matches.map((m) => ({
-      artifactId: m.artifactId,
-      title: m.title,
-      chunkIndex: m.chunkIndex,
-      content: m.content,
-      score: Math.max(0, 1 - m.distance / 2),
-    }));
+    };
+    const [vectorMatches, lexicalMatches] = await Promise.all([
+      ArtifactEmbeddingRepo.searchSimilar(db, { ...scope, queryVector: vector, limit: candidates }),
+      ArtifactEmbeddingRepo.searchLexical(db, { ...scope, query, limit: candidates }),
+    ]);
+    return fuseByReciprocalRank(vectorMatches, lexicalMatches, limit);
   },
 };
+
+/** Konstanta RRF standar; meredam dominasi rank-1 satu jalur (skor ≈ Σ 1/(K + rank)). */
+const RRF_K = 60;
+
+type RankedChunk = { artifactId: string; chunkIndex: number; content: string; title: string };
+
+/**
+ * Reciprocal Rank Fusion: tiap chunk dapat skor Σ 1/(RRF_K + rank0) dari semua jalur yang
+ * memunculkannya (rank 0-based). Chunk yang muncul di vektor DAN leksikal naik ke atas. Kunci
+ * dedupe = `artifactId#chunkIndex`. Skor dikembalikan apa adanya (relatif, bukan [0..1]).
+ */
+function fuseByReciprocalRank(
+  vectorMatches: readonly RankedChunk[],
+  lexicalMatches: readonly RankedChunk[],
+  limit: number,
+): ThreadDocumentMatch[] {
+  const fused = new Map<string, { chunk: RankedChunk; score: number }>();
+  const accumulate = (list: readonly RankedChunk[]) => {
+    list.forEach((chunk, rank) => {
+      const key = `${chunk.artifactId}#${chunk.chunkIndex}`;
+      const contribution = 1 / (RRF_K + rank);
+      const existing = fused.get(key);
+      if (existing) existing.score += contribution;
+      else fused.set(key, { chunk, score: contribution });
+    });
+  };
+  accumulate(vectorMatches);
+  accumulate(lexicalMatches);
+  return [...fused.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map(({ chunk, score }) => ({
+      artifactId: chunk.artifactId,
+      title: chunk.title,
+      chunkIndex: chunk.chunkIndex,
+      content: chunk.content,
+      score: Number(score.toFixed(4)),
+    }));
+}

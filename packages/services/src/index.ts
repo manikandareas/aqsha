@@ -76,7 +76,12 @@ export * from "./artifacts/model";
 export { assertLibraryCapacity } from "./artifacts/capacity";
 export { type ExtractedDocument, extractStoredDocument } from "./artifacts/extract";
 export { StorageService } from "./storage.service";
-export { ragEntryIdFor, RagService, type ThreadDocumentMatch } from "./rag.service";
+export {
+  assertEmbeddingEnabled,
+  ragEntryIdFor,
+  RagService,
+  type ThreadDocumentMatch,
+} from "./rag.service";
 export {
   type EvidenceStrength,
   type ResearchCandidate,

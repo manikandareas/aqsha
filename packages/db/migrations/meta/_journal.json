@@ -134,6 +134,13 @@
       "when": 1782658490558,
       "tag": "0018_black_white_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1782711593237,
+      "tag": "0019_deep_wrecking_crew",
+      "breakpoints": true
     }
   ]
 }

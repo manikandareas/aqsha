@@ -263,6 +263,7 @@ function MastraChatInner({
         busy={busy}
         disabled={blocked}
         notice={notice}
+        threadId={threadId}
         errorDraft={agent.error ? lastUserText(agent.messages) : null}
         onSend={onComposerSend}
         onStop={agent.stop}
@@ -312,6 +313,7 @@ function MastraComposerLanding({
   busy,
   disabled,
   notice,
+  threadId,
   errorDraft,
   onSend,
   onStop,
@@ -321,6 +323,8 @@ function MastraComposerLanding({
   busy: boolean;
   disabled: boolean;
   notice: ComposerNotice | null;
+  // D6: threadId client-generated (effectiveThreadId) → izinkan lampiran di pesan pertama.
+  threadId: string;
   errorDraft: string | null;
   onSend: (payload: ComposerSendPayload) => void;
   onStop: () => void;
@@ -363,6 +367,7 @@ function MastraComposerLanding({
               showSuggestions={!compact}
               recentThreads={recentThreads}
               initialContent={initialContent}
+              threadId={threadId}
               onSend={onSend}
               onStop={onStop}
               busy={busy}

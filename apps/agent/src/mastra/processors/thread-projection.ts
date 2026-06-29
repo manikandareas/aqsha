@@ -1,26 +1,8 @@
 import { messagePreview } from "@aqsha/chat-core";
 import { ThreadService, TitleService } from "@aqsha/services/chat";
 import type { ProcessInputArgs, ProcessOutputResultArgs } from "@mastra/core/processors";
-import {
-  MASTRA_RESOURCE_ID_KEY,
-  MASTRA_THREAD_ID_KEY,
-  type RequestContext,
-} from "@mastra/core/request-context";
 import { getServiceDb } from "../lib/db";
-
-type MessageLike = { threadId?: string; resourceId?: string };
-
-/** Owner + threadId dari pesan tersimpan (SoT) → fallback RequestContext. */
-function resolveOwnerThread(
-  rc: RequestContext | undefined,
-  messages: readonly MessageLike[],
-): { ownerUserId: string | null; threadId: string | null } {
-  return {
-    threadId: messages.find((m) => m.threadId)?.threadId ?? ctxValue(rc, MASTRA_THREAD_ID_KEY),
-    ownerUserId:
-      messages.find((m) => m.resourceId)?.resourceId ?? ctxValue(rc, MASTRA_RESOURCE_ID_KEY),
-  };
-}
+import { resolveOwnerThread } from "../lib/owner-thread";
 
 /**
  * Proyeksi thread (Fase 3 cutover) — menggantikan hook `projection.ts` eve untuk jalur Mastra.
@@ -31,16 +13,9 @@ function resolveOwnerThread(
  * async (`TitleService.requestTitle` → worker BullMQ). TIDAK menulis `chat_messages`/
  * `chat_thread_events` (di-deprecate; Memory yang menyimpan isi pesan).
  *
- * Owner + threadId dibaca dari pesan tersimpan (`MastraDBMessage.threadId`/`.resourceId` —
- * SoT yang selalu terisi saat memory thread aktif), fallback ke RequestContext. Tak bergantung
- * pada `MASTRA_THREAD_ID_KEY` semata (Mastra bisa menyimpan threadId di memoryContext, bukan
- * RequestContext, saat klien mengirimnya via opsi `memory`). Best-effort: kegagalan proyeksi tak
- * boleh meracuni turn.
+ * Owner + threadId via `resolveOwnerThread` (pesan tersimpan dulu, fallback RequestContext).
+ * Best-effort: kegagalan proyeksi tak boleh meracuni turn.
  */
-function ctxValue(rc: RequestContext | undefined, key: string): string | null {
-  const raw = rc?.get(key);
-  return typeof raw === "string" && raw.length > 0 ? raw : null;
-}
 
 /** Teks pesan user PERTAMA (seed judul thread). `content.content` string atau gabung part `text`. */
 function firstUserText(messages: ProcessOutputResultArgs["messages"]): string | null {

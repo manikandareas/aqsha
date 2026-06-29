@@ -26,6 +26,7 @@ import {
   defaultLanguageForArtifactType,
   type DetectedDocumentKind,
   type IndexingStatus,
+  INLINE_INDEX_MAX_BYTES,
   normalizeArtifactTitle,
   normalizeUrl,
   previewFromText,
@@ -67,7 +68,7 @@ export type ArtifactListItem = {
 export type ArtifactRenderPayload =
   | { artifactType: "markdown"; blocksJson: string; markdown: string; plainText: string }
   | {
-      artifactType: "pdf" | "docx";
+      artifactType: "pdf" | "docx" | "image";
       fileName: string;
       mimeType: string;
       byteSize: number;
@@ -550,7 +551,12 @@ export const ArtifactService = {
       mimeType: string;
       size: number;
     },
-  ): Promise<{ artifactId: string; title: string; indexed: boolean }> {
+  ): Promise<{
+    artifactId: string;
+    title: string;
+    indexed: boolean;
+    indexingStatus: IndexingStatus;
+  }> {
     const artifactType = validateUpload({
       fileName: input.fileName,
       mimeType: input.mimeType,
@@ -606,6 +612,16 @@ export const ArtifactService = {
       });
     });
 
+    // File besar (D5): offload ekstraksi+index ke worker `artifact-indexing` supaya finalize
+    // tak terblok. Artifact sudah `pending` (di atas) → FE poll status sampai ready/failed.
+    if (input.size > INLINE_INDEX_MAX_BYTES) {
+      await enqueue(ARTIFACT_QUEUES.artifactIndexing, {
+        ownerUserId: input.ownerUserId,
+        artifactId,
+      });
+      return { artifactId, title, indexed: false, indexingStatus: "pending" };
+    }
+
     // ponytail: skip paper-enrichment untuk lampiran headless — worker scope metadata
     // ke workspace (`workspaceId: string`), yang null di sini; agen cuma butuh teks RAG
     // (sudah ter-index di extractIndexAndPatch). Enrichment menyusul saat di-promote.
@@ -620,7 +636,41 @@ export const ArtifactService = {
       startedAt: now,
     });
 
-    return { artifactId, title, indexed };
+    // Inline: extractIndexAndPatch men-set indexingStatus ready (indexed) / failed (gagal ekstraksi).
+    return { artifactId, title, indexed, indexingStatus: indexed ? "ready" : "failed" };
+  },
+
+  /**
+   * Worker `artifact-indexing` (D5): jalankan ekstraksi+RAG index untuk lampiran thread besar
+   * yang di-offload `finalizeThreadUpload`. Idempoten: hanya proses artifact `pending` milik owner
+   * (re-run job aman; `extractIndexAndPatch` men-set ready/failed + provenance). No-op bila artifact
+   * hilang / sudah selesai / bukan upload.
+   */
+  async runAttachmentIndexing(
+    db: Db,
+    input: { ownerUserId: string; artifactId: string },
+  ): Promise<void> {
+    const artifact = await ArtifactRepo.findById(db, input.artifactId);
+    if (
+      !artifact ||
+      artifact.ownerUserId !== input.ownerUserId ||
+      artifact.indexingStatus !== "pending" ||
+      !artifact.storageR2Key
+    ) {
+      return;
+    }
+    await extractIndexAndPatch(db, {
+      ownerUserId: artifact.ownerUserId,
+      artifactId: artifact.id,
+      workspaceId: artifact.workspaceId,
+      key: artifact.storageR2Key,
+      fileName: artifact.fileName ?? "attachment",
+      mimeType: artifact.mimeType ?? "application/octet-stream",
+      // Kolom `artifact_type` = text; baris ini dibuat `finalizeThreadUpload` via `validateUpload`
+      // → selalu ArtifactType valid. Narrow aman untuk pemilihan extractor.
+      artifactType: artifact.artifactType as ArtifactType,
+      startedAt: Date.now(),
+    });
   },
 
   /**
@@ -1148,7 +1198,7 @@ export const ArtifactService = {
       };
     }
 
-    if (type === "pdf" || type === "docx") {
+    if (type === "pdf" || type === "docx" || type === "image") {
       if (!artifact.storageR2Key) return null;
       const signedUrl = await StorageService.getSignedReadUrl(artifact.storageR2Key);
       return {

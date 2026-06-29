@@ -103,7 +103,8 @@ export const threads = new Elysia({ prefix: "/threads" })
     "/:id/attachments/upload-url",
     async ({ ownerUserId, params }) => {
       const { db } = getDb();
-      await ThreadService.assertOwner(db, ownerUserId, params.id);
+      // D6: izinkan lampiran di percakapan baru (thread belum terproyeksi); tolak thread milik lain.
+      await ThreadService.assertOwnerOrAbsent(db, ownerUserId, params.id);
       return ArtifactService.generateThreadUploadUrl(ownerUserId);
     },
     { auth: true },
@@ -112,7 +113,7 @@ export const threads = new Elysia({ prefix: "/threads" })
     "/:id/attachments",
     async ({ ownerUserId, params, body }) => {
       const { db } = getDb();
-      await ThreadService.assertOwner(db, ownerUserId, params.id);
+      await ThreadService.assertOwnerOrAbsent(db, ownerUserId, params.id);
       return ArtifactService.finalizeThreadUpload(db, {
         ownerUserId,
         threadId: params.id,

@@ -32,6 +32,21 @@ export function isEmbeddingEnabled(): boolean {
   return Boolean(process.env.AQSHA_EMBEDDING_API_KEY ?? process.env.OPENAI_API_KEY);
 }
 
+/**
+ * Fail-fast startup (D1): kredensial embedding WAJIB di proses yang meng-index/mencari RAG
+ * (api upload-finalize, worker indexing, agent `search_thread_documents`). Dipanggil di entry
+ * runtime tiap proses tsb supaya kunci yang hilang gagal keras saat boot — bukan degradasi senyap
+ * (upload "sukses" tapi tak ter-index, search selalu kosong). Embedding by default harus aktif.
+ */
+export function assertEmbeddingEnabled(): void {
+  if (!isEmbeddingEnabled()) {
+    throw new Error(
+      "AQSHA_EMBEDDING_API_KEY (atau OPENAI_API_KEY) wajib: RAG embedding harus aktif. " +
+        "Set kredensial embedding di environment proses ini sebelum start.",
+    );
+  }
+}
+
 export async function embedTexts(values: string[]): Promise<number[][]> {
   if (values.length === 0) return [];
   const { embeddings } = await embedMany({

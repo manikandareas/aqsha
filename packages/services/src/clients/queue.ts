@@ -12,6 +12,9 @@ export const ARTIFACT_QUEUES = {
   urlIngestion: "url-ingestion",
   paperEnrichment: "paper-enrichment",
   artifactCleanup: "artifact-cleanup",
+  // Index lampiran thread besar (D5) — ekstraksi+embedding di-offload dari finalize upload
+  // supaya response tak terblok; file kecil tetap inline.
+  artifactIndexing: "artifact-indexing",
 } as const;
 
 /** Queue feed (P4) — lane hydration discovery (ganti cron 3h Convex). */

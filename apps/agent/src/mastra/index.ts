@@ -1,9 +1,14 @@
+import { assertEmbeddingEnabled } from "@aqsha/services/rag";
 import { Mastra } from "@mastra/core/mastra";
 import { astraLite } from "./agents/astra-lite";
 import { createClerkAuth } from "./auth";
 import { userContextMiddleware } from "./middleware/user-context";
 import { storage, vector } from "./storage";
 import { deepResearch } from "./workflows/deep-research";
+
+// Fail-fast (D1): tool `search_thread_documents` butuh embedding aktif. Konsisten dengan throw
+// `DATABASE_URL` di `./storage` — kredensial wajib digagalkan saat boot, bukan degradasi senyap.
+assertEmbeddingEnabled();
 
 /**
  * Instance Mastra runtime Astra (Fase 0 spike).

@@ -89,6 +89,10 @@ export function useHydrateContext() {
   return useMutation({
     mutationFn: async (input: { workspaceIds: string[]; artifactIds: string[] }) =>
       unwrap(await api.threads.context.hydrate.post(input)),
+    // C3: hydrate konteks @mention (workspace/paper) → catatan ephemeral. Kegagalan transien
+    // (jaringan) men-drop konteks senyap; retri singkat memperkecil peluang itu sebelum submit.
+    retry: 2,
+    retryDelay: (attempt) => Math.min(400 * 2 ** attempt, 2_000),
   });
 }
 
@@ -117,7 +121,10 @@ export function useDeleteThread() {
 }
 
 /** Artifact yang terlampir pada thread (Slice 6.7) — headless (workspaceId=null). */
-export function useThreadArtifacts(threadId: string | null) {
+export function useThreadArtifacts(
+  threadId: string | null,
+  opts?: { pollWhilePending?: boolean },
+) {
   const api = useApi();
   return useQuery({
     queryKey: queryKeys.threads.artifacts(threadId ?? ""),
@@ -125,6 +132,12 @@ export function useThreadArtifacts(threadId: string | null) {
     queryFn: async () =>
       (unwrap(await api.threads({ id: threadId ?? "" }).artifacts.get()) as { items: Artifact[] })
         .items,
+    // D5: saat ada lampiran besar yang masih `pending` (index async), poll sampai ready/failed.
+    refetchInterval: (query) =>
+      opts?.pollWhilePending &&
+      (query.state.data ?? []).some((a) => a.indexingStatus === "pending")
+        ? 2_500
+        : false,
   });
 }
 
@@ -150,9 +163,19 @@ export function useThreadAttachments(threadId: string) {
           mimeType: input.file.type || "application/octet-stream",
           size: input.file.size,
         }),
-      ) as { artifactId: string; title: string; indexed: boolean };
+      ) as { artifactId: string; title: string; indexed: boolean; indexingStatus: string };
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.threads.artifacts(threadId) }),
+    onSuccess: (data) => {
+      // D2: peringatkan hanya saat indexing benar-benar GAGAL (mis. PDF hasil scan / tanpa teks
+      // terbaca) — surface jujur, bukan degradasi senyap. `pending` (file besar, async) belum
+      // selesai → chip menampilkan "memproses…", poll yang akan menyusulkan toast bila failed.
+      if (data.indexingStatus === "failed") {
+        toast.warning(
+          "Berkas terlampir, tetapi isinya tak bisa diindeks untuk pencarian (mis. PDF hasil scan / tanpa teks terbaca). Astra dapat membaca metadata, tetapi mungkin tak menemukan isi teksnya.",
+        );
+      }
+      return qc.invalidateQueries({ queryKey: queryKeys.threads.artifacts(threadId) });
+    },
     onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal melampirkan berkas.")),
   });
 }
