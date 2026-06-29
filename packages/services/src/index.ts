@@ -97,11 +97,14 @@ export {
 export { syncArtifactWorkspaceMove } from "./artifacts/move";
 export { PaperMetadataService, type PaperMetadataInput } from "./paper-metadata.service";
 export {
+  BlockedUrlError,
   classifyPaperText,
   classifyUrl,
   type ClassifiedUrl,
   downloadOaPdf,
+  followRedirectsSafely,
   isAcademicIdentifier,
+  isBlockedHost,
   pdfFileName,
   readWithJinaReader,
   resolvePaper,
@@ -111,8 +114,6 @@ export {
   ARTIFACT_QUEUES,
   type ArtifactQueueName,
   enqueue,
-  EXPLORE_QUEUES,
-  type ExploreQueueName,
   getQueueConnection,
 } from "./clients/queue";
 
@@ -158,25 +159,6 @@ export {
 export { PaperCacheService, type PapersByKeysItem } from "./paper-cache.service";
 export { ExploreService } from "./explore.service";
 export { suggestQueries } from "./explore/suggest";
-export {
-  type ExploreFacets,
-  type FacetGlobe,
-  type FacetGlobeArc,
-  type FacetGlobeNode,
-  type FacetPulse,
-  FacetsService,
-} from "./explore/facets.service";
-export {
-  type AnalysisPaper,
-  type ExploreAnalysisJob,
-  type ExploreAnalysisResult,
-  type ExploreAnalysisStatus,
-  ExploreAnalysisService,
-  type GapResult,
-  parseAnalysis,
-  type TensionClaim,
-  type TensionData,
-} from "./explore/analysis.service";
 export {
   type DiscoveryItemRef,
   type DiscoveryResolvedRef,

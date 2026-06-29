@@ -5,7 +5,7 @@
  * (status "skipped" sekarang). `OPENALEX_API_KEY` wajib.
  */
 import type { Db } from "@aqsha/db";
-import { throwAppError } from "@aqsha/db";
+import { FeedRepo, PaperCacheRepo, throwAppError } from "@aqsha/db";
 import { getCache, putCache } from "./papers/external-cache";
 import { fetchOpenAlexWorks } from "./feed/openAlex";
 import { extractDoi } from "./papers/identifiers";
@@ -132,6 +132,15 @@ async function waterfallFill(
 }
 
 export const ExploreService = {
+  /**
+   * Provenance pdf-proxy: `true` hanya bila `url` benar-benar pdf_url yang kita ingest
+   * (feed_items atau explore_papers). Guard anti-SSRF — proxy menolak URL sembarang.
+   */
+  async isKnownPdfUrl(db: Db, url: string): Promise<boolean> {
+    if (await FeedRepo.pdfUrlExists(db, url)) return true;
+    return PaperCacheRepo.pdfUrlExists(db, url);
+  },
+
   /** Search/recommendations paper (cache → OpenAlex → cache). Port V1 explore.searchPapers. */
   async searchPapers(
     db: Db,

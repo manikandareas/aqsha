@@ -9,10 +9,13 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
+  DiscoveryFeatureCard,
   DiscoveryHeroCard,
   DiscoveryStandardCard,
   type DiscoveryCardHandlers,
 } from "@/features/discovery/components/discovery-item-card";
+import { HouseAdBanner } from "@/features/discovery/components/house-ad-banner";
+import { HOUSE_ADS, type HouseAd } from "@/features/discovery/house-ads";
 import {
   useFeedInfinite,
   useHideDiscovery,
@@ -26,6 +29,7 @@ import {
 } from "@/features/discovery/model";
 import type { FeedItem, FeedTopic } from "@/features/discovery/types";
 import { readableApiErrorMessage } from "@/lib/api-error";
+import { cn } from "@/lib/utils";
 import { SectionHeader } from "./section-header";
 
 type FeedStatus = "LoadingMore" | "CanLoadMore" | "Exhausted";
@@ -124,14 +128,22 @@ export function ExploreFindings({ topic, query }: { topic: FeedTopic | null; que
   const rest = items.slice(1);
 
   return (
-    <section className="pt-16">
-      <SectionHeader
-        title={searchMode ? `Hasil untuk “${q}”` : "Temuan untukmu"}
-        subtitle={searchMode ? "Paper & berita yang cocok dengan pencarianmu" : "Scroll terus untuk paper & berita berikutnya"}
-        right={<span className="shrink-0 font-mono text-[11px] text-muted-foreground">{items.length} item</span>}
-      />
+    <section className={searchMode ? "pt-16" : "pt-8"}>
+      {searchMode ? (
+        <SectionHeader
+          title={`Hasil untuk “${q}”`}
+          subtitle="Paper & berita yang cocok dengan pencarianmu"
+          right={<span className="shrink-0 font-mono text-[11px] text-muted-foreground">{items.length} item</span>}
+        />
+      ) : null}
 
-      <div className="@container/feed mt-5">
+      <div
+        className={cn(
+          searchMode ? "@container/feed mt-5" : "@container/feed",
+          // Hasil lama tetap tampil (di-fade) selagi kueri/topik baru dimuat — transisi mulus.
+          feed.isPlaceholderData && "opacity-60 transition-opacity duration-200",
+        )}
+      >
         {feed.isError ? (
           <div className="max-w-[760px] rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-[13px] font-medium text-destructive">
             {readableApiErrorMessage(feed.error, "Gagal memuat.")}
@@ -142,16 +154,49 @@ export function ExploreFindings({ topic, query }: { topic: FeedTopic | null; que
           <EmptyState topic={topic} searchQuery={searchMode ? q : null} />
         ) : (
           <div className="space-y-10">
-            {hero ? <DiscoveryHeroCard item={hero} busy={false} handlers={handlers} /> : null}
-            {rest.length > 0 ? (
-              <div className="grid grid-cols-1 gap-x-5 gap-y-8 @md/feed:grid-cols-2 @2xl/feed:grid-cols-3">
-                {rest.map((item) => (
-                  <div key={discoveryItemKey(item)}>
-                    <DiscoveryStandardCard item={item} busy={false} handlers={handlers} />
-                  </div>
-                ))}
-              </div>
+            {hero ? (
+              <DiscoveryHeroCard key={discoveryItemKey(hero)} item={hero} busy={false} handlers={handlers} />
             ) : null}
+            {buildFeedBlocks(rest, !searchMode).map((block) => {
+              if (block.kind === "grid") {
+                return (
+                  <div
+                    key={block.key}
+                    className="grid grid-cols-1 gap-x-5 gap-y-8 @md/feed:grid-cols-2 @2xl/feed:grid-cols-3"
+                  >
+                    {block.items.map((item, idx) => (
+                      <div
+                        key={discoveryItemKey(item)}
+                        className="animate-in duration-300 ease-out fade-in-0 slide-in-from-bottom-2"
+                        style={{ animationDelay: `${Math.min(idx, 8) * 40}ms` }}
+                      >
+                        <DiscoveryStandardCard item={item} busy={false} handlers={handlers} />
+                      </div>
+                    ))}
+                  </div>
+                );
+              }
+              if (block.kind === "feature") {
+                return (
+                  <div
+                    key={block.key}
+                    className="animate-in duration-300 ease-out fade-in-0 slide-in-from-bottom-2"
+                  >
+                    <DiscoveryFeatureCard
+                      item={block.item}
+                      imageSide={block.side}
+                      busy={false}
+                      handlers={handlers}
+                    />
+                  </div>
+                );
+              }
+              return (
+                <div key={block.key} className="animate-in duration-300 ease-out fade-in-0">
+                  <HouseAdBanner ad={block.ad} />
+                </div>
+              );
+            })}
             {feedStatus !== "Exhausted" ? <div ref={sentinelRef} aria-hidden className="h-px w-full" /> : null}
             <FeedFooter status={feedStatus} onLoadMore={handleManualLoadMore} />
           </div>
@@ -163,6 +208,54 @@ export function ExploreFindings({ topic, query }: { topic: FeedTopic | null; que
 
 function buildSeed(item: DiscoveryItem): string {
   return `${item.title}\n\n${item.tldr ?? item.summary}\n\nSumber: ${item.resolvedUrl ?? item.url}`;
+}
+
+// Ritme feed editorial (opsi 4): grid 3-up tiap GRID_CHUNK item, lalu 1 feature
+// full-width (selang-seling kiri/kanan). House-ad (opsi 2) diselipkan setelah grid
+// pertama lalu tiap AD_CADENCE grid berikutnya, menarik kampanye berurutan dari
+// HOUSE_ADS sampai habis → menambah entri ke array otomatis ikut tampil (non-search
+// only). Hero (items[0]) dirender terpisah di atas.
+type FeedBlock =
+  | { kind: "grid"; key: string; items: DiscoveryItem[] }
+  | { kind: "feature"; key: string; item: DiscoveryItem; side: "left" | "right" }
+  | { kind: "ad"; key: string; ad: HouseAd };
+
+const GRID_CHUNK = 6;
+const AD_FIRST_AFTER_GRID = 1;
+const AD_CADENCE = 2;
+
+function buildFeedBlocks(rest: DiscoveryItem[], includeAds: boolean): FeedBlock[] {
+  const blocks: FeedBlock[] = [];
+  let p = 0;
+  let gridN = 0;
+  let adN = 0;
+  while (p < rest.length) {
+    const chunk = rest.slice(p, p + GRID_CHUNK);
+    p += chunk.length;
+    blocks.push({ kind: "grid", key: `grid-${gridN}`, items: chunk });
+    gridN += 1;
+    if (
+      includeAds &&
+      adN < HOUSE_ADS.length &&
+      gridN >= AD_FIRST_AFTER_GRID &&
+      (gridN - AD_FIRST_AFTER_GRID) % AD_CADENCE === 0
+    ) {
+      blocks.push({ kind: "ad", key: `ad-${HOUSE_ADS[adN]!.id}`, ad: HOUSE_ADS[adN]! });
+      adN += 1;
+    }
+    if (p < rest.length) {
+      const item = rest[p]!;
+      p += 1;
+      // featN ≡ gridN-1 di tiap feature-push → sisi selang-seling tanpa counter terpisah.
+      blocks.push({
+        kind: "feature",
+        key: `feature-${discoveryItemKey(item)}`,
+        item,
+        side: (gridN - 1) % 2 === 0 ? "left" : "right",
+      });
+    }
+  }
+  return blocks;
 }
 
 function Loader() {

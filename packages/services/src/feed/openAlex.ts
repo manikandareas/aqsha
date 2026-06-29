@@ -76,6 +76,8 @@ export type OpenAlexWork = {
   }> | null;
   primary_topic?: OpenAlexTopic | null;
   topics?: OpenAlexTopic[] | null;
+  /** ID OpenAlex work terkait (algoritmik, konsep paling tumpang-tindih) — edge constellation. */
+  related_works?: string[] | null;
   ids?: { openalex?: string | null; doi?: string | null } | null;
 };
 
@@ -229,6 +231,90 @@ export async function fetchOpenAlexWorks(args: {
   return { works, papers: worksToPapers(works, limit) };
 }
 
+const OPENALEX_SEMANTIC_SELECT = [
+  "id",
+  "doi",
+  "title",
+  "display_name",
+  "publication_year",
+  "publication_date",
+  "cited_by_count",
+  "is_retracted",
+  "primary_location",
+  "best_oa_location",
+  "open_access",
+  "authorships",
+  "primary_topic",
+  "topics",
+  "related_works",
+  "ids",
+];
+
+/**
+ * URL `works` dengan `search.semantic` (pencarian berbasis MAKNA OpenAlex, embedding GTE-Large
+ * atas ~217jt work). Maks 50 hasil/query, input dipotong ≤2000 char. `search.semantic` HANYA
+ * menerima subset filter (a.l. is_retracted, is_oa, has_abstract, publication_year); `is_paratext`,
+ * `from_publication_date`, `cited_by_count`, & `country_code` DITOLAK (HTTP 400) → pakai
+ * is_retracted + publication_year saja.
+ */
+export function buildOpenAlexSemanticUrl(args: {
+  apiKey: string;
+  query: string;
+  limit: number;
+  fromYear?: number;
+}): URL {
+  const fromYear = normalizeFromYear(args.fromYear);
+  const url = new URL(OPENALEX_ENDPOINT);
+  url.searchParams.set("api_key", args.apiKey);
+  url.searchParams.set("per_page", String(Math.min(Math.max(args.limit, 1), 50)));
+  url.searchParams.set("select", OPENALEX_SEMANTIC_SELECT.join(","));
+  url.searchParams.set("search.semantic", args.query.trim().slice(0, 2000));
+  const filters = ["is_retracted:false"];
+  if (fromYear) filters.push(`publication_year:>${fromYear - 1}`);
+  url.searchParams.set("filter", filters.join(","));
+  return url;
+}
+
+/**
+ * Fetch OpenAlex `search.semantic` (cache 24h) → raw works (dgn `related_works` untuk graf
+ * kemiripan Constellation). BERBAYAR (~$0.001/query) tapi diredam cache per-seed. Query kosong →
+ * works kosong (semantic butuh teks; pemanggil fallback ke trending). Tanpa API key → throw.
+ */
+export async function fetchOpenAlexSemantic(args: {
+  query: string;
+  limit: number;
+  fromYear?: number;
+  now?: number;
+}): Promise<{ works: OpenAlexWork[] }> {
+  const query = args.query.trim();
+  if (!query) return { works: [] };
+  const limit = Math.min(Math.max(args.limit, 1), 50);
+  const now = args.now ?? Date.now();
+  const dateBucket = new Date(now).toISOString().slice(0, 10);
+  const cacheKey = `feed:semantic:${limit}:${args.fromYear ?? ""}:${query}:${dateBucket}`;
+
+  const cached = await getCache("openalex", cacheKey);
+  if (cached) {
+    try {
+      return { works: JSON.parse(cached.valueJson) as OpenAlexWork[] };
+    } catch {
+      // fall through to refetch
+    }
+  }
+
+  const apiKey = process.env.OPENALEX_API_KEY;
+  if (!apiKey) throw new Error("OPENALEX_API_KEY is not configured");
+
+  const url = buildOpenAlexSemanticUrl({ apiKey, query, limit, fromYear: args.fromYear });
+  const response = await fetchWithTimeout(url.toString(), { headers: { Accept: "application/json" } });
+  if (!response.ok) throw new Error(`OpenAlex semantic returned ${response.status}`);
+  const json = (await response.json()) as { results?: OpenAlexWork[] };
+  const works = json.results ?? [];
+
+  await putCache("openalex", cacheKey, works.length > 0 ? "ready" : "empty", JSON.stringify(works));
+  return { works };
+}
+
 /** Satu bucket agregat OpenAlex `group_by` (key + label + count). */
 export type OpenAlexGroup = { key: string; label: string; count: number };
 
@@ -297,15 +383,6 @@ export async function fetchOpenAlexGroupBy(args: {
 /** Tren volume publikasi per tahun untuk sebuah topik (Pulse chart). */
 export function fetchOpenAlexYearCounts(args: { query: string; fromYear?: number }) {
   return fetchOpenAlexGroupBy({ query: args.query, groupBy: "publication_year", fromYear: args.fromYear });
-}
-
-/** Sebaran riset per negara untuk sebuah topik (Globe nodes). */
-export function fetchOpenAlexCountryCounts(args: { query: string; fromYear?: number }) {
-  return fetchOpenAlexGroupBy({
-    query: args.query,
-    groupBy: "authorships.institutions.country_code",
-    fromYear: args.fromYear,
-  });
 }
 
 function worksToPapers(works: OpenAlexWork[], limit: number): ExplorePaperInput[] {

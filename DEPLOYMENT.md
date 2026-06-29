@@ -51,7 +51,6 @@ MINIO_ROOT_USER=          MINIO_ROOT_PASSWORD=      MINIO_BUCKET=aqsha
 ```
 # NEXT_PUBLIC_* are build args baked into the web bundle — set them BEFORE the first build.
 NEXT_PUBLIC_API_URL=https://api.<domain>
-NEXT_PUBLIC_MAPBOX_TOKEN=
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
 # S3_ENDPOINT MUST be the public MinIO URL (presigned URLs inherit this host).
 S3_ENDPOINT=https://assets.<domain>

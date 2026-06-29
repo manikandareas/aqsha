@@ -1,6 +1,6 @@
 "use client";
 
-import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { useApi } from "@/lib/api-client";
 import { queryKeys, unwrap } from "@/lib/api-query";
 import type {
@@ -28,6 +28,9 @@ export function useFeedInfinite(mode: FeedMode, topic: FeedTopic | null, enabled
   return useInfiniteQuery({
     queryKey: queryKeys.feed.list({ mode, topic }),
     enabled,
+    // Ganti topik tetap menampilkan feed lama (di-fade) selagi yang baru dimuat —
+    // hindari kedip spinner penuh saat berpindah antar-topik di Jelajahi.
+    placeholderData: keepPreviousData,
     initialPageParam: null as string | null,
     queryFn: async ({ pageParam }) =>
       unwrap(
@@ -52,6 +55,9 @@ export function useSearchDiscovery(q: string, fromYear?: number) {
   return useInfiniteQuery({
     queryKey: queryKeys.feed.search({ q: trimmed, fromYear: fromYear ?? null }),
     enabled: trimmed.length > 0,
+    // Pertahankan hasil sebelumnya (di-fade) saat kata kunci berubah → transisi
+    // Selidiki mulus tanpa kedip spinner penuh tiap ketukan submit.
+    placeholderData: keepPreviousData,
     initialPageParam: null as string | null,
     queryFn: async ({ pageParam }) =>
       unwrap(

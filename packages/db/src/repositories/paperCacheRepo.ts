@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { type ExplorePaper, type NewExplorePaper, explorePapers } from "../schema/explorePapers";
 import type { DbOrTx } from "../types";
 
@@ -34,5 +34,18 @@ export const PaperCacheRepo = {
   async findByKeys(db: DbOrTx, keys: string[]): Promise<ExplorePaper[]> {
     if (keys.length === 0) return [];
     return db.select().from(explorePapers).where(inArray(explorePapers.key, keys));
+  },
+
+  /**
+   * Provenance: apakah `url` benar-benar pdf_url paper ter-cache (guard pdf-proxy, anti-SSRF).
+   * `eq` tak pernah match NULL → tak perlu isNotNull (selaras FeedRepo.pdfUrlExists).
+   */
+  async pdfUrlExists(db: DbOrTx, url: string): Promise<boolean> {
+    const rows = await db
+      .select({ one: sql`1` })
+      .from(explorePapers)
+      .where(eq(explorePapers.pdfUrl, url))
+      .limit(1);
+    return rows.length > 0;
   },
 };

@@ -211,7 +211,9 @@ export function DiscoveryPage() {
             <DiscoveryEmptyState mode={searchActive ? "search" : mode} query={q} />
           ) : showMosaic ? (
             <div className="space-y-10">
-              {hero ? <DiscoveryHeroCard item={hero} busy={false} handlers={handlers} /> : null}
+              {hero ? (
+                <DiscoveryHeroCard key={discoveryItemKey(hero)} item={hero} busy={false} handlers={handlers} />
+              ) : null}
               {briefRows.map((row) =>
                 row.type === "grid" ? (
                   <div key={row.key} className="grid grid-cols-1 gap-x-5 gap-y-8 @md/feed:grid-cols-2 @2xl/feed:grid-cols-3">

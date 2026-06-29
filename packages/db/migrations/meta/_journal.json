@@ -141,6 +141,13 @@
       "when": 1782711593237,
       "tag": "0019_deep_wrecking_crew",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1782729440709,
+      "tag": "0020_exotic_william_stryker",
+      "breakpoints": true
     }
   ]
 }

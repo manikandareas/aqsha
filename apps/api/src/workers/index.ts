@@ -3,7 +3,6 @@ import {
   ARTIFACT_QUEUES,
   assertEmbeddingEnabled,
   CHAT_QUEUES,
-  EXPLORE_QUEUES,
   FEED_QUEUES,
   getQueueConnection,
   registerRepeatable,
@@ -17,7 +16,6 @@ assertEmbeddingEnabled();
 import { type AccountDeletionJob, processAccountDeletion } from "./account-deletion.worker";
 import { type ArtifactCleanupJob, processArtifactCleanup } from "./artifact-cleanup.worker";
 import { type ArtifactIndexingJob, processArtifactIndexing } from "./artifact-indexing.worker";
-import { type ExploreAnalysisJob, processExploreAnalysis } from "./explore-analysis.worker";
 import { type FeedHydrationJob, processFeedHydration } from "./feed-hydration.worker";
 import { type PaperEnrichmentJob, processPaperEnrichment } from "./paper-enrichment.worker";
 import { type ThreadTitleJob, processThreadTitle } from "./thread-title.worker";
@@ -59,11 +57,6 @@ const workers = [
     concurrency: CONCURRENCY,
   }),
   new Worker<AccountDeletionJob>(ACCOUNT_QUEUES.accountDeletion, processAccountDeletion, {
-    connection,
-    concurrency: 2,
-  }),
-  // Explore analysis: concurrency 2 — tiap job = fetch OpenAlex/arXiv + 1 LLM call (pace API).
-  new Worker<ExploreAnalysisJob>(EXPLORE_QUEUES.exploreAnalysis, processExploreAnalysis, {
     connection,
     concurrency: 2,
   }),

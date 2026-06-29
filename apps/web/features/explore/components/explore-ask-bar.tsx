@@ -49,7 +49,7 @@ export function ExploreAskBar({
   };
 
   return (
-    <div className="relative max-w-[520px]">
+    <div className="relative max-w-[600px]">
       <div className="flex items-center gap-3 rounded-xl border border-border bg-background px-4 py-3.5 transition-colors focus-within:border-ring/55">
         <SearchIcon className="size-[18px] shrink-0 text-muted-foreground" />
         <input
@@ -94,7 +94,7 @@ export function ExploreAskBar({
       </div>
 
       {open ? (
-        <div className="absolute z-20 mt-2 w-full rounded-2xl border border-border bg-card p-1.5 shadow-md">
+        <div className="absolute z-20 mt-2 w-full origin-top animate-in rounded-2xl border border-border bg-card p-1.5 shadow-md duration-150 ease-out fade-in-0 zoom-in-95">
           <p className="px-2 py-1 font-mono text-[10px] tracking-wide text-muted-foreground">Saran pencarian</p>
           {suggestions.map((s) => (
             <button

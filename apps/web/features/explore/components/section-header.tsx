@@ -1,5 +1,5 @@
-// Header zona Explore: nomor mono + judul serif + subjudul + hairline + slot kanan.
-// Dipakai zona Pulse (01), Masuk lebih dalam (02), Temuan untukmu (03).
+// Header zona Explore: judul serif + subjudul + hairline + slot kanan.
+// Dipakai ExploreFindings untuk header hasil pencarian.
 
 import type { ReactNode } from "react";
 

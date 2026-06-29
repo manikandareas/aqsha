@@ -21,7 +21,13 @@ import { workspaces } from "./routes/workspaces";
 export const app = new Elysia()
   .use(observability)
   .use(errorPlugin)
-  .use(cors())
+  // exposeHeaders eksplisit: default `true` justru memantulkan nama header REQUEST
+  // (quirk @elysiajs/cors), sehingga accept-ranges/content-range TAK ter-expose lintas
+  // origin → pdf.js gagal deteksi range & mengunduh PDF utuh. Daftar ini adalah kontrak
+  // lintas-origin: setiap route baru yang ingin header respons custom-nya DIBACA klien
+  // (mis. X-Next-Cursor) harus menambahkannya di sini, kalau tidak header itu ada di wire
+  // tapi tak terbaca Eden client (gagal senyap).
+  .use(cors({ exposeHeaders: ["Content-Type", "Content-Length", "Accept-Ranges", "Content-Range"] }))
   .use(openapi())
   .use(health)
   .use(users)
