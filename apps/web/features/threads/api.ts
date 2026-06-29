@@ -87,8 +87,12 @@ export function useThreadSources(id: string, enabled = true) {
 export function useHydrateContext() {
   const api = useApi();
   return useMutation({
-    mutationFn: async (input: { workspaceIds: string[]; artifactIds: string[] }) =>
-      unwrap(await api.threads.context.hydrate.post(input)),
+    mutationFn: async (input: {
+      workspaceIds: string[];
+      artifactIds: string[];
+      paperKeys?: string[];
+      feedItemIds?: string[];
+    }) => unwrap(await api.threads.context.hydrate.post(input)),
     // C3: hydrate konteks @mention (workspace/paper) → catatan ephemeral. Kegagalan transien
     // (jaringan) men-drop konteks senyap; retri singkat memperkecil peluang itu sebelum submit.
     retry: 2,

@@ -1,5 +1,5 @@
 import { Agent } from "@mastra/core/agent";
-import { liteModel } from "../model";
+import { modelForRequestContext } from "../model";
 import { lookupDoi } from "../tools/lookup-doi";
 import { searchArxiv } from "../tools/search-arxiv";
 import { searchPapers } from "../tools/search-papers";
@@ -37,7 +37,8 @@ export const counterEvidence = new Agent({
   description:
     "Searches for evidence that weakens or contradicts the emerging conclusions of a research inventory.",
   instructions,
-  model: liteModel,
+  // Tier per-run (`AQSHA_AGENT_KIND_KEY`): Pro → `proModel` + penalaran, Lite → `liteModel`.
+  model: modelForRequestContext,
   tools: {
     search_web: searchWeb,
     search_arxiv: searchArxiv,

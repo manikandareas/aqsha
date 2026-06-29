@@ -1,5 +1,5 @@
 import { Agent } from "@mastra/core/agent";
-import { liteModel } from "../model";
+import { modelForRequestContext } from "../model";
 import { inlineSkills } from "../skills";
 import { astraTools } from "../tools";
 
@@ -39,7 +39,10 @@ export const deepWriter = new Agent({
   description:
     "Drafts the research plan and writes the final cited synthesis for a /deep run; orchestrator and final author.",
   instructions,
-  model: liteModel,
+  // Tier per-run (`AQSHA_AGENT_KIND_KEY` di RequestContext, ditanam step Workflow): Pro → `proModel`,
+  // Lite → `liteModel`. `reasoning: "high"` aktif hanya bila model mendukung penalaran (Pro), no-op pada
+  // model Lite non-penalaran.
+  model: modelForRequestContext,
   tools: astraTools,
   skills: inlineSkills,
 });

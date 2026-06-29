@@ -20,6 +20,7 @@ import {
 import { HomeExploreBento } from "@/features/discovery/components/home-explore-bento";
 import {
   useSendStatus,
+  useThread,
   useThreadArtifacts,
   useThreadsList,
   useThreadSources,
@@ -32,7 +33,7 @@ import {
 } from "@/features/threads/components/composer";
 import { MessageList } from "@/features/threads/components/message-list";
 import { bucketMessageAttachments } from "@/features/threads/lib/attachment-buckets";
-import { ASTRA_AGENT_ID, useMastraClient } from "@/features/threads/lib/mastra-client";
+import { type AgentKind, ASTRA_AGENT_ID, useMastraClient } from "@/features/threads/lib/mastra-client";
 import type { TimelineMessage } from "@/features/threads/lib/timeline-types";
 import { mastraMessagesToTimeline } from "@/features/threads/lib/mastra-timeline";
 import { useMastraAgent } from "@/features/threads/lib/use-mastra-agent";
@@ -41,6 +42,8 @@ import { threadTitle } from "@/features/threads/types";
 import { queryKeys } from "@/lib/api-query";
 import { panelBodyPaddingClass, threadTranscriptColumnClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
+import type { ContextRef } from "@aqsha/chat-core";
+import { useAmbientContextRefs } from "./composer-context-mentions";
 import { ComposerHeroState } from "./composer-hero-state";
 import { ExploreHandwrittenCue } from "./explore-handwritten-cue";
 import { CenteredLoading } from "./shared";
@@ -143,9 +146,15 @@ function MastraChatInner({
   compact: boolean;
   initialContent?: string;
 }) {
-  const agent = useMastraAgent({ threadId, seedMessages: seed });
+  // Tier TERSIMPAN thread (`chat_threads.agent_kind`) dibaca SEKALI di sini, gated ke thread existing
+  // (thread baru = id klien tanpa baris server → tak ada GET 404). Diteruskan ke `useMastraAgent`
+  // (seed channel agent untuk langganan/regenerate/approval) dan ke `Composer` (default selektor).
+  const threadDetail = useThread(threadId, isExistingThread);
+  const threadAgentKind: AgentKind = threadDetail.data?.agentKind === "pro" ? "pro" : "lite";
+  const agent = useMastraAgent({ threadId, seedMessages: seed, initialAgentKind: threadAgentKind });
   const sendStatus = useSendStatus();
   const qc = useQueryClient();
+  const ambientContextRefs = useAmbientContextRefs();
   const boundRef = useRef(isExistingThread);
 
   const busy = agent.status !== "ready";
@@ -191,8 +200,20 @@ function MastraChatInner({
     bumpUrl();
     const run =
       payload.command === "deep"
-        ? agent.sendDeep(payload.text, payload.clientContext, payload.richText, payload.attachmentIds)
-        : agent.send(payload.text, payload.clientContext, payload.richText, payload.attachmentIds);
+        ? agent.sendDeep(
+            payload.text,
+            payload.clientContext,
+            payload.richText,
+            payload.attachmentIds,
+            payload.agentKind,
+          )
+        : agent.send(
+            payload.text,
+            payload.clientContext,
+            payload.richText,
+            payload.attachmentIds,
+            payload.agentKind,
+          );
     void run.then(() => {
       void qc.invalidateQueries({ queryKey: queryKeys.threads.sendStatus() });
     });
@@ -276,10 +297,12 @@ function MastraChatInner({
       <MastraComposerLanding
         compact={compact}
         initialContent={initialContent}
+        ambientContextRefs={ambientContextRefs}
         busy={busy}
         disabled={blocked}
         notice={notice}
         threadId={threadId}
+        threadAgentKind={threadAgentKind}
         errorDraft={agent.error ? lastUserText(agent.messages) : null}
         onSend={onComposerSend}
         onStop={agent.stop}
@@ -315,6 +338,8 @@ function MastraChatInner({
           disabled={blocked}
           notice={notice}
           threadId={threadId}
+          threadAgentKind={threadAgentKind}
+          ambientContextRefs={ambientContextRefs}
           errorDraft={agent.error ? lastUserText(agent.messages) : null}
           placeholder="Tulis pesan untuk Astra…"
         />
@@ -327,21 +352,25 @@ function MastraChatInner({
 function MastraComposerLanding({
   compact,
   initialContent,
+  ambientContextRefs,
   busy,
   disabled,
   notice,
   threadId,
+  threadAgentKind,
   errorDraft,
   onSend,
   onStop,
 }: {
   compact: boolean;
   initialContent?: string;
+  ambientContextRefs?: ContextRef[];
   busy: boolean;
   disabled: boolean;
   notice: ComposerNotice | null;
   // D6: threadId client-generated (effectiveThreadId) → izinkan lampiran di pesan pertama.
   threadId: string;
+  threadAgentKind: AgentKind;
   errorDraft: string | null;
   onSend: (payload: ComposerSendPayload) => void;
   onStop: () => void;
@@ -384,7 +413,9 @@ function MastraComposerLanding({
               showSuggestions={!compact}
               recentThreads={recentThreads}
               initialContent={initialContent}
+              ambientContextRefs={ambientContextRefs}
               threadId={threadId}
+              threadAgentKind={threadAgentKind}
               onSend={onSend}
               onStop={onStop}
               busy={busy}

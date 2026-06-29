@@ -1,3 +1,4 @@
+import type { AgentKind } from "@aqsha/chat-core";
 import {
   MASTRA_RESOURCE_ID_KEY,
   MASTRA_THREAD_ID_KEY,
@@ -29,6 +30,21 @@ export const AQSHA_EMAIL_KEY = "aqsha__email";
 export const AQSHA_DEEP_RUN_KEY = "aqsha__deep_run_id";
 
 /**
+ * Turn chat aktif — di-set lazily oleh tool riset PERTAMA dalam satu turn (`chatTurnId`). Saat ada,
+ * semua `research_sources` satu turn chat berbagi `turnId` → dedup + penomoran sitasi `[n]` GLOBAL
+ * per-turn (sejajar `AQSHA_DEEP_RUN_KEY` di jalur `/deep`). Null sampai tool pertama memintanya.
+ */
+export const AQSHA_CHAT_TURN_KEY = "aqsha__chat_turn_id";
+
+/**
+ * Penghitung sitasi `[n]` berjalan untuk turn chat aktif. Hidup di RequestContext (per-request =
+ * per-turn → tak bocor lintas-turn, tak perlu Map modul-level + cleanup). `reserveChatCitationOffset`
+ * membaca-lalu-menaikkan SINKRON sehingga tiap pemanggilan tool (paralel sekalipun) menyabit rentang
+ * nomornya sendiri → `[n]` yang dilihat & ditulis model unik lintas pencarian dalam satu turn.
+ */
+export const AQSHA_CHAT_CITE_COUNT_KEY = "aqsha__chat_cite_count";
+
+/**
  * Sub-pertanyaan `/deep` aktif (index + teks) yang sedang dijawab `literatureSearcher`. Di-set
  * step `search-literature` pada RequestContext yang DI-CLONE per sub-pertanyaan (`Promise.all`),
  * supaya tool riset menstempel `research_sources.subQuestionIndex/Text` → FE mengelompokkan kartu
@@ -36,6 +52,26 @@ export const AQSHA_DEEP_RUN_KEY = "aqsha__deep_run_id";
  */
 export const AQSHA_DEEP_SUBQ_INDEX_KEY = "aqsha__deep_subq_index";
 export const AQSHA_DEEP_SUBQ_TEXT_KEY = "aqsha__deep_subq_text";
+
+/**
+ * Tier agen Astra (SoT billing + diferensiasi runtime: model, reasoning, maxSteps, memori). Definisi
+ * tunggal di `@aqsha/chat-core`; di-re-export di sini supaya pemakai agent tetap mengimpor dari path
+ * lib tool-context yang sudah ada.
+ */
+export type { AgentKind };
+
+/**
+ * Tier agen aktif `/deep`. Di-set step Workflow dari `inputData.agentKind` (lewat `withDeepRun`) ke
+ * RequestContext yang DI-CLONE per sub-pertanyaan → subagent memilih `proModel` + penalaran via
+ * `modelForRequestContext`. Chat biasa TAK memakainya: tier sudah inheren dari agent terpilih
+ * (`astra-lite`/`astra-pro`), bukan dari RequestContext.
+ */
+export const AQSHA_AGENT_KIND_KEY = "aqsha__agent_kind";
+
+/** Tier agen dari RequestContext (default `"lite"` bila absen / nilai tak dikenal). */
+export function agentKindFromRequestContext(rc: RequestContext | undefined): AgentKind {
+  return rc?.get(AQSHA_AGENT_KIND_KEY) === "pro" ? "pro" : "lite";
+}
 
 export type AstraToolCtx = {
   requestContext?: RequestContext;
@@ -88,6 +124,37 @@ export function toolCallId(ctx: AstraToolCtx): string {
 export function deepRunId(ctx: AstraToolCtx): string | null {
   const raw = ctx.requestContext?.get(AQSHA_DEEP_RUN_KEY);
   return typeof raw === "string" && raw ? raw : null;
+}
+
+/**
+ * Id turn chat aktif (get-or-create di RequestContext) — dipakai sebagai `research_sources.turnId`
+ * di jalur chat biasa supaya semua sumber satu turn berbagi turn (dedup + sitasi `[n]` global
+ * per-turn), sejajar `deepRunId` di jalur `/deep`. Fallback ke `toolCallId` bila RequestContext absen.
+ */
+export function chatTurnId(ctx: AstraToolCtx): string {
+  const rc = ctx.requestContext;
+  if (!rc) return toolCallId(ctx);
+  const existing = rc.get(AQSHA_CHAT_TURN_KEY);
+  if (typeof existing === "string" && existing) return existing;
+  const id = crypto.randomUUID();
+  rc.set(AQSHA_CHAT_TURN_KEY, id);
+  return id;
+}
+
+/**
+ * Sabit `count` nomor sitasi berikutnya untuk turn chat aktif → kembalikan OFFSET awal (basis 0).
+ * Baca-lalu-naikkan SINKRON (tanpa await di antaranya) supaya aman terhadap tool-call paralel dalam
+ * satu turn: tiap pemanggilan menyabit rentangnya sendiri → `[n]` unik lintas pencarian. Offset 0
+ * bila RequestContext absen (jalur degradasi).
+ */
+export function reserveChatCitationOffset(ctx: AstraToolCtx, count: number): number {
+  const rc = ctx.requestContext;
+  if (!rc) return 0;
+  // Counter ini hanya ditulis di sini sebagai number → tak perlu jalur koersi string.
+  const raw = rc.get(AQSHA_CHAT_CITE_COUNT_KEY);
+  const cur = typeof raw === "number" ? raw : 0;
+  rc.set(AQSHA_CHAT_CITE_COUNT_KEY, cur + count);
+  return cur;
 }
 
 /**

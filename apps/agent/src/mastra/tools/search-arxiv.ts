@@ -1,7 +1,7 @@
 import { ResearchService } from "@aqsha/services/research";
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
-import { chargeExternalSearch, persistResearch, toResearchToolOutput } from "../lib/research";
+import { chargeExternalSearch, numberPersistAndOutput } from "../lib/research";
 import { callerId } from "../lib/tool-context";
 
 /**
@@ -27,7 +27,6 @@ export const searchArxiv = createTool({
       return { results: [], note: "Kuota pencarian eksternal sudah habis untuk periode ini." };
     }
     const candidates = await ResearchService.searchArxiv({ query: input.query, limit: input.limit });
-    await persistResearch(ctx, { ownerUserId, candidates, discoveryQuery: input.query });
-    return toResearchToolOutput(candidates);
+    return numberPersistAndOutput(ctx, { ownerUserId, candidates, discoveryQuery: input.query });
   },
 });

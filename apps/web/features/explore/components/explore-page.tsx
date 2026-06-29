@@ -84,7 +84,7 @@ export function ExplorePage() {
                 />
 
                 {/* Feed paper + berita — jelajah (personal/topik) atau hasil pencarian. */}
-                <ExploreFindings topic={topic} query={q} />
+                <ExploreFindings topic={topic} query={q} onOpenChat={() => setChatOpen(true)} />
               </div>
             </div>
           }

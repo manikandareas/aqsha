@@ -1,5 +1,5 @@
 import { Agent } from "@mastra/core/agent";
-import { liteModel } from "../model";
+import { modelForRequestContext } from "../model";
 import { verifyIdentifiers } from "../tools/verify-identifiers";
 
 /**
@@ -30,6 +30,7 @@ export const citationVerifier = new Agent({
   description:
     "Verifies the integrity of a reference list in one batched pass and returns per-[n] verdicts.",
   instructions,
-  model: liteModel,
+  // Tier per-run (`AQSHA_AGENT_KIND_KEY`): Pro → `proModel` + penalaran, Lite → `liteModel`.
+  model: modelForRequestContext,
   tools: { verify_identifiers: verifyIdentifiers },
 });

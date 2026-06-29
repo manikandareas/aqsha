@@ -10,6 +10,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import type { MessageAttachment } from "../lib/attachment-buckets";
+import { buildCitationMap } from "../lib/citation-markdown";
 import { MENTION_PILL_SHAPE } from "../lib/composer-inline-editor";
 import { dedupeCards, researchSourceToCard } from "../lib/source-card";
 import type { SourceCardData, TimelineMessage, TimelinePart } from "../lib/timeline-types";
@@ -139,7 +140,7 @@ function UserMessageText({ text }: { text: string }) {
             key={i}
             className={cn(
               MENTION_PILL_SHAPE,
-              "bg-primary-foreground/15 decoration-primary-foreground/45",
+              "bg-primary-foreground/25 decoration-primary-foreground/65",
             )}
           >
             {seg.label}
@@ -197,17 +198,24 @@ function AssistantMessage({
     return map.size > 0 ? map : undefined;
   }, [sources]);
 
-  // Panel "Sumber" (collapsible di bawah jawaban). Deep = baris `research_sources` bernomor `[n]`;
-  // chat normal = agregasi kartu dari hasil tiap tool `search_*` di pesan ini (stream + rehydrate,
-  // tanpa DB). Dedup lintas-tool by url/doi.
-  const panelSources = useMemo<SourceCardData[]>(() => {
+  // Kartu sumber pesan ini (sebelum dedup). Deep = baris `research_sources` bernomor `[n]`; chat normal
+  // = agregasi kartu dari hasil tiap tool `search_*` di pesan ini (stream + rehydrate, tanpa DB) yang
+  // membawa `citationNumber` dari `n` global per-turn. Dipakai DUA arah: peta sitasi (semua pasangan
+  // nomor→kartu) dan panel "Sumber" (di-dedup by url/doi).
+  const citationCards = useMemo<SourceCardData[]>(() => {
     if (sources && sources.length > 0) return sources.map(researchSourceToCard);
     const flat: SourceCardData[] = [];
     for (const p of message.parts) {
       if (p.kind === "tool" && p.model.detail?.kind === "search-flat") flat.push(...p.model.detail.sources);
     }
-    return dedupeCards(flat);
+    return flat;
   }, [sources, message.parts]);
+
+  // Panel "Sumber" (collapsible di bawah jawaban) — kartu unik (dedup lintas-tool by key).
+  const panelSources = useMemo(() => dedupeCards(citationCards), [citationCards]);
+  // Peta `nomor [n] → kartu` untuk pill sitasi inline di prosa jawaban (tak di-dedup → tiap nomor,
+  // termasuk sumber yang muncul di >1 pencarian, tetap ter-resolve).
+  const citationMap = useMemo(() => buildCitationMap(citationCards), [citationCards]);
 
   const hasAnswer = Boolean(answer);
   const isEmpty = message.parts.length === 0;
@@ -229,7 +237,9 @@ function AssistantMessage({
         />
       ) : null}
 
-      {answer ? <Response text={answer.text} streaming={answer.streaming} /> : null}
+      {answer ? (
+        <Response text={answer.text} streaming={answer.streaming} citations={citationMap} />
+      ) : null}
 
       {artifactParts.map((part) =>
         part.kind === "artifact" ? <ChatArtifactCard key={part.id} model={part.model} /> : null,

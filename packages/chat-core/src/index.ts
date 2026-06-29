@@ -69,12 +69,16 @@ export function ownershipVerdict(
 
 const PREVIEW_MAX = 160;
 
-/** Preview pesan untuk thread list — collapse whitespace + clamp 160 char (port V1). */
-export function messagePreview(text: string): string {
+/**
+ * Collapse whitespace + clamp ke `max` char (codepoint-safe via `Array.from`), tambah ellipsis bila
+ * dipotong. Default `max` = 160 (preview thread list, port V1); pemanggil lain (mis. label pill
+ * @mention) mengoper `max` lebih kecil. Satu util clamp bersama untuk web + agent.
+ */
+export function messagePreview(text: string, max: number = PREVIEW_MAX): string {
   const flat = (text ?? "").replace(/\s+/g, " ").trim();
   const chars = Array.from(flat);
-  if (chars.length <= PREVIEW_MAX) return flat;
-  return `${chars.slice(0, PREVIEW_MAX - 1).join("")}…`;
+  if (chars.length <= max) return flat;
+  return `${chars.slice(0, max - 1).join("")}…`;
 }
 
 /**
@@ -392,6 +396,13 @@ export function resolveCommandDispatch(content: string, commandId?: string | nul
   return { displayText, dispatchPrompt: command.buildPrompt(argument) };
 }
 
+/**
+ * Tier agen Astra — kontrak bersama web + agent (FE selektor, route agent-scoped, billing, runtime
+ * model/reasoning/memory). SATU definisi di sini; web (`mastra-client`/`ComposerAgentKind`) dan agent
+ * (`tool-context`) mengimpornya, bukan menyalin union-nya.
+ */
+export type AgentKind = "lite" | "pro";
+
 // ---------------------------------------------------------------------------
 // Context refs (Slice 6.6) — inline `@mention` pills (workspace / paper). Pure
 // model dipindah dari apps/web (V1 lib/context-refs.ts) + mention markers
@@ -404,11 +415,24 @@ export const MAX_CONTEXT_PAPERS = 8;
 
 export type ContextRef =
   | { kind: "workspace"; workspaceId: string; label: string }
-  | { kind: "paper"; workspaceId: string; artifactId: string; label: string };
+  | { kind: "paper"; workspaceId: string; artifactId: string; label: string }
+  // Sumber Explore eksternal (BUKAN artifact workspace) — disematkan langsung dari halaman
+  // baca paper/berita. Hydrate menariknya dari cache OpenAlex / feed (lihat ContextService).
+  | { kind: "explore-paper"; paperKey: string; label: string }
+  | { kind: "news"; feedItemId: string; label: string };
 
 /** Stable identity for dedupe + signature comparison. */
 export function contextRefKey(ref: ContextRef): string {
-  return ref.kind === "paper" ? `${ref.workspaceId}:${ref.artifactId}` : `${ref.workspaceId}:`;
+  switch (ref.kind) {
+    case "paper":
+      return `${ref.workspaceId}:${ref.artifactId}`;
+    case "workspace":
+      return `${ref.workspaceId}:`;
+    case "explore-paper":
+      return `epk:${ref.paperKey}`;
+    case "news":
+      return `nid:${ref.feedItemId}`;
+  }
 }
 
 export function contextRefsSignature(refs: ContextRef[]): string {
@@ -419,24 +443,39 @@ export function contextRefsSignature(refs: ContextRef[]): string {
 export function splitContextRefs(refs: ContextRef[]): {
   workspaceIds: string[];
   artifactIds: string[];
+  paperKeys: string[];
+  feedItemIds: string[];
 } {
   const workspaceIds: string[] = [];
   const artifactIds: string[] = [];
+  const paperKeys: string[] = [];
+  const feedItemIds: string[] = [];
   for (const ref of refs) {
     if (ref.kind === "workspace") workspaceIds.push(ref.workspaceId);
-    else artifactIds.push(ref.artifactId);
+    else if (ref.kind === "paper") artifactIds.push(ref.artifactId);
+    else if (ref.kind === "explore-paper") paperKeys.push(ref.paperKey);
+    else feedItemIds.push(ref.feedItemId);
   }
-  return { workspaceIds, artifactIds };
+  return { workspaceIds, artifactIds, paperKeys, feedItemIds };
 }
 
-export function countContextRefs(refs: ContextRef[]): { workspaces: number; papers: number } {
+export function countContextRefs(refs: ContextRef[]): {
+  workspaces: number;
+  papers: number;
+  explorePapers: number;
+  news: number;
+} {
   let workspaces = 0;
   let papers = 0;
+  let explorePapers = 0;
+  let news = 0;
   for (const ref of refs) {
     if (ref.kind === "workspace") workspaces += 1;
-    else papers += 1;
+    else if (ref.kind === "paper") papers += 1;
+    else if (ref.kind === "explore-paper") explorePapers += 1;
+    else news += 1;
   }
-  return { workspaces, papers };
+  return { workspaces, papers, explorePapers, news };
 }
 
 export function buildWorkspaceMentionLabel(workspaceName: string): string {
@@ -446,6 +485,14 @@ export function buildWorkspaceMentionLabel(workspaceName: string): string {
 export function buildPaperMentionLabel(workspaceName: string, paperTitle: string): string {
   return `@${workspaceName}:${paperTitle}`;
 }
+
+/** Label pill untuk paper Explore eksternal / berita (judulnya saja; tanpa prefix workspace). */
+export function buildExternalPaperMentionLabel(paperTitle: string): string {
+  return `@${paperTitle}`;
+}
+
+/** Berita Explore — label = judul saja (format sama dgn paper eksternal). */
+export const buildNewsMentionLabel = buildExternalPaperMentionLabel;
 
 /** Inline mention markers (private-use sentinels) — keep pills inline in sent text. */
 export const MENTION_MARKER_OPEN = String.fromCharCode(0xe000);

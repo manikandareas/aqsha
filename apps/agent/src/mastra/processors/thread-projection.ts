@@ -3,6 +3,7 @@ import { ThreadService, TitleService } from "@aqsha/services/chat";
 import type { ProcessInputArgs, ProcessOutputResultArgs } from "@mastra/core/processors";
 import { getServiceDb } from "../lib/db";
 import { resolveOwnerThread } from "../lib/owner-thread";
+import type { AgentKind } from "../lib/tool-context";
 
 /**
  * Proyeksi thread (Fase 3 cutover) — menggantikan hook `projection.ts` eve untuk jalur Mastra.
@@ -37,52 +38,66 @@ function firstUserText(messages: ProcessOutputResultArgs["messages"]): string | 
 }
 
 /**
- * Proyeksi DINI (turn-start) — upsert `chat_threads` TIPIS sebelum agentic loop supaya thread BARU
- * durable sejak token pertama: refresh saat turn-pertama streaming tak lagi "Akses ditolak"
- * (`chat_threads` baru terisi di onFinish via `processOutputResult` → ada jendela kosong). Tanpa
- * preview/title (itu di output). Idempoten + best-effort.
+ * Proyeksi thread per-tier. Tiap agent (`astra-lite`/`astra-pro`) memasang sepasang processor sendiri
+ * lewat `makeThreadProjectionProcessors(tier)` → kolom `chat_threads.agent_kind` mencerminkan tier
+ * yang benar-benar menjalankan turn (sidebar + billing list app membacanya).
  */
-export const threadProjectionInputProcessor = {
-  id: "thread-projection-input" as const,
-  async processInput({ requestContext, messages }: ProcessInputArgs) {
-    const { ownerUserId, threadId } = resolveOwnerThread(requestContext, messages);
-    if (ownerUserId && threadId) {
-      try {
-        await ThreadService.ensureProjected(getServiceDb(), {
-          threadId,
-          ownerUserId,
-          agentKind: "lite",
-          preview: null,
-        });
-      } catch (err) {
-        console.error("[thread-projection-input] failed", err);
+export function makeThreadProjectionProcessors(tier: AgentKind) {
+  /**
+   * Proyeksi DINI (turn-start) — upsert `chat_threads` TIPIS sebelum agentic loop supaya thread BARU
+   * durable sejak token pertama: refresh saat turn-pertama streaming tak lagi "Akses ditolak"
+   * (`chat_threads` baru terisi di onFinish via `processOutputResult` → ada jendela kosong). Tanpa
+   * preview/title (itu di output). Idempoten + best-effort.
+   */
+  const input = {
+    id: `thread-projection-input-${tier}`,
+    async processInput({ requestContext, messages }: ProcessInputArgs) {
+      const { ownerUserId, threadId } = resolveOwnerThread(requestContext, messages);
+      if (ownerUserId && threadId) {
+        try {
+          await ThreadService.ensureProjected(getServiceDb(), {
+            threadId,
+            ownerUserId,
+            agentKind: tier,
+            preview: null,
+          });
+        } catch (err) {
+          console.error("[thread-projection-input] failed", err);
+        }
       }
-    }
-    return messages;
-  },
-};
+      return messages;
+    },
+  };
 
-export const threadProjectionProcessor = {
-  id: "thread-projection" as const,
-  async processOutputResult({ requestContext, result, messages, messageList }: ProcessOutputResultArgs) {
-    const { ownerUserId, threadId } = resolveOwnerThread(requestContext, messages);
-    if (ownerUserId && threadId) {
-      const preview = result.text ? messagePreview(result.text) : null;
-      try {
-        const db = getServiceDb();
-        await ThreadService.ensureProjected(db, {
-          threadId,
-          ownerUserId,
-          agentKind: "lite",
-          preview,
-        });
-        // Title async (GAP-c): klaim atomik turn-pertama + enqueue worker (membawa seed pesan
-        // user pertama — Mastra Memory = SoT pesan); no-op turn ke-2+.
-        await TitleService.requestTitle(db, threadId, firstUserText(messages));
-      } catch (err) {
-        console.error("[thread-projection] failed", err);
+  const output = {
+    id: `thread-projection-${tier}`,
+    async processOutputResult({
+      requestContext,
+      result,
+      messages,
+      messageList,
+    }: ProcessOutputResultArgs) {
+      const { ownerUserId, threadId } = resolveOwnerThread(requestContext, messages);
+      if (ownerUserId && threadId) {
+        const preview = result.text ? messagePreview(result.text) : null;
+        try {
+          const db = getServiceDb();
+          await ThreadService.ensureProjected(db, {
+            threadId,
+            ownerUserId,
+            agentKind: tier,
+            preview,
+          });
+          // Title async (GAP-c): klaim atomik turn-pertama + enqueue worker (membawa seed pesan
+          // user pertama — Mastra Memory = SoT pesan); no-op turn ke-2+.
+          await TitleService.requestTitle(db, threadId, firstUserText(messages));
+        } catch (err) {
+          console.error("[thread-projection] failed", err);
+        }
       }
-    }
-    return messageList;
-  },
-};
+      return messageList;
+    },
+  };
+
+  return { input, output };
+}

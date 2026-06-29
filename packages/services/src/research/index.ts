@@ -104,16 +104,21 @@ export const ResearchService = {
       subQuestionIndex?: number;
       subQuestionText?: string;
       candidates: ResearchCandidate[];
+      /**
+       * Nomor sitasi `[n]` global per-kandidat (sejajar `candidates`), jalur chat. Deep biarkan
+       * undefined → `citation_number` null, di-assign step `assign-citations` (dedup global).
+       */
+      citationNumbers?: number[];
       now: number;
     },
   ): Promise<void> {
     if (input.candidates.length === 0) return;
-    const rows: NewResearchSource[] = input.candidates.map((candidate) => ({
+    const rows: NewResearchSource[] = input.candidates.map((candidate, i) => ({
       id: crypto.randomUUID(),
       threadId: input.threadId,
       ownerUserId: input.ownerUserId,
       turnId: input.turnId,
-      citationNumber: null,
+      citationNumber: input.citationNumbers?.[i] ?? null,
       origin: candidate.origin,
       provider: candidate.provider ?? null,
       title: candidate.title,

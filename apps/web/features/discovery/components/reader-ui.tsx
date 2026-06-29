@@ -5,10 +5,8 @@
 // framing bersarang (outer tray + inner core) untuk media, dan CTA pill dengan ikon
 // bersarang. Motion hanya pada interaksi (hover/expand/reveal) — bukan scroll-reveal.
 
-import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import {
-  ArrowLeftIcon,
   ArrowUpRightIcon,
   ChevronDownIcon,
   ImageIcon,
@@ -36,29 +34,6 @@ export function ReaderShell({
     <main className={cn("mx-auto w-full px-5 pb-24 pt-8 sm:px-6 sm:pt-10", SHELL_WIDTH[width])}>
       {children}
     </main>
-  );
-}
-
-export function ReaderBackLink() {
-  return (
-    <Link
-      href="/app/explore"
-      className={cn(
-        "group inline-flex items-center gap-2 text-[13px] font-medium text-muted-foreground transition-colors duration-300",
-        EASE,
-        "hover:text-foreground",
-      )}
-    >
-      <span
-        className={cn(
-          "flex size-6 items-center justify-center rounded-full bg-muted/70 transition-transform duration-300 group-hover:-translate-x-0.5",
-          EASE,
-        )}
-      >
-        <ArrowLeftIcon className="size-3.5" />
-      </span>
-      Kembali ke Jelajahi
-    </Link>
   );
 }
 

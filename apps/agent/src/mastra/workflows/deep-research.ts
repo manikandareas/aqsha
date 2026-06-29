@@ -17,11 +17,14 @@ import { deepWriter } from "../agents/deep-writer";
 import { literatureSearcher } from "../agents/literature-searcher";
 import { getServiceDb } from "../lib/db";
 import {
+  AQSHA_AGENT_KIND_KEY,
   AQSHA_DEEP_RUN_KEY,
   AQSHA_DEEP_SUBQ_INDEX_KEY,
   AQSHA_DEEP_SUBQ_TEXT_KEY,
+  type AgentKind,
   ownerFromRequestContext,
 } from "../lib/tool-context";
+import { effectiveBilledTier, proProviderOptions } from "../model";
 
 /**
  * Workflow `deep-research` (Fase 2) — port `/deep` eve ke orkestrasi deterministik Mastra.
@@ -55,6 +58,12 @@ const InputSchema = z.object({
     .optional()
     .describe(
       "Varian `question` ber-penanda @mention (U+E000/E001) untuk DITAMPILKAN/DIPERSIST sebagai pill. Hanya pengaruhi teks pesan user yang disimpan; planner & subagen tetap pakai `question` bersih.",
+    ),
+  agentKind: z
+    .enum(["lite", "pro"])
+    .default("lite")
+    .describe(
+      "Tier agen: `pro` → subagen pakai `proModel` + penalaran tinggi & debit `DEEP_PRO_CREDITS`; `lite` (default) → `liteModel` & `DEEP_LITE_CREDITS`.",
     ),
 });
 
@@ -102,10 +111,43 @@ type Verified = z.infer<typeof VerifiedSchema>;
  * berbagi turn) → penomoran sitasi `[n]` global + dedupe (G4). Owner/email yang sudah ada di rc tetap
  * terbawa (callerId/callerEmail subagent valid). Dipakai di step yang memanggil subagent ber-tool riset.
  */
-function withDeepRun(rc: RequestContext, threadId: string, runId: string): RequestContext {
+function withDeepRun(
+  rc: RequestContext,
+  threadId: string,
+  runId: string,
+  agentKind: AgentKind,
+): RequestContext {
   rc.set(MASTRA_THREAD_ID_KEY, threadId);
   rc.set(AQSHA_DEEP_RUN_KEY, runId);
+  // Tier per-run → subagent (`modelForRequestContext`) memilih `proModel`/`liteModel`. Set di rc INDUK
+  // sebelum fan-out search supaya rc yang DI-CLONE per sub-pertanyaan ikut membawanya.
+  rc.set(AQSHA_AGENT_KIND_KEY, agentKind);
   return rc;
+}
+
+/**
+ * `providerOptions` penalaran per-panggilan subagent (bukan field top-level agent di Mastra 1.47).
+ * Aktif hanya untuk run Pro saat `AQSHA_PRO_MODEL` di-set (`proProviderOptions` undefined → spread kosong).
+ */
+function deepProviderOptions(agentKind: AgentKind): { providerOptions?: typeof proProviderOptions } {
+  return agentKind === "pro" && proProviderOptions ? { providerOptions: proProviderOptions } : {};
+}
+
+/**
+ * Opsi `.generate()` baku untuk subagent `/deep` di rc INDUK: tanam thread+run+tier (`withDeepRun`) +
+ * `providerOptions` penalaran Pro. Satu sumber untuk pasangan rc+providerOptions yang dulu ditulis
+ * verbatim di tiap step (model membaca tier dari rc, providerOptions dari tier yang sama). Step
+ * `search-literature` TIDAK memakai ini — ia meng-clone rc per sub-pertanyaan.
+ */
+function deepGenOptions(
+  rc: RequestContext,
+  inputData: { threadId: string; agentKind: AgentKind },
+  runId: string,
+): { requestContext: RequestContext; providerOptions?: typeof proProviderOptions } {
+  return {
+    requestContext: withDeepRun(rc, inputData.threadId, runId, inputData.agentKind),
+    ...deepProviderOptions(inputData.agentKind),
+  };
 }
 
 // ── Detail proses (writer.write) ──────────────────────────────────────────────────────────
@@ -237,7 +279,7 @@ function buildMastraMessage(args: {
 async function ensureDeepThread(
   mastra: Mastra | undefined,
   requestContext: RequestContext,
-  args: { threadId: string; question: string; displayQuestion?: string },
+  args: { threadId: string; question: string; displayQuestion?: string; agentKind: AgentKind },
 ): Promise<void> {
   if (!mastra) return;
   const resourceId = ownerFromRequestContext(requestContext).id ?? undefined;
@@ -247,7 +289,7 @@ async function ensureDeepThread(
     await ThreadService.ensureProjected(db, {
       threadId: args.threadId,
       ownerUserId: resourceId,
-      agentKind: "lite",
+      agentKind: args.agentKind,
       preview: messagePreview(args.question),
     });
     await TitleService.requestTitle(db, args.threadId, args.question);
@@ -286,6 +328,7 @@ async function persistDeepReport(
     threadId: string;
     report: string;
     runId: string;
+    agentKind: AgentKind;
     /** Jejak proses untuk rehydrate (FE bangun ulang langkah + detail saat refresh/riwayat, G7). */
     deepProcess?: Record<string, unknown>;
   },
@@ -301,7 +344,7 @@ async function persistDeepReport(
         await ThreadService.ensureProjected(getServiceDb(), {
           threadId: args.threadId,
           ownerUserId: resourceId,
-          agentKind: "lite",
+          agentKind: args.agentKind,
           preview: messagePreview(args.report),
         });
         // Idempoten: thread memory biasanya sudah dibuat di `ensureDeepThread` (plan-gate); jaga-jaga.
@@ -390,7 +433,7 @@ function synthesisPrompt(input: Verified): string {
   const evidence = input.evidence
     .map((e, i) => `### Sub-pertanyaan ${i + 1}: ${e.subQuestion}\n${e.findings}`)
     .join("\n\n");
-  return `Tulis jawaban riset tercitasi untuk pertanyaan:\n${input.question}\n\nRencana yang disetujui:\n${input.plan}\n\nDaftar sumber bernomor (WAJIB pakai nomor [n] PERSIS ini saat mengutip; jangan menomori ulang):\n${input.numberedInventory}\n\nInventaris bukti (untuk ekstrak & narasi):\n${evidence}\n\nBukti tandingan (adversarial):\n${input.counter}\n\nVerdict verifikasi sitasi:\n${input.verification}\n\nSintesiskan menjadi jawaban terstruktur dan jujur: ringkasan temuan per sub-pertanyaan, bukti tandingan & keterbatasan, lalu bagian "Sumber" yang mendaftar [n] sesuai daftar sumber bernomor di atas. Setiap klaim faktual membawa penanda [n] dari daftar itu. Baca domain-pack + cite-apa7/write-academic-id lewat tool skill sebelum menulis. JANGAN mengarang identifier.`;
+  return `Tulis jawaban riset tercitasi untuk pertanyaan:\n${input.question}\n\nRencana yang disetujui:\n${input.plan}\n\nDaftar sumber bernomor (WAJIB pakai nomor [n] PERSIS ini saat mengutip; jangan menomori ulang):\n${input.numberedInventory}\n\nInventaris bukti (untuk ekstrak & narasi):\n${evidence}\n\nBukti tandingan (adversarial):\n${input.counter}\n\nVerdict verifikasi sitasi:\n${input.verification}\n\nSintesiskan menjadi jawaban terstruktur dan jujur: ringkasan temuan per sub-pertanyaan, lalu bukti tandingan & keterbatasan. Setiap klaim faktual membawa penanda [n] inline dari daftar sumber bernomor di atas (penanda dirender sebagai pill sumber + panel "Sumber" terpisah — JANGAN tulis daftar/bagian "Sumber" teks sendiri di akhir). Baca domain-pack + cite-apa7/write-academic-id lewat tool skill sebelum menulis. JANGAN mengarang identifier.`;
 }
 
 // ── Steps ─────────────────────────────────────────────────────────────────────────────────
@@ -418,9 +461,10 @@ const draftPlanStep = createStep({
         });
       }
     }
-    const out = await deepWriter.generate(planPrompt(inputData), {
-      requestContext: withDeepRun(requestContext, inputData.threadId, runId),
-    });
+    const out = await deepWriter.generate(
+      planPrompt(inputData),
+      deepGenOptions(requestContext, inputData, runId),
+    );
     const parsed = parsePlan(out.text);
     const plan = parsed?.plan ?? out.text;
     const subQuestions =
@@ -455,6 +499,7 @@ const approvePlanStep = createStep({
         threadId: inputData.threadId,
         question: inputData.question,
         displayQuestion: inputData.displayQuestion,
+        agentKind: inputData.agentKind,
       });
       return await suspend({ plan: inputData.plan, subQuestions: inputData.subQuestions });
     }
@@ -464,13 +509,20 @@ const approvePlanStep = createStep({
     const { id: ownerUserId, email: ownerEmail } = ownerFromRequestContext(requestContext);
     if (ownerUserId) {
       const db = getServiceDb();
-      const credits = estimateCredits({ feature: "deep_research", agentKind: "lite" });
+      // Tier billing EFEKTIF (lihat `effectiveBilledTier`): Pro hanya saat model Pro benar-benar
+      // disetel — tanpa `AQSHA_PRO_MODEL` subagen jatuh ke model Lite (lihat `modelForRequestContext`/
+      // `deepProviderOptions`), jadi bebankan tarif Lite supaya adil. Pro → debit `DEEP_PRO_CREDITS`
+      // (120) & butuh plan berbayar ("starter"); Lite → `DEEP_LITE_CREDITS` (60) dgn `requiredPlan:
+      // "free"` (Free pakai kuota bulanannya).
+      const billedAgentKind = effectiveBilledTier(inputData.agentKind);
+      const credits = estimateCredits({ feature: "deep_research", agentKind: billedAgentKind });
+      const requiredPlan = billedAgentKind === "pro" ? ("starter" as const) : ("free" as const);
       const gate = await BillingService.requireEntitlement(db, {
         ownerUserId,
         ownerEmail,
         feature: "deep_research",
         credits,
-        requiredPlan: "free",
+        requiredPlan,
       });
       if (!gate.ok) {
         return bail({ status: "blocked" as const, reason: `Akses deep research ditolak (${gate.reason}).` });
@@ -480,8 +532,8 @@ const approvePlanStep = createStep({
         ownerEmail,
         feature: "deep_research",
         provider: "openai",
-        agentKind: "lite",
-        requiredPlan: "free",
+        agentKind: billedAgentKind,
+        requiredPlan,
         threadId: inputData.threadId,
         idempotencyKey: `${runId}:deep`,
       });
@@ -506,7 +558,7 @@ const searchStep = createStep({
   outputSchema: SearchedSchema,
   execute: async ({ inputData, requestContext, runId, writer }) => {
     // Tanam thread+run di rc induk dulu → entries() yang DI-CLONE per sub-Q sudah membawanya.
-    withDeepRun(requestContext, inputData.threadId, runId);
+    withDeepRun(requestContext, inputData.threadId, runId, inputData.agentKind);
     const evidence = await Promise.all(
       inputData.subQuestions.map(async (subQuestion, subIndex) => {
         // Clone rc per sub-pertanyaan (Promise.all paralel) lalu stempel index/teks → tool riset
@@ -517,6 +569,7 @@ const searchStep = createStep({
         await emitDetail(writer, { kind: "search-sub", subIndex, subQuestion, status: "searching" });
         const out = await literatureSearcher.generate(searcherPrompt(subQuestion, inputData), {
           requestContext: subRc,
+          ...deepProviderOptions(inputData.agentKind),
         });
         // Sumber yang baru dipersist sub-agen ini → pancarkan live (kartu muncul realtime di FE).
         const sources = await subQuestionSources(inputData.threadId, runId, subIndex);
@@ -534,9 +587,10 @@ const counterEvidenceStep = createStep({
   inputSchema: SearchedSchema,
   outputSchema: CounteredSchema,
   execute: async ({ inputData, requestContext, runId, writer }) => {
-    const out = await counterEvidence.generate(counterPrompt(inputData), {
-      requestContext: withDeepRun(requestContext, inputData.threadId, runId),
-    });
+    const out = await counterEvidence.generate(
+      counterPrompt(inputData),
+      deepGenOptions(requestContext, inputData, runId),
+    );
     await emitDetail(writer, { kind: "counter", text: clampDetail(out.text) });
     return { ...inputData, counter: out.text };
   },
@@ -577,9 +631,10 @@ const citationVerifyStep = createStep({
   inputSchema: CitedSchema,
   outputSchema: VerifiedSchema,
   execute: async ({ inputData, requestContext, runId, writer }) => {
-    const out = await citationVerifier.generate(verifyPrompt(inputData), {
-      requestContext: withDeepRun(requestContext, inputData.threadId, runId),
-    });
+    const out = await citationVerifier.generate(
+      verifyPrompt(inputData),
+      deepGenOptions(requestContext, inputData, runId),
+    );
     await emitDetail(writer, { kind: "verify", text: clampDetail(out.text) });
     return { ...inputData, verification: out.text };
   },
@@ -594,7 +649,7 @@ const synthesizeStep = createStep({
     // `toolChoice: "none"`: seluruh bukti sudah ada di prompt; paksa penulis MENULIS teks
     // (bukan berhenti di tool-call kosong) — jaminan `out.text` terisi pada model gateway.
     const out = await deepWriter.generate(synthesisPrompt(inputData), {
-      requestContext: withDeepRun(requestContext, inputData.threadId, runId),
+      ...deepGenOptions(requestContext, inputData, runId),
       toolChoice: "none",
     });
     // Persist verbatim ke memory thread chat → muncul di history + rehydrate saat refresh (G1/G2).
@@ -604,6 +659,7 @@ const synthesizeStep = createStep({
       threadId: inputData.threadId,
       report: out.text,
       runId,
+      agentKind: inputData.agentKind,
       deepProcess: {
         plan: inputData.plan,
         subQuestions: inputData.subQuestions,

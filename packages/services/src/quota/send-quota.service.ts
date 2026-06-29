@@ -10,7 +10,7 @@ import { getRateLimiter, rateLimitConfig } from "./rate-limits";
  * 'free'` untuk deep agar Free pakai kuota bulanannya (sejalan `propose_research_plan`), bukan
  * ditolak `subscription_required`.
  */
-export type SendFeature = "normal_chat" | "deep_research";
+export type SendFeature = "normal_chat" | "pro_chat" | "deep_research";
 
 /** Entitlement non-consuming untuk satu fitur kirim (deep ⇒ cap deep ikut terhitung). */
 function entitlementForFeature(
@@ -24,6 +24,16 @@ function entitlementForFeature(
       feature: "deep_research",
       credits: estimateCredits({ feature: "deep_research", agentKind: "lite" }),
       requiredPlan: "free",
+    });
+  }
+  if (args.feature === "pro_chat") {
+    // Pro chat (Astra Pro) floor 1 kredit; `requiredPlan` diturunkan `requiredPlanForFeature`
+    // (pro_chat → plan berbayar) → backstop otoritatif gate composer `canUsePro`.
+    return BillingService.requireEntitlement(db, {
+      ownerUserId: args.ownerUserId,
+      ownerEmail: args.ownerEmail,
+      feature: "pro_chat",
+      credits: 1,
     });
   }
   // `normal_chat` floor 1 kredit (Lite, D-B).

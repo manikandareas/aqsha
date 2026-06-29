@@ -2,6 +2,8 @@
 
 import {
   type ContextRef,
+  contextRefKey,
+  contextRefsSignature,
   DEEP_COMMAND_ID,
   getPromptCommand,
   matchPromptCommandInContent,
@@ -131,7 +133,9 @@ export function Composer({
   disabled = false,
   notice,
   threadId = null,
+  threadAgentKind = "lite",
   ambientWorkspaceId = null,
+  ambientContextRefs = EMPTY_CONTEXT_REFS,
   errorDraft = null,
   showSuggestions = false,
   recentThreads = [],
@@ -145,7 +149,13 @@ export function Composer({
   notice?: ComposerNotice | null;
   /** Thread aktif untuk lampiran (Slice 6.7); null = chat baru sebelum turn pertama → attach off. */
   threadId?: string | null;
+  /** Tier TERSIMPAN thread (`chat_threads.agent_kind`) = default selektor; di-baca sekali di surface
+   * (gated thread existing → tak ada GET untuk thread baru). Override sesi tetap lokal di selektor. */
+  threadAgentKind?: ComposerAgentKind;
   ambientWorkspaceId?: string | null;
+  /** Token konteks ambient dari halaman tempat panel chat dibuka (workspace/artifact/paper/berita).
+   * Di-seed otomatis sebagai pill di awal komposer; user tetap bisa mencabutnya. */
+  ambientContextRefs?: ContextRef[];
   /** Retry (Slice 6.8): teks turn terakhir untuk di-restore saat turn gagal. */
   errorDraft?: string | null;
   showSuggestions?: boolean;
@@ -174,7 +184,7 @@ export function Composer({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const secondsLeft = useSecondsLeft(notice?.retryAt);
-  const agentSelection = useComposerAgentSelection();
+  const agentSelection = useComposerAgentSelection(threadAgentKind);
   const hydrate = useHydrateContext();
   const attachmentUpload = useThreadAttachments(threadId ?? "");
   const removeAttachment = useRemoveThreadAttachment(threadId ?? "");
@@ -213,6 +223,29 @@ export function Composer({
     setContent((current) => (current === lastSeedRef.current ? nextSeed : current));
     lastSeedRef.current = nextSeed;
   }, [initialContent]);
+
+  // Auto-mention konteks halaman (ambient): saat panel chat dibuka di halaman workspace/artifact/
+  // paper/berita — atau saat "Tanya Astra" di kartu feed mengganti item — sematkan token-nya
+  // sebagai pill di awal komposer. Pola "adjust state when a prop changes" saat render (BUKAN
+  // effect → hindari cascading render), sama seperti errorDraft di bawah. Replace-aware: token
+  // ambient LAMA yang tak lagi ambient dibuang (mis. ganti item), token ambient baru disisipkan,
+  // dan token MANUAL (ditambah user via palette) selalu dipertahankan. Re-merge hanya saat
+  // signature ambient berganti supaya tak ada loop dengan ekstraksi editor.
+  const ambientSignature = contextRefsSignature(ambientContextRefs);
+  const [ambientMerge, setAmbientMerge] = useState<{ sig: string; refs: ContextRef[] }>({
+    sig: "",
+    refs: EMPTY_CONTEXT_REFS,
+  });
+  if (ambientSignature !== ambientMerge.sig) {
+    // Buang SEMUA token ambient (lama + baru) dari set saat ini, sisakan token MANUAL (palette), lalu
+    // prepend token ambient SAAT INI → ganti item bersih, token manual selalu aman.
+    const ambientKeys = new Set([...ambientMerge.refs, ...ambientContextRefs].map(contextRefKey));
+    setAmbientMerge({ sig: ambientSignature, refs: ambientContextRefs });
+    setContextRefs((current) => {
+      const manual = current.filter((ref) => !ambientKeys.has(contextRefKey(ref)));
+      return [...ambientContextRefs, ...manual];
+    });
+  }
 
   // Retry (Slice 6.8): turn gagal → kembalikan draft terakhir ke editor (resend = turn
   // baru). Derivasi saat render (pola "adjust state when a prop changes", bukan effect).
@@ -313,9 +346,14 @@ export function Composer({
     }
 
     if (contextRefs.length > 0) {
-      const { workspaceIds, artifactIds } = splitContextRefs(contextRefs);
+      const { workspaceIds, artifactIds, paperKeys, feedItemIds } = splitContextRefs(contextRefs);
       try {
-        const hydrated = await hydrate.mutateAsync({ workspaceIds, artifactIds });
+        const hydrated = await hydrate.mutateAsync({
+          workspaceIds,
+          artifactIds,
+          paperKeys,
+          feedItemIds,
+        });
         if (hydrated.note) parts.push(hydrated.note);
       } catch {
         // Hydrate gagal (mis. jaringan) → kirim tanpa catatan konteks daripada blok.

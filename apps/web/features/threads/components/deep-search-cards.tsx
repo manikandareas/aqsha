@@ -3,7 +3,7 @@
 import { ExternalLinkIcon } from "@aqsha/ui/icons";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
-import { originMeta, researchSourceToCard } from "../lib/source-card";
+import { faviconUrl, originMeta, researchSourceToCard, sourceDomain, sourceHref } from "../lib/source-card";
 import type { DeepSubSearch, SourceCardData } from "../lib/timeline-types";
 import type { ResearchSource } from "../types";
 
@@ -82,22 +82,6 @@ export function SourceCardList({ sources }: { sources: SourceCardData[] }) {
   );
 }
 
-/** Domain (tanpa `www.`) dari url/doi — diturunkan client-side. */
-function deriveDomain(source: SourceCardData): string | null {
-  const raw = source.url ?? (source.doi ? `https://doi.org/${source.doi}` : null);
-  if (!raw) return null;
-  try {
-    return new URL(raw).hostname.replace(/^www\./, "");
-  } catch {
-    return null;
-  }
-}
-
-/** Favicon Google s2 dari domain (pola yang sama dengan discovery/source-link-row). */
-function faviconUrl(domain: string | null): string | null {
-  return domain ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64` : null;
-}
-
 /**
  * Satu sumber sebagai BARIS TUNGGAL ringkas (daftar tautan rapat, tanpa border): logo kecil di kiri
  * (favicon → ikon origin) lalu judul (truncate) + badge `[n]` opsional + afordans outbound di kanan.
@@ -106,9 +90,9 @@ function faviconUrl(domain: string | null): string | null {
  */
 function SourceCard({ source }: { source: SourceCardData }) {
   const { Icon, label } = originMeta(source.origin);
-  const domain = deriveDomain(source);
+  const domain = sourceDomain(source);
   const favicon = faviconUrl(domain);
-  const href = source.url ?? (source.doi ? `https://doi.org/${source.doi}` : null);
+  const href = sourceHref(source);
 
   const row = (
     <span className="flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-0.5 transition-colors group-hover:bg-muted/50">

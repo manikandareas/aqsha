@@ -1,38 +1,67 @@
 "use client";
 
+import { buildNewsMentionLabel, type ContextRef } from "@aqsha/chat-core";
 import { SparklesIcon } from "@aqsha/ui/icons";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useMemo } from "react";
 import { toast } from "sonner";
+import { useSetAmbientContextRefs } from "@/features/thread-experience/components/composer-context-mentions";
 import { useFeedItem, useHideDiscovery, useRecordInteraction, useRelated } from "../api";
+import { clampDiscoveryTitle, discoveryItemToContextRef } from "../ask-astra";
 import { discoveryItemKey, feedItemToDiscoveryItem, type DiscoveryItem } from "../model";
 import { domainFromUrl, relativeTime } from "../format";
 import { DiscoveryStandardCard, type DiscoveryCardHandlers } from "./discovery-item-card";
+import { ExploreReaderChatShell } from "./explore-reader-chat-shell";
 import {
   Eyebrow,
   ExpandableText,
   PillCta,
-  ReaderBackLink,
   ReaderEmpty,
   ReaderLoader,
   ReaderSection,
   ReaderShell,
 } from "./reader-ui";
 
-/** Reader berita: getFeedItem(id) + related. Header + media-reveal + lead + badan artikel. */
-export function NewsReader({ id }: { id: string }) {
-  const router = useRouter();
+/** Halaman baca berita + panel chat Astra; menyematkan berita sebagai token konteks otomatis. */
+export function NewsReaderRoute({ id }: { id: string }) {
+  const item = useFeedItem(id).data;
+  const title = item && item.kind === "news" ? item.title : undefined;
+  const ambientContextRefs = useMemo<ContextRef[]>(
+    () =>
+      title
+        ? [{ kind: "news", feedItemId: id, label: buildNewsMentionLabel(clampDiscoveryTitle(title)) }]
+        : [],
+    [id, title],
+  );
+  return (
+    <ExploreReaderChatShell breadcrumb="Berita" ambientContextRefs={ambientContextRefs}>
+      {({ openChat }) => <NewsReader id={id} onAskAstra={openChat} />}
+    </ExploreReaderChatShell>
+  );
+}
+
+/** Reader berita: getFeedItem(id) + related. Header + media-reveal + lead + badan artikel.
+ * `onAskAstra` (disediakan shell halaman) membuka panel chat. */
+export function NewsReader({ id, onAskAstra }: { id: string; onAskAstra: () => void }) {
   const query = useFeedItem(id);
   const related = useRelated(id);
   const hide = useHideDiscovery();
   const record = useRecordInteraction();
+  const setAmbientContextRefs = useSetAmbientContextRefs();
   const item = query.data;
   const ok = item && item.kind === "news";
+
+  // "Tanya Astra" (kartu utama/related): sematkan item sebagai token konteks + buka panel chat.
+  const openAstraFor = (di: DiscoveryItem) => {
+    const ref = discoveryItemToContextRef(di);
+    if (ref) setAmbientContextRefs([ref]);
+    onAskAstra();
+  };
 
   const handlers: DiscoveryCardHandlers = {
     onAskAstra: (r) => {
       record.mutate({ itemRef: r.itemRef, kind: "research" });
-      router.push(`/app/threads?seed=${encodeURIComponent(buildSeed(r))}`);
+      openAstraFor(r);
     },
     onSaved: (r) => record.mutate({ itemRef: r.itemRef, kind: "save" }),
     onHide: (r) => hide.mutate(r.itemRef, { onError: () => toast.error("Gagal menyembunyikan.") }),
@@ -49,12 +78,11 @@ export function NewsReader({ id }: { id: string }) {
     if (!ok) return;
     const di = feedItemToDiscoveryItem(item);
     record.mutate({ itemRef: di.itemRef, kind: "research" });
-    router.push(`/app/threads?seed=${encodeURIComponent(buildSeed(di))}`);
+    openAstraFor(di);
   };
 
   return (
     <ReaderShell width="news">
-      <ReaderBackLink />
       {query.isPending ? (
         <ReaderLoader />
       ) : !ok ? (
@@ -141,8 +169,4 @@ export function NewsReader({ id }: { id: string }) {
       ) : null}
     </ReaderShell>
   );
-}
-
-function buildSeed(item: DiscoveryItem): string {
-  return `${item.title}\n\n${item.tldr ?? item.summary}\n\nSumber: ${item.resolvedUrl ?? item.url}`;
 }

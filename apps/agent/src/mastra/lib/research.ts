@@ -6,8 +6,10 @@ import { getServiceDb } from "./db";
 import {
   type AstraToolCtx,
   callerEmail,
+  chatTurnId,
   deepRunId,
   deepSubQuestion,
+  reserveChatCitationOffset,
   threadScopeId,
   toolCallId,
 } from "./tool-context";
@@ -48,21 +50,29 @@ export function chargeExternalSearch(
 /**
  * Persist kandidat sumber riset (best-effort) — kegagalan persist tak boleh meracuni hasil tool.
  * `turnId` = run id deep-research bila ada (semua sumber satu run berbagi turn → dedupe + penomoran
- * sitasi `[n]` global, G4), jatuh ke `toolCallId` di jalur chat biasa (per-pemanggilan).
+ * sitasi `[n]` global, G4), jatuh ke `chatTurnId` (turn chat) di jalur biasa supaya sumber satu turn
+ * berbagi turn juga. `citationNumbers` (jalur chat) menstempel nomor `[n]` global per-kandidat; deep
+ * membiarkan null → di-assign step `assign-citations` (dedup global).
  */
-export async function persistResearch(
+async function persistResearch(
   ctx: AstraToolCtx,
-  args: { ownerUserId: string; candidates: ResearchCandidate[]; discoveryQuery?: string },
+  args: {
+    ownerUserId: string;
+    candidates: ResearchCandidate[];
+    discoveryQuery?: string;
+    citationNumbers?: number[];
+  },
 ): Promise<void> {
   try {
     const subQ = deepSubQuestion(ctx);
     await ResearchService.persistSources(getServiceDb(), {
       threadId: threadScopeId(ctx),
       ownerUserId: args.ownerUserId,
-      turnId: deepRunId(ctx) ?? toolCallId(ctx),
+      turnId: deepRunId(ctx) ?? chatTurnId(ctx),
       discoveryQuery: args.discoveryQuery,
       ...(subQ ? { subQuestionIndex: subQ.index, subQuestionText: subQ.text } : {}),
       candidates: args.candidates,
+      ...(args.citationNumbers ? { citationNumbers: args.citationNumbers } : {}),
       now: Date.now(),
     });
   } catch (err) {
@@ -70,8 +80,14 @@ export async function persistResearch(
   }
 }
 
-/** Bentuk hasil tool riset yang dilihat model — bernomor + ringkas untuk sitasi [n]. */
-export function toResearchToolOutput(candidates: ResearchCandidate[]): {
+/**
+ * Bentuk hasil tool riset yang dilihat model — bernomor (`n`) + ringkas untuk sitasi `[n]`. `startAt`
+ * = offset global per-turn (chat) supaya dua pencarian dalam satu turn tak sama-sama mulai `[1]`.
+ */
+function toResearchToolOutput(
+  candidates: ResearchCandidate[],
+  startAt = 0,
+): {
   results: Array<{
     n: number;
     title: string;
@@ -84,7 +100,7 @@ export function toResearchToolOutput(candidates: ResearchCandidate[]): {
 } {
   return {
     results: candidates.map((c, i) => ({
-      n: i + 1,
+      n: startAt + i + 1,
       title: c.title,
       url: c.url,
       doi: c.doi,
@@ -93,4 +109,27 @@ export function toResearchToolOutput(candidates: ResearchCandidate[]): {
       snippet: c.snippet,
     })),
   };
+}
+
+/**
+ * Jalur tunggal nomori+persist+output untuk tool riset (chat & deep). Chat: (1) sabit nomor `[n]`
+ * global per-turn (offset dari counter turn), (2) persist `research_sources` membawa nomor itu,
+ * (3) kembalikan output bernomor offset SAMA → `[n]` yang dilihat+ditulis model cocok dengan kartu
+ * sumber FE. Deep (`deepRunId` ada): offset 0 + `citationNumber` null (di-assign step
+ * `assign-citations` belakangan untuk dedup global, G4).
+ */
+export async function numberPersistAndOutput(
+  ctx: AstraToolCtx,
+  args: { ownerUserId: string; candidates: ResearchCandidate[]; discoveryQuery?: string },
+): Promise<ReturnType<typeof toResearchToolOutput>> {
+  const isDeep = deepRunId(ctx) !== null;
+  const offset = isDeep ? 0 : reserveChatCitationOffset(ctx, args.candidates.length);
+  const citationNumbers = isDeep ? undefined : args.candidates.map((_, i) => offset + i + 1);
+  await persistResearch(ctx, {
+    ownerUserId: args.ownerUserId,
+    candidates: args.candidates,
+    discoveryQuery: args.discoveryQuery,
+    ...(citationNumbers ? { citationNumbers } : {}),
+  });
+  return toResearchToolOutput(args.candidates, offset);
 }

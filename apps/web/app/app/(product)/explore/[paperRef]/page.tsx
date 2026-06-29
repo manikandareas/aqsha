@@ -1,4 +1,4 @@
-import { PaperReader } from "@/features/discovery/components/paper-reader";
+import { PaperReaderRoute } from "@/features/discovery/components/paper-reader";
 
 export default async function PaperReaderPage({
   params,
@@ -6,5 +6,5 @@ export default async function PaperReaderPage({
   params: Promise<{ paperRef: string }>;
 }) {
   const { paperRef } = await params;
-  return <PaperReader paperKey={decodeURIComponent(paperRef)} />;
+  return <PaperReaderRoute paperKey={decodeURIComponent(paperRef)} />;
 }

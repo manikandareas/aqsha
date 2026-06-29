@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { readableApiErrorMessage } from "@/lib/api-error";
 import { queryKeys } from "../../../lib/api-query";
 import type { TimelineMessage } from "./timeline-types";
-import { ASTRA_AGENT_ID, useMastraClient } from "./mastra-client";
+import { type AgentKind, agentIdFor, useMastraClient } from "./mastra-client";
 import {
   type MastraApproval,
   type MastraChunk,
@@ -34,12 +34,14 @@ export type MastraAgent = {
     clientContext?: string[],
     richText?: string,
     attachmentIds?: string[],
+    agentKind?: AgentKind,
   ) => Promise<void>;
   sendDeep: (
     question: string,
     clientContext?: string[],
     richText?: string,
     attachmentIds?: string[],
+    agentKind?: AgentKind,
   ) => Promise<void>;
   resolvePlan: (approved: boolean, edits?: string) => Promise<void>;
   regenerate: () => Promise<void>;
@@ -176,6 +178,10 @@ const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 export function useMastraAgent(opts: {
   threadId: string;
   seedMessages?: TimelineMessage[];
+  /** Tier TERSIMPAN thread (`chat_threads.agent_kind`) — seed `committedAgentKind` sebelum turn
+   * pertama supaya langganan + regenerate/approval menunjuk channel agent yang benar saat membuka
+   * thread Pro / refresh di tengah turn Pro. `undefined`/baru → "lite". */
+  initialAgentKind?: AgentKind;
 }): MastraAgent {
   const client = useMastraClient();
   const { userId } = useAuth();
@@ -191,6 +197,24 @@ export function useMastraAgent(opts: {
   const deepRunRef = useRef<DeepRun | null>(null);
   const statusRef = useRef(state.status);
   statusRef.current = state.status;
+
+  // Tier agen yang sedang DIJALANKAN (bukan pilihan composer yang masih pending). Di-commit HANYA saat
+  // sebuah turn benar-benar dimulai (send/sendDeep) → langganan thread menunjuk agent yang benar tanpa
+  // ter-tear-down saat user sekadar menggeser selektor di tengah stream. `ref` untuk baca sinkron di
+  // respond/regenerate; `state` untuk men-trigger ulang effect langganan. Turn berurutan (guard
+  // `statusRef`) → satu agent aktif pada satu waktu; buffer di-replay dari index 0 menutup race re-subscribe.
+  // Tier yang sedang DIJALANKAN = tier turn yang sudah dikirim sesi ini (`sentKind`); kalau belum ada
+  // → tier TERSIMPAN thread (`initialAgentKind`, resolve async dari useThread di surface). Derivasi
+  // sederhana — sejajar `override ?? threadDefault` di `useComposerAgentSelection`: sebelum kirim,
+  // langganan mengikuti tier thread (re-attach turn Pro yang berjalan saat refresh); setelah kirim,
+  // mengikuti turn aktif (tak ter-clobber saat tier thread baru resolve).
+  const initialAgentKind: AgentKind = opts.initialAgentKind ?? "lite";
+  const [sentKind, setSentKind] = useState<AgentKind | null>(null);
+  const committedAgentKind = sentKind ?? initialAgentKind;
+  // Mirror sinkron untuk baca di respond/regenerate (di luar render), pola sama spt stateRef/statusRef.
+  const committedAgentKindRef = useRef(committedAgentKind);
+  committedAgentKindRef.current = committedAgentKind;
+  const commitAgentKind = useCallback((kind: AgentKind) => setSentKind(kind), []);
   const stateRef = useRef(state);
   stateRef.current = state;
 
@@ -207,7 +231,7 @@ export function useMastraAgent(opts: {
     const loop = async () => {
       while (!cancelled) {
         try {
-          const agent = clientRef.current.getAgent(ASTRA_AGENT_ID);
+          const agent = clientRef.current.getAgent(agentIdFor(committedAgentKind));
           const sub = (await agent.subscribeToThread({
             threadId: opts.threadId,
             resourceId: userId,
@@ -232,7 +256,7 @@ export function useMastraAgent(opts: {
       subRef.current?.unsubscribe();
       subRef.current = null;
     };
-  }, [opts.threadId, userId, onChunk]);
+  }, [opts.threadId, userId, onChunk, committedAgentKind]);
 
   // Sidebar (judul/preview) + send-status di-refresh saat turn beralih streaming→ready.
   const prevStatusRef = useRef(state.status);
@@ -244,8 +268,17 @@ export function useMastraAgent(opts: {
   }, [state.status, qc]);
 
   const send = useCallback(
-    async (text: string, clientContext?: string[], richText?: string, attachmentIds?: string[]) => {
+    async (
+      text: string,
+      clientContext?: string[],
+      richText?: string,
+      attachmentIds?: string[],
+      agentKind: AgentKind = "lite",
+    ) => {
       if (!text.trim() || !userId || statusRef.current !== "ready") return;
+      // Commit tier turn ini → langganan thread berpindah ke agent yang sama (Pro mengalir di channel
+      // `astra-pro`). Turn berurutan → aman; buffer replay menutup race re-subscribe.
+      commitAgentKind(agentKind);
       const turnSeed = `${opts.threadId}:${Date.now()}`;
       // `richText` = `text` + penanda `@mention` (U+E000/E001) untuk DITAMPILKAN & DIPERSIST sebagai
       // pill. Agen (LLM) tak melihat penanda: `stripMentionMarkersProcessor` (input) men-strip-nya
@@ -253,7 +286,7 @@ export function useMastraAgent(opts: {
       const display = richText ?? text;
       setState((s) => startAssistantTurn(s, display, turnSeed, attachmentIds));
       try {
-        const agent = clientRef.current.getAgent(ASTRA_AGENT_ID);
+        const agent = clientRef.current.getAgent(agentIdFor(agentKind));
         // `clientContext` (ekspansi command + catatan @mention) = konteks EPHEMERAL per-call (tak
         // dipersist ke memory thread), pindah ke `ifIdle.streamOptions.context` (parity eve).
         await agent.sendMessage({
@@ -277,7 +310,7 @@ export function useMastraAgent(opts: {
         }));
       }
     },
-    [opts.threadId, userId],
+    [opts.threadId, userId, commitAgentKind],
   );
 
   const respond = useCallback(
@@ -285,7 +318,8 @@ export function useMastraAgent(opts: {
       if (!userId) return;
       setState((s) => ({ ...s, approvals: s.approvals.filter((a) => a.toolCallId !== toolCallId) }));
       try {
-        const agent = clientRef.current.getAgent(ASTRA_AGENT_ID);
+        // Approval menyusul turn yang memunculkannya → agent tier yang sama (route agent-scoped).
+        const agent = clientRef.current.getAgent(agentIdFor(committedAgentKindRef.current));
         await agent.sendToolApproval({
           resourceId: userId,
           threadId: opts.threadId,
@@ -368,8 +402,12 @@ export function useMastraAgent(opts: {
       clientContext?: string[],
       richText?: string,
       attachmentIds?: string[],
+      agentKind: AgentKind = "lite",
     ) => {
       if (!userId || !question.trim() || statusRef.current !== "ready") return;
+      // Commit tier → respond/regenerate konsisten. (`/deep` mengalir di channel Workflow, bukan
+      // channel agent, tapi commit menjaga langganan & aksi lanjutan tetap selaras.)
+      commitAgentKind(agentKind);
       const turnSeed = `${opts.threadId}:${Date.now()}`;
       // Bubble user `/deep` ber-pill = `richText` (ber-marker) untuk TAMPIL + PERSIST; planner +
       // semua prompt subagen tetap pakai `question` BERSIH. `displayQuestion` hanya dipakai workflow
@@ -381,7 +419,7 @@ export function useMastraAgent(opts: {
         const run = (await wf.createRun({ resourceId: userId })) as unknown as DeepRun;
         deepRunRef.current = run;
         setDeepRunId(opts.threadId, run.runId);
-        const inputData: Record<string, unknown> = { question, threadId: opts.threadId };
+        const inputData: Record<string, unknown> = { question, threadId: opts.threadId, agentKind };
         if (richText && richText !== question) inputData.displayQuestion = richText;
         if (clientContext && clientContext.length > 0) inputData.context = clientContext.join("\n\n");
         const stream = await run.stream({ inputData, closeOnSuspend: true });
@@ -396,7 +434,7 @@ export function useMastraAgent(opts: {
         }));
       }
     },
-    [opts.threadId, userId, consumeWorkflow, clearDeepRunIdUnlessAlive],
+    [opts.threadId, userId, consumeWorkflow, clearDeepRunIdUnlessAlive, commitAgentKind],
   );
 
   const resolvePlan = useCallback(
@@ -536,10 +574,13 @@ export function useMastraAgent(opts: {
     if (!text) return;
     setState((s) => startRegenerate(s));
     try {
-      const agent = clientRef.current.getAgent(ASTRA_AGENT_ID);
+      // Regenerate turn terakhir di tier yang sama (route agent-scoped). Memory thread = storage
+      // bersama → list/delete via id agent mana pun setara; pakai tier ter-commit demi konsistensi.
+      const agentId = agentIdFor(committedAgentKindRef.current);
+      const agent = clientRef.current.getAgent(agentId);
       const thread = clientRef.current.getMemoryThread({
         threadId: opts.threadId,
-        agentId: ASTRA_AGENT_ID,
+        agentId,
       });
       // Hapus pasangan [user, assistant] lama DULU lalu kirim ulang → generasi baru berjalan atas
       // history yang BERSIH (tanpa Q&A lama yang mencemari konteks) + tak ada bubble user kembar.

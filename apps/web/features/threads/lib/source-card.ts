@@ -19,6 +19,29 @@ export function originMeta(origin: string): { Icon: typeof GlobeIcon; label: str
   }
 }
 
+/** Tautan keluar satu sumber: `url` → `doi.org/<doi>` → null. */
+export function sourceHref(source: { url: string | null; doi: string | null }): string | null {
+  return source.url ?? (source.doi ? `https://doi.org/${source.doi}` : null);
+}
+
+/** Domain (tanpa `www.`) dari `sourceHref`, diturunkan client-side. Null bila tak ada/invalid. */
+export function sourceDomain(source: { url: string | null; doi: string | null }): string | null {
+  const raw = sourceHref(source);
+  if (!raw) return null;
+  try {
+    return new URL(raw).hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+/** Favicon Google s2 dari domain (pola konsisten discovery/sumber). Null bila domain null. */
+export function faviconUrl(domain: string | null): string | null {
+  return domain
+    ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`
+    : null;
+}
+
 function str(v: unknown): string {
   return typeof v === "string" ? v : "";
 }
@@ -56,6 +79,9 @@ export function toCards(raw: unknown): SourceCardData[] {
       doi: strOrNull(r.doi),
       origin: str(r.origin) || "web",
       snippet: str(r.snippet) || undefined,
+      // `n` (nomor sitasi global per-turn dari tool output) → `citationNumber`, supaya kartu
+      // `search-flat` chat (live + rehydrate) memetakan ke `[n]` di prosa (pill sitasi inline).
+      citationNumber: typeof r.n === "number" ? r.n : null,
     });
   }
   return cards;

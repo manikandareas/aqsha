@@ -1,62 +1,98 @@
 import { Agent } from "@mastra/core/agent";
 import { TokenLimiterProcessor } from "@mastra/core/processors";
-import { astraInstructions } from "../instructions";
-import { memory } from "../memory";
-import { liteModel } from "../model";
-import { billingDebitProcessor, billingPrecheckProcessor } from "../processors/billing";
+import { astraInstructions, astraProInstructions } from "../instructions";
+import type { AgentKind } from "../lib/tool-context";
+import { createMemory } from "../memory";
+import { liteModel, proModel, proProviderOptions } from "../model";
+import { makeBillingProcessors } from "../processors/billing";
 import { EnsureFinalResponseProcessor } from "../processors/ensure-final-response";
 import { stripMentionMarkersProcessor } from "../processors/strip-mention-markers";
 import { threadArtifactManifestProcessor } from "../processors/thread-artifact-manifest";
-import {
-  threadProjectionInputProcessor,
-  threadProjectionProcessor,
-} from "../processors/thread-projection";
+import { makeThreadProjectionProcessors } from "../processors/thread-projection";
 import { inlineSkills } from "../skills";
 import { astraTools } from "../tools";
 
 /**
- * Astra Lite — agent chat utama (Fase 1: parity penuh dengan eve).
+ * Astra — agent chat utama, dua tier dari SATU factory (`createAstraAgent`):
  *
- * - `tools`: 17 tool app (5 read / 6 write / 6 research+verify) — port 1:1 dari eve `defineTool`.
- * - `memory`: Mastra Memory (history + semantic recall) = SoT pesan.
- * - `inputProcessors`: `TokenLimiter` (jendela context, ganti compaction eve) +
- *   `billingPrecheck` (gate kuota/cooldown → abort tripwire).
- * - `outputProcessors`: `billingDebit` (consumeCredits per-turn) — ganti hook `step.completed`;
- *   `threadProjection` (upsert tipis `chat_threads` + title async) — ganti hook `projection.ts`.
- * - `skills`: 11 `SKILL.md` (metodologi) — Mastra auto-menyediakan tool `skill`/`skill_read`/
- *   `skill_search` (progressive disclosure), TANPA sandbox.
- * - `maxSteps`/`ensureFinalResponse`: batasi tool-loop + jamin teks akhir (anti turn senyap
- *   saat model nyangkut nge-tool sampai cap step — lihat `EnsureFinalResponseProcessor`).
+ * - **Lite** (`astra-lite`): default. Model `liteModel`, `maxSteps: 10`, recall 16/6/2, tanpa penalaran
+ *   ekstra. Fitur billing `normal_chat`.
+ * - **Pro** (`astra-pro`): model penalaran `proModel` + `reasoning: "high"` (no-op bila model tak
+ *   mendukung), `maxSteps: 22`, context window + recall lebih dalam (32/12/3), instruksi `Pro` (riset
+ *   lebih dalam + verifikasi proaktif). Fitur billing `pro_chat` (rate lebih tinggi). FE memilih tier
+ *   dengan menunjuk agent ID dari `agentKind` composer — tak ada knob per-call yang dikirim klien.
+ *
+ * Knob bersama (tool 17, skills 11, memory SoT, TokenLimiter, billing-precheck, manifest lampiran,
+ * EnsureFinalResponse) identik; hanya nilai per-tier yang berbeda → satu definisi, bukan dua salinan.
  */
-const CONTEXT_WINDOW_TOKENS = Number(process.env.AQSHA_LITE_CONTEXT_WINDOW) || 128_000;
-// Sisakan ruang untuk output + tool results; batasi input ~75% context window.
-const TOKEN_LIMIT = Math.floor(CONTEXT_WINDOW_TOKENS * 0.75);
+type TierProfile = {
+  id: string;
+  name: string;
+  instructions: string;
+  model: typeof liteModel;
+  maxSteps: number;
+  contextWindowTokens: number;
+  /** `providerOptions` penalaran (Pro) — hanya saat `AQSHA_PRO_MODEL` di-set (lihat `proProviderOptions`). */
+  providerOptions?: typeof proProviderOptions;
+};
 
-// Budget langkah tool-loop per giliran. Cukup untuk riset multi-pencarian, tapi mencegah model
-// nyangkut. `EnsureFinalResponseProcessor` memakai angka SAMA → reminder mendarat di step terakhir.
-const MAX_STEPS = 10;
+const PROFILES: Record<AgentKind, TierProfile> = {
+  lite: {
+    id: "astra-lite",
+    name: "Astra",
+    instructions: astraInstructions,
+    model: liteModel,
+    maxSteps: 10,
+    contextWindowTokens: Number(process.env.AQSHA_LITE_CONTEXT_WINDOW) || 128_000,
+  },
+  pro: {
+    id: "astra-pro",
+    name: "Astra Pro",
+    instructions: astraProInstructions,
+    model: proModel,
+    maxSteps: 22,
+    contextWindowTokens: Number(process.env.AQSHA_PRO_CONTEXT_WINDOW) || 200_000,
+    providerOptions: proProviderOptions,
+  },
+};
 
-export const astraLite = new Agent({
-  id: "astra-lite",
-  name: "Astra",
-  instructions: astraInstructions,
-  model: liteModel,
-  tools: astraTools,
-  skills: inlineSkills,
-  memory,
-  // Default opsi `stream()` (vNext) → FE tak perlu mengirim `maxSteps`; satu sumber kebenaran.
-  defaultOptions: { maxSteps: MAX_STEPS },
-  inputProcessors: [
-    // Strip penanda @mention (U+E000/E001) dari teks user PALING AWAL → token-count & semua
-    // processor/LLM di bawahnya melihat teks bersih (penanda cuma untuk render pill di FE).
-    stripMentionMarkersProcessor,
-    new TokenLimiterProcessor(TOKEN_LIMIT),
-    threadProjectionInputProcessor,
-    billingPrecheckProcessor,
-    // Manifest lampiran thread (durable, anti-"linglung"): setelah billingPrecheck supaya turn
-    // yang diblok kuota tak menjalankan query artifact; sebelum EnsureFinalResponse (per-step).
-    threadArtifactManifestProcessor,
-    new EnsureFinalResponseProcessor(MAX_STEPS),
-  ],
-  outputProcessors: [billingDebitProcessor, threadProjectionProcessor],
-});
+function createAstraAgent(tier: AgentKind): Agent {
+  const p = PROFILES[tier];
+  // Sisakan ruang untuk output + tool results; batasi input ~75% context window.
+  const tokenLimit = Math.floor(p.contextWindowTokens * 0.75);
+  const { precheck: billingPrecheck, debit: billingDebit } = makeBillingProcessors(tier);
+  const { input: projectionInput, output: projectionOutput } = makeThreadProjectionProcessors(tier);
+
+  return new Agent({
+    id: p.id,
+    name: p.name,
+    instructions: p.instructions,
+    model: p.model,
+    tools: astraTools,
+    skills: inlineSkills,
+    memory: createMemory(tier),
+    // Default opsi `stream()` (vNext) → FE tak perlu mengirim `maxSteps`/`providerOptions`; satu sumber
+    // kebenaran. `EnsureFinalResponseProcessor` memakai angka MAX_STEPS yang SAMA → reminder mendarat di
+    // step terakhir. `providerOptions` (penalaran Pro) hanya di-set saat `AQSHA_PRO_MODEL` aktif.
+    defaultOptions: {
+      maxSteps: p.maxSteps,
+      ...(p.providerOptions ? { providerOptions: p.providerOptions } : {}),
+    },
+    inputProcessors: [
+      // Strip penanda @mention (U+E000/E001) dari teks user PALING AWAL → token-count & semua
+      // processor/LLM di bawahnya melihat teks bersih (penanda cuma untuk render pill di FE).
+      stripMentionMarkersProcessor,
+      new TokenLimiterProcessor(tokenLimit),
+      projectionInput,
+      billingPrecheck,
+      // Manifest lampiran thread (durable, anti-"linglung"): setelah billingPrecheck supaya turn
+      // yang diblok kuota tak menjalankan query artifact; sebelum EnsureFinalResponse (per-step).
+      threadArtifactManifestProcessor,
+      new EnsureFinalResponseProcessor(p.maxSteps),
+    ],
+    outputProcessors: [billingDebit, projectionOutput],
+  });
+}
+
+export const astraLite = createAstraAgent("lite");
+export const astraPro = createAstraAgent("pro");

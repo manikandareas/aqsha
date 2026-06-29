@@ -1,6 +1,6 @@
 import { assertEmbeddingEnabled } from "@aqsha/services/rag";
 import { Mastra } from "@mastra/core/mastra";
-import { astraLite } from "./agents/astra-lite";
+import { astraLite, astraPro } from "./agents/astra-lite";
 import { createClerkAuth } from "./auth";
 import { userContextMiddleware } from "./middleware/user-context";
 import { storage, vector } from "./storage";
@@ -31,7 +31,7 @@ assertEmbeddingEnabled();
  * sama. `server.auth` menjaga SEMUA route (agent + workflow).
  */
 export const mastra = new Mastra({
-  agents: { "astra-lite": astraLite },
+  agents: { "astra-lite": astraLite, "astra-pro": astraPro },
   workflows: { "deep-research": deepResearch },
   storage,
   vectors: { pg: vector },

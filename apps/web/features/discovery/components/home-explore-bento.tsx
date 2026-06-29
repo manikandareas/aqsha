@@ -5,23 +5,20 @@
 // (deep-link) — cukup buat memancing scroll lalu menyalurkan ke /app/explore.
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ArrowUpRightIcon } from "@aqsha/ui/icons";
+import { useSetAmbientContextRefs } from "@/features/thread-experience/components/composer-context-mentions";
 import { SectionHeader } from "@/features/explore/components/section-header";
 import { useFeedHome, useHideDiscovery, useRecordInteraction } from "../api";
+import { discoveryItemToContextRef } from "../ask-astra";
 import { DISCOVERY_TOPICS } from "../nav";
 import {
   DiscoveryHeroCard,
   DiscoveryStandardCard,
   type DiscoveryCardHandlers,
 } from "./discovery-item-card";
-import {
-  discoveryItemKey,
-  feedItemToDiscoveryItem,
-  type DiscoveryItem,
-} from "../model";
+import { discoveryItemKey, feedItemToDiscoveryItem } from "../model";
 import { FEED_TOPIC_LABELS } from "../types";
 
 const PILLS = [
@@ -30,10 +27,10 @@ const PILLS = [
 ];
 
 export function HomeExploreBento() {
-  const router = useRouter();
   const query = useFeedHome();
   const hide = useHideDiscovery();
   const record = useRecordInteraction();
+  const setAmbientContextRefs = useSetAmbientContextRefs();
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
 
   const items = (query.data ?? [])
@@ -47,7 +44,9 @@ export function HomeExploreBento() {
   const handlers: DiscoveryCardHandlers = {
     onAskAstra: (item) => {
       record.mutate({ itemRef: item.itemRef, kind: "research" });
-      router.push(`/app/threads?seed=${encodeURIComponent(buildSeed(item))}`);
+      // Landing /app: composer ada inline → sematkan item sebagai token konteks (bukan seed nav).
+      const ref = discoveryItemToContextRef(item);
+      if (ref) setAmbientContextRefs([ref]);
     },
     onSaved: (item) => record.mutate({ itemRef: item.itemRef, kind: "save" }),
     onHide: (item) => {
@@ -108,8 +107,4 @@ export function HomeExploreBento() {
       </section>
     </div>
   );
-}
-
-function buildSeed(item: DiscoveryItem): string {
-  return `${item.title}\n\n${item.tldr ?? item.summary}\n\nSumber: ${item.resolvedUrl ?? item.url}`;
 }

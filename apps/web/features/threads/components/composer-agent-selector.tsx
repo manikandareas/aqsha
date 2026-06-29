@@ -9,28 +9,38 @@ import {
 import { ChevronDownIcon, LockIcon } from "@aqsha/ui/icons";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import type { AgentKind } from "@aqsha/chat-core";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useBillingCurrent } from "@/features/settings/api";
 
-export type ComposerAgentKind = "lite" | "pro";
+/** Tier agen di composer — alias kontrak bersama `AgentKind` (`@aqsha/chat-core`), nama lokal dipertahankan. */
+export type ComposerAgentKind = AgentKind;
 
 /**
- * Pilihan agen composer (Slice 6.6). P6 = Lite-only di sisi runtime (eve single
- * agent), jadi selektor ini kosmetik: Pro TERKUNCI kecuali plan berbayar; klik
- * Pro saat terkunci → arahkan ke billing. `agentKind` selalu "lite" untuk plan
- * free supaya tak menyesatkan.
+ * Pilihan agen composer. Default mengikuti tier thread yang TERSIMPAN
+ * (`chat_threads.agent_kind`, di-update proyeksi server tiap turn): buka thread yang dimulai
+ * dengan Pro → selektor default Pro. Thread baru / belum ada baris → "lite". `threadDefault` dibaca
+ * SEKALI di surface (`MastraChatInner`, gated thread existing) lalu diteruskan ke sini → tak ada GET
+ * `/threads/<uuid>` untuk thread baru (id klien yang belum punya baris server).
+ *
+ * `override` = pilihan eksplisit user untuk SESI ini (menimpa default thread); null = ikut default.
+ * Composer di-remount per `threadId` (key di surface) → override reset saat pindah thread, jadi
+ * default kembali ikut tier thread. Tier "menempel" hanya SETELAH sebuah turn dijalankan (proyeksi
+ * yang menulis `agent_kind`), bukan saat selektor digeser. Pro TERKUNCI kecuali plan berbayar; klik
+ * Pro saat terkunci → arahkan ke billing; `agentKind` dipaksa "lite" untuk plan free.
  */
-export function useComposerAgentSelection() {
+export function useComposerAgentSelection(threadDefault: ComposerAgentKind = "lite") {
   const router = useRouter();
   const billing = useBillingCurrent();
   const canUsePro = billing.data ? billing.data.planKey !== "free" : false;
-  const [selected, setSelected] = useState<ComposerAgentKind>("lite");
+  const [override, setOverride] = useState<ComposerAgentKind | null>(null);
+  const selected = override ?? threadDefault;
 
   return {
     agentKind: canUsePro ? selected : ("lite" as const),
     canUsePro,
-    setAgentKind: setSelected,
+    setAgentKind: (kind: ComposerAgentKind) => setOverride(kind),
     handleUpgrade: () => router.push("/app/settings/usage-billing"),
   };
 }

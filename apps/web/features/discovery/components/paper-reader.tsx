@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  buildExternalPaperMentionLabel,
+  type ContextRef,
+} from "@aqsha/chat-core";
 import { Badge } from "@aqsha/ui/components/badge";
 import {
   BookOpenIcon,
@@ -8,18 +12,18 @@ import {
   SparklesIcon,
   UserRoundIcon,
 } from "@aqsha/ui/icons";
-import { useRouter } from "next/navigation";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { SaveToWorkspaceButton } from "@/features/artifacts/components/save-to-workspace-button";
 import { usePaper, useRecordInteraction } from "../api";
 import { formatCitationCount } from "../format";
 import type { ExplorePaper, PaperEnrichment, PaperEnrichmentRef } from "../types";
+import { clampDiscoveryTitle } from "../ask-astra";
+import { ExploreReaderChatShell } from "./explore-reader-chat-shell";
 import {
   Eyebrow,
   ExpandableText,
   MetaItem,
   PillCta,
-  ReaderBackLink,
   ReaderEmpty,
   ReaderLoader,
   ReaderSection,
@@ -27,22 +31,50 @@ import {
   StatCell,
 } from "./reader-ui";
 
-/** Reader paper: getPaperDetail(key) → header + aksi + metrik + abstrak + referensi + fact-sheet. */
-export function PaperReader({ paperKey }: { paperKey: string }) {
+/** Halaman baca paper + panel chat Astra; menyematkan paper sebagai token konteks otomatis. */
+export function PaperReaderRoute({ paperKey }: { paperKey: string }) {
+  const paper = usePaper(paperKey).data;
+  const paperTitle = paper?.title;
+  const ambientContextRefs = useMemo<ContextRef[]>(
+    () =>
+      paperTitle
+        ? [
+            {
+              kind: "explore-paper",
+              paperKey,
+              label: buildExternalPaperMentionLabel(clampDiscoveryTitle(paperTitle)),
+            },
+          ]
+        : [],
+    [paperKey, paperTitle],
+  );
+  return (
+    <ExploreReaderChatShell breadcrumb="Paper" ambientContextRefs={ambientContextRefs}>
+      {({ openChat }) => <PaperReader paperKey={paperKey} onAskAstra={openChat} />}
+    </ExploreReaderChatShell>
+  );
+}
+
+/** Reader paper: getPaperDetail(key) → header + aksi + metrik + abstrak + referensi + fact-sheet.
+ * `onAskAstra` (disediakan shell halaman) membuka panel chat. */
+export function PaperReader({
+  paperKey,
+  onAskAstra,
+}: {
+  paperKey: string;
+  onAskAstra: () => void;
+}) {
   const query = usePaper(paperKey);
   const record = useRecordInteraction();
-  const router = useRouter();
   const paper = query.data;
 
   const askAstra = (p: ExplorePaper) => {
     record.mutate({ itemRef: { kind: "paper", paperKey: p.key }, kind: "research" });
-    const seed = `${p.title}\n\n${p.abstract ?? p.snippet ?? ""}\n\nSumber: ${p.url}`;
-    router.push(`/app/threads?seed=${encodeURIComponent(seed)}`);
+    onAskAstra();
   };
 
   return (
     <ReaderShell width="wide">
-      <ReaderBackLink />
       {query.isPending ? (
         <ReaderLoader />
       ) : !paper ? (

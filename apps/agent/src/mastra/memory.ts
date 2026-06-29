@@ -1,5 +1,6 @@
 import { fastembed } from "@mastra/fastembed";
 import { Memory } from "@mastra/memory";
+import type { AgentKind } from "./lib/tool-context";
 import { storage, vector } from "./storage";
 
 /**
@@ -33,14 +34,27 @@ const WORKING_MEMORY_TEMPLATE = `# Memori kerja percakapan
  *
  * Anggaran token aman: `TokenLimiterProcessor` membatasi input ~96k (75% dari 128k); worst-case
  * memory (16 + ~30 pesan) ≈ 40–50k token → menyisakan ruang untuk instruksi, tool result, output.
+ *
+ * Tier **Pro** memperdalam recall (jendela history + hit semantik lebih besar) untuk konteks thread
+ * yang lebih kaya — `scope: "thread"` TETAP (keputusan produk: tak ada recall lintas-percakapan).
+ * Storage/vector/embedder dibagi → pesan lite & pro hidup di tabel `mastra_*` yang sama.
  */
-export const memory = new Memory({
-  storage,
-  vector,
-  embedder: fastembed,
-  options: {
-    lastMessages: 16,
-    semanticRecall: { topK: 6, messageRange: 2, scope: "thread" },
-    workingMemory: { enabled: true, scope: "thread", template: WORKING_MEMORY_TEMPLATE },
-  },
-});
+/**
+ * Bangun Memory per-tier (storage/vector/embedder + working-memory bersama; hanya knob recall —
+ * `lastMessages` + `semanticRecall` — yang berbeda per tier).
+ */
+export function createMemory(tier: AgentKind): Memory {
+  const recall =
+    tier === "pro"
+      ? { lastMessages: 32, semanticRecall: { topK: 12, messageRange: 3, scope: "thread" as const } }
+      : { lastMessages: 16, semanticRecall: { topK: 6, messageRange: 2, scope: "thread" as const } };
+  return new Memory({
+    storage,
+    vector,
+    embedder: fastembed,
+    options: {
+      ...recall,
+      workingMemory: { enabled: true, scope: "thread", template: WORKING_MEMORY_TEMPLATE },
+    },
+  });
+}

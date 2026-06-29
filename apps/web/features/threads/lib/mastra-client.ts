@@ -1,11 +1,25 @@
 "use client";
 
+import type { AgentKind } from "@aqsha/chat-core";
 import { useAuth } from "@clerk/nextjs";
 import { MastraClient } from "@mastra/client-js";
 import { useMemo } from "react";
 
+/** Tier agen Astra — kontrak tunggal di `@aqsha/chat-core`, di-re-export untuk pemakai lib threads. */
+export type { AgentKind };
+
 /** Id agent Mastra (key di `new Mastra({ agents })`) — lihat `apps/agent/src/mastra/index.ts`. */
 export const ASTRA_AGENT_ID = "astra-lite";
+const ASTRA_PRO_AGENT_ID = "astra-pro";
+
+/**
+ * Agent ID per tier. Route Mastra `sendMessage`/`subscribeToThread` AGENT-SCOPED
+ * (`/agents/:id/...`) → turn Pro mengalir di channel `astra-pro`, jadi langganan thread WAJIB
+ * menunjuk agent yang sama dengan turn aktif (lihat `committedAgentKind` di `use-mastra-agent.ts`).
+ */
+export function agentIdFor(agentKind: AgentKind): string {
+  return agentKind === "pro" ? ASTRA_PRO_AGENT_ID : ASTRA_AGENT_ID;
+}
 
 /**
  * Klien `@mastra/client-js` same-origin → proxy `/mastra-api/*` (lihat

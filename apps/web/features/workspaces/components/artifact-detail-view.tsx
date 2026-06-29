@@ -4,6 +4,7 @@ import {
   DownloadIcon,
   InfoIcon,
   Loader2Icon,
+  MessageSquareIcon,
   MoreHorizontalIcon,
   PanelLeftIcon,
   Trash2Icon,
@@ -95,6 +96,8 @@ export function ArtifactDetailView({
   workspaceId: workspaceIdProp,
   variant,
   onClose,
+  chatOpen,
+  onToggleChat,
 }: {
   artifactId: string;
   /** Required for the page route; the panel derives it from the loaded artifact. */
@@ -102,6 +105,9 @@ export function ArtifactDetailView({
   variant: ArtifactDetailVariant;
   /** Panel only: close the side panel. */
   onClose?: () => void;
+  /** Page only: toggle the artifact-page chat panel (rendered as a header affordance). */
+  chatOpen?: boolean;
+  onToggleChat?: () => void;
 }) {
   const data = useArtifactDetailData(artifactId);
   const router = useRouter();
@@ -218,6 +224,25 @@ export function ArtifactDetailView({
       ) : null
     ) : null;
 
+  const chatToggle =
+    variant === "page" && onToggleChat ? (
+      <Button
+        type="button"
+        variant="ghost"
+        className={cn(
+          "flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-semibold transition-colors",
+          chatOpen
+            ? "bg-primary/15 text-primary hover:bg-primary/15 hover:text-primary"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground",
+        )}
+        onClick={onToggleChat}
+        aria-label={chatOpen ? "Tutup chat" : "Buka chat"}
+      >
+        <MessageSquareIcon className="size-3.5" />
+        Chat
+      </Button>
+    ) : null;
+
   const header =
     ready && detail ? (
       variant === "page" ? (
@@ -226,7 +251,12 @@ export function ArtifactDetailView({
           workspaceId={resolvedWorkspaceId}
           workspaceName={workspaceName}
           onRenameArtifact={renameArtifact}
-          trailing={trailing}
+          trailing={
+            <>
+              {trailing}
+              {chatToggle}
+            </>
+          }
         />
       ) : (
         <ArtifactPanelToolbar onClose={onClose} trailing={panelActions} />
@@ -321,12 +351,14 @@ export function ArtifactDetailView({
     );
   }
 
+  // Page variant: landmark `<main>` + scroll dimiliki shell halaman (ArtifactReaderPageShell)
+  // supaya bisa hidup di samping panel chat (DetailSplitLayout). Komponen ini = konten murni.
   return (
-    <main className="min-h-svh bg-background text-foreground">
+    <div className="min-h-full bg-background text-foreground">
       {header}
       {body}
       {deleteDialog}
-    </main>
+    </div>
   );
 }
 

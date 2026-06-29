@@ -5,9 +5,10 @@
 // + useFeedInfinite + infinite scroll. Di-scope oleh interest pill aktif (topic).
 
 import { CheckCircle2Icon, Loader2Icon, SparklesIcon } from "@aqsha/ui/icons";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useSetAmbientContextRefs } from "@/features/thread-experience/components/composer-context-mentions";
+import { discoveryItemToContextRef } from "@/features/discovery/ask-astra";
 import {
   DiscoveryFeatureCard,
   DiscoveryHeroCard,
@@ -37,8 +38,17 @@ type FeedStatus = "LoadingMore" | "CanLoadMore" | "Exhausted";
 // Bound auto-loads between scrolls so a run of locally-hidden items can't spin.
 const MAX_AUTO_LOADS = 4;
 
-export function ExploreFindings({ topic, query }: { topic: FeedTopic | null; query: string }) {
-  const router = useRouter();
+export function ExploreFindings({
+  topic,
+  query,
+  onOpenChat,
+}: {
+  topic: FeedTopic | null;
+  query: string;
+  /** Buka panel chat Astra (dimiliki ExplorePage) — dipanggil saat "Tanya Astra" di kartu. */
+  onOpenChat: () => void;
+}) {
+  const setAmbientContextRefs = useSetAmbientContextRefs();
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
 
   const q = query.trim();
@@ -114,7 +124,10 @@ export function ExploreFindings({ topic, query }: { topic: FeedTopic | null; que
   const handlers: DiscoveryCardHandlers = {
     onAskAstra: (item) => {
       record.mutate({ itemRef: item.itemRef, kind: "research" });
-      router.push(`/app/threads?seed=${encodeURIComponent(buildSeed(item))}`);
+      // Buka panel chat + sematkan item sebagai token konteks (bukan navigasi seed lagi).
+      const ref = discoveryItemToContextRef(item);
+      if (ref) setAmbientContextRefs([ref]);
+      onOpenChat();
     },
     onSaved: (item) => record.mutate({ itemRef: item.itemRef, kind: "save" }),
     onHide: (item) => {
@@ -204,10 +217,6 @@ export function ExploreFindings({ topic, query }: { topic: FeedTopic | null; que
       </div>
     </section>
   );
-}
-
-function buildSeed(item: DiscoveryItem): string {
-  return `${item.title}\n\n${item.tldr ?? item.summary}\n\nSumber: ${item.resolvedUrl ?? item.url}`;
 }
 
 // Ritme feed editorial (opsi 4): grid 3-up tiap GRID_CHUNK item, lalu 1 feature

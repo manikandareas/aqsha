@@ -1,5 +1,6 @@
 import {
   type ContextRef,
+  contextRefKey,
   type PromptCommand,
   promptCommands,
   wrapMentionLabel,
@@ -16,13 +17,14 @@ const CHIP_SELECTOR = '[data-chip="command"]';
 const CONTEXT_CHIP_SELECTOR = '[data-chip="context"]';
 
 /**
- * Bentuk dasar pill `@mention` / command — TANPA warna & interaksi. Diekspor agar bubble pesan user
- * (`message-list.tsx`) merender mention dengan treatment yang sama (rounded + underline + bobot)
+ * Bentuk dasar pill `@mention` / command — TANPA warna, bobot, & interaksi. Diekspor agar bubble
+ * pesan user (`message-list.tsx`) merender mention dengan treatment yang sama (rounded + underline)
  * sebagai SATU sumber kebenaran, walau tone warnanya beda (composer di atas card, bubble di atas
- * `bg-primary`).
+ * `bg-primary`). Bobot SENGAJA tidak di sini: pill mention memakai bobot teks normal (ukuran token
+ * = ukuran teks sekitarnya); chip command (`/deep`) menambah `font-semibold` lewat tone-nya.
  */
 export const MENTION_PILL_SHAPE =
-  "rounded-[5px] px-0.5 font-semibold underline decoration-2 underline-offset-4";
+  "rounded-[5px] px-0.5 underline decoration-2 underline-offset-4";
 
 const INLINE_PILL_BASE = cn(
   "inline-flex cursor-pointer select-none items-center leading-[18px] transition-[background-color,text-decoration-color] duration-150",
@@ -30,9 +32,9 @@ const INLINE_PILL_BASE = cn(
 );
 const INLINE_PILL_TONE = {
   default:
-    "bg-primary/8 text-primary decoration-primary/60 hover:bg-primary/12 hover:decoration-primary",
+    "font-semibold bg-primary/8 text-primary decoration-primary/60 hover:bg-primary/12 hover:decoration-primary",
   context:
-    "bg-foreground/5 text-foreground decoration-foreground/30 hover:bg-foreground/10 hover:decoration-foreground/60",
+    "bg-foreground/8 text-foreground decoration-foreground/40 hover:bg-foreground/12 hover:decoration-foreground/70",
 } as const;
 
 type InlinePillTone = keyof typeof INLINE_PILL_TONE;
@@ -157,9 +159,15 @@ export function createContextChipElement(ref: ContextRef) {
   span.contentEditable = "false";
   span.dataset.chip = "context";
   span.dataset.kind = ref.kind;
-  span.dataset.workspaceId = ref.workspaceId;
-  if (ref.kind === "paper") {
+  if (ref.kind === "workspace") {
+    span.dataset.workspaceId = ref.workspaceId;
+  } else if (ref.kind === "paper") {
+    span.dataset.workspaceId = ref.workspaceId;
     span.dataset.artifactId = ref.artifactId;
+  } else if (ref.kind === "explore-paper") {
+    span.dataset.paperKey = ref.paperKey;
+  } else {
+    span.dataset.feedItemId = ref.feedItemId;
   }
   span.dataset.label = ref.label;
   span.className = inlinePillClass("context");
@@ -170,33 +178,38 @@ export function createContextChipElement(ref: ContextRef) {
 export function extractContextRefsFromEditor(root: HTMLElement): ContextRef[] {
   const seen = new Set<string>();
   const refs: ContextRef[] = [];
+  const push = (ref: ContextRef) => {
+    const key = contextRefKey(ref);
+    if (seen.has(key)) return;
+    seen.add(key);
+    refs.push(ref);
+  };
   root.querySelectorAll<HTMLElement>(CONTEXT_CHIP_SELECTOR).forEach((chip) => {
-    const workspaceId = chip.dataset.workspaceId;
     const kind = chip.dataset.kind;
     const label = chip.dataset.label ?? chip.textContent ?? "";
-    if (!workspaceId) {
-      return;
-    }
     if (kind === "paper") {
+      const workspaceId = chip.dataset.workspaceId;
       const artifactId = chip.dataset.artifactId;
-      if (!artifactId) {
-        return;
-      }
-      const key = `${workspaceId}:${artifactId}`;
-      if (seen.has(key)) {
-        return;
-      }
-      seen.add(key);
-      refs.push({ kind: "paper", workspaceId, artifactId, label });
+      if (!workspaceId || !artifactId) return;
+      push({ kind: "paper", workspaceId, artifactId, label });
       return;
     }
     if (kind === "workspace") {
-      const key = `${workspaceId}:`;
-      if (seen.has(key)) {
-        return;
-      }
-      seen.add(key);
-      refs.push({ kind: "workspace", workspaceId, label });
+      const workspaceId = chip.dataset.workspaceId;
+      if (!workspaceId) return;
+      push({ kind: "workspace", workspaceId, label });
+      return;
+    }
+    if (kind === "explore-paper") {
+      const paperKey = chip.dataset.paperKey;
+      if (!paperKey) return;
+      push({ kind: "explore-paper", paperKey, label });
+      return;
+    }
+    if (kind === "news") {
+      const feedItemId = chip.dataset.feedItemId;
+      if (!feedItemId) return;
+      push({ kind: "news", feedItemId, label });
     }
   });
   return refs;

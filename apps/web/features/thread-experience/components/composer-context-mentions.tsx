@@ -1,5 +1,6 @@
 "use client";
 
+import { type ContextRef, contextRefsSignature } from "@aqsha/chat-core";
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 
 type DraftContextArtifact = { artifactId: string; title: string };
@@ -12,12 +13,29 @@ type ComposerMentionsContextValue = {
 
 const ComposerMentionsContext = createContext<ComposerMentionsContextValue | null>(null);
 
+/** Token konteks ambient halaman (workspace/artifact/paper/berita) — disuntik composer otomatis.
+ * Default `[]` → aman dibaca surface chat di halaman tanpa provider (mis. /app, /app/threads). */
+const EMPTY_AMBIENT_REFS: ContextRef[] = [];
+
+type AmbientContextRefsValue = {
+  ambientContextRefs: ContextRef[];
+  /** Override imperatif (mis. "Tanya Astra" di kartu feed → ganti token ke item itu). */
+  setAmbientContextRefs: (refs: ContextRef[]) => void;
+};
+const AmbientContextRefsContext = createContext<AmbientContextRefsValue>({
+  ambientContextRefs: EMPTY_AMBIENT_REFS,
+  setAmbientContextRefs: () => {},
+});
+
 export function ComposerMentionsProvider({
   children,
+  ambientContextRefs,
 }: {
   children: ReactNode;
   threadId?: string;
   ambientWorkspaceId?: string | null;
+  /** Token halaman aktif untuk auto-mention di composer (lihat MastraChatThreadSurface). */
+  ambientContextRefs?: ContextRef[];
 }) {
   const [contextArtifacts, setContextArtifacts] = useState<DraftContextArtifact[]>([]);
   const value = useMemo(
@@ -36,8 +54,29 @@ export function ComposerMentionsProvider({
     }),
     [contextArtifacts],
   );
+
+  // Token ambient = state internal supaya kartu "Tanya Astra" bisa override imperatif, TAPI
+  // disinkron dari prop halaman (mis. data reader/artifact baru termuat). Pola "adjust state during
+  // render" (guard signature) — bukan effect → tak memicu cascading render.
+  const propRefs = ambientContextRefs ?? EMPTY_AMBIENT_REFS;
+  const propSignature = contextRefsSignature(propRefs);
+  const [ambientRefs, setAmbientRefs] = useState<ContextRef[]>(propRefs);
+  const [seenPropSignature, setSeenPropSignature] = useState(propSignature);
+  if (propSignature !== seenPropSignature) {
+    setSeenPropSignature(propSignature);
+    setAmbientRefs(propRefs);
+  }
+  const ambientValue = useMemo<AmbientContextRefsValue>(
+    () => ({ ambientContextRefs: ambientRefs, setAmbientContextRefs: setAmbientRefs }),
+    [ambientRefs],
+  );
+
   return (
-    <ComposerMentionsContext.Provider value={value}>{children}</ComposerMentionsContext.Provider>
+    <ComposerMentionsContext.Provider value={value}>
+      <AmbientContextRefsContext.Provider value={ambientValue}>
+        {children}
+      </AmbientContextRefsContext.Provider>
+    </ComposerMentionsContext.Provider>
   );
 }
 
@@ -47,6 +86,16 @@ export function useComposerMentions() {
     throw new Error("useComposerMentions must be used within ComposerMentionsProvider");
   }
   return context;
+}
+
+/** Token konteks ambient halaman aktif. Aman di luar provider (kembalikan `[]`). */
+export function useAmbientContextRefs(): ContextRef[] {
+  return useContext(AmbientContextRefsContext).ambientContextRefs;
+}
+
+/** Setter token ambient — untuk "Tanya Astra" imperatif dari kartu feed/related. No-op tanpa provider. */
+export function useSetAmbientContextRefs(): (refs: ContextRef[]) => void {
+  return useContext(AmbientContextRefsContext).setAmbientContextRefs;
 }
 
 export function usePanelContextSelection(args: {

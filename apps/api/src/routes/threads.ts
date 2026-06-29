@@ -48,6 +48,8 @@ export const threads = new Elysia({ prefix: "/threads" })
         ownerUserId,
         workspaceIds: body.workspaceIds,
         artifactIds: body.artifactIds,
+        paperKeys: body.paperKeys,
+        feedItemIds: body.feedItemIds,
       });
     },
     {
@@ -55,6 +57,9 @@ export const threads = new Elysia({ prefix: "/threads" })
       body: t.Object({
         workspaceIds: t.Array(t.String()),
         artifactIds: t.Array(t.String()),
+        // Sumber Explore publik yang disematkan langsung (paper by key / berita by id).
+        paperKeys: t.Optional(t.Array(t.String())),
+        feedItemIds: t.Optional(t.Array(t.String())),
       }),
     },
   )
