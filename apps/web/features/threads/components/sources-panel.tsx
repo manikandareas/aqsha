@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  ArrowUpRightIcon,
-  BookOpenIcon,
-  ChevronDownIcon,
-  FileTextIcon,
-  GlobeIcon,
-  Link2Icon,
-} from "@aqsha/ui/icons";
+import { ArrowUpRightIcon, ChevronDownIcon, Link2Icon } from "@aqsha/ui/icons";
 import {
   Collapsible,
   CollapsibleContent,
@@ -15,19 +8,8 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { useMemo } from "react";
+import { originMeta } from "../lib/source-card";
 import type { SourceCardData } from "../lib/timeline-types";
-
-/** Ikon + label per kelas sumber. */
-function originMeta(origin: string): { Icon: typeof GlobeIcon; label: string } {
-  switch (origin) {
-    case "arxiv":
-      return { Icon: FileTextIcon, label: "arXiv" };
-    case "doi":
-      return { Icon: BookOpenIcon, label: "Makalah" };
-    default:
-      return { Icon: GlobeIcon, label: "Web" };
-  }
-}
 
 function SourceRow({ source }: { source: SourceCardData }) {
   const { Icon, label } = originMeta(source.origin);

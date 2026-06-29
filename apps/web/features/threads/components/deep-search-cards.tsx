@@ -1,9 +1,9 @@
 "use client";
 
-import { BookOpenIcon, ExternalLinkIcon, FileTextIcon, GlobeIcon } from "@aqsha/ui/icons";
+import { ExternalLinkIcon } from "@aqsha/ui/icons";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
-import { researchSourceToCard } from "../lib/source-card";
+import { originMeta, researchSourceToCard } from "../lib/source-card";
 import type { DeepSubSearch, SourceCardData } from "../lib/timeline-types";
 import type { ResearchSource } from "../types";
 
@@ -80,18 +80,6 @@ export function SourceCardList({ sources }: { sources: SourceCardData[] }) {
       </div>
     </ScrollArea>
   );
-}
-
-/** Ikon + label per kelas sumber. */
-function originMeta(origin: string): { Icon: typeof GlobeIcon; label: string } {
-  switch (origin) {
-    case "arxiv":
-      return { Icon: FileTextIcon, label: "arXiv" };
-    case "doi":
-      return { Icon: BookOpenIcon, label: "Makalah" };
-    default:
-      return { Icon: GlobeIcon, label: "Web" };
-  }
 }
 
 /** Domain (tanpa `www.`) dari url/doi — diturunkan client-side. */

@@ -3,8 +3,21 @@
 // deep live), dan (2) baris `research_sources` dari DB (panel deep bernomor `[n]`). Pure: tak
 // fetch, tak sentuh DB — hanya memetakan ke kontrak presentasi netral.
 
+import { BookOpenIcon, FileTextIcon, GlobeIcon } from "@aqsha/ui/icons";
 import type { ResearchSource } from "../types";
 import type { SourceCardData } from "./timeline-types";
+
+/** Ikon + label per kelas sumber (`origin`) — kontrak presentasi netral dipakai panel & kartu deep. */
+export function originMeta(origin: string): { Icon: typeof GlobeIcon; label: string } {
+  switch (origin) {
+    case "arxiv":
+      return { Icon: FileTextIcon, label: "arXiv" };
+    case "doi":
+      return { Icon: BookOpenIcon, label: "Makalah" };
+    default:
+      return { Icon: GlobeIcon, label: "Web" };
+  }
+}
 
 function str(v: unknown): string {
   return typeof v === "string" ? v : "";
