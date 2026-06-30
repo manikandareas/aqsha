@@ -89,6 +89,29 @@ function citationRehypePlugin() {
   };
 }
 
+// Stage bawaan Streamdown yang HARUS ikut saat kita merekonstruksi pipeline (kunci `sanitize`/`harden`
+// di `defaultRehypePlugins`). Meneruskan prop `rehypePlugins` MENGGANTIKAN seluruh default Streamdown,
+// jadi kalau rekonstruksi ini kehilangan `sanitize`, HTML model mentah lolos tanpa sanitasi.
+const REQUIRED_DEFAULT_REHYPE_STAGES = ["sanitize"] as const;
+
+/**
+ * Guard asumsi versi-terpin: Streamdown menerapkan prop `rehypePlugins` sebagai PENGGANTI pipeline
+ * default-nya (raw → sanitize → harden), jadi kita merekonstruksi default via `Object.values`. Jika
+ * upgrade Streamdown mengubah bentuk `defaultRehypePlugins` (mis. men-drop/me-rename stage `sanitize`),
+ * gagal NYARING di sini (dev/test/build) — bukan diam-diam mengirim HTML asisten tak ter-sanitasi.
+ */
+const defaultRehypeStageKeys = Object.keys(defaultRehypePlugins ?? {});
+if (process.env.NODE_ENV !== "production") {
+  const missing = REQUIRED_DEFAULT_REHYPE_STAGES.filter((k) => !defaultRehypeStageKeys.includes(k));
+  if (missing.length > 0) {
+    throw new Error(
+      `[citation-markdown] Streamdown defaultRehypePlugins kehilangan stage [${missing.join(", ")}] ` +
+        `(stage tersedia: ${defaultRehypeStageKeys.join(", ") || "<kosong>"}). Sanitasi markdown asisten ` +
+        "bisa hilang — tinjau ulang citationRehypePlugins setelah upgrade Streamdown.",
+    );
+  }
+}
+
 /**
  * Pipeline rehype lengkap untuk jawaban tercitasi: plugin bawaan Streamdown (raw → sanitize → harden)
  * lalu transform sitasi di urutan TERAKHIR. Kita merekonstruksi default-nya karena meneruskan prop
