@@ -1,7 +1,7 @@
 "use client";
 
 import { type ContextRef, contextRefsSignature } from "@aqsha/chat-core";
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
 type DraftContextArtifact = { artifactId: string; title: string };
 
@@ -21,10 +21,15 @@ type AmbientContextRefsValue = {
   ambientContextRefs: ContextRef[];
   /** Override imperatif (mis. "Tanya Astra" di kartu feed → ganti token ke item itu). */
   setAmbientContextRefs: (refs: ContextRef[]) => void;
+  /** Naik tiap kali token ambient DI-SET (klik "Tanya Astra" / sinkron prop halaman), termasuk saat
+   * isinya sama. Composer me-merge berdasar epoch (bukan signature) supaya klik-ulang item yang sama
+   * setelah user menghapus pill-nya tetap menyisipkan ulang — signature tak berubah, epoch berubah. */
+  ambientEpoch: number;
 };
 const AmbientContextRefsContext = createContext<AmbientContextRefsValue>({
   ambientContextRefs: EMPTY_AMBIENT_REFS,
   setAmbientContextRefs: () => {},
+  ambientEpoch: 0,
 });
 
 export function ComposerMentionsProvider({
@@ -57,18 +62,31 @@ export function ComposerMentionsProvider({
 
   // Token ambient = state internal supaya kartu "Tanya Astra" bisa override imperatif, TAPI
   // disinkron dari prop halaman (mis. data reader/artifact baru termuat). Pola "adjust state during
-  // render" (guard signature) — bukan effect → tak memicu cascading render.
+  // render" (guard signature) — bukan effect → tak memicu cascading render. `epoch` naik tiap set
+  // (imperatif maupun sinkron-prop) supaya consumer bisa membedakan "di-set ulang" dari "tak berubah"
+  // meski isinya identik (klik-ulang "Tanya Astra" item yang sama setelah pill dihapus).
   const propRefs = ambientContextRefs ?? EMPTY_AMBIENT_REFS;
   const propSignature = contextRefsSignature(propRefs);
-  const [ambientRefs, setAmbientRefs] = useState<ContextRef[]>(propRefs);
+  const [ambient, setAmbient] = useState<{ refs: ContextRef[]; epoch: number }>({
+    refs: propRefs,
+    epoch: 0,
+  });
   const [seenPropSignature, setSeenPropSignature] = useState(propSignature);
   if (propSignature !== seenPropSignature) {
     setSeenPropSignature(propSignature);
-    setAmbientRefs(propRefs);
+    setAmbient((current) => ({ refs: propRefs, epoch: current.epoch + 1 }));
   }
+  const setAmbientContextRefs = useCallback(
+    (refs: ContextRef[]) => setAmbient((current) => ({ refs, epoch: current.epoch + 1 })),
+    [],
+  );
   const ambientValue = useMemo<AmbientContextRefsValue>(
-    () => ({ ambientContextRefs: ambientRefs, setAmbientContextRefs: setAmbientRefs }),
-    [ambientRefs],
+    () => ({
+      ambientContextRefs: ambient.refs,
+      setAmbientContextRefs,
+      ambientEpoch: ambient.epoch,
+    }),
+    [ambient, setAmbientContextRefs],
   );
 
   return (
@@ -96,6 +114,11 @@ export function useAmbientContextRefs(): ContextRef[] {
 /** Setter token ambient — untuk "Tanya Astra" imperatif dari kartu feed/related. No-op tanpa provider. */
 export function useSetAmbientContextRefs(): (refs: ContextRef[]) => void {
   return useContext(AmbientContextRefsContext).setAmbientContextRefs;
+}
+
+/** Epoch token ambient — naik tiap set (lihat `ambientEpoch`). Composer me-merge berdasar epoch ini. */
+export function useAmbientContextEpoch(): number {
+  return useContext(AmbientContextRefsContext).ambientEpoch;
 }
 
 export function usePanelContextSelection(args: {

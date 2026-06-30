@@ -3,7 +3,6 @@
 import {
   type ContextRef,
   contextRefKey,
-  contextRefsSignature,
   DEEP_COMMAND_ID,
   getPromptCommand,
   matchPromptCommandInContent,
@@ -29,6 +28,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useContextPickerArtifacts } from "@/features/artifacts/api";
 import { UPLOAD_ACCEPT } from "@/features/artifacts/types";
+import { useAmbientContextEpoch } from "@/features/thread-experience/components/composer-context-mentions";
 import { useWorkspacesList } from "@/features/workspaces/api";
 import { cn } from "@/lib/utils";
 import {
@@ -231,16 +231,20 @@ export function Composer({
   // ambient LAMA yang tak lagi ambient dibuang (mis. ganti item), token ambient baru disisipkan,
   // dan token MANUAL (ditambah user via palette) selalu dipertahankan. Re-merge hanya saat
   // signature ambient berganti supaya tak ada loop dengan ekstraksi editor.
-  const ambientSignature = contextRefsSignature(ambientContextRefs);
-  const [ambientMerge, setAmbientMerge] = useState<{ sig: string; refs: ContextRef[] }>({
-    sig: "",
+  // Merge berdasar EPOCH (naik tiap set ambient), bukan signature: klik-ulang "Tanya Astra" pada item
+  // yang sama setelah user menghapus pill-nya menghasilkan signature identik tapi epoch baru → pill
+  // tetap disisipkan ulang (signature-only dulu membuat tombol seakan mati). Epoch hanya naik saat ada
+  // set sungguhan, jadi penghapusan pill oleh user TIDAK memicu re-merge (token tak muncul lagi sendiri).
+  const ambientEpoch = useAmbientContextEpoch();
+  const [ambientMerge, setAmbientMerge] = useState<{ epoch: number; refs: ContextRef[] }>({
+    epoch: -1,
     refs: EMPTY_CONTEXT_REFS,
   });
-  if (ambientSignature !== ambientMerge.sig) {
+  if (ambientEpoch !== ambientMerge.epoch) {
     // Buang SEMUA token ambient (lama + baru) dari set saat ini, sisakan token MANUAL (palette), lalu
     // prepend token ambient SAAT INI → ganti item bersih, token manual selalu aman.
     const ambientKeys = new Set([...ambientMerge.refs, ...ambientContextRefs].map(contextRefKey));
-    setAmbientMerge({ sig: ambientSignature, refs: ambientContextRefs });
+    setAmbientMerge({ epoch: ambientEpoch, refs: ambientContextRefs });
     setContextRefs((current) => {
       const manual = current.filter((ref) => !ambientKeys.has(contextRefKey(ref)));
       return [...ambientContextRefs, ...manual];

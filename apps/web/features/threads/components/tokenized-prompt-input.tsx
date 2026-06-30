@@ -134,7 +134,11 @@ export function TokenizedPromptInput({
     pinnedContextRefs.flatMap((ref) => (ref.kind === "paper" ? [ref.artifactId] : [])),
   );
   const workspaceCapReached = counts.workspaces >= MAX_CONTEXT_WORKSPACES;
-  const paperCapReached = counts.papers >= MAX_CONTEXT_PAPERS;
+  // The paper budget covers every pinned source, not just workspace papers — ambient
+  // external papers/news (explore-paper / news) count against it too, so the palette's
+  // paper-add gates correctly once the total source budget is reached.
+  const paperCapReached =
+    counts.papers + counts.explorePapers + counts.news >= MAX_CONTEXT_PAPERS;
 
   const drillWorkspace = drillWorkspaceId
     ? contextWorkspaces.find((workspace) => workspace.workspaceId === drillWorkspaceId)
