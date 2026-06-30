@@ -419,7 +419,24 @@ export type ContextRef =
   // Sumber Explore eksternal (BUKAN artifact workspace) — disematkan langsung dari halaman
   // baca paper/berita. Hydrate menariknya dari cache OpenAlex / feed (lihat ContextService).
   | { kind: "explore-paper"; paperKey: string; label: string }
-  | { kind: "news"; feedItemId: string; label: string };
+  | { kind: "news"; feedItemId: string; label: string }
+  // Pilihan blok di editor BlockNote (tombol "Tanya Astra" di Formatting Toolbar). Menyemat
+  // blok spesifik sebuah artifact markdown + cuplikan teksnya supaya agen tahu bagian persis
+  // yang dimaksud (baca via get_render_payload). Mengedit bagian = lewat AI editor native di dokumen.
+  | {
+      kind: "artifact-selection";
+      artifactId: string;
+      blockIds: string[];
+      excerpt: string;
+      label: string;
+    };
+
+/** Cuplikan pilihan blok editor untuk hydrate (validasi ownership + clamp di server). */
+export type ContextSelection = {
+  artifactId: string;
+  blockIds: string[];
+  excerpt: string;
+};
 
 /** Stable identity for dedupe + signature comparison. */
 export function contextRefKey(ref: ContextRef): string {
@@ -432,6 +449,9 @@ export function contextRefKey(ref: ContextRef): string {
       return `epk:${ref.paperKey}`;
     case "news":
       return `nid:${ref.feedItemId}`;
+    case "artifact-selection":
+      // Key by artifact + blok terurut → pilihan blok yang sama dedupe, pilihan berbeda distinct.
+      return `asel:${ref.artifactId}:${[...ref.blockIds].sort().join(",")}`;
   }
 }
 
@@ -445,18 +465,42 @@ export function splitContextRefs(refs: ContextRef[]): {
   artifactIds: string[];
   paperKeys: string[];
   feedItemIds: string[];
+  selections: ContextSelection[];
 } {
   const workspaceIds: string[] = [];
   const artifactIds: string[] = [];
   const paperKeys: string[] = [];
   const feedItemIds: string[] = [];
+  const selections: ContextSelection[] = [];
   for (const ref of refs) {
-    if (ref.kind === "workspace") workspaceIds.push(ref.workspaceId);
-    else if (ref.kind === "paper") artifactIds.push(ref.artifactId);
-    else if (ref.kind === "explore-paper") paperKeys.push(ref.paperKey);
-    else feedItemIds.push(ref.feedItemId);
+    switch (ref.kind) {
+      case "workspace":
+        workspaceIds.push(ref.workspaceId);
+        break;
+      case "paper":
+        artifactIds.push(ref.artifactId);
+        break;
+      case "explore-paper":
+        paperKeys.push(ref.paperKey);
+        break;
+      case "news":
+        feedItemIds.push(ref.feedItemId);
+        break;
+      case "artifact-selection":
+        selections.push({
+          artifactId: ref.artifactId,
+          blockIds: ref.blockIds,
+          excerpt: ref.excerpt,
+        });
+        break;
+      default: {
+        // Exhaustiveness: menambah kind ContextRef baru jadi error compile di sini.
+        const _exhaustive: never = ref;
+        void _exhaustive;
+      }
+    }
   }
-  return { workspaceIds, artifactIds, paperKeys, feedItemIds };
+  return { workspaceIds, artifactIds, paperKeys, feedItemIds, selections };
 }
 
 export function countContextRefs(refs: ContextRef[]): {
@@ -464,18 +508,37 @@ export function countContextRefs(refs: ContextRef[]): {
   papers: number;
   explorePapers: number;
   news: number;
+  selections: number;
 } {
   let workspaces = 0;
   let papers = 0;
   let explorePapers = 0;
   let news = 0;
+  let selections = 0;
   for (const ref of refs) {
-    if (ref.kind === "workspace") workspaces += 1;
-    else if (ref.kind === "paper") papers += 1;
-    else if (ref.kind === "explore-paper") explorePapers += 1;
-    else news += 1;
+    switch (ref.kind) {
+      case "workspace":
+        workspaces += 1;
+        break;
+      case "paper":
+        papers += 1;
+        break;
+      case "explore-paper":
+        explorePapers += 1;
+        break;
+      case "news":
+        news += 1;
+        break;
+      case "artifact-selection":
+        selections += 1;
+        break;
+      default: {
+        const _exhaustive: never = ref;
+        void _exhaustive;
+      }
+    }
   }
-  return { workspaces, papers, explorePapers, news };
+  return { workspaces, papers, explorePapers, news, selections };
 }
 
 export function buildWorkspaceMentionLabel(workspaceName: string): string {
@@ -493,6 +556,18 @@ export function buildExternalPaperMentionLabel(paperTitle: string): string {
 
 /** Berita Explore — label = judul saja (format sama dgn paper eksternal). */
 export const buildNewsMentionLabel = buildExternalPaperMentionLabel;
+
+/**
+ * Label pill untuk pilihan blok editor ("Tanya Astra"). Pakai cuplikan teks bila ada
+ * (`❝ "kutipan…"`, clamp 24 char); kalau pilihan kosong-teks (mis. heading/embed), pakai jumlah
+ * blok (`❝ N blok`). Prefiks `❝` membedakannya secara visual dari pill workspace/paper.
+ */
+export function buildSelectionMentionLabel(excerpt: string, blockCount = 0): string {
+  const trimmed = (excerpt ?? "").replace(/\s+/g, " ").trim();
+  if (trimmed) return `❝ ${messagePreview(trimmed, 24)}`;
+  if (blockCount > 0) return `❝ ${blockCount} blok`;
+  return "❝ Pilihan";
+}
 
 /** Inline mention markers (private-use sentinels) — keep pills inline in sent text. */
 export const MENTION_MARKER_OPEN = String.fromCharCode(0xe000);

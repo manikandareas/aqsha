@@ -50,6 +50,7 @@ export const threads = new Elysia({ prefix: "/threads" })
         artifactIds: body.artifactIds,
         paperKeys: body.paperKeys,
         feedItemIds: body.feedItemIds,
+        selections: body.selections,
       });
     },
     {
@@ -60,6 +61,16 @@ export const threads = new Elysia({ prefix: "/threads" })
         // Sumber Explore publik yang disematkan langsung (paper by key / berita by id).
         paperKeys: t.Optional(t.Array(t.String())),
         feedItemIds: t.Optional(t.Array(t.String())),
+        // Pilihan blok editor ("Tanya Astra") — blok spesifik artifact markdown + cuplikan.
+        selections: t.Optional(
+          t.Array(
+            t.Object({
+              artifactId: t.String(),
+              blockIds: t.Array(t.String()),
+              excerpt: t.String(),
+            }),
+          ),
+        ),
       }),
     },
   )

@@ -21,6 +21,8 @@ export default defineConfig({
     "src/rag.service.ts",
     "src/research/index.ts",
     "src/artifact.service.ts",
+    "src/astra-gateway.ts",
+    "src/doc-ai.service.ts",
     "src/workspace.service.ts",
     "src/context.service.ts",
   ],
@@ -32,5 +34,5 @@ export default defineConfig({
   clean: true,
   dts: false,
   sourcemap: false,
-  external: ["@aqsha/db"],
+  external: ["@aqsha/db", "@aqsha/chat-core"],
 });

@@ -8,6 +8,7 @@ import { listWorkspaces } from "./list-workspaces";
 import { lookupDoi } from "./lookup-doi";
 import { proposeArtifact } from "./propose-artifact";
 import { renameWorkspace } from "./rename-workspace";
+import { requestDocumentEdit } from "./request-document-edit";
 import { saveUrl } from "./save-url";
 import { searchArxiv } from "./search-arxiv";
 import { searchPapers } from "./search-papers";
@@ -23,6 +24,8 @@ export const readTools = {
   list_workspaces: listWorkspaces,
   get_render_payload: getRenderPayload,
   search_thread_documents: searchThreadDocuments,
+  // Sinyal picu AI editor native (Fase 3.5) — TANPA write DB; penyuntingan + billing dijaga route.
+  request_document_edit: requestDocumentEdit,
 };
 
 /** Tool mutasi data app. `delete_artifact` = approval-card; sisanya konfirmasi percakapan. */

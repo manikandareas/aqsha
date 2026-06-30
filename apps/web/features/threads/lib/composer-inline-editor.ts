@@ -159,15 +159,31 @@ export function createContextChipElement(ref: ContextRef) {
   span.contentEditable = "false";
   span.dataset.chip = "context";
   span.dataset.kind = ref.kind;
-  if (ref.kind === "workspace") {
-    span.dataset.workspaceId = ref.workspaceId;
-  } else if (ref.kind === "paper") {
-    span.dataset.workspaceId = ref.workspaceId;
-    span.dataset.artifactId = ref.artifactId;
-  } else if (ref.kind === "explore-paper") {
-    span.dataset.paperKey = ref.paperKey;
-  } else {
-    span.dataset.feedItemId = ref.feedItemId;
+  switch (ref.kind) {
+    case "workspace":
+      span.dataset.workspaceId = ref.workspaceId;
+      break;
+    case "paper":
+      span.dataset.workspaceId = ref.workspaceId;
+      span.dataset.artifactId = ref.artifactId;
+      break;
+    case "explore-paper":
+      span.dataset.paperKey = ref.paperKey;
+      break;
+    case "news":
+      span.dataset.feedItemId = ref.feedItemId;
+      break;
+    case "artifact-selection":
+      // blok editor terpilih (pisahkan blockIds dengan koma; excerpt utuh).
+      span.dataset.artifactId = ref.artifactId;
+      span.dataset.blockIds = ref.blockIds.join(",");
+      span.dataset.excerpt = ref.excerpt;
+      break;
+    default: {
+      // Exhaustiveness: kind ContextRef baru jadi error compile di sini.
+      const _exhaustive: never = ref;
+      void _exhaustive;
+    }
   }
   span.dataset.label = ref.label;
   span.className = inlinePillClass("context");
@@ -210,6 +226,13 @@ export function extractContextRefsFromEditor(root: HTMLElement): ContextRef[] {
       const feedItemId = chip.dataset.feedItemId;
       if (!feedItemId) return;
       push({ kind: "news", feedItemId, label });
+      return;
+    }
+    if (kind === "artifact-selection") {
+      const artifactId = chip.dataset.artifactId;
+      if (!artifactId) return;
+      const blockIds = (chip.dataset.blockIds ?? "").split(",").filter(Boolean);
+      push({ kind: "artifact-selection", artifactId, blockIds, excerpt: chip.dataset.excerpt ?? "", label });
     }
   });
   return refs;

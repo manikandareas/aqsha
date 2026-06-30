@@ -19,12 +19,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^2",
     "@aqsha/db": "workspace:*",
     "@aqsha/services": "workspace:*",
+    "@blocknote/xl-ai": "0.51.4",
     "@clerk/backend": "^3.7.0",
     "@elysiajs/cors": "^1.4.2",
     "@elysiajs/eden": "^1.4.9",
     "@elysiajs/openapi": "^1.4.15",
+    "ai": "^6",
     "bullmq": "^5.79.0",
     "elysia": "^1.4.29",
     "ioredis": "^5.11.1",

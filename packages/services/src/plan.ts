@@ -36,7 +36,8 @@ export type CreditFeature =
   | "deep_research"
   | "external_search"
   | "sandbox_compute"
-  | "citation_verify";
+  | "citation_verify"
+  | "doc_ai_edit";
 
 export type PlanDefinition = {
   key: PlanKey;
@@ -237,6 +238,8 @@ export function estimateCredits(args: {
   if (args.feature === "citation_verify") return 0;
   if (args.feature === "external_search") return 2;
   if (args.feature === "pro_chat") return Math.max(1, Math.ceil(totalTokens / PRO_CHAT_TOKENS_PER_CREDIT));
+  // normal_chat + doc_ai_edit (edit dokumen AI native BlockNote → model Lite Astra) → rate Lite
+  // berbasis token aktual. Gate plan-nya juga = Lite (requiredPlanForFeature default "free").
   return Math.max(1, Math.ceil(totalTokens / NORMAL_CHAT_TOKENS_PER_CREDIT));
 }
 

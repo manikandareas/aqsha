@@ -1,7 +1,11 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import type { AgentKind } from "@aqsha/chat-core";
+import { resolveAstraGateway } from "@aqsha/services/astra-gateway";
 import type { RequestContext } from "@mastra/core/request-context";
 import { agentKindFromRequestContext } from "./lib/tool-context";
+
+// SSOT gateway Astra (env + default model id). Dipakai bareng route doc-AI (`apps/api`).
+const gateway = resolveAstraGateway();
 
 /**
  * Model Lite Astra (Fase 0/1) — dipakai root agent (dan, nanti, subagent /deep).
@@ -17,11 +21,11 @@ import { agentKindFromRequestContext } from "./lib/tool-context";
  * `MastraModelConfig`.
  */
 const openai = createOpenAI({
-  ...(process.env.OPENAI_BASE_URL ? { baseURL: process.env.OPENAI_BASE_URL } : {}),
-  ...(process.env.OPENAI_API_KEY ? { apiKey: process.env.OPENAI_API_KEY } : {}),
+  ...(gateway.baseURL ? { baseURL: gateway.baseURL } : {}),
+  ...(gateway.apiKey ? { apiKey: gateway.apiKey } : {}),
 });
 
-export const liteModel = openai.chat(process.env.AQSHA_LITE_MODEL ?? "gpt-4o");
+export const liteModel = openai.chat(gateway.liteModelId);
 
 /**
  * Model Pro Astra — model penalaran lebih kuat untuk tier Pro (`AQSHA_PRO_MODEL`). Fallback ke
@@ -30,9 +34,7 @@ export const liteModel = openai.chat(process.env.AQSHA_LITE_MODEL ?? "gpt-4o");
  * (`reasoning: "high"`); efektif hanya bila model ini mendukung penalaran (LanguageModelV4), no-op
  * pada model non-penalaran seperti gpt-4o.
  */
-export const proModel = openai.chat(
-  process.env.AQSHA_PRO_MODEL ?? process.env.AQSHA_LITE_MODEL ?? "gpt-4o",
-);
+export const proModel = openai.chat(process.env.AQSHA_PRO_MODEL ?? gateway.liteModelId);
 
 /**
  * Apakah model Pro benar-benar disetel (`AQSHA_PRO_MODEL` eksplisit)? Saat `false`, Pro mem-fallback ke

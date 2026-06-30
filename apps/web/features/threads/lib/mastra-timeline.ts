@@ -249,6 +249,22 @@ export function settleAssistantTurn(state: MastraTimelineState): MastraTimelineS
 }
 
 /**
+ * Apakah pesan asisten terakhir sudah memuat output bermakna (teks non-kosong / tool / artifact /
+ * usulan)? Dipakai `error` chunk untuk membedakan kegagalan tanpa-output (tampilkan banner) dari
+ * error-ekor pasca-output (settle bersih → konsisten dengan tampilan setelah refresh).
+ */
+function lastAssistantHasOutput(state: MastraTimelineState): boolean {
+  const last = state.messages.findLast((m) => m.role === "assistant");
+  if (!last) return false;
+  return last.parts.some(
+    (p) =>
+      p.kind === "tool" ||
+      p.kind === "artifact" ||
+      (p.kind === "text" && p.text.trim().length > 0),
+  );
+}
+
+/**
  * Mulai regenerate (G6): buang pesan assistant terakhir (jawaban lama) lalu tambah placeholder
  * assistant streaming baru — TANPA menambah bubble user duplikat (pertahankan pesan user terakhir).
  */
@@ -396,6 +412,11 @@ export function reduceMastraChunk(
       return settleAssistantTurn(state);
 
     case "error":
+      // Tail-error: bila turn SUDAH menghasilkan output (teks/tool/artifact/usulan) lalu stream
+      // error di langkah lanjutan kosong (mis. provider hiccup pasca tool-call), JANGAN tampilkan
+      // banner — settle bersih agar live = state setelah refresh (yang merender turn tersimpan tanpa
+      // error). Error baru ditampilkan saat turn benar-benar gagal tanpa output sama sekali.
+      if (lastAssistantHasOutput(state)) return settleAssistantTurn(state);
       return { ...settleAssistantTurn(state), error: extractError(payload.error) };
     case "tripwire":
       return {
