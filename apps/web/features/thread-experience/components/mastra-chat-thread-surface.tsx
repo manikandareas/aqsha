@@ -4,19 +4,10 @@ import { Button } from "@aqsha/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { m, useReducedMotion } from "motion/react";
 import { useMemo, useRef, useState } from "react";
+import { ChevronRightIcon } from "@aqsha/ui/icons";
 import { ConversationContent } from "@/components/ai-elements/conversation-content";
 import { Conversation } from "@/components/ai-elements/conversation-root";
 import { ConversationScrollButton } from "@/components/ai-elements/conversation-scroll-button";
-import {
-  Plan,
-  PlanAction,
-  PlanContent,
-  PlanDescription,
-  PlanFooter,
-  PlanHeader,
-  PlanTitle,
-  PlanTrigger,
-} from "@/components/ai-elements/plan";
 import { HomeExploreBento } from "@/features/discovery/components/home-explore-bento";
 import {
   useSendStatus,
@@ -35,6 +26,7 @@ import { MessageList } from "@/features/threads/components/message-list";
 import { bucketMessageAttachments } from "@/features/threads/lib/attachment-buckets";
 import { type AgentKind, ASTRA_AGENT_ID, useMastraClient } from "@/features/threads/lib/mastra-client";
 import type { TimelineMessage } from "@/features/threads/lib/timeline-types";
+import { buildThreadPanelLookups } from "@/features/threads/lib/thread-panel-data";
 import { mastraMessagesToTimeline } from "@/features/threads/lib/mastra-timeline";
 import { useMastraAgent } from "@/features/threads/lib/use-mastra-agent";
 import type { ResearchSource } from "@/features/threads/types";
@@ -44,6 +36,8 @@ import { panelBodyPaddingClass, threadTranscriptColumnClass } from "@/lib/panel-
 import { cn } from "@/lib/utils";
 import type { ContextRef } from "@aqsha/chat-core";
 import { useAmbientContextRefs } from "./composer-context-mentions";
+import { useRegisterThreadPanelData, useThreadPanel } from "./thread-panel-context";
+import { LIVE_PLAN_KEY } from "../utils/thread-panel-model";
 import { ComposerHeroState } from "./composer-hero-state";
 import { ExploreHandwrittenCue } from "./explore-handwritten-cue";
 import { CenteredLoading } from "./shared";
@@ -187,12 +181,41 @@ function MastraChatInner({
   // input berubah, jadi tak perlu memo manual. Scan-nya kecil (O(pesan-user × upload), array mungil).
   const attachmentsByMessage = bucketMessageAttachments(agent.messages, threadArtifacts);
 
+  const threadPanel = useThreadPanel();
+
+  // Id-keyed detail lookups for the right-side panels (sources / search / step / plan).
+  // The surface owns the parsed timeline + DB sources + plan gate, so it builds them
+  // here and publishes them to `ThreadPanelProvider`; no-op in compact panels (no
+  // provider). While the plan gate is live, the panel mirrors its Setujui/Tolak actions.
+  const { messages: agentMessages, planGate, resolvePlan } = agent;
+  const panelLookups = useMemo(() => {
+    const lookups = buildThreadPanelLookups(agentMessages, sources, planGate);
+    // While a plan gate is live, mirror its Setujui/Tolak into the live plan entry so the
+    // panel opened from the gate card carries the same actions.
+    const livePlan = planGate ? lookups.plans.get(LIVE_PLAN_KEY) : undefined;
+    if (livePlan) {
+      lookups.plans.set(LIVE_PLAN_KEY, {
+        ...livePlan,
+        resolve: (approve: boolean) => void resolvePlan(approve),
+      });
+    }
+    return lookups;
+  }, [agentMessages, sources, planGate, resolvePlan]);
+  useRegisterThreadPanelData(panelLookups);
+
   // Kirim pertama dari thread baru → bump URL ke /app/threads/<id> (history.replaceState, tanpa
   // navigasi Next → komponen tetap mounted) supaya refresh me-resume thread. Klien sudah tahu id.
   const bumpUrl = () => {
     if (!boundRef.current && typeof window !== "undefined") {
       boundRef.current = true;
-      window.history.replaceState(window.history.state, "", `/app/threads/${threadId}`);
+      // Preserve the query string (nuqs `?panel=` detail-panel state) — bumping to a
+      // bare path would strip an open panel from the URL while nuqs React state still
+      // holds it, desyncing them and closing the panel on the next refresh.
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `/app/threads/${threadId}${window.location.search}`,
+      );
     }
   };
 
@@ -249,46 +272,43 @@ function MastraChatInner({
       </div>
     ) : null;
 
-  // Plan-gate `/deep` (Workflow suspended di `approve-plan`) — kartu rencana HITL: AI Elements `Plan`
-  // (collapsible) + tombol aksi di footer, dirender DI ATAS composer (sejajar approvalCards).
+  // Plan-gate `/deep` (Workflow suspended di `approve-plan`) — kartu rencana HITL. BUKAN collapsible:
+  // kartu statis (judul + ringkasan + Setujui/Tolak). Header bisa diklik → buka panel rencana penuh
+  // (sub-pertanyaan + aksi yang sama), bukan expand inline. Dirender DI ATAS composer (sejajar approvalCards).
   const planGateCard = agent.planGate ? (
     <div className={cn(threadTranscriptColumnClass)}>
-      <Plan defaultOpen>
-        <PlanHeader>
+      <div className="rounded-xl border border-border bg-card p-4">
+        {threadPanel?.openPlanPanel ? (
+          <button
+            type="button"
+            onClick={() => threadPanel.openPlanPanel(LIVE_PLAN_KEY)}
+            className="group -m-1 flex w-full items-start justify-between gap-3 rounded-lg p-1 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <div className="grid min-w-0 gap-1">
+              <span className="text-sm font-semibold text-foreground">Rencana riset</span>
+              <span className="text-[13px] text-muted-foreground">
+                {`${agent.planGate.subQuestions.length} sub-pertanyaan riset · ketuk untuk lihat detail`}
+              </span>
+            </div>
+            <ChevronRightIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground/60 transition-colors group-hover:text-muted-foreground" />
+          </button>
+        ) : (
           <div className="grid gap-1">
-            <PlanTitle>Rencana riset</PlanTitle>
-            <PlanDescription>
+            <span className="text-sm font-semibold text-foreground">Rencana riset</span>
+            <span className="text-[13px] text-muted-foreground">
               {`${agent.planGate.subQuestions.length} sub-pertanyaan riset · tinjau sebelum menyetujui`}
-            </PlanDescription>
+            </span>
           </div>
-          <PlanAction>
-            <PlanTrigger />
-          </PlanAction>
-        </PlanHeader>
-        <PlanContent className="space-y-3">
-          <p className="whitespace-pre-wrap text-muted-foreground text-sm">{agent.planGate.plan}</p>
-          {agent.planGate.subQuestions.length > 0 ? (
-            <ul className="list-disc space-y-1 pl-4 text-[13px] text-muted-foreground">
-              {agent.planGate.subQuestions.map((q, i) => (
-                <li key={`${i}-${q.slice(0, 24)}`}>{q}</li>
-              ))}
-            </ul>
-          ) : null}
-        </PlanContent>
-        <PlanFooter className="flex-col items-start gap-2">
-          <p className="text-[13px] text-muted-foreground">
-            Setujui untuk memulai riset, atau tolak untuk membatalkan.
-          </p>
-          <div className="flex gap-2">
-            <Button size="sm" onClick={() => void agent.resolvePlan(true)}>
-              Setujui
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => void agent.resolvePlan(false)}>
-              Tolak
-            </Button>
-          </div>
-        </PlanFooter>
-      </Plan>
+        )}
+        <div className="mt-3 flex gap-2">
+          <Button size="sm" onClick={() => void agent.resolvePlan(true)}>
+            Setujui
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => void agent.resolvePlan(false)}>
+            Tolak
+          </Button>
+        </div>
+      </div>
     </div>
   ) : null;
 

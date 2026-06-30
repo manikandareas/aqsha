@@ -114,8 +114,8 @@ export function ArtifactDetailView({
 
   const detail = data.artifact;
   const sidebarArtifact = detail?.artifact as ArtifactSidebarRecord | undefined;
-  const detailIsMarkdown = detail?.artifact.artifactType === "markdown";
-  const resolvedWorkspaceId = workspaceIdProp ?? detail?.artifact.workspaceId ?? "";
+  const detailIsMarkdown = detail?.artifact?.artifactType === "markdown";
+  const resolvedWorkspaceId = workspaceIdProp ?? detail?.artifact?.workspaceId ?? "";
   const renderPayloadQuery = useArtifactRender(artifactId);
   const activeRenderPayload = (renderPayloadQuery.data ?? data.renderPayload ?? null) as ArtifactRenderPayload | null;
   const activeContentError = renderPayloadQuery.error
@@ -123,11 +123,15 @@ export function ArtifactDetailView({
     : null;
   // The page route guards against a workspace/artifact mismatch in the URL; the
   // panel always shows the artifact's own workspace, so there is nothing to
-  // mismatch against.
+  // mismatch against. `ArtifactService.get` now returns headless artifacts
+  // (`workspaceId=null`, e.g. chat-upload attachments) to the owner, so the page
+  // variant must treat any artifact whose workspace doesn't match the URL —
+  // including a null/headless one — as not-found (the workspace route is
+  // workspace-scoped by definition; headless attachments open via the reader/panel).
   const workspaceMismatch =
     variant === "page" &&
-    Boolean(detail?.artifact.workspaceId) &&
-    detail!.artifact.workspaceId !== workspaceIdProp;
+    detail?.artifact != null &&
+    detail.artifact.workspaceId !== workspaceIdProp;
   const [documentSaveState, dispatchDocumentSave] = useReducer(autosaveReducer, initialAutosaveState);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const markdownBlocksJson =
@@ -146,7 +150,7 @@ export function ArtifactDetailView({
     dispatchDocumentSave({ type: "reset", json: markdownBlocksJson });
   }, [artifactId, markdownBlocksJson]);
 
-  const ready = Boolean(detail) && !workspaceMismatch;
+  const ready = Boolean(detail?.artifact) && !workspaceMismatch;
   const isMarkdown = detailIsMarkdown;
   const workspaceName = data.workspaces.find(
     (workspace) => workspace._id === resolvedWorkspaceId,

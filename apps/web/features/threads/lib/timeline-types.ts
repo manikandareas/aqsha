@@ -102,5 +102,9 @@ export type TimelineMessage = {
    * dipakai langsung untuk menampilkan kartu lampiran live — EKSAK, tanpa menebak via jendela waktu
    * (lihat `bucketMessageAttachments`). Pesan rehydrate tak punya ini → pakai jendela waktu server. */
   attachmentIds?: string[];
+  /** Sumber bernomor laporan `/deep` (dari `metadata.deepProcess.sources`) — fallback DB-independen
+   * untuk pill `[n]` + panel "Sumber" saat fetch `research_sources` live meleset (lihat
+   * `messageSourceCards`). Hanya pesan laporan `/deep` rehydrate. */
+  reportSources?: SourceCardData[];
   parts: TimelinePart[];
 };

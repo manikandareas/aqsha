@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRightIcon, ChevronDownIcon, Link2Icon } from "@aqsha/ui/icons";
+import { ArrowUpRightIcon, ChevronDownIcon, ChevronRightIcon, Link2Icon } from "@aqsha/ui/icons";
 import {
   Collapsible,
   CollapsibleContent,
@@ -49,16 +49,17 @@ function SourceRow({ source }: { source: SourceCardData }) {
 }
 
 /**
- * Daftar sumber inline per-turn (collapsible "N sumber") — ditampilkan tepat di bawah jawaban yang
- * menghasilkannya. Sumber = bukti yang dikumpulkan tool Astra (`search_web`/`search_arxiv`/dst.).
- * Pure: pemanggil menyiapkan kartu (agregasi hasil tool untuk chat normal, atau `research_sources`
- * bernomor `[n]` untuk deep). Kosong → tak render.
+ * Sumber per-turn di bawah jawaban. Bila ada slot panel (`onOpen`) → tampil sebagai TRIGGER
+ * tunggal "N sumber" yang membuka panel daftar sumber (tiap item → URL aslinya). Tanpa slot
+ * (panel chat compact) → fallback collapsible inline lama. Pemanggil menyiapkan kartu; kosong → tak render.
  */
 export function InlineSources({
   sources,
+  onOpen,
   className,
 }: {
   sources: SourceCardData[];
+  onOpen?: () => void;
   className?: string;
 }) {
   // Urut sesuai nomor sitasi [n] (yang belum bernomor di belakang) supaya cocok urutan prosa.
@@ -72,6 +73,24 @@ export function InlineSources({
     [sources],
   );
   if (sorted.length === 0) return null;
+
+  if (onOpen) {
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        className={cn(
+          "group -mx-1.5 flex items-center gap-1.5 rounded-[8px] px-1.5 py-1 text-left text-muted-foreground text-xs transition-colors hover:bg-muted/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          className,
+        )}
+      >
+        <Link2Icon className="size-3.5 shrink-0" />
+        <span className="font-medium">{sorted.length} sumber</span>
+        <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground/60 transition-colors group-hover:text-muted-foreground" />
+      </button>
+    );
+  }
+
   return (
     <Collapsible className={cn("min-w-0", className)}>
       <CollapsibleTrigger className="group flex items-center gap-1.5 text-left text-muted-foreground text-xs transition-colors hover:text-foreground">

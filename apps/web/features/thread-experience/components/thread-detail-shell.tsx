@@ -21,6 +21,10 @@ import { WorkspaceLibrarySurface } from "@/features/workspaces/components/worksp
 import { WorkspaceBoardToolbar } from "@/features/workspaces/components/workspace-board-toolbar";
 import { useWorkspaceLibraryDialogState } from "@/features/workspaces/hooks/use-workspace-library-dialogs";
 import { ArtifactDetailPanel } from "@/features/workspaces/components/artifact-detail-view";
+import { PlanDetailPanel } from "./plan-detail-panel";
+import { SearchStepPanel } from "./search-step-panel";
+import { SourcesListPanel } from "./sources-list-panel";
+import { StepDetailPanel } from "./step-detail-panel";
 import { useThreadExperienceData } from "../api/use-thread-experience-data";
 import type { ThreadShellLayoutProps } from "./component-types";
 import {
@@ -143,16 +147,20 @@ function ThreadDetailShellView({
     )
   ) : null;
 
-  const subagentPanel = null; // Stub: subagent drill-down belum dipersist di eve V2.
-
+  // A clicked message part (artifact / source / sub-question / plan) REPLACES the
+  // workspace-context panel in the single slot; closing it collapses the slot (no
+  // back-to-context — the header toggle reopens context).
   const panelContent =
     mode.kind === "artifact" ? (
-      <ArtifactDetailPanel
-        artifactId={mode.artifactId}
-        onClose={panel?.closePanel}
-      />
-    ) : mode.kind === "subagent" ? (
-      subagentPanel ?? contextContent
+      <ArtifactDetailPanel artifactId={mode.artifactId} onClose={panel?.closePanel} />
+    ) : mode.kind === "sources" ? (
+      <SourcesListPanel messageId={mode.messageId} />
+    ) : mode.kind === "search" ? (
+      <SearchStepPanel turnId={mode.turnId} subQuestionIndex={mode.subQuestionIndex} />
+    ) : mode.kind === "step" ? (
+      <StepDetailPanel toolCallId={mode.toolCallId} />
+    ) : mode.kind === "plan" ? (
+      <PlanDetailPanel turnId={mode.turnId} />
     ) : (
       contextContent
     );

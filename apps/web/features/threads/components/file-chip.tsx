@@ -14,32 +14,55 @@ export type FileChipData = {
 
 /**
  * Kartu file tunggal — ikon dokumen di blok biku biru + nama berkas (tebal). `onRemove` →
- * tombol X bundar (composer, staged). Tanpa `onRemove` = read-only (message row). `pending`
- * (index async) → spinner di blok ikon.
+ * tombol X bundar (composer, staged). `onOpen` (message row, mutually exclusive dengan
+ * `onRemove`) → seluruh chip jadi tombol yang membuka reader artifact di panel. Tanpa keduanya
+ * = read-only. `pending` (index async) → spinner di blok ikon.
  */
 export function FileChip({
   title,
   indexingStatus,
   onRemove,
+  onOpen,
   className,
-}: FileChipData & { onRemove?: () => void; className?: string }) {
+}: FileChipData & { onRemove?: () => void; onOpen?: () => void; className?: string }) {
   const pending = indexingStatus === "pending";
+  const base =
+    "inline-flex max-w-[13rem] items-center gap-2 rounded-xl border border-border bg-card p-1.5 pr-2.5";
+  const icon = (
+    <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground">
+      {pending ? (
+        <Loader2Icon className="size-4 animate-spin" />
+      ) : (
+        <FileTextIcon className="size-4" />
+      )}
+    </span>
+  );
+  const label = (
+    <span className="min-w-0 truncate text-xs font-semibold text-foreground">{title}</span>
+  );
+
+  if (onOpen) {
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={`Buka ${title}`}
+        className={cn(
+          base,
+          "text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          className,
+        )}
+      >
+        {icon}
+        {label}
+      </button>
+    );
+  }
 
   return (
-    <div
-      className={cn(
-        "inline-flex max-w-[13rem] items-center gap-2 rounded-xl border border-border bg-card p-1.5 pr-2.5",
-        className,
-      )}
-    >
-      <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground">
-        {pending ? (
-          <Loader2Icon className="size-4 animate-spin" />
-        ) : (
-          <FileTextIcon className="size-4" />
-        )}
-      </span>
-      <span className="min-w-0 truncate text-xs font-semibold text-foreground">{title}</span>
+    <div className={cn(base, className)}>
+      {icon}
+      {label}
       {onRemove ? (
         <button
           type="button"

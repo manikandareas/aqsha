@@ -3,6 +3,7 @@
 import { parseMentionSegments, stripMentionMarkers } from "@aqsha/chat-core";
 import { CheckIcon, ChevronDownIcon, CopyIcon, RotateCcwIcon, SparklesIcon } from "@aqsha/ui/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useThreadPanel } from "@/features/thread-experience/components/thread-panel-context";
 import { Reasoning } from "@/components/ai-elements/reasoning";
 import { Response } from "@/components/ai-elements/response";
 import { Shimmer } from "@/components/ai-elements/shimmer";
@@ -12,12 +13,18 @@ import { cn } from "@/lib/utils";
 import type { MessageAttachment } from "../lib/attachment-buckets";
 import { buildCitationMap } from "../lib/citation-markdown";
 import { MENTION_PILL_SHAPE } from "../lib/composer-inline-editor";
-import { dedupeCards, researchSourceToCard } from "../lib/source-card";
+import { dedupeCards } from "../lib/source-card";
+import { messageSourceCards } from "../lib/thread-panel-data";
 import type { SourceCardData, TimelineMessage, TimelinePart } from "../lib/timeline-types";
 import type { ResearchSource } from "../types";
 import { ChatArtifactCard } from "./chat-artifact-card";
 import { FileChip } from "./file-chip";
 import { ElapsedLabel } from "./elapsed-label";
+import {
+  MessageInteractionsProvider,
+  useMessageInteractions,
+  type MessageInteractions,
+} from "./message-interactions";
 import { InlineSources } from "./sources-panel";
 import { ToolRow } from "./tool-row";
 
@@ -48,6 +55,24 @@ export function MessageList({
   /** Ulangi (regenerate) turn terakhir — kirim ulang pesan user terakhir sebagai turn baru. */
   onRegenerate?: () => void;
 }) {
+  // Bridge the right-side detail-panel controller to in-message cards (source / artifact /
+  // sub-question / plan). Null outside the full thread shell (compact chat panels) → cards
+  // keep their default behaviour. Openers are stable, so this value is stable when idle.
+  const panel = useThreadPanel();
+  const interactions = useMemo<MessageInteractions>(
+    () =>
+      panel
+        ? {
+            openArtifact: panel.openArtifactPanel,
+            openSources: panel.openSourcesPanel,
+            openSearch: panel.openSearchPanel,
+            openStep: panel.openStepPanel,
+            openPlan: panel.openPlanPanel,
+          }
+        : {},
+    [panel],
+  );
+
   if (messages.length === 0 && !pending) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
@@ -63,21 +88,23 @@ export function MessageList({
   const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant")?.id;
 
   return (
-    <div className="flex flex-col gap-6">
-      {messages.map((m) =>
-        m.role === "user" ? (
-          <UserBubble key={m.id} parts={m.parts} attachments={attachmentsByMessage?.get(m.id)} />
-        ) : (
-          <AssistantMessage
-            key={m.id}
-            message={m}
-            sources={m.turnId ? sourcesByTurn?.get(m.turnId) : undefined}
-            onRegenerate={!busy && m.id === lastAssistantId ? onRegenerate : undefined}
-          />
-        ),
-      )}
-      {showTyping ? <ThinkingRow label="Astra sedang berpikir…" /> : null}
-    </div>
+    <MessageInteractionsProvider value={interactions}>
+      <div className="flex flex-col gap-6">
+        {messages.map((m) =>
+          m.role === "user" ? (
+            <UserBubble key={m.id} parts={m.parts} attachments={attachmentsByMessage?.get(m.id)} />
+          ) : (
+            <AssistantMessage
+              key={m.id}
+              message={m}
+              sources={m.turnId ? sourcesByTurn?.get(m.turnId) : undefined}
+              onRegenerate={!busy && m.id === lastAssistantId ? onRegenerate : undefined}
+            />
+          ),
+        )}
+        {showTyping ? <ThinkingRow label="Astra sedang berpikir…" /> : null}
+      </div>
+    </MessageInteractionsProvider>
   );
 }
 
@@ -88,6 +115,8 @@ function UserBubble({
   parts: TimelinePart[];
   attachments?: MessageAttachment[];
 }) {
+  // Lampiran upload = artifact (id-nya artifact id), jadi klik chip buka reader di panel.
+  const { openArtifact } = useMessageInteractions();
   const text = parts
     .filter((p): p is Extract<TimelinePart, { kind: "text" }> => p.kind === "text")
     .map((p) => p.text)
@@ -105,6 +134,7 @@ function UserBubble({
               title={a.title}
               mimeType={a.mimeType}
               indexingStatus={a.indexingStatus}
+              onOpen={openArtifact ? () => openArtifact(a.id) : undefined}
             />
           ))}
         </div>
@@ -168,6 +198,7 @@ function AssistantMessage({
   sources?: ResearchSource[];
   onRegenerate?: () => void;
 }) {
+  const { openSources } = useMessageInteractions();
   const streaming = Boolean(message.streaming);
   const texts = message.parts.filter(
     (p): p is Extract<TimelinePart, { kind: "text" }> => p.kind === "text",
@@ -198,18 +229,15 @@ function AssistantMessage({
     return map.size > 0 ? map : undefined;
   }, [sources]);
 
-  // Kartu sumber pesan ini (sebelum dedup). Deep = baris `research_sources` bernomor `[n]`; chat normal
-  // = agregasi kartu dari hasil tiap tool `search_*` di pesan ini (stream + rehydrate, tanpa DB) yang
-  // membawa `citationNumber` dari `n` global per-turn. Dipakai DUA arah: peta sitasi (semua pasangan
-  // nomor→kartu) dan panel "Sumber" (di-dedup by url/doi).
-  const citationCards = useMemo<SourceCardData[]>(() => {
-    if (sources && sources.length > 0) return sources.map(researchSourceToCard);
-    const flat: SourceCardData[] = [];
-    for (const p of message.parts) {
-      if (p.kind === "tool" && p.model.detail?.kind === "search-flat") flat.push(...p.model.detail.sources);
-    }
-    return flat;
-  }, [sources, message.parts]);
+  // Kartu sumber pesan ini (sebelum dedup) — SATU sumber kebenaran (`messageSourceCards`) yang dibagi
+  // dengan panel detail (`buildThreadPanelLookups`) supaya pemicu "Sumber" inline & panel tak pernah
+  // berbeda. Precedence: `research_sources` per-turn (deep) → kartu `search-flat` pesan (chat normal) →
+  // sumber laporan deep dari metadata (fallback bila fetch DB meleset). Dipakai DUA arah: peta sitasi
+  // (semua pasangan nomor→kartu) dan panel "Sumber" (di-dedup by url/doi).
+  const citationCards = useMemo<SourceCardData[]>(
+    () => messageSourceCards(message, sources),
+    [message, sources],
+  );
 
   // Panel "Sumber" (collapsible di bawah jawaban) — kartu unik (dedup lintas-tool by key).
   const panelSources = useMemo(() => dedupeCards(citationCards), [citationCards]);
@@ -234,6 +262,7 @@ function AssistantMessage({
           streaming={streaming}
           toolSteps={toolSteps}
           sourcesBySubQ={sourcesBySubQ}
+          turnId={message.turnId}
         />
       ) : null}
 
@@ -245,7 +274,12 @@ function AssistantMessage({
         part.kind === "artifact" ? <ChatArtifactCard key={part.id} model={part.model} /> : null,
       )}
 
-      {!streaming && panelSources.length > 0 ? <InlineSources sources={panelSources} /> : null}
+      {!streaming && panelSources.length > 0 ? (
+        <InlineSources
+          sources={panelSources}
+          onOpen={openSources ? () => openSources(message.id) : undefined}
+        />
+      ) : null}
 
       {hasAnswer && !streaming ? (
         <MessageActions text={answer?.text ?? ""} onRegenerate={onRegenerate} />
@@ -268,11 +302,14 @@ function ProcessBlock({
   streaming,
   toolSteps,
   sourcesBySubQ,
+  turnId,
 }: {
   parts: TimelinePart[];
   streaming: boolean;
   toolSteps: number;
   sourcesBySubQ?: Map<number, ResearchSource[]>;
+  /** Run id of this `/deep` turn — scopes the search/plan detail panels. */
+  turnId?: string;
 }) {
   const [override, setOverride] = useState<boolean | null>(null);
   const prevStreaming = useRef(streaming);
@@ -301,7 +338,12 @@ function ProcessBlock({
       <CollapsibleContent className="overflow-hidden">
         <div className="mt-2 flex min-w-0 flex-col gap-2.5 text-[13px]">
           {parts.map((part) => (
-            <ProcessPartView key={part.id} part={part} sourcesBySubQ={sourcesBySubQ} />
+            <ProcessPartView
+              key={part.id}
+              part={part}
+              sourcesBySubQ={sourcesBySubQ}
+              turnId={turnId}
+            />
           ))}
         </div>
       </CollapsibleContent>
@@ -312,11 +354,14 @@ function ProcessBlock({
 function ProcessPartView({
   part,
   sourcesBySubQ,
+  turnId,
 }: {
   part: TimelinePart;
   sourcesBySubQ?: Map<number, ResearchSource[]>;
+  turnId?: string;
 }) {
-  if (part.kind === "tool") return <ToolRow model={part.model} sourcesBySubQ={sourcesBySubQ} />;
+  if (part.kind === "tool")
+    return <ToolRow model={part.model} sourcesBySubQ={sourcesBySubQ} turnId={turnId} />;
   if (part.kind === "text") {
     // Teks antara (intermediate) yang diucapkan agen sebelum jawaban final.
     return <div className="whitespace-pre-wrap break-words text-muted-foreground">{part.text}</div>;

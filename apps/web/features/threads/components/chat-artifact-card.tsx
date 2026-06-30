@@ -8,20 +8,22 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useLinkArtifactToWorkspace } from "@/features/artifacts/api";
 import { WorkspacePicker } from "@/features/workspaces/components/workspace-picker";
 import type { ArtifactCardModel } from "../lib/timeline-types";
+import { useMessageInteractions } from "./message-interactions";
 
 /**
  * Kartu dokumen yang dibuat agen (Slice 6.5) — `propose_artifact` sukses. Artifact
  * BORN-HEADLESS (`workspaceId=null`): tawarkan Save-to-workspace (FolderIcon → picker →
- * `linkToWorkspace` api). Setelah tersimpan → badge "Tersimpan". Tanpa navigasi reader:
- * artifact headless belum punya rute workspace; deep-link menyusul saat ter-file.
+ * `linkToWorkspace` api). Setelah tersimpan → badge "Tersimpan". Klik judul → buka reader
+ * artifact di panel kanan (`openArtifact`); di panel chat compact (tanpa slot) tetap statis.
  */
 export function ChatArtifactCard({ model }: { model: ArtifactCardModel }) {
   const link = useLinkArtifactToWorkspace();
+  const { openArtifact } = useMessageInteractions();
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  return (
-    <div className="flex w-full min-w-0 items-start gap-2 rounded-[10px] border border-border/80 bg-card/40 px-3 py-2.5 text-left text-[13px] leading-5">
+  const titleBlock = (
+    <>
       <FileTextIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
       <span className="min-w-0 flex-1">
         <span className="line-clamp-2 break-words font-medium text-foreground">{model.title}</span>
@@ -29,6 +31,23 @@ export function ChatArtifactCard({ model }: { model: ArtifactCardModel }) {
           Dibuat · Dokumen
         </span>
       </span>
+    </>
+  );
+
+  return (
+    <div className="flex w-full min-w-0 items-start gap-2 rounded-[10px] border border-border/80 bg-card/40 px-3 py-2.5 text-left text-[13px] leading-5">
+      {openArtifact ? (
+        <button
+          type="button"
+          onClick={() => openArtifact(model.artifactId)}
+          aria-label={`Buka ${model.title}`}
+          className="-m-0.5 flex min-w-0 flex-1 items-start gap-2 rounded-md p-0.5 text-left transition-colors hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {titleBlock}
+        </button>
+      ) : (
+        <div className="flex min-w-0 flex-1 items-start gap-2">{titleBlock}</div>
+      )}
       {saved ? (
         <span className="inline-flex shrink-0 items-center gap-1 self-center px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
           <CheckIcon className="size-3.5" />

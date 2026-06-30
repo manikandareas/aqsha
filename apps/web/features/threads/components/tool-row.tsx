@@ -25,7 +25,6 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import type {
@@ -37,6 +36,8 @@ import type {
 import type { ResearchSource } from "../types";
 import { DeepSearchCards, SourceCardList } from "./deep-search-cards";
 import { ElapsedLabel } from "./elapsed-label";
+import { useMessageInteractions } from "./message-interactions";
+import { ScrollDetailTrigger } from "./scroll-detail-trigger";
 
 // Ikon semantik per tool (kosmetik — data: `model.name` selalu ada). Switch mengembalikan
 // JSX konkret (bukan komponen dinamis) supaya lolos react-compiler. Tool tak dikenal → wrench.
@@ -142,11 +143,15 @@ function toneClass(status: ToolStatus): string {
 export function ToolRow({
   model,
   sourcesBySubQ,
+  turnId,
 }: {
   model: ToolRowModel;
   /** Sumber `/deep` per `subQuestionIndex` (untuk detail step `search-literature`). */
   sourcesBySubQ?: Map<number, ResearchSource[]>;
+  /** Run id `/deep` pesan ini — men-scope panel rencana/pencarian per-run. */
+  turnId?: string;
 }) {
+  const { openStep, openPlan } = useMessageInteractions();
   const detail = model.detail;
   const hasBody = model.rows.length > 0 || Boolean(detail);
   const inputRows = model.rows.filter((row) => row.group === "input");
@@ -219,27 +224,44 @@ export function ToolRow({
       </CollapsibleTrigger>
       <CollapsibleContent className="overflow-hidden">
         {detail && detail.kind === "search" ? (
-          // Step pencarian deep: JANGAN bungkus seluruh body — tiap kartu sub-agen punya scroll sendiri
-          // (daftar sumber di-scroll per kartu), supaya beberapa kartu tetap kebaca bersamaan.
+          // Step pencarian deep: tiap kartu sub-agen jadi trigger panel sendiri (preview + buka panel).
           <div className="mt-1.5 text-[12px]">
-            <DeepSearchCards subSearches={detail.subSearches} sourcesBySubQ={sourcesBySubQ} />
+            <DeepSearchCards
+              subSearches={detail.subSearches}
+              sourcesBySubQ={sourcesBySubQ}
+              turnId={turnId}
+            />
           </div>
         ) : detail && detail.kind === "search-flat" ? (
-          // Tool `search_*` chat normal: kartu sumber hasil satu pencarian (live + rehydrate).
-          <div className="mt-1.5 text-[12px]">
-            <SourceCardList sources={detail.sources} />
-          </div>
-        ) : detail && (detail.kind === "plan" || detail.kind === "text") ? (
-          // Prosa panjang (rencana / bukti tandingan / verifikasi): box ber-scroll (max-h) + vignette.
-          <ScrollArea
-            vignette
-            className="mt-1.5 rounded-lg border bg-background"
-            viewportClassName="max-h-[140px]"
+          // Hasil tool `search_*` chat normal → preview, klik buka panel step (sumber → URL).
+          <ScrollDetailTrigger
+            className="mt-1.5"
+            onOpen={openStep ? () => openStep(model.toolCallId) : undefined}
           >
             <div className="text-[12px]">
+              <SourceCardList sources={detail.sources} />
+            </div>
+          </ScrollDetailTrigger>
+        ) : detail && detail.kind === "plan" ? (
+          // Rencana → preview, klik buka panel rencana penuh (+ sub-pertanyaan & aksi gate).
+          <ScrollDetailTrigger
+            className="mt-1.5"
+            onOpen={openPlan && turnId ? () => openPlan(turnId) : undefined}
+          >
+            <div className="p-2 text-[12px]">
               <DeepDetailBody detail={detail} />
             </div>
-          </ScrollArea>
+          </ScrollDetailTrigger>
+        ) : detail && detail.kind === "text" ? (
+          // Prosa panjang (bukti tandingan / verifikasi) → preview, klik buka panel step penuh.
+          <ScrollDetailTrigger
+            className="mt-1.5"
+            onOpen={openStep ? () => openStep(model.toolCallId) : undefined}
+          >
+            <div className="p-2 text-[12px]">
+              <DeepDetailBody detail={detail} />
+            </div>
+          </ScrollDetailTrigger>
         ) : (
           // Sitasi (teks sebaris) & tool biasa (scalar): polos tanpa box scroll — terlalu pendek.
           <div className="mt-1.5 grid gap-2 text-[12px]">
