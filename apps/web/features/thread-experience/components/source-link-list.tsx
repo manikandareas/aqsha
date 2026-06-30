@@ -53,7 +53,8 @@ function SourceLinkRow({ source }: { source: SourceCardData }) {
           {source.title}
         </span>
         {source.snippet ? (
-          <span className="mt-0.5 line-clamp-2 break-words text-[11px] text-muted-foreground">
+          // Panel = tampilan detail penuh: snippet tak di-clamp (preview inline yang memendekkannya).
+          <span className="mt-0.5 break-words text-[11px] text-muted-foreground leading-5">
             {source.snippet}
           </span>
         ) : null}

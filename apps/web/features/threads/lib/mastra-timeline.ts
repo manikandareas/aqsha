@@ -110,6 +110,27 @@ function isUserDbMessage(m: MastraDBMessageLike): boolean {
   return m.type === "user" || str(signal?.type) === "user";
 }
 
+/**
+ * Teks reasoning dari satu part persisted. OpenAI Responses API menulis ringkasan penalaran ke
+ * `details[].text` (UI-message v4 `ReasoningUIPart`), sementara field agregat `reasoning`/`text`
+ * KOSONG — jadi tanpa fallback `details`, blok reasoning hilang saat refresh. Urutan: `text`/
+ * `reasoning` (jalur deep yg kita persist sendiri mengisi `reasoning`) → rakit dari `details`.
+ */
+function reasoningPartText(p: Record<string, unknown>): string {
+  const direct = str(p.text) || str(p.reasoning);
+  if (direct.trim()) return direct;
+  const details = p.details;
+  if (!Array.isArray(details)) return "";
+  return details
+    .map((d) =>
+      d && typeof d === "object" && str((d as Record<string, unknown>).type) === "text"
+        ? str((d as Record<string, unknown>).text)
+        : "",
+    )
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 /** Bentuk persist `tool-invocation` di `mastra_messages.content.parts` (UI-message v2). */
 type ToolInvocationLike = {
   state?: unknown;
@@ -135,7 +156,7 @@ export function mastraMessagesToTimeline(messages: readonly MastraDBMessageLike[
         const text = str(p.text);
         if (text.trim()) parts.push({ kind: "text", id: `${m.id}:t${i}`, text, streaming: false });
       } else if (type === "reasoning") {
-        const text = str(p.text) || str(p.reasoning);
+        const text = reasoningPartText(p);
         if (text.trim()) parts.push({ kind: "reasoning", id: `${m.id}:r${i}`, text, thinking: false });
       } else if (type === "tool-invocation") {
         const inv = (p.toolInvocation ?? {}) as ToolInvocationLike;
@@ -522,6 +543,10 @@ export function seedWorkflowProgress(
     if (stepId === "synthesize" && status === "success") {
       const report = reportFromOutput(sr?.output);
       if (report) next = setReportText(next, idx, report);
+      // Penalaran sintesis (Route B) dari nilai return step → blok reasoning tetap muncul saat
+      // refresh poll fase RUNNING sebelum pesan riwayat termuat (rehydrate dari content part).
+      const reasoning = reasoningFromOutput(sr?.output);
+      if (reasoning) next = setDeepReasoning(next, idx, reasoning);
     }
   }
   return next;
@@ -591,6 +616,13 @@ export function reduceWorkflowChunk(
       const stepId = str(payload.stepName);
       if (!stepId) return state;
       const [s, idx] = ensureActiveAssistant(streaming(state));
+      // Ringkasan penalaran sintesis (Route B) → blok reasoning (mengambang ke atas, parity chat),
+      // BUKAN detail step. Sisanya = detail proses biasa.
+      const out = asRecord(payload.output);
+      if (str(out.kind) === "reasoning") {
+        const text = str(out.text);
+        return text ? setDeepReasoning(s, idx, text) : s;
+      }
       return applyStepOutputDetail(s, idx, stepId, payload.output);
     }
 
@@ -645,15 +677,40 @@ function setReportText(
   });
 }
 
-function reportFromOutput(output: unknown): string {
+/**
+ * String field dari nilai return step (langsung `o[key]`, atau ter-bungkus `o.result[key]` — dua
+ * bentuk yang dipancarkan Mastra). Sumber bersama untuk `report`/`reasoning` step `synthesize`.
+ */
+function stringFromOutput(output: unknown, key: string): string {
   if (!output || typeof output !== "object") return "";
   const o = output as Record<string, unknown>;
-  if (typeof o.report === "string") return o.report;
+  if (typeof o[key] === "string") return o[key] as string;
   const r = o.result;
-  if (r && typeof r === "object" && typeof (r as Record<string, unknown>).report === "string") {
-    return (r as Record<string, unknown>).report as string;
+  if (r && typeof r === "object" && typeof (r as Record<string, unknown>)[key] === "string") {
+    return (r as Record<string, unknown>)[key] as string;
   }
   return "";
+}
+
+function reportFromOutput(output: unknown): string {
+  return stringFromOutput(output, "report");
+}
+
+/** Ringkasan penalaran sintesis dari nilai return step `synthesize` (`OutputSchema.reasoning`). */
+function reasoningFromOutput(output: unknown): string {
+  return stringFromOutput(output, "reasoning");
+}
+
+/**
+ * Blok penalaran `/deep` (Route B) — satu part reasoning (id stabil `wf:reasoning`) di atas laporan,
+ * dirender `<Reasoning>` yang sama dgn chat. Overwrite (bukan skip) → emit live/refresh/seed konvergen.
+ */
+function setDeepReasoning(
+  state: MastraTimelineState,
+  msgIdx: number,
+  text: string,
+): MastraTimelineState {
+  return upsertPart(state, msgIdx, { kind: "reasoning", id: "wf:reasoning", text, thinking: false }, false);
 }
 
 function strArray(v: unknown): string[] {
@@ -997,20 +1054,17 @@ function artifactFromResult(
   };
 }
 
-const MAX_VALUE_LEN = 240;
-
 function toScalarString(value: unknown): string | null {
   if (typeof value === "string") {
+    // Nilai PENUH (tanpa potong) — pemendekan dilakukan di presentasi: baris pendek tampil polos,
+    // yang panjang dipromosikan ke preview + panel step (lihat `ToolRow`), jadi teks tak jadi
+    // buntu "…" yang tak terbaca.
     const cleaned = value.replace(/\s+/g, " ").trim();
-    return cleaned ? clampValue(cleaned) : null;
+    return cleaned || null;
   }
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
   if (typeof value === "boolean") return value ? "Ya" : "Tidak";
   return null;
-}
-
-function clampValue(value: string): string {
-  return value.length > MAX_VALUE_LEN ? `${value.slice(0, MAX_VALUE_LEN - 1)}…` : value;
 }
 
 function appendScalarRows(rows: ToolRow[], value: unknown, group: "input" | "output"): void {

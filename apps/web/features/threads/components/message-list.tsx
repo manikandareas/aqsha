@@ -206,11 +206,11 @@ function AssistantMessage({
   const answer = texts.at(-1);
   const answerId = answer?.id;
 
-  const reasoningParts = message.parts.filter((p) => p.kind === "reasoning");
   const artifactParts = message.parts.filter((p) => p.kind === "artifact");
-  // Proses = tool + teks antara (semua teks kecuali jawaban final), urut asli.
+  // Proses = reasoning + tool + teks antara (semua teks kecuali jawaban final), URUT ASLI pemanggilan:
+  // reasoning ter-interleave dengan tool-call di dalam blok "Proses" (bukan mengambang di atas).
   const processParts = message.parts.filter(
-    (p) => p.kind === "tool" || (p.kind === "text" && p.id !== answerId),
+    (p) => p.kind === "tool" || p.kind === "reasoning" || (p.kind === "text" && p.id !== answerId),
   );
   const toolSteps = processParts.filter((p) => p.kind === "tool").length;
 
@@ -250,12 +250,6 @@ function AssistantMessage({
 
   return (
     <div className="flex min-w-0 flex-col gap-2.5">
-      {reasoningParts.map((part) =>
-        part.kind === "reasoning" ? (
-          <Reasoning key={part.id} text={part.text} isThinking={part.thinking} />
-        ) : null,
-      )}
-
       {processParts.length > 0 ? (
         <ProcessBlock
           parts={processParts}
@@ -362,6 +356,10 @@ function ProcessPartView({
 }) {
   if (part.kind === "tool")
     return <ToolRow model={part.model} sourcesBySubQ={sourcesBySubQ} turnId={turnId} />;
+  if (part.kind === "reasoning") {
+    // Penalaran model — item proses dalam urutan natural (sebelum/antara/sesudah tool-call).
+    return <Reasoning text={part.text} isThinking={part.thinking} />;
+  }
   if (part.kind === "text") {
     // Teks antara (intermediate) yang diucapkan agen sebelum jawaban final.
     return <div className="whitespace-pre-wrap break-words text-muted-foreground">{part.text}</div>;

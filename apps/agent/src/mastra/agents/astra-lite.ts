@@ -3,7 +3,7 @@ import { TokenLimiterProcessor } from "@mastra/core/processors";
 import { astraInstructions, astraProInstructions } from "../instructions";
 import type { AgentKind } from "../lib/tool-context";
 import { createMemory } from "../memory";
-import { liteModel, proModel, proProviderOptions } from "../model";
+import { liteModel, liteProviderOptions, proModel, proProviderOptions } from "../model";
 import { makeBillingProcessors } from "../processors/billing";
 import { EnsureFinalResponseProcessor } from "../processors/ensure-final-response";
 import { stripMentionMarkersProcessor } from "../processors/strip-mention-markers";
@@ -15,10 +15,10 @@ import { astraTools } from "../tools";
 /**
  * Astra — agent chat utama, dua tier dari SATU factory (`createAstraAgent`):
  *
- * - **Lite** (`astra-lite`): default. Model `liteModel`, `maxSteps: 10`, recall 16/6/2, tanpa penalaran
- *   ekstra. Fitur billing `normal_chat`.
- * - **Pro** (`astra-pro`): model penalaran `proModel` + `reasoning: "high"` (no-op bila model tak
- *   mendukung), `maxSteps: 22`, context window + recall lebih dalam (32/12/3), instruksi `Pro` (riset
+ * - **Lite** (`astra-lite`): default. Model `liteModel` + penalaran ringan (`liteProviderOptions`,
+ *   effort `low`), `maxSteps: 10`, recall 16/6/2. Fitur billing `normal_chat`.
+ * - **Pro** (`astra-pro`): model penalaran `proModel` + penalaran dalam (`proProviderOptions`,
+ *   effort `high`), `maxSteps: 22`, context window + recall lebih dalam (32/12/3), instruksi `Pro` (riset
  *   lebih dalam + verifikasi proaktif). Fitur billing `pro_chat` (rate lebih tinggi). FE memilih tier
  *   dengan menunjuk agent ID dari `agentKind` composer — tak ada knob per-call yang dikirim klien.
  *
@@ -32,7 +32,7 @@ type TierProfile = {
   model: typeof liteModel;
   maxSteps: number;
   contextWindowTokens: number;
-  /** `providerOptions` penalaran (Pro) — hanya saat `AQSHA_PRO_MODEL` di-set (lihat `proProviderOptions`). */
+  /** `providerOptions` penalaran per-tier (effort + reasoningSummary). `undefined` bila effort `off`. */
   providerOptions?: typeof proProviderOptions;
 };
 
@@ -44,6 +44,7 @@ const PROFILES: Record<AgentKind, TierProfile> = {
     model: liteModel,
     maxSteps: 10,
     contextWindowTokens: Number(process.env.AQSHA_LITE_CONTEXT_WINDOW) || 128_000,
+    providerOptions: liteProviderOptions,
   },
   pro: {
     id: "astra-pro",
@@ -73,7 +74,7 @@ function createAstraAgent(tier: AgentKind): Agent {
     memory: createMemory(tier),
     // Default opsi `stream()` (vNext) → FE tak perlu mengirim `maxSteps`/`providerOptions`; satu sumber
     // kebenaran. `EnsureFinalResponseProcessor` memakai angka MAX_STEPS yang SAMA → reminder mendarat di
-    // step terakhir. `providerOptions` (penalaran Pro) hanya di-set saat `AQSHA_PRO_MODEL` aktif.
+    // step terakhir. `providerOptions` (penalaran per-tier) di-set kecuali effort di-`off`-kan via env.
     defaultOptions: {
       maxSteps: p.maxSteps,
       ...(p.providerOptions ? { providerOptions: p.providerOptions } : {}),

@@ -5,8 +5,9 @@ import { cn } from "@/lib/utils";
 
 /**
  * A capped preview of expandable step content that opens the full thing in the side
- * detail panel instead of scrolling inline. The preview is non-interactive; hovering
- * reveals a blurred "Klik untuk detail" overlay, and clicking anywhere opens the panel.
+ * detail panel instead of scrolling inline. The preview is non-interactive; the bottom
+ * vignette (fade-to-background) SPREADS upward on hover — a "there's more, click" cue —
+ * with the "Klik untuk detail" label fading in over it; clicking anywhere opens the panel.
  * Replaces the inline `ScrollArea` for plan / search / verify / counter-evidence steps.
  *
  * Uses `role="button"` on a div (not a `<button>`) because the preview may contain
@@ -35,7 +36,9 @@ export function ScrollDetailTrigger({
       <div className={cn("overflow-hidden", maxHeightClass)} inert aria-hidden>
         {children}
       </div>
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-background to-transparent" />
+      {/* Vignette bawah: tipis saat diam, MENYEBAR ke atas (h-10 → h-full) saat hover; blur ikut
+          merambat bersamanya supaya label CTA terbaca bersih di atas konten yang ter-blur. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-background via-background/70 to-transparent backdrop-blur-none transition-[height,backdrop-filter] duration-300 ease-out group-hover:h-full group-hover:backdrop-blur-[3px]" />
     </>
   );
 
@@ -68,7 +71,8 @@ export function ScrollDetailTrigger({
       )}
     >
       {preview}
-      <span className="absolute inset-0 flex items-center justify-center bg-background/40 text-[11px] font-medium text-foreground opacity-0 backdrop-blur-[2px] transition-opacity duration-150 group-hover:opacity-100">
+      {/* Label CTA terbaca di atas vignette yang menyebar (tanpa blur seragam yang menelan vignette). */}
+      <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-[11px] font-medium text-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100">
         {label}
       </span>
     </div>

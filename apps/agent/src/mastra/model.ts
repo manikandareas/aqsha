@@ -4,53 +4,68 @@ import type { RequestContext } from "@mastra/core/request-context";
 import { agentKindFromRequestContext } from "./lib/tool-context";
 
 /**
- * Model Lite Astra (Fase 0/1) — dipakai root agent (dan, nanti, subagent /deep).
+ * Model Astra (chat lite/pro + subagent /deep). Provider OpenAI / gateway OpenAI-compatible
+ * (`OPENAI_BASE_URL`); model id via `AQSHA_LITE_MODEL` / `AQSHA_PRO_MODEL`.
  *
- * Provider OpenAI / gateway OpenAI-compatible (`OPENAI_BASE_URL`, mis. LiteLLM/OpenRouter).
- * Pakai Chat Completions (`.chat`) demi kompatibilitas gateway maksimal; model id via
- * `AQSHA_LITE_MODEL`. Berbeda dengan eve, Mastra TIDAK butuh `modelContextWindowTokens` —
- * batas context window ditegakkan oleh `TokenLimiter` processor (Fase 1), bukan compaction
- * yang me-resolve katalog dari model id. Jadi escape-hatch `AQSHA_LITE_CONTEXT_WINDOW` eve
- * tak lagi diperlukan di sini.
+ * Pakai **Responses API** (`.responses`), BUKAN Chat Completions (`.chat`): hanya Responses yang
+ * memancarkan ringkasan penalaran sebagai part `reasoning-*` (`reasoningSummary`) → trace berpikir
+ * model GPT-5 (lite & pro) tampil di UI. Dengan `.chat` opsi `reasoningEffort` membuat model berpikir
+ * lebih dalam tapi trace-nya TAK PERNAH ter-stream.
  *
- * Model `LanguageModelV4` (provider AI SDK v7 = `@ai-sdk/provider@4`) diterima native oleh
- * `MastraModelConfig`.
+ * CATATAN gateway: Responses API tak universal di gateway OpenAI-compatible. Bila `OPENAI_BASE_URL`
+ * menunjuk gateway tanpa dukungan Responses (atau model non-penalaran seperti gpt-4o), set
+ * `AQSHA_LITE_REASONING_EFFORT=off` / `AQSHA_PRO_REASONING_EFFORT=off` → opsi penalaran tak dikirim,
+ * model tetap jalan sekadar tanpa trace. Context window ditegakkan `TokenLimiter` (bukan model id).
  */
 const openai = createOpenAI({
   ...(process.env.OPENAI_BASE_URL ? { baseURL: process.env.OPENAI_BASE_URL } : {}),
   ...(process.env.OPENAI_API_KEY ? { apiKey: process.env.OPENAI_API_KEY } : {}),
 });
 
-export const liteModel = openai.chat(process.env.AQSHA_LITE_MODEL ?? "gpt-4o");
+export const liteModel = openai.responses(process.env.AQSHA_LITE_MODEL ?? "gpt-4o");
 
 /**
- * Model Pro Astra — model penalaran lebih kuat untuk tier Pro (`AQSHA_PRO_MODEL`). Fallback ke
- * `AQSHA_LITE_MODEL` lalu `gpt-4o` bila belum di-set → degradasi aman (Pro tetap jalan, sekadar tak
- * lebih kuat) sampai owner set env di produksi. Reasoning/thinking diaktifkan di sisi agent
- * (`reasoning: "high"`); efektif hanya bila model ini mendukung penalaran (LanguageModelV4), no-op
- * pada model non-penalaran seperti gpt-4o.
+ * Model Pro Astra — model penalaran lebih kuat (`AQSHA_PRO_MODEL`). Fallback ke `AQSHA_LITE_MODEL`
+ * lalu `gpt-4o` bila belum di-set → degradasi aman (Pro tetap jalan, sekadar tak lebih kuat) sampai
+ * owner set env. Kedalaman penalaran disetel via `proProviderOptions` (default effort `"high"`).
  */
-export const proModel = openai.chat(
+export const proModel = openai.responses(
   process.env.AQSHA_PRO_MODEL ?? process.env.AQSHA_LITE_MODEL ?? "gpt-4o",
 );
 
 /**
  * Apakah model Pro benar-benar disetel (`AQSHA_PRO_MODEL` eksplisit)? Saat `false`, Pro mem-fallback ke
- * model Lite TANPA penalaran (lihat `proModel`/`proProviderOptions`) → output setara Lite. Billing harus
- * ikut turun ke rate Lite supaya pengguna tak dibebani rate Pro (~6×) untuk keluaran setara Lite sampai
- * owner menyetel model di produksi. Dipakai `makeBillingProcessors` (chat) + `deep-research` (debit).
+ * model Lite → output setara Lite. Billing harus ikut turun ke rate Lite supaya pengguna tak dibebani
+ * rate Pro (~6×) untuk keluaran setara Lite sampai owner menyetel model. Dipakai `makeBillingProcessors`
+ * (chat) + `deep-research` (debit). CATATAN: ini TAK lagi menggerbang penalaran — kedua tier kini punya
+ * model penalaran sendiri, jadi reasoning aktif terlepas dari flag ini.
  */
 export const PRO_MODEL_CONFIGURED = Boolean(process.env.AQSHA_PRO_MODEL);
 
+/** Ringkasan penalaran yang diminta dari Responses API (`auto` | `concise` | `detailed`). */
+const REASONING_SUMMARY = process.env.AQSHA_REASONING_SUMMARY ?? "auto";
+
 /**
- * `providerOptions` penalaran untuk tier Pro. HANYA aktif saat `AQSHA_PRO_MODEL` di-set EKSPLISIT —
- * `reasoningEffort` ditolak (400) oleh model non-penalaran seperti gpt-4o, jadi jangan kirim saat Pro
- * mem-fallback ke model Lite. Owner yang menyetel `AQSHA_PRO_MODEL` diasumsikan memilih model yang
- * mendukung penalaran. `AQSHA_PRO_REASONING_EFFORT` opsional (default `"high"`).
+ * `providerOptions` penalaran satu tier. `reasoningEffort` mengontrol kedalaman berpikir
+ * (`minimal|low|medium|high|xhigh`); `reasoningSummary` MEMUNCULKAN ringkasannya sebagai part
+ * `reasoning-*` yang dirender FE. `effort` kosong / `"off"` → tak mengirim opsi penalaran sama sekali
+ * (escape-hatch untuk model non-penalaran / gateway tanpa Responses).
  */
-export const proProviderOptions = PRO_MODEL_CONFIGURED
-  ? { openai: { reasoningEffort: process.env.AQSHA_PRO_REASONING_EFFORT ?? "high" } }
-  : undefined;
+function reasoningProviderOptions(effort: string | undefined) {
+  const e = (effort ?? "").trim();
+  if (!e || e.toLowerCase() === "off") return undefined;
+  return { openai: { reasoningEffort: e, reasoningSummary: REASONING_SUMMARY } };
+}
+
+/** Lite: penalaran ringan default (`low`) → tier cepat tetap responsif. `AQSHA_LITE_REASONING_EFFORT`. */
+export const liteProviderOptions = reasoningProviderOptions(
+  process.env.AQSHA_LITE_REASONING_EFFORT ?? "low",
+);
+
+/** Pro: penalaran dalam default (`high`). `AQSHA_PRO_REASONING_EFFORT`. */
+export const proProviderOptions = reasoningProviderOptions(
+  process.env.AQSHA_PRO_REASONING_EFFORT ?? "high",
+);
 
 /**
  * Tier billing EFEKTIF dari tier yang DIMINTA: Pro hanya saat model Pro benar-benar disetel

@@ -24,7 +24,7 @@ import {
   type AgentKind,
   ownerFromRequestContext,
 } from "../lib/tool-context";
-import { effectiveBilledTier, proProviderOptions } from "../model";
+import { effectiveBilledTier, liteProviderOptions, proProviderOptions } from "../model";
 
 /**
  * Workflow `deep-research` (Fase 2) — port `/deep` eve ke orkestrasi deterministik Mastra.
@@ -107,6 +107,10 @@ const OutputSchema = z.object({
   plan: z.string().optional(),
   subQuestions: z.array(z.string()).optional(),
   reason: z.string().optional().describe("Alasan blokir/batal (status≠completed)."),
+  reasoning: z
+    .string()
+    .optional()
+    .describe("Ringkasan penalaran penulis sintesis (Route B) → blok reasoning FE saat refresh poll."),
 });
 
 type Planned = z.infer<typeof PlannedSchema>;
@@ -139,10 +143,13 @@ function withDeepRun(
 
 /**
  * `providerOptions` penalaran per-panggilan subagent (bukan field top-level agent di Mastra 1.47).
- * Aktif hanya untuk run Pro saat `AQSHA_PRO_MODEL` di-set (`proProviderOptions` undefined → spread kosong).
+ * Per-tier: Pro pakai `proProviderOptions` (effort tinggi), Lite `liteProviderOptions` (effort ringan) —
+ * jadi penalaran subagent /deep aktif di KEDUA tier (undefined bila effort di-`off`-kan → spread kosong).
+ * Ringkasannya (`reasoningSummary`) dipanen `synthesize` (`out.reasoningText`) → blok penalaran FE.
  */
 function deepProviderOptions(agentKind: AgentKind): { providerOptions?: typeof proProviderOptions } {
-  return agentKind === "pro" && proProviderOptions ? { providerOptions: proProviderOptions } : {};
+  const opts = agentKind === "pro" ? proProviderOptions : liteProviderOptions;
+  return opts ? { providerOptions: opts } : {};
 }
 
 /**
@@ -186,7 +193,9 @@ type StepDetailEmit =
     }
   | { kind: "counter"; text: string }
   | { kind: "citations"; count: number }
-  | { kind: "verify"; text: string };
+  | { kind: "verify"; text: string }
+  /** Ringkasan penalaran penulis sintesis (`out.reasoningText`) → blok "reasoning" FE (Route B). */
+  | { kind: "reasoning"; text: string };
 
 async function emitDetail(writer: StepWriter, data: StepDetailEmit): Promise<void> {
   if (!writer) return;
@@ -196,12 +205,6 @@ async function emitDetail(writer: StepWriter, data: StepDetailEmit): Promise<voi
     // Stream bisa sudah ditutup (mis. plan-gate close-on-suspend) — emit detail tak boleh fatal.
     console.error("[deep-research] emitDetail failed", err);
   }
-}
-
-/** Potong teks panjang (counter/verify) untuk detail FE — narasi penuh tetap ada di laporan. */
-function clampDetail(text: string, max = 1200): string {
-  const trimmed = text.trim();
-  return trimmed.length > max ? `${trimmed.slice(0, max - 1)}…` : trimmed;
 }
 
 /** Bentuk sumber kompak yang dipancarkan ke FE (kartu live) — favicon diturunkan client-side dari url/doi. */
@@ -264,6 +267,8 @@ function buildMastraMessage(args: {
   text: string;
   threadId: string;
   resourceId: string | undefined;
+  /** Ringkasan penalaran (asisten /deep) → part `reasoning` mendahului teks; dirender FE sbg blok berpikir. */
+  reasoning?: string;
   metadata?: Record<string, unknown>;
 }) {
   return {
@@ -274,7 +279,20 @@ function buildMastraMessage(args: {
     resourceId: args.resourceId,
     content: {
       format: 2 as const,
-      parts: [{ type: "text" as const, text: args.text }],
+      parts: [
+        // Bentuk `ReasoningUIPart` (AI SDK v4 / Mastra V2): `reasoning` + `details`. FE rehydrate
+        // membaca `p.text || p.reasoning` (`mastraMessagesToTimeline`) → blok berpikir muncul di riwayat.
+        ...(args.reasoning
+          ? [
+              {
+                type: "reasoning" as const,
+                reasoning: args.reasoning,
+                details: [{ type: "text" as const, text: args.reasoning }],
+              },
+            ]
+          : []),
+        { type: "text" as const, text: args.text },
+      ],
       content: args.text,
       ...(args.metadata ? { metadata: args.metadata } : {}),
     },
@@ -339,6 +357,8 @@ async function persistDeepReport(
   args: {
     threadId: string;
     report: string;
+    /** Ringkasan penalaran penulis sintesis → dipersist sbg part `reasoning` (blok berpikir riwayat). */
+    reasoning?: string;
     runId: string;
     agentKind: AgentKind;
     /** Jejak proses untuk rehydrate (FE bangun ulang langkah + detail saat refresh/riwayat, G7). */
@@ -372,6 +392,7 @@ async function persistDeepReport(
           text: args.report,
           threadId: args.threadId,
           resourceId,
+          ...(args.reasoning ? { reasoning: args.reasoning } : {}),
           metadata: {
             deepRunId: args.runId,
             ...(args.deepProcess ? { deepProcess: args.deepProcess } : {}),
@@ -603,7 +624,7 @@ const counterEvidenceStep = createStep({
       counterPrompt(inputData),
       deepGenOptions(requestContext, inputData, runId),
     );
-    await emitDetail(writer, { kind: "counter", text: clampDetail(out.text) });
+    await emitDetail(writer, { kind: "counter", text: out.text.trim() });
     return { ...inputData, counter: out.text };
   },
 });
@@ -657,7 +678,7 @@ const citationVerifyStep = createStep({
       verifyPrompt(inputData),
       deepGenOptions(requestContext, inputData, runId),
     );
-    await emitDetail(writer, { kind: "verify", text: clampDetail(out.text) });
+    await emitDetail(writer, { kind: "verify", text: out.text.trim() });
     return { ...inputData, verification: out.text };
   },
 });
@@ -667,26 +688,33 @@ const synthesizeStep = createStep({
   id: "synthesize",
   inputSchema: VerifiedSchema,
   outputSchema: OutputSchema,
-  execute: async ({ inputData, requestContext, mastra, runId }) => {
+  execute: async ({ inputData, requestContext, mastra, runId, writer }) => {
     // `toolChoice: "none"`: seluruh bukti sudah ada di prompt; paksa penulis MENULIS teks
     // (bukan berhenti di tool-call kosong) — jaminan `out.text` terisi pada model gateway.
     const out = await deepWriter.generate(synthesisPrompt(inputData), {
       ...deepGenOptions(requestContext, inputData, runId),
       toolChoice: "none",
     });
+    // Ringkasan penalaran penulis (Responses API `reasoningSummary`) → blok "reasoning" di atas
+    // laporan (parity dgn chat). Route B: dipanen post-hoc dari hasil `.generate`, bukan di-stream
+    // token-level (aman thd durable refresh) → emit live + dipersist di pesan untuk rehydrate.
+    const reasoning = (out.reasoningText ?? "").trim();
+    if (reasoning) await emitDetail(writer, { kind: "reasoning", text: reasoning });
     // Persist verbatim ke memory thread chat → muncul di history + rehydrate saat refresh (G1/G2).
     // (Pertanyaan user sudah dipersist di `ensureDeepThread` pada plan-gate.) `deepProcess` =
-    // jejak proses ringkas agar FE bangun ulang langkah + detail tanpa runId (riwayat/refresh, G7).
+    // jejak proses agar FE bangun ulang langkah + detail tanpa runId (riwayat/refresh, G7). Teks
+    // counter/verify dipersist PENUH (tanpa clamp) → panel detail menampilkan narasi utuh.
     await persistDeepReport(mastra, requestContext, {
       threadId: inputData.threadId,
       report: out.text,
+      reasoning,
       runId,
       agentKind: inputData.agentKind,
       deepProcess: {
         plan: inputData.plan,
         subQuestions: inputData.subQuestions,
-        counter: clampDetail(inputData.counter),
-        verification: clampDetail(inputData.verification),
+        counter: inputData.counter.trim(),
+        verification: inputData.verification.trim(),
         citationCount: parseCitationCount(inputData.numberedInventory),
         // Fallback Sumber DB-independen: FE me-resolve `[n]` + panel "Sumber" dari sini bila fetch
         // `research_sources` live meleset (lihat `messageSourceCards`).
@@ -698,6 +726,7 @@ const synthesizeStep = createStep({
       report: out.text,
       plan: inputData.plan,
       subQuestions: inputData.subQuestions,
+      ...(reasoning ? { reasoning } : {}),
     };
   },
 });

@@ -1,5 +1,6 @@
 "use client";
 
+import { messagePreview } from "@aqsha/chat-core";
 import { Badge } from "@aqsha/ui/components/badge";
 import {
   BookmarkIcon,
@@ -119,6 +120,14 @@ function ToolStatusIcon({
   return <ToolGlyph name={name} className={cn(className, "text-muted-foreground")} />;
 }
 
+// Ambang "nilai scalar panjang": di atas ini, baris tool biasa dipromosikan dari teks-inline ke
+// preview + panel step (nilai penuh terbaca di panel). Di bawahnya tetap teks polos (kontrak: 1 baris
+// pendek = teks, tanpa box scroll). ~2 baris pada lebar transkrip.
+const INLINE_VALUE_MAX = 160;
+// Batas descriptor kueri di HEADER selagi running (satu baris) — beda peran dari `INLINE_VALUE_MAX`
+// (promosi body): header selalu dipendekkan, nilai penuh tetap terbaca di panel step.
+const LIVE_QUERY_MAX = 120;
+
 function toneClass(status: ToolStatus): string {
   switch (status) {
     case "running":
@@ -156,10 +165,30 @@ export function ToolRow({
   const hasBody = model.rows.length > 0 || Boolean(detail);
   const inputRows = model.rows.filter((row) => row.group === "input");
   const outputRows = model.rows.filter((row) => row.group === "output");
-  // Descriptor inline selagi running: kueri (tool) atau tugas (subagent, key "message").
-  const liveQuery = model.isRunning
+  // Descriptor inline selagi running: kueri (tool) atau tugas (subagent, key "message"). Dipendekkan
+  // untuk tampilan header saja (nilai scalar kini disimpan penuh → terbaca utuh di panel step).
+  const liveQueryRaw = model.isRunning
     ? model.rows.find((row) => row.key === "query" || row.key === "message")?.value
     : undefined;
+  // Clamp codepoint-safe bersama (`messagePreview`) — bukan `slice` yang membelah surrogate pair.
+  const liveQuery = liveQueryRaw ? messagePreview(liveQueryRaw, LIVE_QUERY_MAX) : undefined;
+  // Ada nilai scalar panjang → promosikan body tool biasa ke preview + panel (bukan dibiarkan
+  // terpotong/menggembung inline). Pendek → tetap teks polos di bawah.
+  const hasLongScalar = model.rows.some((row) => row.value.length > INLINE_VALUE_MAX);
+
+  // Tabel scalar Masukan/Hasil — IDENTIK untuk varian preview-panel (nilai panjang →
+  // ScrollDetailTrigger) maupun teks-polos (pendek); hanya pembungkus + `DeepDetailBody` (di-narrow
+  // per-cabang) yang beda.
+  const scalarRows = (
+    <>
+      <ToolRowSection label="Masukan" rows={inputRows} />
+      <ToolRowSection
+        label="Hasil"
+        rows={outputRows}
+        tone={model.status === "failed" ? "danger" : "default"}
+      />
+    </>
+  );
 
   // null = ikut auto (open == isRunning); boolean = pilihan manual user yang sticky.
   const [override, setOverride] = useState<boolean | null>(null);
@@ -262,15 +291,22 @@ export function ToolRow({
               <DeepDetailBody detail={detail} />
             </div>
           </ScrollDetailTrigger>
+        ) : hasLongScalar ? (
+          // Tool biasa dengan nilai panjang → preview, klik buka panel step (nilai PENUH terbaca di
+          // panel) — konsisten dengan rencana/teks deep, tak ada lagi "…" buntu yang tak terbaca.
+          <ScrollDetailTrigger
+            className="mt-1.5"
+            onOpen={openStep ? () => openStep(model.toolCallId) : undefined}
+          >
+            <div className="grid gap-2 p-2 text-[12px]">
+              {scalarRows}
+              {detail ? <DeepDetailBody detail={detail} /> : null}
+            </div>
+          </ScrollDetailTrigger>
         ) : (
-          // Sitasi (teks sebaris) & tool biasa (scalar): polos tanpa box scroll — terlalu pendek.
+          // Sitasi (teks sebaris) & tool biasa pendek: polos tanpa box scroll — sesuai kontrak.
           <div className="mt-1.5 grid gap-2 text-[12px]">
-            <ToolRowSection label="Masukan" rows={inputRows} />
-            <ToolRowSection
-              label="Hasil"
-              rows={outputRows}
-              tone={model.status === "failed" ? "danger" : "default"}
-            />
+            {scalarRows}
             {detail ? <DeepDetailBody detail={detail} /> : null}
           </div>
         )}

@@ -12,6 +12,7 @@ import type {
   DeepStepDetail,
   SourceCardData,
   TimelineMessage,
+  ToolRow,
   ToolStatus,
 } from "./timeline-types";
 import type { MastraPlanGate } from "./mastra-timeline";
@@ -27,11 +28,13 @@ export type SearchStepDetail = {
   sources: SourceCardData[];
 };
 
-/** Any other expandable tool step (verify, counter-evidence, normal-chat search). */
+/** Any other expandable tool step (verify, counter-evidence, normal-chat search, generic tool). */
 export type StepDetail = {
   toolCallId: string;
   title: string;
-  detail: DeepStepDetail;
+  detail?: DeepStepDetail;
+  /** Baris scalar Masukan/Hasil tool biasa — panel menampilkan nilai PENUH (timeline memotong). */
+  rows?: ToolRow[];
 };
 
 /** The research plan of one run; `resolve` is injected by the surface while a live gate is open. */
@@ -151,18 +154,21 @@ export function buildThreadPanelLookups(
     for (const p of m.parts) {
       if (p.kind !== "tool") continue;
       const d = p.model.detail;
-      if (!d) continue;
-      // Every step with detail is addressable by tool-call id (step panel); plan/search
-      // also have dedicated, run-scoped modes (keyed by the message's turnId).
+      const rows = p.model.rows;
+      // Step addressable di panel bila punya detail proses ATAU baris scalar (tool biasa) — supaya
+      // nilai panjang yang dipotong di timeline tetap terbaca penuh di panel. plan/search juga
+      // punya mode khusus run-scoped (keyed turnId).
+      if (!d && rows.length === 0) continue;
       steps.set(p.model.toolCallId, {
         toolCallId: p.model.toolCallId,
         title: p.model.title,
-        detail: d,
+        ...(d ? { detail: d } : {}),
+        ...(rows.length > 0 ? { rows } : {}),
       });
       if (!m.turnId) continue;
-      if (d.kind === "plan") {
+      if (d?.kind === "plan") {
         plans.set(m.turnId, { turnId: m.turnId, plan: d.plan, subQuestions: d.subQuestions });
-      } else if (d.kind === "search") {
+      } else if (d?.kind === "search") {
         for (const sub of d.subSearches) {
           const key = searchKey(m.turnId, sub.index);
           const prev = searches.get(key);

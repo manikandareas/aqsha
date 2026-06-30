@@ -1,6 +1,6 @@
 "use client";
 
-import type { DeepStepDetail } from "@/features/threads/lib/timeline-types";
+import type { DeepStepDetail, ToolRow } from "@/features/threads/lib/timeline-types";
 import { DetailPanelShell } from "./detail-panel-chrome";
 import { SourceLinkList } from "./source-link-list";
 import { useThreadPanel, useThreadPanelData } from "./thread-panel-context";
@@ -27,8 +27,43 @@ export function StepDetailPanel({ toolCallId }: { toolCallId: string }) {
 
   return (
     <DetailPanelShell title={step.title} onClose={panel?.closePanel}>
-      <StepBody detail={step.detail} />
+      {step.detail ? (
+        <StepBody detail={step.detail} />
+      ) : step.rows && step.rows.length > 0 ? (
+        <StepRows rows={step.rows} />
+      ) : (
+        <p className="text-[13px] text-muted-foreground">Tidak ada detail tambahan.</p>
+      )}
     </DetailPanelShell>
+  );
+}
+
+/** Baris scalar Masukan/Hasil tool biasa — nilai PENUH (panel = sumber kebenaran tak terpotong). */
+function StepRows({ rows }: { rows: ToolRow[] }) {
+  const groups: { label: string; group: ToolRow["group"] }[] = [
+    { label: "Masukan", group: "input" },
+    { label: "Hasil", group: "output" },
+  ];
+  return (
+    <div className="grid gap-4">
+      {groups.map(({ label, group }) => {
+        const items = rows.filter((r) => r.group === group);
+        if (items.length === 0) return null;
+        return (
+          <dl key={group} className="grid gap-1.5">
+            <dt className="font-medium text-[11px] text-muted-foreground/70">{label}</dt>
+            {items.map((row) => (
+              <div key={row.key} className="grid gap-0.5">
+                <dt className="text-[12px] text-muted-foreground">{row.label}</dt>
+                <dd className="whitespace-pre-wrap break-words text-[13px] leading-6 text-foreground">
+                  {row.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        );
+      })}
+    </div>
   );
 }
 
