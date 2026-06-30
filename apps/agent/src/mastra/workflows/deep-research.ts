@@ -84,8 +84,20 @@ const EvidenceItemSchema = z.object({
 const PlannedSchema = InputSchema.extend(PlanSchema.shape);
 const SearchedSchema = PlannedSchema.extend({ evidence: z.array(EvidenceItemSchema) });
 const CounteredSchema = SearchedSchema.extend({ counter: z.string() });
+/** Satu sumber bernomor (format kartu FE `{ n, title, url, … }`) — dipersist sebagai fallback laporan. */
+const NumberedSourceSchema = z.object({
+  n: z.number(),
+  title: z.string(),
+  url: z.string().nullable(),
+  doi: z.string().nullable(),
+  origin: z.string(),
+  snippet: z.string().optional(),
+});
 const CitedSchema = CounteredSchema.extend({
   numberedInventory: z.string().describe("Daftar sumber bernomor [n] GLOBAL (citation_number) untuk dikutip."),
+  numberedSources: z
+    .array(NumberedSourceSchema)
+    .describe("Sumber bernomor terstruktur → dipersist di metadata laporan (fallback Sumber FE)."),
 });
 const VerifiedSchema = CitedSchema.extend({ verification: z.string() });
 
@@ -620,8 +632,18 @@ const assignCitationsStep = createStep({
       .join("\n");
     // Jumlah sitasi unik [n] (dedupe by DOI/arXiv/locator) — sumber penomoran ditampilkan FE.
     const uniqueCitations = new Set(numbered.map((s) => s.citationNumber)).size;
+    // Sumber bernomor terstruktur (format kartu FE) → dipersist di `metadata.deepProcess.sources`
+    // supaya pill `[n]` + panel "Sumber" tetap ter-resolve walau fetch `research_sources` live meleset.
+    const numberedSources = numbered.map((s) => ({
+      n: s.citationNumber ?? 0,
+      title: s.title,
+      url: s.url,
+      doi: s.doi,
+      origin: s.origin,
+      ...(s.snippet ? { snippet: s.snippet } : {}),
+    }));
     await emitDetail(writer, { kind: "citations", count: uniqueCitations });
-    return { ...inputData, numberedInventory };
+    return { ...inputData, numberedInventory, numberedSources };
   },
 });
 
@@ -666,6 +688,9 @@ const synthesizeStep = createStep({
         counter: clampDetail(inputData.counter),
         verification: clampDetail(inputData.verification),
         citationCount: parseCitationCount(inputData.numberedInventory),
+        // Fallback Sumber DB-independen: FE me-resolve `[n]` + panel "Sumber" dari sini bila fetch
+        // `research_sources` live meleset (lihat `messageSourceCards`).
+        sources: inputData.numberedSources,
       },
     });
     return {

@@ -168,16 +168,21 @@ export function mastraMessagesToTimeline(messages: readonly MastraDBMessageLike[
     // Jejak proses `/deep` (`metadata.deepProcess`) → bangun ulang langkah + detail DI DEPAN laporan
     // (process block sebelum jawaban), agar tetap muncul di riwayat & setelah refresh (G7).
     const deepProcessRaw = m.content?.metadata?.deepProcess;
-    const deepParts =
+    const deepProcessObj =
       deepProcessRaw && typeof deepProcessRaw === "object" && !Array.isArray(deepProcessRaw)
-        ? deepProcessParts(deepProcessRaw as Record<string, unknown>)
-        : [];
+        ? (deepProcessRaw as Record<string, unknown>)
+        : undefined;
+    const deepParts = deepProcessObj ? deepProcessParts(deepProcessObj) : [];
+    // Sumber bernomor laporan (`deepProcess.sources`, format tool `{ n, title, url, … }`) → fallback
+    // DB-independen untuk pill `[n]` + panel "Sumber" bila fetch `research_sources` live meleset (G4 robust).
+    const reportSources = deepProcessObj ? toCards(deepProcessObj.sources) : [];
     return {
       id: m.id,
       role: isUserDbMessage(m) ? "user" : "assistant",
       streaming: false,
       createdAt: messageCreatedAt(m),
       ...(typeof deepRunId === "string" && deepRunId ? { turnId: deepRunId } : {}),
+      ...(reportSources.length > 0 ? { reportSources } : {}),
       parts: deepParts.length > 0 ? [...deepParts, ...parts] : parts,
     };
   });
