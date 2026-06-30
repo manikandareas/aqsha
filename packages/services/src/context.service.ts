@@ -60,13 +60,15 @@ export const ContextService = {
       Promise.all(
         wantArtifacts.map((id) => ArtifactService.getForAgent(db, input.ownerUserId, id)),
       ),
-      // Paper Explore publik dari CACHE saja (`fetchOnMiss: false`): hydrate ada di jalur kirim
-      // (composer `await` sebelum mengirim), jadi jangan blokir dengan cold-resolve OpenAlex
-      // (jaringan, rate-limited). Cache miss → drop pill diam-diam (abstrak tak tersedia turn ini).
-      // Best-effort: kegagalan satu key tak menggagalkan hydrate.
+      // Paper Explore publik: resolve-on-miss (`fetchOnMiss: true`). Paper di sini DI-PIN eksplisit
+      // (@mention / "Tanya Astra" / auto-mention halaman), jadi konteksnya HARUS ikut — cache-only
+      // dulu mem-drop diam-diam paper feed yang belum pernah dibuka (tak ada di cache OpenAlex),
+      // menyisakan pill tanpa abstrak. Cache hit = jalur umum (paper yang dibuka reader sudah panas);
+      // miss menanggung satu cold-resolve sekali lalu panas. Dibatasi `MAX_DISCOVERY` + best-effort
+      // (`.catch` → null): kegagalan/timeout satu key drop pill itu saja, tak menggagalkan hydrate.
       Promise.all(
         wantPapers.map((key) =>
-          ExploreService.getOrFetchPaper(db, key, { fetchOnMiss: false }).catch(() => null),
+          ExploreService.getOrFetchPaper(db, key, { fetchOnMiss: true }).catch(() => null),
         ),
       ),
       Promise.all(
