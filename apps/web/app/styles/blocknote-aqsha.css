@@ -210,3 +210,9 @@
   line-height: 1.15;
   font-weight: 500;
 }
+
+/* Tombol "Tanya Astra" di Formatting Toolbar — beri aksen brand agar menonjol dari tombol default. */
+.aqsha-blocknote-ask-astra {
+  color: var(--primary);
+  font-weight: 600;
+}

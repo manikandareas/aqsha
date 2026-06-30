@@ -1,3 +1,4 @@
+import type { ContextSelection } from "@aqsha/chat-core";
 import type { Db } from "@aqsha/db";
 import { ArtifactService } from "./artifact.service";
 import { ExploreService } from "./explore.service";
@@ -9,6 +10,13 @@ const MAX_WORKSPACES = 30;
 const MAX_ARTIFACTS = 8;
 /** Cap sumber Explore eksternal (paper publik / berita) yang disematkan per giliran. */
 const MAX_DISCOVERY = 4;
+/** Cap pilihan blok editor ("Tanya Astra") per giliran + clamp cuplikan teksnya. */
+const MAX_SELECTIONS = 4;
+const MAX_SELECTION_BLOCK_IDS = 50;
+const MAX_SELECTION_EXCERPT_CHARS = 500;
+
+/** Pilihan blok editor tersemat (validasi ownership di hydrate) — alias tipe wire SSOT chat-core. */
+export type ContextSelectionInput = ContextSelection;
 
 export type HydratedContext = {
   /** Catatan ringkas (markdown) untuk dikirim sebagai `clientContext` ke agen. */
@@ -46,19 +54,36 @@ export const ContextService = {
       artifactIds: string[];
       paperKeys?: string[];
       feedItemIds?: string[];
+      selections?: ContextSelectionInput[];
     },
   ): Promise<HydratedContext> {
     const wantWorkspaces = dedupe(input.workspaceIds).slice(0, MAX_WORKSPACES);
     const wantArtifacts = dedupe(input.artifactIds).slice(0, MAX_ARTIFACTS);
     const wantPapers = dedupe(input.paperKeys ?? []).slice(0, MAX_DISCOVERY);
     const wantFeedItems = dedupe(input.feedItemIds ?? []).slice(0, MAX_DISCOVERY);
+    // Pilihan blok: dedup per artifact (pilihan terakhir menang), clamp jumlah + blockIds + excerpt.
+    const wantSelections = dedupeSelections(input.selections ?? []).slice(0, MAX_SELECTIONS);
+    // Gabung id artifact lane @mention dokumen + lane pilihan blok → satu fetch per id unik. Tanpa
+    // ini, dokumen yang di-@mention SEKALIGUS punya pilihan "Tanya Astra" (alur utama fitur ini)
+    // di-`findById` dua kali tiap kirim pesan.
+    const wantArtifactSet = new Set(wantArtifacts);
+    const artifactIdsToHydrate = dedupe([...wantArtifacts, ...wantSelections.map((s) => s.artifactId)]);
 
-    const [workspaces, artifacts, papers, feedItems] = await Promise.all([
+    const [workspaces, artifactEntries, papers, feedItems] = await Promise.all([
       Promise.all(
         wantWorkspaces.map((id) => WorkspaceService.get(db, input.ownerUserId, id)),
       ),
+      // Lane @mention dokumen strict (throw → gagalkan hydrate, sesuai semula); id yang HANYA dari
+      // pilihan blok best-effort (validasi ownership sama, tapi gagal → drop senyap).
       Promise.all(
-        wantArtifacts.map((id) => ArtifactService.getForAgent(db, input.ownerUserId, id)),
+        artifactIdsToHydrate.map(async (id) => {
+          try {
+            return [id, await ArtifactService.getForAgent(db, input.ownerUserId, id)] as const;
+          } catch (err) {
+            if (wantArtifactSet.has(id)) throw err;
+            return [id, null] as const;
+          }
+        }),
       ),
       // Paper Explore publik: resolve-on-miss (`fetchOnMiss: true`). Paper di sini DI-PIN eksplisit
       // (@mention / "Tanya Astra" / auto-mention halaman), jadi konteksnya HARUS ikut — cache-only
@@ -78,17 +103,35 @@ export const ContextService = {
       ),
     ]);
 
+    const artifactById = new Map(artifactEntries);
     const validWorkspaces = workspaces.filter((w): w is NonNullable<typeof w> => w !== null);
-    const validArtifacts = artifacts.filter((a): a is NonNullable<typeof a> => a !== null);
+    const validArtifacts = wantArtifacts
+      .map((id) => artifactById.get(id) ?? null)
+      .filter((a): a is NonNullable<typeof a> => a !== null);
     const validPapers = papers.filter((p): p is NonNullable<typeof p> => p !== null);
     // Hanya berita (`kind: "news"`): kontrak `feedItemIds` = berita-by-id, dan `buildNote`
     // melabelinya "Berita" → jangan salah-label feed item kind lain yang lolos lewat API.
     const validFeedItems = feedItems.filter(
       (f): f is NonNullable<typeof f> => f !== null && f.kind === "news",
     );
+    // Pilihan blok: artifact bukan-milik / hilang → drop senyap. Title diambil untuk catatan;
+    // blockIds + excerpt sudah di-clamp.
+    const validSelections: NoteSelection[] = wantSelections
+      .map((sel) => {
+        const artifact = artifactById.get(sel.artifactId);
+        return artifact
+          ? {
+              artifactId: artifact._id,
+              title: artifact.title,
+              blockIds: sel.blockIds,
+              excerpt: sel.excerpt,
+            }
+          : null;
+      })
+      .filter((s): s is NoteSelection => s !== null);
 
     return {
-      note: buildNote(validWorkspaces, validArtifacts, validPapers, validFeedItems),
+      note: buildNote(validWorkspaces, validArtifacts, validPapers, validFeedItems, validSelections),
       workspaceIds: validWorkspaces.map((w) => w.id),
       artifactIds: validArtifacts.map((a) => a._id),
       paperKeys: validPapers.map((p) => p.key),
@@ -99,6 +142,26 @@ export const ContextService = {
 
 function dedupe(ids: string[]): string[] {
   return [...new Set(ids.filter((id) => id.length > 0))];
+}
+
+/** Dedup pilihan per artifact (yang terakhir menang) + clamp blockIds & excerpt sisi server. */
+function dedupeSelections(selections: ContextSelectionInput[]): ContextSelectionInput[] {
+  const byArtifact = new Map<string, ContextSelectionInput>();
+  for (const sel of selections) {
+    const artifactId = (sel.artifactId ?? "").trim();
+    if (!artifactId) continue;
+    const blockIds = [...new Set((sel.blockIds ?? []).filter((id) => id.length > 0))].slice(
+      0,
+      MAX_SELECTION_BLOCK_IDS,
+    );
+    if (blockIds.length === 0) continue;
+    byArtifact.set(artifactId, {
+      artifactId,
+      blockIds,
+      excerpt: (sel.excerpt ?? "").slice(0, MAX_SELECTION_EXCERPT_CHARS),
+    });
+  }
+  return [...byArtifact.values()];
 }
 
 type NotePaper = {
@@ -121,17 +184,26 @@ type NoteFeedItem = {
   publishedAt?: number;
 };
 
+type NoteSelection = {
+  artifactId: string;
+  title: string;
+  blockIds: string[];
+  excerpt: string;
+};
+
 function buildNote(
   workspaces: Array<{ id: string; name: string }>,
   artifacts: Array<{ _id: string; title: string; plainTextPreview: string | null }>,
   papers: NotePaper[],
   feedItems: NoteFeedItem[],
+  selections: NoteSelection[],
 ): string {
   if (
     workspaces.length === 0 &&
     artifacts.length === 0 &&
     papers.length === 0 &&
-    feedItems.length === 0
+    feedItems.length === 0 &&
+    selections.length === 0
   ) {
     return "";
   }
@@ -183,6 +255,18 @@ function buildNote(
       const body = (f.tldr ?? f.summary ?? "").trim();
       lines.push(`- "${f.title}" (${f.sourceLabel})${f.url ? ` — ${f.url}` : ""}`);
       if (body) lines.push(`  Ringkas: ${body.slice(0, 600)}`);
+    }
+  }
+  if (selections.length > 0) {
+    lines.push(
+      "",
+      "Bagian dokumen tersemat (pengguna memilih blok SPESIFIK di editor — fokuskan jawaban ke sana):",
+      "Untuk membaca konteks lengkap blok tetangga panggil `get_render_payload` dengan artifactId. Untuk MENGEDIT dokumen, pengguna memakai AI editor native di dokumen (Astra dapat menyunting bagian terpilih langsung di editor); JANGAN klaim sudah mengubah dokumen dari sini.",
+    );
+    for (const s of selections) {
+      const excerpt = s.excerpt.trim();
+      lines.push(`- "${s.title}" (artifactId: ${s.artifactId}, blockIds: ${s.blockIds.join(", ")})`);
+      if (excerpt) lines.push(`  Kutipan terpilih: ${excerpt}`);
     }
   }
   lines.push("</system-reminder>");

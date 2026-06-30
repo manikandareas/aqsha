@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { readableApiErrorMessage } from "@/lib/api-error";
+import { documentEditBus } from "@/lib/document-edit-bus";
 import { queryKeys } from "../../../lib/api-query";
 import type { TimelineMessage } from "./timeline-types";
 import { type AgentKind, agentIdFor, useMastraClient } from "./mastra-client";
@@ -217,9 +218,37 @@ export function useMastraAgent(opts: {
   const commitAgentKind = useCallback((kind: AgentKind) => setSentKind(kind), []);
   const stateRef = useRef(state);
   stateRef.current = state;
+  // Dedup sinyal `request_document_edit` per tool-call. Langganan thread tunggal me-REPLAY buffer
+  // dari index 0 tiap reconnect (refresh / blip / ganti agentKind) → chunk tool-result yang SAMA bisa
+  // tiba berkali-kali; tanpa guard ini tiap replay memicu ulang AI editor + men-debit `doc_ai_edit`
+  // lagi. Key = toolCallId (fallback artifactId::instruction bila absen).
+  const publishedDocEditKeysRef = useRef<Set<string>>(new Set());
 
   const onChunk = useCallback((chunk: unknown) => {
     setState((s) => reduceMastraChunk(s, chunk as MastraChunk));
+    // Sinyal `request_document_edit` (Fase 3.5) → picu AI editor dokumen terbuka via bus event
+    // (editor reader artifact = satu React tree dengan chat). Editor yang artifactId-nya cocok
+    // memanggil `invokeAI` → diff Accept/Reject; bila tak ada editor cocok, no-op (bisa diperluas
+    // jadi affordance "buka dokumen").
+    const c = chunk as MastraChunk;
+    if (c?.type === "tool-result" || c?.type === "tool-output") {
+      const payload = c.payload ?? {};
+      if (payload.toolName === "request_document_edit") {
+        const result = (payload.result ?? payload.output) as
+          | { ok?: unknown; artifactId?: unknown; instruction?: unknown }
+          | undefined;
+        const artifactId = typeof result?.artifactId === "string" ? result.artifactId : null;
+        const instruction = typeof result?.instruction === "string" ? result.instruction : null;
+        if (result?.ok === true && artifactId && instruction) {
+          const toolCallId = typeof payload.toolCallId === "string" ? payload.toolCallId : null;
+          const dedupeKey = toolCallId ?? `${artifactId}::${instruction}`;
+          if (!publishedDocEditKeysRef.current.has(dedupeKey)) {
+            publishedDocEditKeysRef.current.add(dedupeKey);
+            documentEditBus.publish({ artifactId, instruction });
+          }
+        }
+      }
+    }
   }, []);
 
   // Langganan thread tunggal & panjang. Self-healing: subscribe awal bisa gagal untuk thread baru

@@ -51,7 +51,7 @@ import {
   type PaperExtractionStatus,
 } from "./artifact-render-panels";
 import { BlockNoteEditorLoader } from "./blocknote-editor-loader";
-import type { DocumentEditorContent } from "./blocknote-document-editor";
+import type { DocumentEditorContent, EditorSelection } from "./blocknote-document-editor";
 import { DocumentTitleEditor } from "./document-title-editor";
 import {
   autosaveReducer,
@@ -99,6 +99,7 @@ export function ArtifactDetailView({
   onClose,
   chatOpen,
   onToggleChat,
+  onAskAstraAboutSelection,
 }: {
   artifactId: string;
   /** Required for the page route; the panel derives it from the loaded artifact. */
@@ -109,6 +110,8 @@ export function ArtifactDetailView({
   /** Page only: toggle the artifact-page chat panel (rendered as a header affordance). */
   chatOpen?: boolean;
   onToggleChat?: () => void;
+  /** Page only (markdown editor): pilihan blok "Tanya Astra" → context token di composer. */
+  onAskAstraAboutSelection?: (selection: EditorSelection) => void;
 }) {
   const data = useArtifactDetailData(artifactId);
   const router = useRouter();
@@ -314,6 +317,7 @@ export function ArtifactDetailView({
               updateDocument={data.updateDocument}
               saveState={documentSaveState}
               dispatchSaveState={dispatchDocumentSave}
+              onAskAstraAboutSelection={onAskAstraAboutSelection}
             />
           )}
         </div>
@@ -535,6 +539,7 @@ function DocumentArtifactDetail({
   updateDocument,
   saveState,
   dispatchSaveState,
+  onAskAstraAboutSelection,
 }: {
   artifactId: string;
   initialTitle: string;
@@ -549,6 +554,7 @@ function DocumentArtifactDetail({
   }) => Promise<unknown>;
   saveState: AutosaveState;
   dispatchSaveState: AutosaveDispatch;
+  onAskAstraAboutSelection?: (selection: EditorSelection) => void;
 }) {
   const latestContent = useRef<DocumentEditorContent | null>(null);
   const lastSavedJsonRef = useRef(initialBlocksJson);
@@ -580,12 +586,14 @@ function DocumentArtifactDetail({
     <div className="grid w-full gap-1">
       <DocumentTitleEditor initialTitle={initialTitle} onRename={onRenameTitle} />
       <BlockNoteEditorLoader
+        artifactId={artifactId}
         initialBlocksJson={initialBlocksJson}
         initialMarkdown={initialMarkdown}
         onContentChange={(content) => {
           latestContent.current = content;
           dispatchSaveState({ type: "changed", json: content.blocksJson });
         }}
+        onAskAstraAboutSelection={onAskAstraAboutSelection}
       />
     </div>
   );

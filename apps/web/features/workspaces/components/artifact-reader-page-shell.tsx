@@ -5,8 +5,14 @@
 // (lewat ComposerMentionsProvider `ambientContextRefs`). Toggle "Chat" hidup di header artifact.
 // Thread baru tetap difile di bawah workspace ini (WorkspaceChatSidePanel).
 
-import { buildPaperMentionLabel, type ContextRef, messagePreview } from "@aqsha/chat-core";
+import {
+  buildPaperMentionLabel,
+  buildSelectionMentionLabel,
+  type ContextRef,
+  messagePreview,
+} from "@aqsha/chat-core";
 import { useMemo, useState } from "react";
+import type { EditorSelection } from "./blocknote-document-editor";
 import { DetailSplitLayout } from "@/components/layout/detail-split-layout";
 import { ResponsiveSidePanel } from "@/components/layout/responsive-side-panel";
 import { ComposerMentionsProvider } from "@/features/thread-experience/components/composer-context-mentions";
@@ -26,33 +32,55 @@ export function ArtifactReaderPageShell({
 }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
+  // Pilihan blok editor ("Tanya Astra") — disematkan sebagai token konteks halaman bersama pill paper.
+  // Disimpan BER-SCOPE `artifactId`: shell ini TIDAK di-remount per artifact (route dinamis, tanpa
+  // `key`), jadi pilihan diturunkan hanya saat masih cocok dengan artifact aktif — pilihan dari
+  // artifact lama otomatis terabaikan saat pindah (tak bocor ke composer artifact baru), tanpa effect.
+  const [pinnedSelection, setPinnedSelection] = useState<{
+    artifactId: string;
+    ref: ContextRef;
+  } | null>(null);
+  const selectionRef = pinnedSelection?.artifactId === artifactId ? pinnedSelection.ref : null;
 
   const workspaceData = useWorkspaceDetailData(workspaceId);
   const artifactData = useArtifactDetailData(artifactId);
   const workspaceName = workspaceData.workspace?.name ?? "Workspace";
   const artifactTitle = artifactData.artifact?.artifact.title;
 
-  const ambientContextRefs = useMemo<ContextRef[]>(
-    () =>
-      artifactTitle
-        ? [
-            {
-              kind: "paper",
-              workspaceId,
-              artifactId,
-              label: buildPaperMentionLabel(
-                messagePreview(workspaceName, 16),
-                messagePreview(artifactTitle, 22),
-              ),
-            },
-          ]
-        : [],
-    [workspaceId, artifactId, workspaceName, artifactTitle],
-  );
+  const ambientContextRefs = useMemo<ContextRef[]>(() => {
+    const refs: ContextRef[] = [];
+    if (artifactTitle) {
+      refs.push({
+        kind: "paper",
+        workspaceId,
+        artifactId,
+        label: buildPaperMentionLabel(
+          messagePreview(workspaceName, 16),
+          messagePreview(artifactTitle, 22),
+        ),
+      });
+    }
+    if (selectionRef) refs.push(selectionRef);
+    return refs;
+  }, [workspaceId, artifactId, workspaceName, artifactTitle, selectionRef]);
 
   const handleThreadChange = (next: string | null) => {
     setThreadId(next);
     if (next !== null) setChatOpen(true);
+  };
+
+  const handleAskAstraAboutSelection = (selection: EditorSelection) => {
+    setPinnedSelection({
+      artifactId,
+      ref: {
+        kind: "artifact-selection",
+        artifactId,
+        blockIds: selection.blockIds,
+        excerpt: selection.excerpt,
+        label: buildSelectionMentionLabel(selection.excerpt, selection.blockIds.length),
+      },
+    });
+    setChatOpen(true);
   };
 
   return (
@@ -73,6 +101,7 @@ export function ArtifactReaderPageShell({
                 variant="page"
                 chatOpen={chatOpen}
                 onToggleChat={() => setChatOpen((open) => !open)}
+                onAskAstraAboutSelection={handleAskAstraAboutSelection}
               />
             </div>
           }

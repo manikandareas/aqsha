@@ -222,6 +222,16 @@ Langkah & file:
 
 Output spike: keputusan "xl-ai-driven" vs "custom-overlay", didokumentasikan di sini sebelum lanjut §7.3 poin 12.
 
+### 8.1 Hasil spike (2026-06-30) — **CUSTOM-OVERLAY**
+
+Inspeksi `@blocknote/xl-ai@0.51.1` (tarball npm, `types/src/AIExtension.d.ts` + `server.d.ts` + `package.json`):
+
+- Visual diff/suggestion xl-ai digerakkan oleh `AIExtension.invokeAI(opts)` yang **memanggil LLM** (model AI SDK) lalu menerapkan operasi streaming lewat state machine `thinking → ai-writing → user-reviewing`. **Tidak ada** API publik untuk memasukkan **operasi eksternal** (record durable kita) ke mesin diff tanpa LLM-call.
+- Satu-satunya primitive apply tingkat-rendah, `_getApplySuggestionsTr` (re-export `server.js`), ber-prefix underscore + diberi peringatan tipe "advanced use-cases only" → jalur internal yang rapuh lintas-versi.
+- Dependensinya berat & **mismatch UI**: butuh `@blocknote/mantine` (editor kita `@blocknote/shadcn`), `@tiptap/core` v3, `@handlewithcare/prosemirror-suggest-changes`, `prosemirror-changeset`, dan salinan kedua SDK `ai` v6.
+
+**Keputusan:** pakai **custom-overlay** (fallback yang sudah disiapkan plan, §10). Render usulan sebagai panel review di atas editor + highlight blok target, di-feed dari record durable yang sama (kontrak §5 tak berubah). Akibatnya: `@blocknote/xl-ai` **TIDAK** dipasang (§7.3 poin 8 di-skip); apply/accept/reject/staleness/pause-autosave dikontrol penuh via API blok native (`getBlock`/`tryParseMarkdownToBlocks`/`replaceBlocks`/`insertBlocks`/`removeBlocks`) yang sudah dipakai editor.
+
 ## 9. Fase 3 — opsional (server-side apply)
 
 Untuk kasus agent perlu menulis tanpa editor terbuka (mis. batch / background / hasil `/deep`):

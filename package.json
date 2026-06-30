@@ -32,7 +32,9 @@
     "typecheck": "bun run --parallel --filter '@aqsha/ui' --filter '@aqsha/api' --filter '@aqsha/web' --filter '@aqsha/agent' --filter '@aqsha/db' --filter '@aqsha/chat-core' --filter '@aqsha/services' typecheck"
   },
   "overrides": {
-    "elysia": "1.4.29"
+    "elysia": "1.4.29",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

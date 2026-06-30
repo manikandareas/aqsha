@@ -39,7 +39,7 @@ export const providerUsageLedger = pgTable(
   (t) => [
     check(
       "provider_usage_ledger_feature_check",
-      sql`${t.feature} in ('normal_chat', 'pro_chat', 'cited_answer', 'deep_research', 'external_search', 'sandbox_compute', 'citation_verify')`,
+      sql`${t.feature} in ('normal_chat', 'pro_chat', 'cited_answer', 'deep_research', 'external_search', 'sandbox_compute', 'citation_verify', 'doc_ai_edit')`,
     ),
     uniqueIndex("provider_usage_ledger_by_owner_idempotency_key")
       .on(t.ownerUserId, t.idempotencyKey)

@@ -94,6 +94,14 @@ export {
   type ArtifactListItem,
   type ArtifactRenderPayload,
 } from "./artifact.service";
+// Helper murni route AI native BlockNote (`apps/api` /blocknote-ai/chat) — TANPA import `ai`.
+export { DocAiService, INDO_BRAND_PROMPT } from "./doc-ai.service";
+// Konfigurasi gateway Astra (env + default model) — SSOT bersama route doc-AI & `model.ts` agent.
+export {
+  ASTRA_LITE_MODEL_FALLBACK,
+  type AstraGatewayConfig,
+  resolveAstraGateway,
+} from "./astra-gateway";
 export { syncArtifactWorkspaceMove } from "./artifacts/move";
 export { PaperMetadataService, type PaperMetadataInput } from "./paper-metadata.service";
 export {

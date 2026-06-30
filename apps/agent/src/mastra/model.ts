@@ -1,7 +1,11 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import type { AgentKind } from "@aqsha/chat-core";
+import { resolveAstraGateway } from "@aqsha/services/astra-gateway";
 import type { RequestContext } from "@mastra/core/request-context";
 import { agentKindFromRequestContext } from "./lib/tool-context";
+
+// SSOT gateway Astra (env + default model id). Dipakai bareng route doc-AI (`apps/api`).
+const gateway = resolveAstraGateway();
 
 /**
  * Model Astra (chat lite/pro + subagent /deep). Provider OpenAI / gateway OpenAI-compatible
@@ -18,11 +22,11 @@ import { agentKindFromRequestContext } from "./lib/tool-context";
  * model tetap jalan sekadar tanpa trace. Context window ditegakkan `TokenLimiter` (bukan model id).
  */
 const openai = createOpenAI({
-  ...(process.env.OPENAI_BASE_URL ? { baseURL: process.env.OPENAI_BASE_URL } : {}),
-  ...(process.env.OPENAI_API_KEY ? { apiKey: process.env.OPENAI_API_KEY } : {}),
+  ...(gateway.baseURL ? { baseURL: gateway.baseURL } : {}),
+  ...(gateway.apiKey ? { apiKey: gateway.apiKey } : {}),
 });
 
-export const liteModel = openai.responses(process.env.AQSHA_LITE_MODEL ?? "gpt-4o");
+export const liteModel = openai.responses(gateway.liteModelId);
 
 /**
  * Model Pro Astra — model penalaran lebih kuat (`AQSHA_PRO_MODEL`). Fallback ke `AQSHA_LITE_MODEL`
@@ -30,7 +34,7 @@ export const liteModel = openai.responses(process.env.AQSHA_LITE_MODEL ?? "gpt-4
  * owner set env. Kedalaman penalaran disetel via `proProviderOptions` (default effort `"high"`).
  */
 export const proModel = openai.responses(
-  process.env.AQSHA_PRO_MODEL ?? process.env.AQSHA_LITE_MODEL ?? "gpt-4o",
+  process.env.AQSHA_PRO_MODEL ?? gateway.liteModelId,
 );
 
 /**

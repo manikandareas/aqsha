@@ -148,6 +148,20 @@
       "when": 1782729440709,
       "tag": "0020_exotic_william_stryker",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1782791104083,
+      "tag": "0021_fat_bulldozer",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1782815048447,
+      "tag": "0022_loving_galactus",
+      "breakpoints": true
     }
   ]
 }

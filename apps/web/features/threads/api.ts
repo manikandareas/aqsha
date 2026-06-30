@@ -92,6 +92,7 @@ export function useHydrateContext() {
       artifactIds: string[];
       paperKeys?: string[];
       feedItemIds?: string[];
+      selections?: { artifactId: string; blockIds: string[]; excerpt: string }[];
     }) => unwrap(await api.threads.context.hydrate.post(input)),
     // C3: hydrate konteks @mention (workspace/paper) → catatan ephemeral. Kegagalan transien
     // (jaringan) men-drop konteks senyap; retri singkat memperkecil peluang itu sebelum submit.
