@@ -1095,10 +1095,14 @@ export const ArtifactService = {
     });
   },
 
-  /** Detail artifact workspace-scoped (inline only). Soft: `null` bila headless/not-owned. */
+  /**
+   * Detail artifact untuk reader. Soft: `null` bila tak ada / bukan milik user. Artifact HEADLESS
+   * (`workspaceId=null`, mis. lampiran upload chat) tetap dikembalikan ke pemiliknya — reader panel
+   * thread membukanya lewat id; `getRenderPayload` juga sudah headless-friendly. Ownership tetap gate.
+   */
   async get(db: DbOrTx, ownerUserId: string, artifactId: string) {
     const artifact = await ArtifactRepo.findById(db, artifactId);
-    if (!artifact || artifact.ownerUserId !== ownerUserId || !artifact.workspaceId) return null;
+    if (!artifact || artifact.ownerUserId !== ownerUserId) return null;
     const content = await ArtifactContentRepo.findByArtifact(db, ownerUserId, artifactId);
     const url =
       artifact.artifactType === "url"
