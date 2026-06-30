@@ -30,7 +30,8 @@ import {
   triggerArtifactDownload,
 } from "@/lib/artifact-download";
 import { useArtifactRender } from "@/features/artifacts/api";
-import { panelHeaderPaddingClass } from "@/lib/panel-surface";
+import { PanelHeaderBar, SidePanelFrame } from "@/components/layout/side-panel-frame";
+import { PanelTitleLabel } from "@/components/panel-title-dropdown-trigger";
 import { cn } from "@/lib/utils";
 import { useArtifactDetailData } from "../api/use-workspaces-data";
 import { DeleteArtifactDialog } from "./artifact-delete-dialog";
@@ -263,7 +264,11 @@ export function ArtifactDetailView({
           }
         />
       ) : (
-        <ArtifactPanelToolbar onClose={onClose} trailing={panelActions} />
+        <ArtifactPanelToolbar
+          title={detail.artifact.title}
+          onClose={onClose}
+          trailing={panelActions}
+        />
       )
     ) : variant === "panel" ? (
       <ArtifactPanelToolbar onClose={onClose} />
@@ -343,15 +348,15 @@ export function ArtifactDetailView({
     ) : null;
 
   if (variant === "panel") {
-    // The framed surface comes from the side-panel slot (ResponsiveSidePanel →
-    // SidebarInset / Sidebar), so this fills it without re-framing (mirrors the
-    // workspace-library panel content).
+    // Flush header bar OUTSIDE the floating card (via SidePanelFrame), matching the
+    // main content header; the scrollable body tucks into the card below it.
     return (
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
-        {header}
-        <div className="relative min-h-0 flex-1 overflow-y-auto">{body}</div>
+      <>
+        <SidePanelFrame header={header}>
+          <div className="relative min-h-0 flex-1 overflow-y-auto">{body}</div>
+        </SidePanelFrame>
         {deleteDialog}
-      </div>
+      </>
     );
   }
 
@@ -367,35 +372,37 @@ export function ArtifactDetailView({
 }
 
 function ArtifactPanelToolbar({
+  title,
   onClose,
   trailing,
 }: {
+  title?: string;
   onClose?: () => void;
   trailing?: ReactNode;
 }) {
-  // Borderless action bar matching the workspace panel header padding: no back
-  // arrow, no title — just the More menu (`trailing`) and the close toggle,
-  // which mirrors the workspace panel's close affordance.
+  // Flush glass bar (same idiom as the main content header): artifact title on the
+  // left, More menu (`trailing`) + close toggle on the right. The bar renders OUTSIDE
+  // the floating card via SidePanelFrame, so the actions read as living outside it.
   return (
-    <header
-      className={cn(
-        "flex shrink-0 items-center justify-end gap-0.5 bg-background",
-        panelHeaderPaddingClass,
-      )}
-    >
-      {trailing}
-      {onClose ? (
-        <Button
-          type="button"
-          variant="ghost"
-          className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-          onClick={onClose}
-          aria-label="Tutup panel"
-        >
-          <PanelLeftIcon className="size-3.5 rotate-180" />
-        </Button>
-      ) : null}
-    </header>
+    <PanelHeaderBar
+      title={title ? <PanelTitleLabel>{title}</PanelTitleLabel> : null}
+      actions={
+        <>
+          {trailing}
+          {onClose ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={onClose}
+              aria-label="Tutup panel"
+            >
+              <PanelLeftIcon className="size-3.5 rotate-180" />
+            </Button>
+          ) : null}
+        </>
+      }
+    />
   );
 }
 

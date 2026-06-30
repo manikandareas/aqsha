@@ -80,6 +80,7 @@ export function WorkspaceLibrarySurface({
   onClosePanel,
   showCreateActions,
   showWorkspaceSettings,
+  variant,
 }: {
   workspaceId: string;
   workspaceName: string;
@@ -98,6 +99,7 @@ export function WorkspaceLibrarySurface({
   onClosePanel?: () => void;
   showCreateActions?: boolean;
   showWorkspaceSettings?: boolean;
+  variant?: "page" | "panel";
 }) {
   const router = useRouter();
   const closePanel = useCloseRightPanel();
@@ -207,6 +209,7 @@ export function WorkspaceLibrarySurface({
         onToggleLeftSidebar={onToggleLeftSidebar}
         showCreateActions={showCreateActions}
         showWorkspaceSettings={showWorkspaceSettings}
+        variant={variant}
         renderDialogs={(activeFolderId, activeFolderName, onUploadFiles) => (
           <WorkspaceLibraryDialogsStack
             workspaceId={workspaceId}

@@ -32,7 +32,8 @@ import {
   type WorkspaceFolder,
 } from "../utils/workspace-library-model";
 import type { WorkspaceLibraryTab } from "./workspace-library-surface";
-import { panelBodyPaddingClass } from "@/lib/panel-surface";
+import { SidePanelFrame } from "@/components/layout/side-panel-frame";
+import { panelBodyColumnClass, panelBodyPaddingClass } from "@/lib/panel-surface";
 import {
   WORKSPACE_UPLOAD_ACCEPT,
   type WorkspaceUploadProgressEvent,
@@ -90,6 +91,7 @@ export function WorkspaceLibraryBoard({
   renderDialogs,
   showCreateActions,
   showWorkspaceSettings,
+  variant = "page",
 }: {
   workspaceName: string;
   workspaceEmoji?: string;
@@ -149,6 +151,11 @@ export function WorkspaceLibraryBoard({
   ) => ReactNode;
   showCreateActions?: boolean;
   showWorkspaceSettings?: boolean;
+  /**
+   * `"page"` (default) renders the board as a full-bleed column (toolbar inside).
+   * `"panel"` routes through `SidePanelFrame` so the toolbar floats OUTSIDE the card.
+   */
+  variant?: "page" | "panel";
 }) {
   const filteredArtifacts = applyWorkspaceArtifactControls({
     artifacts,
@@ -231,9 +238,35 @@ export function WorkspaceLibraryBoard({
 
   const openUploadPicker = () => fileInputRef.current?.click();
 
-  return (
+  const toolbar = (
+    <WorkspaceBoardToolbar
+      workspaceName={workspaceName}
+      workspaceEmoji={workspaceEmoji}
+      titleSlot={titleSlot}
+      // Breadcrumb folder hanya relevan di tab Pustaka.
+      breadcrumb={isPustaka ? folderView.breadcrumb : folderView.breadcrumb.slice(0, 1)}
+      onNavigate={navigateTo}
+      onCreateFolder={onCreateFolder}
+      onCreateDocument={onCreateDocument}
+      onCreateUrl={onCreateUrl}
+      onRenameWorkspace={onRenameWorkspace}
+      onUpdateWorkspaceEmoji={onUpdateWorkspaceEmoji}
+      onArchiveWorkspace={onArchiveWorkspace}
+      onToggleChat={onToggleChatPanel}
+      chatOpen={chatPanelOpen}
+      onClosePanel={onClosePanel}
+      showLeftSidebarTrigger={showLeftSidebarTrigger}
+      onToggleLeftSidebar={onToggleLeftSidebar}
+      showCreateActions={canCreate}
+      showWorkspaceSettings={showWorkspaceSettings}
+    />
+  );
+
+  // Scrollable board body (tabs + grid/timeline + footnote). The hidden upload input
+  // rides along here; in panel mode this tucks into the floating card while `toolbar`
+  // hoists out as the flush header — in page mode both sit in the same column.
+  const body = (
     <>
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
         <input
           ref={fileInputRef}
           type="file"
@@ -247,27 +280,6 @@ export function WorkspaceLibraryBoard({
             }
             event.currentTarget.value = "";
           }}
-        />
-        <WorkspaceBoardToolbar
-          workspaceName={workspaceName}
-          workspaceEmoji={workspaceEmoji}
-          titleSlot={titleSlot}
-          // Breadcrumb folder hanya relevan di tab Pustaka.
-          breadcrumb={isPustaka ? folderView.breadcrumb : folderView.breadcrumb.slice(0, 1)}
-          onNavigate={navigateTo}
-          onCreateFolder={onCreateFolder}
-          onCreateDocument={onCreateDocument}
-          onCreateUrl={onCreateUrl}
-          onRenameWorkspace={onRenameWorkspace}
-          onUpdateWorkspaceEmoji={onUpdateWorkspaceEmoji}
-          onArchiveWorkspace={onArchiveWorkspace}
-          onToggleChat={onToggleChatPanel}
-          chatOpen={chatPanelOpen}
-          onClosePanel={onClosePanel}
-          showLeftSidebarTrigger={showLeftSidebarTrigger}
-          onToggleLeftSidebar={onToggleLeftSidebar}
-          showCreateActions={canCreate}
-          showWorkspaceSettings={showWorkspaceSettings}
         />
         <WorkspaceLibraryTabs
           activeTab={activeTab}
@@ -411,14 +423,36 @@ export function WorkspaceLibraryBoard({
             onClearContext={() => onSetArtifactContextSelection([])}
           />
         ) : null}
+    </>
+  );
+
+  const dialogs = renderDialogs?.(
+    activeFolderId,
+    folderView.activeFolderId === "root"
+      ? ""
+      : (folderView.breadcrumb.at(-1)?.label ?? ""),
+    uploadToActiveFolder,
+  );
+
+  // Panel: toolbar floats OUTSIDE the card as the flush header; body tucks into the card.
+  // `SidePanelFrame` already wraps its children in the body column, so `body` goes in raw.
+  if (variant === "panel") {
+    return (
+      <>
+        <SidePanelFrame header={toolbar}>{body}</SidePanelFrame>
+        {dialogs}
+      </>
+    );
+  }
+
+  // Page: full-bleed column with the toolbar inside it (unchanged from the original).
+  return (
+    <>
+      <div className={panelBodyColumnClass}>
+        {toolbar}
+        {body}
       </div>
-      {renderDialogs?.(
-        activeFolderId,
-        folderView.activeFolderId === "root"
-          ? ""
-          : (folderView.breadcrumb.at(-1)?.label ?? ""),
-        uploadToActiveFolder,
-      )}
+      {dialogs}
     </>
   );
 }

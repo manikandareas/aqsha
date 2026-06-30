@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { ResponsiveSidePanel } from "@/components/layout/responsive-side-panel";
+import { PanelHeaderBar, SidePanelFrame } from "@/components/layout/side-panel-frame";
 import { PanelBoardTitleDropdownTrigger } from "@/components/panel-title-dropdown-trigger";
 import {
   DropdownMenu,
@@ -220,13 +221,13 @@ function ThreadWorkspaceLibraryPanel({
 
   if (libraryData.isLoading) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+      <SidePanelFrame header={<PanelHeaderBar title={titleSlot ?? null} />}>
         <div className={cn("grid gap-3", panelBodyPaddingClass)}>
           <Skeleton className="h-8 w-40 rounded-lg" />
           <Skeleton className="h-48 rounded-xl" />
           <Skeleton className="h-48 rounded-xl" />
         </div>
-      </div>
+      </SidePanelFrame>
     );
   }
 
@@ -243,6 +244,7 @@ function ThreadWorkspaceLibraryPanel({
       onAfterArchive={() => router.push("/app/workspaces")}
       showCreateActions
       showWorkspaceSettings
+      variant="panel"
     />
   );
 }
@@ -320,22 +322,25 @@ function ThreadGlobalContextPanel({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      <WorkspaceBoardToolbar
-        workspaceName="Workspace"
-        titleSlot={workspaceSwitcher}
-        breadcrumb={[{ id: "root", label: "Root" }]}
-        onNavigate={() => {}}
-        onCreateFolder={() => {}}
-        onCreateDocument={() => {}}
-        onCreateUrl={() => {}}
-        onRenameWorkspace={async () => {}}
-        onUpdateWorkspaceEmoji={async () => {}}
-        onArchiveWorkspace={() => {}}
-        onClosePanel={closePanel}
-        showCreateActions={false}
-        showWorkspaceSettings={false}
-      />
+    <SidePanelFrame
+      header={
+        <WorkspaceBoardToolbar
+          workspaceName="Workspace"
+          titleSlot={workspaceSwitcher}
+          breadcrumb={[{ id: "root", label: "Root" }]}
+          onNavigate={() => {}}
+          onCreateFolder={() => {}}
+          onCreateDocument={() => {}}
+          onCreateUrl={() => {}}
+          onRenameWorkspace={async () => {}}
+          onUpdateWorkspaceEmoji={async () => {}}
+          onArchiveWorkspace={() => {}}
+          onClosePanel={closePanel}
+          showCreateActions={false}
+          showWorkspaceSettings={false}
+        />
+      }
+    >
       <div
         className={cn(
           "flex min-h-0 flex-1 items-center justify-center overflow-y-auto bg-background",
@@ -346,6 +351,6 @@ function ThreadGlobalContextPanel({
           Silakan pilih workspace terlebih dahulu.
         </p>
       </div>
-    </div>
+    </SidePanelFrame>
   );
 }

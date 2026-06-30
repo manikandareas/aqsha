@@ -1,13 +1,11 @@
 "use client";
 
 import { MessageSquarePlusIcon, PanelLeftIcon } from "@aqsha/ui/icons";
+import { PanelHeaderBar, SidePanelFrame } from "@/components/layout/side-panel-frame";
 import { Button } from "@/components/ui/button";
 import { SidebarContent } from "@/components/ui/sidebar";
 import { useCloseRightPanel } from "@/hooks/use-close-right-panel";
-import {
-  panelBodyPaddingClass,
-  panelHeaderBarClass,
-} from "@/lib/panel-surface";
+import { panelBodyPaddingClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
 import { AccessDeniedState } from "./access-denied-state";
 import { ChatThreadSurface } from "./chat-thread-surface";
@@ -80,48 +78,53 @@ export function CompactThreadChatPanel({
   const headerLabel = activeThread?.title ?? "Chat baru";
 
   return (
-    <>
-      <div className={panelHeaderBarClass}>
-        <div className="flex min-w-0 items-center gap-1.5">
-          <ThreadRecentSwitcher
-            title={headerLabel}
-            threads={threads}
-            onSelectThread={onActiveThreadIdChange}
-            onNewThread={() => onActiveThreadIdChange(null)}
-            newLabel="Chat baru"
-            emptyLabel="Belum ada thread"
-          />
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          {activeThreadId ? (
-            <ThreadDeleteActions
-              description={deleteDescription}
-              onDelete={async () => {
-                await onDeleteThread();
-                onActiveThreadIdChange(null);
-              }}
+    <SidePanelFrame
+      header={
+        <PanelHeaderBar
+          title={
+            <ThreadRecentSwitcher
+              title={headerLabel}
+              threads={threads}
+              onSelectThread={onActiveThreadIdChange}
+              onNewThread={() => onActiveThreadIdChange(null)}
+              newLabel="Chat baru"
+              emptyLabel="Belum ada thread"
             />
-          ) : null}
-          <Button
-            type="button"
-            variant="ghost"
-            className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label="Chat baru"
-            onClick={() => onActiveThreadIdChange(null)}
-          >
-            <MessageSquarePlusIcon className="size-3.5" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-            onClick={closePanel}
-            aria-label="Tutup panel chat"
-          >
-            <PanelLeftIcon className="size-3.5 rotate-180" />
-          </Button>
-        </div>
-      </div>
+          }
+          actions={
+            <>
+              {activeThreadId ? (
+                <ThreadDeleteActions
+                  description={deleteDescription}
+                  onDelete={async () => {
+                    await onDeleteThread();
+                    onActiveThreadIdChange(null);
+                  }}
+                />
+              ) : null}
+              <Button
+                type="button"
+                variant="ghost"
+                className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Chat baru"
+                onClick={() => onActiveThreadIdChange(null)}
+              >
+                <MessageSquarePlusIcon className="size-3.5" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                onClick={closePanel}
+                aria-label="Tutup panel chat"
+              >
+                <PanelLeftIcon className="size-3.5 rotate-180" />
+              </Button>
+            </>
+          }
+        />
+      }
+    >
       <SidebarContent className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden bg-background p-0">
         {activeThreadId ? (
           activeThread === null ? (
@@ -158,6 +161,6 @@ export function CompactThreadChatPanel({
           />
         )}
       </SidebarContent>
-    </>
+    </SidePanelFrame>
   );
 }
