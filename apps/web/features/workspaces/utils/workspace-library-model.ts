@@ -31,31 +31,6 @@ export type WorkspaceArtifact = {
   createdAt: number;
 };
 
-// "library" = semua yang dibawa/dibuat user sendiri (upload + url + dokumen manual)
-//             → ditampilkan di section "Pustaka".
-// "output"  = HANYA artifak yang digenerate agent → section "Artifact".
-export type ArtifactCategory = "library" | "output";
-
-export function artifactCategory(source?: WorkspaceArtifact["source"]): ArtifactCategory {
-  return source === "agent" ? "output" : "library";
-}
-
-export function partitionArtifactsByCategory(artifacts: WorkspaceArtifact[]): {
-  library: WorkspaceArtifact[];
-  output: WorkspaceArtifact[];
-} {
-  const library: WorkspaceArtifact[] = [];
-  const output: WorkspaceArtifact[] = [];
-  for (const artifact of artifacts) {
-    if (artifactCategory(artifact.source) === "library") {
-      library.push(artifact);
-    } else {
-      output.push(artifact);
-    }
-  }
-  return { library, output };
-}
-
 export const workspaceArtifactTypes = [
   "markdown",
   "plain_text",

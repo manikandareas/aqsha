@@ -148,7 +148,7 @@ function WorkspaceLibraryMain({
       getArtifactSelected={contextSelection.getArtifactSelected}
       onToggleArtifactContext={contextSelection.onToggleArtifactContext}
       onSetArtifactContextSelection={contextSelection.onSetArtifactContextSelection}
-      contextCount={contextSelection.contextArtifacts.length}
+      contextCount={contextSelection.contextCount}
       onAfterArchive={onAfterArchive}
       chatPanelOpen={chatPanelOpen}
       onToggleChatPanel={onToggleChatPanel}

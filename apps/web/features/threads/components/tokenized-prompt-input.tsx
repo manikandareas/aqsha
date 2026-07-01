@@ -57,6 +57,14 @@ export type ContextItemOption = {
   title: string;
 };
 
+/**
+ * Teks placeholder composer. `string` = dipakai apa adanya di semua lebar; pasangan
+ * `{ narrow, wide }` = varian per-lebar KONTAINER (bukan viewport) — `wide` muncul saat
+ * composer ≥ `@lg` (mis. kolom thread penuh), `narrow` di panel chat sempit. Dipilih via
+ * container query, jadi panel kecil di desktop pun ikut memakai teks ringkas.
+ */
+export type ComposerPlaceholder = string | { narrow: string; wide: string };
+
 const EMPTY_CONTEXT_WORKSPACES: ContextWorkspaceOption[] = [];
 
 function truncateLabel(value: string, max = 22) {
@@ -90,7 +98,7 @@ export function TokenizedPromptInput({
   onSubmit: () => void;
   disabled?: boolean;
   maxLength: number;
-  placeholder: string;
+  placeholder: ComposerPlaceholder;
   onHeightChange?: (height: number) => void;
   className?: string;
   isCollapsed?: boolean;
@@ -556,7 +564,16 @@ export function TokenizedPromptInput({
                 isCollapsed ? "inset-y-0 flex items-center" : "top-[3px]",
               )}
             >
-              {placeholder}
+              {typeof placeholder === "string" ? (
+                placeholder
+              ) : (
+                <>
+                  {/* Container-query (bukan viewport): teks ringkas saat composer sempit
+                      (panel chat), teks penuh saat composer ≥ @lg (kolom thread lebar). */}
+                  <span className="@lg/composer:hidden">{placeholder.narrow}</span>
+                  <span className="hidden @lg/composer:inline">{placeholder.wide}</span>
+                </>
+              )}
             </span>
           ) : null}
           <div

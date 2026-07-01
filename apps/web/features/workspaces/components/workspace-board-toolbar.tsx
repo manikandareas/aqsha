@@ -61,6 +61,7 @@ export function WorkspaceBoardToolbar({
   onRenameWorkspace,
   onUpdateWorkspaceEmoji,
   onArchiveWorkspace,
+  controls,
   onToggleChat,
   chatOpen,
   onClosePanel,
@@ -80,6 +81,8 @@ export function WorkspaceBoardToolbar({
   onRenameWorkspace: (name: string) => Promise<unknown>;
   onUpdateWorkspaceEmoji: (emoji: string) => Promise<unknown>;
   onArchiveWorkspace: () => void;
+  /** Compact search / filter / sort cluster, docked in the header's right side. */
+  controls?: ReactNode;
   onToggleChat?: () => void;
   chatOpen?: boolean;
   onClosePanel?: () => void;
@@ -151,7 +154,11 @@ export function WorkspaceBoardToolbar({
             </DropdownMenu>
           ) : null}
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex min-w-0 items-center gap-1">
+          {controls}
+          {controls && (onClosePanel || onToggleChat) ? (
+            <span aria-hidden className="mx-0.5 h-4 w-px shrink-0 bg-border/70" />
+          ) : null}
           {onClosePanel ? (
             <Button
               type="button"
@@ -166,15 +173,16 @@ export function WorkspaceBoardToolbar({
             <button
               type="button"
               onClick={onToggleChat}
+              aria-label={chatOpen ? "Tutup panel chat" : "Buka panel chat"}
+              aria-pressed={chatOpen}
               className={cn(
-                "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold transition-colors",
+                "flex size-7 shrink-0 items-center justify-center rounded-full transition-colors",
                 chatOpen
                   ? "bg-primary/15 text-primary"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
             >
               <MessageSquareIcon className="size-3.5" />
-              Chat
             </button>
           ) : null}
           {showWorkspaceSettings ? (
@@ -184,7 +192,7 @@ export function WorkspaceBoardToolbar({
                   type="button"
                   variant="ghost"
                   size="icon-sm"
-                  className="size-8 rounded-full text-muted-foreground"
+                  className="size-7 rounded-full text-muted-foreground"
                   aria-label="Opsi workspace"
                 >
                   <MoreHorizontalIcon className="size-4" />

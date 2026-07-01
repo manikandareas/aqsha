@@ -81,11 +81,6 @@ export type SelectedContextArtifact = {
   };
 };
 
-export type DraftContextArtifact = {
-  artifactId: string;
-  title: string;
-};
-
 export type ToggleThreadContextArtifact = (args: {
   threadId: string;
   artifactId: ArtifactId;
@@ -118,6 +113,4 @@ export type ThreadShellLayoutProps = {
   onRetryRun?: (args: { runId: AgentRunId }) => Promise<unknown>;
   onDeleteThread?: () => Promise<void>;
   sidePanel?: ReactNode;
-  contextArtifacts?: DraftContextArtifact[];
-  onRemoveContextArtifact?: (artifactId: string) => void;
 };

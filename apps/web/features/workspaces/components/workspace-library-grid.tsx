@@ -12,7 +12,6 @@ import {
   FolderContextMenuContent,
 } from "./workspace-library-context-menus";
 import {
-  partitionArtifactsByCategory,
   type FolderSummary,
   type MoveTargetOption,
   type WorkspaceArtifact,
@@ -90,9 +89,8 @@ export function WorkspaceLibraryGrid({
   onDragArtifactEnd: () => void;
   onDropArtifactOnFolder: (folderId: string) => void;
 }) {
-  // Grid ini sekarang khusus tab "Pustaka": hanya folder + artifak kategori
-  // library. Output agent ditampilkan terpisah sebagai linimasa di tab Artifact.
-  const { library } = partitionArtifactsByCategory(artifacts);
+  // Grid tunggal: folder + semua artifak folder-scoped (pustaka user maupun
+  // output agent). Kartu agent dibedakan lewat badge/aksen di kartunya sendiri.
   const selectedIds = artifacts.flatMap((artifact) =>
     getArtifactSelected(artifact._id) ? [artifact._id] : [],
   );
@@ -136,9 +134,9 @@ export function WorkspaceLibraryGrid({
         </section>
       ) : null}
 
-      {library.length > 0 ? (
+      {artifacts.length > 0 ? (
         <ArtifactSection
-          artifacts={library}
+          artifacts={artifacts}
           selectedIds={selectedIds}
           {...itemHandlers}
         />

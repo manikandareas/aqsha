@@ -1,5 +1,13 @@
 "use client";
 
+import { useContextPickerArtifacts } from "@/features/artifacts/api";
+import { UPLOAD_ACCEPT } from "@/features/artifacts/types";
+import {
+  useAmbientContextEpoch,
+  useComposerSelection,
+} from "@/features/thread-experience/components/composer-context-mentions";
+import { useWorkspacesList } from "@/features/workspaces/api";
+import { cn } from "@/lib/utils";
 import {
   type ContextRef,
   contextRefKey,
@@ -26,12 +34,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { useContextPickerArtifacts } from "@/features/artifacts/api";
-import { UPLOAD_ACCEPT } from "@/features/artifacts/types";
-import { useAmbientContextEpoch } from "@/features/thread-experience/components/composer-context-mentions";
-import { useWorkspacesList } from "@/features/workspaces/api";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { cn } from "@/lib/utils";
 import {
   useHydrateContext,
   useRemoveThreadAttachment,
@@ -45,6 +47,7 @@ import {
 } from "./composer-agent-selector";
 import { FileChip } from "./file-chip";
 import {
+  type ComposerPlaceholder,
   type ContextItemOption,
   type ContextWorkspaceOption,
   TokenizedPromptInput,
@@ -78,13 +81,35 @@ export type ComposerSendPayload = {
 };
 
 /** Thread ringkas untuk panel "Thread terbaru" (start panel landing). */
-export type RecentThread = { threadId: string; title: string; lastActivityAt: number };
+export type RecentThread = {
+  threadId: string;
+  title: string;
+  lastActivityAt: number;
+};
 
 /** Lampiran composer ter-finalize pada thread (Slice 6.7). `indexingStatus` melacak index async
  * (D5): `pending` = file besar masih diproses worker; `ready`/`failed` setelah selesai. */
-type ComposerAttachment = { artifactId: string; title: string; indexingStatus?: string };
+type ComposerAttachment = {
+  artifactId: string;
+  title: string;
+  indexingStatus?: string;
+};
 
 const EMPTY_CONTEXT_REFS: ContextRef[] = [];
+
+/** Reducer merge-pin bersama dua epoch-merge (ambient + selection library): buang `removeKeys`
+ * dari set saat ini, lalu prepend `addRefs` yang belum ada (dedup by key). Satu tempat supaya
+ * perbaikan (mis. perbandingan key/urutan) tak luput di salah satu jalur. */
+function reconcilePinnedRefs(
+  current: ContextRef[],
+  removeKeys: Set<string>,
+  addRefs: ContextRef[],
+): ContextRef[] {
+  const kept = current.filter((ref) => !removeKeys.has(contextRefKey(ref)));
+  const keptKeys = new Set(kept.map(contextRefKey));
+  const toAdd = addRefs.filter((ref) => !keptKeys.has(contextRefKey(ref)));
+  return [...toAdd, ...kept];
+}
 
 const COMPOSER_EASE_OUT = [0.23, 1, 0.32, 1] as const;
 const COMPOSER_COLLAPSED_RADIUS = 23;
@@ -163,23 +188,20 @@ export function Composer({
   recentThreads?: RecentThread[];
   /** Pre-seed teks (mis. item Explore). */
   initialContent?: string;
-  /** Teks placeholder. String = dipakai apa adanya; pasangan `{ mobile, desktop }`
-   * membiarkan Composer memilih per-breakpoint (satu subscription `useIsMobile`
-   * di sini, bukan di tiap pemanggil). Kosong = default @-mention/slash. */
-  placeholder?: string | { mobile: string; desktop: string };
+  /** Teks placeholder. String = dipakai apa adanya di semua lebar; pasangan
+   * `{ narrow, wide }` membiarkan composer memilih per-lebar KONTAINER lewat container
+   * query (bukan viewport `useIsMobile`) — jadi panel chat sempit tetap memakai teks
+   * ringkas walau di desktop. Kosong = default @-mention/slash. */
+  placeholder?: ComposerPlaceholder;
 }) {
   "use no memo";
 
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
-  const isMobile = useIsMobile();
-  const resolvedPlaceholder =
-    typeof placeholder === "object"
-      ? isMobile
-        ? placeholder.mobile
-        : placeholder.desktop
-      : (placeholder ??
-        (isMobile ? "Ketik @ atau /…" : "Ketik @ untuk workspace, / untuk perintah…"));
+  const resolvedPlaceholder: ComposerPlaceholder = placeholder ?? {
+    narrow: "Tulis pesan…",
+    wide: "Tulis pesan untuk Astra…",
+  };
 
   const [content, setContent] = useState(initialContent ?? "");
   // Varian `content` dengan penanda `@mention` (dari `serializeComposerEditorWithMarkers`) — dipakai
@@ -187,7 +209,8 @@ export function Composer({
   // dari `initialContent` (teks polos, tanpa marker) supaya tak drift dari `content` sebelum edit.
   const [richContent, setRichContent] = useState(initialContent ?? "");
   const [commands, setCommands] = useState<PromptCommand[]>([]);
-  const [contextRefs, setContextRefs] = useState<ContextRef[]>(EMPTY_CONTEXT_REFS);
+  const [contextRefs, setContextRefs] =
+    useState<ContextRef[]>(EMPTY_CONTEXT_REFS);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [drillWorkspaceId, setDrillWorkspaceId] = useState<string | null>(null);
   const [editorHeight, setEditorHeight] = useState(24);
@@ -204,14 +227,21 @@ export function Composer({
   // D5: lampiran besar di-index async (status awal `pending`). Poll daftar artifact thread HANYA
   // selama ada upload pending; status chip LIVE diturunkan dari hasil poll (derive, tak mirror ke
   // state → hindari cascading render) + toast sekali per artifact bila index gagal.
-  const hasPendingUpload = attachments.some((a) => a.indexingStatus === "pending");
-  const threadArtifacts = useThreadArtifacts(hasPendingUpload ? (threadId ?? null) : null, {
-    pollWhilePending: true,
-  });
+  const hasPendingUpload = attachments.some(
+    (a) => a.indexingStatus === "pending",
+  );
+  const threadArtifacts = useThreadArtifacts(
+    hasPendingUpload ? (threadId ?? null) : null,
+    {
+      pollWhilePending: true,
+    },
+  );
   const attachmentsView = useMemo(
     () =>
       attachments.map((a) => {
-        const live = threadArtifacts.data?.find((it) => it._id === a.artifactId)?.indexingStatus;
+        const live = threadArtifacts.data?.find(
+          (it) => it._id === a.artifactId,
+        )?.indexingStatus;
         return live ? { ...a, indexingStatus: live } : a;
       }),
     [attachments, threadArtifacts.data],
@@ -219,9 +249,14 @@ export function Composer({
   const toastedFailuresRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     for (const a of attachmentsView) {
-      if (a.indexingStatus === "failed" && !toastedFailuresRef.current.has(a.artifactId)) {
+      if (
+        a.indexingStatus === "failed" &&
+        !toastedFailuresRef.current.has(a.artifactId)
+      ) {
         toastedFailuresRef.current.add(a.artifactId);
-        toast.warning(`"${a.title}" gagal diindeks; Astra mungkin tak bisa membaca isinya.`);
+        toast.warning(
+          `"${a.title}" gagal diindeks; Astra mungkin tak bisa membaca isinya.`,
+        );
       }
     }
   }, [attachmentsView]);
@@ -232,7 +267,9 @@ export function Composer({
   useEffect(() => {
     const nextSeed = initialContent ?? "";
     if (nextSeed === lastSeedRef.current) return;
-    setContent((current) => (current === lastSeedRef.current ? nextSeed : current));
+    setContent((current) =>
+      current === lastSeedRef.current ? nextSeed : current,
+    );
     lastSeedRef.current = nextSeed;
   }, [initialContent]);
 
@@ -248,20 +285,62 @@ export function Composer({
   // tetap disisipkan ulang (signature-only dulu membuat tombol seakan mati). Epoch hanya naik saat ada
   // set sungguhan, jadi penghapusan pill oleh user TIDAK memicu re-merge (token tak muncul lagi sendiri).
   const ambientEpoch = useAmbientContextEpoch();
-  const [ambientMerge, setAmbientMerge] = useState<{ epoch: number; refs: ContextRef[] }>({
+  const [ambientMerge, setAmbientMerge] = useState<{
+    epoch: number;
+    refs: ContextRef[];
+  }>({
     epoch: -1,
     refs: EMPTY_CONTEXT_REFS,
   });
   if (ambientEpoch !== ambientMerge.epoch) {
     // Buang SEMUA token ambient (lama + baru) dari set saat ini, sisakan token MANUAL (palette), lalu
     // prepend token ambient SAAT INI → ganti item bersih, token manual selalu aman.
-    const ambientKeys = new Set([...ambientMerge.refs, ...ambientContextRefs].map(contextRefKey));
+    const ambientKeys = new Set(
+      [...ambientMerge.refs, ...ambientContextRefs].map(contextRefKey),
+    );
     setAmbientMerge({ epoch: ambientEpoch, refs: ambientContextRefs });
-    setContextRefs((current) => {
-      const manual = current.filter((ref) => !ambientKeys.has(contextRefKey(ref)));
-      return [...ambientContextRefs, ...manual];
-    });
+    setContextRefs((current) => reconcilePinnedRefs(current, ambientKeys, ambientContextRefs));
   }
+
+  // Selection library ("klik 1× = konteks", provider) → pill `@paper` di composer. Pola epoch-merge
+  // sama seperti ambient: saat selection berubah, buang pill selection yang tak lagi terpilih dan
+  // sisipkan yang baru, PERTAHANKAN pill lain (manual/@ + ambient). Injeksi ini tak lewat editor →
+  // tak memicu `onContextRefsChange`, jadi back-prop di bawah hanya menangkap pencabutan oleh user.
+  const selection = useComposerSelection();
+  const [selectionMerge, setSelectionMerge] = useState<{
+    epoch: number;
+    keys: string[];
+  }>({
+    epoch: -1,
+    keys: [],
+  });
+  if (selection.selectionEpoch !== selectionMerge.epoch) {
+    const nextKeys = selection.selectionRefs.map(contextRefKey);
+    const nextKeySet = new Set(nextKeys);
+    // Buang HANYA pill yang tadinya selection tapi kini tak terpilih; ref manual/ambient tetap.
+    const removedKeys = new Set(
+      selectionMerge.keys.filter((key) => !nextKeySet.has(key)),
+    );
+    setSelectionMerge({ epoch: selection.selectionEpoch, keys: nextKeys });
+    setContextRefs((current) =>
+      reconcilePinnedRefs(current, removedKeys, selection.selectionRefs),
+    );
+  }
+
+  // Sinkron DUA ARAH: pill selection yang dicabut user di editor → deselect kartu library. Hanya
+  // terpanggil dari event editor (bukan injeksi programatik), jadi ref `paper` terpilih yang hilang
+  // dari `next` = benar-benar dicabut user. Non-selection (manual @) diabaikan (bukan bagian selection).
+  const handleContextRefsChange = (next: ContextRef[]) => {
+    if (selection.selectionRefs.length > 0) {
+      const nextKeys = new Set(next.map(contextRefKey));
+      for (const ref of selection.selectionRefs) {
+        if (ref.kind === "paper" && !nextKeys.has(contextRefKey(ref))) {
+          selection.removeSelectionArtifact(ref.artifactId);
+        }
+      }
+    }
+    setContextRefs(next);
+  };
 
   // Retry (Slice 6.8): turn gagal → kembalikan draft terakhir ke editor (resend = turn
   // baru). Derivasi saat render (pola "adjust state when a prop changes", bukan effect).
@@ -279,7 +358,11 @@ export function Composer({
   const contextWorkspaces: ContextWorkspaceOption[] = useMemo(
     () =>
       (workspacesQuery.data?.pages ?? []).flatMap((page) =>
-        page.items.map((w) => ({ workspaceId: w.id, name: w.name, emoji: w.emoji ?? undefined })),
+        page.items.map((w) => ({
+          workspaceId: w.id,
+          name: w.name,
+          emoji: w.emoji ?? undefined,
+        })),
       ),
     [workspacesQuery.data],
   );
@@ -305,7 +388,10 @@ export function Composer({
     (!isContentEmpty &&
       (content.includes("\n") || editorHeight > 34 || commands.length > 0));
   const shellExpanded = isExpanded;
-  const shellTransition = composerShellTransition(shellExpanded, shouldReduceMotion);
+  const shellTransition = composerShellTransition(
+    shellExpanded,
+    shouldReduceMotion,
+  );
 
   const canSend =
     (hasText || attachments.length > 0) &&
@@ -313,7 +399,8 @@ export function Composer({
     !disabled &&
     !isSending &&
     !hydrate.isPending;
-  const canAttach = Boolean(threadId) && !disabled && !attachmentUpload.isPending && !isSending;
+  const canAttach =
+    Boolean(threadId) && !disabled && !attachmentUpload.isPending && !isSending;
 
   async function submit() {
     if (!canSend) return;
@@ -328,7 +415,9 @@ export function Composer({
     let displayMarked: string;
     let command: "deep" | undefined;
     if (hasText) {
-      const matched = getPromptCommand(commands[0]?.id) ?? matchPromptCommandInContent(content);
+      const matched =
+        getPromptCommand(commands[0]?.id) ??
+        matchPromptCommandInContent(content);
       if (matched?.id === DEEP_COMMAND_ID) {
         // `/deep` → Workflow deep-research: kirim PERTANYAAN (slug di-strip), bukan ekspansi skill.
         const question = stripPromptCommandSlug(content, matched);
@@ -358,7 +447,9 @@ export function Composer({
     // Catatan ephemeral nama berkas: agen menemukan isinya via tool list_artifacts/
     // search_thread_documents (scope thread), catatan ini cuma sinyal "ada lampiran".
     if (attachments.length > 0) {
-      parts.push(`Berkas terlampir: ${attachments.map((a) => a.title).join(", ")}.`);
+      parts.push(
+        `Berkas terlampir: ${attachments.map((a) => a.title).join(", ")}.`,
+      );
     }
 
     if (contextRefs.length > 0) {
@@ -384,6 +475,9 @@ export function Composer({
     setRichContent("");
     setCommands([]);
     setContextRefs([]);
+    // Konteks terpakai untuk pesan ini → bersihkan selection library (highlight kartu + pill hilang
+    // bersamaan; keputusan owner: "Bersihkan" setelah kirim).
+    selection.clearSelectionRefs();
     setAttachments([]);
     setDrillWorkspaceId(null);
     setIsSending(false);
@@ -391,7 +485,9 @@ export function Composer({
       text: displayText,
       // Hanya kirim varian ber-marker bila benar ada mention (mengandung penanda) → selain itu
       // identik dengan `text`, tak perlu dikirim.
-      richText: displayMarked.includes(MENTION_MARKER_OPEN) ? displayMarked : undefined,
+      richText: displayMarked.includes(MENTION_MARKER_OPEN)
+        ? displayMarked
+        : undefined,
       clientContext: parts.length > 0 ? parts : undefined,
       agentKind: agentSelection.agentKind,
       command,
@@ -406,7 +502,11 @@ export function Composer({
     if (res) {
       setAttachments((prev) => [
         ...prev,
-        { artifactId: res.artifactId, title: res.title, indexingStatus: res.indexingStatus },
+        {
+          artifactId: res.artifactId,
+          title: res.title,
+          indexingStatus: res.indexingStatus,
+        },
       ]);
     } else {
       setUploadError(`Gagal melampirkan ${file.name}.`);
@@ -420,9 +520,11 @@ export function Composer({
       <m.div
         initial={false}
         layout
-        className="w-full overflow-hidden border border-border/85 bg-card/95 text-foreground"
+        className="@container/composer w-full overflow-hidden border border-border/85 bg-card/95 text-foreground"
         animate={{
-          borderRadius: shellExpanded ? COMPOSER_EXPANDED_RADIUS : COMPOSER_COLLAPSED_RADIUS,
+          borderRadius: shellExpanded
+            ? COMPOSER_EXPANDED_RADIUS
+            : COMPOSER_COLLAPSED_RADIUS,
         }}
         transition={shellTransition}
       >
@@ -431,7 +533,8 @@ export function Composer({
           onKeyDown={(e) => {
             // Escape (Slice 6.8): batalkan turn berjalan. Bila palette terbuka, handler-nya
             // sudah stopPropagation Escape (tutup palette) → tak sampai ke sini.
-            if (e.key === "Escape" && !e.defaultPrevented && busy && onStop) onStop();
+            if (e.key === "Escape" && !e.defaultPrevented && busy && onStop)
+              onStop();
           }}
         >
           <input
@@ -444,7 +547,9 @@ export function Composer({
               e.target.value = "";
             }}
           />
-          {notice ? <ComposerBlockingNotice notice={notice} secondsLeft={secondsLeft} /> : null}
+          {notice ? (
+            <ComposerBlockingNotice notice={notice} secondsLeft={secondsLeft} />
+          ) : null}
           <LayoutGroup id="composer-prompt">
             <ComposerChipRow
               attachments={attachmentsView}
@@ -454,14 +559,18 @@ export function Composer({
                 // soft-delete GAGAL, artifact tetap aktif → kembalikan chip (rollback) supaya UI
                 // jujur dan user bisa coba lagi (idempoten di service → aman re-try).
                 const removed = attachments.find((a) => a.artifactId === id);
-                setAttachments((prev) => prev.filter((a) => a.artifactId !== id));
+                setAttachments((prev) =>
+                  prev.filter((a) => a.artifactId !== id),
+                );
                 if (threadId && removed) {
                   removeAttachment.mutate(
                     { artifactId: id },
                     {
                       onError: () =>
                         setAttachments((prev) =>
-                          prev.some((a) => a.artifactId === id) ? prev : [...prev, removed],
+                          prev.some((a) => a.artifactId === id)
+                            ? prev
+                            : [...prev, removed],
                         ),
                     },
                   );
@@ -508,7 +617,7 @@ export function Composer({
                     placeholder={resolvedPlaceholder}
                     className={isExpanded ? "py-0.5" : undefined}
                     pinnedContextRefs={contextRefs}
-                    onContextRefsChange={setContextRefs}
+                    onContextRefsChange={handleContextRefsChange}
                     contextWorkspaces={contextWorkspaces}
                     ambientWorkspaceId={ambientWorkspaceId}
                     workspaceItems={workspaceItems}
@@ -552,6 +661,7 @@ export function Composer({
             </div>
           </LayoutGroup>
         </div>
+        {disabled ? null : <ComposerAffordanceHint />}
       </m.div>
       {showSuggestions && !disabled ? (
         <ComposerStartPanel
@@ -571,7 +681,8 @@ const composerSuggestions = [
   {
     emoji: "🔎",
     label: "Cari sumber akademik",
-    prompt: "Cari sumber akademik terbaru tentang dampak AI pada pembelajaran mandiri.",
+    prompt:
+      "Cari sumber akademik terbaru tentang dampak AI pada pembelajaran mandiri.",
   },
   {
     emoji: "🧭",
@@ -581,14 +692,46 @@ const composerSuggestions = [
   {
     emoji: "🧪",
     label: "Susun metodologi",
-    prompt: "Susun rancangan metodologi penelitian kualitatif untuk evaluasi chatbot belajar.",
+    prompt:
+      "Susun rancangan metodologi penelitian kualitatif untuk evaluasi chatbot belajar.",
   },
   {
     emoji: "📝",
     label: "Buat outline tulisan",
-    prompt: "Buat outline artikel ilmiah tentang penggunaan AI sebagai tutor personal.",
+    prompt:
+      "Buat outline artikel ilmiah tentang penggunaan AI sebagai tutor personal.",
   },
 ] as const;
+
+/** Chip mono kecil untuk memvisualkan tuts `@` / `/` di dalam kalimat hint. */
+function HintKey({ children }: { children: string }) {
+  return (
+    <kbd className="inline-flex h-4 min-w-4 items-center justify-center rounded-[5px] border border-border/70 bg-background px-1 font-mono text-[10px] font-semibold leading-none text-foreground">
+      {children}
+    </kbd>
+  );
+}
+
+/**
+ * Zona footer edukasi di DALAM shell composer — berbagi border, radius, dan clip lewat
+ * `overflow-hidden` shell, jadi menyatu sebagai satu permukaan dengan area input dan hanya
+ * dipisah garis rambut. Menyadarkan user akan `@` (tautkan konteks) & `/` (perintah).
+ */
+function ComposerAffordanceHint() {
+  return (
+    <div className="flex items-center gap-2 border-t border-border/50 bg-foreground/[0.02] px-3.5 py-2 text-muted-foreground animate-in fade-in duration-200">
+      <p className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] font-medium leading-4">
+        <HintKey>@</HintKey>
+        <span>tautkan konteks</span>
+        <span className="text-muted-foreground/40" aria-hidden>
+          ·
+        </span>
+        <HintKey>/</HintKey>
+        <span>jalankan perintah</span>
+      </p>
+    </div>
+  );
+}
 
 function ComposerBlockingNotice({
   notice,
@@ -700,7 +843,9 @@ function ComposerStartPanel({
             whileTap={startItemTap}
             transition={{
               duration: shouldReduceMotion ? 0.12 : 0.18,
-              delay: shouldReduceMotion ? 0 : (index + sortedThreads.length) * 0.035,
+              delay: shouldReduceMotion
+                ? 0
+                : (index + sortedThreads.length) * 0.035,
               ease: COMPOSER_EASE_OUT,
             }}
             aria-label={`Gunakan suggestion: ${item.label}`}
@@ -736,12 +881,18 @@ function ThreadListEmpty() {
             key={width}
             className="grid min-h-8 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-lg bg-background/45 px-2.5"
           >
-            <MessageSquareIcon className="size-3.5 shrink-0 text-muted-foreground/40" aria-hidden />
+            <MessageSquareIcon
+              className="size-3.5 shrink-0 text-muted-foreground/40"
+              aria-hidden
+            />
             <span
               className="block h-2 justify-self-start self-center rounded-full bg-muted-foreground/15"
               style={{ width }}
             />
-            <ArrowUpRightIcon className="size-3.5 shrink-0 text-muted-foreground/40" aria-hidden />
+            <ArrowUpRightIcon
+              className="size-3.5 shrink-0 text-muted-foreground/40"
+              aria-hidden
+            />
           </div>
         ))}
       </div>
@@ -755,7 +906,9 @@ function ThreadListEmpty() {
           <span className="grid size-9 place-items-center rounded-xl border border-border/70 bg-background/80 text-muted-foreground backdrop-blur-sm">
             <MessageSquareIcon className="size-4" />
           </span>
-          <p className="text-[13px] font-semibold text-foreground">Mulai percakapan sekarang</p>
+          <p className="text-[13px] font-semibold text-foreground">
+            Mulai percakapan sekarang
+          </p>
         </div>
       </div>
     </div>
@@ -798,12 +951,17 @@ function ComposerChipRow({
   return (
     <div className="flex flex-wrap items-center gap-2 px-3.5 pb-1 pt-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
       {attachments.map((file) => (
-        <div key={file.artifactId} className="animate-in zoom-in-95 duration-150">
+        <div
+          key={file.artifactId}
+          className="animate-in zoom-in-95 duration-150"
+        >
           <FileChip
             id={file.artifactId}
             title={file.title}
             indexingStatus={file.indexingStatus}
-            onRemove={isSending ? undefined : () => onRemoveAttachment(file.artifactId)}
+            onRemove={
+              isSending ? undefined : () => onRemoveAttachment(file.artifactId)
+            }
           />
         </div>
       ))}
@@ -834,7 +992,11 @@ function ComposerUploadButton({
       disabled={disabled}
       onClick={onClick}
       className="aqsha-composer-toolbar-btn flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-all duration-150 hover:bg-muted/30 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-      title={hasThread ? "Lampirkan berkas" : "Kirim pesan dulu untuk melampirkan berkas"}
+      title={
+        hasThread
+          ? "Lampirkan berkas"
+          : "Kirim pesan dulu untuk melampirkan berkas"
+      }
       aria-label="Lampirkan berkas"
     >
       {pending ? (

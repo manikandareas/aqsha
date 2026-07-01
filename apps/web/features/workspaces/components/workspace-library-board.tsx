@@ -5,7 +5,6 @@ import {
   FileTextIcon,
   FolderIcon,
   LinkIcon,
-  NotebookIcon,
   UploadIcon,
 } from "@aqsha/ui/icons";
 import {
@@ -25,13 +24,11 @@ import {
   getUploadTargetFolderId,
   getWorkspaceMoveTargetOptions,
   groupArtifactsByFolder,
-  partitionArtifactsByCategory,
   type WorkspaceArtifactSort,
   type WorkspaceArtifactType,
   type WorkspaceArtifact,
   type WorkspaceFolder,
 } from "../utils/workspace-library-model";
-import type { WorkspaceLibraryTab } from "./workspace-library-surface";
 import { SidePanelFrame } from "@/components/layout/side-panel-frame";
 import { panelBodyColumnClass, panelBodyPaddingClass } from "@/lib/panel-surface";
 import {
@@ -39,13 +36,11 @@ import {
   type WorkspaceUploadProgressEvent,
   type WorkspaceUploadResult,
 } from "../utils/workspace-file-upload";
-import { WorkspaceArtifactTimeline } from "./workspace-artifact-timeline";
 import { WorkspaceBoardToolbar } from "./workspace-board-toolbar";
 import { WorkspaceLibraryControls } from "./workspace-library-controls";
 import { WorkspaceLibraryEmpty } from "./workspace-library-empty";
 import { WorkspaceLibraryFootnote } from "./workspace-library-footnote";
 import { WorkspaceLibraryGrid } from "./workspace-library-grid";
-import { WorkspaceLibraryTabs } from "./workspace-library-tabs";
 import { useWorkspaceUploadToast } from "./workspace-upload-toast";
 
 export function WorkspaceLibraryBoard({
@@ -61,8 +56,6 @@ export function WorkspaceLibraryBoard({
   onSearchQueryChange,
   onToggleType,
   onSortChange,
-  activeTab,
-  onTabChange,
   workspaces,
   getArtifactSelected,
   onToggleArtifactContext,
@@ -105,8 +98,6 @@ export function WorkspaceLibraryBoard({
   onSearchQueryChange: (query: string) => void;
   onToggleType: (type: WorkspaceArtifactType) => void;
   onSortChange: (sort: WorkspaceArtifactSort) => void;
-  activeTab: WorkspaceLibraryTab;
-  onTabChange: (tab: WorkspaceLibraryTab) => void;
   workspaces: Array<{ _id: string; name: string }>;
   getArtifactSelected: (artifactId: string) => boolean;
   onToggleArtifactContext: (artifactId: string) => void;
@@ -184,21 +175,16 @@ export function WorkspaceLibraryBoard({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadToast = useWorkspaceUploadToast({ onUploadFiles });
 
-  const isPustaka = activeTab === "pustaka";
   const hasFilter =
     searchQuery.trim().length > 0 || selectedTypes.length > 0;
-  // Hitungan untuk badge tab = total per kategori se-workspace (mengikuti filter aktif).
-  const { library: allLibrary, output: allOutput } =
-    partitionArtifactsByCategory(filteredArtifacts);
-  // Pustaka tab = folder + artifak library di folder aktif (folder-scoped).
-  const folderLibrary = partitionArtifactsByCategory(folderView.artifacts).library;
-  const rawLibraryCount = partitionArtifactsByCategory(artifacts).library.length;
-
-  const pustakaEmpty =
-    folderView.folders.length === 0 && folderLibrary.length === 0;
-  const pustakaFilteredEmpty =
-    pustakaEmpty && hasFilter && rawLibraryCount > 0;
-  const artifactFilteredEmpty = allOutput.length === 0 && hasFilter;
+  // Unified board: folder + semua artifact (pustaka user + output agent) berbagi
+  // satu grid folder-scoped. Kartu artifact dibedakan lewat badge/aksen, bukan tab.
+  const boardEmpty =
+    folderView.folders.length === 0 && folderView.artifacts.length === 0;
+  const rawArtifactCount = artifacts.filter(
+    (artifact) => artifact.status !== "deleted",
+  ).length;
+  const boardFilteredEmpty = boardEmpty && hasFilter && rawArtifactCount > 0;
   // Label for the empty-state category pill: workspace name at root, otherwise
   // the active folder's name. The workspace emoji only fronts the root pill.
   const isRootFolder = folderView.activeFolderId === "root";
@@ -208,16 +194,14 @@ export function WorkspaceLibraryBoard({
   const activeBadgeEmoji = isRootFolder ? workspaceEmoji : undefined;
   // Footnote panduan hanya relevan saat ada item untuk di-gesture; di state
   // kosong ia disembunyikan agar layar kosong tetap bersih.
-  const showFootnote = isPustaka ? !pustakaEmpty : allOutput.length > 0;
+  const showFootnote = !boardEmpty;
 
-  const canCreate = (showCreateActions ?? true) && isPustaka;
+  const canCreate = showCreateActions ?? true;
   const libraryControls = (
     <WorkspaceLibraryControls
       query={searchQuery}
       selectedTypes={selectedTypes}
       sort={sort}
-      showSort={isPustaka}
-      className="w-full sm:w-auto sm:justify-end"
       onQueryChange={onSearchQueryChange}
       onToggleType={onToggleType}
       onSortChange={onSortChange}
@@ -250,8 +234,7 @@ export function WorkspaceLibraryBoard({
       workspaceName={workspaceName}
       workspaceEmoji={workspaceEmoji}
       titleSlot={titleSlot}
-      // Breadcrumb folder hanya relevan di tab Pustaka.
-      breadcrumb={isPustaka ? folderView.breadcrumb : folderView.breadcrumb.slice(0, 1)}
+      breadcrumb={folderView.breadcrumb}
       onNavigate={navigateTo}
       onCreateFolder={onCreateFolder}
       onCreateDocument={onCreateDocument}
@@ -259,6 +242,7 @@ export function WorkspaceLibraryBoard({
       onRenameWorkspace={onRenameWorkspace}
       onUpdateWorkspaceEmoji={onUpdateWorkspaceEmoji}
       onArchiveWorkspace={onArchiveWorkspace}
+      controls={libraryControls}
       onToggleChat={onToggleChatPanel}
       chatOpen={chatPanelOpen}
       onClosePanel={onClosePanel}
@@ -288,43 +272,31 @@ export function WorkspaceLibraryBoard({
             event.currentTarget.value = "";
           }}
         />
-        <WorkspaceLibraryTabs
-          activeTab={activeTab}
-          onTabChange={onTabChange}
-          libraryCount={allLibrary.length}
-          artifactCount={allOutput.length}
-          controls={libraryControls}
-        />
-        {isPustaka ? (
-          <ContextMenu>
+        <ContextMenu>
           <ContextMenuTrigger asChild>
             <div
               {...dropzoneProps}
               className={cn(
                 "@container relative min-h-0 flex-1 overflow-y-auto bg-background",
                 panelBodyPaddingClass,
-                "pt-6",
+                "pt-5",
                 isUploadDragOver &&
                   "bg-muted/25 ring-2 ring-inset ring-primary/30",
               )}
             >
-              {pustakaEmpty ? (
-                pustakaFilteredEmpty ? (
+              {boardEmpty ? (
+                boardFilteredEmpty ? (
                   <WorkspaceLibraryEmpty
-                    variant={
-                      folderView.activeFolderId === "root" ? "root" : "folder"
-                    }
+                    variant={isRootFolder ? "root" : "folder"}
                     badgeLabel={activeFolderName}
                     badgeEmoji={activeBadgeEmoji}
                     title="Tidak ada dokumen yang cocok"
-                    description="Ubah filter tipe dokumen atau reset filter untuk melihat item lain."
+                    description="Ubah filter tipe dokumen atau kata kunci untuk melihat item lain."
                     showActions={false}
                   />
                 ) : (
                   <WorkspaceLibraryEmpty
-                    variant={
-                      folderView.activeFolderId === "root" ? "root" : "folder"
-                    }
+                    variant={isRootFolder ? "root" : "folder"}
                     badgeLabel={activeFolderName}
                     badgeEmoji={activeBadgeEmoji}
                     onCreateFolder={onCreateFolder}
@@ -380,52 +352,9 @@ export function WorkspaceLibraryBoard({
               Simpan URL
             </ContextMenuItem>
           </ContextMenuContent>
-          </ContextMenu>
-        ) : (
-          <div
-            className={cn(
-              "@container relative min-h-0 flex-1 overflow-y-auto bg-background",
-              panelBodyPaddingClass,
-              "pt-6",
-            )}
-          >
-            {allOutput.length === 0 ? (
-              <WorkspaceLibraryEmpty
-                variant="root"
-                badgeLabel="Artifact"
-                icon={NotebookIcon}
-                title={
-                  artifactFilteredEmpty
-                    ? "Tidak ada artifact yang cocok"
-                    : "Hasil kerja agent muncul di sini"
-                }
-                description={
-                  artifactFilteredEmpty
-                    ? "Ubah filter atau kata kunci untuk melihat artifact lain."
-                    : "Minta agent membuat laporan, ringkasan, atau visualisasi lewat chat — semuanya tersimpan otomatis di sini."
-                }
-                showActions={false}
-              />
-            ) : (
-              <WorkspaceArtifactTimeline
-                artifacts={allOutput}
-                workspaceId={workspaceId}
-                workspaces={workspaceMoveTargets}
-                moveTargets={moveTargets}
-                getArtifactSelected={getArtifactSelected}
-                onToggleArtifactContext={onToggleArtifactContext}
-                onOpenArtifact={onOpenArtifact}
-                onRenameArtifact={onRenameArtifact}
-                onDeleteArtifact={onDeleteArtifact}
-                onMoveArtifact={onMoveArtifact}
-                onMoveArtifactToWorkspace={onMoveArtifactToWorkspace}
-              />
-            )}
-          </div>
-        )}
+        </ContextMenu>
         {showFootnote ? (
           <WorkspaceLibraryFootnote
-            activeTab={activeTab}
             contextCount={contextCount}
             onClearContext={() => onSetArtifactContextSelection([])}
           />

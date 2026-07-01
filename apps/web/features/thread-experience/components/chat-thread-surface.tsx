@@ -1,15 +1,15 @@
 "use client";
 
 import { MastraChatThreadSurface } from "./mastra-chat-thread-surface";
-import type { DraftContextArtifact, ThreadSummary } from "./component-types";
+import type { ThreadSummary } from "./component-types";
 import type { RateStatus } from "../types";
 
 /**
  * Surface chat thread — runtime **Mastra** (cutover eve→Mastra selesai; runtime eve dihapus).
  * Parent (shell/panel) memakai komponen ini → meneruskan ke `MastraChatThreadSurface`. Props
- * eve-legacy (title/rateStatus/threads/contextArtifacts/draftContextLabel) masih diterima demi
- * kompat call-site, TAPI tak dipakai jalur Mastra (history via Mastra Memory, billing/quota via
- * processor server, sumber via API `research_sources`).
+ * eve-legacy (title/rateStatus/threads/draftContextLabel) masih diterima demi kompat call-site,
+ * TAPI tak dipakai jalur Mastra (history via Mastra Memory, billing/quota via processor server,
+ * sumber via API `research_sources`). Konteks @mention kini via provider (lihat useComposerSelection).
  */
 export function ChatThreadSurface({
   threadId,
@@ -25,8 +25,6 @@ export function ChatThreadSurface({
   title?: string;
   rateStatus?: RateStatus;
   threads?: ThreadSummary[];
-  contextArtifacts?: DraftContextArtifact[];
-  onRemoveContextArtifact?: (artifactId: string) => void;
   draftContextLabel?: string;
 }) {
   return (

@@ -3,16 +3,15 @@
 import { FileTextIcon, FolderIcon, UploadIcon } from "@aqsha/ui/icons";
 import { Button } from "@/components/ui/button";
 
-// Centered empty-state for the Pustaka / Artifact tabs: a category pill (icon +
+// Centered empty-state for the workspace library board: a category pill (icon +
 // context label) on top, a short message, a hairline connector, then the create
-// actions stacked below. Vertically + horizontally centered inside the tab body.
+// actions stacked below. Vertically + horizontally centered inside the board body.
 export function WorkspaceLibraryEmpty({
   variant,
   badgeLabel,
   badgeEmoji,
   title,
   description,
-  icon: Icon = FileTextIcon,
   showActions = true,
   onCreateFolder,
   onCreateDocument,
@@ -23,7 +22,6 @@ export function WorkspaceLibraryEmpty({
   badgeEmoji?: string;
   title?: string;
   description?: string;
-  icon?: typeof FileTextIcon;
   showActions?: boolean;
   onCreateFolder?: () => void;
   onCreateDocument?: () => void;
@@ -55,7 +53,7 @@ export function WorkspaceLibraryEmpty({
           <span className="text-xl leading-none">{badgeEmoji}</span>
         ) : (
           <span className="grid size-7 place-items-center rounded-full bg-lavender-soft text-lavender-foreground ring-1 ring-inset ring-lavender-soft-border">
-            <Icon className="size-4" />
+            <FileTextIcon className="size-4" />
           </span>
         )}
         <span className="font-heading text-base font-semibold text-foreground">

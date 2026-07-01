@@ -8,9 +8,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { WorkspaceLibraryTab } from "./workspace-library-surface";
 
-// Footnote tenang yang menempel di dasar board (selalu terlihat di kedua tab).
+// Footnote tenang yang menempel di dasar board.
 // Tujuannya: mengajarkan gesture (1× konteks, 2× buka) tanpa terasa seperti
 // toolbar. Saat ada item terpilih, sisi kanan berubah jadi konfirmasi + aksi
 // bersihkan — jadi bar yang sama mengajar lalu memberi umpan balik.
@@ -58,26 +57,19 @@ function HintDivider({ className }: { className?: string }) {
 }
 
 export function WorkspaceLibraryFootnote({
-  activeTab,
   contextCount = 0,
   onClearContext,
 }: {
-  activeTab: WorkspaceLibraryTab;
   contextCount?: number;
   onClearContext?: () => void;
 }) {
-  // Hint ke-3 mengikuti kemampuan nyata tiap tab: Pustaka punya marquee
-  // (seret area kosong), Artifact timeline pakai menu klik-kanan.
-  const tabHint: Hint =
-    activeTab === "pustaka"
-      ? { chip: "Seret", label: "Pilih banyak" }
-      : { chip: "Klik kanan", label: "Aksi lain" };
   // Single source for the three hints — rendered inline (wide) and inside the
-  // tooltip (narrow), so the copy lives once.
+  // tooltip (narrow), so the copy lives once. Grid tunggal mendukung marquee
+  // (seret area kosong) untuk pilih banyak.
   const hints: Hint[] = [
     { chip: "1×", label: "Jadikan konteks" },
     { chip: "2×", label: "Buka" },
-    tabHint,
+    { chip: "Seret", label: "Pilih banyak" },
   ];
   const hasContext = contextCount > 0;
 

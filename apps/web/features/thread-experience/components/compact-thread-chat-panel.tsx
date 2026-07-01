@@ -11,12 +11,7 @@ import { AccessDeniedState } from "./access-denied-state";
 import { ChatThreadSurface } from "./chat-thread-surface";
 import { ThreadDeleteActions } from "./thread-actions-menu";
 import { ThreadRecentSwitcher } from "./thread-recent-switcher";
-import type {
-  DraftContextArtifact,
-  SendMessage,
-  StartThread,
-  ThreadSummary,
-} from "./component-types";
+import type { SendMessage, StartThread, ThreadSummary } from "./component-types";
 import type { AgentRunId } from "@/lib/convex-refs";
 import type {
   RateStatus,
@@ -48,8 +43,6 @@ export function CompactThreadChatPanel({
   sources,
   onCancelRun,
   onRetryRun,
-  contextArtifacts,
-  onRemoveContextArtifact,
   threadWorkspaceId,
   draftContextLabel,
   seed,
@@ -68,8 +61,6 @@ export function CompactThreadChatPanel({
   sources?: ResearchSource[];
   onCancelRun?: (runId: string) => Promise<unknown>;
   onRetryRun?: (args: { runId: AgentRunId }) => Promise<unknown>;
-  contextArtifacts?: DraftContextArtifact[];
-  onRemoveContextArtifact?: (artifactId: string) => void;
   threadWorkspaceId?: string;
   draftContextLabel?: string;
   seed?: string;
@@ -143,8 +134,6 @@ export function CompactThreadChatPanel({
               title={activeThread?.title}
               rateStatus={rateStatus}
               threads={threads}
-              contextArtifacts={contextArtifacts}
-              onRemoveContextArtifact={onRemoveContextArtifact}
               compact
             />
           )
@@ -153,8 +142,6 @@ export function CompactThreadChatPanel({
             isLoading={false}
             rateStatus={rateStatus}
             threads={threads}
-            contextArtifacts={contextArtifacts}
-            onRemoveContextArtifact={onRemoveContextArtifact}
             draftContextLabel={draftContextLabel}
             seed={seed}
             compact
