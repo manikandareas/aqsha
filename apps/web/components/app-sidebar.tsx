@@ -35,6 +35,7 @@ import {
 } from "@aqsha/ui/icons";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { CreateWorkspacePopover } from "@/features/workspaces/components/create-workspace-popover";
 import { NameDialog } from "@/features/workspaces/components/workspace-dialogs";
 import { ThreadDeleteActions } from "@/features/thread-experience/components/thread-actions-menu";
 import type {
@@ -124,15 +125,16 @@ export function AppSidebar({
     sortedWorkspaces.length > 0 || Boolean(createWorkspace);
   const showThreadSection = sortedThreads.length > 0 || Boolean(onCreateThread);
   const hasSidebarItems = showWorkspaceSection || showThreadSection;
-  const workspaceSectionAction = createWorkspace ? (
-    <button
-      type="button"
-      onClick={() => setCreateDialogOpen(true)}
-      className="flex size-5 shrink-0 items-center justify-center rounded-[5px] text-muted-foreground transition-[background-color,color] duration-150 ease-out hover:bg-primary/10 hover:text-primary"
-      aria-label="Workspace baru"
-    >
-      <PlusIcon className="size-3" />
-    </button>
+  // Shared by the sidebar plus-button popover and the Cmd+K "Workspace baru"
+  // dialog so both entry points create + navigate identically.
+  const submitCreateWorkspace = createWorkspace
+    ? async ({ name }: { name: string }) => {
+        const workspaceId = await createWorkspace({ name });
+        router.push(`/app/workspaces/${String(workspaceId)}`);
+      }
+    : null;
+  const workspaceSectionAction = submitCreateWorkspace ? (
+    <CreateWorkspacePopover onSubmit={submitCreateWorkspace} />
   ) : null;
 
   useEffect(() => {
@@ -410,17 +412,14 @@ export function AppSidebar({
           </>
         ) : null}
       </CommandDialog>
-      {createWorkspace ? (
+      {submitCreateWorkspace ? (
         <NameDialog
           open={createDialogOpen}
           onOpenChange={setCreateDialogOpen}
           title="Workspace baru"
           description="Buat area riset personal."
           submitLabel="Buat"
-          onSubmit={async ({ name }) => {
-            const workspaceId = await createWorkspace({ name });
-            router.push(`/app/workspaces/${String(workspaceId)}`);
-          }}
+          onSubmit={submitCreateWorkspace}
         />
       ) : null}
     </>

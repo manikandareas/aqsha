@@ -127,6 +127,7 @@ export const ArrowDownAZIcon = createIcon(ArrangeByLettersAZIcon);
 export const ArrowDownIcon = createIcon(ArrowDown01Icon);
 export const ArrowLeftIcon = createIcon(ArrowLeft01Icon);
 export const ArrowRight = createIcon(ArrowRight01Icon);
+export const ArrowRightIcon = createIcon(ArrowRight01Icon);
 export const ArrowUpIcon = createIcon(ArrowUp01Icon);
 export const ArrowUpToLineIcon = createIcon(HugeArrowUpToLineIcon);
 export const ArrowUpRightIcon = createIcon(ArrowUpRight01Icon);
