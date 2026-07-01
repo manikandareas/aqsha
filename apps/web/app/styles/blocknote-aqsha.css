@@ -54,7 +54,11 @@
 }
 
 /* Vertical rhythm between top-level blocks (paragraphs, headings, etc.) */
-.aqsha-blocknote .bn-editor > .bn-block-group > .bn-block-outer + .bn-block-outer {
+.aqsha-blocknote
+  .bn-editor
+  > .bn-block-group
+  > .bn-block-outer
+  + .bn-block-outer {
   margin-top: 0.5rem;
 }
 
@@ -67,7 +71,11 @@
 }
 
 /* Nested list items stay tighter than document-level blocks */
-.aqsha-blocknote .bn-block-group .bn-block-group > .bn-block-outer + .bn-block-outer {
+.aqsha-blocknote
+  .bn-block-group
+  .bn-block-group
+  > .bn-block-outer
+  + .bn-block-outer {
   margin-top: 0.125rem;
 }
 
@@ -202,7 +210,10 @@
   flex-shrink: 0;
 }
 
-.aqsha-blocknote .bn-suggestion-menu-item [data-position="right"] [data-slot="badge"] {
+.aqsha-blocknote
+  .bn-suggestion-menu-item
+  [data-position="right"]
+  [data-slot="badge"] {
   height: auto;
   min-height: 1.125rem;
   padding: 0.05rem 0.35rem;
