@@ -25,7 +25,10 @@ export type ThreadPanelMode =
   | { kind: "step"; toolCallId: string }
   // The research plan of one run (`turnId`) — prose + sub-questions, plus the gate
   // actions when that run is the live gate (turnId = `LIVE_PLAN_KEY`).
-  | { kind: "plan"; turnId: string };
+  | { kind: "plan"; turnId: string }
+  // The live ask-gate (klarifikasi `ask_questions`) — interactive questions form. Only
+  // one live gate at a time, so no id is needed.
+  | { kind: "questions" };
 
 export const CLOSED_PANEL: ThreadPanelMode = { kind: "closed" };
 
@@ -55,6 +58,8 @@ export function serializeThreadPanelMode(mode: ThreadPanelMode): string | null {
       return `q:${mode.turnId}:${mode.subQuestionIndex}`;
     case "step":
       return `t:${mode.toolCallId}`;
+    case "questions":
+      return "x";
     case "closed":
       return null;
   }
@@ -62,6 +67,7 @@ export function serializeThreadPanelMode(mode: ThreadPanelMode): string | null {
 
 export function parseThreadPanelMode(raw: string): ThreadPanelMode {
   if (raw === "c") return { kind: "context" };
+  if (raw === "x") return { kind: "questions" };
   if (raw.startsWith("p:")) {
     const turnId = raw.slice(2);
     return turnId ? { kind: "plan", turnId } : CLOSED_PANEL;

@@ -38,6 +38,8 @@ type ThreadPanelValue = {
   openStepPanel: (toolCallId: string) => void;
   /** Open a run's research plan (`turnId`, or `LIVE_PLAN_KEY` for the live gate). */
   openPlanPanel: (turnId: string) => void;
+  /** Open the live ask-gate (klarifikasi) questions form. */
+  openQuestionsPanel: () => void;
   openContextPanel: () => void;
   closePanel: () => void;
   setOpen: (open: boolean) => void;
@@ -113,6 +115,10 @@ export function ThreadPanelProvider({ children }: { children: ReactNode }) {
     (turnId: string) => void setModeParam({ kind: "plan", turnId }),
     [setModeParam],
   );
+  const openQuestionsPanel = useCallback(
+    () => void setModeParam({ kind: "questions" }),
+    [setModeParam],
+  );
   const openContextPanel = useCallback(
     () => void setModeParam({ kind: "context" }),
     [setModeParam],
@@ -128,6 +134,7 @@ export function ThreadPanelProvider({ children }: { children: ReactNode }) {
       openSearchPanel,
       openStepPanel,
       openPlanPanel,
+      openQuestionsPanel,
       openContextPanel,
       closePanel,
       // Reflects the DetailSplitLayout / mobile toggle: opening from closed lands on
@@ -145,6 +152,7 @@ export function ThreadPanelProvider({ children }: { children: ReactNode }) {
       openSearchPanel,
       openStepPanel,
       openPlanPanel,
+      openQuestionsPanel,
       openContextPanel,
       closePanel,
     ],

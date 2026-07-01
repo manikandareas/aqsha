@@ -1,7 +1,7 @@
 import { Agent } from "@mastra/core/agent";
 import { modelForRequestContext } from "../model";
 import { inlineSkills } from "../skills";
-import { astraTools } from "../tools";
+import { deepWriterTools } from "../tools";
 
 /**
  * `deep-writer` (Fase 2) — agent "root" untuk Workflow `/deep`: penyusun rencana (draftPlan) DAN
@@ -43,6 +43,6 @@ export const deepWriter = new Agent({
   // Lite → `liteModel`. `reasoning: "high"` aktif hanya bila model mendukung penalaran (Pro), no-op pada
   // model Lite non-penalaran.
   model: modelForRequestContext,
-  tools: astraTools,
+  tools: deepWriterTools,
   skills: inlineSkills,
 });

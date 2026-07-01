@@ -33,8 +33,8 @@ import { ToolRow } from "./tool-row";
  * `defaultMessageReducer`. User = bubble; assistant = reasoning → blok "Proses" collapsible
  * (tool generik) → jawaban → artifact → sumber inline (per `turnId`) → aksi. TAK ADA grouping
  * run berfase / kartu verifikasi-subagen (verify+subagen = tool-row generik). HITL approval /
- * ask_question yang MENUNGGU jawaban dirender sebagai kartu di atas composer
- * (`InputRequestPrompt`); jejak yang sudah diresolve tetap tampil sebagai tool-row.
+ * `ask_questions` yang MENUNGGU jawaban dirender sebagai kartu di atas composer (`QuestionsCard`,
+ * lihat `mastra-chat-thread-surface`); jejak yang sudah diresolve tetap tampil sebagai tool-row.
  */
 export function MessageList({
   messages,

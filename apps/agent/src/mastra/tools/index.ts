@@ -1,3 +1,4 @@
+import { askQuestions } from "./ask-questions";
 import { createWorkspace } from "./create-workspace";
 import { deleteArtifact } from "./delete-artifact";
 import { getArtifact } from "./get-artifact";
@@ -48,9 +49,28 @@ export const researchTools = {
   verify_identifiers: verifyIdentifiers,
 };
 
-/** Seluruh tool root agent Astra Lite (chat). */
-export const astraTools = {
+/**
+ * Tool interaksi HITL (tanpa write DB / debit). `ask_questions` = tool-suspend native: pause turn
+ * → kartu pertanyaan FE → resume dengan jawaban user.
+ */
+export const interactionTools = {
+  ask_questions: askQuestions,
+};
+
+/**
+ * Tool agent Workflow `/deep` (`deepWriter`): sama seperti chat TAPI TANPA `interactionTools`.
+ * `ask_questions` men-suspend turn — di /deep, klarifikasi punya gerbang terdedikasi
+ * (step `draft-clarify`/`clarify`), jadi tool suspend chat tak boleh callable di tengah
+ * `draft-plan`/`synthesize` (generate tanpa handler suspend → plan/laporan rusak).
+ */
+export const deepWriterTools = {
   ...readTools,
   ...writeTools,
   ...researchTools,
+};
+
+/** Seluruh tool root agent Astra Lite (chat) = tool /deep + HITL interaksi. */
+export const astraTools = {
+  ...deepWriterTools,
+  ...interactionTools,
 };

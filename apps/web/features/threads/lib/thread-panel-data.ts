@@ -7,6 +7,7 @@
 // `ThreadPanelProvider` (see `useRegisterThreadPanelData`). Sources are listed in the
 // panels and each links out to its URL — there is no single-source detail view.
 
+import type { AskQuestion, AskQuestionsResumeData } from "@aqsha/chat-core";
 import { dedupeCards, researchSourceToCard } from "./source-card";
 import type {
   DeepStepDetail,
@@ -15,7 +16,7 @@ import type {
   ToolRow,
   ToolStatus,
 } from "./timeline-types";
-import type { MastraPlanGate } from "./mastra-timeline";
+import type { MastraAskGate, MastraPlanGate } from "./mastra-timeline";
 import { LIVE_PLAN_KEY } from "@/features/thread-experience/utils/thread-panel-model";
 import type { ResearchSource } from "../types";
 
@@ -45,6 +46,13 @@ export type PlanDetail = {
   resolve?: (approve: boolean) => void;
 };
 
+/** Live ask-gate (klarifikasi) — questions + resolve, hanya ada satu pada satu waktu. */
+export type AskGateDetail = {
+  questions: AskQuestion[];
+  resolve?: (resume: AskQuestionsResumeData) => void;
+  skip?: () => void;
+};
+
 export type ThreadPanelLookups = {
   /** Deduped sources per assistant message id (the "Sumber" trigger). */
   messageSources: Map<string, SourceCardData[]>;
@@ -53,6 +61,8 @@ export type ThreadPanelLookups = {
   steps: Map<string, StepDetail>;
   /** Research plans keyed by run `turnId` (+ `LIVE_PLAN_KEY` for the live gate). */
   plans: Map<string, PlanDetail>;
+  /** Live ask-gate (klarifikasi) untuk panel Questions — `null` bila tak ada. */
+  ask: AskGateDetail | null;
 };
 
 export const EMPTY_THREAD_PANEL_LOOKUPS: ThreadPanelLookups = {
@@ -60,6 +70,7 @@ export const EMPTY_THREAD_PANEL_LOOKUPS: ThreadPanelLookups = {
   searches: new Map(),
   steps: new Map(),
   plans: new Map(),
+  ask: null,
 };
 
 /** Composite key for a run's sub-question search step (run-scoped → no cross-run conflation). */
@@ -100,6 +111,7 @@ export function buildThreadPanelLookups(
   messages: readonly TimelineMessage[],
   researchSources: readonly ResearchSource[] | undefined,
   planGate: MastraPlanGate | null,
+  askGate: MastraAskGate | null,
 ): ThreadPanelLookups {
   // research_sources grouped by turn (numbered rows only) — mirrors the surface, so a
   // message's panel sources match the "Sumber" list shown under its answer.
@@ -186,5 +198,7 @@ export function buildThreadPanelLookups(
     }
   }
 
-  return { messageSources, searches, steps, plans };
+  const ask: AskGateDetail | null = askGate ? { questions: askGate.questions } : null;
+
+  return { messageSources, searches, steps, plans, ask };
 }

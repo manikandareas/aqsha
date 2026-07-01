@@ -1,5 +1,6 @@
 "use client";
 
+import { type AskQuestionsResumeData, normalizeAskQuestions } from "@aqsha/chat-core";
 import { useAuth } from "@clerk/nextjs";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -10,6 +11,7 @@ import type { TimelineMessage } from "./timeline-types";
 import { type AgentKind, agentIdFor, useMastraClient } from "./mastra-client";
 import {
   type MastraApproval,
+  type MastraAskGate,
   type MastraChunk,
   type MastraPlanGate,
   type MastraTimelineState,
@@ -29,6 +31,8 @@ export type MastraAgent = {
   messages: TimelineMessage[];
   approvals: MastraApproval[];
   planGate: MastraPlanGate | null;
+  /** Ask-gate (klarifikasi `ask_questions`) aktif → kartu Questions; `null` bila tak ada. */
+  askGate: MastraAskGate | null;
   error: { message: string } | null;
   send: (
     text: string,
@@ -45,6 +49,8 @@ export type MastraAgent = {
     agentKind?: AgentKind,
   ) => Promise<void>;
   resolvePlan: (approved: boolean, edits?: string) => Promise<void>;
+  /** Kirim jawaban / skip untuk kartu Questions aktif (chat tool-suspend atau /deep step clarify). */
+  resolveAsk: (resume: AskQuestionsResumeData) => Promise<void>;
   regenerate: () => Promise<void>;
   approve: (toolCallId: string) => Promise<void>;
   decline: (toolCallId: string) => Promise<void>;
@@ -377,7 +383,11 @@ export function useMastraAgent(opts: {
       for await (const chunk of iterateStream(stream)) {
         setState((s) => reduceWorkflowChunk(s, chunk));
         const stepId = (chunk.payload as { id?: unknown } | undefined)?.id;
-        if (chunk.type === "workflow-step-suspended" && stepId === "approve-plan") {
+        if (
+          chunk.type === "workflow-step-suspended" &&
+          (stepId === "approve-plan" || stepId === "clarify")
+        ) {
+          // Suspend clarify ATAU approve-plan = run TETAP hidup untuk resume → jangan clear runId.
           suspended = true;
         }
         // Sumber terisi selagi run lanjut: setelah search-literature (subQuestionIndex + OG image
@@ -494,6 +504,67 @@ export function useMastraAgent(opts: {
     [consumeWorkflow, clearDeepRunIdUnlessAlive],
   );
 
+  const resolveAsk = useCallback(
+    async (resume: AskQuestionsResumeData) => {
+      const gate = stateRef.current.askGate;
+      if (!gate) return;
+      // Optimistik: sembunyikan kartu; tetap streaming (jawaban memicu kelanjutan turn).
+      setState((s) => ({ ...s, askGate: undefined, status: "streaming" }));
+      if (gate.source === "workflow") {
+        // /deep step `clarify` → resume Workflow (sejajar resolvePlan). Kelanjutan via consumeWorkflow.
+        const run = deepRunRef.current;
+        if (!run) {
+          setState((s) => ({ ...settleAssistantTurn(s), askGate: undefined }));
+          return;
+        }
+        try {
+          const stream = await run.resumeStream({
+            step: "clarify",
+            resumeData: resume as Record<string, unknown>,
+          });
+          await consumeWorkflow(stream);
+        } catch (err) {
+          await clearDeepRunIdUnlessAlive(run.runId);
+          setState((s) => ({
+            ...settleAssistantTurn(s),
+            error: readableApiErrorMessage(err, "Gagal melanjutkan riset mendalam."),
+          }));
+        }
+        return;
+      }
+      // source === "tool" (chat): resume tool-suspend lewat `sendToolApproval` yang MEMBAWA
+      // `resumeData` (non-stream, tanpa runId) → kelanjutan mengalir via langganan thread, tanpa
+      // error urutan tool_result (G8), sejajar `respond()`. Bila jalur ini tak resume tool-suspend
+      // di server, ganti ke `agent.resumeStream(resume, { runId, toolCallId })` (jalur kanonik docs).
+      if (!userId || !gate.toolCallId) {
+        // Tanpa `toolCallId` (chunk suspend tak lengkap) atau `userId`, tool tak bisa di-resume di
+        // server. Jangan diam-diam telan jawaban (turn tampak selesai lokal, run tetap suspend) —
+        // munculkan error supaya user tahu jawabannya tak terkirim.
+        setState((s) => ({
+          ...settleAssistantTurn(s),
+          error: "Gagal mengirim jawaban klarifikasi (sesi tidak lengkap). Coba mulai ulang pertanyaanmu.",
+        }));
+        return;
+      }
+      try {
+        const agent = clientRef.current.getAgent(agentIdFor(committedAgentKindRef.current));
+        await agent.sendToolApproval({
+          resourceId: userId,
+          threadId: opts.threadId,
+          toolCallId: gate.toolCallId,
+          approved: true,
+          resumeData: resume,
+        });
+      } catch (err) {
+        setState((s) => ({
+          ...settleAssistantTurn(s),
+          error: readableApiErrorMessage(err, "Gagal mengirim jawaban."),
+        }));
+      }
+    },
+    [opts.threadId, userId, consumeWorkflow, clearDeepRunIdUnlessAlive],
+  );
+
   // Regenerate (G6): re-run pesan user terakhir TANPA duplikat. Buang jawaban lama dari timeline +
   // hapus pasangan [user, assistant] terakhir di memory server, lalu kirim ulang (re-add SEKALI) →
   // tak ada bubble user kembar (live maupun setelah refresh).
@@ -551,11 +622,29 @@ export function useMastraAgent(opts: {
         const status = wfState.status;
         const steps = wfState.steps ?? {};
         if (status === "suspended") {
-          // Plan-gate (HITL): siapkan runRef untuk `resolvePlan` + tampilkan kartu rencana (G7).
+          // Gerbang HITL: siapkan runRef untuk resume + tampilkan kartu (G7). Bisa clarify (kartu
+          // Questions) ATAU approve-plan (kartu rencana) — bedakan dari step mana yang suspended.
           deepRunRef.current ??= (await wf.createRun({
             runId,
             resourceId: userId,
           })) as unknown as DeepRun;
+          const clarifyStep = steps["clarify"];
+          if (clarifyStep?.status === "suspended" && clarifyStep.suspendPayload) {
+            const questions = normalizeAskQuestions(clarifyStep.suspendPayload.questions);
+            // Guard sejajar reducer live (`normalizeAskQuestions(...).length === 0 → return state`):
+            // payload klarifikasi kosong/rusak (mestinya tak terjadi — suspend hanya saat ada
+            // pertanyaan) tak boleh me-render kartu kosong tak-terjawab yang mengunci run. Seed
+            // progres lalu settle (bukan spinner menggantung).
+            if (questions.length === 0) {
+              setState((s) => settleAssistantTurn(seedWorkflowProgress(s, runId, steps)));
+              return;
+            }
+            setState((s) => ({
+              ...seedWorkflowProgress(s, runId, steps),
+              askGate: { source: "workflow", questions, runId },
+            }));
+            return;
+          }
           const sp = steps["approve-plan"]?.suspendPayload ?? {};
           const subQuestions = Array.isArray(sp.subQuestions)
             ? sp.subQuestions.filter((x): x is string => typeof x === "string")
@@ -639,10 +728,12 @@ export function useMastraAgent(opts: {
     messages: state.messages,
     approvals: state.approvals,
     planGate: state.planGate ?? null,
+    askGate: state.askGate ?? null,
     error: state.error ? { message: state.error } : null,
     send,
     sendDeep,
     resolvePlan,
+    resolveAsk,
     regenerate,
     approve,
     decline,

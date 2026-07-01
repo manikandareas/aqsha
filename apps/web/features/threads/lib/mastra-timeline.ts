@@ -1,3 +1,5 @@
+import type { AskQuestion } from "@aqsha/chat-core";
+import { normalizeAskQuestions } from "@aqsha/chat-core";
 import { toCards } from "./source-card";
 import type {
   ArtifactCardModel,
@@ -37,11 +39,27 @@ export type MastraStatus = "ready" | "submitted" | "streaming";
 /** Plan-gate `/deep` (Workflow suspended di step `approve-plan`) → kartu rencana Setujui/Tolak. */
 export type MastraPlanGate = { plan: string; subQuestions: string[] };
 
+/**
+ * Ask-gate (HITL klarifikasi `ask_questions`) — dirender sebagai kartu Questions di atas composer.
+ * `source:"tool"` = chat (tool suspend; resume by `toolCallId`); `source:"workflow"` = `/deep` step
+ * `clarify` (resume by `runId` + step "clarify").
+ */
+export type MastraAskGate = {
+  source: "tool" | "workflow";
+  questions: AskQuestion[];
+  /** toolCallId — jalur chat (resume via sendToolApproval/resumeStream). */
+  toolCallId?: string;
+  /** runId — jalur `/deep` (resume via run.resumeStream); juga fallback jalur chat. */
+  runId?: string;
+};
+
 export type MastraTimelineState = {
   messages: TimelineMessage[];
   approvals: MastraApproval[];
   /** Plan-gate `/deep` aktif (Workflow suspended) — dirender sebagai kartu di atas composer. */
   planGate?: MastraPlanGate;
+  /** Ask-gate (klarifikasi) aktif — dirender sebagai kartu Questions di atas composer + panel kanan. */
+  askGate?: MastraAskGate;
   /** Run terakhir terlihat (dipakai memanggil approval bila perlu). */
   runId?: string;
   /** Run yang sedang menghasilkan output (status=streaming). */
@@ -270,7 +288,9 @@ export function settleAssistantTurn(state: MastraTimelineState): MastraTimelineS
   const idx = lastStreamingAssistantIndex(state.messages);
   const messages =
     idx < 0 ? state.messages : state.messages.map((m, i) => (i === idx ? { ...m, streaming: false } : m));
-  const status: MastraStatus = state.approvals.length > 0 ? state.status : "ready";
+  // HITL menggantung (approval / ask-gate) → pertahankan status (turn menunggu user), jangan "ready".
+  const status: MastraStatus =
+    state.approvals.length > 0 || state.askGate ? state.status : "ready";
   return { ...state, messages, status, activeRunId: undefined };
 }
 
@@ -401,13 +421,21 @@ export function reduceMastraChunk(
 
     case "tool-result":
     case "tool-output": {
-      const [s, idx] = ensureActiveAssistant(state);
+      const [s0, idx] = ensureActiveAssistant(state);
+      const toolCallId = str(payload.toolCallId);
+      // ask_questions selesai (tool-suspend di-resume) → gate SUDAH terjawab; bersihkan agar tak
+      // muncul lagi saat langganan tunggal me-replay buffer dari index 0 (reconnect / refresh /
+      // ganti agentKind). Tanpa ini, `tool-call-suspended` yang di-replay men-set ulang askGate dan
+      // `finish` mempertahankannya (via settleAssistantTurn) → kartu Klarifikasi terjawab nongol lagi
+      // & composer macet menunggu. (Guard sejajar `publishedDocEditKeysRef` untuk request_document_edit.)
+      const s =
+        toolCallId && s0.askGate?.toolCallId === toolCallId ? { ...s0, askGate: undefined } : s0;
       const toolName = str(payload.toolName);
       const result = payload.result ?? payload.output;
       // propose_artifact sukses → kartu artifact (parity eve).
-      const artifact = artifactFromResult(toolName, str(payload.toolCallId), result);
+      const artifact = artifactFromResult(toolName, toolCallId, result);
       if (artifact) return replaceWithArtifact(s, idx, artifact);
-      return completeToolPart(s, idx, str(payload.toolCallId), result, payload.isError === true);
+      return completeToolPart(s, idx, toolCallId, result, payload.isError === true);
     }
     case "tool-error": {
       const [s, idx] = ensureActiveAssistant(state);
@@ -424,6 +452,26 @@ export function reduceMastraChunk(
           args: asRecord(payload.args),
         }),
       };
+
+    case "tool-call-suspended": {
+      // ask_questions men-suspend turn → kartu Questions (payload.suspendPayload.questions). Tool
+      // lain tak dipakai di jalur ini; payload tanpa `questions` diabaikan (defensif).
+      const sp = asRecord(payload.suspendPayload);
+      const questions = normalizeAskQuestions(sp.questions);
+      if (questions.length === 0) return state;
+      const [s, idx] = ensureActiveAssistant(streaming(state));
+      const toolCallId = str(payload.toolCallId);
+      const withPending = setToolPending(s, idx, toolCallId);
+      return {
+        ...withPending,
+        askGate: {
+          source: "tool",
+          questions,
+          ...(toolCallId ? { toolCallId } : {}),
+          ...(chunk.runId ? { runId: chunk.runId } : {}),
+        },
+      };
+    }
 
     case "finish": {
       // Finish terminal: reason≠tool-calls → turn selesai. reason=tool-calls = masih ada langkah/
@@ -478,6 +526,8 @@ function finishReason(payload: Record<string, unknown>): string {
 // (`workflow-finish` TAK membawa report); plan-gate dari `workflow-step-suspended` `approve-plan`.
 
 const WF_STEP_LABELS: Record<string, string> = {
+  "draft-clarify": "Menilai kebutuhan klarifikasi",
+  clarify: "Menunggu klarifikasi",
   "draft-plan": "Menyusun rencana",
   "approve-plan": "Menunggu persetujuan rencana",
   "search-literature": "Menelaah literatur",
@@ -612,24 +662,37 @@ export function reduceWorkflowChunk(
     }
 
     case "workflow-step-suspended": {
-      if (str(payload.id) !== "approve-plan") return state;
+      const stepId = str(payload.id);
       const sp = asRecord(payload.suspendPayload);
       const [s, idx] = ensureActiveAssistant(streaming(state));
-      const withStep = upsertWorkflowStep(s, idx, "approve-plan", "pending");
-      return {
-        ...withStep,
-        planGate: { plan: str(sp.plan), subQuestions: strArray(sp.subQuestions) },
-      };
+      if (stepId === "approve-plan") {
+        const withStep = upsertWorkflowStep(s, idx, "approve-plan", "pending");
+        return {
+          ...withStep,
+          planGate: { plan: str(sp.plan), subQuestions: strArray(sp.subQuestions) },
+        };
+      }
+      if (stepId === "clarify") {
+        // Klarifikasi pra-rencana (`ask_questions`) → kartu Questions, sejajar plan-gate.
+        const questions = normalizeAskQuestions(sp.questions);
+        if (questions.length === 0) return state;
+        const withStep = upsertWorkflowStep(s, idx, "clarify", "pending");
+        return {
+          ...withStep,
+          askGate: { source: "workflow", questions, ...(chunk.runId ? { runId: chunk.runId } : {}) },
+        };
+      }
+      return state;
     }
 
     case "workflow-finish":
     case "workflow-canceled":
-      // `closeOnSuspend` (default) menutup stream saat plan-gate dengan chunk terminal ini. Bila
-      // plan-gate masih aktif (`planGate` terisi), ini SUSPEND-close — BUKAN finish sungguhan →
-      // PERTAHANKAN kartu rencana + status streaming (tunggu Setujui/Tolak), jangan settle. `resolvePlan`
-      // yang membersihkan `planGate` saat user memutuskan, jadi finish berikutnya (resume) baru settle (G2).
-      if (state.planGate) return state;
-      return settleAssistantTurn({ ...state, planGate: undefined });
+      // `closeOnSuspend` (default) menutup stream saat gerbang HITL dengan chunk terminal ini. Bila
+      // plan-gate/ask-gate masih aktif, ini SUSPEND-close — BUKAN finish sungguhan → PERTAHANKAN
+      // kartu + status streaming (tunggu keputusan user), jangan settle. `resolvePlan`/`resolveAsk`
+      // yang membersihkan gate saat user memutuskan → finish berikutnya (resume) baru settle (G2).
+      if (state.planGate || state.askGate) return state;
+      return settleAssistantTurn({ ...state, planGate: undefined, askGate: undefined });
 
     case "workflow-step-output": {
       // Detail proses yang dipancarkan step via `writer.write` (`payload.output`, `payload.stepName`).
@@ -648,7 +711,10 @@ export function reduceWorkflowChunk(
     }
 
     case "error":
-      return { ...settleAssistantTurn({ ...state, planGate: undefined }), error: extractError(payload.error) };
+      return {
+        ...settleAssistantTurn({ ...state, planGate: undefined, askGate: undefined }),
+        error: extractError(payload.error),
+      };
 
     default:
       return state; // step-progress/waiting/step-finish → diabaikan (granularitas)
@@ -1035,6 +1101,22 @@ function upsertApproval(list: MastraApproval[], a: MastraApproval): MastraApprov
   return [...list, a];
 }
 
+/** Set tool-row `toolCallId` ke status `pending` (menunggu user) — dipakai saat ask_questions suspend. */
+function setToolPending(
+  state: MastraTimelineState,
+  msgIdx: number,
+  toolCallId: string,
+): MastraTimelineState {
+  if (!toolCallId) return state;
+  return mutateMessage(state, msgIdx, (parts) =>
+    parts.map((p) =>
+      p.kind === "tool" && p.model.toolCallId === toolCallId
+        ? { ...p, model: { ...p.model, status: "pending", isRunning: true } }
+        : p,
+    ),
+  );
+}
+
 // ── tool model + scalar helpers (duplikat dari eve-timeline; self-contained) ──────
 
 function toolModel(
@@ -1138,6 +1220,7 @@ const TOOL_LABELS: Record<string, string> = {
   search_papers: "Mencari paper",
   verify_citations: "Memverifikasi sitasi",
   verify_identifiers: "Memverifikasi referensi",
+  ask_questions: "Menanyakan klarifikasi",
 };
 
 function toolTitle(rawName: string): string {

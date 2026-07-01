@@ -24,6 +24,7 @@ import { useWorkspaceLibraryDialogState } from "@/features/workspaces/hooks/use-
 import { ArtifactDetailPanel } from "@/features/workspaces/components/artifact-detail-view";
 import { workspaceEmoji } from "@/features/workspaces/utils/workspace-emoji";
 import { PlanDetailPanel } from "./plan-detail-panel";
+import { QuestionsDetailPanel } from "./questions-detail-panel";
 import { SearchStepPanel } from "./search-step-panel";
 import { SourcesListPanel } from "./sources-list-panel";
 import { StepDetailPanel } from "./step-detail-panel";
@@ -163,6 +164,8 @@ function ThreadDetailShellView({
       <StepDetailPanel toolCallId={mode.toolCallId} />
     ) : mode.kind === "plan" ? (
       <PlanDetailPanel turnId={mode.turnId} />
+    ) : mode.kind === "questions" ? (
+      <QuestionsDetailPanel />
     ) : (
       contextContent
     );

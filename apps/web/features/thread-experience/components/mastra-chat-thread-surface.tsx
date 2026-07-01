@@ -23,6 +23,7 @@ import {
   type RecentThread,
 } from "@/features/threads/components/composer";
 import { MessageList } from "@/features/threads/components/message-list";
+import { QuestionsCard } from "@/features/threads/components/questions-card";
 import { bucketMessageAttachments } from "@/features/threads/lib/attachment-buckets";
 import { type AgentKind, ASTRA_AGENT_ID, useMastraClient } from "@/features/threads/lib/mastra-client";
 import type { TimelineMessage } from "@/features/threads/lib/timeline-types";
@@ -187,9 +188,9 @@ function MastraChatInner({
   // The surface owns the parsed timeline + DB sources + plan gate, so it builds them
   // here and publishes them to `ThreadPanelProvider`; no-op in compact panels (no
   // provider). While the plan gate is live, the panel mirrors its Setujui/Tolak actions.
-  const { messages: agentMessages, planGate, resolvePlan } = agent;
+  const { messages: agentMessages, planGate, resolvePlan, askGate, resolveAsk } = agent;
   const panelLookups = useMemo(() => {
-    const lookups = buildThreadPanelLookups(agentMessages, sources, planGate);
+    const lookups = buildThreadPanelLookups(agentMessages, sources, planGate, askGate);
     // While a plan gate is live, mirror its Setujui/Tolak into the live plan entry so the
     // panel opened from the gate card carries the same actions.
     const livePlan = planGate ? lookups.plans.get(LIVE_PLAN_KEY) : undefined;
@@ -199,8 +200,16 @@ function MastraChatInner({
         resolve: (approve: boolean) => void resolvePlan(approve),
       });
     }
+    // While an ask gate is live, inject resolve/skip so the panel form submits the same answers.
+    if (lookups.ask) {
+      lookups.ask = {
+        ...lookups.ask,
+        resolve: (resume) => void resolveAsk(resume),
+        skip: () => void resolveAsk({ action: "skipped" }),
+      };
+    }
     return lookups;
-  }, [agentMessages, sources, planGate, resolvePlan]);
+  }, [agentMessages, sources, planGate, resolvePlan, askGate, resolveAsk]);
   useRegisterThreadPanelData(panelLookups);
 
   // Kirim pertama dari thread baru → bump URL ke /app/threads/<id> (history.replaceState, tanpa
@@ -271,6 +280,19 @@ function MastraChatInner({
         ))}
       </div>
     ) : null;
+
+  // Kartu klarifikasi (`ask_questions`) — HITL Questions di atas composer (chat tool-suspend ATAU
+  // /deep step clarify). Header punya aksi buka panel; jawab inline atau di panel kanan.
+  const questionsCard = agent.askGate ? (
+    <div className={cn(threadTranscriptColumnClass)}>
+      <QuestionsCard
+        questions={agent.askGate.questions}
+        onSubmit={(resume) => void agent.resolveAsk(resume)}
+        onSkip={() => void agent.resolveAsk({ action: "skipped" })}
+        onOpenPanel={threadPanel?.openQuestionsPanel}
+      />
+    </div>
+  ) : null;
 
   // Plan-gate `/deep` (Workflow suspended di `approve-plan`) — kartu rencana HITL. BUKAN collapsible:
   // kartu statis (judul + ringkasan + Setujui/Tolak). Header bisa diklik → buka panel rencana penuh
@@ -349,6 +371,7 @@ function MastraChatInner({
         <ConversationScrollButton />
       </Conversation>
       <div className={cn(threadTranscriptColumnClass, "flex flex-col gap-2.5 pt-2.5 pb-4")}>
+        {questionsCard}
         {planGateCard}
         {approvalCards}
         <Composer

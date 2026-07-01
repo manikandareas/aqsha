@@ -1,4 +1,9 @@
-import { messagePreview } from "@aqsha/chat-core";
+import {
+  formatAskAnswersForModel,
+  messagePreview,
+  normalizeAskQuestions,
+  type AskQuestion,
+} from "@aqsha/chat-core";
 import { BillingService } from "@aqsha/services/billing";
 import { ThreadService, TitleService } from "@aqsha/services/chat";
 import { estimateCredits } from "@aqsha/services/plan";
@@ -11,6 +16,11 @@ import {
 } from "@mastra/core/request-context";
 import { createStep, createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
+import {
+  askQuestionSchema,
+  askQuestionsResumeSchema,
+  askQuestionsSuspendSchema,
+} from "../lib/ask-questions-schema";
 import { citationVerifier } from "../agents/citation-verifier";
 import { counterEvidence } from "../agents/counter-evidence";
 import { deepWriter } from "../agents/deep-writer";
@@ -32,8 +42,9 @@ import { effectiveBilledTier, liteProviderOptions, proProviderOptions } from "..
  * Menggantikan skill `deep-research` model-driven + subagent eve dengan langkah eksplisit yang
  * observable per fase dan resume-safe:
  *
- *   draftPlan → approvePlan (HITL suspend/resume + gerbang billing) → searchLiterature
- *   → counterEvidence → verifyCitations → synthesize
+ *   draftClarify (kuota + nilai klarifikasi) → clarify (HITL ask_questions, opsional) → draftPlan
+ *   → approvePlan (HITL suspend/resume + gerbang billing) → searchLiterature → counterEvidence
+ *   → verifyCitations → synthesize
  *
  * Keputusan desain (deviasi sah dari §7 plan, dicatat):
  * - **Fan-out di dalam `searchStep`** (Promise.all per sub-pertanyaan) alih-alih builder
@@ -65,6 +76,13 @@ const InputSchema = z.object({
     .describe(
       "Tier agen: `pro` → subagen pakai `proModel` + penalaran tinggi & debit `DEEP_PRO_CREDITS`; `lite` (default) → `liteModel` & `DEEP_LITE_CREDITS`.",
     ),
+});
+
+/** Input + hasil penilaian klarifikasi (`clarifyQuestions` kosong = tak perlu bertanya). */
+const ClarifiedSchema = InputSchema.extend({
+  clarifyQuestions: z
+    .array(askQuestionSchema)
+    .describe("Pertanyaan klarifikasi pra-rencana (kosong bila pertanyaan sudah cukup spesifik)."),
 });
 
 const PlanSchema = z.object({
@@ -267,12 +285,14 @@ function buildMastraMessage(args: {
   text: string;
   threadId: string;
   resourceId: string | undefined;
+  /** Id pesan (deterministik → upsert idempoten saat dipanggil >1× per run). Default acak. */
+  id?: string;
   /** Ringkasan penalaran (asisten /deep) → part `reasoning` mendahului teks; dirender FE sbg blok berpikir. */
   reasoning?: string;
   metadata?: Record<string, unknown>;
 }) {
   return {
-    id: crypto.randomUUID(),
+    id: args.id ?? crypto.randomUUID(),
     role: args.role,
     createdAt: new Date(Date.now()),
     threadId: args.threadId,
@@ -300,16 +320,24 @@ function buildMastraMessage(args: {
 }
 
 /**
- * Proyeksikan thread chat + persist pertanyaan user SEDINI plan-gate (sebelum `suspend`). Jalur `/deep`
- * = Workflow yang dijalankan FE (bukan turn agent) → `threadProjectionProcessor` TAK jalan, jadi tanpa
- * ini `chat_threads` kosong → halaman thread "Akses ditolak" saat refresh di plan-gate/riset (G1/TC13),
- * dan thread tak muncul di sidebar. Persist pertanyaan SEKALI di sini (BUKAN lagi di `persistDeepReport`)
- * supaya tak ada bubble user kembar. Best-effort: kegagalan tak menggagalkan run.
+ * Proyeksikan thread chat + persist pertanyaan user SEDINI gerbang HITL pertama (sebelum `suspend`).
+ * Jalur `/deep` = Workflow yang dijalankan FE (bukan turn agent) → `threadProjectionProcessor` TAK
+ * jalan, jadi tanpa ini `chat_threads` kosong → halaman thread "Akses ditolak" saat refresh di
+ * clarify/plan-gate/riset (G1/TC13), dan thread tak muncul di sidebar. Pesan user memakai id
+ * DETERMINISTIK (`deep-user:<runId>`) → aman dipanggil >1× per run (clarify-gate LALU plan-gate):
+ * `saveMessages` meng-upsert baris yang sama, bukan bubble kembar. Best-effort: kegagalan tak
+ * menggagalkan run.
  */
 async function ensureDeepThread(
   mastra: Mastra | undefined,
   requestContext: RequestContext,
-  args: { threadId: string; question: string; displayQuestion?: string; agentKind: AgentKind },
+  args: {
+    threadId: string;
+    question: string;
+    displayQuestion?: string;
+    agentKind: AgentKind;
+    runId: string;
+  },
 ): Promise<void> {
   if (!mastra) return;
   const resourceId = ownerFromRequestContext(requestContext).id ?? undefined;
@@ -337,6 +365,8 @@ async function ensureDeepThread(
           text: args.displayQuestion ?? args.question,
           threadId: args.threadId,
           resourceId,
+          // Id deterministik per run → clarify-gate + plan-gate memanggil ini idempoten (tak kembar).
+          id: `deep-user:${args.runId}`,
         }),
       ],
     });
@@ -447,6 +477,37 @@ function parsePlan(text: string): { plan: string; subQuestions: string[] } | nul
   return null;
 }
 
+/**
+ * Prompt penilaian klarifikasi pra-rencana: minta model menilai apakah pertanyaan sudah cukup
+ * spesifik; bila tidak, mengembalikan 0-3 pertanyaan klarifikasi TERSTRUKTUR (JSON) — bukan prosa.
+ * Sengaja konservatif (kembalikan kosong bila sudah jelas) agar `/deep` yang sudah spesifik tak
+ * terpotong gerbang tambahan.
+ */
+function clarifyPrompt(input: z.infer<typeof InputSchema>): string {
+  return `Pertanyaan riset dari pengguna:\n${input.question}\n\nNilai apakah pertanyaan ini SUDAH cukup spesifik untuk langsung diriset mendalam, atau ada AMBIGUITAS PENTING yang bila diklarifikasi akan sangat mengubah arah/kualitas riset (mis. ruang lingkup, populasi/konteks, rentang waktu, sudut pandang, atau format keluaran).\n\nBila sudah cukup spesifik, kembalikan daftar KOSONG. Bila perlu, ajukan MAKSIMAL 3 pertanyaan klarifikasi yang paling menentukan — ringkas, tiap pertanyaan \`single\` (pilih satu) atau \`multi\` (pilih beberapa) dengan 2-4 opsi; set \`allowOther: true\` bila jawaban bebas relevan.\n\nAKHIRI dengan TEPAT SATU blok kode JSON valid (tanpa teks setelahnya):\n\`\`\`json\n{"questions": [{"id": "scope", "prompt": "...", "kind": "single", "options": [{"label": "..."}], "allowOther": true}]}\n\`\`\`\nKembalikan {"questions": []} bila tak perlu klarifikasi.`;
+}
+
+/**
+ * Ekstrak `AskQuestion[]` dari output model (blok ```json` di akhir; fallback objek {...} pertama).
+ * Normalisasi item mentah (id/opsi/freeform/lipat "Lainnya") = `normalizeAskQuestions` — SSOT yang
+ * sama dipakai reducer FE; di sini dibatasi `max: 3` (klarifikasi pra-rencana ringkas).
+ */
+function parseClarifyQuestions(text: string): AskQuestion[] {
+  const fenced = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)].map((m) => m[1] ?? "");
+  for (const chunk of [...fenced.reverse(), text]) {
+    const start = chunk.indexOf("{");
+    const end = chunk.lastIndexOf("}");
+    if (start === -1 || end <= start) continue;
+    try {
+      const obj = JSON.parse(chunk.slice(start, end + 1));
+      if (obj && Array.isArray(obj.questions)) return normalizeAskQuestions(obj.questions, { max: 3 });
+    } catch {
+      // coba kandidat berikutnya
+    }
+  }
+  return [];
+}
+
 function searcherPrompt(subQuestion: string, input: Planned): string {
   return `Topik riset utama: ${input.question}\n\nSub-pertanyaan yang HARUS kamu jawab dengan literatur:\n${subQuestion}\n\nCari bukti terkuat dan kembalikan tiap sumber berguna bernomor [n] (dengan judul, identifier DOI/arXiv/URL, extract bukti 2-4 kalimat, dan rating kekuatan).`;
 }
@@ -472,14 +533,16 @@ function synthesisPrompt(input: Verified): string {
 // ── Steps ─────────────────────────────────────────────────────────────────────────────────
 
 /**
- * 1. draftPlan — precheck kuota deep (ramah, `SendQuotaService`) lalu susun rencana prosa +
- * sub-pertanyaan terstruktur via `deepWriter`. Blok kuota → `bail` cepat (tak menyusun rencana).
+ * 0. draftClarify — GERBANG KUOTA paling awal (dipindah dari draft-plan; user terblok tak sampai
+ * memicu generasi apa pun) lalu nilai perlu-tidaknya klarifikasi pra-rencana → 0-3 pertanyaan
+ * terstruktur (`AskQuestion[]`). `toolChoice:"none"` → murni tulis JSON, tak menjalankan tool.
+ * Best-effort: generasi gagal → anggap tak perlu klarifikasi (lanjut ke draft-plan).
  */
-const draftPlanStep = createStep({
-  id: "draft-plan",
+const draftClarifyStep = createStep({
+  id: "draft-clarify",
   inputSchema: InputSchema,
-  outputSchema: PlannedSchema,
-  execute: async ({ inputData, requestContext, bail, runId, writer }) => {
+  outputSchema: ClarifiedSchema,
+  execute: async ({ inputData, requestContext, bail, runId }) => {
     const { id: ownerUserId, email: ownerEmail } = ownerFromRequestContext(requestContext);
     if (ownerUserId) {
       const quota = await SendQuotaService.check(getServiceDb(), {
@@ -494,6 +557,64 @@ const draftPlanStep = createStep({
         });
       }
     }
+    let clarifyQuestions: AskQuestion[] = [];
+    try {
+      const out = await deepWriter.generate(clarifyPrompt(inputData), {
+        ...deepGenOptions(requestContext, inputData, runId),
+        toolChoice: "none",
+      });
+      clarifyQuestions = parseClarifyQuestions(out.text);
+    } catch (err) {
+      console.error("[deep-research] draftClarify failed", err);
+    }
+    return { ...inputData, clarifyQuestions };
+  },
+});
+
+/**
+ * 0b. clarify — HITL KLARIFIKASI (`suspend({ questions })` → kartu Questions FE → `resume({ action,
+ * answers })`), sejajar plan-gate tapi memakai kontrak `ask_questions`. Tanpa pertanyaan → lanjut
+ * langsung (tak suspend). Jawaban disisipkan ke `context` planner; dilewati → biarkan apa adanya.
+ * Proyeksikan thread SEBELUM suspend (idempoten via `runId`) supaya refresh saat kartu tak "Akses
+ * ditolak" (G1). TANPA gerbang billing di sini — billing tetap sekali di plan-gate.
+ */
+const clarifyGateStep = createStep({
+  id: "clarify",
+  inputSchema: ClarifiedSchema,
+  outputSchema: InputSchema,
+  resumeSchema: askQuestionsResumeSchema,
+  suspendSchema: askQuestionsSuspendSchema,
+  execute: async ({ inputData, resumeData, suspend, requestContext, runId, mastra }) => {
+    const { clarifyQuestions, ...base } = inputData;
+    if (!clarifyQuestions || clarifyQuestions.length === 0) return base;
+    if (!resumeData) {
+      await ensureDeepThread(mastra, requestContext, {
+        threadId: base.threadId,
+        question: base.question,
+        displayQuestion: base.displayQuestion,
+        agentKind: base.agentKind,
+        runId,
+      });
+      return await suspend({ questions: clarifyQuestions });
+    }
+    if (resumeData.action === "skipped") return base;
+    const answersText = formatAskAnswersForModel(clarifyQuestions, resumeData);
+    const context = [base.context, answersText]
+      .filter((s): s is string => typeof s === "string" && s.length > 0)
+      .join("\n\n");
+    return { ...base, context };
+  },
+});
+
+/**
+ * 1. draftPlan — susun rencana prosa + sub-pertanyaan terstruktur via `deepWriter`. Precheck kuota
+ * dipindah ke `draft-clarify` (gerbang paling awal) → step ini fokus menyusun rencana.
+ */
+const draftPlanStep = createStep({
+  id: "draft-plan",
+  inputSchema: InputSchema,
+  outputSchema: PlannedSchema,
+  execute: async ({ inputData, requestContext, runId, writer }) => {
     const out = await deepWriter.generate(
       planPrompt(inputData),
       deepGenOptions(requestContext, inputData, runId),
@@ -533,6 +654,7 @@ const approvePlanStep = createStep({
         question: inputData.question,
         displayQuestion: inputData.displayQuestion,
         agentKind: inputData.agentKind,
+        runId,
       });
       return await suspend({ plan: inputData.plan, subQuestions: inputData.subQuestions });
     }
@@ -733,10 +855,12 @@ const synthesizeStep = createStep({
 
 export const deepResearch = createWorkflow({
   id: "deep-research",
-  description: "Riset mendalam tercitasi: plan-gate (HITL) → cari literatur → bukti tandingan → verifikasi sitasi → sintesis.",
+  description: "Riset mendalam tercitasi: klarifikasi (HITL, opsional) → plan-gate (HITL) → cari literatur → bukti tandingan → verifikasi sitasi → sintesis.",
   inputSchema: InputSchema,
   outputSchema: OutputSchema,
 })
+  .then(draftClarifyStep)
+  .then(clarifyGateStep)
   .then(draftPlanStep)
   .then(approvePlanStep)
   .then(searchStep)
