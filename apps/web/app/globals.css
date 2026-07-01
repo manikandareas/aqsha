@@ -87,6 +87,12 @@
   --coral-soft: color-mix(in oklch, var(--coral) 15%, var(--card));
   --coral-soft-border: color-mix(in oklch, var(--coral) 30%, var(--border));
   --shadow-soft-card: var(--shadow);
+  /* Global scrollbar — thin, floating, palette-aware. The thumb derives from
+     `--muted-foreground`, so it re-resolves per theme (warm taupe in light,
+     soft gray in dark) without a separate `.dark` override. */
+  --scrollbar-size: 0.625rem;
+  --scrollbar-thumb: color-mix(in oklch, var(--muted-foreground) 30%, transparent);
+  --scrollbar-thumb-hover: color-mix(in oklch, var(--muted-foreground) 55%, transparent);
 }
 
 .dark {
@@ -266,6 +272,41 @@
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
+  }
+
+  /* Firefox: thin native scrollbar with a transparent track. Lives in the base
+     layer so the `.no-scrollbar` utility (utilities layer) still wins. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+
+  /* WebKit/Blink: a slim, rounded thumb that floats over a transparent track.
+     The 3px transparent border + padding-box clip narrows the visible thumb and
+     gives it breathing room from the content edge for a softer look. */
+  ::-webkit-scrollbar {
+    width: var(--scrollbar-size);
+    height: var(--scrollbar-size);
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-color: var(--scrollbar-thumb);
+    background-clip: padding-box;
+    transition: background-color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
   }
 }
 
@@ -926,4 +967,87 @@
   overflow-y: auto;
   background: var(--background);
   padding: 1.5rem 1rem 6rem;
+}
+
+/* ------------------------------------------------------------------ *
+ * Tactile keycap button surface
+ *
+ * A colour-agnostic recipe that makes any solid button read like a
+ * physical keycap: a subtly domed face, a thin top sheen, and a solid
+ * darker "lip" underneath (a hard 0-blur shadow). Every colour is
+ * derived from `--btn-face` (set per variant), so it inherits the
+ * existing palette instead of introducing new colours.
+ *
+ * Press choreography keeps the BASE fixed while the cap moves, so the
+ * button never appears to jump in a layout:
+ *   rest   translateY(0)  + lip 3px  → bottom edge at +3px
+ *   hover  translateY(-1px) + lip 4px → bottom edge at +3px (cap lifts)
+ *   press  translateY(3px) + lip 0px  → bottom edge at +3px (cap bottoms out)
+ *
+ * The lip/ambient live in `--tw-shadow`, composed through Tailwind's
+ * box-shadow variable chain so the focus ring still layers on top. The
+ * base cva owns the press transform exclusively (its generic
+ * `active:translate-y` nudge is removed for solid variants), so nothing
+ * competes with the choreography above.
+ * ------------------------------------------------------------------ */
+@layer components {
+  .btn-keycap {
+    --btn-face: var(--primary);
+    background-image: linear-gradient(
+      to bottom,
+      color-mix(in oklch, var(--btn-face) 92%, white 8%),
+      color-mix(in oklch, var(--btn-face) 97%, black 3%)
+    );
+    --tw-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / 0.18),
+      0 3px 0 0 color-mix(in oklch, var(--btn-face) 60%, black 40%),
+      0 5px 9px -3px color-mix(in srgb, var(--btn-face) 42%, transparent);
+    box-shadow:
+      var(--tw-inset-shadow, 0 0 #0000),
+      var(--tw-inset-ring-shadow, 0 0 #0000),
+      var(--tw-ring-offset-shadow, 0 0 #0000),
+      var(--tw-ring-shadow, 0 0 #0000),
+      var(--tw-shadow);
+    /* Gradients don't interpolate (background-image transitions discretely), so
+       the motion rides box-shadow + transform; the face swaps instantly. */
+    transition:
+      box-shadow 0.15s ease,
+      transform 0.12s ease;
+  }
+
+  .btn-keycap:hover {
+    transform: translateY(-1px);
+    background-image: linear-gradient(
+      to bottom,
+      color-mix(in oklch, var(--btn-face) 88%, white 12%),
+      color-mix(in oklch, var(--btn-face) 96%, black 4%)
+    );
+    --tw-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / 0.24),
+      0 4px 0 0 color-mix(in oklch, var(--btn-face) 58%, black 42%),
+      0 8px 13px -3px color-mix(in srgb, var(--btn-face) 48%, transparent);
+  }
+
+  /* Pressed and open (dropdown) share the bottomed-out look: cap sinks
+     onto the surface and the lip collapses. */
+  .btn-keycap:active,
+  .btn-keycap[aria-expanded="true"] {
+    transform: translateY(3px);
+    background-image: linear-gradient(
+      to bottom,
+      color-mix(in oklch, var(--btn-face) 96%, black 4%),
+      color-mix(in oklch, var(--btn-face) 92%, black 8%)
+    );
+    --tw-shadow:
+      inset 0 1px 1px 0 color-mix(in oklch, var(--btn-face) 70%, black 30%),
+      0 0 0 0 color-mix(in oklch, var(--btn-face) 60%, black 40%),
+      0 1px 2px 0 color-mix(in srgb, var(--btn-face) 30%, transparent);
+  }
+
+  .btn-keycap:disabled {
+    transform: none;
+    --tw-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / 0.1),
+      0 2px 0 0 color-mix(in oklch, var(--btn-face) 66%, black 34%);
+  }
 }
