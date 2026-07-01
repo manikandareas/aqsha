@@ -28,6 +28,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { readableApiErrorMessage } from "@/lib/api-error";
+import { panelHeaderBarClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
 import type { BreadcrumbSegment } from "../utils/workspace-library-model";
 
@@ -91,8 +92,8 @@ export function WorkspaceBoardToolbar({
   const showTitleControls = showWorkspaceSettings && !titleSlot;
 
   return (
-    <div className="sticky top-0 z-20 flex shrink-0 flex-col gap-2 bg-background/70 px-5 py-2.5 backdrop-blur-xl sm:px-6">
-      <div className="flex min-w-0 items-center justify-between gap-3">
+    <div className={cn(panelHeaderBarClass, inSubfolder && "h-auto flex-col items-stretch gap-1")}>
+      <div className={cn("flex w-full min-w-0 items-center justify-between gap-3", inSubfolder && "h-11 shrink-0")}>
         <div className="flex min-w-0 items-center gap-1.5">
           {showLeftSidebarTrigger && onToggleLeftSidebar ? (
             <Button
@@ -202,7 +203,7 @@ export function WorkspaceBoardToolbar({
       {inSubfolder ? (
         <nav
           aria-label="Lokasi folder"
-          className="flex min-w-0 items-center gap-1 text-[12px] font-medium text-muted-foreground"
+          className="flex min-w-0 items-center gap-1 pb-2 text-[12px] font-medium text-muted-foreground"
         >
           {breadcrumb.map((segment, index) => {
             const isLast = index === breadcrumb.length - 1;

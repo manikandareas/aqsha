@@ -294,7 +294,7 @@ export function WorkspaceLibraryBoard({
             <div
               {...dropzoneProps}
               className={cn(
-                "relative min-h-0 flex-1 overflow-y-auto bg-background",
+                "@container relative min-h-0 flex-1 overflow-y-auto bg-background",
                 panelBodyPaddingClass,
                 "pt-6",
                 isUploadDragOver &&
@@ -377,7 +377,7 @@ export function WorkspaceLibraryBoard({
         ) : (
           <div
             className={cn(
-              "relative min-h-0 flex-1 overflow-y-auto bg-background",
+              "@container relative min-h-0 flex-1 overflow-y-auto bg-background",
               panelBodyPaddingClass,
               "pt-6",
             )}
