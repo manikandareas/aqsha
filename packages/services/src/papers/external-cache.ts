@@ -1,7 +1,7 @@
 /**
  * Redis-backed external-lookup cache. Replaces V1's `externalLookupCache` table
  * + `getCache`/`putCache` Convex functions. Keyed per provider so the paper
- * resolver and Jina reader cache absorb repeat lookups (and act as the only
+ * resolver and Firecrawl reader cache absorb repeat lookups (and act as the only
  * "pacing" mechanism now that the Convex rate-limiter is gone).
  *
  * Cache key shape: `extcache:{provider}:{cacheKey}`.

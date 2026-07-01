@@ -114,9 +114,10 @@ export {
   isAcademicIdentifier,
   isBlockedHost,
   pdfFileName,
-  readWithJinaReader,
   resolvePaper,
   type ResolvedPaper,
+  scrapeUrlFirecrawl,
+  type UrlReadResult,
 } from "./papers";
 export {
   ARTIFACT_QUEUES,

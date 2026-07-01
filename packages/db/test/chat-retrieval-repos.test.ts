@@ -45,7 +45,7 @@ function srcRow(over: Partial<NewResearchSource> & { locator: string; turnId: st
     ownerUserId: OWNER,
     citationNumber: null,
     origin: "web",
-    provider: "jina_search",
+    provider: "firecrawl_search",
     title: "Sumber",
     url: null,
     doi: null,

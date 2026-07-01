@@ -13,7 +13,8 @@ export type RateLimitRule =
   | "artifacts:upload"
   | "chat:send"
   | "account:delete"
-  | "security:sessions-revoke";
+  | "security:sessions-revoke"
+  | "explore:search";
 
 const RATE_LIMIT_RULES: Record<RateLimitRule, { points: number; duration: number }> = {
   "workspaces:create": { points: 3, duration: 3600 },
@@ -26,6 +27,9 @@ const RATE_LIMIT_RULES: Record<RateLimitRule, { points: number; duration: number
   "account:delete": { points: 5, duration: 3600 },
   // Keluarkan perangkat — 10/menit cukup (klik tombol manual, bukan throughput).
   "security:sessions-revoke": { points: 10, duration: 60 },
+  // Live search Explore (gratis, tembak OpenAlex/arXiv/Crossref) — 30/menit/user cukup
+  // longgar (hasil di-cache Redis) tapi membatasi abuse call eksternal yang tak berbayar.
+  "explore:search": { points: 30, duration: 60 },
 };
 
 /** Konfigurasi rule (points/duration) — dipakai `getSendStatus` untuk hitung cooldown. */

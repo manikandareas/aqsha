@@ -31,8 +31,6 @@ export const queryKeys = {
     all: ["feed"] as const,
     list: (params: { mode: string; topic: string | null }) =>
       ["feed", "list", params] as const,
-    search: (params: { q: string; fromYear: number | null }) =>
-      ["feed", "search", params] as const,
     item: (id: string) => ["feed", "item", id] as const,
   },
   papers: {

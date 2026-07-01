@@ -95,6 +95,8 @@ export function buildOpenAlexWorksUrl(args: {
   limit: number;
   includeRetracted?: boolean;
   fromYear?: number;
+  /** Halaman basic-paging OpenAlex (>1 → `page`); default 1. Untuk load-more search. */
+  page?: number;
 }): URL {
   const query = args.query.trim();
   const retractionFilter = args.includeRetracted ? "" : "is_retracted:false,";
@@ -102,6 +104,7 @@ export function buildOpenAlexWorksUrl(args: {
   const url = new URL(OPENALEX_ENDPOINT);
   url.searchParams.set("api_key", args.apiKey);
   url.searchParams.set("per_page", String(args.limit));
+  if (args.page && args.page > 1) url.searchParams.set("page", String(args.page));
   url.searchParams.set("select", OPENALEX_SELECT_FIELDS.join(","));
   if (query) {
     const dateFilter = fromYear ? `,from_publication_date:${fromYear}-01-01` : "";
@@ -199,14 +202,19 @@ export async function fetchOpenAlexWorks(args: {
   limit: number;
   includeRetracted?: boolean;
   fromYear?: number;
+  page?: number;
   now?: number;
 }): Promise<{ papers: ExplorePaperInput[]; works: OpenAlexWork[] }> {
   const query = args.query.trim();
   const limit = Math.min(Math.max(args.limit, 1), 50);
   const includeRetracted = args.includeRetracted ?? false;
+  const page = args.page && args.page > 1 ? args.page : 1;
+  // `fromYear` ikut ke cache key: buildOpenAlexWorksUrl memfilter tahun, jadi tanpa ini dua
+  // pencarian query/limit/page sama tapi fromYear beda akan tabrakan (hasil salah-tahun).
+  const yearBucket = args.fromYear ?? "all";
   const now = args.now ?? Date.now();
   const dateBucket = new Date(now).toISOString().slice(0, 10);
-  const cacheKey = `feed:works:${includeRetracted ? "ret" : "noret"}:${limit}:${query}:${dateBucket}`;
+  const cacheKey = `feed:works:${includeRetracted ? "ret" : "noret"}:${limit}:p${page}:y${yearBucket}:${query}:${dateBucket}`;
 
   const cached = await getCache("openalex", cacheKey);
   if (cached) {
@@ -221,7 +229,7 @@ export async function fetchOpenAlexWorks(args: {
   const apiKey = process.env.OPENALEX_API_KEY;
   if (!apiKey) throw new Error("OPENALEX_API_KEY is not configured");
 
-  const url = buildOpenAlexWorksUrl({ apiKey, query, limit, includeRetracted, fromYear: args.fromYear });
+  const url = buildOpenAlexWorksUrl({ apiKey, query, limit, includeRetracted, fromYear: args.fromYear, page });
   const response = await fetchWithTimeout(url.toString(), { headers: { Accept: "application/json" } });
   if (!response.ok) throw new Error(`OpenAlex returned ${response.status}`);
   const json = (await response.json()) as { results?: OpenAlexWork[] };

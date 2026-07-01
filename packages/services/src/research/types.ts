@@ -11,7 +11,7 @@ export type EvidenceStrength = "strong" | "medium" | "weak";
 /** One source candidate returned by a research provider. */
 export type ResearchCandidate = {
   origin: ResearchOrigin;
-  /** Provider label (`jina_search`, `arxiv`, `crossref`, `openalex`). */
+  /** Provider label (`firecrawl_search`, `arxiv`, `crossref`, `openalex`). */
   provider?: string;
   evidenceStrength: EvidenceStrength;
   title: string;

@@ -10,7 +10,7 @@ import { type DbOrTx, type NewResearchSource, type ResearchSource, ResearchSourc
 import { fetchArticlePreview } from "../papers/articlePreview";
 import { normalizeDoi } from "../papers/identifiers";
 import { searchArxiv } from "./arxiv";
-import { lookupDoi } from "./crossref";
+import { lookupDoi, searchCrossref } from "./crossref";
 import { searchWebFirecrawl } from "./firecrawl";
 import { searchOpenAlex } from "./openalex";
 import type { ResearchCandidate } from "./types";
@@ -81,6 +81,11 @@ export const ResearchService = {
   /** Lookup metadata satu DOI (Crossref). */
   lookupDoi(args: { doi: string }): Promise<ResearchCandidate[]> {
     return lookupDoi(args);
+  },
+
+  /** Keyword search Crossref (`/works?query=…`, multi-hasil). */
+  searchCrossref(args: { query: string; limit?: number }): Promise<ResearchCandidate[]> {
+    return searchCrossref(args);
   },
 
   /** Pencarian karya akademik (OpenAlex). */

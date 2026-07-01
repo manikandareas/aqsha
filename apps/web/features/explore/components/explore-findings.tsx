@@ -20,12 +20,14 @@ import { HOUSE_ADS, type HouseAd } from "@/features/discovery/house-ads";
 import {
   useFeedInfinite,
   useHideDiscovery,
+  usePaperSearch,
   useRecordInteraction,
-  useSearchDiscovery,
+  type SearchPaper,
 } from "@/features/discovery/api";
 import {
   discoveryItemKey,
   feedItemToDiscoveryItem,
+  paperToDiscoveryItem,
   type DiscoveryItem,
 } from "@/features/discovery/model";
 import type { FeedItem, FeedTopic } from "@/features/discovery/types";
@@ -55,31 +57,39 @@ export function ExploreFindings({
   const searchMode = q.length > 0;
   const mode = topic ? "topics" : "foryou";
   // Query disubmit → feed switch ke hasil pencarian (paper+news); kosong → feed personal.
+  // Search = live paper (OpenAlex→arXiv→Crossref, load-more via page); browse = feed
+  // personal (paper+news, infinite scroll). Dua infinite-query bentuk item beda.
   const feedQuery = useFeedInfinite(mode, topic, !searchMode);
-  const searchQuery = useSearchDiscovery(q);
-  const feed = searchMode ? searchQuery : feedQuery;
+  const searchQuery = usePaperSearch(q, undefined, searchMode);
   const hide = useHideDiscovery();
   const record = useRecordInteraction();
 
-  // Flatten → dedupe → drop locally-hidden (auto-memoized by React Compiler).
+  // Petakan per-mode → dedupe by kunci discovery → drop locally-hidden.
   const items: DiscoveryItem[] = [];
   {
     const seen = new Set<string>();
-    for (const page of feed.data?.pages ?? []) {
-      for (const raw of page.items as FeedItem[]) {
-        if (seen.has(raw._id)) continue;
-        seen.add(raw._id);
-        const item = feedItemToDiscoveryItem(raw);
-        if (!hiddenIds.has(discoveryItemKey(item))) items.push(item);
+    const pages = searchMode ? (searchQuery.data?.pages ?? []) : (feedQuery.data?.pages ?? []);
+    for (const page of pages) {
+      for (const raw of page.items) {
+        const item = searchMode
+          ? paperToDiscoveryItem(raw as SearchPaper)
+          : feedItemToDiscoveryItem(raw as FeedItem);
+        const key = discoveryItemKey(item);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (!hiddenIds.has(key)) items.push(item);
       }
     }
   }
-  const rawCount = (feed.data?.pages ?? []).reduce((n, p) => n + p.items.length, 0);
+  const rawCount = (feedQuery.data?.pages ?? []).reduce((n, p) => n + p.items.length, 0);
 
-  const fetchNextPage = feed.fetchNextPage;
-  const feedStatus: FeedStatus = feed.isFetchingNextPage
+  // Satu sumber status per-mode: search & browse berbagi antarmuka infinite-query, jadi
+  // cukup pilih query aktif sekali (pemetaan item per-bentuk tetap ditangani di atas).
+  const active = searchMode ? searchQuery : feedQuery;
+  const { isError, error, isPending, isPlaceholderData, fetchNextPage } = active;
+  const feedStatus: FeedStatus = active.isFetchingNextPage
     ? "LoadingMore"
-    : feed.hasNextPage
+    : active.hasNextPage
       ? "CanLoadMore"
       : "Exhausted";
 
@@ -95,6 +105,8 @@ export function ExploreFindings({
   }, [sessionKey]);
 
   useEffect(() => {
+    // Search TIDAK auto-load — hanya tombol "Muat lagi" manual. Observer khusus browse.
+    if (searchMode) return;
     const node = sentinelRef.current;
     if (!node) return;
     const observer = new IntersectionObserver(
@@ -113,7 +125,7 @@ export function ExploreFindings({
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [sessionKey, feedStatus, fetchNextPage, rawCount]);
+  }, [searchMode, sessionKey, feedStatus, fetchNextPage, rawCount]);
 
   const handleManualLoadMore = () => {
     autoLoadCountRef.current = 0;
@@ -154,16 +166,16 @@ export function ExploreFindings({
         className={cn(
           searchMode ? "@container/feed mt-5" : "@container/feed",
           // Hasil lama tetap tampil (di-fade) selagi kueri/topik baru dimuat — transisi mulus.
-          feed.isPlaceholderData && "opacity-60 transition-opacity duration-200",
+          isPlaceholderData && "opacity-60 transition-opacity duration-200",
         )}
       >
-        {feed.isError ? (
+        {isError ? (
           <div className="max-w-[760px] rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-[13px] font-medium text-destructive">
-            {readableApiErrorMessage(feed.error, "Gagal memuat.")}
+            {readableApiErrorMessage(error, "Gagal memuat.")}
           </div>
-        ) : feed.isPending ? (
+        ) : isPending ? (
           <Loader />
-        ) : items.length === 0 ? (
+        ) : items.length === 0 && feedStatus === "Exhausted" ? (
           <EmptyState topic={topic} searchQuery={searchMode ? q : null} />
         ) : (
           <div className="space-y-10">
@@ -210,8 +222,12 @@ export function ExploreFindings({
                 </div>
               );
             })}
-            {feedStatus !== "Exhausted" ? <div ref={sentinelRef} aria-hidden className="h-px w-full" /> : null}
-            <FeedFooter status={feedStatus} onLoadMore={handleManualLoadMore} />
+            {!searchMode && feedStatus !== "Exhausted" ? (
+              <div ref={sentinelRef} aria-hidden className="h-px w-full" />
+            ) : null}
+            {searchMode && feedStatus === "Exhausted" ? null : (
+              <FeedFooter status={feedStatus} onLoadMore={handleManualLoadMore} />
+            )}
           </div>
         )}
       </div>

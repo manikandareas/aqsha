@@ -1,5 +1,4 @@
 import {
-  BillingService,
   BlockedUrlError,
   ExploreService,
   followRedirectsSafely,
@@ -8,6 +7,7 @@ import {
 import { Elysia, status, t } from "elysia";
 import { getDb } from "../clients/db";
 import { authMacro } from "../plugins/auth";
+import { rateLimitMacro } from "../plugins/rate-limit";
 
 // Cache provenance URL ter-validasi (anti seq-scan berulang: pdf.js menembak
 // beberapa range request per dokumen). TTL pendek → entri di-revalidasi berkala
@@ -74,8 +74,8 @@ async function fetchPdfUpstream(target: URL, range: string | null): Promise<PdfF
 }
 
 /**
- * Route papers/explore (Domain 9, P4 + Fase 8). `GET /papers/search` (waterfall
- * OpenAlex→arXiv→Jina→Crossref + cache; live keyword search debit `external_search`),
+ * Route papers/explore (Domain 9, P4 + Fase 8). `GET /papers/search` (waterfall akademik
+ * OpenAlex→arXiv→Crossref + cache; GRATIS, rate-limit `explore:search`; load-more via `page`),
  * `GET /papers/detail?key=…` (getPaperDetail: cache + OpenAlex single-work enrichment).
  *
  * Kunci kanonik (`doi:`/`arxiv:`/`url:`/`title:`) DIBAWA SEBAGAI QUERY PARAM, bukan path:
@@ -85,46 +85,29 @@ async function fetchPdfUpstream(target: URL, range: string | null): Promise<PdfF
  */
 export const papers = new Elysia({ prefix: "/papers" })
   .use(authMacro)
+  .use(rateLimitMacro)
   .get(
     "/search",
-    async ({ ownerUserId, email, query }) => {
+    ({ ownerUserId, query }) => {
       const { db } = getDb();
-      // Live keyword search reaches external providers → gate `external_search`
-      // (return-union, no throw). Recommendations stay free (feed cold-start).
-      if (query.mode === "search") {
-        const credit = await BillingService.consumeCredits(db, {
-          ownerUserId,
-          ownerEmail: email,
-          feature: "external_search",
-          provider: "explore_search",
-        });
-        if (!credit.ok) {
-          return {
-            items: [],
-            mode: "search" as const,
-            query: query.query ?? "",
-            providerStatus: [],
-            generatedAt: Date.now(),
-            cached: false,
-            blocked: { reason: credit.reason, resetAt: credit.resetAt },
-          };
-        }
-      }
       return ExploreService.searchPapers(db, ownerUserId, {
         query: query.query,
         limit: query.limit,
         mode: query.mode,
         fromYear: query.fromYear,
+        page: query.page,
         interestSeed: query.interestSeed,
       });
     },
     {
       auth: true,
+      rateLimit: "explore:search",
       query: t.Object({
         query: t.Optional(t.String()),
         limit: t.Optional(t.Numeric()),
         mode: t.Optional(t.Union([t.Literal("recommendations"), t.Literal("search")])),
         fromYear: t.Optional(t.Numeric()),
+        page: t.Optional(t.Numeric()),
         interestSeed: t.Optional(t.Boolean()),
       }),
     },

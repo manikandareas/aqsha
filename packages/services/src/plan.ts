@@ -264,9 +264,8 @@ export function estimateProviderCostCents(args: {
   // NOTE: heuristik cents = OBSERVABILITY-only (bukan gerbang). Port verbatim V1
   // (string "gpt-5.5"); retune ke pricing Claude = follow-up P6/P9.
   if (args.feature === "external_search") {
-    if (args.provider === "exa") return 3;
-    if (args.provider === "jina_read") return 2;
-    if (args.provider === "jina_search" || args.provider === "jina_rerank") return 1;
+    // Provider akademik/web (openalex/arxiv/crossref/firecrawl_search) tak dipatok
+    // biaya per-call di sini — usage direkam ledger, cents observability = 0.
     return 0;
   }
 

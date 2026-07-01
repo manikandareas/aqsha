@@ -5,7 +5,7 @@
  *
  * INVARIAN: `deriveOrderAt` + `deriveSearchText` HARUS jalan di SETIAP write feed
  * (`buildFeedItemRow` adalah satu-satunya konstruktor row) supaya keyset infinite-scroll
- * + searchDiscovery konsisten. Lihat docs/v2/06 Fase 4.
+ * konsisten (search_tsv retained; read-path search dihapus). Lihat docs/v2/06 Fase 4.
  */
 import type { NewFeedItem } from "@aqsha/db";
 import type { ExplorePaperInput } from "../explore/model";
