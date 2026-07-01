@@ -361,7 +361,7 @@ function MastraChatInner({
           threadAgentKind={threadAgentKind}
           ambientContextRefs={ambientContextRefs}
           errorDraft={agent.error ? lastUserText(agent.messages) : null}
-          placeholder="Tulis pesan untuk Astra…"
+          placeholder={{ mobile: "Tulis pesan…", desktop: "Tulis pesan untuk Astra…" }}
         />
       </div>
     </div>

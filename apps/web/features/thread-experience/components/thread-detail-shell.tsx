@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { ResponsiveSidePanel } from "@/components/layout/responsive-side-panel";
 import { PanelHeaderBar, SidePanelFrame } from "@/components/layout/side-panel-frame";
-import { PanelBoardTitleDropdownTrigger } from "@/components/panel-title-dropdown-trigger";
+import { PanelTitleDropdownTrigger } from "@/components/panel-title-dropdown-trigger";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,6 +22,7 @@ import { WorkspaceLibrarySurface } from "@/features/workspaces/components/worksp
 import { WorkspaceBoardToolbar } from "@/features/workspaces/components/workspace-board-toolbar";
 import { useWorkspaceLibraryDialogState } from "@/features/workspaces/hooks/use-workspace-library-dialogs";
 import { ArtifactDetailPanel } from "@/features/workspaces/components/artifact-detail-view";
+import { workspaceEmoji } from "@/features/workspaces/utils/workspace-emoji";
 import { PlanDetailPanel } from "./plan-detail-panel";
 import { SearchStepPanel } from "./search-step-panel";
 import { SourcesListPanel } from "./sources-list-panel";
@@ -252,6 +253,7 @@ function ThreadWorkspaceLibraryPanel({
 type WorkspacePickerOption = {
   _id: string;
   name: string;
+  emoji?: string;
 };
 
 function WorkspacePanelSwitcher({
@@ -265,14 +267,23 @@ function WorkspacePanelSwitcher({
   onSelectWorkspace: (workspaceId: string) => void;
   placeholder?: string;
 }) {
-  const label = selectedWorkspaceId
-    ? (workspaces.find((workspace) => workspace._id === selectedWorkspaceId)?.name ?? placeholder)
-    : placeholder;
+  const selectedWorkspace = selectedWorkspaceId
+    ? workspaces.find((workspace) => workspace._id === selectedWorkspaceId)
+    : undefined;
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <PanelBoardTitleDropdownTrigger>{label}</PanelBoardTitleDropdownTrigger>
+        <PanelTitleDropdownTrigger className="font-serif text-base font-normal">
+          {selectedWorkspace ? (
+            <>
+              <span className="shrink-0">{workspaceEmoji(selectedWorkspace.emoji)}</span>
+              <span className="truncate">{selectedWorkspace.name}</span>
+            </>
+          ) : (
+            <span className="truncate">{placeholder}</span>
+          )}
+        </PanelTitleDropdownTrigger>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="max-h-64 w-64 overflow-y-auto">
         {workspaces.length === 0 ? (
@@ -283,7 +294,10 @@ function WorkspacePanelSwitcher({
               key={workspace._id}
               onClick={() => onSelectWorkspace(workspace._id)}
             >
-              <span className="truncate">{workspace.name}</span>
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="shrink-0">{workspaceEmoji(workspace.emoji)}</span>
+                <span className="truncate">{workspace.name}</span>
+              </span>
             </DropdownMenuItem>
           ))
         )}

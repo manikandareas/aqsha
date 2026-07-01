@@ -30,6 +30,7 @@ import { useContextPickerArtifacts } from "@/features/artifacts/api";
 import { UPLOAD_ACCEPT } from "@/features/artifacts/types";
 import { useAmbientContextEpoch } from "@/features/thread-experience/components/composer-context-mentions";
 import { useWorkspacesList } from "@/features/workspaces/api";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import {
   useHydrateContext,
@@ -140,7 +141,7 @@ export function Composer({
   showSuggestions = false,
   recentThreads = [],
   initialContent,
-  placeholder = "Ketik @ untuk workspace, / untuk perintah…",
+  placeholder,
 }: {
   onSend: (payload: ComposerSendPayload) => void;
   onStop?: () => void;
@@ -162,12 +163,23 @@ export function Composer({
   recentThreads?: RecentThread[];
   /** Pre-seed teks (mis. item Explore). */
   initialContent?: string;
-  placeholder?: string;
+  /** Teks placeholder. String = dipakai apa adanya; pasangan `{ mobile, desktop }`
+   * membiarkan Composer memilih per-breakpoint (satu subscription `useIsMobile`
+   * di sini, bukan di tiap pemanggil). Kosong = default @-mention/slash. */
+  placeholder?: string | { mobile: string; desktop: string };
 }) {
   "use no memo";
 
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
+  const isMobile = useIsMobile();
+  const resolvedPlaceholder =
+    typeof placeholder === "object"
+      ? isMobile
+        ? placeholder.mobile
+        : placeholder.desktop
+      : (placeholder ??
+        (isMobile ? "Ketik @ atau /…" : "Ketik @ untuk workspace, / untuk perintah…"));
 
   const [content, setContent] = useState(initialContent ?? "");
   // Varian `content` dengan penanda `@mention` (dari `serializeComposerEditorWithMarkers`) — dipakai
@@ -493,7 +505,7 @@ export function Composer({
                     disabled={disabled}
                     maxLength={MAX_LENGTH}
                     isCollapsed={!isExpanded}
-                    placeholder={placeholder}
+                    placeholder={resolvedPlaceholder}
                     className={isExpanded ? "py-0.5" : undefined}
                     pinnedContextRefs={contextRefs}
                     onContextRefsChange={setContextRefs}

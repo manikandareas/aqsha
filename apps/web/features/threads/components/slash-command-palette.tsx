@@ -74,7 +74,7 @@ export function SlashCommandPalette({
             const startIndex = flatIndex;
             flatIndex += groupCommands.length;
             return (
-              <ComposerPopoverGroup key={group} label={group} count={groupCommands.length}>
+              <ComposerPopoverGroup key={group} label={group}>
                 {groupCommands.map((item, index) => {
                   const itemIndex = startIndex + index;
                   const ItemIcon =

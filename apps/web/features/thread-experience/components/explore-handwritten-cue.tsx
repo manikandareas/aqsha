@@ -11,12 +11,12 @@ export function ExploreHandwrittenCue({
 }) {
   return (
     <m.div
-      className="absolute bottom-7 left-4 flex items-center gap-1.5 md:left-0 lg:-left-10 xl:-left-16"
+      className="absolute bottom-7 right-8 flex flex-row-reverse items-center gap-1.5 md:right-16 lg:right-4"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5, ease: HOME_EASE_OUT, delay: 0.5 }}
     >
-      <span className="font-hand text-[17px] text-muted-foreground">
+      <span className="font-hand text-[17px] text-muted-foreground rotate-[5deg]">
         bacaan hari ini
       </span>
       <m.svg
@@ -24,7 +24,7 @@ export function ExploreHandwrittenCue({
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
         aria-hidden="true"
-        className="-scale-x-100 rotate-[20deg] shrink-0 fill-muted-foreground"
+        className="shrink-0 fill-muted-foreground"
         style={{ width: 42 }}
         initial={{ opacity: 0.4, scale: 1 }}
         animate={

@@ -13,6 +13,7 @@ import {
 import { ArchiveIcon, ChevronRightIcon, Loader2Icon, MoreHorizontalIcon } from "@aqsha/ui/icons";
 import { useArchiveWorkspace, useWorkspacesList } from "../api";
 import { isArchived, type Workspace } from "../types";
+import { workspaceEmoji } from "../utils/workspace-emoji";
 import { ConfirmDialog } from "./common-dialogs";
 import { CreateWorkspaceButton } from "./create-workspace-dialog";
 
@@ -87,7 +88,7 @@ function WorkspaceRow({ workspace }: { workspace: Workspace }) {
         href={`/app/workspaces/${workspace.id}`}
         className="flex min-w-0 flex-1 items-center gap-3"
       >
-        <span className="text-2xl">{workspace.emoji ?? "📁"}</span>
+        <span className="text-2xl">{workspaceEmoji(workspace.emoji)}</span>
         <span className="min-w-0">
           <span className="flex items-center gap-2">
             <span className="truncate font-medium">{workspace.name}</span>

@@ -375,7 +375,8 @@ export function AppSidebar({
                   {sortedWorkspaces.map((workspace) => (
                     <CommandItem
                       key={workspace._id}
-                      value={`workspace-${workspace.name}`}
+                      value={`workspace-${workspace._id}`}
+                      keywords={[workspace.name]}
                       onSelect={() => setCommandOpen(false)}
                       asChild
                     >
@@ -392,7 +393,8 @@ export function AppSidebar({
                   {sortedThreads.map((thread) => (
                     <CommandItem
                       key={thread.threadId}
-                      value={`thread-${thread.title}`}
+                      value={`thread-${thread.threadId}`}
+                      keywords={[thread.title]}
                       onSelect={() => setCommandOpen(false)}
                       asChild
                     >
