@@ -199,6 +199,13 @@ export function WorkspaceLibraryBoard({
   const pustakaFilteredEmpty =
     pustakaEmpty && hasFilter && rawLibraryCount > 0;
   const artifactFilteredEmpty = allOutput.length === 0 && hasFilter;
+  // Label for the empty-state category pill: workspace name at root, otherwise
+  // the active folder's name. The workspace emoji only fronts the root pill.
+  const isRootFolder = folderView.activeFolderId === "root";
+  const activeFolderName = isRootFolder
+    ? workspaceName
+    : (folderView.breadcrumb.at(-1)?.label ?? "Folder");
+  const activeBadgeEmoji = isRootFolder ? workspaceEmoji : undefined;
   // Footnote panduan hanya relevan saat ada item untuk di-gesture; di state
   // kosong ia disembunyikan agar layar kosong tetap bersih.
   const showFootnote = isPustaka ? !pustakaEmpty : allOutput.length > 0;
@@ -307,19 +314,19 @@ export function WorkspaceLibraryBoard({
                     variant={
                       folderView.activeFolderId === "root" ? "root" : "folder"
                     }
+                    badgeLabel={activeFolderName}
+                    badgeEmoji={activeBadgeEmoji}
                     title="Tidak ada dokumen yang cocok"
                     description="Ubah filter tipe dokumen atau reset filter untuk melihat item lain."
                     showActions={false}
-                    showSamples={false}
-                    onCreateFolder={onCreateFolder}
-                    onCreateDocument={onCreateDocument}
-                    onCreateUrl={onCreateUrl}
                   />
                 ) : (
                   <WorkspaceLibraryEmpty
                     variant={
                       folderView.activeFolderId === "root" ? "root" : "folder"
                     }
+                    badgeLabel={activeFolderName}
+                    badgeEmoji={activeBadgeEmoji}
                     onCreateFolder={onCreateFolder}
                     onCreateDocument={onCreateDocument}
                     onCreateUrl={onCreateUrl}
@@ -385,6 +392,7 @@ export function WorkspaceLibraryBoard({
             {allOutput.length === 0 ? (
               <WorkspaceLibraryEmpty
                 variant="root"
+                badgeLabel="Artifact"
                 icon={NotebookIcon}
                 title={
                   artifactFilteredEmpty
@@ -397,7 +405,6 @@ export function WorkspaceLibraryBoard({
                     : "Minta agent membuat laporan, ringkasan, atau visualisasi lewat chat — semuanya tersimpan otomatis di sini."
                 }
                 showActions={false}
-                showSamples={!artifactFilteredEmpty}
               />
             ) : (
               <WorkspaceArtifactTimeline
