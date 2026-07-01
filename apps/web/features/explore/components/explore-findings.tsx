@@ -4,7 +4,7 @@
 // discovery yang sudah ada (DiscoveryHeroCard featured + grid DiscoveryStandardCard)
 // + useFeedInfinite + infinite scroll. Di-scope oleh interest pill aktif (topic).
 
-import { CheckCircle2Icon, Loader2Icon, SparklesIcon } from "@aqsha/ui/icons";
+import { CheckCircle2Icon, SparklesIcon } from "@aqsha/ui/icons";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useSetAmbientContextRefs } from "@/features/thread-experience/components/composer-context-mentions";
@@ -33,6 +33,7 @@ import {
 import type { FeedItem, FeedTopic } from "@/features/discovery/types";
 import { readableApiErrorMessage } from "@/lib/api-error";
 import { cn } from "@/lib/utils";
+import { ExploreFeedSkeleton } from "./explore-feed-skeleton";
 import { SectionHeader } from "./section-header";
 
 type FeedStatus = "LoadingMore" | "CanLoadMore" | "Exhausted";
@@ -174,7 +175,7 @@ export function ExploreFindings({
             {readableApiErrorMessage(error, "Gagal memuat.")}
           </div>
         ) : isPending ? (
-          <Loader />
+          <ExploreFeedSkeleton />
         ) : items.length === 0 && feedStatus === "Exhausted" ? (
           <EmptyState topic={topic} searchQuery={searchMode ? q : null} />
         ) : (
@@ -281,14 +282,6 @@ function buildFeedBlocks(rest: DiscoveryItem[], includeAds: boolean): FeedBlock[
     }
   }
   return blocks;
-}
-
-function Loader() {
-  return (
-    <div className="flex items-center justify-center py-10 text-muted-foreground">
-      <Loader2Icon className="animate-spin" />
-    </div>
-  );
 }
 
 function FeedFooter({ status, onLoadMore }: { status: FeedStatus; onLoadMore: () => void }) {
