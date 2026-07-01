@@ -97,6 +97,7 @@ export type PaperEnrichment = {
   citedByCount?: number;
   citedBy: PaperEnrichmentRef[];
   relatedCount: number;
+  related: PaperEnrichmentRef[];
 };
 
 /** Tautan reader internal per-kind. paper→/[key], news→/n/[id]; lain→eksternal. */

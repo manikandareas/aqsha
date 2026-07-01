@@ -44,7 +44,7 @@ const WORK_SELECT = [
   "topics",
   "concepts",
   "sustainable_development_goals",
-  "grants",
+  "funders",
   "referenced_works",
   "related_works",
   "cited_by_api_url",
@@ -80,7 +80,7 @@ type RawWork = {
   topics?: RawWeighted[] | null;
   concepts?: RawWeighted[] | null;
   sustainable_development_goals?: RawWeighted[] | null;
-  grants?: Array<{ funder_display_name?: string | null }> | null;
+  funders?: Array<{ display_name?: string | null }> | null;
   referenced_works?: string[] | null;
   related_works?: string[] | null;
   cited_by_api_url?: string | null;
@@ -123,6 +123,28 @@ async function fetchNeighborsByIds(ids: string[]): Promise<PaperEnrichmentRef[]>
     .sort((a, b) => (b.citedByCount ?? 0) - (a.citedByCount ?? 0));
 }
 
+/**
+ * Fallback "paper terkait" saat `related_works` kosong (umum untuk paper baru): OpenAlex
+ * `search.semantic` by judul (embedding GTE-Large), buang paper itu sendiri, pertahankan urutan
+ * relevansi semantik (JANGAN re-sort by sitasi). Hasil ikut ter-cache di enrichment (`enrich:v3`)
+ * → ≤1 call per paper per masa cache. Best-effort: dibungkus .catch di pemanggil.
+ */
+async function fetchSemanticNeighbors(title: string, excludeId: string): Promise<PaperEnrichmentRef[]> {
+  const query = collapse(title);
+  if (!query) return [];
+  const url = withKey(new URL(OPENALEX_WORKS));
+  url.searchParams.set("search.semantic", query.slice(0, 2000));
+  // search.semantic hanya menerima subset filter (is_retracted diperbolehkan).
+  url.searchParams.set("filter", "is_retracted:false");
+  url.searchParams.set("select", NEIGHBOR_SELECT);
+  url.searchParams.set("per-page", String(REF_SAMPLE_CAP + 1)); // +1 untuk mengcompensasi exclude self
+  const json = await fetchJson<{ results?: RawWork[] }>(url.toString());
+  return (json?.results ?? [])
+    .map(toRef)
+    .filter((r): r is PaperEnrichmentRef => r !== null && r.openalexId !== excludeId)
+    .slice(0, REF_SAMPLE_CAP);
+}
+
 /** Sampel "dikutip oleh" (top cited_by_count) via cited_by_api_url. */
 async function fetchCitedBy(citedByApiUrl: string | null | undefined): Promise<PaperEnrichmentRef[]> {
   if (!citedByApiUrl) return [];
@@ -163,7 +185,7 @@ function mapWeighted(list: RawWeighted[] | null | undefined, cap: number): Paper
     .slice(0, cap);
 }
 
-function mapWork(work: RawWork): Omit<PaperEnrichment, "references" | "citedBy"> {
+function mapWork(work: RawWork): Omit<PaperEnrichment, "references" | "citedBy" | "related"> {
   const authors = (work.authorships ?? []).slice(0, AUTHOR_CAP).map((a) => {
     const institution = collapse(a.institutions?.[0]?.display_name ?? "");
     const country = a.institutions?.[0]?.country_code ?? a.countries?.[0] ?? undefined;
@@ -209,7 +231,7 @@ function mapWork(work: RawWork): Omit<PaperEnrichment, "references" | "citedBy">
     countries,
     concepts: mapWeighted(work.topics ?? work.concepts, 6),
     sdgs: mapWeighted(work.sustainable_development_goals, 4),
-    funders: uniqueCompact((work.grants ?? []).map((g) => g.funder_display_name)).slice(0, 6),
+    funders: uniqueCompact((work.funders ?? []).map((f) => f.display_name)).slice(0, 6),
     referencedCount: work.referenced_works?.length ?? 0,
     citedByCount: work.cited_by_count ?? undefined,
     relatedCount: work.related_works?.length ?? 0,
@@ -226,7 +248,8 @@ export async function fetchPaperEnrichment(
   const shortId = shortOpenAlexId(openalexId);
   if (!shortId) return null;
 
-  const cacheKey = `enrich:${shortId}`;
+  // v3: `related` kini fallback ke semantic search saat related_works kosong → bump key.
+  const cacheKey = `enrich:v3:${shortId}`;
   const cached = await getCache("openalex", cacheKey);
   if (cached) {
     try {
@@ -242,13 +265,21 @@ export async function fetchPaperEnrichment(
   if (!work || !work.id) return null;
 
   const base = mapWork(work);
-  // Referensi + dikutip-oleh best-effort & paralel; gagal salah satu tak menggugurkan enrichment.
-  const [references, citedBy] = await Promise.all([
+  // Referensi + dikutip-oleh + paper terkait best-effort & paralel; gagal salah satu tak
+  // menggugurkan enrichment. `related_works` = relatedness precomputed OpenAlex (shared topics).
+  const [references, citedBy, relatedByIds] = await Promise.all([
     fetchNeighborsByIds(work.referenced_works ?? []).catch(() => []),
     fetchCitedBy(work.cited_by_api_url).catch(() => []),
+    fetchNeighborsByIds(work.related_works ?? []).catch(() => []),
   ]);
+  // Fallback: paper baru sering `related_works` kosong → semantic search by judul (exclude self)
+  // supaya section "Paper terkait" selalu terisi selama OpenAlex mengenal paper ini.
+  const related =
+    relatedByIds.length > 0
+      ? relatedByIds
+      : await fetchSemanticNeighbors(work.display_name ?? work.title ?? "", shortId).catch(() => []);
 
-  const enrichment: PaperEnrichment = { ...base, references, citedBy };
+  const enrichment: PaperEnrichment = { ...base, references, citedBy, related };
   await putCache("openalex", cacheKey, "ready", JSON.stringify(enrichment));
   return enrichment;
 }

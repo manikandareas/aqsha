@@ -90,6 +90,8 @@ export type PaperEnrichment = {
   citedByCount?: number;
   citedBy: PaperEnrichmentRef[];
   relatedCount: number;
+  /** Paper terkait (OpenAlex `related_works`, judul ter-resolve) — precomputed shared-topic. */
+  related: PaperEnrichmentRef[];
 };
 
 export type ExploreProviderStatus = {

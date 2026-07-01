@@ -130,6 +130,12 @@ export function PaperReader({
                   <RefList refs={paper.enriched.citedBy} />
                 </ReaderSection>
               ) : null}
+
+              {paper.enriched && paper.enriched.related.length > 0 ? (
+                <ReaderSection title="Paper terkait">
+                  <RefList refs={paper.enriched.related} />
+                </ReaderSection>
+              ) : null}
             </div>
 
             <PaperAside paper={paper} />
