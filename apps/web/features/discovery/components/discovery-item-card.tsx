@@ -30,6 +30,7 @@ import {
 } from "../model";
 import { domainFromUrl, formatCitationCount, relativeTime, sourceName } from "../format";
 import type { FeedItem } from "../types";
+import { GenerativeCover, firstInitial } from "./generative-cover";
 
 // pdfjs tak boleh dieval saat SSR → muat klien-only. Cover generatif tampil
 // sebagai latar sampai (kalau) PDF page-1 selesai render menutupinya.
@@ -283,53 +284,10 @@ function PaperCover({ item, className }: { item: DiscoveryItem; className?: stri
   const pdfUrl = item.kind === "paper" ? item.pdfUrl : undefined;
   return (
     <div className={cn("relative overflow-hidden rounded-[12px]", className)} aria-hidden>
-      <GenerativeCover item={item} />
+      <GenerativeCover title={item.title} label={kindLabel(item.kind)} openAccess={item.isOpenAccess} />
       {pdfUrl && failedUrl !== pdfUrl ? (
         <PdfThumb key={pdfUrl} pdfUrl={pdfUrl} onFail={() => setFailedUrl(pdfUrl)} />
       ) : null}
-    </div>
-  );
-}
-
-// Cover deterministik (warna brand dari hash judul + inisial ghost + motif node +
-// label kind + chip open-access). Mengganti kotak fallback datar lama.
-const COVER_GRADIENTS = [
-  "linear-gradient(145deg, oklch(0.55 0.15 154), oklch(0.31 0.10 154))", // mint
-  "linear-gradient(145deg, oklch(0.52 0.14 248), oklch(0.30 0.10 248))", // sky
-  "linear-gradient(145deg, oklch(0.52 0.13 305), oklch(0.30 0.10 305))", // lavender
-  "linear-gradient(145deg, oklch(0.56 0.15 34), oklch(0.33 0.11 34))", // coral
-  "linear-gradient(145deg, oklch(0.50 0.07 70), oklch(0.30 0.05 70))", // warm gold/ink
-];
-
-function hashIndex(value: string, mod: number): number {
-  let h = 0;
-  for (let i = 0; i < value.length; i += 1) h = (h * 31 + value.charCodeAt(i)) | 0;
-  return Math.abs(h) % mod;
-}
-
-/** Inisial pertama (huruf besar) dari teks; fallback "•" untuk teks kosong. */
-function firstInitial(text: string): string {
-  return (text.trim()[0] ?? "•").toUpperCase();
-}
-
-function GenerativeCover({ item }: { item: DiscoveryItem }) {
-  const initial = firstInitial(item.title);
-  const gradient = COVER_GRADIENTS[hashIndex(item.title, COVER_GRADIENTS.length)];
-  return (
-    <div className="absolute inset-0 flex flex-col justify-end p-3 text-white" style={{ background: gradient }}>
-      <span className="pointer-events-none absolute -top-7 right-1 select-none font-heading text-[150px] font-black leading-none text-white/15">
-        {initial}
-      </span>
-      <div className="relative flex items-center gap-1.5">
-        <span className="rounded-full bg-white/90 px-2 py-0.5 text-[10.5px] font-bold tracking-wide text-zinc-900">
-          {kindLabel(item.kind)}
-        </span>
-        {item.isOpenAccess ? (
-          <span className="rounded-full bg-black/35 px-2 py-0.5 text-[10.5px] font-semibold text-white backdrop-blur-sm">
-            Open access
-          </span>
-        ) : null}
-      </div>
     </div>
   );
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import { buildNewsMentionLabel, type ContextRef } from "@aqsha/chat-core";
-import { SparklesIcon } from "@aqsha/ui/icons";
 import Image from "next/image";
 import { useMemo } from "react";
 import { toast } from "sonner";
@@ -13,6 +12,7 @@ import { domainFromUrl, relativeTime } from "../format";
 import { DiscoveryStandardCard, type DiscoveryCardHandlers } from "./discovery-item-card";
 import { ExploreReaderChatShell } from "./explore-reader-chat-shell";
 import {
+  AstraAgentAvatars,
   Eyebrow,
   ExpandableText,
   PillCta,
@@ -130,7 +130,7 @@ export function NewsReader({ id, onAskAstra }: { id: string; onAskAstra: () => v
 
           <div className="mt-6 flex flex-wrap items-center gap-2.5">
             <PillCta href={sourceUrl}>Baca di sumber asli</PillCta>
-            <PillCta variant="outline" onClick={askAstra} icon={<SparklesIcon className="size-4" />}>
+            <PillCta variant="outline" onClick={askAstra} bareIcon icon={<AstraAgentAvatars />}>
               Tanya Astra
             </PillCta>
           </div>

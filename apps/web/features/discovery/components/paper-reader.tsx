@@ -4,31 +4,30 @@ import {
   buildExternalPaperMentionLabel,
   type ContextRef,
 } from "@aqsha/chat-core";
-import { Badge } from "@aqsha/ui/components/badge";
 import {
   BookOpenIcon,
   DownloadIcon,
-  Link2Icon,
-  SparklesIcon,
   UserRoundIcon,
 } from "@aqsha/ui/icons";
-import { useMemo, type ReactNode } from "react";
+import Link from "next/link";
+import { type ReactNode, useMemo } from "react";
 import { SaveToWorkspaceButton } from "@/features/artifacts/components/save-to-workspace-button";
 import { usePaper, useRecordInteraction } from "../api";
 import { formatCitationCount } from "../format";
-import type { ExplorePaper, PaperEnrichment, PaperEnrichmentRef } from "../types";
+import type { ExplorePaper, PaperEnrichmentRef } from "../types";
 import { clampDiscoveryTitle } from "../ask-astra";
 import { ExploreReaderChatShell } from "./explore-reader-chat-shell";
+import { GenerativeCover } from "./generative-cover";
+import { PaperAside } from "./paper-aside";
 import {
+  AstraAgentAvatars,
   Eyebrow,
   ExpandableText,
-  MetaItem,
   PillCta,
   ReaderEmpty,
   ReaderLoader,
   ReaderSection,
   ReaderShell,
-  StatCell,
 } from "./reader-ui";
 
 /** Halaman baca paper + panel chat Astra; menyematkan paper sebagai token konteks otomatis. */
@@ -95,7 +94,7 @@ export function PaperReader({
             <PillCta href={paper.url} variant={paper.pdfUrl ?? paper.enriched?.oaUrl ? "outline" : "solid"}>
               Lihat di penerbit
             </PillCta>
-            <PillCta variant="outline" onClick={() => askAstra(paper)} icon={<SparklesIcon className="size-4" />}>
+            <PillCta variant="outline" onClick={() => askAstra(paper)} bareIcon icon={<AstraAgentAvatars />}>
               Tanya Astra
             </PillCta>
             <SaveToWorkspaceButton
@@ -109,9 +108,7 @@ export function PaperReader({
             />
           </div>
 
-          {paper.enriched ? <MetricStrip enriched={paper.enriched} citedByCount={paper.citedByCount} /> : null}
-
-          <div className="mt-2 grid grid-cols-1 gap-x-12 gap-y-2 lg:grid-cols-[minmax(0,1fr)_18rem]">
+          <div className="mt-8 grid grid-cols-1 gap-x-12 gap-y-2 lg:grid-cols-[minmax(0,1fr)_18rem]">
             <div className="min-w-0">
               {paper.abstract || paper.snippet ? (
                 <ReaderSection title="Abstrak">
@@ -133,7 +130,7 @@ export function PaperReader({
 
               {paper.enriched && paper.enriched.related.length > 0 ? (
                 <ReaderSection title="Paper terkait">
-                  <RefList refs={paper.enriched.related} />
+                  <RelatedPaperGrid refs={paper.enriched.related} />
                 </ReaderSection>
               ) : null}
             </div>
@@ -172,153 +169,84 @@ function PaperHeader({ paper }: { paper: ExplorePaper }) {
   );
 }
 
-// ── Metric strip (sitasi · persentil · FWCI · referensi) + sparkline tren ───
-function MetricStrip({ enriched, citedByCount }: { enriched: PaperEnrichment; citedByCount?: number }) {
-  const cites = citedByCount ?? enriched.citedByCount;
-  const metrics: Array<{ label: string; value: string }> = [];
-  if (cites != null) metrics.push({ label: "Sitasi", value: cites.toLocaleString("id-ID") });
-  if (enriched.citationPercentile != null)
-    metrics.push({ label: "Persentil sitasi", value: `${enriched.citationPercentile}` });
-  if (enriched.fwci != null)
-    metrics.push({
-      label: "FWCI",
-      value: enriched.fwci.toLocaleString("id-ID", { maximumFractionDigits: 2 }),
-    });
-  if (enriched.referencedCount > 0)
-    metrics.push({ label: "Referensi", value: String(enriched.referencedCount) });
-
-  if (metrics.length === 0 && enriched.countsByYear.length < 2) return null;
-
+/** Grid kartu "Paper terkait" — meniru kartu standar feed Explore (cover generatif +
+ * judul + meta). Ref ber-DOI dibuka di reader in-app (key `doi:`), sisanya ke OpenAlex. */
+function RelatedPaperGrid({ refs }: { refs: PaperEnrichmentRef[] }) {
   return (
-    <div className="mt-7 rounded-2xl border border-border/60 bg-muted/25 px-5 py-4">
-      <div className="flex flex-wrap items-end gap-x-9 gap-y-4">
-        {metrics.map((m) => (
-          <StatCell key={m.label} value={m.value} label={m.label} />
-        ))}
-        {enriched.countsByYear.length > 1 ? (
-          <div className="min-w-0">
-            <CitationSparkline counts={enriched.countsByYear} />
-            <p className="mt-1.5 text-[11px] font-medium text-muted-foreground">Tren sitasi</p>
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function CitationSparkline({ counts }: { counts: PaperEnrichment["countsByYear"] }) {
-  const max = Math.max(1, ...counts.map((c) => c.citedByCount));
-  return (
-    <div className="flex h-8 items-end gap-[3px]" aria-hidden>
-      {counts.map((c) => (
-        <span
-          key={c.year}
-          title={`${c.year}: ${c.citedByCount}`}
-          className="w-[6px] rounded-sm bg-mint-foreground/65"
-          style={{ height: `${Math.max(8, (c.citedByCount / max) * 100)}%` }}
-        />
+    <div className="grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-3">
+      {refs.slice(0, 6).map((r) => (
+        <RelatedPaperCard key={r.openalexId} paper={r} />
       ))}
     </div>
   );
 }
 
-// ── Fact-sheet aside (sticky di desktop) ────────────────────────────────────
-function PaperAside({ paper }: { paper: ExplorePaper }) {
-  const e = paper.enriched;
-  const facts: Array<{ label: string; node: ReactNode }> = [];
-  const journal = e?.journal ?? paper.venue;
-  if (journal) facts.push({ label: "Jurnal", node: journal });
-  if (paper.doi)
-    facts.push({
-      label: "DOI",
-      node: (
-        <a
-          href={`https://doi.org/${paper.doi}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 break-all text-foreground hover:underline underline-offset-2"
-        >
-          <Link2Icon className="size-3 shrink-0 text-muted-foreground" />
-          {paper.doi}
-        </a>
-      ),
-    });
-  if (e?.oaStatus) facts.push({ label: "Akses", node: e.oaStatus });
-  if (e?.issn && e.issn.length > 0) facts.push({ label: "ISSN", node: e.issn[0] });
-  if (e?.license) facts.push({ label: "Lisensi", node: e.license });
-  if (e?.language) facts.push({ label: "Bahasa", node: e.language.toUpperCase() });
-
-  const concepts = [...(e?.concepts.map((c) => c.name) ?? []), ...paper.topics];
-  const hasAside =
-    facts.length > 0 ||
-    concepts.length > 0 ||
-    (e?.institutions.length ?? 0) > 0 ||
-    (e?.sdgs.length ?? 0) > 0 ||
-    (e?.funders.length ?? 0) > 0;
-  if (!hasAside) return null;
-
-  return (
-    <aside className="mt-9 min-w-0 lg:sticky lg:top-6 lg:mt-9 lg:self-start">
-      <div className="space-y-6 rounded-2xl border border-border/60 bg-card px-5 py-5">
-        {facts.length > 0 ? (
-          <div>
-            <h3 className="mb-3 font-serif text-base text-foreground">Tentang paper</h3>
-            <dl className="space-y-3">
-              {facts.map((f) => (
-                <MetaItem key={f.label} label={f.label}>
-                  {f.node}
-                </MetaItem>
-              ))}
-            </dl>
-          </div>
-        ) : null}
-
-        {e && e.institutions.length > 0 ? (
-          <AsideBlock title="Afiliasi">
-            <p className="text-[13px] leading-relaxed text-muted-foreground">{e.institutions.join(" · ")}</p>
-          </AsideBlock>
-        ) : null}
-
-        {concepts.length > 0 ? (
-          <AsideBlock title="Topik & konsep">
-            <div className="flex flex-wrap gap-1.5">
-              {dedupe(concepts).slice(0, 10).map((c) => (
-                <Badge key={c} variant="secondary" className="font-normal">
-                  {c}
-                </Badge>
-              ))}
-            </div>
-          </AsideBlock>
-        ) : null}
-
-        {e && e.sdgs.length > 0 ? (
-          <AsideBlock title="Tujuan pembangunan berkelanjutan">
-            <div className="flex flex-wrap gap-1.5">
-              {e.sdgs.map((s) => (
-                <Badge key={s.name} variant="outline" className="font-normal">
-                  {s.name}
-                </Badge>
-              ))}
-            </div>
-          </AsideBlock>
-        ) : null}
-
-        {e && e.funders.length > 0 ? (
-          <AsideBlock title="Pendanaan">
-            <p className="text-[13px] leading-relaxed text-muted-foreground">{e.funders.join(" · ")}</p>
-          </AsideBlock>
-        ) : null}
-      </div>
-    </aside>
+/**
+ * Tautan kartu paper terkait: internal (`/app/explore/doi:…`) bila DOI ada, jika tidak fallback ke
+ * OpenAlex (tab baru). Satu wrapper → URL & atribut target/rel/a11y tak diduplikasi antara cover &
+ * judul. `decorative` = pembungkus cover (disembunyikan dari a11y; judul tetap tautan utama).
+ */
+function PaperLink({
+  internalHref,
+  externalHref,
+  className,
+  decorative = false,
+  children,
+}: {
+  internalHref: string | null;
+  externalHref: string;
+  className: string;
+  decorative?: boolean;
+  children: ReactNode;
+}) {
+  const decor = decorative ? { "aria-hidden": true, tabIndex: -1 } : {};
+  return internalHref ? (
+    <Link href={internalHref} className={className} {...decor}>
+      {children}
+    </Link>
+  ) : (
+    <a href={externalHref} target="_blank" rel="noopener noreferrer" className={className} {...decor}>
+      {children}
+    </a>
   );
 }
 
-function AsideBlock({ title, children }: { title: string; children: ReactNode }) {
+function RelatedPaperCard({ paper }: { paper: PaperEnrichmentRef }) {
+  const internalHref = paper.doi ? `/app/explore/${encodeURIComponent(`doi:${paper.doi}`)}` : null;
+  const externalHref = `https://openalex.org/${paper.openalexId}`;
+  const meta = [
+    paper.year ? String(paper.year) : null,
+    paper.citedByCount != null ? formatCitationCount(paper.citedByCount) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
-    <div className="border-t border-border/60 pt-5 first:border-t-0 first:pt-0">
-      <h3 className="mb-2.5 text-[11px] font-semibold tracking-tight text-muted-foreground">{title}</h3>
-      {children}
-    </div>
+    <article className="group flex flex-col">
+      <PaperLink
+        internalHref={internalHref}
+        externalHref={externalHref}
+        className="block overflow-hidden rounded-[12px]"
+        decorative
+      >
+        <div className="relative aspect-[16/10] w-full transition-opacity duration-200 group-hover:opacity-90">
+          <GenerativeCover title={paper.title} label="Paper" />
+        </div>
+      </PaperLink>
+
+      <div className="flex min-w-0 flex-1 flex-col pt-2.5">
+        <h3 className="font-heading text-[15px] font-bold leading-[1.25] tracking-tight text-foreground">
+          <PaperLink
+            internalHref={internalHref}
+            externalHref={externalHref}
+            className="line-clamp-3 break-words hover:underline underline-offset-4"
+          >
+            {paper.title}
+          </PaperLink>
+        </h3>
+        {meta ? <p className="mt-2 text-[12px] font-medium text-muted-foreground">{meta}</p> : null}
+      </div>
+    </article>
   );
 }
 
@@ -349,17 +277,4 @@ function RefList({ refs }: { refs: PaperEnrichmentRef[] }) {
       })}
     </ul>
   );
-}
-
-function dedupe(values: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const v of values) {
-    const key = v.trim().toLowerCase();
-    if (key && !seen.has(key)) {
-      seen.add(key);
-      out.push(v);
-    }
-  }
-  return out;
 }

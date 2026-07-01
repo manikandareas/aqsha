@@ -12,6 +12,7 @@ import {
   ImageIcon,
   Loader2Icon,
 } from "@aqsha/ui/icons";
+import { Avatar, AvatarFallback, AvatarGroup, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
 // Easing fisik (spring-out) dipakai konsisten untuk semua transisi interaktif.
@@ -91,6 +92,7 @@ export function Eyebrow({
 /**
  * CTA pill dengan ikon bersarang (button-in-button). `solid` = high-contrast ink,
  * `outline` = hairline. Hover: ikon menggeser diagonal + press scale — kinetik halus.
+ * `bareIcon` melepas cangkang lingkaran ikon (mis. untuk menyematkan duo avatar Astra).
  */
 export function PillCta({
   href,
@@ -98,12 +100,14 @@ export function PillCta({
   children,
   variant = "solid",
   icon,
+  bareIcon,
 }: {
   href?: string;
   onClick?: () => void;
   children: ReactNode;
   variant?: "solid" | "outline";
   icon?: ReactNode;
+  bareIcon?: boolean;
 }) {
   const solid = variant === "solid";
   const base = cn(
@@ -114,9 +118,10 @@ export function PillCta({
       : "border border-border/80 bg-card text-foreground hover:border-foreground/30 hover:bg-muted/40",
   );
   const iconWrap = cn(
-    "flex size-7 items-center justify-center rounded-full transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-px",
+    "flex items-center justify-center transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-px",
     EASE,
-    solid ? "bg-background/15" : "bg-muted",
+    !bareIcon && "size-7 rounded-full",
+    !bareIcon && (solid ? "bg-background/15" : "bg-muted"),
   );
   const inner = (
     <>
@@ -135,6 +140,27 @@ export function PillCta({
     <button type="button" onClick={onClick} className={base}>
       {inner}
     </button>
+  );
+}
+
+/**
+ * Duo avatar agent Astra (general + pro) yang saling overlap — dipakai sebagai ikon CTA
+ * "Tanya Astra" (pasangkan dengan `bareIcon` pada PillCta). Overlap via `AvatarGroup`.
+ */
+export function AstraAgentAvatars() {
+  // Ring pemisah = warna kartu (bukan background), agar celah overlap menyatu mulus
+  // dengan permukaan tombol outline (bg-card) — separasi hanya terlihat saat tumpang tindih.
+  return (
+    <AvatarGroup className="*:data-[slot=avatar]:ring-card">
+      <Avatar className="size-7">
+        <AvatarImage src="/general-agent.png" alt="" />
+        <AvatarFallback>A</AvatarFallback>
+      </Avatar>
+      <Avatar className="size-7">
+        <AvatarImage src="/pro-agent.png" alt="" />
+        <AvatarFallback>A</AvatarFallback>
+      </Avatar>
+    </AvatarGroup>
   );
 }
 
@@ -185,26 +211,6 @@ export function ExpandableText({
           />
         </button>
       ) : null}
-    </div>
-  );
-}
-
-/** Sel statistik (sitasi / persentil / FWCI) — angka serif besar + label tenang. */
-export function StatCell({ value, label }: { value: string; label: string }) {
-  return (
-    <div className="min-w-0">
-      <p className="font-serif text-[26px] leading-none tracking-tight text-foreground">{value}</p>
-      <p className="mt-1.5 text-[11px] font-medium text-muted-foreground">{label}</p>
-    </div>
-  );
-}
-
-/** Baris meta key→value untuk panel "Tentang paper". */
-export function MetaItem({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <dt className="text-[11px] font-medium text-muted-foreground">{label}</dt>
-      <dd className="text-[13px] leading-snug text-foreground">{children}</dd>
     </div>
   );
 }
