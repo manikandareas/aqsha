@@ -2,11 +2,23 @@
 
 import { useRef, useState, type ReactNode } from "react";
 import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  pointerWithin,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+  type Modifier,
+} from "@dnd-kit/core";
+import {
   FileTextIcon,
   FolderIcon,
   LinkIcon,
   UploadIcon,
 } from "@aqsha/ui/icons";
+import { LibraryDragOverlayCard } from "@/components/library-drag-overlay-card";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -42,6 +54,29 @@ import { WorkspaceLibraryEmpty } from "./workspace-library-empty";
 import { WorkspaceLibraryFootnote } from "./workspace-library-footnote";
 import { WorkspaceLibraryGrid } from "./workspace-library-grid";
 import { useWorkspaceUploadToast } from "./workspace-upload-toast";
+
+// Keep the lifted mini-card centered on the pointer. dnd-kit sizes the drag
+// overlay wrapper to the grabbed card, so without this the compact chip would
+// float far from the cursor (anchored to the card's corner). We recenter the
+// wrapper on the pointer; a flex wrapper then centers the chip within it.
+const snapCenterToCursor: Modifier = ({
+  activatorEvent,
+  draggingNodeRect,
+  transform,
+}) => {
+  if (!draggingNodeRect || !activatorEvent) return transform;
+  const pointer = activatorEvent as { clientX?: number; clientY?: number };
+  if (typeof pointer.clientX !== "number" || typeof pointer.clientY !== "number") {
+    return transform;
+  }
+  const offsetX = pointer.clientX - draggingNodeRect.left;
+  const offsetY = pointer.clientY - draggingNodeRect.top;
+  return {
+    ...transform,
+    x: transform.x + offsetX - draggingNodeRect.width / 2,
+    y: transform.y + offsetY - draggingNodeRect.height / 2,
+  };
+};
 
 export function WorkspaceLibraryBoard({
   workspaceName,
@@ -171,7 +206,9 @@ export function WorkspaceLibraryBoard({
     _id: target.value,
     name: target.label,
   }));
-  const [dragArtifactId, setDragArtifactId] = useState<string | null>(null);
+  // Ids in the active drag. Length > 1 when a multi-selection is dragged; the
+  // first entry is the card actually grabbed (drives the overlay's front face).
+  const [dragArtifactIds, setDragArtifactIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadToast = useWorkspaceUploadToast({ onUploadFiles });
 
@@ -208,11 +245,43 @@ export function WorkspaceLibraryBoard({
     />
   );
 
-  const handleDropOnFolder = async (folderId: string) => {
-    if (!dragArtifactId) return;
-    await onMoveArtifact(dragArtifactId, folderId);
-    setDragArtifactId(null);
+  // dnd-kit: activate a drag only after the pointer travels a few px so plain
+  // clicks (select / open on the card) still pass through untouched.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
+  // Resolve the dragged ids to artifacts (grabbed one first) so the overlay can
+  // fan their filenames into a Finder-style cascade.
+  const dragArtifacts = dragArtifactIds.flatMap((id) => {
+    const artifact = folderView.artifacts.find((item) => item._id === id);
+    return artifact ? [artifact] : [];
+  });
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const grabbedId = String(event.active.id);
+    const selectedIds = folderView.artifacts
+      .filter((artifact) => getArtifactSelected(artifact._id))
+      .map((artifact) => artifact._id);
+    // Grab a card that's part of a multi-selection → drag the whole selection;
+    // grab anything else → drag just it (leaving any selection untouched). The
+    // grabbed id stays first so the overlay shows the card you actually held.
+    const dragIds =
+      selectedIds.length > 1 && selectedIds.includes(grabbedId)
+        ? [grabbedId, ...selectedIds.filter((id) => id !== grabbedId)]
+        : [grabbedId];
+    setDragArtifactIds(dragIds);
   };
+  const handleDragEnd = (event: DragEndEvent) => {
+    // The only droppables are folder tiles, so a non-null `over` is a folder.
+    const folderId = event.over?.id;
+    if (folderId != null) {
+      for (const artifactId of dragArtifactIds) {
+        void onMoveArtifact(artifactId, String(folderId));
+      }
+    }
+    setDragArtifactIds([]);
+  };
+  const handleDragCancel = () => setDragArtifactIds([]);
 
   const uploadToActiveFolder = async (fileList: FileList | File[]) => {
     const files = [...fileList];
@@ -311,7 +380,7 @@ export function WorkspaceLibraryBoard({
                   workspaceId={workspaceId}
                   workspaces={workspaceMoveTargets}
                   moveTargets={moveTargets}
-                  dragArtifactId={dragArtifactId}
+                  draggingArtifactIds={dragArtifactIds}
                   getArtifactSelected={getArtifactSelected}
                   onToggleArtifactContext={onToggleArtifactContext}
                   onSetArtifactContextSelection={onSetArtifactContextSelection}
@@ -324,11 +393,6 @@ export function WorkspaceLibraryBoard({
                   onDeleteArtifact={onDeleteArtifact}
                   onMoveArtifact={onMoveArtifact}
                   onMoveArtifactToWorkspace={onMoveArtifactToWorkspace}
-                  onDragArtifactStart={setDragArtifactId}
-                  onDragArtifactEnd={() => setDragArtifactId(null)}
-                  onDropArtifactOnFolder={(folderId) =>
-                    void handleDropOnFolder(folderId)
-                  }
                 />
               )}
             </div>
@@ -370,25 +434,44 @@ export function WorkspaceLibraryBoard({
     uploadToActiveFolder,
   );
 
-  // Panel: toolbar floats OUTSIDE the card as the flush header; body tucks into the card.
-  // `SidePanelFrame` already wraps its children in the body column, so `body` goes in raw.
-  if (variant === "panel") {
-    return (
-      <>
-        <SidePanelFrame header={toolbar}>{body}</SidePanelFrame>
-        {dialogs}
-      </>
-    );
-  }
-
-  // Page: full-bleed column with the toolbar inside it (unchanged from the original).
-  return (
-    <>
+  // Panel floats the toolbar OUTSIDE the card as a flush header (`SidePanelFrame`
+  // already wraps its children in the body column, so `body` goes in raw); page
+  // keeps the toolbar inside a full-bleed column.
+  const boardShell =
+    variant === "panel" ? (
+      <SidePanelFrame header={toolbar}>{body}</SidePanelFrame>
+    ) : (
       <div className={panelBodyColumnClass}>
         {toolbar}
         {body}
       </div>
+    );
+
+  // One `DndContext` drives both variants: it owns the drag lifecycle and the
+  // `DragOverlay` renders the lifted mini-card that follows the pointer.
+  // `dropAnimation={null}` skips the fly-back tween — on a successful move the
+  // source card leaves the grid, so there is nothing to animate back to. The
+  // `snapCenterToCursor` modifier + flex wrapper keep the compact chip pinned
+  // to the pointer despite the overlay wrapper being sized to the grabbed card.
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={pointerWithin}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
+    >
+      {boardShell}
+      <DragOverlay dropAnimation={null} modifiers={[snapCenterToCursor]}>
+        {dragArtifacts.length > 0 ? (
+          <div className="pointer-events-none flex size-full items-center justify-center">
+            <LibraryDragOverlayCard
+              titles={dragArtifacts.map((artifact) => artifact.title)}
+            />
+          </div>
+        ) : null}
+      </DragOverlay>
       {dialogs}
-    </>
+    </DndContext>
   );
 }

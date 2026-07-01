@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, type ReactNode } from "react";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { FolderIcon } from "@aqsha/ui/icons";
 import { LibraryArtifactCard } from "@/components/library-artifact-card";
 import { useLibraryItemClick } from "../hooks/use-library-item-click";
@@ -31,7 +32,8 @@ type ArtifactItemHandlers = {
   workspaceId: string;
   workspaces: Array<{ _id: string; name: string }>;
   moveTargets: MoveTargetOption[];
-  dragArtifactId: string | null;
+  /** Ids of every card in the active drag (>1 when dragging a multi-selection). */
+  draggingArtifactIds: string[];
   getArtifactSelected: (artifactId: string) => boolean;
   onToggleArtifactContext: (artifactId: string) => void;
   onSetArtifactContextSelection: (artifactIds: string[]) => void;
@@ -40,8 +42,6 @@ type ArtifactItemHandlers = {
   onDeleteArtifact: (artifact: WorkspaceArtifact) => void;
   onMoveArtifact: (artifactId: string, target: string) => Promise<void>;
   onMoveArtifactToWorkspace: (artifactId: string, targetWorkspaceId: string) => Promise<void>;
-  onDragArtifactStart: (artifactId: string) => void;
-  onDragArtifactEnd: () => void;
 };
 
 export function WorkspaceLibraryGrid({
@@ -50,7 +50,7 @@ export function WorkspaceLibraryGrid({
   workspaceId,
   workspaces,
   moveTargets,
-  dragArtifactId,
+  draggingArtifactIds,
   getArtifactSelected,
   onToggleArtifactContext,
   onSetArtifactContextSelection,
@@ -63,16 +63,13 @@ export function WorkspaceLibraryGrid({
   onDeleteArtifact,
   onMoveArtifact,
   onMoveArtifactToWorkspace,
-  onDragArtifactStart,
-  onDragArtifactEnd,
-  onDropArtifactOnFolder,
 }: {
   folders: FolderSummary[];
   artifacts: WorkspaceArtifact[];
   workspaceId: string;
   workspaces: Array<{ _id: string; name: string }>;
   moveTargets: MoveTargetOption[];
-  dragArtifactId: string | null;
+  draggingArtifactIds: string[];
   getArtifactSelected: (artifactId: string) => boolean;
   onToggleArtifactContext: (artifactId: string) => void;
   onSetArtifactContextSelection: (artifactIds: string[]) => void;
@@ -85,9 +82,6 @@ export function WorkspaceLibraryGrid({
   onDeleteArtifact: (artifact: WorkspaceArtifact) => void;
   onMoveArtifact: (artifactId: string, target: string) => Promise<void>;
   onMoveArtifactToWorkspace: (artifactId: string, targetWorkspaceId: string) => Promise<void>;
-  onDragArtifactStart: (artifactId: string) => void;
-  onDragArtifactEnd: () => void;
-  onDropArtifactOnFolder: (folderId: string) => void;
 }) {
   // Grid tunggal: folder + semua artifak folder-scoped (pustaka user maupun
   // output agent). Kartu agent dibedakan lewat badge/aksen di kartunya sendiri.
@@ -99,7 +93,7 @@ export function WorkspaceLibraryGrid({
     workspaceId,
     workspaces,
     moveTargets,
-    dragArtifactId,
+    draggingArtifactIds,
     getArtifactSelected,
     onToggleArtifactContext,
     onSetArtifactContextSelection,
@@ -108,8 +102,6 @@ export function WorkspaceLibraryGrid({
     onDeleteArtifact,
     onMoveArtifact,
     onMoveArtifactToWorkspace,
-    onDragArtifactStart,
-    onDragArtifactEnd,
   };
 
   return (
@@ -120,14 +112,12 @@ export function WorkspaceLibraryGrid({
             <FolderTile
               key={folder._id}
               folder={folder}
-              isDropTarget={dragArtifactId !== null}
               onOpen={() => onOpenFolder(folder._id)}
               onRename={() => onRenameFolder(folder)}
               onDelete={() => onDeleteFolder(folder)}
               onMoveToWorkspace={(targetWorkspaceId) =>
                 onMoveFolderToWorkspace(folder._id, targetWorkspaceId)
               }
-              onDrop={() => onDropArtifactOnFolder(folder._id)}
               workspaces={workspaces}
             />
           ))}
@@ -154,7 +144,7 @@ export function ArtifactSection({
   workspaceId,
   workspaces,
   moveTargets,
-  dragArtifactId,
+  draggingArtifactIds,
   getArtifactSelected,
   onToggleArtifactContext,
   onSetArtifactContextSelection,
@@ -163,8 +153,6 @@ export function ArtifactSection({
   onDeleteArtifact,
   onMoveArtifact,
   onMoveArtifactToWorkspace,
-  onDragArtifactStart,
-  onDragArtifactEnd,
 }: ArtifactItemHandlers & {
   title?: string;
   artifacts: WorkspaceArtifact[];
@@ -193,6 +181,9 @@ export function ArtifactSection({
 
   const visibleArtifactIds = artifacts.map((artifact) => artifact._id);
   const previewIdSet = new Set(previewIds);
+  // Every card in the active drag dims together — not just the grabbed one —
+  // so a multi-selection visibly lifts out as a group.
+  const draggingIdSet = new Set(draggingArtifactIds);
   const updatePreview = (rect: MarqueeRect) => {
     const targets = artifacts.flatMap((artifact) => {
       const element = tileElementRefs.get(artifact._id);
@@ -277,7 +268,7 @@ export function ArtifactSection({
               artifact={artifact}
               workspaceId={workspaceId}
               moveTargets={moveTargets}
-              isDragging={dragArtifactId === artifact._id}
+              isBeingDragged={draggingIdSet.has(artifact._id)}
               isSelected={getPreviewSelectedState({
                 selected: getArtifactSelected(artifact._id),
                 previewed: previewIdSet.has(artifact._id),
@@ -291,8 +282,6 @@ export function ArtifactSection({
               onMoveToWorkspace={(targetWorkspaceId) =>
                 onMoveArtifactToWorkspace(artifact._id, targetWorkspaceId)
               }
-              onDragStart={() => onDragArtifactStart(artifact._id)}
-              onDragEnd={onDragArtifactEnd}
               workspaces={workspaces}
             />
           ))}
@@ -363,40 +352,36 @@ function getPreviewSelectedState({
 
 function FolderTile({
   folder,
-  isDropTarget,
   onOpen,
   onRename,
   onDelete,
   onMoveToWorkspace,
-  onDrop,
   workspaces,
 }: {
   folder: FolderSummary;
-  isDropTarget: boolean;
   onOpen: () => void;
   onRename: () => void;
   onDelete: () => void;
   onMoveToWorkspace: (targetWorkspaceId: string) => void;
-  onDrop: () => void;
   workspaces: Array<{ _id: string; name: string }>;
 }) {
+  // Drop target for the dnd-kit drag: `active` is set while any card is being
+  // dragged (so all folders hint they can receive it), `isOver` is the one the
+  // pointer is currently hovering (so it pops to confirm the drop).
+  const { setNodeRef, isOver, active } = useDroppable({ id: folder._id });
+  const isDragActive = active !== null;
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
+          ref={setNodeRef}
           className={cn(
-            "group relative inline-flex max-w-full items-center rounded-lg transition-colors hover:bg-muted/50",
-            isDropTarget && "ring-2 ring-primary/30",
+            "group relative inline-flex max-w-full items-center rounded-lg hover:bg-muted/50",
+            "motion-safe:transition-[transform,background-color,box-shadow] motion-safe:duration-150 motion-safe:ease-out",
+            isDragActive && "ring-1 ring-primary/25",
+            isOver && "-translate-y-0.5 scale-[1.03] bg-primary/10 ring-2 ring-primary/60",
           )}
-          onDragOver={(event) => {
-            if (!isDropTarget) return;
-            event.preventDefault();
-            event.dataTransfer.dropEffect = "move";
-          }}
-          onDrop={(event) => {
-            event.preventDefault();
-            onDrop();
-          }}
         >
           <button
             type="button"
@@ -405,7 +390,10 @@ function FolderTile({
             aria-label={`Folder ${folder.name}. Klik dua kali untuk membuka.`}
           >
             <FolderIcon
-              className="size-5 shrink-0 fill-lemon text-lemon"
+              className={cn(
+                "size-5 shrink-0 fill-lemon text-lemon motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-out",
+                isOver && "scale-110",
+              )}
               strokeWidth={1.25}
             />
             <span className="truncate text-[13px] font-medium text-foreground">{folder.name}</span>
@@ -428,7 +416,7 @@ export function ArtifactTile({
   artifact,
   workspaceId,
   moveTargets,
-  isDragging,
+  isBeingDragged,
   isSelected,
   onSelect,
   onOpen,
@@ -436,8 +424,6 @@ export function ArtifactTile({
   onDelete,
   onMove,
   onMoveToWorkspace,
-  onDragStart,
-  onDragEnd,
   workspaces,
 }: {
   refCallback: (element: HTMLDivElement | null) => void;
@@ -445,7 +431,7 @@ export function ArtifactTile({
   workspaceId: string;
   moveTargets: MoveTargetOption[];
   workspaces: Array<{ _id: string; name: string }>;
-  isDragging: boolean;
+  isBeingDragged: boolean;
   isSelected: boolean;
   onSelect: () => void;
   onOpen: () => void;
@@ -453,8 +439,6 @@ export function ArtifactTile({
   onDelete: () => void;
   onMove: (target: string) => void;
   onMoveToWorkspace: (targetWorkspaceId: string) => void;
-  onDragStart: () => void;
-  onDragEnd: () => void;
 }) {
   const { selectLibraryItem, openLibraryItem } = useLibraryItemClick({
     onSingleClick: onSelect,
@@ -467,23 +451,30 @@ export function ArtifactTile({
     artifact.indexingStatus === "pending" || artifact.indexingStatus === "failed";
   const processingFailed = artifact.indexingStatus === "failed";
 
+  // dnd-kit drag source. The pointer sensor only activates after a small move
+  // (see the board), so plain clicks still fall through to select/open. We omit
+  // `attributes` on purpose: the card already nests a real <button>, so adding
+  // role="button"/tabIndex here would duplicate it in the focus/AX tree.
+  const { listeners, setNodeRef } = useDraggable({
+    id: artifact._id,
+    disabled: isProcessing,
+  });
+  // The dnd measurement ref and the marquee-measurement ref both need the node.
+  const setRefs = (node: HTMLDivElement | null) => {
+    setNodeRef(node);
+    refCallback(node);
+  };
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
-          ref={refCallback}
-          className={cn("group relative", isDragging && "opacity-50")}
-          draggable={!isProcessing}
-          onDragStart={(event) => {
-            if (isProcessing) {
-              event.preventDefault();
-              return;
-            }
-            event.dataTransfer.effectAllowed = "move";
-            event.dataTransfer.setData("text/plain", artifact._id);
-            onDragStart();
-          }}
-          onDragEnd={onDragEnd}
+          ref={setRefs}
+          {...listeners}
+          className={cn(
+            "group relative motion-safe:transition-opacity motion-safe:duration-150",
+            isBeingDragged && "opacity-40",
+          )}
         >
           <LibraryArtifactCard
             title={artifact.title}
