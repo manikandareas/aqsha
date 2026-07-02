@@ -11,8 +11,10 @@ import {
  * - `callerId` = owner = `MASTRA_RESOURCE_ID_KEY` (diset Mastra dari `mapUserToResourceId`
  *   auth Clerk = `sub`, MENIMPA `resource` klien → tepercaya). WAJIB untuk akses data app.
  * - `callerEmail` = email caller (gate entitlement admin). Diisi oleh `userContextMiddleware`
- *   (`../middleware/user-context.ts`) dari klaim Clerk ke key `AQSHA_EMAIL_KEY`; `null` bila
- *   token tak memuat email (admin-allowlist tak aktif untuk user itu, sama seperti eve).
+ *   (`../middleware/user-context.ts`) dari klaim Clerk ke key `AQSHA_EMAIL_KEY` — SELALU diset
+ *   (`""` bila token tak memuat email, dibaca sebagai `null` di sini) agar nilai injeksi klien
+ *   tak pernah lolos merge body (lihat `AQSHA_SERVER_OWNED_CONTEXT_KEYS`). Tanpa email,
+ *   admin-allowlist jatuh ke fallback email users-table di `resolveAdminOverride`.
  * - `threadScopeId` = thread aktif (scoping `research_sources` + RAG). Chat: dari
  *   `ctx.agent.threadId` (memory thread). Workflow `/deep`: step memanggil subagent via
  *   `agent.generate` tanpa memory thread → fallback ke `MASTRA_THREAD_ID_KEY` di RequestContext
@@ -67,6 +69,25 @@ export type { AgentKind };
  * (`astra-lite`/`astra-pro`), bukan dari RequestContext.
  */
 export const AQSHA_AGENT_KIND_KEY = "aqsha__agent_kind";
+
+/**
+ * SEMUA key `aqsha__*` adalah server-owned (SEC-1). `mergeBodyRequestContext` (@mastra/server)
+ * menyalin `requestContext` dari body klien ke RequestContext server untuk key yang BELUM
+ * terdefinisi — hanya prefix `mastra__` yang di-reserve framework, jadi key `aqsha__*` bisa
+ * di-inject klien (mis. `aqsha__email` → bypass allowlist admin billing). `userContextMiddleware`
+ * pre-seed daftar ini SEBELUM handler me-merge body, sehingga nilai klien tak pernah masuk;
+ * semua reader di file ini memperlakukan `""` sebagai absen. Key `aqsha__*` baru WAJIB
+ * ditambahkan ke daftar ini.
+ */
+export const AQSHA_SERVER_OWNED_CONTEXT_KEYS = [
+  AQSHA_EMAIL_KEY,
+  AQSHA_DEEP_RUN_KEY,
+  AQSHA_CHAT_TURN_KEY,
+  AQSHA_CHAT_CITE_COUNT_KEY,
+  AQSHA_DEEP_SUBQ_INDEX_KEY,
+  AQSHA_DEEP_SUBQ_TEXT_KEY,
+  AQSHA_AGENT_KIND_KEY,
+] as const;
 
 /** Tier agen dari RequestContext (default `"lite"` bila absen / nilai tak dikenal). */
 export function agentKindFromRequestContext(rc: RequestContext | undefined): AgentKind {
