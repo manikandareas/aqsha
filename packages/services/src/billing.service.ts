@@ -26,6 +26,7 @@ import {
   PUBLIC_PLAN_KEYS,
   type PublicPlanKey,
   requiredPlanForFeature,
+  UNLIMITED,
 } from "./plan";
 import { getEntitlementSnapshot, resolveAdminOverride } from "./billing/snapshot";
 import { ensureAndLockPeriod, ensureCreditPeriod, evaluateGate, utcDateString } from "./billing/period";
@@ -81,6 +82,13 @@ export type CurrentBillingResponse = BillingSnapshot & {
   resetAt: number;
   providerSpendCeilingCents: number;
   estimatedCostCents: number;
+  /**
+   * Kuota Deep Research bulanan — run count TERPISAH dari pool kredit (cap
+   * `deepResearchRuns` per plan). Unlimited (Ultra/Admin) → `deepRunsLimit`
+   * = `Number.MAX_SAFE_INTEGER`, `deepRunsUsed` = 0.
+   */
+  deepRunsUsed: number;
+  deepRunsLimit: number;
 };
 
 export type PlanListItem = {
@@ -474,6 +482,22 @@ export const BillingService = {
       planKey: snapshot.planKey,
       status: snapshot.status,
     });
+    // Kuota Deep Research (run count, terpisah dari pool kredit). Unlimited plan
+    // (admin/Ultra) di-short-circuit: JANGAN kueri ledger dgn cap MAX_SAFE_INTEGER
+    // (limit huge = overflow), cukup laporkan used=0.
+    const deepRunsLimit = PLAN_CATALOG[snapshot.planKey].deepResearchRuns;
+    const deepRunsUsed =
+      snapshot.isAdmin || deepRunsLimit >= UNLIMITED
+        ? 0
+        : Math.min(
+            deepRunsLimit,
+            await BillingRepo.countDeepResearchInWindow(db, {
+              ownerUserId,
+              startedAt: period.startedAt,
+              resetAt: period.resetAt,
+              cap: deepRunsLimit,
+            }),
+          );
     return {
       ...snapshot,
       planLabel: PLAN_CATALOG[snapshot.planKey].label,
@@ -483,6 +507,8 @@ export const BillingService = {
       resetAt: period.resetAt,
       providerSpendCeilingCents: period.spendCeilingCents,
       estimatedCostCents: period.estimatedCostCents,
+      deepRunsUsed,
+      deepRunsLimit,
     };
   },
 

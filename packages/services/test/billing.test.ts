@@ -192,26 +192,27 @@ afterAll(async () => {
 describe("BillingService.consumeCredits (integration)", () => {
   itest("free: debit lalu quota_exceeded return-union (tanpa double-debit)", async () => {
     const owner = await freshOwner();
+    // Free limit = 150. Debit 120 → sisa 30; debit 40 berikut > sisa → quota_exceeded.
     const ok = await BillingService.consumeCredits(db, {
       ownerUserId: owner,
       feature: "normal_chat",
       provider: "test",
-      credits: 40,
+      credits: 120,
     });
     expect(ok.ok).toBe(true);
-    if (ok.ok) expect(ok.creditsUsed).toBe(40);
+    if (ok.ok) expect(ok.creditsUsed).toBe(120);
 
     const blocked = await BillingService.consumeCredits(db, {
       ownerUserId: owner,
       feature: "normal_chat",
       provider: "test",
-      credits: 40, // remaining 10 < 40
+      credits: 40, // remaining 30 < 40
     });
     expect(blocked.ok).toBe(false);
     if (!blocked.ok) expect(blocked.reason).toBe("quota_exceeded");
 
     const period = await BillingService.getCurrentPeriod(db, owner);
-    expect(period.creditsUsed).toBe(40); // block tak menambah debit
+    expect(period.creditsUsed).toBe(120); // block tak menambah debit
   });
 
   itest("A9 idempotency: re-run key sama tak double-debit", async () => {
@@ -330,13 +331,16 @@ describe("BillingService.consumeCredits (integration)", () => {
     expect(activity[0]!.eventCount).toBe(0);
   });
 
-  itest("getCurrentBilling: free user default (limit 50, remaining 50)", async () => {
+  itest("getCurrentBilling: free user default (limit 150, remaining 150, deep 0/2)", async () => {
     const owner = await freshOwner();
     const current = await BillingService.getCurrentBilling(db, owner);
     expect(current.planKey).toBe("free");
     expect(current.planLabel).toBe("Free");
-    expect(current.creditsLimit).toBe(50);
-    expect(current.creditsRemaining).toBe(50);
+    expect(current.creditsLimit).toBe(150);
+    expect(current.creditsRemaining).toBe(150);
+    // Kuota Deep Research (run count, terpisah dari pool kredit) — fresh owner = 0/2.
+    expect(current.deepRunsUsed).toBe(0);
+    expect(current.deepRunsLimit).toBe(2);
     expect(current.billingPortalAvailable).toBe(false);
     expect(current.canChangeSubscription).toBe(false);
   });

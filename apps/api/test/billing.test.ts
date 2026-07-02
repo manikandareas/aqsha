@@ -74,14 +74,16 @@ describe("api billing — auth gate", () => {
 });
 
 describe("api billing — read surface (free user)", () => {
-  itest("GET /billing/current → free, limit 50", async () => {
+  itest("GET /billing/current → free, limit 150, deep 0/2", async () => {
     await req("POST", "/users/me/sync", tok(OWNER));
     const res = await get("/billing/current", tok(OWNER));
     expect(res.status).toBe(200);
     const body = await readJson(res);
     expect(body.planKey).toBe("free");
-    expect(body.creditsLimit).toBe(50);
-    expect(body.creditsRemaining).toBe(50);
+    expect(body.creditsLimit).toBe(150);
+    expect(body.creditsRemaining).toBe(150);
+    expect(body.deepRunsUsed).toBe(0);
+    expect(body.deepRunsLimit).toBe(2);
   });
 
   itest("GET /billing/usage/activity?days=7 → 7 zero-filled days", async () => {

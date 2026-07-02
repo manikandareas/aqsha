@@ -1,6 +1,6 @@
 "use client";
 
-import type { PromptCommand, PromptCommandId } from "@aqsha/chat-core";
+import { DEEP_COMMAND_ID, type PromptCommand, type PromptCommandId } from "@aqsha/chat-core";
 import {
   BookOpenIcon,
   CheckCircle2Icon,
@@ -28,8 +28,11 @@ import {
   TrendingUpIcon,
   WrenchIcon,
 } from "@aqsha/ui/icons";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
+import { useBillingCurrent } from "@/features/settings/api";
+import { deepRunsQuota } from "@/features/settings/lib/billing-derived";
 import {
+  ComposerPopoverBadge,
   ComposerPopoverEmpty,
   ComposerPopoverGroup,
   ComposerPopoverHeader,
@@ -76,6 +79,22 @@ const promptCommandIconMap: Record<PromptCommandId, ComponentType<{ className?: 
   workspace: FolderIcon,
 };
 
+/** Badge kuota Deep Research untuk item `/deep` — sisa run bulanan (∞ = unlimited). */
+function renderDeepQuotaBadge(
+  data: { deepRunsUsed: number; deepRunsLimit: number } | undefined,
+): ReactNode {
+  if (!data) return null;
+  const { unlimited, remaining } = deepRunsQuota(data);
+  if (unlimited) {
+    return <ComposerPopoverBadge tone="muted">tanpa batas</ComposerPopoverBadge>;
+  }
+  return (
+    <ComposerPopoverBadge tone={remaining > 0 ? "accent" : "muted"}>
+      {remaining} tersisa
+    </ComposerPopoverBadge>
+  );
+}
+
 export function SlashCommandPalette({
   commands,
   highlightedIndex,
@@ -87,6 +106,8 @@ export function SlashCommandPalette({
   onHighlight: (index: number) => void;
   onSelect: (command: PromptCommand) => void;
 }) {
+  // Kuota Deep Research ditumpangkan pada item `/deep` (cache app-wide, tanpa fetch ekstra).
+  const billing = useBillingCurrent();
   let flatIndex = 0;
 
   return (
@@ -117,6 +138,8 @@ export function SlashCommandPalette({
                   const itemIndex = startIndex + index;
                   const ItemIcon =
                     promptCommandIconMap[item.id as PromptCommandId] ?? LayoutGridIcon;
+                  const deepBadge =
+                    item.id === DEEP_COMMAND_ID ? renderDeepQuotaBadge(billing.data) : null;
                   return (
                     <ComposerPopoverItem
                       key={item.id}
@@ -128,9 +151,12 @@ export function SlashCommandPalette({
                       onSelect={() => onSelect(item)}
                       onMouseEnter={() => onHighlight(itemIndex)}
                       meta={
-                        <span className="font-mono text-[10.5px] text-muted-foreground/70">
-                          {item.slug}
-                        </span>
+                        <>
+                          {deepBadge}
+                          <span className="font-mono text-[10.5px] text-muted-foreground/70">
+                            {item.slug}
+                          </span>
+                        </>
                       }
                     />
                   );

@@ -6,6 +6,8 @@ import {
   useAmbientContextEpoch,
   useComposerSelection,
 } from "@/features/thread-experience/components/composer-context-mentions";
+import { useBillingCurrent } from "@/features/settings/api";
+import { isCreditsLow } from "@/features/settings/lib/billing-derived";
 import { useWorkspacesList } from "@/features/workspaces/api";
 import { cn } from "@/lib/utils";
 import {
@@ -718,6 +720,12 @@ function HintKey({ children }: { children: string }) {
  * dipisah garis rambut. Menyadarkan user akan `@` (tautkan konteks) & `/` (perintah).
  */
 function ComposerAffordanceHint() {
+  const billing = useBillingCurrent();
+  const data = billing.data;
+  // Sisa kredit hanya relevan untuk plan berkuota; unlimited (Ultra/Admin) di-skip
+  // agar hint tetap ringkas. Menipis (≤15%) → tekankan dgn warna peringatan.
+  const showCredits = Boolean(data) && !data?.isUnlimitedCredits;
+  const low = showCredits && isCreditsLow(data!);
   return (
     <div className="flex items-center gap-2 border-t border-border/50 bg-foreground/[0.02] px-3.5 py-2 text-muted-foreground animate-in fade-in duration-200">
       <p className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] font-medium leading-4">
@@ -728,6 +736,16 @@ function ComposerAffordanceHint() {
         </span>
         <HintKey>/</HintKey>
         <span>jalankan perintah</span>
+        {showCredits ? (
+          <>
+            <span className="text-muted-foreground/40" aria-hidden>
+              ·
+            </span>
+            <span className={cn(low && "font-semibold text-amber-600 dark:text-amber-500")}>
+              sisa {data!.creditsRemaining.toLocaleString("id-ID")} kredit
+            </span>
+          </>
+        ) : null}
       </p>
     </div>
   );
