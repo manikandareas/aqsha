@@ -667,3 +667,6 @@ export const BillingService = {
 
 // re-export tipe untuk caller (route/web/test). `currentMonthPeriod` di-export via index.ts → ./plan.
 export type { EntitlementResult, EntitlementSnapshot, ConsumeCreditsArgs } from "./billing/types";
+// Snapshot entitlement hot-path (planKey/isAdmin tanpa ensure-period) — dipakai dynamic
+// instructions Astra (CTX-5) untuk menyuntik paket pengguna ke system prompt.
+export { getEntitlementSnapshot } from "./billing/snapshot";

@@ -9,7 +9,14 @@ import { contactEmail, fetchWithTimeout } from "../papers/http";
 import { normalizeDoi } from "../papers/identifiers";
 import { readCachedCandidates, writeCachedCandidates } from "./cache";
 import { collapse, normalizeKey, trimForSnippet } from "./text";
-import { type ResearchCandidate, readableError, researchUserAgent } from "./types";
+import {
+  type ProviderSearchResult,
+  type ResearchCandidate,
+  providerError,
+  providerOk,
+  readableError,
+  researchUserAgent,
+} from "./types";
 
 const CROSSREF_ENDPOINT = "https://api.crossref.org/works";
 const PROVIDER = "crossref";
@@ -25,11 +32,16 @@ type CrossrefItem = {
   "container-title"?: string[];
 };
 
-export async function lookupDoi(args: { doi: string }): Promise<ResearchCandidate[]> {
+export async function lookupDoi(args: { doi: string }): Promise<ProviderSearchResult> {
   const doi = normalizeDoi(args.doi);
-  if (!doi) return [];
+  if (!doi) return providerOk([]);
   const cached = await readCachedCandidates(PROVIDER, doi);
-  if (cached) return cached;
+  if (cached) {
+    if (cached.status === "failed") {
+      return providerError("Crossref sedang bermasalah (kegagalan terakhir masih dalam masa backoff).");
+    }
+    return providerOk(cached.candidates);
+  }
 
   try {
     const url = new URL(`${CROSSREF_ENDPOINT}/${encodeURIComponent(doi)}`);
@@ -43,11 +55,12 @@ export async function lookupDoi(args: { doi: string }): Promise<ResearchCandidat
     const candidate = json.message ? crossrefToCandidate(json.message) : null;
     const candidates = candidate ? [candidate] : [];
     await writeCachedCandidates(PROVIDER, doi, candidates);
-    return candidates;
+    return providerOk(candidates);
   } catch (error) {
-    console.error("[research] crossref lookup failed", readableError(error));
+    const message = readableError(error);
+    console.error("[research] crossref lookup failed", message);
     await writeCachedCandidates(PROVIDER, doi, [], "failed");
-    return [];
+    return providerError(`Crossref gagal merespons (${message}).`);
   }
 }
 
@@ -55,13 +68,21 @@ export async function lookupDoi(args: { doi: string }): Promise<ResearchCandidat
  * Keyword search Crossref (`/works?query=…&sort=relevance`, multi-hasil). Dipakai
  * waterfall Explore saat query BUKAN DOI. Best-effort + Redis-cached; error → [].
  */
-export async function searchCrossref(args: { query: string; limit?: number }): Promise<ResearchCandidate[]> {
+export async function searchCrossref(args: {
+  query: string;
+  limit?: number;
+}): Promise<ProviderSearchResult> {
   const query = args.query.trim();
-  if (!query) return [];
+  if (!query) return providerOk([]);
   const limit = Math.min(args.limit ?? 5, 10);
   const cacheKey = `search:${normalizeKey(JSON.stringify({ query, limit }))}`;
   const cached = await readCachedCandidates(PROVIDER, cacheKey);
-  if (cached) return cached;
+  if (cached) {
+    if (cached.status === "failed") {
+      return providerError("Crossref sedang bermasalah (kegagalan terakhir masih dalam masa backoff).");
+    }
+    return providerOk(cached.candidates);
+  }
 
   try {
     const url = new URL(CROSSREF_ENDPOINT);
@@ -79,11 +100,12 @@ export async function searchCrossref(args: { query: string; limit?: number }): P
       .map(crossrefToCandidate)
       .filter((c): c is ResearchCandidate => Boolean(c));
     await writeCachedCandidates(PROVIDER, cacheKey, candidates);
-    return candidates;
+    return providerOk(candidates);
   } catch (error) {
-    console.error("[research] crossref search failed", readableError(error));
+    const message = readableError(error);
+    console.error("[research] crossref search failed", message);
     await writeCachedCandidates(PROVIDER, cacheKey, [], "failed");
-    return [];
+    return providerError(`Crossref gagal merespons (${message}).`);
   }
 }
 

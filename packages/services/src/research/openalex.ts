@@ -15,7 +15,14 @@ import {
   trimForSnippet,
   uniqueCompact,
 } from "./text";
-import { type ResearchCandidate, readableError, researchUserAgent } from "./types";
+import {
+  type ProviderSearchResult,
+  type ResearchCandidate,
+  providerError,
+  providerOk,
+  readableError,
+  researchUserAgent,
+} from "./types";
 
 const OPENALEX_ENDPOINT = "https://api.openalex.org/works";
 const PROVIDER = "openalex";
@@ -84,13 +91,19 @@ export function reconstructOpenAlexAbstract(
 export async function searchOpenAlex(args: {
   query: string;
   limit?: number;
-}): Promise<ResearchCandidate[]> {
+}): Promise<ProviderSearchResult> {
   const query = args.query.trim();
-  if (!query) return [];
+  if (!query) return providerOk([]);
   const limit = Math.min(args.limit ?? 5, 15);
   const cacheKey = normalizeKey(JSON.stringify({ query, limit }));
   const cached = await readCachedCandidates(PROVIDER, cacheKey);
-  if (cached) return cached;
+  if (cached) {
+    // Cache `failed` = backoff 12 mnt yang JUJUR: laporkan sebagai error, bukan "tak ada hasil".
+    if (cached.status === "failed") {
+      return providerError("OpenAlex sedang bermasalah (kegagalan terakhir masih dalam masa backoff).");
+    }
+    return providerOk(cached.candidates);
+  }
 
   try {
     const url = new URL(OPENALEX_ENDPOINT);
@@ -113,11 +126,12 @@ export async function searchOpenAlex(args: {
       .map(openAlexWorkToCandidate)
       .filter((item): item is ResearchCandidate => Boolean(item));
     await writeCachedCandidates(PROVIDER, cacheKey, candidates);
-    return candidates;
+    return providerOk(candidates);
   } catch (error) {
-    console.error("[research] openalex search failed", readableError(error));
+    const message = readableError(error);
+    console.error("[research] openalex search failed", message);
     await writeCachedCandidates(PROVIDER, cacheKey, [], "failed");
-    return [];
+    return providerError(`OpenAlex gagal merespons (${message}).`);
   }
 }
 

@@ -10,7 +10,14 @@ import { fetchWithTimeout } from "../papers/http";
 import { readCachedCandidates, writeCachedCandidates } from "./cache";
 import { arxivPacer } from "./pacer";
 import { asArray, collapse, normalizeKey, trimForSnippet } from "./text";
-import { type ResearchCandidate, readableError, researchUserAgent } from "./types";
+import {
+  type ProviderSearchResult,
+  type ResearchCandidate,
+  providerError,
+  providerOk,
+  readableError,
+  researchUserAgent,
+} from "./types";
 
 const ARXIV_ENDPOINT = "https://export.arxiv.org/api/query";
 const PROVIDER = "arxiv";
@@ -36,12 +43,17 @@ type ArxivLink = { "@_href"?: string; "@_rel"?: string };
 export async function searchArxiv(args: {
   query: string;
   limit?: number;
-}): Promise<ResearchCandidate[]> {
+}): Promise<ProviderSearchResult> {
   const query = args.query.trim();
-  if (!query) return [];
+  if (!query) return providerOk([]);
   const cacheKey = normalizeKey(`${query}:${args.limit ?? 5}`);
   const cached = await readCachedCandidates(PROVIDER, cacheKey);
-  if (cached) return cached;
+  if (cached) {
+    if (cached.status === "failed") {
+      return providerError("arXiv sedang bermasalah (kegagalan terakhir masih dalam masa backoff).");
+    }
+    return providerOk(cached.candidates);
+  }
   await arxivPacer.reserve();
 
   try {
@@ -63,11 +75,12 @@ export async function searchArxiv(args: {
       .map(arxivToCandidate)
       .filter((item): item is ResearchCandidate => Boolean(item));
     await writeCachedCandidates(PROVIDER, cacheKey, candidates);
-    return candidates;
+    return providerOk(candidates);
   } catch (error) {
-    console.error("[research] arxiv search failed", readableError(error));
+    const message = readableError(error);
+    console.error("[research] arxiv search failed", message);
     await writeCachedCandidates(PROVIDER, cacheKey, [], "failed");
-    return [];
+    return providerError(`arXiv gagal merespons (${message}).`);
   }
 }
 

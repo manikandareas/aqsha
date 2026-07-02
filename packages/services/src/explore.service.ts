@@ -9,7 +9,7 @@ import { FeedRepo, PaperCacheRepo, throwAppError } from "@aqsha/db";
 import { getCache, putCache } from "./papers/external-cache";
 import { fetchOpenAlexWorks } from "./feed/openAlex";
 import { extractDoi } from "./papers/identifiers";
-import { ResearchService, type ResearchCandidate } from "./research";
+import { ResearchService, type ProviderSearchResult, type ResearchCandidate } from "./research";
 import { InterestService } from "./interest.service";
 import { PaperCacheService } from "./paper-cache.service";
 import {
@@ -101,7 +101,7 @@ async function waterfallFill(
 
   const run = async (
     provider: ExploreProvider,
-    fetcher: () => Promise<ResearchCandidate[]>,
+    fetcher: () => Promise<ProviderSearchResult>,
     enabled: boolean,
   ) => {
     if (!enabled || items.length >= needed) {
@@ -109,8 +109,12 @@ async function waterfallFill(
       return;
     }
     try {
-      const candidates = await fetcher();
-      const mapped = candidates
+      const result = await fetcher();
+      if (!result.ok) {
+        statuses.push({ provider, status: "error", message: result.message });
+        return;
+      }
+      const mapped = result.candidates
         .map((c) => candidateToPaperInput(c, provider))
         .filter((p) => (fromYear ? !p.year || p.year >= fromYear : true));
       items.push(...mapped);

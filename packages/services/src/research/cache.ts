@@ -9,16 +9,31 @@
 import { getCache, putCache } from "../papers/external-cache";
 import type { ResearchCandidate } from "./types";
 
-/** Read cached candidates for a provider+key, or `null` on miss / parse error. */
+export type CachedCandidates = {
+  status: "ready" | "empty" | "failed";
+  candidates: ResearchCandidate[];
+};
+
+/**
+ * Read cached candidates for a provider+key, or `null` on miss / parse error.
+ * MEMBAWA `status` (CTX-2): pemanggil WAJIB membedakan `failed` (kegagalan provider yang
+ * di-cache 12 mnt sebagai backoff) dari `ready`/`empty` — cache `failed` TIDAK boleh
+ * disajikan sebagai "tak ada hasil".
+ */
 export async function readCachedCandidates(
   provider: string,
   cacheKey: string,
-): Promise<ResearchCandidate[] | null> {
+): Promise<CachedCandidates | null> {
   const cached = await getCache(provider, cacheKey);
   if (!cached) return null;
+  const status =
+    cached.status === "ready" || cached.status === "empty" || cached.status === "failed"
+      ? cached.status
+      : null;
+  if (!status) return null;
   try {
     const parsed = JSON.parse(cached.valueJson);
-    return Array.isArray(parsed) ? (parsed as ResearchCandidate[]) : null;
+    return Array.isArray(parsed) ? { status, candidates: parsed as ResearchCandidate[] } : null;
   } catch {
     return null;
   }

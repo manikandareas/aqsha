@@ -48,6 +48,12 @@ export const researchSources = pgTable(
     subQuestionIndex: integer("sub_question_index"),
     subQuestionText: text("sub_question_text"),
     imageUrl: text("image_url"),
+    // Metadata sitasi terstruktur (CTX-8): authors (JSON array string, maks 3), tahun, venue —
+    // diekstrak dari `metadataJson` provider saat persist → inventory [n] + verify_identifiers
+    // menerima author/year asli, bukan mengarang. Nullable (provider web sering tanpa metadata).
+    authorsJson: text("authors_json"),
+    year: integer("year"),
+    venue: text("venue"),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
   (t) => [

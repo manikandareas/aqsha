@@ -7,6 +7,7 @@ import * as cache from "../src/papers/external-cache";
 import { PaperCacheService } from "../src/paper-cache.service";
 import { ResearchService } from "../src/research";
 import type { ResearchCandidate } from "../src/research";
+import { providerOk } from "../src/research/types";
 
 const fakeDb = {} as never;
 
@@ -141,14 +142,13 @@ describe("ExploreService.searchPapers — waterfall (Fase 8)", () => {
       works: [{}], // 1 work mentah (< limit) → nextPage null
     } as never);
     // arXiv mengembalikan dup-a (rank kalah OpenAlex) + c; masih < needed → Crossref keyword jalan.
-    const arxiv = spyOn(ResearchService, "searchArxiv").mockResolvedValue([
-      candidate({ origin: "arxiv", doi: "10.1/a" }),
-      candidate({ url: "https://x/c" }),
-    ]);
-    const crossSearch = spyOn(ResearchService, "searchCrossref").mockResolvedValue([
-      candidate({ url: "https://x/d" }),
-    ]);
-    const doiLookup = spyOn(ResearchService, "lookupDoi").mockResolvedValue([]);
+    const arxiv = spyOn(ResearchService, "searchArxiv").mockResolvedValue(
+      providerOk([candidate({ origin: "arxiv", doi: "10.1/a" }), candidate({ url: "https://x/c" })]),
+    );
+    const crossSearch = spyOn(ResearchService, "searchCrossref").mockResolvedValue(
+      providerOk([candidate({ url: "https://x/d" })]),
+    );
+    const doiLookup = spyOn(ResearchService, "lookupDoi").mockResolvedValue(providerOk([]));
 
     const res = await ExploreService.searchPapers(fakeDb, "u", {
       query: "graph neural networks",
@@ -174,11 +174,13 @@ describe("ExploreService.searchPapers — waterfall (Fase 8)", () => {
     spyOn(cache, "putCache").mockResolvedValue(undefined);
     spyOn(PaperCacheService, "upsert").mockResolvedValue(undefined as never);
     spyOn(openAlex, "fetchOpenAlexWorks").mockResolvedValue({ papers: [], works: [] } as never);
-    const arxiv = spyOn(ResearchService, "searchArxiv").mockResolvedValue([]);
-    const doiLookup = spyOn(ResearchService, "lookupDoi").mockResolvedValue([
-      candidate({ origin: "arxiv", doi: "10.1000/xyz123", url: "https://doi.org/10.1000/xyz123" }),
-    ]);
-    const crossSearch = spyOn(ResearchService, "searchCrossref").mockResolvedValue([]);
+    const arxiv = spyOn(ResearchService, "searchArxiv").mockResolvedValue(providerOk([]));
+    const doiLookup = spyOn(ResearchService, "lookupDoi").mockResolvedValue(
+      providerOk([
+        candidate({ origin: "arxiv", doi: "10.1000/xyz123", url: "https://doi.org/10.1000/xyz123" }),
+      ]),
+    );
+    const crossSearch = spyOn(ResearchService, "searchCrossref").mockResolvedValue(providerOk([]));
 
     const res = await ExploreService.searchPapers(fakeDb, "u", {
       query: "10.1000/xyz123",
@@ -200,7 +202,7 @@ describe("ExploreService.searchPapers — waterfall (Fase 8)", () => {
       papers: [oaPaper("doi:10.1/a"), oaPaper("doi:10.1/b")],
       works: [{}, {}], // 2 works mentah (== limit) → nextPage tersedia
     } as never);
-    const arxiv = spyOn(ResearchService, "searchArxiv").mockResolvedValue([]);
+    const arxiv = spyOn(ResearchService, "searchArxiv").mockResolvedValue(providerOk([]));
 
     const res = await ExploreService.searchPapers(fakeDb, "u", {
       query: "q",
@@ -225,9 +227,9 @@ describe("ExploreService.searchPapers — waterfall (Fase 8)", () => {
       papers: [oaPaper("doi:10.1/a")],
       works: [{}, {}],
     } as never);
-    spyOn(ResearchService, "searchArxiv").mockResolvedValue([]);
-    spyOn(ResearchService, "searchCrossref").mockResolvedValue([]);
-    spyOn(ResearchService, "lookupDoi").mockResolvedValue([]);
+    spyOn(ResearchService, "searchArxiv").mockResolvedValue(providerOk([]));
+    spyOn(ResearchService, "searchCrossref").mockResolvedValue(providerOk([]));
+    spyOn(ResearchService, "lookupDoi").mockResolvedValue(providerOk([]));
 
     const res = await ExploreService.searchPapers(fakeDb, "u", {
       query: "q",

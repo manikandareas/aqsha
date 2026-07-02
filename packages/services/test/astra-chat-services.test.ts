@@ -138,10 +138,12 @@ describe("ResearchService.searchWeb (Firecrawl, cache + failure)", () => {
 
   test("cache HIT → kembalikan cached, tak fetch / tak tulis cache", async () => {
     getCache.mockResolvedValue({
+      status: "ready",
       valueJson: JSON.stringify([{ origin: "web", provider: "firecrawl_search", title: "Cached" }]),
     } as never);
     const r = await ResearchService.searchWeb({ query: "energi surya" });
-    expect(r[0]?.title).toBe("Cached");
+    expect(r.ok).toBe(true);
+    expect(r.ok ? r.candidates[0]?.title : null).toBe("Cached");
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(putCache).not.toHaveBeenCalled();
   });
@@ -157,28 +159,37 @@ describe("ResearchService.searchWeb (Firecrawl, cache + failure)", () => {
       ) as never,
     );
     const r = await ResearchService.searchWeb({ query: "energi surya" });
-    expect(r[0]?.title).toBe("Hasil A");
+    expect(r.ok ? r.candidates[0]?.title : null).toBe("Hasil A");
     // putCache(provider, cacheKey, status, valueJson) — status[2] = 'ready' karena ada hasil
     expect((putCache.mock.calls[0] as unknown[])[2]).toBe("ready");
   });
 
-  test("provider error (HTTP !ok) → sentinel: [] + tulis cache 'failed'", async () => {
+  test("provider error (HTTP !ok) → ok:false (CTX-2) + tulis cache 'failed'", async () => {
     fetchSpy.mockResolvedValue(new Response("nope", { status: 503 }) as never);
     const r = await ResearchService.searchWeb({ query: "energi surya" });
-    expect(r).toEqual([]);
+    expect(r.ok).toBe(false);
     expect((putCache.mock.calls[0] as unknown[])[2]).toBe("failed");
   });
 
-  test("tanpa FIRECRAWL_API_KEY → [] + cache 'failed', tak fetch", async () => {
+  test("tanpa FIRECRAWL_API_KEY → ok:false (misconfig eksplisit), tak fetch, TAK cache 'failed'", async () => {
     delete process.env.FIRECRAWL_API_KEY;
     const r = await ResearchService.searchWeb({ query: "energi surya" });
-    expect(r).toEqual([]);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toContain("FIRECRAWL_API_KEY");
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect((putCache.mock.calls[0] as unknown[])[2]).toBe("failed");
+    // Misconfig tak di-cache 'failed' → pulih instan begitu key diset.
+    expect(putCache).not.toHaveBeenCalled();
   });
 
-  test("query kosong → [] tanpa fetch/cache", async () => {
-    expect(await ResearchService.searchWeb({ query: "   " })).toEqual([]);
+  test("cache status 'failed' → ok:false TANPA fetch (backoff jujur, CTX-2)", async () => {
+    getCache.mockResolvedValue({ status: "failed", valueJson: "[]" } as never);
+    const r = await ResearchService.searchWeb({ query: "energi surya" });
+    expect(r.ok).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  test("query kosong → ok+[] tanpa fetch/cache", async () => {
+    expect(await ResearchService.searchWeb({ query: "   " })).toEqual({ ok: true, candidates: [] });
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(getCache).not.toHaveBeenCalled();
   });
@@ -216,9 +227,11 @@ describe("ResearchService.searchCrossref (keyword, cache + map)", () => {
 
   test("map message.items → kandidat crossref + kirim query/rows/sort=relevance", async () => {
     const r = await ResearchService.searchCrossref({ query: "graph neural", limit: 5 });
-    expect(r).toHaveLength(1);
-    expect(r[0]?.provider).toBe("crossref");
-    expect(r[0]?.doi).toBe("10.1/a");
+    expect(r.ok).toBe(true);
+    const items = r.ok ? r.candidates : [];
+    expect(items).toHaveLength(1);
+    expect(items[0]?.provider).toBe("crossref");
+    expect(items[0]?.doi).toBe("10.1/a");
     const url = String((fetchSpy.mock.calls[0] as unknown[])[0]);
     expect(url).toContain("query=graph+neural");
     expect(url).toContain("sort=relevance");
@@ -226,17 +239,28 @@ describe("ResearchService.searchCrossref (keyword, cache + map)", () => {
     expect((putCache.mock.calls[0] as unknown[])[2]).toBe("ready");
   });
 
-  test("query kosong → [] tanpa fetch/cache", async () => {
-    expect(await ResearchService.searchCrossref({ query: "  " })).toEqual([]);
+  test("query kosong → ok+[] tanpa fetch/cache", async () => {
+    expect(await ResearchService.searchCrossref({ query: "  " })).toEqual({
+      ok: true,
+      candidates: [],
+    });
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(getCache).not.toHaveBeenCalled();
   });
 
-  test("provider error (HTTP !ok) → [] + cache 'failed'", async () => {
+  test("provider error (HTTP !ok) → ok:false (CTX-2, bukan menyaru []) + cache 'failed'", async () => {
     fetchSpy.mockResolvedValue(new Response("nope", { status: 500 }) as never);
     const r = await ResearchService.searchCrossref({ query: "x" });
-    expect(r).toEqual([]);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("provider_error");
     expect((putCache.mock.calls[0] as unknown[])[2]).toBe("failed");
+  });
+
+  test("cache status 'failed' → ok:false TANPA fetch (backoff jujur, CTX-2)", async () => {
+    getCache.mockResolvedValue({ status: "failed", valueJson: "[]" } as never);
+    const r = await ResearchService.searchCrossref({ query: "x" });
+    expect(r.ok).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
 

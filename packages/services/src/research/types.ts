@@ -25,6 +25,23 @@ export type ResearchCandidate = {
   metadataJson?: string;
 };
 
+/**
+ * Hasil pencarian provider yang DISKRIMINATIF (CTX-2): kegagalan provider tidak lagi menyaru
+ * sebagai "tak ada hasil". `ok:false` = provider error/misconfig (pemanggil bisa skip debit +
+ * melaporkan ke model); `ok:true` + `candidates` kosong = benar-benar tidak ada hasil.
+ */
+export type ProviderSearchResult =
+  | { ok: true; candidates: ResearchCandidate[] }
+  | { ok: false; reason: "provider_error"; message: string };
+
+export function providerOk(candidates: ResearchCandidate[]): ProviderSearchResult {
+  return { ok: true, candidates };
+}
+
+export function providerError(message: string): ProviderSearchResult {
+  return { ok: false, reason: "provider_error", message };
+}
+
 export function researchUserAgent(): string {
   return "AqshaResearch/1.0 (+https://aqsha.app)";
 }

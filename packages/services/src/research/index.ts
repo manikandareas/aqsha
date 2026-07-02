@@ -13,10 +13,11 @@ import { searchArxiv } from "./arxiv";
 import { lookupDoi, searchCrossref } from "./crossref";
 import { searchWebFirecrawl } from "./firecrawl";
 import { searchOpenAlex } from "./openalex";
-import type { ResearchCandidate } from "./types";
+import type { ProviderSearchResult, ResearchCandidate } from "./types";
 
 export type {
   EvidenceStrength,
+  ProviderSearchResult,
   ResearchCandidate,
   ResearchOrigin,
 } from "./types";
@@ -64,32 +65,68 @@ export type ResearchSourceItem = {
   subQuestionText: string | null;
   /** OG image (best-effort) untuk kartu sumber (null bila tak ada/belum di-enrich). */
   imageUrl: string | null;
+  /** Penulis (maks 3, dari metadata provider) — untuk inventory sitasi + verifikasi (CTX-8). */
+  authors: string[];
+  /** Tahun publikasi (null bila provider tak memberi). */
+  year: number | null;
+  /** Venue/jurnal (null bila provider tak memberi). */
+  venue: string | null;
   createdAt: number;
 };
 
+/**
+ * Ekstrak authors/year/venue dari `candidate.metadataJson` (blob provider). Dipakai persist
+ * (kolom terstruktur `research_sources`) + output tool riset (CTX-8: model harus MENERIMA
+ * metadata sitasi, bukan hanya tersimpan di DB). Best-effort: blob korup → kosong.
+ */
+export function candidateCitationMeta(candidate: ResearchCandidate): {
+  authors: string[];
+  year: number | null;
+  venue: string | null;
+} {
+  if (!candidate.metadataJson) return { authors: [], year: null, venue: null };
+  try {
+    const meta = JSON.parse(candidate.metadataJson) as {
+      authors?: unknown;
+      year?: unknown;
+      venue?: unknown;
+    };
+    const authors = Array.isArray(meta.authors)
+      ? meta.authors.filter((a): a is string => typeof a === "string" && a.length > 0).slice(0, 3)
+      : [];
+    return {
+      authors,
+      year: typeof meta.year === "number" && Number.isFinite(meta.year) ? meta.year : null,
+      venue: typeof meta.venue === "string" && meta.venue.length > 0 ? meta.venue : null,
+    };
+  } catch {
+    return { authors: [], year: null, venue: null };
+  }
+}
+
 export const ResearchService = {
-  /** Pencarian web (Firecrawl `/v2/search`). */
-  searchWeb(args: { query: string; limit?: number }): Promise<ResearchCandidate[]> {
+  /** Pencarian web (Firecrawl `/v2/search`). Hasil DISKRIMINATIF (`ok:false` = provider error). */
+  searchWeb(args: { query: string; limit?: number }): Promise<ProviderSearchResult> {
     return searchWebFirecrawl(args);
   },
 
-  /** Pencarian arXiv (Atom, multi-entry). */
-  searchArxiv(args: { query: string; limit?: number }): Promise<ResearchCandidate[]> {
+  /** Pencarian arXiv (Atom, multi-entry). Hasil DISKRIMINATIF (`ok:false` = provider error). */
+  searchArxiv(args: { query: string; limit?: number }): Promise<ProviderSearchResult> {
     return searchArxiv(args);
   },
 
-  /** Lookup metadata satu DOI (Crossref). */
-  lookupDoi(args: { doi: string }): Promise<ResearchCandidate[]> {
+  /** Lookup metadata satu DOI (Crossref). Hasil DISKRIMINATIF (`ok:false` = provider error). */
+  lookupDoi(args: { doi: string }): Promise<ProviderSearchResult> {
     return lookupDoi(args);
   },
 
-  /** Keyword search Crossref (`/works?query=…`, multi-hasil). */
-  searchCrossref(args: { query: string; limit?: number }): Promise<ResearchCandidate[]> {
+  /** Keyword search Crossref (`/works?query=…`, multi-hasil). Hasil DISKRIMINATIF. */
+  searchCrossref(args: { query: string; limit?: number }): Promise<ProviderSearchResult> {
     return searchCrossref(args);
   },
 
-  /** Pencarian karya akademik (OpenAlex). */
-  searchOpenAlex(args: { query: string; limit?: number }): Promise<ResearchCandidate[]> {
+  /** Pencarian karya akademik (OpenAlex). Hasil DISKRIMINATIF (`ok:false` = provider error). */
+  searchOpenAlex(args: { query: string; limit?: number }): Promise<ProviderSearchResult> {
     return searchOpenAlex(args);
   },
 
@@ -118,27 +155,33 @@ export const ResearchService = {
     },
   ): Promise<void> {
     if (input.candidates.length === 0) return;
-    const rows: NewResearchSource[] = input.candidates.map((candidate, i) => ({
-      id: crypto.randomUUID(),
-      threadId: input.threadId,
-      ownerUserId: input.ownerUserId,
-      turnId: input.turnId,
-      citationNumber: input.citationNumbers?.[i] ?? null,
-      origin: candidate.origin,
-      provider: candidate.provider ?? null,
-      title: candidate.title,
-      locator: candidate.locator,
-      url: candidate.url ?? null,
-      doi: candidate.doi ?? null,
-      arxivId: candidate.arxivId ?? null,
-      snippet: candidate.snippet,
-      evidenceStrength: candidate.evidenceStrength,
-      discoveryQuery: input.discoveryQuery ?? null,
-      subQuestionIndex: input.subQuestionIndex ?? null,
-      subQuestionText: input.subQuestionText ?? null,
-      imageUrl: null,
-      createdAt: input.now,
-    }));
+    const rows: NewResearchSource[] = input.candidates.map((candidate, i) => {
+      const meta = candidateCitationMeta(candidate);
+      return {
+        id: crypto.randomUUID(),
+        threadId: input.threadId,
+        ownerUserId: input.ownerUserId,
+        turnId: input.turnId,
+        citationNumber: input.citationNumbers?.[i] ?? null,
+        origin: candidate.origin,
+        provider: candidate.provider ?? null,
+        title: candidate.title,
+        locator: candidate.locator,
+        url: candidate.url ?? null,
+        doi: candidate.doi ?? null,
+        arxivId: candidate.arxivId ?? null,
+        snippet: candidate.snippet,
+        evidenceStrength: candidate.evidenceStrength,
+        discoveryQuery: input.discoveryQuery ?? null,
+        subQuestionIndex: input.subQuestionIndex ?? null,
+        subQuestionText: input.subQuestionText ?? null,
+        imageUrl: null,
+        authorsJson: meta.authors.length > 0 ? JSON.stringify(meta.authors) : null,
+        year: meta.year,
+        venue: meta.venue,
+        createdAt: input.now,
+      };
+    });
     await ResearchSourceRepo.insertMany(db, rows);
   },
 
@@ -215,6 +258,22 @@ function toResearchSourceItem(r: ResearchSource): ResearchSourceItem {
     subQuestionIndex: r.subQuestionIndex,
     subQuestionText: r.subQuestionText,
     imageUrl: r.imageUrl,
+    authors: parseAuthorsJson(r.authorsJson),
+    year: r.year,
+    venue: r.venue,
     createdAt: r.createdAt,
   };
+}
+
+/** Parse kolom `authors_json` (array string) — blob korup/legacy null → []. */
+function parseAuthorsJson(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((a): a is string => typeof a === "string" && a.length > 0)
+      : [];
+  } catch {
+    return [];
+  }
 }
