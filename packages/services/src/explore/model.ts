@@ -9,7 +9,7 @@ import type { NewExplorePaper } from "@aqsha/db";
 import { extractArxivId, normalizeDoi } from "../papers/identifiers";
 import { collapse } from "../lib/text";
 
-export type ExploreProvider = "OpenAlex" | "arXiv" | "Exa" | "Jina" | "Crossref";
+export type ExploreProvider = "OpenAlex" | "arXiv" | "Crossref";
 export type ExploreMode = "recommendations" | "search";
 
 /** Input write explore_papers (explorePaperFields; `lastSeenAt` di-set saat upsert). */
@@ -35,8 +35,64 @@ export type ExplorePaperInput = {
   score?: number;
 };
 
-/** Paper detail (input + lastSeenAt) — kontrak GET /papers/:key. */
-export type ExplorePaperDetail = ExplorePaperInput & { lastSeenAt: number };
+/** Paper detail (input + lastSeenAt + enrichment OpenAlex opsional) — kontrak GET /papers/detail. */
+export type ExplorePaperDetail = ExplorePaperInput & {
+  lastSeenAt: number;
+  enriched?: PaperEnrichment;
+};
+
+/** Satu paper terkait (referensi / dikutip-oleh) — judul + identitas untuk tautan eksternal. */
+export type PaperEnrichmentRef = {
+  openalexId: string;
+  title: string;
+  year?: number;
+  doi?: string;
+  citedByCount?: number;
+};
+
+/** Penulis dengan afiliasi (dari authorships OpenAlex). */
+export type PaperEnrichmentAuthor = {
+  name: string;
+  institution?: string;
+  country?: string;
+};
+
+/** Skor sitasi per tahun (counts_by_year) untuk sparkline tren. */
+export type PaperYearCount = { year: number; citedByCount: number };
+
+/** Konsep/topik atau SDG berbobot. */
+export type PaperWeighted = { name: string; score?: number };
+
+/**
+ * Enrichment paper dari OpenAlex single-work (`GET /works/{id}`). Best-effort & Redis-cached;
+ * `enriched` di-omit kalau tak ada `openalexId` atau fetch gagal. Field tambahan yang TIDAK ada
+ * di cache `explore_papers`: tren sitasi, afiliasi, referensi/dikutip-oleh ber-judul, SDG, funding.
+ */
+export type PaperEnrichment = {
+  oaStatus?: string;
+  oaUrl?: string;
+  license?: string;
+  journal?: string;
+  issn?: string[];
+  type?: string;
+  language?: string;
+  fwci?: number;
+  citationPercentile?: number;
+  countsByYear: PaperYearCount[];
+  authors: PaperEnrichmentAuthor[];
+  institutions: string[];
+  countries: string[];
+  concepts: PaperWeighted[];
+  sdgs: PaperWeighted[];
+  funders: string[];
+  referencedCount: number;
+  references: PaperEnrichmentRef[];
+  citedByCount?: number;
+  citedBy: PaperEnrichmentRef[];
+  relatedCount: number;
+  /** Paper terkait (OpenAlex `related_works`, judul ter-resolve) — precomputed shared-topic. */
+  related: PaperEnrichmentRef[];
+};
 
 export type ExploreProviderStatus = {
   provider: ExploreProvider;
@@ -51,9 +107,11 @@ export type ExploreSearchResponse = {
   providerStatus: ExploreProviderStatus[];
   generatedAt: number;
   cached: boolean;
+  /** Halaman berikutnya untuk load-more search (OpenAlex `page`); null = habis. */
+  nextPage: number | null;
 };
 
-const PROVIDER_RANK: ExploreProvider[] = ["OpenAlex", "arXiv", "Exa", "Jina", "Crossref"];
+const PROVIDER_RANK: ExploreProvider[] = ["OpenAlex", "arXiv", "Crossref"];
 export function providerRank(provider: ExploreProvider): number {
   return PROVIDER_RANK.indexOf(provider);
 }
@@ -113,13 +171,15 @@ export function exploreCacheKey(args: {
   query: string;
   limit: number;
   fromYear?: number;
+  page?: number;
   seed?: string;
   now: number;
 }): string {
   const dateBucket = new Date(args.now).toISOString().slice(0, 10);
   const yearBucket = args.fromYear ?? "all";
+  const pageBucket = args.page && args.page > 1 ? args.page : 1;
   const q = collapse(args.query).toLowerCase();
-  const base = `explore:v2:${args.mode}:${q}:${args.limit}:${yearBucket}:${dateBucket}`;
+  const base = `explore:v2:${args.mode}:${q}:${args.limit}:${yearBucket}:p${pageBucket}:${dateBucket}`;
   const seed = args.seed?.trim().toLowerCase();
   return seed ? `${base}:seed:${seed}` : base;
 }

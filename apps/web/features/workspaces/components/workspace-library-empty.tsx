@@ -2,151 +2,117 @@
 
 import { FileTextIcon, FolderIcon, UploadIcon } from "@aqsha/ui/icons";
 import { Button } from "@/components/ui/button";
-import { LibraryArtifactCard } from "@/components/library-artifact-card";
-import { libraryArtifactGridClass } from "@/lib/library-grid";
 
-// Decorative sample cards rendered (blurred) behind the empty-state CTA so a
-// fresh library hints at what saved research will look like. Titles resemble
-// real papers; purely cosmetic — the layer is `inert` (no pointer/focus/a11y).
-const SAMPLE_CARDS: Array<{
-  title: string;
-  artifactType?: string;
-  source: "manual" | "upload" | "agent" | "url";
-  year: number;
-}> = [
-  {
-    title: "Deep Residual Learning for Image Recognition",
-    artifactType: "pdf",
-    source: "upload",
-    year: 2024,
-  },
-  {
-    title: "A Survey of Large Language Models for Scientific Discovery",
-    artifactType: "pdf",
-    source: "upload",
-    year: 2025,
-  },
-  {
-    title: "Climate Tipping Points: Early-Warning Signals in Coupled Earth Systems",
-    artifactType: "url",
-    source: "url",
-    year: 2023,
-  },
-  {
-    title: "Reinforcement Learning from Human Feedback at Scale",
-    source: "agent",
-    year: 2025,
-  },
-  {
-    title: "CRISPR-Cas9 Off-Target Effects: A Genome-Wide Meta-Analysis",
-    artifactType: "pdf",
-    source: "upload",
-    year: 2022,
-  },
-  {
-    title: "Transformer Architectures for Long-Horizon Time-Series Forecasting",
-    source: "agent",
-    year: 2024,
-  },
-];
-
-const noop = () => {};
-
+// Centered empty-state for the workspace library board: a category pill (icon +
+// context label) on top, a short message, a hairline connector, then the create
+// actions stacked below. Vertically + horizontally centered inside the board body.
 export function WorkspaceLibraryEmpty({
   variant,
+  badgeLabel,
+  badgeEmoji,
   title,
   description,
-  icon: Icon = FileTextIcon,
   showActions = true,
-  // Defaults to following showActions: the genuinely-empty CTA teases samples,
-  // while filtered-empty stays a plain box (samples there would mislead — the
-  // items merely got filtered out). Section empties pass it explicitly.
-  showSamples = showActions,
   onCreateFolder,
   onCreateDocument,
   onCreateUrl,
 }: {
   variant: "root" | "folder";
+  badgeLabel?: string;
+  badgeEmoji?: string;
   title?: string;
   description?: string;
-  icon?: typeof FileTextIcon;
   showActions?: boolean;
-  showSamples?: boolean;
   onCreateFolder?: () => void;
   onCreateDocument?: () => void;
   onCreateUrl?: () => void;
 }) {
   const isRoot = variant === "root";
-  const resolvedTitle = title ?? (isRoot ? "Kumpulkan paper-mu di sini" : "Folder ini masih kosong");
+  const resolvedBadge = badgeLabel ?? (isRoot ? "Pustaka" : "Folder");
+  const resolvedTitle =
+    title ??
+    (isRoot ? "Kumpulkan paper-mu di sini" : "Folder ini masih kosong");
   const resolvedDescription =
     description ??
     (isRoot
       ? "Simpan dokumen, file, atau URL untuk mulai membangun perpustakaan risetmu."
       : "Tambahkan dokumen atau URL ke folder ini.");
 
+  const showDocument = showActions && Boolean(onCreateDocument);
+  const showUpload = showActions && Boolean(onCreateUrl);
+  const showFolder = showActions && isRoot && Boolean(onCreateFolder);
+  const hasActions = showDocument || showUpload || showFolder;
+
   return (
-    <div className="relative isolate min-h-[clamp(20rem,42svh,30rem)] overflow-hidden rounded-2xl border border-dashed border-border bg-muted/20">
-      {showSamples ? (
+    <div className="flex min-h-full flex-col items-center justify-center px-6 py-12 text-center">
+      {/* Category pill — echoes the active context. When the workspace has an
+          emoji it renders bare (no tinted chip); otherwise a lavender-tinted
+          icon chip stands in for the reference's colour dot. */}
+      <div className="inline-flex items-center gap-2.5 rounded-full border border-border/70 bg-background/70 py-2 pl-3.5 pr-5 shadow-[0_1px_2px_rgb(0_0_0/0.04)] backdrop-blur-sm">
+        {badgeEmoji ? (
+          <span className="text-xl leading-none">{badgeEmoji}</span>
+        ) : (
+          <span className="grid size-7 place-items-center rounded-full bg-lavender-soft text-lavender-foreground ring-1 ring-inset ring-lavender-soft-border">
+            <FileTextIcon className="size-4" />
+          </span>
+        )}
+        <span className="font-heading text-base font-semibold text-foreground">
+          {resolvedBadge}
+        </span>
+      </div>
+
+      <div className="mt-5 grid max-w-[17rem] gap-1.5">
+        <p className="text-[15px] font-semibold text-foreground">
+          {resolvedTitle}
+        </p>
+        <p className="text-[13px] font-medium leading-relaxed text-muted-foreground">
+          {resolvedDescription}
+        </p>
+      </div>
+
+      {hasActions ? (
         <>
+          {/* Hairline connector linking the message to the actions below. */}
           <div
-            inert={true}
             aria-hidden
-            className="pointer-events-none absolute inset-x-0 -top-2 select-none p-6"
-          >
-            <div className={libraryArtifactGridClass}>
-              {SAMPLE_CARDS.map((card) => (
-                <LibraryArtifactCard
-                  key={card.title}
-                  title={card.title}
-                  artifactType={card.artifactType}
-                  source={card.source}
-                  // Mid-year so the displayed year is timezone-stable.
-                  createdAt={Date.UTC(card.year, 5, 15)}
-                  isSelected={false}
-                  onClick={noop}
-                />
-              ))}
-            </div>
+            className="my-6 h-14 w-px bg-gradient-to-b from-transparent via-border to-transparent"
+          />
+          <div className="flex flex-col items-center gap-2">
+            {showDocument ? (
+              <Button
+                type="button"
+                className="rounded-full px-4"
+                onClick={onCreateDocument}
+              >
+                <FileTextIcon className="size-4" />
+                Dokumen
+              </Button>
+            ) : null}
+            {showUpload ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className="rounded-full px-4"
+                onClick={onCreateUrl}
+              >
+                <UploadIcon className="size-4" />
+                Upload
+              </Button>
+            ) : null}
+            {showFolder ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className="rounded-full px-4"
+                onClick={onCreateFolder}
+              >
+                <FolderIcon className="size-4" />
+                Folder
+              </Button>
+            ) : null}
           </div>
-          {/* Frosted glass: blur the sample cards + a top→bottom vignette so
-              the CTA stays legible and the cards dissolve toward the edges. */}
-          <div className="absolute inset-0 bg-gradient-to-b from-background/50 via-background/65 to-background/85 backdrop-blur-md" />
         </>
       ) : null}
-
-      <div className="relative grid min-h-[inherit] place-items-center p-12 text-center">
-        <div className="grid max-w-sm justify-items-center gap-4">
-          <span className="grid size-14 place-items-center rounded-2xl border border-border/70 bg-background/80 text-muted-foreground shadow-sm backdrop-blur-sm">
-            <Icon className="size-7" />
-          </span>
-          <h2 className="font-heading text-xl font-semibold">{resolvedTitle}</h2>
-          <p className="max-w-xs text-[13px] font-medium leading-relaxed text-muted-foreground">
-            {resolvedDescription}
-          </p>
-          {showActions ? (
-            <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-              {isRoot && onCreateFolder ? (
-                <Button type="button" variant="outline" size="sm" onClick={onCreateFolder}>
-                  <FolderIcon className="size-4" />
-                  Folder
-                </Button>
-              ) : null}
-              {onCreateDocument ? (
-                <Button type="button" size="sm" onClick={onCreateDocument}>
-                  <FileTextIcon className="size-4" />
-                  Dokumen
-                </Button>
-              ) : null}
-              {onCreateUrl ? (
-                <Button type="button" variant="outline" size="sm" onClick={onCreateUrl}>
-                  <UploadIcon className="size-4" />
-                  Upload
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      </div>
     </div>
   );
 }

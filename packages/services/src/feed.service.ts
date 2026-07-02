@@ -1,13 +1,12 @@
 /**
  * FeedService — read path discovery (P4). Port V1 `feed.getFeed`/`getFeedPaginated`/
- * `getFeedItem`/`searchDiscovery`. Framework-agnostic: re-rank For You/Top/Topics in-memory,
+ * `getFeedItem`. Framework-agnostic: re-rank For You/Top/Topics in-memory,
  * filter hidden/kind/topic post-fetch (page boleh menyusut, nextCursor tetap benar). Ownership
  * di-enforce caller (read feed = milik semua user; owner-scoped hanya hidden/saved/interest).
  */
 import {
   type Db,
   decodeBalancedCursor,
-  decodeSearchCursor,
   FeedInteractionRepo,
   type FeedItem,
   FeedRepo,
@@ -150,54 +149,6 @@ export const FeedService = {
     // deClump tanpa truncate (page sudah ≤ limit dari lane berimbang) → paper & news selang-seling.
     const ordered = deClump(scored, scored.length);
 
-    return { items: ordered.map((s) => s.shaped), nextCursor: page.nextCursor };
-  },
-
-  /**
-   * Global full-text search atas feed cache (tsvector/GIN). Filter kind/fromYear di repo (SQL),
-   * hidden post-fetch (owner-scoped), annotate relevanceScore/reason. Port V1 searchDiscovery.
-   * `q` kosong → page kosong. Frontend bisa augment live paper (Fase 8).
-   */
-  async searchDiscovery(
-    db: Db,
-    ownerUserId: string,
-    args: {
-      q: string;
-      cursor?: string;
-      limit?: number;
-      kinds?: FeedKind[];
-      fromYear?: number;
-    },
-  ): Promise<{ items: FeedItemResponse[]; nextCursor: string | null }> {
-    const text = args.q.trim().slice(0, 256);
-    if (!text) return { items: [], nextCursor: null };
-    const limit = Math.min(Math.max(args.limit ?? FEED_PAGE_LIMIT, 1), 40);
-
-    const page = await FeedRepo.searchByTsvector(db, {
-      q: text,
-      kinds: args.kinds && args.kinds.length > 0 ? args.kinds : null,
-      fromYear: args.fromYear ?? null,
-      limit,
-      cursor: decodeSearchCursor(args.cursor),
-    });
-
-    const interests = await InterestService.loadWeights(db, ownerUserId);
-    const hidden = new Set(await FeedInteractionRepo.hiddenItemIds(db, ownerUserId, HIDDEN_CAP));
-
-    const scored = page.items
-      .filter((item) => !hidden.has(item.id))
-      .map((item) => {
-        const interest = interestMatch(item.topics, interests);
-        return {
-          item,
-          shaped: shapeFeedItem(item, {
-            relevanceScore: Math.round(Math.min(1, interest.normalized) * 100),
-            reason: reasonFor(item, interest, false),
-          }),
-        };
-      });
-    // deClump (tanpa truncate): jaga urutan relevansi ts_rank tapi paper & news tak menggumpal.
-    const ordered = deClump(scored, scored.length);
     return { items: ordered.map((s) => s.shaped), nextCursor: page.nextCursor };
   },
 

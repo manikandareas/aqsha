@@ -31,8 +31,6 @@ export const queryKeys = {
     all: ["feed"] as const,
     list: (params: { mode: string; topic: string | null }) =>
       ["feed", "list", params] as const,
-    search: (params: { q: string; fromYear: number | null }) =>
-      ["feed", "search", params] as const,
     item: (id: string) => ["feed", "item", id] as const,
   },
   papers: {
@@ -49,6 +47,7 @@ export const queryKeys = {
   threads: {
     all: ["threads"] as const,
     list: () => ["threads", "list"] as const,
+    pinned: () => ["threads", "pinned"] as const,
     detail: (id: string) => ["threads", "detail", id] as const,
     messages: (id: string) => ["threads", "messages", id] as const,
     events: (id: string) => ["threads", "events", id] as const,
@@ -65,5 +64,9 @@ export const queryKeys = {
   },
   onboarding: {
     status: () => ["onboarding", "status"] as const,
+  },
+  preferences: {
+    all: ["preferences"] as const,
+    detail: () => ["preferences", "detail"] as const,
   },
 };

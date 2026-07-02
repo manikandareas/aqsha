@@ -17,6 +17,19 @@ export const OnboardingRepo = {
     return rows[0] ?? null;
   },
 
+  /** Update interests saja (Settings → Personalisasi) — baris onboarding harus sudah ada. */
+  async setInterests(
+    db: DbOrTx,
+    ownerUserId: string,
+    interests: string[],
+    updatedAt: number,
+  ): Promise<void> {
+    await db
+      .update(userOnboarding)
+      .set({ interests, updatedAt })
+      .where(eq(userOnboarding.ownerUserId, ownerUserId));
+  },
+
   /** Upsert keyed by PK (owner_user_id) — overwrite jawaban + completedAt. */
   async upsert(db: DbOrTx, row: NewUserOnboarding): Promise<void> {
     await db

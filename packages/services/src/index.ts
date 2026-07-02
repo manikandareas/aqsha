@@ -1,9 +1,8 @@
 // @aqsha/services — service layer framework-agnostic (route/MCP/worker callable).
 
-// Chat Astra (Fase 6) — path BACA + CRUD untuk route api (juga via subpath
-// `@aqsha/services/chat`). Logika murni di `@aqsha/chat-core`; path tulis proyeksi di
-// PROSES eve (`apps/web/agent/lib/store.ts`).
-export { EventService, MessageService, ThreadService, TitleService } from "./chat";
+// Chat Astra — CRUD thread untuk route api + proyeksi tipis `chat_threads` (agent Mastra) +
+// auto-title (juga via subpath `@aqsha/services/chat`). Isi pesan = Mastra Memory.
+export { ThreadService, TitleService } from "./chat";
 
 export { InterestService } from "./interest.service";
 export { DEFAULT_WORKSPACE_NAME, WorkspaceService } from "./workspace.service";
@@ -19,6 +18,15 @@ export {
   type CompleteOnboardingInput,
   OnboardingService,
 } from "./onboarding.service";
+export {
+  type AgentPreferences,
+  type AgentPreferencesPatch,
+  AgentPreferencesService,
+  ANSWER_LANGUAGE_IDS,
+  CITATION_STYLE_IDS,
+  CUSTOM_INSTRUCTION_MAX_CHARS,
+  RESPONSE_STYLE_IDS,
+} from "./agentPreferences.service";
 
 // Plan catalog + pricing SSOT (Fase 5).
 export {
@@ -77,7 +85,12 @@ export * from "./artifacts/model";
 export { assertLibraryCapacity } from "./artifacts/capacity";
 export { type ExtractedDocument, extractStoredDocument } from "./artifacts/extract";
 export { StorageService } from "./storage.service";
-export { ragEntryIdFor, RagService, type ThreadDocumentMatch } from "./rag.service";
+export {
+  assertEmbeddingEnabled,
+  ragEntryIdFor,
+  RagService,
+  type ThreadDocumentMatch,
+} from "./rag.service";
 export {
   type EvidenceStrength,
   type ResearchCandidate,
@@ -90,25 +103,35 @@ export {
   type ArtifactListItem,
   type ArtifactRenderPayload,
 } from "./artifact.service";
+// Helper murni route AI native BlockNote (`apps/api` /blocknote-ai/chat) — TANPA import `ai`.
+export { DocAiService, INDO_BRAND_PROMPT } from "./doc-ai.service";
+// Konfigurasi gateway Astra (env + default model) — SSOT bersama route doc-AI & `model.ts` agent.
+export {
+  ASTRA_LITE_MODEL_FALLBACK,
+  type AstraGatewayConfig,
+  resolveAstraGateway,
+} from "./astra-gateway";
 export { syncArtifactWorkspaceMove } from "./artifacts/move";
 export { PaperMetadataService, type PaperMetadataInput } from "./paper-metadata.service";
 export {
+  BlockedUrlError,
   classifyPaperText,
   classifyUrl,
   type ClassifiedUrl,
   downloadOaPdf,
+  followRedirectsSafely,
   isAcademicIdentifier,
+  isBlockedHost,
   pdfFileName,
-  readWithJinaReader,
   resolvePaper,
   type ResolvedPaper,
+  scrapeUrlFirecrawl,
+  type UrlReadResult,
 } from "./papers";
 export {
   ARTIFACT_QUEUES,
   type ArtifactQueueName,
   enqueue,
-  EXPLORE_QUEUES,
-  type ExploreQueueName,
   getQueueConnection,
 } from "./clients/queue";
 
@@ -153,26 +176,7 @@ export {
 } from "./feed-hydration.service";
 export { PaperCacheService, type PapersByKeysItem } from "./paper-cache.service";
 export { ExploreService } from "./explore.service";
-export { deriveSubtopics, suggestQueries } from "./explore/suggest";
-export {
-  type ExploreFacets,
-  type FacetGlobe,
-  type FacetGlobeArc,
-  type FacetGlobeNode,
-  type FacetPulse,
-  FacetsService,
-} from "./explore/facets.service";
-export {
-  type AnalysisPaper,
-  type ExploreAnalysisJob,
-  type ExploreAnalysisResult,
-  type ExploreAnalysisStatus,
-  ExploreAnalysisService,
-  type GapResult,
-  parseAnalysis,
-  type TensionClaim,
-  type TensionData,
-} from "./explore/analysis.service";
+export { suggestQueries } from "./explore/suggest";
 export {
   type DiscoveryItemRef,
   type DiscoveryResolvedRef,

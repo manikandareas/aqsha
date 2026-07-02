@@ -35,17 +35,6 @@ export function decodeKeysetCursor(value: string | null | undefined): KeysetCurs
 }
 
 /**
- * Cursor relevance keyset untuk searchDiscovery: `(rank, orderAt, id)` — primary sort `ts_rank`
- * desc (port relevance-order V1), tiebreaker kronologis. `r` deterministik per (query,row),
- * jadi keyset stabil sepanjang query yang sama.
- */
-export type SearchKeysetCursor = { r: number; u: number; i: string };
-
-export function encodeSearchCursor(cursor: SearchKeysetCursor): string {
-  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64");
-}
-
-/**
  * Cursor untuk feed BERIMBANG paper↔news (FeedRepo.paginateBalanced). Dua lane keyset
  * independen (paper vs non-paper) digabung jadi satu token. Per-lane: `KeysetCursor`
  * (lanjut), `"end"` (lane habis — JANGAN re-query), atau `null` (mulai dari atas).
@@ -81,26 +70,6 @@ export function decodeBalancedCursor(value: string | null | undefined): Balanced
     };
     if (!parsed || typeof parsed !== "object") return null;
     return { p: normalizeLane(parsed.p), n: normalizeLane(parsed.n) };
-  } catch {
-    return null;
-  }
-}
-
-export function decodeSearchCursor(value: string | null | undefined): SearchKeysetCursor | null {
-  if (!value) return null;
-  try {
-    const parsed = JSON.parse(Buffer.from(value, "base64").toString("utf8")) as unknown;
-    if (
-      parsed &&
-      typeof parsed === "object" &&
-      typeof (parsed as SearchKeysetCursor).r === "number" &&
-      typeof (parsed as SearchKeysetCursor).u === "number" &&
-      typeof (parsed as SearchKeysetCursor).i === "string"
-    ) {
-      const c = parsed as SearchKeysetCursor;
-      return { r: c.r, u: c.u, i: c.i };
-    }
-    return null;
   } catch {
     return null;
   }

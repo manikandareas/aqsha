@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { buildWorkspaceMentionLabel, type ContextRef } from "@aqsha/chat-core";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DetailSplitLayout } from "@/components/layout/detail-split-layout";
 import { ResponsiveSidePanel } from "@/components/layout/responsive-side-panel";
@@ -39,6 +40,16 @@ function WorkspaceDetailMain({
   const [chatPanelOpen, setChatPanelOpen] = useState(false);
   const [panelThreadId, setPanelThreadId] = useState<string | null>(null);
 
+  // Auto-mention: workspace yang sedang dibuka → token `@Workspace` di composer panel chat.
+  const workspaceName = data.workspace?.name;
+  const ambientContextRefs = useMemo<ContextRef[]>(
+    () =>
+      workspaceName
+        ? [{ kind: "workspace", workspaceId, label: buildWorkspaceMentionLabel(workspaceName) }]
+        : [],
+    [workspaceId, workspaceName],
+  );
+
   const handlePanelThreadChange = (threadId: string | null) => {
     setPanelThreadId(threadId);
     if (threadId !== null) {
@@ -60,6 +71,7 @@ function WorkspaceDetailMain({
         <ComposerMentionsProvider
           threadId={panelThreadId ?? undefined}
           ambientWorkspaceId={workspaceId}
+          ambientContextRefs={ambientContextRefs}
         >
           <DetailSplitLayout
             sideOpen={chatPanelOpen}
@@ -136,6 +148,7 @@ function WorkspaceLibraryMain({
       getArtifactSelected={contextSelection.getArtifactSelected}
       onToggleArtifactContext={contextSelection.onToggleArtifactContext}
       onSetArtifactContextSelection={contextSelection.onSetArtifactContextSelection}
+      contextCount={contextSelection.contextCount}
       onAfterArchive={onAfterArchive}
       chatPanelOpen={chatPanelOpen}
       onToggleChatPanel={onToggleChatPanel}

@@ -6,6 +6,7 @@ coverage
 .worktrees/
 *.log
 .claude/
+.cursor/
 apps/api/.env
 apps/api/.env.local
 apps/app/.env.local
@@ -13,3 +14,6 @@ packages/convex/.env.local
 packages/convex/.convex/
 apps/agents/.env
 apps/agents/.env.local
+
+# TestSprite transient run scratch (config w/ keys, mcp.log, generated summaries)
+testsprite_tests/tmp/

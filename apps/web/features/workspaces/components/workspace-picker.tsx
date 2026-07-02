@@ -3,6 +3,7 @@
 import { Loader2Icon } from "@aqsha/ui/icons";
 import { cn } from "@/lib/utils";
 import { useWorkspacesList } from "../api";
+import { workspaceEmoji } from "../utils/workspace-emoji";
 
 /**
  * Picker workspace aktif reusable (mis. target pindah folder). Mengecualikan
@@ -47,7 +48,7 @@ export function WorkspacePicker({
             "flex items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-accent disabled:opacity-50",
           )}
         >
-          <span className="text-lg">{w.emoji ?? "📁"}</span>
+          <span className="text-lg">{workspaceEmoji(w.emoji)}</span>
           <span className="truncate">{w.name}</span>
         </button>
       ))}

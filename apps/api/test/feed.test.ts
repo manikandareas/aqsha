@@ -38,7 +38,9 @@ function readJson(res: Response): Promise<any> {
 const ITEM_A = DEDUPE("a");
 const ITEM_B = DEDUPE("b");
 const ITEM_C = DEDUPE("c");
-const PAPER_KEY = `feedtest_${suffix}:paper`;
+// Slash + colon di key (mirip `doi:10.x/y`) → regression guard transport: key WAJIB lewat
+// query param, bukan path segment (lihat papers route).
+const PAPER_KEY = `doi:10.${suffix}/feedtest`;
 let idA = "";
 let idB = "";
 let idC = "";
@@ -168,23 +170,10 @@ describe("api feed routes", () => {
     expect(ids).not.toContain(idA); // hidden
   });
 
-  itest("GET /feed/search (tsvector) → match judul; q kosong → kosong", async () => {
-    const r = await req("GET", "/feed/search?q=gamma&limit=40", tok(OWNER));
-    expect(r.status).toBe(200);
-    const ids = (await readJson(r)).items.map((i: { _id: string }) => i._id);
-    expect(ids).toContain(idC); // judul "Gamma" → match
-
-    const empty = await req("GET", "/feed/search?q=%20%20", tok(OWNER));
-    expect(empty.status).toBe(200);
-    const emptyBody = await readJson(empty);
-    expect(emptyBody.items).toEqual([]);
-    expect(emptyBody.nextCursor).toBeNull();
-  });
-
-  itest("GET /papers/:key cache-only (fetchOnMiss=false) → paper ter-cache", async () => {
+  itest("GET /papers/detail cache-only (fetchOnMiss=false) → paper ter-cache", async () => {
     const r = await req(
       "GET",
-      `/papers/${encodeURIComponent(PAPER_KEY)}?fetchOnMiss=false`,
+      `/papers/detail?key=${encodeURIComponent(PAPER_KEY)}&fetchOnMiss=false`,
       tok(OWNER),
     );
     expect(r.status).toBe(200);

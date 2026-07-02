@@ -1,9 +1,11 @@
 import { normalizeUploadMimeType } from "./model";
+import { isOcrEnabled, ocrExtractText } from "./ocr";
 
 /**
  * Ekstraksi teks dokumen (port `convex/artifacts/uploads.ts` `extractStoredDocument`):
- * PDF → unpdf, DOCX → mammoth, text-like → utf8 (+ stripHtml untuk HTML). TANPA GROBID.
- * Dipakai inline di `finalizeUpload` (route + worker url-ingestion OA-PDF).
+ * PDF → unpdf (fallback Mistral OCR utk PDF hasil scan, D3), DOCX → mammoth, gambar → Mistral OCR
+ * (D8), text-like → utf8 (+ stripHtml untuk HTML). Dipakai inline di `finalizeUpload` (route +
+ * worker url-ingestion OA-PDF + worker artifact-indexing).
  */
 export type ExtractedDocument = { markdown: string; plainText: string };
 
@@ -36,7 +38,19 @@ async function extractPdf(bytes: Uint8Array): Promise<ExtractedDocument> {
   const pdf = await getDocumentProxy(new Uint8Array(bytes));
   const { text } = await extractText(pdf, { mergePages: true });
   const normalized = normalizeExtractedText(Array.isArray(text) ? text.join("\n") : text);
+  if (normalized) return { markdown: normalized, plainText: normalized };
+  // PDF hasil scan (tanpa text-layer): unpdf kosong → fallback Mistral OCR (D3) bila aktif.
+  if (isOcrEnabled()) {
+    const ocr = normalizeExtractedText(await ocrExtractText(bytes, "application/pdf", "pdf"));
+    return { markdown: ocr, plainText: ocr };
+  }
   return { markdown: normalized, plainText: normalized };
+}
+
+/** Gambar (D8): OCR via Mistral. Tak ada text-layer; satu-satunya jalur teks = OCR. */
+async function extractImage(bytes: Uint8Array, mimeType: string): Promise<ExtractedDocument> {
+  const ocr = normalizeExtractedText(await ocrExtractText(bytes, mimeType || "image/png", "image"));
+  return { markdown: ocr, plainText: ocr };
 }
 
 async function extractDocx(bytes: Uint8Array): Promise<ExtractedDocument> {
@@ -59,6 +73,13 @@ export async function extractStoredDocument(
   }
   if (mime === DOCX_MIME || lowerName.endsWith(".docx")) {
     return extractDocx(bytes);
+  }
+  // Gambar raster (D8) → OCR. SVG (image/svg+xml) bukan raster → biar jatuh ke jalur teks utf8.
+  const isImage =
+    (mime.startsWith("image/") && mime !== "image/svg+xml") ||
+    /\.(png|jpe?g|webp)$/.test(lowerName);
+  if (isImage) {
+    return extractImage(bytes, mime);
   }
 
   const raw = normalizeExtractedText(Buffer.from(bytes).toString("utf8"));

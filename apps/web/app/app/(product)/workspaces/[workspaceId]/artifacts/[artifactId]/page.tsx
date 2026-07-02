@@ -1,4 +1,4 @@
-import { ArtifactDetailView } from "@/features/workspaces/components/artifact-detail-view";
+import { ArtifactReaderPageShell } from "@/features/workspaces/components/artifact-reader-page-shell";
 
 export default async function ArtifactReaderPage({
   params,
@@ -6,11 +6,5 @@ export default async function ArtifactReaderPage({
   params: Promise<{ workspaceId: string; artifactId: string }>;
 }) {
   const { workspaceId, artifactId } = await params;
-  return (
-    <ArtifactDetailView
-      artifactId={artifactId}
-      workspaceId={workspaceId}
-      variant="page"
-    />
-  );
+  return <ArtifactReaderPageShell workspaceId={workspaceId} artifactId={artifactId} />;
 }

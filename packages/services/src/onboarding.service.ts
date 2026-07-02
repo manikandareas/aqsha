@@ -25,6 +25,49 @@ export const OnboardingService = {
     return { completed: Boolean(row?.completedAt) };
   },
 
+  /** Jawaban wizard yang bisa ditinjau/diubah dari Settings → Personalisasi (IMP-2). */
+  async getProfile(
+    db: DbOrTx,
+    ownerUserId: string,
+  ): Promise<{ background: string | null; interests: string[] }> {
+    const row = await OnboardingRepo.findByOwner(db, ownerUserId);
+    return { background: row?.background ?? null, interests: row?.interests ?? [] };
+  },
+
+  /**
+   * Patch interests dari Settings (IMP-2) — validasi sama dengan `complete` (dedup-filter, min
+   * MIN_INTERESTS), wajib onboarding sudah selesai (page settings hidup di balik gate /app).
+   * Seed feed interests raise-only ikut di-refresh supaya personalisasi feed mengikuti.
+   */
+  async updateInterests(db: Db, ownerUserId: string, rawInterests: string[]): Promise<{ ok: true }> {
+    const interests = [...new Set(rawInterests)].filter(isInterestFieldId);
+    if (interests.length < MIN_INTERESTS) {
+      throwAppError({
+        code: "interests_too_few",
+        message: `Pilih minimal ${MIN_INTERESTS} bidang yang kamu minati.`,
+        field: "interests",
+      });
+    }
+    const row = await OnboardingRepo.findByOwner(db, ownerUserId);
+    if (!row?.completedAt) {
+      throwAppError({
+        code: "onboarding_incomplete",
+        message: "Selesaikan onboarding dulu sebelum mengubah minat riset.",
+        field: "interests",
+      });
+    }
+    await db.transaction(async (tx) => {
+      await OnboardingRepo.setInterests(tx, ownerUserId, interests, Date.now());
+      await InterestService.seedFeedInterests(
+        tx,
+        ownerUserId,
+        topicsForInterestFields(interests),
+        SEED_INTEREST_WEIGHT,
+      );
+    });
+    return { ok: true };
+  },
+
   /**
    * Validasi (dedup-filter-count interests, enum background/source, other wajib
    * bila "lainnya") lalu — dalam satu transaksi — self-heal user, upsert

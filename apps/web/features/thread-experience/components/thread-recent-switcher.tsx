@@ -27,7 +27,9 @@ export function ThreadRecentSwitcher({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <PanelTitleDropdownTrigger>{title}</PanelTitleDropdownTrigger>
+        <PanelTitleDropdownTrigger>
+          <span className="truncate">{title}</span>
+        </PanelTitleDropdownTrigger>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="max-h-64 w-64 overflow-y-auto">
         <DropdownMenuItem onClick={onNewThread}>{newLabel}</DropdownMenuItem>

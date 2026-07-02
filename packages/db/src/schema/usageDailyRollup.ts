@@ -1,7 +1,7 @@
 import { bigint, integer, jsonb, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import { users } from "./users";
 
-/** Per-day feature-count (sinkron `CreditFeature`; sandbox_compute/citation_verify opsional pada row lama). */
+/** Per-day feature-count (sinkron `CreditFeature`; sandbox_compute/citation_verify/doc_ai_edit opsional pada row lama). */
 export type FeatureCounts = {
   normal_chat: number;
   pro_chat: number;
@@ -10,6 +10,7 @@ export type FeatureCounts = {
   external_search: number;
   sandbox_compute?: number;
   citation_verify?: number;
+  doc_ai_edit?: number;
 };
 
 /**
@@ -37,7 +38,7 @@ export const usageDailyRollup = pgTable(
 export type UsageDailyRollupRow = typeof usageDailyRollup.$inferSelect;
 export type NewUsageDailyRollupRow = typeof usageDailyRollup.$inferInsert;
 
-/** Objek feature-count baru ter-zero (semua 7 feature). Baru tiap call → caller boleh mutasi. */
+/** Objek feature-count baru ter-zero (semua feature). Baru tiap call → caller boleh mutasi. */
 export function emptyFeatureCounts(): Required<FeatureCounts> {
   return {
     normal_chat: 0,
@@ -47,6 +48,7 @@ export function emptyFeatureCounts(): Required<FeatureCounts> {
     external_search: 0,
     sandbox_compute: 0,
     citation_verify: 0,
+    doc_ai_edit: 0,
   };
 }
 
@@ -60,5 +62,6 @@ export function normalizeFeatureCounts(counts: FeatureCounts | null | undefined)
     external_search: counts?.external_search ?? 0,
     sandbox_compute: counts?.sandbox_compute ?? 0,
     citation_verify: counts?.citation_verify ?? 0,
+    doc_ai_edit: counts?.doc_ai_edit ?? 0,
   };
 }

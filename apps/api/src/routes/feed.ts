@@ -93,30 +93,6 @@ export const feed = new Elysia({ prefix: "/feed" })
       }),
     },
   )
-  // GET /feed/search — full-text search lintas konten (tsvector/GIN), filter kind/fromYear.
-  .get(
-    "/search",
-    ({ ownerUserId, query }) => {
-      const { db } = getDb();
-      return FeedService.searchDiscovery(db, ownerUserId, {
-        q: query.q,
-        cursor: query.cursor,
-        limit: query.limit,
-        kinds: query.kinds,
-        fromYear: query.fromYear,
-      });
-    },
-    {
-      auth: true,
-      query: t.Object({
-        q: t.String(),
-        cursor: t.Optional(t.String()),
-        limit: t.Optional(t.Numeric()),
-        kinds: t.Optional(t.Array(FEED_KIND)),
-        fromYear: t.Optional(t.Numeric()),
-      }),
-    },
-  )
   // GET /feed/saved-refs — ref tersimpan (probe `refs` JSON, atau set terbaru via limit).
   .get(
     "/saved-refs",

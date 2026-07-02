@@ -2,11 +2,23 @@
 
 import { useRef, useState, type ReactNode } from "react";
 import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  pointerWithin,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+  type Modifier,
+} from "@dnd-kit/core";
+import {
   FileTextIcon,
   FolderIcon,
   LinkIcon,
   UploadIcon,
 } from "@aqsha/ui/icons";
+import { LibraryDragOverlayCard } from "@/components/library-drag-overlay-card";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -29,7 +41,8 @@ import {
   type WorkspaceArtifact,
   type WorkspaceFolder,
 } from "../utils/workspace-library-model";
-import { panelBodyPaddingClass } from "@/lib/panel-surface";
+import { SidePanelFrame } from "@/components/layout/side-panel-frame";
+import { panelBodyColumnClass, panelBodyPaddingClass } from "@/lib/panel-surface";
 import {
   WORKSPACE_UPLOAD_ACCEPT,
   type WorkspaceUploadProgressEvent,
@@ -38,8 +51,32 @@ import {
 import { WorkspaceBoardToolbar } from "./workspace-board-toolbar";
 import { WorkspaceLibraryControls } from "./workspace-library-controls";
 import { WorkspaceLibraryEmpty } from "./workspace-library-empty";
+import { WorkspaceLibraryFootnote } from "./workspace-library-footnote";
 import { WorkspaceLibraryGrid } from "./workspace-library-grid";
 import { useWorkspaceUploadToast } from "./workspace-upload-toast";
+
+// Keep the lifted mini-card centered on the pointer. dnd-kit sizes the drag
+// overlay wrapper to the grabbed card, so without this the compact chip would
+// float far from the cursor (anchored to the card's corner). We recenter the
+// wrapper on the pointer; a flex wrapper then centers the chip within it.
+const snapCenterToCursor: Modifier = ({
+  activatorEvent,
+  draggingNodeRect,
+  transform,
+}) => {
+  if (!draggingNodeRect || !activatorEvent) return transform;
+  const pointer = activatorEvent as { clientX?: number; clientY?: number };
+  if (typeof pointer.clientX !== "number" || typeof pointer.clientY !== "number") {
+    return transform;
+  }
+  const offsetX = pointer.clientX - draggingNodeRect.left;
+  const offsetY = pointer.clientY - draggingNodeRect.top;
+  return {
+    ...transform,
+    x: transform.x + offsetX - draggingNodeRect.width / 2,
+    y: transform.y + offsetY - draggingNodeRect.height / 2,
+  };
+};
 
 export function WorkspaceLibraryBoard({
   workspaceName,
@@ -58,6 +95,7 @@ export function WorkspaceLibraryBoard({
   getArtifactSelected,
   onToggleArtifactContext,
   onSetArtifactContextSelection,
+  contextCount,
   onOpenArtifact,
   onRenameFolder,
   onDeleteFolder,
@@ -81,6 +119,7 @@ export function WorkspaceLibraryBoard({
   renderDialogs,
   showCreateActions,
   showWorkspaceSettings,
+  variant = "page",
 }: {
   workspaceName: string;
   workspaceEmoji?: string;
@@ -98,6 +137,7 @@ export function WorkspaceLibraryBoard({
   getArtifactSelected: (artifactId: string) => boolean;
   onToggleArtifactContext: (artifactId: string) => void;
   onSetArtifactContextSelection: (artifactIds: string[]) => void;
+  contextCount?: number;
   onOpenArtifact: (artifactId: string) => void;
   onRenameFolder: (folder: WorkspaceFolder) => void;
   onDeleteFolder: (folder: WorkspaceFolder) => void;
@@ -137,6 +177,11 @@ export function WorkspaceLibraryBoard({
   ) => ReactNode;
   showCreateActions?: boolean;
   showWorkspaceSettings?: boolean;
+  /**
+   * `"page"` (default) renders the board as a full-bleed column (toolbar inside).
+   * `"panel"` routes through `SidePanelFrame` so the toolbar floats OUTSIDE the card.
+   */
+  variant?: "page" | "panel";
 }) {
   const filteredArtifacts = applyWorkspaceArtifactControls({
     artifacts,
@@ -161,33 +206,82 @@ export function WorkspaceLibraryBoard({
     _id: target.value,
     name: target.label,
   }));
-  const [dragArtifactId, setDragArtifactId] = useState<string | null>(null);
+  // Ids in the active drag. Length > 1 when a multi-selection is dragged; the
+  // first entry is the card actually grabbed (drives the overlay's front face).
+  const [dragArtifactIds, setDragArtifactIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadToast = useWorkspaceUploadToast({ onUploadFiles });
 
-  const isEmpty =
+  const hasFilter =
+    searchQuery.trim().length > 0 || selectedTypes.length > 0;
+  // Unified board: folder + semua artifact (pustaka user + output agent) berbagi
+  // satu grid folder-scoped. Kartu artifact dibedakan lewat badge/aksen, bukan tab.
+  const boardEmpty =
     folderView.folders.length === 0 && folderView.artifacts.length === 0;
-  const isFilteredEmpty =
-    isEmpty &&
-    (searchQuery.trim().length > 0 || selectedTypes.length > 0) &&
-    artifacts.length > 0;
+  const rawArtifactCount = artifacts.filter(
+    (artifact) => artifact.status !== "deleted",
+  ).length;
+  const boardFilteredEmpty = boardEmpty && hasFilter && rawArtifactCount > 0;
+  // Label for the empty-state category pill: workspace name at root, otherwise
+  // the active folder's name. The workspace emoji only fronts the root pill.
+  const isRootFolder = folderView.activeFolderId === "root";
+  const activeFolderName = isRootFolder
+    ? workspaceName
+    : (folderView.breadcrumb.at(-1)?.label ?? "Folder");
+  const activeBadgeEmoji = isRootFolder ? workspaceEmoji : undefined;
+  // Footnote panduan hanya relevan saat ada item untuk di-gesture; di state
+  // kosong ia disembunyikan agar layar kosong tetap bersih.
+  const showFootnote = !boardEmpty;
+
+  const canCreate = showCreateActions ?? true;
   const libraryControls = (
     <WorkspaceLibraryControls
       query={searchQuery}
       selectedTypes={selectedTypes}
       sort={sort}
-      className="w-full sm:w-auto sm:justify-end"
       onQueryChange={onSearchQueryChange}
       onToggleType={onToggleType}
       onSortChange={onSortChange}
     />
   );
 
-  const handleDropOnFolder = async (folderId: string) => {
-    if (!dragArtifactId) return;
-    await onMoveArtifact(dragArtifactId, folderId);
-    setDragArtifactId(null);
+  // dnd-kit: activate a drag only after the pointer travels a few px so plain
+  // clicks (select / open on the card) still pass through untouched.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
+  // Resolve the dragged ids to artifacts (grabbed one first) so the overlay can
+  // fan their filenames into a Finder-style cascade.
+  const dragArtifacts = dragArtifactIds.flatMap((id) => {
+    const artifact = folderView.artifacts.find((item) => item._id === id);
+    return artifact ? [artifact] : [];
+  });
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const grabbedId = String(event.active.id);
+    const selectedIds = folderView.artifacts
+      .filter((artifact) => getArtifactSelected(artifact._id))
+      .map((artifact) => artifact._id);
+    // Grab a card that's part of a multi-selection → drag the whole selection;
+    // grab anything else → drag just it (leaving any selection untouched). The
+    // grabbed id stays first so the overlay shows the card you actually held.
+    const dragIds =
+      selectedIds.length > 1 && selectedIds.includes(grabbedId)
+        ? [grabbedId, ...selectedIds.filter((id) => id !== grabbedId)]
+        : [grabbedId];
+    setDragArtifactIds(dragIds);
   };
+  const handleDragEnd = (event: DragEndEvent) => {
+    // The only droppables are folder tiles, so a non-null `over` is a folder.
+    const folderId = event.over?.id;
+    if (folderId != null) {
+      for (const artifactId of dragArtifactIds) {
+        void onMoveArtifact(artifactId, String(folderId));
+      }
+    }
+    setDragArtifactIds([]);
+  };
+  const handleDragCancel = () => setDragArtifactIds([]);
 
   const uploadToActiveFolder = async (fileList: FileList | File[]) => {
     const files = [...fileList];
@@ -204,9 +298,35 @@ export function WorkspaceLibraryBoard({
 
   const openUploadPicker = () => fileInputRef.current?.click();
 
-  return (
+  const toolbar = (
+    <WorkspaceBoardToolbar
+      workspaceName={workspaceName}
+      workspaceEmoji={workspaceEmoji}
+      titleSlot={titleSlot}
+      breadcrumb={folderView.breadcrumb}
+      onNavigate={navigateTo}
+      onCreateFolder={onCreateFolder}
+      onCreateDocument={onCreateDocument}
+      onCreateUrl={onCreateUrl}
+      onRenameWorkspace={onRenameWorkspace}
+      onUpdateWorkspaceEmoji={onUpdateWorkspaceEmoji}
+      onArchiveWorkspace={onArchiveWorkspace}
+      controls={libraryControls}
+      onToggleChat={onToggleChatPanel}
+      chatOpen={chatPanelOpen}
+      onClosePanel={onClosePanel}
+      showLeftSidebarTrigger={showLeftSidebarTrigger}
+      onToggleLeftSidebar={onToggleLeftSidebar}
+      showCreateActions={canCreate}
+      showWorkspaceSettings={showWorkspaceSettings}
+    />
+  );
+
+  // Scrollable board body (tabs + grid/timeline + footnote). The hidden upload input
+  // rides along here; in panel mode this tucks into the floating card while `toolbar`
+  // hoists out as the flush header — in page mode both sit in the same column.
+  const body = (
     <>
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
         <input
           ref={fileInputRef}
           type="file"
@@ -221,68 +341,33 @@ export function WorkspaceLibraryBoard({
             event.currentTarget.value = "";
           }}
         />
-        <WorkspaceBoardToolbar
-          workspaceName={workspaceName}
-          workspaceEmoji={workspaceEmoji}
-          titleSlot={titleSlot}
-          breadcrumb={folderView.breadcrumb}
-          onNavigate={navigateTo}
-          onCreateFolder={onCreateFolder}
-          onCreateDocument={onCreateDocument}
-          onCreateUrl={onCreateUrl}
-          onRenameWorkspace={onRenameWorkspace}
-          onUpdateWorkspaceEmoji={onUpdateWorkspaceEmoji}
-          onArchiveWorkspace={onArchiveWorkspace}
-          onToggleChat={onToggleChatPanel}
-          chatOpen={chatPanelOpen}
-          onClosePanel={onClosePanel}
-          showLeftSidebarTrigger={showLeftSidebarTrigger}
-          onToggleLeftSidebar={onToggleLeftSidebar}
-          showCreateActions={showCreateActions}
-          showWorkspaceSettings={showWorkspaceSettings}
-        />
         <ContextMenu>
           <ContextMenuTrigger asChild>
             <div
               {...dropzoneProps}
               className={cn(
-                "relative min-h-0 flex-1 overflow-y-auto bg-background",
+                "@container relative min-h-0 flex-1 overflow-y-auto bg-background",
                 panelBodyPaddingClass,
+                "pt-5",
                 isUploadDragOver &&
                   "bg-muted/25 ring-2 ring-inset ring-primary/30",
               )}
             >
-              {isEmpty ? (
-                isFilteredEmpty ? (
-                  <div className="flex flex-col gap-5">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex min-w-0 flex-1 items-center gap-5">
-                        <h2 className="shrink-0 text-[15px] font-semibold leading-none text-foreground">
-                          All items (0)
-                        </h2>
-                        <div className="h-px min-w-0 flex-1 bg-border/70" />
-                      </div>
-                      <div className="flex shrink-0 justify-start sm:justify-end">
-                        {libraryControls}
-                      </div>
-                    </div>
-                    <WorkspaceLibraryEmpty
-                      variant={
-                        folderView.activeFolderId === "root" ? "root" : "folder"
-                      }
-                      title="Tidak ada dokumen yang cocok"
-                      description="Ubah filter tipe dokumen atau reset filter untuk melihat item lain."
-                      showActions={false}
-                      onCreateFolder={onCreateFolder}
-                      onCreateDocument={onCreateDocument}
-                      onCreateUrl={onCreateUrl}
-                    />
-                  </div>
+              {boardEmpty ? (
+                boardFilteredEmpty ? (
+                  <WorkspaceLibraryEmpty
+                    variant={isRootFolder ? "root" : "folder"}
+                    badgeLabel={activeFolderName}
+                    badgeEmoji={activeBadgeEmoji}
+                    title="Tidak ada dokumen yang cocok"
+                    description="Ubah filter tipe dokumen atau kata kunci untuk melihat item lain."
+                    showActions={false}
+                  />
                 ) : (
                   <WorkspaceLibraryEmpty
-                    variant={
-                      folderView.activeFolderId === "root" ? "root" : "folder"
-                    }
+                    variant={isRootFolder ? "root" : "folder"}
+                    badgeLabel={activeFolderName}
+                    badgeEmoji={activeBadgeEmoji}
                     onCreateFolder={onCreateFolder}
                     onCreateDocument={onCreateDocument}
                     onCreateUrl={onCreateUrl}
@@ -295,7 +380,7 @@ export function WorkspaceLibraryBoard({
                   workspaceId={workspaceId}
                   workspaces={workspaceMoveTargets}
                   moveTargets={moveTargets}
-                  dragArtifactId={dragArtifactId}
+                  draggingArtifactIds={dragArtifactIds}
                   getArtifactSelected={getArtifactSelected}
                   onToggleArtifactContext={onToggleArtifactContext}
                   onSetArtifactContextSelection={onSetArtifactContextSelection}
@@ -308,12 +393,6 @@ export function WorkspaceLibraryBoard({
                   onDeleteArtifact={onDeleteArtifact}
                   onMoveArtifact={onMoveArtifact}
                   onMoveArtifactToWorkspace={onMoveArtifactToWorkspace}
-                  onDragArtifactStart={setDragArtifactId}
-                  onDragArtifactEnd={() => setDragArtifactId(null)}
-                  onDropArtifactOnFolder={(folderId) =>
-                    void handleDropOnFolder(folderId)
-                  }
-                  controls={libraryControls}
                 />
               )}
             </div>
@@ -338,14 +417,61 @@ export function WorkspaceLibraryBoard({
             </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>
-      </div>
-      {renderDialogs?.(
-        activeFolderId,
-        folderView.activeFolderId === "root"
-          ? ""
-          : (folderView.breadcrumb.at(-1)?.label ?? ""),
-        uploadToActiveFolder,
-      )}
+        {showFootnote ? (
+          <WorkspaceLibraryFootnote
+            contextCount={contextCount}
+            onClearContext={() => onSetArtifactContextSelection([])}
+          />
+        ) : null}
     </>
+  );
+
+  const dialogs = renderDialogs?.(
+    activeFolderId,
+    folderView.activeFolderId === "root"
+      ? ""
+      : (folderView.breadcrumb.at(-1)?.label ?? ""),
+    uploadToActiveFolder,
+  );
+
+  // Panel floats the toolbar OUTSIDE the card as a flush header (`SidePanelFrame`
+  // already wraps its children in the body column, so `body` goes in raw); page
+  // keeps the toolbar inside a full-bleed column.
+  const boardShell =
+    variant === "panel" ? (
+      <SidePanelFrame header={toolbar}>{body}</SidePanelFrame>
+    ) : (
+      <div className={panelBodyColumnClass}>
+        {toolbar}
+        {body}
+      </div>
+    );
+
+  // One `DndContext` drives both variants: it owns the drag lifecycle and the
+  // `DragOverlay` renders the lifted mini-card that follows the pointer.
+  // `dropAnimation={null}` skips the fly-back tween — on a successful move the
+  // source card leaves the grid, so there is nothing to animate back to. The
+  // `snapCenterToCursor` modifier + flex wrapper keep the compact chip pinned
+  // to the pointer despite the overlay wrapper being sized to the grabbed card.
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={pointerWithin}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
+    >
+      {boardShell}
+      <DragOverlay dropAnimation={null} modifiers={[snapCenterToCursor]}>
+        {dragArtifacts.length > 0 ? (
+          <div className="pointer-events-none flex size-full items-center justify-center">
+            <LibraryDragOverlayCard
+              titles={dragArtifacts.map((artifact) => artifact.title)}
+            />
+          </div>
+        ) : null}
+      </DragOverlay>
+      {dialogs}
+    </DndContext>
   );
 }

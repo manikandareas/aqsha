@@ -11,7 +11,7 @@ export type EvidenceStrength = "strong" | "medium" | "weak";
 /** One source candidate returned by a research provider. */
 export type ResearchCandidate = {
   origin: ResearchOrigin;
-  /** Provider label (`jina_search`, `arxiv`, `crossref`, `openalex`). */
+  /** Provider label (`firecrawl_search`, `arxiv`, `crossref`, `openalex`). */
   provider?: string;
   evidenceStrength: EvidenceStrength;
   title: string;
@@ -24,6 +24,23 @@ export type ResearchCandidate = {
   /** Optional JSON blob with authors/year/venue (parsed by the caller when needed). */
   metadataJson?: string;
 };
+
+/**
+ * Hasil pencarian provider yang DISKRIMINATIF (CTX-2): kegagalan provider tidak lagi menyaru
+ * sebagai "tak ada hasil". `ok:false` = provider error/misconfig (pemanggil bisa skip debit +
+ * melaporkan ke model); `ok:true` + `candidates` kosong = benar-benar tidak ada hasil.
+ */
+export type ProviderSearchResult =
+  | { ok: true; candidates: ResearchCandidate[] }
+  | { ok: false; reason: "provider_error"; message: string };
+
+export function providerOk(candidates: ResearchCandidate[]): ProviderSearchResult {
+  return { ok: true, candidates };
+}
+
+export function providerError(message: string): ProviderSearchResult {
+  return { ok: false, reason: "provider_error", message };
+}
 
 export function researchUserAgent(): string {
   return "AqshaResearch/1.0 (+https://aqsha.app)";

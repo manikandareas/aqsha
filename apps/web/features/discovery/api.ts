@@ -1,6 +1,6 @@
 "use client";
 
-import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { useApi } from "@/lib/api-client";
 import { queryKeys, unwrap } from "@/lib/api-query";
 import type {
@@ -28,6 +28,9 @@ export function useFeedInfinite(mode: FeedMode, topic: FeedTopic | null, enabled
   return useInfiniteQuery({
     queryKey: queryKeys.feed.list({ mode, topic }),
     enabled,
+    // Ganti topik tetap menampilkan feed lama (di-fade) selagi yang baru dimuat —
+    // hindari kedip spinner penuh saat berpindah antar-topik di Jelajahi.
+    placeholderData: keepPreviousData,
     initialPageParam: null as string | null,
     queryFn: async ({ pageParam }) =>
       unwrap(
@@ -45,55 +48,42 @@ export function useFeedInfinite(mode: FeedMode, topic: FeedTopic | null, enabled
   });
 }
 
-/** Global search lintas konten (tsvector). Enabled hanya saat `q` non-kosong. */
-export function useSearchDiscovery(q: string, fromYear?: number) {
-  const api = useApi();
-  const trimmed = q.trim();
-  return useInfiniteQuery({
-    queryKey: queryKeys.feed.search({ q: trimmed, fromYear: fromYear ?? null }),
-    enabled: trimmed.length > 0,
-    initialPageParam: null as string | null,
-    queryFn: async ({ pageParam }) =>
-      unwrap(
-        await api.feed.search.get({
-          query: {
-            q: trimmed,
-            limit: 20,
-            kinds: [...VISIBLE_KINDS],
-            ...(fromYear ? { fromYear } : {}),
-            ...(pageParam ? { cursor: pageParam } : {}),
-          },
-        }),
-      ) as FeedPage,
-    getNextPageParam: (last) => last.nextCursor,
-  });
-}
-
 export type SearchPaper = Omit<ExplorePaper, "lastSeenAt">;
-export type PaperSearchResult = {
+export type PaperSearchPage = {
   items: SearchPaper[];
   cached?: boolean;
-  blocked?: { reason: string; resetAt: number };
+  /** Halaman berikutnya (OpenAlex basic-paging) untuk load-more; null = habis. */
+  nextPage: number | null;
 };
 
 /**
- * Live external paper search (Fase 8 augmentation): waterfall OpenAlex→arXiv→Jina→Crossref
- * via /papers/search (mode=search), credit-gated (external_search). Deferred — the page
- * enables it only after the in-app tsvector index is exhausted. `blocked` = quota union.
+ * Live academic paper search — waterfall OpenAlex→arXiv→Crossref via /papers/search
+ * (mode=search), GRATIS + rate-limited server-side. Load-more manual via `page`
+ * (OpenAlex `page`); `nextPage` null = habis. Enabled hanya saat `q` non-kosong.
  */
 export function usePaperSearch(q: string, fromYear: number | undefined, enabled: boolean) {
   const api = useApi();
   const trimmed = q.trim();
-  return useQuery({
-    queryKey: ["papers", "search", trimmed, fromYear ?? null],
+  return useInfiniteQuery({
+    queryKey: queryKeys.papers.search({ query: trimmed, fromYear: fromYear ?? null }),
     enabled: enabled && trimmed.length > 0,
+    // Hasil lama tetap tampil (di-fade) saat kueri berubah → transisi mulus tanpa spinner.
+    placeholderData: keepPreviousData,
     staleTime: 5 * 60_000,
-    queryFn: async () =>
+    initialPageParam: 1 as number,
+    queryFn: async ({ pageParam }) =>
       unwrap(
         await api.papers.search.get({
-          query: { query: trimmed, mode: "search", limit: 12, ...(fromYear ? { fromYear } : {}) },
+          query: {
+            query: trimmed,
+            mode: "search",
+            limit: 12,
+            page: pageParam,
+            ...(fromYear ? { fromYear } : {}),
+          },
         }),
-      ) as PaperSearchResult,
+      ) as PaperSearchPage,
+    getNextPageParam: (last) => last.nextPage,
   });
 }
 
@@ -131,12 +121,17 @@ export function useRecordInteraction() {
   });
 }
 
-/** Reader paper (getOrFetchPaper cold-resolve). `null` = tak teresolve. */
+/**
+ * Reader paper (getPaperDetail: cache/cold-resolve + enrichment OpenAlex). `null` = tak
+ * teresolve. Key dibawa sebagai QUERY PARAM — kunci kanonik mengandung `/` (DOI/url) yang
+ * akan memecah path segment kalau dikirim sebagai path param Eden.
+ */
 export function usePaper(key: string) {
   const api = useApi();
   return useQuery({
     queryKey: queryKeys.papers.detail(key),
-    queryFn: async () => (unwrap(await api.papers({ key }).get({ query: {} })) ?? null) as ExplorePaper | null,
+    queryFn: async () =>
+      (unwrap(await api.papers.detail.get({ query: { key } })) ?? null) as ExplorePaper | null,
   });
 }
 

@@ -1,0 +1,53 @@
+---
+title: "Cara verifikasi sumber sebelum masuk ke skripsi"
+description: "Panduan praktis ngecek kredibilitas dan kecocokan sumber, plus checklist cepat sebelum kamu mengutipnya."
+publishedAt: "2026-06-25"
+updated: "2026-06-26"
+tags: ["riset", "panduan", "sitasi"]
+author: "Tim Aqsha"
+---
+
+Sumber yang salah bisa bikin satu bab runtuh pas sidang. Sebelum sebuah
+referensi masuk ke daftar pustaka, lewatin dulu tiga lapis pengecekan ini.
+
+## 1. Cek keberadaan
+
+Pertanyaan pertama selalu sama: **paper-nya beneran ada?** Cocokkan judul,
+penulis, tahun, dan DOI. Kalau DOI nggak resolve, itu tanda bahaya.
+
+## 2. Cek kecocokan
+
+Sumber ada bukan berarti mendukung klaim kamu. Baca bagian yang relevan,
+bukan cuma abstrak. Tabel di bawah ngebandingin tipe kekeliruan yang sering
+kejadian:
+
+| Gejala                         | Risiko             | Aksi                          |
+| ------------------------------ | ------------------ | ----------------------------- |
+| DOI nggak resolve              | Sumber ngarang     | Buang, cari pengganti         |
+| Abstrak cocok, isi nggak       | ~~Aman~~ menyesatkan | Baca bagian metode/hasil      |
+| Tahun beda dari yang dikutip   | Salah versi        | Samakan ke edisi yang benar   |
+
+## 3. Cek kualitas
+
+Perhatikan venue, peer-review, dan jumlah sitasi sebagai sinyal — bukan
+jaminan. Sumber sekunder boleh buat konteks, tapi klaim inti idealnya nyantol
+ke sumber primer.
+
+## Checklist cepat
+
+Kalau mau diotomatiskan, kira-kira logikanya begini:
+
+```ts
+type Source = {
+  doiResolves: boolean;
+  supportsClaim: boolean;
+  peerReviewed: boolean;
+};
+
+function isCitable(s: Source): boolean {
+  return s.doiResolves && s.supportsClaim && s.peerReviewed;
+}
+```
+
+Di Aqsha, tiga lapis ini dijalanin otomatis tiap Astra ngutip sesuatu — jadi
+kamu bisa fokus ke argumennya, bukan ke kerjaan ngecek manual satu-satu.

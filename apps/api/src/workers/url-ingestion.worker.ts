@@ -5,9 +5,9 @@ import {
   isAcademicIdentifier,
   PaperMetadataService,
   pdfFileName,
-  readWithJinaReader,
   resolvePaper,
   type ResolvedPaper,
+  scrapeUrlFirecrawl,
 } from "@aqsha/services";
 import type { Job } from "bullmq";
 import { getDb } from "../clients/db";
@@ -25,7 +25,7 @@ type IngestTarget = {
 };
 
 /**
- * Worker `url-ingestion` (port V1 `ingest.ts`): classify → generik (Jina crawl) /
+ * Worker `url-ingestion` (port V1 `ingest.ts`): classify → generik (Firecrawl scrape) /
  * akademik (resolve → OA PDF download→convert→extract / else metadata-only). Metadata
  * resolver ditulis via PaperMetadataService (monotonik rank).
  */
@@ -83,7 +83,7 @@ async function crawlGeneric(
   target: IngestTarget,
 ): Promise<void> {
   const { db } = getDb();
-  const read = await readWithJinaReader({ url: target.normalizedUrl });
+  const read = await scrapeUrlFirecrawl({ url: target.normalizedUrl });
   if (!read.ok) {
     await ArtifactService.markUrlFailed(db, {
       ownerUserId,

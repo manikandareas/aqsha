@@ -77,14 +77,14 @@ describe("deriveKeyProbe", () => {
 });
 
 describe("dedupeExplorePapers", () => {
-  test("dedup by key, OpenAlex menang atas Jina", () => {
+  test("dedup by key, OpenAlex menang atas Crossref", () => {
     const a: ExplorePaperInput = {
       key: "doi:10.1/x",
       title: "A",
       snippet: "",
       url: "u",
-      provider: "Jina",
-      sourceLabel: "Jina",
+      provider: "Crossref",
+      sourceLabel: "Crossref",
       authors: [],
       topics: [],
     };

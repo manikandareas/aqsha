@@ -113,6 +113,83 @@
       "when": 1782470297676,
       "tag": "0015_third_secret_warriors",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1782572156953,
+      "tag": "0016_remarkable_franklin_storm",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1782574159607,
+      "tag": "0017_cloudy_tomas",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1782658490558,
+      "tag": "0018_black_white_queen",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1782711593237,
+      "tag": "0019_deep_wrecking_crew",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1782729440709,
+      "tag": "0020_exotic_william_stryker",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1782791104083,
+      "tag": "0021_fat_bulldozer",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1782815048447,
+      "tag": "0022_loving_galactus",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1782924327243,
+      "tag": "0023_wide_charles_xavier",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1782925537618,
+      "tag": "0024_right_jackpot",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1782976917855,
+      "tag": "0025_wonderful_marvel_apes",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1783000143390,
+      "tag": "0026_broad_surge",
+      "breakpoints": true
     }
   ]
 }

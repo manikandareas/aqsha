@@ -26,6 +26,7 @@ import {
   defaultLanguageForArtifactType,
   type DetectedDocumentKind,
   type IndexingStatus,
+  INLINE_INDEX_MAX_BYTES,
   normalizeArtifactTitle,
   normalizeUrl,
   previewFromText,
@@ -64,16 +65,30 @@ export type ArtifactListItem = {
   updatedAt: number;
 };
 
+/**
+ * Cap teks ekstraksi yang dikembalikan ke AGEN via `get_render_payload` (~20k token). Dokumen
+ * panjang (mis. survey 180k+ char) penuh akan membengkakkan konteks LLM / berisiko melewati window
+ * → turn gagal. Potong + beri penanda; bagian spesifik tetap dijangkau lewat `search_thread_documents`.
+ */
+const MAX_RENDER_EXTRACTED_TEXT_CHARS = 80_000;
+
 export type ArtifactRenderPayload =
   | { artifactType: "markdown"; blocksJson: string; markdown: string; plainText: string }
   | {
-      artifactType: "pdf" | "docx";
+      artifactType: "pdf" | "docx" | "image";
       fileName: string;
       mimeType: string;
       byteSize: number;
       url: string;
       indexingStatus: IndexingStatus;
       indexingFailureReason?: string;
+      /** Teks hasil ekstraksi indexing (pdf/docx) — agar agen bisa MEMBACA isinya (URL presigned
+       * tak dapat diparse agen). Absen untuk image / dokumen yang belum/ gagal terindeks. */
+      extractedText?: string;
+      /** Panjang total teks ekstraksi (IMP-8) — agen tahu kapan perlu paging via `textOffset`. */
+      extractedTextTotalChars?: number;
+      /** Offset awal potongan `extractedText` yang dikembalikan (IMP-8). */
+      extractedTextOffset?: number;
     }
   | {
       artifactType: "url";
@@ -183,6 +198,18 @@ async function deleteStaleR2Keys(keys: Array<string | null | undefined>): Promis
       console.error("[artifact] stale R2 delete failed", key, err);
     }
   }
+}
+
+/** Soft-delete satu artifact (status=deleted + tombstone timestamps). Dipakai `remove` (dalam tx) +
+ * `removeThreadAttachment`. Enqueue cleanup TERPISAH (harus setelah tx commit). */
+async function softDeleteArtifactRow(db: DbOrTx, artifactId: string): Promise<void> {
+  const now = Date.now();
+  await ArtifactRepo.update(db, artifactId, { status: "deleted", deletedAt: now, updatedAt: now });
+}
+
+/** Enqueue worker `artifact-cleanup` (hard-delete blob R2 + embeddings + child rows). */
+async function enqueueArtifactCleanup(ownerUserId: string, artifactId: string): Promise<void> {
+  await enqueue(ARTIFACT_QUEUES.artifactCleanup, { ownerUserId, artifactId });
 }
 
 export const ArtifactService = {
@@ -550,7 +577,12 @@ export const ArtifactService = {
       mimeType: string;
       size: number;
     },
-  ): Promise<{ artifactId: string; title: string; indexed: boolean }> {
+  ): Promise<{
+    artifactId: string;
+    title: string;
+    indexed: boolean;
+    indexingStatus: IndexingStatus;
+  }> {
     const artifactType = validateUpload({
       fileName: input.fileName,
       mimeType: input.mimeType,
@@ -606,6 +638,16 @@ export const ArtifactService = {
       });
     });
 
+    // File besar (D5): offload ekstraksi+index ke worker `artifact-indexing` supaya finalize
+    // tak terblok. Artifact sudah `pending` (di atas) → FE poll status sampai ready/failed.
+    if (input.size > INLINE_INDEX_MAX_BYTES) {
+      await enqueue(ARTIFACT_QUEUES.artifactIndexing, {
+        ownerUserId: input.ownerUserId,
+        artifactId,
+      });
+      return { artifactId, title, indexed: false, indexingStatus: "pending" };
+    }
+
     // ponytail: skip paper-enrichment untuk lampiran headless — worker scope metadata
     // ke workspace (`workspaceId: string`), yang null di sini; agen cuma butuh teks RAG
     // (sudah ter-index di extractIndexAndPatch). Enrichment menyusul saat di-promote.
@@ -620,7 +662,41 @@ export const ArtifactService = {
       startedAt: now,
     });
 
-    return { artifactId, title, indexed };
+    // Inline: extractIndexAndPatch men-set indexingStatus ready (indexed) / failed (gagal ekstraksi).
+    return { artifactId, title, indexed, indexingStatus: indexed ? "ready" : "failed" };
+  },
+
+  /**
+   * Worker `artifact-indexing` (D5): jalankan ekstraksi+RAG index untuk lampiran thread besar
+   * yang di-offload `finalizeThreadUpload`. Idempoten: hanya proses artifact `pending` milik owner
+   * (re-run job aman; `extractIndexAndPatch` men-set ready/failed + provenance). No-op bila artifact
+   * hilang / sudah selesai / bukan upload.
+   */
+  async runAttachmentIndexing(
+    db: Db,
+    input: { ownerUserId: string; artifactId: string },
+  ): Promise<void> {
+    const artifact = await ArtifactRepo.findById(db, input.artifactId);
+    if (
+      !artifact ||
+      artifact.ownerUserId !== input.ownerUserId ||
+      artifact.indexingStatus !== "pending" ||
+      !artifact.storageR2Key
+    ) {
+      return;
+    }
+    await extractIndexAndPatch(db, {
+      ownerUserId: artifact.ownerUserId,
+      artifactId: artifact.id,
+      workspaceId: artifact.workspaceId,
+      key: artifact.storageR2Key,
+      fileName: artifact.fileName ?? "attachment",
+      mimeType: artifact.mimeType ?? "application/octet-stream",
+      // Kolom `artifact_type` = text; baris ini dibuat `finalizeThreadUpload` via `validateUpload`
+      // → selalu ArtifactType valid. Narrow aman untuk pemilihan extractor.
+      artifactType: artifact.artifactType as ArtifactType,
+      startedAt: Date.now(),
+    });
   },
 
   /**
@@ -1023,10 +1099,14 @@ export const ArtifactService = {
     });
   },
 
-  /** Detail artifact workspace-scoped (inline only). Soft: `null` bila headless/not-owned. */
+  /**
+   * Detail artifact untuk reader. Soft: `null` bila tak ada / bukan milik user. Artifact HEADLESS
+   * (`workspaceId=null`, mis. lampiran upload chat) tetap dikembalikan ke pemiliknya — reader panel
+   * thread membukanya lewat id; `getRenderPayload` juga sudah headless-friendly. Ownership tetap gate.
+   */
   async get(db: DbOrTx, ownerUserId: string, artifactId: string) {
     const artifact = await ArtifactRepo.findById(db, artifactId);
-    if (!artifact || artifact.ownerUserId !== ownerUserId || !artifact.workspaceId) return null;
+    if (!artifact || artifact.ownerUserId !== ownerUserId) return null;
     const content = await ArtifactContentRepo.findByArtifact(db, ownerUserId, artifactId);
     const url =
       artifact.artifactType === "url"
@@ -1118,12 +1198,20 @@ export const ArtifactService = {
   /**
    * Render payload (discriminated union on artifactType). Headless-tolerant: hanya
    * butuh owner + active (chat-attachment workspaceId=null tetap resolve). pdf/docx
-   * → presigned R2 GET. Return `null` bila missing/not-owned/not-active/blob hilang.
+   * → presigned R2 GET + `extractedText` (teks hasil indexing, agar agen bisa membaca
+   * isinya tanpa parse PDF). Return `null` bila missing/not-owned/not-active/blob hilang.
    */
   async getRenderPayload(
     db: DbOrTx,
     ownerUserId: string,
     artifactId: string,
+    opts?: {
+      includeExtractedText?: boolean;
+      /** Paging `extractedText` pdf/docx (IMP-8): mulai dari indeks char ini (default 0). */
+      textOffset?: number;
+      /** Cap potongan `extractedText` (default & maksimum = MAX_RENDER_EXTRACTED_TEXT_CHARS). */
+      textMaxChars?: number;
+    },
   ): Promise<ArtifactRenderPayload | null> {
     const artifact = await ArtifactRepo.findById(db, artifactId);
     if (!artifact || artifact.ownerUserId !== ownerUserId || artifact.status !== "active") return null;
@@ -1148,9 +1236,39 @@ export const ArtifactService = {
       };
     }
 
-    if (type === "pdf" || type === "docx") {
+    if (type === "pdf" || type === "docx" || type === "image") {
       if (!artifact.storageR2Key) return null;
       const signedUrl = await StorageService.getSignedReadUrl(artifact.storageR2Key);
+      // pdf/docx: sertakan teks hasil ekstraksi indexing (inline / fallback R2) supaya agen bisa
+      // membaca ISI dokumen — URL presigned saja tak dapat diparse agen (tak ada web_fetch). Hanya
+      // saat diminta (`includeExtractedText`, dipakai tool agen) → viewer web tak terbebani ~ratusan
+      // KB teks yang tak dipakainya. Image tak punya teks → biarkan kosong.
+      let extractedText: string | undefined;
+      let extractedTextTotalChars: number | undefined;
+      let extractedTextOffset: number | undefined;
+      if (opts?.includeExtractedText && type !== "image") {
+        const content = await ArtifactContentRepo.findByArtifact(db, ownerUserId, artifactId);
+        const resolved =
+          content?.plainText ??
+          (content?.plainTextR2Key ? await StorageService.readText(content.plainTextR2Key) : "");
+        if (resolved.trim()) {
+          // Paging (IMP-8): `textOffset`/`textMaxChars` membuka BAGIAN LANJUTAN dokumen panjang —
+          // tanpa ini ekor >80k char tak pernah terjangkau agen (mis. bab akhir / daftar pustaka).
+          const offset = Math.min(Math.max(0, opts.textOffset ?? 0), resolved.length);
+          const maxChars = Math.min(
+            MAX_RENDER_EXTRACTED_TEXT_CHARS,
+            Math.max(1, opts.textMaxChars ?? MAX_RENDER_EXTRACTED_TEXT_CHARS),
+          );
+          const slice = resolved.slice(offset, offset + maxChars);
+          const nextOffset = offset + slice.length;
+          extractedText =
+            nextOffset < resolved.length
+              ? `${slice}\n\n[…teks dipotong (karakter ${offset}–${nextOffset} dari ${resolved.length}). Untuk lanjutannya, panggil lagi dengan offset=${nextOffset}; untuk mencari bagian spesifik tanpa paging, pakai search_thread_documents dengan kueri spesifik.]`
+              : slice;
+          extractedTextTotalChars = resolved.length;
+          extractedTextOffset = offset;
+        }
+      }
       return {
         artifactType: type,
         fileName: artifact.fileName ?? artifact.title,
@@ -1161,6 +1279,9 @@ export const ArtifactService = {
         ...(artifact.indexingFailureReason
           ? { indexingFailureReason: artifact.indexingFailureReason }
           : {}),
+        ...(extractedText ? { extractedText } : {}),
+        ...(extractedTextTotalChars !== undefined ? { extractedTextTotalChars } : {}),
+        ...(extractedTextOffset !== undefined ? { extractedTextOffset } : {}),
       };
     }
 
@@ -1191,6 +1312,42 @@ export const ArtifactService = {
       source: source ?? "",
       ...(artifact.language ? { language: artifact.language } : {}),
     };
+  },
+
+  /**
+   * Teks penuh TANPA cap render (IMP-4, dipakai `verify_citations` server-side): daftar pustaka
+   * ada di EKOR dokumen — cap 80k `getRenderPayload` justru memotongnya. Headless-tolerant seperti
+   * `getRenderPayload`. Return `null` bila missing/not-owned/not-active/tak bertipe teks (image).
+   */
+  async getFullPlainText(
+    db: DbOrTx,
+    ownerUserId: string,
+    artifactId: string,
+  ): Promise<string | null> {
+    const artifact = await ArtifactRepo.findById(db, artifactId);
+    if (!artifact || artifact.ownerUserId !== ownerUserId || artifact.status !== "active") return null;
+    const type = artifact.artifactType as ArtifactType;
+    if (type === "image") return null;
+    if (type === "url") {
+      const url = await ArtifactUrlRepo.findByArtifact(db, ownerUserId, artifactId);
+      if (!url) return null;
+      return (
+        url.readableText ??
+        (url.readableTextR2Key ? await StorageService.readText(url.readableTextR2Key) : "")
+      );
+    }
+    const content = await ArtifactContentRepo.findByArtifact(db, ownerUserId, artifactId);
+    if (type === "markdown") {
+      return (
+        content?.markdown ??
+        (content?.markdownR2Key ? await StorageService.readText(content.markdownR2Key) : "")
+      );
+    }
+    return (
+      content?.plainText ??
+      content?.markdown ??
+      (content?.plainTextR2Key ? await StorageService.readText(content.plainTextR2Key) : "")
+    );
   },
 
   /**
@@ -1380,17 +1537,42 @@ export const ArtifactService = {
       await WorkspaceService.assertWorkspaceOwner(tx, input.ownerUserId, artifact.workspaceId, {
         requireActive: true,
       });
-      const now = Date.now();
-      await ArtifactRepo.update(tx, input.artifactId, {
-        status: "deleted",
-        deletedAt: now,
-        updatedAt: now,
+      await softDeleteArtifactRow(tx, input.artifactId);
+    });
+    await enqueueArtifactCleanup(input.ownerUserId, input.artifactId);
+    return { ok: true };
+  },
+
+  /**
+   * Hapus lampiran thread (HEADLESS, `workspaceId=null`) — dipakai saat user mencabut chip
+   * di composer SEBELUM kirim. Beda dari `remove` yang workspace-scoped: di sini ownership =
+   * owner + artifact benar-benar lampiran upload milik thread ini (`source='upload'`,
+   * `threadId` cocok). Soft-delete + enqueue cleanup. Idempoten (sudah hilang/non-aktif → no-op).
+   */
+  async removeThreadAttachment(
+    db: Db,
+    input: { ownerUserId: string; threadId: string; artifactId: string },
+  ): Promise<{ ok: true }> {
+    const artifact = await ArtifactRepo.findById(db, input.artifactId);
+    // Idempoten: sudah hilang → no-op (mis. double-click / retry setelah sukses).
+    if (!artifact) return { ok: true };
+    // Bukan lampiran upload milik thread ini / milik owner lain → 404 (cegah numpang/hapus salah).
+    if (
+      artifact.ownerUserId !== input.ownerUserId ||
+      artifact.threadId !== input.threadId ||
+      artifact.source !== "upload"
+    ) {
+      throwAppError({
+        message: "Attachment not found",
+        code: "artifact_not_found",
+        severity: "error",
+        status: 404,
       });
-    });
-    await enqueue(ARTIFACT_QUEUES.artifactCleanup, {
-      ownerUserId: input.ownerUserId,
-      artifactId: input.artifactId,
-    });
+    }
+    // Sudah non-aktif (terhapus sebelumnya) → no-op idempoten, tak perlu update/enqueue ulang.
+    if (artifact.status !== "active") return { ok: true };
+    await softDeleteArtifactRow(db, input.artifactId);
+    await enqueueArtifactCleanup(input.ownerUserId, input.artifactId);
     return { ok: true };
   },
 

@@ -1,7 +1,7 @@
 /**
  * Redis-backed external-lookup cache. Replaces V1's `externalLookupCache` table
  * + `getCache`/`putCache` Convex functions. Keyed per provider so the paper
- * resolver and Jina reader cache absorb repeat lookups (and act as the only
+ * resolver and Firecrawl reader cache absorb repeat lookups (and act as the only
  * "pacing" mechanism now that the Convex rate-limiter is gone).
  *
  * Cache key shape: `extcache:{provider}:{cacheKey}`.
@@ -72,9 +72,13 @@ export async function putCache(
   cacheKey: string,
   status: CacheStatus,
   valueJson: string,
+  ttlSecondsOverride?: number,
 ): Promise<void> {
   try {
-    const ttlSeconds = CACHE_TTL_SECONDS_BY_STATUS[status];
+    const ttlSeconds =
+      ttlSecondsOverride && ttlSecondsOverride > 0
+        ? Math.floor(ttlSecondsOverride)
+        : CACHE_TTL_SECONDS_BY_STATUS[status];
     const payload = JSON.stringify({ status, valueJson } satisfies CacheEntry);
     await getRedis().set(keyFor(provider, cacheKey), payload, "EX", ttlSeconds);
   } catch {

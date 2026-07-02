@@ -26,7 +26,7 @@ export type Artifact = {
 export type ArtifactRenderPayload =
   | { artifactType: "markdown"; blocksJson: string; markdown: string; plainText: string }
   | {
-      artifactType: "pdf" | "docx";
+      artifactType: "pdf" | "docx" | "image";
       fileName: string;
       mimeType: string;
       byteSize: number;
@@ -56,6 +56,7 @@ const TYPE_LABELS: Record<string, string> = {
   plain_text: "Teks",
   pdf: "PDF",
   docx: "Word",
+  image: "Gambar",
   url: "Tautan",
   html: "HTML",
   svg: "SVG",
@@ -77,10 +78,17 @@ export const UPLOAD_ACCEPT = [
   ".markdown",
   ".csv",
   ".json",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "text/plain",
   "text/markdown",
   "text/csv",
   "application/json",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
 ].join(",");

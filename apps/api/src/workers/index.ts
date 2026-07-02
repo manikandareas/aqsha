@@ -1,20 +1,23 @@
 import {
   ACCOUNT_QUEUES,
   ARTIFACT_QUEUES,
+  assertEmbeddingEnabled,
   CHAT_QUEUES,
-  EXPLORE_QUEUES,
   FEED_QUEUES,
   getQueueConnection,
   registerRepeatable,
 } from "@aqsha/services";
 import { Worker } from "bullmq";
 import { logger } from "../lib/log";
+
+// Fail-fast (D1): worker meng-index dokumen (artifact-indexing, url-ingestion) via embedding.
+// Kredensial yang hilang digagalkan saat boot, bukan job gagal senyap.
+assertEmbeddingEnabled();
 import { type AccountDeletionJob, processAccountDeletion } from "./account-deletion.worker";
 import { type ArtifactCleanupJob, processArtifactCleanup } from "./artifact-cleanup.worker";
-import { type ExploreAnalysisJob, processExploreAnalysis } from "./explore-analysis.worker";
+import { type ArtifactIndexingJob, processArtifactIndexing } from "./artifact-indexing.worker";
 import { type FeedHydrationJob, processFeedHydration } from "./feed-hydration.worker";
 import { type PaperEnrichmentJob, processPaperEnrichment } from "./paper-enrichment.worker";
-import { type ReconcileStaleJob, processReconcileStale } from "./reconcile-stale.worker";
 import { type ThreadTitleJob, processThreadTitle } from "./thread-title.worker";
 import { type UrlIngestionJob, processUrlIngestion } from "./url-ingestion.worker";
 
@@ -36,6 +39,10 @@ const workers = [
     connection,
     concurrency: CONCURRENCY,
   }),
+  new Worker<ArtifactIndexingJob>(ARTIFACT_QUEUES.artifactIndexing, processArtifactIndexing, {
+    connection,
+    concurrency: CONCURRENCY,
+  }),
   new Worker<PaperEnrichmentJob>(ARTIFACT_QUEUES.paperEnrichment, processPaperEnrichment, {
     connection,
     concurrency: CONCURRENCY,
@@ -49,17 +56,7 @@ const workers = [
     connection,
     concurrency: CONCURRENCY,
   }),
-  // Reconciler zombie (Phase 5): concurrency 1 — sweep berkala ringan, tak perlu paralel.
-  new Worker<ReconcileStaleJob>(CHAT_QUEUES.reconcileStale, processReconcileStale, {
-    connection,
-    concurrency: 1,
-  }),
   new Worker<AccountDeletionJob>(ACCOUNT_QUEUES.accountDeletion, processAccountDeletion, {
-    connection,
-    concurrency: 2,
-  }),
-  // Explore analysis: concurrency 2 — tiap job = fetch OpenAlex/arXiv + 1 LLM call (pace API).
-  new Worker<ExploreAnalysisJob>(EXPLORE_QUEUES.exploreAnalysis, processExploreAnalysis, {
     connection,
     concurrency: 2,
   }),
@@ -79,15 +76,6 @@ registerRepeatable(FEED_QUEUES.feedHydration, { kind: "cycle" }, {
 })
   .then(() => logger.info({ pattern: "0 */3 * * *" }, "cron_feed_hydration_registered"))
   .catch((err) => logger.error({ err }, "cron_feed_hydration_register_failed"));
-
-// Cron reconciler zombie (Phase 5, fix E) — tiap jam tandai thread `streaming` basi → `failed`
-// + event terminal sintetik (composer unlock). Idempotent by jobId.
-registerRepeatable(CHAT_QUEUES.reconcileStale, { kind: "cycle" }, {
-  pattern: "0 * * * *",
-  jobId: "reconcile-stale-threads-cycle",
-})
-  .then(() => logger.info({ pattern: "0 * * * *" }, "cron_reconcile_stale_registered"))
-  .catch((err) => logger.error({ err }, "cron_reconcile_stale_register_failed"));
 
 async function shutdown() {
   logger.info("workers_shutting_down");

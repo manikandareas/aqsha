@@ -16,20 +16,27 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@aqsha/ui/components/dropdown-menu";
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import type { ComponentProps, ReactNode } from "react";
+import { useState, type ComponentProps, type ReactNode } from "react";
 import { SaveToWorkspaceButton } from "@/features/artifacts/components/save-to-workspace-button";
 import { cn } from "@/lib/utils";
 import {
   bestIngestUrl,
   feedDetailHref,
   kindLabel,
-  kindPanelClass,
   type DiscoveryItem,
 } from "../model";
 import { domainFromUrl, formatCitationCount, relativeTime, sourceName } from "../format";
 import type { FeedItem } from "../types";
+import { GenerativeCover, firstInitial } from "./generative-cover";
+
+// pdfjs tak boleh dieval saat SSR → muat klien-only. Cover generatif tampil
+// sebagai latar sampai (kalau) PDF page-1 selesai render menutupinya.
+const PdfThumb = dynamic(() => import("./pdf-thumb").then((m) => m.PdfThumb), {
+  ssr: false,
+});
 
 export type DiscoveryCardHandlers = {
   onAskAstra: (item: DiscoveryItem) => void;
@@ -234,7 +241,7 @@ function SourceRow({ item }: { item: DiscoveryItem }) {
 
 function SourceAvatar({ item }: { item: DiscoveryItem }) {
   const domain = item.kind === "news" ? domainFromUrl(item.url) : null;
-  const letter = (sourceName(item).trim()[0] ?? "•").toUpperCase();
+  const letter = firstInitial(sourceName(item));
   return (
     <span
       className={cn(
@@ -255,6 +262,7 @@ function SourceAvatar({ item }: { item: DiscoveryItem }) {
 }
 
 function CardMedia({ item, title, className }: { item: DiscoveryItem; title: string; className?: string }) {
+  // Berita / item ber-OG image → foto langsung.
   if (item.imageUrl) {
     return (
       <div className={cn("relative overflow-hidden rounded-[12px] bg-muted", className)}>
@@ -262,9 +270,24 @@ function CardMedia({ item, title, className }: { item: DiscoveryItem; title: str
       </div>
     );
   }
+  // Paper / item tanpa gambar → cover generatif; paper open-access overlay preview PDF.
+  return <PaperCover item={item} className={className} />;
+}
+
+// Cover berlapis: GenerativeCover sebagai latar (selalu terbaca, tak pernah blank);
+// untuk paper ber-PDF, PdfThumb di-overlay & menutupi latar begitu page-1 ter-render.
+// Simpan URL yang GAGAL (bukan boolean) + `key={pdfUrl}` pada PdfThumb → saat slot ini
+// dipakai ulang untuk paper lain (mis. hero tak ber-key yang berganti), state lama tak
+// ikut: URL baru ≠ failedUrl → tampil lagi, dan PdfThumb remount bersih per URL.
+function PaperCover({ item, className }: { item: DiscoveryItem; className?: string }) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const pdfUrl = item.kind === "paper" ? item.pdfUrl : undefined;
   return (
-    <div className={cn("flex items-center justify-center overflow-hidden rounded-[12px]", kindPanelClass(item.kind), className)} aria-hidden>
-      <span className="font-heading text-[14px] font-bold tracking-[0.08em] text-foreground/35">{kindLabel(item.kind)}</span>
+    <div className={cn("relative overflow-hidden rounded-[12px]", className)} aria-hidden>
+      <GenerativeCover title={item.title} label={kindLabel(item.kind)} openAccess={item.isOpenAccess} />
+      {pdfUrl && failedUrl !== pdfUrl ? (
+        <PdfThumb key={pdfUrl} pdfUrl={pdfUrl} onFail={() => setFailedUrl(pdfUrl)} />
+      ) : null}
     </div>
   );
 }

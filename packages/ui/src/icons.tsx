@@ -78,6 +78,8 @@ import {
   PanelLeftIcon as HugePanelLeftIcon,
   PencilEdit01Icon,
   PenTool01Icon,
+  Pin02Icon,
+  PinOffIcon as HugePinOffIcon,
   PlayIcon as HugePlayIcon,
   QuoteUpIcon,
   SaveIcon as HugeSaveIcon,
@@ -127,6 +129,7 @@ export const ArrowDownAZIcon = createIcon(ArrangeByLettersAZIcon);
 export const ArrowDownIcon = createIcon(ArrowDown01Icon);
 export const ArrowLeftIcon = createIcon(ArrowLeft01Icon);
 export const ArrowRight = createIcon(ArrowRight01Icon);
+export const ArrowRightIcon = createIcon(ArrowRight01Icon);
 export const ArrowUpIcon = createIcon(ArrowUp01Icon);
 export const ArrowUpToLineIcon = createIcon(HugeArrowUpToLineIcon);
 export const ArrowUpRightIcon = createIcon(ArrowUpRight01Icon);
@@ -207,6 +210,8 @@ export const PaperclipIcon = createIcon(Attachment01Icon);
 export const PanelLeftIcon = createIcon(HugePanelLeftIcon);
 export const PenLineIcon = createIcon(PenTool01Icon);
 export const PencilIcon = createIcon(PencilEdit01Icon);
+export const PinIcon = createIcon(Pin02Icon);
+export const PinOffIcon = createIcon(HugePinOffIcon);
 export const Play = createIcon(HugePlayIcon);
 export const PlusIcon = createIcon(Add01Icon);
 export const Quote = createIcon(QuoteUpIcon);

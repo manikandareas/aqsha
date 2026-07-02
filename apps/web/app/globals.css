@@ -40,7 +40,7 @@
   --chart-3: oklch(0.4688 0.0136 84.5932);
   --chart-4: oklch(0.7057 0.0250 82.0932);
   --chart-5: oklch(0.8340 0.0232 87.1630);
-  --sidebar: oklch(0.8985 0.0199 87.5195);
+  --sidebar: oklch(0.8620 0.0205 86.5000);
   --sidebar-foreground: oklch(0.2350 0 0);
   --sidebar-primary: oklch(0.3012 0 0);
   --sidebar-primary-foreground: oklch(0.9169 0.0175 99.6160);
@@ -87,6 +87,12 @@
   --coral-soft: color-mix(in oklch, var(--coral) 15%, var(--card));
   --coral-soft-border: color-mix(in oklch, var(--coral) 30%, var(--border));
   --shadow-soft-card: var(--shadow);
+  /* Global scrollbar — thin, floating, palette-aware. The thumb derives from
+     `--muted-foreground`, so it re-resolves per theme (warm taupe in light,
+     soft gray in dark) without a separate `.dark` override. */
+  --scrollbar-size: 0.625rem;
+  --scrollbar-thumb: color-mix(in oklch, var(--muted-foreground) 30%, transparent);
+  --scrollbar-thumb-hover: color-mix(in oklch, var(--muted-foreground) 55%, transparent);
 }
 
 .dark {
@@ -114,7 +120,7 @@
   --chart-3: oklch(0.6348 0.0113 81.7875);
   --chart-4: oklch(0.4681 0.0069 84.5829);
   --chart-5: oklch(0.3523 0 0);
-  --sidebar: oklch(0.1730 0 0);
+  --sidebar: oklch(0.1480 0 0);
   --sidebar-foreground: oklch(0.9173 0.0133 82.4015);
   --sidebar-primary: oklch(0.8520 0.0205 100.6306);
   --sidebar-primary-foreground: oklch(0.3329 0 0);
@@ -266,6 +272,41 @@
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
+  }
+
+  /* Firefox: thin native scrollbar with a transparent track. Lives in the base
+     layer so the `.no-scrollbar` utility (utilities layer) still wins. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+
+  /* WebKit/Blink: a slim, rounded thumb that floats over a transparent track.
+     The 3px transparent border + padding-box clip narrows the visible thumb and
+     gives it breathing room from the content edge for a softer look. */
+  ::-webkit-scrollbar {
+    width: var(--scrollbar-size);
+    height: var(--scrollbar-size);
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-color: var(--scrollbar-thumb);
+    background-clip: padding-box;
+    transition: background-color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
   }
 }
 
@@ -569,6 +610,20 @@
   text-decoration-color: var(--primary);
 }
 
+/* Heading anchors (rehype-autolink-headings, behavior: wrap) inherit the heading
+   color and drop the link underline; the deep-link affordance shows on hover only. */
+:where(.aqsha-prose, .artifact-prose) :is(h1, h2, h3, h4) a {
+  color: inherit;
+  font: inherit;
+  text-decoration: none;
+}
+
+:where(.aqsha-prose, .artifact-prose) :is(h1, h2, h3, h4) a:hover {
+  text-decoration-line: underline;
+  text-decoration-color: color-mix(in srgb, var(--foreground) 25%, transparent);
+  text-underline-offset: 6px;
+}
+
 :where(.aqsha-prose, .artifact-prose) blockquote {
   margin: 1.35rem 0;
   border-left: 2px solid var(--border);
@@ -608,6 +663,24 @@
   padding: 0;
   font-family: var(--font-mono), monospace;
   color: var(--foreground);
+}
+
+/* Blog code block — shiki menambah background gelap, jadi band prose default
+   (padding X = 0, border atas/bawah) bikin kode nempel ke tepi. Scope ke blog
+   saja (jangan ubah prose chat/artifact): kartu membulat + padding X proper.
+   Padding ditaruh di <code> (bukan <pre>) supaya padding kiri & kanan tetap
+   terjaga saat baris panjang overflow-scroll. */
+.blog-prose pre {
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
+
+.blog-prose pre code {
+  display: block;
+  width: fit-content;
+  min-width: 100%;
+  padding: 0.95rem 1.15rem;
 }
 
 :where(.aqsha-prose, .artifact-prose) table {
@@ -894,4 +967,87 @@
   overflow-y: auto;
   background: var(--background);
   padding: 1.5rem 1rem 6rem;
+}
+
+/* ------------------------------------------------------------------ *
+ * Tactile keycap button surface
+ *
+ * A colour-agnostic recipe that makes any solid button read like a
+ * physical keycap: a subtly domed face, a thin top sheen, and a solid
+ * darker "lip" underneath (a hard 0-blur shadow). Every colour is
+ * derived from `--btn-face` (set per variant), so it inherits the
+ * existing palette instead of introducing new colours.
+ *
+ * Press choreography keeps the BASE fixed while the cap moves, so the
+ * button never appears to jump in a layout:
+ *   rest   translateY(0)  + lip 3px  → bottom edge at +3px
+ *   hover  translateY(-1px) + lip 4px → bottom edge at +3px (cap lifts)
+ *   press  translateY(3px) + lip 0px  → bottom edge at +3px (cap bottoms out)
+ *
+ * The lip/ambient live in `--tw-shadow`, composed through Tailwind's
+ * box-shadow variable chain so the focus ring still layers on top. The
+ * base cva owns the press transform exclusively (its generic
+ * `active:translate-y` nudge is removed for solid variants), so nothing
+ * competes with the choreography above.
+ * ------------------------------------------------------------------ */
+@layer components {
+  .btn-keycap {
+    --btn-face: var(--primary);
+    background-image: linear-gradient(
+      to bottom,
+      color-mix(in oklch, var(--btn-face) 92%, white 8%),
+      color-mix(in oklch, var(--btn-face) 97%, black 3%)
+    );
+    --tw-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / 0.18),
+      0 3px 0 0 color-mix(in oklch, var(--btn-face) 60%, black 40%),
+      0 5px 9px -3px color-mix(in srgb, var(--btn-face) 42%, transparent);
+    box-shadow:
+      var(--tw-inset-shadow, 0 0 #0000),
+      var(--tw-inset-ring-shadow, 0 0 #0000),
+      var(--tw-ring-offset-shadow, 0 0 #0000),
+      var(--tw-ring-shadow, 0 0 #0000),
+      var(--tw-shadow);
+    /* Gradients don't interpolate (background-image transitions discretely), so
+       the motion rides box-shadow + transform; the face swaps instantly. */
+    transition:
+      box-shadow 0.15s ease,
+      transform 0.12s ease;
+  }
+
+  .btn-keycap:hover {
+    transform: translateY(-1px);
+    background-image: linear-gradient(
+      to bottom,
+      color-mix(in oklch, var(--btn-face) 88%, white 12%),
+      color-mix(in oklch, var(--btn-face) 96%, black 4%)
+    );
+    --tw-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / 0.24),
+      0 4px 0 0 color-mix(in oklch, var(--btn-face) 58%, black 42%),
+      0 8px 13px -3px color-mix(in srgb, var(--btn-face) 48%, transparent);
+  }
+
+  /* Pressed and open (dropdown) share the bottomed-out look: cap sinks
+     onto the surface and the lip collapses. */
+  .btn-keycap:active,
+  .btn-keycap[aria-expanded="true"] {
+    transform: translateY(3px);
+    background-image: linear-gradient(
+      to bottom,
+      color-mix(in oklch, var(--btn-face) 96%, black 4%),
+      color-mix(in oklch, var(--btn-face) 92%, black 8%)
+    );
+    --tw-shadow:
+      inset 0 1px 1px 0 color-mix(in oklch, var(--btn-face) 70%, black 30%),
+      0 0 0 0 color-mix(in oklch, var(--btn-face) 60%, black 40%),
+      0 1px 2px 0 color-mix(in srgb, var(--btn-face) 30%, transparent);
+  }
+
+  .btn-keycap:disabled {
+    transform: none;
+    --tw-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / 0.1),
+      0 2px 0 0 color-mix(in oklch, var(--btn-face) 66%, black 34%);
+  }
 }

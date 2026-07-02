@@ -10,7 +10,7 @@ import { users } from "./users";
  * - `feature` text + CHECK (7 feature, sinkron `CreditFeature`).
  * - `metadata` jsonb (ganti `metadataJson` string V1).
  * - idempotency UNIQUE per-OWNER (owner_user_id, idempotency_key) partial (where
- *   key not null) → A9: step eve yang re-run saat resume tak double-debit. Scoped
+ *   key not null) → A9: step yang re-run saat resume durable tak double-debit. Scoped
  *   per-owner supaya key bentrok lintas-owner tak menelan charge owner lain.
  *   Insert on-conflict-do-nothing dicek di tx yang sama SEBELUM debit.
  * - index by_owner_feature_created (owner, feature, created_at) → cap deep_research
@@ -39,7 +39,7 @@ export const providerUsageLedger = pgTable(
   (t) => [
     check(
       "provider_usage_ledger_feature_check",
-      sql`${t.feature} in ('normal_chat', 'pro_chat', 'cited_answer', 'deep_research', 'external_search', 'sandbox_compute', 'citation_verify')`,
+      sql`${t.feature} in ('normal_chat', 'pro_chat', 'cited_answer', 'deep_research', 'external_search', 'sandbox_compute', 'citation_verify', 'doc_ai_edit')`,
     ),
     uniqueIndex("provider_usage_ledger_by_owner_idempotency_key")
       .on(t.ownerUserId, t.idempotencyKey)

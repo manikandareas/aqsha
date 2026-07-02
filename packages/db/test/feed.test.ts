@@ -129,7 +129,7 @@ describe("FeedRepo — paginateBalanced (paper↔news seimbang)", () => {
     for (const o of [9000, 9001, 9002, 9003]) {
       await FeedRepo.upsertByDedupeKey(
         db,
-        mkFeed({ dedupeKey: DEDUPE(`bn${o}`), orderAt: o, kind: "news", provider: "google_news" }),
+        mkFeed({ dedupeKey: DEDUPE(`bn${o}`), orderAt: o, kind: "news", provider: "gdelt" }),
       );
     }
     for (const o of [100, 101, 102, 103]) {
@@ -139,63 +139,6 @@ describe("FeedRepo — paginateBalanced (paper↔news seimbang)", () => {
     const kinds = new Set(page.items.map((i) => i.kind));
     expect(kinds.has("paper")).toBe(true);
     expect(kinds.has("news")).toBe(true);
-  });
-});
-
-describe("FeedRepo — searchByTsvector (GIN tsvector)", () => {
-  itest("match token + filter kind + fromYear", async () => {
-    await FeedRepo.upsertByDedupeKey(
-      db,
-      mkFeed({
-        dedupeKey: DEDUPE("s-quantum"),
-        orderAt: 400,
-        kind: "paper",
-        title: "Quantum entanglement breakthrough",
-        searchText: "quantum entanglement breakthrough physics",
-        publishedAt: Date.UTC(2024, 0, 1),
-        topics: ["physics"],
-      }),
-    );
-    await FeedRepo.upsertByDedupeKey(
-      db,
-      mkFeed({
-        dedupeKey: DEDUPE("s-bio"),
-        orderAt: 401,
-        kind: "news",
-        title: "Biology news",
-        searchText: "biology cell research",
-        publishedAt: Date.UTC(2018, 0, 1),
-      }),
-    );
-    const hit = await FeedRepo.searchByTsvector(db, {
-      q: "quantum",
-      kinds: null,
-      fromYear: null,
-      limit: 20,
-      cursor: null,
-    });
-    expect(hit.items.some((i) => i.dedupeKey === DEDUPE("s-quantum"))).toBe(true);
-    expect(hit.items.some((i) => i.dedupeKey === DEDUPE("s-bio"))).toBe(false);
-
-    const kindFiltered = await FeedRepo.searchByTsvector(db, {
-      q: "research",
-      kinds: ["paper"],
-      fromYear: null,
-      limit: 20,
-      cursor: null,
-    });
-    // "research" hanya ada di item news → filter kind=paper menyingkirkannya
-    expect(kindFiltered.items.some((i) => i.dedupeKey === DEDUPE("s-bio"))).toBe(false);
-
-    const yearFiltered = await FeedRepo.searchByTsvector(db, {
-      q: "biology",
-      kinds: null,
-      fromYear: 2020,
-      limit: 20,
-      cursor: null,
-    });
-    // bio item publishedAt 2018 < 2020 → tersaring
-    expect(yearFiltered.items.some((i) => i.dedupeKey === DEDUPE("s-bio"))).toBe(false);
   });
 });
 
@@ -232,7 +175,7 @@ describe("FeedInteractionRepo — saved/hidden refs", () => {
     );
     const newsFeed = await FeedRepo.upsertByDedupeKey(
       db,
-      mkFeed({ dedupeKey: DEDUPE("ix2"), orderAt: 501, kind: "news", provider: "google_news" }),
+      mkFeed({ dedupeKey: DEDUPE("ix2"), orderAt: 501, kind: "news", provider: "gdelt" }),
     );
 
     await FeedInteractionRepo.insertSaved(db, {
@@ -267,14 +210,14 @@ describe("FeedInteractionRepo — saved/hidden refs", () => {
 });
 
 describe("FeedRepo — news enrichment", () => {
-  itest("listNewsNeedingEnrichment menemukan google_news tanpa articleText; patch mengeluarkannya", async () => {
+  itest("listNewsNeedingEnrichment menemukan gdelt tanpa articleText; patch mengeluarkannya", async () => {
     const news = await FeedRepo.upsertByDedupeKey(
       db,
       mkFeed({
         dedupeKey: DEDUPE("enrich1"),
         orderAt: 600,
         kind: "news",
-        provider: "google_news",
+        provider: "gdelt",
         publishedAt: 600,
       }),
     );
@@ -284,41 +227,9 @@ describe("FeedRepo — news enrichment", () => {
     await FeedRepo.applyEnrichmentPatch(db, news.id, {
       enrichAttempts: 1,
       articleText: "Body artikel ter-ekstrak.",
-      resolvedUrl: "https://publisher.example/x",
     });
     const after = await FeedRepo.listNewsNeedingEnrichment(db, 50);
     expect(after.some((t) => t.id === news.id)).toBe(false); // articleText terisi → keluar dari sweep
   });
 });
 
-describe("FeedRepo — searchByTsvector relevance order", () => {
-  itest("ts_rank desc: kepadatan term lebih tinggi rank lebih dulu", async () => {
-    // term unik 'zzqxlk' hanya di dua item ini → isolasi dari data lain.
-    const hi = await FeedRepo.upsertByDedupeKey(
-      db,
-      mkFeed({
-        dedupeKey: DEDUPE("rank-hi"),
-        orderAt: 700,
-        searchText: "zzqxlk zzqxlk zzqxlk zzqxlk",
-      }),
-    );
-    const lo = await FeedRepo.upsertByDedupeKey(
-      db,
-      mkFeed({
-        dedupeKey: DEDUPE("rank-lo"),
-        orderAt: 701, // orderAt LEBIH BARU — kalau urut kronologis lo akan menang
-        searchText: "zzqxlk filler words padding extra terms here",
-      }),
-    );
-    const res = await FeedRepo.searchByTsvector(db, {
-      q: "zzqxlk",
-      kinds: null,
-      fromYear: null,
-      limit: 20,
-      cursor: null,
-    });
-    const ids = res.items.map((i) => i.id);
-    // hi (kepadatan 'zzqxlk' lebih tinggi) harus mendahului lo MESKIPUN lo lebih baru.
-    expect(ids.indexOf(hi.id)).toBeLessThan(ids.indexOf(lo.id));
-  });
-});

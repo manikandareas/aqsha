@@ -1,37 +1,46 @@
 import {
   type ContextRef,
+  contextRefKey,
+  getPromptCommand,
+  getPromptCommandBySlug,
   type PromptCommand,
-  promptCommands,
+  promptCommandSlugPattern,
   wrapMentionLabel,
 } from "@aqsha/chat-core";
-import { cn } from "@/lib/utils";
+import {
+  splitTokenLabel,
+  TOKEN_PILL_LABEL_CLASS,
+  TOKEN_PILL_PREFIX_CLASS,
+  tokenPillClass,
+} from "./token-pill";
 
 /**
  * Logika DOM murni composer tokenized (port V1 apps/web). Mengelola chip slash
  * command + chip `@mention` context di dalam satu `contentEditable`. SSOT command
- * + context ref = `@aqsha/chat-core`. /deep dibuang → tak ada lagi tone "deep".
+ * + context ref = `@aqsha/chat-core`; SSOT kelas visual chip = `token-pill.ts`
+ * (dibagi dengan bubble pesan user).
  */
 
 const CHIP_SELECTOR = '[data-chip="command"]';
 const CONTEXT_CHIP_SELECTOR = '[data-chip="context"]';
 
-const INLINE_PILL_BASE =
-  "inline-flex cursor-pointer select-none items-center rounded-[5px] px-0.5 font-semibold leading-[18px] underline decoration-2 underline-offset-4 transition-[background-color,text-decoration-color] duration-150";
-const INLINE_PILL_TONE = {
-  default:
-    "bg-primary/8 text-primary decoration-primary/60 hover:bg-primary/12 hover:decoration-primary",
-  context:
-    "bg-foreground/5 text-foreground decoration-foreground/30 hover:bg-foreground/10 hover:decoration-foreground/60",
-} as const;
-
-type InlinePillTone = keyof typeof INLINE_PILL_TONE;
-
-function inlinePillClass(tone: InlinePillTone) {
-  return cn(INLINE_PILL_BASE, INLINE_PILL_TONE[tone]);
-}
-
-export function promptCommandDisplayLabel(command: Pick<PromptCommand, "slug">) {
-  return command.slug.startsWith("/") ? command.slug.slice(1) : command.slug;
+/**
+ * Isi visual chip: glyph prefix redup (`/`, `@`, `❝`) + label ter-truncate CSS.
+ * `dataset.*` tetap memuat label/slug PENUH — serialisasi & extraction tak
+ * bergantung pada textContent.
+ */
+function appendChipContent(chip: HTMLElement, label: string) {
+  const { prefix, text } = splitTokenLabel(label);
+  if (prefix) {
+    const prefixSpan = document.createElement("span");
+    prefixSpan.className = TOKEN_PILL_PREFIX_CLASS;
+    prefixSpan.textContent = prefix;
+    chip.appendChild(prefixSpan);
+  }
+  const labelSpan = document.createElement("span");
+  labelSpan.className = TOKEN_PILL_LABEL_CLASS;
+  labelSpan.textContent = text;
+  chip.appendChild(labelSpan);
 }
 
 export function getTextBeforeCursor(root: HTMLElement) {
@@ -116,7 +125,7 @@ export function extractCommandsFromEditor(root: HTMLElement): PromptCommand[] {
     if (!commandId || ids.has(commandId)) {
       return;
     }
-    const command = promptCommands.find((item) => item.id === commandId);
+    const command = getPromptCommand(commandId);
     if (!command) {
       return;
     }
@@ -136,8 +145,8 @@ export function createCommandChipElement(command: PromptCommand) {
   span.dataset.chip = "command";
   span.dataset.commandId = command.id;
   span.dataset.slug = command.slug;
-  span.className = inlinePillClass("default");
-  span.textContent = promptCommandDisplayLabel(command);
+  span.className = tokenPillClass("composer", "command");
+  appendChipContent(span, command.slug);
   return span;
 }
 
@@ -146,46 +155,80 @@ export function createContextChipElement(ref: ContextRef) {
   span.contentEditable = "false";
   span.dataset.chip = "context";
   span.dataset.kind = ref.kind;
-  span.dataset.workspaceId = ref.workspaceId;
-  if (ref.kind === "paper") {
-    span.dataset.artifactId = ref.artifactId;
+  switch (ref.kind) {
+    case "workspace":
+      span.dataset.workspaceId = ref.workspaceId;
+      break;
+    case "paper":
+      span.dataset.workspaceId = ref.workspaceId;
+      span.dataset.artifactId = ref.artifactId;
+      break;
+    case "explore-paper":
+      span.dataset.paperKey = ref.paperKey;
+      break;
+    case "news":
+      span.dataset.feedItemId = ref.feedItemId;
+      break;
+    case "artifact-selection":
+      // blok editor terpilih (pisahkan blockIds dengan koma; excerpt utuh).
+      span.dataset.artifactId = ref.artifactId;
+      span.dataset.blockIds = ref.blockIds.join(",");
+      span.dataset.excerpt = ref.excerpt;
+      break;
+    default: {
+      // Exhaustiveness: kind ContextRef baru jadi error compile di sini.
+      const _exhaustive: never = ref;
+      void _exhaustive;
+    }
   }
   span.dataset.label = ref.label;
-  span.className = inlinePillClass("context");
-  span.textContent = ref.label;
+  span.className = tokenPillClass("composer", "mention");
+  appendChipContent(span, ref.label);
   return span;
 }
 
 export function extractContextRefsFromEditor(root: HTMLElement): ContextRef[] {
   const seen = new Set<string>();
   const refs: ContextRef[] = [];
+  const push = (ref: ContextRef) => {
+    const key = contextRefKey(ref);
+    if (seen.has(key)) return;
+    seen.add(key);
+    refs.push(ref);
+  };
   root.querySelectorAll<HTMLElement>(CONTEXT_CHIP_SELECTOR).forEach((chip) => {
-    const workspaceId = chip.dataset.workspaceId;
     const kind = chip.dataset.kind;
     const label = chip.dataset.label ?? chip.textContent ?? "";
-    if (!workspaceId) {
-      return;
-    }
     if (kind === "paper") {
+      const workspaceId = chip.dataset.workspaceId;
       const artifactId = chip.dataset.artifactId;
-      if (!artifactId) {
-        return;
-      }
-      const key = `${workspaceId}:${artifactId}`;
-      if (seen.has(key)) {
-        return;
-      }
-      seen.add(key);
-      refs.push({ kind: "paper", workspaceId, artifactId, label });
+      if (!workspaceId || !artifactId) return;
+      push({ kind: "paper", workspaceId, artifactId, label });
       return;
     }
     if (kind === "workspace") {
-      const key = `${workspaceId}:`;
-      if (seen.has(key)) {
-        return;
-      }
-      seen.add(key);
-      refs.push({ kind: "workspace", workspaceId, label });
+      const workspaceId = chip.dataset.workspaceId;
+      if (!workspaceId) return;
+      push({ kind: "workspace", workspaceId, label });
+      return;
+    }
+    if (kind === "explore-paper") {
+      const paperKey = chip.dataset.paperKey;
+      if (!paperKey) return;
+      push({ kind: "explore-paper", paperKey, label });
+      return;
+    }
+    if (kind === "news") {
+      const feedItemId = chip.dataset.feedItemId;
+      if (!feedItemId) return;
+      push({ kind: "news", feedItemId, label });
+      return;
+    }
+    if (kind === "artifact-selection") {
+      const artifactId = chip.dataset.artifactId;
+      if (!artifactId) return;
+      const blockIds = (chip.dataset.blockIds ?? "").split(",").filter(Boolean);
+      push({ kind: "artifact-selection", artifactId, blockIds, excerpt: chip.dataset.excerpt ?? "", label });
     }
   });
   return refs;
@@ -338,33 +381,22 @@ export function moveCaretToEnd(element: HTMLElement) {
   selection?.addRange(range);
 }
 
-function findCommandBySlug(slug: string) {
-  return promptCommands.find(
-    (command) => command.slug === slug || command.aliases.some((alias) => alias === slug),
-  );
-}
-
-function escapeRegex(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 function appendVisibleContentTokens(root: HTMLElement, visibleContent: string) {
   if (!visibleContent) {
     return;
   }
-  const slugs = [...promptCommands]
-    .flatMap((command) => [command.slug, ...command.aliases])
-    .sort((a, b) => b.length - a.length)
-    .map(escapeRegex);
-  const slugPattern = new RegExp(slugs.join("|"), "g");
+  // Matcher slug bersama dari chat-core (word-boundary aware) — URL/infix yang
+  // kebetulan memuat slug tak lagi salah jadi chip.
   let lastIndex = 0;
-  for (const match of visibleContent.matchAll(slugPattern)) {
-    const index = match.index ?? 0;
+  for (const match of visibleContent.matchAll(promptCommandSlugPattern())) {
+    // Boundary (grup-1) ikut dikonsumsi → geser index ke awal slug (grup-2).
+    const boundary = match[1] ?? "";
+    const index = (match.index ?? 0) + boundary.length;
     if (index > lastIndex) {
       root.appendChild(document.createTextNode(visibleContent.slice(lastIndex, index)));
     }
-    const slug = match[0];
-    const command = findCommandBySlug(slug);
+    const slug = match[2] ?? "";
+    const command = getPromptCommandBySlug(slug);
     if (command) {
       root.appendChild(createCommandChipElement(command));
     } else {

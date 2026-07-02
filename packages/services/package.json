@@ -60,6 +60,27 @@
       "import": "./dist/artifact.service.js",
       "default": "./dist/artifact.service.js"
     },
+    "./astra-gateway": {
+      "types": "./src/astra-gateway.ts",
+      "bun": "./src/astra-gateway.ts",
+      "node": "./dist/astra-gateway.js",
+      "import": "./dist/astra-gateway.js",
+      "default": "./dist/astra-gateway.js"
+    },
+    "./doc-ai": {
+      "types": "./src/doc-ai.service.ts",
+      "bun": "./src/doc-ai.service.ts",
+      "node": "./dist/doc-ai.service.js",
+      "import": "./dist/doc-ai.service.js",
+      "default": "./dist/doc-ai.service.js"
+    },
+    "./preferences": {
+      "types": "./src/agentPreferences.service.ts",
+      "bun": "./src/agentPreferences.service.ts",
+      "node": "./dist/agentPreferences.service.js",
+      "import": "./dist/agentPreferences.service.js",
+      "default": "./dist/agentPreferences.service.js"
+    },
     "./workspace": {
       "types": "./src/workspace.service.ts",
       "bun": "./src/workspace.service.ts",
@@ -83,9 +104,11 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.73",
+    "@aqsha/chat-core": "workspace:*",
     "@aqsha/db": "workspace:*",
     "@aws-sdk/client-s3": "^3.1073.0",
     "@aws-sdk/s3-request-presigner": "^3.1073.0",
+    "@mistralai/mistralai": "^2.3.0",
     "ai": "^6.0.208",
     "bullmq": "^5.79.0",
     "drizzle-orm": "^0.45.2",

@@ -2,10 +2,89 @@ import { describe, expect, test } from "bun:test";
 import {
   assistantMessageId,
   clerkClaimsToPrincipal,
+  isOtherLikeOptionLabel,
   messagePreview,
+  normalizeAskOtherOption,
+  normalizeAskQuestions,
   ownershipVerdict,
+  parseCommandSegments,
   userMessageId,
 } from "../src/index";
+
+describe("normalizeAskOtherOption (dobel 'Lainnya')", () => {
+  test("opsi 'Lainnya' model + allowOther → satu chip (opsi dibuang, allowOther true)", () => {
+    const res = normalizeAskOtherOption(
+      [{ label: "Teks" }, { label: "Lainnya", description: "Tulis sendiri" }],
+      true,
+    );
+    expect(res.options.map((o) => o.label)).toEqual(["Teks"]);
+    expect(res.allowOther).toBe(true);
+  });
+
+  test("opsi 'Lainnya…' tanpa allowOther → di-promote jadi allowOther", () => {
+    const res = normalizeAskOtherOption([{ label: "A" }, { label: "Lainnya…" }], false);
+    expect(res.options.map((o) => o.label)).toEqual(["A"]);
+    expect(res.allowOther).toBe(true);
+  });
+
+  test("tanpa opsi other-like → tak berubah", () => {
+    const res = normalizeAskOtherOption([{ label: "A" }, { label: "B" }], false);
+    expect(res.options).toHaveLength(2);
+    expect(res.allowOther).toBe(false);
+  });
+
+  test("isOtherLikeOptionLabel varian", () => {
+    for (const l of [
+      "Lainnya",
+      "Lainnya…",
+      "lainnya...",
+      "Other",
+      "others",
+      "Tulis sendiri",
+      "Lain-lain",
+      "Lainnya (sebutkan)",
+      "Other, specify",
+    ]) {
+      expect(isOtherLikeOptionLabel(l)).toBe(true);
+    }
+    // Opsi konkret yang kebetulan diawali "Other"/"Lainnya" TAK boleh dianggap sentinel isi-sendiri.
+    for (const l of ["Teks/dokumen", "Data", "Ringkasan", "Other renewable sources", "Lainnya energi terbarukan"]) {
+      expect(isOtherLikeOptionLabel(l)).toBe(false);
+    }
+  });
+});
+
+describe("normalizeAskQuestions", () => {
+  test("payload bukan array → []", () => {
+    expect(normalizeAskQuestions(null)).toEqual([]);
+    expect(normalizeAskQuestions({ questions: [] })).toEqual([]);
+  });
+
+  test("item tanpa prompt dibuang; id fallback q{i+1}", () => {
+    const out = normalizeAskQuestions([{ prompt: "" }, { prompt: "Fokus?" }]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ id: "q2", prompt: "Fokus?", kind: "single" });
+  });
+
+  test("opsi string + object, lipat 'Lainnya' → allowOther, hormati kind multi", () => {
+    const out = normalizeAskQuestions([
+      { id: "scope", prompt: "Pilih", kind: "multi", options: ["A", { label: "B", description: "d" }, "Lainnya"] },
+    ]);
+    expect(out[0]).toMatchObject({ id: "scope", kind: "multi", allowOther: true });
+    expect(out[0]!.options.map((o) => o.label)).toEqual(["A", "B"]);
+  });
+
+  test("tanpa opsi → freeform murni (single + allowOther)", () => {
+    const out = normalizeAskQuestions([{ prompt: "Bebas" }]);
+    expect(out[0]).toMatchObject({ kind: "single", options: [], allowOther: true });
+  });
+
+  test("opts.max membatasi jumlah pertanyaan", () => {
+    const raw = Array.from({ length: 5 }, (_, i) => ({ prompt: `Q${i}` }));
+    expect(normalizeAskQuestions(raw, { max: 3 })).toHaveLength(3);
+    expect(normalizeAskQuestions(raw)).toHaveLength(5);
+  });
+});
 
 describe("clerkClaimsToPrincipal", () => {
   test("no sub → null", () => {
@@ -56,6 +135,54 @@ describe("messagePreview", () => {
     const out = messagePreview("x".repeat(300));
     expect(Array.from(out).length).toBe(160);
     expect(out.endsWith("…")).toBe(true);
+  });
+});
+
+describe("parseCommandSegments", () => {
+  test("slug di awal + argumen → [command, text]", () => {
+    const out = parseCommandSegments("/matriks bab 2 tentang UMKM");
+    expect(out).toHaveLength(2);
+    expect(out[0]).toMatchObject({ type: "command", matched: "/matriks" });
+    expect(out[1]).toMatchObject({ type: "text", value: " bab 2 tentang UMKM" });
+  });
+
+  test("slug di tengah kalimat (dipisah spasi) tetap cocok", () => {
+    const out = parseCommandSegments("tolong pakai /sitasi untuk daftar ini");
+    expect(out.map((s) => s.type)).toEqual(["text", "command", "text"]);
+    expect(out[1]).toMatchObject({ type: "command", matched: "/sitasi" });
+  });
+
+  test("alias ter-resolve ke command kanoniknya", () => {
+    const out = parseCommandSegments("/kuanti topik regresi");
+    expect(out[0]).toMatchObject({ type: "command", matched: "/kuanti" });
+    expect(out[0]!.type === "command" && out[0]!.command.id).toBe("kuantitatif");
+  });
+
+  test("alias prefix tak memakan slug panjang (/kuanti vs /kuantitatif)", () => {
+    const out = parseCommandSegments("/kuantitatif topik");
+    expect(out[0]).toMatchObject({ type: "command", matched: "/kuantitatif" });
+  });
+
+  test("slug di dalam URL / infix TIDAK jadi command", () => {
+    expect(parseCommandSegments("lihat https://x.co/matriks ya")).toEqual([
+      { type: "text", value: "lihat https://x.co/matriks ya" },
+    ]);
+    expect(parseCommandSegments("kata/matriks tanpa spasi")).toEqual([
+      { type: "text", value: "kata/matriks tanpa spasi" },
+    ]);
+  });
+
+  test("slug diikuti tanda baca tetap cocok; diikuti huruf tidak", () => {
+    const out = parseCommandSegments("pakai /matriks, lalu lanjut");
+    expect(out[1]).toMatchObject({ type: "command", matched: "/matriks" });
+    expect(parseCommandSegments("/matriksx bukan command")).toEqual([
+      { type: "text", value: "/matriksx bukan command" },
+    ]);
+  });
+
+  test("teks tanpa slash → satu segmen teks; string kosong → []", () => {
+    expect(parseCommandSegments("halo dunia")).toEqual([{ type: "text", value: "halo dunia" }]);
+    expect(parseCommandSegments("")).toEqual([]);
   });
 });
 

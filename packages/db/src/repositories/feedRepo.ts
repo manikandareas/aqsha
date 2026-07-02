@@ -1,12 +1,10 @@
-import { and, desc, eq, getTableColumns, gte, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, lt, ne, or, sql } from "drizzle-orm";
 import {
   type BalancedCursor,
   encodeBalancedCursor,
   encodeKeysetCursor,
-  encodeSearchCursor,
   type KeysetCursor,
   type LaneCursor,
-  type SearchKeysetCursor,
 } from "../cursor";
 import { type FeedItem, type NewFeedItem, feedItems } from "../schema/feedItems";
 import type { DbOrTx } from "../types";
@@ -44,13 +42,23 @@ export const FeedRepo = {
    * Upsert by `dedupe_key` (port V1 upsertFeedItems). On conflict update SEMUA field mutable
    * kecuali `id`+`created_at` (preserve baris asli yang dirujuk saved/hidden FK). `search_tsv`
    * GENERATED — tak di-set. Mengembalikan baris hasil (inserted/updated).
+   *
+   * GUARD enrichment: re-ingest RSS Google News membawa `summary: ""` (string kosong eksplisit)
+   * → tanpa guard, CONFLICT meng-clobber `summary` hasil enrichment tiap siklus 3 jam. CASE di
+   * bawah hanya menimpa `summary` bila nilai masuk non-kosong. Field enrichment lain
+   * (article_text/tldr/image_url/resolved_url/enrich_attempts) datang `undefined` di row RSS →
+   * Drizzle skip dari SET → otomatis preserved.
    */
   async upsertByDedupeKey(db: DbOrTx, row: NewFeedItem): Promise<FeedItem> {
     const { id: _id, createdAt: _createdAt, ...mutable } = row;
+    const set = {
+      ...mutable,
+      summary: sql`case when excluded.summary = '' then ${feedItems.summary} else excluded.summary end`,
+    };
     const rows = await db
       .insert(feedItems)
       .values(row)
-      .onConflictDoUpdate({ target: feedItems.dedupeKey, set: mutable })
+      .onConflictDoUpdate({ target: feedItems.dedupeKey, set })
       .returning();
     return rows[0]!;
   },
@@ -67,6 +75,16 @@ export const FeedRepo = {
       .where(eq(feedItems.dedupeKey, dedupeKey))
       .limit(1);
     return rows[0] ?? null;
+  },
+
+  /** Provenance: apakah `url` benar-benar pdf_url salah satu feed item (guard pdf-proxy, anti-SSRF). */
+  async pdfUrlExists(db: DbOrTx, url: string): Promise<boolean> {
+    const rows = await db
+      .select({ one: sql`1` })
+      .from(feedItems)
+      .where(eq(feedItems.pdfUrl, url))
+      .limit(1);
+    return rows.length > 0;
   },
 
   /** Baris feed paper yang sudah ter-materialisasi untuk sebuah paper_key (ensureFeedItemForPaperKey). */
@@ -168,8 +186,8 @@ export const FeedRepo = {
   },
 
   /**
-   * Item news Google yang masih butuh enrichment: provider google_news, article_text NULL,
-   * enrich_attempts < MAX (2). Port V1 googleNewsItemsNeedingEnrichment. NULLS LAST by published.
+   * Item news yang masih butuh enrichment: provider gdelt, article_text NULL,
+   * enrich_attempts < MAX (2). NULLS LAST by published.
    */
   async listNewsNeedingEnrichment(
     db: DbOrTx,
@@ -190,7 +208,7 @@ export const FeedRepo = {
       .where(
         and(
           eq(feedItems.kind, "news"),
-          eq(feedItems.provider, "google_news"),
+          eq(feedItems.provider, "gdelt"),
           isNull(feedItems.articleText),
           or(isNull(feedItems.enrichAttempts), lt(feedItems.enrichAttempts, 2)),
         ),
@@ -222,50 +240,6 @@ export const FeedRepo = {
       .limit(args.limit);
   },
 
-  /**
-   * Full-text search (search_tsv GIN, websearch_to_tsquery 'simple') + filter kind/fromYear,
-   * di-rank `ts_rank` DESC (port relevance-order V1 Convex withSearchIndex) lalu tiebreaker
-   * kronologis `(order_at, id)`. Keyset cursor `(rank, order_at, id)` (searchDiscovery, Slice 4.6).
-   */
-  async searchByTsvector(
-    db: DbOrTx,
-    args: {
-      q: string;
-      kinds: string[] | null;
-      fromYear: number | null;
-      limit: number;
-      cursor: SearchKeysetCursor | null;
-    },
-  ): Promise<{ items: FeedItem[]; nextCursor: string | null }> {
-    const tsq = sql`websearch_to_tsquery('simple', ${args.q})`;
-    const rank = sql<number>`ts_rank(${feedItems.searchTsv}, ${tsq})`;
-    const conds = [sql`${feedItems.searchTsv} @@ ${tsq}`];
-    if (args.kinds && args.kinds.length > 0) conds.push(inArray(feedItems.kind, args.kinds));
-    if (args.fromYear != null) {
-      conds.push(gte(feedItems.publishedAt, Date.UTC(args.fromYear, 0, 1)));
-    }
-    if (args.cursor) {
-      const c = args.cursor;
-      conds.push(
-        sql`(${rank} < ${c.r} or (${rank} = ${c.r} and (${feedItems.orderAt} < ${c.u} or (${feedItems.orderAt} = ${c.u} and ${feedItems.id} < ${c.i}))))`,
-      );
-    }
-    const rows = await db
-      .select({ ...getTableColumns(feedItems), _rank: rank })
-      .from(feedItems)
-      .where(and(...conds))
-      .orderBy(desc(rank), desc(feedItems.orderAt), desc(feedItems.id))
-      .limit(args.limit + 1);
-    const hasMore = rows.length > args.limit;
-    const page = hasMore ? rows.slice(0, args.limit) : rows;
-    const last = page[page.length - 1];
-    const nextCursor =
-      hasMore && last
-        ? encodeSearchCursor({ r: last._rank, u: last.orderAt, i: last.id })
-        : null;
-    const items: FeedItem[] = page.map(({ _rank, ...row }) => row);
-    return { items, nextCursor };
-  },
 };
 
 /**

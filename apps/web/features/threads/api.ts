@@ -4,9 +4,10 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { toast } from "sonner";
 import type { Artifact } from "@/features/artifacts/types";
 import { useApi } from "@/lib/api-client";
-import { readableApiErrorMessage } from "@/lib/api-error";
+import { apiErrorCode, readableApiErrorMessage } from "@/lib/api-error";
 import { queryKeys, unwrap } from "@/lib/api-query";
-import type { ChatMessage, ChatThread, ChatThreadEvent, ResearchSource } from "./types";
+import { triggerArtifactDownload } from "@/lib/artifact-download";
+import type { ChatThread, ResearchSource } from "./types";
 
 const LIST_PAGE_SIZE = 30;
 
@@ -26,6 +27,19 @@ export function useThreadsList() {
   });
 }
 
+/**
+ * Thread yang disematkan (grup "Disematkan" sidebar) — fetch utuh (bukan infinite),
+ * DESC `pinnedAt`. Terpisah dari `useThreadsList` karena list utama meng-exclude pin.
+ */
+export function usePinnedThreads() {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.threads.pinned(),
+    queryFn: async () =>
+      (unwrap(await api.threads.pinned.get()) as { items: ChatThread[] }).items,
+  });
+}
+
 /** Detail satu thread (null bila tak ditemukan / bukan milik user). */
 export function useThread(id: string, enabled = true) {
   const api = useApi();
@@ -37,48 +51,9 @@ export function useThread(id: string, enabled = true) {
 }
 
 /**
- * Transkrip thread (history persisted). `staleTime: Infinity` + tanpa refetch fokus:
- * dalam sesi live, buffer eve (`useAstraAgent`) yang jadi sumber turn berjalan; history
- * = snapshot mount supaya tak duplikat dengan live. Switch thread (queryKey berubah)
- * memuat ulang.
- */
-export function useThreadMessages(id: string, enabled = true) {
-  const api = useApi();
-  return useQuery({
-    queryKey: queryKeys.threads.messages(id),
-    enabled,
-    staleTime: Number.POSITIVE_INFINITY,
-    queryFn: async () =>
-      (unwrap(await api.threads({ id }).messages.get()) as { items: ChatMessage[] }).items,
-  });
-}
-
-/**
- * Event stream eve mentah per thread (1:1) — di-replay lewat `defaultMessageReducer` untuk
- * merekonstruksi timeline PENUH (tool/skill/subagent/HITL) saat reload. **Snapshot SEKALI**
- * saat mount (cold-load); turn in-flight di-stream live token-demi-token oleh resume stream
- * (`use-thread-resume`, satu-satunya sumber live), BUKAN poll 2 dtk (dibuang — redundan dgn
- * stream durable eve + sumber query berat). `staleTime: 0` + invalidate (resume settle / turn
- * selesai, lihat `chat-surface`) → ambil snapshot terbaru yang kini memuat event terminal →
- * `isStreamActive` false → composer unlock. Route masih dukung `afterIndex` (backfill manual
- * bila perlu), tapi tak ada lagi loop poll yang men-detoast log tiap tick.
- */
-export function useThreadEvents(id: string, enabled = true) {
-  const api = useApi();
-  return useQuery({
-    queryKey: queryKeys.threads.events(id),
-    enabled,
-    staleTime: 0,
-    queryFn: async () =>
-      (unwrap(await api.threads({ id }).events.get({ query: {} })) as { items: ChatThreadEvent[] })
-        .items,
-  });
-}
-
-/**
  * Status kirim (Slice 6.2) — pre-check UX-ramah: entitlement preview + cooldown rate-limit,
- * non-consuming. Backstop otoritatif tetap di `onMessage` proses eve. Tipe hasil di-infer
- * Eden dari route `GET /threads/send-status` (tanpa impor `@aqsha/services` di client).
+ * non-consuming. Backstop otoritatif = billing precheck processor server Mastra. Tipe hasil
+ * di-infer Eden dari route `GET /threads/send-status` (tanpa impor `@aqsha/services` di client).
  *
  * `feature='deep_research'` (Slice 7.0) → status sadar-cap deep (untuk notice saat `/deep`
  * aktif). Key di-scope per-feature → cache terpisah dari pre-check normal_chat.
@@ -118,16 +93,52 @@ export function useThreadSources(id: string, enabled = true) {
 }
 
 /**
+ * Unduh daftar pustaka thread (FEAT-3) — BibTeX/RIS diformat DETERMINISTIK di server dari
+ * `research_sources` (dedup + urut alfabetis). Mutation sekali-jalan: fetch teks → blob →
+ * anchor download (pola `triggerArtifactDownload`).
+ */
+export function useDownloadThreadReferences(threadId: string) {
+  const api = useApi();
+  return useMutation({
+    mutationFn: async (format: "bibtex" | "ris") => {
+      const payload = unwrap(
+        await api.threads({ id: threadId }).references.get({ query: { format } }),
+      ) as { fileName: string; mime: string; content: string; count: number };
+      if (payload.count === 0) {
+        toast.info("Belum ada sumber riset di percakapan ini.");
+        return;
+      }
+      triggerArtifactDownload({
+        kind: "blob",
+        mime: payload.mime,
+        fileName: payload.fileName,
+        getText: () => payload.content,
+      });
+    },
+    onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal mengekspor referensi.")),
+  });
+}
+
+/**
  * Hydrate konteks `@mention` (Slice 6.6) — resolve workspace/paper yang di-pin
  * composer → catatan ringkas + id tervalidasi (ownership di-cek server). Dipanggil
  * saat submit bila ada pin; hasilnya dikirim sebagai `clientContext` ephemeral ke
- * proses eve. Mutation (bukan query): aksi sekali-jalan per turn.
+ * runtime agent. Mutation (bukan query): aksi sekali-jalan per turn.
  */
 export function useHydrateContext() {
   const api = useApi();
   return useMutation({
-    mutationFn: async (input: { workspaceIds: string[]; artifactIds: string[] }) =>
-      unwrap(await api.threads.context.hydrate.post(input)),
+    mutationFn: async (input: {
+      workspaceIds: string[];
+      artifactIds: string[];
+      paperKeys?: string[];
+      feedItemIds?: string[];
+      selections?: { artifactId: string; blockIds: string[]; excerpt: string }[];
+    }) => unwrap(await api.threads.context.hydrate.post(input)),
+    // C3: hydrate konteks @mention (workspace/paper) → catatan ephemeral. Kegagalan transien
+    // (jaringan) men-drop konteks senyap; retri singkat memperkecil peluang itu sebelum submit.
+    retry: 2,
+    retryDelay: (attempt) => Math.min(400 * 2 ** attempt, 2_000),
   });
 }
 
@@ -155,8 +166,33 @@ export function useDeleteThread() {
   });
 }
 
+/**
+ * Sematkan / lepas sematan thread. Invalidate `threads.all` → list utama (exclude pin) +
+ * grup pinned re-sinkron sekaligus. Soft-cap terlampaui (backend `pin_limit_reached`,
+ * severity warning) → toast peringatan; kegagalan lain → toast error.
+ */
+export function usePinThread() {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string; pinned: boolean }) =>
+      unwrap(await api.threads({ id: input.id }).pin.patch({ pinned: input.pinned })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.threads.all }),
+    onError: (e) => {
+      if (apiErrorCode(e) === "pin_limit_reached") {
+        toast.warning(readableApiErrorMessage(e, "Batas sematan tercapai."));
+        return;
+      }
+      toast.error(readableApiErrorMessage(e, "Gagal menyematkan thread."));
+    },
+  });
+}
+
 /** Artifact yang terlampir pada thread (Slice 6.7) — headless (workspaceId=null). */
-export function useThreadArtifacts(threadId: string | null) {
+export function useThreadArtifacts(
+  threadId: string | null,
+  opts?: { pollWhilePending?: boolean },
+) {
   const api = useApi();
   return useQuery({
     queryKey: queryKeys.threads.artifacts(threadId ?? ""),
@@ -164,6 +200,30 @@ export function useThreadArtifacts(threadId: string | null) {
     queryFn: async () =>
       (unwrap(await api.threads({ id: threadId ?? "" }).artifacts.get()) as { items: Artifact[] })
         .items,
+    // D5: saat ada lampiran besar yang masih `pending` (index async), poll sampai ready/failed.
+    refetchInterval: (query) =>
+      opts?.pollWhilePending &&
+      (query.state.data ?? []).some((a) => a.indexingStatus === "pending")
+        ? 2_500
+        : false,
+  });
+}
+
+/**
+ * Cabut lampiran thread yang masih di-stage (sebelum kirim) — soft-delete headless.
+ * Dipanggil saat user menghapus chip composer supaya berkas yang ditarik tak ikut terlihat
+ * di message row (join sisi-baca per pesan memetakan lampiran via thread + waktu).
+ */
+export function useRemoveThreadAttachment(threadId: string) {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { artifactId: string }) =>
+      unwrap(
+        await api.threads({ id: threadId }).attachments({ artifactId: input.artifactId }).delete(),
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.threads.artifacts(threadId) }),
+    onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal mencabut lampiran.")),
   });
 }
 
@@ -189,9 +249,19 @@ export function useThreadAttachments(threadId: string) {
           mimeType: input.file.type || "application/octet-stream",
           size: input.file.size,
         }),
-      ) as { artifactId: string; title: string; indexed: boolean };
+      ) as { artifactId: string; title: string; indexed: boolean; indexingStatus: string };
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.threads.artifacts(threadId) }),
+    onSuccess: (data) => {
+      // D2: peringatkan hanya saat indexing benar-benar GAGAL (mis. PDF hasil scan / tanpa teks
+      // terbaca) — surface jujur, bukan degradasi senyap. `pending` (file besar, async) belum
+      // selesai → chip menampilkan "memproses…", poll yang akan menyusulkan toast bila failed.
+      if (data.indexingStatus === "failed") {
+        toast.warning(
+          "Berkas terlampir, tetapi isinya tak bisa diindeks untuk pencarian (mis. PDF hasil scan / tanpa teks terbaca). Astra dapat membaca metadata, tetapi mungkin tak menemukan isi teksnya.",
+        );
+      }
+      return qc.invalidateQueries({ queryKey: queryKeys.threads.artifacts(threadId) });
+    },
     onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal melampirkan berkas.")),
   });
 }

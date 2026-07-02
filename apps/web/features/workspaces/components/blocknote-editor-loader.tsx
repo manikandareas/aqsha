@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { DocumentEditorContent } from "./blocknote-document-editor";
+import type { DocumentEditorContent, EditorSelection } from "./blocknote-document-editor";
 
 const ClientBlockNoteDocumentEditor = dynamic(
   () =>
@@ -14,19 +14,25 @@ const ClientBlockNoteDocumentEditor = dynamic(
 );
 
 export function BlockNoteEditorLoader({
+  artifactId,
   initialBlocksJson,
   initialMarkdown,
   onContentChange,
+  onAskAstraAboutSelection,
 }: {
+  artifactId: string;
   initialBlocksJson: string;
   initialMarkdown?: string;
   onContentChange: (content: DocumentEditorContent) => void;
+  onAskAstraAboutSelection?: (selection: EditorSelection) => void;
 }) {
   return (
     <ClientBlockNoteDocumentEditor
+      artifactId={artifactId}
       initialBlocksJson={initialBlocksJson}
       initialMarkdown={initialMarkdown}
       onContentChange={onContentChange}
+      onAskAstraAboutSelection={onAskAstraAboutSelection}
     />
   );
 }

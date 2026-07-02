@@ -3,7 +3,8 @@
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { ResponsiveSidePanel } from "@/components/layout/responsive-side-panel";
-import { PanelBoardTitleDropdownTrigger } from "@/components/panel-title-dropdown-trigger";
+import { PanelHeaderBar, SidePanelFrame } from "@/components/layout/side-panel-frame";
+import { PanelTitleDropdownTrigger } from "@/components/panel-title-dropdown-trigger";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,6 +22,12 @@ import { WorkspaceLibrarySurface } from "@/features/workspaces/components/worksp
 import { WorkspaceBoardToolbar } from "@/features/workspaces/components/workspace-board-toolbar";
 import { useWorkspaceLibraryDialogState } from "@/features/workspaces/hooks/use-workspace-library-dialogs";
 import { ArtifactDetailPanel } from "@/features/workspaces/components/artifact-detail-view";
+import { workspaceEmoji } from "@/features/workspaces/utils/workspace-emoji";
+import { PlanDetailPanel } from "./plan-detail-panel";
+import { QuestionsDetailPanel } from "./questions-detail-panel";
+import { SearchStepPanel } from "./search-step-panel";
+import { SourcesListPanel } from "./sources-list-panel";
+import { StepDetailPanel } from "./step-detail-panel";
 import { useThreadExperienceData } from "../api/use-thread-experience-data";
 import type { ThreadShellLayoutProps } from "./component-types";
 import {
@@ -143,16 +150,22 @@ function ThreadDetailShellView({
     )
   ) : null;
 
-  const subagentPanel = null; // Stub: subagent drill-down belum dipersist di eve V2.
-
+  // A clicked message part (artifact / source / sub-question / plan) REPLACES the
+  // workspace-context panel in the single slot; closing it collapses the slot (no
+  // back-to-context — the header toggle reopens context).
   const panelContent =
     mode.kind === "artifact" ? (
-      <ArtifactDetailPanel
-        artifactId={mode.artifactId}
-        onClose={panel?.closePanel}
-      />
-    ) : mode.kind === "subagent" ? (
-      subagentPanel ?? contextContent
+      <ArtifactDetailPanel artifactId={mode.artifactId} onClose={panel?.closePanel} />
+    ) : mode.kind === "sources" ? (
+      <SourcesListPanel messageId={mode.messageId} threadId={threadId} />
+    ) : mode.kind === "search" ? (
+      <SearchStepPanel turnId={mode.turnId} subQuestionIndex={mode.subQuestionIndex} />
+    ) : mode.kind === "step" ? (
+      <StepDetailPanel toolCallId={mode.toolCallId} />
+    ) : mode.kind === "plan" ? (
+      <PlanDetailPanel turnId={mode.turnId} />
+    ) : mode.kind === "questions" ? (
+      <QuestionsDetailPanel />
     ) : (
       contextContent
     );
@@ -212,13 +225,13 @@ function ThreadWorkspaceLibraryPanel({
 
   if (libraryData.isLoading) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+      <SidePanelFrame header={<PanelHeaderBar title={titleSlot ?? null} />}>
         <div className={cn("grid gap-3", panelBodyPaddingClass)}>
           <Skeleton className="h-8 w-40 rounded-lg" />
           <Skeleton className="h-48 rounded-xl" />
           <Skeleton className="h-48 rounded-xl" />
         </div>
-      </div>
+      </SidePanelFrame>
     );
   }
 
@@ -235,6 +248,7 @@ function ThreadWorkspaceLibraryPanel({
       onAfterArchive={() => router.push("/app/workspaces")}
       showCreateActions
       showWorkspaceSettings
+      variant="panel"
     />
   );
 }
@@ -242,6 +256,7 @@ function ThreadWorkspaceLibraryPanel({
 type WorkspacePickerOption = {
   _id: string;
   name: string;
+  emoji?: string;
 };
 
 function WorkspacePanelSwitcher({
@@ -255,14 +270,23 @@ function WorkspacePanelSwitcher({
   onSelectWorkspace: (workspaceId: string) => void;
   placeholder?: string;
 }) {
-  const label = selectedWorkspaceId
-    ? (workspaces.find((workspace) => workspace._id === selectedWorkspaceId)?.name ?? placeholder)
-    : placeholder;
+  const selectedWorkspace = selectedWorkspaceId
+    ? workspaces.find((workspace) => workspace._id === selectedWorkspaceId)
+    : undefined;
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <PanelBoardTitleDropdownTrigger>{label}</PanelBoardTitleDropdownTrigger>
+        <PanelTitleDropdownTrigger className="font-serif text-base font-normal">
+          {selectedWorkspace ? (
+            <>
+              <span className="shrink-0">{workspaceEmoji(selectedWorkspace.emoji)}</span>
+              <span className="truncate">{selectedWorkspace.name}</span>
+            </>
+          ) : (
+            <span className="truncate">{placeholder}</span>
+          )}
+        </PanelTitleDropdownTrigger>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="max-h-64 w-64 overflow-y-auto">
         {workspaces.length === 0 ? (
@@ -273,7 +297,10 @@ function WorkspacePanelSwitcher({
               key={workspace._id}
               onClick={() => onSelectWorkspace(workspace._id)}
             >
-              <span className="truncate">{workspace.name}</span>
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="shrink-0">{workspaceEmoji(workspace.emoji)}</span>
+                <span className="truncate">{workspace.name}</span>
+              </span>
             </DropdownMenuItem>
           ))
         )}
@@ -312,22 +339,25 @@ function ThreadGlobalContextPanel({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      <WorkspaceBoardToolbar
-        workspaceName="Workspace"
-        titleSlot={workspaceSwitcher}
-        breadcrumb={[{ id: "root", label: "Root" }]}
-        onNavigate={() => {}}
-        onCreateFolder={() => {}}
-        onCreateDocument={() => {}}
-        onCreateUrl={() => {}}
-        onRenameWorkspace={async () => {}}
-        onUpdateWorkspaceEmoji={async () => {}}
-        onArchiveWorkspace={() => {}}
-        onClosePanel={closePanel}
-        showCreateActions={false}
-        showWorkspaceSettings={false}
-      />
+    <SidePanelFrame
+      header={
+        <WorkspaceBoardToolbar
+          workspaceName="Workspace"
+          titleSlot={workspaceSwitcher}
+          breadcrumb={[{ id: "root", label: "Root" }]}
+          onNavigate={() => {}}
+          onCreateFolder={() => {}}
+          onCreateDocument={() => {}}
+          onCreateUrl={() => {}}
+          onRenameWorkspace={async () => {}}
+          onUpdateWorkspaceEmoji={async () => {}}
+          onArchiveWorkspace={() => {}}
+          onClosePanel={closePanel}
+          showCreateActions={false}
+          showWorkspaceSettings={false}
+        />
+      }
+    >
       <div
         className={cn(
           "flex min-h-0 flex-1 items-center justify-center overflow-y-auto bg-background",
@@ -338,6 +368,6 @@ function ThreadGlobalContextPanel({
           Silakan pilih workspace terlebih dahulu.
         </p>
       </div>
-    </div>
+    </SidePanelFrame>
   );
 }

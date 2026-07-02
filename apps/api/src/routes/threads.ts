@@ -1,29 +1,34 @@
 import {
   ArtifactService,
   ContextService,
-  EventService,
-  MessageService,
   ResearchService,
   ThreadService,
 } from "@aqsha/services";
+import {
+  dedupeReferenceSources,
+  formatBibtex,
+  formatRis,
+  sortForReferenceList,
+} from "@aqsha/services/research";
 import { SendQuotaService } from "@aqsha/services/quota";
 import { Elysia, t } from "elysia";
 import { getDb } from "../clients/db";
 import { authMacro } from "../plugins/auth";
 
 /**
- * Route threads (Fase 6) — READ + non-stream WRITE (list/detail/history/rename/delete).
- * Stream chat TIDAK lewat sini: turn live di-handle PROSES eve (`/eve/v1/*` via proxy
- * `withEve`); thread+pesan di-persist hook proyeksi eve. Route ini hanya read history +
- * thread CRUD. Thread di-CREATE oleh hook (id == eve session id), bukan POST di sini.
+ * Route threads (Fase 6) — READ + non-stream WRITE (list/detail/rename/delete) + panel data
+ * (sources/artifacts/attachments). Stream chat & isi pesan TIDAK lewat sini: turn live + history
+ * di-handle server Mastra (`/mastra-api/*`); Mastra Memory (`mastra_*`) = SoT pesan. Thread
+ * metadata di-proyeksikan tipis ke `chat_threads` oleh `threadProjectionProcessor` agent (untuk
+ * sidebar/billing list), bukan POST di sini.
  *
  * Tipis: auth → 1 service call. Ownership/validasi domain hidup di service →
  * `appError` terstruktur, di-map errorPlugin global.
  */
 export const threads = new Elysia({ prefix: "/threads" })
   .use(authMacro)
-  // Pre-check kirim (Slice 6.2) — non-consuming preview entitlement + cooldown untuk UX
-  // composer. Backstop otoritatif tetap di `onMessage` proses eve. Static route → router
+  // Pre-check kirim — non-consuming preview entitlement + cooldown untuk UX composer.
+  // Backstop otoritatif tetap di processor billing runtime agent. Static route → router
   // Elysia memprioritaskan di atas `/:id`.
   .get(
     "/send-status",
@@ -49,6 +54,9 @@ export const threads = new Elysia({ prefix: "/threads" })
         ownerUserId,
         workspaceIds: body.workspaceIds,
         artifactIds: body.artifactIds,
+        paperKeys: body.paperKeys,
+        feedItemIds: body.feedItemIds,
+        selections: body.selections,
       });
     },
     {
@@ -56,6 +64,19 @@ export const threads = new Elysia({ prefix: "/threads" })
       body: t.Object({
         workspaceIds: t.Array(t.String()),
         artifactIds: t.Array(t.String()),
+        // Sumber Explore publik yang disematkan langsung (paper by key / berita by id).
+        paperKeys: t.Optional(t.Array(t.String())),
+        feedItemIds: t.Optional(t.Array(t.String())),
+        // Pilihan blok editor ("Tanya Astra") — blok spesifik artifact markdown + cuplikan.
+        selections: t.Optional(
+          t.Array(
+            t.Object({
+              artifactId: t.String(),
+              blockIds: t.Array(t.String()),
+              excerpt: t.String(),
+            }),
+          ),
+        ),
       }),
     },
   )
@@ -76,16 +97,16 @@ export const threads = new Elysia({ prefix: "/threads" })
       }),
     },
   )
-  // Thread `streaming` termuda milik caller (Layer C2) — klien memakai ini untuk menemukan
-  // sessionId turn PERTAMA segera setelah `send()` (eve baru surface sessionId di akhir turn),
-  // lalu bump URL → refresh saat menyusun plan tak kehilangan thread. Static route → di atas `/:id`.
+  // Thread yang disematkan — grup "Disematkan" sidebar (fetch utuh, DESC pinnedAt). Static
+  // route → di atas `/:id` supaya "pinned" tak salah-cocok sebagai id.
   .get(
-    "/recent-active",
-    ({ ownerUserId, query }) => {
+    "/pinned",
+    async ({ ownerUserId }) => {
       const { db } = getDb();
-      return ThreadService.recentActive(db, ownerUserId, query.since);
+      const items = await ThreadService.listPinned(db, ownerUserId);
+      return { items };
     },
-    { auth: true, query: t.Object({ since: t.Optional(t.Numeric()) }) },
+    { auth: true },
   )
   .get(
     "/:id",
@@ -94,32 +115,6 @@ export const threads = new Elysia({ prefix: "/threads" })
       return ThreadService.get(db, ownerUserId, params.id);
     },
     { auth: true },
-  )
-  .get(
-    "/:id/messages",
-    async ({ ownerUserId, params }) => {
-      const { db } = getDb();
-      await ThreadService.assertOwner(db, ownerUserId, params.id);
-      const items = await MessageService.listByThread(db, params.id);
-      return { items };
-    },
-    { auth: true },
-  )
-  // Event stream eve mentah per thread (fix timeline persist) — klien me-replay lewat
-  // `defaultMessageReducer` supaya timeline reload == live, dan poll endpoint ini selagi
-  // turn berjalan agar progress in-flight tetap terlihat setelah refresh. Ownership
-  // di-assert dulu (thread milik caller), lalu list by thread (urut seq).
-  .get(
-    "/:id/events",
-    async ({ ownerUserId, params, query }) => {
-      const { db } = getDb();
-      await ThreadService.assertOwner(db, ownerUserId, params.id);
-      // `afterIndex` → fetch INCREMENTAL (hanya delta) untuk reconciliation klien; tanpa
-      // itu → seluruh log (cold-start snapshot saat reload).
-      const items = await EventService.listByThread(db, params.id, query.afterIndex);
-      return { items };
-    },
-    { auth: true, query: t.Object({ afterIndex: t.Optional(t.Numeric()) }) },
   )
   // Sumber riset yang dipersist tool Astra (Slice 6.4) — panel Sources. Ownership
   // di-assert dulu (thread milik caller), lalu list by thread.
@@ -133,6 +128,26 @@ export const threads = new Elysia({ prefix: "/threads" })
     },
     { auth: true },
   )
+  // Ekspor daftar pustaka thread (FEAT-3) — BibTeX/RIS deterministik dari `research_sources`
+  // (dedup lintas turn, urut alfabetis APA). FE mengunduh sebagai blob; body = teks file.
+  .get(
+    "/:id/references",
+    async ({ ownerUserId, params, query }) => {
+      const { db } = getDb();
+      await ThreadService.assertOwner(db, ownerUserId, params.id);
+      const items = await ResearchService.listThreadSources(db, params.id);
+      const sources = sortForReferenceList(dedupeReferenceSources(items));
+      const format = query.format === "ris" ? "ris" : "bibtex";
+      return {
+        format,
+        count: sources.length,
+        fileName: `referensi-${params.id}.${format === "ris" ? "ris" : "bib"}`,
+        mime: format === "ris" ? "application/x-research-info-systems" : "application/x-bibtex",
+        content: format === "ris" ? formatRis(sources) : formatBibtex(sources),
+      };
+    },
+    { auth: true, query: t.Object({ format: t.Optional(t.String()) }) },
+  )
   // Lampiran thread (Slice 6.7) — file di-attach di chat, HEADLESS (workspaceId=null,
   // threadId set). Ownership = THREAD (assertOwner), bukan workspace. Reuse presign +
   // extract/RAG pipeline. Astra baca via tool list_artifacts/search_thread_documents
@@ -141,7 +156,8 @@ export const threads = new Elysia({ prefix: "/threads" })
     "/:id/attachments/upload-url",
     async ({ ownerUserId, params }) => {
       const { db } = getDb();
-      await ThreadService.assertOwner(db, ownerUserId, params.id);
+      // D6: izinkan lampiran di percakapan baru (thread belum terproyeksi); tolak thread milik lain.
+      await ThreadService.assertOwnerOrAbsent(db, ownerUserId, params.id);
       return ArtifactService.generateThreadUploadUrl(ownerUserId);
     },
     { auth: true },
@@ -150,7 +166,7 @@ export const threads = new Elysia({ prefix: "/threads" })
     "/:id/attachments",
     async ({ ownerUserId, params, body }) => {
       const { db } = getDb();
-      await ThreadService.assertOwner(db, ownerUserId, params.id);
+      await ThreadService.assertOwnerOrAbsent(db, ownerUserId, params.id);
       return ArtifactService.finalizeThreadUpload(db, {
         ownerUserId,
         threadId: params.id,
@@ -174,50 +190,44 @@ export const threads = new Elysia({ prefix: "/threads" })
     "/:id/artifacts",
     async ({ ownerUserId, params }) => {
       const { db } = getDb();
-      await ThreadService.assertOwner(db, ownerUserId, params.id);
+      // D6: percakapan baru (belum terproyeksi) tetap boleh — lampiran pesan-1 di-render live
+      // sebelum projection. Tolak thread milik lain.
+      await ThreadService.assertOwnerOrAbsent(db, ownerUserId, params.id);
       const items = await ArtifactService.listByThread(db, ownerUserId, params.id);
       return { items };
     },
     { auth: true },
   )
-  // Pending user message (Slice resume) — recovery pesan terkirim yang turn-nya belum settle.
-  // Ditulis klien sebelum `agent.send()` follow-up; di-DELETE saat kirim gagal. Recovery
-  // (null saat sudah settle) dihitung klien dari `events`. Owner-gated di service.
-  .post(
-    "/:id/pending",
-    ({ ownerUserId, params, body }) => {
+  // Cabut lampiran thread yang masih di-stage (sebelum kirim). Headless-tolerant: ownership =
+  // owner + lampiran upload milik thread ini (di-assert di service). Soft-delete + cleanup.
+  .delete(
+    "/:id/attachments/:artifactId",
+    async ({ ownerUserId, params }) => {
       const { db } = getDb();
-      return ThreadService.markPending(db, {
+      await ThreadService.assertOwnerOrAbsent(db, ownerUserId, params.id);
+      return ArtifactService.removeThreadAttachment(db, {
         ownerUserId,
         threadId: params.id,
-        message: body.message,
+        artifactId: params.artifactId,
       });
-    },
-    { auth: true, body: t.Object({ message: t.String() }) },
-  )
-  .delete(
-    "/:id/pending",
-    ({ ownerUserId, params }) => {
-      const { db } = getDb();
-      return ThreadService.clearPending(db, { ownerUserId, threadId: params.id });
     },
     { auth: true },
   )
-  // Handle-resume eve (continuationToken) — di-upsert SERVER-SIDE oleh proxy-tee respons
-  // create/continue eve (`web app/eve/v1/[...path]/route.ts`), BUKAN klien. Token dari
-  // respons create-POST = ber-namespace TUNGGAL (`eve:<uuid>`); RACE-PROOF (insert-if-absent,
-  // owner-guard di repo) karena respons create (202) bisa mendahului hook `session.started`.
-  .post(
-    "/:id/session-token",
+  // Sematkan / lepas sematan thread. Sub-route `/:id/pin` → di atas `PATCH /:id` (rename).
+  .patch(
+    "/:id/pin",
     ({ ownerUserId, params, body }) => {
       const { db } = getDb();
-      return ThreadService.upsertContinuationToken(db, {
+      return ThreadService.setPinned(db, {
         ownerUserId,
         threadId: params.id,
-        continuationToken: body.continuationToken,
+        pinned: body.pinned,
       });
     },
-    { auth: true, body: t.Object({ continuationToken: t.String() }) },
+    {
+      auth: true,
+      body: t.Object({ pinned: t.Boolean() }),
+    },
   )
   .patch(
     "/:id",

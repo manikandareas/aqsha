@@ -2,7 +2,7 @@
 
 import { DetailSplitLayout } from "@/components/layout/detail-split-layout";
 import { useSidebar } from "@/components/ui/sidebar";
-import { EveChatThreadSurface } from "./eve-chat-thread-surface";
+import { ChatThreadSurface } from "./chat-thread-surface";
 import type { ThreadShellLayoutProps } from "./component-types";
 import { AccessDeniedState } from "./access-denied-state";
 import { ThreadHeader } from "./thread-header";
@@ -26,8 +26,6 @@ export function ThreadShellLayout({
   onRetryRun,
   onDeleteThread,
   sidePanel,
-  contextArtifacts,
-  onRemoveContextArtifact,
 }: ThreadShellLayoutProps) {
   const leftSidebar = useSidebar();
   const isLeftSidebarOpen = leftSidebar.isMobile
@@ -59,14 +57,12 @@ export function ThreadShellLayout({
                 {threadId && selectedThread === null ? (
                   <AccessDeniedState />
                 ) : (
-                  <EveChatThreadSurface
+                  <ChatThreadSurface
                     threadId={threadId}
                     isLoading={threadId ? selectedThread === undefined : false}
                     title={threadId ? selectedThread?.title : undefined}
                     rateStatus={rateStatus}
                     threads={threads}
-                    contextArtifacts={contextArtifacts}
-                    onRemoveContextArtifact={onRemoveContextArtifact}
                   />
                 )}
               </main>

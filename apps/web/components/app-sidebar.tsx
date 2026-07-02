@@ -1,7 +1,6 @@
 "use client";
 
 import { NavUser } from "@/components/nav-user";
-import { SidebarProCard } from "@/components/sidebar-pro-card";
 import {
   CommandDialog,
   CommandEmpty,
@@ -28,6 +27,7 @@ import {
   LayoutGridIcon,
   MessageSquareIcon,
   PanelLeftIcon,
+  PinIcon,
   PlusIcon,
   SearchIcon,
   SettingsIcon,
@@ -35,11 +35,13 @@ import {
 } from "@aqsha/ui/icons";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { CreateWorkspacePopover } from "@/features/workspaces/components/create-workspace-popover";
 import { NameDialog } from "@/features/workspaces/components/workspace-dialogs";
-import { ThreadDeleteActions } from "@/features/thread-experience/components/thread-actions-menu";
+import { ThreadActionsMenu } from "@/features/thread-experience/components/thread-actions-menu";
 import type {
   RemoveThread,
   ThreadSummary,
+  TogglePinThread,
 } from "@/features/thread-experience/components/component-types";
 import {
   type ComponentProps,
@@ -90,6 +92,7 @@ export function AppSidebar({
   onCreateThread,
   createWorkspace,
   removeThread,
+  togglePinThread,
   ...props
 }: ComponentProps<typeof Sidebar> & {
   viewer: Viewer | undefined;
@@ -100,6 +103,7 @@ export function AppSidebar({
   onCreateThread: () => void;
   createWorkspace?: (args: { name: string }) => Promise<unknown>;
   removeThread?: RemoveThread;
+  togglePinThread?: TogglePinThread;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -112,10 +116,15 @@ export function AppSidebar({
   const sortedThreads = threads.toSorted(
     (left, right) => right.lastActivityAt - left.lastActivityAt,
   );
-  // Grouping recent/older dari BE (ThreadService.list `bucket`) — FE tinggal pisah by field.
+  // Thread yang disematkan diangkat ke grup "Disematkan" (urut pinnedAt DESC — pin terbaru
+  // dulu). Sisanya (unpinned) dipisah recent/older dari BE (ThreadService.list `bucket`).
+  const pinnedThreads = threads
+    .filter((t) => t.pinnedAt != null)
+    .toSorted((left, right) => (right.pinnedAt ?? 0) - (left.pinnedAt ?? 0));
+  const unpinnedThreads = sortedThreads.filter((t) => t.pinnedAt == null);
   const threadGroups = {
-    recent: sortedThreads.filter((t) => t.bucket !== "older"),
-    older: sortedThreads.filter((t) => t.bucket === "older"),
+    recent: unpinnedThreads.filter((t) => t.bucket !== "older"),
+    older: unpinnedThreads.filter((t) => t.bucket === "older"),
   };
   const isHomeActive = pathname === "/app" && !selectedThreadId;
   const isWorkspaceRoute = pathname.startsWith("/app/workspaces");
@@ -124,15 +133,16 @@ export function AppSidebar({
     sortedWorkspaces.length > 0 || Boolean(createWorkspace);
   const showThreadSection = sortedThreads.length > 0 || Boolean(onCreateThread);
   const hasSidebarItems = showWorkspaceSection || showThreadSection;
-  const workspaceSectionAction = createWorkspace ? (
-    <button
-      type="button"
-      onClick={() => setCreateDialogOpen(true)}
-      className="flex size-5 shrink-0 items-center justify-center rounded-[5px] text-muted-foreground transition-[background-color,color] duration-150 ease-out hover:bg-primary/10 hover:text-primary"
-      aria-label="Workspace baru"
-    >
-      <PlusIcon className="size-3" />
-    </button>
+  // Shared by the sidebar plus-button popover and the Cmd+K "Workspace baru"
+  // dialog so both entry points create + navigate identically.
+  const submitCreateWorkspace = createWorkspace
+    ? async ({ name }: { name: string }) => {
+        const workspaceId = await createWorkspace({ name });
+        router.push(`/app/workspaces/${String(workspaceId)}`);
+      }
+    : null;
+  const workspaceSectionAction = submitCreateWorkspace ? (
+    <CreateWorkspacePopover onSubmit={submitCreateWorkspace} />
   ) : null;
 
   useEffect(() => {
@@ -185,11 +195,25 @@ export function AppSidebar({
     }
   };
 
+  const handleTogglePin = async (thread: ThreadSummary) => {
+    if (!togglePinThread) return;
+    await togglePinThread({
+      threadId: thread.threadId,
+      pinned: thread.pinnedAt == null,
+    });
+  };
+
   return (
     <>
+      {/* "sidebar" (not "flush"): the main rail reads as its own surface
+          (bg-sidebar) so it sits a step below the page background instead of
+          blending into it. The color step alone is the seam, so we drop the
+          variant's border-r — overriding only this left rail keeps the
+          mobile right-side panel's divider (also variant="sidebar") intact. */}
       <Sidebar
         collapsible="offcanvas"
-        variant="flush"
+        variant="sidebar"
+        className="group-data-[side=left]:border-r-0"
         {...props}
       >
         <SidebarHeader className="gap-3 px-3 pb-3 pt-3.5">
@@ -271,29 +295,56 @@ export function AppSidebar({
                       storageKey={THREADS_COLLAPSED_STORAGE_KEY}
                     >
                       {sortedThreads.length > 0 ? (
-                        <div className="grid min-w-0 gap-2 overflow-hidden">
-                          {threadGroups.recent.length > 0 ? (
-                            <SidebarMenu className="min-w-0 gap-1 overflow-hidden">
-                              {threadGroups.recent.map((thread) => (
-                                <RecentThreadRow
-                                  key={thread.threadId}
-                                  thread={thread}
-                                  active={thread.threadId === selectedThreadId}
-                                  onDelete={
-                                    removeThread
-                                      ? () => handleDeleteThread(thread)
-                                      : undefined
-                                  }
-                                />
-                              ))}
-                            </SidebarMenu>
-                          ) : null}
+                        <div className="min-w-0 overflow-hidden">
+                          <SidebarMenu className="min-w-0 gap-1 overflow-hidden">
+                            {pinnedThreads.length > 0 ? (
+                              <>
+                                <PinnedThreadsLabel />
+                                {pinnedThreads.map((thread) => (
+                                  <RecentThreadRow
+                                    key={thread.threadId}
+                                    thread={thread}
+                                    active={thread.threadId === selectedThreadId}
+                                    onDelete={
+                                      removeThread
+                                        ? () => handleDeleteThread(thread)
+                                        : undefined
+                                    }
+                                    onTogglePin={
+                                      togglePinThread
+                                        ? () => handleTogglePin(thread)
+                                        : undefined
+                                    }
+                                  />
+                                ))}
+                              </>
+                            ) : null}
+                            {threadGroups.recent.map((thread) => (
+                              <RecentThreadRow
+                                key={thread.threadId}
+                                thread={thread}
+                                active={thread.threadId === selectedThreadId}
+                                onDelete={
+                                  removeThread
+                                    ? () => handleDeleteThread(thread)
+                                    : undefined
+                                }
+                                onTogglePin={
+                                  togglePinThread
+                                    ? () => handleTogglePin(thread)
+                                    : undefined
+                                }
+                              />
+                            ))}
+                          </SidebarMenu>
                           {threadGroups.older.length > 0 ? (
                             <ThreadArchiveGroup
                               threads={threadGroups.older}
                               selectedThreadId={selectedThreadId}
                               removeThread={removeThread}
+                              togglePinThread={togglePinThread}
                               onDeleteThread={handleDeleteThread}
+                              onTogglePin={handleTogglePin}
                             />
                           ) : null}
                         </div>
@@ -309,7 +360,6 @@ export function AppSidebar({
         </SidebarContent>
 
         <SidebarFooter className="mt-auto gap-3 p-3">
-          <SidebarProCard />
           <NavUser user={viewer} />
         </SidebarFooter>
       </Sidebar>
@@ -369,7 +419,8 @@ export function AppSidebar({
                   {sortedWorkspaces.map((workspace) => (
                     <CommandItem
                       key={workspace._id}
-                      value={`workspace-${workspace.name}`}
+                      value={`workspace-${workspace._id}`}
+                      keywords={[workspace.name]}
                       onSelect={() => setCommandOpen(false)}
                       asChild
                     >
@@ -386,7 +437,8 @@ export function AppSidebar({
                   {sortedThreads.map((thread) => (
                     <CommandItem
                       key={thread.threadId}
-                      value={`thread-${thread.title}`}
+                      value={`thread-${thread.threadId}`}
+                      keywords={[thread.title]}
                       onSelect={() => setCommandOpen(false)}
                       asChild
                     >
@@ -402,17 +454,14 @@ export function AppSidebar({
           </>
         ) : null}
       </CommandDialog>
-      {createWorkspace ? (
+      {submitCreateWorkspace ? (
         <NameDialog
           open={createDialogOpen}
           onOpenChange={setCreateDialogOpen}
           title="Workspace baru"
           description="Buat area riset personal."
           submitLabel="Buat"
-          onSubmit={async ({ name }) => {
-            const workspaceId = await createWorkspace({ name });
-            router.push(`/app/workspaces/${String(workspaceId)}`);
-          }}
+          onSubmit={submitCreateWorkspace}
         />
       ) : null}
     </>
@@ -564,12 +613,16 @@ function ThreadArchiveGroup({
   threads,
   selectedThreadId,
   removeThread,
+  togglePinThread,
   onDeleteThread,
+  onTogglePin,
 }: {
   threads: ThreadSummary[];
   selectedThreadId?: string;
   removeThread?: RemoveThread;
+  togglePinThread?: TogglePinThread;
   onDeleteThread: (thread: ThreadSummary) => Promise<void>;
+  onTogglePin: (thread: ThreadSummary) => Promise<void>;
 }) {
   const hasActiveThread = threads.some(
     (thread) => thread.threadId === selectedThreadId,
@@ -627,6 +680,9 @@ function ThreadArchiveGroup({
                 onDelete={
                   removeThread ? () => onDeleteThread(thread) : undefined
                 }
+                onTogglePin={
+                  togglePinThread ? () => onTogglePin(thread) : undefined
+                }
               />
             ))}
           </SidebarMenu>
@@ -636,18 +692,36 @@ function ThreadArchiveGroup({
   );
 }
 
+function PinnedThreadsLabel() {
+  return (
+    <li
+      role="presentation"
+      aria-hidden="true"
+      className="flex items-center gap-1 px-1"
+    >
+      <PinIcon className="size-3 shrink-0 text-primary/60" />
+      <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-muted-foreground">
+        Disematkan
+      </span>
+    </li>
+  );
+}
+
 function RecentThreadRow({
   thread,
   active,
   onDelete,
+  onTogglePin,
 }: {
   thread: ThreadSummary;
   active: boolean;
   onDelete?: () => Promise<void>;
+  onTogglePin?: () => Promise<void>;
 }) {
   const deleteDescription = thread.workspaceId
     ? "Thread dan pesannya akan dihapus permanen dari workspace ini."
     : "Thread dan pesannya akan dihapus permanen.";
+  const isPinned = thread.pinnedAt != null;
 
   return (
     <SidebarMenuItem className="min-w-0 overflow-hidden">
@@ -671,16 +745,21 @@ function RecentThreadRow({
           <span className="min-w-0 flex-1 truncate font-normal">
             {truncateCharacters(thread.title, MOBILE_THREAD_TITLE_MAX_CHARS)}
           </span>
+          {isPinned ? (
+            <PinIcon className="size-3 shrink-0 text-primary/50" />
+          ) : null}
           {thread.status === "streaming" ? (
-            <span className="ml-auto inline-flex size-1.5 shrink-0 rounded-full bg-primary" />
+            <span className="inline-flex size-1.5 shrink-0 rounded-full bg-primary" />
           ) : null}
         </Link>
       </SidebarMenuButton>
       {onDelete ? (
-        <ThreadDeleteActions
+        <ThreadActionsMenu
           variant="sidebar-row"
           description={deleteDescription}
           onDelete={onDelete}
+          isPinned={isPinned}
+          onTogglePin={onTogglePin}
         />
       ) : null}
     </SidebarMenuItem>

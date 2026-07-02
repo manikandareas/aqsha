@@ -36,7 +36,8 @@ export type CreditFeature =
   | "deep_research"
   | "external_search"
   | "sandbox_compute"
-  | "citation_verify";
+  | "citation_verify"
+  | "doc_ai_edit";
 
 export type PlanDefinition = {
   key: PlanKey;
@@ -68,14 +69,14 @@ export const PLAN_CATALOG: Record<PlanKey, PlanDefinition> = {
     label: "Free",
     monthlyPriceIdr: 0,
     annualPriceIdr: 0,
-    monthlyCredits: 50,
+    monthlyCredits: 150,
     deepResearchRuns: 2,
     workspaceLimit: 1,
     libraryItemLimit: 25,
     providerSpendCeilingCents: 0,
     features: [
       "Astra Lite",
-      "50 credits per bulan",
+      "150 credits per bulan",
       "2 Deep Research (Lite) per bulan",
       "1 workspace",
       "25 library items",
@@ -237,6 +238,8 @@ export function estimateCredits(args: {
   if (args.feature === "citation_verify") return 0;
   if (args.feature === "external_search") return 2;
   if (args.feature === "pro_chat") return Math.max(1, Math.ceil(totalTokens / PRO_CHAT_TOKENS_PER_CREDIT));
+  // normal_chat + doc_ai_edit (edit dokumen AI native BlockNote → model Lite Astra) → rate Lite
+  // berbasis token aktual. Gate plan-nya juga = Lite (requiredPlanForFeature default "free").
   return Math.max(1, Math.ceil(totalTokens / NORMAL_CHAT_TOKENS_PER_CREDIT));
 }
 
@@ -261,9 +264,8 @@ export function estimateProviderCostCents(args: {
   // NOTE: heuristik cents = OBSERVABILITY-only (bukan gerbang). Port verbatim V1
   // (string "gpt-5.5"); retune ke pricing Claude = follow-up P6/P9.
   if (args.feature === "external_search") {
-    if (args.provider === "exa") return 3;
-    if (args.provider === "jina_read") return 2;
-    if (args.provider === "jina_search" || args.provider === "jina_rerank") return 1;
+    // Provider akademik/web (openalex/arxiv/crossref/firecrawl_search) tak dipatok
+    // biaya per-call di sini — usage direkam ledger, cents observability = 0.
     return 0;
   }
 

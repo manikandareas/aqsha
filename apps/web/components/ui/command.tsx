@@ -48,17 +48,17 @@ function CommandDialog({
 }) {
   return (
     <Dialog {...props}>
-      <DialogHeader className="sr-only">
-        <DialogTitle>{title}</DialogTitle>
-        <DialogDescription>{description}</DialogDescription>
-      </DialogHeader>
       <DialogContent
         className={cn(
-          "top-1/3 translate-y-0 overflow-hidden rounded-xl! p-0",
+          "top-1/3 translate-y-0 overflow-hidden rounded-xl! p-0 sm:max-w-2xl",
           className
         )}
         showCloseButton={showCloseButton}
       >
+        <DialogHeader className="sr-only">
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
         <Command className="rounded-none border-0 bg-transparent shadow-none">
           {children}
         </Command>
@@ -151,19 +151,31 @@ function CommandSeparator({
 function CommandItem({
   className,
   children,
+  asChild,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Item>) {
   return (
     <CommandPrimitive.Item
       data-slot="command-item"
+      asChild={asChild}
       className={cn(
         "group/command-item relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none in-data-[slot=dialog-content]:rounded-lg! data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:bg-muted data-selected:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 data-selected:*:[svg]:text-foreground",
         className
       )}
       {...props}
     >
-      {children}
-      <CheckIcon className="ml-auto opacity-0 group-has-data-[slot=command-shortcut]/command-item:hidden group-data-[checked=true]/command-item:opacity-100" />
+      {/* With `asChild`, the consumer supplies the single slotted element
+          (e.g. a <Link>). The checked-state affordance can't be rendered as a
+          sibling or Radix's Slot rejects the extra child, so it only appears on
+          items that own their own content. */}
+      {asChild ? (
+        children
+      ) : (
+        <>
+          {children}
+          <CheckIcon className="ml-auto opacity-0 group-has-data-[slot=command-shortcut]/command-item:hidden group-data-[checked=true]/command-item:opacity-100" />
+        </>
+      )}
     </CommandPrimitive.Item>
   )
 }

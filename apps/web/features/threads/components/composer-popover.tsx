@@ -51,12 +51,6 @@ export function ComposerPopoverHeader({
           </span>
         ) : null}
       </div>
-      <span className="inline-flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground">
-        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded border border-border/70 bg-background px-1 font-medium font-mono text-[9.5px] text-foreground/80 leading-none">
-          esc
-        </span>
-        tutup
-      </span>
     </div>
   );
 }
@@ -71,11 +65,9 @@ export function ComposerPopoverList({ id, children }: { id: string; children: Re
 
 export function ComposerPopoverGroup({
   label,
-  count,
   children,
 }: {
   label?: ReactNode;
-  count?: number;
   children: ReactNode;
 }) {
   return (
@@ -83,11 +75,6 @@ export function ComposerPopoverGroup({
       {label != null ? (
         <div className="flex items-center gap-2 px-2 pt-2 pb-1 font-medium text-[11px] text-muted-foreground first:pt-1">
           <span className="truncate">{label}</span>
-          {count != null ? (
-            <span className="ml-auto text-[10.5px] text-muted-foreground/60 tabular-nums">
-              {count}
-            </span>
-          ) : null}
         </div>
       ) : null}
       {children}

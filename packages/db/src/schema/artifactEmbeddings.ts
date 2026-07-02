@@ -1,7 +1,15 @@
-import { bigint, index, integer, pgTable, text, vector } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { bigint, customType, index, integer, pgTable, text, vector } from "drizzle-orm/pg-core";
 import { artifacts } from "./artifacts";
 import { users } from "./users";
 import { workspaces } from "./workspaces";
+
+/** Tipe `tsvector` Postgres (drizzle pg-core tak punya bawaan) — full-text lexical chunk (D4). */
+const tsvector = customType<{ data: string }>({
+  dataType() {
+    return "tsvector";
+  },
+});
 
 /**
  * artifact_embeddings — pgvector RAG index (P3). Satu row per chunk teks artifact.
@@ -26,6 +34,10 @@ export const artifactEmbeddings = pgTable(
     chunkIndex: integer("chunk_index").notNull(),
     content: text("content").notNull(),
     embedding: vector("embedding", { dimensions: ARTIFACT_EMBEDDING_DIMENSION }).notNull(),
+    // Lexical FTS chunk (D4 hybrid search) — di-generate dari `content`, di-index GIN.
+    contentTsv: tsvector("content_tsv").generatedAlwaysAs(
+      sql`to_tsvector('simple', coalesce(content, ''))`,
+    ),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
   (t) => [
@@ -34,6 +46,7 @@ export const artifactEmbeddings = pgTable(
       "hnsw",
       t.embedding.op("vector_cosine_ops"),
     ),
+    index("artifact_embeddings_content_gin").using("gin", t.contentTsv),
   ],
 );
 

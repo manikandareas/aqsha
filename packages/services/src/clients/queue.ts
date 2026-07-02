@@ -12,6 +12,9 @@ export const ARTIFACT_QUEUES = {
   urlIngestion: "url-ingestion",
   paperEnrichment: "paper-enrichment",
   artifactCleanup: "artifact-cleanup",
+  // Index lampiran thread besar (D5) — ekstraksi+embedding di-offload dari finalize upload
+  // supaya response tak terblok; file kecil tetap inline.
+  artifactIndexing: "artifact-indexing",
 } as const;
 
 /** Queue feed (P4) — lane hydration discovery (ganti cron 3h Convex). */
@@ -19,10 +22,9 @@ export const FEED_QUEUES = {
   feedHydration: "feed-hydration",
 } as const;
 
-/** Queue chat (P6) — auto-title async thread (Slice 6.8) + reconciler zombie (Phase 5). */
+/** Queue chat (P6) — auto-title async thread (Slice 6.8). */
 export const CHAT_QUEUES = {
   threadTitle: "thread-title",
-  reconcileStale: "reconcile-stale-threads",
 } as const;
 
 /** Queue account (P9) — cascade hard-delete data owner async (blob sweep + DELETE users). */
@@ -30,22 +32,11 @@ export const ACCOUNT_QUEUES = {
   accountDeletion: "account-deletion",
 } as const;
 
-/** Queue Explore — analisis gap/tension berat (baca abstrak paper → LLM), per-query. */
-export const EXPLORE_QUEUES = {
-  exploreAnalysis: "explore-analysis",
-} as const;
-
 export type ArtifactQueueName = (typeof ARTIFACT_QUEUES)[keyof typeof ARTIFACT_QUEUES];
 export type FeedQueueName = (typeof FEED_QUEUES)[keyof typeof FEED_QUEUES];
 export type ChatQueueName = (typeof CHAT_QUEUES)[keyof typeof CHAT_QUEUES];
 export type AccountQueueName = (typeof ACCOUNT_QUEUES)[keyof typeof ACCOUNT_QUEUES];
-export type ExploreQueueName = (typeof EXPLORE_QUEUES)[keyof typeof EXPLORE_QUEUES];
-export type QueueName =
-  | ArtifactQueueName
-  | FeedQueueName
-  | ChatQueueName
-  | AccountQueueName
-  | ExploreQueueName;
+export type QueueName = ArtifactQueueName | FeedQueueName | ChatQueueName | AccountQueueName;
 
 let connection: ConnectionOptions | null = null;
 const queues = new Map<QueueName, Queue>();

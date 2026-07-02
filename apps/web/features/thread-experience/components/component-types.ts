@@ -25,6 +25,7 @@ export type ThreadSummary = {
   messageCount: number;
   status: "idle" | "streaming" | "failed";
   lastAgentKind?: "lite" | "pro";
+  pinnedAt?: number | null; // null/absen = tak disematkan; nilai ⇒ grup "Disematkan" (urut DESC)
   bucket?: "recent" | "older"; // dihitung BE (ThreadService.list) untuk grouping sidebar
 };
 
@@ -81,17 +82,17 @@ export type SelectedContextArtifact = {
   };
 };
 
-export type DraftContextArtifact = {
-  artifactId: string;
-  title: string;
-};
-
 export type ToggleThreadContextArtifact = (args: {
   threadId: string;
   artifactId: ArtifactId;
 }) => Promise<{ ok: boolean; selected: boolean }>;
 
 export type RemoveThread = (args: { threadId: string }) => Promise<{ ok: boolean }>;
+
+export type TogglePinThread = (args: {
+  threadId: string;
+  pinned: boolean;
+}) => Promise<{ ok: boolean }>;
 
 export type ThreadShellLayoutProps = {
   threads: ThreadSummary[];
@@ -118,6 +119,4 @@ export type ThreadShellLayoutProps = {
   onRetryRun?: (args: { runId: AgentRunId }) => Promise<unknown>;
   onDeleteThread?: () => Promise<void>;
   sidePanel?: ReactNode;
-  contextArtifacts?: DraftContextArtifact[];
-  onRemoveContextArtifact?: (artifactId: string) => void;
 };

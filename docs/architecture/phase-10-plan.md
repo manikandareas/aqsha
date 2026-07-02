@@ -22,11 +22,11 @@ Spec 06 ditulis sebelum beberapa keputusan Fase 6–9. Realita kode + keputusan 
 
 ## Topologi prod (di-deploy)
 
-| Proses | Runtime | systemd unit | Port | Reverse proxy |
-|---|---|---|---|---|
-| api-v2 | Bun | `aqsha-api-v2.service` | 3001 | `api.aqsha.app` |
-| worker | Bun | `aqsha-worker.service` | — | (tanpa port; BullMQ) |
-| web-v2 + eve | Node ≥24 | `aqsha-web-v2.service` | 3000 | `app.aqsha.app` |
+| Proses       | Runtime  | systemd unit           | Port | Reverse proxy        |
+| ------------ | -------- | ---------------------- | ---- | -------------------- |
+| api-v2       | Bun      | `aqsha-api-v2.service` | 3001 | `api.aqsha.app`      |
+| worker       | Bun      | `aqsha-worker.service` | —    | (tanpa port; BullMQ) |
+| web-v2 + eve | Node ≥24 | `aqsha-web-v2.service` | 3000 | `aqshara.com`        |
 
 eve = **child process** yang di-spawn `withEve` di dalam web-v2 → **satu replica** (D1).
 Artefak deploy: `infra/nginx/aqsha.conf`, `infra/systemd/aqsha-*.service`.
@@ -58,7 +58,7 @@ Artefak deploy: `infra/nginx/aqsha.conf`, `infra/systemd/aqsha-*.service`.
 2. Pasang artefak:
    - `cp infra/systemd/aqsha-*.service /etc/systemd/system/` (sesuaikan path Bun/Node + `User=`).
    - `cp infra/nginx/aqsha.conf /etc/nginx/sites-available/aqsha` + symlink ke `sites-enabled`.
-   - TLS: `certbot --nginx -d api.aqsha.app -d app.aqsha.app`.
+   - TLS: `certbot --nginx -d api.aqsha.app -d aqshara.com`.
 3. `systemctl daemon-reload && systemctl enable --now aqsha-api-v2 aqsha-worker aqsha-web-v2`.
 4. `nginx -t && systemctl reload nginx`.
 5. Cron feed-hydration 3h: di-register oleh worker saat start (BullMQ repeatable). Verifikasi di bull-board.
@@ -84,7 +84,7 @@ Probe infra: `curl https://api.aqsha.app/healthz` (db+redis true), `/health/read
 ## 4. Flip
 
 1. **DNS / reverse-proxy**: arahkan domain utama dari apps/web (V1) → web-v2. (Kalau V1 di host lain,
-   cukup ganti A/CNAME; kalau seproxy, aktifkan blok `app.aqsha.app`.)
+   cukup ganti A/CNAME; kalau seproxy, aktifkan blok `aqshara.com`.)
 2. **Webhook Clerk**: dashboard Clerk → ganti endpoint ke `https://api.aqsha.app/webhooks/clerk`,
    pakai signing secret V2 yang sudah di `api-v2.env`.
 3. **Webhook Polar**: dashboard Polar → endpoint `https://api.aqsha.app/webhooks/polar`.

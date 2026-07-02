@@ -13,6 +13,7 @@ import type {
   ReactNode,
 } from "react";
 import { Streamdown } from "streamdown";
+import { CitationMarkdownComponent } from "./inline-citation";
 import { TableBlock } from "./table-block";
 import {
   Tooltip,
@@ -58,16 +59,18 @@ export const MessageContent = ({
 export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
 const streamdownPlugins = { cjk, code, math, mermaid };
-const streamdownComponents = { table: TableBlock };
+// Komponen default: tabel kustom + element `citation` (pill sitasi inline). `citation` hanya muncul
+// bila pemanggil meneruskan `citationRehypePlugins` (lihat `Response`); tanpa itu komponen tak terpakai.
+const streamdownComponents = { table: TableBlock, citation: CitationMarkdownComponent };
 
-export const MessageResponse = ({ className, ...props }: MessageResponseProps) => (
+export const MessageResponse = ({ className, components, ...props }: MessageResponseProps) => (
     <Streamdown
       className={cn(
         "size-full min-w-0 max-w-full overflow-x-hidden break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
         className
       )}
       plugins={streamdownPlugins}
-      components={streamdownComponents}
+      components={{ ...streamdownComponents, ...components }}
       controls={{ table: false }}
       {...props}
     />

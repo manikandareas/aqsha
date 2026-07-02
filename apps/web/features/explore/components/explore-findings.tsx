@@ -4,28 +4,36 @@
 // discovery yang sudah ada (DiscoveryHeroCard featured + grid DiscoveryStandardCard)
 // + useFeedInfinite + infinite scroll. Di-scope oleh interest pill aktif (topic).
 
-import { CheckCircle2Icon, Loader2Icon, SparklesIcon } from "@aqsha/ui/icons";
-import { useRouter } from "next/navigation";
+import { CheckCircle2Icon, SparklesIcon } from "@aqsha/ui/icons";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useSetAmbientContextRefs } from "@/features/thread-experience/components/composer-context-mentions";
+import { discoveryItemToContextRef } from "@/features/discovery/ask-astra";
 import {
+  DiscoveryFeatureCard,
   DiscoveryHeroCard,
   DiscoveryStandardCard,
   type DiscoveryCardHandlers,
 } from "@/features/discovery/components/discovery-item-card";
+import { HouseAdBanner } from "@/features/discovery/components/house-ad-banner";
+import { HOUSE_ADS, type HouseAd } from "@/features/discovery/house-ads";
 import {
   useFeedInfinite,
   useHideDiscovery,
+  usePaperSearch,
   useRecordInteraction,
-  useSearchDiscovery,
+  type SearchPaper,
 } from "@/features/discovery/api";
 import {
   discoveryItemKey,
   feedItemToDiscoveryItem,
+  paperToDiscoveryItem,
   type DiscoveryItem,
 } from "@/features/discovery/model";
 import type { FeedItem, FeedTopic } from "@/features/discovery/types";
 import { readableApiErrorMessage } from "@/lib/api-error";
+import { cn } from "@/lib/utils";
+import { ExploreFeedSkeleton } from "./explore-feed-skeleton";
 import { SectionHeader } from "./section-header";
 
 type FeedStatus = "LoadingMore" | "CanLoadMore" | "Exhausted";
@@ -33,39 +41,56 @@ type FeedStatus = "LoadingMore" | "CanLoadMore" | "Exhausted";
 // Bound auto-loads between scrolls so a run of locally-hidden items can't spin.
 const MAX_AUTO_LOADS = 4;
 
-export function ExploreFindings({ topic, query }: { topic: FeedTopic | null; query: string }) {
-  const router = useRouter();
+export function ExploreFindings({
+  topic,
+  query,
+  onOpenChat,
+}: {
+  topic: FeedTopic | null;
+  query: string;
+  /** Buka panel chat Astra (dimiliki ExplorePage) — dipanggil saat "Tanya Astra" di kartu. */
+  onOpenChat: () => void;
+}) {
+  const setAmbientContextRefs = useSetAmbientContextRefs();
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
 
   const q = query.trim();
   const searchMode = q.length > 0;
   const mode = topic ? "topics" : "foryou";
   // Query disubmit → feed switch ke hasil pencarian (paper+news); kosong → feed personal.
+  // Search = live paper (OpenAlex→arXiv→Crossref, load-more via page); browse = feed
+  // personal (paper+news, infinite scroll). Dua infinite-query bentuk item beda.
   const feedQuery = useFeedInfinite(mode, topic, !searchMode);
-  const searchQuery = useSearchDiscovery(q);
-  const feed = searchMode ? searchQuery : feedQuery;
+  const searchQuery = usePaperSearch(q, undefined, searchMode);
   const hide = useHideDiscovery();
   const record = useRecordInteraction();
 
-  // Flatten → dedupe → drop locally-hidden (auto-memoized by React Compiler).
+  // Petakan per-mode → dedupe by kunci discovery → drop locally-hidden.
   const items: DiscoveryItem[] = [];
   {
     const seen = new Set<string>();
-    for (const page of feed.data?.pages ?? []) {
-      for (const raw of page.items as FeedItem[]) {
-        if (seen.has(raw._id)) continue;
-        seen.add(raw._id);
-        const item = feedItemToDiscoveryItem(raw);
-        if (!hiddenIds.has(discoveryItemKey(item))) items.push(item);
+    const pages = searchMode ? (searchQuery.data?.pages ?? []) : (feedQuery.data?.pages ?? []);
+    for (const page of pages) {
+      for (const raw of page.items) {
+        const item = searchMode
+          ? paperToDiscoveryItem(raw as SearchPaper)
+          : feedItemToDiscoveryItem(raw as FeedItem);
+        const key = discoveryItemKey(item);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (!hiddenIds.has(key)) items.push(item);
       }
     }
   }
-  const rawCount = (feed.data?.pages ?? []).reduce((n, p) => n + p.items.length, 0);
+  const rawCount = (feedQuery.data?.pages ?? []).reduce((n, p) => n + p.items.length, 0);
 
-  const fetchNextPage = feed.fetchNextPage;
-  const feedStatus: FeedStatus = feed.isFetchingNextPage
+  // Satu sumber status per-mode: search & browse berbagi antarmuka infinite-query, jadi
+  // cukup pilih query aktif sekali (pemetaan item per-bentuk tetap ditangani di atas).
+  const active = searchMode ? searchQuery : feedQuery;
+  const { isError, error, isPending, isPlaceholderData, fetchNextPage } = active;
+  const feedStatus: FeedStatus = active.isFetchingNextPage
     ? "LoadingMore"
-    : feed.hasNextPage
+    : active.hasNextPage
       ? "CanLoadMore"
       : "Exhausted";
 
@@ -81,6 +106,8 @@ export function ExploreFindings({ topic, query }: { topic: FeedTopic | null; que
   }, [sessionKey]);
 
   useEffect(() => {
+    // Search TIDAK auto-load — hanya tombol "Muat lagi" manual. Observer khusus browse.
+    if (searchMode) return;
     const node = sentinelRef.current;
     if (!node) return;
     const observer = new IntersectionObserver(
@@ -99,7 +126,7 @@ export function ExploreFindings({ topic, query }: { topic: FeedTopic | null; que
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [sessionKey, feedStatus, fetchNextPage, rawCount]);
+  }, [searchMode, sessionKey, feedStatus, fetchNextPage, rawCount]);
 
   const handleManualLoadMore = () => {
     autoLoadCountRef.current = 0;
@@ -110,7 +137,10 @@ export function ExploreFindings({ topic, query }: { topic: FeedTopic | null; que
   const handlers: DiscoveryCardHandlers = {
     onAskAstra: (item) => {
       record.mutate({ itemRef: item.itemRef, kind: "research" });
-      router.push(`/app/threads?seed=${encodeURIComponent(buildSeed(item))}`);
+      // Buka panel chat + sematkan item sebagai token konteks (bukan navigasi seed lagi).
+      const ref = discoveryItemToContextRef(item);
+      if (ref) setAmbientContextRefs([ref]);
+      onOpenChat();
     },
     onSaved: (item) => record.mutate({ itemRef: item.itemRef, kind: "save" }),
     onHide: (item) => {
@@ -124,36 +154,81 @@ export function ExploreFindings({ topic, query }: { topic: FeedTopic | null; que
   const rest = items.slice(1);
 
   return (
-    <section className="pt-16">
-      <SectionHeader
-        title={searchMode ? `Hasil untuk “${q}”` : "Temuan untukmu"}
-        subtitle={searchMode ? "Paper & berita yang cocok dengan pencarianmu" : "Scroll terus untuk paper & berita berikutnya"}
-        right={<span className="shrink-0 font-mono text-[11px] text-muted-foreground">{items.length} item</span>}
-      />
+    <section className={searchMode ? "pt-16" : "pt-8"}>
+      {searchMode ? (
+        <SectionHeader
+          title={`Hasil untuk “${q}”`}
+          subtitle="Paper & berita yang cocok dengan pencarianmu"
+          right={<span className="shrink-0 font-mono text-[11px] text-muted-foreground">{items.length} item</span>}
+        />
+      ) : null}
 
-      <div className="@container/feed mt-5">
-        {feed.isError ? (
+      <div
+        className={cn(
+          searchMode ? "@container/feed mt-5" : "@container/feed",
+          // Hasil lama tetap tampil (di-fade) selagi kueri/topik baru dimuat — transisi mulus.
+          isPlaceholderData && "opacity-60 transition-opacity duration-200",
+        )}
+      >
+        {isError ? (
           <div className="max-w-[760px] rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-[13px] font-medium text-destructive">
-            {readableApiErrorMessage(feed.error, "Gagal memuat.")}
+            {readableApiErrorMessage(error, "Gagal memuat.")}
           </div>
-        ) : feed.isPending ? (
-          <Loader />
-        ) : items.length === 0 ? (
+        ) : isPending ? (
+          <ExploreFeedSkeleton />
+        ) : items.length === 0 && feedStatus === "Exhausted" ? (
           <EmptyState topic={topic} searchQuery={searchMode ? q : null} />
         ) : (
           <div className="space-y-10">
-            {hero ? <DiscoveryHeroCard item={hero} busy={false} handlers={handlers} /> : null}
-            {rest.length > 0 ? (
-              <div className="grid grid-cols-1 gap-x-5 gap-y-8 @md/feed:grid-cols-2 @2xl/feed:grid-cols-3">
-                {rest.map((item) => (
-                  <div key={discoveryItemKey(item)}>
-                    <DiscoveryStandardCard item={item} busy={false} handlers={handlers} />
-                  </div>
-                ))}
-              </div>
+            {hero ? (
+              <DiscoveryHeroCard key={discoveryItemKey(hero)} item={hero} busy={false} handlers={handlers} />
             ) : null}
-            {feedStatus !== "Exhausted" ? <div ref={sentinelRef} aria-hidden className="h-px w-full" /> : null}
-            <FeedFooter status={feedStatus} onLoadMore={handleManualLoadMore} />
+            {buildFeedBlocks(rest, !searchMode).map((block) => {
+              if (block.kind === "grid") {
+                return (
+                  <div
+                    key={block.key}
+                    className="grid grid-cols-1 gap-x-5 gap-y-8 @md/feed:grid-cols-2 @2xl/feed:grid-cols-3"
+                  >
+                    {block.items.map((item, idx) => (
+                      <div
+                        key={discoveryItemKey(item)}
+                        className="animate-in duration-300 ease-out fade-in-0 slide-in-from-bottom-2"
+                        style={{ animationDelay: `${Math.min(idx, 8) * 40}ms` }}
+                      >
+                        <DiscoveryStandardCard item={item} busy={false} handlers={handlers} />
+                      </div>
+                    ))}
+                  </div>
+                );
+              }
+              if (block.kind === "feature") {
+                return (
+                  <div
+                    key={block.key}
+                    className="animate-in duration-300 ease-out fade-in-0 slide-in-from-bottom-2"
+                  >
+                    <DiscoveryFeatureCard
+                      item={block.item}
+                      imageSide={block.side}
+                      busy={false}
+                      handlers={handlers}
+                    />
+                  </div>
+                );
+              }
+              return (
+                <div key={block.key} className="animate-in duration-300 ease-out fade-in-0">
+                  <HouseAdBanner ad={block.ad} />
+                </div>
+              );
+            })}
+            {!searchMode && feedStatus !== "Exhausted" ? (
+              <div ref={sentinelRef} aria-hidden className="h-px w-full" />
+            ) : null}
+            {searchMode && feedStatus === "Exhausted" ? null : (
+              <FeedFooter status={feedStatus} onLoadMore={handleManualLoadMore} />
+            )}
           </div>
         )}
       </div>
@@ -161,16 +236,52 @@ export function ExploreFindings({ topic, query }: { topic: FeedTopic | null; que
   );
 }
 
-function buildSeed(item: DiscoveryItem): string {
-  return `${item.title}\n\n${item.tldr ?? item.summary}\n\nSumber: ${item.resolvedUrl ?? item.url}`;
-}
+// Ritme feed editorial (opsi 4): grid 3-up tiap GRID_CHUNK item, lalu 1 feature
+// full-width (selang-seling kiri/kanan). House-ad (opsi 2) diselipkan setelah grid
+// pertama lalu tiap AD_CADENCE grid berikutnya, menarik kampanye berurutan dari
+// HOUSE_ADS sampai habis → menambah entri ke array otomatis ikut tampil (non-search
+// only). Hero (items[0]) dirender terpisah di atas.
+type FeedBlock =
+  | { kind: "grid"; key: string; items: DiscoveryItem[] }
+  | { kind: "feature"; key: string; item: DiscoveryItem; side: "left" | "right" }
+  | { kind: "ad"; key: string; ad: HouseAd };
 
-function Loader() {
-  return (
-    <div className="flex items-center justify-center py-10 text-muted-foreground">
-      <Loader2Icon className="animate-spin" />
-    </div>
-  );
+const GRID_CHUNK = 6;
+const AD_FIRST_AFTER_GRID = 1;
+const AD_CADENCE = 2;
+
+function buildFeedBlocks(rest: DiscoveryItem[], includeAds: boolean): FeedBlock[] {
+  const blocks: FeedBlock[] = [];
+  let p = 0;
+  let gridN = 0;
+  let adN = 0;
+  while (p < rest.length) {
+    const chunk = rest.slice(p, p + GRID_CHUNK);
+    p += chunk.length;
+    blocks.push({ kind: "grid", key: `grid-${gridN}`, items: chunk });
+    gridN += 1;
+    if (
+      includeAds &&
+      adN < HOUSE_ADS.length &&
+      gridN >= AD_FIRST_AFTER_GRID &&
+      (gridN - AD_FIRST_AFTER_GRID) % AD_CADENCE === 0
+    ) {
+      blocks.push({ kind: "ad", key: `ad-${HOUSE_ADS[adN]!.id}`, ad: HOUSE_ADS[adN]! });
+      adN += 1;
+    }
+    if (p < rest.length) {
+      const item = rest[p]!;
+      p += 1;
+      // featN ≡ gridN-1 di tiap feature-push → sisi selang-seling tanpa counter terpisah.
+      blocks.push({
+        kind: "feature",
+        key: `feature-${discoveryItemKey(item)}`,
+        item,
+        side: (gridN - 1) % 2 === 0 ? "left" : "right",
+      });
+    }
+  }
+  return blocks;
 }
 
 function FeedFooter({ status, onLoadMore }: { status: FeedStatus; onLoadMore: () => void }) {

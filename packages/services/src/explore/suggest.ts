@@ -34,7 +34,7 @@ export function parseSuggestions(text: string): string[] {
 
 /**
  * Satu pemanggilan LLM saran ber-cache (namespace `openai_suggest`) + soft-fail → [].
- * Inti bersama deriveSubtopics & suggestQueries: cache get → generate → parse → cache put.
+ * Inti dari suggestQueries: cache get → generate → parse → cache put.
  */
 async function cachedSuggest(cacheKey: string, prompt: string, cap: number): Promise<string[]> {
   const cached = await getCache("openai_suggest", cacheKey);
@@ -53,22 +53,6 @@ async function cachedSuggest(cacheKey: string, prompt: string, cap: number): Pro
   } catch {
     return [];
   }
-}
-
-/**
- * Subtopik/aspek riset dari sebuah topik (3–4 label pendek) — dipakai Pulse chart untuk
- * series multi-lapis. Cache + soft-fail via cachedSuggest.
- */
-export async function deriveSubtopics(query: string): Promise<string[]> {
-  const q = query.trim();
-  if (q.length < MIN_CHARS) return [];
-  return cachedSuggest(
-    `subtopics:${normalizeKey(q)}`,
-    `Sebutkan 4 subtopik atau aspek riset SPESIFIK dari topik "${q}". ` +
-      "Aturan: 1–3 kata per baris (boleh istilah teknis Inggris), satu per baris, " +
-      "TANPA nomor/bullet/tanda kutip.",
-    4,
-  );
 }
 
 export async function suggestQueries(partial: string): Promise<string[]> {

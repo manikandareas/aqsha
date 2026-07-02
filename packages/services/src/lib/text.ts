@@ -40,3 +40,37 @@ export function uniqueCompact(values: Array<string | null | undefined>): string[
   }
   return out;
 }
+
+/**
+ * Decode entitas HTML umum (named + numeric dec/hex). Rumah bersama untuk mapper feed/scrape
+ * (GDELT title, articlePreview) supaya tak ada decoder yang divergen. Numeric aman via
+ * {@link safeFromCodePoint} (code invalid → dibuang, bukan throw).
+ */
+export function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&(?:apos|#39|#x27);/gi, "'")
+    .replace(/&(?:hellip|#8230);/gi, "…")
+    .replace(/&(?:mdash|#8212);/gi, "—")
+    .replace(/&(?:ndash|#8211);/gi, "–")
+    .replace(/&(?:ldquo|#8220);/gi, "“")
+    .replace(/&(?:rdquo|#8221);/gi, "”")
+    .replace(/&(?:lsquo|#8216);/gi, "‘")
+    .replace(/&(?:rsquo|#8217);/gi, "’")
+    .replace(/&#x2f;/gi, "/")
+    .replace(/&#47;/g, "/")
+    .replace(/&#(\d+);/g, (_, dec) => safeFromCodePoint(Number(dec)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => safeFromCodePoint(parseInt(hex, 16)));
+}
+
+function safeFromCodePoint(code: number): string {
+  try {
+    return Number.isFinite(code) && code > 0 ? String.fromCodePoint(code) : "";
+  } catch {
+    return "";
+  }
+}

@@ -23,7 +23,7 @@ import { lookupDoi } from "./crossref";
 import { searchOpenAlex } from "./openalex";
 import { authorOverlap, titleSimilarity } from "./similarity";
 import { collapse } from "./text";
-import type { ResearchCandidate } from "./types";
+import type { ProviderSearchResult, ResearchCandidate } from "./types";
 
 export type IntegrityStatus =
   | "verified"
@@ -163,9 +163,10 @@ function parseCandidateMeta(candidate: ResearchCandidate): {
   }
 }
 
-/** First candidate with a usable title, or null. V2 providers return [] on failure. */
-function asResolvedRecord(candidates: ResearchCandidate[]): ResearchCandidate | null {
-  return candidates.find((candidate) => candidate.title) ?? null;
+/** First candidate with a usable title, or null. Provider error (`ok:false`) → null (sinyal tetap ambigu). */
+function asResolvedRecord(result: ProviderSearchResult): ResearchCandidate | null {
+  if (!result.ok) return null;
+  return result.candidates.find((candidate) => candidate.title) ?? null;
 }
 
 // Run the 4-step check for one citation. Provider errors / empty results degrade
@@ -216,8 +217,9 @@ async function verifyOneCitation(input: CitationInput): Promise<{
   if (signals.identifierResolved !== true && input.title.trim()) {
     try {
       const query = [input.title, input.authors?.[0]].filter(Boolean).join(" ");
-      const works = await searchOpenAlex({ query, limit: 5 });
-      // Empty = ambiguous (outage OR genuine absence) → leave existence null.
+      const result = await searchOpenAlex({ query, limit: 5 });
+      // Provider error ATAU empty = ambiguous → leave existence null (never a false accusation).
+      const works = result.ok ? result.candidates : [];
       if (works.length > 0) {
         const best = works
           .map((work) => ({ work, score: titleSimilarity(input.title, work.title) }))

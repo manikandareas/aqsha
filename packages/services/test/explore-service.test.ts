@@ -7,6 +7,7 @@ import * as cache from "../src/papers/external-cache";
 import { PaperCacheService } from "../src/paper-cache.service";
 import { ResearchService } from "../src/research";
 import type { ResearchCandidate } from "../src/research";
+import { providerOk } from "../src/research/types";
 
 const fakeDb = {} as never;
 
@@ -132,20 +133,22 @@ describe("ExploreService.searchPapers — waterfall (Fase 8)", () => {
     mock.restore();
   });
 
-  test("OpenAlex pendek → fill arXiv+Jina, dedupe by key, hormati limit; Crossref skipped (bukan DOI)", async () => {
+  test("OpenAlex pendek → fill arXiv+Crossref(keyword), dedupe by key, hormati limit; lookupDoi skip (bukan DOI)", async () => {
     spyOn(cache, "getCache").mockResolvedValue(null);
     spyOn(cache, "putCache").mockResolvedValue(undefined);
     spyOn(PaperCacheService, "upsert").mockResolvedValue(undefined as never);
     spyOn(openAlex, "fetchOpenAlexWorks").mockResolvedValue({
       papers: [oaPaper("doi:10.1/a")],
+      works: [{}], // 1 work mentah (< limit) → nextPage null
     } as never);
-    // arXiv mengembalikan dup-a (rank kalah OpenAlex) + c; masih < needed → Jina jalan.
-    const arxiv = spyOn(ResearchService, "searchArxiv").mockResolvedValue([
-      candidate({ origin: "arxiv", doi: "10.1/a" }),
-      candidate({ url: "https://x/c" }),
-    ]);
-    const web = spyOn(ResearchService, "searchWeb").mockResolvedValue([candidate({ url: "https://x/d" })]);
-    const cross = spyOn(ResearchService, "lookupDoi").mockResolvedValue([]);
+    // arXiv mengembalikan dup-a (rank kalah OpenAlex) + c; masih < needed → Crossref keyword jalan.
+    const arxiv = spyOn(ResearchService, "searchArxiv").mockResolvedValue(
+      providerOk([candidate({ origin: "arxiv", doi: "10.1/a" }), candidate({ url: "https://x/c" })]),
+    );
+    const crossSearch = spyOn(ResearchService, "searchCrossref").mockResolvedValue(
+      providerOk([candidate({ url: "https://x/d" })]),
+    );
+    const doiLookup = spyOn(ResearchService, "lookupDoi").mockResolvedValue(providerOk([]));
 
     const res = await ExploreService.searchPapers(fakeDb, "u", {
       query: "graph neural networks",
@@ -154,26 +157,52 @@ describe("ExploreService.searchPapers — waterfall (Fase 8)", () => {
     });
 
     expect(arxiv).toHaveBeenCalledTimes(1);
-    expect(web).toHaveBeenCalledTimes(1);
-    expect(cross).not.toHaveBeenCalled(); // query bukan DOI
+    expect(crossSearch).toHaveBeenCalledTimes(1);
+    expect(doiLookup).not.toHaveBeenCalled(); // query bukan DOI → keyword search, bukan lookup
     expect(res.items.map((p) => p.key).sort()).toEqual(["doi:10.1/a", "url:https://x/c", "url:https://x/d"]);
     // dup doi:10.1/a dimenangkan OpenAlex (provider rank).
     expect(res.items.find((p) => p.key === "doi:10.1/a")?.provider).toBe("OpenAlex");
+    expect(res.nextPage).toBeNull(); // OpenAlex < limit → tak ada halaman berikutnya
     const statuses = Object.fromEntries(res.providerStatus.map((s) => [s.provider, s.status]));
     expect(statuses.OpenAlex).toBe("ready");
     expect(statuses.arXiv).toBe("ready");
-    expect(statuses.Jina).toBe("ready");
-    expect(statuses.Crossref).toBe("skipped");
+    expect(statuses.Crossref).toBe("ready");
   });
 
-  test("OpenAlex sudah penuh (== limit) → provider lain skipped, tak dipanggil", async () => {
+  test("query berupa DOI → Crossref pakai lookupDoi (presisi), searchCrossref skip", async () => {
+    spyOn(cache, "getCache").mockResolvedValue(null);
+    spyOn(cache, "putCache").mockResolvedValue(undefined);
+    spyOn(PaperCacheService, "upsert").mockResolvedValue(undefined as never);
+    spyOn(openAlex, "fetchOpenAlexWorks").mockResolvedValue({ papers: [], works: [] } as never);
+    const arxiv = spyOn(ResearchService, "searchArxiv").mockResolvedValue(providerOk([]));
+    const doiLookup = spyOn(ResearchService, "lookupDoi").mockResolvedValue(
+      providerOk([
+        candidate({ origin: "arxiv", doi: "10.1000/xyz123", url: "https://doi.org/10.1000/xyz123" }),
+      ]),
+    );
+    const crossSearch = spyOn(ResearchService, "searchCrossref").mockResolvedValue(providerOk([]));
+
+    const res = await ExploreService.searchPapers(fakeDb, "u", {
+      query: "10.1000/xyz123",
+      mode: "search",
+      limit: 5,
+    });
+
+    expect(arxiv).toHaveBeenCalledTimes(1);
+    expect(doiLookup).toHaveBeenCalledTimes(1);
+    expect(crossSearch).not.toHaveBeenCalled();
+    expect(res.items.map((p) => p.key)).toContain("doi:10.1000/xyz123");
+  });
+
+  test("OpenAlex sudah penuh (== limit) → provider lain skipped + nextPage tersedia", async () => {
     spyOn(cache, "getCache").mockResolvedValue(null);
     spyOn(cache, "putCache").mockResolvedValue(undefined);
     spyOn(PaperCacheService, "upsert").mockResolvedValue(undefined as never);
     spyOn(openAlex, "fetchOpenAlexWorks").mockResolvedValue({
       papers: [oaPaper("doi:10.1/a"), oaPaper("doi:10.1/b")],
+      works: [{}, {}], // 2 works mentah (== limit) → nextPage tersedia
     } as never);
-    const arxiv = spyOn(ResearchService, "searchArxiv").mockResolvedValue([]);
+    const arxiv = spyOn(ResearchService, "searchArxiv").mockResolvedValue(providerOk([]));
 
     const res = await ExploreService.searchPapers(fakeDb, "u", {
       query: "q",
@@ -183,9 +212,32 @@ describe("ExploreService.searchPapers — waterfall (Fase 8)", () => {
 
     expect(arxiv).not.toHaveBeenCalled();
     expect(res.items.length).toBe(2);
+    expect(res.nextPage).toBe(2); // OpenAlex penuh → mungkin ada halaman berikutnya (load-more)
     const statuses = Object.fromEntries(res.providerStatus.map((s) => [s.provider, s.status]));
     expect(statuses.arXiv).toBe("skipped");
-    expect(statuses.Jina).toBe("skipped");
     expect(statuses.Crossref).toBe("skipped");
+  });
+
+  test("works penuh tapi sebagian tak-terpetakan → nextPage tetap (sinyal dari works MENTAH, bukan papers)", async () => {
+    spyOn(cache, "getCache").mockResolvedValue(null);
+    spyOn(cache, "putCache").mockResolvedValue(undefined);
+    spyOn(PaperCacheService, "upsert").mockResolvedValue(undefined as never);
+    // Halaman OpenAlex penuh (works == limit) tapi worksToPapers menjatuhkan 1 → papers < limit.
+    spyOn(openAlex, "fetchOpenAlexWorks").mockResolvedValue({
+      papers: [oaPaper("doi:10.1/a")],
+      works: [{}, {}],
+    } as never);
+    spyOn(ResearchService, "searchArxiv").mockResolvedValue(providerOk([]));
+    spyOn(ResearchService, "searchCrossref").mockResolvedValue(providerOk([]));
+    spyOn(ResearchService, "lookupDoi").mockResolvedValue(providerOk([]));
+
+    const res = await ExploreService.searchPapers(fakeDb, "u", {
+      query: "q",
+      mode: "search",
+      limit: 2,
+    });
+
+    // papers.length(1) < limit tapi works.length(2) == limit → halaman berikutnya tetap ditawarkan.
+    expect(res.nextPage).toBe(2);
   });
 });

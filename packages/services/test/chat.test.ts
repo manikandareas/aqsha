@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { AppError, ChatMessageRepo, ChatThreadRepo, ResearchSourceRepo } from "@aqsha/db";
-import { MessageService, ThreadService } from "../src/chat";
+import { AppError, ChatThreadRepo, ResearchSourceRepo } from "@aqsha/db";
+import { ThreadService } from "../src/chat";
 
 // fakeDb.transaction(fn) menjalankan fn dengan tx=fakeDb; repo di-spy jadi tx tak dipakai.
 const fakeDb = { transaction: async (fn: (tx: unknown) => unknown) => fn(fakeDb) } as never;
 
 const OWNER = "user_1";
-const SID = "eve:sess-1";
+const SID = "astra:sess-1";
 
 const makeThread = (over: Record<string, unknown> = {}) =>
   ({
@@ -28,8 +28,6 @@ let s: {
   update: ReturnType<typeof spyOn>;
   deleteById: ReturnType<typeof spyOn>;
   listByOwner: ReturnType<typeof spyOn>;
-  msgList: ReturnType<typeof spyOn>;
-  msgDelete: ReturnType<typeof spyOn>;
   srcDelete: ReturnType<typeof spyOn>;
 };
 
@@ -42,8 +40,6 @@ beforeEach(() => {
       items: [],
       nextCursor: null,
     } as never),
-    msgList: spyOn(ChatMessageRepo, "listByThread").mockResolvedValue([] as never),
-    msgDelete: spyOn(ChatMessageRepo, "deleteByThread").mockResolvedValue(undefined),
     srcDelete: spyOn(ResearchSourceRepo, "deleteByThread").mockResolvedValue(undefined),
   };
 });
@@ -107,9 +103,8 @@ describe("ThreadService.rename", () => {
 });
 
 describe("ThreadService.remove", () => {
-  test("deletes messages + research sources then thread (FK no-cascade)", async () => {
+  test("deletes research sources then thread (FK no-cascade)", async () => {
     await ThreadService.remove(fakeDb, { ownerUserId: OWNER, threadId: SID });
-    expect(s.msgDelete).toHaveBeenCalledTimes(1);
     expect(s.srcDelete).toHaveBeenCalledTimes(1);
     expect(s.deleteById).toHaveBeenCalledTimes(1);
   });
@@ -119,12 +114,5 @@ describe("ThreadService.remove", () => {
       await appErrorCode(ThreadService.remove(fakeDb, { ownerUserId: OWNER, threadId: SID })),
     ).toBe("thread_not_found");
     expect(s.deleteById).not.toHaveBeenCalled();
-  });
-});
-
-describe("MessageService.listByThread", () => {
-  test("delegates to repo", async () => {
-    await MessageService.listByThread(fakeDb, SID);
-    expect(s.msgList).toHaveBeenCalledWith(fakeDb, SID);
   });
 });

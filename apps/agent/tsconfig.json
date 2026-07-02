@@ -13,6 +13,6 @@
     "allowImportingTsExtensions": true,
     "types": ["node"]
   },
-  "include": ["agent/**/*.ts"],
-  "exclude": ["node_modules", ".eve", ".output", ".nitro", ".vercel", ".workflow-data"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", ".output", ".nitro", ".vercel", ".mastra"]
 }

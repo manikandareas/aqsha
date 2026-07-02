@@ -1,14 +1,22 @@
 /**
- * Crossref DOI lookup — Slice 6.4. Port of V1 `lookupDoiProvider`. A DOI is not a
- * search query, so this returns at most one candidate (the work for that DOI).
- * Reads `contactEmail()` for the polite-pool `mailto`.
+ * Crossref — Slice 6.4 + Explore live search. `lookupDoi` port V1 `lookupDoiProvider`
+ * (satu work per DOI). `searchCrossref` = keyword search (`/works?query=…`) untuk
+ * mengisi ekor waterfall Explore saat query bukan DOI. Reads `contactEmail()` for
+ * the polite-pool `mailto`.
  */
 
-import { contactEmail, fetchWithTimeout } from "../papers/http";
+import { contactEmail, fetchWithRetry } from "../papers/http";
 import { normalizeDoi } from "../papers/identifiers";
 import { readCachedCandidates, writeCachedCandidates } from "./cache";
-import { collapse, trimForSnippet } from "./text";
-import { type ResearchCandidate, readableError, researchUserAgent } from "./types";
+import { collapse, normalizeKey, trimForSnippet } from "./text";
+import {
+  type ProviderSearchResult,
+  type ResearchCandidate,
+  providerError,
+  providerOk,
+  readableError,
+  researchUserAgent,
+} from "./types";
 
 const CROSSREF_ENDPOINT = "https://api.crossref.org/works";
 const PROVIDER = "crossref";
@@ -24,17 +32,22 @@ type CrossrefItem = {
   "container-title"?: string[];
 };
 
-export async function lookupDoi(args: { doi: string }): Promise<ResearchCandidate[]> {
+export async function lookupDoi(args: { doi: string }): Promise<ProviderSearchResult> {
   const doi = normalizeDoi(args.doi);
-  if (!doi) return [];
+  if (!doi) return providerOk([]);
   const cached = await readCachedCandidates(PROVIDER, doi);
-  if (cached) return cached;
+  if (cached) {
+    if (cached.status === "failed") {
+      return providerError("Crossref sedang bermasalah (kegagalan terakhir masih dalam masa backoff).");
+    }
+    return providerOk(cached.candidates);
+  }
 
   try {
     const url = new URL(`${CROSSREF_ENDPOINT}/${encodeURIComponent(doi)}`);
     const email = contactEmail();
     if (email) url.searchParams.set("mailto", email);
-    const response = await fetchWithTimeout(url.toString(), {
+    const response = await fetchWithRetry(url.toString(), {
       headers: { Accept: "application/json", "User-Agent": researchUserAgent() },
     });
     if (!response.ok) throw new Error(`Crossref returned ${response.status}`);
@@ -42,11 +55,57 @@ export async function lookupDoi(args: { doi: string }): Promise<ResearchCandidat
     const candidate = json.message ? crossrefToCandidate(json.message) : null;
     const candidates = candidate ? [candidate] : [];
     await writeCachedCandidates(PROVIDER, doi, candidates);
-    return candidates;
+    return providerOk(candidates);
   } catch (error) {
-    console.error("[research] crossref lookup failed", readableError(error));
+    const message = readableError(error);
+    console.error("[research] crossref lookup failed", message);
     await writeCachedCandidates(PROVIDER, doi, [], "failed");
-    return [];
+    return providerError(`Crossref gagal merespons (${message}).`);
+  }
+}
+
+/**
+ * Keyword search Crossref (`/works?query=…&sort=relevance`, multi-hasil). Dipakai
+ * waterfall Explore saat query BUKAN DOI. Best-effort + Redis-cached; error → [].
+ */
+export async function searchCrossref(args: {
+  query: string;
+  limit?: number;
+}): Promise<ProviderSearchResult> {
+  const query = args.query.trim();
+  if (!query) return providerOk([]);
+  const limit = Math.min(args.limit ?? 5, 10);
+  const cacheKey = `search:${normalizeKey(JSON.stringify({ query, limit }))}`;
+  const cached = await readCachedCandidates(PROVIDER, cacheKey);
+  if (cached) {
+    if (cached.status === "failed") {
+      return providerError("Crossref sedang bermasalah (kegagalan terakhir masih dalam masa backoff).");
+    }
+    return providerOk(cached.candidates);
+  }
+
+  try {
+    const url = new URL(CROSSREF_ENDPOINT);
+    url.searchParams.set("query", query);
+    url.searchParams.set("rows", String(limit));
+    url.searchParams.set("sort", "relevance");
+    const email = contactEmail();
+    if (email) url.searchParams.set("mailto", email);
+    const response = await fetchWithRetry(url.toString(), {
+      headers: { Accept: "application/json", "User-Agent": researchUserAgent() },
+    });
+    if (!response.ok) throw new Error(`Crossref returned ${response.status}`);
+    const json = (await response.json()) as { message?: { items?: CrossrefItem[] } };
+    const candidates = (json.message?.items ?? [])
+      .map(crossrefToCandidate)
+      .filter((c): c is ResearchCandidate => Boolean(c));
+    await writeCachedCandidates(PROVIDER, cacheKey, candidates);
+    return providerOk(candidates);
+  } catch (error) {
+    const message = readableError(error);
+    console.error("[research] crossref search failed", message);
+    await writeCachedCandidates(PROVIDER, cacheKey, [], "failed");
+    return providerError(`Crossref gagal merespons (${message}).`);
   }
 }
 

@@ -58,7 +58,6 @@ const B = mkRow({ id: "B", trendScore: 0, publishedAt: NOW, topics: ["machine le
 
 afterEach(() => {
   spyOn(FeedRepo, "paginateBalanced").mockRestore();
-  spyOn(FeedRepo, "searchByTsvector").mockRestore();
   spyOn(FeedInteractionRepo, "hiddenItemIds").mockRestore();
   spyOn(InterestService, "loadWeights").mockRestore();
 });
@@ -101,26 +100,5 @@ describe("FeedService.getFeedPaginated re-rank", () => {
     const res = await FeedService.getFeedPaginated(fakeDb, "u", {});
     expect(res.items.length).toBe(0); // semua ter-hide
     expect(res.nextCursor).toBe("CURSOR"); // cursor tetap (bukan dari item terakhir yang lolos)
-  });
-});
-
-describe("FeedService.searchDiscovery", () => {
-  test("q kosong → page kosong tanpa hit repo", async () => {
-    const spy = spyOn(FeedRepo, "searchByTsvector");
-    const res = await FeedService.searchDiscovery(fakeDb, "u", { q: "   " });
-    expect(res).toEqual({ items: [], nextCursor: null });
-    expect(spy).not.toHaveBeenCalled();
-  });
-
-  test("filter hidden + teruskan nextCursor", async () => {
-    spyOn(FeedRepo, "searchByTsvector").mockResolvedValue({
-      items: [A, B] as never,
-      nextCursor: "C2",
-    });
-    spyOn(FeedInteractionRepo, "hiddenItemIds").mockResolvedValue(["A"]);
-    spyOn(InterestService, "loadWeights").mockResolvedValue(new Map());
-    const res = await FeedService.searchDiscovery(fakeDb, "u", { q: "quantum" });
-    expect(res.items.map((i) => i._id)).toEqual(["B"]);
-    expect(res.nextCursor).toBe("C2");
   });
 });

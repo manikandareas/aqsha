@@ -14,6 +14,7 @@ import * as arxivMod from "../src/research/arxiv";
 import { CitationService } from "../src/research/citation";
 import * as crossrefMod from "../src/research/crossref";
 import * as openalexMod from "../src/research/openalex";
+import { providerOk } from "../src/research/types";
 import type { ResearchCandidate } from "../src/research/types";
 
 const cand = (over: Partial<ResearchCandidate> & { title: string }): ResearchCandidate => ({
@@ -30,9 +31,9 @@ let openalex: ReturnType<typeof spyOn>;
 
 beforeEach(() => {
   // Default: semua provider nihil (`[]`) → baseline ambigu (unverifiable).
-  doi = spyOn(crossrefMod, "lookupDoi").mockResolvedValue([] as never);
-  arxiv = spyOn(arxivMod, "searchArxiv").mockResolvedValue([] as never);
-  openalex = spyOn(openalexMod, "searchOpenAlex").mockResolvedValue([] as never);
+  doi = spyOn(crossrefMod, "lookupDoi").mockResolvedValue(providerOk([]) as never);
+  arxiv = spyOn(arxivMod, "searchArxiv").mockResolvedValue(providerOk([]) as never);
+  openalex = spyOn(openalexMod, "searchOpenAlex").mockResolvedValue(providerOk([]) as never);
 });
 afterEach(() => mock.restore());
 
@@ -41,22 +42,22 @@ describe("CitationService.verifyIdentifiers — verdicts", () => {
   const TITLE = "A Study of Solar Energy Systems in Arid Regions";
 
   test("verified — DOI resolve + judul cocok + metadata konsisten", async () => {
-    doi.mockResolvedValue([cand({ title: TITLE })] as never);
+    doi.mockResolvedValue(providerOk([cand({ title: TITLE })]) as never);
     const r = await CitationService.verifyIdentifiers([{ title: TITLE, doi: "10.1234/solar" }]);
     expect(r.items[0]?.status).toBe("verified");
     expect(openalex).not.toHaveBeenCalled(); // identifier resolve → skip existence
   });
 
   test("identifier_invalid — DOI resolve tapi judul TAK cocok", async () => {
-    doi.mockResolvedValue([cand({ title: "Completely Unrelated Cooking Recipes" })] as never);
+    doi.mockResolvedValue(providerOk([cand({ title: "Completely Unrelated Cooking Recipes" })]) as never);
     const r = await CitationService.verifyIdentifiers([{ title: TITLE, doi: "10.1234/wrong" }]);
     expect(r.items[0]?.status).toBe("identifier_invalid");
   });
 
   test("metadata_mismatch — DOI cocok tapi tahun selisih > 1", async () => {
-    doi.mockResolvedValue([
-      cand({ title: TITLE, metadataJson: JSON.stringify({ year: 2005 }) }),
-    ] as never);
+    doi.mockResolvedValue(
+      providerOk([cand({ title: TITLE, metadataJson: JSON.stringify({ year: 2005 }) })]) as never,
+    );
     const r = await CitationService.verifyIdentifiers([
       { title: TITLE, doi: "10.1234/solar", year: 2020 },
     ]);
@@ -65,13 +66,13 @@ describe("CitationService.verifyIdentifiers — verdicts", () => {
   });
 
   test("not_found — tanpa identifier, openalex balas hasil NYATA none-match", async () => {
-    openalex.mockResolvedValue([cand({ title: "Totally Different Subject", origin: "web" })] as never);
+    openalex.mockResolvedValue(providerOk([cand({ title: "Totally Different Subject", origin: "web" })]) as never);
     const r = await CitationService.verifyIdentifiers([{ title: TITLE }]);
     expect(r.items[0]?.status).toBe("not_found");
   });
 
   test("unverifiable — openalex balas [] (ambigu, BUKAN false not_found)", async () => {
-    openalex.mockResolvedValue([] as never);
+    openalex.mockResolvedValue(providerOk([]) as never);
     const r = await CitationService.verifyIdentifiers([{ title: TITLE }]);
     expect(r.items[0]?.status).toBe("unverifiable");
   });
@@ -95,11 +96,13 @@ describe("CitationService.verifyIdentifiers — batch/tally/echo", () => {
   test("tally summary (checked/verified/flagged) + caveat netral", async () => {
     // Drive 3 verdict via existence keyed-by-query: verified / not_found / unverifiable.
     openalex.mockImplementation(async ({ query }: { query: string }) =>
-      query.includes("Verified")
-        ? [cand({ title: "Verified Paper" })]
-        : query.includes("Missing")
-          ? [cand({ title: "Some Other Real Title" })]
-          : ([] as ResearchCandidate[]),
+      providerOk(
+        query.includes("Verified")
+          ? [cand({ title: "Verified Paper" })]
+          : query.includes("Missing")
+            ? [cand({ title: "Some Other Real Title" })]
+            : ([] as ResearchCandidate[]),
+      ),
     );
     const r = await CitationService.verifyIdentifiers([
       { title: "Verified Paper", citation: 1 },

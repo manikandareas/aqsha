@@ -11,17 +11,17 @@ Untuk setiap proses brainstorming dan planning, gunakan **bahasa Indonesia**. Is
 - `AGENTS.md` — current monorepo boundaries and exact commands.
 - `docs/architecture/` — architecture and design notes (overview, tech stack, API domains, service layer, contracts).
 - `BRAND-IDENTITY.md` — brand voice and palette source of truth.
-- The `eve` skill — read before editing the agent runtime in `apps/agent` (instructions, skills, tools, channels, subagents).
+- Mastra docs (`.mcp.json` `@mastra/mcp-docs-server`, or context7 `/mastra-ai/mastra`) — consult before editing the agent runtime in `apps/agent/src/mastra/` (agents, tools, skills, workflows, processors, memory). Verify Mastra APIs against the installed `@mastra/core` version; don't invent them.
 
 Next.js in this repo is 16.x. Before writing frontend code that depends on framework behavior, consult the installed `node_modules/next/dist/docs/` docs.
 
 ## Architecture
 
-Aqsha is a Postgres-backed research product. Stack: Next.js front-of-house, an Elysia REST API, and an eve agent runtime, over Postgres/Drizzle + Redis + S3-compatible object storage.
+Aqsha is a Postgres-backed research product. Stack: Next.js front-of-house, an Elysia REST API, and a Mastra agent runtime, over Postgres/Drizzle + Redis + S3-compatible object storage.
 
-- `apps/web` (`@aqsha/web`): Next.js 16 public landing + authenticated product app. Talks to the API via a type-safe Eden Treaty client; proxies `/eve/v1/*` to the agent runtime.
-- `apps/api` (`@aqsha/api`): Elysia REST API + BullMQ workers (feed hydration, metadata enrichment, account deletion). Clerk auth, Mayar billing, pino logging.
-- `apps/agent` (`@aqsha/agent`): eve agent runtime for Astra (chat + `/deep` deep research). Streams NDJSON; owns durable turn/step state.
+- `apps/web` (`@aqsha/web`): Next.js 16 public landing + authenticated product app. Talks to the API via a type-safe Eden Treaty client; proxies `/mastra-api/*` to the agent runtime (`@mastra/client-js`).
+- `apps/api` (`@aqsha/api`): Elysia REST API + BullMQ workers (feed hydration, metadata enrichment, account deletion, thread-title). Clerk auth, Mayar billing, pino logging.
+- `apps/agent` (`@aqsha/agent`): Mastra agent runtime for Astra — chat agent `astra-lite` + `/deep` Workflow `deep-research` (plan-gate HITL → subagents → cited synthesis). Mastra Memory (`mastra_*`) = source of truth for messages; streams via `@mastra/client-js`.
 - `packages/db` (`@aqsha/db`): Drizzle ORM schema + migrations for Postgres (pgvector). Shared structured `appError`.
 - `packages/services` (`@aqsha/services`): domain services (workspaces, artifacts, billing, RAG, research, citations, chat). One implementation consumed by API routes, workers, and the agent.
 - `packages/chat-core` (`@aqsha/chat-core`): shared chat/timeline primitives.

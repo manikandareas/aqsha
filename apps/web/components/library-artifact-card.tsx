@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircleIcon, ArtifactTypeIcon } from "@aqsha/ui/icons";
+import { AlertCircleIcon, ArtifactTypeIcon, NotebookIcon } from "@aqsha/ui/icons";
 import { LibraryCardFrame } from "@/components/library-card-frame";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -32,14 +32,23 @@ function LibraryArtifactCardComponent({
 }) {
   const label = artifactTypeLabel(artifactType);
   const year = formatArtifactYear(createdAt);
-  const provenance = provenanceLabel(source);
+  // Agent output gets the accented "Artifact" badge; other provenance (manual
+  // "Catatan") keeps the quiet outline chip. Uploads/URLs stay unlabelled — their
+  // type chip already conveys origin.
+  const isArtifact = source === "agent";
+  const provenance = isArtifact ? null : provenanceLabel(source);
 
   const header = (
     <div className="flex items-center gap-2">
       <span className="inline-flex h-7 shrink-0 items-center justify-center rounded-[8px] bg-muted px-2 text-[12px] font-semibold leading-none text-muted-foreground">
         {year}
       </span>
-      {provenance ? (
+      {isArtifact ? (
+        <span className="inline-flex h-7 shrink-0 items-center gap-1 rounded-[8px] bg-primary/15 px-2 text-[11px] font-semibold leading-none text-primary">
+          <NotebookIcon className="size-3" />
+          Artifact
+        </span>
+      ) : provenance ? (
         <span className="inline-flex h-7 shrink-0 items-center justify-center rounded-[8px] border border-border px-2 text-[11px] font-medium leading-none text-muted-foreground">
           {provenance}
         </span>

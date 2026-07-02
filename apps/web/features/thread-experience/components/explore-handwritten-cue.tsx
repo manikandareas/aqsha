@@ -2,29 +2,46 @@
 
 import { m } from "motion/react";
 
+import { HOME_EXPLORE_SECTION_ID } from "@/features/discovery/components/home-explore-bento";
+
 const HOME_EASE_OUT = [0.23, 1, 0.32, 1] as const;
 
+/**
+ * Cue tulisan tangan "scroll ke bawah, yuk" — duduk di kanan-atas landing /app,
+ * diagonal di antara action buka panel Workspace dan hero title. Klik → gulir
+ * mulus ke section Jelajahi yang ada di bawah fold.
+ */
 export function ExploreHandwrittenCue({
   shouldReduceMotion,
 }: {
   shouldReduceMotion: boolean;
 }) {
+  const scrollToExplore = () => {
+    document.getElementById(HOME_EXPLORE_SECTION_ID)?.scrollIntoView({
+      behavior: shouldReduceMotion ? "auto" : "smooth",
+      block: "start",
+    });
+  };
+
   return (
-    <m.div
-      className="absolute bottom-7 left-4 flex items-center gap-1.5 md:left-0 lg:-left-10 xl:-left-16"
+    <m.button
+      type="button"
+      onClick={scrollToExplore}
+      aria-label="Gulir ke section Jelajahi"
+      className="group absolute right-2 top-10 z-10 flex flex-row-reverse items-center gap-1.5 sm:right-8 sm:top-12"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5, ease: HOME_EASE_OUT, delay: 0.5 }}
     >
-      <span className="font-hand text-[17px] text-muted-foreground">
-        bacaan hari ini
+      <span className="font-hand text-[17px] text-muted-foreground rotate-[5deg] transition-colors duration-150 ease-out group-hover:text-foreground">
+        scroll ke bawah, yuk
       </span>
       <m.svg
         viewBox="0 0 219 41"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
         aria-hidden="true"
-        className="-scale-x-100 rotate-[20deg] shrink-0 fill-muted-foreground"
+        className="shrink-0 fill-muted-foreground transition-colors duration-150 ease-out group-hover:fill-foreground"
         style={{ width: 42 }}
         initial={{ opacity: 0.4, scale: 1 }}
         animate={
@@ -48,6 +65,6 @@ export function ExploreHandwrittenCue({
           </clipPath>
         </defs>
       </m.svg>
-    </m.div>
+    </m.button>
   );
 }

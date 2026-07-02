@@ -1,8 +1,10 @@
 "use client";
 
 import {
+  DownloadIcon,
   InfoIcon,
   Loader2Icon,
+  MessageSquareIcon,
   MoreHorizontalIcon,
   PanelLeftIcon,
   Trash2Icon,
@@ -23,8 +25,13 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toArtifactId, type ArtifactId } from "@/lib/convex-refs";
 import { readableApiErrorMessage } from "@/lib/api-error";
+import {
+  resolveArtifactDownload,
+  triggerArtifactDownload,
+} from "@/lib/artifact-download";
 import { useArtifactRender } from "@/features/artifacts/api";
-import { panelHeaderPaddingClass } from "@/lib/panel-surface";
+import { PanelHeaderBar, SidePanelFrame } from "@/components/layout/side-panel-frame";
+import { PanelTitleLabel } from "@/components/panel-title-dropdown-trigger";
 import { cn } from "@/lib/utils";
 import { useArtifactDetailData } from "../api/use-workspaces-data";
 import { DeleteArtifactDialog } from "./artifact-delete-dialog";
@@ -34,7 +41,6 @@ import {
   ArtifactMetadataPopover,
   MarkdownArtifactDetails,
   MarkdownArtifactInfo,
-  PaperStatusBanner,
   type ArtifactSidebarRecord,
 } from "./artifact-detail-sidebar";
 import {
@@ -45,7 +51,7 @@ import {
   type PaperExtractionStatus,
 } from "./artifact-render-panels";
 import { BlockNoteEditorLoader } from "./blocknote-editor-loader";
-import type { DocumentEditorContent } from "./blocknote-document-editor";
+import type { DocumentEditorContent, EditorSelection } from "./blocknote-document-editor";
 import { DocumentTitleEditor } from "./document-title-editor";
 import {
   autosaveReducer,
@@ -59,10 +65,20 @@ const initialAutosaveState: AutosaveState = {
   error: null,
 };
 
-const readerColumnClass =
-  "mx-auto w-full max-w-[940px] px-4 pb-16 pt-2 sm:px-6";
-const singleColumnGridClass =
-  "mx-auto w-full max-w-[1080px] px-5 pb-12 pt-4 sm:px-8 lg:px-10";
+// Content-first reading measure — markdown docs, pdf pages, url/plain-text
+// readers. Every "read this" surface shares it so the page rhymes top to bottom.
+const proseColumnClass = "mx-auto w-full max-w-[860px] px-4 pb-16 pt-3 sm:px-6";
+// Roomier column for framed embedded viewers (html/svg/diagram/data/code).
+const mediaColumnClass = "mx-auto w-full max-w-[1040px] px-4 pb-16 pt-3 sm:px-6";
+// Types that read as documents rather than embedded media: they get the narrow
+// prose column and stay borderless/centered like the markdown reference.
+const contentFirstTypes = new Set([
+  "markdown",
+  "plain_text",
+  "url",
+  "pdf",
+  "docx",
+]);
 
 export type ArtifactDetailVariant = "page" | "panel";
 
@@ -81,6 +97,9 @@ export function ArtifactDetailView({
   workspaceId: workspaceIdProp,
   variant,
   onClose,
+  chatOpen,
+  onToggleChat,
+  onAskAstraAboutSelection,
 }: {
   artifactId: string;
   /** Required for the page route; the panel derives it from the loaded artifact. */
@@ -88,39 +107,19 @@ export function ArtifactDetailView({
   variant: ArtifactDetailVariant;
   /** Panel only: close the side panel. */
   onClose?: () => void;
+  /** Page only: toggle the artifact-page chat panel (rendered as a header affordance). */
+  chatOpen?: boolean;
+  onToggleChat?: () => void;
+  /** Page only (markdown editor): pilihan blok "Tanya Astra" → context token di composer. */
+  onAskAstraAboutSelection?: (selection: EditorSelection) => void;
 }) {
   const data = useArtifactDetailData(artifactId);
   const router = useRouter();
 
   const detail = data.artifact;
   const sidebarArtifact = detail?.artifact as ArtifactSidebarRecord | undefined;
-  const detailIsMarkdown = detail?.artifact.artifactType === "markdown";
-  const resolvedWorkspaceId = workspaceIdProp ?? detail?.artifact.workspaceId ?? "";
-  // For markdown on the PAGE the render payload is only the initial seed: once
-  // loaded, the BlockNote editor owns the content and autosave pushes to Convex.
-  // Keeping the key stable per-artifact stops our own saves (which bump
-  // content.updatedAt) from churning the query key, which would otherwise blank
-  // the payload and remount the editor on every keystroke-batch. The PANEL is a
-  // read-only viewer (no editor → no autosave churn), so it CAN track updatedAt —
-  // and must, so the agent re-writing a markdown doc refreshes the open panel
-  // (plan §7 "panel ikut update saat agen selesai menulis"). Papers/URLs always
-  // track updatedAt (extraction retries + agent writes refresh the reader).
-  const markdownKey =
-    variant === "panel"
-      ? `${artifactId}:markdown:${detail?.artifact.updatedAt ?? 0}:${
-          detail?.content?.updatedAt ?? "no-content"
-        }`
-      : `${artifactId}:markdown`;
-  const renderPayloadVersionKey = !detail
-    ? null
-    : detailIsMarkdown
-      ? markdownKey
-      : [
-          artifactId,
-          detail.artifact.updatedAt,
-          detail.content?.updatedAt ?? "no-content",
-          detail.url?.extractedAt ?? "no-url",
-        ].join(":");
+  const detailIsMarkdown = detail?.artifact?.artifactType === "markdown";
+  const resolvedWorkspaceId = workspaceIdProp ?? detail?.artifact?.workspaceId ?? "";
   const renderPayloadQuery = useArtifactRender(artifactId);
   const activeRenderPayload = (renderPayloadQuery.data ?? data.renderPayload ?? null) as ArtifactRenderPayload | null;
   const activeContentError = renderPayloadQuery.error
@@ -128,11 +127,15 @@ export function ArtifactDetailView({
     : null;
   // The page route guards against a workspace/artifact mismatch in the URL; the
   // panel always shows the artifact's own workspace, so there is nothing to
-  // mismatch against.
+  // mismatch against. `ArtifactService.get` now returns headless artifacts
+  // (`workspaceId=null`, e.g. chat-upload attachments) to the owner, so the page
+  // variant must treat any artifact whose workspace doesn't match the URL —
+  // including a null/headless one — as not-found (the workspace route is
+  // workspace-scoped by definition; headless attachments open via the reader/panel).
   const workspaceMismatch =
     variant === "page" &&
-    Boolean(detail?.artifact.workspaceId) &&
-    detail!.artifact.workspaceId !== workspaceIdProp;
+    detail?.artifact != null &&
+    detail.artifact.workspaceId !== workspaceIdProp;
   const [documentSaveState, dispatchDocumentSave] = useReducer(autosaveReducer, initialAutosaveState);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const markdownBlocksJson =
@@ -151,7 +154,7 @@ export function ArtifactDetailView({
     dispatchDocumentSave({ type: "reset", json: markdownBlocksJson });
   }, [artifactId, markdownBlocksJson]);
 
-  const ready = Boolean(detail) && !workspaceMismatch;
+  const ready = Boolean(detail?.artifact) && !workspaceMismatch;
   const isMarkdown = detailIsMarkdown;
   const workspaceName = data.workspaces.find(
     (workspace) => workspace._id === resolvedWorkspaceId,
@@ -161,6 +164,7 @@ export function ArtifactDetailView({
     ready && detail && activeRenderPayload ? (
       <ArtifactHeaderActions
         payload={activeRenderPayload}
+        title={detail.artifact.title}
         onDelete={() => setDeleteOpen(true)}
       />
     ) : null;
@@ -203,8 +207,10 @@ export function ArtifactDetailView({
   // The side panel collapses every action into one More menu (Info + Delete),
   // sitting next to the close toggle. The full page keeps its richer `trailing`.
   const panelActions =
-    ready && detail && infoContent ? (
+    ready && detail && activeRenderPayload && infoContent ? (
       <ArtifactPanelActions
+        payload={activeRenderPayload}
+        title={detail.artifact.title}
         infoContent={infoContent}
         onDelete={() => setDeleteOpen(true)}
       />
@@ -226,6 +232,25 @@ export function ArtifactDetailView({
       ) : null
     ) : null;
 
+  const chatToggle =
+    variant === "page" && onToggleChat ? (
+      <Button
+        type="button"
+        variant="ghost"
+        className={cn(
+          "flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-semibold transition-colors",
+          chatOpen
+            ? "bg-primary/15 text-primary hover:bg-primary/15 hover:text-primary"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground",
+        )}
+        onClick={onToggleChat}
+        aria-label={chatOpen ? "Tutup chat" : "Buka chat"}
+      >
+        <MessageSquareIcon className="size-3.5" />
+        Chat
+      </Button>
+    ) : null;
+
   const header =
     ready && detail ? (
       variant === "page" ? (
@@ -234,17 +259,33 @@ export function ArtifactDetailView({
           workspaceId={resolvedWorkspaceId}
           workspaceName={workspaceName}
           onRenameArtifact={renameArtifact}
-          trailing={trailing}
+          trailing={
+            <>
+              {trailing}
+              {chatToggle}
+            </>
+          }
         />
       ) : (
-        <ArtifactPanelToolbar onClose={onClose} trailing={panelActions} />
+        <ArtifactPanelToolbar
+          title={detail.artifact.title}
+          onClose={onClose}
+          trailing={panelActions}
+        />
       )
     ) : variant === "panel" ? (
       <ArtifactPanelToolbar onClose={onClose} />
     ) : null;
 
+  // Content-first types (incl. pdf pages) stay in the narrow prose column; framed
+  // embedded viewers (html/svg/diagram/data/code) get the roomier media column.
+  const bodyColumnClass =
+    !activeRenderPayload || contentFirstTypes.has(activeRenderPayload.artifactType)
+      ? proseColumnClass
+      : mediaColumnClass;
+
   const body = (
-    <div className={isMarkdown ? singleColumnGridClass : readerColumnClass}>
+    <div className={bodyColumnClass}>
       {data.isLoading ? (
         <AppLoadingOverlay variant="absolute" />
       ) : !ready || !detail ? (
@@ -276,23 +317,19 @@ export function ArtifactDetailView({
               updateDocument={data.updateDocument}
               saveState={documentSaveState}
               dispatchSaveState={dispatchDocumentSave}
+              onAskAstraAboutSelection={onAskAstraAboutSelection}
             />
           )}
         </div>
       ) : (
-        <section className="min-w-0 space-y-5">
-          <PaperStatusBanner
-            payload={activeRenderPayload}
-            paperExtraction={data.paperExtraction as PaperExtractionStatus}
-            artifactId={artifactId}
-            retryGrobidExtraction={data.retryGrobidExtraction}
-            retryUrlExtraction={data.retryUrlExtraction}
-          />
+        // Body stays content-only (extraction status + retry live in the header
+        // Info popover) so every reader matches the markdown reference.
+        <div className="min-w-0">
           <ArtifactReadingColumn
             payload={activeRenderPayload}
             title={detail.artifact.title}
           />
-        </section>
+        </div>
       )}
     </div>
   );
@@ -315,85 +352,97 @@ export function ArtifactDetailView({
     ) : null;
 
   if (variant === "panel") {
-    // The framed surface comes from the side-panel slot (ResponsiveSidePanel →
-    // SidebarInset / Sidebar), so this fills it without re-framing (mirrors the
-    // workspace-library panel content).
+    // Flush header bar OUTSIDE the floating card (via SidePanelFrame), matching the
+    // main content header; the scrollable body tucks into the card below it.
     return (
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
-        {header}
-        <div className="relative min-h-0 flex-1 overflow-y-auto">{body}</div>
+      <>
+        <SidePanelFrame header={header}>
+          <div className="relative min-h-0 flex-1 overflow-y-auto">{body}</div>
+        </SidePanelFrame>
         {deleteDialog}
-      </div>
+      </>
     );
   }
 
+  // Page variant: landmark `<main>` + scroll dimiliki shell halaman (ArtifactReaderPageShell)
+  // supaya bisa hidup di samping panel chat (DetailSplitLayout). Komponen ini = konten murni.
   return (
-    <main className="min-h-svh bg-background text-foreground">
+    <div className="min-h-full bg-background text-foreground">
       {header}
       {body}
       {deleteDialog}
-    </main>
+    </div>
   );
 }
 
 function ArtifactPanelToolbar({
+  title,
   onClose,
   trailing,
 }: {
+  title?: string;
   onClose?: () => void;
   trailing?: ReactNode;
 }) {
-  // Borderless action bar matching the workspace panel header padding: no back
-  // arrow, no title — just the More menu (`trailing`) and the close toggle,
-  // which mirrors the workspace panel's close affordance.
+  // Flush glass bar (same idiom as the main content header): artifact title on the
+  // left, More menu (`trailing`) + close toggle on the right. The bar renders OUTSIDE
+  // the floating card via SidePanelFrame, so the actions read as living outside it.
   return (
-    <header
-      className={cn(
-        "flex shrink-0 items-center justify-end gap-0.5 bg-background",
-        panelHeaderPaddingClass,
-      )}
-    >
-      {trailing}
-      {onClose ? (
-        <Button
-          type="button"
-          variant="ghost"
-          className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-          onClick={onClose}
-          aria-label="Tutup panel"
-        >
-          <PanelLeftIcon className="size-3.5 rotate-180" />
-        </Button>
-      ) : null}
-    </header>
+    <PanelHeaderBar
+      title={title ? <PanelTitleLabel>{title}</PanelTitleLabel> : null}
+      actions={
+        <>
+          {trailing}
+          {onClose ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={onClose}
+              aria-label="Tutup panel"
+            >
+              <PanelLeftIcon className="size-3.5 rotate-180" />
+            </Button>
+          ) : null}
+        </>
+      }
+    />
   );
 }
 
 /**
  * Side-panel header actions: a single More popover next to the close toggle.
  *
- * One overlay, two views. The "menu" view lists Info + Delete; choosing Info
- * swaps the SAME popover to the metadata "info" view (the panel the page header
- * shows in its own popover). This deliberately avoids nesting a Popover inside a
- * DropdownMenu — two dismissable layers sharing an anchor fight each other (the
- * menu closing dismisses the just-opened popover → flicker), which is the bug we
- * hit before. A single controlled surface sidesteps that entirely.
+ * One overlay, two views. The "menu" view lists Info + Download + Delete;
+ * choosing Info swaps the SAME popover to the metadata "info" view (the panel the
+ * page header shows in its own popover). This deliberately avoids nesting a
+ * Popover inside a DropdownMenu — two dismissable layers sharing an anchor fight
+ * each other (the menu closing dismisses the just-opened popover → flicker),
+ * which is the bug we hit before. A single controlled surface sidesteps that.
  */
 function ArtifactPanelActions({
+  payload,
+  title,
   infoContent,
   onDelete,
 }: {
+  payload: ArtifactRenderPayload;
+  title: string;
   infoContent: ReactNode;
   onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"menu" | "info">("menu");
+  const download = resolveArtifactDownload(payload, title);
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
     // Always reopen on the menu view, never stuck on a stale info panel.
     if (!next) setView("menu");
   };
+
+  const menuItemClass =
+    "flex w-full items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] text-foreground transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none";
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
@@ -420,11 +469,34 @@ function ArtifactPanelActions({
             <button
               type="button"
               onClick={() => setView("info")}
-              className="flex w-full items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] text-foreground transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+              className={menuItemClass}
             >
               <InfoIcon className="size-4 text-muted-foreground" />
               Info
             </button>
+            {download.kind === "url" ? (
+              <a
+                href={download.href}
+                download={download.fileName}
+                onClick={() => setOpen(false)}
+                className={menuItemClass}
+              >
+                <DownloadIcon className="size-4 text-muted-foreground" />
+                Download
+              </a>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  triggerArtifactDownload(download);
+                }}
+                className={menuItemClass}
+              >
+                <DownloadIcon className="size-4 text-muted-foreground" />
+                Download
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -467,6 +539,7 @@ function DocumentArtifactDetail({
   updateDocument,
   saveState,
   dispatchSaveState,
+  onAskAstraAboutSelection,
 }: {
   artifactId: string;
   initialTitle: string;
@@ -481,6 +554,7 @@ function DocumentArtifactDetail({
   }) => Promise<unknown>;
   saveState: AutosaveState;
   dispatchSaveState: AutosaveDispatch;
+  onAskAstraAboutSelection?: (selection: EditorSelection) => void;
 }) {
   const latestContent = useRef<DocumentEditorContent | null>(null);
   const lastSavedJsonRef = useRef(initialBlocksJson);
@@ -512,12 +586,14 @@ function DocumentArtifactDetail({
     <div className="grid w-full gap-1">
       <DocumentTitleEditor initialTitle={initialTitle} onRename={onRenameTitle} />
       <BlockNoteEditorLoader
+        artifactId={artifactId}
         initialBlocksJson={initialBlocksJson}
         initialMarkdown={initialMarkdown}
         onContentChange={(content) => {
           latestContent.current = content;
           dispatchSaveState({ type: "changed", json: content.blocksJson });
         }}
+        onAskAstraAboutSelection={onAskAstraAboutSelection}
       />
     </div>
   );

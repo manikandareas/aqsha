@@ -18,6 +18,8 @@ const eslintConfig = defineConfig([
     ".workflow-data/**",
     ".nitro/**",
     ".vercel/**",
+    // Content Collections generated output (blog MDX content layer).
+    ".content-collections/**",
   ]),
 ]);
 

@@ -1,0 +1,245 @@
+[
+  {
+    "id": "TC001",
+    "title": "Basic chat completes with a full answer ending in a complete sentence",
+    "description": "From a new chat on /app, a basic question streams a non-empty answer that finishes with sentence-ending punctuation (not truncated mid-word). Verifies FR1.1 and the G1 truncation fix at the UI level.",
+    "category": "Astra streaming chat",
+    "steps": [
+      { "type": "action", "description": "Navigate to http://localhost:3000/sign-in" },
+      { "type": "action", "description": "Fill in the email field with {{LOGIN_USER}}" },
+      { "type": "action", "description": "Fill in the password field with {{LOGIN_PASSWORD}}" },
+      { "type": "action", "description": "Submit the sign-in form and wait until redirected to http://localhost:3000/app" },
+      { "type": "action", "description": "In the composer on /app, type exactly 'jelaskan singkat apa itu spaced repetition' and press Enter" },
+      { "type": "assertion", "description": "A user message bubble appears containing the text 'jelaskan singkat apa itu spaced repetition'" },
+      { "type": "assertion", "description": "The agent begins streaming: the composer's send control becomes a Stop button and a shimmering indicator reading 'Astra sedang berpikir…' or 'Astra sedang menyusun jawaban…' is visible" },
+      { "type": "action", "description": "Wait up to 90 seconds until streaming finishes (the Stop button reverts to the send control and a copy icon plus a regenerate circular-arrow icon appear under the answer)" },
+      { "type": "assertion", "description": "The assistant answer is non-empty and ends with a complete sentence: the final visible character is sentence-ending punctuation such as '.', '!', '?', or '…', i.e. it is not cut off mid-word" }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC002",
+    "title": "Streaming shows Stop control, then reverts to send with copy/regenerate (FR1.2, AC1.2)",
+    "description": "While an answer streams the composer shows a Stop button; after completion the control returns to the send arrow and copy/regenerate icons appear.",
+    "category": "Astra streaming chat",
+    "steps": [
+      { "type": "action", "description": "Navigate to http://localhost:3000/sign-in" },
+      { "type": "action", "description": "Fill in the email field with {{LOGIN_USER}}" },
+      { "type": "action", "description": "Fill in the password field with {{LOGIN_PASSWORD}}" },
+      { "type": "action", "description": "Submit the sign-in form and wait until redirected to /app" },
+      { "type": "action", "description": "In the composer type exactly 'tuliskan esai 4 paragraf tentang manfaat membaca buku' and press Enter" },
+      { "type": "assertion", "description": "While the answer is streaming, the composer shows a Stop button (not the send arrow)" },
+      { "type": "action", "description": "Wait up to 90 seconds for the answer to finish streaming" },
+      { "type": "assertion", "description": "After completion the control returns to the send arrow and a copy icon plus a regenerate (circular arrow) icon are shown under the answer" }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC003",
+    "title": "Empty send is blocked (AC1.3)",
+    "description": "Pressing Enter on an empty composer does not send a message, does not create a thread, and keeps the URL on /app.",
+    "category": "Astra streaming chat",
+    "steps": [
+      { "type": "action", "description": "Navigate to http://localhost:3000/sign-in" },
+      { "type": "action", "description": "Fill in the email field with {{LOGIN_USER}}" },
+      { "type": "action", "description": "Fill in the password field with {{LOGIN_PASSWORD}}" },
+      { "type": "action", "description": "Submit the sign-in form and wait until redirected to http://localhost:3000/app" },
+      { "type": "action", "description": "Ensure the composer is empty (no text) and press Enter without typing anything" },
+      { "type": "assertion", "description": "No message bubble is added and no assistant streaming begins" },
+      { "type": "assertion", "description": "No new thread is created and the URL stays on http://localhost:3000/app (it does not navigate to /app/threads/<id>)" }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC004",
+    "title": "Slash command menu lists 10 commands in 3 sections; selecting Deep research enters deep mode (AC2.1, AC2.2)",
+    "description": "Typing '/' opens a grouped command menu of exactly 10 commands; typing 'deep' and selecting Deep research attaches a deep mode chip to the composer.",
+    "category": "Slash command menu",
+    "steps": [
+      { "type": "action", "description": "Navigate to http://localhost:3000/sign-in" },
+      { "type": "action", "description": "Fill in the email field with {{LOGIN_USER}}" },
+      { "type": "action", "description": "Fill in the password field with {{LOGIN_PASSWORD}}" },
+      { "type": "action", "description": "Submit the sign-in form and wait until redirected to /app" },
+      { "type": "action", "description": "In the composer type a single '/' character" },
+      { "type": "assertion", "description": "A command menu opens listing 10 commands grouped into three sections titled 'Tulis Akademik', 'Rancang Riset', and 'Workspace'" },
+      { "type": "assertion", "description": "The menu includes all of: /paraphrase, /expand, /summarize, /outline, /research-question, /methodology, /literature-review, /deep, /artifact, /workspace" },
+      { "type": "action", "description": "Continue typing 'deep' to filter, then select the 'Deep research' item" },
+      { "type": "assertion", "description": "The composer shows a 'deep' chip/mode and is ready to accept a research question" }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC005",
+    "title": "Stop mid-stream is clean with no AbortError (regression, fix G5)",
+    "description": "Clicking Stop while streaming halts cleanly, keeps the partial text, and surfaces no error overlay/banner/'1 Issue' badge and no 'AbortError: BodyStreamBuffer was aborted'.",
+    "category": "Astra streaming chat",
+    "steps": [
+      { "type": "action", "description": "Navigate to http://localhost:3000/sign-in" },
+      { "type": "action", "description": "Fill in the email field with {{LOGIN_USER}}" },
+      { "type": "action", "description": "Fill in the password field with {{LOGIN_PASSWORD}}" },
+      { "type": "action", "description": "Submit the sign-in form and wait until redirected to /app" },
+      { "type": "action", "description": "In the composer type exactly 'tuliskan esai panjang dan rinci tentang sejarah kopi di dunia' and press Enter" },
+      { "type": "action", "description": "Wait until a few paragraphs have streamed and the answer is still streaming (Stop button visible), then click the Stop button" },
+      { "type": "assertion", "description": "Streaming halts immediately, the already-streamed partial text remains visible, and the control returns to the send arrow" },
+      { "type": "assertion", "description": "No error overlay, red error banner, or '1 Issue' badge appears, and the message 'AbortError: BodyStreamBuffer was aborted' does NOT appear anywhere" }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC006",
+    "title": "Regenerate does not duplicate the user message (regression, fix G6)",
+    "description": "Regenerating a completed answer produces a fresh answer for the same question without adding a second copy of the user's message bubble.",
+    "category": "Astra streaming chat",
+    "steps": [
+      { "type": "action", "description": "Navigate to http://localhost:3000/sign-in" },
+      { "type": "action", "description": "Fill in the email field with {{LOGIN_USER}}" },
+      { "type": "action", "description": "Fill in the password field with {{LOGIN_PASSWORD}}" },
+      { "type": "action", "description": "Submit the sign-in form and wait until redirected to /app" },
+      { "type": "action", "description": "In the composer type exactly 'jelaskan singkat apa itu spaced repetition' and press Enter, then wait up to 90 seconds for the answer to finish (copy + regenerate icons visible)" },
+      { "type": "action", "description": "Click the regenerate (circular arrow) icon under the completed answer" },
+      { "type": "assertion", "description": "A new answer is generated for the same question" },
+      { "type": "assertion", "description": "The user's message 'jelaskan singkat apa itu spaced repetition' still appears exactly once above the regenerated answer; it is NOT duplicated into a second user bubble" }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC007",
+    "title": "Refresh while streaming resumes and completes (best-effort, timing-sensitive, fix G1)",
+    "description": "Reloading the page mid-stream resumes the in-progress answer and the final answer is complete, not truncated. Mark inconclusive if the mid-stream window is missed.",
+    "category": "Astra streaming chat",
+    "steps": [
+      { "type": "action", "description": "Navigate to http://localhost:3000/sign-in" },
+      { "type": "action", "description": "Fill in the email field with {{LOGIN_USER}}" },
+      { "type": "action", "description": "Fill in the password field with {{LOGIN_PASSWORD}}" },
+      { "type": "action", "description": "Submit the sign-in form and wait until redirected to /app" },
+      { "type": "action", "description": "In the composer type exactly 'tuliskan panduan komprehensif dan sangat panjang tentang pola tidur sehat' and press Enter" },
+      { "type": "action", "description": "As soon as a few paragraphs have streamed (still streaming, Stop button visible), reload the current thread page in the browser" },
+      { "type": "assertion", "description": "After reload the thread is not empty: the in-progress answer continues to stream or is already completed (no lost run)" },
+      { "type": "action", "description": "Wait up to 90 seconds for streaming to settle after the reload" },
+      { "type": "assertion", "description": "The final answer is complete, ending with sentence-ending punctuation ('.', '!', '?', or '…') and not truncated mid-sentence. If the refresh landed after completion, a full answer still passes. If the exact mid-stream window was missed, mark the test inconclusive rather than failed." }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC008",
+    "title": "Document artifact card survives a page refresh (regression, fix G7)",
+    "description": "Asking Astra to create a short document yields a document artifact card in the thread that remains visible after reloading the page.",
+    "category": "Artifacts and sources panel",
+    "steps": [
+      { "type": "action", "description": "Navigate to http://localhost:3000/sign-in" },
+      { "type": "action", "description": "Fill in the email field with {{LOGIN_USER}}" },
+      { "type": "action", "description": "Fill in the password field with {{LOGIN_PASSWORD}}" },
+      { "type": "action", "description": "Submit the sign-in form and wait until redirected to /app" },
+      { "type": "action", "description": "In the composer type exactly 'buatkan dokumen catatan singkat berisi 3 tips belajar efektif' and press Enter" },
+      { "type": "action", "description": "If the agent asks a clarifying question, reply briefly with 'untuk mahasiswa, bahasa Indonesia' so it proceeds; approve in conversation if prompted" },
+      { "type": "assertion", "description": "A document artifact card showing a title and the label 'Dokumen' appears in the thread (wait up to 120 seconds)" },
+      { "type": "action", "description": "Reload the current thread page in the browser" },
+      { "type": "assertion", "description": "After reload, the document artifact card is still visible in the thread (it is not lost)" }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC009",
+    "title": "Destructive delete approval card; approving deletes with no stream error (regression, fix G8, AC5.3)",
+    "description": "Requesting deletion of an existing artifact surfaces an approval card ending 'Setujui untuk menjalankan.'; approving removes the card and confirms deletion with no 'tool_result must be preceded by a tool_call' error.",
+    "category": "Destructive tool approval",
+    "steps": [
+      { "type": "action", "description": "Navigate to http://localhost:3000/sign-in" },
+      { "type": "action", "description": "Fill in the email field with {{LOGIN_USER}}" },
+      { "type": "action", "description": "Fill in the password field with {{LOGIN_PASSWORD}}" },
+      { "type": "action", "description": "Submit the sign-in form and wait until redirected to /app" },
+      { "type": "action", "description": "First ensure an artifact exists: type 'buatkan dokumen catatan singkat berisi 3 tips belajar efektif', press Enter, answer any clarifying question with 'untuk mahasiswa, bahasa Indonesia', and wait until a document artifact card (title + 'Dokumen') appears" },
+      { "type": "action", "description": "In the same thread type exactly 'tolong hapus artefak yang tadi' and press Enter" },
+      { "type": "assertion", "description": "An approval card appears containing a line ending with 'Setujui untuk menjalankan.' and two buttons labeled 'Setujui' and 'Tolak'" },
+      { "type": "action", "description": "Click the 'Setujui' button" },
+      { "type": "assertion", "description": "The agent confirms deletion (text such as 'Sudah dihapus') and the artifact card is removed from the thread" },
+      { "type": "assertion", "description": "No error overlay or '1 Issue' badge appears, and the stream error 'tool_result must be preceded by a tool_call' does NOT appear" }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC010",
+    "title": "/deep shows a plan-gate before researching (fix G2, AC4.1)",
+    "description": "A /deep research question produces a 'Rencana riset' plan card with sub-questions and approve/reject buttons, and research does NOT start until approval.",
+    "category": "Deep research plan and cited synthesis",
+    "steps": [
+      { "type": "action", "description": "Navigate to http://localhost:3000/sign-in" },
+      { "type": "action", "description": "Fill in the email field with {{LOGIN_USER}}" },
+      { "type": "action", "description": "Fill in the password field with {{LOGIN_PASSWORD}}" },
+      { "type": "action", "description": "Submit the sign-in form and wait until redirected to /app" },
+      { "type": "action", "description": "Select /deep from the slash menu (or type '/deep '), then type exactly 'apa efek konsumsi kafein terhadap kualitas tidur pada orang dewasa?' and send" },
+      { "type": "action", "description": "Wait up to 90 seconds for the plan step to appear" },
+      { "type": "assertion", "description": "A card titled 'Rencana riset' appears containing a prose plan paragraph, a bullet list of sub-questions, the line 'Setujui untuk memulai riset, atau tolak untuk membatalkan.', and two buttons labeled 'Setujui' and 'Tolak'" },
+      { "type": "assertion", "description": "Research has NOT started yet: no final cited answer and no sources panel are present at this point" }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC011",
+    "title": "Approve /deep produces cited synthesis with a sources panel (long-running, fix G2/G3/G4, AC4.2-4.4)",
+    "description": "Approving the /deep plan runs a process trace and yields a structured answer with inline [1]/[2] citation markers and an expandable 'N sumber' sources panel whose numbers match the prose.",
+    "category": "Deep research plan and cited synthesis",
+    "steps": [
+      { "type": "action", "description": "Navigate to http://localhost:3000/sign-in" },
+      { "type": "action", "description": "Fill in the email field with {{LOGIN_USER}}" },
+      { "type": "action", "description": "Fill in the password field with {{LOGIN_PASSWORD}}" },
+      { "type": "action", "description": "Submit the sign-in form and wait until redirected to /app" },
+      { "type": "action", "description": "Select /deep (or type '/deep '), type exactly 'apa efek konsumsi kafein terhadap kualitas tidur pada orang dewasa?', send, and wait up to 90 seconds for the 'Rencana riset' plan card" },
+      { "type": "action", "description": "Click the 'Setujui' button to start the research" },
+      { "type": "action", "description": "Wait up to 240 seconds; a process trace runs with steps such as 'Menelaah literatur', 'Mencari bukti tandingan', 'Memverifikasi sitasi', 'Menulis sintesis', and a live elapsed label starting with 'Sedang bekerja' ticks" },
+      { "type": "assertion", "description": "A final structured answer appears containing inline citation markers such as [1] and [2]" },
+      { "type": "action", "description": "Click the sources toggle that reads 'N sumber' (e.g. '12 sumber') to expand the sources list" },
+      { "type": "assertion", "description": "The expanded sources list shows sources each prefixed with a bracketed number [1] / [2] / … that match the citation markers used in the prose" }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC012",
+    "title": "Reject the /deep plan stops research",
+    "description": "Clicking 'Tolak' on a /deep plan card cancels the research; no literature search or cited synthesis is produced.",
+    "category": "Deep research plan and cited synthesis",
+    "steps": [
+      { "type": "action", "description": "Navigate to http://localhost:3000/sign-in" },
+      { "type": "action", "description": "Fill in the email field with {{LOGIN_USER}}" },
+      { "type": "action", "description": "Fill in the password field with {{LOGIN_PASSWORD}}" },
+      { "type": "action", "description": "Submit the sign-in form and wait until redirected to /app" },
+      { "type": "action", "description": "Run a deep research request: select /deep (or type '/deep '), type exactly 'apa dampak olahraga pagi terhadap produktivitas?', send, and wait up to 90 seconds for the 'Rencana riset' plan card" },
+      { "type": "action", "description": "Click the 'Tolak' button" },
+      { "type": "assertion", "description": "The agent stops and does not proceed into research: no process trace, no cited synthesis answer, and no 'N sumber' sources panel are produced" }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC013",
+    "title": "Ambiguous query makes the agent ask for context (AC5.2)",
+    "description": "An ambiguous question prompts a plain-text clarification request rather than a confident answer; no buttoned card is required.",
+    "category": "Astra streaming chat",
+    "steps": [
+      { "type": "action", "description": "Navigate to http://localhost:3000/sign-in" },
+      { "type": "action", "description": "Fill in the email field with {{LOGIN_USER}}" },
+      { "type": "action", "description": "Fill in the password field with {{LOGIN_PASSWORD}}" },
+      { "type": "action", "description": "Submit the sign-in form and wait until redirected to /app" },
+      { "type": "action", "description": "In a fresh chat, type exactly 'bandingkan dua pendekatan itu untuk proyek saya' and press Enter" },
+      { "type": "action", "description": "Wait up to 90 seconds for the answer to settle" },
+      { "type": "assertion", "description": "The agent replies as plain text asking for clarification/context (e.g. it asks which two approaches are meant or what the project is), rather than producing a confident answer. No approval/buttoned card is required." }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC014",
+    "title": "Refresh during a running /deep resumes (best-effort, fix G1 for workflow)",
+    "description": "Reloading while the deep-research process trace runs resumes the run (process trace / 'Sedang bekerja' continues or completes with cited answer + sources); the thread must not silently become empty. Mark inconclusive if timing is missed.",
+    "category": "Deep research plan and cited synthesis",
+    "steps": [
+      { "type": "action", "description": "Navigate to http://localhost:3000/sign-in" },
+      { "type": "action", "description": "Fill in the email field with {{LOGIN_USER}}" },
+      { "type": "action", "description": "Fill in the password field with {{LOGIN_PASSWORD}}" },
+      { "type": "action", "description": "Submit the sign-in form and wait until redirected to /app" },
+      { "type": "action", "description": "Select /deep (or type '/deep '), type exactly 'apa manfaat dan risiko puasa intermiten?', send, and wait up to 90 seconds for the 'Rencana riset' plan card" },
+      { "type": "action", "description": "Click the 'Setujui' button to start the research" },
+      { "type": "action", "description": "While the research process trace is running (the 'Sedang bekerja' label is ticking), reload the current thread page in the browser" },
+      { "type": "assertion", "description": "After reload the thread still shows the deep-research run: either still in progress (process trace / 'Sedang bekerja' resumes) or completed with the cited answer + 'N sumber' sources. The thread must NOT be silently lost/empty. If the timing window was missed, mark inconclusive rather than failed." }
+    ],
+    "priority": "High"
+  }
+]

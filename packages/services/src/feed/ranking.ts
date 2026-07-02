@@ -89,7 +89,7 @@ export function reasonFor(
     case "topic":
       return "Sedang ramai diperbincangkan";
     case "news":
-      return "Berita sains terbaru";
+      return "Berita terbaru";
     case "idea":
       return "Celah riset untuk digali";
     default:

@@ -151,7 +151,7 @@ describe("AccountDeletion cascade (DB-itest)", () => {
       select conrelid::regclass::text as tbl, confdeltype as del
       from pg_constraint
       where confrelid = 'users'::regclass and contype = 'f'`;
-    expect(rows.length).toBeGreaterThanOrEqual(21);
+    expect(rows.length).toBeGreaterThanOrEqual(20);
     const notCascade = rows.filter((r) => r.del !== "c").map((r) => r.tbl);
     expect(notCascade).toEqual([]); // tabel owner tanpa cascade = bug
   });

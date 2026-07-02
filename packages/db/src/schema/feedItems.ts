@@ -16,8 +16,9 @@ import {
 
 /**
  * Postgres `tsvector` (drizzle pg-core tak punya tipe bawaan). Dipakai untuk kolom
- * full-text GENERATED + index GIN (Isu 7 / searchDiscovery). pgvector KHUSUS RAG (P3),
- * full-text feed KHUSUS tsvector — jangan dicampur.
+ * full-text GENERATED + index GIN. Read-path tsvector search dihapus (search Explore
+ * kini live OpenAlex/arXiv/Crossref); kolom+index DIPERTAHANKAN (drop = migrasi Tier-2
+ * tersendiri). pgvector KHUSUS RAG (P3), full-text feed KHUSUS tsvector — jangan dicampur.
  */
 const tsvector = customType<{ data: string }>({
   dataType() {
@@ -32,7 +33,7 @@ const tsvector = customType<{ data: string }>({
  * - `order_at` bigint NOT NULL → kunci sort total untuk keyset infinite scroll
  *   (getFeedPaginated by_order). DIISI `deriveOrderAt` di SETIAP write.
  * - `search_text` (blob title+summary+topics) + `search_tsv` GENERATED tsvector +
- *   index GIN → back searchDiscovery. DIISI `deriveSearchText` di SETIAP write.
+ *   index GIN (retained; read-path search dihapus). DIISI `deriveSearchText` di SETIAP write.
  * - `paper_key` = logical ref ke `explore_papers.key` (TANPA FK keras; lihat explorePapers.ts).
  * - Enum (kind/provider/retraction) = text + CHECK. provider LOWERCASE (beda dari explore_papers).
  * - `stance_supporting`/`stance_contrasting` di-keep nullable demi kontrak FeedItem; TIDAK
@@ -84,7 +85,7 @@ export const feedItems = pgTable(
     check("feed_items_kind_check", sql`${t.kind} in ('paper', 'news', 'claim', 'topic', 'idea')`),
     check(
       "feed_items_provider_check",
-      sql`${t.provider} in ('openalex', 'exa_news', 'google_news', 'gdelt', 'google_factcheck', 'turnbackhoax')`,
+      sql`${t.provider} in ('openalex', 'exa_news', 'gdelt', 'google_factcheck', 'turnbackhoax')`,
     ),
     check(
       "feed_items_retraction_status_check",

@@ -63,8 +63,8 @@ export const admin = new Elysia({ prefix: "/admin" })
           t.Array(
             t.Union([
               t.Literal("refreshTrendingPapers"),
-              t.Literal("refreshGoogleNews"),
-              t.Literal("enrichGoogleNewsArticles"),
+              t.Literal("refreshGdeltNews"),
+              t.Literal("enrichNewsArticles"),
             ]),
           ),
         ),

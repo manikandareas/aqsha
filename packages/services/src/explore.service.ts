@@ -1,15 +1,15 @@
 /**
  * ExploreService — paper search + cold-deep-link resolver (P4). Port V1 `explore.searchPapers`/
  * `getPaper`/`getOrFetchPaper`. Fase 4 = OpenAlex-backed (spine) + cache Redis `explore` +
- * cache `explore_papers`. Waterfall multi-provider (arXiv/Jina/Crossref) = Fase 8 augmentation
- * (status "skipped" sekarang). `OPENALEX_API_KEY` wajib.
+ * cache `explore_papers`. Waterfall multi-provider akademik (arXiv/Crossref) mengisi ekor
+ * keyword search halaman-1; load-more memperdalam OpenAlex via `page`. `OPENALEX_API_KEY` wajib.
  */
 import type { Db } from "@aqsha/db";
-import { throwAppError } from "@aqsha/db";
+import { FeedRepo, PaperCacheRepo, throwAppError } from "@aqsha/db";
 import { getCache, putCache } from "./papers/external-cache";
 import { fetchOpenAlexWorks } from "./feed/openAlex";
 import { extractDoi } from "./papers/identifiers";
-import { ResearchService, type ResearchCandidate } from "./research";
+import { ResearchService, type ProviderSearchResult, type ResearchCandidate } from "./research";
 import { InterestService } from "./interest.service";
 import { PaperCacheService } from "./paper-cache.service";
 import {
@@ -24,12 +24,24 @@ import {
   type ExploreProvider,
   type ExploreProviderStatus,
   type ExploreSearchResponse,
+  type PaperEnrichment,
   exploreCacheKey,
   normalizeExploreQuery,
   openAlexRecommendationQuery,
 } from "./explore/model";
+import { fetchPaperEnrichment } from "./explore/paperEnrichment";
 
 const RECOMMENDATION_INTEREST_LIMIT = 6;
+
+/** Enrichment OpenAlex single-work best-effort; null saat tak ada openalexId / fetch gagal. */
+async function enrichFromOpenAlex(base: ExplorePaperDetail): Promise<PaperEnrichment | null> {
+  if (!base.openalexId) return null;
+  try {
+    return await fetchPaperEnrichment(base.openalexId);
+  } catch {
+    return null;
+  }
+}
 
 /** ResearchCandidate (web/arxiv/doi) → ExplorePaperInput untuk dedup + cache explore_papers. */
 function candidateToPaperInput(candidate: ResearchCandidate, provider: ExploreProvider): ExplorePaperInput {
@@ -75,7 +87,8 @@ function candidateToPaperInput(candidate: ResearchCandidate, provider: ExplorePr
 
 /**
  * Waterfall fill (Fase 8): saat OpenAlex belum mengisi `limit`, lengkapi dari
- * arXiv → Jina → Crossref(DOI). Tiap provider best-effort; status dilaporkan.
+ * arXiv → Crossref. Crossref = lookupDoi bila query berupa DOI (presisi), else
+ * searchCrossref (keyword). Tiap provider best-effort; status dilaporkan.
  * Mengembalikan item gabungan (belum di-dedup) + status per-provider.
  */
 async function waterfallFill(
@@ -88,7 +101,7 @@ async function waterfallFill(
 
   const run = async (
     provider: ExploreProvider,
-    fetcher: () => Promise<ResearchCandidate[]>,
+    fetcher: () => Promise<ProviderSearchResult>,
     enabled: boolean,
   ) => {
     if (!enabled || items.length >= needed) {
@@ -96,8 +109,12 @@ async function waterfallFill(
       return;
     }
     try {
-      const candidates = await fetcher();
-      const mapped = candidates
+      const result = await fetcher();
+      if (!result.ok) {
+        statuses.push({ provider, status: "error", message: result.message });
+        return;
+      }
+      const mapped = result.candidates
         .map((c) => candidateToPaperInput(c, provider))
         .filter((p) => (fromYear ? !p.year || p.year >= fromYear : true));
       items.push(...mapped);
@@ -113,13 +130,28 @@ async function waterfallFill(
 
   const doi = extractDoi(query);
   await run("arXiv", () => ResearchService.searchArxiv({ query, limit: needed }), true);
-  await run("Jina", () => ResearchService.searchWeb({ query, limit: needed }), true);
-  await run("Crossref", () => ResearchService.lookupDoi({ doi: doi ?? "" }), Boolean(doi));
+  await run(
+    "Crossref",
+    () =>
+      doi
+        ? ResearchService.lookupDoi({ doi })
+        : ResearchService.searchCrossref({ query, limit: needed }),
+    true,
+  );
 
   return { items, statuses };
 }
 
 export const ExploreService = {
+  /**
+   * Provenance pdf-proxy: `true` hanya bila `url` benar-benar pdf_url yang kita ingest
+   * (feed_items atau explore_papers). Guard anti-SSRF — proxy menolak URL sembarang.
+   */
+  async isKnownPdfUrl(db: Db, url: string): Promise<boolean> {
+    if (await FeedRepo.pdfUrlExists(db, url)) return true;
+    return PaperCacheRepo.pdfUrlExists(db, url);
+  },
+
   /** Search/recommendations paper (cache → OpenAlex → cache). Port V1 explore.searchPapers. */
   async searchPapers(
     db: Db,
@@ -129,6 +161,7 @@ export const ExploreService = {
       limit?: number;
       mode?: ExploreMode;
       fromYear?: number;
+      page?: number;
       interestSeed?: boolean;
     },
   ): Promise<ExploreSearchResponse> {
@@ -145,6 +178,7 @@ export const ExploreService = {
       });
     }
     const fromYear = clampFromYear(args.fromYear);
+    const page = args.page && args.page > 1 ? args.page : 1;
     const now = Date.now();
 
     const interestTopics =
@@ -152,7 +186,7 @@ export const ExploreService = {
         ? await InterestService.topInterestTopics(db, ownerUserId, RECOMMENDATION_INTEREST_LIMIT)
         : [];
     const seedKey = interestTopics.length > 0 ? interestTopics.join(",") : undefined;
-    const cacheKey = exploreCacheKey({ mode, query, limit, fromYear, seed: seedKey, now });
+    const cacheKey = exploreCacheKey({ mode, query, limit, fromYear, page, seed: seedKey, now });
 
     const cached = await getCache("explore", cacheKey);
     if (cached) {
@@ -167,10 +201,15 @@ export const ExploreService = {
 
     const openAlexQuery = openAlexRecommendationQuery(query, interestTopics);
     let items: ExplorePaperInput[] = [];
+    let openAlexWorksCount = 0;
     let openAlexStatus: ExploreProviderStatus = { provider: "OpenAlex", status: "ready" };
     try {
-      const { papers } = await fetchOpenAlexWorks({ query: openAlexQuery, limit, fromYear, now });
+      const { papers, works } = await fetchOpenAlexWorks({ query: openAlexQuery, limit, fromYear, page, now });
       items = papers;
+      // Sinyal load-more dari jumlah works MENTAH OpenAlex (bukan `papers` yang sudah di-map/
+      // dedup): satu work tak-terpetakan/duplikat pada halaman penuh jangan sampai menyetel
+      // nextPage=null dan menyembunyikan halaman berikutnya yang sebenarnya masih ada.
+      openAlexWorksCount = works.length;
       if (papers.length === 0) openAlexStatus = { provider: "OpenAlex", status: "fallback" };
     } catch (error) {
       openAlexStatus = {
@@ -180,19 +219,23 @@ export const ExploreService = {
       };
     }
 
-    // Waterfall fill (Fase 8): only for keyword search that OpenAlex left short.
+    // Waterfall fill (Fase 8): hanya untuk keyword search HALAMAN-1 yang OpenAlex
+    // tinggalkan pendek. arXiv/Crossref tak bercursor → halaman berikutnya (load-more)
+    // memperdalam OpenAlex murni (cegah duplikat + hemat call eksternal).
     const providerStatus: ExploreProviderStatus[] = [openAlexStatus];
-    if (mode === "search" && query && items.length < limit) {
+    if (mode === "search" && query && page === 1 && items.length < limit) {
       const fill = await waterfallFill(query, fromYear, limit - items.length);
       items = dedupeExplorePapers([...items, ...fill.items], limit);
       providerStatus.push(...fill.statuses);
     } else {
       providerStatus.push(
         { provider: "arXiv", status: "skipped" },
-        { provider: "Jina", status: "skipped" },
         { provider: "Crossref", status: "skipped" },
       );
     }
+
+    // Load-more: OpenAlex mengisi penuh halaman ini → kemungkinan masih ada halaman berikutnya.
+    const nextPage = mode === "search" && openAlexWorksCount >= limit ? page + 1 : null;
 
     const response: ExploreSearchResponse = {
       items,
@@ -201,6 +244,7 @@ export const ExploreService = {
       providerStatus,
       generatedAt: now,
       cached: false,
+      nextPage,
     };
     await putCache("explore", cacheKey, items.length > 0 ? "ready" : "empty", JSON.stringify(response));
     await PaperCacheService.upsert(db, items, now);
@@ -210,6 +254,22 @@ export const ExploreService = {
   /** Baca paper by key (cache-only). Port V1 explore.getPaper. */
   async getPaper(db: Db, key: string): Promise<ExplorePaperDetail | null> {
     return PaperCacheService.getByKey(db, key);
+  },
+
+  /**
+   * Detail paper untuk reader: cache/cold-resolve (getOrFetchPaper) + enrichment OpenAlex
+   * single-work (referensi, dikutip-oleh, tren sitasi, afiliasi, dst.) best-effort & Redis-cached.
+   * `enriched` absen bila tak ada `openalexId` atau fetch gagal — reader tetap render base.
+   */
+  async getPaperDetail(
+    db: Db,
+    key: string,
+    opts?: { fetchOnMiss?: boolean },
+  ): Promise<ExplorePaperDetail | null> {
+    const base = await this.getOrFetchPaper(db, key, opts);
+    if (!base) return null;
+    const enriched = await enrichFromOpenAlex(base);
+    return enriched ? { ...base, enriched } : base;
   },
 
   /**

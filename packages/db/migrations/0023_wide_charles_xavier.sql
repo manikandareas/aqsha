@@ -1,0 +1,2 @@
+ALTER TABLE "chat_threads" ADD COLUMN "pinned_at" bigint;--> statement-breakpoint
+CREATE INDEX "chat_threads_pinned_by_owner" ON "chat_threads" USING btree ("owner_user_id","pinned_at") WHERE "chat_threads"."pinned_at" is not null;

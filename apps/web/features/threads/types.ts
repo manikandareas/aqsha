@@ -11,42 +11,10 @@ export type ChatThread = {
   agentKind: string; // "lite" | "pro"
   workspaceId?: string | null;
   lastMessagePreview: string | null;
-  continuationToken?: string | null; // resume handle eve (rehydrate initialSession saat lanjut thread)
-  // Recovery pesan terkirim yang turn-nya belum settle (baseline template) — bubble user
-  // optimistik lintas-reload; di-null-kan klien saat ada event settled setelah `_createdAt`.
-  pendingUserMessage?: string | null;
-  pendingUserMessageCreatedAt?: number | null;
   lastActivityAt: number;
+  pinnedAt: number | null; // null = tak disematkan; nilai ⇒ disematkan (kunci urut grup "Disematkan")
   createdAt: number;
   updatedAt: number;
-};
-
-export type ChatMessage = {
-  id: string;
-  threadId: string;
-  ownerUserId: string;
-  role: string; // "user" | "assistant" | "system"
-  text: string;
-  reasoning: string | null;
-  status: string; // "streaming" | "complete" | "error"
-  turnId: string | null;
-  createdAt: number;
-};
-
-/**
- * Event stream eve mentah persisted (fix timeline persist) — di-replay lewat
- * `defaultMessageReducer` untuk merekonstruksi timeline penuh saat reload + poll progress
- * in-flight. `payload` = `HandleMessageStreamEvent` utuh. Struktural — cocok shape Eden.
- */
-export type ChatThreadEvent = {
-  id: number;
-  threadId: string;
-  ownerUserId: string;
-  eventIndex: number; // posisi stream eve (1:1) → cursor resume = max(eventIndex)+1
-  type: string;
-  turnId: string | null;
-  payload: unknown;
-  createdAt: number;
 };
 
 /** Sumber riset yang dipersist tool Astra (Slice 6.4) — panel Sources. */
@@ -65,6 +33,11 @@ export type ResearchSource = {
   snippet: string;
   evidenceStrength: string; // "strong" | "medium" | "weak"
   discoveryQuery: string | null;
+  /** Index sub-pertanyaan `/deep` yang menemukan sumber (null di chat biasa) — pengelompokan kartu. */
+  subQuestionIndex: number | null;
+  subQuestionText: string | null;
+  /** OG image (best-effort) untuk kartu sumber (null bila tak ada). */
+  imageUrl: string | null;
   createdAt: number;
 };
 

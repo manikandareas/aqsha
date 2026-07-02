@@ -1,8 +1,8 @@
 /**
- * Slice 6.9 — service-unit (repo-fake) untuk jalur Astra chat eve yang TIDAK
- * butuh proses eve / DB live: SendQuotaService.check return-union, TitleService
- * claim/finalize guard, dan ResearchService (Jina) cache hit/miss +
- * provider-failure sentinel.
+ * Service-unit (repo-fake) untuk jalur Astra chat yang TIDAK butuh runtime
+ * agent / DB live: SendQuotaService.check return-union, TitleService
+ * claim/finalize guard, ResearchService (Firecrawl search + Crossref keyword) cache
+ * hit/miss + provider-failure sentinel, dan Firecrawl reader (scrapeUrlFirecrawl).
  *
  * Leaf deps (Redis cache / HTTP / LLM / queue / rate-limiter) di-`spyOn` pada
  * namespace modul-nya (file-local, di-restore tiap afterEach lewat `mock.restore`)
@@ -14,7 +14,7 @@
  * di billing.test.ts (A9) → tak diulang.
  */
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { ChatMessageRepo, ChatThreadRepo } from "@aqsha/db";
+import { ChatThreadRepo } from "@aqsha/db";
 import { BillingService } from "../src/billing.service";
 import * as llmMod from "../src/clients/llm";
 import * as queueMod from "../src/clients/queue";
@@ -23,6 +23,7 @@ import * as httpMod from "../src/papers/http";
 import { SendQuotaService } from "../src/quota/send-quota.service";
 import * as rlMod from "../src/quota/rate-limits";
 import { ResearchService } from "../src/research";
+import { scrapeUrlFirecrawl } from "../src/papers/firecrawl-reader";
 import { TitleService } from "../src/chat/title.service";
 
 const fakeDb = { transaction: async (fn: (tx: unknown) => unknown) => fn(fakeDb) } as never;
@@ -88,13 +89,13 @@ describe("TitleService", () => {
     enqueueSpy = spyOn(queueMod, "enqueue").mockResolvedValue(undefined as never);
   });
 
-  test("requestTitle: klaim menang → enqueue threadTitle jobId=threadId, true", async () => {
+  test("requestTitle: klaim menang → enqueue threadTitle jobId=threadId (+seed), true", async () => {
     spyOn(ChatThreadRepo, "claimTitleGeneration").mockResolvedValue(true as never);
-    const ok = await TitleService.requestTitle(fakeDb, "t1");
+    const ok = await TitleService.requestTitle(fakeDb, "t1", "Tolong jelaskan riset ini");
     expect(ok).toBe(true);
     expect(enqueueSpy).toHaveBeenCalledWith(
       queueMod.CHAT_QUEUES.threadTitle,
-      { threadId: "t1" },
+      { threadId: "t1", titleSeed: "Tolong jelaskan riset ini" },
       { jobId: "t1" },
     );
   });
@@ -105,25 +106,18 @@ describe("TitleService", () => {
     expect(enqueueSpy).not.toHaveBeenCalled();
   });
 
-  test("generate: ada pesan user → finalizeTitle (ber-guard) judul collapsed+unquoted", async () => {
-    spyOn(ChatMessageRepo, "listByThread").mockResolvedValue([
-      { role: "assistant", text: "halo" },
-      { role: "user", text: "Tolong jelaskan riset ini" },
-    ] as never);
+  test("generate: ada seed → finalizeTitle (ber-guard) judul collapsed+unquoted", async () => {
     spyOn(llmMod, "generateThreadTitle").mockResolvedValue('  "Riset Energi"  ' as never);
     const fin = spyOn(ChatThreadRepo, "finalizeTitle").mockResolvedValue(undefined as never);
-    await TitleService.generate(fakeDb, "t1");
+    await TitleService.generate(fakeDb, { threadId: "t1", titleSeed: "Tolong jelaskan riset ini" });
     expect(fin).toHaveBeenCalledTimes(1);
     expect((fin.mock.calls[0] as unknown[])[2]).toBe("Riset Energi");
   });
 
-  test("generate: tanpa pesan user → finalizeTitle TIDAK dipanggil (status tetap generating)", async () => {
-    spyOn(ChatMessageRepo, "listByThread").mockResolvedValue([
-      { role: "assistant", text: "halo" },
-    ] as never);
+  test("generate: tanpa seed → finalizeTitle TIDAK dipanggil (status tetap generating)", async () => {
     spyOn(llmMod, "generateThreadTitle").mockResolvedValue("apa pun" as never);
     const fin = spyOn(ChatThreadRepo, "finalizeTitle").mockResolvedValue(undefined as never);
-    await TitleService.generate(fakeDb, "t1");
+    await TitleService.generate(fakeDb, { threadId: "t1" });
     expect(fin).not.toHaveBeenCalled();
   });
 });
@@ -144,10 +138,12 @@ describe("ResearchService.searchWeb (Firecrawl, cache + failure)", () => {
 
   test("cache HIT → kembalikan cached, tak fetch / tak tulis cache", async () => {
     getCache.mockResolvedValue({
+      status: "ready",
       valueJson: JSON.stringify([{ origin: "web", provider: "firecrawl_search", title: "Cached" }]),
     } as never);
     const r = await ResearchService.searchWeb({ query: "energi surya" });
-    expect(r[0]?.title).toBe("Cached");
+    expect(r.ok).toBe(true);
+    expect(r.ok ? r.candidates[0]?.title : null).toBe("Cached");
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(putCache).not.toHaveBeenCalled();
   });
@@ -163,29 +159,157 @@ describe("ResearchService.searchWeb (Firecrawl, cache + failure)", () => {
       ) as never,
     );
     const r = await ResearchService.searchWeb({ query: "energi surya" });
-    expect(r[0]?.title).toBe("Hasil A");
+    expect(r.ok ? r.candidates[0]?.title : null).toBe("Hasil A");
     // putCache(provider, cacheKey, status, valueJson) — status[2] = 'ready' karena ada hasil
     expect((putCache.mock.calls[0] as unknown[])[2]).toBe("ready");
   });
 
-  test("provider error (HTTP !ok) → sentinel: [] + tulis cache 'failed'", async () => {
+  test("provider error (HTTP !ok) → ok:false (CTX-2) + tulis cache 'failed'", async () => {
     fetchSpy.mockResolvedValue(new Response("nope", { status: 503 }) as never);
     const r = await ResearchService.searchWeb({ query: "energi surya" });
-    expect(r).toEqual([]);
+    expect(r.ok).toBe(false);
     expect((putCache.mock.calls[0] as unknown[])[2]).toBe("failed");
   });
 
-  test("tanpa FIRECRAWL_API_KEY → [] + cache 'failed', tak fetch", async () => {
+  test("tanpa FIRECRAWL_API_KEY → ok:false (misconfig eksplisit), tak fetch, TAK cache 'failed'", async () => {
     delete process.env.FIRECRAWL_API_KEY;
     const r = await ResearchService.searchWeb({ query: "energi surya" });
-    expect(r).toEqual([]);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toContain("FIRECRAWL_API_KEY");
+    expect(fetchSpy).not.toHaveBeenCalled();
+    // Misconfig tak di-cache 'failed' → pulih instan begitu key diset.
+    expect(putCache).not.toHaveBeenCalled();
+  });
+
+  test("cache status 'failed' → ok:false TANPA fetch (backoff jujur, CTX-2)", async () => {
+    getCache.mockResolvedValue({ status: "failed", valueJson: "[]" } as never);
+    const r = await ResearchService.searchWeb({ query: "energi surya" });
+    expect(r.ok).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  test("query kosong → ok+[] tanpa fetch/cache", async () => {
+    expect(await ResearchService.searchWeb({ query: "   " })).toEqual({ ok: true, candidates: [] });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(getCache).not.toHaveBeenCalled();
+  });
+});
+
+// ── ResearchService.searchCrossref (keyword search, cache + map) ──────────────
+describe("ResearchService.searchCrossref (keyword, cache + map)", () => {
+  let getCache: ReturnType<typeof spyOn>;
+  let putCache: ReturnType<typeof spyOn>;
+  let fetchSpy: ReturnType<typeof spyOn>;
+  beforeEach(() => {
+    getCache = spyOn(cacheMod, "getCache").mockResolvedValue(null as never);
+    putCache = spyOn(cacheMod, "putCache").mockResolvedValue(undefined as never);
+    fetchSpy = spyOn(httpMod, "fetchWithTimeout").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          message: {
+            items: [
+              {
+                DOI: "10.1/a",
+                title: ["Judul A"],
+                abstract: "abstrak",
+                author: [{ given: "J", family: "Doe" }],
+                published: { "date-parts": [[2023]] },
+                "container-title": ["Jurnal X"],
+                URL: "https://doi.org/10.1/a",
+              },
+            ],
+          },
+        }),
+        { status: 200 },
+      ) as never,
+    );
+  });
+
+  test("map message.items → kandidat crossref + kirim query/rows/sort=relevance", async () => {
+    const r = await ResearchService.searchCrossref({ query: "graph neural", limit: 5 });
+    expect(r.ok).toBe(true);
+    const items = r.ok ? r.candidates : [];
+    expect(items).toHaveLength(1);
+    expect(items[0]?.provider).toBe("crossref");
+    expect(items[0]?.doi).toBe("10.1/a");
+    const url = String((fetchSpy.mock.calls[0] as unknown[])[0]);
+    expect(url).toContain("query=graph+neural");
+    expect(url).toContain("sort=relevance");
+    expect(url).toContain("rows=5");
+    expect((putCache.mock.calls[0] as unknown[])[2]).toBe("ready");
+  });
+
+  test("query kosong → ok+[] tanpa fetch/cache", async () => {
+    expect(await ResearchService.searchCrossref({ query: "  " })).toEqual({
+      ok: true,
+      candidates: [],
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(getCache).not.toHaveBeenCalled();
+  });
+
+  test("provider error (HTTP !ok) → ok:false (CTX-2, bukan menyaru []) + cache 'failed'", async () => {
+    fetchSpy.mockResolvedValue(new Response("nope", { status: 500 }) as never);
+    const r = await ResearchService.searchCrossref({ query: "x" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("provider_error");
+    expect((putCache.mock.calls[0] as unknown[])[2]).toBe("failed");
+  });
+
+  test("cache status 'failed' → ok:false TANPA fetch (backoff jujur, CTX-2)", async () => {
+    getCache.mockResolvedValue({ status: "failed", valueJson: "[]" } as never);
+    const r = await ResearchService.searchCrossref({ query: "x" });
+    expect(r.ok).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ── scrapeUrlFirecrawl (Firecrawl /v2/scrape → markdown) ─────────────────────
+describe("scrapeUrlFirecrawl (Firecrawl /v2/scrape, cache + map)", () => {
+  let putCache: ReturnType<typeof spyOn>;
+  let fetchSpy: ReturnType<typeof spyOn>;
+  beforeEach(() => {
+    process.env.FIRECRAWL_API_KEY = "fc-test";
+    spyOn(cacheMod, "getCache").mockResolvedValue(null as never);
+    putCache = spyOn(cacheMod, "putCache").mockResolvedValue(undefined as never);
+    fetchSpy = spyOn(httpMod, "fetchWithTimeout").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            url: "https://a.test",
+            markdown: "# Judul\n\nisi konten",
+            metadata: { title: "Judul Halaman", description: "ringkas" },
+          },
+        }),
+        { status: 200 },
+      ) as never,
+    );
+  });
+
+  test("scrape sukses → UrlReadResult (markdown+title+snippet), cache 'ready'", async () => {
+    const r = await scrapeUrlFirecrawl({ url: "https://a.test" });
+    expect(r.ok).toBe(true);
+    expect(r.title).toBe("Judul Halaman");
+    expect(r.markdown).toContain("isi konten");
+    expect(r.snippet).toBe("ringkas");
+    expect((putCache.mock.calls[0] as unknown[])[2]).toBe("ready");
+  });
+
+  test("tanpa FIRECRAWL_API_KEY → ok=false + cache 'failed', tak fetch", async () => {
+    delete process.env.FIRECRAWL_API_KEY;
+    const r = await scrapeUrlFirecrawl({ url: "https://a.test" });
+    expect(r.ok).toBe(false);
     expect(fetchSpy).not.toHaveBeenCalled();
     expect((putCache.mock.calls[0] as unknown[])[2]).toBe("failed");
   });
 
-  test("query kosong → [] tanpa fetch/cache", async () => {
-    expect(await ResearchService.searchWeb({ query: "   " })).toEqual([]);
-    expect(fetchSpy).not.toHaveBeenCalled();
-    expect(getCache).not.toHaveBeenCalled();
+  test("respons tanpa markdown → ok=false + cache 'failed'", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify({ success: true, data: {} }), { status: 200 }) as never,
+    );
+    const r = await scrapeUrlFirecrawl({ url: "https://a.test" });
+    expect(r.ok).toBe(false);
+    expect((putCache.mock.calls[0] as unknown[])[2]).toBe("failed");
   });
 });

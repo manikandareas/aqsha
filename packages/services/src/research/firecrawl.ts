@@ -5,10 +5,16 @@
  * → [] + cache 'failed' (degrade-graceful, tak melempar ke model).
  */
 
-import { fetchWithTimeout } from "../papers/http";
+import { fetchWithRetry } from "../papers/http";
 import { readCachedCandidates, writeCachedCandidates } from "./cache";
 import { normalizeKey, trimForSnippet } from "./text";
-import { type ResearchCandidate, readableError } from "./types";
+import {
+  type ProviderSearchResult,
+  type ResearchCandidate,
+  providerError,
+  providerOk,
+  readableError,
+} from "./types";
 
 const FIRECRAWL_SEARCH_ENDPOINT = "https://api.firecrawl.dev/v2/search";
 const PROVIDER = "firecrawl_search";
@@ -16,23 +22,31 @@ const PROVIDER = "firecrawl_search";
 export async function searchWebFirecrawl(args: {
   query: string;
   limit?: number;
-}): Promise<ResearchCandidate[]> {
+}): Promise<ProviderSearchResult> {
   const query = args.query.trim();
-  if (!query) return [];
+  if (!query) return providerOk([]);
   const limit = Math.min(args.limit ?? 5, 10);
   const cacheKey = normalizeKey(JSON.stringify({ query, limit }));
   const cached = await readCachedCandidates(PROVIDER, cacheKey);
-  if (cached) return cached;
+  if (cached) {
+    if (cached.status === "failed") {
+      return providerError(
+        "Pencarian web sedang bermasalah (kegagalan terakhir masih dalam masa backoff).",
+      );
+    }
+    return providerOk(cached.candidates);
+  }
 
   const apiKey = process.env.FIRECRAWL_API_KEY;
   if (!apiKey) {
+    // Misconfig, bukan kegagalan transien — JANGAN cache 'failed' supaya pulih instan begitu
+    // key diset; laporkan eksplisit agar tak menyaru sebagai "tak ada hasil".
     console.error("[research] firecrawl search dilewati: FIRECRAWL_API_KEY tak diset");
-    await writeCachedCandidates(PROVIDER, cacheKey, [], "failed");
-    return [];
+    return providerError("Pencarian web belum dikonfigurasi (FIRECRAWL_API_KEY tak diset).");
   }
 
   try {
-    const response = await fetchWithTimeout(FIRECRAWL_SEARCH_ENDPOINT, {
+    const response = await fetchWithRetry(FIRECRAWL_SEARCH_ENDPOINT, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -44,11 +58,12 @@ export async function searchWebFirecrawl(args: {
     if (!response.ok) throw new Error(`Firecrawl Search returned ${response.status}`);
     const candidates = parseFirecrawlSearchResponse(await response.json(), limit);
     await writeCachedCandidates(PROVIDER, cacheKey, candidates);
-    return candidates;
+    return providerOk(candidates);
   } catch (error) {
-    console.error("[research] firecrawl search failed", readableError(error));
+    const message = readableError(error);
+    console.error("[research] firecrawl search failed", message);
     await writeCachedCandidates(PROVIDER, cacheKey, [], "failed");
-    return [];
+    return providerError(`Pencarian web gagal (${message}).`);
   }
 }
 

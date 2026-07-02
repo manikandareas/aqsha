@@ -3,6 +3,7 @@ import {
   GaugeIcon,
   PaletteIcon,
   ShieldIcon,
+  SparklesIcon,
   UserRoundIcon,
 } from "@aqsha/ui/icons";
 
@@ -10,6 +11,7 @@ export type SettingsKey =
   | "overview"
   | "account"
   | "appearance"
+  | "personalization"
   | "usage-billing"
   | "security";
 
@@ -46,6 +48,14 @@ export const settingsMenu: SettingsMenuItem[] = [
     description: "Tema terang, gelap, atau mengikuti sistem.",
     group: "Pribadi",
     icon: PaletteIcon,
+  },
+  {
+    key: "personalization",
+    href: "/app/settings/personalization",
+    label: "Personalisasi",
+    description: "Preferensi Astra dan minat riset kamu.",
+    group: "Riset",
+    icon: SparklesIcon,
   },
   {
     key: "usage-billing",

@@ -3,9 +3,10 @@ import { defineConfig } from "tsup";
 /**
  * Dist build untuk @aqsha/services (Slice 6.2, keputusan D-E).
  *
- * Sama dengan @aqsha/db: proses eve = Node v25, tak bisa import raw-TS workspace pkg.
- * Emit ESM ber-ekstensi + subpath granular supaya proses eve hanya me-resolve irisan
- * yang dipakai (mis. `@aqsha/services/billing`) bukan barrel penuh.
+ * Sama dengan @aqsha/db: konsumen dist (`apps/api` + `apps/agent`, runtime Mastra)
+ * tak meng-import raw-TS workspace pkg. Emit ESM ber-ekstensi + subpath granular
+ * supaya konsumen hanya me-resolve irisan yang dipakai (mis.
+ * `@aqsha/services/billing`) bukan barrel penuh.
  *
  * `@aqsha/db` + semua npm dep (drizzle-orm, ai, bullmq, ioredis,
  * @aws-sdk/*, unpdf, mammoth, fast-xml-parser) di-external otomatis dari `dependencies`
@@ -21,8 +22,11 @@ export default defineConfig({
     "src/rag.service.ts",
     "src/research/index.ts",
     "src/artifact.service.ts",
+    "src/astra-gateway.ts",
+    "src/doc-ai.service.ts",
     "src/workspace.service.ts",
     "src/context.service.ts",
+    "src/agentPreferences.service.ts",
   ],
   outDir: "dist",
   format: ["esm"],
@@ -32,5 +36,5 @@ export default defineConfig({
   clean: true,
   dts: false,
   sourcemap: false,
-  external: ["@aqsha/db"],
+  external: ["@aqsha/db", "@aqsha/chat-core"],
 });

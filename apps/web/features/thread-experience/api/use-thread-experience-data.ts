@@ -1,7 +1,6 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { useMemo } from "react";
 import { useProfile } from "@/features/settings/api";
 import {
   useDeleteThread,
@@ -9,54 +8,25 @@ import {
   useThread,
   useThreadArtifacts,
   useThreadSources,
-  useThreadsList,
 } from "@/features/threads/api";
 import type { SendMessage, StartThread } from "../components/component-types";
 import type { ResearchArtifact, ResearchRun, ResearchSource, SendResult } from "../types";
 import { useWorkspaceIndexData } from "@/features/workspaces/api/use-workspaces-data";
-
-function mapThreadSummary(
-  thread: {
-    id: string;
-    title: string | null;
-    lastActivityAt: number;
-    lastMessagePreview: string | null;
-    status: string;
-    agentKind: string;
-    createdAt: number;
-  },
-) {
-  return {
-    threadId: thread.id,
-    title: thread.title?.trim() ? thread.title : "Percakapan baru",
-    createdAt: thread.createdAt,
-    lastActivityAt: thread.lastActivityAt,
-    lastMessagePreview: thread.lastMessagePreview ?? "",
-    messageCount: 0,
-    status: thread.status as "idle" | "streaming" | "failed",
-    lastAgentKind: thread.agentKind as "lite" | "pro" | undefined,
-  };
-}
 
 export function useThreadExperienceData(threadId: string | undefined, enabled = true) {
   const { isLoaded, isSignedIn } = useAuth();
   const active = enabled && isLoaded && isSignedIn;
   const profile = useProfile();
   const index = useWorkspaceIndexData();
-  const threadsQuery = useThreadsList();
   const selectedThreadQuery = useThread(threadId ?? "");
   const rateStatus = useSendStatus();
   const sourcesQuery = useThreadSources(threadId ?? "", Boolean(threadId && active));
   const artifactsQuery = useThreadArtifacts(threadId ?? null);
   const removeThreadMutation = useDeleteThread();
 
-  const threads = useMemo(
-    () =>
-      (threadsQuery.data?.pages ?? [])
-        .flatMap((page) => page.items)
-        .map(mapThreadSummary),
-    [threadsQuery.data],
-  );
+  // Pakai daftar gabungan dari index (pinned + list utama, sudah di-dedup) supaya thread yang
+  // disematkan tetap muncul di quick-switcher header — `useThreadsList` sendiri kini exclude pin.
+  const threads = index.threads;
 
   const selectedThread =
     threadId && selectedThreadQuery.data

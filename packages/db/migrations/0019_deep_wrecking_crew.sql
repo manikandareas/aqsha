@@ -1,0 +1,2 @@
+ALTER TABLE "artifact_embeddings" ADD COLUMN "content_tsv" "tsvector" GENERATED ALWAYS AS (to_tsvector('simple', coalesce(content, ''))) STORED;--> statement-breakpoint
+CREATE INDEX "artifact_embeddings_content_gin" ON "artifact_embeddings" USING gin ("content_tsv");

@@ -165,9 +165,12 @@ describe("createDocument", () => {
 });
 
 describe("get", () => {
-  test("returns null for headless (no workspaceId)", async () => {
+  test("returns headless artifact for its owner (thread-attachment reader)", async () => {
     spyOn(ArtifactRepo, "findById").mockResolvedValue(makeArtifact({ workspaceId: null }));
-    expect(await ArtifactService.get(fakeDb, "u", "a")).toBeNull();
+    spyOn(ArtifactContentRepo, "findByArtifact").mockResolvedValue(makeContent());
+    const res = await ArtifactService.get(fakeDb, "u", "a");
+    expect(res?.artifact._id).toBe("a");
+    expect(res?.artifact.workspaceId).toBeNull();
   });
   test("returns null for cross-owner", async () => {
     spyOn(ArtifactRepo, "findById").mockResolvedValue(makeArtifact({ ownerUserId: "other" }));

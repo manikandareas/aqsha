@@ -34,6 +34,7 @@ import {
   serializeComposerEditor,
   serializeComposerEditorWithMarkers,
 } from "../lib/composer-inline-editor";
+import { ComposerChipTooltip } from "./composer-chip-tooltip";
 import {
   ContextMentionPalette,
   type MentionItemOption,
@@ -57,12 +58,15 @@ export type ContextItemOption = {
   title: string;
 };
 
-const EMPTY_CONTEXT_WORKSPACES: ContextWorkspaceOption[] = [];
+/**
+ * Teks placeholder composer. `string` = dipakai apa adanya di semua lebar; pasangan
+ * `{ narrow, wide }` = varian per-lebar KONTAINER (bukan viewport) — `wide` muncul saat
+ * composer ≥ `@lg` (mis. kolom thread penuh), `narrow` di panel chat sempit. Dipilih via
+ * container query, jadi panel kecil di desktop pun ikut memakai teks ringkas.
+ */
+export type ComposerPlaceholder = string | { narrow: string; wide: string };
 
-function truncateLabel(value: string, max = 22) {
-  const compact = value.replace(/\s+/g, " ").trim();
-  return compact.length > max ? `${compact.slice(0, max - 1)}…` : compact;
-}
+const EMPTY_CONTEXT_WORKSPACES: ContextWorkspaceOption[] = [];
 
 export function TokenizedPromptInput({
   value,
@@ -90,7 +94,7 @@ export function TokenizedPromptInput({
   onSubmit: () => void;
   disabled?: boolean;
   maxLength: number;
-  placeholder: string;
+  placeholder: ComposerPlaceholder;
   onHeightChange?: (height: number) => void;
   className?: string;
   isCollapsed?: boolean;
@@ -114,6 +118,8 @@ export function TokenizedPromptInput({
   const [slashFilterQuery, setSlashFilterQuery] = useState<string | null>(null);
   const [mentionFilterQuery, setMentionFilterQuery] = useState<string | null>(null);
   const [drillWorkspaceId, setDrillWorkspaceId] = useState<string | null>(null);
+  // Chip yang sedang di-hover → tooltip detail (delegasi; chip = DOM murni, bukan React).
+  const [hoveredChip, setHoveredChip] = useState<HTMLElement | null>(null);
 
   const slashOpen = slashFilterQuery !== null;
   const mentionOpen = mentionFilterQuery !== null;
@@ -134,7 +140,11 @@ export function TokenizedPromptInput({
     pinnedContextRefs.flatMap((ref) => (ref.kind === "paper" ? [ref.artifactId] : [])),
   );
   const workspaceCapReached = counts.workspaces >= MAX_CONTEXT_WORKSPACES;
-  const paperCapReached = counts.papers >= MAX_CONTEXT_PAPERS;
+  // The paper budget covers every pinned source, not just workspace papers — ambient
+  // external papers/news (explore-paper / news) count against it too, so the palette's
+  // paper-add gates correctly once the total source budget is reached.
+  const paperCapReached =
+    counts.papers + counts.explorePapers + counts.news >= MAX_CONTEXT_PAPERS;
 
   const drillWorkspace = drillWorkspaceId
     ? contextWorkspaces.find((workspace) => workspace.workspaceId === drillWorkspaceId)
@@ -370,10 +380,8 @@ export function TokenizedPromptInput({
         kind: "paper",
         workspaceId: option.workspaceId,
         artifactId: option.artifactId,
-        label: buildPaperMentionLabel(
-          truncateLabel(option.workspaceName, 16),
-          truncateLabel(option.title, 20),
-        ),
+        // Label penuh — tampilan chip di-truncate CSS (token-pill), detail utuh di tooltip.
+        label: buildPaperMentionLabel(option.workspaceName, option.title),
       }),
     );
     setDrillWorkspaceId(null);
@@ -411,6 +419,8 @@ export function TokenizedPromptInput({
   };
 
   const updateEditorFromInput = () => {
+    // Mengetik = tooltip chip tak relevan lagi (pointer bisa kebetulan diam di atas chip).
+    setHoveredChip(null);
     const editor = editorRef.current;
     if (!editor) {
       return;
@@ -496,6 +506,26 @@ export function TokenizedPromptInput({
     }
   };
 
+  // Paste = teks polos saja. Default contentEditable menempel HTML kaya (mewarisi font/warna/ukuran
+  // dari sumber copy) → tampilan komposer rusak. Cegah default HANYA bila ada teks polos yang benar
+  // tersisip; kalau tidak (paste non-teks, atau tak ada caret/selection), biarkan default agar paste
+  // tak tertelan (teks hilang). Setelah sisip → `updateEditorFromInput` (serialize + clamp + sync).
+  const handlePaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
+    const text = event.clipboardData.getData("text/plain");
+    if (!text) {
+      return;
+    }
+    // Tanpa caret/selection, `insertPlainTextAtSelection` no-op → jangan `preventDefault` (biar
+    // paste native jalan) supaya teks tak hilang.
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return;
+    }
+    event.preventDefault();
+    insertPlainTextAtSelection(text);
+    updateEditorFromInput();
+  };
+
   const handleChipClick = (event: React.MouseEvent<HTMLDivElement>) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) {
@@ -506,9 +536,21 @@ export function TokenizedPromptInput({
       return;
     }
     event.preventDefault();
+    setHoveredChip(null);
     chip.remove();
     syncEditorState();
     focusEditor();
+  };
+
+  // Delegasi hover chip: mouseover pada descendant menentukan chip aktif; keluar
+  // dari area editor (atau scroll internal) membersihkan tooltip.
+  const handleChipHover = (event: React.MouseEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+    const chip = target.closest<HTMLElement>('[data-chip="command"],[data-chip="context"]');
+    setHoveredChip(chip && editorRef.current?.contains(chip) ? chip : null);
   };
 
   const isEditorEmpty = value.trim().length === 0 && pinnedContextRefs.length === 0;
@@ -532,7 +574,16 @@ export function TokenizedPromptInput({
                 isCollapsed ? "inset-y-0 flex items-center" : "top-[3px]",
               )}
             >
-              {placeholder}
+              {typeof placeholder === "string" ? (
+                placeholder
+              ) : (
+                <>
+                  {/* Container-query (bukan viewport): teks ringkas saat composer sempit
+                      (panel chat), teks penuh saat composer ≥ @lg (kolom thread lebar). */}
+                  <span className="@lg/composer:hidden">{placeholder.narrow}</span>
+                  <span className="hidden @lg/composer:inline">{placeholder.wide}</span>
+                </>
+              )}
             </span>
           ) : null}
           <div
@@ -555,10 +606,15 @@ export function TokenizedPromptInput({
             onInput={updateEditorFromInput}
             onBlur={syncEditorState}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             onClick={handleChipClick}
+            onMouseOver={handleChipHover}
+            onMouseLeave={() => setHoveredChip(null)}
+            onScroll={() => setHoveredChip(null)}
             tabIndex={0}
             suppressContentEditableWarning
           />
+          {hoveredChip ? <ComposerChipTooltip chip={hoveredChip} /> : null}
         </div>
       </PopoverAnchor>
       <PopoverContent
