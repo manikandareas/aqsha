@@ -14,15 +14,16 @@ import {
 import { readableApiErrorMessage } from "@/lib/api-error";
 
 // How long the pointer can dwell in the gap between the trigger and the
-// portaled card before a hover-preview collapses. Long enough to cross the
-// sideOffset, short enough that leaving feels immediate.
+// portaled card before the hover-open popover collapses. Long enough to cross
+// the sideOffset, short enough that leaving feels immediate.
 const CLOSE_DELAY_MS = 120;
 
 /**
- * Sidebar "new workspace" affordance. Hovering the plus button reveals a
- * SidebarProCard-style card as a non-focusing preview that closes again on
- * pointer-leave; clicking locks it open so the name input can be focused and
- * typed into. Submitting hands the trimmed name to `onSubmit`.
+ * Sidebar "new workspace" affordance. Hovering the plus button opens a
+ * SidebarProCard-style card that stays interactive for as long as the pointer
+ * remains over the trigger or the card; leaving both closes it while the card
+ * is still pristine (see scheduleClose). Submitting hands the trimmed name to
+ * `onSubmit`.
  */
 export function CreateWorkspacePopover({
   onSubmit,
@@ -30,7 +31,6 @@ export function CreateWorkspacePopover({
   onSubmit: (value: { name: string }) => Promise<unknown>;
 }) {
   const [open, setOpen] = useState(false);
-  const [locked, setLocked] = useState(false);
   const [name, setName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,38 +51,32 @@ export function CreateWorkspacePopover({
   const close = () => {
     clearCloseTimer();
     setOpen(false);
-    setLocked(false);
     setName("");
     setError(null);
     setIsSubmitting(false);
   };
 
-  // Hover reveals the card without stealing focus (see onOpenAutoFocus below).
-  const openPreview = () => {
+  // Opens without stealing focus (see onOpenAutoFocus below); the card is
+  // fully interactive while the pointer stays inside it.
+  const openNow = () => {
     clearCloseTimer();
     setOpen(true);
   };
 
+  // Once the card is dirty (typed name, in-flight submit, or an error worth
+  // reading) pointer-leave no longer closes it — an accidental mouse move must
+  // not wipe a draft. A dirty card only closes via Escape or click-outside.
   const scheduleClose = () => {
-    if (locked) return;
+    if (isSubmitting || name.length > 0 || error) return;
     clearCloseTimer();
     closeTimer.current = setTimeout(close, CLOSE_DELAY_MS);
   };
 
-  // Clicking the trigger promotes the preview to a locked card and moves focus
-  // into the field; the pointer-leave timer no longer applies while locked.
-  const lockAndFocus = () => {
-    clearCloseTimer();
-    setOpen(true);
-    setLocked(true);
+  // Clicking the trigger (touch / keyboard users without hover) opens the
+  // card and moves focus straight into the field.
+  const openAndFocus = () => {
+    openNow();
     requestAnimationFrame(() => inputRef.current?.focus());
-  };
-
-  // A pointer press anywhere inside the card (the field, the submit button)
-  // also locks it, so a preview the user reaches for stays put.
-  const lockInPlace = () => {
-    clearCloseTimer();
-    setLocked(true);
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -110,9 +104,9 @@ export function CreateWorkspacePopover({
       <PopoverAnchor asChild>
         <button
           type="button"
-          onMouseEnter={openPreview}
+          onMouseEnter={openNow}
           onMouseLeave={scheduleClose}
-          onClick={lockAndFocus}
+          onClick={openAndFocus}
           className="flex size-5 shrink-0 items-center justify-center rounded-[5px] text-muted-foreground transition-[background-color,color] duration-150 ease-out hover:bg-primary/10 hover:text-primary"
           aria-label="Workspace baru"
         >
@@ -122,29 +116,29 @@ export function CreateWorkspacePopover({
       <PopoverContent
         align="start"
         sideOffset={8}
-        className="w-72 overflow-hidden p-0"
+        className="w-60 p-2"
         onOpenAutoFocus={(event) => event.preventDefault()}
         onMouseEnter={clearCloseTimer}
         onMouseLeave={scheduleClose}
-        onPointerDown={lockInPlace}
       >
-        <div className="relative aspect-[5/2] w-full overflow-hidden bg-white">
+        <div className="relative aspect-[4/3] w-full overflow-hidden rounded-md bg-white">
           <Image
             src="/whimsical-floating-paper.png"
             alt=""
             fill
-            sizes="288px"
+            sizes="224px"
             className="object-cover"
           />
         </div>
 
-        <div className="grid gap-3 p-3.5">
+        <div className="grid gap-3 p-1.5 pt-3">
           <div className="grid gap-1">
-            <p className="font-heading text-sm font-semibold leading-tight text-card-foreground">
+            <p className="font-heading text-[15px] font-semibold leading-tight text-card-foreground">
               Workspace baru
             </p>
             <p className="text-[12px] leading-relaxed text-muted-foreground">
-              Buat area riset personal.
+              Buat area riset personal untuk mengumpulkan paper, catatan, dan
+              artifact dalam satu tempat.
             </p>
           </div>
 
