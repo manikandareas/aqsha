@@ -437,22 +437,53 @@ export function useMastraAgent(opts: {
   // DUR-5: run `/deep` terdeteksi macet (snapshot tak maju) → banner affordance mulai ulang.
   const [deepStalled, setDeepStalled] = useState(false);
 
+  // IMP-10: batch delta frekuensi-tinggi (text/reasoning) per animation-frame. Tanpa ini tiap
+  // delta = satu setState penuh (rebuild messages + memo turunannya) — jawaban panjang bisa
+  // ratusan render/detik. Delta di-buffer lalu di-reduce SEKALI per frame (~16ms; tab
+  // tersembunyi → timer 32ms, rAF di-throttle browser); chunk struktural mem-flush buffer LEBIH
+  // DULU sehingga urutan reduksi tetap persis urutan kedatangan.
+  const pendingDeltasRef = useRef<MastraChunk[]>([]);
+  const deltaFlushScheduledRef = useRef(false);
+  const flushPendingDeltas = useCallback(() => {
+    deltaFlushScheduledRef.current = false;
+    const batch = pendingDeltasRef.current;
+    if (batch.length === 0) return;
+    pendingDeltasRef.current = [];
+    setState((s) => batch.reduce((acc, c) => reduceMastraChunk(acc, c), s));
+  }, []);
+
   const onChunk = useCallback((chunk: unknown) => {
     if (!replayFilterRef.current(chunk as MastraChunk)) return; // duplikat replay (FE-2)
+    const c0 = chunk as MastraChunk;
+    if (c0?.type === "text-delta" || c0?.type === "reasoning-delta") {
+      pendingDeltasRef.current.push(c0);
+      if (!deltaFlushScheduledRef.current) {
+        deltaFlushScheduledRef.current = true;
+        if (
+          typeof requestAnimationFrame === "function" &&
+          typeof document !== "undefined" &&
+          document.visibilityState === "visible"
+        ) {
+          requestAnimationFrame(() => flushPendingDeltas());
+        } else {
+          setTimeout(flushPendingDeltas, 32);
+        }
+      }
+      return;
+    }
+    // Chunk struktural: terapkan delta ter-buffer dulu agar urutan state = urutan stream.
+    flushPendingDeltas();
     // DUR-6: run antrean server (queueMessage) MULAI → lahirkan bubble user + placeholder-nya
     // SEBELUM reducer memproses `start` (ensureActiveAssistant memakai placeholder ini). Saat antre,
     // pesan hanya tampil di baris "antre" — bubble lahir tepat ketika gilirannya jalan.
-    {
-      const c0 = chunk as MastraChunk;
-      if (c0?.type === "start" && c0.runId) {
-        const queuedInfo = queuedServerRunsRef.current.get(c0.runId);
-        if (queuedInfo) {
-          queuedServerRunsRef.current.delete(c0.runId);
-          setQueuedSends((q) => q.filter((i) => i.serverRunId !== c0.runId));
-          setState((s) =>
-            startAssistantTurn(s, queuedInfo.display, c0.runId!, queuedInfo.attachmentIds),
-          );
-        }
+    if (c0?.type === "start" && c0.runId) {
+      const queuedInfo = queuedServerRunsRef.current.get(c0.runId);
+      if (queuedInfo) {
+        queuedServerRunsRef.current.delete(c0.runId);
+        setQueuedSends((q) => q.filter((i) => i.serverRunId !== c0.runId));
+        setState((s) =>
+          startAssistantTurn(s, queuedInfo.display, c0.runId!, queuedInfo.attachmentIds),
+        );
       }
     }
     setState((s) => reduceMastraChunk(s, chunk as MastraChunk));
@@ -479,7 +510,7 @@ export function useMastraAgent(opts: {
         }
       }
     }
-  }, []);
+  }, [flushPendingDeltas]);
 
   // Langganan thread tunggal & panjang. Self-healing: subscribe awal bisa gagal untuk thread baru
   // (belum ada di server) → retry tiap 1 dtk sampai `sendMessage` pertama membuatnya; buffer di-replay

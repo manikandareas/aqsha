@@ -126,6 +126,50 @@ export function useUpdateDisplayName() {
   });
 }
 
+/** Preferensi Astra + minat riset (Settings → Personalisasi, IMP-2). */
+export function usePreferences() {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.preferences.detail(),
+    queryFn: async () => unwrap(await api.preferences.get()),
+  });
+}
+
+/** Patch preferensi Astra — hanya field yang dikirim yang berubah; null = reset ke default. */
+export function useUpdatePreferences() {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (patch: {
+      answerLanguage?: string | null;
+      citationStyle?: string | null;
+      responseStyle?: string | null;
+      customInstruction?: string | null;
+    }) => unwrap(await api.preferences.patch(patch)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.preferences.all });
+      toast.success("Preferensi Astra disimpan.");
+    },
+    onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal menyimpan preferensi.")),
+  });
+}
+
+/** Patch minat riset (interests onboarding) — minimal 3 bidang; feed ikut menyesuaikan. */
+export function useUpdateInterests() {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (interests: string[]) =>
+      unwrap(await api.preferences.interests.patch({ interests })),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.preferences.all });
+      qc.invalidateQueries({ queryKey: queryKeys.feed.all });
+      toast.success("Minat riset diperbarui.");
+    },
+    onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal memperbarui minat riset.")),
+  });
+}
+
 /** Daftar perangkat/sesi aktif (diproksi ke Clerk Backend lewat api). */
 export function useSessions() {
   const api = useApi();

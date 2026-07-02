@@ -435,6 +435,20 @@ export function reduceMastraChunk(
       });
     }
 
+    case "tool-call-delta": {
+      // IMP-11: arg tool mengalir sebagai teks JSON parsial — akumulasikan + parse best-effort
+      // agar kartu tool terisi progresif (kueri terlihat "mengetik"), bukan pop utuh saat
+      // `tool-call` final tiba (yang tetap menimpa dengan args lengkap).
+      const [s, idx] = ensureActiveAssistant(streaming(state));
+      return appendToolArgsDelta(
+        s,
+        idx,
+        str(payload.toolCallId),
+        str(payload.argsTextDelta),
+        str(payload.toolName),
+      );
+    }
+
     case "tool-result":
     case "tool-output": {
       const [s0, idx] = ensureActiveAssistant(state);
@@ -597,8 +611,12 @@ function wfStepLabel(stepId: string): string {
 /**
  * Urutan step user-facing Workflow `/deep` (cocokkan rantai `.then()` di `deep-research.ts`).
  * Dipakai untuk menyeed stepper saat re-attach refresh. Step `input` (mapping) sengaja dilewati.
+ * `draft-clarify`/`clarify` ikut di-seed (IMP-12) — tanpa ini baris klarifikasi hilang dari trace
+ * setelah reload; step yang tak ada di snapshot (mis. clarify yang dilewati) otomatis di-skip.
  */
 const WF_STEP_ORDER = [
+  "draft-clarify",
+  "clarify",
   "draft-plan",
   "approve-plan",
   "search-literature",
@@ -1099,6 +1117,57 @@ function upsertToolPart(
   });
 }
 
+/**
+ * Parse JSON parsial arg tool yang masih mengalir (IMP-11): coba apa adanya, lalu coba menutup
+ * string/objek yang menggantung dengan beberapa suffix umum. Gagal semua → null (baris input
+ * lama dipertahankan sampai delta berikutnya bisa diparse).
+ */
+function parsePartialArgs(raw: string): Record<string, unknown> | null {
+  const t = raw.trim();
+  if (!t.startsWith("{")) return null;
+  for (const suffix of ["", '"', '"}', "}", '"]}', "]}", "}}"]) {
+    try {
+      const parsed: unknown = JSON.parse(t + suffix);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      // potongan belum bisa ditutup dengan suffix ini → coba berikutnya
+    }
+  }
+  return null;
+}
+
+/** Akumulasi `tool-call-delta` ke tool-row + render ulang baris input dari parse parsial (IMP-11). */
+function appendToolArgsDelta(
+  state: MastraTimelineState,
+  msgIdx: number,
+  toolCallId: string,
+  delta: string,
+  toolName: string,
+): MastraTimelineState {
+  if (!toolCallId || !delta) return state;
+  return mutateMessage(state, msgIdx, (parts) => {
+    const i = parts.findIndex((p) => p.kind === "tool" && p.model.toolCallId === toolCallId);
+    if (i < 0) {
+      // `tool-call-input-streaming-start` tak terlihat (re-attach mid-stream) → buat row minimal.
+      const model = toolModel(toolCallId, toolName || "tool", {}, "running");
+      return [...parts, { kind: "tool", id: `tool:${toolCallId}`, model: { ...model, argsTextRaw: delta } }];
+    }
+    return parts.map((p, j) => {
+      if (j !== i || p.kind !== "tool") return p;
+      const argsTextRaw = (p.model.argsTextRaw ?? "") + delta;
+      const parsed = parsePartialArgs(argsTextRaw);
+      const rows: ToolRow[] = [];
+      if (parsed) appendScalarRows(rows, parsed, "input");
+      return {
+        ...p,
+        model: { ...p.model, argsTextRaw, ...(parsed ? { rows } : {}) },
+      };
+    });
+  });
+}
+
 function completeToolPart(
   state: MastraTimelineState,
   msgIdx: number,
@@ -1276,6 +1345,8 @@ const TOOL_LABELS: Record<string, string> = {
   verify_citations: "Memverifikasi sitasi",
   verify_identifiers: "Memverifikasi referensi",
   ask_questions: "Menanyakan klarifikasi",
+  request_document_edit: "Meminta penyuntingan dokumen",
+  update_preferences: "Menyimpan preferensi",
 };
 
 function toolTitle(rawName: string): string {

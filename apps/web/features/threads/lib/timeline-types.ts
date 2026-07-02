@@ -69,6 +69,8 @@ export type ToolRowModel = {
   rows: ToolRow[];
   /** Detail proses `/deep` (rencana, kartu sub-agen pencarian, bukti tandingan, dll.). */
   detail?: DeepStepDetail;
+  /** Akumulasi teks JSON arg yang masih mengalir (`tool-call-delta`, IMP-11) — internal reducer. */
+  argsTextRaw?: string;
 };
 
 /** Model kartu artifact dari output `propose_artifact` yang sukses. */
