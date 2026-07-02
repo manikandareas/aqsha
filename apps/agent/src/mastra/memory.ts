@@ -22,7 +22,11 @@ const WORKING_MEMORY_TEMPLATE = `# Memori kerja percakapan
  * Mastra memuat history dari storage.
  *
  * - `storage`/`vector`: dibagi dengan instance Mastra (satu Postgres, tabel `mastra_*`).
- * - `lastMessages` (16): jendela history non-semantik per turn (~8 giliran verbatim).
+ * - `lastMessages` (16): jendela history non-semantik per turn, dihitung per PESAN, bukan per
+ *   giliran — giliran ber-tool menghasilkan >2 pesan (user + asisten tool-call + tool-result +
+ *   jawaban), jadi jendela efektif bisa jauh di bawah 8 giliran pada percakapan riset. Payload
+ *   hasil tool di pesan riwayat dielide `ElideHistoryToolResultsProcessor` (CTX-6) sebelum
+ *   TokenLimiter, sehingga bobot token-nya terkendali walau jumlah pesannya tetap terhitung.
  * - `semanticRecall`: tarik pesan relevan lintas-turn via embedding. `topK: 6` hit ×
  *   `messageRange: 2` (2 pesan sebelum+sesudah tiap hit) → hingga ~30 pesan recall.
  *   `scope: "thread"` EKSPLISIT: default Mastra = `"resource"` (lintas-thread); kita kunci ke

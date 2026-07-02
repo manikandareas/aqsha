@@ -8,7 +8,12 @@ import { BillingService } from "@aqsha/services/billing";
 import { ThreadService, TitleService } from "@aqsha/services/chat";
 import { estimateCredits } from "@aqsha/services/plan";
 import { SendQuotaService } from "@aqsha/services/quota";
-import { ResearchService } from "@aqsha/services/research";
+import {
+  CitationService,
+  ResearchService,
+  type IntegrityStatus,
+  type VerificationResult,
+} from "@aqsha/services/research";
 import type { Mastra } from "@mastra/core/mastra";
 import {
   MASTRA_THREAD_ID_KEY,
@@ -121,11 +126,25 @@ const NumberedSourceSchema = z.object({
   origin: z.string(),
   snippet: z.string().optional(),
 });
+/** Referensi terstruktur per `[n]` unik — bahan `CitationService.verifyIdentifiers` langsung (IMP-5). */
+const VerifyRefSchema = z.object({
+  citation: z.number(),
+  title: z.string(),
+  doi: z.string().optional(),
+  arxivId: z.string().optional(),
+  url: z.string().optional(),
+  authors: z.array(z.string()).optional(),
+  year: z.number().optional(),
+  venue: z.string().optional(),
+});
 const CitedSchema = CounteredSchema.extend({
   numberedInventory: z.string().describe("Daftar sumber bernomor [n] GLOBAL (citation_number) untuk dikutip."),
   numberedSources: z
     .array(NumberedSourceSchema)
     .describe("Sumber bernomor terstruktur → dipersist di metadata laporan (fallback Sumber FE)."),
+  verifyRefs: z
+    .array(VerifyRefSchema)
+    .describe("Referensi terstruktur per [n] unik → verify-citations panggil CitationService langsung (IMP-5)."),
 });
 const VerifiedSchema = CitedSchema.extend({ verification: z.string() });
 
@@ -143,7 +162,6 @@ const OutputSchema = z.object({
 
 type Planned = z.infer<typeof PlannedSchema>;
 type Searched = z.infer<typeof SearchedSchema>;
-type Cited = z.infer<typeof CitedSchema>;
 type Verified = z.infer<typeof VerifiedSchema>;
 
 // ── Helper konteks ───────────────────────────────────────────────────────────────────────
@@ -548,8 +566,34 @@ function counterPrompt(input: Searched): string {
   return `Inventaris bukti yang kesimpulannya sedang terbentuk untuk topik "${input.question}":\n\n${inventory}\n\nCari bukti yang MELEMAHKAN atau menentang kesimpulan-kesimpulan di atas. Laporkan jujur bila tak ada.`;
 }
 
-function verifyPrompt(input: Cited): string {
-  return `Daftar referensi bernomor [n] yang akan dikutip — verifikasi integritasnya dengan SATU panggilan verify_identifiers:\n\n${input.numberedInventory}`;
+/**
+ * Format verdict `CitationService.verifyIdentifiers` → teks verifikasi untuk prompt sintesis +
+ * panel proses. DETERMINISTIK (IMP-5) — dulu tabel hasil subagent LLM `citation-verifier`; data
+ * sumbernya sudah terstruktur sejak `assign-citations`, jadi LLM hanya menambah biaya + drift
+ * parsing. Framing netral: flag bukan tuduhan (bisa typo metadata / database tak lengkap /
+ * provider outage) — paritas dgn instruksi subagent lama.
+ */
+const VERDICT_LABEL: Record<IntegrityStatus, string> = {
+  verified: "terverifikasi",
+  metadata_mismatch: "metadata tidak cocok",
+  identifier_invalid: "identifier tidak valid",
+  not_found: "tidak ditemukan di database",
+  unverifiable: "tidak dapat diverifikasi otomatis",
+};
+
+function formatVerificationText(result: VerificationResult): string {
+  const lines = result.items.map((item) => {
+    const n = item.citation !== undefined ? `[${item.citation}] ` : "";
+    const issues = item.issues.length > 0 ? ` — ${item.issues.join("; ")}` : "";
+    const matched = item.matchedTitle ? ` (cocok dgn: "${item.matchedTitle}")` : "";
+    return `- ${n}${item.reference}: ${VERDICT_LABEL[item.status]}${issues}${matched}`;
+  });
+  return [
+    `Ringkasan verifikasi: ${result.summary.checked} referensi diperiksa, ${result.summary.verified} terverifikasi, ${result.summary.flagged} ditandai perlu tinjauan.`,
+    ...lines,
+    result.caveat,
+    ...(result.note ? [result.note] : []),
+  ].join("\n");
 }
 
 /** Nama skill domain-pack per `ResearchDomain` (di-inline ke prompt sintesis, CFG-2). */
@@ -884,6 +928,12 @@ const counterEvidenceStep = createStep({
   outputSchema: CounteredSchema,
   retries: 1,
   execute: async ({ inputData, mastra, requestContext, runId, writer }) => {
+    // IMP-9: emit di AWAL step → body panel proses terisi jujur selama fase lambat berjalan
+    // (ditimpa teks final di akhir step; paritas pola `search-sub` status "searching").
+    await emitDetail(writer, {
+      kind: "counter",
+      text: `Menelusuri bukti tandingan atas temuan ${inputData.evidence.length} sub-pertanyaan…`,
+    });
     // DUR-7: background task persisten — restart run me-reuse hasil task selesai.
     const rc = withDeepRun(requestContext, inputData.threadId, runId, inputData.agentKind);
     const owner = ownerFromRequestContext(requestContext);
@@ -951,38 +1001,76 @@ const assignCitationsStep = createStep({
       origin: s.origin,
       ...(s.snippet ? { snippet: s.snippet } : {}),
     }));
+    // Referensi terstruktur per [n] UNIK (baris bisa berbagi nomor karena dedupe) — bahan
+    // `verify-citations` memanggil CitationService LANGSUNG, tanpa parsing inventory (IMP-5).
+    const seenCitation = new Set<number>();
+    const verifyRefs = numbered.flatMap((s) => {
+      const n = s.citationNumber ?? 0;
+      if (seenCitation.has(n)) return [];
+      seenCitation.add(n);
+      return [
+        {
+          citation: n,
+          title: s.title,
+          ...(s.doi ? { doi: s.doi } : {}),
+          ...(s.arxivId ? { arxivId: s.arxivId } : {}),
+          ...(s.url ? { url: s.url } : {}),
+          ...(s.authors.length > 0 ? { authors: s.authors } : {}),
+          ...(s.year !== null ? { year: s.year } : {}),
+          ...(s.venue ? { venue: s.venue } : {}),
+        },
+      ];
+    });
     await emitDetail(writer, { kind: "citations", count: uniqueCitations });
-    return { ...inputData, numberedInventory, numberedSources };
+    return { ...inputData, numberedInventory, numberedSources, verifyRefs };
   },
 });
 
-/** 6. verifyCitations — verifikasi integritas referensi bernomor (batch `verify_identifiers`). */
+/**
+ * 6. verifyCitations — verifikasi integritas referensi bernomor. DETERMINISTIK (IMP-5): data
+ * referensi sudah terstruktur sejak `assign-citations` (`verifyRefs` per [n] unik) → panggil
+ * `CitationService.verifyIdentifiers` LANGSUNG, tanpa subagent LLM (lebih murah, tanpa drift
+ * parsing inventory↔verdict, hasil konsisten lintas-run; tak perlu background task DUR-7 karena
+ * tak ada model call — restart run tinggal mengulang batch lookup Crossref/OpenAlex yang murah).
+ * `retries: 1` tetap (provider di engine bisa transien).
+ */
 const citationVerifyStep = createStep({
   id: "verify-citations",
   inputSchema: CitedSchema,
   outputSchema: VerifiedSchema,
   retries: 1,
-  execute: async ({ inputData, mastra, requestContext, runId, writer }) => {
-    // DUR-7: background task persisten — restart run me-reuse hasil task selesai.
-    const rc = withDeepRun(requestContext, inputData.threadId, runId, inputData.agentKind);
-    const owner = ownerFromRequestContext(requestContext);
-    const out = await runDeepSubagentTask({
-      mastra,
-      runId,
-      threadId: inputData.threadId,
-      ...(owner.id ? { resourceId: owner.id } : {}),
-      timeoutMs: 300_000,
-      toolCallId: `${runId}:verify`,
-      args: {
-        agentId: "citation-verifier",
-        prompt: verifyPrompt(inputData),
-        requestContext: Array.from(rc.entries()),
-      },
+  execute: async ({ inputData, requestContext, runId, writer }) => {
+    if (inputData.verifyRefs.length === 0) {
+      const verification = "(Tidak ada referensi bernomor untuk diverifikasi pada run ini.)";
+      await emitDetail(writer, { kind: "verify", text: verification });
+      return { ...inputData, verification };
+    }
+    // IMP-9: emit di AWAL step (ditimpa verdict final) → panel proses jujur selama fase verifikasi.
+    await emitDetail(writer, {
+      kind: "verify",
+      text: `Memverifikasi ${inputData.verifyRefs.length} referensi (keberadaan, konsistensi metadata, DOI/arXiv)…`,
     });
-    // Guard teks kosong (CTX-7): tanpa verdict, tandai belum-terverifikasi — jangan diam.
-    const verification =
-      out.text.trim() ||
-      "(Verifikasi sitasi berakhir tanpa verdict — perlakukan SEMUA referensi sebagai belum terverifikasi otomatis dan sarankan pemeriksaan manual.)";
+    // Paritas CFG-7 dgn tool `verify_identifiers`: rekam usage `citation_verify` (rate 0 hari ini,
+    // idempoten per-run) dan hormati gate — kuota habis TIDAK boleh tetap menjalankan verifikasi.
+    const { id: ownerUserId, email: ownerEmail } = ownerFromRequestContext(requestContext);
+    if (ownerUserId) {
+      const charged = await BillingService.consumeCredits(getServiceDb(), {
+        ownerUserId,
+        ownerEmail,
+        feature: "citation_verify",
+        provider: "crossref",
+        threadId: inputData.threadId,
+        idempotencyKey: `${runId}:verify`,
+      });
+      if (!charged.ok) {
+        const verification =
+          "(Verifikasi sitasi TIDAK dijalankan: kuota fitur verifikasi habis — perlakukan SEMUA referensi sebagai belum terverifikasi otomatis dan sarankan pemeriksaan manual.)";
+        await emitDetail(writer, { kind: "verify", text: verification });
+        return { ...inputData, verification };
+      }
+    }
+    const result = await CitationService.verifyIdentifiers(inputData.verifyRefs);
+    const verification = formatVerificationText(result);
     await emitDetail(writer, { kind: "verify", text: verification });
     return { ...inputData, verification };
   },

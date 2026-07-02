@@ -15,7 +15,7 @@ import { runResearchTool } from "../lib/research";
 export const searchWeb = createTool({
   id: "search_web",
   description:
-    "Cari di web untuk bukti/informasi terkini. Kembalikan sumber dengan cuplikan + metadata; di chat bernomor [n] untuk sitasi.",
+    "Cari di web umum: berita, informasi terkini, situs institusi, topik non-akademik. Kembalikan sumber dengan cuplikan + metadata; di chat bernomor [n] untuk sitasi. JANGAN dipakai untuk mencari makalah akademik (pakai search_papers) atau mengambil metadata dari DOI yang sudah diketahui (pakai lookup_doi).",
   inputSchema: z.object({
     query: z.string().min(1).max(500).describe("Kueri pencarian dalam bahasa alami."),
     limit: z.number().int().min(1).max(8).optional().describe("Jumlah hasil (default 5)."),

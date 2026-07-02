@@ -11,7 +11,7 @@ import { runResearchTool } from "../lib/research";
 export const searchPapers = createTool({
   id: "search_papers",
   description:
-    "Cari makalah akademik (OpenAlex; mencakup jurnal ter-peer-review, bukan hanya preprint). Kembalikan makalah + authors/tahun/venue; di chat bernomor [n] untuk sitasi.",
+    "Pintu UTAMA pencarian literatur akademik (OpenAlex, lintas-disiplin: kesehatan, pendidikan, sosial-humaniora, sains, teknik; jurnal ter-peer-review + preprint). Kembalikan makalah + authors/tahun/venue; di chat bernomor [n] untuk sitasi. JANGAN dipakai untuk berita/informasi web umum (pakai search_web).",
   inputSchema: z.object({
     query: z.string().min(1).max(400).describe("Topik atau judul makalah."),
     limit: z.number().int().min(1).max(10).optional().describe("Jumlah hasil (default 5)."),

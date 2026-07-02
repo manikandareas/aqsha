@@ -2,6 +2,7 @@ export * from "./userRepo";
 export * from "./workspaceRepo";
 export * from "./folderRepo";
 export * from "./onboardingRepo";
+export * from "./userAgentPreferencesRepo";
 export * from "./interestRepo";
 export * from "./artifactRepo";
 export * from "./artifactContentRepo";

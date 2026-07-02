@@ -11,7 +11,7 @@ import { runResearchTool } from "../lib/research";
 export const lookupDoi = createTool({
   id: "lookup_doi",
   description:
-    "Ambil metadata sebuah makalah dari DOI-nya (Crossref): judul, penulis, tahun, venue, abstrak bila ada.",
+    "Ambil metadata sebuah makalah dari DOI yang SUDAH kamu pegang (Crossref): judul, penulis, tahun, venue, abstrak bila ada. JANGAN dipakai untuk menemukan makalah tanpa DOI (pakai search_papers) atau memverifikasi daftar referensi (pakai verify_identifiers).",
   inputSchema: z.object({
     doi: z.string().min(1).max(200).describe("DOI (mis. 10.1000/xyz atau https://doi.org/...)."),
   }),

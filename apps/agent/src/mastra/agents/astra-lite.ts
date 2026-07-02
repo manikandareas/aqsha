@@ -1,7 +1,9 @@
 import { UserRepo } from "@aqsha/db";
 import { getEntitlementSnapshot } from "@aqsha/services/billing";
+import { AgentPreferencesService } from "@aqsha/services/preferences";
+import { WorkspaceService } from "@aqsha/services/workspace";
 import { Agent } from "@mastra/core/agent";
-import { TokenLimiterProcessor } from "@mastra/core/processors";
+import { StreamErrorRetryProcessor, TokenLimiterProcessor } from "@mastra/core/processors";
 import type { RequestContext } from "@mastra/core/request-context";
 import { astraInstructions, astraProInstructions, sessionContextBlock } from "../instructions";
 import { getServiceDb } from "../lib/db";
@@ -76,22 +78,52 @@ async function resolveSessionContext(
   }).format(new Date());
   let userName: string | null = null;
   let planKey: string | null = null;
+  let workspaceNames: string[] = [];
+  let preferences: Awaited<ReturnType<typeof AgentPreferencesService.get>> | null = null;
   try {
     const { id, email } = ownerFromRequestContext(requestContext);
     if (id) {
       const db = getServiceDb();
-      const [user, snapshot] = await Promise.all([
+      const [user, snapshot, workspaces, prefs] = await Promise.all([
         UserRepo.findByOwnerUserId(db, id),
         getEntitlementSnapshot(db, id, email),
+        // Ringkasan workspace aktif (IMP-1): nama saja, maks 6 — ambient awareness topik riset
+        // user tanpa tool call; detail tetap lewat `list_workspaces`/`list_artifacts`.
+        WorkspaceService.list(db, id, { limit: 6 }),
+        // Preferensi stabil profil (IMP-2) — lintas-thread by design (data profil eksplisit,
+        // bukan recall percakapan); override yang diminta user di thread aktif tetap menang.
+        AgentPreferencesService.get(db, id),
       ]);
       userName = user?.name ?? null;
       planKey = snapshot.planKey ?? null;
+      workspaceNames = workspaces.items.map((w) => w.name);
+      preferences = prefs;
     }
   } catch (err) {
     // Best-effort: kegagalan lookup tak boleh menggagalkan turn — blok tetap memuat tanggal+tier.
     console.error("[astra] resolveSessionContext failed", err);
   }
-  return sessionContextBlock({ dateText, userName, planKey, tier });
+  return sessionContextBlock({ dateText, userName, planKey, tier, workspaceNames, preferences });
+}
+
+/**
+ * IMP-6: matcher retry untuk error transien gateway/jaringan yang TIDAK tertangkap matcher
+ * bawaan OpenAI-Responses (429 rate-limit, 5xx gateway, socket reset). Tanpa ini satu blip
+ * mematikan seluruh turn — termasuk hasil 9 langkah tool yang sudah terkumpul. Debit billing
+ * aman dari retry: idempotencyKey turn-scoped (CFG-9).
+ */
+function isTransientProviderError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const e = error as { code?: unknown; statusCode?: unknown; status?: unknown; message?: unknown };
+  const status =
+    typeof e.statusCode === "number" ? e.statusCode : typeof e.status === "number" ? e.status : null;
+  if (status === 429 || (status !== null && status >= 500 && status <= 599)) return true;
+  const code = typeof e.code === "string" ? e.code.toUpperCase() : "";
+  if (code === "ECONNRESET" || code === "ETIMEDOUT" || code === "ECONNREFUSED") return true;
+  const message = typeof e.message === "string" ? e.message : "";
+  return /econnreset|socket hang up|fetch failed|too many requests|bad gateway|service unavailable|gateway timeout/i.test(
+    message,
+  );
 }
 
 function createAstraAgent(tier: AgentKind): Agent {
@@ -137,6 +169,16 @@ function createAstraAgent(tier: AgentKind): Agent {
       new EnsureFinalResponseProcessor(p.maxSteps),
     ],
     outputProcessors: [billingDebit, projectionOutput],
+    // IMP-6: retry error stream transien (429/5xx/socket reset) dgn backoff eksponensial —
+    // matcher bawaan OpenAI-Responses + matcher gateway/jaringan kita. 2 percobaan ulang cukup
+    // untuk blip; error persisten tetap sampai ke FE (banner error jalur normal).
+    errorProcessors: [
+      new StreamErrorRetryProcessor({
+        maxRetries: 2,
+        delayMs: ({ retryCount }) => Math.min(1_000 * 2 ** retryCount, 8_000),
+        matchers: [isTransientProviderError],
+      }),
+    ],
   });
 }
 

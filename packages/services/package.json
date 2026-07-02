@@ -74,6 +74,13 @@
       "import": "./dist/doc-ai.service.js",
       "default": "./dist/doc-ai.service.js"
     },
+    "./preferences": {
+      "types": "./src/agentPreferences.service.ts",
+      "bun": "./src/agentPreferences.service.ts",
+      "node": "./dist/agentPreferences.service.js",
+      "import": "./dist/agentPreferences.service.js",
+      "default": "./dist/agentPreferences.service.js"
+    },
     "./workspace": {
       "types": "./src/workspace.service.ts",
       "bun": "./src/workspace.service.ts",

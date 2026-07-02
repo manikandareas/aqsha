@@ -26,6 +26,7 @@ export default defineConfig({
     "src/doc-ai.service.ts",
     "src/workspace.service.ts",
     "src/context.service.ts",
+    "src/agentPreferences.service.ts",
   ],
   outDir: "dist",
   format: ["esm"],

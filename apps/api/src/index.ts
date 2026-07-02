@@ -13,6 +13,7 @@ import { folders } from "./routes/folders";
 import { health } from "./routes/health";
 import { onboarding } from "./routes/onboarding";
 import { papers } from "./routes/papers";
+import { preferences } from "./routes/preferences";
 import { security } from "./routes/security";
 import { threads } from "./routes/threads";
 import { users } from "./routes/users";
@@ -34,6 +35,7 @@ export const app = new Elysia()
   .use(users)
   .use(security)
   .use(onboarding)
+  .use(preferences)
   .use(webhooks)
   .use(billing)
   .use(workspaces)

@@ -18,6 +18,15 @@ export {
   type CompleteOnboardingInput,
   OnboardingService,
 } from "./onboarding.service";
+export {
+  type AgentPreferences,
+  type AgentPreferencesPatch,
+  AgentPreferencesService,
+  ANSWER_LANGUAGE_IDS,
+  CITATION_STYLE_IDS,
+  CUSTOM_INSTRUCTION_MAX_CHARS,
+  RESPONSE_STYLE_IDS,
+} from "./agentPreferences.service";
 
 // Plan catalog + pricing SSOT (Fase 5).
 export {

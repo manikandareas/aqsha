@@ -15,6 +15,7 @@ import { searchArxiv } from "./search-arxiv";
 import { searchPapers } from "./search-papers";
 import { searchThreadDocuments } from "./search-thread-documents";
 import { searchWeb } from "./search-web";
+import { updatePreferences } from "./update-preferences";
 import { verifyCitations } from "./verify-citations";
 import { verifyIdentifiers } from "./verify-identifiers";
 
@@ -37,6 +38,8 @@ export const writeTools = {
   link_to_workspace: linkToWorkspace,
   save_url: saveUrl,
   delete_artifact: deleteArtifact,
+  // Preferensi stabil user → profil app (IMP-2); konfirmasi percakapan seperti write lain.
+  update_preferences: updatePreferences,
 };
 
 /** Tool riset eksternal (debit `external_search`) + verifikasi sitasi (`citation_verify`=0). */

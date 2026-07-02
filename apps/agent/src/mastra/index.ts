@@ -1,7 +1,15 @@
 import { assertEmbeddingEnabled } from "@aqsha/services/rag";
 import { Mastra } from "@mastra/core/mastra";
+import { MASTRA_THREAD_ID_KEY } from "@mastra/core/request-context";
+import { MastraStorageExporter, Observability } from "@mastra/observability";
 import { astraLite, astraPro } from "./agents/astra-lite";
 import { createClerkAuth } from "./auth";
+import {
+  AQSHA_AGENT_KIND_KEY,
+  AQSHA_CHAT_TURN_KEY,
+  AQSHA_DEEP_RUN_KEY,
+  AQSHA_DEEP_SUBQ_INDEX_KEY,
+} from "./lib/tool-context";
 import { userContextMiddleware } from "./middleware/user-context";
 import { storage, vector } from "./storage";
 import { deepResearch } from "./workflows/deep-research";
@@ -36,6 +44,30 @@ export const mastra = new Mastra({
   workflows: { "deep-research": deepResearch },
   storage,
   vectors: { pg: vector },
+  // IMP-7: observability dasar — trace agent/workflow/tool/LLM dipersist ke storage Postgres yang
+  // sama (tabel observability `mastra_*`, terbaca di Mastra Studio). Metadata span membawa
+  // threadId/run deep/turn chat/tier dari RequestContext → ledger kosong (mis. CFG-6) & bobot
+  // token history terlihat dari trace prod, bukan tebakan. Email SENGAJA tidak diekstrak (PII).
+  // `SensitiveDataFilter` auto-aktif. Matikan via env `AQSHA_OBSERVABILITY=off`.
+  ...(process.env.AQSHA_OBSERVABILITY === "off"
+    ? {}
+    : {
+        observability: new Observability({
+          configs: {
+            default: {
+              serviceName: "aqsha-agent",
+              exporters: [new MastraStorageExporter()],
+              requestContextKeys: [
+                MASTRA_THREAD_ID_KEY,
+                AQSHA_DEEP_RUN_KEY,
+                AQSHA_CHAT_TURN_KEY,
+                AQSHA_AGENT_KIND_KEY,
+                AQSHA_DEEP_SUBQ_INDEX_KEY,
+              ],
+            },
+          },
+        }),
+      }),
   // DUR-7: subagent `/deep` jalan sebagai background task persisten (`mastra_background_tasks`,
   // storage Postgres yang sama) → selamat restart proses + restart run me-reuse hasil task selesai
   // (tanpa re-debit `external_search`). Concurrency ≥ fan-out search (subQuestions ≤ 8) supaya

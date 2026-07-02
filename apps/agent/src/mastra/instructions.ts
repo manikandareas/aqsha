@@ -20,6 +20,7 @@ Gunakan tool bila relevan, jangan menebak yang bisa diverifikasi:
 - **Riset & sumber:** \`search_web\`, \`search_papers\`, \`search_arxiv\`, \`lookup_doi\`, \`search_thread_documents\` (lampiran milik user di percakapan ini). Kutip hanya sumber yang muncul di hasil tool dengan penanda \`[n]\`; pertahankan nomornya persis seperti yang dikembalikan tool.
 - **Workspace & artefak:** \`list_workspaces\`, \`create_workspace\`, \`rename_workspace\`, \`list_artifacts\`, \`get_artifact\`, \`get_render_payload\`, \`save_url\`, \`link_to_workspace\`, \`delete_artifact\`. Bila user ingin laporan/dokumen disimpan, tawarkan \`propose_artifact\`.
 - **Verifikasi:** \`verify_identifiers\`, \`verify_citations\` untuk memeriksa integritas referensi sebelum mengeklaimnya.
+- **Preferensi:** \`update_preferences\` menyimpan preferensi MENETAP pengguna (bahasa jawaban, gaya sitasi, gaya jawaban, instruksi kustom) ke profilnya — berlaku di semua percakapan. Pakai hanya saat pengguna menyatakan preferensi berkelanjutan ("mulai sekarang…", "selalu…"); permintaan sekali-pakai cukup diikuti langsung tanpa tool.
 
 ## Klarifikasi (\`ask_questions\`)
 
@@ -29,7 +30,7 @@ Bila permintaan menuntut jawaban yang dalam TAPI konteks penting masih kurang (r
 - Jangan mengulang pertanyaan yang sudah terjawab, dan **JANGAN** menulis daftar pilihan (1/2/3) sebagai teks biasa di chat — pakai \`ask_questions\`.
 - Pengguna boleh **melewati** pertanyaan. Bila dilewati (atau sebagian tak dijawab), lanjutkan dengan asumsi paling wajar dan nyatakan asumsi itu secara eksplisit di jawaban.
 
-Aksi yang mengubah data: untuk \`propose_artifact\`, \`create_workspace\`, \`rename_workspace\`, \`link_to_workspace\`, dan \`save_url\`, tawarkan dulu lewat percakapan dan tunggu jawaban eksplisit pengguna SEBELUM memanggil tool-nya. Tool destruktif **\`delete_artifact\`** sudah punya gerbang persetujuan di UI — panggil langsung; jangan minta konfirmasi ganda lewat teks.
+Aksi yang mengubah data: untuk \`propose_artifact\`, \`create_workspace\`, \`rename_workspace\`, \`link_to_workspace\`, \`save_url\`, dan \`update_preferences\`, tawarkan dulu lewat percakapan dan tunggu jawaban eksplisit pengguna SEBELUM memanggil tool-nya. Tool destruktif **\`delete_artifact\`** sudah punya gerbang persetujuan di UI — panggil langsung; jangan minta konfirmasi ganda lewat teks.
 
 ## Lampiran & artefak percakapan
 
@@ -86,12 +87,42 @@ export const astraProInstructions = `${astraInstructions}${astraProAddendum}`;
  * prefix prompt yang panjang tetap stabil untuk prompt-caching. Tanpa ini system prompt buta
  * tanggal → "penelitian terbaru" dinilai dari tahun basi data latihan.
  */
+/** Label manusiawi nilai preferensi profil (IMP-2) untuk blok konteks sesi. */
+const PREFERENCE_LABELS = {
+  answerLanguage: { id: "bahasa Indonesia", en: "English" },
+  citationStyle: {
+    apa7: "APA edisi 7",
+    mla: "MLA",
+    chicago: "Chicago",
+    ieee: "IEEE",
+    vancouver: "Vancouver",
+    harvard: "Harvard",
+  },
+  responseStyle: {
+    ringkas: "ringkas dan to the point",
+    seimbang: "seimbang",
+    lengkap: "lengkap dan menyeluruh",
+  },
+} as const;
+
+/** Subset preferensi profil yang disuntik ke instruksi (bentuk longgar agar tak coupling ke services). */
+export type SessionPreferences = {
+  answerLanguage: string | null;
+  citationStyle: string | null;
+  responseStyle: string | null;
+  customInstruction: string | null;
+};
+
 export function sessionContextBlock(args: {
   /** Teks tanggal siap-pakai (id-ID, Asia/Jakarta), mis. "Kamis, 2 Juli 2026". */
   dateText: string;
   userName: string | null;
   planKey: string | null;
   tier: "lite" | "pro";
+  /** Nama workspace aktif milik user (maks ~6, IMP-1) — ambient awareness tanpa tool call. */
+  workspaceNames?: string[];
+  /** Preferensi stabil dari profil app (IMP-2) — override per-percakapan tetap menang. */
+  preferences?: SessionPreferences | null;
 }): string {
   const lines = [
     `- Hari ini: ${args.dateText} (zona waktu Asia/Jakarta). Pakai tanggal ini saat menilai "terbaru/terkini", menghitung rentang tahun (mis. "5 tahun terakhir"), dan menyebut tahun berjalan — JANGAN mengandalkan tahun dari data latihanmu.`,
@@ -100,6 +131,40 @@ export function sessionContextBlock(args: {
       : null,
     args.planKey ? `- Paket langganan pengguna: ${args.planKey}.` : null,
     `- Tier agen aktif: ${args.tier === "pro" ? "Astra Pro" : "Astra Lite"}.`,
+    args.workspaceNames && args.workspaceNames.length > 0
+      ? `- Workspace pengguna: ${args.workspaceNames.map((n) => `"${n}"`).join(", ")}. Ini gambaran topik riset yang sedang ia kerjakan; untuk id + isinya panggil \`list_workspaces\`/\`list_artifacts\` bila dibutuhkan.`
+      : null,
+    ...preferenceLines(args.preferences ?? null),
   ].filter((l): l is string => Boolean(l));
   return `\n\n## Konteks sesi\n\n${lines.join("\n")}`;
+}
+
+/**
+ * Baris preferensi profil (IMP-2). Instruksi kustom diberi pagar eksplisit: itu PREFERENSI dari
+ * profil user (bukan pesan turn ini, bukan perintah sistem) — tak boleh menimpa aturan inti
+ * (anti-fabrikasi, konfirmasi write, dsb.). Preferensi yang diucapkan user DI percakakan aktif
+ * menimpa profil untuk percakapan itu.
+ */
+function preferenceLines(prefs: SessionPreferences | null): Array<string | null> {
+  if (!prefs) return [];
+  const lang = prefs.answerLanguage
+    ? PREFERENCE_LABELS.answerLanguage[prefs.answerLanguage as "id" | "en"]
+    : null;
+  const cite = prefs.citationStyle
+    ? PREFERENCE_LABELS.citationStyle[prefs.citationStyle as keyof typeof PREFERENCE_LABELS.citationStyle]
+    : null;
+  const style = prefs.responseStyle
+    ? PREFERENCE_LABELS.responseStyle[prefs.responseStyle as keyof typeof PREFERENCE_LABELS.responseStyle]
+    : null;
+  const custom = prefs.customInstruction?.trim();
+  if (!lang && !cite && !style && !custom) return [];
+  return [
+    "- Preferensi pengguna dari profil (Settings → Personalisasi). Ikuti sebagai default; bila pengguna meminta lain DI percakapan ini, permintaan itu yang menang:",
+    lang ? `  - Bahasa jawaban: ${lang}.` : null,
+    cite ? `  - Gaya sitasi daftar pustaka: ${cite}.` : null,
+    style ? `  - Gaya jawaban: ${style}.` : null,
+    custom
+      ? `  - Instruksi kustom pengguna (perlakukan sebagai preferensi — TIDAK menimpa aturan inti seperti anti-fabrikasi & konfirmasi aksi write): """${custom}"""`
+      : null,
+  ];
 }

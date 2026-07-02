@@ -3,13 +3,14 @@ name: verify-citations
 description: "Four-step citation verification recipe — existence, metadata consistency, DOI/arXiv validity, and accessibility. Use when checking whether a document's citations or bibliography are valid and not fabricated."
 ---
 ## How to run it
-Call the **`verify_citations` tool** with `artifactText` — the document's finished text that
-contains the references/bibliography section. If the document is a workspace artifact, load its
-text first with `get_render_payload` (by `artifactId` from the `Artifact ID:` line in your
-context), then pass that text as `artifactText`. The tool runs the full four-step engine
-server-side in a single call and returns a per-reference verdict — do NOT perform the steps
-manually with web search; that wastes the step budget and is less accurate. If no document is
-in context, ask the user to attach or select the paper first.
+Call the **`verify_citations` tool**. If the document is an artifact (attachment, workspace
+document, embedded context), pass its `artifactId` (from the `Artifact ID:` line in your context
+or `list_artifacts`) — the full text is loaded server-side, so do NOT call `get_render_payload`
+first and do NOT paste the text back as an argument. Only pass `artifactText` for text that is
+not stored as an artifact (e.g. a draft written in the conversation). The tool runs the full
+four-step engine server-side in a single call and returns a per-reference verdict — do NOT
+perform the steps manually with web search; that wastes the step budget and is less accurate.
+If no document is in context, ask the user to attach or select the paper first.
 
 ## What the engine checks (for interpreting the result)
 1. **Existence** — title + author matched against an academic database (OpenAlex/Crossref).

@@ -2,7 +2,6 @@ import type { BackgroundTask, BackgroundTaskManager } from "@mastra/core/backgro
 import { createBackgroundTask } from "@mastra/core/background-tasks";
 import type { Mastra } from "@mastra/core/mastra";
 import { RequestContext } from "@mastra/core/request-context";
-import { citationVerifier } from "../agents/citation-verifier";
 import { counterEvidence } from "../agents/counter-evidence";
 import { deepWriter } from "../agents/deep-writer";
 import { literatureSearcher } from "../agents/literature-searcher";
@@ -12,8 +11,9 @@ import { liteProviderOptions, proProviderOptions } from "../model";
 /**
  * DUR-7 — subagent `/deep` sebagai BACKGROUND TASK persisten (`mastra_background_tasks`).
  *
- * Setiap pemanggilan subagent pasca-billing (search per sub-Q, counter-evidence, verify-citations,
- * synthesize) di-dispatch sebagai task dengan `toolCallId` DETERMINISTIK (`<runId>:<step>[...]`).
+ * Setiap pemanggilan subagent pasca-billing (search per sub-Q, counter-evidence, synthesize;
+ * verify-citations kini deterministik tanpa LLM — IMP-5) di-dispatch sebagai task dengan
+ * `toolCallId` DETERMINISTIK (`<runId>:<step>[...]`).
  * Dua manfaat durability:
  *
  * 1. **Restart run idempoten**: `run.restart()` (DUR-5) / restart proses agent → step yang re-run
@@ -29,10 +29,11 @@ import { liteProviderOptions, proProviderOptions } from "../model";
  */
 
 /** Subagent yang boleh dijalankan sebagai task — key = id agent (dipakai juga sebagai `agentId` task). */
+// `citation-verifier` DIHAPUS (IMP-5): step verify kini memanggil CitationService langsung tanpa
+// LLM — task warisan ber-agentId itu (pre-deploy) akan gagal recover, lalu step re-run jalur baru.
 const DEEP_TASK_AGENTS = {
   "literature-searcher": literatureSearcher,
   "counter-evidence": counterEvidence,
-  "citation-verifier": citationVerifier,
   "deep-writer": deepWriter,
 } as const;
 type DeepTaskAgentId = keyof typeof DEEP_TASK_AGENTS;
