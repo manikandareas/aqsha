@@ -21,11 +21,9 @@ import {
   askQuestionsResumeSchema,
   askQuestionsSuspendSchema,
 } from "../lib/ask-questions-schema";
-import { citationVerifier } from "../agents/citation-verifier";
-import { counterEvidence } from "../agents/counter-evidence";
 import { deepWriter } from "../agents/deep-writer";
-import { literatureSearcher } from "../agents/literature-searcher";
 import { getServiceDb } from "../lib/db";
+import { runDeepSubagentTask } from "./deep-tasks";
 import { inlineSkillInstructions } from "../skills";
 import {
   AQSHA_AGENT_KIND_KEY,
@@ -806,10 +804,12 @@ const searchStep = createStep({
   inputSchema: PlannedSchema,
   outputSchema: SearchedSchema,
   // TANPA `retries`: re-run step = re-debit `external_search` per tool-call baru. Isolasi
-  // per-sub-Q di bawah sudah membuat step ini tak melempar.
-  execute: async ({ inputData, requestContext, runId, writer }) => {
+  // per-sub-Q di bawah sudah membuat step ini tak melempar. (Pasca-DUR-7 restart step justru
+  // AMAN: task selesai di-reuse by `toolCallId`, tak menjalankan ulang subagent.)
+  execute: async ({ inputData, mastra, requestContext, runId, writer }) => {
     // Tanam thread+run di rc induk dulu → entries() yang DI-CLONE per sub-Q sudah membawanya.
     withDeepRun(requestContext, inputData.threadId, runId, inputData.agentKind);
+    const owner = ownerFromRequestContext(requestContext);
     const evidence = await Promise.all(
       inputData.subQuestions.map(async (subQuestion, subIndex) => {
         // Clone rc per sub-pertanyaan (Promise.all paralel) lalu stempel index/teks → tool riset
@@ -818,19 +818,40 @@ const searchStep = createStep({
         subRc.set(AQSHA_DEEP_SUBQ_INDEX_KEY, subIndex);
         subRc.set(AQSHA_DEEP_SUBQ_TEXT_KEY, subQuestion);
         await emitDetail(writer, { kind: "search-sub", subIndex, subQuestion, status: "searching" });
-        const genOpts = { requestContext: subRc, ...deepProviderOptions(inputData.agentKind) };
+        // DUR-7: subagent jalan sebagai background task persisten — `toolCallId` deterministik
+        // per (run, sub-Q) → restart run me-reuse hasil task selesai (tanpa re-debit search).
+        const taskBase = {
+          mastra,
+          runId,
+          threadId: inputData.threadId,
+          ...(owner.id ? { resourceId: owner.id } : {}),
+          timeoutMs: 600_000,
+        };
         let findings = "";
         try {
-          const out = await literatureSearcher.generate(searcherPrompt(subQuestion, inputData), genOpts);
+          const out = await runDeepSubagentTask({
+            ...taskBase,
+            toolCallId: `${runId}:search:${subIndex}`,
+            args: {
+              agentId: "literature-searcher",
+              prompt: searcherPrompt(subQuestion, inputData),
+              requestContext: Array.from(subRc.entries()),
+            },
+          });
           findings = out.text.trim();
           // Guard turn-senyap subagent (CTX-7): selesai pas di tool-call → teks kosong. Retry SEKALI
           // dengan pengingat eksplisit; masih kosong → catat gap jujur (jangan biarkan bucket kosong
           // mengalir senyap ke sintesis).
           if (!findings) {
-            const retry = await literatureSearcher.generate(
-              `${searcherPrompt(subQuestion, inputData)}\n\nPENTING: percobaan sebelumnya berakhir tanpa teks. AKHIRI responsmu dengan ringkasan teks temuan (atau nyatakan jujur bila buktinya tipis) — jangan berhenti pada pemanggilan tool.`,
-              genOpts,
-            );
+            const retry = await runDeepSubagentTask({
+              ...taskBase,
+              toolCallId: `${runId}:search:${subIndex}:empty-retry`,
+              args: {
+                agentId: "literature-searcher",
+                prompt: `${searcherPrompt(subQuestion, inputData)}\n\nPENTING: percobaan sebelumnya berakhir tanpa teks. AKHIRI responsmu dengan ringkasan teks temuan (atau nyatakan jujur bila buktinya tipis) — jangan berhenti pada pemanggilan tool.`,
+                requestContext: Array.from(subRc.entries()),
+              },
+            });
             findings = retry.text.trim();
           }
         } catch (err) {
@@ -862,11 +883,23 @@ const counterEvidenceStep = createStep({
   inputSchema: SearchedSchema,
   outputSchema: CounteredSchema,
   retries: 1,
-  execute: async ({ inputData, requestContext, runId, writer }) => {
-    const out = await counterEvidence.generate(
-      counterPrompt(inputData),
-      deepGenOptions(requestContext, inputData, runId),
-    );
+  execute: async ({ inputData, mastra, requestContext, runId, writer }) => {
+    // DUR-7: background task persisten — restart run me-reuse hasil task selesai.
+    const rc = withDeepRun(requestContext, inputData.threadId, runId, inputData.agentKind);
+    const owner = ownerFromRequestContext(requestContext);
+    const out = await runDeepSubagentTask({
+      mastra,
+      runId,
+      threadId: inputData.threadId,
+      ...(owner.id ? { resourceId: owner.id } : {}),
+      timeoutMs: 600_000,
+      toolCallId: `${runId}:counter`,
+      args: {
+        agentId: "counter-evidence",
+        prompt: counterPrompt(inputData),
+        requestContext: Array.from(rc.entries()),
+      },
+    });
     // Guard teks kosong (CTX-7): jangan biarkan bagian adversarial hilang senyap.
     const counter =
       out.text.trim() ||
@@ -929,11 +962,23 @@ const citationVerifyStep = createStep({
   inputSchema: CitedSchema,
   outputSchema: VerifiedSchema,
   retries: 1,
-  execute: async ({ inputData, requestContext, runId, writer }) => {
-    const out = await citationVerifier.generate(
-      verifyPrompt(inputData),
-      deepGenOptions(requestContext, inputData, runId),
-    );
+  execute: async ({ inputData, mastra, requestContext, runId, writer }) => {
+    // DUR-7: background task persisten — restart run me-reuse hasil task selesai.
+    const rc = withDeepRun(requestContext, inputData.threadId, runId, inputData.agentKind);
+    const owner = ownerFromRequestContext(requestContext);
+    const out = await runDeepSubagentTask({
+      mastra,
+      runId,
+      threadId: inputData.threadId,
+      ...(owner.id ? { resourceId: owner.id } : {}),
+      timeoutMs: 300_000,
+      toolCallId: `${runId}:verify`,
+      args: {
+        agentId: "citation-verifier",
+        prompt: verifyPrompt(inputData),
+        requestContext: Array.from(rc.entries()),
+      },
+    });
     // Guard teks kosong (CTX-7): tanpa verdict, tandai belum-terverifikasi — jangan diam.
     const verification =
       out.text.trim() ||
@@ -952,9 +997,22 @@ const synthesizeStep = createStep({
   execute: async ({ inputData, requestContext, mastra, runId, writer }) => {
     // `toolChoice: "none"`: seluruh bukti sudah ada di prompt; paksa penulis MENULIS teks
     // (bukan berhenti di tool-call kosong) — jaminan `out.text` terisi pada model gateway.
-    const out = await deepWriter.generate(synthesisPrompt(inputData), {
-      ...deepGenOptions(requestContext, inputData, runId),
-      toolChoice: "none",
+    // DUR-7: background task persisten — restart run me-reuse laporan task selesai.
+    const rc = withDeepRun(requestContext, inputData.threadId, runId, inputData.agentKind);
+    const owner = ownerFromRequestContext(requestContext);
+    const out = await runDeepSubagentTask({
+      mastra,
+      runId,
+      threadId: inputData.threadId,
+      ...(owner.id ? { resourceId: owner.id } : {}),
+      timeoutMs: 900_000,
+      toolCallId: `${runId}:synthesize`,
+      args: {
+        agentId: "deep-writer",
+        prompt: synthesisPrompt(inputData),
+        requestContext: Array.from(rc.entries()),
+        toolChoice: "none",
+      },
     });
     // Ringkasan penalaran penulis (Responses API `reasoningSummary`) → blok "reasoning" di atas
     // laporan (parity dgn chat). Route B: dipanen post-hoc dari hasil `.generate`, bukan di-stream

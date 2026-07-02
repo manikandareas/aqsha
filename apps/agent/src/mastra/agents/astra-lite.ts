@@ -140,5 +140,16 @@ function createAstraAgent(tier: AgentKind): Agent {
   });
 }
 
+/**
+ * DUR-1 (di-BLOK framework, 2026-07-02): `createDurableAgent`/`createEventedAgent` (Mastra 1.47)
+ * SENGAJA tidak dipakai di sini. Dibuktikan dengan smoke test in-process
+ * (`scripts/smoke-durable-chat.ts`): agent yang dibungkus durable memulai run
+ * (`sendMessage` → `accepted.action:"wake"`) tapi NOL chunk sampai ke `subscribeToThread` —
+ * chunk durable mengalir di topic durable-nya sendiri (konsumsi via `stream()`/`observe()` route
+ * durable), BUKAN channel durable-thread yang dipakai seluruh FE (send-message +
+ * threads/subscribe). Agent polos pada harness yang sama PASS penuh. Jangan bungkus ulang
+ * sebelum Mastra mengawinkan thread-stream-runtime dengan durable agent — jalankan smoke itu
+ * lagi untuk memverifikasi.
+ */
 export const astraLite = createAstraAgent("lite");
 export const astraPro = createAstraAgent("pro");

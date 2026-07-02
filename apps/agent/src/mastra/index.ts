@@ -5,6 +5,7 @@ import { createClerkAuth } from "./auth";
 import { userContextMiddleware } from "./middleware/user-context";
 import { storage, vector } from "./storage";
 import { deepResearch } from "./workflows/deep-research";
+import { registerDeepTaskExecutors } from "./workflows/deep-tasks";
 
 // Fail-fast (D1): tool `search_thread_documents` butuh embedding aktif. Konsisten dengan throw
 // `DATABASE_URL` di `./storage` — kredensial wajib digagalkan saat boot, bukan degradasi senyap.
@@ -35,6 +36,16 @@ export const mastra = new Mastra({
   workflows: { "deep-research": deepResearch },
   storage,
   vectors: { pg: vector },
+  // DUR-7: subagent `/deep` jalan sebagai background task persisten (`mastra_background_tasks`,
+  // storage Postgres yang sama) → selamat restart proses + restart run me-reuse hasil task selesai
+  // (tanpa re-debit `external_search`). Concurrency ≥ fan-out search (subQuestions ≤ 8) supaya
+  // paralelisme pra-DUR-7 tak menyempit; backpressure default `queue`.
+  backgroundTasks: {
+    enabled: true,
+    globalConcurrency: 16,
+    perAgentConcurrency: 8,
+    defaultTimeoutMs: 600_000,
+  },
   server: {
     port: Number(process.env.PORT ?? 4111),
     host: process.env.HOST ?? "0.0.0.0",
@@ -43,3 +54,8 @@ export const mastra = new Mastra({
     middleware: [userContextMiddleware],
   },
 });
+
+// Executor static task `/deep` WAJIB di-register saat boot: task `running`/`pending` yang dipulihkan
+// `recoverStaleTasks` (proses sebelumnya mati) hanya bisa dieksekusi ulang lewat registry ini —
+// manager tidak merehidrasi closure dari storage. Registrasi murni in-memory (aman saat build).
+registerDeepTaskExecutors(mastra);
