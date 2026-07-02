@@ -15,7 +15,6 @@ export type FeedKind = "paper" | "news" | "claim" | "topic" | "idea";
 export type FeedProvider =
   | "openalex"
   | "exa_news"
-  | "google_news"
   | "gdelt"
   | "google_factcheck"
   | "turnbackhoax";

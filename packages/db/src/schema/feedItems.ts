@@ -85,7 +85,7 @@ export const feedItems = pgTable(
     check("feed_items_kind_check", sql`${t.kind} in ('paper', 'news', 'claim', 'topic', 'idea')`),
     check(
       "feed_items_provider_check",
-      sql`${t.provider} in ('openalex', 'exa_news', 'google_news', 'gdelt', 'google_factcheck', 'turnbackhoax')`,
+      sql`${t.provider} in ('openalex', 'exa_news', 'gdelt', 'google_factcheck', 'turnbackhoax')`,
     ),
     check(
       "feed_items_retraction_status_check",

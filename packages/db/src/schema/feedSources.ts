@@ -25,7 +25,7 @@ export const feedSources = pgTable(
   (t) => [
     check(
       "feed_sources_provider_check",
-      sql`${t.provider} in ('openalex', 'exa_news', 'google_news', 'gdelt', 'google_factcheck', 'turnbackhoax')`,
+      sql`${t.provider} in ('openalex', 'exa_news', 'gdelt', 'google_factcheck', 'turnbackhoax')`,
     ),
     check(
       "feed_sources_last_status_check",

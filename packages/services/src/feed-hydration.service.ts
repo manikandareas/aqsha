@@ -1,21 +1,20 @@
 /**
  * FeedHydrationService — lane ingest feed (P4), dipanggil worker BullMQ `feed-hydration`
  * (proses terpisah, ganti cron 3h Convex `hydrateCycle`). Business logic di sini; worker
- * hanya dispatch. Lane: OpenAlex (papers), Google News (RSS + enrich). Provider lib di
+ * hanya dispatch. Lane: OpenAlex (papers), GDELT (news + enrich). Provider lib di
  * `feed/providers/*` + `feed/openAlex`.
  */
 import type { Db } from "@aqsha/db";
 import { FeedRepo } from "@aqsha/db";
 import { fetchOpenAlexWorks, workIdentifiers } from "./feed/openAlex";
 import {
-  buildGoogleNewsFeedInputs,
-  dedupeGoogleNewsItems,
-  fetchGoogleNews,
-  type GoogleNewsItem,
-  googleNewsSearchUrl,
-  googleNewsTopicUrl,
-} from "./feed/providers/googleNews";
-import { resolvePublisherUrl } from "./feed/providers/googleNewsDecode";
+  buildGdeltFeedInputs,
+  dedupeGdeltItems,
+  fetchGdelt,
+  gdeltArtListUrl,
+  type GdeltItem,
+} from "./feed/providers/gdelt";
+import { GDELT_TOPIC_SEEDS, gdeltSeedQuery } from "./feed/gdeltSeeds";
 import { type ArticlePreview, fetchArticlePreview } from "./papers/articlePreview";
 import { deriveSearchText, paperToFeedInput } from "./feed/model";
 import { upsertFeedItems } from "./feed/write";
@@ -24,37 +23,29 @@ import { enqueue, FEED_QUEUES } from "./clients/queue";
 import { generateText } from "ai";
 import { fastModel } from "./clients/fast-model";
 
-// ── konstanta lane (port V1) ─────────────────────────────────────────────────
+// ── konstanta lane ───────────────────────────────────────────────────────────
 const TRENDING_LIMIT = 24;
-const GOOGLE_NEWS_PER_SEED = 6;
-const GOOGLE_NEWS_TOTAL_CAP = 16;
-const GOOGLE_NEWS_SEED_SPACING_MS = 1_500;
-const GOOGLE_NEWS_ENRICH_BATCH = 6;
-const GOOGLE_NEWS_ENRICH_SPACING_MS = 1_200;
-
-const GOOGLE_NEWS_SEARCH_SEEDS: Array<{ label: string; query: string }> = [
-  { label: "Kesehatan", query: "kesehatan OR medis OR penyakit when:7d -hoaks" },
-  { label: "Sains", query: "sains OR penelitian OR riset when:7d" },
-  { label: "Lingkungan", query: "lingkungan OR iklim OR energi when:7d" },
-];
-const GOOGLE_NEWS_TOPIC_SEEDS: Array<{ label: string; topic: string }> = [
-  { label: "Sains", topic: "SCIENCE" },
-  { label: "Kesehatan", topic: "HEALTH" },
-];
+const GDELT_PER_SEED = 25;
+const GDELT_TOTAL_CAP = 24;
+const GDELT_TIMESPAN = "3d";
+// GDELT soft-throttle "1 request / 5 detik" → spacing aman 6s (worker concurrency = 1).
+const GDELT_SEED_SPACING_MS = 6_000;
+const NEWS_ENRICH_BATCH = 6;
+const NEWS_ENRICH_SPACING_MS = 1_200;
 
 /** Stagger fan-out lane (ms) — port V1 HYDRATE_STAGGER (3h cron orchestrator). */
 const HYDRATE_STAGGER: Record<FeedHydrationLane, number> = {
   refreshTrendingPapers: 0,
-  refreshGoogleNews: 20 * 60_000,
-  enrichGoogleNewsArticles: 60 * 60_000,
+  refreshGdeltNews: 20 * 60_000,
+  enrichNewsArticles: 60 * 60_000,
 };
 
 export type RefreshResult = { fetched: number; written: number };
 
 export const FEED_HYDRATION_LANES = [
   "refreshTrendingPapers",
-  "refreshGoogleNews",
-  "enrichGoogleNewsArticles",
+  "refreshGdeltNews",
+  "enrichNewsArticles",
 ] as const;
 export type FeedHydrationLane = (typeof FEED_HYDRATION_LANES)[number];
 
@@ -115,45 +106,46 @@ export const FeedHydrationService = {
     return { fetched: papers.length, written: inputs.length };
   },
 
-  /** News Google News RSS (spacing 1.5s) → dedupe → feed kind=news (summary kosong). */
-  async refreshGoogleNews(db: Db, args?: { perSeed?: number }): Promise<RefreshResult> {
+  /** News GDELT ArtList (spacing 6s, semi-global seed) → dedupe → feed kind=news (summary kosong). */
+  async refreshGdeltNews(db: Db, args?: { perSeed?: number }): Promise<RefreshResult> {
     const now = Date.now();
-    const perSeed = Math.min(args?.perSeed ?? GOOGLE_NEWS_PER_SEED, 12);
-    const seeds: Array<{ label: string; url: string }> = [
-      ...GOOGLE_NEWS_SEARCH_SEEDS.map((s) => ({ label: s.label, url: googleNewsSearchUrl(s.query) })),
-      ...GOOGLE_NEWS_TOPIC_SEEDS.map((s) => ({ label: s.label, url: googleNewsTopicUrl(s.topic) })),
-    ];
-    const bySeed: Array<{ label: string; items: GoogleNewsItem[] }> = [];
-    for (let i = 0; i < seeds.length; i += 1) {
-      if (i > 0) await sleep(GOOGLE_NEWS_SEED_SPACING_MS);
+    const perSeed = Math.min(args?.perSeed ?? GDELT_PER_SEED, 250);
+    const bySeed: Array<{ label: string; topics: string[]; items: GdeltItem[] }> = [];
+    for (let i = 0; i < GDELT_TOPIC_SEEDS.length; i += 1) {
+      const seed = GDELT_TOPIC_SEEDS[i]!;
+      if (i > 0) await sleep(GDELT_SEED_SPACING_MS);
       try {
-        const items = await fetchGoogleNews({ url: seeds[i]!.url, limit: perSeed });
-        bySeed.push({ label: seeds[i]!.label, items });
+        const url = gdeltArtListUrl({
+          query: gdeltSeedQuery(seed),
+          timespan: GDELT_TIMESPAN,
+          maxrecords: perSeed,
+        });
+        const items = await fetchGdelt({ url, limit: perSeed });
+        bySeed.push({ label: seed.label, topics: seed.topics, items });
       } catch {
-        bySeed.push({ label: seeds[i]!.label, items: [] });
+        bySeed.push({ label: seed.label, topics: seed.topics, items: [] });
       }
     }
-    const collected = dedupeGoogleNewsItems(bySeed, GOOGLE_NEWS_TOTAL_CAP);
+    const collected = dedupeGdeltItems(bySeed, GDELT_TOTAL_CAP);
     if (collected.length === 0) return { fetched: 0, written: 0 };
-    const inputs = buildGoogleNewsFeedInputs(collected, now);
+    const inputs = buildGdeltFeedInputs(collected, now);
     await upsertFeedItems(db, inputs, now);
     return { fetched: inputs.length, written: inputs.length };
   },
 
-  /** Enrich news: resolve publisher URL + ekstrak body/image. Patch never-overwrite + searchText. */
-  async enrichGoogleNewsArticles(db: Db, args?: { limit?: number }): Promise<{ scanned: number; patched: number }> {
-    const limit = Math.min(args?.limit ?? GOOGLE_NEWS_ENRICH_BATCH, 20);
+  /** Enrich news: ekstrak body/image dari URL publisher (GDELT langsung). Patch never-overwrite + searchText. */
+  async enrichNewsArticles(db: Db, args?: { limit?: number }): Promise<{ scanned: number; patched: number }> {
+    const limit = Math.min(args?.limit ?? NEWS_ENRICH_BATCH, 20);
     const targets = await FeedRepo.listNewsNeedingEnrichment(db, limit);
     if (targets.length === 0) return { scanned: 0, patched: 0 };
 
     let patched = 0;
     for (let i = 0; i < targets.length; i += 1) {
-      if (i > 0) await sleep(GOOGLE_NEWS_ENRICH_SPACING_MS);
+      if (i > 0) await sleep(NEWS_ENRICH_SPACING_MS);
       const target = targets[i]!;
       // Selalu catat attempt (walau gagal) supaya item konvergen keluar dari sweep.
       const patch: {
         enrichAttempts: number;
-        resolvedUrl?: string;
         articleText?: string;
         imageUrl?: string;
         summary?: string;
@@ -161,29 +153,26 @@ export const FeedHydrationService = {
         searchText?: string;
       } = { enrichAttempts: (target.enrichAttempts ?? 0) + 1 };
 
-      const resolvedUrl = await resolvePublisherUrl(target.url);
-      if (resolvedUrl) {
-        patch.resolvedUrl = resolvedUrl;
-        const preview: ArticlePreview = await fetchArticlePreview(resolvedUrl);
-        if (preview.imageUrl && !target.imageUrl) patch.imageUrl = preview.imageUrl;
-        if (preview.articleText) {
-          patch.articleText = preview.articleText;
-          patched += 1;
-          if (target.tldr === null) {
-            patch.tldr =
-              (await summarizeArticleId(target.title, preview.articleText)) ??
-              firstSentence(preview.articleText);
-          }
-          if (target.summary.trim().length === 0) {
-            const summary = leadFromArticle(preview.articleText);
-            patch.summary = summary;
-            // Recompute searchText (RSS ingest summary kosong → tadinya title+topics saja).
-            patch.searchText = deriveSearchText({
-              title: target.title,
-              summary,
-              topics: target.topics,
-            });
-          }
+      // GDELT memberi URL publisher langsung → tanpa resolve redirect.
+      const preview: ArticlePreview = await fetchArticlePreview(target.url);
+      if (preview.imageUrl && !target.imageUrl) patch.imageUrl = preview.imageUrl;
+      if (preview.articleText) {
+        patch.articleText = preview.articleText;
+        patched += 1;
+        if (target.tldr === null) {
+          patch.tldr =
+            (await summarizeArticleId(target.title, preview.articleText)) ??
+            firstSentence(preview.articleText);
+        }
+        if (target.summary.trim().length === 0) {
+          const summary = leadFromArticle(preview.articleText);
+          patch.summary = summary;
+          // Recompute searchText (ingest summary kosong → tadinya title+topics saja).
+          patch.searchText = deriveSearchText({
+            title: target.title,
+            summary,
+            topics: target.topics,
+          });
         }
       }
       await FeedRepo.applyEnrichmentPatch(db, target.id, patch);
@@ -197,11 +186,11 @@ export const FeedHydrationService = {
       case "refreshTrendingPapers":
         await this.refreshTrendingPapers(db, { limit });
         break;
-      case "refreshGoogleNews":
-        await this.refreshGoogleNews(db, { perSeed: limit });
+      case "refreshGdeltNews":
+        await this.refreshGdeltNews(db, { perSeed: limit });
         break;
-      case "enrichGoogleNewsArticles":
-        await this.enrichGoogleNewsArticles(db, { limit });
+      case "enrichNewsArticles":
+        await this.enrichNewsArticles(db, { limit });
         break;
     }
   },

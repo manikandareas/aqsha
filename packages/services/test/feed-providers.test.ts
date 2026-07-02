@@ -1,88 +1,97 @@
 import { describe, expect, test } from "bun:test";
 import {
-  buildGoogleNewsFeedInputs,
-  dedupeGoogleNewsItems,
-  type GoogleNewsItem,
-  parseGoogleNewsRss,
-} from "../src/feed/providers/googleNews";
-import { parseBatchExecuteUrl } from "../src/feed/providers/googleNewsDecode";
+  buildGdeltFeedInputs,
+  dedupeGdeltItems,
+  type GdeltItem,
+  parseGdeltArtList,
+} from "../src/feed/providers/gdelt";
 import {
   extractArticlePreviewFromHtml,
   extractArticleTextFromHtml,
 } from "../src/papers/articlePreview";
 
-describe("googleNews parseGoogleNewsRss", () => {
-  const xml = `<?xml version="1.0"?><rss><channel>
-    <item><title>Judul Berita - Kompas</title><link>https://news.google.com/rss/articles/ABC</link>
-      <guid>guid-1</guid><pubDate>Mon, 01 Jan 2024 00:00:00 GMT</pubDate>
-      <source url="https://www.kompas.com">Kompas</source></item>
-  </channel></rss>`;
+describe("gdelt parseGdeltArtList", () => {
+  const body = JSON.stringify({
+    articles: [
+      {
+        url: "https://www.kompas.com/sains/a",
+        url_mobile: "",
+        title: "Vaksin Baru &amp; Uji Klinis",
+        seendate: "20260701T131500Z",
+        socialimage: "https://asset.kompas.com/cover.jpg",
+        domain: "kompas.com",
+        language: "Indonesian",
+        sourcecountry: "Indonesia",
+      },
+    ],
+  });
 
-  test("parse item + strip publisher suffix + domain", () => {
-    const items = parseGoogleNewsRss(xml);
+  test("parse artikel + decode entity + strip www + socialimage + seendate", () => {
+    const items = parseGdeltArtList(body);
     expect(items.length).toBe(1);
-    expect(items[0]!.title).toBe("Judul Berita");
-    expect(items[0]!.guid).toBe("guid-1");
-    expect(items[0]!.publisherName).toBe("Kompas");
-    expect(items[0]!.publisherDomain).toBe("kompas.com");
-    expect(items[0]!.redirectUrl).toContain("news.google.com");
+    expect(items[0]!.title).toBe("Vaksin Baru & Uji Klinis");
+    expect(items[0]!.url).toBe("https://www.kompas.com/sains/a");
+    expect(items[0]!.domain).toBe("kompas.com");
+    expect(items[0]!.imageUrl).toBe("https://asset.kompas.com/cover.jpg");
+    expect(new Date(items[0]!.seenDate!).toISOString()).toBe("2026-07-01T13:15:00.000Z");
+  });
+
+  test("body non-JSON (pesan throttle) → []", () => {
+    expect(parseGdeltArtList("Please limit requests to one every 5 seconds")).toEqual([]);
+    expect(parseGdeltArtList('{"error":"x"}')).toEqual([]); // tanpa articles[]
   });
 });
 
-describe("googleNews dedupe + build", () => {
-  const mk = (over: Partial<GoogleNewsItem>): GoogleNewsItem => ({
+describe("gdelt dedupe + build", () => {
+  const mk = (over: Partial<GdeltItem>): GdeltItem => ({
     title: "T",
-    redirectUrl: "https://news.google.com/rss/articles/X",
-    guid: "g",
-    publisherName: "Pub",
+    url: "https://x.com/a",
+    domain: "x.com",
+    sourceLabel: "x.com",
     ...over,
   });
 
-  test("dedupe by guid + secondary (title+domain)", () => {
-    const out = dedupeGoogleNewsItems(
+  test("dedupe by url + secondary (title+domain)", () => {
+    const out = dedupeGdeltItems(
       [
-        { label: "A", items: [mk({ guid: "g1", title: "Sama", publisherDomain: "x.com" })] },
-        { label: "B", items: [mk({ guid: "g1" })] }, // guid sama → drop
-        { label: "C", items: [mk({ guid: "g2", title: "Sama", publisherDomain: "x.com" })] }, // secondary sama → drop
-        { label: "D", items: [mk({ guid: "g3", title: "Beda" })] },
+        { label: "A", topics: ["ai"], items: [mk({ url: "https://a.com/1", title: "Sama", domain: "a.com" })] },
+        { label: "B", topics: ["ai"], items: [mk({ url: "https://a.com/1" })] }, // url sama → drop
+        { label: "C", topics: ["econ"], items: [mk({ url: "https://a.com/2", title: "Sama", domain: "a.com" })] }, // secondary sama → drop
+        { label: "D", topics: ["econ"], items: [mk({ url: "https://a.com/3", title: "Beda", domain: "a.com" })] },
       ],
       10,
     );
-    expect(out.map((o) => o.item.guid)).toEqual(["g1", "g3"]);
+    expect(out.map((o) => o.item.url)).toEqual(["https://a.com/1", "https://a.com/3"]);
   });
 
-  test("buildGoogleNewsFeedInputs → kind news, summary kosong, dedupeKey kanonik title", () => {
-    const inputs = buildGoogleNewsFeedInputs(
-      [{ item: mk({ guid: "g9", title: "Vaksin Baru", publisherDomain: "kompas.com" }), topicLabel: "Sains" }],
+  test("buildGdeltFeedInputs → kind news, summary kosong, imageUrl saat ingest, topics seed", () => {
+    const inputs = buildGdeltFeedInputs(
+      [
+        {
+          item: mk({ url: "https://kompas.com/v", title: "Vaksin Baru", domain: "kompas.com", imageUrl: "https://i/x.jpg", seenDate: 42 }),
+          topics: ["medicine", "health"],
+        },
+      ],
       100,
     );
     expect(inputs[0]!.kind).toBe("news");
+    expect(inputs[0]!.provider).toBe("gdelt");
     expect(inputs[0]!.summary).toBe("");
+    expect(inputs[0]!.imageUrl).toBe("https://i/x.jpg");
+    expect(inputs[0]!.publishedAt).toBe(42);
     expect(inputs[0]!.dedupeKey).toBe("news:kompas.com:vaksin baru");
-    expect(inputs[0]!.topics).toEqual(["Sains"]);
+    expect(inputs[0]!.topics).toEqual(["medicine", "health"]);
   });
 
-  test("dedupeKey kanonik meng-collapse story tersindikasi (guid beda, title+domain sama)", () => {
-    // Fix bug duplikat: guid berbeda (RSS/seed beda) TAPI cerita sama → satu dedupeKey.
-    const [a, b] = buildGoogleNewsFeedInputs(
+  test("dedupeKey kanonik meng-collapse story tersindikasi (url beda, title+domain sama)", () => {
+    const [a, b] = buildGdeltFeedInputs(
       [
-        { item: mk({ guid: "gA", title: "Gempa Bumi M5", publisherDomain: "detik.com" }), topicLabel: "Sains" },
-        { item: mk({ guid: "gB", title: "Gempa Bumi M5", publisherDomain: "detik.com" }), topicLabel: "Lingkungan" },
+        { item: mk({ url: "https://detik.com/1", title: "Gempa Bumi M5", domain: "detik.com" }), topics: ["environmental science"] },
+        { item: mk({ url: "https://detik.com/2", title: "Gempa Bumi M5", domain: "detik.com" }), topics: ["climate"] },
       ],
       100,
     );
     expect(a!.dedupeKey).toBe(b!.dedupeKey); // upsertByDedupeKey → satu baris, bukan dua
-  });
-});
-
-describe("googleNewsDecode parseBatchExecuteUrl", () => {
-  test("ekstrak URL dari payload Fbv4je", () => {
-    const inner = JSON.stringify(["garturlres", "https://publisher.com/article"]);
-    const outer = JSON.stringify([["wrb.fr", "Fbv4je", inner]]);
-    expect(parseBatchExecuteUrl(`)]}'\n${outer}`)).toBe("https://publisher.com/article");
-  });
-  test("tanpa Fbv4je → null", () => {
-    expect(parseBatchExecuteUrl(")]}'\n[]")).toBeNull();
   });
 });
 

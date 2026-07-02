@@ -129,7 +129,7 @@ describe("FeedRepo — paginateBalanced (paper↔news seimbang)", () => {
     for (const o of [9000, 9001, 9002, 9003]) {
       await FeedRepo.upsertByDedupeKey(
         db,
-        mkFeed({ dedupeKey: DEDUPE(`bn${o}`), orderAt: o, kind: "news", provider: "google_news" }),
+        mkFeed({ dedupeKey: DEDUPE(`bn${o}`), orderAt: o, kind: "news", provider: "gdelt" }),
       );
     }
     for (const o of [100, 101, 102, 103]) {
@@ -175,7 +175,7 @@ describe("FeedInteractionRepo — saved/hidden refs", () => {
     );
     const newsFeed = await FeedRepo.upsertByDedupeKey(
       db,
-      mkFeed({ dedupeKey: DEDUPE("ix2"), orderAt: 501, kind: "news", provider: "google_news" }),
+      mkFeed({ dedupeKey: DEDUPE("ix2"), orderAt: 501, kind: "news", provider: "gdelt" }),
     );
 
     await FeedInteractionRepo.insertSaved(db, {
@@ -210,14 +210,14 @@ describe("FeedInteractionRepo — saved/hidden refs", () => {
 });
 
 describe("FeedRepo — news enrichment", () => {
-  itest("listNewsNeedingEnrichment menemukan google_news tanpa articleText; patch mengeluarkannya", async () => {
+  itest("listNewsNeedingEnrichment menemukan gdelt tanpa articleText; patch mengeluarkannya", async () => {
     const news = await FeedRepo.upsertByDedupeKey(
       db,
       mkFeed({
         dedupeKey: DEDUPE("enrich1"),
         orderAt: 600,
         kind: "news",
-        provider: "google_news",
+        provider: "gdelt",
         publishedAt: 600,
       }),
     );
@@ -227,7 +227,6 @@ describe("FeedRepo — news enrichment", () => {
     await FeedRepo.applyEnrichmentPatch(db, news.id, {
       enrichAttempts: 1,
       articleText: "Body artikel ter-ekstrak.",
-      resolvedUrl: "https://publisher.example/x",
     });
     const after = await FeedRepo.listNewsNeedingEnrichment(db, 50);
     expect(after.some((t) => t.id === news.id)).toBe(false); // articleText terisi → keluar dari sweep

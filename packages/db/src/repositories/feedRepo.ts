@@ -186,8 +186,8 @@ export const FeedRepo = {
   },
 
   /**
-   * Item news Google yang masih butuh enrichment: provider google_news, article_text NULL,
-   * enrich_attempts < MAX (2). Port V1 googleNewsItemsNeedingEnrichment. NULLS LAST by published.
+   * Item news yang masih butuh enrichment: provider gdelt, article_text NULL,
+   * enrich_attempts < MAX (2). NULLS LAST by published.
    */
   async listNewsNeedingEnrichment(
     db: DbOrTx,
@@ -208,7 +208,7 @@ export const FeedRepo = {
       .where(
         and(
           eq(feedItems.kind, "news"),
-          eq(feedItems.provider, "google_news"),
+          eq(feedItems.provider, "gdelt"),
           isNull(feedItems.articleText),
           or(isNull(feedItems.enrichAttempts), lt(feedItems.enrichAttempts, 2)),
         ),

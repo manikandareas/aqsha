@@ -169,6 +169,13 @@
       "when": 1782924327243,
       "tag": "0023_wide_charles_xavier",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1782925537618,
+      "tag": "0024_right_jackpot",
+      "breakpoints": true
     }
   ]
 }

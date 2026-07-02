@@ -4,6 +4,7 @@
  * share satu boundary + bisa di-test tanpa network. Hanya bergantung http.ts.
  */
 import { fetchWithTimeout, userAgent } from "./http";
+import { decodeHtmlEntities } from "../lib/text";
 
 const FETCH_TIMEOUT_MS = 7_000;
 const MAX_HTML_CHARS = 400_000;
@@ -179,38 +180,9 @@ function isContentParagraph(text: string): boolean {
 }
 
 function stripTags(value: string): string {
-  return decodeEntities(value.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+  return decodeHtmlEntities(value.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
 }
 
 function normalizeUrl(value: string): string {
-  return decodeEntities(value).replace(/\\\//g, "/").trim();
-}
-
-function decodeEntities(value: string): string {
-  return value
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&(?:apos|#39|#x27);/gi, "'")
-    .replace(/&(?:hellip|#8230);/gi, "…")
-    .replace(/&(?:mdash|#8212);/gi, "—")
-    .replace(/&(?:ndash|#8211);/gi, "–")
-    .replace(/&(?:ldquo|#8220);/gi, "“")
-    .replace(/&(?:rdquo|#8221);/gi, "”")
-    .replace(/&(?:lsquo|#8216);/gi, "‘")
-    .replace(/&(?:rsquo|#8217);/gi, "’")
-    .replace(/&#x2f;/gi, "/")
-    .replace(/&#47;/g, "/")
-    .replace(/&#(\d+);/g, (_, dec) => safeFromCodePoint(Number(dec)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => safeFromCodePoint(parseInt(hex, 16)));
-}
-
-function safeFromCodePoint(code: number): string {
-  try {
-    return Number.isFinite(code) && code > 0 ? String.fromCodePoint(code) : "";
-  } catch {
-    return "";
-  }
+  return decodeHtmlEntities(value).replace(/\\\//g, "/").trim();
 }

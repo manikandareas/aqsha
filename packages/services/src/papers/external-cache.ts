@@ -72,9 +72,13 @@ export async function putCache(
   cacheKey: string,
   status: CacheStatus,
   valueJson: string,
+  ttlSecondsOverride?: number,
 ): Promise<void> {
   try {
-    const ttlSeconds = CACHE_TTL_SECONDS_BY_STATUS[status];
+    const ttlSeconds =
+      ttlSecondsOverride && ttlSecondsOverride > 0
+        ? Math.floor(ttlSecondsOverride)
+        : CACHE_TTL_SECONDS_BY_STATUS[status];
     const payload = JSON.stringify({ status, valueJson } satisfies CacheEntry);
     await getRedis().set(keyFor(provider, cacheKey), payload, "EX", ttlSeconds);
   } catch {
