@@ -686,6 +686,76 @@ export function resolveCommandDispatch(content: string, commandId?: string | nul
   return { displayText, dispatchPrompt: command.buildPrompt(argument) };
 }
 
+/** Lookup command by exact slug or alias (mis. `/kuanti` → command `kuantitatif`). */
+export function getPromptCommandBySlug(slug: string): PromptCommand | null {
+  return (
+    promptCommands.find(
+      (command) => command.slug === slug || command.aliases.some((alias) => alias === slug),
+    ) ?? null
+  );
+}
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Sumber pattern di-cache (promptCommands konstan); regex `g` stateful (lastIndex),
+// jadi factory mengembalikan instance BARU per pemanggilan.
+let commandSlugPatternSource: string | null = null;
+
+/**
+ * Regex global pencocok slug/alias command di teks bebas, dengan word boundary:
+ * harus didahului awal-string/whitespace/kurung-kutip buka (grup-1 capture), dan
+ * TIDAK diikuti karakter kata (`/matriks!` cocok, `x.co/matriks` &
+ * `/kuantitatifxyz` tidak). Slug ada di grup-2 (bukan `match[0]`) karena boundary
+ * ikut dikonsumsi — SENGAJA capture, bukan lookbehind: lookbehind (`(?<=…)`) baru
+ * ada di Safari 16.4+, dan SWC tak mentranspilasi regex, jadi WebView/iOS lama
+ * akan `SyntaxError` saat `new RegExp`. Alternatif diurutkan terpanjang-dulu
+ * supaya alias prefix (mis. `/kuanti` vs `/kuantitatif`) tak saling memakan.
+ * Dipakai composer (chip-ify draft) dan bubble user (pill command) — SATU sumber
+ * kebenaran pencocokan.
+ */
+export function promptCommandSlugPattern(): RegExp {
+  if (commandSlugPatternSource === null) {
+    const slugs = promptCommands
+      .flatMap((command) => [command.slug, ...command.aliases])
+      .sort((a, b) => b.length - a.length)
+      .map(escapeRegex);
+    commandSlugPatternSource = `(^|[\\s([{"'])(${slugs.join("|")})(?![\\w/-])`;
+  }
+  return new RegExp(commandSlugPatternSource, "g");
+}
+
+export type CommandSegment =
+  | { type: "text"; value: string }
+  | { type: "command"; command: PromptCommand; matched: string };
+
+/**
+ * Pecah teks bebas jadi segmen teks / command (slug atau alias yang dikenal).
+ * Dipakai bubble pesan user untuk merender command sebagai pill — command
+ * terserialisasi sebagai slug polos (tanpa marker), jadi parsing by-slug di
+ * sisi render juga menghidupkan styling untuk pesan lama.
+ */
+export function parseCommandSegments(text: string): CommandSegment[] {
+  // Jalur cepat: mayoritas pesan tak memuat "/" sama sekali.
+  if (!text.includes("/")) return text ? [{ type: "text", value: text }] : [];
+  const segments: CommandSegment[] = [];
+  let lastIndex = 0;
+  for (const match of text.matchAll(promptCommandSlugPattern())) {
+    // Boundary (grup-1) ikut dikonsumsi → geser index ke awal slug (grup-2).
+    const boundary = match[1] ?? "";
+    const index = (match.index ?? 0) + boundary.length;
+    const matched = match[2] ?? "";
+    const command = getPromptCommandBySlug(matched);
+    if (!command) continue;
+    if (index > lastIndex) segments.push({ type: "text", value: text.slice(lastIndex, index) });
+    segments.push({ type: "command", command, matched });
+    lastIndex = index + matched.length;
+  }
+  if (lastIndex < text.length) segments.push({ type: "text", value: text.slice(lastIndex) });
+  return segments;
+}
+
 /**
  * Tier agen Astra — kontrak bersama web + agent (FE selektor, route agent-scoped, billing, runtime
  * model/reasoning/memory). SATU definisi di sini; web (`mastra-client`/`ComposerAgentKind`) dan agent

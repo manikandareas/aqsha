@@ -9,7 +9,6 @@ import {
   buildPaperMentionLabel,
   buildSelectionMentionLabel,
   type ContextRef,
-  messagePreview,
 } from "@aqsha/chat-core";
 import { useMemo, useState } from "react";
 import type { EditorSelection } from "./blocknote-document-editor";
@@ -54,10 +53,8 @@ export function ArtifactReaderPageShell({
         kind: "paper",
         workspaceId,
         artifactId,
-        label: buildPaperMentionLabel(
-          messagePreview(workspaceName, 16),
-          messagePreview(artifactTitle, 22),
-        ),
+        // Label penuh — tampilan pill di-truncate CSS (token-pill), detail utuh di tooltip.
+        label: buildPaperMentionLabel(workspaceName, artifactTitle),
       });
     }
     if (selectionRef) refs.push(selectionRef);

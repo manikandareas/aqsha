@@ -1,50 +1,46 @@
 import {
   type ContextRef,
   contextRefKey,
+  getPromptCommand,
+  getPromptCommandBySlug,
   type PromptCommand,
-  promptCommands,
+  promptCommandSlugPattern,
   wrapMentionLabel,
 } from "@aqsha/chat-core";
-import { cn } from "@/lib/utils";
+import {
+  splitTokenLabel,
+  TOKEN_PILL_LABEL_CLASS,
+  TOKEN_PILL_PREFIX_CLASS,
+  tokenPillClass,
+} from "./token-pill";
 
 /**
  * Logika DOM murni composer tokenized (port V1 apps/web). Mengelola chip slash
  * command + chip `@mention` context di dalam satu `contentEditable`. SSOT command
- * + context ref = `@aqsha/chat-core`. /deep dibuang → tak ada lagi tone "deep".
+ * + context ref = `@aqsha/chat-core`; SSOT kelas visual chip = `token-pill.ts`
+ * (dibagi dengan bubble pesan user).
  */
 
 const CHIP_SELECTOR = '[data-chip="command"]';
 const CONTEXT_CHIP_SELECTOR = '[data-chip="context"]';
 
 /**
- * Bentuk dasar pill `@mention` / command — TANPA warna, bobot, & interaksi. Diekspor agar bubble
- * pesan user (`message-list.tsx`) merender mention dengan treatment yang sama (rounded + underline)
- * sebagai SATU sumber kebenaran, walau tone warnanya beda (composer di atas card, bubble di atas
- * `bg-primary`). Bobot SENGAJA tidak di sini: pill mention memakai bobot teks normal (ukuran token
- * = ukuran teks sekitarnya); chip command (`/deep`) menambah `font-semibold` lewat tone-nya.
+ * Isi visual chip: glyph prefix redup (`/`, `@`, `❝`) + label ter-truncate CSS.
+ * `dataset.*` tetap memuat label/slug PENUH — serialisasi & extraction tak
+ * bergantung pada textContent.
  */
-export const MENTION_PILL_SHAPE =
-  "rounded-[5px] px-0.5 underline decoration-2 underline-offset-4";
-
-const INLINE_PILL_BASE = cn(
-  "inline-flex cursor-pointer select-none items-center leading-[18px] transition-[background-color,text-decoration-color] duration-150",
-  MENTION_PILL_SHAPE,
-);
-const INLINE_PILL_TONE = {
-  default:
-    "font-semibold bg-primary/8 text-primary decoration-primary/60 hover:bg-primary/12 hover:decoration-primary",
-  context:
-    "bg-foreground/8 text-foreground decoration-foreground/40 hover:bg-foreground/12 hover:decoration-foreground/70",
-} as const;
-
-type InlinePillTone = keyof typeof INLINE_PILL_TONE;
-
-function inlinePillClass(tone: InlinePillTone) {
-  return cn(INLINE_PILL_BASE, INLINE_PILL_TONE[tone]);
-}
-
-export function promptCommandDisplayLabel(command: Pick<PromptCommand, "slug">) {
-  return command.slug.startsWith("/") ? command.slug.slice(1) : command.slug;
+function appendChipContent(chip: HTMLElement, label: string) {
+  const { prefix, text } = splitTokenLabel(label);
+  if (prefix) {
+    const prefixSpan = document.createElement("span");
+    prefixSpan.className = TOKEN_PILL_PREFIX_CLASS;
+    prefixSpan.textContent = prefix;
+    chip.appendChild(prefixSpan);
+  }
+  const labelSpan = document.createElement("span");
+  labelSpan.className = TOKEN_PILL_LABEL_CLASS;
+  labelSpan.textContent = text;
+  chip.appendChild(labelSpan);
 }
 
 export function getTextBeforeCursor(root: HTMLElement) {
@@ -129,7 +125,7 @@ export function extractCommandsFromEditor(root: HTMLElement): PromptCommand[] {
     if (!commandId || ids.has(commandId)) {
       return;
     }
-    const command = promptCommands.find((item) => item.id === commandId);
+    const command = getPromptCommand(commandId);
     if (!command) {
       return;
     }
@@ -149,8 +145,8 @@ export function createCommandChipElement(command: PromptCommand) {
   span.dataset.chip = "command";
   span.dataset.commandId = command.id;
   span.dataset.slug = command.slug;
-  span.className = inlinePillClass("default");
-  span.textContent = promptCommandDisplayLabel(command);
+  span.className = tokenPillClass("composer", "command");
+  appendChipContent(span, command.slug);
   return span;
 }
 
@@ -186,8 +182,8 @@ export function createContextChipElement(ref: ContextRef) {
     }
   }
   span.dataset.label = ref.label;
-  span.className = inlinePillClass("context");
-  span.textContent = ref.label;
+  span.className = tokenPillClass("composer", "mention");
+  appendChipContent(span, ref.label);
   return span;
 }
 
@@ -385,33 +381,22 @@ export function moveCaretToEnd(element: HTMLElement) {
   selection?.addRange(range);
 }
 
-function findCommandBySlug(slug: string) {
-  return promptCommands.find(
-    (command) => command.slug === slug || command.aliases.some((alias) => alias === slug),
-  );
-}
-
-function escapeRegex(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 function appendVisibleContentTokens(root: HTMLElement, visibleContent: string) {
   if (!visibleContent) {
     return;
   }
-  const slugs = [...promptCommands]
-    .flatMap((command) => [command.slug, ...command.aliases])
-    .sort((a, b) => b.length - a.length)
-    .map(escapeRegex);
-  const slugPattern = new RegExp(slugs.join("|"), "g");
+  // Matcher slug bersama dari chat-core (word-boundary aware) — URL/infix yang
+  // kebetulan memuat slug tak lagi salah jadi chip.
   let lastIndex = 0;
-  for (const match of visibleContent.matchAll(slugPattern)) {
-    const index = match.index ?? 0;
+  for (const match of visibleContent.matchAll(promptCommandSlugPattern())) {
+    // Boundary (grup-1) ikut dikonsumsi → geser index ke awal slug (grup-2).
+    const boundary = match[1] ?? "";
+    const index = (match.index ?? 0) + boundary.length;
     if (index > lastIndex) {
       root.appendChild(document.createTextNode(visibleContent.slice(lastIndex, index)));
     }
-    const slug = match[0];
-    const command = findCommandBySlug(slug);
+    const slug = match[2] ?? "";
+    const command = getPromptCommandBySlug(slug);
     if (command) {
       root.appendChild(createCommandChipElement(command));
     } else {

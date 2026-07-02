@@ -34,6 +34,7 @@ import {
   serializeComposerEditor,
   serializeComposerEditorWithMarkers,
 } from "../lib/composer-inline-editor";
+import { ComposerChipTooltip } from "./composer-chip-tooltip";
 import {
   ContextMentionPalette,
   type MentionItemOption,
@@ -66,11 +67,6 @@ export type ContextItemOption = {
 export type ComposerPlaceholder = string | { narrow: string; wide: string };
 
 const EMPTY_CONTEXT_WORKSPACES: ContextWorkspaceOption[] = [];
-
-function truncateLabel(value: string, max = 22) {
-  const compact = value.replace(/\s+/g, " ").trim();
-  return compact.length > max ? `${compact.slice(0, max - 1)}…` : compact;
-}
 
 export function TokenizedPromptInput({
   value,
@@ -122,6 +118,8 @@ export function TokenizedPromptInput({
   const [slashFilterQuery, setSlashFilterQuery] = useState<string | null>(null);
   const [mentionFilterQuery, setMentionFilterQuery] = useState<string | null>(null);
   const [drillWorkspaceId, setDrillWorkspaceId] = useState<string | null>(null);
+  // Chip yang sedang di-hover → tooltip detail (delegasi; chip = DOM murni, bukan React).
+  const [hoveredChip, setHoveredChip] = useState<HTMLElement | null>(null);
 
   const slashOpen = slashFilterQuery !== null;
   const mentionOpen = mentionFilterQuery !== null;
@@ -382,10 +380,8 @@ export function TokenizedPromptInput({
         kind: "paper",
         workspaceId: option.workspaceId,
         artifactId: option.artifactId,
-        label: buildPaperMentionLabel(
-          truncateLabel(option.workspaceName, 16),
-          truncateLabel(option.title, 20),
-        ),
+        // Label penuh — tampilan chip di-truncate CSS (token-pill), detail utuh di tooltip.
+        label: buildPaperMentionLabel(option.workspaceName, option.title),
       }),
     );
     setDrillWorkspaceId(null);
@@ -423,6 +419,8 @@ export function TokenizedPromptInput({
   };
 
   const updateEditorFromInput = () => {
+    // Mengetik = tooltip chip tak relevan lagi (pointer bisa kebetulan diam di atas chip).
+    setHoveredChip(null);
     const editor = editorRef.current;
     if (!editor) {
       return;
@@ -538,9 +536,21 @@ export function TokenizedPromptInput({
       return;
     }
     event.preventDefault();
+    setHoveredChip(null);
     chip.remove();
     syncEditorState();
     focusEditor();
+  };
+
+  // Delegasi hover chip: mouseover pada descendant menentukan chip aktif; keluar
+  // dari area editor (atau scroll internal) membersihkan tooltip.
+  const handleChipHover = (event: React.MouseEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+    const chip = target.closest<HTMLElement>('[data-chip="command"],[data-chip="context"]');
+    setHoveredChip(chip && editorRef.current?.contains(chip) ? chip : null);
   };
 
   const isEditorEmpty = value.trim().length === 0 && pinnedContextRefs.length === 0;
@@ -598,9 +608,13 @@ export function TokenizedPromptInput({
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             onClick={handleChipClick}
+            onMouseOver={handleChipHover}
+            onMouseLeave={() => setHoveredChip(null)}
+            onScroll={() => setHoveredChip(null)}
             tabIndex={0}
             suppressContentEditableWarning
           />
+          {hoveredChip ? <ComposerChipTooltip chip={hoveredChip} /> : null}
         </div>
       </PopoverAnchor>
       <PopoverContent

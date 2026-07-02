@@ -7,6 +7,7 @@ import {
   normalizeAskOtherOption,
   normalizeAskQuestions,
   ownershipVerdict,
+  parseCommandSegments,
   userMessageId,
 } from "../src/index";
 
@@ -134,6 +135,54 @@ describe("messagePreview", () => {
     const out = messagePreview("x".repeat(300));
     expect(Array.from(out).length).toBe(160);
     expect(out.endsWith("…")).toBe(true);
+  });
+});
+
+describe("parseCommandSegments", () => {
+  test("slug di awal + argumen → [command, text]", () => {
+    const out = parseCommandSegments("/matriks bab 2 tentang UMKM");
+    expect(out).toHaveLength(2);
+    expect(out[0]).toMatchObject({ type: "command", matched: "/matriks" });
+    expect(out[1]).toMatchObject({ type: "text", value: " bab 2 tentang UMKM" });
+  });
+
+  test("slug di tengah kalimat (dipisah spasi) tetap cocok", () => {
+    const out = parseCommandSegments("tolong pakai /sitasi untuk daftar ini");
+    expect(out.map((s) => s.type)).toEqual(["text", "command", "text"]);
+    expect(out[1]).toMatchObject({ type: "command", matched: "/sitasi" });
+  });
+
+  test("alias ter-resolve ke command kanoniknya", () => {
+    const out = parseCommandSegments("/kuanti topik regresi");
+    expect(out[0]).toMatchObject({ type: "command", matched: "/kuanti" });
+    expect(out[0]!.type === "command" && out[0]!.command.id).toBe("kuantitatif");
+  });
+
+  test("alias prefix tak memakan slug panjang (/kuanti vs /kuantitatif)", () => {
+    const out = parseCommandSegments("/kuantitatif topik");
+    expect(out[0]).toMatchObject({ type: "command", matched: "/kuantitatif" });
+  });
+
+  test("slug di dalam URL / infix TIDAK jadi command", () => {
+    expect(parseCommandSegments("lihat https://x.co/matriks ya")).toEqual([
+      { type: "text", value: "lihat https://x.co/matriks ya" },
+    ]);
+    expect(parseCommandSegments("kata/matriks tanpa spasi")).toEqual([
+      { type: "text", value: "kata/matriks tanpa spasi" },
+    ]);
+  });
+
+  test("slug diikuti tanda baca tetap cocok; diikuti huruf tidak", () => {
+    const out = parseCommandSegments("pakai /matriks, lalu lanjut");
+    expect(out[1]).toMatchObject({ type: "command", matched: "/matriks" });
+    expect(parseCommandSegments("/matriksx bukan command")).toEqual([
+      { type: "text", value: "/matriksx bukan command" },
+    ]);
+  });
+
+  test("teks tanpa slash → satu segmen teks; string kosong → []", () => {
+    expect(parseCommandSegments("halo dunia")).toEqual([{ type: "text", value: "halo dunia" }]);
+    expect(parseCommandSegments("")).toEqual([]);
   });
 });
 

@@ -1,6 +1,12 @@
 "use client";
 
-import { parseMentionSegments, stripMentionMarkers } from "@aqsha/chat-core";
+import {
+  type CommandSegment,
+  type MentionSegment,
+  parseCommandSegments,
+  parseMentionSegments,
+  stripMentionMarkers,
+} from "@aqsha/chat-core";
 import { CheckIcon, ChevronDownIcon, CopyIcon, RotateCcwIcon, SparklesIcon } from "@aqsha/ui/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useThreadPanel } from "@/features/thread-experience/components/thread-panel-context";
@@ -9,10 +15,16 @@ import { Response } from "@/components/ai-elements/response";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { MessageAttachment } from "../lib/attachment-buckets";
 import { buildCitationMap } from "../lib/citation-markdown";
-import { MENTION_PILL_SHAPE } from "../lib/composer-inline-editor";
+import {
+  splitTokenLabel,
+  TOKEN_PILL_LABEL_CLASS,
+  TOKEN_PILL_PREFIX_CLASS,
+  type TokenPillKind,
+  tokenPillClass,
+} from "../lib/token-pill";
 import { dedupeCards } from "../lib/source-card";
 import { messageSourceCards } from "../lib/thread-panel-data";
 import type { SourceCardData, TimelineMessage, TimelinePart } from "../lib/timeline-types";
@@ -149,38 +161,80 @@ function UserBubble({
 }
 
 /**
- * Teks pesan user → segmen teks + pill `@mention`. Penanda mention (U+E000/E001) disuntik composer
- * (`serializeComposerEditorWithMarkers`) saat kirim dan ikut dipersist; `parseMentionSegments`
- * memecahnya lagi di sini supaya mention tampil sebagai pill — treatment SAMA dengan composer
- * (`MENTION_PILL_SHAPE`), tone-nya disesuaikan ke bubble `bg-primary`.
+ * Teks pesan user → segmen teks + pill `@mention` + pill `/command`. Penanda mention
+ * (U+E000/E001) disuntik composer (`serializeComposerEditorWithMarkers`) saat kirim dan ikut
+ * dipersist; `parseMentionSegments` memecahnya lagi di sini. Command TIDAK ber-marker
+ * (terserialisasi sebagai slug polos) → `parseCommandSegments` mencocokkannya by-slug, jadi
+ * pesan lama pun ikut ter-pill. Treatment visual SATU SSOT dengan composer (`token-pill.ts`),
+ * tone `bubble` (di atas `bg-primary`).
  */
 function UserMessageText({ text }: { text: string }) {
   // React Compiler meng-cache turunan ini (keyed `text`). Segmen mention pakai `label` (sudah bersih
   // dari parse); segmen teks di-strip dari sisa penanda yatim (open tanpa close, mis. teks ter-truncate)
-  // agar char private-use tak ter-render.
-  const segments = parseMentionSegments(text).map((seg) =>
-    seg.type === "text" ? { type: "text" as const, value: stripMentionMarkers(seg.value) } : seg,
+  // agar char private-use tak ter-render, lalu dipecah lagi per slug command.
+  const segments = parseMentionSegments(text).flatMap(
+    (seg): Array<MentionSegment | CommandSegment> =>
+      seg.type === "mention" ? [seg] : parseCommandSegments(stripMentionMarkers(seg.value)),
   );
   return (
     <>
       {segments.map((seg, i) =>
         seg.type === "mention" ? (
-          <span
+          <BubbleTokenPill
             // biome-ignore lint/suspicious/noArrayIndexKey: segmen statis hasil parse satu string
             key={i}
-            className={cn(
-              MENTION_PILL_SHAPE,
-              "bg-primary-foreground/25 decoration-primary-foreground/65",
-            )}
-          >
-            {seg.label}
-          </span>
+            kind="mention"
+            label={seg.label}
+            tooltipTitle={splitTokenLabel(seg.label).text.trim()}
+          />
+        ) : seg.type === "command" ? (
+          <BubbleTokenPill
+            // biome-ignore lint/suspicious/noArrayIndexKey: segmen statis hasil parse satu string
+            key={i}
+            kind="command"
+            label={seg.matched}
+            tooltipTitle={`${seg.command.slug} · ${seg.command.label}`}
+            tooltipDescription={seg.command.description}
+          />
         ) : (
           // biome-ignore lint/suspicious/noArrayIndexKey: segmen statis hasil parse satu string
           <span key={i}>{seg.value}</span>
         ),
       )}
     </>
+  );
+}
+
+/** Pill token di bubble user: label ter-truncate CSS, detail penuh di tooltip hover. */
+function BubbleTokenPill({
+  kind,
+  label,
+  tooltipTitle,
+  tooltipDescription,
+}: {
+  kind: TokenPillKind;
+  label: string;
+  tooltipTitle: string;
+  tooltipDescription?: string;
+}) {
+  const { prefix, text } = splitTokenLabel(label);
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className={tokenPillClass("bubble", kind)}>
+          {prefix ? <span className={TOKEN_PILL_PREFIX_CLASS}>{prefix}</span> : null}
+          <span className={TOKEN_PILL_LABEL_CLASS}>{text}</span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        <div>
+          <p className="break-words font-medium">{tooltipTitle}</p>
+          {tooltipDescription ? (
+            <p className="mt-0.5 break-words opacity-70">{tooltipDescription}</p>
+          ) : null}
+        </div>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

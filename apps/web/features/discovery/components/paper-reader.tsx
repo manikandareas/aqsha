@@ -15,7 +15,6 @@ import { SaveToWorkspaceButton } from "@/features/artifacts/components/save-to-w
 import { usePaper, useRecordInteraction } from "../api";
 import { formatCitationCount } from "../format";
 import type { ExplorePaper, PaperEnrichmentRef } from "../types";
-import { clampDiscoveryTitle } from "../ask-astra";
 import { ExploreReaderChatShell } from "./explore-reader-chat-shell";
 import { GenerativeCover } from "./generative-cover";
 import { PaperAside } from "./paper-aside";
@@ -41,7 +40,7 @@ export function PaperReaderRoute({ paperKey }: { paperKey: string }) {
             {
               kind: "explore-paper",
               paperKey,
-              label: buildExternalPaperMentionLabel(clampDiscoveryTitle(paperTitle)),
+              label: buildExternalPaperMentionLabel(paperTitle),
             },
           ]
         : [],

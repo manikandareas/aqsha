@@ -6,7 +6,7 @@ import { useMemo } from "react";
 import { toast } from "sonner";
 import { useSetAmbientContextRefs } from "@/features/thread-experience/components/composer-context-mentions";
 import { useFeedItem, useHideDiscovery, useRecordInteraction, useRelated } from "../api";
-import { clampDiscoveryTitle, discoveryItemToContextRef } from "../ask-astra";
+import { discoveryItemToContextRef } from "../ask-astra";
 import { discoveryItemKey, feedItemToDiscoveryItem, type DiscoveryItem } from "../model";
 import { domainFromUrl, relativeTime } from "../format";
 import { DiscoveryStandardCard, type DiscoveryCardHandlers } from "./discovery-item-card";
@@ -29,7 +29,7 @@ export function NewsReaderRoute({ id }: { id: string }) {
   const ambientContextRefs = useMemo<ContextRef[]>(
     () =>
       title
-        ? [{ kind: "news", feedItemId: id, label: buildNewsMentionLabel(clampDiscoveryTitle(title)) }]
+        ? [{ kind: "news", feedItemId: id, label: buildNewsMentionLabel(title) }]
         : [],
     [id, title],
   );
