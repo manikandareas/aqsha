@@ -1098,9 +1098,15 @@ export function useMastraAgent(opts: {
               setState((s) => settleWorkflowTurn(seedWorkflowProgress(s, rid, steps), rid));
               return;
             }
+            const findings = clarifyStep.suspendPayload.findings;
             setState((s) => ({
               ...seedWorkflowProgress(s, rid, steps),
-              askGate: { source: "workflow", questions, runId: rid },
+              askGate: {
+                source: "workflow",
+                questions,
+                ...(typeof findings === "string" && findings ? { findings } : {}),
+                runId: rid,
+              },
             }));
             return;
           }

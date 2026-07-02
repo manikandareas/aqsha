@@ -407,6 +407,7 @@ function MastraChatInner({
     <div className={cn(threadTranscriptColumnClass)}>
       <QuestionsCard
         questions={agent.askGate.questions}
+        findings={agent.askGate.findings}
         onSubmit={(resume) => void agent.resolveAsk(resume)}
         onSkip={() => void agent.resolveAsk({ action: "skipped" })}
         onOpenPanel={threadPanel?.openQuestionsPanel}

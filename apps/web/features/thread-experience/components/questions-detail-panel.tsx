@@ -32,6 +32,7 @@ export function QuestionsDetailPanel() {
     <DetailPanelShell eyebrow="Klarifikasi" title="Pertanyaan" onClose={onClose}>
       <QuestionsForm
         questions={ask.questions}
+        findings={ask.findings}
         onSubmit={(resume) => {
           resolve?.(resume);
           onClose?.();

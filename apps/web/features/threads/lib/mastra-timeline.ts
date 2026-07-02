@@ -46,6 +46,8 @@ export type MastraPlanGate = { plan: string; subQuestions: string[] };
 export type MastraAskGate = {
   source: "tool" | "workflow";
   questions: AskQuestion[];
+  /** Temuan parsial pra-klarifikasi (TOOL-3) — dirender di atas pertanyaan agar riset tak terbuang. */
+  findings?: string;
   /** toolCallId — jalur chat (resume via sendToolApproval/resumeStream). */
   toolCallId?: string;
   /** runId — jalur `/deep` (resume via run.resumeStream); juga fallback jalur chat. */
@@ -492,11 +494,13 @@ export function reduceMastraChunk(
       const [s, idx] = ensureActiveAssistant(streaming(state));
       const toolCallId = str(payload.toolCallId);
       const withPending = setToolPending(s, idx, toolCallId);
+      const findings = str(sp.findings);
       return {
         ...withPending,
         askGate: {
           source: "tool",
           questions,
+          ...(findings ? { findings } : {}),
           ...(toolCallId ? { toolCallId } : {}),
           ...(chunk.runId ? { runId: chunk.runId } : {}),
         },
@@ -748,9 +752,15 @@ export function reduceWorkflowChunk(
         const questions = normalizeAskQuestions(sp.questions);
         if (questions.length === 0) return state;
         const withStep = upsertWorkflowStep(s, idx, "clarify", "pending");
+        const findings = str(sp.findings);
         return {
           ...withStep,
-          askGate: { source: "workflow", questions, ...(chunk.runId ? { runId: chunk.runId } : {}) },
+          askGate: {
+            source: "workflow",
+            questions,
+            ...(findings ? { findings } : {}),
+            ...(chunk.runId ? { runId: chunk.runId } : {}),
+          },
         };
       }
       return state;

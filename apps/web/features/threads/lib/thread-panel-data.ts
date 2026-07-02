@@ -7,7 +7,7 @@
 // `ThreadPanelProvider` (see `useRegisterThreadPanelData`). Sources are listed in the
 // panels and each links out to its URL — there is no single-source detail view.
 
-import type { AskQuestion, AskQuestionsResumeData } from "@aqsha/chat-core";
+import type { AskQuestionsResumeData } from "@aqsha/chat-core";
 import { dedupeCards, researchSourceToCard } from "./source-card";
 import type {
   DeepStepDetail,
@@ -46,9 +46,12 @@ export type PlanDetail = {
   resolve?: (approve: boolean) => void;
 };
 
-/** Live ask-gate (klarifikasi) — questions + resolve, hanya ada satu pada satu waktu. */
-export type AskGateDetail = {
-  questions: AskQuestion[];
+/**
+ * Live ask-gate (klarifikasi) — data gate diturunkan dari `MastraAskGate` (satu sumber bentuk:
+ * field baru pada gate otomatis ikut ke panel), resolve/skip disuntik surface. Hanya ada satu
+ * pada satu waktu.
+ */
+export type AskGateDetail = Pick<MastraAskGate, "questions" | "findings"> & {
   resolve?: (resume: AskQuestionsResumeData) => void;
   skip?: () => void;
 };
@@ -198,7 +201,9 @@ export function buildThreadPanelLookups(
     }
   }
 
-  const ask: AskGateDetail | null = askGate ? { questions: askGate.questions } : null;
+  const ask: AskGateDetail | null = askGate
+    ? { questions: askGate.questions, findings: askGate.findings }
+    : null;
 
   return { messageSources, searches, steps, plans, ask };
 }

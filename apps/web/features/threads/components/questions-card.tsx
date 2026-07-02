@@ -177,11 +177,14 @@ function QuestionBlock({
  */
 export function QuestionsForm({
   questions,
+  findings,
   onSubmit,
   onSkip,
   scrollable = false,
 }: {
   questions: AskQuestion[];
+  /** Temuan parsial pra-klarifikasi dari agent — tampil di atas pertanyaan agar riset tak terbuang. */
+  findings?: string;
   onSubmit: (resume: AskQuestionsResumeData) => void;
   onSkip: () => void;
   scrollable?: boolean;
@@ -192,6 +195,11 @@ export function QuestionsForm({
 
   const fields = (
     <div className={cn("grid gap-4", scrollable && "pr-3")}>
+      {findings ? (
+        <p className="whitespace-pre-wrap [overflow-wrap:anywhere] rounded-lg bg-muted/40 px-2.5 py-2 text-[13px] leading-5 text-muted-foreground">
+          {findings}
+        </p>
+      ) : null}
       {questions.map((q, i) => (
         <QuestionBlock
           key={q.id}
@@ -227,11 +235,13 @@ export function QuestionsForm({
  */
 export function QuestionsCard({
   questions,
+  findings,
   onSubmit,
   onSkip,
   onOpenPanel,
 }: {
   questions: AskQuestion[];
+  findings?: string;
   onSubmit: (resume: AskQuestionsResumeData) => void;
   onSkip: () => void;
   onOpenPanel?: () => void;
@@ -259,7 +269,13 @@ export function QuestionsCard({
         </div>
       )}
       <div className="mt-3">
-        <QuestionsForm questions={questions} onSubmit={onSubmit} onSkip={onSkip} scrollable />
+        <QuestionsForm
+          questions={questions}
+          findings={findings}
+          onSubmit={onSubmit}
+          onSkip={onSkip}
+          scrollable
+        />
       </div>
     </div>
   );
