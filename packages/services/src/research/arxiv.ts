@@ -6,7 +6,7 @@
 
 import { XMLParser } from "fast-xml-parser";
 import { normalizeDoi } from "../papers/identifiers";
-import { fetchWithTimeout } from "../papers/http";
+import { fetchWithRetry } from "../papers/http";
 import { readCachedCandidates, writeCachedCandidates } from "./cache";
 import { arxivPacer } from "./pacer";
 import { asArray, collapse, normalizeKey, trimForSnippet } from "./text";
@@ -66,7 +66,7 @@ export async function searchArxiv(args: {
     url.searchParams.set("sortBy", "relevance");
     url.searchParams.set("sortOrder", "descending");
 
-    const response = await fetchWithTimeout(url.toString(), {
+    const response = await fetchWithRetry(url.toString(), {
       headers: { Accept: "application/atom+xml", "User-Agent": researchUserAgent() },
     });
     if (!response.ok) throw new Error(`arXiv returned ${response.status}`);

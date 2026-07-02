@@ -38,6 +38,39 @@ export async function fetchWithTimeout(
   });
 }
 
+const RETRY_BASE_DELAY_MS = 400;
+const RETRY_JITTER_MS = 800;
+
+/**
+ * `fetchWithTimeout` + SATU retry ber-jitter pada 429/5xx atau kegagalan jaringan (CFG-8) —
+ * untuk API akademik yang flaky (OpenAlex/Crossref/arXiv/Firecrawl). Timeout/abort TIDAK
+ * di-retry (menggandakan latensi terburuk tanpa harapan beda hasil); 4xx lain juga tidak
+ * (deterministik). Response non-ok yang tak di-retry dikembalikan apa adanya — pola caller
+ * `if (!response.ok) throw` tetap jalan.
+ */
+export async function fetchWithRetry(
+  url: string,
+  init: RequestInit & { timeoutMs?: number } = {},
+): Promise<Response> {
+  const shouldRetryStatus = (status: number) => status === 429 || status >= 500;
+  const backoff = () =>
+    new Promise((resolve) =>
+      setTimeout(resolve, RETRY_BASE_DELAY_MS + Math.random() * RETRY_JITTER_MS),
+    );
+  try {
+    const response = await fetchWithTimeout(url, init);
+    if (!shouldRetryStatus(response.status)) return response;
+    await response.body?.cancel().catch(() => {});
+    await backoff();
+    return fetchWithTimeout(url, init);
+  } catch (error) {
+    // Timeout/abort (`TimeoutError`/`AbortError`) bukan kandidat retry; error jaringan lain ya.
+    if (error instanceof DOMException) throw error;
+    await backoff();
+    return fetchWithTimeout(url, init);
+  }
+}
+
 /**
  * Host yang TAK BOLEH dijangkau fetch server-side ke URL pihak ketiga (anti-SSRF):
  * loopback / link-local / private / metadata-cloud. Dipakai untuk URL yang berasal

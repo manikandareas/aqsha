@@ -4,7 +4,7 @@
  * reconstructs the inverted-index abstract for a usable snippet.
  */
 
-import { contactEmail, fetchWithTimeout } from "../papers/http";
+import { contactEmail, fetchWithRetry } from "../papers/http";
 import { normalizeDoi } from "../papers/identifiers";
 import { readCachedCandidates, writeCachedCandidates } from "./cache";
 import {
@@ -117,7 +117,7 @@ export async function searchOpenAlex(args: {
     url.searchParams.set("search", query);
     url.searchParams.set("sort", "relevance_score:desc");
 
-    const response = await fetchWithTimeout(url.toString(), {
+    const response = await fetchWithRetry(url.toString(), {
       headers: { Accept: "application/json", "User-Agent": researchUserAgent() },
     });
     if (!response.ok) throw new Error(`OpenAlex returned ${response.status}`);

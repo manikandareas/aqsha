@@ -5,7 +5,7 @@
  * the polite-pool `mailto`.
  */
 
-import { contactEmail, fetchWithTimeout } from "../papers/http";
+import { contactEmail, fetchWithRetry } from "../papers/http";
 import { normalizeDoi } from "../papers/identifiers";
 import { readCachedCandidates, writeCachedCandidates } from "./cache";
 import { collapse, normalizeKey, trimForSnippet } from "./text";
@@ -47,7 +47,7 @@ export async function lookupDoi(args: { doi: string }): Promise<ProviderSearchRe
     const url = new URL(`${CROSSREF_ENDPOINT}/${encodeURIComponent(doi)}`);
     const email = contactEmail();
     if (email) url.searchParams.set("mailto", email);
-    const response = await fetchWithTimeout(url.toString(), {
+    const response = await fetchWithRetry(url.toString(), {
       headers: { Accept: "application/json", "User-Agent": researchUserAgent() },
     });
     if (!response.ok) throw new Error(`Crossref returned ${response.status}`);
@@ -91,7 +91,7 @@ export async function searchCrossref(args: {
     url.searchParams.set("sort", "relevance");
     const email = contactEmail();
     if (email) url.searchParams.set("mailto", email);
-    const response = await fetchWithTimeout(url.toString(), {
+    const response = await fetchWithRetry(url.toString(), {
       headers: { Accept: "application/json", "User-Agent": researchUserAgent() },
     });
     if (!response.ok) throw new Error(`Crossref returned ${response.status}`);

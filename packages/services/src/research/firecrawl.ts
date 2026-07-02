@@ -5,7 +5,7 @@
  * → [] + cache 'failed' (degrade-graceful, tak melempar ke model).
  */
 
-import { fetchWithTimeout } from "../papers/http";
+import { fetchWithRetry } from "../papers/http";
 import { readCachedCandidates, writeCachedCandidates } from "./cache";
 import { normalizeKey, trimForSnippet } from "./text";
 import {
@@ -46,7 +46,7 @@ export async function searchWebFirecrawl(args: {
   }
 
   try {
-    const response = await fetchWithTimeout(FIRECRAWL_SEARCH_ENDPOINT, {
+    const response = await fetchWithRetry(FIRECRAWL_SEARCH_ENDPOINT, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
