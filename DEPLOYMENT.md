@@ -11,11 +11,11 @@ with Traefik + Let's Encrypt.
 
 | Service         | Port | Public?     | Domain (example)                   | Notes                                                          |
 | --------------- | ---- | ----------- | ---------------------------------- | -------------------------------------------------------------- |
-| **web**         | 3000 | ✅          | `aqshara.com` (+ apex for landing) | Next.js app + landing; hosts the same-origin `/eve/v1/*` proxy |
+| **web**         | 3000 | ✅          | `aqshara.com` (+ apex for landing) | Next.js app + landing; hosts the same-origin `/mastra-api/*` proxy |
 | **api**         | 3001 | ✅          | `api.aqshara.com`                  | Elysia REST; browser API + Clerk/Mayar webhooks                |
 | **minio**       | 9000 | ✅          | `assets.aqshara.com`               | Object storage; browser uploads/downloads via presigned URLs   |
 | minio (console) | 9001 | optional    | `minio.aqshara.com`                | Admin UI only                                                  |
-| **agent**       | 4317 | ❌ internal | —                                  | eve runtime; reached by `web` at `http://agent:4317`           |
+| **agent**       | 4317 | ❌ internal | —                                  | Mastra runtime (Astra); reached by `web` at `http://agent:4317` |
 | **worker**      | —    | ❌ internal | —                                  | BullMQ consumers (reuses the api image)                        |
 | **postgres**    | 5432 | ❌ internal | —                                  | pgvector                                                       |
 | **redis**       | 6379 | ❌ internal | —                                  | queues + rate limit                                            |
@@ -24,7 +24,7 @@ with Traefik + Let's Encrypt.
 
 - A server with **Dokploy** installed and a domain whose DNS A-records point at it.
 - DNS records for `@`, `api`, `assets` (+ optional `minio` for the console) → server IP.
-- External accounts/keys: **Clerk** (app + secret + webhook secret), **Mayar** (API key + 6 membership product IDs — see `apps/api/MAYAR-SETUP.md`), an **OpenAI-compatible** LLM provider (chat + fast + embedding), and optional research keys (Firecrawl/Jina/OpenAlex/Semantic Scholar). A **Mapbox** token for the Explore globe.
+- External accounts/keys: **Clerk** (app + secret + webhook secret), **Mayar** (API key + webhook secret — see `apps/api/MAYAR-SETUP.md`), an **OpenAI-compatible** LLM provider (chat + fast + embedding), and optional research keys (Firecrawl/OpenAlex/Semantic Scholar/Mistral OCR).
 
 ## Step 1 — Create the Compose app
 
@@ -36,57 +36,27 @@ In Dokploy: **Create Project → Create Service → Compose**.
 
 ## Step 2 — Set environment variables
 
-In the service's **Environment** tab, set the variables below (values feed `${VAR}` in
-`compose.yaml`). Full descriptions live in each app's `.env.example`.
+In the service's **Environment** tab, paste and fill the root **`.env.example`** — it is the
+single source of truth for every `${VAR}` referenced by `compose.yaml`, with per-variable
+descriptions and which values are required vs optional.
 
-**Infra / secrets**
-
-```
-POSTGRES_PASSWORD=        REDIS_PASSWORD=
-MINIO_ROOT_USER=          MINIO_ROOT_PASSWORD=      MINIO_BUCKET=aqsha
-```
-
-**Public URLs / wiring**
+The minimum required set:
 
 ```
-# NEXT_PUBLIC_* are build args baked into the web bundle — set them BEFORE the first build.
-NEXT_PUBLIC_API_URL=https://api.<domain>
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
-# S3_ENDPOINT MUST be the public MinIO URL (presigned URLs inherit this host).
+# Infra / secrets
+POSTGRES_PASSWORD=   REDIS_PASSWORD=   MINIO_ROOT_USER=   MINIO_ROOT_PASSWORD=
+# Public URLs (NEXT_PUBLIC_* are build args baked into the web bundle — set BEFORE the first build;
+# S3_ENDPOINT MUST be the public MinIO URL — presigned URLs inherit this host)
+NEXT_PUBLIC_API_URL=https://api.<domain>   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
 S3_ENDPOINT=https://assets.<domain>
+# Clerk + LLM + billing
+CLERK_SECRET_KEY=   CLERK_WEBHOOK_SIGNING_SECRET=
+OPENAI_API_KEY=   AQSHA_FAST_MODEL_API_KEY=   AQSHA_EMBEDDING_API_KEY=
+MAYAR_SERVER=production   MAYAR_API_KEY=   MAYAR_WEBHOOK_SECRET=
 ```
 
-**Shared backend (api + worker + agent)** — see `apps/api/.env.example` / `apps/agent/.env.example`
-
-```
-CLERK_SECRET_KEY=
-AQSHA_EMBEDDING_API_KEY=    AQSHA_EMBEDDING_BASE_URL=
-AQSHA_RAG_EMBEDDING_MODEL=text-embedding-3-small   AQSHA_RAG_EMBEDDING_DIMENSION=1536
-OPENALEX_API_KEY=  JINA_API_KEY=  UNPAYWALL_EMAIL=  AQSHA_CONTACT_EMAIL=  SEMANTIC_SCHOLAR_API_KEY=
-```
-
-**api / worker only**
-
-```
-CLERK_WEBHOOK_SIGNING_SECRET=
-AQSHA_FAST_MODEL_API_KEY=   AQSHA_FAST_MODEL_BASE_URL=   AQSHA_FAST_MODEL=gpt-4o-mini
-MAYAR_SERVER=production     MAYAR_API_KEY=   MAYAR_WEBHOOK_SECRET=
-MAYAR_STARTER_MONTHLY_PRODUCT_ID=  MAYAR_STARTER_YEARLY_PRODUCT_ID=
-MAYAR_PLUS_MONTHLY_PRODUCT_ID=     MAYAR_PLUS_YEARLY_PRODUCT_ID=
-MAYAR_ULTRA_MONTHLY_PRODUCT_ID=    MAYAR_ULTRA_YEARLY_PRODUCT_ID=
-LLM_METADATA_ENABLED=false
-AQSHA_ADMIN_OWNER_USER_IDS=        AQSHA_ADMIN_EMAILS=
-```
-
-**agent only**
-
-```
-OPENAI_API_KEY=   OPENAI_BASE_URL=
-AQSHA_LITE_MODEL=gpt-4o   AQSHA_LITE_CONTEXT_WINDOW=128000
-FIRECRAWL_API_KEY=   CROSSREF_MAILTO=
-```
-
-`AGENT_ORIGIN` is fixed to `http://agent:4317` in `compose.yaml` — do not set it.
+Internal service-to-service wiring (`DATABASE_URL`, `REDIS_URL`, `MASTRA_AGENT_ORIGIN` =
+`http://agent:4317`) is fixed in `compose.yaml` — do not set it.
 
 ## Step 3 — Assign domains
 
@@ -133,7 +103,7 @@ The bucket stays private (`minio-init` runs `mc anonymous set none`); access is 
 ## Step 7 — Register webhooks
 
 - **Clerk** → Webhooks → endpoint `https://api.<domain>/webhooks/clerk`; copy the signing secret into `CLERK_WEBHOOK_SIGNING_SECRET` and redeploy.
-- **Mayar** → webhook URL `https://api.<domain>/webhooks/mayar/<MAYAR_WEBHOOK_SECRET>` (the secret is in the path; Mayar does not sign). Create the 6 membership products and fill the `MAYAR_*_PRODUCT_ID` vars. See `apps/api/MAYAR-SETUP.md`.
+- **Mayar** → webhook URL `https://api.<domain>/webhooks/mayar/<MAYAR_WEBHOOK_SECRET>` (the secret is in the path; Mayar does not sign). Plans are matched by payment AMOUNT; the `MAYAR_MEMBERSHIP_PRODUCT_ID` / `MAYAR_*_TIER_ID` vars are optional fallbacks. See `apps/api/MAYAR-SETUP.md`.
 
 ## Step 8 — Verify
 
@@ -148,12 +118,11 @@ Push to the deployed branch and click **Redeploy** in Dokploy (or enable auto-de
 Re-run **Step 5** if the change includes a new migration. Changing `NEXT_PUBLIC_*` requires a
 rebuild (they are baked into the web image).
 
-## Backups & single-replica note
+## Backups
 
-- `agent` keeps eve durable run state in the `agent_workflow_data` volume (`.workflow-data`). It is
-  file-backed and single-node — **run exactly one `agent` replica** and snapshot this volume before
-  redeploys.
-- Back up the `postgres_data` and `minio_data` volumes on a schedule.
+- All durable state lives in Postgres (including Mastra `mastra_*` run state) and MinIO — back up
+  the `postgres_data` and `minio_data` volumes on a schedule. No app container holds file-backed
+  state.
 
 ## Local development
 

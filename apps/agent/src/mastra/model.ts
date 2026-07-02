@@ -32,10 +32,11 @@ export const liteModel = openai.responses(gateway.liteModelId);
  * Model Pro Astra — model penalaran lebih kuat (`AQSHA_PRO_MODEL`). Fallback ke `AQSHA_LITE_MODEL`
  * lalu `gpt-4o` bila belum di-set → degradasi aman (Pro tetap jalan, sekadar tak lebih kuat) sampai
  * owner set env. Kedalaman penalaran disetel via `proProviderOptions` (default effort `"high"`).
+ * String kosong = belum di-set (compose prod meneruskan `${AQSHA_PRO_MODEL:-}` sebagai "").
  */
-export const proModel = openai.responses(
-  process.env.AQSHA_PRO_MODEL ?? gateway.liteModelId,
-);
+const PRO_MODEL_ID = process.env.AQSHA_PRO_MODEL?.trim() || undefined;
+
+export const proModel = openai.responses(PRO_MODEL_ID ?? gateway.liteModelId);
 
 /**
  * Apakah model Pro benar-benar disetel (`AQSHA_PRO_MODEL` eksplisit)? Saat `false`, Pro mem-fallback ke
@@ -44,10 +45,10 @@ export const proModel = openai.responses(
  * (chat) + `deep-research` (debit). CATATAN: ini TAK lagi menggerbang penalaran — kedua tier kini punya
  * model penalaran sendiri, jadi reasoning aktif terlepas dari flag ini.
  */
-export const PRO_MODEL_CONFIGURED = Boolean(process.env.AQSHA_PRO_MODEL);
+export const PRO_MODEL_CONFIGURED = Boolean(PRO_MODEL_ID);
 
 /** Ringkasan penalaran yang diminta dari Responses API (`auto` | `concise` | `detailed`). */
-const REASONING_SUMMARY = process.env.AQSHA_REASONING_SUMMARY ?? "auto";
+const REASONING_SUMMARY = process.env.AQSHA_REASONING_SUMMARY?.trim() || "auto";
 
 /**
  * `providerOptions` penalaran satu tier. `reasoningEffort` mengontrol kedalaman berpikir
