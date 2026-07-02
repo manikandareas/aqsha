@@ -25,7 +25,9 @@ import { astraTools } from "../tools";
  * - **Lite** (`astra-lite`): default. Model `liteModel` + penalaran ringan (`liteProviderOptions`,
  *   effort `low`), `maxSteps: 10`, recall 16/6/2. Fitur billing `normal_chat`.
  * - **Pro** (`astra-pro`): model penalaran `proModel` + penalaran dalam (`proProviderOptions`,
- *   effort `high`), `maxSteps: 22`, context window + recall lebih dalam (32/12/3), instruksi `Pro` (riset
+ *   effort `high`), `maxSteps: 12` (TOOL-1: diturunkan dari 22 — budget longgar terbukti memicu
+ *   belasan tool call utk prompt sepele; kedalaman Pro datang dari reasoning effort + batch paralel,
+ *   bukan jumlah langkah), context window + recall lebih dalam (32/12/3), instruksi `Pro` (riset
  *   lebih dalam + verifikasi proaktif). Fitur billing `pro_chat` (rate lebih tinggi). FE memilih tier
  *   dengan menunjuk agent ID dari `agentKind` composer — tak ada knob per-call yang dikirim klien.
  *
@@ -58,7 +60,7 @@ const PROFILES: Record<AgentKind, TierProfile> = {
     name: "Astra Pro",
     instructions: astraProInstructions,
     model: proModel,
-    maxSteps: 22,
+    maxSteps: 12,
     contextWindowTokens: Number(process.env.AQSHA_PRO_CONTEXT_WINDOW) || 200_000,
     providerOptions: proProviderOptions,
   },
@@ -144,8 +146,9 @@ function createAstraAgent(tier: AgentKind): Agent {
     skills: inlineSkills,
     memory: createMemory(tier),
     // Default opsi `stream()` (vNext) → FE tak perlu mengirim `maxSteps`/`providerOptions`; satu sumber
-    // kebenaran. `EnsureFinalResponseProcessor` memakai angka MAX_STEPS yang SAMA → reminder mendarat di
-    // step terakhir. `providerOptions` (penalaran per-tier) di-set kecuali effort di-`off`-kan via env.
+    // kebenaran. `EnsureFinalResponseProcessor` memakai angka MAX_STEPS yang SAMA → checkpoint
+    // kecukupan (~40%/70% budget, TOOL-1) dan reminder+`toolChoice:"none"` step terakhir mendarat
+    // tepat. `providerOptions` (penalaran per-tier) di-set kecuali effort di-`off`-kan via env.
     defaultOptions: {
       maxSteps: p.maxSteps,
       ...(p.providerOptions ? { providerOptions: p.providerOptions } : {}),

@@ -1,4 +1,8 @@
-import type { AskQuestion, AskQuestionsResumeData } from "@aqsha/chat-core";
+import type {
+  AskQuestion,
+  AskQuestionsResumeData,
+  AskQuestionsSuspendPayload,
+} from "@aqsha/chat-core";
 import { z } from "zod";
 
 /**
@@ -33,10 +37,17 @@ export const askQuestionSchema = z.object({
 
 export const askQuestionsInputSchema = z.object({
   questions: z.array(askQuestionSchema).min(1).max(6).describe("Daftar pertanyaan klarifikasi (1-6)."),
+  findings: z
+    .string()
+    .optional()
+    .describe(
+      "Ringkasan temuan parsial yang SUDAH kamu kumpulkan lewat tool di turn ini, relevan dgn pertanyaan user. WAJIB diisi bila kamu sudah memanggil tool riset sebelum bertanya (ditampilkan ke user di atas pertanyaan — hasil riset tak boleh terbuang). Kosongkan bila belum ada riset di turn ini.",
+    ),
 });
 
 export const askQuestionsSuspendSchema = z.object({
   questions: z.array(askQuestionSchema),
+  findings: z.string().optional(),
 });
 
 export const askQuestionsResumeSchema = z.union([
@@ -60,5 +71,8 @@ type _CheckQuestion = z.infer<typeof askQuestionSchema> extends AskQuestion ? tr
 type _CheckResume = z.infer<typeof askQuestionsResumeSchema> extends AskQuestionsResumeData
   ? true
   : never;
-const _assertSchemaTypes: [_CheckQuestion, _CheckResume] = [true, true];
+type _CheckSuspend = z.infer<typeof askQuestionsSuspendSchema> extends AskQuestionsSuspendPayload
+  ? true
+  : never;
+const _assertSchemaTypes: [_CheckQuestion, _CheckResume, _CheckSuspend] = [true, true, true];
 void _assertSchemaTypes;

@@ -997,8 +997,13 @@ export type AskQuestion = {
   allowOther?: boolean;
 };
 
-/** Payload yang dipancarkan ke FE saat tool/step suspend → dirender jadi kartu Questions. */
-export type AskQuestionsSuspendPayload = { questions: AskQuestion[] };
+/**
+ * Payload yang dipancarkan ke FE saat tool/step suspend → dirender jadi kartu Questions.
+ * `findings` (TOOL-3): ringkasan temuan parsial yang SUDAH terkumpul di turn ini — wajib diisi
+ * model bila ia sudah memanggil tool riset sebelum bertanya, supaya hasil riset tersaji ke user
+ * (dirender di atas pertanyaan) alih-alih terbuang saat turn suspend.
+ */
+export type AskQuestionsSuspendPayload = { questions: AskQuestion[]; findings?: string };
 
 /**
  * Jawaban satu pertanyaan. `selected` = label opsi terpilih (single: panjang ≤1); `other` = teks
