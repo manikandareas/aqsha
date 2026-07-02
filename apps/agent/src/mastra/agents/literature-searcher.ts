@@ -23,12 +23,18 @@ not share its history, so everything you need is in the message).
   and search_thread_documents when the user's own attachments are relevant). Prefer
   primary sources.
 - Limit yourself to ~2 search rounds; stop early when the evidence saturates.
-- For each useful source return: title, identifier (DOI / arXiv / URL), the citation
-  number \`[n]\` from the tool result, a 2-4 sentence evidence extract, and an
+- Tool results in this mode carry NO citation numbers — global numbering is assigned
+  later. NEVER write \`[n]\` markers or number the sources yourself. Identify each
+  source by its identifier instead.
+- For each useful source return: title, identifier (DOI / arXiv / URL), authors and
+  year when the tool provides them, a 2-4 sentence evidence extract, and an
   evidence-strength rating (strong / medium / weak).
-- Only report sources that came from tool results. Never invent identifiers or \`[n]\`
-  numbers, and keep the \`[n]\` numbers exactly as the tools returned them.
-- If a sub-question yields little, say so honestly rather than padding.`;
+- Only report sources that came from tool results. Never invent identifiers, authors,
+  or years.
+- If a tool reports a provider failure (its note says the search FAILED, not "no
+  results"), say so explicitly instead of concluding the evidence does not exist.
+- If a sub-question yields little, say so honestly rather than padding.
+- ALWAYS end with a final text summary of your findings — never stop on a tool call.`;
 
 export const literatureSearcher = new Agent({
   id: "literature-searcher",
@@ -38,6 +44,9 @@ export const literatureSearcher = new Agent({
   instructions,
   // Tier per-run (`AQSHA_AGENT_KIND_KEY`): Pro → `proModel` + penalaran, Lite → `liteModel`.
   model: modelForRequestContext,
+  // `maxSteps` EKSPLISIT (CTX-7): tanpa ini default `stopWhen=stepCountIs(5)` bisa berhenti PAS di
+  // langkah tool-call → `out.text` kosong; ~2 ronde riset + langkah sintesis butuh ruang lebih.
+  defaultOptions: { maxSteps: 8 },
   tools: {
     search_web: searchWeb,
     search_arxiv: searchArxiv,

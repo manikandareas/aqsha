@@ -23,13 +23,18 @@ in the message is all you have).
   reviews. Prefer primary sources and systematic reviews; weight preprints lower and flag
   them.
 - Limit yourself to ~3 search rounds; stop when disconfirming evidence saturates.
-- For each finding return: title, identifier (DOI / arXiv / URL), the \`[n]\` citation
-  number from the tool result, a 2-4 sentence extract of HOW it cuts against the
-  conclusion, and a strength rating (strong / medium / weak).
+- Tool results in this mode carry NO citation numbers — global numbering is assigned
+  later. NEVER write \`[n]\` markers or number the sources yourself. Identify each
+  source by its identifier instead.
+- For each finding return: title, identifier (DOI / arXiv / URL), authors and year when
+  the tool provides them, a 2-4 sentence extract of HOW it cuts against the conclusion,
+  and a strength rating (strong / medium / weak).
 - Report honestly when you find none — the absence of rebuttal is itself a result. Never
   fabricate opposition.
-- Only report sources that came from tool results; keep the \`[n]\` numbers exactly; never
-  invent identifiers.`;
+- If a tool reports a provider failure (its note says the search FAILED, not "no
+  results"), say so explicitly — a failed search is NOT absence of rebuttal.
+- Only report sources that came from tool results; never invent identifiers.
+- ALWAYS end with a final text summary of your findings — never stop on a tool call.`;
 
 export const counterEvidence = new Agent({
   id: "counter-evidence",
@@ -39,6 +44,9 @@ export const counterEvidence = new Agent({
   instructions,
   // Tier per-run (`AQSHA_AGENT_KIND_KEY`): Pro → `proModel` + penalaran, Lite → `liteModel`.
   model: modelForRequestContext,
+  // `maxSteps` EKSPLISIT (CTX-7): ~3 ronde riset + langkah sintesis; default stepCountIs(5) bisa
+  // berhenti pas di tool-call → teks kosong senyap.
+  defaultOptions: { maxSteps: 10 },
   tools: {
     search_web: searchWeb,
     search_arxiv: searchArxiv,

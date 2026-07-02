@@ -79,3 +79,27 @@ Kamu berjalan dalam **mode Pro**: pengguna mengharapkan analisis yang lebih meny
 
 /** Instruksi tier Pro = inti Lite + adendum mode Pro (lihat `astraProAddendum`). */
 export const astraProInstructions = `${astraInstructions}${astraProAddendum}`;
+
+/**
+ * Blok "Konteks sesi" DINAMIS (CTX-5): tanggal hari ini + nama pengguna + paket — disusun per-call
+ * oleh dynamic instructions agent (`astra-lite.ts`) dan ditempel di AKHIR instruksi statis, supaya
+ * prefix prompt yang panjang tetap stabil untuk prompt-caching. Tanpa ini system prompt buta
+ * tanggal → "penelitian terbaru" dinilai dari tahun basi data latihan.
+ */
+export function sessionContextBlock(args: {
+  /** Teks tanggal siap-pakai (id-ID, Asia/Jakarta), mis. "Kamis, 2 Juli 2026". */
+  dateText: string;
+  userName: string | null;
+  planKey: string | null;
+  tier: "lite" | "pro";
+}): string {
+  const lines = [
+    `- Hari ini: ${args.dateText} (zona waktu Asia/Jakarta). Pakai tanggal ini saat menilai "terbaru/terkini", menghitung rentang tahun (mis. "5 tahun terakhir"), dan menyebut tahun berjalan — JANGAN mengandalkan tahun dari data latihanmu.`,
+    args.userName
+      ? `- Nama pengguna: ${args.userName}. Sapa dengan nama secukupnya bila terasa wajar.`
+      : null,
+    args.planKey ? `- Paket langganan pengguna: ${args.planKey}.` : null,
+    `- Tier agen aktif: ${args.tier === "pro" ? "Astra Pro" : "Astra Lite"}.`,
+  ].filter((l): l is string => Boolean(l));
+  return `\n\n## Konteks sesi\n\n${lines.join("\n")}`;
+}

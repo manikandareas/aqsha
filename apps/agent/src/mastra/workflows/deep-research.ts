@@ -96,7 +96,7 @@ const PlanSchema = z.object({
 
 const EvidenceItemSchema = z.object({
   subQuestion: z.string(),
-  findings: z.string().describe("Temuan bukti bernomor [n] dari literature-searcher."),
+  findings: z.string().describe("Temuan bukti dari literature-searcher (TANPA [n]; identifikasi via DOI/arXiv/URL — penomoran global di assign-citations, CTX-1)."),
 });
 
 const PlannedSchema = InputSchema.extend(PlanSchema.shape);
@@ -509,7 +509,7 @@ function parseClarifyQuestions(text: string): AskQuestion[] {
 }
 
 function searcherPrompt(subQuestion: string, input: Planned): string {
-  return `Topik riset utama: ${input.question}\n\nSub-pertanyaan yang HARUS kamu jawab dengan literatur:\n${subQuestion}\n\nCari bukti terkuat dan kembalikan tiap sumber berguna bernomor [n] (dengan judul, identifier DOI/arXiv/URL, extract bukti 2-4 kalimat, dan rating kekuatan).`;
+  return `Topik riset utama: ${input.question}\n\nSub-pertanyaan yang HARUS kamu jawab dengan literatur:\n${subQuestion}\n\nCari bukti terkuat dan kembalikan tiap sumber berguna dengan: judul, identifier (DOI/arXiv/URL), penulis + tahun bila tersedia, extract bukti 2-4 kalimat, dan rating kekuatan. JANGAN menomori sumber dan JANGAN menulis penanda [n] — penomoran sitasi global dilakukan belakangan (CTX-1).`;
 }
 
 function counterPrompt(input: Searched): string {
@@ -527,7 +527,7 @@ function synthesisPrompt(input: Verified): string {
   const evidence = input.evidence
     .map((e, i) => `### Sub-pertanyaan ${i + 1}: ${e.subQuestion}\n${e.findings}`)
     .join("\n\n");
-  return `Tulis jawaban riset tercitasi untuk pertanyaan:\n${input.question}\n\nRencana yang disetujui:\n${input.plan}\n\nDaftar sumber bernomor (WAJIB pakai nomor [n] PERSIS ini saat mengutip; jangan menomori ulang):\n${input.numberedInventory}\n\nInventaris bukti (untuk ekstrak & narasi):\n${evidence}\n\nBukti tandingan (adversarial):\n${input.counter}\n\nVerdict verifikasi sitasi:\n${input.verification}\n\nSintesiskan menjadi jawaban terstruktur dan jujur: ringkasan temuan per sub-pertanyaan, lalu bukti tandingan & keterbatasan. Setiap klaim faktual membawa penanda [n] inline dari daftar sumber bernomor di atas (penanda dirender sebagai pill sumber + panel "Sumber" terpisah — JANGAN tulis daftar/bagian "Sumber" teks sendiri di akhir). Baca domain-pack + cite-apa7/write-academic-id lewat tool skill sebelum menulis. JANGAN mengarang identifier.`;
+  return `Tulis jawaban riset tercitasi untuk pertanyaan:\n${input.question}\n\nRencana yang disetujui:\n${input.plan}\n\nDaftar sumber bernomor (SATU-SATUNYA sumber nomor [n] — WAJIB pakai nomor PERSIS ini saat mengutip; jangan menomori ulang):\n${input.numberedInventory}\n\nInventaris bukti (untuk ekstrak & narasi — teks temuan TIDAK bernomor; petakan tiap klaim ke daftar sumber bernomor di atas via DOI/arXiv/URL/judul):\n${evidence}\n\nBukti tandingan (adversarial):\n${input.counter}\n\nVerdict verifikasi sitasi:\n${input.verification}\n\nSintesiskan menjadi jawaban terstruktur dan jujur: ringkasan temuan per sub-pertanyaan, lalu bukti tandingan & keterbatasan. Setiap klaim faktual membawa penanda [n] inline dari daftar sumber bernomor di atas (penanda dirender sebagai pill sumber + panel "Sumber" terpisah — JANGAN tulis daftar/bagian "Sumber" teks sendiri di akhir). Baca domain-pack + cite-apa7/write-academic-id lewat tool skill sebelum menulis. JANGAN mengarang identifier.`;
 }
 
 // ── Steps ─────────────────────────────────────────────────────────────────────────────────
@@ -722,14 +722,27 @@ const searchStep = createStep({
         subRc.set(AQSHA_DEEP_SUBQ_INDEX_KEY, subIndex);
         subRc.set(AQSHA_DEEP_SUBQ_TEXT_KEY, subQuestion);
         await emitDetail(writer, { kind: "search-sub", subIndex, subQuestion, status: "searching" });
-        const out = await literatureSearcher.generate(searcherPrompt(subQuestion, inputData), {
-          requestContext: subRc,
-          ...deepProviderOptions(inputData.agentKind),
-        });
+        const genOpts = { requestContext: subRc, ...deepProviderOptions(inputData.agentKind) };
+        const out = await literatureSearcher.generate(searcherPrompt(subQuestion, inputData), genOpts);
+        let findings = out.text.trim();
+        // Guard turn-senyap subagent (CTX-7): selesai pas di tool-call → teks kosong. Retry SEKALI
+        // dengan pengingat eksplisit; masih kosong → catat gap jujur (jangan biarkan bucket kosong
+        // mengalir senyap ke sintesis).
+        if (!findings) {
+          const retry = await literatureSearcher.generate(
+            `${searcherPrompt(subQuestion, inputData)}\n\nPENTING: percobaan sebelumnya berakhir tanpa teks. AKHIRI responsmu dengan ringkasan teks temuan (atau nyatakan jujur bila buktinya tipis) — jangan berhenti pada pemanggilan tool.`,
+            genOpts,
+          );
+          findings = retry.text.trim();
+        }
+        if (!findings) {
+          findings =
+            "(Sub-pertanyaan ini GAGAL diriset: subagent selesai tanpa teks temuan. Nyatakan gap ini secara eksplisit di laporan — JANGAN mengarang temuan untuk bagian ini.)";
+        }
         // Sumber yang baru dipersist sub-agen ini → pancarkan live (kartu muncul realtime di FE).
         const sources = await subQuestionSources(inputData.threadId, runId, subIndex);
         await emitDetail(writer, { kind: "search-sub", subIndex, subQuestion, status: "done", sources });
-        return { subQuestion, findings: out.text };
+        return { subQuestion, findings };
       }),
     );
     return { ...inputData, evidence };
@@ -746,8 +759,12 @@ const counterEvidenceStep = createStep({
       counterPrompt(inputData),
       deepGenOptions(requestContext, inputData, runId),
     );
-    await emitDetail(writer, { kind: "counter", text: out.text.trim() });
-    return { ...inputData, counter: out.text };
+    // Guard teks kosong (CTX-7): jangan biarkan bagian adversarial hilang senyap.
+    const counter =
+      out.text.trim() ||
+      "(Pencarian bukti tandingan berakhir tanpa teks — perlakukan sebagai BELUM diverifikasi ada/tidaknya bukti tandingan, BUKAN sebagai ketiadaan bukti tandingan.)";
+    await emitDetail(writer, { kind: "counter", text: counter });
+    return { ...inputData, counter };
   },
 });
 
@@ -765,13 +782,21 @@ const assignCitationsStep = createStep({
       turnId: runId,
     });
     const numbered = items.filter((s) => s.citationNumber !== null);
+    // Baris inventory bawa authors/year/venue (CTX-8) → verify_identifiers + daftar pustaka APA
+    // bekerja dari metadata asli provider, bukan karangan model.
     const numberedInventory = numbered
-      .map(
-        (s) =>
-          `[${s.citationNumber}] ${s.title} — ${s.doi ?? s.arxivId ?? s.url ?? s.locator}${
-            s.snippet ? ` — ${s.snippet}` : ""
-          } (${s.evidenceStrength})`,
-      )
+      .map((s) => {
+        const meta = [
+          s.authors.length > 0 ? s.authors.join(", ") : null,
+          s.year !== null ? String(s.year) : null,
+          s.venue,
+        ]
+          .filter(Boolean)
+          .join("; ");
+        return `[${s.citationNumber}] ${s.title}${meta ? ` (${meta})` : ""} — ${
+          s.doi ?? s.arxivId ?? s.url ?? s.locator
+        }${s.snippet ? ` — ${s.snippet}` : ""} (${s.evidenceStrength})`;
+      })
       .join("\n");
     // Jumlah sitasi unik [n] (dedupe by DOI/arXiv/locator) — sumber penomoran ditampilkan FE.
     const uniqueCitations = new Set(numbered.map((s) => s.citationNumber)).size;
@@ -800,8 +825,12 @@ const citationVerifyStep = createStep({
       verifyPrompt(inputData),
       deepGenOptions(requestContext, inputData, runId),
     );
-    await emitDetail(writer, { kind: "verify", text: out.text.trim() });
-    return { ...inputData, verification: out.text };
+    // Guard teks kosong (CTX-7): tanpa verdict, tandai belum-terverifikasi — jangan diam.
+    const verification =
+      out.text.trim() ||
+      "(Verifikasi sitasi berakhir tanpa verdict — perlakukan SEMUA referensi sebagai belum terverifikasi otomatis dan sarankan pemeriksaan manual.)";
+    await emitDetail(writer, { kind: "verify", text: verification });
+    return { ...inputData, verification };
   },
 });
 

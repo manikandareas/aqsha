@@ -1,10 +1,15 @@
+import { UserRepo } from "@aqsha/db";
+import { getEntitlementSnapshot } from "@aqsha/services/billing";
 import { Agent } from "@mastra/core/agent";
 import { TokenLimiterProcessor } from "@mastra/core/processors";
-import { astraInstructions, astraProInstructions } from "../instructions";
-import type { AgentKind } from "../lib/tool-context";
+import type { RequestContext } from "@mastra/core/request-context";
+import { astraInstructions, astraProInstructions, sessionContextBlock } from "../instructions";
+import { getServiceDb } from "../lib/db";
+import { ownerFromRequestContext, type AgentKind } from "../lib/tool-context";
 import { createMemory } from "../memory";
 import { liteModel, liteProviderOptions, proModel, proProviderOptions } from "../model";
 import { makeBillingProcessors } from "../processors/billing";
+import { ElideHistoryToolResultsProcessor } from "../processors/elide-history-tool-results";
 import { EnsureFinalResponseProcessor } from "../processors/ensure-final-response";
 import { stripMentionMarkersProcessor } from "../processors/strip-mention-markers";
 import { threadArtifactManifestProcessor } from "../processors/thread-artifact-manifest";
@@ -57,6 +62,38 @@ const PROFILES: Record<AgentKind, TierProfile> = {
   },
 };
 
+/**
+ * Blok "Konteks sesi" dinamis (CTX-5): tanggal + nama + paket, dibaca per-call dari RequestContext
+ * + DB (2 lookup ringan, best-effort). Ditempel di AKHIR instruksi statis → prefix ter-cache.
+ */
+async function resolveSessionContext(
+  tier: AgentKind,
+  requestContext: RequestContext | undefined,
+): Promise<string> {
+  const dateText = new Intl.DateTimeFormat("id-ID", {
+    dateStyle: "full",
+    timeZone: "Asia/Jakarta",
+  }).format(new Date());
+  let userName: string | null = null;
+  let planKey: string | null = null;
+  try {
+    const { id, email } = ownerFromRequestContext(requestContext);
+    if (id) {
+      const db = getServiceDb();
+      const [user, snapshot] = await Promise.all([
+        UserRepo.findByOwnerUserId(db, id),
+        getEntitlementSnapshot(db, id, email),
+      ]);
+      userName = user?.name ?? null;
+      planKey = snapshot.planKey ?? null;
+    }
+  } catch (err) {
+    // Best-effort: kegagalan lookup tak boleh menggagalkan turn — blok tetap memuat tanggal+tier.
+    console.error("[astra] resolveSessionContext failed", err);
+  }
+  return sessionContextBlock({ dateText, userName, planKey, tier });
+}
+
 function createAstraAgent(tier: AgentKind): Agent {
   const p = PROFILES[tier];
   // Sisakan ruang untuk output + tool results; batasi input ~75% context window.
@@ -67,7 +104,9 @@ function createAstraAgent(tier: AgentKind): Agent {
   return new Agent({
     id: p.id,
     name: p.name,
-    instructions: p.instructions,
+    // Dynamic instructions (CTX-5): inti statis per-tier + blok "Konteks sesi" di akhir.
+    instructions: async ({ requestContext }) =>
+      `${p.instructions}${await resolveSessionContext(tier, requestContext)}`,
     model: p.model,
     tools: astraTools,
     skills: inlineSkills,
@@ -82,7 +121,11 @@ function createAstraAgent(tier: AgentKind): Agent {
     inputProcessors: [
       // Strip penanda @mention (U+E000/E001) dari teks user PALING AWAL → token-count & semua
       // processor/LLM di bawahnya melihat teks bersih (penanda cuma untuk render pill di FE).
+      // (Juga per-step utk pesan history/recall yang tak lewat processInput — CTX-4.)
       stripMentionMarkersProcessor,
+      // Elide payload hasil tool BESAR di pesan riwayat (CTX-6) SEBELUM TokenLimiter → jendela
+      // history tak lagi didominasi dump JSON basi.
+      new ElideHistoryToolResultsProcessor(),
       new TokenLimiterProcessor(tokenLimit),
       projectionInput,
       billingPrecheck,

@@ -32,5 +32,7 @@ export const citationVerifier = new Agent({
   instructions,
   // Tier per-run (`AQSHA_AGENT_KIND_KEY`): Pro → `proModel` + penalaran, Lite → `liteModel`.
   model: modelForRequestContext,
+  // `maxSteps` EKSPLISIT (CTX-7): 1 tool call + tabel verdict; jangan berhenti di tool-call.
+  defaultOptions: { maxSteps: 4 },
   tools: { verify_identifiers: verifyIdentifiers },
 });

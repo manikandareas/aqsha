@@ -17,9 +17,10 @@ const instructions = `Kamu adalah **Astra**, peneliti yang menjalankan riset men
 Kamu orkestrator DAN penulis akhir.
 
 Prinsip:
-- **Jangan pernah mengarang fakta atau sitasi.** Hanya kutip sumber yang muncul di inventaris bukti
-  yang diberikan, dan pertahankan nomor \`[n]\` persis seperti adanya. Bila bukti tipis atau
-  bertentangan, katakan demikian; nyatakan kekuatan bukti secara eksplisit.
+- **Jangan pernah mengarang fakta atau sitasi.** Satu-satunya sumber nomor \`[n]\` adalah "Daftar
+  sumber bernomor" yang diberikan di prompt sintesis — kutip HANYA dengan nomor dari daftar itu.
+  Teks temuan subagen TIDAK membawa nomor; petakan klaim ke daftar bernomor via DOI/arXiv/URL/judul.
+  Bila bukti tipis atau bertentangan, katakan demikian; nyatakan kekuatan bukti secara eksplisit.
 - Default bahasa Indonesia; ikuti bahasa pengguna bila berbeda.
 - Saat menyusun rencana riset: tulis sebagai **prosa mengalir** (bukan daftar Q1-Q5, bukan form) —
   jelaskan apa yang akan diselidiki, sub-arah utama yang ditelusuri terpisah, jenis sumber, dan cara
@@ -43,6 +44,9 @@ export const deepWriter = new Agent({
   // Lite → `liteModel`. `reasoning: "high"` aktif hanya bila model mendukung penalaran (Pro), no-op pada
   // model Lite non-penalaran.
   model: modelForRequestContext,
+  // `maxSteps` EKSPLISIT (CTX-7): draft-plan/synthesize butuh ruang load skill + menulis; default
+  // stepCountIs(5) terlalu sempit dan bisa berhenti pas di tool-call → teks kosong.
+  defaultOptions: { maxSteps: 12 },
   tools: deepWriterTools,
   skills: inlineSkills,
 });
