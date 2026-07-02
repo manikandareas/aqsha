@@ -6,6 +6,7 @@ import type { Artifact } from "@/features/artifacts/types";
 import { useApi } from "@/lib/api-client";
 import { apiErrorCode, readableApiErrorMessage } from "@/lib/api-error";
 import { queryKeys, unwrap } from "@/lib/api-query";
+import { triggerArtifactDownload } from "@/lib/artifact-download";
 import type { ChatThread, ResearchSource } from "./types";
 
 const LIST_PAGE_SIZE = 30;
@@ -88,6 +89,33 @@ export function useThreadSources(id: string, enabled = true) {
     staleTime: 10_000,
     queryFn: async () =>
       (unwrap(await api.threads({ id }).sources.get()) as { items: ResearchSource[] }).items,
+  });
+}
+
+/**
+ * Unduh daftar pustaka thread (FEAT-3) — BibTeX/RIS diformat DETERMINISTIK di server dari
+ * `research_sources` (dedup + urut alfabetis). Mutation sekali-jalan: fetch teks → blob →
+ * anchor download (pola `triggerArtifactDownload`).
+ */
+export function useDownloadThreadReferences(threadId: string) {
+  const api = useApi();
+  return useMutation({
+    mutationFn: async (format: "bibtex" | "ris") => {
+      const payload = unwrap(
+        await api.threads({ id: threadId }).references.get({ query: { format } }),
+      ) as { fileName: string; mime: string; content: string; count: number };
+      if (payload.count === 0) {
+        toast.info("Belum ada sumber riset di percakapan ini.");
+        return;
+      }
+      triggerArtifactDownload({
+        kind: "blob",
+        mime: payload.mime,
+        fileName: payload.fileName,
+        getText: () => payload.content,
+      });
+    },
+    onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal mengekspor referensi.")),
   });
 }
 

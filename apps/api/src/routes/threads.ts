@@ -4,6 +4,12 @@ import {
   ResearchService,
   ThreadService,
 } from "@aqsha/services";
+import {
+  dedupeReferenceSources,
+  formatBibtex,
+  formatRis,
+  sortForReferenceList,
+} from "@aqsha/services/research";
 import { SendQuotaService } from "@aqsha/services/quota";
 import { Elysia, t } from "elysia";
 import { getDb } from "../clients/db";
@@ -121,6 +127,26 @@ export const threads = new Elysia({ prefix: "/threads" })
       return { items };
     },
     { auth: true },
+  )
+  // Ekspor daftar pustaka thread (FEAT-3) — BibTeX/RIS deterministik dari `research_sources`
+  // (dedup lintas turn, urut alfabetis APA). FE mengunduh sebagai blob; body = teks file.
+  .get(
+    "/:id/references",
+    async ({ ownerUserId, params, query }) => {
+      const { db } = getDb();
+      await ThreadService.assertOwner(db, ownerUserId, params.id);
+      const items = await ResearchService.listThreadSources(db, params.id);
+      const sources = sortForReferenceList(dedupeReferenceSources(items));
+      const format = query.format === "ris" ? "ris" : "bibtex";
+      return {
+        format,
+        count: sources.length,
+        fileName: `referensi-${params.id}.${format === "ris" ? "ris" : "bib"}`,
+        mime: format === "ris" ? "application/x-research-info-systems" : "application/x-bibtex",
+        content: format === "ris" ? formatRis(sources) : formatBibtex(sources),
+      };
+    },
+    { auth: true, query: t.Object({ format: t.Optional(t.String()) }) },
   )
   // Lampiran thread (Slice 6.7) — file di-attach di chat, HEADLESS (workspaceId=null,
   // threadId set). Ownership = THREAD (assertOwner), bukan workspace. Reuse presign +

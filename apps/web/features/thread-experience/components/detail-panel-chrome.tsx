@@ -34,11 +34,14 @@ export function DetailPanelShell({
   title,
   eyebrow,
   onClose,
+  actions,
   children,
 }: {
   title: string;
   eyebrow?: string;
   onClose?: () => void;
+  /** Aksi tambahan di kiri tombol tutup (mis. ekspor referensi di panel Sumber). */
+  actions?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -47,7 +50,12 @@ export function DetailPanelShell({
         <PanelHeaderBar
           title={<PanelTitleLabel>{title}</PanelTitleLabel>}
           eyebrow={eyebrow}
-          actions={<PanelCloseButton onClose={onClose} />}
+          actions={
+            <>
+              {actions}
+              <PanelCloseButton onClose={onClose} />
+            </>
+          }
         />
       }
     >

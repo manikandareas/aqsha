@@ -157,7 +157,7 @@ function ThreadDetailShellView({
     mode.kind === "artifact" ? (
       <ArtifactDetailPanel artifactId={mode.artifactId} onClose={panel?.closePanel} />
     ) : mode.kind === "sources" ? (
-      <SourcesListPanel messageId={mode.messageId} />
+      <SourcesListPanel messageId={mode.messageId} threadId={threadId} />
     ) : mode.kind === "search" ? (
       <SearchStepPanel turnId={mode.turnId} subQuestionIndex={mode.subQuestionIndex} />
     ) : mode.kind === "step" ? (
