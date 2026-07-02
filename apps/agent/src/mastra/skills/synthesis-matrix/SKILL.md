@@ -18,7 +18,7 @@ For each paper, pull only what the source actually states:
 Leave a cell blank (or `—`) when the source does not state it. Never fabricate an author, year, number, or finding; if a detail is uncertain, mark it `[perlu sumber]` rather than guessing.
 
 ## Produce the artifact
-Emit the matrix as a workspace artifact, not just chat text. Call `propose_artifact` with `artifactType` `markdown` (a Markdown table) or `csv`, and `planBullets` naming the topic and the studies to include; after the user approves, call `execute_artifact` once with the final table. Order rows chronologically or by theme, whichever the user asked for.
+Emit the matrix as a document artifact, not just chat text. First offer it in conversation ("mau saya simpan sebagai dokumen?") naming the topic and the studies to include; once the user agrees, call `propose_artifact` **once** with `title` (short document title) and `markdown` (the full Markdown table plus the synthesis paragraphs). There is no separate execute step — `propose_artifact` creates the document directly. Order rows chronologically or by theme, whichever the user asked for.
 
 ## Close with a synthesis
 After the table, add one or two paragraphs that read across the rows: recurring methods and findings, where studies agree or conflict, and the gap this points to. Keep claims tied to the rows above — the synthesis summarizes the matrix, it does not add new sources.

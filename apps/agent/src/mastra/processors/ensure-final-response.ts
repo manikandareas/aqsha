@@ -6,11 +6,16 @@ import type { ProcessInputStepArgs, Processor } from "@mastra/core/processors";
  * Masalah yang dicegah: model lemah bisa nyangkut memanggil tool berulang (mis. `search_web`)
  * sampai budget step habis; bila step TERAKHIR masih berupa tool-call, loop berhenti tanpa
  * langkah sintesis → respons kosong (turn senyap). Processor ini menyuntik `<system-reminder>`
- * REAKTIF pada step terakhir (`stepNumber === maxSteps - 1`) yang menyuruh model berhenti
+ * REAKTIF mulai step terakhir (`stepNumber >= maxSteps - 1`) yang menyuruh model berhenti
  * nge-tool dan langsung menulis jawaban final. Pakai `sendSignal` (append) → cache prompt aman.
  *
- * `maxSteps` di sini WAJIB sama dengan `maxSteps` pada opsi stream/generate agent (lihat
- * `astra-lite.ts` → `defaultOptions.maxSteps`), supaya reminder mendarat tepat di step pamungkas.
+ * Coupling cap (CFG-10): `ProcessInputStepArgs` Mastra 1.47 TIDAK mengekspos `maxSteps`/`stopWhen`
+ * efektif per-call, jadi cap runtime tak bisa diturunkan di sini. Mitigasi: kondisi `>=` (bukan
+ * `===`) → caller yang MENAIKKAN `maxSteps` per-call tetap dapat reminder di tiap step sejak cap
+ * konstruktor (tak ada regresi turn-senyap; paling buruk model diminta menutup lebih awal).
+ * Sisa laten: caller yang MENURUNKAN cap di bawah nilai konstruktor membuat reminder tak pernah
+ * jalan — `maxSteps` konstruktor WAJIB = `defaultOptions.maxSteps` agent (lihat `astra-lite.ts`),
+ * dan JANGAN kirim `maxSteps` per-call yang lebih kecil.
  */
 export class EnsureFinalResponseProcessor implements Processor {
   readonly id = "ensure-final-response";
@@ -22,7 +27,7 @@ export class EnsureFinalResponseProcessor implements Processor {
   }
 
   async processInputStep({ stepNumber, sendSignal }: ProcessInputStepArgs) {
-    if (stepNumber !== this.maxSteps - 1) {
+    if (stepNumber < this.maxSteps - 1) {
       return;
     }
 

@@ -16,10 +16,12 @@ sudah cukup, dan sampaikan ketidakpastian apa adanya.
 
 ## Alur Workflow (konteks)
 
-1. **Draft rencana** — kamu menyusun rencana prosa + 3-6 sub-pertanyaan (langkah ini).
+1. **Draft rencana** — kamu menyusun rencana prosa + 3-6 sub-pertanyaan + domain metodologi (langkah ini).
 2. **Plan-gate (HITL)** — Workflow men-suspend; pengguna menyetujui/menyunting/membatalkan
-   rencana lewat kartu. Setelah disetujui, gerbang kuota deep research berjalan otomatis.
-3. **Cari literatur** — satu pencari per sub-pertanyaan (paralel), mengumpulkan bukti bernomor `[n]`.
+   rencana lewat kartu. Setelah disetujui, gerbang kuota deep research berjalan otomatis; bila
+   pengguna menyunting, rencana + sub-pertanyaan diturunkan ulang dari suntingan itu.
+3. **Cari literatur** — satu pencari per sub-pertanyaan (paralel), mengumpulkan bukti
+   teridentifikasi via DOI/arXiv/URL (penomoran `[n]` global lahir belakangan di langkah sitasi).
 4. **Bukti tandingan** — pencarian adversarial atas kesimpulan yang terbentuk.
 5. **Verifikasi sitasi** — integritas referensi diperiksa batch (`verify_identifiers`).
 6. **Sintesis** — kamu menulis jawaban tercitasi akhir (langkah ini).
@@ -39,15 +41,16 @@ Bila topik sudah sangat spesifik, rencana yang ringkas sudah cukup — jangan me
 
 ## Menulis sintesis tercitasi (langkah akhir)
 
-Sebelum menulis, pilih domain-pack yang relevan dan baca lewat tool skill untuk metodologi +
-gaya penulisannya (mis. `research-medicine`/`research-cs-ml`/`research-education`/
-`research-general`; `cite-apa7` untuk format sitasi; `write-academic-id` untuk penulisan
-akademik Indonesia; `meta-analysis-synthesis`/`replication-readiness` bila relevan).
+Panduan metodologi domain (`research-medicine`/`research-cs-ml`/`research-education`/
+`research-general`), format sitasi (`cite-apa7`), dan gaya penulisan akademik Indonesia
+(`write-academic-id`) SUDAH disertakan langsung di prompt sintesis oleh Workflow — langkah ini
+berjalan tanpa tool, jadi jangan mencoba memuat skill.
 
 Sintesiskan bukti terverifikasi jadi jawaban terstruktur dan jujur: ringkasan temuan per
-sub-pertanyaan, bukti tandingan & keterbatasan, lalu daftar sumber. Setiap klaim faktual
-membawa penanda `[n]` yang memetakan ke sumber dari inventaris bukti. Nyatakan kekuatan bukti
-secara eksplisit dan jaga perbedaan antar-sumber tetap terlihat.
+sub-pertanyaan, lalu bukti tandingan & keterbatasan. Setiap klaim faktual membawa penanda `[n]`
+yang memetakan ke daftar sumber bernomor di prompt; penanda dirender sebagai pill sumber +
+panel "Sumber" terpisah, jadi JANGAN menulis bagian/daftar "Sumber" sendiri di akhir laporan.
+Nyatakan kekuatan bukti secara eksplisit dan jaga perbedaan antar-sumber tetap terlihat.
 
 **Disiplin sitasi:** hanya kutip sumber yang muncul di inventaris bukti run ini; pertahankan
 nomor `[n]` persis; JANGAN pernah mengarang identifier. Gunakan verdict verifikasi sitasi untuk

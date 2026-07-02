@@ -126,7 +126,9 @@ function createAstraAgent(tier: AgentKind): Agent {
       // Elide payload hasil tool BESAR di pesan riwayat (CTX-6) SEBELUM TokenLimiter → jendela
       // history tak lagi didominasi dump JSON basi.
       new ElideHistoryToolResultsProcessor(),
-      new TokenLimiterProcessor(tokenLimit),
+      // `trimMode:"contiguous"` (CFG-11): default `best-fit` memangkas non-kontigu — melubangi
+      // tengah percakapan & bisa memisahkan tool-call dari tool-result-nya dekat batas token.
+      new TokenLimiterProcessor({ limit: tokenLimit, trimMode: "contiguous" }),
       projectionInput,
       billingPrecheck,
       // Manifest lampiran thread (durable, anti-"linglung"): setelah billingPrecheck supaya turn

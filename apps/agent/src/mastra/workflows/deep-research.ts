@@ -26,6 +26,7 @@ import { counterEvidence } from "../agents/counter-evidence";
 import { deepWriter } from "../agents/deep-writer";
 import { literatureSearcher } from "../agents/literature-searcher";
 import { getServiceDb } from "../lib/db";
+import { inlineSkillInstructions } from "../skills";
 import {
   AQSHA_AGENT_KIND_KEY,
   AQSHA_DEEP_RUN_KEY,
@@ -37,9 +38,9 @@ import {
 import { effectiveBilledTier, liteProviderOptions, proProviderOptions } from "../model";
 
 /**
- * Workflow `deep-research` (Fase 2) — port `/deep` eve ke orkestrasi deterministik Mastra.
+ * Workflow `deep-research` — orkestrasi deterministik Mastra untuk `/deep`.
  *
- * Menggantikan skill `deep-research` model-driven + subagent eve dengan langkah eksplisit yang
+ * Riset mendalam dijalankan sebagai langkah eksplisit (bukan loop model-driven) supaya
  * observable per fase dan resume-safe:
  *
  *   draftClarify (kuota + nilai klarifikasi) → clarify (HITL ask_questions, opsional) → draftPlan
@@ -51,9 +52,9 @@ import { effectiveBilledTier, liteProviderOptions, proProviderOptions } from "..
  *   `.foreach`. Rantai linear `.then` menjaga konteks (question/plan) mengalir utuh tanpa
  *   `.map`/`getStepResult` dan tetap observable per fase. Per-sub-pertanyaan paralel.
  * - **Billing SEKALI di plan-gate** (`requireEntitlement` + `consumeCredits` feature
- *   `deep_research`, idempoten via `runId`) — port `begin_deep_research.ts`. Subagent &
- *   penulis TAK pakai processor billing per-turn; tool `search_*` tetap men-debit
- *   `external_search` per pemanggilan (parity eve).
+ *   `deep_research`, idempoten via `runId`). Subagent & penulis TAK pakai processor billing
+ *   per-turn; tool `search_*` tetap men-debit `external_search` per pemanggilan, sama seperti
+ *   di chat biasa.
  * - **threadId** dialirkan ke subagent via `RequestContext` (`MASTRA_THREAD_ID_KEY`) supaya
  *   tool riset men-scope `research_sources` ke thread chat tanpa memory thread subagent.
  */
@@ -85,6 +86,14 @@ const ClarifiedSchema = InputSchema.extend({
     .describe("Pertanyaan klarifikasi pra-rencana (kosong bila pertanyaan sudah cukup spesifik)."),
 });
 
+/**
+ * Domain-pack metodologi untuk sintesis (CFG-2): dipilih planner di `draft-plan`, dipakai
+ * `synthesize` untuk meng-inline skill `research-<domain>` ke prompt (langkah sintesis berjalan
+ * `toolChoice:"none"` sehingga tool skill tak bisa dipanggil di sana).
+ */
+const ResearchDomainSchema = z.enum(["medicine", "cs-ml", "education", "general"]);
+type ResearchDomain = z.infer<typeof ResearchDomainSchema>;
+
 const PlanSchema = z.object({
   plan: z.string().min(1).describe("Rencana riset sebagai prosa mengalir."),
   subQuestions: z
@@ -92,6 +101,9 @@ const PlanSchema = z.object({
     .min(1)
     .max(8)
     .describe("3-6 sub-pertanyaan riset yang diturunkan dari rencana."),
+  domain: ResearchDomainSchema.default("general").describe(
+    "Domain-pack metodologi yang di-inline ke prompt sintesis (CFG-2).",
+  ),
 });
 
 const EvidenceItemSchema = z.object({
@@ -446,9 +458,21 @@ function parseCitationCount(numberedInventory: string): number {
 
 // ── Prompt builders ────────────────────────────────────────────────────────────────────
 
+/** Ekor kontrak JSON rencana — dipakai `planPrompt` DAN `replanPrompt` (satu sumber format). */
+const PLAN_JSON_CONTRACT = `AKHIRI responsmu dengan TEPAT SATU blok kode JSON valid (tanpa teks setelahnya) berbentuk:\n\`\`\`json\n{"plan": "<rencana prosa lengkap di sini>", "subQuestions": ["<sub-pertanyaan 1>", "<sub-pertanyaan 2>", "..."], "domain": "<medicine|cs-ml|education|general>"}\n\`\`\`\nField \`domain\` = domain-pack metodologi yang paling cocok dengan topik (kesehatan/biomedis → medicine; CS/ML → cs-ml; pendidikan/pembelajaran → education; selain itu → general).`;
+
 function planPrompt(input: z.infer<typeof InputSchema>): string {
   const ctx = input.context ? `\n\nKonteks tambahan dari pengguna:\n${input.context}` : "";
-  return `Pertanyaan riset:\n${input.question}${ctx}\n\nSusun rencana riset mendalam sebagai PROSA mengalir (bukan daftar bernomor, bukan form): jelaskan apa yang akan diselidiki, sub-arah utama yang ditelusuri terpisah, jenis sumber yang dicari, dan cara verifikasi. Lalu turunkan 3-6 sub-pertanyaan riset spesifik dari rencana itu.\n\nAKHIRI responsmu dengan TEPAT SATU blok kode JSON valid (tanpa teks setelahnya) berbentuk:\n\`\`\`json\n{"plan": "<rencana prosa lengkap di sini>", "subQuestions": ["<sub-pertanyaan 1>", "<sub-pertanyaan 2>", "..."]}\n\`\`\``;
+  return `Pertanyaan riset:\n${input.question}${ctx}\n\nSusun rencana riset mendalam sebagai PROSA mengalir (bukan daftar bernomor, bukan form): jelaskan apa yang akan diselidiki, sub-arah utama yang ditelusuri terpisah, jenis sumber yang dicari, dan cara verifikasi. Lalu turunkan 3-6 sub-pertanyaan riset spesifik dari rencana itu.\n\n${PLAN_JSON_CONTRACT}`;
+}
+
+/**
+ * Prompt re-derive rencana setelah edit plan-gate (CFG-3): edit user harus MENGUBAH
+ * `subQuestions` yang benar-benar diriset, bukan hanya ditempel sebagai prosa untuk writer akhir.
+ */
+function replanPrompt(input: Planned, edits: string): string {
+  const subs = input.subQuestions.map((s, i) => `${i + 1}. ${s}`).join("\n");
+  return `Rencana riset untuk pertanyaan:\n${input.question}\n\nRencana saat ini:\n${input.plan}\n\nSub-pertanyaan saat ini:\n${subs}\n\nPengguna meminta penyesuaian berikut SEBELUM riset dijalankan:\n${edits}\n\nTulis ulang rencana sebagai PROSA mengalir yang menghormati penyesuaian itu, lalu turunkan ulang 3-6 sub-pertanyaan (buang/ubah/tambah sub-pertanyaan sesuai permintaan pengguna; pertahankan yang tidak disinggung).\n\n${PLAN_JSON_CONTRACT}`;
 }
 
 /**
@@ -456,7 +480,9 @@ function planPrompt(input: z.infer<typeof InputSchema>): string {
  * gateway kerap membungkus JSON dalam markdown); fallback ke objek {...} pertama yang valid.
  * Lebih tahan-banting dari `structuredOutput` native pada model OpenAI-compatible (gateway).
  */
-function parsePlan(text: string): { plan: string; subQuestions: string[] } | null {
+function parsePlan(
+  text: string,
+): { plan: string; subQuestions: string[]; domain: ResearchDomain } | null {
   const fenced = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)].map((m) => m[1]);
   for (const chunk of [...fenced.reverse(), text]) {
     const start = chunk.indexOf("{");
@@ -468,7 +494,12 @@ function parsePlan(text: string): { plan: string; subQuestions: string[] } | nul
         const subQuestions = obj.subQuestions.filter(
           (s: unknown): s is string => typeof s === "string" && s.trim().length > 0,
         );
-        return { plan: obj.plan, subQuestions };
+        const domainParsed = ResearchDomainSchema.safeParse(obj.domain);
+        return {
+          plan: obj.plan,
+          subQuestions,
+          domain: domainParsed.success ? domainParsed.data : "general",
+        };
       }
     } catch {
       // coba kandidat berikutnya
@@ -523,11 +554,39 @@ function verifyPrompt(input: Cited): string {
   return `Daftar referensi bernomor [n] yang akan dikutip — verifikasi integritasnya dengan SATU panggilan verify_identifiers:\n\n${input.numberedInventory}`;
 }
 
+/** Nama skill domain-pack per `ResearchDomain` (di-inline ke prompt sintesis, CFG-2). */
+const DOMAIN_SKILL_NAME: Record<ResearchDomain, string> = {
+  medicine: "research-medicine",
+  "cs-ml": "research-cs-ml",
+  education: "research-education",
+  general: "research-general",
+};
+
+/**
+ * Panduan metodologi + gaya yang DI-INLINE ke prompt sintesis (CFG-2): langkah `synthesize`
+ * berjalan `toolChoice:"none"` sehingga instruksi lama "baca skill lewat tool" tak pernah bisa
+ * dieksekusi. Konten diambil dari inline skills (SSOT = SKILL.md via codegen) — bukan salinan.
+ */
+function synthesisGuidance(domain: ResearchDomain): string {
+  const domainSkill = DOMAIN_SKILL_NAME[domain];
+  return [
+    `## Metodologi domain (${domainSkill})`,
+    inlineSkillInstructions(domainSkill),
+    "",
+    "## Gaya penulisan akademik Indonesia (write-academic-id)",
+    inlineSkillInstructions("write-academic-id"),
+    "",
+    "## Konvensi APA 7 (cite-apa7) — HANYA untuk penyebutan naratif",
+    "Berlaku saat menyebut sumber secara naratif di prosa (mis. \"Vaswani et al. (2017) menunjukkan …\"). Penanda sitasi inline TETAP [n], dan JANGAN menulis bagian daftar pustaka.",
+    inlineSkillInstructions("cite-apa7"),
+  ].join("\n");
+}
+
 function synthesisPrompt(input: Verified): string {
   const evidence = input.evidence
     .map((e, i) => `### Sub-pertanyaan ${i + 1}: ${e.subQuestion}\n${e.findings}`)
     .join("\n\n");
-  return `Tulis jawaban riset tercitasi untuk pertanyaan:\n${input.question}\n\nRencana yang disetujui:\n${input.plan}\n\nDaftar sumber bernomor (SATU-SATUNYA sumber nomor [n] — WAJIB pakai nomor PERSIS ini saat mengutip; jangan menomori ulang):\n${input.numberedInventory}\n\nInventaris bukti (untuk ekstrak & narasi — teks temuan TIDAK bernomor; petakan tiap klaim ke daftar sumber bernomor di atas via DOI/arXiv/URL/judul):\n${evidence}\n\nBukti tandingan (adversarial):\n${input.counter}\n\nVerdict verifikasi sitasi:\n${input.verification}\n\nSintesiskan menjadi jawaban terstruktur dan jujur: ringkasan temuan per sub-pertanyaan, lalu bukti tandingan & keterbatasan. Setiap klaim faktual membawa penanda [n] inline dari daftar sumber bernomor di atas (penanda dirender sebagai pill sumber + panel "Sumber" terpisah — JANGAN tulis daftar/bagian "Sumber" teks sendiri di akhir). Baca domain-pack + cite-apa7/write-academic-id lewat tool skill sebelum menulis. JANGAN mengarang identifier.`;
+  return `Tulis jawaban riset tercitasi untuk pertanyaan:\n${input.question}\n\nRencana yang disetujui:\n${input.plan}\n\nDaftar sumber bernomor (SATU-SATUNYA sumber nomor [n] — WAJIB pakai nomor PERSIS ini saat mengutip; jangan menomori ulang):\n${input.numberedInventory}\n\nInventaris bukti (untuk ekstrak & narasi — teks temuan TIDAK bernomor; petakan tiap klaim ke daftar sumber bernomor di atas via DOI/arXiv/URL/judul):\n${evidence}\n\nBukti tandingan (adversarial):\n${input.counter}\n\nVerdict verifikasi sitasi:\n${input.verification}\n\nPanduan metodologi & gaya (SUDAH disertakan di bawah — kamu TIDAK bisa dan TIDAK perlu memuat skill lewat tool di langkah ini):\n\n${synthesisGuidance(input.domain)}\n\nSintesiskan menjadi jawaban terstruktur dan jujur: ringkasan temuan per sub-pertanyaan, lalu bukti tandingan & keterbatasan. Setiap klaim faktual membawa penanda [n] inline dari daftar sumber bernomor di atas (penanda dirender sebagai pill sumber + panel "Sumber" terpisah — JANGAN tulis daftar/bagian "Sumber"/daftar pustaka sendiri di akhir). JANGAN mengarang identifier.`;
 }
 
 // ── Steps ─────────────────────────────────────────────────────────────────────────────────
@@ -609,22 +668,27 @@ const clarifyGateStep = createStep({
 /**
  * 1. draftPlan — susun rencana prosa + sub-pertanyaan terstruktur via `deepWriter`. Precheck kuota
  * dipindah ke `draft-clarify` (gerbang paling awal) → step ini fokus menyusun rencana.
+ * `toolChoice:"none"` (CFG-5): step ini berjalan SEBELUM gerbang billing `approve-plan`, jadi tool
+ * berbayar (`search_*`) tak boleh bisa jalan di sini; `delete_artifact` (approval-suspend) juga
+ * dilarang dalam workflow-generate (lihat `tools/index.ts`). Murni menulis JSON rencana.
  */
 const draftPlanStep = createStep({
   id: "draft-plan",
   inputSchema: InputSchema,
   outputSchema: PlannedSchema,
+  retries: 1,
   execute: async ({ inputData, requestContext, runId, writer }) => {
-    const out = await deepWriter.generate(
-      planPrompt(inputData),
-      deepGenOptions(requestContext, inputData, runId),
-    );
+    const out = await deepWriter.generate(planPrompt(inputData), {
+      ...deepGenOptions(requestContext, inputData, runId),
+      toolChoice: "none",
+    });
     const parsed = parsePlan(out.text);
     const plan = parsed?.plan ?? out.text;
     const subQuestions =
       parsed && parsed.subQuestions.length > 0 ? parsed.subQuestions : [inputData.question];
+    const domain = parsed?.domain ?? "general";
     await emitDetail(writer, { kind: "plan", plan, subQuestions });
-    return { ...inputData, plan, subQuestions };
+    return { ...inputData, plan, subQuestions, domain };
   },
 });
 
@@ -645,7 +709,7 @@ const approvePlanStep = createStep({
     plan: z.string(),
     subQuestions: z.array(z.string()),
   }),
-  execute: async ({ inputData, resumeData, suspend, bail, requestContext, runId, mastra }) => {
+  execute: async ({ inputData, resumeData, suspend, bail, requestContext, runId, mastra, writer }) => {
     if (!resumeData) {
       // Proyeksikan thread + persist pertanyaan SEBELUM suspend → refresh saat plan-gate me-resume
       // kartu rencana (thread durable, tak "Akses ditolak"), bukan thread kosong (G1/TC13).
@@ -696,21 +760,53 @@ const approvePlanStep = createStep({
         return bail({ status: "blocked" as const, reason: `Kuota deep research habis (${debit.reason}).` });
       }
     }
-    const plan = resumeData.edits
-      ? `${inputData.plan}\n\nPenyesuaian dari pengguna: ${resumeData.edits}`
-      : inputData.plan;
-    return { ...inputData, plan };
+    if (!resumeData.edits) return inputData;
+    // CFG-3: edit user harus sampai ke `subQuestions` yang benar-benar diriset fan-out — bukan
+    // hanya ditempel sebagai prosa yang baru dibaca writer akhir. Re-derive rencana+sub-pertanyaan
+    // dengan satu pass murah (`toolChoice:"none"`); gagal → fallback perilaku lama (append prosa).
+    try {
+      const out = await deepWriter.generate(replanPrompt(inputData, resumeData.edits), {
+        ...deepGenOptions(requestContext, inputData, runId),
+        toolChoice: "none",
+      });
+      const parsed = parsePlan(out.text);
+      if (parsed && parsed.subQuestions.length > 0) {
+        await emitDetail(writer, {
+          kind: "plan",
+          plan: parsed.plan,
+          subQuestions: parsed.subQuestions,
+        });
+        return {
+          ...inputData,
+          plan: parsed.plan,
+          subQuestions: parsed.subQuestions,
+          domain: parsed.domain,
+        };
+      }
+    } catch (err) {
+      console.error("[deep-research] replan after edits failed", err);
+    }
+    return {
+      ...inputData,
+      plan: `${inputData.plan}\n\nPenyesuaian dari pengguna: ${resumeData.edits}`,
+    };
   },
 });
 
 /**
  * 3. searchLiterature — fan-out paralel: satu `literatureSearcher` per sub-pertanyaan. Tool
  * `search_*` men-debit `external_search` + persist `research_sources` ke thread chat.
+ *
+ * Isolasi kegagalan per sub-pertanyaan (CFG-4): satu subagent yang melempar (429/timeout
+ * terminal) TIDAK menggagalkan seluruh fan-out — kredit sudah didebit di plan-gate, jadi run
+ * harus degradasi per-sub-Q (catat gap jujur ke sintesis), bukan `failed` tanpa hasil parsial.
  */
 const searchStep = createStep({
   id: "search-literature",
   inputSchema: PlannedSchema,
   outputSchema: SearchedSchema,
+  // TANPA `retries`: re-run step = re-debit `external_search` per tool-call baru. Isolasi
+  // per-sub-Q di bawah sudah membuat step ini tak melempar.
   execute: async ({ inputData, requestContext, runId, writer }) => {
     // Tanam thread+run di rc induk dulu → entries() yang DI-CLONE per sub-Q sudah membawanya.
     withDeepRun(requestContext, inputData.threadId, runId, inputData.agentKind);
@@ -723,17 +819,23 @@ const searchStep = createStep({
         subRc.set(AQSHA_DEEP_SUBQ_TEXT_KEY, subQuestion);
         await emitDetail(writer, { kind: "search-sub", subIndex, subQuestion, status: "searching" });
         const genOpts = { requestContext: subRc, ...deepProviderOptions(inputData.agentKind) };
-        const out = await literatureSearcher.generate(searcherPrompt(subQuestion, inputData), genOpts);
-        let findings = out.text.trim();
-        // Guard turn-senyap subagent (CTX-7): selesai pas di tool-call → teks kosong. Retry SEKALI
-        // dengan pengingat eksplisit; masih kosong → catat gap jujur (jangan biarkan bucket kosong
-        // mengalir senyap ke sintesis).
-        if (!findings) {
-          const retry = await literatureSearcher.generate(
-            `${searcherPrompt(subQuestion, inputData)}\n\nPENTING: percobaan sebelumnya berakhir tanpa teks. AKHIRI responsmu dengan ringkasan teks temuan (atau nyatakan jujur bila buktinya tipis) — jangan berhenti pada pemanggilan tool.`,
-            genOpts,
-          );
-          findings = retry.text.trim();
+        let findings = "";
+        try {
+          const out = await literatureSearcher.generate(searcherPrompt(subQuestion, inputData), genOpts);
+          findings = out.text.trim();
+          // Guard turn-senyap subagent (CTX-7): selesai pas di tool-call → teks kosong. Retry SEKALI
+          // dengan pengingat eksplisit; masih kosong → catat gap jujur (jangan biarkan bucket kosong
+          // mengalir senyap ke sintesis).
+          if (!findings) {
+            const retry = await literatureSearcher.generate(
+              `${searcherPrompt(subQuestion, inputData)}\n\nPENTING: percobaan sebelumnya berakhir tanpa teks. AKHIRI responsmu dengan ringkasan teks temuan (atau nyatakan jujur bila buktinya tipis) — jangan berhenti pada pemanggilan tool.`,
+              genOpts,
+            );
+            findings = retry.text.trim();
+          }
+        } catch (err) {
+          // CFG-4: kegagalan satu subagent tak boleh menolak seluruh Promise.all.
+          console.error(`[deep-research] literature-searcher sub-Q ${subIndex} failed`, err);
         }
         if (!findings) {
           findings =
@@ -749,11 +851,17 @@ const searchStep = createStep({
   },
 });
 
-/** 4. counterEvidence — cari bukti tandingan adversarial atas inventaris. */
+/**
+ * 4. counterEvidence — cari bukti tandingan adversarial atas inventaris. `retries: 1` (CFG-4):
+ * step LLM pasca-billing tak boleh mematikan run karena satu error transien (kredit deep sudah
+ * didebit di plan-gate; re-run bisa mengulang sedikit debit `external_search` — jauh lebih murah
+ * daripada run `failed` tanpa refund).
+ */
 const counterEvidenceStep = createStep({
   id: "counter-evidence",
   inputSchema: SearchedSchema,
   outputSchema: CounteredSchema,
+  retries: 1,
   execute: async ({ inputData, requestContext, runId, writer }) => {
     const out = await counterEvidence.generate(
       counterPrompt(inputData),
@@ -820,6 +928,7 @@ const citationVerifyStep = createStep({
   id: "verify-citations",
   inputSchema: CitedSchema,
   outputSchema: VerifiedSchema,
+  retries: 1,
   execute: async ({ inputData, requestContext, runId, writer }) => {
     const out = await citationVerifier.generate(
       verifyPrompt(inputData),
@@ -839,6 +948,7 @@ const synthesizeStep = createStep({
   id: "synthesize",
   inputSchema: VerifiedSchema,
   outputSchema: OutputSchema,
+  retries: 1,
   execute: async ({ inputData, requestContext, mastra, runId, writer }) => {
     // `toolChoice: "none"`: seluruh bukti sudah ada di prompt; paksa penulis MENULIS teks
     // (bukan berhenti di tool-call kosong) — jaminan `out.text` terisi pada model gateway.

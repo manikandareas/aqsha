@@ -18,12 +18,20 @@ export const verifyCitations = createTool({
   }),
   execute: async (input, ctx) => {
     const ownerUserId = callerId(ctx);
-    await chargeToolUsage(ctx, {
+    // CFG-7: hormati hasil gate — `citation_verify` berrate 0 hari ini (selalu ok), tapi bila
+    // suatu saat diberi rate, kuota habis TIDAK boleh tetap menjalankan verifikasi.
+    const charged = await chargeToolUsage(ctx, {
       ownerUserId,
       feature: "citation_verify",
       tool: "verify_citations",
       provider: "crossref",
     });
+    if (!charged) {
+      return {
+        error: "quota_exhausted" as const,
+        note: "Verifikasi TIDAK dijalankan: kuota fitur verifikasi sitasi habis untuk periode ini.",
+      };
+    }
     return CitationService.verifyCitations(input.artifactText);
   },
 });

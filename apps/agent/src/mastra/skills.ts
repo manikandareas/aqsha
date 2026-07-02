@@ -11,4 +11,18 @@
  * Mastra menyediakan tool bawaan (`skill`/`skill_read`/`skill_search`, progressive disclosure)
  * saat `skills` terdaftar — TANPA sandbox.
  */
-export { inlineSkills } from "./skills-inline";
+import { inlineSkills } from "./skills-inline";
+
+export { inlineSkills };
+
+/**
+ * Isi (body SKILL.md) satu inline skill by name — untuk langkah yang berjalan `toolChoice:"none"`
+ * (mis. `synthesize` di Workflow `/deep`) sehingga tak bisa memuat skill lewat tool: panduannya
+ * DI-INLINE ke prompt (CFG-2). Tetap SSOT: konten datang dari codegen SKILL.md, bukan salinan.
+ * Throw bila nama tak dikenal — salah ketik harus gagal keras saat dev, bukan senyap.
+ */
+export function inlineSkillInstructions(name: string): string {
+  const skill = inlineSkills.find((s) => s.name === name);
+  if (!skill) throw new Error(`Inline skill tidak ditemukan: ${name}`);
+  return skill.instructions;
+}
