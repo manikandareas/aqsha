@@ -50,9 +50,13 @@ export function chargeExternalSearch(
 
 /**
  * Gerbang kuota `external_search` NON-consuming (CTX-2): dicek SEBELUM memanggil provider, debit
- * baru terjadi SETELAH provider sukses (`runResearchTool`) → provider error tak menguras kredit.
+ * baru terjadi SETELAH provider sukses (`runResearchTool`, `read_url`) → provider error tak
+ * menguras kredit.
  */
-async function precheckExternalSearch(ctx: AstraToolCtx, ownerUserId: string): Promise<boolean> {
+export async function precheckExternalSearch(
+  ctx: AstraToolCtx,
+  ownerUserId: string,
+): Promise<boolean> {
   const gate = await BillingService.requireEntitlement(getServiceDb(), {
     ownerUserId,
     ownerEmail: callerEmail(ctx),

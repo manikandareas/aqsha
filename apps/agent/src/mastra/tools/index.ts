@@ -1,6 +1,7 @@
 import { askQuestions } from "./ask-questions";
 import { createWorkspace } from "./create-workspace";
 import { deleteArtifact } from "./delete-artifact";
+import { formatReferences } from "./format-references";
 import { getArtifact } from "./get-artifact";
 import { getRenderPayload } from "./get-render-payload";
 import { linkToWorkspace } from "./link-to-workspace";
@@ -8,6 +9,7 @@ import { listArtifacts } from "./list-artifacts";
 import { listWorkspaces } from "./list-workspaces";
 import { lookupDoi } from "./lookup-doi";
 import { proposeArtifact } from "./propose-artifact";
+import { readUrl } from "./read-url";
 import { renameWorkspace } from "./rename-workspace";
 import { requestDocumentEdit } from "./request-document-edit";
 import { saveUrl } from "./save-url";
@@ -48,8 +50,10 @@ export const researchTools = {
   search_arxiv: searchArxiv,
   lookup_doi: lookupDoi,
   search_web: searchWeb,
+  read_url: readUrl,
   verify_citations: verifyCitations,
   verify_identifiers: verifyIdentifiers,
+  format_references: formatReferences,
 };
 
 /**

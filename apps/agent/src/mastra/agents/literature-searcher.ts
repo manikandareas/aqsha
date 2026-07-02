@@ -1,6 +1,7 @@
 import { Agent } from "@mastra/core/agent";
 import { modelForRequestContext } from "../model";
 import { lookupDoi } from "../tools/lookup-doi";
+import { readUrl } from "../tools/read-url";
 import { searchArxiv } from "../tools/search-arxiv";
 import { searchPapers } from "../tools/search-papers";
 import { searchThreadDocuments } from "../tools/search-thread-documents";
@@ -22,6 +23,9 @@ not share its history, so everything you need is in the message).
 - Search with the research tools (search_web, search_arxiv, search_papers, lookup_doi,
   and search_thread_documents when the user's own attachments are relevant). Prefer
   primary sources.
+- When a snippet is too thin to judge or extract the evidence, call read_url on the
+  SINGLE most decisive source to read its full text. At most 1-2 read_url calls per
+  sub-question — never read every search result.
 - Limit yourself to ~2 search rounds; stop early when the evidence saturates.
 - Tool results in this mode carry NO citation numbers — global numbering is assigned
   later. NEVER write \`[n]\` markers or number the sources yourself. Identify each
@@ -52,6 +56,7 @@ export const literatureSearcher = new Agent({
     search_arxiv: searchArxiv,
     search_papers: searchPapers,
     lookup_doi: lookupDoi,
+    read_url: readUrl,
     search_thread_documents: searchThreadDocuments,
   },
 });

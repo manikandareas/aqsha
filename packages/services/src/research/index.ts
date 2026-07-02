@@ -12,8 +12,10 @@ import { normalizeDoi } from "../papers/identifiers";
 import { searchArxiv } from "./arxiv";
 import { lookupDoi, searchCrossref } from "./crossref";
 import { searchWebFirecrawl } from "./firecrawl";
-import { searchOpenAlex } from "./openalex";
+import { type OpenAlexSort, searchOpenAlex } from "./openalex";
 import type { ProviderSearchResult, ResearchCandidate } from "./types";
+
+export type { OpenAlexSort } from "./openalex";
 
 export type {
   EvidenceStrength,
@@ -32,6 +34,20 @@ export {
   type IntegrityStatus,
   type VerificationResult,
 } from "./citation";
+
+// Firecrawl reader (FEAT-1) — full-text URL → markdown untuk tool `read_url` agent; berbagi
+// subpath `./research` (fisiknya di ../papers karena dipakai worker ingest juga).
+export { scrapeUrlFirecrawl, type UrlReadResult } from "../papers/firecrawl-reader";
+
+// Formatter daftar pustaka deterministik (FEAT-3) — tool `format_references` + export .bib/.ris.
+export {
+  dedupeReferenceSources,
+  formatApa7Reference,
+  formatBibtex,
+  formatRis,
+  type ReferenceSourceInput,
+  sortForReferenceList,
+} from "./references";
 
 /**
  * Preview OG image untuk satu sumber web (best-effort, time-boxed di `fetchArticlePreview`).
@@ -125,8 +141,19 @@ export const ResearchService = {
     return searchCrossref(args);
   },
 
-  /** Pencarian karya akademik (OpenAlex). Hasil DISKRIMINATIF (`ok:false` = provider error). */
-  searchOpenAlex(args: { query: string; limit?: number }): Promise<ProviderSearchResult> {
+  /**
+   * Pencarian karya akademik (OpenAlex). Hasil DISKRIMINATIF (`ok:false` = provider error).
+   * Filter FEAT-2: rentang tahun terbit, bahasa (ISO 639-1, mis. `id` untuk jurnal Indonesia),
+   * dan sort (`relevance`|`cited_by`|`newest`).
+   */
+  searchOpenAlex(args: {
+    query: string;
+    limit?: number;
+    yearFrom?: number;
+    yearTo?: number;
+    language?: string;
+    sort?: OpenAlexSort;
+  }): Promise<ProviderSearchResult> {
     return searchOpenAlex(args);
   },
 

@@ -88,14 +88,33 @@ export function reconstructOpenAlexAbstract(
   return words.filter(Boolean).join(" ").trim();
 }
 
+/** Sort yang didukung `search_papers` (FEAT-2) → param `sort` OpenAlex. */
+export type OpenAlexSort = "relevance" | "cited_by" | "newest";
+
+const SORT_PARAM: Record<OpenAlexSort, string> = {
+  relevance: "relevance_score:desc",
+  cited_by: "cited_by_count:desc",
+  newest: "publication_date:desc",
+};
+
 export async function searchOpenAlex(args: {
   query: string;
   limit?: number;
+  /** Filter tahun terbit inklusif (FEAT-2) — "jurnal 5 tahun terakhir" dsb. */
+  yearFrom?: number;
+  yearTo?: number;
+  /** Kode bahasa ISO 639-1 (mis. `id`) → filter `language:` OpenAlex (FEAT-2). */
+  language?: string;
+  sort?: OpenAlexSort;
 }): Promise<ProviderSearchResult> {
   const query = args.query.trim();
   if (!query) return providerOk([]);
   const limit = Math.min(args.limit ?? 5, 15);
-  const cacheKey = normalizeKey(JSON.stringify({ query, limit }));
+  const yearFrom = args.yearFrom;
+  const yearTo = args.yearTo;
+  const language = args.language?.trim().toLowerCase() || undefined;
+  const sort = args.sort ?? "relevance";
+  const cacheKey = normalizeKey(JSON.stringify({ query, limit, yearFrom, yearTo, language, sort }));
   const cached = await readCachedCandidates(PROVIDER, cacheKey);
   if (cached) {
     // Cache `failed` = backoff 12 mnt yang JUJUR: laporkan sebagai error, bukan "tak ada hasil".
@@ -113,9 +132,14 @@ export async function searchOpenAlex(args: {
     if (email) url.searchParams.set("mailto", email);
     url.searchParams.set("per_page", String(limit));
     url.searchParams.set("select", SELECT_FIELDS.join(","));
-    url.searchParams.set("filter", "is_retracted:false,is_paratext:false");
+    const filters = ["is_retracted:false", "is_paratext:false"];
+    // Rentang tahun inklusif (FEAT-2): pakai from/to_publication_date (filter tanggal OpenAlex).
+    if (yearFrom) filters.push(`from_publication_date:${yearFrom}-01-01`);
+    if (yearTo) filters.push(`to_publication_date:${yearTo}-12-31`);
+    if (language) filters.push(`language:${language}`);
+    url.searchParams.set("filter", filters.join(","));
     url.searchParams.set("search", query);
-    url.searchParams.set("sort", "relevance_score:desc");
+    url.searchParams.set("sort", SORT_PARAM[sort]);
 
     const response = await fetchWithRetry(url.toString(), {
       headers: { Accept: "application/json", "User-Agent": researchUserAgent() },
