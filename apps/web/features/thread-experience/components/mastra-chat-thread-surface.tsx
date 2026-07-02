@@ -4,6 +4,7 @@ import { Button } from "@aqsha/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { m, useReducedMotion } from "motion/react";
 import { useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { ChevronRightIcon } from "@aqsha/ui/icons";
 import { ConversationContent } from "@/components/ai-elements/conversation-content";
 import { Conversation } from "@/components/ai-elements/conversation-root";
@@ -88,6 +89,35 @@ function blockedNotice(
   }
 }
 
+/**
+ * Pesan blokir pre-check `/deep` (feature `deep_research`) — dipakai sebagai toast saat submit
+ * (FE-11): user kehabisan cap `/deep` harus tahu SEBELUM Workflow jalan, bukan gagal mid-run.
+ */
+function deepBlockedMessage(status: ReturnType<typeof useSendStatus>["data"]): string {
+  if (!status || status.canSend) return "Riset mendalam sedang tidak tersedia.";
+  switch (status.reason) {
+    case "cooldown":
+      return "Terlalu cepat. Tunggu sebentar sebelum menjalankan /deep lagi.";
+    case "quota_exceeded":
+      return "Kuota riset mendalam (/deep) bulan ini sudah habis. Tingkatkan paket atau tunggu reset.";
+    case "subscription_required":
+      return "Riset mendalam butuh paket berbayar. Tingkatkan paket untuk melanjutkan.";
+    case "billing_inactive":
+      return "Langganan tidak aktif. Perbarui pembayaran untuk melanjutkan.";
+    default:
+      return "Riset mendalam sedang tidak tersedia.";
+  }
+}
+
+/**
+ * FE-1: `listMessages()` tanpa `perPage` jatuh ke `config.lastMessages` server (16 — dan fetch selalu
+ * via id `astra-lite`, jadi thread Pro pun ikut 16) → thread panjang kehilangan pesan lama setelah
+ * refresh tanpa indikasi. `perPage` HARUS angka (query di-parse `z.coerce.number`; `false` → 400).
+ * Server mengambil N TERBARU lalu membalik → kronologis; 400 pesan ≈ 200 giliran, jauh di atas
+ * thread wajar — melewati ini butuh paginasi sungguhan.
+ */
+const HISTORY_SEED_PER_PAGE = 400;
+
 /** Teks user terakhir di timeline (untuk regenerate). */
 function lastUserText(messages: readonly TimelineMessage[]): string | null {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -130,7 +160,11 @@ export function MastraChatThreadSurface({
   const effectiveThreadId = threadId ?? newThreadId;
 
   const client = useMastraClient();
-  const { data: historyMessages, isLoading: historyLoading } = useQuery({
+  const {
+    data: historyMessages,
+    isLoading: historyLoading,
+    isFetching: historyFetching,
+  } = useQuery({
     queryKey: ["mastra", "thread-messages", threadId],
     enabled: Boolean(threadId),
     queryFn: async () => {
@@ -138,12 +172,22 @@ export function MastraChatThreadSurface({
         threadId: threadId!,
         agentId: ASTRA_AGENT_ID,
       });
-      const res = await thread.listMessages();
+      const res = await thread.listMessages({ perPage: HISTORY_SEED_PER_PAGE });
       return mastraMessagesToTimeline(res.messages ?? []);
     },
   });
 
-  if (isLoading || (threadId && historyLoading)) {
+  // FE-3: seed dikonsumsi SEKALI oleh `useState` initializer di inner — data cache BASI saat
+  // kunjung ulang thread (chat → Explore → balik) membekukan turn baru sampai hard-reload karena
+  // hasil refetch React Query diabaikan. Latch per-mount (pola adjust-state-during-render): tahan
+  // first-paint sampai refetch on-mount selesai (data segar jadi seed); refetch background SETELAH
+  // inner tampil tidak memblok.
+  const [historySettled, setHistorySettled] = useState(false);
+  if (!historyFetching && !historySettled) setHistorySettled(true);
+  if (
+    isLoading ||
+    (threadId && (historyLoading || (historyFetching && !historySettled)))
+  ) {
     return <CenteredLoading label="Memuat thread..." />;
   }
 
@@ -184,6 +228,9 @@ function MastraChatInner({
     initialAgentKind: threadAgentKind,
   });
   const sendStatus = useSendStatus();
+  // FE-11: pre-check kuota `/deep` (feature `deep_research`, non-consuming) — diperiksa saat submit
+  // command deep supaya cap habis ketahuan sebelum Workflow jalan (dulu dead code tanpa call site).
+  const deepSendStatus = useSendStatus("deep_research");
   const qc = useQueryClient();
   const ambientContextRefs = useAmbientContextRefs();
   const boundRef = useRef(isExistingThread);
@@ -194,12 +241,11 @@ function MastraChatInner({
   const isEmpty = agent.messages.length === 0 && !busy;
 
   // Sumber riset `/deep` (research_sources, citation_number) → dikelompokkan per turn (runId) untuk
-  // dirender di bawah jawaban (G4). Fetch saat thread mapan (ready + ada pesan) → hindari 404 thread
-  // baru; invalidasi otomatis saat run deep selesai (lihat useMastraAgent).
-  const { data: sources } = useThreadSources(
-    threadId,
-    !busy && agent.messages.length > 0,
-  );
+  // dirender di bawah jawaban (G4). Fetch saat thread mapan (ada pesan) → hindari 404 thread baru.
+  // FE-9: TANPA gate `!busy` — invalidasi mid-run (search-literature / assign-citations) harus bisa
+  // refetch selagi streaming supaya kartu sumber terisi live; query `enabled:false` mengabaikan
+  // invalidasi. Fetch idempoten & murah, aman berjalan saat busy.
+  const { data: sources } = useThreadSources(threadId, agent.messages.length > 0);
   const sourcesByTurn = useMemo(() => {
     const map = new Map<string, ResearchSource[]>();
     for (const s of sources ?? []) {
@@ -282,6 +328,15 @@ function MastraChatInner({
   };
 
   const onComposerSend = (payload: ComposerSendPayload) => {
+    // FE-11: pre-check kuota `/deep` sebelum Workflow jalan. Backstop otoritatif tetap di server
+    // (billing precheck); ini UX-ramah supaya cap habis tak baru ketahuan mid-run.
+    if (payload.command === "deep") {
+      const st = deepSendStatus.data;
+      if (st && !st.canSend) {
+        toast.error(deepBlockedMessage(st));
+        return;
+      }
+    }
     bumpUrl();
     const run =
       payload.command === "deep"
@@ -301,6 +356,9 @@ function MastraChatInner({
           );
     void run.then(() => {
       void qc.invalidateQueries({ queryKey: queryKeys.threads.sendStatus() });
+      void qc.invalidateQueries({
+        queryKey: queryKeys.threads.sendStatus("deep_research"),
+      });
     });
   };
 

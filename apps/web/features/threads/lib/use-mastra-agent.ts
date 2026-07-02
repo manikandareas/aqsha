@@ -3,7 +3,7 @@
 import { type AskQuestionsResumeData, normalizeAskQuestions } from "@aqsha/chat-core";
 import { useAuth } from "@clerk/nextjs";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { readableApiErrorMessage } from "@/lib/api-error";
 import { documentEditBus } from "@/lib/document-edit-bus";
 import { queryKeys } from "../../../lib/api-query";
@@ -15,11 +15,13 @@ import {
   type MastraChunk,
   type MastraPlanGate,
   type MastraTimelineState,
+  dropLastTurn,
   initialMastraTimeline,
   reduceMastraChunk,
   reduceWorkflowChunk,
   seedWorkflowProgress,
   settleAssistantTurn,
+  settleWorkflowTurn,
   startAssistantTurn,
   startRegenerate,
 } from "./mastra-timeline";
@@ -72,6 +74,8 @@ type DeepRun = {
     resumeData?: Record<string, unknown>;
   }) => Promise<ReadableStream<MastraChunk>>;
   observe: (p?: { offset?: number }) => Promise<ReadableStream<MastraChunk>>;
+  /** Cancel run Workflow server-side (abort step berjalan + status `canceled`) — Stop `/deep` (FE-4). */
+  cancel: () => Promise<unknown>;
 };
 
 /** Iterasi `ReadableStream` via reader (async-iterator ReadableStream belum universal di browser). */
@@ -155,6 +159,90 @@ function lastTurnMessageIds(messages: readonly ServerMessageLike[]): string[] {
   return ids;
 }
 
+/**
+ * Filter dedup chunk langganan thread (FE-2). Server me-REPLAY buffer run AKTIF dari index 0 pada
+ * tiap (re)connect — refresh, blip jaringan (reconnect internal client-js), dan flip
+ * `committedAgentKind` lite→pro mid-run (deterministik) — sedangkan reducer `text-delta` append,
+ * bukan idempoten → teks/reasoning dobel. Tak ada penanda urutan pada chunk (diverifikasi ke
+ * `@mastra/core` 1.47: subscriber stream = replay parts polos + `runId` disisipkan), jadi dedup
+ * pakai pencocokan PREFIX signature per-run:
+ *
+ * - `applied[]` = signature semua chunk run yang sudah diterapkan, berurutan; `cursor` = posisi
+ *   pencocokan replay berikutnya (default = akhir → chunk baru).
+ * - Chunk `start` = kandidat awal segmen: cari signature-nya di `applied` → ketemu = replay mulai
+ *   dari titik itu (set cursor ke sana); tidak = segmen kelanjutan BARU (resume suspend memakai
+ *   runId yang sama) → cursor ke akhir.
+ * - Chunk cocok pada `applied[cursor]` → duplikat replay, SKIP; divergensi → perlakukan sebagai
+ *   chunk baru (append + terapkan).
+ *
+ * Run terminal tak pernah di-replay lagi → jejaknya dibuang (hemat memori thread panjang).
+ */
+function createChunkReplayFilter(): (chunk: MastraChunk) => boolean {
+  const runs = new Map<string, { applied: string[]; cursor: number }>();
+  const sigOf = (chunk: MastraChunk): string => {
+    try {
+      return `${chunk.type}:${JSON.stringify(chunk.payload ?? null)}`;
+    } catch {
+      return `${chunk.type}:?`; // payload tak ter-serialize (mis. circular) → jangan pernah skip
+    }
+  };
+  const isTerminal = (chunk: MastraChunk): boolean => {
+    if (chunk.type === "abort" || chunk.type === "error") return true;
+    if (chunk.type !== "finish") return false;
+    const payload = chunk.payload ?? {};
+    const stepResult = payload.stepResult;
+    const reason =
+      stepResult && typeof stepResult === "object" && "reason" in stepResult
+        ? String((stepResult as { reason?: unknown }).reason ?? "")
+        : String(payload.reason ?? "");
+    return reason !== "tool-calls";
+  };
+  return (chunk) => {
+    const runId = chunk.runId;
+    if (!runId || !chunk.type) return true;
+    let run = runs.get(runId);
+    if (!run) {
+      run = { applied: [], cursor: 0 };
+      runs.set(runId, run);
+    }
+    const sig = sigOf(chunk);
+    if (chunk.type === "start") {
+      const idx = run.applied.indexOf(sig);
+      run.cursor = idx >= 0 ? idx : run.applied.length;
+    }
+    if (run.cursor < run.applied.length) {
+      if (run.applied[run.cursor] === sig) {
+        run.cursor += 1;
+        return false; // duplikat replay — sudah diterapkan
+      }
+      run.cursor = run.applied.length; // divergensi dari prefix → bukan replay murni
+    }
+    run.applied.push(sig);
+    run.cursor = run.applied.length;
+    if (isTerminal(chunk)) runs.delete(runId);
+    return true;
+  };
+}
+
+/** Banner degraded langganan (FE-12) — string konstan supaya bisa dibersihkan saat tersambung lagi. */
+const SUBSCRIBE_DEGRADED_ERROR = "Koneksi ke Astra terputus. Mencoba menyambung ulang…";
+
+/**
+ * Konteks turn terakhir yang DIKIRIM sesi ini (FE-8) — regenerate memakainya supaya kualitas setara
+ * turn asli: `clientContext` (hydration @mention + ekspansi slash) ikut terkirim ulang, `richText`
+ * mempertahankan pill, dan turn `/deep` di-regen sebagai `/deep` (bukan downgrade ke chat biasa
+ * yang menghapus report + meninggalkan `research_sources` yatim). Setelah refresh ref ini kosong →
+ * fallback kirim ulang teks polos (perilaku lama).
+ */
+type LastSentTurn = {
+  mode: "chat" | "deep";
+  text: string;
+  clientContext?: string[];
+  richText?: string;
+  attachmentIds?: string[];
+  agentKind: AgentKind;
+};
+
 /** Handle langganan thread (`subscribeToThread`) — abort=cancel run server-side; unsubscribe=tutup. */
 type ThreadSubscription = {
   processDataStream: (o: {
@@ -227,10 +315,17 @@ export function useMastraAgent(opts: {
   // Dedup sinyal `request_document_edit` per tool-call. Langganan thread tunggal me-REPLAY buffer
   // dari index 0 tiap reconnect (refresh / blip / ganti agentKind) → chunk tool-result yang SAMA bisa
   // tiba berkali-kali; tanpa guard ini tiap replay memicu ulang AI editor + men-debit `doc_ai_edit`
-  // lagi. Key = toolCallId (fallback artifactId::instruction bila absen).
+  // lagi. Key = toolCallId (fallback artifactId::instruction bila absen). Tetap dipertahankan
+  // sebagai lapis kedua di bawah filter replay umum (aksi ini punya efek samping berbayar).
   const publishedDocEditKeysRef = useRef<Set<string>>(new Set());
+  // FE-2: filter dedup replay per-run (lihat `createChunkReplayFilter`) — reducer `text-delta`
+  // append (non-idempoten), jadi chunk replay TIDAK boleh sampai ke reducer dua kali.
+  const replayFilterRef = useRef(createChunkReplayFilter());
+  // FE-8: konteks turn terakhir yang dikirim sesi ini — dipakai regenerate.
+  const lastSendRef = useRef<LastSentTurn | null>(null);
 
   const onChunk = useCallback((chunk: unknown) => {
+    if (!replayFilterRef.current(chunk as MastraChunk)) return; // duplikat replay (FE-2)
     setState((s) => reduceMastraChunk(s, chunk as MastraChunk));
     // Sinyal `request_document_edit` (Fase 3.5) → picu AI editor dokumen terbuka via bus event
     // (editor reader artifact = satu React tree dengan chat). Editor yang artifactId-nya cocok
@@ -259,10 +354,24 @@ export function useMastraAgent(opts: {
 
   // Langganan thread tunggal & panjang. Self-healing: subscribe awal bisa gagal untuk thread baru
   // (belum ada di server) → retry tiap 1 dtk sampai `sendMessage` pertama membuatnya; buffer di-replay
-  // dari index 0 saat tersambung → tak ada chunk yang hilang.
+  // dari index 0 saat tersambung → tak ada chunk yang hilang (dedup via `replayFilterRef`).
+  // FE-12: kegagalan TIDAK lagi ditelan senyap selamanya — thread yang sudah punya pesan (bukan
+  // thread baru pra-kirim, yang subscribe-nya memang wajar gagal) di-log dan setelah beberapa retry
+  // menampilkan banner degraded; banner dibersihkan otomatis saat tersambung lagi.
   useEffect(() => {
     if (!userId) return;
     let cancelled = false;
+    let failures = 0;
+    const noteFailure = (err: unknown) => {
+      failures += 1;
+      if (stateRef.current.messages.length === 0) return; // thread baru pra-kirim → normal, diam
+      console.warn("[astra] langganan thread gagal", { attempt: failures, threadId: opts.threadId, err });
+      if (failures >= 3) {
+        setState((s) =>
+          s.error === SUBSCRIBE_DEGRADED_ERROR ? s : { ...s, error: SUBSCRIBE_DEGRADED_ERROR },
+        );
+      }
+    };
     const loop = async () => {
       while (!cancelled) {
         try {
@@ -276,12 +385,20 @@ export function useMastraAgent(opts: {
             return;
           }
           subRef.current = sub;
-          await sub.processDataStream({ onChunk, reconnect: true });
+          failures = 0;
+          // Tersambung (lagi) → bersihkan banner degraded bila itu yang tampil.
+          setState((s) =>
+            s.error === SUBSCRIBE_DEGRADED_ERROR ? { ...s, error: undefined } : s,
+          );
+          // `maxRetries` FINITE (bukan `reconnect:true` = Infinity): outage panjang akhirnya lolos
+          // ke catch loop ini → terdeteksi degraded (FE-12), lalu loop tetap re-subscribe sendiri.
+          await sub.processDataStream({ onChunk, reconnect: { maxRetries: 20, delayMs: 1000 } });
           if (cancelled) return;
           await delay(1000); // langganan berakhir tak terduga → tunggu lalu ulang
-        } catch {
+        } catch (err) {
           if (cancelled) return;
-          await delay(1000); // subscribe awal gagal (thread belum ada) → retry
+          noteFailure(err); // subscribe awal gagal (thread belum ada) ATAU stream tumbang melewati retry internal
+          await delay(1000);
         }
       }
     };
@@ -314,6 +431,7 @@ export function useMastraAgent(opts: {
       // Commit tier turn ini → langganan thread berpindah ke agent yang sama (Pro mengalir di channel
       // `astra-pro`). Turn berurutan → aman; buffer replay menutup race re-subscribe.
       commitAgentKind(agentKind);
+      lastSendRef.current = { mode: "chat", text, clientContext, richText, attachmentIds, agentKind };
       const turnSeed = `${opts.threadId}:${Date.now()}`;
       // `richText` = `text` + penanda `@mention` (U+E000/E001) untuk DITAMPILKAN & DIPERSIST sebagai
       // pill. Agen (LLM) tak melihat penanda: `stripMentionMarkersProcessor` (input) men-strip-nya
@@ -414,26 +532,42 @@ export function useMastraAgent(opts: {
     [opts.threadId, qc],
   );
 
+  // FE-5: pemicu ulang effect poll re-attach `/deep` TANPA menunggu refresh manual — di-bump saat
+  // stream putus tapi run masih hidup server-side (blip jaringan / proxy / agent hang sesaat).
+  const [reattachNonce, bumpReattach] = useReducer((n: number) => n + 1, 0);
+
   // Saat stream `/deep` gagal/putus: pertahankan runId bila run masih HIDUP server-side (running/
-  // suspended/waiting) → re-attach poll memulihkannya saat refresh (durable). Hanya clear bila run
-  // tak jalan (terminal/pending) atau status tak bisa diverifikasi (default aman = clear).
+  // suspended/waiting) → re-attach poll memulihkannya (return `true`). Hanya clear bila run tak
+  // jalan (terminal/pending) atau status tak bisa diverifikasi (default aman = clear, return `false`).
   const clearDeepRunIdUnlessAlive = useCallback(
-    async (runId: string | undefined) => {
+    async (runId: string | undefined): Promise<boolean> => {
       if (runId) {
         try {
           const st = (await clientRef.current.getWorkflow(DEEP_WORKFLOW_ID).runById(runId)) as unknown as {
             status?: string;
           };
-          if (st.status === "running" || st.status === "suspended" || st.status === "waiting") return;
+          if (st.status === "running" || st.status === "suspended" || st.status === "waiting") {
+            return true;
+          }
         } catch {
           /* tak bisa verifikasi → jatuh ke clear */
         }
       }
       clearDeepRunId(opts.threadId);
       deepRunRef.current = null;
+      return false;
     },
     [opts.threadId],
   );
+
+  // FE-5: stream `/deep` selesai TANPA chunk terminal & TANPA gerbang HITL (blip jaringan/proxy
+  // menutup body tanpa error) → run masih jalan server-side; serahkan ke poll re-attach supaya
+  // progres live lanjut di sesi ini, bukan baru pulih setelah refresh manual.
+  const maybeReattachAfterStreamClose = useCallback((runId: string) => {
+    if (deepRunRef.current?.runId !== runId) return; // terminal normal → runId sudah dibersihkan
+    if (stateRef.current.planGate || stateRef.current.askGate) return; // suspend-close normal (HITL)
+    bumpReattach();
+  }, []);
 
   const sendDeep = useCallback(
     async (
@@ -447,6 +581,14 @@ export function useMastraAgent(opts: {
       // Commit tier → respond/regenerate konsisten. (`/deep` mengalir di channel Workflow, bukan
       // channel agent, tapi commit menjaga langganan & aksi lanjutan tetap selaras.)
       commitAgentKind(agentKind);
+      lastSendRef.current = {
+        mode: "deep",
+        text: question,
+        clientContext,
+        richText,
+        attachmentIds,
+        agentKind,
+      };
       const turnSeed = `${opts.threadId}:${Date.now()}`;
       // Bubble user `/deep` ber-pill = `richText` (ber-marker) untuk TAMPIL + PERSIST; planner +
       // semua prompt subagen tetap pakai `question` BERSIH. `displayQuestion` hanya dipakai workflow
@@ -463,17 +605,29 @@ export function useMastraAgent(opts: {
         if (clientContext && clientContext.length > 0) inputData.context = clientContext.join("\n\n");
         const stream = await run.stream({ inputData, closeOnSuspend: true });
         await consumeWorkflow(stream);
+        maybeReattachAfterStreamClose(run.runId);
       } catch (err) {
         // Stream gagal/putus (mis. agent hang sesaat saat fase berat) TAPI run mungkin sudah HIDUP
-        // server-side → pertahankan runId supaya refresh me-resume via poll re-attach (durable).
-        await clearDeepRunIdUnlessAlive(deepRunRef.current?.runId);
+        // server-side → JANGAN banner error (FE-5): poll re-attach mengambil alih progres live di
+        // sesi ini. Banner hanya saat run benar-benar tak jalan.
+        if (await clearDeepRunIdUnlessAlive(deepRunRef.current?.runId)) {
+          bumpReattach();
+          return;
+        }
         setState((s) => ({
           ...settleAssistantTurn(s),
           error: readableApiErrorMessage(err, "Gagal memulai riset mendalam."),
         }));
       }
     },
-    [opts.threadId, userId, consumeWorkflow, clearDeepRunIdUnlessAlive, commitAgentKind],
+    [
+      opts.threadId,
+      userId,
+      consumeWorkflow,
+      clearDeepRunIdUnlessAlive,
+      maybeReattachAfterStreamClose,
+      commitAgentKind,
+    ],
   );
 
   const resolvePlan = useCallback(
@@ -492,16 +646,20 @@ export function useMastraAgent(opts: {
           resumeData: { approved, ...(edits ? { edits } : {}) },
         });
         await consumeWorkflow(stream);
+        maybeReattachAfterStreamClose(run.runId);
       } catch (err) {
-        // Sama seperti sendDeep: bila run masih hidup server-side, pertahankan runId (durable refresh).
-        await clearDeepRunIdUnlessAlive(run.runId);
+        // Sama seperti sendDeep (FE-5): run masih hidup server-side → poll re-attach, tanpa banner.
+        if (await clearDeepRunIdUnlessAlive(run.runId)) {
+          bumpReattach();
+          return;
+        }
         setState((s) => ({
           ...settleAssistantTurn(s),
           error: readableApiErrorMessage(err, "Gagal melanjutkan riset mendalam."),
         }));
       }
     },
-    [consumeWorkflow, clearDeepRunIdUnlessAlive],
+    [consumeWorkflow, clearDeepRunIdUnlessAlive, maybeReattachAfterStreamClose],
   );
 
   const resolveAsk = useCallback(
@@ -523,8 +681,13 @@ export function useMastraAgent(opts: {
             resumeData: resume as Record<string, unknown>,
           });
           await consumeWorkflow(stream);
+          maybeReattachAfterStreamClose(run.runId);
         } catch (err) {
-          await clearDeepRunIdUnlessAlive(run.runId);
+          // FE-5: run masih hidup server-side → poll re-attach, tanpa banner error.
+          if (await clearDeepRunIdUnlessAlive(run.runId)) {
+            bumpReattach();
+            return;
+          }
           setState((s) => ({
             ...settleAssistantTurn(s),
             error: readableApiErrorMessage(err, "Gagal melanjutkan riset mendalam."),
@@ -562,7 +725,7 @@ export function useMastraAgent(opts: {
         }));
       }
     },
-    [opts.threadId, userId, consumeWorkflow, clearDeepRunIdUnlessAlive],
+    [opts.threadId, userId, consumeWorkflow, clearDeepRunIdUnlessAlive, maybeReattachAfterStreamClose],
   );
 
   // Regenerate (G6): re-run pesan user terakhir TANPA duplikat. Buang jawaban lama dari timeline +
@@ -636,7 +799,7 @@ export function useMastraAgent(opts: {
             // pertanyaan) tak boleh me-render kartu kosong tak-terjawab yang mengunci run. Seed
             // progres lalu settle (bukan spinner menggantung).
             if (questions.length === 0) {
-              setState((s) => settleAssistantTurn(seedWorkflowProgress(s, runId, steps)));
+              setState((s) => settleWorkflowTurn(seedWorkflowProgress(s, runId, steps), runId));
               return;
             }
             setState((s) => ({
@@ -656,7 +819,8 @@ export function useMastraAgent(opts: {
           return;
         }
         if (status === "success") {
-          setState((s) => settleAssistantTurn(seedWorkflowProgress(s, runId, steps)));
+          // FE-7: settle by runId — jangan positional (turn lain tak boleh ikut ter-settle).
+          setState((s) => settleWorkflowTurn(seedWorkflowProgress(s, runId, steps), runId));
           clearDeepRunId(opts.threadId);
           deepRunRef.current = null;
           // Sumber baru (citation_number) + judul/preview → refresh panel Sumber & sidebar.
@@ -665,7 +829,7 @@ export function useMastraAgent(opts: {
           return;
         }
         if (status === "failed" || status === "canceled") {
-          setState((s) => settleAssistantTurn(seedWorkflowProgress(s, runId, steps)));
+          setState((s) => settleWorkflowTurn(seedWorkflowProgress(s, runId, steps), runId));
           clearDeepRunId(opts.threadId);
           deepRunRef.current = null;
           return;
@@ -684,44 +848,101 @@ export function useMastraAgent(opts: {
     return () => {
       cancelled = true;
     };
-  }, [opts.threadId, userId, qc]);
+    // FE-5: `reattachNonce` di-bump saat stream `/deep` putus tapi run masih hidup → effect re-run,
+    // poll mengambil alih progres live tanpa menunggu refresh manual.
+  }, [opts.threadId, userId, qc, reattachNonce]);
 
   const regenerate = useCallback(async () => {
     if (!userId || statusRef.current !== "ready") return;
     const text = lastUserText(stateRef.current.messages);
     if (!text) return;
-    setState((s) => startRegenerate(s));
-    try {
-      // Regenerate turn terakhir di tier yang sama (route agent-scoped). Memory thread = storage
-      // bersama → list/delete via id agent mana pun setara; pakai tier ter-commit demi konsistensi.
-      const agentId = agentIdFor(committedAgentKindRef.current);
-      const agent = clientRef.current.getAgent(agentId);
+    // FE-8: turn terakhir dikirim SESI INI (`lastSendRef`) → regen memakai konteks aslinya
+    // (clientContext hydration @mention/slash + richText ber-pill) dan turn `/deep` di-regen sebagai
+    // `/deep`. Teks bubble = `richText ?? text` turn asli, jadi kecocokan diperiksa terhadap itu.
+    // Setelah refresh (ref kosong / turn lebih lama) → fallback kirim ulang teks polos (perilaku lama).
+    const last = lastSendRef.current;
+    const lastMatches = last !== null && (last.richText ?? last.text) === text;
+
+    // Hapus pasangan [user, assistant] lama DULU lalu kirim ulang → generasi baru berjalan atas
+    // history yang BERSIH (tanpa Q&A lama yang mencemari konteks) + tak ada bubble user kembar.
+    // (Urutan kirim-dulu-baru-hapus akan menutup celah kehilangan-data sempit bila kirim gagal, TAPI
+    // membuat setiap regenerate melihat turn lama di konteks → regresi jalur-umum. Perbaikan tuntas =
+    // endpoint regenerate atomik sisi-server; di luar cakupan FE ini.)
+    // Memory thread = storage bersama → list/delete via id agent mana pun setara; pakai tier
+    // ter-commit demi konsistensi (route agent-scoped).
+    const deleteLastServerTurn = async () => {
       const thread = clientRef.current.getMemoryThread({
         threadId: opts.threadId,
-        agentId,
+        agentId: agentIdFor(committedAgentKindRef.current),
       });
-      // Hapus pasangan [user, assistant] lama DULU lalu kirim ulang → generasi baru berjalan atas
-      // history yang BERSIH (tanpa Q&A lama yang mencemari konteks) + tak ada bubble user kembar.
-      // (Urutan kirim-dulu-baru-hapus akan menutup celah kehilangan-data sempit bila kirim gagal, TAPI
-      // membuat setiap regenerate melihat turn lama di konteks → regresi jalur-umum. Perbaikan tuntas =
-      // endpoint regenerate atomik sisi-server; di luar cakupan FE ini.)
       const res = await thread.listMessages();
       const staleIds = lastTurnMessageIds((res.messages ?? []) as ServerMessageLike[]);
       if (staleIds.length > 0) await thread.deleteMessages(staleIds);
-      await agent.sendMessage({ message: text, resourceId: userId, threadId: opts.threadId });
+    };
+
+    if (lastMatches && last.mode === "deep") {
+      // Regen `/deep` = jalankan ulang Workflow dengan pertanyaan + konteks asli — BUKAN downgrade
+      // ke chat biasa (yang menghapus report & meninggalkan `research_sources` yatim). `sendDeep`
+      // menambah ulang bubble user + placeholder sendiri → buang pasangan lokal dulu.
+      try {
+        await deleteLastServerTurn();
+      } catch (err) {
+        setState((s) => ({
+          ...s,
+          error: readableApiErrorMessage(err, "Gagal membuat ulang jawaban."),
+        }));
+        return;
+      }
+      setState((s) => dropLastTurn(s));
+      await sendDeep(last.text, last.clientContext, last.richText, last.attachmentIds, last.agentKind);
+      return;
+    }
+
+    setState((s) => startRegenerate(s));
+    try {
+      const agent = clientRef.current.getAgent(agentIdFor(committedAgentKindRef.current));
+      await deleteLastServerTurn();
+      await agent.sendMessage({
+        message: lastMatches ? (last.richText ?? last.text) : text,
+        resourceId: userId,
+        threadId: opts.threadId,
+        // Konteks ephemeral turn asli ikut terkirim ulang (paritas `send`) — tanpa ini hasil regen
+        // diam-diam lebih buruk (hydration @mention & ekspansi slash hilang).
+        ...(lastMatches && last.clientContext && last.clientContext.length > 0
+          ? {
+              ifIdle: {
+                streamOptions: {
+                  context: last.clientContext.map((c) => ({ role: "user" as const, content: c })),
+                },
+              },
+            }
+          : {}),
+      });
     } catch (err) {
       setState((s) => ({
         ...settleAssistantTurn(s),
         error: readableApiErrorMessage(err, "Gagal membuat ulang jawaban."),
       }));
     }
-  }, [opts.threadId, userId]);
+  }, [opts.threadId, userId, sendDeep]);
 
   const stop = useCallback(() => {
-    // Cancel run server-side; server kirim chunk `abort` → reducer men-settle bersih (tanpa AbortError).
+    const run = deepRunRef.current;
+    if (run) {
+      // FE-4: Stop saat `/deep` → cancel RUN WORKFLOW server-side. `subscription.abort()`
+      // (`POST /agents/:id/threads/abort`) hanya membatalkan run agent chat — workflow terus jalan
+      // membakar kredit sementara tombol tampak "rusak". Bersihkan runId agar poll re-attach tak
+      // menghidupkan ulang turn yang sengaja dihentikan.
+      void run.cancel().catch(() => {});
+      clearDeepRunId(opts.threadId);
+      deepRunRef.current = null;
+      setState((s) => settleAssistantTurn({ ...s, planGate: undefined, askGate: undefined }));
+      return;
+    }
+    // Chat: cancel run server-side; server kirim chunk `abort` → reducer men-settle bersih (tanpa AbortError).
     void subRef.current?.abort().catch(() => {});
     setState((s) => settleAssistantTurn(s));
-  }, []);
+  }, [opts.threadId]);
 
   return {
     status: state.status,

@@ -294,19 +294,36 @@ export function settleAssistantTurn(state: MastraTimelineState): MastraTimelineS
 }
 
 /**
- * Apakah pesan asisten terakhir sudah memuat output bermakna (teks non-kosong / tool / artifact /
- * usulan)? Dipakai `error` chunk untuk membedakan kegagalan tanpa-output (tampilkan banner) dari
- * error-ekor pasca-output (settle bersih → konsisten dengan tampilan setelah refresh).
+ * Apakah pesan asisten terakhir sudah memuat TEKS jawaban non-kosong? Pembeda `error` chunk (FE-6):
+ * ada teks → jawaban kemungkinan TERPOTONG (settle + banner "mungkin terpotong", retry via Buat
+ * ulang); belum ada teks (baru tool-call/reasoning) → user belum dapat jawaban sama sekali →
+ * banner error penuh. Tool-row saja TIDAK dihitung output — dulu 1 tool-row cukup membuat error
+ * di-settle senyap, user tak pernah tahu turn-nya gagal.
  */
-function lastAssistantHasOutput(state: MastraTimelineState): boolean {
+function lastAssistantHasAnswerText(state: MastraTimelineState): boolean {
   const last = state.messages.findLast((m) => m.role === "assistant");
   if (!last) return false;
-  return last.parts.some(
-    (p) =>
-      p.kind === "tool" ||
-      p.kind === "artifact" ||
-      (p.kind === "text" && p.text.trim().length > 0),
-  );
+  return last.parts.some((p) => p.kind === "text" && p.text.trim().length > 0);
+}
+
+/**
+ * Buang pasangan [user, assistant] TERAKHIR dari timeline lokal — dipakai regenerate `/deep` (FE-8):
+ * `sendDeep` menambah ulang bubble user + placeholder-nya sendiri, jadi keduanya harus hilang dulu
+ * (beda dari `startRegenerate` yang mempertahankan bubble user untuk jalur chat).
+ */
+export function dropLastTurn(state: MastraTimelineState): MastraTimelineState {
+  let lastAssistant = -1;
+  for (let i = state.messages.length - 1; i >= 0; i -= 1) {
+    if (state.messages[i]!.role === "assistant") {
+      lastAssistant = i;
+      break;
+    }
+  }
+  if (lastAssistant < 0) return state;
+  // Awal turn = pesan non-assistant beruntun tepat sebelum assistant terakhir (role user/signal).
+  let start = lastAssistant;
+  while (start > 0 && state.messages[start - 1]!.role !== "assistant") start -= 1;
+  return { ...state, messages: state.messages.slice(0, start), error: undefined };
 }
 
 /**
@@ -485,11 +502,17 @@ export function reduceMastraChunk(
       return settleAssistantTurn(state);
 
     case "error":
-      // Tail-error: bila turn SUDAH menghasilkan output (teks/tool/artifact/usulan) lalu stream
-      // error di langkah lanjutan kosong (mis. provider hiccup pasca tool-call), JANGAN tampilkan
-      // banner — settle bersih agar live = state setelah refresh (yang merender turn tersimpan tanpa
-      // error). Error baru ditampilkan saat turn benar-benar gagal tanpa output sama sekali.
-      if (lastAssistantHasOutput(state)) return settleAssistantTurn(state);
+      // FE-6: bedakan error-ekor berdasarkan ada/tidaknya TEKS jawaban. Sudah ada teks → provider
+      // mati mid-jawaban: settle + banner "mungkin terpotong" supaya user tahu bisa retry (dulu
+      // di-settle senyap → setengah jawaban tampak lengkap). Belum ada teks (baru tool-call/
+      // reasoning) → turn gagal tanpa jawaban: banner error penuh.
+      if (lastAssistantHasAnswerText(state)) {
+        return {
+          ...settleAssistantTurn(state),
+          error:
+            "Jawaban terhenti sebelum selesai dan mungkin terpotong. Gunakan \"Buat ulang\" untuk mencoba lagi.",
+        };
+      }
       return { ...settleAssistantTurn(state), error: extractError(payload.error) };
     case "tripwire":
       return {
@@ -500,6 +523,37 @@ export function reduceMastraChunk(
     default:
       return state; // step-finish/source/lifecycle lain → tak mempengaruhi timeline
   }
+}
+
+/**
+ * Settle turn Workflow BY `runId` (FE-7): `settleAssistantTurn` menyasar last-streaming-by-POSITION,
+ * jadi `workflow-finish` yang telat (reject-plan → kirim pesan baru cepat) bisa men-settle placeholder
+ * turn BARU → ghost bubble kosong. Di sini sasar pesan ber-`turnId === runId` (di-tag saat
+ * `workflow-start`/seed); status hanya kembali "ready" bila tak ada turn lain yang masih streaming.
+ */
+export function settleWorkflowTurn(
+  state: MastraTimelineState,
+  runId: string | undefined,
+): MastraTimelineState {
+  if (!runId) return settleAssistantTurn(state);
+  const tagged = state.messages.some((m) => m.role === "assistant" && m.turnId === runId);
+  if (!tagged) {
+    // Run tak pernah men-tag turn (chunk terminal tiba sebelum workflow-start terlihat). Fallback
+    // positional hanya bila tak ada run LAIN yang aktif — kalau ada, jangan sentuh turn miliknya.
+    return state.activeRunId && state.activeRunId !== runId ? state : settleAssistantTurn(state);
+  }
+  const messages = state.messages.map((m) =>
+    m.role === "assistant" && m.turnId === runId && m.streaming ? { ...m, streaming: false } : m,
+  );
+  const anyStreaming = messages.some((m) => m.role === "assistant" && m.streaming);
+  const status: MastraStatus =
+    anyStreaming || state.approvals.length > 0 || state.askGate ? state.status : "ready";
+  return {
+    ...state,
+    messages,
+    status,
+    activeRunId: state.activeRunId === runId ? undefined : state.activeRunId,
+  };
 }
 
 /** Set status streaming tanpa menyentuh pesan (dipakai sebelum menerapkan chunk konten). */
@@ -690,8 +744,9 @@ export function reduceWorkflowChunk(
       // plan-gate/ask-gate masih aktif, ini SUSPEND-close — BUKAN finish sungguhan → PERTAHANKAN
       // kartu + status streaming (tunggu keputusan user), jangan settle. `resolvePlan`/`resolveAsk`
       // yang membersihkan gate saat user memutuskan → finish berikutnya (resume) baru settle (G2).
+      // FE-7: settle by runId — finish telat dari run lama tak boleh mengenai turn baru.
       if (state.planGate || state.askGate) return state;
-      return settleAssistantTurn({ ...state, planGate: undefined, askGate: undefined });
+      return settleWorkflowTurn({ ...state, planGate: undefined, askGate: undefined }, chunk.runId);
 
     case "workflow-step-output": {
       // Detail proses yang dipancarkan step via `writer.write` (`payload.output`, `payload.stepName`).
@@ -710,8 +765,9 @@ export function reduceWorkflowChunk(
     }
 
     case "error":
+      // FE-7: sejajar workflow-finish — error run lama tak boleh men-settle turn baru secara posisi.
       return {
-        ...settleAssistantTurn({ ...state, planGate: undefined, askGate: undefined }),
+        ...settleWorkflowTurn({ ...state, planGate: undefined, askGate: undefined }, chunk.runId),
         error: extractError(payload.error),
       };
 

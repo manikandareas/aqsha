@@ -28,6 +28,10 @@ const DROP_REQUEST_HEADERS = new Set([
   "content-length",
   "transfer-encoding",
   "keep-alive",
+  // FE-10: respons diteruskan TANPA `content-encoding` (di-strip di bawah) → upstream tak boleh
+  // diberi izin kompresi, atau klien menerima byte gzip tanpa header saat ada compressor di depan
+  // agent (Hono tak kompres by default — landmine laten, bukan bug aktif).
+  "accept-encoding",
 ]);
 const DROP_RESPONSE_HEADERS = new Set([
   "content-length",
@@ -92,3 +96,8 @@ async function proxy(req: NextRequest): Promise<Response> {
 
 export const GET = proxy;
 export const POST = proxy;
+// FE-10: client-js juga memakai PATCH (`thread.update`), DELETE (`thread.delete`/`deleteMessages`
+// bila kelak pindah method), dan PUT — tanpa export, Next membalas 405 sebelum sampai ke agent.
+export const PATCH = proxy;
+export const PUT = proxy;
+export const DELETE = proxy;
