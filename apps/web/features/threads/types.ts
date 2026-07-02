@@ -12,6 +12,7 @@ export type ChatThread = {
   workspaceId?: string | null;
   lastMessagePreview: string | null;
   lastActivityAt: number;
+  pinnedAt: number | null; // null = tak disematkan; nilai ⇒ disematkan (kunci urut grup "Disematkan")
   createdAt: number;
   updatedAt: number;
 };

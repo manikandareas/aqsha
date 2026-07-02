@@ -10,6 +10,7 @@ import { Conversation } from "@/components/ai-elements/conversation-root";
 import { ConversationScrollButton } from "@/components/ai-elements/conversation-scroll-button";
 import { HomeExploreBento } from "@/features/discovery/components/home-explore-bento";
 import {
+  usePinnedThreads,
   useSendStatus,
   useThread,
   useThreadArtifacts,
@@ -419,9 +420,18 @@ function MastraComposerLanding({
 }) {
   const shouldReduceMotion = useReducedMotion();
   const threadsList = useThreadsList();
-  const recentThreads: RecentThread[] = (threadsList.data?.pages ?? []).flatMap((page) =>
-    page.items.map((t) => ({ threadId: t.id, title: threadTitle(t), lastActivityAt: t.lastActivityAt })),
-  );
+  const pinnedThreads = usePinnedThreads();
+  // `useThreadsList` kini exclude thread yang disematkan → gabungkan pinned dulu (dedup by id)
+  // supaya empty-state tetap menawarkan thread penting user.
+  const recentThreads: RecentThread[] = [
+    ...(pinnedThreads.data ?? []),
+    ...(threadsList.data?.pages ?? []).flatMap((page) => page.items),
+  ].reduce<RecentThread[]>((acc, t) => {
+    if (!acc.some((r) => r.threadId === t.id)) {
+      acc.push({ threadId: t.id, title: threadTitle(t), lastActivityAt: t.lastActivityAt });
+    }
+    return acc;
+  }, []);
 
   return (
     <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden bg-background">

@@ -22,7 +22,7 @@ export function AppShell({
 }) {
   const router = useRouter();
   const params = useParams<{ threadId?: string; workspaceId?: string }>();
-  const { viewer, workspaces, threads, createWorkspace, removeThread } =
+  const { viewer, workspaces, threads, createWorkspace, removeThread, togglePinThread } =
     useWorkspaceIndexData();
 
   // Selected state is fully derivable from the URL. For a thread route we don't
@@ -55,6 +55,7 @@ export function AppShell({
         onCreateThread={() => router.push("/app")}
         createWorkspace={createWorkspace}
         removeThread={removeThread}
+        togglePinThread={togglePinThread}
       />
       <SidebarInset className="relative min-h-svh bg-background text-foreground">
         {children}

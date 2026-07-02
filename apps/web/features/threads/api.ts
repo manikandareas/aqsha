@@ -4,7 +4,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { toast } from "sonner";
 import type { Artifact } from "@/features/artifacts/types";
 import { useApi } from "@/lib/api-client";
-import { readableApiErrorMessage } from "@/lib/api-error";
+import { apiErrorCode, readableApiErrorMessage } from "@/lib/api-error";
 import { queryKeys, unwrap } from "@/lib/api-query";
 import type { ChatThread, ResearchSource } from "./types";
 
@@ -23,6 +23,19 @@ export function useThreadsList() {
         }),
       ) as { items: ChatThread[]; nextCursor: string | null },
     getNextPageParam: (last) => last.nextCursor,
+  });
+}
+
+/**
+ * Thread yang disematkan (grup "Disematkan" sidebar) — fetch utuh (bukan infinite),
+ * DESC `pinnedAt`. Terpisah dari `useThreadsList` karena list utama meng-exclude pin.
+ */
+export function usePinnedThreads() {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.threads.pinned(),
+    queryFn: async () =>
+      (unwrap(await api.threads.pinned.get()) as { items: ChatThread[] }).items,
   });
 }
 
@@ -122,6 +135,28 @@ export function useDeleteThread() {
     mutationFn: async (input: { id: string }) => unwrap(await api.threads({ id: input.id }).delete()),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.threads.all }),
     onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal menghapus percakapan.")),
+  });
+}
+
+/**
+ * Sematkan / lepas sematan thread. Invalidate `threads.all` → list utama (exclude pin) +
+ * grup pinned re-sinkron sekaligus. Soft-cap terlampaui (backend `pin_limit_reached`,
+ * severity warning) → toast peringatan; kegagalan lain → toast error.
+ */
+export function usePinThread() {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string; pinned: boolean }) =>
+      unwrap(await api.threads({ id: input.id }).pin.patch({ pinned: input.pinned })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.threads.all }),
+    onError: (e) => {
+      if (apiErrorCode(e) === "pin_limit_reached") {
+        toast.warning(readableApiErrorMessage(e, "Batas sematan tercapai."));
+        return;
+      }
+      toast.error(readableApiErrorMessage(e, "Gagal menyematkan thread."));
+    },
   });
 }
 

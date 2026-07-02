@@ -13,6 +13,7 @@ const DEFAULT_LIST_LIMIT = 30;
 const MAX_LIST_LIMIT = 100;
 const TITLE_MAX = 120;
 const ARCHIVE_THRESHOLD_MS = 24 * 60 * 60 * 1000; // >1 hari sejak aktivitas terakhir → "older"
+const PIN_CAP = 10; // soft-cap thread yang bisa disematkan sekaligus (grup "Disematkan" sidebar)
 
 /** Bucket aktivitas thread untuk pengelompokan sidebar — dihitung server-side (BE). */
 export type ThreadBucket = "recent" | "older";
@@ -140,6 +141,43 @@ export const ThreadService = {
       updatedAt: Date.now(),
     });
     return { ok: true };
+  },
+
+  /** Thread yang disematkan milik owner, DESC `pinnedAt` (pin terbaru dulu) — grup "Disematkan". */
+  async listPinned(db: DbOrTx, ownerUserId: string): Promise<ChatThread[]> {
+    return ChatThreadRepo.listPinnedByOwner(db, { ownerUserId, limit: PIN_CAP });
+  },
+
+  /**
+   * Sematkan / lepas sematan thread. `pinnedAt = now` (pin) atau `null` (lepas); idempoten.
+   * Soft-cap {@link PIN_CAP}: hanya dicek saat transisi unpinned→pinned (thread yang sudah
+   * dipin lolos). Melebihi cap → `appError` severity `warning` (FE surface via toast).
+   * Proyeksi `ensureProjected` per turn tak menyentuh `pinnedAt` → pin persist lintas pesan.
+   */
+  async setPinned(
+    db: DbOrTx,
+    input: { ownerUserId: string; threadId: string; pinned: boolean },
+  ): Promise<{ ok: true; pinnedAt: number | null }> {
+    const thread = await this.assertOwner(db, input.ownerUserId, input.threadId);
+
+    if (!input.pinned) {
+      if (thread.pinnedAt === null) return { ok: true, pinnedAt: null };
+      await ChatThreadRepo.update(db, input.threadId, { pinnedAt: null, updatedAt: Date.now() });
+      return { ok: true, pinnedAt: null };
+    }
+
+    if (thread.pinnedAt !== null) return { ok: true, pinnedAt: thread.pinnedAt };
+    const pinnedCount = await ChatThreadRepo.countPinnedByOwner(db, input.ownerUserId);
+    if (pinnedCount >= PIN_CAP) {
+      throwAppError({
+        message: `Maksimal ${PIN_CAP} thread yang dapat disematkan. Lepas salah satu dulu.`,
+        code: "pin_limit_reached",
+        severity: "warning",
+      });
+    }
+    const now = Date.now();
+    await ChatThreadRepo.update(db, input.threadId, { pinnedAt: now, updatedAt: now });
+    return { ok: true, pinnedAt: now };
   },
 
   /**

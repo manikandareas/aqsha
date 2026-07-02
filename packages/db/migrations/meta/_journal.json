@@ -162,6 +162,13 @@
       "when": 1782815048447,
       "tag": "0022_loving_galactus",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1782924327243,
+      "tag": "0023_wide_charles_xavier",
+      "breakpoints": true
     }
   ]
 }

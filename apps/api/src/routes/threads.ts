@@ -91,6 +91,17 @@ export const threads = new Elysia({ prefix: "/threads" })
       }),
     },
   )
+  // Thread yang disematkan — grup "Disematkan" sidebar (fetch utuh, DESC pinnedAt). Static
+  // route → di atas `/:id` supaya "pinned" tak salah-cocok sebagai id.
+  .get(
+    "/pinned",
+    async ({ ownerUserId }) => {
+      const { db } = getDb();
+      const items = await ThreadService.listPinned(db, ownerUserId);
+      return { items };
+    },
+    { auth: true },
+  )
   .get(
     "/:id",
     ({ ownerUserId, params }) => {
@@ -175,6 +186,22 @@ export const threads = new Elysia({ prefix: "/threads" })
       });
     },
     { auth: true },
+  )
+  // Sematkan / lepas sematan thread. Sub-route `/:id/pin` → di atas `PATCH /:id` (rename).
+  .patch(
+    "/:id/pin",
+    ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      return ThreadService.setPinned(db, {
+        ownerUserId,
+        threadId: params.id,
+        pinned: body.pinned,
+      });
+    },
+    {
+      auth: true,
+      body: t.Object({ pinned: t.Boolean() }),
+    },
   )
   .patch(
     "/:id",

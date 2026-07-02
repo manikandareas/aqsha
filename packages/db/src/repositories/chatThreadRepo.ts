@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, lt, or } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { type ChatThread, chatThreads, type NewChatThread } from "../schema/chatThreads";
 import { type KeysetCursor, encodeKeysetCursor } from "../cursor";
 import type { DbOrTx } from "../types";
@@ -60,12 +60,19 @@ export const ChatThreadRepo = {
     await db.delete(chatThreads).where(eq(chatThreads.id, id));
   },
 
-  /** List keyset milik owner, DESC `(lastActivityAt, id)`. `{ items, nextCursor }`. */
+  /**
+   * List keyset milik owner, DESC `(lastActivityAt, id)`. `{ items, nextCursor }`.
+   * Thread yang disematkan (`pinned_at IS NOT NULL`) DIKELUARKAN — ditampilkan di grup
+   * "Disematkan" terpisah (`listPinnedByOwner`) supaya keyset tak duplikat & tetap utuh.
+   */
   async listByOwner(
     db: DbOrTx,
     args: { ownerUserId: string; limit: number; cursor: KeysetCursor | null },
   ): Promise<{ items: ChatThread[]; nextCursor: string | null }> {
-    const ownerFilter = eq(chatThreads.ownerUserId, args.ownerUserId);
+    const ownerFilter = and(
+      eq(chatThreads.ownerUserId, args.ownerUserId),
+      isNull(chatThreads.pinnedAt),
+    );
     const keyset = args.cursor
       ? or(
           lt(chatThreads.lastActivityAt, args.cursor.u),
@@ -86,5 +93,32 @@ export const ChatThreadRepo = {
     const nextCursor =
       hasMore && last ? encodeKeysetCursor({ u: last.lastActivityAt, i: last.id }) : null;
     return { items, nextCursor };
+  },
+
+  /**
+   * Thread yang disematkan milik owner, DESC `(pinnedAt, id)` (pin terbaru dulu).
+   * Set kecil (dibatasi cap di service) → tak perlu keyset; ambil `limit` teratas.
+   */
+  async listPinnedByOwner(
+    db: DbOrTx,
+    args: { ownerUserId: string; limit: number },
+  ): Promise<ChatThread[]> {
+    return db
+      .select()
+      .from(chatThreads)
+      .where(
+        and(eq(chatThreads.ownerUserId, args.ownerUserId), isNotNull(chatThreads.pinnedAt)),
+      )
+      .orderBy(desc(chatThreads.pinnedAt), desc(chatThreads.id))
+      .limit(args.limit);
+  },
+
+  /** Jumlah thread yang sedang disematkan owner — enforcement soft-cap di service. */
+  async countPinnedByOwner(db: DbOrTx, ownerUserId: string): Promise<number> {
+    const rows = await db
+      .select({ value: count() })
+      .from(chatThreads)
+      .where(and(eq(chatThreads.ownerUserId, ownerUserId), isNotNull(chatThreads.pinnedAt)));
+    return rows[0]?.value ?? 0;
   },
 };

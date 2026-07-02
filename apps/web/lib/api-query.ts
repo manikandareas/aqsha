@@ -47,6 +47,7 @@ export const queryKeys = {
   threads: {
     all: ["threads"] as const,
     list: () => ["threads", "list"] as const,
+    pinned: () => ["threads", "pinned"] as const,
     detail: (id: string) => ["threads", "detail", id] as const,
     messages: (id: string) => ["threads", "messages", id] as const,
     events: (id: string) => ["threads", "events", id] as const,

@@ -25,6 +25,7 @@ export type ThreadSummary = {
   messageCount: number;
   status: "idle" | "streaming" | "failed";
   lastAgentKind?: "lite" | "pro";
+  pinnedAt?: number | null; // null/absen = tak disematkan; nilai ⇒ grup "Disematkan" (urut DESC)
   bucket?: "recent" | "older"; // dihitung BE (ThreadService.list) untuk grouping sidebar
 };
 
@@ -87,6 +88,11 @@ export type ToggleThreadContextArtifact = (args: {
 }) => Promise<{ ok: boolean; selected: boolean }>;
 
 export type RemoveThread = (args: { threadId: string }) => Promise<{ ok: boolean }>;
+
+export type TogglePinThread = (args: {
+  threadId: string;
+  pinned: boolean;
+}) => Promise<{ ok: boolean }>;
 
 export type ThreadShellLayoutProps = {
   threads: ThreadSummary[];

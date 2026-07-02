@@ -13,6 +13,9 @@ import { users } from "./users";
  * - `titleStatus` text + CHECK (null|generating|ready) — klaim siklus auto-title
  *   (generasi judul landing Slice 6.8; di 6.1 selalu null/`Percakapan baru`).
  * - `agentKind` text + CHECK (lite|pro) — Lite-first (D-B); Pro landing slice lanjutan.
+ * - `pinnedAt` epoch-ms nullable — thread yang disematkan user (grup "Disematkan" sidebar).
+ *   `null` = tak disematkan; nilai ⇒ disematkan sekaligus kunci urut (pin terbaru di atas).
+ *   Proyeksi `threadProjectionProcessor` per turn TIDAK menyentuh kolom ini (pin persist).
  * - timestamp epoch-ms (`bigint`) seragam dengan tabel V2 lain.
  */
 export const chatThreads = pgTable(
@@ -28,6 +31,7 @@ export const chatThreads = pgTable(
     agentKind: text("agent_kind").notNull().default("lite"),
     lastMessagePreview: text("last_message_preview"),
     lastActivityAt: bigint("last_activity_at", { mode: "number" }).notNull(),
+    pinnedAt: bigint("pinned_at", { mode: "number" }),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
     updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
   },
@@ -39,6 +43,11 @@ export const chatThreads = pgTable(
     ),
     check("chat_threads_agent_kind_check", sql`${t.agentKind} in ('lite', 'pro')`),
     index("chat_threads_by_owner_activity").on(t.ownerUserId, t.lastActivityAt),
+    // Grup "Disematkan": owner + pin terbaru dulu. Partial (pin-only) → indeks kecil,
+    // list utama (pinned_at IS NULL) tetap pakai indeks by_owner_activity.
+    index("chat_threads_pinned_by_owner")
+      .on(t.ownerUserId, t.pinnedAt)
+      .where(sql`${t.pinnedAt} is not null`),
   ],
 );
 

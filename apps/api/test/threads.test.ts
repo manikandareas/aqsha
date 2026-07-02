@@ -112,3 +112,70 @@ describe("api threads — auth + ownership", () => {
     expect(afterText === "" || afterText === "null").toBe(true);
   });
 });
+
+describe("api threads — pin/sematkan", () => {
+  const PID = `eve:itest-pin-${suffix}`;
+
+  beforeAll(async () => {
+    if (!DATABASE_URL) return;
+    const { client } = createDb(DATABASE_URL);
+    const now = Date.now();
+    await client`insert into chat_threads
+        (id, owner_user_id, status, agent_kind, last_activity_at, created_at, updated_at)
+      values (${PID}, ${OWNER}, 'idle', 'lite', ${now}, ${now}, ${now})
+      on conflict (id) do nothing`;
+    await client.end();
+  });
+
+  itest("pin → keluar list utama, muncul di grup pinned", async () => {
+    const res = await req("PATCH", `/threads/${PID}/pin`, tok(OWNER), { pinned: true });
+    expect(res.status).toBe(200);
+    expect((await readJson(res)).pinnedAt).toBeGreaterThan(0);
+
+    const pinned = await readJson(await get("/threads/pinned", tok(OWNER)));
+    expect(pinned.items.some((t: { id: string }) => t.id === PID)).toBe(true);
+
+    const list = await readJson(await get("/threads", tok(OWNER)));
+    expect(list.items.some((t: { id: string }) => t.id === PID)).toBe(false);
+  });
+
+  itest("unpin → balik ke list utama, hilang dari pinned", async () => {
+    const res = await req("PATCH", `/threads/${PID}/pin`, tok(OWNER), { pinned: false });
+    expect(res.status).toBe(200);
+    expect((await readJson(res)).pinnedAt).toBeNull();
+
+    const pinned = await readJson(await get("/threads/pinned", tok(OWNER)));
+    expect(pinned.items.some((t: { id: string }) => t.id === PID)).toBe(false);
+    const list = await readJson(await get("/threads", tok(OWNER)));
+    expect(list.items.some((t: { id: string }) => t.id === PID)).toBe(true);
+  });
+
+  itest("cross-owner pin → 404", async () => {
+    const res = await req("PATCH", `/threads/${PID}/pin`, tok(OTHER), { pinned: true });
+    expect(res.status).toBe(404);
+  });
+
+  itest("soft-cap 10 → pin ke-11 ditolak (pin_limit_reached)", async () => {
+    if (!DATABASE_URL) return;
+    const { client } = createDb(DATABASE_URL);
+    const now = Date.now();
+    // 10 thread sudah tersemat langsung di DB (bypass API) → cap tercapai.
+    for (let i = 0; i < 10; i++) {
+      const id = `eve:itest-cap-${suffix}-${i}`;
+      await client`insert into chat_threads
+          (id, owner_user_id, status, agent_kind, last_activity_at, pinned_at, created_at, updated_at)
+        values (${id}, ${OWNER}, 'idle', 'lite', ${now}, ${now + i}, ${now}, ${now})
+        on conflict (id) do nothing`;
+    }
+    const capId = `eve:itest-cap-${suffix}-extra`;
+    await client`insert into chat_threads
+        (id, owner_user_id, status, agent_kind, last_activity_at, created_at, updated_at)
+      values (${capId}, ${OWNER}, 'idle', 'lite', ${now}, ${now}, ${now})
+      on conflict (id) do nothing`;
+    await client.end();
+
+    const res = await req("PATCH", `/threads/${capId}/pin`, tok(OWNER), { pinned: true });
+    expect(res.status).toBe(400);
+    expect((await readJson(res)).code).toBe("pin_limit_reached");
+  });
+});

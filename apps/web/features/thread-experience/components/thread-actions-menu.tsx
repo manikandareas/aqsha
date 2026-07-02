@@ -1,6 +1,12 @@
 "use client";
 
-import { MoreHorizontalIcon, MoreVerticalIcon, Trash2Icon } from "@aqsha/ui/icons";
+import {
+  MoreHorizontalIcon,
+  MoreVerticalIcon,
+  PinIcon,
+  PinOffIcon,
+  Trash2Icon,
+} from "@aqsha/ui/icons";
 import { useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
@@ -8,18 +14,27 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
-export function ThreadDeleteActions({
+/**
+ * Menu aksi per-thread (dropdown). Aksi delete selalu ada; item sematkan/lepas sematan
+ * hanya dirender saat `onTogglePin` diberikan (sidebar row) — header/compact tetap delete-only.
+ */
+export function ThreadActionsMenu({
   description,
   onDelete,
   variant = "header",
+  isPinned = false,
+  onTogglePin,
 }: {
   description: string;
   onDelete: () => Promise<void>;
   variant?: "header" | "sidebar-row";
+  isPinned?: boolean;
+  onTogglePin?: () => void | Promise<void>;
 }) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const isSidebarRow = variant === "sidebar-row";
@@ -56,6 +71,15 @@ export function ThreadDeleteActions({
           sideOffset={isSidebarRow ? 4 : undefined}
           className="w-44"
         >
+          {onTogglePin ? (
+            <>
+              <DropdownMenuItem onClick={() => void onTogglePin()}>
+                {isPinned ? <PinOffIcon className="size-4" /> : <PinIcon className="size-4" />}
+                {isPinned ? "Lepas sematan" : "Sematkan thread"}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
+          ) : null}
           <DropdownMenuItem
             variant="destructive"
             onClick={() => setDeleteDialogOpen(true)}

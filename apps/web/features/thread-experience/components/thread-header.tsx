@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { panelHeaderBarClass } from "@/lib/panel-surface";
 import type { ThreadSummary } from "./component-types";
-import { ThreadDeleteActions } from "./thread-actions-menu";
+import { ThreadActionsMenu } from "./thread-actions-menu";
 import { ThreadRecentSwitcher } from "./thread-recent-switcher";
 
 export function ThreadHeader({
@@ -65,7 +65,7 @@ export function ThreadHeader({
       </div>
       <div className="flex shrink-0 items-center gap-1">
         {threadId && onDeleteThread ? (
-          <ThreadDeleteActions
+          <ThreadActionsMenu
             description="Thread dan pesannya akan dihapus permanen."
             onDelete={onDeleteThread}
           />

@@ -18,6 +18,8 @@ import {
 import { useProfile } from "@/features/settings/api";
 import {
   useDeleteThread,
+  usePinnedThreads,
+  usePinThread,
   useSendStatus,
   useThreadsList,
 } from "@/features/threads/api";
@@ -70,6 +72,7 @@ function flattenThreads(
           agentKind: string;
           createdAt: number;
           workspaceId?: string | null;
+          pinnedAt?: number | null;
           bucket?: "recent" | "older";
         }>;
       }>
@@ -86,6 +89,7 @@ function flattenThreads(
       status: thread.status as "idle" | "streaming" | "failed",
       lastAgentKind: thread.agentKind as "lite" | "pro" | undefined,
       workspaceId: thread.workspaceId ?? undefined,
+      pinnedAt: thread.pinnedAt ?? null,
       bucket: thread.bucket,
     })),
   );
@@ -144,9 +148,11 @@ export function useWorkspaceIndexData() {
   const profile = useProfile();
   const workspacesQuery = useWorkspacesList(false);
   const threadsQuery = useThreadsList();
+  const pinnedThreadsQuery = usePinnedThreads();
   const createWorkspaceMutation = useCreateWorkspace();
   const archiveWorkspaceMutation = useArchiveWorkspace();
   const deleteThreadMutation = useDeleteThread();
+  const pinThreadMutation = usePinThread();
 
   const viewer = profile.data
     ? {
@@ -156,11 +162,22 @@ export function useWorkspaceIndexData() {
       }
     : undefined;
 
+  // Pinned + list disatukan dalam satu array `threads`. List utama sudah exclude pin di BE;
+  // dedup by id tetap dijaga di sini sebagai guard saat jendela invalidasi (dua query refetch
+  // tak sinkron sesaat). AppSidebar mem-partisi ulang jadi grup Disematkan/Terbaru/More via `pinnedAt`.
+  const pinnedThreads = flattenThreads(
+    pinnedThreadsQuery.data ? [{ items: pinnedThreadsQuery.data }] : undefined,
+  );
+  const pinnedThreadIds = new Set(pinnedThreads.map((thread) => thread.threadId));
+  const listThreads = flattenThreads(threadsQuery.data?.pages).filter(
+    (thread) => !pinnedThreadIds.has(thread.threadId),
+  );
+
   return {
     isAuthenticated,
     viewer,
     workspaces: flattenWorkspaces(workspacesQuery.data?.pages),
-    threads: flattenThreads(threadsQuery.data?.pages),
+    threads: [...pinnedThreads, ...listThreads],
     isLoadingWorkspaces: workspacesQuery.isLoading,
     createWorkspace: async (args: { name: string }) => {
       const workspace = await createWorkspaceMutation.mutateAsync(args);
@@ -171,6 +188,10 @@ export function useWorkspaceIndexData() {
     },
     removeThread: async (args: { threadId: string }) => {
       await deleteThreadMutation.mutateAsync({ id: args.threadId });
+      return { ok: true as const };
+    },
+    togglePinThread: async (args: { threadId: string; pinned: boolean }) => {
+      await pinThreadMutation.mutateAsync({ id: args.threadId, pinned: args.pinned });
       return { ok: true as const };
     },
   };

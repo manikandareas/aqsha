@@ -9,7 +9,7 @@ import { panelBodyPaddingClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
 import { AccessDeniedState } from "./access-denied-state";
 import { ChatThreadSurface } from "./chat-thread-surface";
-import { ThreadDeleteActions } from "./thread-actions-menu";
+import { ThreadActionsMenu } from "./thread-actions-menu";
 import { ThreadRecentSwitcher } from "./thread-recent-switcher";
 import type { SendMessage, StartThread, ThreadSummary } from "./component-types";
 import type { AgentRunId } from "@/lib/convex-refs";
@@ -85,7 +85,7 @@ export function CompactThreadChatPanel({
           actions={
             <>
               {activeThreadId ? (
-                <ThreadDeleteActions
+                <ThreadActionsMenu
                   description={deleteDescription}
                   onDelete={async () => {
                     await onDeleteThread();
