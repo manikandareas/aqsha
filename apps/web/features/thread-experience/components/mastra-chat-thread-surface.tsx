@@ -8,6 +8,7 @@ import { ChevronRightIcon } from "@aqsha/ui/icons";
 import { ConversationContent } from "@/components/ai-elements/conversation-content";
 import { Conversation } from "@/components/ai-elements/conversation-root";
 import { ConversationScrollButton } from "@/components/ai-elements/conversation-scroll-button";
+import { HomeBannerCarousel } from "@/components/home-banner-carousel";
 import { HomeExploreBento } from "@/features/discovery/components/home-explore-bento";
 import {
   usePinnedThreads,
@@ -26,7 +27,11 @@ import {
 import { MessageList } from "@/features/threads/components/message-list";
 import { QuestionsCard } from "@/features/threads/components/questions-card";
 import { bucketMessageAttachments } from "@/features/threads/lib/attachment-buckets";
-import { type AgentKind, ASTRA_AGENT_ID, useMastraClient } from "@/features/threads/lib/mastra-client";
+import {
+  type AgentKind,
+  ASTRA_AGENT_ID,
+  useMastraClient,
+} from "@/features/threads/lib/mastra-client";
 import type { TimelineMessage } from "@/features/threads/lib/timeline-types";
 import { buildThreadPanelLookups } from "@/features/threads/lib/thread-panel-data";
 import { mastraMessagesToTimeline } from "@/features/threads/lib/mastra-timeline";
@@ -34,11 +39,17 @@ import { useMastraAgent } from "@/features/threads/lib/use-mastra-agent";
 import type { ResearchSource } from "@/features/threads/types";
 import { threadTitle } from "@/features/threads/types";
 import { queryKeys } from "@/lib/api-query";
-import { panelBodyPaddingClass, threadTranscriptColumnClass } from "@/lib/panel-surface";
+import {
+  panelBodyPaddingClass,
+  threadTranscriptColumnClass,
+} from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
 import type { ContextRef } from "@aqsha/chat-core";
 import { useAmbientContextRefs } from "./composer-context-mentions";
-import { useRegisterThreadPanelData, useThreadPanel } from "./thread-panel-context";
+import {
+  useRegisterThreadPanelData,
+  useThreadPanel,
+} from "./thread-panel-context";
 import { LIVE_PLAN_KEY } from "../utils/thread-panel-model";
 import { ComposerHeroState } from "./composer-hero-state";
 import { ExploreHandwrittenCue } from "./explore-handwritten-cue";
@@ -47,17 +58,31 @@ import { CenteredLoading } from "./shared";
 const HOME_EASE_OUT = [0.23, 1, 0.32, 1] as const;
 
 /** Map status kirim terblok → notice composer (billing return-union / cooldown). */
-function blockedNotice(status: ReturnType<typeof useSendStatus>["data"]): ComposerNotice | null {
+function blockedNotice(
+  status: ReturnType<typeof useSendStatus>["data"],
+): ComposerNotice | null {
   if (!status || status.canSend) return null;
   switch (status.reason) {
     case "cooldown":
-      return { message: "Terlalu cepat. Tunggu sebentar sebelum mengirim lagi.", retryAt: status.retryAt };
+      return {
+        message: "Terlalu cepat. Tunggu sebentar sebelum mengirim lagi.",
+        retryAt: status.retryAt,
+      };
     case "quota_exceeded":
-      return { message: "Kredit chat bulan ini sudah habis. Tingkatkan paket atau tunggu reset." };
+      return {
+        message:
+          "Kredit chat bulan ini sudah habis. Tingkatkan paket atau tunggu reset.",
+      };
     case "subscription_required":
-      return { message: "Fitur ini butuh paket berbayar. Tingkatkan paket untuk melanjutkan." };
+      return {
+        message:
+          "Fitur ini butuh paket berbayar. Tingkatkan paket untuk melanjutkan.",
+      };
     case "billing_inactive":
-      return { message: "Langganan tidak aktif. Perbarui pembayaran untuk melanjutkan." };
+      return {
+        message:
+          "Langganan tidak aktif. Perbarui pembayaran untuk melanjutkan.",
+      };
     default:
       return { message: "Pengiriman sedang tidak tersedia." };
   }
@@ -98,7 +123,9 @@ export function MastraChatThreadSurface({
 }) {
   // Thread baru: id klien-side stabil (Mastra mengizinkan klien menentukan thread id).
   const [newThreadId] = useState(() =>
-    typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `t-${Date.now()}`,
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `t-${Date.now()}`,
   );
   const effectiveThreadId = threadId ?? newThreadId;
 
@@ -107,7 +134,10 @@ export function MastraChatThreadSurface({
     queryKey: ["mastra", "thread-messages", threadId],
     enabled: Boolean(threadId),
     queryFn: async () => {
-      const thread = client.getMemoryThread({ threadId: threadId!, agentId: ASTRA_AGENT_ID });
+      const thread = client.getMemoryThread({
+        threadId: threadId!,
+        agentId: ASTRA_AGENT_ID,
+      });
       const res = await thread.listMessages();
       return mastraMessagesToTimeline(res.messages ?? []);
     },
@@ -146,8 +176,13 @@ function MastraChatInner({
   // (thread baru = id klien tanpa baris server → tak ada GET 404). Diteruskan ke `useMastraAgent`
   // (seed channel agent untuk langganan/regenerate/approval) dan ke `Composer` (default selektor).
   const threadDetail = useThread(threadId, isExistingThread);
-  const threadAgentKind: AgentKind = threadDetail.data?.agentKind === "pro" ? "pro" : "lite";
-  const agent = useMastraAgent({ threadId, seedMessages: seed, initialAgentKind: threadAgentKind });
+  const threadAgentKind: AgentKind =
+    threadDetail.data?.agentKind === "pro" ? "pro" : "lite";
+  const agent = useMastraAgent({
+    threadId,
+    seedMessages: seed,
+    initialAgentKind: threadAgentKind,
+  });
   const sendStatus = useSendStatus();
   const qc = useQueryClient();
   const ambientContextRefs = useAmbientContextRefs();
@@ -161,7 +196,10 @@ function MastraChatInner({
   // Sumber riset `/deep` (research_sources, citation_number) → dikelompokkan per turn (runId) untuk
   // dirender di bawah jawaban (G4). Fetch saat thread mapan (ready + ada pesan) → hindari 404 thread
   // baru; invalidasi otomatis saat run deep selesai (lihat useMastraAgent).
-  const { data: sources } = useThreadSources(threadId, !busy && agent.messages.length > 0);
+  const { data: sources } = useThreadSources(
+    threadId,
+    !busy && agent.messages.length > 0,
+  );
   const sourcesByTurn = useMemo(() => {
     const map = new Map<string, ResearchSource[]>();
     for (const s of sources ?? []) {
@@ -181,7 +219,10 @@ function MastraChatInner({
   );
   // React Compiler (next.config `reactCompiler: true`) meng-cache turunan ini — recompute hanya saat
   // input berubah, jadi tak perlu memo manual. Scan-nya kecil (O(pesan-user × upload), array mungil).
-  const attachmentsByMessage = bucketMessageAttachments(agent.messages, threadArtifacts);
+  const attachmentsByMessage = bucketMessageAttachments(
+    agent.messages,
+    threadArtifacts,
+  );
 
   const threadPanel = useThreadPanel();
 
@@ -189,9 +230,20 @@ function MastraChatInner({
   // The surface owns the parsed timeline + DB sources + plan gate, so it builds them
   // here and publishes them to `ThreadPanelProvider`; no-op in compact panels (no
   // provider). While the plan gate is live, the panel mirrors its Setujui/Tolak actions.
-  const { messages: agentMessages, planGate, resolvePlan, askGate, resolveAsk } = agent;
+  const {
+    messages: agentMessages,
+    planGate,
+    resolvePlan,
+    askGate,
+    resolveAsk,
+  } = agent;
   const panelLookups = useMemo(() => {
-    const lookups = buildThreadPanelLookups(agentMessages, sources, planGate, askGate);
+    const lookups = buildThreadPanelLookups(
+      agentMessages,
+      sources,
+      planGate,
+      askGate,
+    );
     // While a plan gate is live, mirror its Setujui/Tolak into the live plan entry so the
     // panel opened from the gate card carries the same actions.
     const livePlan = planGate ? lookups.plans.get(LIVE_PLAN_KEY) : undefined;
@@ -266,14 +318,23 @@ function MastraChatInner({
           >
             <p className="mb-2 text-foreground">
               {a.title}
-              {typeof a.args.artifactId === "string" ? ` — ${a.args.artifactId}` : ""}? Setujui untuk
-              menjalankan.
+              {typeof a.args.artifactId === "string"
+                ? ` — ${a.args.artifactId}`
+                : ""}
+              ? Setujui untuk menjalankan.
             </p>
             <div className="flex gap-2">
-              <Button size="sm" onClick={() => void agent.approve(a.toolCallId)}>
+              <Button
+                size="sm"
+                onClick={() => void agent.approve(a.toolCallId)}
+              >
                 Setujui
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => void agent.decline(a.toolCallId)}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => void agent.decline(a.toolCallId)}
+              >
                 Tolak
               </Button>
             </div>
@@ -308,7 +369,9 @@ function MastraChatInner({
             className="group -m-1 flex w-full items-start justify-between gap-3 rounded-lg p-1 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <div className="grid min-w-0 gap-1">
-              <span className="text-sm font-semibold text-foreground">Rencana riset</span>
+              <span className="text-sm font-semibold text-foreground">
+                Rencana riset
+              </span>
               <span className="text-[13px] text-muted-foreground">
                 {`${agent.planGate.subQuestions.length} sub-pertanyaan riset · ketuk untuk lihat detail`}
               </span>
@@ -317,7 +380,9 @@ function MastraChatInner({
           </button>
         ) : (
           <div className="grid gap-1">
-            <span className="text-sm font-semibold text-foreground">Rencana riset</span>
+            <span className="text-sm font-semibold text-foreground">
+              Rencana riset
+            </span>
             <span className="text-[13px] text-muted-foreground">
               {`${agent.planGate.subQuestions.length} sub-pertanyaan riset · tinjau sebelum menyetujui`}
             </span>
@@ -327,7 +392,11 @@ function MastraChatInner({
           <Button size="sm" onClick={() => void agent.resolvePlan(true)}>
             Setujui
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => void agent.resolvePlan(false)}>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => void agent.resolvePlan(false)}
+          >
             Tolak
           </Button>
         </div>
@@ -357,7 +426,12 @@ function MastraChatInner({
     <div className="flex h-full min-h-0 w-full flex-col">
       <Conversation className="flex-1">
         <ConversationContent className="max-w-none p-0">
-          <div className={cn(threadTranscriptColumnClass, "flex flex-col gap-4 pt-3 pb-8")}>
+          <div
+            className={cn(
+              threadTranscriptColumnClass,
+              "flex flex-col gap-4 pt-3 pb-8",
+            )}
+          >
             <MessageList
               messages={agent.messages}
               pending={agent.status === "submitted"}
@@ -366,12 +440,19 @@ function MastraChatInner({
               attachmentsByMessage={attachmentsByMessage}
               onRegenerate={regenerate}
             />
-            {agent.error ? <p className="text-red-500 text-sm">{agent.error.message}</p> : null}
+            {agent.error ? (
+              <p className="text-red-500 text-sm">{agent.error.message}</p>
+            ) : null}
           </div>
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
-      <div className={cn(threadTranscriptColumnClass, "flex flex-col gap-2.5 pt-2.5 pb-4")}>
+      <div
+        className={cn(
+          threadTranscriptColumnClass,
+          "flex flex-col gap-2.5 pt-2.5 pb-4",
+        )}
+      >
         {questionsCard}
         {planGateCard}
         {approvalCards}
@@ -428,56 +509,81 @@ function MastraComposerLanding({
     ...(threadsList.data?.pages ?? []).flatMap((page) => page.items),
   ].reduce<RecentThread[]>((acc, t) => {
     if (!acc.some((r) => r.threadId === t.id)) {
-      acc.push({ threadId: t.id, title: threadTitle(t), lastActivityAt: t.lastActivityAt });
+      acc.push({
+        threadId: t.id,
+        title: threadTitle(t),
+        lastActivityAt: t.lastActivityAt,
+      });
     }
     return acc;
   }, []);
 
   return (
     <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden bg-background">
+      {/* Landing penuh (non-compact): kolom setinggi viewport — hero di tengah, banner
+          carousel menempel di dasar (tepat di atas section Jelajahi yang jadi turun ke
+          bawah fold; cue "bacaan hari ini" yang mengundang scroll ke sana). */}
       <div
         className={cn(
-          "relative mx-auto flex w-full items-center justify-center",
+          "relative mx-auto flex w-full flex-col",
           compact
             ? cn("flex-1 max-w-none", panelBodyPaddingClass)
-            : "min-h-[calc(100%-5rem)] max-w-5xl px-4 py-10 sm:px-8",
+            : "min-h-full max-w-5xl px-4 pb-5 pt-10 sm:px-8",
         )}
       >
-        <m.div
-          className={cn("w-full", compact ? "max-w-none" : "max-w-2xl")}
-          initial={
-            shouldReduceMotion
-              ? { opacity: 0 }
-              : { opacity: 0, transform: "translateY(10px) scale(0.985)" }
-          }
-          animate={{ opacity: 1, transform: "translateY(0px) scale(1)" }}
-          transition={{ duration: shouldReduceMotion ? 0.14 : 0.24, ease: HOME_EASE_OUT }}
-        >
-          <ComposerHeroState
-            headerClassName="mb-5 gap-2"
-            logoClassName={compact ? "size-12 sm:size-18" : "size-12 sm:size-22"}
-            titleClassName={cn(
-              "font-sans font-bold tracking-tight text-foreground leading-none",
-              compact ? "text-xl" : "text-2xl sm:text-3xl",
-            )}
+        <div className="flex w-full flex-1 items-center justify-center">
+          <m.div
+            className={cn("w-full", compact ? "max-w-none" : "max-w-2xl")}
+            initial={
+              shouldReduceMotion
+                ? { opacity: 0 }
+                : { opacity: 0, transform: "translateY(10px) scale(0.985)" }
+            }
+            animate={{ opacity: 1, transform: "translateY(0px) scale(1)" }}
+            transition={{
+              duration: shouldReduceMotion ? 0.14 : 0.24,
+              ease: HOME_EASE_OUT,
+            }}
           >
-            <Composer
-              showSuggestions={!compact}
-              recentThreads={recentThreads}
-              initialContent={initialContent}
-              ambientContextRefs={ambientContextRefs}
-              threadId={threadId}
-              threadAgentKind={threadAgentKind}
-              onSend={onSend}
-              onStop={onStop}
-              busy={busy}
-              disabled={disabled}
-              notice={notice}
-              errorDraft={errorDraft}
+            <ComposerHeroState
+              headerClassName="mb-5 gap-2"
+              logoClassName={
+                compact ? "size-12 sm:size-18" : "size-12 sm:size-22"
+              }
+              titleClassName={cn(
+                "font-sans font-bold tracking-tight text-foreground leading-none",
+                compact ? "text-xl" : "text-2xl sm:text-3xl",
+              )}
+            >
+              <Composer
+                showSuggestions={!compact}
+                recentThreads={recentThreads}
+                initialContent={initialContent}
+                ambientContextRefs={ambientContextRefs}
+                threadId={threadId}
+                threadAgentKind={threadAgentKind}
+                onSend={onSend}
+                onStop={onStop}
+                busy={busy}
+                disabled={disabled}
+                notice={notice}
+                errorDraft={errorDraft}
+              />
+            </ComposerHeroState>
+          </m.div>
+        </div>
+        {compact ? null : (
+          <>
+            <div className="mx-auto w-full max-w-2xl">
+              <HomeBannerCarousel />
+            </div>
+            {/* Cue diposisikan absolut terhadap kolom landing — kanan-atas, diagonal
+                di antara action buka panel Workspace dan hero title. */}
+            <ExploreHandwrittenCue
+              shouldReduceMotion={shouldReduceMotion ?? false}
             />
-          </ComposerHeroState>
-        </m.div>
-        {compact ? null : <ExploreHandwrittenCue shouldReduceMotion={shouldReduceMotion ?? false} />}
+          </>
+        )}
       </div>
       {compact ? null : <HomeExploreBento />}
     </main>

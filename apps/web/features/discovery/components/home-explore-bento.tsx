@@ -26,6 +26,9 @@ const PILLS = [
   ...DISCOVERY_TOPICS.map((t) => ({ label: FEED_TOPIC_LABELS[t], href: `/app/explore?topic=${t}` })),
 ];
 
+/** Anchor scroll dari cue "bacaan hari ini" di landing (section ini di bawah fold). */
+export const HOME_EXPLORE_SECTION_ID = "home-explore";
+
 export function HomeExploreBento() {
   const query = useFeedHome();
   const hide = useHideDiscovery();
@@ -59,7 +62,10 @@ export function HomeExploreBento() {
   if (!showFeed) return null;
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 pb-20 pt-4 sm:px-8">
+    <div
+      id={HOME_EXPLORE_SECTION_ID}
+      className="mx-auto w-full max-w-5xl scroll-mt-6 px-4 pb-20 pt-4 sm:px-8"
+    >
       {/* Jelajahi — sliver feed asli */}
       <section>
         <SectionHeader
