@@ -1,7 +1,7 @@
 import { MastraAuthClerk } from "@mastra/auth-clerk";
 
 /**
- * Auth Clerk native Mastra (Fase 0) — menggantikan channel eve `clerkAuth()` buatan tangan.
+ * Auth Clerk native Mastra (`MastraAuthClerk`), bukan verifikasi token buatan tangan.
  *
  * `MastraAuthClerk.authenticateToken` memverifikasi bearer Clerk via JWKS (RS256), jadi WAJIB
  * `jwksUri` + `secretKey` + `publishableKey`. `jwksUri` kita turunkan dari publishableKey

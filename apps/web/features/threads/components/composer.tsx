@@ -149,8 +149,7 @@ function useSecondsLeft(retryAt?: number): number {
 
 /**
  * Composer kaya — token editor (expand/collapse animasi) + `/slash` command +
- * `@context` mention + selektor agen, identik visual/UX dengan V1 (apps/web). Data
- * di-wire ke eve/api: command di-expand client-side via `resolveCommandDispatch`,
+ * `@context` mention + selektor agen. Command di-expand client-side via `resolveCommandDispatch`,
  * pin `@mention` di-hydrate (ownership server) → `clientContext` ephemeral, kirim
  * via `onSend`. Enter kirim, Shift+Enter newline, Escape hentikan turn berjalan.
  */
@@ -441,7 +440,7 @@ export function Composer({
         if (r.dispatchPrompt !== r.displayText) parts.push(r.dispatchPrompt);
       }
     } else {
-      // Lampiran tanpa teks → prompt sintetik supaya turn punya pesan (eve butuh non-empty).
+      // Lampiran tanpa teks → prompt sintetik supaya turn punya pesan user non-kosong.
       displayText = "Tolong baca berkas terlampir.";
       displayMarked = displayText;
     }

@@ -6,7 +6,7 @@ import { resolveOwnerThread } from "../lib/owner-thread";
 import type { AgentKind } from "../lib/tool-context";
 
 /**
- * Proyeksi thread (Fase 3 cutover) — menggantikan hook `projection.ts` eve untuk jalur Mastra.
+ * Proyeksi thread — sinkronkan metadata thread app dari turn agent.
  *
  * Mastra Memory = SoT pesan (auto-save `mastra_messages`), tapi sidebar + billing list app
  * membaca `chat_threads`. Mastra TAK punya projection hook, jadi outputProcessor ini meng-upsert

@@ -1,7 +1,6 @@
-// Tipe presentasi timeline chat — NETRAL runtime (tak bergantung eve / Mastra). Dipakai bersama
+// Tipe presentasi timeline chat — NETRAL runtime (tak terikat adapter tertentu). Dipakai bersama
 // oleh komponen render (message-list, tool-row, chat-artifact-card) dan adapter per-runtime
-// (mastra-timeline). Sebelumnya hidup di `eve-timeline.ts`; diekstrak saat cutover Mastra supaya
-// penghapusan adapter eve tak memutus jalur Mastra.
+// (mastra-timeline), supaya komponen render tak perlu tahu bentuk chunk runtime.
 
 /** Status tampil satu tool-call. */
 export type ToolStatus = "running" | "pending" | "completed" | "failed" | "denied";

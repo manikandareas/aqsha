@@ -20,10 +20,9 @@ export type ThreadBucket = "recent" | "older";
 export type ThreadListItem = ChatThread & { bucket: ThreadBucket };
 
 /**
- * ThreadService — path BACA + CRUD non-stream thread Astra (Fase 6), dipakai route
- * api (Bun, tanpa bundling). Path TULIS proyeksi (ensure/record/status) hidup di
- * PROSES eve (`apps/web/agent/lib/store.ts`, raw SQL) karena bundle eve tak bisa
- * mengonsumsi paket workspace TS-mentah — tak ada operasi yang tumpang-tindih.
+ * ThreadService — path BACA + CRUD non-stream thread Astra, dipakai route api.
+ * Path TULIS proyeksi = `ensureProjected` di bawah, dipanggil outputProcessor
+ * runtime agent (konsumsi via dist build) — tak ada operasi yang tumpang-tindih.
  */
 export const ThreadService = {
   /** Soft ownership: `null` bila missing/not-owned (BUKAN throw). Path route GET /:id. */
@@ -36,8 +35,7 @@ export const ThreadService = {
   /**
    * Proyeksi thread Mastra → `chat_threads` (Fase 3 cutover). Mastra Memory = SoT pesan, jadi
    * ini HANYA menyiapkan baris metadata tipis (owner/status/preview/agent_kind) yang dibutuhkan
-   * sidebar + billing list — TIDAK menulis `chat_messages`/`chat_thread_events`. Menggantikan
-   * proyeksi `ensureThread`/`setThreadStatus`/preview milik PROSES eve (`store.ts`, raw SQL).
+   * sidebar + billing list — TIDAK menulis `chat_messages`/`chat_thread_events`.
    * Idempoten: insert-if-absent → update aktivitas/preview/status. Dipanggil outputProcessor
    * agent per turn; `status='idle'` (turn selesai saat output result).
    */

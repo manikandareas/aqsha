@@ -1,6 +1,6 @@
 /**
- * Slice 6.9 — service-unit (repo-fake) untuk jalur Astra chat eve yang TIDAK
- * butuh proses eve / DB live: SendQuotaService.check return-union, TitleService
+ * Service-unit (repo-fake) untuk jalur Astra chat yang TIDAK butuh runtime
+ * agent / DB live: SendQuotaService.check return-union, TitleService
  * claim/finalize guard, ResearchService (Firecrawl search + Crossref keyword) cache
  * hit/miss + provider-failure sentinel, dan Firecrawl reader (scrapeUrlFirecrawl).
  *

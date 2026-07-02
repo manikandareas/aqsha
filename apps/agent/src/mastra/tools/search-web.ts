@@ -8,9 +8,9 @@ import { runResearchTool } from "../lib/research";
  * gate kuota → provider → debit `external_search` (2 kredit) hanya saat provider sukses (CTX-2)
  * + persist `research_sources` (panel Sources).
  *
- * CATATAN: built-in `web_search` provider eve (native) SENGAJA tak diport — model via gateway
- * tak menjamin web-search native, dan ini (Firecrawl in-process) sudah memenuhi. Filesystem
- * builtins/sandbox eve juga tak diport (Mastra tanpa sandbox).
+ * CATATAN: SENGAJA tidak memakai web-search native provider model — model via gateway tak
+ * menjamin web-search native tersedia, dan Firecrawl in-process sudah memenuhi kebutuhan
+ * (plus kontrol kuota/billing/persist di sisi kita).
  */
 export const searchWeb = createTool({
   id: "search_web",

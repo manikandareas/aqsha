@@ -19,7 +19,7 @@ assertEmbeddingEnabled();
  * - `agents`: key = id agent (dipakai di route `/api/agents/:id/*`).
  * - `storage` + `vectors`: satu Postgres bersama (tabel `mastra_*`); juga dipakai Memory.
  * - `server.auth`: MastraAuthClerk — memverifikasi bearer Clerk DI SEMUA route (termasuk
- *   stream/subscribe), menutup celah eve stream-GET yang tak ber-ownership. resourceId
+ *   stream/subscribe), supaya tak ada endpoint stream-GET tanpa cek ownership. resourceId
  *   diturunkan dari Clerk `sub` (lihat `./auth.ts`).
  *
  * OPEN-Q-1 (resolusi Fase 0): route agent STANDAR Mastra (`/api/agents/:id/stream*`,

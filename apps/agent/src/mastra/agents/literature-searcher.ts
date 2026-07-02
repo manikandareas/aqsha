@@ -7,7 +7,7 @@ import { searchThreadDocuments } from "../tools/search-thread-documents";
 import { searchWeb } from "../tools/search-web";
 
 /**
- * Subagent `literature-searcher` (Fase 2) — port dari eve `subagents/literature-searcher`.
+ * Subagent `literature-searcher` — pencari bukti literatur per sub-pertanyaan.
  *
  * Menerima SATU sub-pertanyaan per pemanggilan (tak melihat history root; semua konteks ada di
  * prompt) dan mengembalikan bukti terkuat bernomor `[n]`. Dipakai sebagai langkah `searchStep`

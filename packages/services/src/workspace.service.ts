@@ -12,7 +12,7 @@ const WORKSPACE_NAME_LABEL = "Workspace name";
 const DEFAULT_LIST_LIMIT = 25;
 const MAX_LIST_LIMIT = 100;
 
-/** Workspace seam — CRUD penuh + capacity (P2). Dipakai route (P2) + eve MCP (P6). */
+/** Workspace seam — CRUD penuh + capacity. Dipakai route api + tool agent. */
 export const WorkspaceService = {
   /**
    * Idempotent: kembalikan id workspace terbaru milik owner bila ada; selain itu

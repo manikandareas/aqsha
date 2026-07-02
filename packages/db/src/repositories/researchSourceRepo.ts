@@ -11,7 +11,7 @@ import type { DbOrTx } from "../types";
  *
  * `insertMany` IDEMPOTEN: `onConflictDoNothing` pada unique
  * (`thread_id`,`turn_id`,`locator`) supaya step tool riset yang RE-RUN saat resume
- * eve tak menggandakan baris. `listByThread` untuk panel Sources (api route).
+ * durable tak menggandakan baris. `listByThread` untuk panel Sources (api route).
  */
 export const ResearchSourceRepo = {
   async insertMany(db: DbOrTx, rows: NewResearchSource[]): Promise<void> {

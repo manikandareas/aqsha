@@ -3,7 +3,7 @@ import { modelForRequestContext } from "../model";
 import { verifyIdentifiers } from "../tools/verify-identifiers";
 
 /**
- * Subagent `citation-verifier` (Fase 2) — port dari eve `subagents/citation-verifier`.
+ * Subagent `citation-verifier` — verifikasi integritas referensi hasil riset.
  *
  * Menerima daftar referensi (judul, DOI/arXiv, penulis, tahun, `[n]`) dan memanggil
  * `verify_identifiers` SEKALI atas seluruh daftar (engine integritas 4-langkah batch di server),

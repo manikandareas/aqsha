@@ -107,7 +107,7 @@ function lastUserText(messages: readonly TimelineMessage[]): string | null {
  * Surface chat runtime MASTRA — komposisi V1 (composer KAYA + landing hero + explore bento)
  * di atas `useMastraAgent`. Mastra Memory (server) = SoT pesan; `@mastra/client-js` menangani
  * stream + persist; thread id ditentukan klien (Mastra mengizinkannya), jadi URL di-bump SEGERA
- * saat kirim pertama (tanpa discovery race ala eve). HITL = kartu approval tool. Sumber riset
+ * saat kirim pertama tanpa menunggu round-trip server. HITL = kartu approval tool. Sumber riset
  * tetap via API `research_sources` (panel terpisah).
  */
 export function MastraChatThreadSurface({

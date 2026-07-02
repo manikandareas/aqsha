@@ -4,7 +4,7 @@
  * chat yang HANYA terbukti di DB nyata (bukan repo-fake):
  *
  *  1. `ResearchSourceRepo.insertMany` IDEMPOTEN (`onConflictDoNothing` pada unique
- *     thread+turn+locator) → step tool riset yang RE-RUN saat resume eve tak gandakan.
+ *     thread+turn+locator) → step tool riset yang RE-RUN saat resume durable tak gandakan.
  *  2. `ArtifactEmbeddingRepo.searchSimilar` ANN cosine + scope `threadId` via JOIN ke
  *     `artifacts` (artifact_embeddings tak punya thread_id) → attachment headless
  *     (workspaceId=null) tetap ke-temu lewat thread, lintas-thread TER-EXCLUDE.
@@ -117,7 +117,7 @@ afterAll(async () => {
 describe("ResearchSourceRepo.insertMany — idempoten (resume tak gandakan)", () => {
   itest("re-insert (thread+turn+locator) sama → 1 baris; locator beda → tambah", async () => {
     await ResearchSourceRepo.insertMany(db, [srcRow({ turnId: "turn1", locator: "https://a.test" })]);
-    // RE-RUN step yang sama (resume eve) — id baru, key sama → onConflictDoNothing
+    // RE-RUN step yang sama (resume durable) — id baru, key sama → onConflictDoNothing
     await ResearchSourceRepo.insertMany(db, [srcRow({ turnId: "turn1", locator: "https://a.test" })]);
     let rows = await ResearchSourceRepo.listByThread(db, T1);
     expect(rows.length).toBe(1);

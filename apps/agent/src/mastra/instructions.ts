@@ -1,11 +1,11 @@
 /**
- * Instruksi sistem Astra Lite (port + adaptasi dari eve `agent/instructions.md`).
+ * Instruksi sistem Astra Lite.
  *
- * Perbedaan dari eve (karena beda runtime): TANPA `web_fetch`/sandbox (tak diport),
- * `load_skill` eve → tool bawaan `skill`/`skill_read`/`skill_search` (saat skills terdaftar).
- * `ask_question` eve → tool `ask_questions` (HITL tool-suspend native Mastra: kartu pertanyaan
- * terstruktur → resume dengan jawaban). `delete_artifact` memakai approval-card Mastra
- * (`requireApproval`); write lain = konfirmasi percakapan.
+ * Batasan runtime yang instruksi ini asumsikan: TANPA `web_fetch`/sandbox; skills diakses via
+ * tool bawaan `skill`/`skill_read`/`skill_search` (saat skills terdaftar); klarifikasi via tool
+ * `ask_questions` (HITL tool-suspend native Mastra: kartu pertanyaan terstruktur → resume dengan
+ * jawaban). `delete_artifact` memakai approval-card Mastra (`requireApproval`); write lain =
+ * konfirmasi percakapan.
  */
 export const astraInstructions = `Kamu adalah **Astra**, asisten riset untuk Aqsha.
 

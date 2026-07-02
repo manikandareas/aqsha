@@ -16,8 +16,8 @@ const WORKING_MEMORY_TEMPLATE = `# Memori kerja percakapan
 - **Langkah berikutnya / pertanyaan yang masih terbuka:**`;
 
 /**
- * Mastra Memory = Source of Truth pesan/history Astra (menggantikan proyeksi eve:
- * `chat_thread_events` + B-strip + hook projection). Pesan tersimpan OTOMATIS saat
+ * Mastra Memory = Source of Truth pesan/history Astra (tabel `mastra_*`, bukan
+ * `chat_thread_events` legacy). Pesan tersimpan OTOMATIS saat
  * `agent.stream(msg, { memory: { thread, resource } })`; klien hanya mengirim pesan BARU,
  * Mastra memuat history dari storage.
  *

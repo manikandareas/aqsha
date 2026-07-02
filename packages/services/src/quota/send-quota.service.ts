@@ -72,8 +72,8 @@ export type SendStatus = {
 const RULE = "chat:send" as const;
 
 /**
- * Gerbang kirim chat Astra (Slice 6.2). Dua entry:
- * - `check` (consuming) — backstop OTORITATIF di `onMessage` proses eve. Cek entitlement
+ * Gerbang kirim chat Astra. Dua entry:
+ * - `check` (consuming) — backstop OTORITATIF di processor billing runtime agent. Cek entitlement
  *   non-consuming DULU (biar blok billing tak membakar jatah cooldown), lalu consume satu
  *   poin `chat:send`. Blok → return-union (channel `return null` = drop turn).
  * - `getSendStatus` (non-consuming) — preview UX-ramah untuk composer. Tak mengubah state.

@@ -1,9 +1,9 @@
 /**
- * In-process politeness pacer for arXiv (≈1 req / 3s) — port of the V1
- * `apps/agents/src/providers/cache.ts` `Pacer`. CAVEAT: V2 may run multiple
- * processes (api + eve), so this only paces requests *within one process*;
- * a Redis token-bucket for cross-process pacing is a follow-up (plan §7). The
- * Redis result cache already absorbs repeat queries, so this is best-effort.
+ * In-process politeness pacer for arXiv (≈1 req / 3s). CAVEAT: multiple
+ * processes may run this code (api + agent), so this only paces requests
+ * *within one process*; a Redis token-bucket for cross-process pacing is a
+ * follow-up (plan §7). The Redis result cache already absorbs repeat queries,
+ * so this is best-effort.
  */
 export class Pacer {
   private nextAvailable = 0;

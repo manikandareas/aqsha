@@ -21,8 +21,8 @@ import { authMacro } from "../plugins/auth";
  */
 export const threads = new Elysia({ prefix: "/threads" })
   .use(authMacro)
-  // Pre-check kirim (Slice 6.2) — non-consuming preview entitlement + cooldown untuk UX
-  // composer. Backstop otoritatif tetap di `onMessage` proses eve. Static route → router
+  // Pre-check kirim — non-consuming preview entitlement + cooldown untuk UX composer.
+  // Backstop otoritatif tetap di processor billing runtime agent. Static route → router
   // Elysia memprioritaskan di atas `/:id`.
   .get(
     "/send-status",

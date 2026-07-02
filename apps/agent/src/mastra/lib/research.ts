@@ -16,7 +16,7 @@ import {
 } from "./tool-context";
 
 /**
- * Helper riset/billing bersama untuk tool Mastra Astra (port dari eve `agent/lib/tools.ts`).
+ * Helper riset/billing bersama untuk tool Mastra Astra.
  */
 
 /**

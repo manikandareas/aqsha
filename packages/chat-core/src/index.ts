@@ -2,22 +2,21 @@
  * @aqsha/chat-core — logika MURNI chat Astra (Fase 6), zero-dep & SATU FILE
  * (tanpa relative import).
  *
- * Kenapa paket sendiri: PROSES eve (`apps/web/agent/*`) di-bundle Rolldown dan
- * TIDAK bisa mengonsumsi paket workspace TS-mentah dengan relative-import tanpa
- * ekstensi (`@aqsha/db`/`@aqsha/services`) — bundler-nya gagal resolve, dan runtime
- * Node tak bisa import `.ts` mentah bila di-externalize. Paket satu-file tanpa relative
- * import BISA di-bundle eve. Helper murni di sini dipakai BERSAMA oleh `agent/` (eve)
- * dan unit test (`test:v2`) → SATU SSOT, tanpa duplikasi.
+ * Kenapa paket sendiri: konsumen ter-bundle (runtime agent Node) TIDAK bisa
+ * mengonsumsi paket workspace TS-mentah dengan relative-import tanpa ekstensi
+ * (`@aqsha/db`/`@aqsha/services`) — bundler gagal resolve, dan runtime Node tak
+ * bisa import `.ts` mentah bila di-externalize. Paket satu-file tanpa relative
+ * import aman di-bundle. Helper murni di sini dipakai BERSAMA oleh web, api, dan
+ * agent + unit test → SATU SSOT, tanpa duplikasi.
  *
- * Tulisan tabel (raw SQL) tetap di `agent/lib/store.ts` (butuh driver `postgres`);
- * struktur tabel SSOT = `packages/db` (migrasi).
+ * Struktur tabel SSOT = `packages/db` (migrasi).
  */
 
 /**
- * Principal hasil auth Clerk — STRUKTURAL identik `SessionAuthContext` eve tanpa
- * mengikat tipe eve.
+ * Principal hasil auth Clerk — bentuk struktural netral (tak mengikat tipe
+ * runtime/framework mana pun).
  */
-export type EvePrincipal = {
+export type SessionPrincipal = {
   principalId: string;
   principalType: string;
   authenticator: string;
@@ -37,7 +36,7 @@ type ClerkClaims = {
  * Map klaim token sesi Clerk → principal. `sub` (== `ownerUserId` V2) wajib; tanpa
  * `sub` → `null` (AuthFn skip → 401). `email` best-effort (bukan klaim token standar).
  */
-export function clerkClaimsToPrincipal(claims: ClerkClaims): EvePrincipal | null {
+export function clerkClaimsToPrincipal(claims: ClerkClaims): SessionPrincipal | null {
   const sub = typeof claims.sub === "string" ? claims.sub : "";
   if (!sub) return null;
   const attributes: Record<string, string> = {};
@@ -100,11 +99,10 @@ export function assistantMessageId(sessionId: string, turnId: string, sequence: 
 }
 
 // ---------------------------------------------------------------------------
-// Prompt commands (Slice 6.6) — SSOT dipindah dari packages/convex (V1) ke sini
-// supaya client (web) DAN eve bundle pakai data yang sama. Pure, zero-dep,
-// tetap SATU FILE (constraint bundle eve). /deep di-DROP saat 6.6 (Lite-only),
-// di-REAKTIFKAN Slice 7.0 (deep research): expand jadi instruksi pakai skill
-// deep-research; gate billing/cap = `propose_research_plan` + send-status?feature.
+// Prompt commands — SSOT di sini supaya client (web) DAN runtime agent pakai
+// data yang sama. Pure, zero-dep, tetap SATU FILE (constraint bundle konsumen).
+// /deep aktif untuk deep research: expand jadi instruksi riset mendalam; gate
+// billing/cap = plan-gate `/deep` + send-status?feature.
 // ---------------------------------------------------------------------------
 
 /** Command id `/deep` (Slice 7.0) — dipakai composer untuk pre-check send-status deep-aware. */

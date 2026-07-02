@@ -20,7 +20,7 @@ import { users } from "./users";
  * - `image_url` opsional — OG image best-effort yang di-enrich step search (`fetchSourcePreview`)
  *   untuk kartu sumber. Favicon + domain TIDAK disimpan (diturunkan client-side dari `url`).
  * - Idempotensi insert: unique (`thread_id`,`turn_id`,`locator`) → step tool yang RE-RUN
- *   saat resume eve tak menggandakan baris (ON CONFLICT DO NOTHING di repo).
+ *   saat resume durable tak menggandakan baris (ON CONFLICT DO NOTHING di repo).
  * - timestamp epoch-ms (`bigint`) seragam dengan tabel V2 lain.
  */
 export const researchSources = pgTable(

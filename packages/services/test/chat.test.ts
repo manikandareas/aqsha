@@ -6,7 +6,7 @@ import { ThreadService } from "../src/chat";
 const fakeDb = { transaction: async (fn: (tx: unknown) => unknown) => fn(fakeDb) } as never;
 
 const OWNER = "user_1";
-const SID = "eve:sess-1";
+const SID = "astra:sess-1";
 
 const makeThread = (over: Record<string, unknown> = {}) =>
   ({

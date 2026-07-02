@@ -9,7 +9,7 @@ import { callerId } from "../lib/tool-context";
  * workspace-scoped (assert di service). HITL = Mastra Agent Approval (`requireApproval: true`):
  * server memancarkan chunk `tool-call-approval` → FE menampilkan kartu konfirmasi → user
  * `approveToolCall()/declineToolCall()` sebelum eksekusi. Satu-satunya tool write ber-kartu
- * (parity eve `needsApproval`; write lain = konfirmasi percakapan).
+ * approval; write lain cukup konfirmasi lewat percakapan.
  */
 export const deleteArtifact = createTool({
   id: "delete_artifact",

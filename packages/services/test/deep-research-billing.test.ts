@@ -5,14 +5,14 @@
  *     'deep_research')` = pre-check ramah composer (notice cap deep). Buktikan
  *     feature dipropagasi ke entitlement + blok deep TAK membakar jatah cooldown.
  *  B. DB-itest (prefix `itdeep_`, di luar broad cleanup `user_itest_%`): jalur
- *     billing yang dipakai `propose_research_plan.execute` saat user approve —
- *     `consumeCredits(feature:'deep_research')` idempoten (resume eve tak
+ *     billing yang dipakai plan-gate `/deep` saat user approve —
+ *     `consumeCredits(feature:'deep_research')` idempoten (resume durable tak
  *     double-charge) + cap bulanan `deepResearchRuns` memblok run berikut TANPA
  *     debit tambahan.
  *
- * Keputusan scope B: `propose_research_plan.execute` TAK di-import langsung —
- * tool ada di apps/web (impor `eve/tools`, di luar `test:v2`; bukan dep
- * @aqsha/services). Tool = passthrough tipis ke BillingService; dua perilakunya
+ * Keputusan scope B: step plan-gate TAK di-import langsung — tool riset hidup di
+ * apps/agent (`apps/agent/src/mastra/tools`, di luar test paket ini; bukan dep
+ * @aqsha/services). Step = passthrough tipis ke BillingService; dua perilakunya
  * (gate-block tanpa consume + idempoten key `thread:turn:deep`) terbukti penuh di
  * itest `consumeCredits(deep_research)` + unit SendQuotaService di bawah, dan
  * `evaluateGate(deepLimitReached)→quota_exceeded` (pure) sudah di billing.test.ts.

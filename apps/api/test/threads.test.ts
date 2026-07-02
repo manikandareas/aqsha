@@ -13,7 +13,7 @@ const itest = DATABASE_URL ? test : test.skip;
 const suffix = Math.floor(Math.random() * 1e9);
 const OWNER = `user_itest_thr_${suffix}`;
 const OTHER = `user_itest_thr_other_${suffix}`;
-const SID = `eve:itest-${suffix}`;
+const SID = `astra:itest-${suffix}`;
 
 const { app } = await import("../src/index");
 
@@ -114,7 +114,7 @@ describe("api threads — auth + ownership", () => {
 });
 
 describe("api threads — pin/sematkan", () => {
-  const PID = `eve:itest-pin-${suffix}`;
+  const PID = `astra:itest-pin-${suffix}`;
 
   beforeAll(async () => {
     if (!DATABASE_URL) return;
@@ -161,13 +161,13 @@ describe("api threads — pin/sematkan", () => {
     const now = Date.now();
     // 10 thread sudah tersemat langsung di DB (bypass API) → cap tercapai.
     for (let i = 0; i < 10; i++) {
-      const id = `eve:itest-cap-${suffix}-${i}`;
+      const id = `astra:itest-cap-${suffix}-${i}`;
       await client`insert into chat_threads
           (id, owner_user_id, status, agent_kind, last_activity_at, pinned_at, created_at, updated_at)
         values (${id}, ${OWNER}, 'idle', 'lite', ${now}, ${now + i}, ${now}, ${now})
         on conflict (id) do nothing`;
     }
-    const capId = `eve:itest-cap-${suffix}-extra`;
+    const capId = `astra:itest-cap-${suffix}-extra`;
     await client`insert into chat_threads
         (id, owner_user_id, status, agent_kind, last_activity_at, created_at, updated_at)
       values (${capId}, ${OWNER}, 'idle', 'lite', ${now}, ${now}, ${now})

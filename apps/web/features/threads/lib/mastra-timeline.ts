@@ -15,11 +15,10 @@ import type {
 /**
  * Adapter chunk Mastra (`@mastra/client-js` `processDataStream` onChunk) → `TimelineMessage[]`
  * yang dipakai komponen existing (MessageList/ToolRow/ChatArtifactCard). Pure reducer: satu
- * `reduceMastraChunk(state, chunk)` per chunk. Menggantikan `eve-timeline.ts` untuk runtime
- * Mastra (dipilih via flag `NEXT_PUBLIC_AGENT_RUNTIME`).
+ * `reduceMastraChunk(state, chunk)` per chunk.
  *
- * Hanya import TYPE dari `eve-timeline` (di-erase saat compile) supaya tak menyeret runtime eve;
- * helper kecil (title/scalar/desc) diduplikasi di sini agar lepas saat eve dihapus (Fase 3).
+ * Tipe presentasi diimpor dari `timeline-types` (netral runtime); helper kecil
+ * (title/scalar/desc) hidup di file ini supaya adapter self-contained.
  */
 
 /** Chunk Mastra (subset yang dipakai). `payload` bervariasi per `type`. */
@@ -432,7 +431,7 @@ export function reduceMastraChunk(
         toolCallId && s0.askGate?.toolCallId === toolCallId ? { ...s0, askGate: undefined } : s0;
       const toolName = str(payload.toolName);
       const result = payload.result ?? payload.output;
-      // propose_artifact sukses → kartu artifact (parity eve).
+      // propose_artifact sukses → render sebagai kartu artifact, bukan tool-row generik.
       const artifact = artifactFromResult(toolName, toolCallId, result);
       if (artifact) return replaceWithArtifact(s, idx, artifact);
       return completeToolPart(s, idx, toolCallId, result, payload.isError === true);
@@ -1117,7 +1116,7 @@ function setToolPending(
   );
 }
 
-// ── tool model + scalar helpers (duplikat dari eve-timeline; self-contained) ──────
+// ── tool model + scalar helpers (self-contained, tak diimpor dari luar adapter) ──────
 
 function toolModel(
   toolCallId: string,

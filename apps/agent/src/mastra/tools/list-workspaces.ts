@@ -5,9 +5,8 @@ import { getServiceDb } from "../lib/db";
 import { callerId } from "../lib/tool-context";
 
 /**
- * list_workspaces — port 1:1 dari eve `defineTool` ke Mastra `createTool` (Fase 0:
- * bukti bahwa Node build Mastra bisa mengonsumsi paket workspace `@aqsha/services`
- * in-process; owner = resourceId terautentikasi, bukan argumen model). READ, tanpa
+ * list_workspaces — tool Mastra `createTool` yang memanggil `@aqsha/services`
+ * in-process; owner = resourceId terautentikasi, bukan argumen model. READ, tanpa
  * approval, tanpa debit.
  */
 export const listWorkspaces = createTool({

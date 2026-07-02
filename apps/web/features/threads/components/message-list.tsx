@@ -41,7 +41,7 @@ import { InlineSources } from "./sources-panel";
 import { ToolRow } from "./tool-row";
 
 /**
- * Timeline pesan (simplifikasi eve-chat-template) — render DATAR per pesan, mengikuti urutan
+ * Timeline pesan — render DATAR per pesan, mengikuti urutan
  * `defaultMessageReducer`. User = bubble; assistant = reasoning → blok "Proses" collapsible
  * (tool generik) → jawaban → artifact → sumber inline (per `turnId`) → aksi. TAK ADA grouping
  * run berfase / kartu verifikasi-subagen (verify+subagen = tool-row generik). HITL approval /
@@ -239,7 +239,7 @@ function BubbleTokenPill({
 }
 
 /**
- * Satu pesan asisten (satu eve-turn). Reasoning → blok "Proses" (tool + teks antara) → jawaban
+ * Satu pesan asisten (satu turn). Reasoning → blok "Proses" (tool + teks antara) → jawaban
  * (teks TERAKHIR) → artifact → sumber → aksi. `message.streaming` (sudah di-gate `busy` di adapter)
  * mengatur shimmer + sembunyi sumber/aksi selagi mengalir.
  */

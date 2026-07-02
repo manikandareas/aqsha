@@ -36,11 +36,11 @@ export type HydratedContext = {
  * yang di-pin user) → konteks ringkas tepercaya. Memvalidasi kepemilikan tiap id
  * (drop yang bukan milik / hilang), meng-clamp jumlah, dan menyusun catatan
  * markdown yang dikirim composer sebagai `clientContext` (ephemeral, satu turn)
- * ke proses eve. Sisi eve, tool `search_thread_documents` bisa men-scope RAG ke
- * `workspaceIds` yang dikembalikan di catatan.
+ * ke runtime agent. Di sisi agent, tool `search_thread_documents` bisa men-scope
+ * RAG ke `workspaceIds` yang dikembalikan di catatan.
  *
  * Diakses dari api (bun, src). Subpath `./context` + entri tsup ditambah agar
- * konsisten dengan service lain (D-E) bila kelak dipakai dari proses eve.
+ * konsisten dengan service lain bila kelak dipakai dari konsumen dist (agent).
  */
 export const ContextService = {
   async hydrate(

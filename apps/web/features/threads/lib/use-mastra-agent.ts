@@ -322,8 +322,8 @@ export function useMastraAgent(opts: {
       setState((s) => startAssistantTurn(s, display, turnSeed, attachmentIds));
       try {
         const agent = clientRef.current.getAgent(agentIdFor(agentKind));
-        // `clientContext` (ekspansi command + catatan @mention) = konteks EPHEMERAL per-call (tak
-        // dipersist ke memory thread), pindah ke `ifIdle.streamOptions.context` (parity eve).
+        // `clientContext` (ekspansi command + catatan @mention) = konteks EPHEMERAL per-call:
+        // dikirim via `ifIdle.streamOptions.context` supaya TAK dipersist ke memory thread.
         await agent.sendMessage({
           message: display,
           resourceId: userId,

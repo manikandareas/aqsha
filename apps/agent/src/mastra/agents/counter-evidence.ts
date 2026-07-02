@@ -7,7 +7,7 @@ import { searchThreadDocuments } from "../tools/search-thread-documents";
 import { searchWeb } from "../tools/search-web";
 
 /**
- * Subagent `counter-evidence` (Fase 2) — port dari eve `subagents/counter-evidence`.
+ * Subagent `counter-evidence` — pencari bukti tandingan atas kesimpulan sementara.
  *
  * Menerima inventaris bukti yang kesimpulannya sedang terbentuk dan mencari SPESIFIK bukti yang
  * melemahkan/menentangnya (replikasi gagal, studi bertentangan, kritik metodologis, retraksi).
