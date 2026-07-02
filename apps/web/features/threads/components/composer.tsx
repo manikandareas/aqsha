@@ -394,9 +394,11 @@ export function Composer({
     shouldReduceMotion,
   );
 
+  // DUR-6: `busy` tak lagi memblok submit — pesan saat run aktif masuk ANTREAN (server untuk chat
+  // polos, klien untuk sisanya) via `send`/`sendDeep`, bukan dibuang. Tombol Stop tetap tampil
+  // selama composer kosong (lihat `ComposerSubmitButton`).
   const canSend =
     (hasText || attachments.length > 0) &&
-    !busy &&
     !disabled &&
     !isSending &&
     !hydrate.isPending;
@@ -1038,7 +1040,9 @@ function ComposerSubmitButton({
   onStop?: () => void;
   onSubmit: () => void;
 }) {
-  if (busy && onStop) {
+  // Saat run aktif TANPA draf → Stop. Begitu user mengetik, tombol berubah jadi kirim-antre
+  // (DUR-6); Escape tetap menghentikan run kapan pun.
+  if (busy && onStop && !canSend) {
     return (
       <button
         type="button"

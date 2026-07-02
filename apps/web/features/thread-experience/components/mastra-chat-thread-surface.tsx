@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { m, useReducedMotion } from "motion/react";
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ChevronRightIcon } from "@aqsha/ui/icons";
+import { ChevronRightIcon, ClockIcon, RotateCcwIcon, XIcon } from "@aqsha/ui/icons";
 import { ConversationContent } from "@/components/ai-elements/conversation-content";
 import { Conversation } from "@/components/ai-elements/conversation-root";
 import { ConversationScrollButton } from "@/components/ai-elements/conversation-scroll-button";
@@ -462,6 +462,57 @@ function MastraChatInner({
     </div>
   ) : null;
 
+  // DUR-6: baris antrean — pesan yang menunggu giliran saat run aktif. Item server (chat polos,
+  // `queueMessage`) jalan sendiri meski tab ditutup dan tak bisa dibatalkan; item klien bisa.
+  const queuedRow =
+    agent.queued.length > 0 ? (
+      <div className={cn(threadTranscriptColumnClass, "flex flex-col gap-1.5")}>
+        {agent.queued.map((q) => (
+          <div
+            key={q.id}
+            className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-[13px]"
+          >
+            <ClockIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
+            <span className="min-w-0 flex-1 truncate text-foreground/80">{q.text}</span>
+            <span className="shrink-0 text-[11px] text-muted-foreground">
+              {q.mode === "deep" ? "Antre · /deep" : q.serverRunId ? "Antre di server" : "Antre"}
+            </span>
+            {q.serverRunId === undefined ? (
+              <button
+                type="button"
+                onClick={() => agent.cancelQueued(q.id)}
+                aria-label="Batalkan antrean"
+                className="shrink-0 rounded p-0.5 text-muted-foreground/60 transition-colors hover:text-foreground"
+              >
+                <XIcon className="size-3.5" />
+              </button>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    ) : null;
+
+  // DUR-5: run `/deep` tampak macet (snapshot tak maju beberapa menit — biasanya proses agent
+  // sempat restart; run `running` tak resume sendiri) → tawarkan mulai ulang dari step terakhir.
+  const stalledCard = agent.deepStalled ? (
+    <div className={cn(threadTranscriptColumnClass)}>
+      <div className="rounded-xl border border-border bg-card p-4">
+        <p className="text-sm text-foreground">
+          Riset mendalam tampak macet — tidak ada kemajuan beberapa menit terakhir.
+        </p>
+        <div className="mt-3 flex gap-2">
+          <Button size="sm" onClick={() => void agent.restartDeep()}>
+            <RotateCcwIcon className="size-3.5" />
+            Mulai ulang
+          </Button>
+          <Button size="sm" variant="ghost" onClick={agent.stop}>
+            Hentikan
+          </Button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   if (isEmpty) {
     return (
       <MastraComposerLanding
@@ -511,9 +562,11 @@ function MastraChatInner({
           "flex flex-col gap-2.5 pt-2.5 pb-4",
         )}
       >
+        {stalledCard}
         {questionsCard}
         {planGateCard}
         {approvalCards}
+        {queuedRow}
         <Composer
           onSend={onComposerSend}
           onStop={agent.stop}
