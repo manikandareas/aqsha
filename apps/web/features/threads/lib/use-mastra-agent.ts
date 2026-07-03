@@ -1046,6 +1046,7 @@ export function useMastraAgent(opts: {
       // Binding `const` untuk closure di dalam loop (TS melebar `let runId` kembali ke nullable).
       const rid = runId;
       let errors = 0;
+      let sourcesSeeded = false;
       let sourcesRefreshed = false;
       // DUR-5: deteksi run macet — signature progres (status + status tiap step) yang tak berubah
       // selama DEEP_STALL_MS pada status `running` = macet (mis. proses agent restart, snapshot beku
@@ -1155,8 +1156,14 @@ export function useMastraAgent(opts: {
         } else if (status === "running" && Date.now() - progressAt >= DEEP_STALL_MS) {
           setDeepStalled(true);
         }
-        // Sekali, saat search-literature selesai: refresh sumber → kartu per sub-agen terisi
-        // (subQuestionIndex + OG image) walau run masih lanjut ke fase berikutnya.
+        // Refresh sumber DUA titik: (1) sekali begitu step search-literature MUNCUL di snapshot —
+        // rows `research_sources` dipersist DI TENGAH step oleh tool search, jadi kartu sub-agen
+        // hasil seed re-attach langsung terisi (bukan body kosong yang terlihat mengulang dari
+        // nol); (2) sekali lagi saat step selesai → set final (subQuestionIndex + OG image).
+        if (!sourcesSeeded && steps["search-literature"]) {
+          sourcesSeeded = true;
+          void qc.invalidateQueries({ queryKey: queryKeys.threads.sources(opts.threadId) });
+        }
         if (!sourcesRefreshed && steps["search-literature"]?.status === "success") {
           sourcesRefreshed = true;
           void qc.invalidateQueries({ queryKey: queryKeys.threads.sources(opts.threadId) });

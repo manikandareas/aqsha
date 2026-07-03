@@ -1,6 +1,5 @@
 import { Agent } from "@mastra/core/agent";
 import { modelForRequestContext } from "../model";
-import { inlineSkills } from "../skills";
 import { deepWriterTools } from "../tools";
 
 /**
@@ -50,5 +49,8 @@ export const deepWriter = new Agent({
   // bila deep-writer dipakai di jalur ber-tool di masa depan.
   defaultOptions: { maxSteps: 12 },
   tools: deepWriterTools,
-  skills: inlineSkills,
+  // TANPA `skills` (audit 2026-07-03): semua pemanggilan `toolChoice:"none"` → tool skill tak
+  // pernah bisa jalan, tapi keberadaannya memancing model MENULIS `{"name": "..."}` sebagai teks
+  // di awal output (junk yang merusak rencana di prod). Panduan metodologi di-inline via
+  // `synthesisGuidance` (CFG-2), bukan lewat skill tool.
 });

@@ -10,17 +10,20 @@ import { Shimmer } from "@/components/ai-elements/shimmer";
  * Terisolasi → hanya komponen ini yang re-render tiap detik.
  *
  * Dipakai blok "Proses" (`message-list`) DAN row subagent-call yang running (`tool-row`).
- * ponytail: hitung dari mount (`Date.now()`), bukan `createdAt` event aktif pertama — reset saat
- * refresh tapi tetap menunjukkan gerak; presisi lintas-reload = upgrade opsional.
+ * `startedAt` (epoch-ms durable: `steps[id].startedAt` snapshot `/deep` / `createdAt` pesan user)
+ * menjadikan timer selamat-refresh; tanpa itu fallback waktu mount. Boleh tiba TERLAMBAT (poll
+ * seed sesudah mount) → dihitung sebagai prop tiap render, bukan di-freeze useState. Clamp ≥0
+ * mengantisipasi skew jam client vs server.
  */
-export function ElapsedLabel({ base }: { base: string }) {
-  const [start] = useState(() => Date.now());
-  const [now, setNow] = useState(start);
+export function ElapsedLabel({ base, startedAt }: { base: string; startedAt?: number }) {
+  const [mountedAt] = useState(() => Date.now());
+  const [now, setNow] = useState(mountedAt);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
-  const secs = Math.floor((now - start) / 1000);
+  const start = startedAt && startedAt > 0 ? startedAt : mountedAt;
+  const secs = Math.max(0, Math.floor((now - start) / 1000));
   const m = Math.floor(secs / 60);
   const s = secs % 60;
   const label = secs < 10 ? `${base}…` : `${base}… ${m > 0 ? `${m}m ` : ""}${s}s`;

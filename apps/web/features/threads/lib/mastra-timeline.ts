@@ -646,7 +646,7 @@ function wfStepStatusToTool(status: string): ToolStatus {
   }
 }
 
-type WorkflowStepSnapshot = { status?: unknown; output?: unknown };
+type WorkflowStepSnapshot = { status?: unknown; output?: unknown; startedAt?: unknown };
 
 /**
  * Seed progres Workflow `/deep` dari snapshot `runById().steps` saat re-attach refresh fase RUNNING.
@@ -681,11 +681,17 @@ export function seedWorkflowProgress(
     const sr = Array.isArray(raw) ? raw[raw.length - 1] : raw;
     const status = str(sr?.status);
     if (!status) continue;
-    next = upsertWorkflowStep(next, idx, stepId, wfStepStatusToTool(status));
+    next = upsertWorkflowStep(next, idx, stepId, wfStepStatusToTool(status), num(sr?.startedAt) || undefined);
     // Rekonstruksi detail dari nilai return step (tersedia saat step selesai) → body expandable
     // tetap terisi setelah refresh fase RUNNING (rencana, kartu sub-agen, bukti tandingan, dll.).
     const detail = detailFromStepOutput(stepId, sr?.output);
     if (detail) next = setStepDetail(next, idx, stepId, detail);
+    else if (stepId === "search-literature" && status === "running") {
+      // Step search MASIH berjalan (output belum ada): jangan render body kosong yang terlihat
+      // "mulai dari nol" — kartu sub-agen di-seed dari rencana; hanya bila belum ada detail live.
+      const planned = runningSearchDetail(steps);
+      if (planned) next = setStepDetailWith(next, idx, stepId, (prev) => prev ?? planned);
+    }
     if (stepId === "synthesize" && status === "success") {
       const report = reportFromOutput(sr?.output);
       if (report) next = setReportText(next, idx, report);
@@ -804,12 +810,17 @@ export function reduceWorkflowChunk(
   }
 }
 
-/** Tool-row "Proses" untuk satu langkah Workflow (keyed `wf:<stepId>`). */
+/**
+ * Tool-row "Proses" untuk satu langkah Workflow (keyed `wf:<stepId>`). `startedAt` (epoch-ms dari
+ * snapshot `steps[id].startedAt`) menimpa saat tersedia — anchor timer yang selamat refresh; jalur
+ * live tanpa nilai ini biarkan apa adanya (timer fallback ke waktu mount).
+ */
 function upsertWorkflowStep(
   state: MastraTimelineState,
   msgIdx: number,
   stepId: string,
   status: ToolStatus,
+  startedAt?: number,
 ): MastraTimelineState {
   const toolCallId = `wf:${stepId}`;
   const isRunning = status === "running" || status === "pending";
@@ -825,11 +836,14 @@ function upsertWorkflowStep(
         isRunning,
         description: undefined,
         rows: [],
+        ...(startedAt ? { startedAt } : {}),
       };
       return [...parts, { kind: "tool", id: `tool:${toolCallId}`, model }];
     }
     return parts.map((p, j) =>
-      j === i && p.kind === "tool" ? { ...p, model: { ...p.model, status, isRunning } } : p,
+      j === i && p.kind === "tool"
+        ? { ...p, model: { ...p.model, status, isRunning, ...(startedAt ? { startedAt } : {}) } }
+        : p,
     );
   });
 }
@@ -1028,6 +1042,34 @@ function detailFromStepOutput(stepId: string, output: unknown): DeepStepDetail |
     default:
       return null;
   }
+}
+
+/**
+ * Detail sintetis step `search-literature` yang MASIH berjalan saat re-attach: output step belum
+ * ada, tapi daftar sub-pertanyaan sudah pasti dari rencana yang disetujui (`approve-plan`,
+ * fallback `draft-plan`) → kartu sub-agen ber-status running alih-alih body kosong yang terlihat
+ * seperti "mengulang dari nol". Sumber per-kartu terisi via join `research_sources`
+ * (`subQuestionIndex`) — rows dipersist DI TENGAH step oleh tool search, di-refresh saat re-attach.
+ */
+function runningSearchDetail(
+  steps: Record<string, WorkflowStepSnapshot | WorkflowStepSnapshot[]>,
+): DeepStepDetail | null {
+  for (const sourceStep of ["approve-plan", "draft-plan"] as const) {
+    const raw = steps[sourceStep];
+    const sr = Array.isArray(raw) ? raw[raw.length - 1] : raw;
+    const subQuestions = strArray(asRecord(sr?.output).subQuestions);
+    if (subQuestions.length > 0) {
+      return {
+        kind: "search",
+        subSearches: subQuestions.map((q, i) => ({
+          index: i,
+          subQuestion: q,
+          status: "running" as ToolStatus,
+        })),
+      };
+    }
+  }
+  return null;
 }
 
 /**

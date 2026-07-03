@@ -69,6 +69,8 @@ export type ToolRowModel = {
   rows: ToolRow[];
   /** Detail proses `/deep` (rencana, kartu sub-agen pencarian, bukti tandingan, dll.). */
   detail?: DeepStepDetail;
+  /** Epoch-ms mulai step (snapshot Workflow `steps[id].startedAt`) — anchor timer lintas-refresh. */
+  startedAt?: number;
   /** Akumulasi teks JSON arg yang masih mengalir (`tool-call-delta`, IMP-11) — internal reducer. */
   argsTextRaw?: string;
 };

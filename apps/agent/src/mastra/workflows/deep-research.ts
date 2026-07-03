@@ -474,12 +474,64 @@ function parseCitationCount(numberedInventory: string): number {
 
 // ── Prompt builders ────────────────────────────────────────────────────────────────────
 
-/** Ekor kontrak JSON rencana — dipakai `planPrompt` DAN `replanPrompt` (satu sumber format). */
-const PLAN_JSON_CONTRACT = `AKHIRI responsmu dengan TEPAT SATU blok kode JSON valid (tanpa teks setelahnya) berbentuk:\n\`\`\`json\n{"plan": "<rencana prosa lengkap di sini>", "subQuestions": ["<sub-pertanyaan 1>", "<sub-pertanyaan 2>", "..."], "domain": "<medicine|cs-ml|education|general>"}\n\`\`\`\nField \`domain\` = domain-pack metodologi yang paling cocok dengan topik (kesehatan/biomedis → medicine; CS/ML → cs-ml; pendidikan/pembelajaran → education; selain itu → general).`;
+/**
+ * Skema WIRE rencana untuk `structuredOutput` native (audit prod 2026-07-03: parser fence manual
+ * gagal SENYAP — fence tak tertutup + junk `{"name":…}` → riset jalan dgn 1 sub-question fallback).
+ * Sengaja TANPA constraint numerik (`minItems`/`minLength`): dukungan keyword itu tak seragam pada
+ * gateway OpenAI-compatible mode strict; kardinalitas ditegakkan `ensurePlanOutput` di kode.
+ */
+const PlanOutputSchema = z.object({
+  plan: z
+    .string()
+    .describe("Rencana riset lengkap sebagai prosa mengalir (bukan daftar bernomor, bukan form)."),
+  subQuestions: z
+    .array(z.string())
+    .describe("3-6 sub-pertanyaan riset spesifik yang diturunkan dari rencana."),
+  domain: ResearchDomainSchema.describe(
+    "Domain-pack metodologi paling cocok dengan topik: kesehatan/biomedis → medicine; CS/ML → cs-ml; pendidikan/pembelajaran → education; selain itu → general.",
+  ),
+});
+
+/**
+ * Escape-hatch gateway tanpa `response_format` native: set `AQSHA_STRUCTURED_OUTPUT_INJECTION=1`
+ * → Mastra memaksa JSON lewat injeksi prompt sistem alih-alih response_format json_schema.
+ */
+const STRUCTURED_OUTPUT_INJECTION = process.env.AQSHA_STRUCTURED_OUTPUT_INJECTION === "1";
+
+/** Opsi `structuredOutput` baku langkah `/deep`: strict (gagal validasi = throw, TANPA degradasi senyap). */
+function structuredOutputOpts<T extends z.ZodType>(schema: T) {
+  return {
+    schema,
+    errorStrategy: "strict" as const,
+    ...(STRUCTURED_OUTPUT_INJECTION ? { jsonPromptInjection: true } : {}),
+  };
+}
+
+/**
+ * Gerbang kualitas hasil `PlanOutputSchema`: rapikan whitespace + tegakkan kardinalitas yang tak
+ * dibawa skema wire. Throw (bukan fallback) → ditangani `retries` step / try-catch pemanggil;
+ * JANGAN pernah menurunkan diam-diam ke 1 sub-question — itu bug prod yang memicu migrasi ini.
+ */
+function ensurePlanOutput(output: z.infer<typeof PlanOutputSchema> | undefined): {
+  plan: string;
+  subQuestions: string[];
+  domain: ResearchDomain;
+} {
+  const plan = output?.plan.trim() ?? "";
+  const subQuestions = (output?.subQuestions ?? [])
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  if (!output || plan.length === 0 || subQuestions.length < 2) {
+    throw new Error(
+      `deep-research: rencana terstruktur tidak memadai (plan ${plan.length} char, ${subQuestions.length} sub-pertanyaan)`,
+    );
+  }
+  return { plan, subQuestions: subQuestions.slice(0, 8), domain: output.domain };
+}
 
 function planPrompt(input: z.infer<typeof InputSchema>): string {
   const ctx = input.context ? `\n\nKonteks tambahan dari pengguna:\n${input.context}` : "";
-  return `Pertanyaan riset:\n${input.question}${ctx}\n\nSusun rencana riset mendalam sebagai PROSA mengalir (bukan daftar bernomor, bukan form): jelaskan apa yang akan diselidiki, sub-arah utama yang ditelusuri terpisah, jenis sumber yang dicari, dan cara verifikasi. Lalu turunkan 3-6 sub-pertanyaan riset spesifik dari rencana itu.\n\n${PLAN_JSON_CONTRACT}`;
+  return `Pertanyaan riset:\n${input.question}${ctx}\n\nSusun rencana riset mendalam sebagai PROSA mengalir (bukan daftar bernomor, bukan form): jelaskan apa yang akan diselidiki, sub-arah utama yang ditelusuri terpisah, jenis sumber yang dicari, dan cara verifikasi. Lalu turunkan 3-6 sub-pertanyaan riset spesifik dari rencana itu.`;
 }
 
 /**
@@ -488,71 +540,38 @@ function planPrompt(input: z.infer<typeof InputSchema>): string {
  */
 function replanPrompt(input: Planned, edits: string): string {
   const subs = input.subQuestions.map((s, i) => `${i + 1}. ${s}`).join("\n");
-  return `Rencana riset untuk pertanyaan:\n${input.question}\n\nRencana saat ini:\n${input.plan}\n\nSub-pertanyaan saat ini:\n${subs}\n\nPengguna meminta penyesuaian berikut SEBELUM riset dijalankan:\n${edits}\n\nTulis ulang rencana sebagai PROSA mengalir yang menghormati penyesuaian itu, lalu turunkan ulang 3-6 sub-pertanyaan (buang/ubah/tambah sub-pertanyaan sesuai permintaan pengguna; pertahankan yang tidak disinggung).\n\n${PLAN_JSON_CONTRACT}`;
+  return `Rencana riset untuk pertanyaan:\n${input.question}\n\nRencana saat ini:\n${input.plan}\n\nSub-pertanyaan saat ini:\n${subs}\n\nPengguna meminta penyesuaian berikut SEBELUM riset dijalankan:\n${edits}\n\nTulis ulang rencana sebagai PROSA mengalir yang menghormati penyesuaian itu, lalu turunkan ulang 3-6 sub-pertanyaan (buang/ubah/tambah sub-pertanyaan sesuai permintaan pengguna; pertahankan yang tidak disinggung).`;
 }
 
 /**
- * Ekstrak `{plan, subQuestions}` dari output model. Andalkan blok \`\`\`json di akhir (model
- * gateway kerap membungkus JSON dalam markdown); fallback ke objek {...} pertama yang valid.
- * Lebih tahan-banting dari `structuredOutput` native pada model OpenAI-compatible (gateway).
+ * Skema WIRE klarifikasi pra-rencana untuk `structuredOutput`. Longgar by-design: hasil parse
+ * TETAP melewati `normalizeAskQuestions` (SSOT normalisasi id/opsi/freeform/lipat "Lainnya" yang
+ * sama dipakai reducer FE) — skema hanya menjamin bentuk, bukan semantik.
  */
-function parsePlan(
-  text: string,
-): { plan: string; subQuestions: string[]; domain: ResearchDomain } | null {
-  const fenced = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)].map((m) => m[1]);
-  for (const chunk of [...fenced.reverse(), text]) {
-    const start = chunk.indexOf("{");
-    const end = chunk.lastIndexOf("}");
-    if (start === -1 || end <= start) continue;
-    try {
-      const obj = JSON.parse(chunk.slice(start, end + 1));
-      if (obj && typeof obj.plan === "string" && Array.isArray(obj.subQuestions)) {
-        const subQuestions = obj.subQuestions.filter(
-          (s: unknown): s is string => typeof s === "string" && s.trim().length > 0,
-        );
-        const domainParsed = ResearchDomainSchema.safeParse(obj.domain);
-        return {
-          plan: obj.plan,
-          subQuestions,
-          domain: domainParsed.success ? domainParsed.data : "general",
-        };
-      }
-    } catch {
-      // coba kandidat berikutnya
-    }
-  }
-  return null;
-}
+const ClarifyOutputSchema = z.object({
+  questions: z
+    .array(
+      z.object({
+        id: z.string().describe("Id singkat pertanyaan, mis. `scope`."),
+        prompt: z.string().describe("Teks pertanyaan klarifikasi."),
+        kind: z.enum(["single", "multi"]).describe("`single` pilih satu; `multi` pilih beberapa."),
+        options: z
+          .array(z.object({ label: z.string() }))
+          .describe("2-4 opsi jawaban ringkas."),
+        allowOther: z.boolean().describe("true bila jawaban bebas relevan."),
+      }),
+    )
+    .describe("MAKSIMAL 3 pertanyaan; KOSONG bila pertanyaan riset sudah cukup spesifik."),
+});
 
 /**
  * Prompt penilaian klarifikasi pra-rencana: minta model menilai apakah pertanyaan sudah cukup
- * spesifik; bila tidak, mengembalikan 0-3 pertanyaan klarifikasi TERSTRUKTUR (JSON) — bukan prosa.
+ * spesifik; bila tidak, mengembalikan 0-3 pertanyaan klarifikasi terstruktur — bukan prosa.
  * Sengaja konservatif (kembalikan kosong bila sudah jelas) agar `/deep` yang sudah spesifik tak
  * terpotong gerbang tambahan.
  */
 function clarifyPrompt(input: z.infer<typeof InputSchema>): string {
-  return `Pertanyaan riset dari pengguna:\n${input.question}\n\nNilai apakah pertanyaan ini SUDAH cukup spesifik untuk langsung diriset mendalam, atau ada AMBIGUITAS PENTING yang bila diklarifikasi akan sangat mengubah arah/kualitas riset (mis. ruang lingkup, populasi/konteks, rentang waktu, sudut pandang, atau format keluaran).\n\nBila sudah cukup spesifik, kembalikan daftar KOSONG. Bila perlu, ajukan MAKSIMAL 3 pertanyaan klarifikasi yang paling menentukan — ringkas, tiap pertanyaan \`single\` (pilih satu) atau \`multi\` (pilih beberapa) dengan 2-4 opsi; set \`allowOther: true\` bila jawaban bebas relevan.\n\nAKHIRI dengan TEPAT SATU blok kode JSON valid (tanpa teks setelahnya):\n\`\`\`json\n{"questions": [{"id": "scope", "prompt": "...", "kind": "single", "options": [{"label": "..."}], "allowOther": true}]}\n\`\`\`\nKembalikan {"questions": []} bila tak perlu klarifikasi.`;
-}
-
-/**
- * Ekstrak `AskQuestion[]` dari output model (blok ```json` di akhir; fallback objek {...} pertama).
- * Normalisasi item mentah (id/opsi/freeform/lipat "Lainnya") = `normalizeAskQuestions` — SSOT yang
- * sama dipakai reducer FE; di sini dibatasi `max: 3` (klarifikasi pra-rencana ringkas).
- */
-function parseClarifyQuestions(text: string): AskQuestion[] {
-  const fenced = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)].map((m) => m[1] ?? "");
-  for (const chunk of [...fenced.reverse(), text]) {
-    const start = chunk.indexOf("{");
-    const end = chunk.lastIndexOf("}");
-    if (start === -1 || end <= start) continue;
-    try {
-      const obj = JSON.parse(chunk.slice(start, end + 1));
-      if (obj && Array.isArray(obj.questions)) return normalizeAskQuestions(obj.questions, { max: 3 });
-    } catch {
-      // coba kandidat berikutnya
-    }
-  }
-  return [];
+  return `Pertanyaan riset dari pengguna:\n${input.question}\n\nNilai apakah pertanyaan ini SUDAH cukup spesifik untuk langsung diriset mendalam, atau ada AMBIGUITAS PENTING yang bila diklarifikasi akan sangat mengubah arah/kualitas riset (mis. ruang lingkup, populasi/konteks, rentang waktu, sudut pandang, atau format keluaran).\n\nBila sudah cukup spesifik, kembalikan daftar \`questions\` KOSONG. Bila perlu, ajukan MAKSIMAL 3 pertanyaan klarifikasi yang paling menentukan — ringkas, tiap pertanyaan \`single\` (pilih satu) atau \`multi\` (pilih beberapa) dengan 2-4 opsi; set \`allowOther: true\` bila jawaban bebas relevan.`;
 }
 
 function searcherPrompt(subQuestion: string, input: Planned): string {
@@ -663,8 +682,9 @@ const draftClarifyStep = createStep({
       const out = await deepWriter.generate(clarifyPrompt(inputData), {
         ...deepGenOptions(requestContext, inputData, runId),
         toolChoice: "none",
+        structuredOutput: structuredOutputOpts(ClarifyOutputSchema),
       });
-      clarifyQuestions = parseClarifyQuestions(out.text);
+      clarifyQuestions = normalizeAskQuestions(out.object?.questions ?? [], { max: 3 });
     } catch (err) {
       console.error("[deep-research] draftClarify failed", err);
     }
@@ -708,11 +728,12 @@ const clarifyGateStep = createStep({
 });
 
 /**
- * 1. draftPlan — susun rencana prosa + sub-pertanyaan terstruktur via `deepWriter`. Precheck kuota
- * dipindah ke `draft-clarify` (gerbang paling awal) → step ini fokus menyusun rencana.
+ * 1. draftPlan — susun rencana prosa + sub-pertanyaan terstruktur via `deepWriter` dengan
+ * `structuredOutput` strict (audit 2026-07-03: fallback parse-manual yang senyap DIHAPUS — gagal
+ * validasi → throw → `retries: 1` → run failed SEBELUM gerbang billing, user tak kehilangan kredit).
  * `toolChoice:"none"` (CFG-5): step ini berjalan SEBELUM gerbang billing `approve-plan`, jadi tool
  * berbayar (`search_*`) tak boleh bisa jalan di sini; `delete_artifact` (approval-suspend) juga
- * dilarang dalam workflow-generate (lihat `tools/index.ts`). Murni menulis JSON rencana.
+ * dilarang dalam workflow-generate (lihat `tools/index.ts`). Murni menulis rencana terstruktur.
  */
 const draftPlanStep = createStep({
   id: "draft-plan",
@@ -723,12 +744,9 @@ const draftPlanStep = createStep({
     const out = await deepWriter.generate(planPrompt(inputData), {
       ...deepGenOptions(requestContext, inputData, runId),
       toolChoice: "none",
+      structuredOutput: structuredOutputOpts(PlanOutputSchema),
     });
-    const parsed = parsePlan(out.text);
-    const plan = parsed?.plan ?? out.text;
-    const subQuestions =
-      parsed && parsed.subQuestions.length > 0 ? parsed.subQuestions : [inputData.question];
-    const domain = parsed?.domain ?? "general";
+    const { plan, subQuestions, domain } = ensurePlanOutput(out.object);
     await emitDetail(writer, { kind: "plan", plan, subQuestions });
     return { ...inputData, plan, subQuestions, domain };
   },
@@ -805,26 +823,17 @@ const approvePlanStep = createStep({
     if (!resumeData.edits) return inputData;
     // CFG-3: edit user harus sampai ke `subQuestions` yang benar-benar diriset fan-out — bukan
     // hanya ditempel sebagai prosa yang baru dibaca writer akhir. Re-derive rencana+sub-pertanyaan
-    // dengan satu pass murah (`toolChoice:"none"`); gagal → fallback perilaku lama (append prosa).
+    // dengan satu pass murah (`toolChoice:"none"` + structuredOutput strict); gagal → fallback
+    // perilaku lama (append prosa) — di titik ini debit SUDAH terjadi, run tak boleh mati.
     try {
       const out = await deepWriter.generate(replanPrompt(inputData, resumeData.edits), {
         ...deepGenOptions(requestContext, inputData, runId),
         toolChoice: "none",
+        structuredOutput: structuredOutputOpts(PlanOutputSchema),
       });
-      const parsed = parsePlan(out.text);
-      if (parsed && parsed.subQuestions.length > 0) {
-        await emitDetail(writer, {
-          kind: "plan",
-          plan: parsed.plan,
-          subQuestions: parsed.subQuestions,
-        });
-        return {
-          ...inputData,
-          plan: parsed.plan,
-          subQuestions: parsed.subQuestions,
-          domain: parsed.domain,
-        };
-      }
+      const { plan, subQuestions, domain } = ensurePlanOutput(out.object);
+      await emitDetail(writer, { kind: "plan", plan, subQuestions });
+      return { ...inputData, plan, subQuestions, domain };
     } catch (err) {
       console.error("[deep-research] replan after edits failed", err);
     }
