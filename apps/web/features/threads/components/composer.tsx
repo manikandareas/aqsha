@@ -218,6 +218,8 @@ export function Composer({
   const [isSending, setIsSending] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Ref shell composer (kotak rounded penuh) — anchor palette slash/mention di mobile.
+  const composerShellRef = useRef<HTMLDivElement | null>(null);
 
   const secondsLeft = useSecondsLeft(notice?.retryAt);
   const agentSelection = useComposerAgentSelection(threadAgentKind);
@@ -521,6 +523,7 @@ export function Composer({
   return (
     <div className="flex w-full flex-col gap-8">
       <m.div
+        ref={composerShellRef}
         initial={false}
         layout
         className="@container/composer w-full overflow-hidden border border-border/85 bg-card/95 text-foreground"
@@ -626,6 +629,7 @@ export function Composer({
                     workspaceItems={workspaceItems}
                     workspaceItemsLoading={itemsQuery.isLoading}
                     onRequestWorkspaceItems={setDrillWorkspaceId}
+                    mobilePaletteAnchorRef={composerShellRef}
                   />
                 </div>
               </div>
