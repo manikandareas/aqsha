@@ -16,9 +16,12 @@ import {
   type MastraPlanGate,
   type MastraTimelineState,
   dropLastTurn,
+  errorMessageFrom,
   initialMastraTimeline,
+  lastStepAttempt,
   reduceMastraChunk,
   reduceWorkflowChunk,
+  reviveWorkflowTurn,
   seedWorkflowProgress,
   settleAssistantTurn,
   settleWorkflowTurn,
@@ -42,6 +45,18 @@ export type QueuedSend = {
   serverRunId?: string;
 };
 
+/**
+ * Run `/deep` berakhir `failed` (audit B1) — kunci pemulihan DITAHAN untuk kartu "Coba lagi"
+ * (time-travel dari step gagal, tanpa debit baru), alih-alih settle senyap + regenerate berbayar.
+ */
+export type DeepFailure = {
+  runId: string;
+  /** Step yang gagal (target time-travel); null bila tak teridentifikasi dari snapshot. */
+  stepId: string | null;
+  /** Pesan error step (best-effort dari snapshot) untuk kartu. */
+  message: string | null;
+};
+
 export type MastraAgent = {
   status: MastraAgentStatus;
   messages: TimelineMessage[];
@@ -58,6 +73,16 @@ export type MastraAgent = {
   deepStalled: boolean;
   /** Mulai ulang run `/deep` yang macet dari step aktif terakhir (`run.restart()`). */
   restartDeep: () => Promise<void>;
+  /** Run `/deep` gagal pasca-billing → kartu "Coba lagi" (B1); `null` bila tak ada. */
+  deepFailed: DeepFailure | null;
+  /** Ulangi run `/deep` failed MULAI DARI step gagal (`timeTravelStream`) — debit/task lama di-reuse. */
+  retryDeep: () => Promise<void>;
+  /** Buang kartu gagal + lepaskan runId (run itu tak lagi bisa dipulihkan dari UI). */
+  dismissDeepFailure: () => void;
+  /** Run `/deep` berakhir bail `blocked` (kuota/akses) → kartu alasan (B3); `null` bila tak ada. */
+  deepNotice: DeepNotice | null;
+  /** Tutup kartu alasan bail — murni UI (run sudah terminal `success`, kunci sudah di-clear). */
+  dismissDeepNotice: () => void;
   send: (
     text: string,
     clientContext?: string[],
@@ -85,9 +110,10 @@ export type MastraAgent = {
 const DEEP_WORKFLOW_ID = "deep-research";
 
 /**
- * DUR-5: ambang "run macet" — status `running` tanpa SATU pun transisi status step selama ini.
- * Longgar (fase search-literature bisa sah 3-4 menit tanpa transisi); melewatinya hampir pasti
- * snapshot beku pasca-restart proses agent (run tak pernah resume sendiri di Mastra 1.47).
+ * DUR-5: ambang "run macet" — status non-terminal (`running`/`waiting`/`pending`, A3) tanpa SATU
+ * pun transisi status step selama ini. Longgar (fase search-literature bisa sah 3-4 menit tanpa
+ * transisi); melewatinya hampir pasti snapshot beku pasca-restart proses agent (run tak pernah
+ * resume sendiri di Mastra 1.47).
  */
 const DEEP_STALL_MS = 300_000;
 
@@ -108,7 +134,59 @@ type DeepRun = {
   /** Restart run dari step aktif terakhir (snapshot) — affordance run macet (DUR-5). Impl client-js
    *  membaca `params.requestContext` TANPA guard → argumen `{}` WAJIB (jangan panggil tanpa arg). */
   restart: (p: Record<string, unknown>) => Promise<unknown>;
+  /** Re-eksekusi MULAI DARI step target dgn stepResults lama dari snapshot — jalur pemulihan run
+   *  `failed` (B1). `restart()` MENOLAK snapshot non-aktif di Mastra 1.47 ("This workflow run was
+   *  not active"), time-travel hanya menolak snapshot `running`. */
+  timeTravelStream: (p: { step: string | string[] }) => Promise<ReadableStream<MastraChunk>>;
 };
+
+/** Bentuk `runById().steps[id]` yang dipakai re-attach + rekonsiliasi terminal (subset longgar). */
+type WorkflowStepsSnapshot = Record<
+  string,
+  { status?: unknown; output?: unknown; suspendPayload?: Record<string, unknown>; error?: unknown }
+>;
+
+/**
+ * Snapshot run `runById()` (subset yang dipakai FE) — SATU bentuk untuk poll re-attach,
+ * rekonsiliasi terminal, dan probe status, supaya penambahan field (spt `result` untuk B3)
+ * tak perlu diulang di tiap cast inline.
+ */
+type DeepRunSnapshot = {
+  status?: string;
+  steps?: WorkflowStepsSnapshot;
+  /** B3: payload `bail()` (run success) — sumber `reason` kartu notice. */
+  result?: Record<string, unknown>;
+};
+
+/**
+ * B3: notice terminal dari `result` run (payload `bail()` — engine mem-persist run bail sebagai
+ * `success` dgn payload di `result`). Hanya `status: "blocked"` (kuota/akses) yang dirender;
+ * `cancelled` (user menolak rencana) dan `completed` (laporan normal) tetap senyap by-design.
+ */
+export type DeepNotice = { runId: string; reason: string };
+
+function deepNoticeFromResult(runId: string, result: unknown): DeepNotice | null {
+  if (!result || typeof result !== "object") return null;
+  const r = result as { status?: unknown; reason?: unknown };
+  if (r.status !== "blocked") return null;
+  const reason =
+    typeof r.reason === "string" && r.reason ? r.reason : "Run dihentikan tanpa alasan terekam.";
+  return { runId, reason };
+}
+
+/** B1: temukan step failed (target time-travel) + pesannya dari snapshot run `failed`. */
+function deepFailureFromSteps(runId: string, steps: WorkflowStepsSnapshot): DeepFailure {
+  for (const [stepId, rawEntry] of Object.entries(steps)) {
+    // Wire type @mastra/core mengizinkan entry array-of-attempt — unwrap via helper yang sama
+    // dengan pembaca kembar `seedWorkflowProgress` (mastra-timeline).
+    const st = lastStepAttempt<WorkflowStepsSnapshot[string]>(
+      rawEntry as WorkflowStepsSnapshot[string] | WorkflowStepsSnapshot[string][],
+    );
+    if (String(st?.status ?? "") !== "failed") continue;
+    return { runId, stepId, message: errorMessageFrom(st?.error) };
+  }
+  return { runId, stepId: null, message: null };
+}
 
 /** Iterasi `ReadableStream` via reader (async-iterator ReadableStream belum universal di browser). */
 async function* iterateStream<T>(stream: ReadableStream<T>): AsyncGenerator<T> {
@@ -235,6 +313,25 @@ function lastTurnMessageIds(messages: readonly ServerMessageLike[]): string[] {
       lastAssistant = i;
       break;
     }
+  }
+  // Turn MENGGANTUNG: ada pesan setelah assistant terakhir (mis. `deep-user:<runId>` dari run
+  // `/deep` failed — jawaban tak pernah dipersist). Yang dibuang HANYA turn menggantung TERAKHIR
+  // (pesan user/signal terakhir di ekor + pesan sesudahnya) — regenerate hanya mengirim ulang
+  // pertanyaan terakhir, jadi turn menggantung yang lebih tua (multi-gagal beruntun) atau seluruh
+  // history saat thread belum punya assistant sama sekali (lastAssistant = -1 → ekor = SEMUA
+  // pesan) tidak boleh ikut terhapus permanen. `signal` = label input user durable-thread
+  // `sendMessage` (lihat doc di atas).
+  const tail = messages.slice(lastAssistant + 1);
+  if (tail.length > 0) {
+    let start = 0;
+    for (let i = tail.length - 1; i >= 0; i -= 1) {
+      const role = tail[i]!.role;
+      if (role === "user" || role === "signal") {
+        start = i;
+        break;
+      }
+    }
+    return tail.slice(start).map((m) => m.id);
   }
   if (lastAssistant < 0) return [];
   const ids: string[] = [messages[lastAssistant]!.id];
@@ -436,6 +533,12 @@ export function useMastraAgent(opts: {
   );
   // DUR-5: run `/deep` terdeteksi macet (snapshot tak maju) → banner affordance mulai ulang.
   const [deepStalled, setDeepStalled] = useState(false);
+  // B1: run `/deep` failed → TAHAN kunci pemulihan (runId localStorage sengaja TIDAK di-clear,
+  // affordance selamat refresh) + kartu "Coba lagi" (time-travel dari step gagal, tanpa debit baru).
+  const [deepFailed, setDeepFailed] = useState<DeepFailure | null>(null);
+  // B3: run `/deep` bail `blocked` (kuota/akses) → kartu alasan. Terminalnya `success` (semantik
+  // bail Mastra) jadi kunci runId tetap di-clear normal — kartu murni state UI sesi ini.
+  const [deepNotice, setDeepNotice] = useState<DeepNotice | null>(null);
 
   // IMP-10: batch delta frekuensi-tinggi (text/reasoning) per animation-frame. Tanpa ini tiap
   // delta = satu setState penuh (rebuild messages + memo turunannya) — jawaban panjang bisa
@@ -717,6 +820,76 @@ export function useMastraAgent(opts: {
 
   // ── `/deep` = Workflow `deep-research` (G2). Run terlepas dari koneksi; FE simpan runId untuk
   //    re-attach saat refresh. Plan-gate = suspend `approve-plan` → kartu → `resumeStream`. ──────
+
+  // Snapshot run `/deep` via `runById` — SATU titik fetch+cast (poll, rekonsiliasi, probe status);
+  // `null` bila tak terverifikasi — pemanggil yang memutuskan (jangan aksi destruktif atas `null`).
+  const fetchDeepRun = useCallback(async (runId: string): Promise<DeepRunSnapshot | null> => {
+    try {
+      return (await clientRef.current
+        .getWorkflow(DEEP_WORKFLOW_ID)
+        .runById(runId)) as DeepRunSnapshot;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Run `/deep` tuntas → lepaskan kunci + refresh data turunan: Sumber baru (citation_number) +
+  // judul/preview sidebar. SATU tempat — dipakai tail `applyDeepTerminal` dan jalur chunk-cacat
+  // `reconcileDeepTerminal`, supaya invalidasi baru tak bisa terpasang di satu sisi saja.
+  const clearDeepRunAndRefresh = useCallback(() => {
+    clearDeepRunId(opts.threadId);
+    void qc.invalidateQueries({ queryKey: queryKeys.threads.sources(opts.threadId) });
+    void qc.invalidateQueries({ queryKey: queryKeys.threads.all });
+  }, [opts.threadId, qc]);
+
+  // B1: terapkan status terminal run `/deep` — handler TUNGGAL untuk jalur live (via
+  // `reconcileDeepTerminal`) + poll re-attach, agar semantiknya tak bisa drift. failed → TAHAN
+  // runId (kunci time-travel, selamat refresh) + kartu "Coba lagi"; success hasil bail `blocked`
+  // → kartu alasan (B3, dari `result` run); selainnya → clear + refresh Sumber/sidebar.
+  const applyDeepTerminal = useCallback(
+    (runId: string, status: string, steps: WorkflowStepsSnapshot, result?: unknown) => {
+      setDeepStalled(false);
+      deepRunRef.current = null;
+      // Seed ikon step dari snapshot (idempoten di jalur live yang sudah menerima chunk) +
+      // settle by runId (FE-7) — jangan positional, turn lain tak boleh ikut ter-settle.
+      setState((s) => settleWorkflowTurn(seedWorkflowProgress(s, runId, steps), runId));
+      if (status === "failed") {
+        setDeepFailed(deepFailureFromSteps(runId, steps));
+        return;
+      }
+      setDeepFailed(null);
+      // B3: `canceled` (Stop user) dan `cancelled` di payload (tolak rencana) tetap senyap —
+      // hanya bail `blocked` yang menghasilkan kartu.
+      if (status === "success") setDeepNotice(deepNoticeFromResult(runId, result));
+      clearDeepRunAndRefresh();
+    },
+    [clearDeepRunAndRefresh],
+  );
+
+  // B1: rekonsiliasi terminal jalur live. `workflow-finish` TIDAK membawa status (payload hanya
+  // `{runId}` — diverifikasi @mastra/core 1.47), jadi baca status otentik via `runById` SEKALI
+  // lalu delegasikan ke `applyDeepTerminal`. Fetch GAGAL → JANGAN clear: runId bisa milik run
+  // failed (satu-satunya kunci pemulihan B1 — discovery tak menjangkau run failed); serahkan ke
+  // poll re-attach yang toleran blip (retry 8×) via `bumpReattach`.
+  const reconcileDeepTerminal = useCallback(
+    async (runId: string | undefined) => {
+      if (!runId) {
+        // Tanpa runId (chunk cacat + runRef kosong) → jalur lama: clear + refresh.
+        deepRunRef.current = null;
+        clearDeepRunAndRefresh();
+        return;
+      }
+      const st = await fetchDeepRun(runId);
+      if (!st) {
+        deepRunRef.current = null;
+        bumpReattach();
+        return;
+      }
+      applyDeepTerminal(runId, st.status ?? "", st.steps ?? {}, st.result);
+    },
+    [fetchDeepRun, clearDeepRunAndRefresh, applyDeepTerminal],
+  );
+
   const consumeWorkflow = useCallback(
     async (stream: ReadableStream<MastraChunk>) => {
       // `closeOnSuspend` (default) menutup stream saat plan-gate dengan chunk terminal `workflow-finish`.
@@ -724,6 +897,7 @@ export function useMastraAgent(opts: {
       // sempat suspend di `approve-plan`, JANGAN bersihkan runId/runRef — kartu rencana + `resolvePlan`
       // (resume) + re-attach saat refresh (G2/G7) bergantung padanya.
       let suspended = false;
+      let terminalHandled = false;
       for await (const chunk of iterateStream(stream)) {
         setState((s) => reduceWorkflowChunk(s, chunk));
         const stepId = (chunk.payload as { id?: unknown } | undefined)?.id;
@@ -745,45 +919,53 @@ export function useMastraAgent(opts: {
         }
         if (
           !suspended &&
+          !terminalHandled &&
           (chunk.type === "workflow-finish" || chunk.type === "workflow-canceled")
         ) {
-          clearDeepRunId(opts.threadId);
-          deepRunRef.current = null;
-          // Sumber baru (citation_number) sudah dipersist → refresh panel Sumber + sidebar.
-          void qc.invalidateQueries({ queryKey: queryKeys.threads.sources(opts.threadId) });
-          void qc.invalidateQueries({ queryKey: queryKeys.threads.all });
+          // Satu stream bisa membawa >1 chunk terminal (`workflow-canceled` LALU `workflow-finish`
+          // + finish sintetis saat close — @mastra/core 1.47) → rekonsiliasi cukup SEKALI.
+          terminalHandled = true;
+          await reconcileDeepTerminal(chunk.runId ?? deepRunRef.current?.runId);
         }
       }
     },
-    [opts.threadId, qc],
+    [opts.threadId, qc, reconcileDeepTerminal],
   );
 
   // FE-5: pemicu ulang effect poll re-attach `/deep` TANPA menunggu refresh manual — di-bump saat
   // stream putus tapi run masih hidup server-side (blip jaringan / proxy / agent hang sesaat).
   const [reattachNonce, bumpReattach] = useReducer((n: number) => n + 1, 0);
 
+  // Status run `/deep`; `""` bila tak terverifikasi — pemanggil yang memutuskan
+  // (jangan ambil aksi destruktif atas dasar `""`).
+  const deepRunStatus = useCallback(
+    async (runId: string): Promise<string> => (await fetchDeepRun(runId))?.status ?? "",
+    [fetchDeepRun],
+  );
+
   // Saat stream `/deep` gagal/putus: pertahankan runId bila run masih HIDUP server-side (running/
-  // suspended/waiting) → re-attach poll memulihkannya (return `true`). Hanya clear bila run tak
-  // jalan (terminal/pending) atau status tak bisa diverifikasi (default aman = clear, return `false`).
+  // suspended/waiting) → re-attach poll memulihkannya (return `true`). Clear HANYA bila status
+  // TERVERIFIKASI tak jalan (terminal non-failed / pending). PENGECUALIAN B1: `failed` TIDAK
+  // di-clear — runId run failed = kunci pemulihan time-travel (kartu "Coba lagi" lahir dari poll
+  // mount berikutnya); `""` (tak terverifikasi — blip yang sama bisa memutus stream DAN probe ini)
+  // juga TIDAK di-clear: runId bisa milik run yang berakhir failed, dan discovery tak menjangkau
+  // run failed — serahkan ke poll re-attach yang toleran blip (paritas `reconcileDeepTerminal` +
+  // catch `retryDeep`); `undefined` (run tak pernah dimulai) no-op agar kunci milik run failed
+  // lama tak ikut tersapu oleh error start run baru.
   const clearDeepRunIdUnlessAlive = useCallback(
     async (runId: string | undefined): Promise<boolean> => {
-      if (runId) {
-        try {
-          const st = (await clientRef.current.getWorkflow(DEEP_WORKFLOW_ID).runById(runId)) as unknown as {
-            status?: string;
-          };
-          if (st.status === "running" || st.status === "suspended" || st.status === "waiting") {
-            return true;
-          }
-        } catch {
-          /* tak bisa verifikasi → jatuh ke clear */
-        }
+      if (!runId) return false;
+      const status = await deepRunStatus(runId);
+      if (status === "running" || status === "suspended" || status === "waiting") {
+        return true;
       }
-      clearDeepRunId(opts.threadId);
       deepRunRef.current = null;
+      if (status === "") bumpReattach();
+      if (status === "" || status === "failed") return false;
+      clearDeepRunId(opts.threadId);
       return false;
     },
-    [opts.threadId],
+    [opts.threadId, deepRunStatus],
   );
 
   // FE-5: stream `/deep` selesai TANPA chunk terminal & TANPA gerbang HITL (blip jaringan/proxy
@@ -839,6 +1021,10 @@ export function useMastraAgent(opts: {
         const wf = clientRef.current.getWorkflow(DEEP_WORKFLOW_ID);
         const run = (await wf.createRun({ resourceId: userId })) as unknown as DeepRun;
         deepRunRef.current = run;
+        // Run baru MENGGANTIKAN run failed lama — kartu + kunci lama dibuang HANYA setelah run
+        // pengganti benar-benar lahir (createRun gagal → kartu & kunci pemulihan B1 tetap utuh).
+        setDeepFailed(null);
+        setDeepNotice(null);
         setDeepRunId(opts.threadId, run.runId);
         const inputData: Record<string, unknown> = { question, threadId: opts.threadId, agentKind };
         if (richText && richText !== question) inputData.displayQuestion = richText;
@@ -1049,22 +1235,15 @@ export function useMastraAgent(opts: {
       let sourcesSeeded = false;
       let sourcesRefreshed = false;
       // DUR-5: deteksi run macet — signature progres (status + status tiap step) yang tak berubah
-      // selama DEEP_STALL_MS pada status `running` = macet (mis. proses agent restart, snapshot beku
-      // `running` selamanya). Banner affordance mulai ulang; poll TETAP jalan (bisa pulih sendiri).
+      // selama DEEP_STALL_MS pada status non-terminal (`running`/`waiting`/`pending`, A3) = macet
+      // (mis. proses agent restart, snapshot beku selamanya). Banner affordance mulai ulang; poll
+      // TETAP jalan (bisa pulih sendiri).
       let progressSig = "";
       let progressAt = Date.now();
       while (!cancelled) {
-        let wfState: {
-          status?: string;
-          steps?: Record<
-            string,
-            { status?: unknown; output?: unknown; suspendPayload?: Record<string, unknown> }
-          >;
-        };
-        try {
-          wfState = (await wf.runById(rid)) as typeof wfState;
-        } catch {
-          if (cancelled) return;
+        const wfState = await fetchDeepRun(rid);
+        if (cancelled) return;
+        if (!wfState) {
           // Error transien (agent single-thread sempat hang saat fase berat / restart dev) → JANGAN
           // clear runId; coba lagi. Run tetap hidup server-side. Menyerah hanya setelah lama tak
           // responsif — TANPA clear runId, agar refresh berikutnya bisa re-attach lagi.
@@ -1077,7 +1256,6 @@ export function useMastraAgent(opts: {
           continue;
         }
         errors = 0;
-        if (cancelled) return;
         const status = wfState.status;
         const steps = wfState.steps ?? {};
         if (status === "suspended") {
@@ -1121,22 +1299,11 @@ export function useMastraAgent(opts: {
           }));
           return;
         }
-        if (status === "success") {
-          setDeepStalled(false);
-          // FE-7: settle by runId — jangan positional (turn lain tak boleh ikut ter-settle).
-          setState((s) => settleWorkflowTurn(seedWorkflowProgress(s, rid, steps), rid));
-          clearDeepRunId(opts.threadId);
-          deepRunRef.current = null;
-          // Sumber baru (citation_number) + judul/preview → refresh panel Sumber & sidebar.
-          void qc.invalidateQueries({ queryKey: queryKeys.threads.sources(opts.threadId) });
-          void qc.invalidateQueries({ queryKey: queryKeys.threads.all });
-          return;
-        }
-        if (status === "failed" || status === "canceled") {
-          setDeepStalled(false);
-          setState((s) => settleWorkflowTurn(seedWorkflowProgress(s, rid, steps), rid));
-          clearDeepRunId(opts.threadId);
-          deepRunRef.current = null;
+        if (status === "success" || status === "failed" || status === "canceled") {
+          // Terminal → handler TUNGGAL (paritas jalur live, B1): failed = TAHAN runId (kunci
+          // time-travel; kartu "Coba lagi" selamat refresh — mount berikutnya masuk sini lagi),
+          // success/canceled = clear + refresh Sumber/sidebar; semua settle by runId (FE-7).
+          applyDeepTerminal(rid, status, steps, wfState.result);
           return;
         }
         // running / waiting / pending → render progres terkini lalu poll lagi (step-level).
@@ -1153,7 +1320,12 @@ export function useMastraAgent(opts: {
           progressSig = sig;
           progressAt = Date.now();
           setDeepStalled(false);
-        } else if (status === "running" && Date.now() - progressAt >= DEEP_STALL_MS) {
+        } else if (
+          // A3: run bisa beku di `waiting`/`pending` juga (bukan cuma `running`) — snapshot
+          // non-terminal mana pun yang tak maju melewati ambang = macet.
+          (status === "running" || status === "waiting" || status === "pending") &&
+          Date.now() - progressAt >= DEEP_STALL_MS
+        ) {
           setDeepStalled(true);
         }
         // Refresh sumber DUA titik: (1) sekali begitu step search-literature MUNCUL di snapshot —
@@ -1176,12 +1348,27 @@ export function useMastraAgent(opts: {
     };
     // FE-5: `reattachNonce` di-bump saat stream `/deep` putus tapi run masih hidup → effect re-run,
     // poll mengambil alih progres live tanpa menunggu refresh manual.
-  }, [opts.threadId, userId, qc, reattachNonce]);
+  }, [opts.threadId, userId, qc, reattachNonce, applyDeepTerminal, fetchDeepRun]);
+
+  // B1: buang kartu gagal + LEPASKAN kunci pemulihan (run itu tak lagi bisa dipulihkan dari UI).
+  // Dideklarasikan sebelum `regenerate`/`retryDeep` yang memakainya.
+  const dismissDeepFailure = useCallback(() => {
+    setDeepFailed(null);
+    clearDeepRunId(opts.threadId);
+    deepRunRef.current = null;
+  }, [opts.threadId]);
+
+  // B3: tutup kartu alasan bail — murni UI; runId sudah di-clear `applyDeepTerminal` (run success).
+  const dismissDeepNotice = useCallback(() => setDeepNotice(null), []);
 
   const regenerate = useCallback(async () => {
     if (!userId || statusRef.current !== "ready") return;
     const text = lastUserText(stateRef.current.messages);
     if (!text) return;
+    // Regenerate = user MEMILIH debit baru → run failed lama tuntas urusannya. Tanpa ini kartu +
+    // kunci bertahan: kartu bangkit lagi tiap mount (poll membaca runId lama), dan "Coba lagi"
+    // sesudahnya menjalankan run lama sampai selesai → laporan kembar di bawah turn pengganti.
+    if (deepFailed) dismissDeepFailure();
     // FE-8: turn terakhir dikirim SESI INI (`lastSendRef`) → regen memakai konteks aslinya
     // (clientContext hydration @mention/slash + richText ber-pill) dan turn `/deep` di-regen sebagai
     // `/deep`. Teks bubble = `richText ?? text` turn asli, jadi kecocokan diperiksa terhadap itu.
@@ -1250,7 +1437,7 @@ export function useMastraAgent(opts: {
         error: readableApiErrorMessage(err, "Gagal membuat ulang jawaban."),
       }));
     }
-  }, [opts.threadId, userId, sendDeep]);
+  }, [opts.threadId, userId, sendDeep, deepFailed, dismissDeepFailure]);
 
   // DUR-5: mulai ulang run `/deep` macet dari step aktif terakhir (`POST .../restart`, snapshot-based).
   // Aman diulang: debit `deep_research` idempoten (`${runId}:deep`) dan subagent pasca-migrasi
@@ -1267,12 +1454,93 @@ export function useMastraAgent(opts: {
       await run.restart({});
       bumpReattach();
     } catch (err) {
+      // A3: run beku di `pending` tak pernah mulai — `restart()` pasti menolaknya ("This workflow
+      // run was not active" hanya menerima running/waiting). Arahkan user ke aksi yang benar
+      // alih-alih pesan gagal generik.
+      if ((await deepRunStatus(runId)) === "pending") {
+        setState((s) => ({
+          ...s,
+          error: "Run riset ini belum pernah mulai. Hentikan, lalu kirim ulang pertanyaannya.",
+        }));
+        return;
+      }
       setState((s) => ({
         ...s,
         error: readableApiErrorMessage(err, "Gagal memulai ulang riset mendalam."),
       }));
     }
-  }, [opts.threadId, userId]);
+  }, [opts.threadId, userId, deepRunStatus]);
+
+  // B1: ulangi run `/deep` failed MULAI DARI step gagal via time-travel — `restart()` MENOLAK
+  // snapshot `failed` di Mastra 1.47 ("This workflow run was not active"). stepResults lama
+  // dipertahankan dari snapshot → `approve-plan` tak pernah re-eksekusi (debit `${runId}:deep`
+  // tak tersentuh); search yang re-run me-reuse task selesai by `toolCallId` (DUR-7); persist
+  // idempoten via id `deep-report:<runId>`. Chunk retry mengalir ke `consumeWorkflow` (pipeline
+  // live yang sama); turn lama di-revive dulu supaya tak lahir bubble kembar.
+  const retryDeep = useCallback(async () => {
+    const failure = deepFailed;
+    if (!userId || !failure) return;
+    // Paritas send/sendDeep: jangan mulai stream kedua selagi turn lain streaming — chunk workflow
+    // menyasar assistant streaming TERAKHIR (`ensureActiveAssistant`), jadi retry mid-stream akan
+    // me-render step + laporan di dalam bubble chat yang sedang berjalan.
+    if (statusRef.current !== "ready") return;
+    const stepId = failure.stepId;
+    if (!stepId) {
+      // Tanpa target time-travel tak ada jalur pulih — snapshot run failed immutable, membaca ulang
+      // pasti null lagi. Jangan kembalikan kartu yang pasti gagal; buang + arahkan regenerate.
+      dismissDeepFailure();
+      setState((s) => ({
+        ...s,
+        error: "Tidak bisa menentukan langkah yang gagal. Coba buat ulang jawabannya.",
+      }));
+      return;
+    }
+    setDeepFailed(null);
+    const wf = clientRef.current.getWorkflow(DEEP_WORKFLOW_ID);
+    try {
+      const run = (await wf.createRun({
+        runId: failure.runId,
+        resourceId: userId,
+      })) as unknown as DeepRun;
+      deepRunRef.current = run;
+      setDeepRunId(opts.threadId, failure.runId);
+      setState((s) => reviveWorkflowTurn(s, failure.runId));
+      const stream = await run.timeTravelStream({ step: stepId });
+      await consumeWorkflow(stream);
+      maybeReattachAfterStreamClose(failure.runId);
+    } catch (err) {
+      // JANGAN `clearDeepRunIdUnlessAlive` di sini: run failed memang "tak hidup", tapi kuncinya =
+      // jaminan selamat-refresh B1 — error transien (timeTravelStream 502) tak boleh menyapunya.
+      const snap = await fetchDeepRun(failure.runId);
+      const status = snap?.status ?? "";
+      if (status === "running" || status === "suspended" || status === "waiting") {
+        // Masih hidup server-side (mis. retry dari tab lain menang duluan) → poll ambil alih.
+        bumpReattach();
+        return;
+      }
+      if (status === "success" || status === "canceled") {
+        // Dituntaskan dari tempat lain → rekonsiliasi normal (clear + refresh Sumber/sidebar);
+        // snapshot sudah di tangan — jangan fetch `runById` kedua via reconcile.
+        applyDeepTerminal(failure.runId, status, snap?.steps ?? {}, snap?.result);
+        return;
+      }
+      // failed / tak terverifikasi → kembalikan kartu; kunci pemulihan TETAP dipegang.
+      setDeepFailed(failure);
+      setState((s) => ({
+        ...settleWorkflowTurn(s, failure.runId),
+        error: readableApiErrorMessage(err, "Gagal mengulang riset mendalam."),
+      }));
+    }
+  }, [
+    deepFailed,
+    userId,
+    opts.threadId,
+    consumeWorkflow,
+    fetchDeepRun,
+    applyDeepTerminal,
+    dismissDeepFailure,
+    maybeReattachAfterStreamClose,
+  ]);
 
   const stop = useCallback(() => {
     // DUR-6: Stop = user menghentikan pipeline → antrean KLIEN ikut dibuang (auto-kirim setelah
@@ -1280,6 +1548,8 @@ export function useMastraAgent(opts: {
     // biarkan entry-nya; bubble tetap lahir saat runtime menjalankannya.
     setQueuedSends((q) => q.filter((i) => i.serverRunId !== undefined));
     setDeepStalled(false);
+    // Kartu gagal B1 SENGAJA tak disentuh: Stop atas run lain (chat) tak boleh membuang affordance
+    // pemulihan secara senyap — retry/sendDeep/regenerate/dismiss yang mengelolanya sendiri.
     const run = deepRunRef.current;
     if (run) {
       // FE-4: Stop saat `/deep` → cancel RUN WORKFLOW server-side. `subscription.abort()`
@@ -1308,6 +1578,11 @@ export function useMastraAgent(opts: {
     cancelQueued,
     deepStalled,
     restartDeep,
+    deepFailed,
+    retryDeep,
+    dismissDeepFailure,
+    deepNotice,
+    dismissDeepNotice,
     send,
     sendDeep,
     resolvePlan,

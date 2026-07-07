@@ -48,7 +48,7 @@ import { effectiveBilledTier, liteProviderOptions, proProviderOptions } from "..
  *
  *   draftClarify (kuota + nilai klarifikasi) → clarify (HITL ask_questions, opsional) → draftPlan
  *   → approvePlan (HITL suspend/resume + gerbang billing) → searchLiterature → counterEvidence
- *   → verifyCitations → synthesize
+ *   → verifyCitations → synthesize → persistReport
  *
  * Keputusan desain (deviasi sah dari §7 plan, dicatat):
  * - **Fan-out di dalam `searchStep`** (Promise.all per sub-pertanyaan) alih-alih builder
@@ -147,6 +147,27 @@ const CitedSchema = CounteredSchema.extend({
     .describe("Referensi terstruktur per [n] unik → verify-citations panggil CitationService langsung (IMP-5)."),
 });
 const VerifiedSchema = CitedSchema.extend({ verification: z.string() });
+/**
+ * Hasil sintesis → step `persist-report` (failure domain persist terpisah, B2). SUBSET yang
+ * dikonsumsi persist-report + FE saja — korpus bukti (evidence/verifyRefs/question/context) sudah
+ * tersimpan di output step-step sebelumnya; mengangkutnya lagi hanya menggemukkan snapshot dan
+ * chunk `workflow-step-result` yang dikirim ke browser tepat saat user menunggu laporan.
+ */
+const SynthesizedSchema = VerifiedSchema.pick({
+  threadId: true,
+  agentKind: true,
+  plan: true,
+  subQuestions: true,
+  counter: true,
+  verification: true,
+  numberedInventory: true,
+  numberedSources: true,
+}).extend({
+  report: z.string().min(1).describe("Laporan tercitasi hasil penulis sintesis."),
+  reasoning: z
+    .string()
+    .describe("Ringkasan penalaran penulis (kosong bila provider tak mengembalikan)."),
+});
 
 const OutputSchema = z.object({
   status: z.enum(["completed", "cancelled", "blocked"]),
@@ -407,7 +428,14 @@ async function ensureDeepThread(
  * Persist laporan akhir (assistant) ke memory thread chat (`mastra_messages`) lewat agent `astra-lite`.
  * Disimpan VERBATIM (fidelitas sitasi `[n]`) + `metadata.deepRunId = runId` agar FE memetakan Sumber
  * per-turn (G4). Pertanyaan user sudah dipersist di `ensureDeepThread` (plan-gate) → JANGAN ulang di sini
- * (anti bubble kembar). Preview thread diperbarui ke laporan. Best-effort.
+ * (anti bubble kembar). Preview thread diperbarui ke laporan.
+ *
+ * THROW saat persist gagal (audit B2): laporan yang tak tersimpan = produk berbayar LENYAP saat
+ * refresh (history dibaca dari `mastra_messages`) — bukan side-effect opsional yang boleh ditelan.
+ * Pemanggil = step `persist-report` ber-`retries`; id pesan deterministik `deep-report:<runId>`
+ * membuat retry/time-travel meng-upsert baris yang SAMA (tak pernah bubble laporan kembar). Guard
+ * `!mastra`/`!memory` tetap return diam — absennya memory = constraint environment (unit test),
+ * bukan kegagalan persist.
  */
 async function persistDeepReport(
   mastra: Mastra | undefined,
@@ -424,43 +452,117 @@ async function persistDeepReport(
   },
 ): Promise<void> {
   if (!mastra) return;
+  const agent = mastra.getAgent("astra-lite");
+  const memory = await agent.getMemory({ requestContext });
+  if (!memory) return;
+  const resourceId = ownerFromRequestContext(requestContext).id ?? undefined;
+  if (resourceId) {
+    try {
+      await ThreadService.ensureProjected(getServiceDb(), {
+        threadId: args.threadId,
+        ownerUserId: resourceId,
+        agentKind: args.agentKind,
+        preview: messagePreview(args.report),
+      });
+    } catch (err) {
+      // Proyeksi `chat_threads` = kosmetik sidebar/preview (best-effort, paritas `ensureDeepThread`)
+      // — BUKAN bagian dari "laporan tersimpan". Gagal deterministik di sini (mis. constraint) tak
+      // boleh mengunci run di loop retry/time-travel padahal `saveMessages` sendiri akan sukses.
+      console.error("[deep-research] thread projection failed", err);
+    }
+    // Idempoten: thread memory biasanya sudah dibuat di `ensureDeepThread` (plan-gate); jaga-jaga.
+    // TETAP throw — `saveMessages` butuh baris `mastra_threads` (kegagalan nyata domain persist).
+    await ensureMemoryThread(memory, { threadId: args.threadId, resourceId, title: args.report });
+  }
+  await memory.saveMessages({
+    messages: [
+      buildMastraMessage({
+        role: "assistant",
+        text: args.report,
+        threadId: args.threadId,
+        resourceId,
+        // Id deterministik per run (paritas `deep-user:<runId>`) → upsert idempoten lintas retry.
+        id: `deep-report:${args.runId}`,
+        ...(args.reasoning ? { reasoning: args.reasoning } : {}),
+        metadata: {
+          deepRunId: args.runId,
+          ...(args.deepProcess ? { deepProcess: args.deepProcess } : {}),
+        },
+      }),
+    ],
+  });
+}
+
+/**
+ * B3(b): persist alasan bail `blocked` sebagai pesan assistant — id deterministik
+ * `deep-bail:<runId>` (paritas `deep-report:<runId>`) → upsert idempoten, tak mungkin kembar.
+ * Tanpa ini alasan hanya hidup di kartu notice sesi FE; refresh membaca history dari
+ * `mastra_messages` dan kehilangan konteks kenapa run berhenti. BEST-EFFORT keseluruhan (beda
+ * dgn `persistDeepReport` yang throw): bail = jalur keluar run, kegagalan persist tak boleh
+ * mengubah hasil bail.
+ */
+async function persistDeepNotice(
+  mastra: Mastra | undefined,
+  requestContext: RequestContext,
+  args: { threadId: string; runId: string; reason: string },
+): Promise<void> {
+  if (!mastra) return;
   try {
     const agent = mastra.getAgent("astra-lite");
     const memory = await agent.getMemory({ requestContext });
     if (!memory) return;
     const resourceId = ownerFromRequestContext(requestContext).id ?? undefined;
-    if (resourceId) {
-      try {
-        await ThreadService.ensureProjected(getServiceDb(), {
-          threadId: args.threadId,
-          ownerUserId: resourceId,
-          agentKind: args.agentKind,
-          preview: messagePreview(args.report),
-        });
-        // Idempoten: thread memory biasanya sudah dibuat di `ensureDeepThread` (plan-gate); jaga-jaga.
-        await ensureMemoryThread(memory, { threadId: args.threadId, resourceId, title: args.report });
-      } catch (err) {
-        console.error("[deep-research] thread projection failed", err);
-      }
-    }
+    if (!resourceId) return;
+    // Idempoten — biasanya sudah dibuat `ensureDeepThread` barusan; jaga-jaga bila itu gagal parsial.
+    await ensureMemoryThread(memory, { threadId: args.threadId, resourceId, title: args.reason });
     await memory.saveMessages({
       messages: [
         buildMastraMessage({
           role: "assistant",
-          text: args.report,
+          text: `Riset mendalam dihentikan: ${args.reason}`,
           threadId: args.threadId,
           resourceId,
-          ...(args.reasoning ? { reasoning: args.reasoning } : {}),
-          metadata: {
-            deepRunId: args.runId,
-            ...(args.deepProcess ? { deepProcess: args.deepProcess } : {}),
-          },
+          id: `deep-bail:${args.runId}`,
+          metadata: { deepRunId: args.runId },
         }),
       ],
     });
   } catch (err) {
-    console.error("[deep-research] persistReport failed", err);
+    console.error("[deep-research] persistDeepNotice failed", err);
   }
+}
+
+/**
+ * B3(b): efek durable SEBELUM bail `blocked` (kuota/akses) — satu helper untuk ketiga site.
+ * (1) `ensureDeepThread` (idempoten `deep-user:<runId>`) — site draft-clarify bisa bail sebelum
+ * gerbang HITL mana pun memproyeksikan thread → tanpa ini refresh = thread kosong; (2)
+ * `persistDeepNotice` — alasannya ikut tersimpan. Site `cancelled` (user menolak rencana)
+ * SENGAJA tidak lewat sini: settle senyap adalah keputusan user.
+ */
+async function persistBlockedBail(
+  mastra: Mastra | undefined,
+  requestContext: RequestContext,
+  args: {
+    threadId: string;
+    question: string;
+    displayQuestion?: string;
+    agentKind: AgentKind;
+    runId: string;
+    reason: string;
+  },
+): Promise<void> {
+  await ensureDeepThread(mastra, requestContext, {
+    threadId: args.threadId,
+    question: args.question,
+    displayQuestion: args.displayQuestion,
+    agentKind: args.agentKind,
+    runId: args.runId,
+  });
+  await persistDeepNotice(mastra, requestContext, {
+    threadId: args.threadId,
+    runId: args.runId,
+    reason: args.reason,
+  });
 }
 
 /** Jumlah sitasi unik `[n]` di inventory bernomor (baris bisa berbagi nomor karena dedupe). */
@@ -662,7 +764,7 @@ const draftClarifyStep = createStep({
   id: "draft-clarify",
   inputSchema: InputSchema,
   outputSchema: ClarifiedSchema,
-  execute: async ({ inputData, requestContext, bail, runId }) => {
+  execute: async ({ inputData, requestContext, bail, runId, mastra }) => {
     const { id: ownerUserId, email: ownerEmail } = ownerFromRequestContext(requestContext);
     if (ownerUserId) {
       const quota = await SendQuotaService.check(getServiceDb(), {
@@ -671,10 +773,11 @@ const draftClarifyStep = createStep({
         feature: "deep_research",
       });
       if (!quota.ok) {
-        return bail({
-          status: "blocked" as const,
-          reason: `Kuota deep research tidak tersedia (${quota.reason}).`,
-        });
+        // B3: bail PALING DINI — belum ada gerbang HITL yang memproyeksikan thread, jadi efek
+        // durable (bubble user + alasan) wajib dari sini.
+        const reason = `Kuota deep research tidak tersedia (${quota.reason}).`;
+        await persistBlockedBail(mastra, requestContext, { ...inputData, runId, reason });
+        return bail({ status: "blocked" as const, reason });
       }
     }
     let clarifyQuestions: AskQuestion[] = [];
@@ -804,7 +907,9 @@ const approvePlanStep = createStep({
         requiredPlan,
       });
       if (!gate.ok) {
-        return bail({ status: "blocked" as const, reason: `Akses deep research ditolak (${gate.reason}).` });
+        const reason = `Akses deep research ditolak (${gate.reason}).`;
+        await persistBlockedBail(mastra, requestContext, { ...inputData, runId, reason });
+        return bail({ status: "blocked" as const, reason });
       }
       const debit = await BillingService.consumeCredits(db, {
         ownerUserId,
@@ -817,7 +922,9 @@ const approvePlanStep = createStep({
         idempotencyKey: `${runId}:deep`,
       });
       if (!debit.ok) {
-        return bail({ status: "blocked" as const, reason: `Kuota deep research habis (${debit.reason}).` });
+        const reason = `Kuota deep research habis (${debit.reason}).`;
+        await persistBlockedBail(mastra, requestContext, { ...inputData, runId, reason });
+        return bail({ status: "blocked" as const, reason });
       }
     }
     if (!resumeData.edits) return inputData;
@@ -859,7 +966,7 @@ const searchStep = createStep({
   // TANPA `retries`: re-run step = re-debit `external_search` per tool-call baru. Isolasi
   // per-sub-Q di bawah sudah membuat step ini tak melempar. (Pasca-DUR-7 restart step justru
   // AMAN: task selesai di-reuse by `toolCallId`, tak menjalankan ulang subagent.)
-  execute: async ({ inputData, mastra, requestContext, runId, writer }) => {
+  execute: async ({ inputData, mastra, requestContext, runId, writer, abortSignal }) => {
     // Tanam thread+run di rc induk dulu → entries() yang DI-CLONE per sub-Q sudah membawanya.
     withDeepRun(requestContext, inputData.threadId, runId, inputData.agentKind);
     const owner = ownerFromRequestContext(requestContext);
@@ -873,12 +980,14 @@ const searchStep = createStep({
         await emitDetail(writer, { kind: "search-sub", subIndex, subQuestion, status: "searching" });
         // DUR-7: subagent jalan sebagai background task persisten — `toolCallId` deterministik
         // per (run, sub-Q) → restart run me-reuse hasil task selesai (tanpa re-debit search).
+        // B4: `abortSignal` ikut — Stop user menutup task run ini, bukan membiarkannya jalan terus.
         const taskBase = {
           mastra,
           runId,
           threadId: inputData.threadId,
           ...(owner.id ? { resourceId: owner.id } : {}),
           timeoutMs: 600_000,
+          abortSignal,
         };
         let findings = "";
         try {
@@ -894,8 +1003,9 @@ const searchStep = createStep({
           findings = out.text.trim();
           // Guard turn-senyap subagent (CTX-7): selesai pas di tool-call → teks kosong. Retry SEKALI
           // dengan pengingat eksplisit; masih kosong → catat gap jujur (jangan biarkan bucket kosong
-          // mengalir senyap ke sintesis).
-          if (!findings) {
+          // mengalir senyap ke sintesis). B4: jangan dispatch empty-retry untuk run yang sedang
+          // dibatalkan (catch CFG-4 di bawah menelan abort-error attempt pertama).
+          if (!findings && !abortSignal.aborted) {
             const retry = await runDeepSubagentTask({
               ...taskBase,
               toolCallId: `${runId}:search:${subIndex}:empty-retry`,
@@ -936,7 +1046,7 @@ const counterEvidenceStep = createStep({
   inputSchema: SearchedSchema,
   outputSchema: CounteredSchema,
   retries: 1,
-  execute: async ({ inputData, mastra, requestContext, runId, writer }) => {
+  execute: async ({ inputData, mastra, requestContext, runId, writer, abortSignal }) => {
     // IMP-9: emit di AWAL step → body panel proses terisi jujur selama fase lambat berjalan
     // (ditimpa teks final di akhir step; paritas pola `search-sub` status "searching").
     await emitDetail(writer, {
@@ -952,6 +1062,7 @@ const counterEvidenceStep = createStep({
       threadId: inputData.threadId,
       ...(owner.id ? { resourceId: owner.id } : {}),
       timeoutMs: 600_000,
+      abortSignal,
       toolCallId: `${runId}:counter`,
       args: {
         agentId: "counter-evidence",
@@ -971,11 +1082,15 @@ const counterEvidenceStep = createStep({
 /**
  * 5. assignCitations — nomori `research_sources` run ini (turnId=runId) → `citation_number` 1..N
  * (dedupe by DOI/arXiv/locator) lalu susun inventory bernomor GLOBAL untuk verify + synthesis (G4).
+ * `retries: 1` (audit B1): step pasca-billing murni DB dan idempoten (`assignCitationNumbers`
+ * menghitung ulang penomoran deterministik lalu overwrite) — blip DB satu kali tak boleh
+ * mematikan run yang kreditnya sudah didebit.
  */
 const assignCitationsStep = createStep({
   id: "assign-citations",
   inputSchema: CounteredSchema,
   outputSchema: CitedSchema,
+  retries: 1,
   execute: async ({ inputData, runId, writer }) => {
     const items = await ResearchService.assignCitationNumbers(getServiceDb(), {
       threadId: inputData.threadId,
@@ -1085,13 +1200,13 @@ const citationVerifyStep = createStep({
   },
 });
 
-/** 7. synthesize — penulis akhir (deepWriter, "root") merangkai jawaban tercitasi + persist. */
+/** 7. synthesize — penulis akhir (deepWriter, "root") merangkai jawaban tercitasi. */
 const synthesizeStep = createStep({
   id: "synthesize",
   inputSchema: VerifiedSchema,
-  outputSchema: OutputSchema,
+  outputSchema: SynthesizedSchema,
   retries: 1,
-  execute: async ({ inputData, requestContext, mastra, runId, writer }) => {
+  execute: async ({ inputData, requestContext, mastra, runId, writer, abortSignal }) => {
     // `toolChoice: "none"`: seluruh bukti sudah ada di prompt; paksa penulis MENULIS teks
     // (bukan berhenti di tool-call kosong) — jaminan `out.text` terisi pada model gateway.
     // DUR-7: background task persisten — restart run me-reuse laporan task selesai.
@@ -1103,6 +1218,7 @@ const synthesizeStep = createStep({
       threadId: inputData.threadId,
       ...(owner.id ? { resourceId: owner.id } : {}),
       timeoutMs: 900_000,
+      abortSignal,
       toolCallId: `${runId}:synthesize`,
       args: {
         agentId: "deep-writer",
@@ -1116,14 +1232,60 @@ const synthesizeStep = createStep({
     // token-level (aman thd durable refresh) → emit live + dipersist di pesan untuk rehydrate.
     const reasoning = (out.reasoningText ?? "").trim();
     if (reasoning) await emitDetail(writer, { kind: "reasoning", text: reasoning });
-    // Persist verbatim ke memory thread chat → muncul di history + rehydrate saat refresh (G1/G2).
-    // (Pertanyaan user sudah dipersist di `ensureDeepThread` pada plan-gate.) `deepProcess` =
-    // jejak proses agar FE bangun ulang langkah + detail tanpa runId (riwayat/refresh, G7). Teks
-    // counter/verify dipersist PENUH (tanpa clamp) → panel detail menampilkan narasi utuh.
+    // Laporan kosong (blip gateway / turn senyap penulis) HARUS gagal DI step ini: lolos ke
+    // `persist-report` = gagal di validasi input `min(1)` di sana, dan time-travel ke persist
+    // selalu me-replay laporan kosong yang sama dari snapshot — buntu. Gagal di sini →
+    // retry/time-travel synthesize menulis ulang; deep-tasks TIDAK me-reuse completed kosong
+    // (completedWithText) → retry itu benar-benar men-dispatch attempt penulis baru, bukan
+    // memutar hasil kosong yang sama selamanya.
+    const report = (out.text ?? "").trim();
+    if (!report) throw new Error("deep-research: penulis sintesis mengembalikan teks kosong");
+    // Persist ke memory = step `persist-report` TERPISAH (B2) — kegagalan simpan tak lagi menelan
+    // laporan senyap, dan retry/time-travel persist tak menyentuh jalur LLM/task sama sekali.
+    return {
+      threadId: inputData.threadId,
+      agentKind: inputData.agentKind,
+      plan: inputData.plan,
+      subQuestions: inputData.subQuestions,
+      counter: inputData.counter,
+      verification: inputData.verification,
+      numberedInventory: inputData.numberedInventory,
+      numberedSources: inputData.numberedSources,
+      report,
+      reasoning,
+    };
+  },
+});
+
+/**
+ * 8. persistReport — simpan laporan ke memory thread sebagai step tersendiri (audit B2). Failure
+ * domain terpisah dari `synthesize`: persist murni DB, idempoten (id pesan `deep-report:<runId>`),
+ * jadi boleh `retries: 2` + di-time-travel TANPA menyentuh jalur LLM/task. Dulu best-effort di
+ * dalam synthesize → gagal = run tetap `success` tapi laporan LENYAP saat refresh (history dibaca
+ * dari `mastra_messages`) padahal user bayar penuh. `deepProcess` = jejak proses agar FE bangun
+ * ulang langkah + detail tanpa runId (riwayat/refresh, G7); teks counter/verify dipersist PENUH
+ * (tanpa clamp) → panel detail menampilkan narasi utuh.
+ */
+const persistReportStep = createStep({
+  id: "persist-report",
+  inputSchema: SynthesizedSchema,
+  outputSchema: OutputSchema,
+  retries: 2,
+  execute: async ({ inputData, requestContext, mastra, runId }) => {
+    // TEMP-TEST E2E B1/B2 (HAPUS SETELAH UJI): HANYA saat env `AQSHA_E2E_FAIL_PERSIST=1` — gagal
+    // selama file flag ada (toggle mid-run tanpa restart proses); hapus flag lalu "Coba lagi"
+    // (time-travel) harus memulihkan tanpa debit baru. Tanpa env (prod) = nol I/O fs, dan file
+    // /tmp nyasar di host TIDAK bisa mematikan persist semua user.
+    if (process.env.AQSHA_E2E_FAIL_PERSIST === "1") {
+      const { existsSync } = await import("node:fs");
+      if (existsSync("/tmp/aqsha-fail-persist")) {
+        throw new Error("uji E2E: persist digagalkan via flag /tmp/aqsha-fail-persist");
+      }
+    }
     await persistDeepReport(mastra, requestContext, {
       threadId: inputData.threadId,
-      report: out.text,
-      reasoning,
+      report: inputData.report,
+      reasoning: inputData.reasoning,
       runId,
       agentKind: inputData.agentKind,
       deepProcess: {
@@ -1139,17 +1301,17 @@ const synthesizeStep = createStep({
     });
     return {
       status: "completed" as const,
-      report: out.text,
+      report: inputData.report,
       plan: inputData.plan,
       subQuestions: inputData.subQuestions,
-      ...(reasoning ? { reasoning } : {}),
+      ...(inputData.reasoning ? { reasoning: inputData.reasoning } : {}),
     };
   },
 });
 
 export const deepResearch = createWorkflow({
   id: "deep-research",
-  description: "Riset mendalam tercitasi: klarifikasi (HITL, opsional) → plan-gate (HITL) → cari literatur → bukti tandingan → verifikasi sitasi → sintesis.",
+  description: "Riset mendalam tercitasi: klarifikasi (HITL, opsional) → plan-gate (HITL) → cari literatur → bukti tandingan → verifikasi sitasi → sintesis → persist laporan.",
   inputSchema: InputSchema,
   outputSchema: OutputSchema,
 })
@@ -1162,4 +1324,5 @@ export const deepResearch = createWorkflow({
   .then(assignCitationsStep)
   .then(citationVerifyStep)
   .then(synthesizeStep)
+  .then(persistReportStep)
   .commit();

@@ -574,6 +574,31 @@ export function settleWorkflowTurn(
   };
 }
 
+/**
+ * B1: hidupkan lagi turn `/deep` yang failed SEBELUM retry time-travel. Chunk retry mengalir via
+ * `reduceWorkflowChunk` yang menyasar assistant STREAMING (`ensureActiveAssistant`) — turn failed
+ * sudah settle (`streaming: false`), jadi tanpa revive retry melahirkan bubble kembar. Turn
+ * ber-`turnId === runId` ditandai streaming lagi; tak ditemukan (mis. retry sebelum seed) →
+ * biarkan — `ensureActiveAssistant`/`seedWorkflowProgress` yang melahirkan placeholder.
+ */
+export function reviveWorkflowTurn(
+  state: MastraTimelineState,
+  runId: string,
+): MastraTimelineState {
+  return {
+    ...state,
+    status: "streaming",
+    runId,
+    activeRunId: runId,
+    // Paritas `startAssistantTurn`: aktivitas baru menghapus banner error basi (mis. pesan
+    // "Gagal mengulang" dari percobaan retry sebelumnya) selagi run retry streaming.
+    error: undefined,
+    messages: state.messages.map((m) =>
+      m.role === "assistant" && m.turnId === runId ? { ...m, streaming: true } : m,
+    ),
+  };
+}
+
 /** Set status streaming tanpa menyentuh pesan (dipakai sebelum menerapkan chunk konten). */
 function streaming(state: MastraTimelineState): MastraTimelineState {
   return state.status === "streaming" ? state : { ...state, status: "streaming" };
@@ -606,9 +631,11 @@ const WF_STEP_LABELS: Record<string, string> = {
   "assign-citations": "Menomori sumber",
   "verify-citations": "Memverifikasi sitasi",
   synthesize: "Menulis sintesis",
+  "persist-report": "Menyimpan laporan",
 };
 
-function wfStepLabel(stepId: string): string {
+/** Diekspor untuk kartu run gagal (B1) — label langkah yang sama dgn baris "Proses". */
+export function wfStepLabel(stepId: string): string {
   return WF_STEP_LABELS[stepId] ?? humanizeSlug(stepId);
 }
 
@@ -628,6 +655,7 @@ const WF_STEP_ORDER = [
   "assign-citations",
   "verify-citations",
   "synthesize",
+  "persist-report",
 ] as const;
 
 /** Status step Mastra (`runById().steps[id].status`) → `ToolStatus` baris "Proses". */
@@ -647,6 +675,16 @@ function wfStepStatusToTool(status: string): ToolStatus {
 }
 
 type WorkflowStepSnapshot = { status?: unknown; output?: unknown; startedAt?: unknown };
+
+/**
+ * Unwrap entry `runById().steps[id]`: wire type @mastra/core mengizinkan array-of-attempt —
+ * ambil attempt TERAKHIR (engine 1.47 chain `.then()` polos hari ini selalu menulis objek
+ * tunggal). Diekspor agar pembaca kembar (`deepFailureFromSteps` di use-mastra-agent) memakai
+ * normalisasi bentuk wire yang SATU dan sama.
+ */
+export function lastStepAttempt<T>(raw: T | T[] | undefined): T | undefined {
+  return Array.isArray(raw) ? raw[raw.length - 1] : raw;
+}
 
 /**
  * Seed progres Workflow `/deep` dari snapshot `runById().steps` saat re-attach refresh fase RUNNING.
@@ -678,7 +716,7 @@ export function seedWorkflowProgress(
   for (const stepId of WF_STEP_ORDER) {
     const raw = steps[stepId];
     if (!raw) continue;
-    const sr = Array.isArray(raw) ? raw[raw.length - 1] : raw;
+    const sr = lastStepAttempt(raw);
     const status = str(sr?.status);
     if (!status) continue;
     next = upsertWorkflowStep(next, idx, stepId, wfStepStatusToTool(status), num(sr?.startedAt) || undefined);
@@ -1056,7 +1094,7 @@ function runningSearchDetail(
 ): DeepStepDetail | null {
   for (const sourceStep of ["approve-plan", "draft-plan"] as const) {
     const raw = steps[sourceStep];
-    const sr = Array.isArray(raw) ? raw[raw.length - 1] : raw;
+    const sr = lastStepAttempt(raw);
     const subQuestions = strArray(asRecord(sr?.output).subQuestions);
     if (subQuestions.length > 0) {
       return {
@@ -1453,8 +1491,19 @@ function num(v: unknown): number {
 function asRecord(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 }
+/**
+ * Pesan error dari payload longgar (string / `{message}`) — `null` bila tak ada. Diekspor untuk
+ * kartu run gagal B1 (`deepFailed.message` dari `steps[id].error` snapshot) agar normalisasi
+ * bentuk error Mastra hidup di SATU tempat.
+ */
+export function errorMessageFrom(err: unknown): string | null {
+  if (typeof err === "string" && err) return err;
+  if (err && typeof err === "object" && "message" in err) {
+    const msg = String((err as { message: unknown }).message);
+    if (msg) return msg;
+  }
+  return null;
+}
 function extractError(err: unknown): string {
-  if (typeof err === "string") return err;
-  if (err && typeof err === "object" && "message" in err) return String((err as { message: unknown }).message);
-  return "Terjadi kesalahan saat memproses.";
+  return errorMessageFrom(err) ?? "Terjadi kesalahan saat memproses.";
 }
