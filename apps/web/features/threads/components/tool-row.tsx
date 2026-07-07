@@ -215,7 +215,7 @@ export function ToolRow({
       />
       <span className="min-w-0">
         {isSubagentRunning ? (
-          <ElapsedLabel base={model.title} />
+          <ElapsedLabel base={model.title} startedAt={model.startedAt} />
         ) : model.isRunning ? (
           <Shimmer as="span">{model.title}</Shimmer>
         ) : (

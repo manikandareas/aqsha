@@ -9,7 +9,8 @@ const HOME_EASE_OUT = [0.23, 1, 0.32, 1] as const;
 /**
  * Cue tulisan tangan "scroll ke bawah, yuk" — duduk di kanan-atas landing /app,
  * diagonal di antara action buka panel Workspace dan hero title. Klik → gulir
- * mulus ke section Jelajahi yang ada di bawah fold.
+ * mulus ke section Jelajahi yang ada di bawah fold. Disembunyikan di bawah `sm`:
+ * di layar sempit tak ada celah antara header dan hero, cue menabrak keduanya.
  */
 export function ExploreHandwrittenCue({
   shouldReduceMotion,
@@ -28,7 +29,7 @@ export function ExploreHandwrittenCue({
       type="button"
       onClick={scrollToExplore}
       aria-label="Gulir ke section Jelajahi"
-      className="group absolute right-2 top-10 z-10 flex flex-row-reverse items-center gap-1.5 sm:right-8 sm:top-12"
+      className="group absolute right-8 top-12 z-10 hidden flex-row-reverse items-center gap-1.5 sm:flex"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5, ease: HOME_EASE_OUT, delay: 0.5 }}

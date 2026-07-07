@@ -102,7 +102,7 @@ export function MessageList({
   return (
     <MessageInteractionsProvider value={interactions}>
       <div className="flex flex-col gap-6">
-        {messages.map((m) =>
+        {messages.map((m, i) =>
           m.role === "user" ? (
             <UserBubble key={m.id} parts={m.parts} attachments={attachmentsByMessage?.get(m.id)} />
           ) : (
@@ -111,6 +111,7 @@ export function MessageList({
               message={m}
               sources={m.turnId ? sourcesByTurn?.get(m.turnId) : undefined}
               onRegenerate={!busy && m.id === lastAssistantId ? onRegenerate : undefined}
+              turnStartedAt={precedingUserCreatedAt(messages, i)}
             />
           ),
         )}
@@ -118,6 +119,19 @@ export function MessageList({
       </div>
     </MessageInteractionsProvider>
   );
+}
+
+/**
+ * `createdAt` pesan user terdekat SEBELUM pesan index `i` — anchor timer turn asisten yang
+ * selamat refresh (pesan user dipersist segera saat submit, jadi tersedia live maupun rehydrate).
+ * 0/absen → undefined (ElapsedLabel fallback ke waktu mount).
+ */
+function precedingUserCreatedAt(messages: TimelineMessage[], i: number): number | undefined {
+  for (let j = i - 1; j >= 0; j--) {
+    const m = messages[j];
+    if (m?.role === "user") return m.createdAt > 0 ? m.createdAt : undefined;
+  }
+  return undefined;
 }
 
 function UserBubble({
@@ -247,10 +261,13 @@ function AssistantMessage({
   message,
   sources,
   onRegenerate,
+  turnStartedAt,
 }: {
   message: TimelineMessage;
   sources?: ResearchSource[];
   onRegenerate?: () => void;
+  /** Epoch-ms pesan user pemicu turn — anchor timer "Sedang bekerja" yang selamat refresh. */
+  turnStartedAt?: number;
 }) {
   const { openSources } = useMessageInteractions();
   const streaming = Boolean(message.streaming);
@@ -267,6 +284,18 @@ function AssistantMessage({
     (p) => p.kind === "tool" || p.kind === "reasoning" || (p.kind === "text" && p.id !== answerId),
   );
   const toolSteps = processParts.filter((p) => p.kind === "tool").length;
+  // Anchor timer "Sedang bekerja": startedAt step Workflow yang SEDANG berjalan (snapshot `/deep`,
+  // durable lintas-refresh — sengaja bukan awal run supaya jeda menunggu plan-gate tak terhitung);
+  // fallback `createdAt` pesan user pemicu (chat normal), lalu waktu mount di ElapsedLabel.
+  let earliestRunningToolStart: number | undefined;
+  for (const p of processParts) {
+    if (p.kind !== "tool" || !p.model.isRunning) continue;
+    const startedAt = p.model.startedAt ?? 0;
+    if (startedAt > 0 && (earliestRunningToolStart === undefined || startedAt < earliestRunningToolStart)) {
+      earliestRunningToolStart = startedAt;
+    }
+  }
+  const workingSince = earliestRunningToolStart ?? turnStartedAt;
 
   // Sumber `/deep` dikelompokkan per `subQuestionIndex` → kartu sub-agen pencarian (step
   // search-literature). Hanya sumber bertanda sub-pertanyaan (chat biasa = null → dilewati).
@@ -311,6 +340,7 @@ function AssistantMessage({
           toolSteps={toolSteps}
           sourcesBySubQ={sourcesBySubQ}
           turnId={message.turnId}
+          workingSince={workingSince}
         />
       ) : null}
 
@@ -351,6 +381,7 @@ function ProcessBlock({
   toolSteps,
   sourcesBySubQ,
   turnId,
+  workingSince,
 }: {
   parts: TimelinePart[];
   streaming: boolean;
@@ -358,6 +389,8 @@ function ProcessBlock({
   sourcesBySubQ?: Map<number, ResearchSource[]>;
   /** Run id of this `/deep` turn — scopes the search/plan detail panels. */
   turnId?: string;
+  /** Epoch-ms anchor timer "Sedang bekerja" (durable lintas-refresh); kosong → waktu mount. */
+  workingSince?: number;
 }) {
   const [override, setOverride] = useState<boolean | null>(null);
   const prevStreaming = useRef(streaming);
@@ -376,7 +409,7 @@ function ProcessBlock({
             <Spinner className="size-3.5 shrink-0 text-primary" />
             {/* Riset mendalam menunggu subagent (task mode) bisa diam bermenit-menit tanpa
                 event; elapsed yang berdetak meyakinkan "masih bekerja", bukan beku. */}
-            <ElapsedLabel base="Sedang bekerja" />
+            <ElapsedLabel base="Sedang bekerja" startedAt={workingSince} />
           </>
         ) : (
           <span className="font-medium text-muted-foreground">{settledLabel}</span>

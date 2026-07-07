@@ -207,7 +207,7 @@ function BannerSlideCard({
       </div>
       <div
         className={cn(
-          "relative h-14 w-24 shrink-0 overflow-hidden rounded-[8px]",
+          "relative h-12 w-20 shrink-0 overflow-hidden rounded-[8px] sm:h-14 sm:w-24",
           slide.imageBgClass,
         )}
       >
@@ -225,7 +225,7 @@ function BannerSlideCard({
     </>
   );
   const slideClass =
-    "flex w-full shrink-0 items-center gap-4 px-4 py-3 sm:px-5 focus-visible:outline-none";
+    "flex w-full shrink-0 items-center gap-3 px-4 py-3 sm:gap-4 sm:px-5 focus-visible:outline-none";
 
   // Slide non-aktif disembunyikan dari tab-order & a11y tree (masih di DOM demi animasi geser).
   if (slide.external) {

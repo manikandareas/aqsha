@@ -100,14 +100,56 @@ function normalizeResult(result: unknown): DeepTaskResult {
   };
 }
 
-/** Poll sampai task terminal (getTask baca storage — andal juga untuk task yang dipulihkan). */
+/** Margin di atas timeout task sendiri — beri waktu engine menandai `timed_out` lebih dulu. */
+const STALE_WAIT_MARGIN_MS = 30_000;
+
+/**
+ * A2: batas tunggu untuk task LAMA = sisa umur task itu sendiri (`startedAt ?? createdAt` +
+ * `task.timeoutMs` + margin) — BUKAN full timeout baru. Task stale (eksekutor proses lama mati,
+ * recovery tak menyentuh) punya deadline di masa lalu → loop wait langsung keluar → dispatch
+ * attempt baru segera, alih-alih klik "Mulai ulang" terasa hang ~10 menit. Catatan: record
+ * `BackgroundTask` TIDAK punya `updatedAt` (rekomendasi audit dikoreksi di sini). Tetap di-cap
+ * timeout step pemanggil.
+ */
+function existingTaskDeadline(task: BackgroundTask, callerTimeoutMs: number): number {
+  const anchor = new Date(task.startedAt ?? task.createdAt).getTime();
+  return Math.min(anchor + task.timeoutMs + STALE_WAIT_MARGIN_MS, Date.now() + callerTimeoutMs);
+}
+
+/**
+ * B5: attempt yang satu identitas logis dgn `base` = base persis ATAU suffix retry `:r<N>:<ts>`.
+ * BUKAN prefix polos: `:empty-retry` adalah kunci logis BERBEDA (retry teks-kosong CTX-7), dan
+ * `search:1` tak boleh mencocokkan `search:10`.
+ */
+function isAttemptOf(toolCallId: string, base: string): boolean {
+  return toolCallId === base || toolCallId.startsWith(`${base}:r`);
+}
+
+/**
+ * Hasil `completed` layak reuse hanya bila MEMBAWA TEKS. Task completed ber-`text:""` (turn senyap
+ * CTX-7 / result malformed yang dipaksa kosong `normalizeResult`) yang di-reuse membuat synthesize
+ * gagal PERMANEN: throw laporan-kosong → retry/time-travel menemukan task "completed" yang sama →
+ * tak pernah dispatch attempt baru — kredit run hangus tanpa jalur pulih. Empty completed
+ * diperlakukan seperti terminal non-completed → attempt baru ber-suffix (untuk search ini berarti
+ * re-riset sub-Q yang hasilnya memang kosong/tak berguna — debit ulang yang membeli jawaban nyata).
+ */
+function completedWithText(task: BackgroundTask): boolean {
+  return normalizeResult(task.result).text.trim().length > 0;
+}
+
+/** Poll sampai task terminal (getTask baca storage — andal juga untuk task yang dipulihkan).
+ *  Deadline ABSOLUT (epoch ms, A2); abort run (B4) → tutup task lalu lempar. */
 async function waitUntilTerminal(
   manager: BackgroundTaskManager,
   taskId: string,
-  timeoutMs: number,
+  deadlineMs: number,
+  abortSignal?: AbortSignal,
 ): Promise<BackgroundTask | null> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
+  while (Date.now() < deadlineMs) {
+    if (abortSignal?.aborted) {
+      await manager.cancel(taskId).catch(() => {});
+      throw new Error("deep task dibatalkan: run di-cancel");
+    }
     const task = await manager.getTask(taskId);
     if (!task) return null;
     if (TERMINAL_STATUSES.has(task.status)) return task;
@@ -121,9 +163,11 @@ async function waitUntilTerminal(
  *
  * - Manager tak tersedia (backgroundTasks off / unit test) → fallback FOREGROUND (perilaku
  *   pra-DUR-7, tanpa persist).
- * - Task lama dgn `toolCallId` sama: `completed` → reuse hasil (no re-run/no re-debit);
- *   `pending/running/suspended` → register ulang executor + tunggu; `failed/timed_out/cancelled`
- *   → dispatch BARU dgn suffix percobaan (`:r<N>`).
+ * - Task lama satu identitas logis (base ATAU attempt ber-suffix `:r<N>:<ts>`, B5): `completed`
+ *   BER-TEKS → reuse hasil (no re-run/no re-debit); `pending/running/suspended` → register ulang
+ *   executor + tunggu maksimal sisa umur task itu (A2; melewati deadline → di-cancel supaya tak
+ *   jalan dobel); semua terminal non-completed (atau completed kosong) → dispatch BARU dgn suffix
+ *   percobaan berikutnya.
  * - Throw hanya bila task baru berakhir non-completed — pemanggil (step) yang memutuskan isolasi
  *   (searchStep menangkap per sub-Q; step ber-`retries` biarkan workflow yang mengulang).
  */
@@ -135,33 +179,65 @@ export async function runDeepSubagentTask(params: {
   threadId: string;
   resourceId?: string;
   timeoutMs: number;
+  /** B4: abortSignal step (dipicu `run.cancel()`) — tutup task run ini alih-alih jalan terus. */
+  abortSignal?: AbortSignal;
 }): Promise<DeepTaskResult> {
   const manager = params.mastra?.backgroundTaskManager;
   if (!manager) return executeDeepGenerate(params.args);
+  if (params.abortSignal?.aborted) throw new Error("deep task dibatalkan: run di-cancel");
 
   let toolCallId = params.toolCallId;
   try {
+    // B5: list per-RUN (bukan exact `toolCallId` — filter storage exact-match) supaya attempt
+    // ber-suffix `:r<N>:<ts>` yang BERHASIL ikut ditemukan saat restart; dulu attempt sukses itu
+    // tak terlihat → sub-Q diriset (dan didebit `external_search`) ulang.
     const { tasks } = await manager.listTasks({
-      toolCallId: params.toolCallId,
       runId: params.runId,
-      perPage: 10,
+      orderBy: "createdAt",
+      orderDirection: "desc",
+      // Fan-out satu run: ≤8 sub-Q × (base + empty-retry + suffix retry) + counter + synthesize.
+      perPage: 100,
     });
-    // Bisa >1 (percobaan ber-suffix listTasks by toolCallId dasar tak ikut) — ambil terbaru.
-    const existing = tasks[0];
-    if (existing) {
-      if (existing.status === "completed") return normalizeResult(existing.result);
-      if (!TERMINAL_STATUSES.has(existing.status)) {
-        manager.registerTaskContext(existing.id, { executor: deepTaskExecutor });
-        const done = await waitUntilTerminal(manager, existing.id, params.timeoutMs);
-        if (done?.status === "completed") return normalizeResult(done.result);
-        // Gagal/timeout/hilang → jatuh ke dispatch percobaan baru di bawah.
+    const attempts = tasks.filter((t) => isAttemptOf(t.toolCallId, params.toolCallId));
+    // Prioritas: (1) completed BER-TEKS terbaru → reuse hasil (no re-run / no re-debit);
+    const completed = attempts.find((t) => t.status === "completed" && completedWithText(t));
+    if (completed) return normalizeResult(completed.result);
+    // (2) non-terminal TERBARU → register ulang executor + tunggu ber-deadline umur task (A2);
+    const active = attempts.find((t) => !TERMINAL_STATUSES.has(t.status));
+    if (active) {
+      manager.registerTaskContext(active.id, { executor: deepTaskExecutor });
+      const done = await waitUntilTerminal(
+        manager,
+        active.id,
+        existingTaskDeadline(active, params.timeoutMs),
+        params.abortSignal,
+      );
+      if (done?.status === "completed" && completedWithText(done)) return normalizeResult(done.result);
+      // Stale melewati deadline / hilang dari storage → CANCEL dulu sebelum attempt baru: record
+      // `cancelled` membuat antrean melewatinya (engine hanya skip task cancelled saat dispatch).
+      // Tanpa ini task lama yang ternyata masih hidup (pending antrean backlog / re-dispatch
+      // `recoverStaleTasks` ber-`startedAt` kosong) ikut jalan → subagent DOBEL + debit dobel.
+      // Kooperatif: eksekusi yang sudah in-flight bisa tuntas internal (hasil dibuang).
+      if (!done || !TERMINAL_STATUSES.has(done.status)) {
+        await manager.cancel(active.id).catch(() => {});
       }
-      toolCallId = `${params.toolCallId}:r${existing.retryCount + 1}:${Date.now()}`;
+      // Gagal/timeout/stale/hilang → jatuh ke dispatch percobaan baru di bawah.
+    }
+    // (3) semua attempt terminal non-completed (atau completed tanpa teks) → attempt baru ber-suffix.
+    if (attempts.length > 0) {
+      toolCallId = `${params.toolCallId}:r${(attempts[0]?.retryCount ?? 0) + 1}:${Date.now()}`;
     }
   } catch (err) {
+    // Abort ≠ blip lookup — jangan lanjut dispatch attempt baru untuk run yang dibatalkan.
+    if (params.abortSignal?.aborted) throw err;
     // Dedupe best-effort — kegagalan lookup tak boleh mematikan step; lanjut dispatch baru.
     console.error("[deep-tasks] task lookup failed", err);
   }
+
+  // B4: abort bisa mendarat SELAMA lookup di atas (await panjang) — listener `abort` di bawah
+  // dipasang SETELAHNYA dan event pada signal yang sudah aborted tak pernah fire (spec WHATWG),
+  // jadi tanpa cek ulang ini task baru lahir + ditunggu full timeout untuk run yang dibatalkan.
+  if (params.abortSignal?.aborted) throw new Error("deep task dibatalkan: run di-cancel");
 
   const handle = createBackgroundTask(manager, {
     runId: params.runId,
@@ -174,15 +250,28 @@ export async function runDeepSubagentTask(params: {
     timeoutMs: params.timeoutMs,
     context: { executor: deepTaskExecutor },
   });
-  const { fallbackToSync } = await handle.dispatch();
-  if (fallbackToSync) return executeDeepGenerate(params.args);
-  const done = await handle.waitForCompletion({ timeoutMs: params.timeoutMs + 30_000 });
-  if (done.status !== "completed") {
-    throw new Error(
-      `deep background task ${params.args.agentId} berakhir ${done.status}${
-        done.error ? `: ${done.error.message}` : ""
-      }`,
-    );
+  // B4: run di-cancel → tutup task yang baru di-dispatch. KOOPERATIF & JUJUR: cancel menandai
+  // record `cancelled` + wait di bawah keluar dini via status terminal itu, tapi `agent.generate`
+  // in-flight TIDAK menerima signal (args task wajib JSON-serializable, tanpa closure) — panggilan
+  // LLM yang sudah jalan bisa tuntas internal lalu hasilnya dibuang. Kebocoran debit `search_*`
+  // mengecil (task antre/berikutnya tak pernah mulai), tidak nol.
+  const onAbort = () => void handle.cancel().catch(() => {});
+  params.abortSignal?.addEventListener("abort", onAbort, { once: true });
+  // Tutup jendela race tersisa (abort mendarat di antara cek ulang di atas dan addEventListener).
+  if (params.abortSignal?.aborted) onAbort();
+  try {
+    const { fallbackToSync } = await handle.dispatch();
+    if (fallbackToSync) return executeDeepGenerate(params.args);
+    const done = await handle.waitForCompletion({ timeoutMs: params.timeoutMs + STALE_WAIT_MARGIN_MS });
+    if (done.status !== "completed") {
+      throw new Error(
+        `deep background task ${params.args.agentId} berakhir ${done.status}${
+          done.error ? `: ${done.error.message}` : ""
+        }`,
+      );
+    }
+    return normalizeResult(done.result);
+  } finally {
+    params.abortSignal?.removeEventListener("abort", onAbort);
   }
-  return normalizeResult(done.result);
 }

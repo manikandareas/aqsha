@@ -11,8 +11,15 @@ import {
   MAX_CONTEXT_WORKSPACES,
   type PromptCommand,
 } from "@aqsha/chat-core";
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from "react";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  type RefObject,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import {
   createCommandChipElement,
@@ -87,6 +94,7 @@ export function TokenizedPromptInput({
   workspaceItems,
   workspaceItemsLoading = false,
   onRequestWorkspaceItems,
+  mobilePaletteAnchorRef,
 }: {
   value: string;
   onValueChange: (value: string) => void;
@@ -106,8 +114,18 @@ export function TokenizedPromptInput({
   workspaceItems?: ContextItemOption[];
   workspaceItemsLoading?: boolean;
   onRequestWorkspaceItems?: (workspaceId: string | null) => void;
+  /**
+   * Anchor palette saat mobile: ref ke shell composer (kotak rounded penuh) supaya
+   * popover slash/mention selebar & center terhadap kotak input — bukan menjorok
+   * mengikuti wrapper editor yang offset oleh tombol upload/AgentSelector. Desktop
+   * tetap ter-anchor ke wrapper editor.
+   */
+  mobilePaletteAnchorRef?: RefObject<HTMLElement | null>;
 }) {
   const editorRef = useRef<HTMLDivElement | null>(null);
+  const editorWrapperRef = useRef<HTMLDivElement | null>(null);
+  const isMobile = useIsMobile();
+  const anchorToShell = isMobile && mobilePaletteAnchorRef != null;
   const paletteDismissalRef = useRef({ value, dismissed: false });
   const lastContextSignatureRef = useRef<string | null>(null);
   const isPaletteDismissed = () =>
@@ -558,70 +576,83 @@ export function TokenizedPromptInput({
 
   return (
     <Popover open={paletteOpen} modal={false}>
-      <PopoverAnchor asChild>
-        <div
-          className={cn(
-            "relative min-w-0 w-full text-[12.5px] text-foreground leading-[18px]",
-            isCollapsed && "flex min-h-8 items-center",
-            disabled && "opacity-100",
-            className,
-          )}
-        >
-          {showPlaceholder ? (
-            <span
-              className={cn(
-                "pointer-events-none absolute left-0 font-normal text-[12.5px] text-muted-foreground",
-                isCollapsed ? "inset-y-0 flex items-center" : "top-[3px]",
-              )}
-            >
-              {typeof placeholder === "string" ? (
-                placeholder
-              ) : (
-                <>
-                  {/* Container-query (bukan viewport): teks ringkas saat composer sempit
-                      (panel chat), teks penuh saat composer ≥ @lg (kolom thread lebar). */}
-                  <span className="@lg/composer:hidden">{placeholder.narrow}</span>
-                  <span className="hidden @lg/composer:inline">{placeholder.wide}</span>
-                </>
-              )}
-            </span>
-          ) : null}
-          <div
-            ref={editorRef}
-            contentEditable={!disabled}
-            role="textbox"
-            aria-label="Pesan"
-            aria-multiline="true"
-            aria-controls={
-              slashOpen
-                ? "composer-slash-commands"
-                : mentionOpen
-                  ? "composer-context-mentions"
-                  : undefined
-            }
+      {/* Anchor selalu virtual (render null) supaya wrapper editor tidak pernah
+          remount saat target anchor berpindah di breakpoint mobile↔desktop.
+          Cast: RefObject nullable React 19 tidak assignable ke RefObject<Measurable>
+          milik popper; runtime aman — popper hanya membaca .current. */}
+      <PopoverAnchor
+        virtualRef={
+          (anchorToShell ? mobilePaletteAnchorRef : editorWrapperRef) as RefObject<HTMLElement>
+        }
+      />
+      <div
+        ref={editorWrapperRef}
+        className={cn(
+          "relative min-w-0 w-full text-[12.5px] text-foreground leading-[18px]",
+          isCollapsed && "flex min-h-8 items-center",
+          disabled && "opacity-100",
+          className,
+        )}
+      >
+        {showPlaceholder ? (
+          <span
             className={cn(
-              "max-h-36 w-full overflow-y-auto whitespace-pre-wrap break-words text-foreground caret-primary outline-none disabled:opacity-100",
-              isCollapsed ? "min-h-8 py-[7px] leading-[18px]" : "min-h-6 py-1",
+              "pointer-events-none absolute left-0 font-normal text-[12.5px] text-muted-foreground",
+              isCollapsed ? "inset-y-0 flex items-center" : "top-[3px]",
             )}
-            onInput={updateEditorFromInput}
-            onBlur={syncEditorState}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            onClick={handleChipClick}
-            onMouseOver={handleChipHover}
-            onMouseLeave={() => setHoveredChip(null)}
-            onScroll={() => setHoveredChip(null)}
-            tabIndex={0}
-            suppressContentEditableWarning
-          />
-          {hoveredChip ? <ComposerChipTooltip chip={hoveredChip} /> : null}
-        </div>
-      </PopoverAnchor>
+          >
+            {typeof placeholder === "string" ? (
+              placeholder
+            ) : (
+              <>
+                {/* Container-query (bukan viewport): teks ringkas saat composer sempit
+                    (panel chat), teks penuh saat composer ≥ @lg (kolom thread lebar). */}
+                <span className="@lg/composer:hidden">{placeholder.narrow}</span>
+                <span className="hidden @lg/composer:inline">{placeholder.wide}</span>
+              </>
+            )}
+          </span>
+        ) : null}
+        <div
+          ref={editorRef}
+          contentEditable={!disabled}
+          role="textbox"
+          aria-label="Pesan"
+          aria-multiline="true"
+          aria-controls={
+            slashOpen
+              ? "composer-slash-commands"
+              : mentionOpen
+                ? "composer-context-mentions"
+                : undefined
+          }
+          className={cn(
+            "max-h-36 w-full overflow-y-auto whitespace-pre-wrap break-words text-foreground caret-primary outline-none disabled:opacity-100",
+            isCollapsed ? "min-h-8 py-[7px] leading-[18px]" : "min-h-6 py-1",
+          )}
+          onInput={updateEditorFromInput}
+          onBlur={syncEditorState}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+          onClick={handleChipClick}
+          onMouseOver={handleChipHover}
+          onMouseLeave={() => setHoveredChip(null)}
+          onScroll={() => setHoveredChip(null)}
+          tabIndex={0}
+          suppressContentEditableWarning
+        />
+        {hoveredChip ? <ComposerChipTooltip chip={hoveredChip} /> : null}
+      </div>
       <PopoverContent
-        align="start"
+        align={anchorToShell ? "center" : "start"}
         side="bottom"
         sideOffset={12}
-        className="w-[min(22.5rem,calc(100vw-2rem))] overflow-hidden rounded-xl p-0"
+        className={cn(
+          "overflow-hidden rounded-xl p-0",
+          anchorToShell
+            ? "w-[var(--radix-popover-trigger-width)]"
+            : "w-[min(22.5rem,calc(100vw-2rem))]",
+        )}
         onMouseDown={(event) => {
           event.preventDefault();
         }}

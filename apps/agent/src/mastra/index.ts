@@ -1,6 +1,7 @@
 import { assertEmbeddingEnabled } from "@aqsha/services/rag";
 import { Mastra } from "@mastra/core/mastra";
 import { MASTRA_THREAD_ID_KEY } from "@mastra/core/request-context";
+import type { Middleware } from "@mastra/core/server";
 import { MastraStorageExporter, Observability } from "@mastra/observability";
 import { astraLite, astraPro } from "./agents/astra-lite";
 import { createClerkAuth } from "./auth";
@@ -18,6 +19,15 @@ import { registerDeepTaskExecutors } from "./workflows/deep-tasks";
 // Fail-fast (D1): tool `search_thread_documents` butuh embedding aktif. Konsisten dengan throw
 // `DATABASE_URL` di `./storage` — kredensial wajib digagalkan saat boot, bukan degradasi senyap.
 assertEmbeddingEnabled();
+
+// Sweep A1 hanya boleh jalan SEKALI per proses — flag di-set sinkron sebelum panggilan async
+// supaya request paralel pertama tak memicu sweep ganda. Impl `sweepFrozenDeepRunsOnce` di bawah
+// instance `mastra` (butuh instance-nya); deklarasi function di-hoist, aman dirujuk dari sini.
+let deepBootSweepStarted = false;
+const bootSweepMiddleware: Middleware = async (_c, next) => {
+  sweepFrozenDeepRunsOnce();
+  await next();
+};
 
 /**
  * Instance Mastra runtime Astra (Fase 0 spike).
@@ -83,9 +93,35 @@ export const mastra = new Mastra({
     host: process.env.HOST ?? "0.0.0.0",
     auth: createClerkAuth(),
     // userContextMiddleware: ekstrak email Clerk → RequestContext (gate admin billing).
-    middleware: [userContextMiddleware],
+    // bootSweepMiddleware: sweep A1 run beku, terpicu request pertama (lihat komentar di bawah).
+    middleware: [userContextMiddleware, bootSweepMiddleware],
   },
 });
+
+/**
+ * A1 (audit 2026-07-03): sweep run `deep-research` yang beku karena proses mati (deploy Dokploy =
+ * restart container; Mastra 1.47 tak me-resume run `running` sendiri). Hanya menyapu
+ * `running`+`waiting` (bukan `suspended` — run parkir di gerbang HITL sehat, di-resume user);
+ * step yang re-run me-reuse task selesai by `toolCallId` (DUR-7) → tanpa re-debit. Fire-and-forget:
+ * kegagalan sweep (mis. storage belum siap) tak boleh mematikan server; error per-run ditangkap
+ * internal. Scoped per-workflow (bukan facade `mastra.*`) supaya workflow internal Mastra
+ * (`__mastra_notification_dispatcher`) tak ikut tersapu.
+ *
+ * Dipicu REQUEST HTTP PERTAMA (middleware), BUKAN import module: modul ini juga di-import smoke
+ * scripts / build / test yang menunjuk DB sama — sweep dari proses sekali-jalan me-restart run
+ * milik user lalu mati di tengah (membekukan ulang, bisa dobel-dispatch task). Hanya proses yang
+ * benar-benar melayani HTTP yang boleh men-sweep; saat request pertama tiba, `startWorkers()`
+ * deployer juga sudah jalan (urutan boot), jadi task hasil restart tak menganggur di antrean.
+ * Run beku selalu tersentuh: FE poll re-attach memukul server begitu ada user membuka thread-nya.
+ */
+function sweepFrozenDeepRunsOnce(): void {
+  if (deepBootSweepStarted) return;
+  deepBootSweepStarted = true;
+  void mastra
+    .getWorkflow("deep-research")
+    .restartAllActiveWorkflowRuns()
+    .catch((err) => console.error("[deep-research] boot sweep restart gagal", err));
+}
 
 // Executor static task `/deep` WAJIB di-register saat boot: task `running`/`pending` yang dipulihkan
 // `recoverStaleTasks` (proses sebelumnya mati) hanya bisa dieksekusi ulang lewat registry ini —

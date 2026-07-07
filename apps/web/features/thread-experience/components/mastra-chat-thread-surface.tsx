@@ -3,7 +3,7 @@
 import { Button } from "@aqsha/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { m, useReducedMotion } from "motion/react";
-import { useMemo, useRef, useState } from "react";
+import { type ReactNode, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ChevronRightIcon, ClockIcon, RotateCcwIcon, XIcon } from "@aqsha/ui/icons";
 import { ConversationContent } from "@/components/ai-elements/conversation-content";
@@ -35,7 +35,7 @@ import {
 } from "@/features/threads/lib/mastra-client";
 import type { TimelineMessage } from "@/features/threads/lib/timeline-types";
 import { buildThreadPanelLookups } from "@/features/threads/lib/thread-panel-data";
-import { mastraMessagesToTimeline } from "@/features/threads/lib/mastra-timeline";
+import { mastraMessagesToTimeline, wfStepLabel } from "@/features/threads/lib/mastra-timeline";
 import { useMastraAgent } from "@/features/threads/lib/use-mastra-agent";
 import type { ResearchSource } from "@/features/threads/types";
 import { threadTitle } from "@/features/threads/types";
@@ -117,6 +117,38 @@ function deepBlockedMessage(status: ReturnType<typeof useSendStatus>["data"]): s
  * thread wajar — melewati ini butuh paginasi sungguhan.
  */
 const HISTORY_SEED_PER_PAGE = 400;
+
+/** Kartu notice run `/deep` (macet DUR-5 / gagal B1 / bail blocked B3) — satu shell agar styling
+ *  & a11y konsisten. `secondary` opsional (varian info-only B3 cukup satu aksi tutup); ikon primary
+ *  default panah-ulang (aksi restart/retry), override via `icon` bila aksinya bukan mengulang. */
+function DeepRunNoticeCard(props: {
+  body: ReactNode;
+  detail?: string | null;
+  primary: { label: string; onClick: () => void; disabled?: boolean; icon?: ReactNode };
+  secondary?: { label: string; onClick: () => void };
+}) {
+  return (
+    <div className={cn(threadTranscriptColumnClass)}>
+      <div className="rounded-xl border border-border bg-card p-4">
+        <p className="text-sm text-foreground">{props.body}</p>
+        {props.detail ? (
+          <p className="mt-1 text-muted-foreground text-xs">{props.detail}</p>
+        ) : null}
+        <div className="mt-3 flex gap-2">
+          <Button size="sm" onClick={props.primary.onClick} disabled={props.primary.disabled}>
+            {props.primary.icon ?? <RotateCcwIcon className="size-3.5" />}
+            {props.primary.label}
+          </Button>
+          {props.secondary ? (
+            <Button size="sm" variant="ghost" onClick={props.secondary.onClick}>
+              {props.secondary.label}
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /** Teks user terakhir di timeline (untuk regenerate). */
 function lastUserText(messages: readonly TimelineMessage[]): string | null {
@@ -496,23 +528,51 @@ function MastraChatInner({
   // DUR-5: run `/deep` tampak macet (snapshot tak maju beberapa menit — biasanya proses agent
   // sempat restart; run `running` tak resume sendiri) → tawarkan mulai ulang dari step terakhir.
   const stalledCard = agent.deepStalled ? (
-    <div className={cn(threadTranscriptColumnClass)}>
-      <div className="rounded-xl border border-border bg-card p-4">
-        <p className="text-sm text-foreground">
-          Riset mendalam tampak macet — tidak ada kemajuan beberapa menit terakhir.
-        </p>
-        <div className="mt-3 flex gap-2">
-          <Button size="sm" onClick={() => void agent.restartDeep()}>
-            <RotateCcwIcon className="size-3.5" />
-            Mulai ulang
-          </Button>
-          <Button size="sm" variant="ghost" onClick={agent.stop}>
-            Hentikan
-          </Button>
-        </div>
-      </div>
-    </div>
+    <DeepRunNoticeCard
+      body="Riset mendalam tampak macet — tidak ada kemajuan beberapa menit terakhir."
+      primary={{ label: "Mulai ulang", onClick: () => void agent.restartDeep() }}
+      secondary={{ label: "Hentikan", onClick: agent.stop }}
+    />
   ) : null;
+
+  // B1: run `/deep` gagal pasca-billing → jangan senyap. Kredit run sudah didebit (idempoten
+  // per-run), jadi tawarkan "Coba lagi" (time-travel dari langkah gagal — tanpa debit baru)
+  // alih-alih membiarkan user regenerate yang memotong kredit lagi. Tombol dinonaktifkan selagi
+  // turn lain streaming (retryDeep juga menolak) — retry mid-stream merusak timeline.
+  const failedCard = agent.deepFailed ? (
+    <DeepRunNoticeCard
+      body={
+        <>
+          Riset mendalam gagal
+          {agent.deepFailed.stepId
+            ? ` pada langkah "${wfStepLabel(agent.deepFailed.stepId).toLowerCase()}"`
+            : ""}
+          . Coba lagi akan melanjutkan dari langkah itu tanpa memotong kredit baru.
+        </>
+      }
+      detail={agent.deepFailed.message}
+      primary={{ label: "Coba lagi", onClick: () => void agent.retryDeep(), disabled: busy }}
+      secondary={{ label: "Buang", onClick: agent.dismissDeepFailure }}
+    />
+  ) : null;
+
+  // B3: run `/deep` berakhir bail `blocked` (kuota habis / akses ditolak — SEBELUM debit) → alasan
+  // harus terlihat, bukan settle senyap. Info-only: run sudah terminal, tak ada aksi pemulihan.
+  // Kartu DITEKAN bila bubble persisted `deep-bail:<runId>` (persistDeepNotice, best-effort) sudah
+  // ada di timeline — pasca-refresh history memuatnya, tanpa guard ini alasan yang sama tampil
+  // dua kali (bubble + kartu). Sesi live (bubble belum di-load) tetap dapat kartunya.
+  const deepNotice = agent.deepNotice;
+  const noticeCard =
+    deepNotice && !agent.messages.some((m) => m.id === `deep-bail:${deepNotice.runId}`) ? (
+      <DeepRunNoticeCard
+        body={<>Riset mendalam dihentikan: {deepNotice.reason}</>}
+        primary={{
+          label: "Tutup",
+          onClick: agent.dismissDeepNotice,
+          icon: <XIcon className="size-3.5" />,
+        }}
+      />
+    ) : null;
 
   if (isEmpty) {
     return (
@@ -564,6 +624,8 @@ function MastraChatInner({
         )}
       >
         {stalledCard}
+        {failedCard}
+        {noticeCard}
         {questionsCard}
         {planGateCard}
         {approvalCards}
