@@ -1,5 +1,5 @@
 import {
-  dedupeReferenceSources,
+  dedupeCitableReferenceSources,
   formatApa7Reference,
   ResearchService,
   sortForReferenceList,
@@ -37,7 +37,7 @@ export const formatReferences = createTool({
       };
     }
     const wanted = input.citations && input.citations.length > 0 ? new Set(input.citations) : null;
-    const deduped = dedupeReferenceSources(items).filter(
+    const deduped = dedupeCitableReferenceSources(items).filter(
       (s) => !wanted || (s.citationNumber !== null && wanted.has(s.citationNumber)),
     );
     if (deduped.length === 0) {

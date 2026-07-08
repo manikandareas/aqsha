@@ -32,6 +32,32 @@ export type ReferenceSourceInput = {
 const AUTHOR_CAP = 3;
 
 /**
+ * Keluarkan baris deep yang tersisih cap penomoran (ISSUE-5): `citationNumber` null pada turn
+ * yang PUNYA baris bernomor = paper terkumpul yang tak pernah bisa dikutip laporan — jangan ikut
+ * daftar pustaka "semua sumber". Sumber chat biasa (turn tanpa penomoran sama sekali) tetap lolos.
+ * Dipakai tool `format_references` + route export `.bib/.ris` — SATU aturan untuk keduanya.
+ */
+export function filterCitableReferenceSources<
+  T extends { turnId: string | null; citationNumber: number | null },
+>(items: T[]): T[] {
+  const numberedTurns = new Set(
+    items.filter((s) => s.citationNumber !== null).map((s) => s.turnId),
+  );
+  return items.filter((s) => s.citationNumber !== null || !numberedTurns.has(s.turnId));
+}
+
+/**
+ * Aturan bersama "semua sumber yang layak masuk daftar pustaka" — komposisi filter citable lalu
+ * dedupe lintas turn, SATU tempat untuk tool `format_references` + route export `.bib/.ris`
+ * (urutan komposisi tak boleh drift antar konsumen).
+ */
+export function dedupeCitableReferenceSources<
+  T extends ReferenceSourceInput & { turnId: string | null; citationNumber: number | null },
+>(items: T[]): T[] {
+  return dedupeReferenceSources(filterCitableReferenceSources(items));
+}
+
+/**
  * Dedup lintas turn: `research_sources` unik per (thread, turn, locator) sehingga sumber yang
  * sama muncul lagi di turn lain. Kunci samadengan `assignCitationNumbers`: DOI ternormalisasi ??
  * arXiv id ?? locator. Pemenang = baris pertama; nomor sitasi & metadata terisi menang atas null.

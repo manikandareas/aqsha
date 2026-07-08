@@ -5,7 +5,7 @@ import {
   ThreadService,
 } from "@aqsha/services";
 import {
-  dedupeReferenceSources,
+  dedupeCitableReferenceSources,
   formatBibtex,
   formatRis,
   sortForReferenceList,
@@ -136,7 +136,7 @@ export const threads = new Elysia({ prefix: "/threads" })
       const { db } = getDb();
       await ThreadService.assertOwner(db, ownerUserId, params.id);
       const items = await ResearchService.listThreadSources(db, params.id);
-      const sources = sortForReferenceList(dedupeReferenceSources(items));
+      const sources = sortForReferenceList(dedupeCitableReferenceSources(items));
       const format = query.format === "ris" ? "ris" : "bibtex";
       return {
         format,
