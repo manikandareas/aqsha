@@ -1,14 +1,14 @@
 /**
- * Crossref — Slice 6.4 + Explore live search. `lookupDoi` port V1 `lookupDoiProvider`
- * (satu work per DOI). `searchCrossref` = keyword search (`/works?query=…`) untuk
- * mengisi ekor waterfall Explore saat query bukan DOI. Reads `contactEmail()` for
- * the polite-pool `mailto`.
+ * Provider Crossref untuk tool riset + Explore live search. `lookupDoi` mengambil
+ * satu work per DOI. `searchCrossref` = keyword search (`/works?query=…`) untuk
+ * mengisi ekor waterfall Explore saat query bukan DOI. Membaca `contactEmail()`
+ * untuk `mailto` polite-pool.
  */
 
 import { contactEmail, fetchWithRetry } from "../papers/http";
 import { normalizeDoi } from "../papers/identifiers";
 import { readCachedCandidates, writeCachedCandidates } from "./cache";
-import { collapse, normalizeKey, trimForSnippet } from "./text";
+import { collapse, normalizeKey, numberOrUndefined, trimForSnippet } from "./text";
 import {
   type ProviderSearchResult,
   type ResearchCandidate,
@@ -30,6 +30,7 @@ type CrossrefItem = {
   issued?: { "date-parts"?: number[][] };
   published?: { "date-parts"?: number[][] };
   "container-title"?: string[];
+  "is-referenced-by-count"?: number;
 };
 
 export async function lookupDoi(args: { doi: string }): Promise<ProviderSearchResult> {
@@ -132,6 +133,7 @@ function crossrefToCandidate(item: CrossrefItem): ResearchCandidate | null {
         .slice(0, 6),
       year: item.published?.["date-parts"]?.[0]?.[0] ?? item.issued?.["date-parts"]?.[0]?.[0],
       venue: item["container-title"]?.find((value) => value.trim()),
+      citedByCount: numberOrUndefined(item["is-referenced-by-count"]),
       sourceLabel: item["container-title"]?.find((value) => value.trim()) ?? "Crossref",
     }),
   };

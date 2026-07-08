@@ -190,6 +190,13 @@
       "when": 1783000143390,
       "tag": "0026_broad_surge",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1783428331630,
+      "tag": "0027_milky_wolfpack",
+      "breakpoints": true
     }
   ]
 }

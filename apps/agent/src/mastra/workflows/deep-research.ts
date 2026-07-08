@@ -4,6 +4,16 @@ import {
   normalizeAskQuestions,
   type AskQuestion,
 } from "@aqsha/chat-core";
+import {
+  DEEP_VIZ_CLASSIFIED_STANCES,
+  DEEP_VIZ_STUDY_DESIGNS,
+  buildDeepVizBlocks,
+  deepVizBlockSchema,
+  formatDeepAnalyzeSummary,
+  injectVizBlocks,
+  type DeepVizBlock,
+  type DeepVizSourceInput,
+} from "@aqsha/chat-core/deep-viz";
 import { BillingService } from "@aqsha/services/billing";
 import { ThreadService, TitleService } from "@aqsha/services/chat";
 import { estimateCredits } from "@aqsha/services/plan";
@@ -48,9 +58,9 @@ import { effectiveBilledTier, liteProviderOptions, proProviderOptions } from "..
  *
  *   draftClarify (kuota + nilai klarifikasi) → clarify (HITL ask_questions, opsional) → draftPlan
  *   → approvePlan (HITL suspend/resume + gerbang billing) → searchLiterature → counterEvidence
- *   → verifyCitations → synthesize → persistReport
+ *   → assignCitations → analyzeSources (evidence viz) → verifyCitations → synthesize → persistReport
  *
- * Keputusan desain (deviasi sah dari §7 plan, dicatat):
+ * Keputusan desain (deviasi yang disengaja dari rancangan awal, dicatat):
  * - **Fan-out di dalam `searchStep`** (Promise.all per sub-pertanyaan) alih-alih builder
  *   `.foreach`. Rantai linear `.then` menjaga konteks (question/plan) mengalir utuh tanpa
  *   `.map`/`getStepResult` dan tetap observable per fase. Per-sub-pertanyaan paralel.
@@ -90,7 +100,7 @@ const ClarifiedSchema = InputSchema.extend({
 });
 
 /**
- * Domain-pack metodologi untuk sintesis (CFG-2): dipilih planner di `draft-plan`, dipakai
+ * Domain-pack metodologi untuk sintesis: dipilih planner di `draft-plan`, dipakai
  * `synthesize` untuk meng-inline skill `research-<domain>` ke prompt (langkah sintesis berjalan
  * `toolChoice:"none"` sehingga tool skill tak bisa dipanggil di sana).
  */
@@ -105,13 +115,13 @@ const PlanSchema = z.object({
     .max(8)
     .describe("3-6 sub-pertanyaan riset yang diturunkan dari rencana."),
   domain: ResearchDomainSchema.default("general").describe(
-    "Domain-pack metodologi yang di-inline ke prompt sintesis (CFG-2).",
+    "Domain-pack metodologi yang di-inline ke prompt sintesis.",
   ),
 });
 
 const EvidenceItemSchema = z.object({
   subQuestion: z.string(),
-  findings: z.string().describe("Temuan bukti dari literature-searcher (TANPA [n]; identifikasi via DOI/arXiv/URL — penomoran global di assign-citations, CTX-1)."),
+  findings: z.string().describe("Temuan bukti dari literature-searcher (TANPA [n]; identifikasi via DOI/arXiv/URL — penomoran global di assign-citations)."),
 });
 
 const PlannedSchema = InputSchema.extend(PlanSchema.shape);
@@ -126,7 +136,7 @@ const NumberedSourceSchema = z.object({
   origin: z.string(),
   snippet: z.string().optional(),
 });
-/** Referensi terstruktur per `[n]` unik — bahan `CitationService.verifyIdentifiers` langsung (IMP-5). */
+/** Referensi terstruktur per `[n]` unik — bahan `CitationService.verifyIdentifiers` langsung. */
 const VerifyRefSchema = z.object({
   citation: z.number(),
   title: z.string(),
@@ -144,11 +154,31 @@ const CitedSchema = CounteredSchema.extend({
     .describe("Sumber bernomor terstruktur → dipersist di metadata laporan (fallback Sumber FE)."),
   verifyRefs: z
     .array(VerifyRefSchema)
-    .describe("Referensi terstruktur per [n] unik → verify-citations panggil CitationService langsung (IMP-5)."),
+    .describe("Referensi terstruktur per [n] unik → verify-citations panggil CitationService langsung."),
 });
-const VerifiedSchema = CitedSchema.extend({ verification: z.string() });
 /**
- * Hasil sintesis → step `persist-report` (failure domain persist terpisah, B2). SUBSET yang
+ * Hasil analisis bukti (step `analyze-sources`, evidence viz): blok visual deterministik yang
+ * memenuhi ambang minimum data + jumlah unit terklasifikasi (bahan panel proses).
+ * Best-effort total: step gagal → `vizBlocks: []` dan laporan tampil polos seperti sebelumnya.
+ * `.default(...)` WAJIB: snapshot run yang dimulai sebelum field ini ada (restart boot-sweep
+ * maupun pemulihan time-travel "Coba lagi") tak memuat keduanya — tanpa default, validasi
+ * input step baru menolak run lama selamanya.
+ */
+const AnalyzedSchema = CitedSchema.extend({
+  vizBlocks: z
+    .array(deepVizBlockSchema)
+    .default([])
+    .describe(
+      "Blok visual berbasis bukti (chat-core `deep-viz`, deterministik) yang lolos ambang — [] bila analisis gagal/kurang data.",
+    ),
+  analyzedSourceCount: z
+    .number()
+    .default(0)
+    .describe("Jumlah unit sumber (pasangan [n]×sub-pertanyaan) yang berhasil diklasifikasikan."),
+});
+const VerifiedSchema = AnalyzedSchema.extend({ verification: z.string() });
+/**
+ * Hasil sintesis → step `persist-report` (failure domain persist terpisah). SUBSET yang
  * dikonsumsi persist-report + FE saja — korpus bukti (evidence/verifyRefs/question/context) sudah
  * tersimpan di output step-step sebelumnya; mengangkutnya lagi hanya menggemukkan snapshot dan
  * chunk `workflow-step-result` yang dikirim ke browser tepat saat user menunggu laporan.
@@ -162,6 +192,8 @@ const SynthesizedSchema = VerifiedSchema.pick({
   verification: true,
   numberedInventory: true,
   numberedSources: true,
+  vizBlocks: true,
+  analyzedSourceCount: true,
 }).extend({
   report: z.string().min(1).describe("Laporan tercitasi hasil penulis sintesis."),
   reasoning: z
@@ -178,7 +210,7 @@ const OutputSchema = z.object({
   reasoning: z
     .string()
     .optional()
-    .describe("Ringkasan penalaran penulis sintesis (Route B) → blok reasoning FE saat refresh poll."),
+    .describe("Ringkasan penalaran penulis sintesis → blok reasoning FE saat refresh poll."),
 });
 
 type Planned = z.infer<typeof PlannedSchema>;
@@ -191,7 +223,7 @@ type Verified = z.infer<typeof VerifiedSchema>;
  * Tanam threadId chat + run id deep (`AQSHA_DEEP_RUN_KEY`) ke RequestContext sebelum memanggil
  * subagent. Tool riset membaca `MASTRA_THREAD_ID_KEY` (lewat `threadScopeId`) untuk men-scope
  * `research_sources` + RAG, dan menstempel `research_sources.turnId = runId` (semua sumber satu run
- * berbagi turn) → penomoran sitasi `[n]` global + dedupe (G4). Owner/email yang sudah ada di rc tetap
+ * berbagi turn) → penomoran sitasi `[n]` global + dedupe. Owner/email yang sudah ada di rc tetap
  * terbawa (callerId/callerEmail subagent valid). Dipakai di step yang memanggil subagent ber-tool riset.
  */
 function withDeepRun(
@@ -260,8 +292,10 @@ type StepDetailEmit =
     }
   | { kind: "counter"; text: string }
   | { kind: "citations"; count: number }
+  /** Analisis bukti (step `analyze-sources`): status awal + ringkasan akhir (unit terklasifikasi, blok layak). */
+  | { kind: "analyze"; text: string }
   | { kind: "verify"; text: string }
-  /** Ringkasan penalaran penulis sintesis (`out.reasoningText`) → blok "reasoning" FE (Route B). */
+  /** Ringkasan penalaran penulis sintesis (`out.reasoningText`) → blok "reasoning" FE. */
   | { kind: "reasoning"; text: string };
 
 async function emitDetail(writer: StepWriter, data: StepDetailEmit): Promise<void> {
@@ -327,7 +361,7 @@ async function ensureMemoryThread(
  * Bangun satu pesan Mastra Memory (format V2) untuk `saveMessages` dari jalur Workflow `/deep`, yang
  * menulis pesan LANGSUNG ke memory thread di luar turn agent (pertanyaan user di plan-gate, laporan
  * akhir di sintesis). `metadata` (mis. `{ deepRunId }`) menempel di `content` agar FE memetakan Sumber
- * per-turn (G4).
+ * per-turn.
  */
 function buildMastraMessage(args: {
   role: "user" | "assistant";
@@ -372,7 +406,7 @@ function buildMastraMessage(args: {
  * Proyeksikan thread chat + persist pertanyaan user SEDINI gerbang HITL pertama (sebelum `suspend`).
  * Jalur `/deep` = Workflow yang dijalankan FE (bukan turn agent) → `threadProjectionProcessor` TAK
  * jalan, jadi tanpa ini `chat_threads` kosong → halaman thread "Akses ditolak" saat refresh di
- * clarify/plan-gate/riset (G1/TC13), dan thread tak muncul di sidebar. Pesan user memakai id
+ * clarify/plan-gate/riset, dan thread tak muncul di sidebar. Pesan user memakai id
  * DETERMINISTIK (`deep-user:<runId>`) → aman dipanggil >1× per run (clarify-gate LALU plan-gate):
  * `saveMessages` meng-upsert baris yang sama, bukan bubble kembar. Best-effort: kegagalan tak
  * menggagalkan run.
@@ -427,10 +461,10 @@ async function ensureDeepThread(
 /**
  * Persist laporan akhir (assistant) ke memory thread chat (`mastra_messages`) lewat agent `astra-lite`.
  * Disimpan VERBATIM (fidelitas sitasi `[n]`) + `metadata.deepRunId = runId` agar FE memetakan Sumber
- * per-turn (G4). Pertanyaan user sudah dipersist di `ensureDeepThread` (plan-gate) → JANGAN ulang di sini
+ * per-turn. Pertanyaan user sudah dipersist di `ensureDeepThread` (plan-gate) → JANGAN ulang di sini
  * (anti bubble kembar). Preview thread diperbarui ke laporan.
  *
- * THROW saat persist gagal (audit B2): laporan yang tak tersimpan = produk berbayar LENYAP saat
+ * THROW saat persist gagal: laporan yang tak tersimpan = produk berbayar LENYAP saat
  * refresh (history dibaca dari `mastra_messages`) — bukan side-effect opsional yang boleh ditelan.
  * Pemanggil = step `persist-report` ber-`retries`; id pesan deterministik `deep-report:<runId>`
  * membuat retry/time-travel meng-upsert baris yang SAMA (tak pernah bubble laporan kembar). Guard
@@ -447,7 +481,7 @@ async function persistDeepReport(
     reasoning?: string;
     runId: string;
     agentKind: AgentKind;
-    /** Jejak proses untuk rehydrate (FE bangun ulang langkah + detail saat refresh/riwayat, G7). */
+    /** Jejak proses untuk rehydrate (FE bangun ulang langkah + detail saat refresh/riwayat). */
     deepProcess?: Record<string, unknown>;
   },
 ): Promise<void> {
@@ -494,7 +528,7 @@ async function persistDeepReport(
 }
 
 /**
- * B3(b): persist alasan bail `blocked` sebagai pesan assistant — id deterministik
+ * Persist alasan bail `blocked` sebagai pesan assistant — id deterministik
  * `deep-bail:<runId>` (paritas `deep-report:<runId>`) → upsert idempoten, tak mungkin kembar.
  * Tanpa ini alasan hanya hidup di kartu notice sesi FE; refresh membaca history dari
  * `mastra_messages` dan kehilangan konteks kenapa run berhenti. BEST-EFFORT keseluruhan (beda
@@ -533,7 +567,7 @@ async function persistDeepNotice(
 }
 
 /**
- * B3(b): efek durable SEBELUM bail `blocked` (kuota/akses) — satu helper untuk ketiga site.
+ * Efek durable SEBELUM bail `blocked` (kuota/akses) — satu helper untuk ketiga site.
  * (1) `ensureDeepThread` (idempoten `deep-user:<runId>`) — site draft-clarify bisa bail sebelum
  * gerbang HITL mana pun memproyeksikan thread → tanpa ini refresh = thread kosong; (2)
  * `persistDeepNotice` — alasannya ikut tersimpan. Site `cancelled` (user menolak rencana)
@@ -577,8 +611,8 @@ function parseCitationCount(numberedInventory: string): number {
 // ── Prompt builders ────────────────────────────────────────────────────────────────────
 
 /**
- * Skema WIRE rencana untuk `structuredOutput` native (audit prod 2026-07-03: parser fence manual
- * gagal SENYAP — fence tak tertutup + junk `{"name":…}` → riset jalan dgn 1 sub-question fallback).
+ * Skema WIRE rencana untuk `structuredOutput` native — menggantikan parser fence manual yang di
+ * produksi gagal SENYAP (fence tak tertutup + junk `{"name":…}` → riset jalan dgn 1 sub-question fallback).
  * Sengaja TANPA constraint numerik (`minItems`/`minLength`): dukungan keyword itu tak seragam pada
  * gateway OpenAI-compatible mode strict; kardinalitas ditegakkan `ensurePlanOutput` di kode.
  */
@@ -637,7 +671,7 @@ function planPrompt(input: z.infer<typeof InputSchema>): string {
 }
 
 /**
- * Prompt re-derive rencana setelah edit plan-gate (CFG-3): edit user harus MENGUBAH
+ * Prompt re-derive rencana setelah edit plan-gate: edit user harus MENGUBAH
  * `subQuestions` yang benar-benar diriset, bukan hanya ditempel sebagai prosa untuk writer akhir.
  */
 function replanPrompt(input: Planned, edits: string): string {
@@ -677,7 +711,7 @@ function clarifyPrompt(input: z.infer<typeof InputSchema>): string {
 }
 
 function searcherPrompt(subQuestion: string, input: Planned): string {
-  return `Topik riset utama: ${input.question}\n\nSub-pertanyaan yang HARUS kamu jawab dengan literatur:\n${subQuestion}\n\nCari bukti terkuat dan kembalikan tiap sumber berguna dengan: judul, identifier (DOI/arXiv/URL), penulis + tahun bila tersedia, extract bukti 2-4 kalimat, dan rating kekuatan. JANGAN menomori sumber dan JANGAN menulis penanda [n] — penomoran sitasi global dilakukan belakangan (CTX-1).`;
+  return `Topik riset utama: ${input.question}\n\nSub-pertanyaan yang HARUS kamu jawab dengan literatur:\n${subQuestion}\n\nCari bukti terkuat dan kembalikan tiap sumber berguna dengan: judul, identifier (DOI/arXiv/URL), penulis + tahun bila tersedia, extract bukti 2-4 kalimat, dan rating kekuatan. JANGAN menomori sumber dan JANGAN menulis penanda [n] — penomoran sitasi global dilakukan belakangan.`;
 }
 
 function counterPrompt(input: Searched): string {
@@ -687,9 +721,151 @@ function counterPrompt(input: Searched): string {
   return `Inventaris bukti yang kesimpulannya sedang terbentuk untuk topik "${input.question}":\n\n${inventory}\n\nCari bukti yang MELEMAHKAN atau menentang kesimpulan-kesimpulan di atas. Laporkan jujur bila tak ada.`;
 }
 
+// ── Analisis bukti (evidence viz) — wire schema + prompt step `analyze-sources` ─────────
+
+/**
+ * Stance/design wire — diderivasi dari const chat-core `deep-viz` supaya vocab tak bisa
+ * drift dari builder viz; CHECK kolom `research_sources` menyalin daftar yang sama
+ * (dijaga test sinkronisasi di `packages/services`).
+ */
+const AnalyzeStanceSchema = z.enum(DEEP_VIZ_CLASSIFIED_STANCES);
+const AnalyzeDesignSchema = z.enum(DEEP_VIZ_STUDY_DESIGNS);
+
+/**
+ * Skema WIRE klasifikasi per unit `[n]×subQ`. Paritas `PlanOutputSchema`: TANPA constraint
+ * numerik (`min`/`max`) — dukungan keyword strict-mode tak seragam di gateway; integer/range
+ * disanitasi di kode (unit di luar inventaris dibuang).
+ */
+const AnalyzeInsightSchema = z.object({
+  n: z.number().describe("Nomor sitasi [n] unit — PERSIS dari daftar unit."),
+  subQuestionIndex: z.number().describe("Index sub-pertanyaan unit (0-based) — PERSIS dari daftar unit."),
+  stance: AnalyzeStanceSchema.describe(
+    "Posisi TEMUAN paper terhadap sub-pertanyaan unit (bukan opini penulis): ragu → mixed; tidak menjawab sub-pertanyaan → not_applicable.",
+  ),
+  studyDesign: AnalyzeDesignSchema.describe("Desain studi paper (tebakan terbaik dari judul+snippet)."),
+  outcomes: z
+    .array(z.string())
+    .describe("Maksimal 3 outcome/variabel utama yang diukur paper (frasa pendek, bahasa Indonesia, lowercase)."),
+});
+
+const AnalyzeChunkOutputSchema = z.object({
+  insights: z
+    .array(AnalyzeInsightSchema)
+    .describe("Satu entri per unit dari daftar unit — jangan mengarang unit di luar daftar."),
+});
+
+/**
+ * Chunk PERTAMA sekalian membawa penilaian global (answerable/claims/openQuestions) — hemat satu
+ * panggilan; chunk berikutnya memakai `AnalyzeChunkOutputSchema` (insights saja). Kardinalitas
+ * (3-6 klaim, 2-4 pertanyaan) ditegakkan builder chat-core, bukan skema wire.
+ */
+const AnalyzeFullOutputSchema = AnalyzeChunkOutputSchema.extend({
+  subQuestionAnswerable: z.array(
+    z.object({
+      subQuestionIndex: z.number(),
+      answerable: z
+        .boolean()
+        .describe("true HANYA bila sub-pertanyaan berbentuk dapat dijawab ya/tidak (mis. \"apakah X efektif?\")."),
+    }),
+  ),
+  claims: z
+    .array(
+      z.object({
+        text: z.string().describe("Klaim faktual ringkas (1 kalimat)."),
+        reasoning: z.string().describe("Alasan singkat kenapa bukti mendukung klaim ini."),
+        papers: z.array(z.number()).describe("Nomor sitasi [n] pendukung — HANYA dari inventaris."),
+      }),
+    )
+    .describe("3-6 klaim utama yang jujur terhadap bukti + bukti tandingan."),
+  openQuestions: z
+    .array(
+      z.object({
+        question: z.string(),
+        why: z.string().describe("Mengapa pertanyaan ini penting dan masih terbuka."),
+      }),
+    )
+    .describe("2-4 pertanyaan riset terbuka, dipandu bukti tandingan + celah bukti."),
+});
+
+/** Satu unit klasifikasi = pasangan unik `[n] × subQuestionIndex` + baris DB pemiliknya. */
+type AnalyzeUnit = {
+  n: number;
+  subQuestionIndex: number;
+  /** Id baris `research_sources` unit ini (bisa >1 — duplikat paper sama; semuanya di-update). */
+  rowIds: string[];
+  title: string;
+  snippet: string;
+  year: number | null;
+  venue: string | null;
+  evidenceStrength: "strong" | "medium" | "weak";
+};
+
+function analyzeUnitList(units: AnalyzeUnit[]): string {
+  return units
+    .map((u) => {
+      const meta = [u.year !== null ? String(u.year) : null, u.venue].filter(Boolean).join("; ");
+      return `- (n=${u.n}, subQ=${u.subQuestionIndex}) ${u.title}${meta ? ` (${meta})` : ""} [${u.evidenceStrength}] — ${u.snippet}`;
+    })
+    .join("\n");
+}
+
+/** Prompt klasifikasi satu chunk unit (dipakai SEMUA panggilan analisis). */
+function analyzeChunkPrompt(input: z.infer<typeof CitedSchema>, units: AnalyzeUnit[]): string {
+  const subs = input.subQuestions.map((q, i) => `${i}. ${q}`).join("\n");
+  return `Pertanyaan riset utama:\n${input.question}\n\nSub-pertanyaan (index 0-based):\n${subs}\n\nUnit sumber yang HARUS diklasifikasikan (satu entri \`insights\` per unit; \`n\` dan \`subQuestionIndex\` PERSIS seperti tertulis):\n${analyzeUnitList(units)}\n\nUntuk tiap unit: \`stance\` = posisi TEMUAN paper terhadap sub-pertanyaan unit itu, berdasar judul + abstrak/snippet (ragu → mixed; tidak menjawab sub-pertanyaan → not_applicable). \`studyDesign\` = desain studi. \`outcomes\` = maksimal 3 outcome/variabel utama yang diukur. JANGAN mengarang unit di luar daftar.`;
+}
+
+/** Seksi tambahan panggilan PERTAMA: penilaian global (answerable, claims, open questions). */
+function analyzeGlobalPrompt(input: z.infer<typeof CitedSchema>): string {
+  return `Selain klasifikasi unit di atas, nilai juga tingkat riset keseluruhan.\n\nInventaris sumber bernomor lengkap:\n${input.numberedInventory}\n\nBukti tandingan (adversarial):\n${input.counter}\n\nKembalikan juga:\n- \`subQuestionAnswerable\`: untuk TIAP sub-pertanyaan, \`answerable: true\` hanya bila pertanyaannya berbentuk dapat dijawab ya/tidak — bukan pertanyaan terbuka/deskriptif.\n- \`claims\`: 3-6 klaim faktual utama yang didukung inventaris, jujur terhadap bukti tandingan; \`papers\` = nomor sitasi [n] pendukung dari inventaris (JANGAN nomor di luar inventaris; JANGAN menulis angka agregat — kekuatan bukti dihitung sistem).\n- \`openQuestions\`: 2-4 pertanyaan riset terbuka paling penting, dipandu bukti tandingan dan celah pada bukti (\`why\` = mengapa penting).`;
+}
+
+/** Deskriptor satu baris per blok viz untuk prompt writer (id + ringkasan data — TANPA angka baru). */
+function vizBlockDescriptor(block: DeepVizBlock): string {
+  switch (block.type) {
+    case "consensus-meter":
+      return `- {{viz:${block.id}}} — meter konsensus sub-pertanyaan ${block.subQuestionIndex + 1} (N=${block.n}): "${block.question}"`;
+    case "results-timeline": {
+      const years = block.points.map((p) => p.year);
+      return `- {{viz:${block.id}}} — timeline publikasi ${Math.min(...years)}–${Math.max(...years)} (${block.points.length} paper)`;
+    }
+    case "top-contributors":
+      return `- {{viz:${block.id}}} — tabel top author & venue (${block.authors.length} author, ${block.venues.length} venue)`;
+    case "claims-evidence":
+      return `- {{viz:${block.id}}} — tabel klaim & kekuatan bukti (${block.claims.length} klaim)`;
+    case "gaps-matrix":
+      return `- {{viz:${block.id}}} — matriks research gaps (${block.rows.length} outcome × 4 desain studi)`;
+    case "open-questions":
+      return `- {{viz:${block.id}}} — pertanyaan riset terbuka (${block.items.length} item)`;
+  }
+}
+
+/**
+ * Seksi kontrak penempatan blok viz di prompt writer — hanya bila ada
+ * blok. Writer HANYA menaruh marker `{{viz:<id>}}`; datanya di-inject post-process
+ * (`injectVizBlocks`) sehingga model tak pernah menulis angka.
+ */
+function vizPromptSection(blocks: DeepVizBlock[]): string {
+  if (blocks.length === 0) return "";
+  return [
+    "",
+    "",
+    "## Blok visual tersedia (WAJIB ditempatkan)",
+    "Berikut blok visual yang SUDAH dihitung dari data. Sisipkan penandanya di laporan, masing-masing pada BARIS TERSENDIRI, persis: {{viz:<id>}}",
+    ...blocks.map(vizBlockDescriptor),
+    "Aturan penempatan (gaya artikel ilmiah):",
+    "- Meter konsensus: TEPAT setelah paragraf yang menyimpulkan sub-pertanyaan terkait.",
+    "- Timeline & kontributor: di bagian karakteristik/peta literatur (biasanya awal pembahasan), timeline dulu, dipisah minimal satu paragraf.",
+    "- Tabel klaim & bukti: di bagian sintesis bukti, sebelum kesimpulan.",
+    "- Gaps matrix lalu open questions: di bagian keterbatasan/arah riset ke depan, setelah kesimpulan utama.",
+    '- JANGAN dua penanda berurutan tanpa paragraf prosa di antaranya; setiap blok diantar kalimat yang merujuknya (mis. "Gambar berikut merangkum sebaran temuan…").',
+    "- JANGAN mengarang penanda lain, JANGAN menulis blok ```aqsha:viz sendiri, JANGAN mengubah data.",
+  ].join("\n");
+}
+
 /**
  * Format verdict `CitationService.verifyIdentifiers` → teks verifikasi untuk prompt sintesis +
- * panel proses. DETERMINISTIK (IMP-5) — dulu tabel hasil subagent LLM `citation-verifier`; data
+ * panel proses. DETERMINISTIK — dulu tabel hasil subagent LLM `citation-verifier`; data
  * sumbernya sudah terstruktur sejak `assign-citations`, jadi LLM hanya menambah biaya + drift
  * parsing. Framing netral: flag bukan tuduhan (bisa typo metadata / database tak lengkap /
  * provider outage) — paritas dgn instruksi subagent lama.
@@ -717,7 +893,7 @@ function formatVerificationText(result: VerificationResult): string {
   ].join("\n");
 }
 
-/** Nama skill domain-pack per `ResearchDomain` (di-inline ke prompt sintesis, CFG-2). */
+/** Nama skill domain-pack per `ResearchDomain` (di-inline ke prompt sintesis). */
 const DOMAIN_SKILL_NAME: Record<ResearchDomain, string> = {
   medicine: "research-medicine",
   "cs-ml": "research-cs-ml",
@@ -726,7 +902,7 @@ const DOMAIN_SKILL_NAME: Record<ResearchDomain, string> = {
 };
 
 /**
- * Panduan metodologi + gaya yang DI-INLINE ke prompt sintesis (CFG-2): langkah `synthesize`
+ * Panduan metodologi + gaya yang DI-INLINE ke prompt sintesis: langkah `synthesize`
  * berjalan `toolChoice:"none"` sehingga instruksi lama "baca skill lewat tool" tak pernah bisa
  * dieksekusi. Konten diambil dari inline skills (SSOT = SKILL.md via codegen) — bukan salinan.
  */
@@ -745,11 +921,22 @@ function synthesisGuidance(domain: ResearchDomain): string {
   ].join("\n");
 }
 
+/**
+ * Clamp temuan per sub-pertanyaan di prompt sintesis (lapis kedua setelah budget inventory —
+ * prompt sintesis yang menggelembung pernah membuat run macet permanen di produksi):
+ * teks subagent search umumnya ≤ ~11KB, tapi tak ada jaminan — batasi supaya prompt writer
+ * tetap berbatas walau satu subagent menulis sangat panjang. Codepoint-safe (`messagePreview`).
+ */
+const SYNTHESIS_FINDINGS_MAX_CHARS = 10_000;
+
 function synthesisPrompt(input: Verified): string {
   const evidence = input.evidence
-    .map((e, i) => `### Sub-pertanyaan ${i + 1}: ${e.subQuestion}\n${e.findings}`)
+    .map(
+      (e, i) =>
+        `### Sub-pertanyaan ${i + 1}: ${e.subQuestion}\n${messagePreview(e.findings, SYNTHESIS_FINDINGS_MAX_CHARS)}`,
+    )
     .join("\n\n");
-  return `Tulis jawaban riset tercitasi untuk pertanyaan:\n${input.question}\n\nRencana yang disetujui:\n${input.plan}\n\nDaftar sumber bernomor (SATU-SATUNYA sumber nomor [n] — WAJIB pakai nomor PERSIS ini saat mengutip; jangan menomori ulang):\n${input.numberedInventory}\n\nInventaris bukti (untuk ekstrak & narasi — teks temuan TIDAK bernomor; petakan tiap klaim ke daftar sumber bernomor di atas via DOI/arXiv/URL/judul):\n${evidence}\n\nBukti tandingan (adversarial):\n${input.counter}\n\nVerdict verifikasi sitasi:\n${input.verification}\n\nPanduan metodologi & gaya (SUDAH disertakan di bawah — kamu TIDAK bisa dan TIDAK perlu memuat skill lewat tool di langkah ini):\n\n${synthesisGuidance(input.domain)}\n\nSintesiskan menjadi jawaban terstruktur dan jujur: ringkasan temuan per sub-pertanyaan, lalu bukti tandingan & keterbatasan. Setiap klaim faktual membawa penanda [n] inline dari daftar sumber bernomor di atas (penanda dirender sebagai pill sumber + panel "Sumber" terpisah — JANGAN tulis daftar/bagian "Sumber"/daftar pustaka sendiri di akhir). JANGAN mengarang identifier.`;
+  return `Tulis jawaban riset tercitasi untuk pertanyaan:\n${input.question}\n\nRencana yang disetujui:\n${input.plan}\n\nDaftar sumber bernomor (SATU-SATUNYA sumber nomor [n] — WAJIB pakai nomor PERSIS ini saat mengutip; jangan menomori ulang):\n${input.numberedInventory}\n\nInventaris bukti (untuk ekstrak & narasi — teks temuan TIDAK bernomor; petakan tiap klaim ke daftar sumber bernomor di atas via DOI/arXiv/URL/judul):\n${evidence}\n\nBukti tandingan (adversarial):\n${input.counter}\n\nVerdict verifikasi sitasi:\n${input.verification}\n\nPanduan metodologi & gaya (SUDAH disertakan di bawah — kamu TIDAK bisa dan TIDAK perlu memuat skill lewat tool di langkah ini):\n\n${synthesisGuidance(input.domain)}\n\nSintesiskan menjadi jawaban terstruktur dan jujur: ringkasan temuan per sub-pertanyaan, lalu bukti tandingan & keterbatasan. Setiap klaim faktual membawa penanda [n] inline dari daftar sumber bernomor di atas (penanda dirender sebagai pill sumber + panel "Sumber" terpisah — JANGAN tulis daftar/bagian "Sumber"/daftar pustaka sendiri di akhir). JANGAN mengarang identifier.${vizPromptSection(input.vizBlocks)}`;
 }
 
 // ── Steps ─────────────────────────────────────────────────────────────────────────────────
@@ -773,7 +960,7 @@ const draftClarifyStep = createStep({
         feature: "deep_research",
       });
       if (!quota.ok) {
-        // B3: bail PALING DINI — belum ada gerbang HITL yang memproyeksikan thread, jadi efek
+        // Bail PALING DINI — belum ada gerbang HITL yang memproyeksikan thread, jadi efek
         // durable (bubble user + alasan) wajib dari sini.
         const reason = `Kuota deep research tidak tersedia (${quota.reason}).`;
         await persistBlockedBail(mastra, requestContext, { ...inputData, runId, reason });
@@ -800,7 +987,7 @@ const draftClarifyStep = createStep({
  * answers })`), sejajar plan-gate tapi memakai kontrak `ask_questions`. Tanpa pertanyaan → lanjut
  * langsung (tak suspend). Jawaban disisipkan ke `context` planner; dilewati → biarkan apa adanya.
  * Proyeksikan thread SEBELUM suspend (idempoten via `runId`) supaya refresh saat kartu tak "Akses
- * ditolak" (G1). TANPA gerbang billing di sini — billing tetap sekali di plan-gate.
+ * ditolak". TANPA gerbang billing di sini — billing tetap sekali di plan-gate.
  */
 const clarifyGateStep = createStep({
   id: "clarify",
@@ -832,9 +1019,9 @@ const clarifyGateStep = createStep({
 
 /**
  * 1. draftPlan — susun rencana prosa + sub-pertanyaan terstruktur via `deepWriter` dengan
- * `structuredOutput` strict (audit 2026-07-03: fallback parse-manual yang senyap DIHAPUS — gagal
+ * `structuredOutput` strict (fallback parse-manual yang senyap sengaja DIHAPUS — gagal
  * validasi → throw → `retries: 1` → run failed SEBELUM gerbang billing, user tak kehilangan kredit).
- * `toolChoice:"none"` (CFG-5): step ini berjalan SEBELUM gerbang billing `approve-plan`, jadi tool
+ * `toolChoice:"none"`: step ini berjalan SEBELUM gerbang billing `approve-plan`, jadi tool
  * berbayar (`search_*`) tak boleh bisa jalan di sini; `delete_artifact` (approval-suspend) juga
  * dilarang dalam workflow-generate (lihat `tools/index.ts`). Murni menulis rencana terstruktur.
  */
@@ -875,7 +1062,7 @@ const approvePlanStep = createStep({
   execute: async ({ inputData, resumeData, suspend, bail, requestContext, runId, mastra, writer }) => {
     if (!resumeData) {
       // Proyeksikan thread + persist pertanyaan SEBELUM suspend → refresh saat plan-gate me-resume
-      // kartu rencana (thread durable, tak "Akses ditolak"), bukan thread kosong (G1/TC13).
+      // kartu rencana (thread durable, tak "Akses ditolak"), bukan thread kosong.
       await ensureDeepThread(mastra, requestContext, {
         threadId: inputData.threadId,
         question: inputData.question,
@@ -928,7 +1115,7 @@ const approvePlanStep = createStep({
       }
     }
     if (!resumeData.edits) return inputData;
-    // CFG-3: edit user harus sampai ke `subQuestions` yang benar-benar diriset fan-out — bukan
+    // Edit user harus sampai ke `subQuestions` yang benar-benar diriset fan-out — bukan
     // hanya ditempel sebagai prosa yang baru dibaca writer akhir. Re-derive rencana+sub-pertanyaan
     // dengan satu pass murah (`toolChoice:"none"` + structuredOutput strict); gagal → fallback
     // perilaku lama (append prosa) — di titik ini debit SUDAH terjadi, run tak boleh mati.
@@ -955,7 +1142,7 @@ const approvePlanStep = createStep({
  * 3. searchLiterature — fan-out paralel: satu `literatureSearcher` per sub-pertanyaan. Tool
  * `search_*` men-debit `external_search` + persist `research_sources` ke thread chat.
  *
- * Isolasi kegagalan per sub-pertanyaan (CFG-4): satu subagent yang melempar (429/timeout
+ * Isolasi kegagalan per sub-pertanyaan: satu subagent yang melempar (429/timeout
  * terminal) TIDAK menggagalkan seluruh fan-out — kredit sudah didebit di plan-gate, jadi run
  * harus degradasi per-sub-Q (catat gap jujur ke sintesis), bukan `failed` tanpa hasil parsial.
  */
@@ -964,8 +1151,9 @@ const searchStep = createStep({
   inputSchema: PlannedSchema,
   outputSchema: SearchedSchema,
   // TANPA `retries`: re-run step = re-debit `external_search` per tool-call baru. Isolasi
-  // per-sub-Q di bawah sudah membuat step ini tak melempar. (Pasca-DUR-7 restart step justru
-  // AMAN: task selesai di-reuse by `toolCallId`, tak menjalankan ulang subagent.)
+  // per-sub-Q di bawah sudah membuat step ini tak melempar. (Karena subagent jalan sebagai
+  // background task persisten, restart step justru AMAN: task selesai di-reuse by `toolCallId`,
+  // tak menjalankan ulang subagent.)
   execute: async ({ inputData, mastra, requestContext, runId, writer, abortSignal }) => {
     // Tanam thread+run di rc induk dulu → entries() yang DI-CLONE per sub-Q sudah membawanya.
     withDeepRun(requestContext, inputData.threadId, runId, inputData.agentKind);
@@ -978,9 +1166,9 @@ const searchStep = createStep({
         subRc.set(AQSHA_DEEP_SUBQ_INDEX_KEY, subIndex);
         subRc.set(AQSHA_DEEP_SUBQ_TEXT_KEY, subQuestion);
         await emitDetail(writer, { kind: "search-sub", subIndex, subQuestion, status: "searching" });
-        // DUR-7: subagent jalan sebagai background task persisten — `toolCallId` deterministik
+        // Subagent jalan sebagai background task persisten — `toolCallId` deterministik
         // per (run, sub-Q) → restart run me-reuse hasil task selesai (tanpa re-debit search).
-        // B4: `abortSignal` ikut — Stop user menutup task run ini, bukan membiarkannya jalan terus.
+        // `abortSignal` ikut — Stop dari user menutup task run ini, bukan membiarkannya jalan terus.
         const taskBase = {
           mastra,
           runId,
@@ -1001,10 +1189,10 @@ const searchStep = createStep({
             },
           });
           findings = out.text.trim();
-          // Guard turn-senyap subagent (CTX-7): selesai pas di tool-call → teks kosong. Retry SEKALI
+          // Guard turn-senyap subagent: selesai pas di tool-call → teks kosong. Retry SEKALI
           // dengan pengingat eksplisit; masih kosong → catat gap jujur (jangan biarkan bucket kosong
-          // mengalir senyap ke sintesis). B4: jangan dispatch empty-retry untuk run yang sedang
-          // dibatalkan (catch CFG-4 di bawah menelan abort-error attempt pertama).
+          // mengalir senyap ke sintesis). Jangan dispatch empty-retry untuk run yang sedang
+          // dibatalkan (catch isolasi per-sub-Q di bawah menelan abort-error attempt pertama).
           if (!findings && !abortSignal.aborted) {
             const retry = await runDeepSubagentTask({
               ...taskBase,
@@ -1018,7 +1206,7 @@ const searchStep = createStep({
             findings = retry.text.trim();
           }
         } catch (err) {
-          // CFG-4: kegagalan satu subagent tak boleh menolak seluruh Promise.all.
+          // Kegagalan satu subagent tak boleh menolak seluruh Promise.all.
           console.error(`[deep-research] literature-searcher sub-Q ${subIndex} failed`, err);
         }
         if (!findings) {
@@ -1036,7 +1224,7 @@ const searchStep = createStep({
 });
 
 /**
- * 4. counterEvidence — cari bukti tandingan adversarial atas inventaris. `retries: 1` (CFG-4):
+ * 4. counterEvidence — cari bukti tandingan adversarial atas inventaris. `retries: 1`:
  * step LLM pasca-billing tak boleh mematikan run karena satu error transien (kredit deep sudah
  * didebit di plan-gate; re-run bisa mengulang sedikit debit `external_search` — jauh lebih murah
  * daripada run `failed` tanpa refund).
@@ -1047,13 +1235,13 @@ const counterEvidenceStep = createStep({
   outputSchema: CounteredSchema,
   retries: 1,
   execute: async ({ inputData, mastra, requestContext, runId, writer, abortSignal }) => {
-    // IMP-9: emit di AWAL step → body panel proses terisi jujur selama fase lambat berjalan
+    // Emit di AWAL step → body panel proses terisi jujur selama fase lambat berjalan
     // (ditimpa teks final di akhir step; paritas pola `search-sub` status "searching").
     await emitDetail(writer, {
       kind: "counter",
       text: `Menelusuri bukti tandingan atas temuan ${inputData.evidence.length} sub-pertanyaan…`,
     });
-    // DUR-7: background task persisten — restart run me-reuse hasil task selesai.
+    // Background task persisten — restart run me-reuse hasil task selesai.
     const rc = withDeepRun(requestContext, inputData.threadId, runId, inputData.agentKind);
     const owner = ownerFromRequestContext(requestContext);
     const out = await runDeepSubagentTask({
@@ -1070,7 +1258,7 @@ const counterEvidenceStep = createStep({
         requestContext: Array.from(rc.entries()),
       },
     });
-    // Guard teks kosong (CTX-7): jangan biarkan bagian adversarial hilang senyap.
+    // Guard teks kosong (turn subagent bisa selesai pas di tool-call): jangan biarkan bagian adversarial hilang senyap.
     const counter =
       out.text.trim() ||
       "(Pencarian bukti tandingan berakhir tanpa teks — perlakukan sebagai BELUM diverifikasi ada/tidaknya bukti tandingan, BUKAN sebagai ketiadaan bukti tandingan.)";
@@ -1079,10 +1267,15 @@ const counterEvidenceStep = createStep({
   },
 });
 
+/** Clamp snippet per baris inventory (codepoint-safe via `messagePreview`). */
+const INVENTORY_SNIPPET_MAX_CHARS = 240;
+/** Budget total inventory — melewati ini, baris berikutnya tanpa snippet (identitas [n] tetap). */
+const INVENTORY_CHAR_BUDGET = 48_000;
+
 /**
  * 5. assignCitations — nomori `research_sources` run ini (turnId=runId) → `citation_number` 1..N
- * (dedupe by DOI/arXiv/locator) lalu susun inventory bernomor GLOBAL untuk verify + synthesis (G4).
- * `retries: 1` (audit B1): step pasca-billing murni DB dan idempoten (`assignCitationNumbers`
+ * (dedupe by DOI/arXiv/locator) lalu susun inventory bernomor GLOBAL untuk verify + synthesis.
+ * `retries: 1`: step pasca-billing murni DB dan idempoten (`assignCitationNumbers`
  * menghitung ulang penomoran deterministik lalu overwrite) — blip DB satu kali tak boleh
  * mematikan run yang kreditnya sudah didebit.
  */
@@ -1097,8 +1290,17 @@ const assignCitationsStep = createStep({
       turnId: runId,
     });
     const numbered = items.filter((s) => s.citationNumber !== null);
-    // Baris inventory bawa authors/year/venue (CTX-8) → verify_identifiers + daftar pustaka APA
+    // Baris inventory bawa authors/year/venue → verify_identifiers + daftar pustaka APA
     // bekerja dari metadata asli provider, bukan karangan model.
+    //
+    // BERBATAS (temuan produksi run yang macet): run kaya-sumber (262 baris) dengan snippet penuh per baris
+    // menggelembungkan prompt sintesis sampai ~400KB (~100k token) → panggilan penulis merangkak
+    // melampaui timeout task 15 menit, dan tiap retry mewarisi prompt beracun yang sama → run
+    // "macet" permanen. Snippet per baris di-clamp; setelah budget total tersentuh, baris
+    // berikutnya ditulis TANPA snippet — identitas `[n] judul (meta) — identifier` tetap utuh
+    // sehingga SEMUA nomor sitasi tetap bisa dikutip writer.
+    let inventoryChars = 0;
+    let snippetlessRows = 0;
     const numberedInventory = numbered
       .map((s) => {
         const meta = [
@@ -1108,11 +1310,22 @@ const assignCitationsStep = createStep({
         ]
           .filter(Boolean)
           .join("; ");
-        return `[${s.citationNumber}] ${s.title}${meta ? ` (${meta})` : ""} — ${
+        const withinBudget = inventoryChars < INVENTORY_CHAR_BUDGET;
+        if (s.snippet && !withinBudget) snippetlessRows += 1;
+        const snippet =
+          s.snippet && withinBudget ? ` — ${messagePreview(s.snippet, INVENTORY_SNIPPET_MAX_CHARS)}` : "";
+        const line = `[${s.citationNumber}] ${s.title}${meta ? ` (${meta})` : ""} — ${
           s.doi ?? s.arxivId ?? s.url ?? s.locator
-        }${s.snippet ? ` — ${s.snippet}` : ""} (${s.evidenceStrength})`;
+        }${snippet} (${s.evidenceStrength})`;
+        inventoryChars += line.length + 1;
+        return line;
       })
       .join("\n");
+    if (snippetlessRows > 0) {
+      console.log(
+        `[deep-research] assign-citations run=${runId}: inventory menyentuh budget ${INVENTORY_CHAR_BUDGET} char — ${snippetlessRows} baris ditulis tanpa snippet`,
+      );
+    }
     // Jumlah sitasi unik [n] (dedupe by DOI/arXiv/locator) — sumber penomoran ditampilkan FE.
     const uniqueCitations = new Set(numbered.map((s) => s.citationNumber)).size;
     // Sumber bernomor terstruktur (format kartu FE) → dipersist di `metadata.deepProcess.sources`
@@ -1126,7 +1339,7 @@ const assignCitationsStep = createStep({
       ...(s.snippet ? { snippet: s.snippet } : {}),
     }));
     // Referensi terstruktur per [n] UNIK (baris bisa berbagi nomor karena dedupe) — bahan
-    // `verify-citations` memanggil CitationService LANGSUNG, tanpa parsing inventory (IMP-5).
+    // `verify-citations` memanggil CitationService LANGSUNG, tanpa parsing inventory.
     const seenCitation = new Set<number>();
     const verifyRefs = numbered.flatMap((s) => {
       const n = s.citationNumber ?? 0;
@@ -1150,17 +1363,249 @@ const assignCitationsStep = createStep({
   },
 });
 
+/** Cap unit klasifikasi per run (lebih → prioritaskan evidenceStrength kuat, sisanya di-drop). */
+const ANALYZE_UNIT_CAP = 60;
+/** Unit per panggilan LLM klasifikasi. */
+const ANALYZE_CHUNK_SIZE = 20;
+const ANALYZE_STRENGTH_PRIORITY: Record<AnalyzeUnit["evidenceStrength"], number> = {
+  strong: 0,
+  medium: 1,
+  weak: 2,
+};
+
 /**
- * 6. verifyCitations — verifikasi integritas referensi bernomor. DETERMINISTIK (IMP-5): data
+ * 5b. analyzeSources — klasifikasi stance/design/outcomes per unit `[n]×subQ` (LLM structuredOutput
+ * strict, pola draft-plan) lalu `buildDeepVizBlocks` deterministik (chat-core) → blok visual untuk
+ * writer. Keputusan desain: model SELALU lite (tugas klasifikasi, hemat) dan
+ * TANPA ledger `deep_analyze` (butuh migration CHECK `provider_usage_ledger` baru — tak sepadan
+ * untuk rate 0; biaya sudah tertanggung debit deep di plan-gate). BEST-EFFORT TOTAL pasca-billing:
+ * retry per panggilan LLM di DALAM step (bukan `retries` engine — step pasca-billing tak boleh
+ * melempar); gagal total → `vizBlocks: []`, laporan tampil polos. Panggilan generate langsung
+ * (bukan `runDeepSubagentTask`) mengikuti preseden draft-plan — `structuredOutput` belum lewat
+ * jalur task; restart run mengulang step ini (murah, deterministik-ish).
+ */
+const analyzeSourcesStep = createStep({
+  id: "analyze-sources",
+  inputSchema: CitedSchema,
+  outputSchema: AnalyzedSchema,
+  execute: async ({ inputData, requestContext, runId, writer }) => {
+    const fallback = { ...inputData, vizBlocks: [] as DeepVizBlock[], analyzedSourceCount: 0 };
+    try {
+      const rows = await ResearchService.listTurnSources(getServiceDb(), {
+        threadId: inputData.threadId,
+        turnId: runId,
+      });
+      const numbered = rows.filter((r) => r.citationNumber !== null);
+      if (numbered.length === 0) return fallback;
+
+      // Unit klasifikasi = pasangan unik `[n] × subQuestionIndex` (kemunculan pertama menang;
+      // baris duplikat paper yang sama menambah `rowIds` — persist klasifikasi menyasar semuanya).
+      // Baris tanpa subQuestionIndex tak bisa dinilai stance-nya (tetap ikut builder di bawah).
+      const unitByKey = new Map<string, AnalyzeUnit>();
+      for (const row of numbered) {
+        if (row.subQuestionIndex === null) continue;
+        const key = `${row.citationNumber}:${row.subQuestionIndex}`;
+        const existing = unitByKey.get(key);
+        if (existing) {
+          existing.rowIds.push(row.id);
+          continue;
+        }
+        unitByKey.set(key, {
+          n: row.citationNumber as number,
+          subQuestionIndex: row.subQuestionIndex,
+          rowIds: [row.id],
+          title: row.title,
+          snippet: row.snippet,
+          year: row.year,
+          venue: row.venue,
+          evidenceStrength: row.evidenceStrength,
+        });
+      }
+      const allUnits = [...unitByKey.values()].sort(
+        (a, b) =>
+          ANALYZE_STRENGTH_PRIORITY[a.evidenceStrength] - ANALYZE_STRENGTH_PRIORITY[b.evidenceStrength] ||
+          a.n - b.n ||
+          a.subQuestionIndex - b.subQuestionIndex,
+      );
+      const units = allUnits.slice(0, ANALYZE_UNIT_CAP);
+      if (allUnits.length > units.length) {
+        console.log(
+          `[deep-research] analyze-sources run=${runId}: ${allUnits.length - units.length} unit di-drop (cap ${ANALYZE_UNIT_CAP})`,
+        );
+      }
+      await emitDetail(writer, {
+        kind: "analyze",
+        text: `Menganalisis bukti: mengklasifikasikan ${units.length} unit sumber (${numbered.length} baris)…`,
+      });
+
+      // Model SELALU lite — clone rc supaya tier run (pro) di rc induk tak ikut ke panggilan
+      // analisis. Cast `out.object` per skema: generic `structuredOutput` tak terbawa inference
+      // Mastra melalui helper (validasi runtime tetap strict via `structuredOutputOpts`).
+      const analyzeGenerate = async <T extends z.ZodType>(
+        prompt: string,
+        schema: T,
+      ): Promise<z.output<T> | undefined> => {
+        const out = await deepWriter.generate(prompt, {
+          requestContext: withDeepRun(
+            new RequestContext(requestContext.entries()),
+            inputData.threadId,
+            runId,
+            "lite",
+          ),
+          ...deepProviderOptions("lite"),
+          toolChoice: "none",
+          structuredOutput: structuredOutputOpts(schema),
+        });
+        return out.object as z.output<T> | undefined;
+      };
+      const withOneRetry = async <T>(label: string, fn: () => Promise<T>): Promise<T | null> => {
+        try {
+          return await fn();
+        } catch (err) {
+          console.error(`[deep-research] analyze-sources ${label} attempt 1 failed`, err);
+          try {
+            return await fn();
+          } catch (err2) {
+            console.error(`[deep-research] analyze-sources ${label} attempt 2 failed`, err2);
+            return null;
+          }
+        }
+      };
+
+      const chunks: AnalyzeUnit[][] = [];
+      for (let i = 0; i < units.length; i += ANALYZE_CHUNK_SIZE) {
+        chunks.push(units.slice(i, i + ANALYZE_CHUNK_SIZE));
+      }
+      // Semua chunk paralel — prompt tiap chunk hanya bergantung inputData + unit chunk itu.
+      // Chunk pertama sekalian membawa penilaian global (answerable/claims/openQuestions).
+      // Kegagalan satu chunk = insight-nya hilang saja (blok yang ambangnya tak terpenuhi
+      // otomatis drop) — bukan kegagalan step.
+      let global: z.infer<typeof AnalyzeFullOutputSchema> | null = null;
+      const rawInsights: Array<z.infer<typeof AnalyzeInsightSchema>> = [];
+      if (chunks.length > 0) {
+        const firstPromise = withOneRetry("chunk 0 (global)", () =>
+          analyzeGenerate(
+            `${analyzeChunkPrompt(inputData, chunks[0] ?? [])}\n\n${analyzeGlobalPrompt(inputData)}`,
+            AnalyzeFullOutputSchema,
+          ),
+        );
+        const restPromise = Promise.all(
+          chunks.slice(1).map((chunk, i) =>
+            withOneRetry(`chunk ${i + 1}`, () =>
+              analyzeGenerate(analyzeChunkPrompt(inputData, chunk), AnalyzeChunkOutputSchema),
+            ),
+          ),
+        );
+        const first = await firstPromise;
+        const rest = await restPromise;
+        if (first) {
+          global = first;
+          rawInsights.push(...(first.insights ?? []));
+        }
+        for (const r of rest) if (r) rawInsights.push(...(r.insights ?? []));
+      }
+
+      // Sanitasi insight: hanya unit yang benar-benar DIKIRIM ke LLM (set ter-cap) — dalam praktik
+      // model ikut "mengklasifikasi" pasangan lain yang dilihatnya di inventaris global; subQ
+      // pasangan itu tebakan (inventaris tak memuat subQ) → tak dipercaya.
+      // Duplikat: kemunculan pertama menang.
+      const sentKeys = new Set(units.map((u) => `${u.n}:${u.subQuestionIndex}`));
+      const insightByKey = new Map<
+        string,
+        { stance: z.infer<typeof AnalyzeStanceSchema>; studyDesign: z.infer<typeof AnalyzeDesignSchema>; outcomes: string[] }
+      >();
+      for (const ins of rawInsights) {
+        if (!Number.isInteger(ins.n) || !Number.isInteger(ins.subQuestionIndex)) continue;
+        const key = `${ins.n}:${ins.subQuestionIndex}`;
+        if (!sentKeys.has(key) || insightByKey.has(key)) continue;
+        insightByKey.set(key, {
+          stance: ins.stance,
+          studyDesign: ins.studyDesign,
+          outcomes: ins.outcomes.filter((o) => o.trim().length > 0).slice(0, 3),
+        });
+      }
+
+      // Persist klasifikasi ke `research_sources` (best-effort — kolom = fallback/observabilitas;
+      // kegagalan DB tak menggagalkan step, blok tetap dibangun dari state workflow).
+      const updates = [...unitByKey.entries()].flatMap(([key, unit]) => {
+        const insight = insightByKey.get(key);
+        if (!insight) return [];
+        return unit.rowIds.map((id) => ({ id, ...insight }));
+      });
+      if (updates.length > 0) {
+        try {
+          await ResearchService.setSourceClassification(getServiceDb(), updates);
+        } catch (err) {
+          console.error("[deep-research] analyze-sources persist classification failed", err);
+        }
+      }
+
+      // Input builder = SEMUA baris bernomor (termasuk unit di luar cap / tanpa subQ — blok yang
+      // tak butuh stance seperti timeline/kontributor tetap memakai metadatanya; stance null aman).
+      const sources: DeepVizSourceInput[] = numbered.map((row) => {
+        const insight =
+          row.subQuestionIndex !== null
+            ? insightByKey.get(`${row.citationNumber}:${row.subQuestionIndex}`)
+            : undefined;
+        return {
+          n: row.citationNumber as number,
+          subQuestionIndex: row.subQuestionIndex,
+          title: row.title,
+          authors: row.authors,
+          year: row.year,
+          venue: row.venue,
+          citedByCount: row.citedByCount,
+          evidenceStrength: row.evidenceStrength,
+          stance: insight?.stance ?? null,
+          studyDesign: insight?.studyDesign ?? null,
+          outcomes: insight?.outcomes ?? [],
+          topics: row.topics,
+        };
+      });
+      const subQuestionAnswerable = (global?.subQuestionAnswerable ?? [])
+        .filter(
+          (e) =>
+            Number.isInteger(e.subQuestionIndex) &&
+            e.subQuestionIndex >= 0 &&
+            e.subQuestionIndex < inputData.subQuestions.length,
+        )
+        .map((e) => ({ subQuestionIndex: e.subQuestionIndex, answerable: e.answerable === true }));
+      const claims = (global?.claims ?? [])
+        .map((c) => ({ text: c.text, reasoning: c.reasoning, papers: c.papers.filter((p) => Number.isInteger(p)) }))
+        .slice(0, 6);
+      const openQuestions = (global?.openQuestions ?? []).slice(0, 4);
+
+      const vizBlocks = buildDeepVizBlocks({
+        subQuestions: inputData.subQuestions,
+        sources,
+        subQuestionAnswerable,
+        claims,
+        openQuestions,
+      });
+      await emitDetail(writer, {
+        kind: "analyze",
+        text: formatDeepAnalyzeSummary(insightByKey.size, vizBlocks.map((b) => b.id)),
+      });
+      return { ...inputData, vizBlocks, analyzedSourceCount: insightByKey.size };
+    } catch (err) {
+      // Best-effort total: analisis gagal → laporan polos, JANGAN throw pasca-billing.
+      console.error("[deep-research] analyze-sources failed", err);
+      return fallback;
+    }
+  },
+});
+
+/**
+ * 6. verifyCitations — verifikasi integritas referensi bernomor. DETERMINISTIK: data
  * referensi sudah terstruktur sejak `assign-citations` (`verifyRefs` per [n] unik) → panggil
  * `CitationService.verifyIdentifiers` LANGSUNG, tanpa subagent LLM (lebih murah, tanpa drift
- * parsing inventory↔verdict, hasil konsisten lintas-run; tak perlu background task DUR-7 karena
+ * parsing inventory↔verdict, hasil konsisten lintas-run; tak perlu background task persisten karena
  * tak ada model call — restart run tinggal mengulang batch lookup Crossref/OpenAlex yang murah).
  * `retries: 1` tetap (provider di engine bisa transien).
  */
 const citationVerifyStep = createStep({
   id: "verify-citations",
-  inputSchema: CitedSchema,
+  inputSchema: AnalyzedSchema,
   outputSchema: VerifiedSchema,
   retries: 1,
   execute: async ({ inputData, requestContext, runId, writer }) => {
@@ -1169,12 +1614,12 @@ const citationVerifyStep = createStep({
       await emitDetail(writer, { kind: "verify", text: verification });
       return { ...inputData, verification };
     }
-    // IMP-9: emit di AWAL step (ditimpa verdict final) → panel proses jujur selama fase verifikasi.
+    // Emit di AWAL step (ditimpa verdict final) → panel proses jujur selama fase verifikasi.
     await emitDetail(writer, {
       kind: "verify",
       text: `Memverifikasi ${inputData.verifyRefs.length} referensi (keberadaan, konsistensi metadata, DOI/arXiv)…`,
     });
-    // Paritas CFG-7 dgn tool `verify_identifiers`: rekam usage `citation_verify` (rate 0 hari ini,
+    // Paritas dgn tool `verify_identifiers`: rekam usage `citation_verify` (rate 0 hari ini,
     // idempoten per-run) dan hormati gate — kuota habis TIDAK boleh tetap menjalankan verifikasi.
     const { id: ownerUserId, email: ownerEmail } = ownerFromRequestContext(requestContext);
     if (ownerUserId) {
@@ -1209,7 +1654,7 @@ const synthesizeStep = createStep({
   execute: async ({ inputData, requestContext, mastra, runId, writer, abortSignal }) => {
     // `toolChoice: "none"`: seluruh bukti sudah ada di prompt; paksa penulis MENULIS teks
     // (bukan berhenti di tool-call kosong) — jaminan `out.text` terisi pada model gateway.
-    // DUR-7: background task persisten — restart run me-reuse laporan task selesai.
+    // Background task persisten — restart run me-reuse laporan task selesai.
     const rc = withDeepRun(requestContext, inputData.threadId, runId, inputData.agentKind);
     const owner = ownerFromRequestContext(requestContext);
     const out = await runDeepSubagentTask({
@@ -1228,7 +1673,7 @@ const synthesizeStep = createStep({
       },
     });
     // Ringkasan penalaran penulis (Responses API `reasoningSummary`) → blok "reasoning" di atas
-    // laporan (parity dgn chat). Route B: dipanen post-hoc dari hasil `.generate`, bukan di-stream
+    // laporan (parity dgn chat). Dipanen post-hoc dari hasil `.generate`, bukan di-stream
     // token-level (aman thd durable refresh) → emit live + dipersist di pesan untuk rehydrate.
     const reasoning = (out.reasoningText ?? "").trim();
     if (reasoning) await emitDetail(writer, { kind: "reasoning", text: reasoning });
@@ -1238,9 +1683,29 @@ const synthesizeStep = createStep({
     // retry/time-travel synthesize menulis ulang; deep-tasks TIDAK me-reuse completed kosong
     // (completedWithText) → retry itu benar-benar men-dispatch attempt penulis baru, bukan
     // memutar hasil kosong yang sama selamanya.
-    const report = (out.text ?? "").trim();
-    if (!report) throw new Error("deep-research: penulis sintesis mengembalikan teks kosong");
-    // Persist ke memory = step `persist-report` TERPISAH (B2) — kegagalan simpan tak lagi menelan
+    const rawReport = (out.text ?? "").trim();
+    if (!rawReport) throw new Error("deep-research: penulis sintesis mengembalikan teks kosong");
+    // Post-process viz — SELALU dijalankan (juga saat `vizBlocks` kosong: anti-forgery men-strip
+    // fence ```aqsha:viz tulisan model + marker liar). Pure & idempoten — retry synthesize
+    // mengulang injeksi dengan hasil sama.
+    const injected = injectVizBlocks(rawReport, inputData.vizBlocks);
+    const report = injected.report;
+    // Guard kosong DIULANG pasca-strip: laporan yang hanya berisi fence viz palsu jadi kosong
+    // setelah injeksi — harus gagal di sini (retry menulis ulang; `completedWithText` deep-tasks
+    // menilai hasil seperti itu tak layak reuse sehingga attempt baru benar-benar di-dispatch).
+    if (!report.trim()) {
+      throw new Error("deep-research: laporan kosong setelah stripping anti-forgery viz");
+    }
+    if (
+      inputData.vizBlocks.length > 0 ||
+      injected.strippedFenceCount > 0 ||
+      injected.removedMarkerCount > 0
+    ) {
+      console.log(
+        `[deep-research] viz injection run=${runId}: placed=[${injected.placedIds.join(",")}] appended=[${injected.appendedIds.join(",")}] dropped=[${injected.droppedIds.join(",")}] strippedFences=${injected.strippedFenceCount} removedMarkers=${injected.removedMarkerCount}`,
+      );
+    }
+    // Persist ke memory = step `persist-report` TERPISAH — kegagalan simpan tak lagi menelan
     // laporan senyap, dan retry/time-travel persist tak menyentuh jalur LLM/task sama sekali.
     return {
       threadId: inputData.threadId,
@@ -1251,6 +1716,8 @@ const synthesizeStep = createStep({
       verification: inputData.verification,
       numberedInventory: inputData.numberedInventory,
       numberedSources: inputData.numberedSources,
+      vizBlocks: inputData.vizBlocks,
+      analyzedSourceCount: inputData.analyzedSourceCount,
       report,
       reasoning,
     };
@@ -1258,12 +1725,12 @@ const synthesizeStep = createStep({
 });
 
 /**
- * 8. persistReport — simpan laporan ke memory thread sebagai step tersendiri (audit B2). Failure
+ * 8. persistReport — simpan laporan ke memory thread sebagai step tersendiri. Failure
  * domain terpisah dari `synthesize`: persist murni DB, idempoten (id pesan `deep-report:<runId>`),
  * jadi boleh `retries: 2` + di-time-travel TANPA menyentuh jalur LLM/task. Dulu best-effort di
  * dalam synthesize → gagal = run tetap `success` tapi laporan LENYAP saat refresh (history dibaca
  * dari `mastra_messages`) padahal user bayar penuh. `deepProcess` = jejak proses agar FE bangun
- * ulang langkah + detail tanpa runId (riwayat/refresh, G7); teks counter/verify dipersist PENUH
+ * ulang langkah + detail tanpa runId (riwayat/refresh); teks counter/verify dipersist PENUH
  * (tanpa clamp) → panel detail menampilkan narasi utuh.
  */
 const persistReportStep = createStep({
@@ -1272,7 +1739,7 @@ const persistReportStep = createStep({
   outputSchema: OutputSchema,
   retries: 2,
   execute: async ({ inputData, requestContext, mastra, runId }) => {
-    // TEMP-TEST E2E B1/B2 (HAPUS SETELAH UJI): HANYA saat env `AQSHA_E2E_FAIL_PERSIST=1` — gagal
+    // TEMP-TEST E2E (HAPUS SETELAH UJI): HANYA saat env `AQSHA_E2E_FAIL_PERSIST=1` — gagal
     // selama file flag ada (toggle mid-run tanpa restart proses); hapus flag lalu "Coba lagi"
     // (time-travel) harus memulihkan tanpa debit baru. Tanpa env (prod) = nol I/O fs, dan file
     // /tmp nyasar di host TIDAK bisa mematikan persist semua user.
@@ -1297,6 +1764,15 @@ const persistReportStep = createStep({
         // Fallback Sumber DB-independen: FE me-resolve `[n]` + panel "Sumber" dari sini bila fetch
         // `research_sources` live meleset (lihat `messageSourceCards`).
         sources: inputData.numberedSources,
+        // Evidence viz: ringkasan untuk baris panel proses "analyze" di riwayat. HANYA id + jumlah
+        // — data blok penuh sudah terangkut di fence ```aqsha:viz dalam `report` (satu-satunya
+        // sumber render figure); menduplikasinya di metadata menggemukkan tiap load pesan.
+        ...(inputData.vizBlocks.length > 0 || inputData.analyzedSourceCount > 0
+          ? {
+              vizBlockIds: inputData.vizBlocks.map((b) => b.id),
+              analyzedSourceCount: inputData.analyzedSourceCount,
+            }
+          : {}),
       },
     });
     return {
@@ -1311,7 +1787,7 @@ const persistReportStep = createStep({
 
 export const deepResearch = createWorkflow({
   id: "deep-research",
-  description: "Riset mendalam tercitasi: klarifikasi (HITL, opsional) → plan-gate (HITL) → cari literatur → bukti tandingan → verifikasi sitasi → sintesis → persist laporan.",
+  description: "Riset mendalam tercitasi: klarifikasi (HITL, opsional) → plan-gate (HITL) → cari literatur → bukti tandingan → nomori sitasi → analisis bukti (viz) → verifikasi sitasi → sintesis → persist laporan.",
   inputSchema: InputSchema,
   outputSchema: OutputSchema,
 })
@@ -1322,6 +1798,7 @@ export const deepResearch = createWorkflow({
   .then(searchStep)
   .then(counterEvidenceStep)
   .then(assignCitationsStep)
+  .then(analyzeSourcesStep)
   .then(citationVerifyStep)
   .then(synthesizeStep)
   .then(persistReportStep)

@@ -5,6 +5,7 @@ import { Badge } from "@aqsha/ui/components/badge";
 import {
   BookmarkIcon,
   BookOpenIcon,
+  ChartColumnIcon,
   CheckCircle2Icon,
   ChevronDownIcon,
   FileTextIcon,
@@ -55,6 +56,8 @@ function ToolGlyph({ name, className }: { name: string; className?: string }) {
       return <Scale className={className} />;
     case "assign-citations":
       return <Quote className={className} />;
+    case "analyze-sources":
+      return <ChartColumnIcon className={className} />;
     case "verify-citations":
     case "verify_citations":
     case "verify_identifiers":
@@ -93,7 +96,7 @@ function ToolGlyph({ name, className }: { name: string; className?: string }) {
 
 // Afordans live/gagal selalu menang: running → spinner; failed/denied → silang; selain
 // itu → ikon semantik per nama tool (fallback wrench). Delegasi subagent (kind
-// "subagent-call", Slice 7.1) pakai teleskop agar terbaca sebagai riset terdelegasi.
+// "subagent-call") pakai teleskop agar terbaca sebagai riset terdelegasi.
 function ToolStatusIcon({
   status,
   name,
@@ -141,7 +144,7 @@ function toneClass(status: ToolStatus): string {
 }
 
 /**
- * Satu pemanggilan alat sebagai baris collapsible (Slice 6.3, port shell V1).
+ * Satu pemanggilan alat sebagai baris collapsible.
  * Collapsed: ikon status + judul (Shimmer + kueri inline selagi running) + badge
  * hasil. Expanded: scalar curated (default-deny via adapter) dikelompokkan Masukan
  * / Hasil. Tool tanpa body scalar = baris polos.
@@ -282,7 +285,8 @@ export function ToolRow({
             </div>
           </ScrollDetailTrigger>
         ) : detail && detail.kind === "text" ? (
-          // Prosa panjang (bukti tandingan / verifikasi) → preview, klik buka panel step penuh.
+          // Prosa panjang (bukti tandingan / verifikasi / analisis bukti) → preview, klik buka
+          // panel step penuh.
           <ScrollDetailTrigger
             className="mt-1.5"
             onOpen={openStep ? () => openStep(model.toolCallId) : undefined}
