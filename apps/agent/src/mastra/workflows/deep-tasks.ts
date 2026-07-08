@@ -7,7 +7,7 @@ import { counterEvidence } from "../agents/counter-evidence";
 import { deepWriter } from "../agents/deep-writer";
 import { literatureSearcher } from "../agents/literature-searcher";
 import { AQSHA_AGENT_KIND_KEY, type AgentKind } from "../lib/tool-context";
-import { liteProviderOptions, proProviderOptions } from "../model";
+import { liteProviderOptions, proProviderOptions, proSearchProviderOptions } from "../model";
 
 /**
  * Subagent `/deep` sebagai BACKGROUND TASK persisten (`mastra_background_tasks`).
@@ -55,13 +55,32 @@ type DeepTaskArgs = {
 /** Hasil task (kolom `result`) — subset output `.generate()` yang dipakai step. */
 type DeepTaskResult = { text: string; reasoningText?: string };
 
-function deepProviderOptionsFor(agentKind: AgentKind): Record<string, unknown> {
-  const opts = agentKind === "pro" ? proProviderOptions : liteProviderOptions;
+/**
+ * `providerOptions` penalaran per (tier, subagent). Run pro tetap `proModel` untuk SEMUA subagent,
+ * tapi `literature-searcher` memakai effort search yang diturunkan (`proSearchProviderOptions`) —
+ * fase fan-out terbanyak-panggilan; penalaran dalam disimpan untuk counter-evidence + writer.
+ */
+function deepProviderOptionsFor(agentKind: AgentKind, agentId: DeepTaskAgentId): Record<string, unknown> {
+  const opts =
+    agentKind === "pro"
+      ? agentId === "literature-searcher"
+        ? proSearchProviderOptions
+        : proProviderOptions
+      : liteProviderOptions;
   return opts ? { providerOptions: opts } : {};
 }
 
-/** Eksekusi sesungguhnya — dipakai executor task DAN fallback foreground (manager mati/test env). */
-async function executeDeepGenerate(rawArgs: Record<string, unknown>): Promise<DeepTaskResult> {
+/**
+ * Eksekusi sesungguhnya — dipakai executor task DAN fallback foreground (manager mati/test env).
+ * `abortSignal` (opsional) diteruskan ke `agent.generate` supaya Stop/timeout benar-benar
+ * membatalkan panggilan LLM in-flight — bukan sekadar menandai record task `cancelled`/`timed_out`
+ * lalu membuang hasilnya. Mastra memasok signal ini via `options.abortSignal` di executor task
+ * (satu controller dgn timeout task), dan jalur foreground meneruskan `params.abortSignal`.
+ */
+async function executeDeepGenerate(
+  rawArgs: Record<string, unknown>,
+  abortSignal?: AbortSignal,
+): Promise<DeepTaskResult> {
   const args = rawArgs as DeepTaskArgs;
   const agent = DEEP_TASK_AGENTS[args.agentId];
   if (!agent) throw new Error(`deep task: unknown subagent id "${String(args.agentId)}"`);
@@ -69,16 +88,22 @@ async function executeDeepGenerate(rawArgs: Record<string, unknown>): Promise<De
   const agentKind: AgentKind = rc.get(AQSHA_AGENT_KIND_KEY) === "pro" ? "pro" : "lite";
   const out = await agent.generate(args.prompt, {
     requestContext: rc,
-    ...deepProviderOptionsFor(agentKind),
+    ...deepProviderOptionsFor(agentKind, args.agentId),
     ...(args.toolChoice ? { toolChoice: args.toolChoice } : {}),
+    ...(abortSignal ? { abortSignal } : {}),
   });
   const reasoning = (out.reasoningText ?? "").trim();
   return { text: out.text, ...(reasoning ? { reasoningText: reasoning } : {}) };
 }
 
-/** Executor static — satu untuk semua subagent (routing via `args.agentId`). */
+/**
+ * Executor static — satu untuk semua subagent (routing via `args.agentId`). Parameter kedua
+ * (`ToolExecutor` options) membawa `abortSignal` yang di-abort Mastra saat `manager.cancel()`
+ * ATAU saat task melewati `timeoutMs` — diteruskan ke `agent.generate` agar generasi berhenti.
+ */
 const deepTaskExecutor = {
-  execute: (args: Record<string, unknown>) => executeDeepGenerate(args),
+  execute: (args: Record<string, unknown>, options?: { abortSignal?: AbortSignal }) =>
+    executeDeepGenerate(args, options?.abortSignal),
 };
 
 /**
@@ -189,7 +214,7 @@ export async function runDeepSubagentTask(params: {
   abortSignal?: AbortSignal;
 }): Promise<DeepTaskResult> {
   const manager = params.mastra?.backgroundTaskManager;
-  if (!manager) return executeDeepGenerate(params.args);
+  if (!manager) return executeDeepGenerate(params.args, params.abortSignal);
   if (params.abortSignal?.aborted) throw new Error("deep task dibatalkan: run di-cancel");
 
   let toolCallId = params.toolCallId;
@@ -256,18 +281,18 @@ export async function runDeepSubagentTask(params: {
     timeoutMs: params.timeoutMs,
     context: { executor: deepTaskExecutor },
   });
-  // Run di-cancel → tutup task yang baru di-dispatch. KOOPERATIF & JUJUR: cancel menandai
-  // record `cancelled` + wait di bawah keluar dini via status terminal itu, tapi `agent.generate`
-  // in-flight TIDAK menerima signal (args task wajib JSON-serializable, tanpa closure) — panggilan
-  // LLM yang sudah jalan bisa tuntas internal lalu hasilnya dibuang. Kebocoran debit `search_*`
-  // mengecil (task antre/berikutnya tak pernah mulai), tidak nol.
+  // Run di-cancel → tutup task yang baru di-dispatch. `manager.cancel()` (dipicu handle.cancel())
+  // men-abort controller task di `activeAbortControllers`; controller itu diteruskan Mastra ke
+  // executor sebagai `options.abortSignal` → `deepTaskExecutor` mengopernya ke `agent.generate`,
+  // jadi panggilan LLM in-flight IKUT ter-abort (generasi berhenti, kredit `search_*` tak
+  // terlanjur habis). Wait di bawah tetap keluar dini via status terminal `cancelled`.
   const onAbort = () => void handle.cancel().catch(() => {});
   params.abortSignal?.addEventListener("abort", onAbort, { once: true });
   // Tutup jendela race tersisa (abort mendarat di antara cek ulang di atas dan addEventListener).
   if (params.abortSignal?.aborted) onAbort();
   try {
     const { fallbackToSync } = await handle.dispatch();
-    if (fallbackToSync) return executeDeepGenerate(params.args);
+    if (fallbackToSync) return executeDeepGenerate(params.args, params.abortSignal);
     const done = await handle.waitForCompletion({ timeoutMs: params.timeoutMs + STALE_WAIT_MARGIN_MS });
     if (done.status !== "completed") {
       throw new Error(
