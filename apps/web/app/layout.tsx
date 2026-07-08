@@ -5,6 +5,7 @@ import { Inter, JetBrains_Mono, Instrument_Serif } from "next/font/google";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AgentationDevToolbar } from "@/components/agentation-dev-toolbar";
 import { AppToaster } from "@/components/app-toaster";
 import { AuthenticatedUserSync } from "@/components/authenticated-user-sync";
 import { MotionProvider } from "@/components/motion-provider";
@@ -96,6 +97,7 @@ export default function RootLayout({
             </ThemeProvider>
           </QueryProvider>
         </ClerkProvider>
+        <AgentationDevToolbar />
       </body>
     </html>
   );
