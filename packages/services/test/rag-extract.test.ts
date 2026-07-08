@@ -3,11 +3,18 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { extractStoredDocument } from "../src/artifacts/extract";
 
 let embeddingEnabled = true;
+// Spread modul asli supaya mock EXPORT-COMPLETE by construction: mock.module MENGGANTI seluruh
+// modul, export yang hilang = SyntaxError saat import (dan bocor ke file test lain) — export baru
+// di clients/embeddings otomatis ikut tanpa harus menambal daftar ini lagi.
+const actualEmbeddings = await import("../src/clients/embeddings");
 mock.module("../src/clients/embeddings", () => ({
+  ...actualEmbeddings,
   embedTexts: async (values: string[]) => values.map(() => [0.1, 0.2, 0.3]),
   isEmbeddingEnabled: () => embeddingEnabled,
-  EMBEDDING_MODEL: "text-embedding-3-small",
-  EMBEDDING_DIMENSION: 1536,
+  // Override tetap perlu: versi asli membaca kredensial env, test mengontrol via flag lokal.
+  assertEmbeddingEnabled: () => {
+    if (!embeddingEnabled) throw new Error("embedding disabled (mock)");
+  },
 }));
 
 const { RagService, ragEntryIdFor } = await import("../src/rag.service");
