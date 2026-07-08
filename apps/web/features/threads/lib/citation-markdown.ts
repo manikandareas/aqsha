@@ -1,16 +1,18 @@
 // Parsing penanda sitasi `[n]` / `[n, m]` di prosa jawaban Astra → element kustom `<citation>` yang
 // dirender sebagai pill sumber (lihat `components/ai-elements/inline-citation.tsx`). Dua bagian:
 //
-//  1. `citationRehypePlugin` — rehype plugin yang memindai HAST text node, memecah token `[n]`, dan
-//     menyisipkan element `citation` (atribut `citations="1,2"`). Berjalan PALING AKHIR dalam pipeline
-//     (lihat `citationRehypePlugins`) sehingga element kita dibuat SETELAH sanitize/harden bawaan
-//     Streamdown → tak perlu memperluas skema sanitasi, dan node kode/tautan dilewati.
+//  1. `reportRehypePlugin` — rehype plugin (SATU traversal) yang memindai HAST: text node dipecah
+//     pada token `[n]` → element `citation` (atribut `citations="1,2"`), dan `pre>code` ber-bahasa
+//     `aqsha:viz` → element `deepviz` (helper `viz-markdown.ts`). Berjalan PALING AKHIR dalam
+//     pipeline (lihat `reportRehypePlugins`) sehingga element kita dibuat SETELAH sanitize/harden
+//     bawaan Streamdown → tak perlu memperluas skema sanitasi, dan node kode/tautan dilewati.
 //  2. `buildCitationMap` — `Map<number, SourceCardData[]>` dari kartu sumber pesan (chat `search-flat`
 //     yang membawa `citationNumber`, atau baris `research_sources` deep). Komponen `citation` melihat
 //     map ini lewat React Context untuk me-resolve `[n]` → kartu (fallback teks `[n]` bila tak ada).
 
 import { defaultRehypePlugins, type StreamdownProps } from "streamdown";
 import type { SourceCardData } from "./timeline-types";
+import { DEEP_VIZ_TAG, vizElementFromPre } from "./viz-markdown";
 
 /** Nama tag + atribut element sitasi kustom (dipakai bareng komponen render di message.tsx). */
 export const CITATION_TAG = "citation";
@@ -19,19 +21,20 @@ export const CITATION_ATTR = "citations";
 // `[1]`, `[1, 2]`, `[3,4,5]` — hanya digit + koma di dalam kurung (tak menyentuh `[teks](url)`).
 const CITATION_RE = /\[(\d+(?:\s*,\s*\d+)*)\]/g;
 // Subtree yang TAK boleh diutak-atik: kode (indeks array `arr[0]`), tautan (label numerik), serta
-// element sitasi yang sudah jadi.
-const SKIP_TAGS = new Set(["code", "pre", "a", CITATION_TAG]);
+// element sitasi/viz yang sudah jadi.
+const SKIP_TAGS = new Set(["code", "pre", "a", CITATION_TAG, DEEP_VIZ_TAG]);
 
-// Subset bentuk HAST yang kita pakai — paket tipe `hast` tak terpasang sebagai dependency langsung.
-type HastText = { type: "text"; value: string };
-type HastElement = {
+// Subset bentuk HAST yang kita pakai — paket tipe `hast` tak terpasang sebagai dependency
+// langsung. Diekspor untuk plugin rehype saudara (`viz-markdown.ts`) — satu definisi bersama.
+export type HastText = { type: "text"; value: string };
+export type HastElement = {
   type: "element";
   tagName: string;
   properties?: Record<string, unknown>;
   children: HastChild[];
 };
-type HastChild = HastText | HastElement | { type: string; [k: string]: unknown };
-type HastRoot = { type: "root"; children: HastChild[] };
+export type HastChild = HastText | HastElement | { type: string; [k: string]: unknown };
+export type HastRoot = { type: "root"; children: HastChild[] };
 
 /** Pecah satu text node pada token `[n]` → [teks, <citation>, teks, …]. Tanpa token → node apa adanya. */
 function splitTextNode(node: HastText): HastChild[] {
@@ -63,7 +66,7 @@ function splitTextNode(node: HastText): HastChild[] {
   return out;
 }
 
-/** Rekursi anak HAST: pecah text node, lewati subtree `SKIP_TAGS`. */
+/** Rekursi anak HAST: pecah text node, ganti `pre` viz → `deepviz`, lewati subtree `SKIP_TAGS`. */
 function walk(children: HastChild[]): HastChild[] {
   const out: HastChild[] = [];
   for (const child of children) {
@@ -71,6 +74,12 @@ function walk(children: HastChild[]): HastChild[] {
       out.push(...splitTextNode(child as HastText));
     } else if (child.type === "element") {
       const el = child as HastElement;
+      if (el.tagName === "pre") {
+        // Satu-satunya transform di dalam `pre`: fence `aqsha:viz` → `deepviz`; `pre` lain
+        // dilewati utuh (sitasi tak boleh menyentuh kode).
+        out.push(vizElementFromPre(el) ?? el);
+        continue;
+      }
       if (!SKIP_TAGS.has(el.tagName) && Array.isArray(el.children)) {
         el.children = walk(el.children);
       }
@@ -82,8 +91,8 @@ function walk(children: HastChild[]): HastChild[] {
   return out;
 }
 
-/** Rehype plugin: transform `[n]` → `<citation>` di seluruh pohon. */
-function citationRehypePlugin() {
+/** Rehype plugin: transform `[n]` → `<citation>` dan fence `aqsha:viz` → `<deepviz>` — satu traversal. */
+function reportRehypePlugin() {
   return (tree: HastRoot) => {
     if (Array.isArray(tree.children)) tree.children = walk(tree.children);
   };
@@ -113,15 +122,16 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 /**
- * Pipeline rehype lengkap untuk jawaban tercitasi: plugin bawaan Streamdown (raw → sanitize → harden)
- * lalu transform sitasi di urutan TERAKHIR. Kita merekonstruksi default-nya karena meneruskan prop
- * `rehypePlugins` MENGGANTIKAN seluruh default (bukan menambah); menjalankan transform setelah sanitize
- * berarti element `citation` kita tepercaya (dibuat dari teks yang sudah bersih) tanpa perlu allowlist.
+ * Pipeline rehype lengkap untuk jawaban laporan: plugin bawaan Streamdown (raw → sanitize → harden)
+ * lalu transform sitasi `[n]` → `<citation>` + fence `aqsha:viz` → `<deepviz>` (satu walk) di
+ * urutan TERAKHIR. Kita merekonstruksi default-nya karena meneruskan prop `rehypePlugins`
+ * MENGGANTIKAN seluruh default (bukan menambah); menjalankan transform setelah sanitize berarti
+ * element kustom kita tepercaya (dibuat dari pohon yang sudah bersih) tanpa perlu allowlist.
  * Referensi modul-level yang stabil → memo Block Streamdown tetap valid.
  */
-export const citationRehypePlugins = [
+export const reportRehypePlugins = [
   ...Object.values(defaultRehypePlugins as unknown as Record<string, unknown>),
-  citationRehypePlugin,
+  reportRehypePlugin,
 ] as NonNullable<StreamdownProps["rehypePlugins"]>;
 
 /**

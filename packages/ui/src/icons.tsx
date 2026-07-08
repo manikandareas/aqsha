@@ -19,6 +19,7 @@ import {
   Camera01Icon,
   Cancel01Icon,
   CancelCircleIcon,
+  ChartColumnIcon as HugeChartColumnIcon,
   ChartUpIcon,
   CheckIcon as HugeCheckIcon,
   CheckmarkCircle02Icon,
@@ -39,12 +40,14 @@ import {
   Download01Icon,
   ExpandParagraphIcon as HugeExpandParagraphIcon,
   ExternalLinkIcon as HugeExternalLinkIcon,
+  EyeIcon as HugeEyeIcon,
   FavouriteIcon,
   File01Icon,
   FileDownloadIcon,
   FileScriptIcon,
   FilterIcon as HugeFilterIcon,
   Flag01Icon,
+  FlaskConicalIcon as HugeFlaskConicalIcon,
   Folder01Icon,
   FolderTreeIcon as HugeFolderTreeIcon,
   GaugeIcon as HugeGaugeIcon,
@@ -97,6 +100,7 @@ import {
   Upload01Icon,
   CloudUploadIcon,
   UserIcon,
+  UserMultipleIcon,
   Wrench01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -139,6 +143,7 @@ export const BookmarkIcon = createIcon(Bookmark01Icon);
 export const BracesIcon = createIcon(HugeBracesIcon);
 export const CalendarRangeIcon = createIcon(Calendar03Icon);
 export const CameraIcon = createIcon(Camera01Icon);
+export const ChartColumnIcon = createIcon(HugeChartColumnIcon);
 export const Check = createIcon(HugeCheckIcon);
 export const CheckCircle2 = createIcon(CheckmarkCircle02Icon);
 export const CheckIcon = createIcon(HugeCheckIcon);
@@ -163,6 +168,7 @@ export const DollarSign = createIcon(Dollar01Icon);
 export const DownloadIcon = createIcon(Download01Icon);
 export const ExternalLinkIcon = createIcon(HugeExternalLinkIcon);
 export const ExpandParagraphIcon = createIcon(HugeExpandParagraphIcon);
+export const EyeIcon = createIcon(HugeEyeIcon);
 export const FileDownIcon = createIcon(FileDownloadIcon);
 export const FileIcon = createIcon(File01Icon);
 export const FileText = createIcon(FileScriptIcon);
@@ -170,6 +176,7 @@ export const FileTextIcon = createIcon(FileScriptIcon);
 export const FilterIcon = createIcon(HugeFilterIcon);
 export const Flag = createIcon(Flag01Icon);
 export const FlagIcon = createIcon(Flag01Icon);
+export const FlaskConicalIcon = createIcon(HugeFlaskConicalIcon);
 export const FolderIcon = createIcon(Folder01Icon);
 export const FolderTreeIcon = createIcon(HugeFolderTreeIcon);
 export const GaugeIcon = createIcon(HugeGaugeIcon);
@@ -238,6 +245,7 @@ export const TrendingUpIcon = createIcon(ChartUpIcon);
 export const UploadCloudIcon = createIcon(CloudUploadIcon);
 export const UploadIcon = createIcon(Upload01Icon);
 export const UserRoundIcon = createIcon(UserIcon);
+export const UsersRoundIcon = createIcon(UserMultipleIcon);
 export const WrenchIcon = createIcon(Wrench01Icon);
 export const RotateCcwIcon = createIcon(ArrowReloadHorizontalIcon);
 export const XCircleIcon = createIcon(CancelCircleIcon);

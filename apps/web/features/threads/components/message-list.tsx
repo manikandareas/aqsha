@@ -283,6 +283,11 @@ function AssistantMessage({
   const processParts = message.parts.filter(
     (p) => p.kind === "tool" || p.kind === "reasoning" || (p.kind === "text" && p.id !== answerId),
   );
+  // Pesan laporan `/deep` = punya baris step Workflow (`wf:<stepId>`), live maupun riwayat.
+  // Hanya pesan ini yang boleh merender fence `aqsha:viz` sebagai figur (lihat prop `viz` Response).
+  const isDeepReport = message.parts.some(
+    (p) => p.kind === "tool" && p.model.toolCallId.startsWith("wf:"),
+  );
   const toolSteps = processParts.filter((p) => p.kind === "tool").length;
   // Anchor timer "Sedang bekerja": startedAt step Workflow yang SEDANG berjalan (snapshot `/deep`,
   // durable lintas-refresh — sengaja bukan awal run supaya jeda menunggu plan-gate tak terhitung);
@@ -345,7 +350,12 @@ function AssistantMessage({
       ) : null}
 
       {answer ? (
-        <Response text={answer.text} streaming={answer.streaming} citations={citationMap} />
+        <Response
+          text={answer.text}
+          streaming={answer.streaming}
+          citations={citationMap}
+          viz={isDeepReport}
+        />
       ) : null}
 
       {artifactParts.map((part) =>

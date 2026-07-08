@@ -1,5 +1,6 @@
 import type { AskQuestion } from "@aqsha/chat-core";
 import { normalizeAskQuestions } from "@aqsha/chat-core";
+import { formatDeepAnalyzeSummary } from "@aqsha/chat-core/deep-viz";
 import { toCards } from "./source-card";
 import type {
   ArtifactCardModel,
@@ -46,7 +47,7 @@ export type MastraPlanGate = { plan: string; subQuestions: string[] };
 export type MastraAskGate = {
   source: "tool" | "workflow";
   questions: AskQuestion[];
-  /** Temuan parsial pra-klarifikasi (TOOL-3) — dirender di atas pertanyaan agar riset tak terbuang. */
+  /** Temuan parsial pra-klarifikasi — dirender di atas pertanyaan agar riset tak terbuang. */
   findings?: string;
   /** toolCallId — jalur chat (resume via sendToolApproval/resumeStream). */
   toolCallId?: string;
@@ -162,7 +163,7 @@ type ToolInvocationLike = {
 /**
  * History thread Mastra (`getMemoryThread().listMessages()` → `MastraDBMessage[]`) →
  * `TimelineMessage[]` seed. Rekonstruksi part TERURUT: teks, reasoning, DAN tool/artifact
- * (`tool-invocation`) — supaya kartu artefak + jejak proses tetap muncul setelah refresh (G7),
+ * (`tool-invocation`) — supaya kartu artefak + jejak proses tetap muncul setelah refresh,
  * konsisten dengan tampilan live.
  */
 export function mastraMessagesToTimeline(messages: readonly MastraDBMessageLike[]): TimelineMessage[] {
@@ -203,10 +204,10 @@ export function mastraMessagesToTimeline(messages: readonly MastraDBMessageLike[
         parts.push({ kind: "text", id: `${m.id}:t`, text: m.content.content, streaming: false });
       }
     }
-    // `turnId` dari metadata laporan `/deep` (`deepRunId`) → memetakan Sumber per-turn (G4).
+    // `turnId` dari metadata laporan `/deep` (`deepRunId`) → memetakan Sumber per-turn.
     const deepRunId = m.content?.metadata?.deepRunId;
     // Jejak proses `/deep` (`metadata.deepProcess`) → bangun ulang langkah + detail DI DEPAN laporan
-    // (process block sebelum jawaban), agar tetap muncul di riwayat & setelah refresh (G7).
+    // (process block sebelum jawaban), agar tetap muncul di riwayat & setelah refresh.
     const deepProcessRaw = m.content?.metadata?.deepProcess;
     const deepProcessObj =
       deepProcessRaw && typeof deepProcessRaw === "object" && !Array.isArray(deepProcessRaw)
@@ -214,7 +215,7 @@ export function mastraMessagesToTimeline(messages: readonly MastraDBMessageLike[
         : undefined;
     const deepParts = deepProcessObj ? deepProcessParts(deepProcessObj) : [];
     // Sumber bernomor laporan (`deepProcess.sources`, format tool `{ n, title, url, … }`) → fallback
-    // DB-independen untuk pill `[n]` + panel "Sumber" bila fetch `research_sources` live meleset (G4 robust).
+    // DB-independen untuk pill `[n]` + panel "Sumber" bila fetch `research_sources` live meleset.
     const reportSources = deepProcessObj ? toCards(deepProcessObj.sources) : [];
     return {
       id: m.id,
@@ -296,7 +297,7 @@ export function settleAssistantTurn(state: MastraTimelineState): MastraTimelineS
 }
 
 /**
- * Apakah pesan asisten terakhir sudah memuat TEKS jawaban non-kosong? Pembeda `error` chunk (FE-6):
+ * Apakah pesan asisten terakhir sudah memuat TEKS jawaban non-kosong? Pembeda `error` chunk:
  * ada teks → jawaban kemungkinan TERPOTONG (settle + banner "mungkin terpotong", retry via Buat
  * ulang); belum ada teks (baru tool-call/reasoning) → user belum dapat jawaban sama sekali →
  * banner error penuh. Tool-row saja TIDAK dihitung output — dulu 1 tool-row cukup membuat error
@@ -309,7 +310,7 @@ function lastAssistantHasAnswerText(state: MastraTimelineState): boolean {
 }
 
 /**
- * Buang pasangan [user, assistant] TERAKHIR dari timeline lokal — dipakai regenerate `/deep` (FE-8):
+ * Buang pasangan [user, assistant] TERAKHIR dari timeline lokal — dipakai regenerate `/deep`:
  * `sendDeep` menambah ulang bubble user + placeholder-nya sendiri, jadi keduanya harus hilang dulu
  * (beda dari `startRegenerate` yang mempertahankan bubble user untuk jalur chat).
  */
@@ -329,7 +330,7 @@ export function dropLastTurn(state: MastraTimelineState): MastraTimelineState {
 }
 
 /**
- * Mulai regenerate (G6): buang pesan assistant terakhir (jawaban lama) lalu tambah placeholder
+ * Mulai regenerate: buang pesan assistant terakhir (jawaban lama) lalu tambah placeholder
  * assistant streaming baru — TANPA menambah bubble user duplikat (pertahankan pesan user terakhir).
  */
 export function startRegenerate(state: MastraTimelineState): MastraTimelineState {
@@ -438,7 +439,7 @@ export function reduceMastraChunk(
     }
 
     case "tool-call-delta": {
-      // IMP-11: arg tool mengalir sebagai teks JSON parsial — akumulasikan + parse best-effort
+      // Arg tool mengalir sebagai teks JSON parsial — akumulasikan + parse best-effort
       // agar kartu tool terisi progresif (kueri terlihat "mengetik"), bukan pop utuh saat
       // `tool-call` final tiba (yang tetap menimpa dengan args lengkap).
       const [s, idx] = ensureActiveAssistant(streaming(state));
@@ -516,11 +517,11 @@ export function reduceMastraChunk(
     }
 
     case "abort":
-      // Stop bersih (server cancel via abortThread) → settle, tanpa error. (G5)
+      // Stop bersih (server cancel via abortThread) → settle, tanpa error.
       return settleAssistantTurn(state);
 
     case "error":
-      // FE-6: bedakan error-ekor berdasarkan ada/tidaknya TEKS jawaban. Sudah ada teks → provider
+      // Bedakan error-ekor berdasarkan ada/tidaknya TEKS jawaban. Sudah ada teks → provider
       // mati mid-jawaban: settle + banner "mungkin terpotong" supaya user tahu bisa retry (dulu
       // di-settle senyap → setengah jawaban tampak lengkap). Belum ada teks (baru tool-call/
       // reasoning) → turn gagal tanpa jawaban: banner error penuh.
@@ -544,7 +545,7 @@ export function reduceMastraChunk(
 }
 
 /**
- * Settle turn Workflow BY `runId` (FE-7): `settleAssistantTurn` menyasar last-streaming-by-POSITION,
+ * Settle turn Workflow BY `runId`: `settleAssistantTurn` menyasar last-streaming-by-POSITION,
  * jadi `workflow-finish` yang telat (reject-plan → kirim pesan baru cepat) bisa men-settle placeholder
  * turn BARU → ghost bubble kosong. Di sini sasar pesan ber-`turnId === runId` (di-tag saat
  * `workflow-start`/seed); status hanya kembali "ready" bila tak ada turn lain yang masih streaming.
@@ -575,7 +576,7 @@ export function settleWorkflowTurn(
 }
 
 /**
- * B1: hidupkan lagi turn `/deep` yang failed SEBELUM retry time-travel. Chunk retry mengalir via
+ * Hidupkan lagi turn `/deep` yang failed SEBELUM retry time-travel. Chunk retry mengalir via
  * `reduceWorkflowChunk` yang menyasar assistant STREAMING (`ensureActiveAssistant`) — turn failed
  * sudah settle (`streaming: false`), jadi tanpa revive retry melahirkan bubble kembar. Turn
  * ber-`turnId === runId` ditandai streaming lagi; tak ditemukan (mis. retry sebelum seed) →
@@ -613,7 +614,7 @@ function finishReason(payload: Record<string, unknown>): string {
   return str(payload.reason);
 }
 
-// ── adapter Workflow `/deep` (G2) ──────────────────────────────────────────────
+// ── adapter Workflow `/deep` ───────────────────────────────────────────────────
 //
 // Stream Workflow (`run.stream`/`resumeStream`/`observe`) memancarkan `StreamVNextChunkType`
 // {type,payload,runId,from:'WORKFLOW'} STEP-LEVEL (subagent pakai `.generate()`, tak ada token
@@ -629,12 +630,13 @@ const WF_STEP_LABELS: Record<string, string> = {
   "search-literature": "Menelaah literatur",
   "counter-evidence": "Mencari bukti tandingan",
   "assign-citations": "Menomori sumber",
+  "analyze-sources": "Menganalisis bukti",
   "verify-citations": "Memverifikasi sitasi",
   synthesize: "Menulis sintesis",
   "persist-report": "Menyimpan laporan",
 };
 
-/** Diekspor untuk kartu run gagal (B1) — label langkah yang sama dgn baris "Proses". */
+/** Diekspor untuk kartu run `/deep` gagal — label langkah yang sama dgn baris "Proses". */
 export function wfStepLabel(stepId: string): string {
   return WF_STEP_LABELS[stepId] ?? humanizeSlug(stepId);
 }
@@ -642,7 +644,7 @@ export function wfStepLabel(stepId: string): string {
 /**
  * Urutan step user-facing Workflow `/deep` (cocokkan rantai `.then()` di `deep-research.ts`).
  * Dipakai untuk menyeed stepper saat re-attach refresh. Step `input` (mapping) sengaja dilewati.
- * `draft-clarify`/`clarify` ikut di-seed (IMP-12) — tanpa ini baris klarifikasi hilang dari trace
+ * `draft-clarify`/`clarify` ikut di-seed — tanpa ini baris klarifikasi hilang dari trace
  * setelah reload; step yang tak ada di snapshot (mis. clarify yang dilewati) otomatis di-skip.
  */
 const WF_STEP_ORDER = [
@@ -653,6 +655,7 @@ const WF_STEP_ORDER = [
   "search-literature",
   "counter-evidence",
   "assign-citations",
+  "analyze-sources",
   "verify-citations",
   "synthesize",
   "persist-report",
@@ -701,7 +704,7 @@ export function seedWorkflowProgress(
   const base: MastraTimelineState = { ...state, status: "streaming", runId, activeRunId: runId };
   // Sasar turn assistant yang SUDAH ber-`turnId === runId` (poll re-seed = idempoten, tak menduplikat
   // bubble). Bila belum ada (seed pertama saat re-attach), buat placeholder lalu tandai turnId =
-  // runId → memetakan Sumber per-turn (G4), konsisten dengan `workflow-start` live.
+  // runId → memetakan Sumber per-turn, konsisten dengan `workflow-start` live.
   const existing = base.messages.findIndex((m) => m.role === "assistant" && m.turnId === runId);
   let idx: number;
   let next: MastraTimelineState;
@@ -733,7 +736,7 @@ export function seedWorkflowProgress(
     if (stepId === "synthesize" && status === "success") {
       const report = reportFromOutput(sr?.output);
       if (report) next = setReportText(next, idx, report);
-      // Penalaran sintesis (Route B) dari nilai return step → blok reasoning tetap muncul saat
+      // Penalaran sintesis dari nilai return step → blok reasoning tetap muncul saat
       // refresh poll fase RUNNING sebelum pesan riwayat termuat (rehydrate dari content part).
       const reasoning = reasoningFromOutput(sr?.output);
       if (reasoning) next = setDeepReasoning(next, idx, reasoning);
@@ -756,7 +759,7 @@ export function reduceWorkflowChunk(
         ...(runId ? { runId, activeRunId: runId } : {}),
       };
       const [s, idx] = ensureActiveAssistant(withRun);
-      // Tandai turn assistant dgn runId → memetakan Sumber per-turn live (G4).
+      // Tandai turn assistant dgn runId → memetakan Sumber per-turn live.
       if (!runId) return s;
       return { ...s, messages: s.messages.map((m, i) => (i === idx ? { ...m, turnId: runId } : m)) };
     }
@@ -815,8 +818,8 @@ export function reduceWorkflowChunk(
       // `closeOnSuspend` (default) menutup stream saat gerbang HITL dengan chunk terminal ini. Bila
       // plan-gate/ask-gate masih aktif, ini SUSPEND-close — BUKAN finish sungguhan → PERTAHANKAN
       // kartu + status streaming (tunggu keputusan user), jangan settle. `resolvePlan`/`resolveAsk`
-      // yang membersihkan gate saat user memutuskan → finish berikutnya (resume) baru settle (G2).
-      // FE-7: settle by runId — finish telat dari run lama tak boleh mengenai turn baru.
+      // yang membersihkan gate saat user memutuskan → finish berikutnya (resume) baru settle.
+      // Settle by runId — finish telat dari run lama tak boleh mengenai turn baru.
       if (state.planGate || state.askGate) return state;
       return settleWorkflowTurn({ ...state, planGate: undefined, askGate: undefined }, chunk.runId);
 
@@ -826,7 +829,7 @@ export function reduceWorkflowChunk(
       const stepId = str(payload.stepName);
       if (!stepId) return state;
       const [s, idx] = ensureActiveAssistant(streaming(state));
-      // Ringkasan penalaran sintesis (Route B) → blok reasoning (mengambang ke atas, parity chat),
+      // Ringkasan penalaran sintesis → blok reasoning (mengambang ke atas, parity chat),
       // BUKAN detail step. Sisanya = detail proses biasa.
       const out = asRecord(payload.output);
       if (str(out.kind) === "reasoning") {
@@ -837,7 +840,7 @@ export function reduceWorkflowChunk(
     }
 
     case "error":
-      // FE-7: sejajar workflow-finish — error run lama tak boleh men-settle turn baru secara posisi.
+      // Sejajar workflow-finish — error run lama tak boleh men-settle turn baru secara posisi.
       return {
         ...settleWorkflowTurn({ ...state, planGate: undefined, askGate: undefined }, chunk.runId),
         error: extractError(payload.error),
@@ -924,7 +927,7 @@ function reasoningFromOutput(output: unknown): string {
 }
 
 /**
- * Blok penalaran `/deep` (Route B) — satu part reasoning (id stabil `wf:reasoning`) di atas laporan,
+ * Blok penalaran `/deep` — satu part reasoning (id stabil `wf:reasoning`) di atas laporan,
  * dirender `<Reasoning>` yang sama dgn chat. Overwrite (bukan skip) → emit live/refresh/seed konvergen.
  */
 function setDeepReasoning(
@@ -990,6 +993,7 @@ function mergeLiveDetail(
     }
     case "counter":
     case "verify":
+    case "analyze":
       return { kind: "text", text: str(data.text) };
     case "citations":
       return { kind: "citations", count: num(data.count) };
@@ -1073,6 +1077,14 @@ function detailFromStepOutput(stepId: string, output: unknown): DeepStepDetail |
       const inventory = str(o.numberedInventory);
       return inventory ? { kind: "citations", count: countInventory(inventory) } : null;
     }
+    case "analyze-sources": {
+      const analyzed = num(o.analyzedSourceCount);
+      const vizIds = Array.isArray(o.vizBlocks)
+        ? o.vizBlocks.map((b) => str(asRecord(b).id)).filter(Boolean)
+        : [];
+      if (analyzed <= 0 && vizIds.length === 0) return null;
+      return { kind: "text", text: formatDeepAnalyzeSummary(analyzed, vizIds) };
+    }
     case "verify-citations": {
       const text = str(o.verification);
       return text ? { kind: "text", text } : null;
@@ -1134,6 +1146,20 @@ function deepProcessParts(deepProcess: Record<string, unknown>): TimelinePart[] 
   }
   if (counter) push("counter-evidence", { kind: "text", text: counter });
   if (citationCount > 0) push("assign-citations", { kind: "citations", count: citationCount });
+  // Evidence viz: `deepProcess.vizBlockIds` + `analyzedSourceCount` dipersist hanya bila analisis
+  // menghasilkan sesuatu → baris "Menganalisis bukti" ikut di riwayat. `deepProcess.viz` (array
+  // blok penuh) = bentuk lama pesan yang dipersist sebelum metadata diringkas jadi id saja.
+  const persistedIds = strArray(deepProcess.vizBlockIds);
+  const vizIds =
+    persistedIds.length > 0
+      ? persistedIds
+      : Array.isArray(deepProcess.viz)
+        ? deepProcess.viz.map((b) => str(asRecord(b).id)).filter(Boolean)
+        : [];
+  const analyzedCount = num(deepProcess.analyzedSourceCount);
+  if (vizIds.length > 0 || analyzedCount > 0) {
+    push("analyze-sources", { kind: "text", text: formatDeepAnalyzeSummary(analyzedCount, vizIds) });
+  }
   if (verification) push("verify-citations", { kind: "text", text: verification });
   return parts;
 }
@@ -1208,7 +1234,7 @@ function upsertToolPart(
 }
 
 /**
- * Parse JSON parsial arg tool yang masih mengalir (IMP-11): coba apa adanya, lalu coba menutup
+ * Parse JSON parsial arg tool yang masih mengalir: coba apa adanya, lalu coba menutup
  * string/objek yang menggantung dengan beberapa suffix umum. Gagal semua → null (baris input
  * lama dipertahankan sampai delta berikutnya bisa diparse).
  */
@@ -1228,7 +1254,7 @@ function parsePartialArgs(raw: string): Record<string, unknown> | null {
   return null;
 }
 
-/** Akumulasi `tool-call-delta` ke tool-row + render ulang baris input dari parse parsial (IMP-11). */
+/** Akumulasi `tool-call-delta` ke tool-row + render ulang baris input dari parse parsial. */
 function appendToolArgsDelta(
   state: MastraTimelineState,
   msgIdx: number,
@@ -1493,7 +1519,7 @@ function asRecord(v: unknown): Record<string, unknown> {
 }
 /**
  * Pesan error dari payload longgar (string / `{message}`) — `null` bila tak ada. Diekspor untuk
- * kartu run gagal B1 (`deepFailed.message` dari `steps[id].error` snapshot) agar normalisasi
+ * kartu run `/deep` gagal (`deepFailed.message` dari `steps[id].error` snapshot) agar normalisasi
  * bentuk error Mastra hidup di SATU tempat.
  */
 export function errorMessageFrom(err: unknown): string | null {

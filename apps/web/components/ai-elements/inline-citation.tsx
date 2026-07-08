@@ -33,7 +33,11 @@ export function CitationProvider({
   return <CitationContext.Provider value={value}>{children}</CitationContext.Provider>;
 }
 
-function useCitationMap(): Map<number, SourceCardData[]> | undefined {
+/**
+ * Peta sitasi `nomor → kartu` subtree jawaban aktif. Diekspor untuk komponen evidence viz
+ * (`deep-viz/*`) yang me-resolve `papers: number[]` payload ke kartu sumber yang sama.
+ */
+export function useCitationMap(): Map<number, SourceCardData[]> | undefined {
   return useContext(CitationContext);
 }
 

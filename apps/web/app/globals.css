@@ -87,6 +87,14 @@
   --coral-soft: color-mix(in oklch, var(--coral) 15%, var(--card));
   --coral-soft-border: color-mix(in oklch, var(--coral) 30%, var(--border));
   --shadow-soft-card: var(--shadow);
+  /* Evidence viz /deep — stance meter (yes/possibly/mixed/no). Tervalidasi
+     dataviz validate_palette terhadap surface card tema ini (#f4efe4): lightness
+     band + chroma + CVD PASS; WARN kontras <3:1 di-relief oleh label & angka
+     yang selalu tertulis di komponen. JANGAN ganti sebagian. */
+  --viz-stance-yes: #22a87e;
+  --viz-stance-possibly: #d9a514;
+  --viz-stance-mixed: #bd86ff;
+  --viz-stance-no: #c43f3f;
   /* Global scrollbar — thin, floating, palette-aware. The thumb derives from
      `--muted-foreground`, so it re-resolves per theme (warm taupe in light,
      soft gray in dark) without a separate `.dark` override. */
@@ -164,6 +172,12 @@
   --coral-soft: color-mix(in oklch, var(--coral) 18%, var(--card));
   --coral-soft-border: color-mix(in oklch, var(--coral) 34%, var(--border));
   --shadow-soft-card: var(--shadow);
+  /* Evidence viz /deep — varian dark (surface card #1c1c1c): semua cek PASS
+     termasuk kontras ≥3:1. JANGAN ganti sebagian. */
+  --viz-stance-yes: #22a87e;
+  --viz-stance-possibly: #b3891a;
+  --viz-stance-mixed: #8f7ae0;
+  --viz-stance-no: #d95c5c;
 }
 
 @theme inline {
@@ -683,7 +697,10 @@
   padding: 0.95rem 1.15rem;
 }
 
-:where(.aqsha-prose, .artifact-prose) table {
+/* Semua aturan tabel prose menghormati opt-out `.not-prose` (mis. figur deep-viz yang membawa
+   tabelnya sendiri): subtree .not-prose tak disentuh sama sekali, jadi komponen di dalamnya cukup
+   pakai utility Tailwind polos tanpa perang !important melawan rule unlayered ini. */
+:where(.aqsha-prose, .artifact-prose) table:not(:where(.not-prose, .not-prose *)) {
   display: block;
   width: 100%;
   max-width: 100%;
@@ -695,31 +712,31 @@
   line-height: 1.45;
 }
 
-:where(.aqsha-prose, .artifact-prose) thead {
+:where(.aqsha-prose, .artifact-prose) thead:not(:where(.not-prose, .not-prose *)) {
   background: var(--muted);
 }
 
-:where(.aqsha-prose, .artifact-prose) th,
-:where(.aqsha-prose, .artifact-prose) td {
+:where(.aqsha-prose, .artifact-prose) th:not(:where(.not-prose, .not-prose *)),
+:where(.aqsha-prose, .artifact-prose) td:not(:where(.not-prose, .not-prose *)) {
   border: 1px solid var(--border);
   padding: 0.55rem 0.7rem;
   vertical-align: top;
 }
 
-:where(.aqsha-prose, .artifact-prose) th {
+:where(.aqsha-prose, .artifact-prose) th:not(:where(.not-prose, .not-prose *)) {
   color: var(--foreground);
   font-size: 12px;
   font-weight: 700;
   text-align: left;
 }
 
-:where(.aqsha-prose, .artifact-prose) td p,
-:where(.aqsha-prose, .artifact-prose) th p {
+:where(.aqsha-prose, .artifact-prose) td p:not(:where(.not-prose, .not-prose *)),
+:where(.aqsha-prose, .artifact-prose) th p:not(:where(.not-prose, .not-prose *)) {
   margin: 0;
 }
 
-:where(.aqsha-prose, .artifact-prose) td ul,
-:where(.aqsha-prose, .artifact-prose) td ol {
+:where(.aqsha-prose, .artifact-prose) td ul:not(:where(.not-prose, .not-prose *)),
+:where(.aqsha-prose, .artifact-prose) td ol:not(:where(.not-prose, .not-prose *)) {
   margin: 0.25rem 0;
   padding-left: 1rem;
 }
@@ -759,7 +776,7 @@
   margin: 1.25rem 0 0.55rem;
 }
 
-.aqsha-prose-message table {
+.aqsha-prose-message table:not(:where(.not-prose, .not-prose *)) {
   font-size: 11.5px;
 }
 

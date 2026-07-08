@@ -13,6 +13,7 @@ import type {
   ReactNode,
 } from "react";
 import { Streamdown } from "streamdown";
+import dynamic from "next/dynamic";
 import { CitationMarkdownComponent } from "./inline-citation";
 import { TableBlock } from "./table-block";
 import {
@@ -59,9 +60,27 @@ export const MessageContent = ({
 export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
 const streamdownPlugins = { cjk, code, math, mermaid };
-// Komponen default: tabel kustom + element `citation` (pill sitasi inline). `citation` hanya muncul
-// bila pemanggil meneruskan `citationRehypePlugins` (lihat `Response`); tanpa itu komponen tak terpakai.
-const streamdownComponents = { table: TableBlock, citation: CitationMarkdownComponent };
+// Subtree deep-viz (6 komponen blok + skema zod chat-core) di-lazy-load: element `deepviz` hanya
+// muncul di laporan `/deep`, jadi pesan chat biasa tak perlu ikut memuatnya di bundle awal.
+const DeepVizMarkdownComponent = dynamic(
+  () =>
+    import("@/features/threads/components/deep-viz/viz-block").then(
+      (m) => m.DeepVizMarkdownComponent,
+    ),
+  {
+    loading: () => (
+      <div className="my-4 h-24 animate-pulse rounded-xl border border-dashed bg-muted/30" />
+    ),
+  },
+);
+// Komponen default: tabel kustom + element `citation` (pill sitasi inline) + element `deepviz`
+// (blok evidence viz laporan `/deep`). `citation`/`deepviz` hanya muncul bila pemanggil meneruskan
+// `reportRehypePlugins` (lihat `Response`); tanpa itu komponen tak terpakai.
+const streamdownComponents = {
+  table: TableBlock,
+  citation: CitationMarkdownComponent,
+  deepviz: DeepVizMarkdownComponent,
+};
 
 export const MessageResponse = ({ className, components, ...props }: MessageResponseProps) => (
     <Streamdown
