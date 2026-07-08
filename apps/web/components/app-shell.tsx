@@ -11,8 +11,9 @@ import { useWorkspaceIndexData } from "@/features/workspaces/api/use-workspaces-
 // explore). Hoisting the left navigation here — instead of re-rendering it inside
 // each page shell — means the sidebar stays mounted across navigations (no
 // remount/flicker, no layout shift) and the sidebar data is fetched once. Pages
-// render only their content into SidebarInset, so route-level loading.tsx fills
-// the content area without covering the nav.
+// render only their content into SidebarInset, which is `relative` so the
+// route-level `(product)/loading.tsx` boundary (AppLoadingOverlay
+// variant="absolute") fills just the content area without covering the nav.
 export function AppShell({
   defaultSidebarOpen,
   children,
