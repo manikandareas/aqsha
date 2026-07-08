@@ -159,6 +159,42 @@ describe("ResearchSourceRepo.listByThreadTurn + setCitationNumbers (penomoran si
   });
 });
 
+describe("ResearchSourceRepo.setClassification — kolom evidence viz (mig 0027)", () => {
+  itest("persist cited_by_count/topics_json saat insert + set klasifikasi batch by id", async () => {
+    const run = "run-viz";
+    const a = srcRow({
+      turnId: run,
+      locator: "https://v1.test",
+      citedByCount: 42,
+      topicsJson: JSON.stringify(["Solar energy", "Photovoltaics"]),
+    });
+    const b = srcRow({ turnId: run, locator: "https://v2.test" });
+    await ResearchSourceRepo.insertMany(db, [a, b]);
+
+    let rows = await ResearchSourceRepo.listByThreadTurn(db, T1, run);
+    const rowA = rows.find((r) => r.id === a.id);
+    const rowB = rows.find((r) => r.id === b.id);
+    expect(rowA?.citedByCount).toBe(42);
+    expect(rowA?.topicsJson).toBe(JSON.stringify(["Solar energy", "Photovoltaics"]));
+    // Sebelum step analyze: klasifikasi null (jalur chat biasa & run lama aman).
+    expect(rowA?.stance).toBe(null);
+    expect(rowB?.citedByCount).toBe(null);
+
+    await ResearchSourceRepo.setClassification(db, [
+      { id: a.id, stance: "yes", studyDesign: "rct", outcomesJson: JSON.stringify(["mortality"]) },
+      { id: b.id, stance: "not_applicable", studyDesign: "other", outcomesJson: null },
+    ]);
+    rows = await ResearchSourceRepo.listByThreadTurn(db, T1, run);
+    const afterA = rows.find((r) => r.id === a.id);
+    const afterB = rows.find((r) => r.id === b.id);
+    expect(afterA?.stance).toBe("yes");
+    expect(afterA?.studyDesign).toBe("rct");
+    expect(afterA?.outcomesJson).toBe(JSON.stringify(["mortality"]));
+    expect(afterB?.stance).toBe("not_applicable");
+    expect(afterB?.outcomesJson).toBe(null);
+  });
+});
+
 describe("ArtifactEmbeddingRepo.searchSimilar — ANN + scope threadId via JOIN", () => {
   itest("scope threadId → hanya artifact thread itu (lintas-thread excluded)", async () => {
     await seedArtifact(`${SUFFIX}-artA`, T1, 0);

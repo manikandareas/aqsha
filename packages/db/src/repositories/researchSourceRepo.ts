@@ -2,12 +2,14 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import {
   type NewResearchSource,
   type ResearchSource,
+  type ResearchSourceStance,
+  type ResearchSourceStudyDesign,
   researchSources,
 } from "../schema/researchSources";
 import type { DbOrTx } from "../types";
 
 /**
- * Repo research_sources (Slice 6.4) — query Drizzle saja, tanpa business rule.
+ * Repo research_sources — query Drizzle saja, tanpa business rule.
  *
  * `insertMany` IDEMPOTEN: `onConflictDoNothing` pada unique
  * (`thread_id`,`turn_id`,`locator`) supaya step tool riset yang RE-RUN saat resume
@@ -32,7 +34,7 @@ export const ResearchSourceRepo = {
       .orderBy(asc(researchSources.createdAt), asc(researchSources.id));
   },
 
-  /** Sumber satu run deep (turn_id = workflow runId) — untuk penomoran sitasi `[n]` (G4). */
+  /** Sumber satu run deep (turn_id = workflow runId) — untuk penomoran sitasi `[n]`. */
   async listByThreadTurn(db: DbOrTx, threadId: string, turnId: string): Promise<ResearchSource[]> {
     return await db
       .select()
@@ -72,6 +74,40 @@ export const ResearchSourceRepo = {
     await db
       .update(researchSources)
       .set({ imageUrl: sql`case ${cases} end` })
+      .where(
+        inArray(
+          researchSources.id,
+          updates.map((u) => u.id),
+        ),
+      );
+  },
+
+  /**
+   * Set hasil klasifikasi evidence viz (stance/study_design/outcomes_json) batch via satu
+   * UPDATE…CASE per kolom — pola sama `setCitationNumbers`/`setImages` (≤60 baris per run deep).
+   */
+  async setClassification(
+    db: DbOrTx,
+    updates: Array<{
+      id: string;
+      stance: ResearchSourceStance;
+      studyDesign: ResearchSourceStudyDesign;
+      outcomesJson: string | null;
+    }>,
+  ): Promise<void> {
+    if (updates.length === 0) return;
+    const caseFor = (value: (u: (typeof updates)[number]) => string | null) =>
+      sql`case ${sql.join(
+        updates.map((u) => sql`when ${researchSources.id} = ${u.id} then ${value(u)}::text`),
+        sql` `,
+      )} end`;
+    await db
+      .update(researchSources)
+      .set({
+        stance: caseFor((u) => u.stance),
+        studyDesign: caseFor((u) => u.studyDesign),
+        outcomesJson: caseFor((u) => u.outcomesJson),
+      })
       .where(
         inArray(
           researchSources.id,
