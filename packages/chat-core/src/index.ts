@@ -1,12 +1,14 @@
 /**
- * @aqsha/chat-core — logika MURNI chat Astra (Fase 6), zero-dep & SATU FILE
- * (tanpa relative import).
+ * @aqsha/chat-core — logika MURNI chat Astra (Fase 6). Tiap entry (subpath exports
+ * map) = SATU file mandiri TANPA relative import: `index.ts` (ini) dan
+ * `deep-viz.ts` (`@aqsha/chat-core/deep-viz`, evidence viz laporan `/deep`).
  *
  * Kenapa paket sendiri: konsumen ter-bundle (runtime agent Node) TIDAK bisa
  * mengonsumsi paket workspace TS-mentah dengan relative-import tanpa ekstensi
  * (`@aqsha/db`/`@aqsha/services`) — bundler gagal resolve, dan runtime Node tak
- * bisa import `.ts` mentah bila di-externalize. Paket satu-file tanpa relative
- * import aman di-bundle. Helper murni di sini dipakai BERSAMA oleh web, api, dan
+ * bisa import `.ts` mentah bila di-externalize. File entry mandiri tanpa relative
+ * import aman di-bundle; dependency npm ter-compile (hanya `zod`, dipin sama dgn
+ * web/agent) juga aman. Helper murni di sini dipakai BERSAMA oleh web, api, dan
  * agent + unit test → SATU SSOT, tanpa duplikasi.
  *
  * Struktur tabel SSOT = `packages/db` (migrasi).
