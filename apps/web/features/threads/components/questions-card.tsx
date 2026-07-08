@@ -48,6 +48,7 @@ function OptionChip({
   multi,
   onClick,
 }: {
+  /** Keycap huruf (A, B, C…) — hanya dipakai varian pilih-satu; checkbox pakai kotak-centang. */
   letter: string;
   label: string;
   description?: string;
@@ -59,7 +60,9 @@ function OptionChip({
     <button
       type="button"
       onClick={onClick}
-      aria-pressed={selected}
+      role={multi ? "checkbox" : undefined}
+      aria-checked={multi ? selected : undefined}
+      aria-pressed={multi ? undefined : selected}
       className={cn(
         "flex items-start gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         selected
@@ -67,16 +70,31 @@ function OptionChip({
           : "border-border bg-card text-foreground hover:bg-muted/40",
       )}
     >
-      <span
-        className={cn(
-          "mt-px inline-flex h-5 min-w-5 items-center justify-center rounded-[5px] border px-1 font-mono text-[10px] font-semibold leading-none",
-          selected
-            ? "border-foreground/30 bg-foreground/[0.08] text-foreground"
-            : "border-border/70 bg-background text-muted-foreground",
-        )}
-      >
-        {multi && selected ? <CheckIcon className="size-3" /> : letter}
-      </span>
+      {multi ? (
+        // Checkbox: kotak-centang (kosong → tercentang), sengaja beda dari keycap huruf pilih-satu.
+        <span
+          className={cn(
+            "mt-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors",
+            selected
+              ? "border-foreground bg-foreground text-background"
+              : "border-border/70 bg-background text-transparent",
+          )}
+        >
+          <CheckIcon className="size-3" />
+        </span>
+      ) : (
+        // Pilih-satu (pilihan ganda): keycap huruf A/B/C.
+        <span
+          className={cn(
+            "mt-px inline-flex h-5 min-w-5 items-center justify-center rounded-[5px] border px-1 font-mono text-[10px] font-semibold leading-none",
+            selected
+              ? "border-foreground/30 bg-foreground/[0.08] text-foreground"
+              : "border-border/70 bg-background text-muted-foreground",
+          )}
+        >
+          {letter}
+        </span>
+      )}
       <span className="min-w-0">
         <span className="block text-[13px] leading-5">{label}</span>
         {description ? (
