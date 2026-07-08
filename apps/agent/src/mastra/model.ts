@@ -73,6 +73,17 @@ export const proProviderOptions = reasoningProviderOptions(
 );
 
 /**
+ * Pro KHUSUS subagent pencarian literatur `/deep` (`literature-searcher`): tetap model Pro
+ * (kualitas pemilihan query & seleksi sumber), tapi effort diturunkan — search adalah fase
+ * fan-out terbanyak-panggilan sekaligus terlama di run (≤8 sub-Q × maxSteps 8), tugasnya
+ * orkestrasi tool + ekstraksi snippet, bukan penalaran dalam; effort `high` di sana mahal dan
+ * lambat tanpa gain sepadan. `AQSHA_PRO_SEARCH_REASONING_EFFORT` (default `medium`).
+ */
+export const proSearchProviderOptions = reasoningProviderOptions(
+  process.env.AQSHA_PRO_SEARCH_REASONING_EFFORT ?? "medium",
+);
+
+/**
  * Tier billing EFEKTIF dari tier yang DIMINTA: Pro hanya saat model Pro benar-benar disetel
  * (`PRO_MODEL_CONFIGURED`) — tanpa `AQSHA_PRO_MODEL`, output Pro setara Lite (lihat `proModel`/
  * `proProviderOptions`), jadi bebankan tarif Lite supaya adil. SATU sumber aturan downgrade (dipakai

@@ -43,10 +43,14 @@ export const ResearchSourceRepo = {
       .orderBy(asc(researchSources.createdAt), asc(researchSources.id));
   },
 
-  /** Set citation_number batch via satu UPDATE…CASE (≤60 baris per run deep). */
+  /**
+   * Set citation_number batch via satu UPDATE…CASE (ratusan baris per run deep kaya-sumber).
+   * `citationNumber: null` = baris tersisih cap penomoran (ISSUE-5) — di-NULL-kan eksplisit
+   * supaya restart run dengan seleksi berbeda tak meninggalkan nomor basi.
+   */
   async setCitationNumbers(
     db: DbOrTx,
-    updates: Array<{ id: string; citationNumber: number }>,
+    updates: Array<{ id: string; citationNumber: number | null }>,
   ): Promise<void> {
     if (updates.length === 0) return;
     const cases = sql.join(

@@ -20,7 +20,7 @@ import { searchArxiv } from "./arxiv";
 import { lookupDoi, searchCrossref } from "./crossref";
 import { searchWebFirecrawl } from "./firecrawl";
 import { type OpenAlexSort, searchOpenAlex } from "./openalex";
-import type { ProviderSearchResult, ResearchCandidate } from "./types";
+import type { EvidenceStrength, ProviderSearchResult, ResearchCandidate } from "./types";
 
 export type { OpenAlexSort } from "./openalex";
 
@@ -50,7 +50,9 @@ export { scrapeUrlFirecrawl, type UrlReadResult } from "../papers/firecrawl-read
 
 // Formatter daftar pustaka deterministik — tool `format_references` + export .bib/.ris.
 export {
+  dedupeCitableReferenceSources,
   dedupeReferenceSources,
+  filterCitableReferenceSources,
   formatApa7Reference,
   formatBibtex,
   formatRis,
@@ -298,18 +300,27 @@ export const ResearchService = {
    * Dedupe paper yang sama lintas sub-pertanyaan/penyedia via kunci `normalizeDoi ?? arxivId ??
    * locator` (baris berbeda dgn DOI/URL beda dapat NOMOR SAMA). Dipanggil step `assign-citations`
    * SEBELUM verify/synthesize → writer mengutip `[n]` global yang stabil. Mengembalikan item
-   * bernomor (urut createdAt) untuk menyusun inventory.
+   * (urut createdAt) untuk menyusun inventory — HANYA yang bernomor layak dikutip.
+   *
+   * `perSubQuestionCap` (ISSUE-5): tool search mem-persist SEMUA hasilnya, jadi run kaya-sumber
+   * menomori 3–4× kapasitas synthesize/analyze hilir. Cap membatasi baris bernomor per
+   * sub-pertanyaan (prioritas `evidenceStrength`, lalu urutan persist); baris tersisih di-set
+   * `citation_number = NULL` (overwrite — restart dengan cap berbeda tak meninggalkan nomor basi)
+   * tapi TETAP tersimpan di DB (panel Sources thread tak kehilangan data). Baris tanpa
+   * `subQuestionIndex` (bukti tandingan / untagged) selalu lolos.
    */
   async assignCitationNumbers(
     db: DbOrTx,
-    args: { threadId: string; turnId: string },
+    args: { threadId: string; turnId: string; perSubQuestionCap?: number },
   ): Promise<ResearchSourceItem[]> {
     const rows = await ResearchSourceRepo.listByThreadTurn(db, args.threadId, args.turnId);
     if (rows.length === 0) return [];
+    const selected = selectSourceIdsForNumbering(rows, args.perSubQuestionCap);
     const numberByKey = new Map<string, number>();
     let next = 1;
     const updates = rows.map((r) => {
-      const key = (r.doi && normalizeDoi(r.doi)) || r.arxivId || r.locator;
+      if (!selected.has(r.id)) return { id: r.id, citationNumber: null };
+      const key = citationDedupeKey(r);
       let n = numberByKey.get(key);
       if (n === undefined) {
         n = next++;
@@ -321,6 +332,81 @@ export const ResearchService = {
     return rows.map((r, i) => toResearchSourceItem({ ...r, citationNumber: updates[i]!.citationNumber }));
   },
 };
+
+/**
+ * Prioritas kekuatan bukti (kecil = kuat) — SATU sumber untuk seleksi penomoran di sini DAN
+ * prioritisasi unit klasifikasi step `analyze-sources` (agent deep-research). Nilai di luar
+ * vocab (kolom text bebas) diperingkat paling akhir via `evidenceStrengthRank`.
+ */
+export const EVIDENCE_STRENGTH_PRIORITY: Record<EvidenceStrength, number> = {
+  strong: 0,
+  medium: 1,
+  weak: 2,
+};
+
+/** Rank aman untuk nilai bebas kolom `evidence_strength` — tak dikenal = paling akhir. */
+export function evidenceStrengthRank(strength: string): number {
+  return (EVIDENCE_STRENGTH_PRIORITY as Record<string, number | undefined>)[strength] ?? 3;
+}
+
+/** Kunci dedupe sitasi — paper sama lintas baris/penyedia berbagi satu [n]. */
+function citationDedupeKey(r: { doi: string | null; arxivId: string | null; locator: string }): string {
+  return (r.doi && normalizeDoi(r.doi)) || r.arxivId || r.locator;
+}
+
+/**
+ * Pilih id baris yang layak dinomori: per sub-pertanyaan ambil ≤`cap` PAPER UNIK terkuat
+ * (`evidenceStrength` strong→medium→weak, seri dipecah urutan persist — baris lebih awal = hasil
+ * ronde search pertama yang paling relevan). Cap dihitung per kunci dedupe (BUKAN per baris):
+ * baris duplikat paper yang sudah terpilih (mis. baris arXiv + baris publisher ber-DOI sama)
+ * berbagi satu [n] di penomoran, jadi tak boleh memakan slot paper unik lain. Baris
+ * ber-`subQuestionIndex` null (bukti tandingan / read_url untagged) selalu lolos — jumlahnya
+ * kecil dan bernilai tinggi. Pure — diekspor untuk test.
+ */
+export function selectSourceIdsForNumbering(
+  rows: Array<{
+    id: string;
+    subQuestionIndex: number | null;
+    evidenceStrength: string;
+    doi: string | null;
+    arxivId: string | null;
+    locator: string;
+  }>,
+  perSubQuestionCap?: number,
+): Set<string> {
+  if (perSubQuestionCap === undefined || perSubQuestionCap <= 0) {
+    return new Set(rows.map((r) => r.id));
+  }
+  const selected = new Set<string>();
+  const bySubQ = new Map<number, Array<{ id: string; key: string; order: number; strength: number }>>();
+  rows.forEach((r, order) => {
+    if (r.subQuestionIndex === null) {
+      selected.add(r.id);
+      return;
+    }
+    const bucket = bySubQ.get(r.subQuestionIndex) ?? [];
+    bucket.push({
+      id: r.id,
+      key: citationDedupeKey(r),
+      order,
+      strength: evidenceStrengthRank(r.evidenceStrength),
+    });
+    bySubQ.set(r.subQuestionIndex, bucket);
+  });
+  for (const bucket of bySubQ.values()) {
+    const keys = new Set<string>();
+    for (const r of bucket.sort((a, b) => a.strength - b.strength || a.order - b.order)) {
+      if (keys.has(r.key)) {
+        selected.add(r.id);
+        continue;
+      }
+      if (keys.size >= perSubQuestionCap) continue;
+      keys.add(r.key);
+      selected.add(r.id);
+    }
+  }
+  return selected;
+}
 
 /** Row `research_sources` → read model `ResearchSourceItem`. */
 function toResearchSourceItem(r: ResearchSource): ResearchSourceItem {

@@ -20,6 +20,7 @@ import { estimateCredits } from "@aqsha/services/plan";
 import { SendQuotaService } from "@aqsha/services/quota";
 import {
   CitationService,
+  evidenceStrengthRank,
   ResearchService,
   type IntegrityStatus,
   type VerificationResult,
@@ -711,7 +712,7 @@ function clarifyPrompt(input: z.infer<typeof InputSchema>): string {
 }
 
 function searcherPrompt(subQuestion: string, input: Planned): string {
-  return `Topik riset utama: ${input.question}\n\nSub-pertanyaan yang HARUS kamu jawab dengan literatur:\n${subQuestion}\n\nCari bukti terkuat dan kembalikan tiap sumber berguna dengan: judul, identifier (DOI/arXiv/URL), penulis + tahun bila tersedia, extract bukti 2-4 kalimat, dan rating kekuatan. JANGAN menomori sumber dan JANGAN menulis penanda [n] — penomoran sitasi global dilakukan belakangan.`;
+  return `Topik riset utama: ${input.question}\n\nSub-pertanyaan yang HARUS kamu jawab dengan literatur:\n${subQuestion}\n\nCari bukti terkuat dan kembalikan tiap sumber berguna dengan: judul, identifier (DOI/arXiv/URL), penulis + tahun bila tersedia, extract bukti 2-4 kalimat, dan rating kekuatan. Kurasi ketat: laporkan MAKSIMAL ~${SEARCHER_REPORT_TARGET} sumber TERKUAT yang benar-benar menjawab sub-pertanyaan — jangan menyetor ulang semua hasil tool. JANGAN menomori sumber dan JANGAN menulis penanda [n] — penomoran sitasi global dilakukan belakangan.`;
 }
 
 function counterPrompt(input: Searched): string {
@@ -1269,8 +1270,26 @@ const counterEvidenceStep = createStep({
 
 /** Clamp snippet per baris inventory (codepoint-safe via `messagePreview`). */
 const INVENTORY_SNIPPET_MAX_CHARS = 240;
+/** Lantai alokasi snippet adaptif — di bawah ini snippet tak informatif, fallback greedy. */
+const INVENTORY_SNIPPET_MIN_CHARS = 80;
 /** Budget total inventory — melewati ini, baris berikutnya tanpa snippet (identitas [n] tetap). */
 const INVENTORY_CHAR_BUDGET = 48_000;
+/** Pemisah snippet di baris inventory — panjangnya ikut dihitung alokasi adaptif. */
+const INVENTORY_SNIPPET_SEP = " — ";
+/**
+ * ISSUE-5: cap paper BERNOMOR per sub-pertanyaan. Tool search mem-persist SEMUA hasilnya (run
+ * nyata: 257 baris utk 6 sub-Q — 3–4× kapasitas analyze/synthesize hilir), jadi kurasi via prompt
+ * searcher saja tak cukup — seleksi deterministik terjadi saat penomoran (prioritas
+ * `evidenceStrength`; baris tersisih tetap tersimpan di DB, hanya tak dikutip). ≤8 sub-Q × 20 =
+ * ≤160 paper bernomor + bukti tandingan (selalu lolos) — muat di budget inventory (alokasi snippet
+ * adaptif di bawah); run maksimal masih melewati `ANALYZE_UNIT_CAP` (unit terlemah di-drop, ter-log).
+ */
+const NUMBERED_SOURCES_PER_SUBQ_CAP = 20;
+/**
+ * Target kurasi yang DIMINTA ke searcher via prompt — satu funnel dengan cap penomoran di atas:
+ * target < cap supaya seleksi deterministik jarang memotong; ubah cap → tinjau target ini juga.
+ */
+const SEARCHER_REPORT_TARGET = 15;
 
 /**
  * 5. assignCitations — nomori `research_sources` run ini (turnId=runId) → `citation_number` 1..N
@@ -1288,43 +1307,92 @@ const assignCitationsStep = createStep({
     const items = await ResearchService.assignCitationNumbers(getServiceDb(), {
       threadId: inputData.threadId,
       turnId: runId,
+      perSubQuestionCap: NUMBERED_SOURCES_PER_SUBQ_CAP,
     });
     const numbered = items.filter((s) => s.citationNumber !== null);
+    if (items.length > numbered.length) {
+      console.log(
+        `[deep-research] assign-citations run=${runId}: ${items.length - numbered.length}/${items.length} baris tersisih cap penomoran ${NUMBERED_SOURCES_PER_SUBQ_CAP}/sub-Q (tetap tersimpan di DB, tak dikutip)`,
+      );
+    }
     // Baris inventory bawa authors/year/venue → verify_identifiers + daftar pustaka APA
     // bekerja dari metadata asli provider, bukan karangan model.
     //
     // BERBATAS (temuan produksi run yang macet): run kaya-sumber (262 baris) dengan snippet penuh per baris
     // menggelembungkan prompt sintesis sampai ~400KB (~100k token) → panggilan penulis merangkak
     // melampaui timeout task 15 menit, dan tiap retry mewarisi prompt beracun yang sama → run
-    // "macet" permanen. Snippet per baris di-clamp; setelah budget total tersentuh, baris
-    // berikutnya ditulis TANPA snippet — identitas `[n] judul (meta) — identifier` tetap utuh
-    // sehingga SEMUA nomor sitasi tetap bisa dikutip writer.
-    let inventoryChars = 0;
-    let snippetlessRows = 0;
-    const numberedInventory = numbered
-      .map((s) => {
-        const meta = [
-          s.authors.length > 0 ? s.authors.join(", ") : null,
-          s.year !== null ? String(s.year) : null,
-          s.venue,
-        ]
-          .filter(Boolean)
-          .join("; ");
-        const withinBudget = inventoryChars < INVENTORY_CHAR_BUDGET;
-        if (s.snippet && !withinBudget) snippetlessRows += 1;
-        const snippet =
-          s.snippet && withinBudget ? ` — ${messagePreview(s.snippet, INVENTORY_SNIPPET_MAX_CHARS)}` : "";
-        const line = `[${s.citationNumber}] ${s.title}${meta ? ` (${meta})` : ""} — ${
+    // "macet" permanen. Identitas `[n] judul (meta) — identifier` selalu utuh sehingga SEMUA nomor
+    // sitasi tetap bisa dikutip writer; hanya snippet yang tunduk budget.
+    //
+    // ISSUE-5, alokasi snippet ADAPTIF: urutan inventory = urutan nomor sitasi, BUKAN kekuatan
+    // bukti — skema first-come lama memberi baris awal snippet 240 char penuh dan ekor tanpa
+    // snippet sama sekali. Kini sisa budget (setelah baris dasar) dibagi rata semua baris
+    // bersnippet; bila jatah per baris < lantai 80 char (run patologis), fallback ke greedy lama
+    // sebagai backstop insiden 400KB.
+    const baseLines = numbered.map((s) => {
+      const meta = [
+        s.authors.length > 0 ? s.authors.join(", ") : null,
+        s.year !== null ? String(s.year) : null,
+        s.venue,
+      ]
+        .filter(Boolean)
+        .join("; ");
+      return {
+        head: `[${s.citationNumber}] ${s.title}${meta ? ` (${meta})` : ""} — ${
           s.doi ?? s.arxivId ?? s.url ?? s.locator
-        }${snippet} (${s.evidenceStrength})`;
-        inventoryChars += line.length + 1;
-        return line;
-      })
-      .join("\n");
-    if (snippetlessRows > 0) {
-      console.log(
-        `[deep-research] assign-citations run=${runId}: inventory menyentuh budget ${INVENTORY_CHAR_BUDGET} char — ${snippetlessRows} baris ditulis tanpa snippet`,
-      );
+        }`,
+        tail: ` (${s.evidenceStrength})`,
+        snippet: s.snippet,
+      };
+    });
+    const baseChars = baseLines.reduce((sum, l) => sum + l.head.length + l.tail.length + 1, 0);
+    const rowsWithSnippet = baseLines.filter((l) => l.snippet).length;
+    const evenAlloc =
+      rowsWithSnippet > 0
+        ? Math.floor((INVENTORY_CHAR_BUDGET - baseChars) / rowsWithSnippet) -
+          INVENTORY_SNIPPET_SEP.length
+        : 0;
+    const adaptiveSnippetChars =
+      evenAlloc >= INVENTORY_SNIPPET_MIN_CHARS
+        ? Math.min(INVENTORY_SNIPPET_MAX_CHARS, evenAlloc)
+        : null;
+    let numberedInventory: string;
+    if (adaptiveSnippetChars !== null) {
+      // Mode adaptif: tiap baris bersnippet dapat jatah rata — total dijamin ≤ budget by construction.
+      numberedInventory = baseLines
+        .map((l) =>
+          l.snippet
+            ? `${l.head}${INVENTORY_SNIPPET_SEP}${messagePreview(l.snippet, adaptiveSnippetChars)}${l.tail}`
+            : `${l.head}${l.tail}`,
+        )
+        .join("\n");
+      if (adaptiveSnippetChars < INVENTORY_SNIPPET_MAX_CHARS) {
+        console.log(
+          `[deep-research] assign-citations run=${runId}: snippet inventory dialokasikan adaptif ${adaptiveSnippetChars} char/baris (${rowsWithSnippet} baris)`,
+        );
+      }
+    } else {
+      // Mode greedy (backstop run patologis, jatah rata < lantai): baris awal snippet penuh,
+      // setelah budget tersentuh baris berikutnya tanpa snippet.
+      let inventoryChars = 0;
+      let snippetlessRows = 0;
+      numberedInventory = baseLines
+        .map((l) => {
+          const includeSnippet = Boolean(l.snippet) && inventoryChars < INVENTORY_CHAR_BUDGET;
+          if (l.snippet && !includeSnippet) snippetlessRows += 1;
+          const snippet = includeSnippet
+            ? `${INVENTORY_SNIPPET_SEP}${messagePreview(l.snippet as string, INVENTORY_SNIPPET_MAX_CHARS)}`
+            : "";
+          const line = `${l.head}${snippet}${l.tail}`;
+          inventoryChars += line.length + 1;
+          return line;
+        })
+        .join("\n");
+      if (snippetlessRows > 0) {
+        console.log(
+          `[deep-research] assign-citations run=${runId}: inventory menyentuh budget ${INVENTORY_CHAR_BUDGET} char — ${snippetlessRows} baris ditulis tanpa snippet (fallback greedy)`,
+        );
+      }
     }
     // Jumlah sitasi unik [n] (dedupe by DOI/arXiv/locator) — sumber penomoran ditampilkan FE.
     const uniqueCitations = new Set(numbered.map((s) => s.citationNumber)).size;
@@ -1363,15 +1431,16 @@ const assignCitationsStep = createStep({
   },
 });
 
-/** Cap unit klasifikasi per run (lebih → prioritaskan evidenceStrength kuat, sisanya di-drop). */
-const ANALYZE_UNIT_CAP = 60;
+/**
+ * Cap unit klasifikasi per run (lebih → prioritaskan evidenceStrength kuat, sisanya di-drop,
+ * ter-log). ISSUE-5: 60 → 100 — klasifikasi chunked 20 unit/panggilan model lite, jadi biayanya
+ * maksimal +2 panggilan lite. Run maksimal (8 sub-Q × cap penomoran 20) tetap bisa menghasilkan
+ * ≤160 unit → hingga 60 unit TERLEMAH masih di-drop; trade-off biaya yang disengaja — dampaknya
+ * hanya klasifikasi viz best-effort kurang lengkap (baris tetap bernomor & bisa dikutip).
+ */
+const ANALYZE_UNIT_CAP = 100;
 /** Unit per panggilan LLM klasifikasi. */
 const ANALYZE_CHUNK_SIZE = 20;
-const ANALYZE_STRENGTH_PRIORITY: Record<AnalyzeUnit["evidenceStrength"], number> = {
-  strong: 0,
-  medium: 1,
-  weak: 2,
-};
 
 /**
  * 5b. analyzeSources — klasifikasi stance/design/outcomes per unit `[n]×subQ` (LLM structuredOutput
@@ -1423,7 +1492,7 @@ const analyzeSourcesStep = createStep({
       }
       const allUnits = [...unitByKey.values()].sort(
         (a, b) =>
-          ANALYZE_STRENGTH_PRIORITY[a.evidenceStrength] - ANALYZE_STRENGTH_PRIORITY[b.evidenceStrength] ||
+          evidenceStrengthRank(a.evidenceStrength) - evidenceStrengthRank(b.evidenceStrength) ||
           a.n - b.n ||
           a.subQuestionIndex - b.subQuestionIndex,
       );

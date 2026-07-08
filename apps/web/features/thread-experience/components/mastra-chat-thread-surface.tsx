@@ -529,7 +529,7 @@ function MastraChatInner({
   // sempat restart; run `running` tak resume sendiri) → tawarkan mulai ulang dari step terakhir.
   const stalledCard = agent.deepStalled ? (
     <DeepRunNoticeCard
-      body="Riset mendalam tampak macet — tidak ada kemajuan beberapa menit terakhir."
+      body={agent.deepStalled}
       primary={{ label: "Mulai ulang", onClick: () => void agent.restartDeep() }}
       secondary={{ label: "Hentikan", onClick: agent.stop }}
     />
