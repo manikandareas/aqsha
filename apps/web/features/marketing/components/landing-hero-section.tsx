@@ -1,52 +1,13 @@
 "use client";
 
 import { m, useReducedMotion } from "motion/react";
+import Image from "next/image";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
-import { HeroComparisonCard } from "@/features/marketing/components/hero-comparison-card";
-import { LandingDemoSessionPreview } from "@/features/marketing/components/landing-demo-session-preview";
-
-function HeroResearchShowcase() {
-  const reduce = useReducedMotion();
-
-  return (
-    <div
-      className="w-full [perspective:1400px]"
-      style={{ perspectiveOrigin: "50% 0%" }}
-    >
-      <m.div
-        className="w-full overflow-hidden rounded-2xl border border-border bg-muted shadow-sm"
-        initial={
-          reduce
-            ? false
-            : {
-                opacity: 0,
-                rotateX: 9,
-                y: 52,
-                scale: 0.96,
-                transformOrigin: "50% 0%",
-              }
-        }
-        animate={{ opacity: 1, rotateX: 0, y: 0, scale: 1 }}
-        transition={{
-          type: "spring",
-          stiffness: 95,
-          damping: 20,
-          mass: 0.85,
-        }}
-        style={{ transformStyle: "preserve-3d" }}
-      >
-        <div className="aspect-[16/10] w-full p-2 sm:p-3 lg:aspect-[16/9]">
-          <LandingDemoSessionPreview
-            variant="hero"
-            className="h-full rounded-[12px] sm:rounded-[14px]"
-          />
-        </div>
-      </m.div>
-    </div>
-  );
-}
+import { FrameChrome } from "@/features/marketing/components/feature-frame";
+import { MagneticButton } from "@/features/marketing/components/magnetic-button";
+import { useScrollProgress, useScrollTransform } from "@/lib/motion";
 
 const buttonContainer = {
   hidden: {},
@@ -68,117 +29,163 @@ const buttonItem = (reduce: boolean | null) =>
         },
       };
 
+/**
+ * HeroImageFrame — the near-full-bleed editorial image that anchors the hero.
+ *
+ * Entrance: 3D drop-in (rotateX + y, perspective 1400px). Signature scroll
+ * interaction: "frame settles" — a subtle scale 0.965 → 1 as the frame enters,
+ * plus internal parallax (image moves slower than scroll) and a Ken Burns slow
+ * zoom. Paper-grain + corner crosshairs come from the shared FrameChrome.
+ */
+function HeroImageFrame() {
+  const reduce = useReducedMotion();
+  const { ref, scrollYProgress } = useScrollProgress<HTMLDivElement>({
+    offset: ["start end", "end start"],
+  });
+  const scale = useScrollTransform(scrollYProgress, [0, 0.35], [0.965, 1]);
+  const parallaxY = useScrollTransform(scrollYProgress, [0, 1], ["-8%", "8%"]);
+
+  return (
+    <div
+      className="mx-auto mt-16 w-full max-w-[88rem] px-3 sm:mt-20 sm:px-5 lg:mt-24"
+      style={{ perspective: "1400px", perspectiveOrigin: "50% 0%" }}
+    >
+      <m.div
+        initial={
+          reduce
+            ? false
+            : { opacity: 0, y: 64, rotateX: 6, transformOrigin: "50% 0%" }
+        }
+        animate={{ opacity: 1, y: 0, rotateX: 0 }}
+        transition={{
+          type: "spring",
+          stiffness: 95,
+          damping: 20,
+          mass: 0.85,
+          delay: 0.25,
+        }}
+        style={{ transformStyle: "preserve-3d" }}
+      >
+        <m.div
+          ref={ref}
+          className="relative w-full overflow-hidden rounded-2xl border border-border"
+          style={reduce ? undefined : { scale }}
+        >
+          <div className="relative aspect-[4/3] w-full sm:aspect-[16/10] lg:aspect-[21/10]">
+            <m.div
+              className="absolute inset-[-12%]"
+              style={reduce ? undefined : { y: parallaxY }}
+            >
+              <Image
+                src="/landing/hero-frame.png"
+                alt="Hand-drawn panoramic landscape with woven research journal elements"
+                fill
+                priority
+                sizes="(min-width: 1408px) 1408px, 100vw"
+                className="ken-burns object-cover"
+              />
+            </m.div>
+            <FrameChrome />
+          </div>
+        </m.div>
+      </m.div>
+
+      {/* Caption line: editorial note + handwritten accent */}
+      <m.div
+        className="mt-5 flex items-end justify-between gap-6 sm:mt-6"
+        initial={reduce ? false : { opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.6, duration: 0.5 }}
+      >
+        <p className="max-w-md text-pretty text-sm leading-snug text-muted-foreground sm:text-base sm:leading-snug">
+          Setiap sumber dicek ke aslinya. Setiap klaim punya jejak. Setiap kata
+          berasal dari baca, bukan karang.
+        </p>
+        <p className="font-hand shrink-0 text-lg leading-none text-foreground/70 sm:text-2xl sm:leading-none">
+          field notes
+        </p>
+      </m.div>
+    </div>
+  );
+}
+
+/**
+ * LandingHeroSection — pure hero: headline + CTA pair + one big image.
+ *
+ * Single centered column, oversized serif headline with a clipPath sweep
+ * reveal, magnetic primary CTA, then the near-full-bleed HeroImageFrame.
+ * No product mockups, no comparison cards — the comparison message lives in
+ * WhyAqshaSection (#bandingin).
+ */
 export function LandingHeroSection() {
   const reduce = useReducedMotion();
 
   return (
-    <section className="w-full">
-      <div className="mx-auto w-full max-w-7xl px-4 pb-20 pt-24 sm:px-6 sm:pb-24 sm:pt-32 lg:px-8 lg:pb-28 lg:pt-40">
-        <div className="space-y-6 sm:space-y-8">
-          <m.p
-            className="text-[15px] leading-snug text-muted-foreground sm:text-base"
-            initial={reduce ? false : { opacity: 0, y: 10, letterSpacing: "0.12em" }}
-            animate={{ opacity: 1, y: 0, letterSpacing: "0em" }}
-            transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
-          >
-            Asisten AI buat skripsi, tesis &amp; paper
-          </m.p>
-          <div className="grid gap-10 sm:gap-12 lg:grid-cols-2 lg:items-start lg:gap-x-14 xl:gap-x-20">
-            <div className="min-w-0 max-w-xl lg:max-w-none">
-              <m.h1
-                className="font-heading max-w-[min(100%,28rem)] text-[2.75rem] font-normal leading-[1.08] tracking-normal text-foreground sm:text-5xl sm:leading-[1.06] lg:text-[3.25rem] lg:leading-[1.05] xl:text-[3.5rem]"
-                initial={reduce ? false : { clipPath: "inset(0 100% 0 0)", opacity: 0.2 }}
-                animate={{ clipPath: "inset(0 0% 0 0)", opacity: 1 }}
-                transition={{ duration: 0.95, ease: [0.22, 1, 0.36, 1] }}
-              >
-                AI buat nulis riset — yang{" "}
-                <em className="not-italic text-foreground/80">nggak ngarang sumber.</em>
-              </m.h1>
-              <m.div
-                className="mt-8 flex flex-wrap gap-3 sm:mt-10"
-                variants={buttonContainer}
-                initial="hidden"
-                animate="show"
-              >
-                <m.div variants={buttonItem(reduce)}>
-                  <Button asChild className="h-14 rounded-full px-7 text-base">
-                    <Link href="/sign-up">Mulai gratis →</Link>
-                  </Button>
-                </m.div>
-                <m.div variants={buttonItem(reduce)}>
-                  <Button
-                    asChild
-                    variant="outline"
-                    className="h-14 rounded-full border-border/80 bg-card px-7 text-base text-card-foreground shadow-sm hover:bg-muted"
-                  >
-                    <Link href="#bandingin">Bandingin sama yang lain</Link>
-                  </Button>
-                </m.div>
-              </m.div>
-              <m.p
-                className="mt-6 text-sm text-muted-foreground sm:mt-8"
-                initial={reduce ? false : { opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.35, duration: 0.5 }}
-              >
-                Buat mahasiswa S1 · pascasarjana · peneliti
-              </m.p>
-            </div>
-            <m.div
-              className="min-w-0"
-              initial={
-                reduce
-                  ? false
-                  : { opacity: 0, x: 28, skewY: 1.2, filter: "blur(8px)" }
-              }
-              animate={{ opacity: 1, x: 0, skewY: 0, filter: "blur(0px)" }}
-              transition={{
-                delay: 0.18,
-                duration: 0.75,
-                ease: [0.16, 1, 0.3, 1],
-              }}
+    <section className="w-full pb-16 sm:pb-24 lg:pb-28">
+      <div className="mx-auto w-full max-w-4xl px-4 pt-24 text-center sm:px-6 sm:pt-32 lg:pt-40">
+        <m.p
+          className="text-[15px] leading-snug text-muted-foreground sm:text-base"
+          initial={reduce ? false : { opacity: 0, y: 10, letterSpacing: "0.12em" }}
+          animate={{ opacity: 1, y: 0, letterSpacing: "0em" }}
+          transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+        >
+          Asisten AI buat skripsi, tesis &amp; paper
+        </m.p>
+        <m.h1
+          className="font-heading mx-auto mt-6 max-w-[22ch] text-balance text-5xl font-normal leading-[1.06] tracking-normal text-foreground sm:mt-8 sm:text-6xl sm:leading-[1.05] lg:text-[4.5rem] lg:leading-[1.04]"
+          initial={reduce ? false : { clipPath: "inset(0 100% 0 0)", opacity: 0.2 }}
+          animate={{ clipPath: "inset(0 0% 0 0)", opacity: 1 }}
+          transition={{ duration: 0.95, ease: [0.22, 1, 0.36, 1] }}
+        >
+          AI buat nulis riset — yang{" "}
+          <em className="not-italic text-foreground/80">nggak ngarang sumber.</em>
+        </m.h1>
+        <m.p
+          className="mx-auto mt-6 max-w-xl text-pretty text-lg leading-snug text-foreground/85 sm:mt-8 sm:text-xl sm:leading-snug"
+          initial={reduce ? false : { opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+        >
+          Tool AI lain sering ngasih referensi palsu.{" "}
+          <strong className="font-medium text-foreground">
+            Aqsha ngecek tiap sumber ke paper aslinya
+          </strong>{" "}
+          sebelum kamu pakai.
+        </m.p>
+        <m.div
+          className="mt-8 flex flex-wrap justify-center gap-3 sm:mt-10"
+          variants={buttonContainer}
+          initial="hidden"
+          animate="show"
+        >
+          <m.div variants={buttonItem(reduce)}>
+            <MagneticButton radius={140} strength={0.4}>
+              <Button asChild className="h-14 rounded-full px-7 text-base">
+                <Link href="/sign-up">Mulai gratis →</Link>
+              </Button>
+            </MagneticButton>
+          </m.div>
+          <m.div variants={buttonItem(reduce)}>
+            <Button
+              asChild
+              variant="outline"
+              className="h-14 rounded-full border-border/80 bg-card px-7 text-base text-card-foreground hover:bg-muted"
             >
-              <p className="text-pretty text-lg leading-snug text-foreground/85 sm:text-xl sm:leading-snug lg:max-w-[26rem]">
-                Perplexity, ChatGPT, dan kawan-kawannya sering ngasih referensi palsu:
-                judul yang nggak ada, kutipan yang nggak pernah ditulis.{" "}
-                <strong className="font-medium text-foreground">
-                  Aqsha ngecek tiap sumber ke aslinya dulu
-                </strong>{" "}
-                — jadi kamu nggak ketahuan pas sidang atau direview dosen.
-              </p>
-            </m.div>
-          </div>
-        </div>
-
-        <m.div
-          className="mt-20 w-full sm:mt-24 lg:mt-28"
-          initial={reduce ? false : { opacity: 0, y: 40 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{
-            type: "spring",
-            stiffness: 95,
-            damping: 20,
-            mass: 0.85,
-            delay: 0.2,
-          }}
-        >
-          <HeroResearchShowcase />
+              <Link href="#bandingin">Bandingin sama yang lain</Link>
+            </Button>
+          </m.div>
         </m.div>
-
-        <m.div
-          className="mt-10 w-full sm:mt-12"
-          initial={reduce ? false : { opacity: 0, y: 28 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{
-            type: "spring",
-            stiffness: 120,
-            damping: 22,
-            delay: 0.35,
-          }}
+        <m.p
+          className="mt-6 text-sm text-muted-foreground sm:mt-8"
+          initial={reduce ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.35, duration: 0.5 }}
         >
-          <HeroComparisonCard />
-        </m.div>
+          Buat mahasiswa S1 · pascasarjana · peneliti
+        </m.p>
       </div>
+
+      <HeroImageFrame />
     </section>
   );
 }
