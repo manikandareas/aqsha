@@ -103,6 +103,18 @@ export {
   type ArtifactListItem,
   type ArtifactRenderPayload,
 } from "./artifact.service";
+// Analisis statistik (sandbox Daytona per-thread) — juga via subpath `@aqsha/services/analysis`.
+export {
+  ANALYSIS_CATALOG,
+  ANALYSIS_IDS,
+  type AnalysisArgSpec,
+  type AnalysisCatalogEntry,
+  analysisCatalogEntry,
+  type AnalysisChart,
+  type AnalysisId,
+  type AnalysisRunResult,
+  AnalysisService,
+} from "./analysis";
 // Helper murni route AI native BlockNote (`apps/api` /blocknote-ai/chat) — TANPA import `ai`.
 export { DocAiService, INDO_BRAND_PROMPT } from "./doc-ai.service";
 // Konfigurasi gateway Astra (env + default model) — SSOT bersama route doc-AI & `model.ts` agent.

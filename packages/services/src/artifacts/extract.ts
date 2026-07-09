@@ -10,6 +10,11 @@ import { isOcrEnabled, ocrExtractText } from "./ocr";
 export type ExtractedDocument = { markdown: string; plainText: string };
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+/** Cap preview XLSX untuk RAG — bytes mentah tetap sumber sandbox analisis. */
+const XLSX_PREVIEW_ROWS = 50;
+const XLSX_PREVIEW_COLUMNS = 40;
 
 function normalizeExtractedText(text: string): string {
   return text
@@ -53,6 +58,42 @@ async function extractImage(bytes: Uint8Array, mimeType: string): Promise<Extrac
   return { markdown: ocr, plainText: ocr };
 }
 
+/**
+ * XLSX (binary — jalur utf8 fallback menghasilkan sampah): preview text sheet
+ * pertama (±50 baris, CSV-like) untuk RAG/konteks. Analisis statistik penuh
+ * membaca BYTES via sandbox (AnalysisService), bukan teks ini.
+ */
+async function extractXlsx(bytes: Uint8Array): Promise<ExtractedDocument> {
+  const ExcelJS = (await import("exceljs")).default;
+  const workbook = new ExcelJS.Workbook();
+  // Slice out EXACTLY the file's bytes. `bytes.buffer` may be a shared/pooled ArrayBuffer
+  // (Node's 8 KB pool for small allocations) at a nonzero byteOffset — passing it whole
+  // (the old `Buffer.from(bytes).buffer` cast) feeds ExcelJS pool garbage and mis-parses.
+  const exact = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  await workbook.xlsx.load(exact as ArrayBuffer);
+  const sheet = workbook.worksheets[0];
+  if (!sheet) return { markdown: "", plainText: "" };
+
+  const lines: string[] = [];
+  sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (rowNumber > XLSX_PREVIEW_ROWS) return;
+    const cells: string[] = [];
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      if (colNumber > XLSX_PREVIEW_COLUMNS) return;
+      const text = (cell.text ?? "").replace(/\s+/g, " ").trim();
+      // CSV-quote when the cell holds a comma OR a double-quote, doubling embedded
+      // quotes (RFC 4180) — otherwise a value like  He said "hi"  corrupts columns.
+      const needsQuote = text.includes(",") || text.includes('"');
+      cells.push(needsQuote ? `"${text.replace(/"/g, '""')}"` : text);
+    });
+    lines.push(cells.join(","));
+  });
+  const truncated = sheet.rowCount > XLSX_PREVIEW_ROWS;
+  const header = `Sheet: ${sheet.name} (${sheet.rowCount} baris${truncated ? `, preview ${XLSX_PREVIEW_ROWS} pertama` : ""})`;
+  const text = normalizeExtractedText([header, ...lines].join("\n"));
+  return { markdown: text, plainText: text };
+}
+
 async function extractDocx(bytes: Uint8Array): Promise<ExtractedDocument> {
   const mammoth = (await import("mammoth")).default;
   const result = await mammoth.extractRawText({ buffer: Buffer.from(bytes) });
@@ -73,6 +114,9 @@ export async function extractStoredDocument(
   }
   if (mime === DOCX_MIME || lowerName.endsWith(".docx")) {
     return extractDocx(bytes);
+  }
+  if (mime === XLSX_MIME || lowerName.endsWith(".xlsx")) {
+    return extractXlsx(bytes);
   }
   // Gambar raster (D8) → OCR. SVG (image/svg+xml) bukan raster → biar jatuh ke jalur teks utf8.
   const isImage =

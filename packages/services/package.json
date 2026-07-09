@@ -88,6 +88,13 @@
       "import": "./dist/workspace.service.js",
       "default": "./dist/workspace.service.js"
     },
+    "./analysis": {
+      "types": "./src/analysis/index.ts",
+      "bun": "./src/analysis/index.ts",
+      "node": "./dist/analysis/index.js",
+      "import": "./dist/analysis/index.js",
+      "default": "./dist/analysis/index.js"
+    },
     "./context": {
       "types": "./src/context.service.ts",
       "bun": "./src/context.service.ts",
@@ -100,7 +107,9 @@
     "build": "tsup",
     "build:watch": "tsup --watch",
     "test": "bun test --timeout 30000",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "stats:snapshot": "bun run scripts/daytona-snapshot.ts",
+    "stats:smoke": "bun run scripts/daytona-smoke.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.73",
@@ -108,10 +117,12 @@
     "@aqsha/db": "workspace:*",
     "@aws-sdk/client-s3": "^3.1073.0",
     "@aws-sdk/s3-request-presigner": "^3.1073.0",
+    "@daytona/sdk": "^0.194.0",
     "@mistralai/mistralai": "^2.3.0",
     "ai": "^6.0.208",
     "bullmq": "^5.79.0",
     "drizzle-orm": "^0.45.2",
+    "exceljs": "^4.4.0",
     "fast-xml-parser": "^5.7.3",
     "ioredis": "^5.11.1",
     "mammoth": "^1.12.0",
