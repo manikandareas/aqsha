@@ -10,7 +10,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useReducedMotion } from "motion/react";
 
-import { HOUSE_ADS, type HouseAdAccent } from "@/features/discovery/house-ads";
+import { HOUSE_ADS } from "@/features/discovery/house-ads";
 import { useBillingCurrent } from "@/features/settings/api";
 import {
   deepRunsQuota,
@@ -23,10 +23,13 @@ const NUM = new Intl.NumberFormat("id-ID");
 const DAY_MS = 86_400_000;
 const SLIDE_INTERVAL_MS = 6_000;
 
-const ACCENT_SOFT: Record<HouseAdAccent, string> = {
-  mint: "bg-mint-soft",
-  lavender: "bg-lavender-soft",
-  coral: "bg-coral-soft",
+// Ilustrasi banner per-slide — HANYA berlaku di carousel /app; feed Explore tetap
+// pakai creative house-ads aslinya. Kunci = id slide. Rasio SVG-nya beragam
+// (portret/persegi/lanskap) → dirender object-contain, bukan cover.
+const BANNER_IMAGE: Record<string, string> = {
+  usage: "/programming.svg",
+  "astra-deep": "/ai-working.svg",
+  "aqsha-app": "/video-call.svg",
 };
 
 function resetLabel(resetAt: number): string {
@@ -43,7 +46,6 @@ type BannerSlide = {
   title: string;
   subtitle: string;
   image?: string;
-  imageBgClass: string;
   /** Bar kredit mini — hanya di slide usage berpaket terbatas. */
   meter?: { pct: number; low: boolean };
 };
@@ -74,7 +76,6 @@ function useUsageSlide(): BannerSlide | null {
       title: `Paket ${planLabel} — kredit tak terbatas ∞`,
       subtitle: `${deepLabel} · kelola langganan`,
       image: "/pro-card.png",
-      imageBgClass: "bg-white",
     };
   }
 
@@ -90,7 +91,6 @@ function useUsageSlide(): BannerSlide | null {
       planKey === "free" ? " · upgrade untuk kuota lebih besar" : ""
     }`,
     image: "/pro-card.png",
-    imageBgClass: "bg-white",
     meter: { pct, low: isCreditsLow(billing.data) },
   };
 }
@@ -112,9 +112,11 @@ export function HomeBannerCarousel() {
       title: ad.title,
       subtitle: ad.body,
       image: ad.image,
-      imageBgClass: ACCENT_SOFT[ad.accent],
     })),
-  ];
+  ].map((slide) => ({
+    ...slide,
+    image: BANNER_IMAGE[slide.id] ?? slide.image,
+  }));
   // Jumlah slide bisa berubah saat billing selesai memuat → index modulo agar tak out-of-range.
   const active = slides.length > 0 ? index % slides.length : 0;
 
@@ -205,12 +207,7 @@ function BannerSlideCard({
           {slide.subtitle}
         </p>
       </div>
-      <div
-        className={cn(
-          "relative h-12 w-20 shrink-0 overflow-hidden rounded-[8px] sm:h-14 sm:w-24",
-          slide.imageBgClass,
-        )}
-      >
+      <div className="relative h-12 w-20 shrink-0 sm:h-14 sm:w-24">
         {slide.image ? (
           <Image
             src={slide.image}
@@ -218,7 +215,7 @@ function BannerSlideCard({
             fill
             unoptimized
             sizes="96px"
-            className="object-cover"
+            className="object-contain"
           />
         ) : null}
       </div>

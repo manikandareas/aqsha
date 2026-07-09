@@ -3,6 +3,7 @@ import {
   AlertCircleIcon as HugeAlertCircleIcon,
   ArchiveIcon as HugeArchiveIcon,
   ArrowDown01Icon,
+  ArrowExpand01Icon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
   ArrowReloadHorizontalIcon,
@@ -203,6 +204,9 @@ export const MessageSquareIcon = createIcon(Message01Icon);
 export const MessageSquarePlusIcon = createIcon(MessageAdd01Icon);
 export const MicIcon = createIcon(Mic01Icon);
 export const MaximizeIcon = createIcon(Maximize01Icon);
+// Empat panah sudut → afordans "buka/perbesar" yang bersih (beda dari Maximize01 yang glyph-nya
+// berbentuk kursor-tangan). Dipakai tombol buka-panel tool card.
+export const ExpandIcon = createIcon(ArrowExpand01Icon);
 export const MinimizeIcon = createIcon(Minimize01Icon);
 export const MinusIcon = createIcon(MinusSignIcon);
 export const Monitor = createIcon(ComputerIcon);
