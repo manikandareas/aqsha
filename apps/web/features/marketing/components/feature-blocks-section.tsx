@@ -5,8 +5,13 @@ import { m, useReducedMotion } from "motion/react";
 import { FeatureFrame } from "@/features/marketing/components/feature-frame";
 import { cn } from "@/lib/utils";
 
-/** Placeholder untuk semua frame — nanti di-swap per fitur dengan screenshot asli. */
-const FRAME_IMAGE = "/landing/hero-frame.png";
+/** Editorial frame art per feature block — sketchbook landscapes, satu gambar per blok. */
+const FRAME_IMAGES = {
+  workspace: "/landing/frame-workspace.png",
+  astra: "/landing/frame-astra.png",
+  citations: "/landing/frame-citations.png",
+  provenance: "/landing/frame-provenance.png",
+} as const;
 
 const blocks = {
   workspace: {
@@ -144,7 +149,7 @@ export function FeatureBlocksSection() {
           </div>
           <FeatureFrame
             className="mt-10 sm:mt-12 lg:mt-14"
-            image={FRAME_IMAGE}
+            image={FRAME_IMAGES.workspace}
             alt={blocks.workspace.alt}
             aspectClassName="aspect-[4/3] sm:aspect-[16/10]"
             sizes="(min-width: 1152px) 1152px, 100vw"
@@ -164,7 +169,7 @@ export function FeatureBlocksSection() {
           </div>
           <FeatureFrame
             className="mt-10 sm:mt-12 lg:-mr-10 lg:mt-14 lg:w-[calc(100%+2.5rem)]"
-            image={FRAME_IMAGE}
+            image={FRAME_IMAGES.astra}
             alt={blocks.astra.alt}
             aspectClassName="aspect-[4/3] sm:aspect-[16/10]"
             sizes="(min-width: 1152px) 1192px, 100vw"
@@ -182,7 +187,7 @@ export function FeatureBlocksSection() {
           </div>
           <FeatureFrame
             className="mt-10 rounded-none border-x-0 sm:mt-12 lg:mt-16"
-            image={FRAME_IMAGE}
+            image={FRAME_IMAGES.citations}
             alt={blocks.citations.alt}
             aspectClassName="aspect-[4/3] sm:aspect-[16/9] lg:aspect-[21/9]"
             sizes="100vw"
@@ -200,7 +205,7 @@ export function FeatureBlocksSection() {
               </div>
             </div>
             <FeatureFrame
-              image={FRAME_IMAGE}
+              image={FRAME_IMAGES.provenance}
               alt={blocks.provenance.alt}
               aspectClassName="aspect-[4/3] sm:aspect-[4/5]"
               sizes="(min-width: 1024px) 45vw, 100vw"
