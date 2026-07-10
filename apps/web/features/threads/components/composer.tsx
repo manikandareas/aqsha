@@ -816,7 +816,7 @@ function ComposerStartPanel({
       };
 
   return (
-    <div className="grid gap-4 sm:grid-cols-[1.05fr_0.95fr]">
+    <div className="grid gap-4 @2xl:grid-cols-[1.05fr_0.95fr]">
       <ComposerStartColumn title="Thread terbaru">
         {sortedThreads.length > 0 ? (
           sortedThreads.map((thread, index) => (

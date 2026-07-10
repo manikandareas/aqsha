@@ -6,7 +6,6 @@ import {
   Loader2Icon,
   MessageSquareIcon,
   MoreHorizontalIcon,
-  PanelLeftIcon,
   Trash2Icon,
 } from "@aqsha/ui/icons";
 import { useRouter } from "next/navigation";
@@ -30,7 +29,7 @@ import {
   triggerArtifactDownload,
 } from "@/lib/artifact-download";
 import { useArtifactRender } from "@/features/artifacts/api";
-import { PanelHeaderBar, SidePanelFrame } from "@/components/layout/side-panel-frame";
+import { PanelCardToolbar, PanelOpenButton } from "@/components/layout/side-panel-frame";
 import { PanelTitleLabel } from "@/components/panel-title-dropdown-trigger";
 import { cn } from "@/lib/utils";
 import { useArtifactDetailData } from "../api/use-workspaces-data";
@@ -67,9 +66,9 @@ const initialAutosaveState: AutosaveState = {
 
 // Content-first reading measure — markdown docs, pdf pages, url/plain-text
 // readers. Every "read this" surface shares it so the page rhymes top to bottom.
-const proseColumnClass = "mx-auto w-full max-w-[860px] px-4 pb-16 pt-3 sm:px-6";
+const proseColumnClass = "mx-auto w-full max-w-[860px] px-4 pb-16 pt-3 @2xl:px-6";
 // Roomier column for framed embedded viewers (html/svg/diagram/data/code).
-const mediaColumnClass = "mx-auto w-full max-w-[1040px] px-4 pb-16 pt-3 sm:px-6";
+const mediaColumnClass = "mx-auto w-full max-w-[1040px] px-4 pb-16 pt-3 @2xl:px-6";
 // Types that read as documents rather than embedded media: they get the narrow
 // prose column and stay borderless/centered like the markdown reference.
 const contentFirstTypes = new Set([
@@ -234,21 +233,13 @@ export function ArtifactDetailView({
 
   const chatToggle =
     variant === "page" && onToggleChat ? (
-      <Button
-        type="button"
-        variant="ghost"
-        className={cn(
-          "flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-semibold transition-colors",
-          chatOpen
-            ? "bg-primary/15 text-primary hover:bg-primary/15 hover:text-primary"
-            : "text-muted-foreground hover:bg-muted hover:text-foreground",
-        )}
-        onClick={onToggleChat}
-        aria-label={chatOpen ? "Tutup chat" : "Buka chat"}
-      >
-        <MessageSquareIcon className="size-3.5" />
-        Chat
-      </Button>
+      <PanelOpenButton
+        open={chatOpen ?? false}
+        onOpen={onToggleChat}
+        icon={<MessageSquareIcon className="size-3.5" />}
+        label="Chat"
+        ariaLabel="Buka chat"
+      />
     ) : null;
 
   const header =
@@ -269,12 +260,11 @@ export function ArtifactDetailView({
       ) : (
         <ArtifactPanelToolbar
           title={detail.artifact.title}
-          onClose={onClose}
           trailing={panelActions}
         />
       )
     ) : variant === "panel" ? (
-      <ArtifactPanelToolbar onClose={onClose} />
+      <ArtifactPanelToolbar />
     ) : null;
 
   // Content-first types (incl. pdf pages) stay in the narrow prose column; framed
@@ -352,13 +342,12 @@ export function ArtifactDetailView({
     ) : null;
 
   if (variant === "panel") {
-    // Flush header bar OUTSIDE the floating card (via SidePanelFrame), matching the
-    // main content header; the scrollable body tucks into the card below it.
+    // IN-CARD content for the side panel host (the flush tabs header + card come from
+    // the thread shell's `SidePanelFrame`): card toolbar on top, scrollable body below.
     return (
       <>
-        <SidePanelFrame header={header}>
-          <div className="relative min-h-0 flex-1 overflow-y-auto">{body}</div>
-        </SidePanelFrame>
+        {header}
+        <div className="relative min-h-0 flex-1 overflow-y-auto">{body}</div>
         {deleteDialog}
       </>
     );
@@ -377,35 +366,17 @@ export function ArtifactDetailView({
 
 function ArtifactPanelToolbar({
   title,
-  onClose,
   trailing,
 }: {
   title?: string;
-  onClose?: () => void;
   trailing?: ReactNode;
 }) {
-  // Flush glass bar (same idiom as the main content header): artifact title on the
-  // left, More menu (`trailing`) + close toggle on the right. The bar renders OUTSIDE
-  // the floating card via SidePanelFrame, so the actions read as living outside it.
+  // Card toolbar INSIDE the floating panel card: artifact title on the left, More menu
+  // (`trailing`) on the right. Close lives on the panel host's tabs header now.
   return (
-    <PanelHeaderBar
+    <PanelCardToolbar
       title={title ? <PanelTitleLabel>{title}</PanelTitleLabel> : null}
-      actions={
-        <>
-          {trailing}
-          {onClose ? (
-            <Button
-              type="button"
-              variant="ghost"
-              className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-              onClick={onClose}
-              aria-label="Tutup panel"
-            >
-              <PanelLeftIcon className="size-3.5 rotate-180" />
-            </Button>
-          ) : null}
-        </>
-      }
+      actions={trailing}
     />
   );
 }

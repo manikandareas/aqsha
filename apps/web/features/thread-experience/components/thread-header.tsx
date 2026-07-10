@@ -1,9 +1,9 @@
 "use client";
 
 import { LayersIcon, PanelLeftIcon } from "@aqsha/ui/icons";
+import { PanelOpenButton } from "@/components/layout/side-panel-frame";
 import { PanelTitleLabel } from "@/components/panel-title-dropdown-trigger";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { panelHeaderBarClass } from "@/lib/panel-surface";
 import type { ThreadSummary } from "./component-types";
 import { ThreadActionsMenu } from "./thread-actions-menu";
@@ -71,19 +71,14 @@ export function ThreadHeader({
           />
         ) : null}
         {showContextToggle ? (
-          <button
-            type="button"
-            onClick={onToggleContextPanel}
-            className={cn(
-              "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold transition-colors",
-              contextPanelOpen
-                ? "bg-primary/15 text-primary"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
-            )}
-          >
-            <LayersIcon className="size-3.5" />
-            Workspace
-          </button>
+          // Membuka rumah panel kanan (tab Workspace · Sumber · Pratinjau).
+          <PanelOpenButton
+            open={contextPanelOpen}
+            onOpen={onToggleContextPanel}
+            icon={<LayersIcon className="size-3.5" />}
+            label="Panel"
+            ariaLabel="Buka panel samping"
+          />
         ) : null}
       </div>
     </div>

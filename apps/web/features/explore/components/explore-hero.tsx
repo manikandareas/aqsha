@@ -47,7 +47,7 @@ export function ExploreHero({
   }
 
   return (
-    <section className="pt-10 pb-2 sm:pt-12">
+    <section className="pt-10 pb-2 @2xl:pt-12">
       <h1 className="mb-6 max-w-[760px] font-heading text-[clamp(30px,3.6vw,46px)] font-medium leading-[1.07] tracking-tight text-balance text-foreground">
         {greeting}
       </h1>

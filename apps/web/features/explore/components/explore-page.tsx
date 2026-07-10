@@ -14,6 +14,7 @@ import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useState } from "react";
 import { DetailSplitLayout } from "@/components/layout/detail-split-layout";
 import { ResponsiveSidePanel } from "@/components/layout/responsive-side-panel";
+import { PanelOpenButton } from "@/components/layout/side-panel-frame";
 import { Button } from "@/components/ui/button";
 import { useSidebar } from "@/components/ui/sidebar";
 import { ComposerMentionsProvider } from "@/features/thread-experience/components/composer-context-mentions";
@@ -73,7 +74,7 @@ export function ExplorePage() {
                 showLeftTrigger={!isLeftSidebarOpen}
                 onToggleLeftSidebar={leftSidebar.toggleSidebar}
               />
-              <div className="mx-auto w-full max-w-[1180px] px-6 pb-24 sm:px-7">
+              <div className="mx-auto w-full max-w-[1180px] px-6 pb-24 @2xl:px-7">
                 {/* Command bar — persisten. Selidiki: compact (ask-bar = query header). */}
                 <ExploreHero
                   activeTopic={topic}
@@ -157,19 +158,13 @@ function ExploreHeader({
           </>
         ) : null}
       </nav>
-      <button
-        type="button"
-        onClick={onToggleChat}
-        className={cn(
-          "flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold transition-colors",
-          chatOpen
-            ? "bg-primary/15 text-primary"
-            : "text-muted-foreground hover:bg-muted hover:text-foreground",
-        )}
-      >
-        <MessageSquareIcon className="size-3.5" />
-        Chat
-      </button>
+      <PanelOpenButton
+        open={chatOpen}
+        onOpen={onToggleChat}
+        icon={<MessageSquareIcon className="size-3.5" />}
+        label="Chat"
+        ariaLabel="Buka panel chat"
+      />
     </header>
   );
 }

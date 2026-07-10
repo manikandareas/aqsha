@@ -103,13 +103,17 @@ import {
   UserIcon,
   UserMultipleIcon,
   Wrench01Icon,
+  ArrowShrink02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { Ref } from "react";
 
 import type { HugeiconsIconProps, IconSvgElement } from "@hugeicons/react";
 
-type IconProps = Omit<HugeiconsIconProps, "icon" | "altIcon" | "strokeWidth"> & {
+type IconProps = Omit<
+  HugeiconsIconProps,
+  "icon" | "altIcon" | "strokeWidth"
+> & {
   strokeWidth?: string | number;
   ref?: Ref<SVGSVGElement>;
 };
@@ -207,6 +211,7 @@ export const MaximizeIcon = createIcon(Maximize01Icon);
 // Empat panah sudut → afordans "buka/perbesar" yang bersih (beda dari Maximize01 yang glyph-nya
 // berbentuk kursor-tangan). Dipakai tombol buka-panel tool card.
 export const ExpandIcon = createIcon(ArrowExpand01Icon);
+export const ShrinkIcon = createIcon(ArrowShrink02Icon);
 export const MinimizeIcon = createIcon(Minimize01Icon);
 export const MinusIcon = createIcon(MinusSignIcon);
 export const Monitor = createIcon(ComputerIcon);
@@ -258,7 +263,9 @@ export const XIcon = createIcon(Cancel01Icon);
 // Shared icon-per-artifact-type mapping (used by the workspace library card and
 // the in-chat artifact card). Lives here so every artifact surface draws from the
 // same Hugeicons-backed set; the textual label / provenance copy stays app-side.
-function getArtifactTypeIcon(artifactType: string | undefined): typeof FileTextIcon {
+function getArtifactTypeIcon(
+  artifactType: string | undefined,
+): typeof FileTextIcon {
   switch (artifactType) {
     case "url":
       return LinkIcon;

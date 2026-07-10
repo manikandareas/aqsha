@@ -64,7 +64,7 @@ export function HomeExploreBento() {
   return (
     <div
       id={HOME_EXPLORE_SECTION_ID}
-      className="mx-auto w-full max-w-5xl scroll-mt-6 px-4 pb-20 pt-4 sm:px-8"
+      className="mx-auto w-full max-w-5xl scroll-mt-6 px-4 pb-20 pt-4 @2xl:px-8"
     >
       {/* Jelajahi — sliver feed asli */}
       <section>

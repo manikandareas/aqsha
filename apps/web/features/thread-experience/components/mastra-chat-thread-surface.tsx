@@ -703,7 +703,7 @@ function MastraComposerLanding({
           "relative mx-auto flex w-full flex-col",
           compact
             ? cn("flex-1 max-w-none", panelBodyPaddingClass)
-            : "min-h-full max-w-5xl px-4 pb-5 pt-10 sm:px-8",
+            : "min-h-full max-w-5xl px-4 pb-5 pt-10 @2xl:px-8",
         )}
       >
         <div className="flex w-full flex-1 items-center justify-center">
@@ -723,11 +723,11 @@ function MastraComposerLanding({
             <ComposerHeroState
               headerClassName="mb-5 gap-2"
               logoClassName={
-                compact ? "size-12 sm:size-18" : "size-12 sm:size-22"
+                compact ? "size-12 @2xl:size-18" : "size-12 @2xl:size-22"
               }
               titleClassName={cn(
                 "font-sans font-bold tracking-tight text-foreground leading-none",
-                compact ? "text-xl" : "text-2xl sm:text-3xl",
+                compact ? "text-xl" : "text-2xl @2xl:text-3xl",
               )}
             >
               <Composer

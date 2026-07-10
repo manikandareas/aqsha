@@ -41,8 +41,11 @@ import {
   type WorkspaceArtifact,
   type WorkspaceFolder,
 } from "../utils/workspace-library-model";
-import { SidePanelFrame } from "@/components/layout/side-panel-frame";
-import { panelBodyColumnClass, panelBodyPaddingClass } from "@/lib/panel-surface";
+import {
+  panelBodyColumnClass,
+  panelBodyPaddingClass,
+  panelCardToolbarClass,
+} from "@/lib/panel-surface";
 import {
   WORKSPACE_UPLOAD_ACCEPT,
   type WorkspaceUploadProgressEvent,
@@ -113,7 +116,6 @@ export function WorkspaceLibraryBoard({
   onArchiveWorkspace,
   chatPanelOpen,
   onToggleChatPanel,
-  onClosePanel,
   showLeftSidebarTrigger,
   onToggleLeftSidebar,
   renderDialogs,
@@ -167,7 +169,6 @@ export function WorkspaceLibraryBoard({
   onArchiveWorkspace: () => void;
   chatPanelOpen?: boolean;
   onToggleChatPanel?: () => void;
-  onClosePanel?: () => void;
   showLeftSidebarTrigger?: boolean;
   onToggleLeftSidebar?: () => void;
   renderDialogs?: (
@@ -179,7 +180,9 @@ export function WorkspaceLibraryBoard({
   showWorkspaceSettings?: boolean;
   /**
    * `"page"` (default) renders the board as a full-bleed column (toolbar inside).
-   * `"panel"` routes through `SidePanelFrame` so the toolbar floats OUTSIDE the card.
+   * `"panel"` renders IN-CARD content for the side panel host (the flush tabs header +
+   * card come from the thread shell's `SidePanelFrame`): the toolbar becomes the card's
+   * top bar, the body scrolls below it.
    */
   variant?: "page" | "panel";
 }) {
@@ -300,6 +303,7 @@ export function WorkspaceLibraryBoard({
 
   const toolbar = (
     <WorkspaceBoardToolbar
+      barClassName={variant === "panel" ? panelCardToolbarClass : undefined}
       workspaceName={workspaceName}
       workspaceEmoji={workspaceEmoji}
       titleSlot={titleSlot}
@@ -314,7 +318,6 @@ export function WorkspaceLibraryBoard({
       controls={libraryControls}
       onToggleChat={onToggleChatPanel}
       chatOpen={chatPanelOpen}
-      onClosePanel={onClosePanel}
       showLeftSidebarTrigger={showLeftSidebarTrigger}
       onToggleLeftSidebar={onToggleLeftSidebar}
       showCreateActions={canCreate}
@@ -434,12 +437,14 @@ export function WorkspaceLibraryBoard({
     uploadToActiveFolder,
   );
 
-  // Panel floats the toolbar OUTSIDE the card as a flush header (`SidePanelFrame`
-  // already wraps its children in the body column, so `body` goes in raw); page
-  // keeps the toolbar inside a full-bleed column.
+  // Panel = in-card content (the host's `SidePanelFrame` provides the card column, so
+  // toolbar + body go in raw); page keeps the toolbar inside a full-bleed column.
   const boardShell =
     variant === "panel" ? (
-      <SidePanelFrame header={toolbar}>{body}</SidePanelFrame>
+      <>
+        {toolbar}
+        {body}
+      </>
     ) : (
       <div className={panelBodyColumnClass}>
         {toolbar}

@@ -32,7 +32,7 @@ export function ReaderShell({
   width?: keyof typeof SHELL_WIDTH;
 }) {
   return (
-    <main className={cn("mx-auto w-full px-5 pb-24 pt-8 sm:px-6 sm:pt-10", SHELL_WIDTH[width])}>
+    <main className={cn("mx-auto w-full px-5 pb-24 pt-8 @2xl:px-6 @2xl:pt-10", SHELL_WIDTH[width])}>
       {children}
     </main>
   );

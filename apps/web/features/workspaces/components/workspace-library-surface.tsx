@@ -9,7 +9,6 @@ import {
   useQueryStates,
 } from "nuqs";
 import { toArtifactId, toWorkspaceFolderId, toWorkspaceId } from "@/lib/convex-refs";
-import { useCloseRightPanel } from "@/hooks/use-close-right-panel";
 import type { WorkspaceLibraryData } from "../api/use-workspaces-data";
 import type { useWorkspaceLibraryDialogState } from "../hooks/use-workspace-library-dialogs";
 import {
@@ -73,7 +72,6 @@ export function WorkspaceLibrarySurface({
   onToggleLeftSidebar,
   chatPanelOpen,
   onToggleChatPanel,
-  onClosePanel,
   showCreateActions,
   showWorkspaceSettings,
   variant,
@@ -92,19 +90,15 @@ export function WorkspaceLibrarySurface({
   onToggleLeftSidebar?: () => void;
   chatPanelOpen?: boolean;
   onToggleChatPanel?: () => void;
-  onClosePanel?: () => void;
   showCreateActions?: boolean;
   showWorkspaceSettings?: boolean;
   variant?: "page" | "panel";
 }) {
   const router = useRouter();
-  const closePanel = useCloseRightPanel();
   const [libraryControls, setLibraryControls] = useQueryStates(
     workspaceLibraryQueryParsers,
     { history: "replace" },
   );
-  // Main board uses Chat toggle; side-panel embeds use close only (mutually exclusive in toolbar).
-  const panelCloseHandler = onToggleChatPanel ? undefined : (onClosePanel ?? closePanel);
   const currentWorkspaceName = libraryData.workspace?.name ?? workspaceName;
   const currentWorkspaceEmoji = libraryData.workspace?.emoji;
 
@@ -196,7 +190,6 @@ export function WorkspaceLibrarySurface({
         }}
         chatPanelOpen={chatPanelOpen}
         onToggleChatPanel={onToggleChatPanel}
-        onClosePanel={panelCloseHandler}
         showLeftSidebarTrigger={showLeftSidebarTrigger}
         onToggleLeftSidebar={onToggleLeftSidebar}
         showCreateActions={showCreateActions}

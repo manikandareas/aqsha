@@ -31,13 +31,6 @@ export function ExploreChatSidePanel({
           : Promise.resolve()
       }
       rateStatus={threadExperience.rateStatus}
-      startThread={threadExperience.startThread}
-      onSend={threadExperience.sendMessage}
-      runs={threadExperience.runs}
-      artifacts={threadExperience.artifacts}
-      sources={threadExperience.sources}
-      onCancelRun={threadExperience.cancelRun}
-      onRetryRun={threadExperience.retryRun}
     />
   );
 }

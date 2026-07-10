@@ -78,10 +78,11 @@ function SidebarProvider({
       setOpenProp(openState);
     } else {
       _setOpen(openState);
+      // Persist only for the uncontrolled (left rail) provider — controlled providers
+      // (the right detail panel) share this cookie name and would clobber the left
+      // rail's saved state on every panel close.
+      document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
     }
-
-    // This sets the cookie to keep the sidebar state.
-    document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
   };
   const setOpenMobile = (value: boolean | ((value: boolean) => boolean)) => {
     const openState = typeof value === "function" ? value(openMobile) : value;
@@ -113,8 +114,8 @@ function SidebarProvider({
         setOpenProp(openState);
       } else {
         _setOpen(openState);
+        document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
       }
-      document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
     }
   });
 
@@ -213,7 +214,9 @@ function Sidebar({
           data-mobile="true"
           className={cn(
             "min-w-full p-0 text-sidebar-foreground [&>button]:hidden",
-            getSidebarSurfaceClass(variant),
+            // The offcanvas sheet floats over page content, so "transparent" (meant for
+            // a docked rail over the app background) must fall back to an opaque surface.
+            variant === "transparent" ? "bg-sidebar" : getSidebarSurfaceClass(variant),
           )}
           side={side}
         >

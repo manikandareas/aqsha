@@ -3,7 +3,7 @@
 import type { DeepStepDetail, ToolRow } from "@/features/threads/lib/timeline-types";
 import { DetailPanelShell } from "./detail-panel-chrome";
 import { SourceLinkList } from "./source-link-list";
-import { useThreadPanel, useThreadPanelData } from "./thread-panel-context";
+import { useThreadPanelData } from "./thread-panel-context";
 
 /**
  * Generic step detail panel — the full content of any expandable tool step that isn't
@@ -11,13 +11,12 @@ import { useThreadPanel, useThreadPanelData } from "./thread-panel-context";
  * Resolves by tool-call id; sources link out to their URL.
  */
 export function StepDetailPanel({ toolCallId }: { toolCallId: string }) {
-  const panel = useThreadPanel();
   const lookups = useThreadPanelData();
   const step = lookups?.steps.get(toolCallId) ?? null;
 
   if (!step) {
     return (
-      <DetailPanelShell title="Detail" onClose={panel?.closePanel}>
+      <DetailPanelShell title="Detail">
         <p className="text-[13px] text-muted-foreground">
           Detail langkah ini belum tersedia. Coba lagi setelah proses selesai.
         </p>
@@ -26,7 +25,7 @@ export function StepDetailPanel({ toolCallId }: { toolCallId: string }) {
   }
 
   return (
-    <DetailPanelShell title={step.title} onClose={panel?.closePanel}>
+    <DetailPanelShell title={step.title}>
       {step.detail ? (
         <StepBody detail={step.detail} />
       ) : step.rows && step.rows.length > 0 ? (

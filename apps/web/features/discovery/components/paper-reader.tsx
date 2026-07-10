@@ -107,7 +107,7 @@ export function PaperReader({
             />
           </div>
 
-          <div className="mt-8 grid grid-cols-1 gap-x-12 gap-y-2 lg:grid-cols-[minmax(0,1fr)_18rem]">
+          <div className="mt-8 grid grid-cols-1 gap-x-12 gap-y-2 @5xl:grid-cols-[minmax(0,1fr)_18rem]">
             <div className="min-w-0">
               {paper.abstract || paper.snippet ? (
                 <ReaderSection title="Abstrak">
@@ -154,7 +154,7 @@ function PaperHeader({ paper }: { paper: ExplorePaper }) {
         </Eyebrow>
         {paper.isOpenAccess ? <Eyebrow tone="lemon">Akses terbuka</Eyebrow> : null}
       </div>
-      <h1 className="mt-4 font-serif text-[28px] leading-[1.12] tracking-tight text-foreground sm:text-[40px]">
+      <h1 className="mt-4 font-serif text-[28px] leading-[1.12] tracking-tight text-foreground @2xl:text-[40px]">
         {paper.title}
       </h1>
       {paper.authors.length > 0 ? (
@@ -172,7 +172,7 @@ function PaperHeader({ paper }: { paper: ExplorePaper }) {
  * judul + meta). Ref ber-DOI dibuka di reader in-app (key `doi:`), sisanya ke OpenAlex. */
 function RelatedPaperGrid({ refs }: { refs: PaperEnrichmentRef[] }) {
   return (
-    <div className="grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-3">
+    <div className="grid grid-cols-2 gap-x-5 gap-y-7 @2xl:grid-cols-3">
       {refs.slice(0, 6).map((r) => (
         <RelatedPaperCard key={r.openalexId} paper={r} />
       ))}

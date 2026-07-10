@@ -354,7 +354,7 @@ function JsonStructuredViewer({ source }: { source: string }) {
         {rows.map((row) => (
           <div
             key={row.path}
-            className="grid gap-1 px-3 py-2 sm:grid-cols-[minmax(0,0.45fr)_minmax(0,0.55fr)] sm:gap-4"
+            className="grid gap-1 px-3 py-2 @2xl:grid-cols-[minmax(0,0.45fr)_minmax(0,0.55fr)] @2xl:gap-4"
           >
             <span className="truncate font-mono text-[12px] text-muted-foreground">{row.path}</span>
             <span className="truncate text-[12px] font-medium text-foreground">{row.value}</span>

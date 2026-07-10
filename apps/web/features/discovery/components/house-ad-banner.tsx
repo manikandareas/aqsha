@@ -61,7 +61,7 @@ export function HouseAdBanner({ ad }: { ad: HouseAd }) {
       </div>
 
       {/* Panel konten */}
-      <div className="relative flex flex-col justify-center gap-2.5 px-6 py-7 sm:px-8">
+      <div className="relative flex flex-col justify-center gap-2.5 px-6 py-7 @2xl:px-8">
         <span className="absolute right-4 top-4 font-mono text-[9.5px] tracking-[0.12em] text-muted-foreground/70">
           dari aqsha
         </span>

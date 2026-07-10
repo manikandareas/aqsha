@@ -1,10 +1,27 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { createContext, use, useState, type ReactNode } from "react";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { usePanelInline } from "@/hooks/use-mobile";
-import { detailSplitMainSurfaceClass } from "@/lib/panel-surface";
+import {
+  detailSplitMainSurfaceClass,
+  PANEL_TRANSITION_MS,
+} from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
+
+type PanelExpandValue = {
+  /** Expand only applies while the panel docks inline (desktop) — the drawer is already full-width. */
+  canExpand: boolean;
+  expanded: boolean;
+  setExpanded: (expanded: boolean) => void;
+};
+
+const PanelExpandContext = createContext<PanelExpandValue | null>(null);
+
+/** Panel width control (normal vs expanded 30:70 split). Null outside `DetailSplitLayout`. */
+export function usePanelExpand(): PanelExpandValue | null {
+  return use(PanelExpandContext);
+}
 
 export function DetailSplitLayout({
   main,
@@ -22,6 +39,9 @@ export function DetailSplitLayout({
   // drawer, so main keeps its full width and panel content never spills past the viewport.
   const canInset = usePanelInline();
   const inset = sideOpen && canInset;
+  // Expanded = a 30:70 split (panel takes 70), toggled from the panel header
+  // (`PanelExpandButton`). Sticky across open/close within the page mount.
+  const [expanded, setExpanded] = useState(false);
 
   return (
     <SidebarProvider
@@ -29,19 +49,31 @@ export function DetailSplitLayout({
       onOpenChange={onSideOpenChange}
       className="flex min-h-0 min-h-svh flex-1 flex-col overflow-hidden bg-background"
     >
-      <div
-        className={cn(
-          "grid min-h-0 w-full flex-1 transition-[grid-template-columns] duration-300 ease-out",
-          // Panel = side-panel width that scales with the viewport but is capped (main flexes
-          // to fill the rest), not a 50/50 split. Floor keeps main usable at the ~1100px inline edge.
-          inset ? "grid-cols-[minmax(0,1fr)_clamp(26rem,32vw,32rem)]" : "grid-cols-1",
-        )}
+      <PanelExpandContext.Provider
+        value={{ canExpand: canInset, expanded, setExpanded }}
       >
-        <SidebarInset className={detailSplitMainSurfaceClass}>
-          {main}
-        </SidebarInset>
-        {side}
-      </div>
+        <div
+          style={{ transitionDuration: `${PANEL_TRANSITION_MS}ms` }}
+          className={cn(
+            "grid min-h-0 w-full flex-1 transition-[grid-template-columns] ease-out",
+            // ALWAYS two tracks with a length-typed side width (0 when closed) so
+            // grid-template-columns interpolates — that's the open/close slide and the
+            // expand tween. Panel = capped width that scales with the viewport (main
+            // flexes to fill), or a 30:70 split when expanded. Floor keeps main usable
+            // at the ~1100px inline edge.
+            inset
+              ? expanded
+                ? "grid-cols-[minmax(0,1fr)_70%]"
+                : "grid-cols-[minmax(0,1fr)_clamp(26rem,32vw,32rem)]"
+              : "grid-cols-[minmax(0,1fr)_0rem]",
+          )}
+        >
+          <SidebarInset className={detailSplitMainSurfaceClass}>
+            {main}
+          </SidebarInset>
+          {side}
+        </div>
+      </PanelExpandContext.Provider>
     </SidebarProvider>
   );
 }

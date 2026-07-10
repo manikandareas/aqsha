@@ -14,6 +14,7 @@ import {
   PlusIcon,
   UploadIcon,
 } from "@aqsha/ui/icons";
+import { PanelOpenButton } from "@/components/layout/side-panel-frame";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -64,11 +65,11 @@ export function WorkspaceBoardToolbar({
   controls,
   onToggleChat,
   chatOpen,
-  onClosePanel,
   showLeftSidebarTrigger,
   onToggleLeftSidebar,
   showCreateActions = true,
   showWorkspaceSettings = true,
+  barClassName,
 }: {
   workspaceName: string;
   workspaceEmoji?: string;
@@ -85,17 +86,23 @@ export function WorkspaceBoardToolbar({
   controls?: ReactNode;
   onToggleChat?: () => void;
   chatOpen?: boolean;
-  onClosePanel?: () => void;
   showLeftSidebarTrigger?: boolean;
   onToggleLeftSidebar?: () => void;
   showCreateActions?: boolean;
   showWorkspaceSettings?: boolean;
+  /** Bar surface override — e.g. `panelCardToolbarClass` when embedded INSIDE the panel card. */
+  barClassName?: string;
 }) {
   const inSubfolder = breadcrumb.length > 1;
   const showTitleControls = showWorkspaceSettings && !titleSlot;
 
   return (
-    <div className={cn(panelHeaderBarClass, inSubfolder && "h-auto flex-col items-stretch gap-1")}>
+    <div
+      className={cn(
+        barClassName ?? panelHeaderBarClass,
+        inSubfolder && "h-auto flex-col items-stretch gap-1",
+      )}
+    >
       <div className={cn("flex w-full min-w-0 items-center justify-between gap-3", inSubfolder && "h-11 shrink-0")}>
         <div className="flex min-w-0 items-center gap-1.5">
           {showLeftSidebarTrigger && onToggleLeftSidebar ? (
@@ -156,34 +163,16 @@ export function WorkspaceBoardToolbar({
         </div>
         <div className="flex min-w-0 items-center gap-1">
           {controls}
-          {controls && (onClosePanel || onToggleChat) ? (
+          {controls && onToggleChat ? (
             <span aria-hidden className="mx-0.5 h-4 w-px shrink-0 bg-border/70" />
           ) : null}
-          {onClosePanel ? (
-            <Button
-              type="button"
-              variant="ghost"
-              className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-              onClick={onClosePanel}
-              aria-label="Tutup panel"
-            >
-              <PanelLeftIcon className="size-3.5 rotate-180" />
-            </Button>
-          ) : onToggleChat ? (
-            <button
-              type="button"
-              onClick={onToggleChat}
-              aria-label={chatOpen ? "Tutup panel chat" : "Buka panel chat"}
-              aria-pressed={chatOpen}
-              className={cn(
-                "flex size-7 shrink-0 items-center justify-center rounded-full transition-colors",
-                chatOpen
-                  ? "bg-primary/15 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
-            >
-              <MessageSquareIcon className="size-3.5" />
-            </button>
+          {onToggleChat ? (
+            <PanelOpenButton
+              open={chatOpen ?? false}
+              onOpen={onToggleChat}
+              icon={<MessageSquareIcon className="size-3.5" />}
+              ariaLabel="Buka panel chat"
+            />
           ) : null}
           {showWorkspaceSettings ? (
             <DropdownMenu>
