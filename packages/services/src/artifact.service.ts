@@ -667,6 +667,89 @@ export const ArtifactService = {
   },
 
   /**
+   * Artifact hasil GENERASI server (fase 5 export .docx/.xlsx/.sav): byte sudah di-store ke R2
+   * (`StorageService.storeBytes`), tinggal catat baris artifact di pustaka (thread-scoped,
+   * `source:'agent'`). Tanpa `validateUpload` (bukan unggahan user — file tepercaya server) dan
+   * tanpa RAG index (`not_indexed` — deliverable biner untuk diunduh, bukan sumber bacaan agen).
+   */
+  async createGeneratedFile(
+    db: Db,
+    input: {
+      ownerUserId: string;
+      threadId: string;
+      bytes: Uint8Array;
+      fileName: string;
+      mimeType: string;
+      artifactType: ArtifactType;
+      title: string;
+    },
+  ): Promise<{ artifactId: string; title: string }> {
+    const artifactId = crypto.randomUUID();
+    const contentId = crypto.randomUUID();
+    const now = Date.now();
+    // Simpan byte ke R2 dulu (key = artifacts/<owner>/<artifactId>/export-...), lalu catat baris.
+    const key = await StorageService.storeBytes(
+      input.ownerUserId,
+      artifactId,
+      "export",
+      input.bytes,
+      input.mimeType,
+    );
+    try {
+      await db.transaction(async (tx) => {
+        await ArtifactRepo.insert(tx, {
+        id: artifactId,
+        ownerUserId: input.ownerUserId,
+        workspaceId: null,
+        folderId: null,
+        threadId: input.threadId,
+        artifactType: input.artifactType,
+        artifactFamily: artifactFamilyForType(input.artifactType),
+        source: "agent",
+        title: input.title,
+        language: defaultLanguageForArtifactType(input.artifactType) ?? null,
+        mimeType: input.mimeType,
+        fileName: input.fileName,
+        byteSize: input.bytes.byteLength,
+        indexingStatus: "not_indexed",
+        indexingFailureReason: null,
+        detectedDocumentKind: null,
+        storageR2Key: key,
+        ragEntryId: null,
+        plainTextPreview: input.title,
+        indexedAt: null,
+        status: "active",
+        deletedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ArtifactContentRepo.insert(tx, {
+        id: contentId,
+        ownerUserId: input.ownerUserId,
+        workspaceId: null,
+        threadId: input.threadId,
+        artifactId,
+        blocksJson: null,
+        markdown: "",
+        plainText: "",
+        contextText: "",
+        plainTextR2Key: null,
+        blocksJsonR2Key: null,
+        markdownR2Key: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+      });
+    } catch (err) {
+      // Insert baris gagal (constraint/koneksi) → byte sudah terlanjur di R2 tanpa referensi.
+      // Hapus blob yatim lalu lempar ulang supaya caller tahu ekspor gagal.
+      await StorageService.deleteObject(key).catch(() => {});
+      throw err;
+    }
+    return { artifactId, title: input.title };
+  },
+
+  /**
    * Worker `artifact-indexing` (D5): jalankan ekstraksi+RAG index untuk lampiran thread besar
    * yang di-offload `finalizeThreadUpload`. Idempoten: hanya proses artifact `pending` milik owner
    * (re-run job aman; `extractIndexAndPatch` men-set ready/failed + provenance). No-op bila artifact

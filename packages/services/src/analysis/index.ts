@@ -8,6 +8,9 @@ export {
 } from "./catalog";
 export {
   type AnalysisChart,
+  type AnalysisExportFile,
+  type AnalysisExportFormat,
+  type AnalysisExportResult,
   type AnalysisRunResult,
   AnalysisService,
 } from "./analysis.service";

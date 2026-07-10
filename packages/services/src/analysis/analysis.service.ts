@@ -1,4 +1,6 @@
 import {
+  AnalysisResultBlockRepo,
+  type AnalysisResultBlockRow,
   AnalysisSandboxRepo,
   type AnalysisSandbox,
   ArtifactContentRepo,
@@ -7,6 +9,7 @@ import {
   type StagedDataset,
   throwAppError,
 } from "@aqsha/db";
+import { parseStatsGroup } from "@aqsha/chat-core/stats-viz";
 import type { Sandbox } from "@daytona/sdk";
 import {
   CODE_RUN_HEAVY_TIMEOUT_SECONDS,
@@ -39,9 +42,62 @@ export type AnalysisRunResult =
   | { ok: true; result: Record<string, unknown>; charts: AnalysisChart[] }
   | { ok: false; error: { code: string; message: string } };
 
-function datasetPathFor(artifactId: string, fileName: string | null): string {
-  const extension = fileName?.toLowerCase().endsWith(".xlsx") ? "xlsx" : "csv";
-  return `${DATASET_DIR}/${artifactId}.${extension}`;
+/** Format ekspor deliverable (fase 5). */
+export type AnalysisExportFormat = "docx" | "xlsx" | "sav";
+
+export type AnalysisExportFile = {
+  format: AnalysisExportFormat;
+  fileName: string;
+  mimeType: string;
+  /** Tipe artifact pustaka (docx = dokumen; xlsx/sav = data). */
+  artifactType: "docx" | "spreadsheet";
+  bytes: Uint8Array;
+};
+
+export type AnalysisExportResult =
+  | { ok: true; files: AnalysisExportFile[] }
+  | { ok: false; error: { code: string; message: string } };
+
+const EXPORT_DIR = "/home/daytona/exports";
+const EXPORT_SPEC: Record<
+  AnalysisExportFormat,
+  { fileName: string; mimeType: string; artifactType: "docx" | "spreadsheet" }
+> = {
+  docx: {
+    fileName: "hasil-analisis.docx",
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    artifactType: "docx",
+  },
+  xlsx: {
+    fileName: "hasil-analisis.xlsx",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    artifactType: "spreadsheet",
+  },
+  sav: {
+    fileName: "dataset-olahan.sav",
+    mimeType: "application/x-spss-sav",
+    artifactType: "spreadsheet",
+  },
+};
+
+/** Ekstensi dataset yang dikenali sandbox (`aqsha_stats.io.load_dataset` dispatch by suffix). */
+const DATASET_EXTENSIONS = [".xlsx", ".xls", ".sav", ".dta", ".csv"] as const;
+
+function datasetPathFor(
+  artifactId: string,
+  fileName: string | null,
+  title: string | null,
+  artifactType: string,
+): string {
+  for (const name of [fileName, title]) {
+    const lower = name?.toLowerCase() ?? "";
+    const extension = DATASET_EXTENSIONS.find((ext) => lower.endsWith(ext))?.slice(1);
+    if (extension) return `${DATASET_DIR}/${artifactId}.${extension}`;
+  }
+  // Nama tanpa ekstensi dikenali → default per tipe artifact: spreadsheet (XLSX bytes) TIDAK boleh
+  // jatuh ke `.csv` (load_dataset akan mem-parse biner sebagai CSV → gagal), hanya CSV yang boleh.
+  const fallback = artifactType === "spreadsheet" ? "xlsx" : "csv";
+  return `${DATASET_DIR}/${artifactId}.${fallback}`;
 }
 
 async function loadDatasetBytes(
@@ -92,7 +148,37 @@ function runnerCode(analysisId: string, dataPath: string, args: Record<string, u
     `args = json.loads(base64.b64decode("${argsB64}").decode("utf-8"))`,
     `result = run_analysis_safe(${JSON.stringify(analysisId)}, ${JSON.stringify(dataPath)}, args)`,
     `print(${JSON.stringify(RESULT_MARKER)})`,
-    "print(json.dumps(result, ensure_ascii=False))",
+    // `default=str` sejajar `freeformRunnerCode`: nilai sisa yang lolos sanitasi `r3()` (mis.
+    // Timestamp/Decimal di sel tabel) di-string-kan alih-alih meledakkan json.dumps SETELAH marker
+    // tercetak — kalau tidak, analisis yang SUKSES salah dilaporkan gagal (parse tail JSON gagal).
+    "print(json.dumps(result, ensure_ascii=False, default=str))",
+  ].join("\n");
+}
+
+/**
+ * Runner codegen fallback (fase 4) — kode Python bebas dari LLM. Konvensi: dataset sudah
+ * dimuat ke `df` (+ `DATA_PATH`), pandas/numpy/plt tersedia; kode WAJIB mengisi variabel
+ * `result` (dict JSON-serializable, idealnya `{"tables": [...], "decisions": [...]}`); chart
+ * lewat `plt.show()`. Sandbox `networkBlockAll` + timeout ketat = pagar eksekusi. Kode
+ * diselipkan apa adanya: syntax error → codeRun exit non-nol tanpa marker → caller lapor gagal
+ * (traceback di stdout tail) supaya model bisa memperbaiki.
+ */
+function freeformRunnerCode(dataPath: string, code: string): string {
+  return [
+    "import base64, json",
+    "import pandas as pd",
+    "import numpy as np",
+    "import matplotlib",
+    "import matplotlib.pyplot as plt",
+    "from aqsha_stats.io import load_dataset",
+    `DATA_PATH = ${JSON.stringify(dataPath)}`,
+    "df = load_dataset(DATA_PATH)",
+    "result = None",
+    "# ---- kode analisis kustom (LLM) ----",
+    code,
+    "# ---- akhir kode analisis kustom ----",
+    `print(${JSON.stringify(RESULT_MARKER)})`,
+    "print(json.dumps(result if result is not None else {}, ensure_ascii=False, default=str))",
   ].join("\n");
 }
 
@@ -120,6 +206,71 @@ function parseRunnerStdout(stdout: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+const EXPORT_PAYLOAD_PATH = "/home/daytona/export-payload.json";
+
+/** Runner ekspor (fase 5): baca payload JSON → tulis file → cetak {format: path}. */
+function exporterCode(formats: string[], dataPath: string | null): string {
+  return [
+    "import json, os",
+    "from aqsha_stats.export import export_files",
+    `with open(${JSON.stringify(EXPORT_PAYLOAD_PATH)}, encoding="utf-8") as _f: payload = json.load(_f)`,
+    `formats = ${JSON.stringify(formats)}`,
+    `data_path = ${dataPath ? JSON.stringify(dataPath) : "None"}`,
+    `os.makedirs(${JSON.stringify(EXPORT_DIR)}, exist_ok=True)`,
+    `out = export_files(payload, formats, data_path, ${JSON.stringify(EXPORT_DIR)})`,
+    `print(${JSON.stringify(RESULT_MARKER)})`,
+    "print(json.dumps(out))",
+  ].join("\n");
+}
+
+type ExportGroup = {
+  title: string;
+  tables: Array<{ title: string; columns: string[]; rows: unknown[][]; notes: string[] }>;
+  decisions: Array<{ label: string; verdict: string; interpretation: string }>;
+  figures: Array<{ png: string; caption: string }>;
+};
+
+/** Grup blok tersimpan (baris `analysis_result_blocks`) → payload ekspor (tabel/verdict/figur). */
+function buildExportGroup(row: AnalysisResultBlockRow): ExportGroup | null {
+  const group = parseStatsGroup({
+    v: 1,
+    runKey: row.runKey,
+    analysis: row.analysis,
+    title: row.title,
+    blocks: row.blocks,
+  });
+  if (!group) return null;
+  const tables: ExportGroup["tables"] = [];
+  const decisions: ExportGroup["decisions"] = [];
+  const figures: ExportGroup["figures"] = [];
+  for (const block of group.blocks) {
+    if (block.type === "stats-table") {
+      tables.push({
+        title: block.table.title,
+        columns: block.table.columns,
+        rows: block.table.rows,
+        notes: block.table.notes,
+      });
+    } else if (block.type === "stats-decision") {
+      for (const d of block.decisions) {
+        decisions.push({ label: d.label, verdict: d.verdict, interpretation: d.interpretation });
+      }
+    } else if (block.type === "stats-figure") {
+      figures.push({ png: block.png, caption: block.caption });
+    }
+  }
+  return { title: group.title, tables, decisions, figures };
+}
+
+/** Chart PNG (base64 + metadata) yang di-capture Daytona dari `plt.show()`. */
+function extractCharts(execution: {
+  artifacts?: { charts?: Array<{ png?: string; title?: string; type?: string }> };
+}): AnalysisChart[] {
+  return (execution.artifacts?.charts ?? []).flatMap((chart) =>
+    chart.png ? [{ png: chart.png, title: chart.title, type: chart.type }] : [],
+  );
 }
 
 export const AnalysisService = {
@@ -207,7 +358,7 @@ export const AnalysisService = {
     const bytes = await loadDatasetBytes(db, scope.ownerUserId, artifact);
     const dataset: StagedDataset = {
       artifactId: artifact.id,
-      path: datasetPathFor(artifact.id, artifact.fileName),
+      path: datasetPathFor(artifact.id, artifact.fileName, artifact.title, artifact.artifactType),
       fileName: artifact.fileName ?? artifact.title,
       stagedAt: Date.now(),
     };
@@ -283,10 +434,37 @@ export const AnalysisService = {
       };
     }
 
-    const charts: AnalysisChart[] = (execution.artifacts?.charts ?? []).flatMap((chart) =>
-      chart.png ? [{ png: chart.png, title: chart.title, type: chart.type }] : [],
+    return { ok: true, result: parsed, charts: extractCharts(execution) };
+  },
+
+  /**
+   * Codegen fallback (fase 4) — jalankan kode Python bebas dari LLM di sandbox thread ini
+   * (dataset di-stage bila perlu). Guardrail: `networkBlockAll` (bawaan sandbox) + timeout
+   * ketat + konvensi `result` JSON. Error runtime/syntax = `ok: false` dengan tail stdout
+   * (traceback) supaya model bisa memperbaiki, tanpa kehilangan kredit (debit on-success di tool).
+   */
+  async runFreeformPython(
+    db: DbOrTx,
+    scope: { ownerUserId: string; threadId: string; artifactId: string; code: string },
+  ): Promise<AnalysisRunResult> {
+    const { sandbox, dataset } = await this.stageDataset(db, scope);
+    const execution = await sandbox.process.codeRun(
+      freeformRunnerCode(dataset.path, scope.code),
+      undefined,
+      CODE_RUN_TIMEOUT_SECONDS,
     );
-    return { ok: true, result: parsed, charts };
+    const stdout = execution.artifacts?.stdout ?? execution.result ?? "";
+    const parsed = parseRunnerStdout(stdout);
+    if (!parsed) {
+      return {
+        ok: false,
+        error: {
+          code: "analysis_code_failed",
+          message: `Eksekusi kode gagal (exit ${execution.exitCode}): ${stdout.slice(-600) || "output kosong"}`,
+        },
+      };
+    }
+    return { ok: true, result: parsed, charts: extractCharts(execution) };
   },
 
   /** Profil dataset (gratis) — analisis `profile` dari katalog. */
@@ -295,5 +473,156 @@ export const AnalysisService = {
     scope: { ownerUserId: string; threadId: string; artifactId: string },
   ): Promise<AnalysisRunResult> {
     return this.runAnalysis(db, { ...scope, analysisId: "profile", args: {} });
+  },
+
+  /**
+   * Persist grup blok hasil (tabel/verdict/figur) di luar teks pesan — FE me-join
+   * per-thread untuk merender penanda `{{stats:<runKey>}}`. Idempoten pada
+   * `(threadId, runKey)`: retry/re-run tool (toolCallId → runKey sama) menimpa baris
+   * yang sama, bukan menggandakan. `blocks` = `StatsBlock[]` terserialisasi (kontrak
+   * `@aqsha/chat-core/stats-viz`; schema DB sengaja tak depend chat-core).
+   */
+  async saveResultBlocks(
+    db: DbOrTx,
+    scope: {
+      ownerUserId: string;
+      threadId: string;
+      toolCallId: string;
+      runKey: string;
+      analysis: string;
+      title: string;
+      blocks: unknown[];
+      custom?: boolean;
+      code?: string | null;
+    },
+  ): Promise<void> {
+    await AnalysisResultBlockRepo.upsert(db, {
+      id: crypto.randomUUID(),
+      ownerUserId: scope.ownerUserId,
+      threadId: scope.threadId,
+      toolCallId: scope.toolCallId,
+      runKey: scope.runKey,
+      analysis: scope.analysis,
+      title: scope.title,
+      blocks: scope.blocks,
+      custom: scope.custom,
+      code: scope.code,
+      now: Date.now(),
+    });
+  },
+
+  /** Semua grup blok hasil thread (urut createdAt) — dibaca route FE per-thread. */
+  async listResultBlocks(
+    db: DbOrTx,
+    scope: { threadId: string; ownerUserId: string },
+  ): Promise<AnalysisResultBlockRow[]> {
+    return AnalysisResultBlockRepo.listByThread(db, scope);
+  },
+
+  /**
+   * Ekspor hasil analisis thread ke file unduhan (fase 5): .docx (tabel + interpretasi Bab 4),
+   * .xlsx (tabel mentah), .sav (dataset untuk SPSS). Dibangun di sandbox dari blok yang sudah
+   * dipersist (`analysis_result_blocks`) → byte diunduh untuk disimpan sbg artifact pustaka oleh
+   * caller (tool). `.sav` butuh `datasetArtifactId` (dataset di-stage lalu ditulis ulang .sav).
+   */
+  async exportResults(
+    db: DbOrTx,
+    scope: {
+      ownerUserId: string;
+      threadId: string;
+      formats: AnalysisExportFormat[];
+      datasetArtifactId?: string;
+    },
+  ): Promise<AnalysisExportResult> {
+    const formats = [...new Set(scope.formats)].filter(
+      (f): f is AnalysisExportFormat => f in EXPORT_SPEC,
+    );
+    if (formats.length === 0) {
+      return { ok: false, error: { code: "export_no_format", message: "Format ekspor tidak dikenal (pilih docx/xlsx/sav)." } };
+    }
+
+    const rows = await AnalysisResultBlockRepo.listByThread(db, {
+      threadId: scope.threadId,
+      ownerUserId: scope.ownerUserId,
+    });
+    const groups = rows
+      .map(buildExportGroup)
+      .filter((g): g is ExportGroup => g !== null);
+
+    // `.sav` (dataset) butuh datasetArtifactId; format dokumen (docx/xlsx) butuh minimal 1 hasil.
+    // Format yang syaratnya tak terpenuhi DIBUANG (bukan menggagalkan seluruh batch) supaya
+    // permintaan campuran tetap menghasilkan file yang bisa dibuat.
+    const docFormats = formats.filter((f) => f !== "sav");
+    const wantsSav = formats.includes("sav");
+    const canSav = wantsSav && Boolean(scope.datasetArtifactId);
+    const runFormats: AnalysisExportFormat[] = [
+      ...(groups.length > 0 ? docFormats : []),
+      ...(canSav ? (["sav"] as const) : []),
+    ];
+    if (runFormats.length === 0) {
+      const reason =
+        wantsSav && !scope.datasetArtifactId
+          ? "Ekspor .sav butuh dataset — sebutkan artifactId dataset yang mau disimpan sebagai file SPSS."
+          : "Belum ada hasil analisis untuk diekspor. Jalankan minimal satu uji dulu.";
+      return { ok: false, error: { code: "export_empty", message: reason } };
+    }
+
+    let sandbox: Sandbox;
+    let dataPath: string | null = null;
+    if (canSav) {
+      const staged = await this.stageDataset(db, {
+        ownerUserId: scope.ownerUserId,
+        threadId: scope.threadId,
+        artifactId: scope.datasetArtifactId as string,
+      });
+      sandbox = staged.sandbox;
+      dataPath = staged.dataset.path;
+    } else {
+      sandbox = (await this.ensureSandbox(db, scope)).sandbox;
+    }
+
+    const payload = { title: "Hasil Analisis Data", groups };
+    await sandbox.fs.uploadFile(
+      Buffer.from(JSON.stringify(payload), "utf8"),
+      EXPORT_PAYLOAD_PATH,
+    );
+    const execution = await sandbox.process.codeRun(
+      exporterCode(runFormats, dataPath),
+      undefined,
+      CODE_RUN_HEAVY_TIMEOUT_SECONDS,
+    );
+    const stdout = execution.artifacts?.stdout ?? execution.result ?? "";
+    const parsed = parseRunnerStdout(stdout);
+    if (!parsed) {
+      return {
+        ok: false,
+        error: {
+          code: "export_failed",
+          message: `Ekspor gagal (exit ${execution.exitCode}): ${stdout.slice(-400) || "output kosong"}`,
+        },
+      };
+    }
+
+    // Unduhan tiap file independen → paralel (bukan seri) supaya wall-clock = maks, bukan jumlah.
+    const downloads = await Promise.all(
+      runFormats
+        .filter((format) => typeof parsed[format] === "string")
+        .map(async (format) => {
+          const buf = await sandbox.fs.downloadFile(parsed[format] as string);
+          const spec = EXPORT_SPEC[format];
+          return {
+            format,
+            fileName: spec.fileName,
+            mimeType: spec.mimeType,
+            artifactType: spec.artifactType,
+            bytes: new Uint8Array(buf),
+          };
+        }),
+    );
+    const files: AnalysisExportFile[] = downloads;
+    if (files.length === 0) {
+      return { ok: false, error: { code: "export_empty_output", message: "Tidak ada file yang berhasil dibuat." } };
+    }
+    return { ok: true, files };
   },
 };

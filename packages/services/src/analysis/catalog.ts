@@ -19,6 +19,16 @@ export const ANALYSIS_IDS = [
   "uji_linearitas",
   "regresi_linear",
   "korelasi",
+  "uji_beda_t",
+  "uji_anova",
+  "uji_mann_whitney",
+  "uji_wilcoxon",
+  "uji_kruskal_wallis",
+  "uji_chi_square",
+  "transformasi_msi",
+  "regresi_logistik",
+  "uji_moderasi",
+  "uji_mediasi",
 ] as const;
 export type AnalysisId = (typeof ANALYSIS_IDS)[number];
 
@@ -53,6 +63,30 @@ const independents: AnalysisArgSpec = {
   type: "string[]",
   required: true,
   description: "Nama kolom variabel bebas (X1, X2, …).",
+};
+const groupArg: AnalysisArgSpec = {
+  name: "group",
+  type: "string",
+  required: true,
+  description: "Nama kolom pengelompok (kategorik, mis. JenisKelamin).",
+};
+const dependentNumeric: AnalysisArgSpec = {
+  name: "dependent",
+  type: "string",
+  required: true,
+  description: "Nama kolom nilai yang dibandingkan (numerik).",
+};
+const preArg: AnalysisArgSpec = {
+  name: "pre",
+  type: "string",
+  required: true,
+  description: "Kolom pengukuran pertama (pre/sebelum).",
+};
+const postArg: AnalysisArgSpec = {
+  name: "post",
+  type: "string",
+  required: true,
+  description: "Kolom pengukuran kedua (post/sesudah).",
 };
 
 export const ANALYSIS_CATALOG: readonly AnalysisCatalogEntry[] = [
@@ -247,6 +281,129 @@ export const ANALYSIS_CATALOG: readonly AnalysisCatalogEntry[] = [
     ],
     credits: 10,
     heavy: false,
+  },
+  {
+    id: "uji_beda_t",
+    title: "Uji beda rata-rata (t test)",
+    description:
+      "Independent-Samples t Test (2 grup, + Levene) atau Paired-Samples t Test (pre/post). Sig. (2-tailed) < 0,05 → ada perbedaan signifikan.",
+    args: [
+      {
+        name: "mode",
+        type: "enum",
+        values: ["independent", "paired"],
+        required: true,
+        description: "independent = beda 2 grup; paired = beda pre-post satu grup.",
+      },
+      { ...dependentNumeric, required: false, description: "Wajib mode independent: kolom nilai (numerik)." },
+      { ...groupArg, required: false, description: "Wajib mode independent: kolom grup (TEPAT 2 kategori)." },
+      { ...preArg, required: false },
+      { ...postArg, required: false },
+    ],
+    credits: 10,
+    heavy: false,
+  },
+  {
+    id: "uji_anova",
+    title: "One-Way ANOVA (+ Levene + Tukey)",
+    description:
+      "Uji beda rata-rata ≥3 grup: homogenitas (Levene) + ANOVA (uji F) + post-hoc Tukey HSD bila signifikan. Sig. < 0,05 → ada perbedaan antar grup.",
+    args: [dependentNumeric, groupArg],
+    credits: 10,
+    heavy: false,
+  },
+  {
+    id: "uji_mann_whitney",
+    title: "Uji Mann-Whitney U (non-parametrik, 2 grup)",
+    description:
+      "Alternatif non-parametrik t independent (data tidak normal/ordinal), TEPAT 2 grup. Asymp. Sig. < 0,05 → ada perbedaan.",
+    args: [dependentNumeric, groupArg],
+    credits: 10,
+    heavy: false,
+  },
+  {
+    id: "uji_wilcoxon",
+    title: "Uji Wilcoxon Signed-Rank (non-parametrik, berpasangan)",
+    description:
+      "Alternatif non-parametrik paired t (pre/post tidak normal). Asymp. Sig. < 0,05 → ada perbedaan pre-post.",
+    args: [preArg, postArg],
+    credits: 10,
+    heavy: false,
+  },
+  {
+    id: "uji_kruskal_wallis",
+    title: "Uji Kruskal-Wallis H (non-parametrik, ≥3 grup)",
+    description:
+      "Alternatif non-parametrik one-way ANOVA (data tidak normal/ordinal). Asymp. Sig. < 0,05 → ada perbedaan antar grup.",
+    args: [dependentNumeric, groupArg],
+    credits: 10,
+    heavy: false,
+  },
+  {
+    id: "uji_chi_square",
+    title: "Uji Chi-Square (asosiasi 2 kategorik)",
+    description:
+      "Crosstab + Pearson Chi-Square + Cramer's V untuk hubungan dua variabel kategorik. Asymp. Sig. < 0,05 → ada asosiasi.",
+    args: [
+      { name: "row", type: "string", required: true, description: "Kolom kategorik baris." },
+      { name: "col", type: "string", required: true, description: "Kolom kategorik kolom." },
+    ],
+    credits: 10,
+    heavy: false,
+  },
+  {
+    id: "transformasi_msi",
+    title: "Transformasi MSI (ordinal → interval)",
+    description:
+      "Method of Successive Interval: ubah skor Likert ordinal menjadi skala interval per item (prasyarat regresi/path atas data Likert). Menghasilkan tabel nilai transformasi.",
+    args: [
+      {
+        name: "items",
+        type: "string[]",
+        required: true,
+        description: "Kolom item ordinal yang ditransformasi.",
+      },
+    ],
+    credits: 10,
+    heavy: false,
+  },
+  {
+    id: "regresi_logistik",
+    title: "Regresi logistik biner",
+    description:
+      "Binary Logistic: Omnibus, Model Summary (Nagelkerke R²), Variables in Equation (B, Wald, Sig., Exp(B)). Untuk variabel terikat biner (0/1).",
+    args: [
+      { ...dependentNumeric, description: "Kolom terikat BINER (2 nilai, mis. 0/1)." },
+      independents,
+    ],
+    credits: 10,
+    heavy: false,
+  },
+  {
+    id: "uji_moderasi",
+    title: "Uji moderasi (MRA)",
+    description:
+      "Moderated Regression Analysis: Y ~ X + M + X*M (mean-centered). Sig. interaksi < 0,05 → M memoderasi pengaruh X terhadap Y.",
+    args: [
+      dependent,
+      { name: "independent", type: "string", required: true, description: "Variabel bebas (X)." },
+      { name: "moderator", type: "string", required: true, description: "Variabel moderasi (M)." },
+    ],
+    credits: 10,
+    heavy: false,
+  },
+  {
+    id: "uji_mediasi",
+    title: "Uji mediasi (path + Sobel + bootstrap)",
+    description:
+      "Analisis jalur X → M → Y: efek langsung/tak langsung, uji Sobel, dan bootstrap CI 95% (5000 sampel). 0 di luar CI → M memediasi.",
+    args: [
+      dependent,
+      { name: "independent", type: "string", required: true, description: "Variabel bebas (X)." },
+      { name: "mediator", type: "string", required: true, description: "Variabel mediasi (M)." },
+    ],
+    credits: 20,
+    heavy: true,
   },
 ] as const;
 
