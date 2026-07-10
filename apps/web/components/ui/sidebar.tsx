@@ -164,6 +164,15 @@ function SidebarProvider({
   );
 }
 
+type SidebarVariant =
+  "sidebar" | "floating" | "inset" | "flush" | "transparent";
+
+function getSidebarSurfaceClass(variant: SidebarVariant): string {
+  if (variant === "transparent") return "bg-transparent";
+  if (variant === "flush") return "bg-background";
+  return "bg-sidebar";
+}
+
 function Sidebar({
   side = "left",
   variant = "sidebar",
@@ -174,7 +183,7 @@ function Sidebar({
   ...props
 }: React.ComponentProps<"div"> & {
   side?: "left" | "right";
-  variant?: "sidebar" | "floating" | "inset" | "flush";
+  variant?: SidebarVariant;
   collapsible?: "offcanvas" | "icon" | "none";
 }) {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
@@ -202,7 +211,10 @@ function Sidebar({
           data-sidebar="sidebar"
           data-slot="sidebar"
           data-mobile="true"
-          className="min-w-full bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
+          className={cn(
+            "min-w-full p-0 text-sidebar-foreground [&>button]:hidden",
+            getSidebarSurfaceClass(variant),
+          )}
           side={side}
         >
           <SheetHeader className="sr-only">
@@ -228,7 +240,8 @@ function Sidebar({
       <div
         data-slot="sidebar-gap"
         className={cn(
-          "relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear",
+          "relative w-(--sidebar-width) transition-[width] duration-200 ease-linear",
+          variant === "flush" ? "bg-background" : "bg-transparent",
           "group-data-[collapsible=offcanvas]:w-0",
           "group-data-[side=right]:rotate-180",
           variant === "floating" || variant === "inset"
@@ -256,7 +269,7 @@ function Sidebar({
           data-slot="sidebar-inner"
           className={cn(
             "flex size-full flex-col group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border",
-            variant === "flush" ? "bg-background" : "bg-sidebar",
+            getSidebarSurfaceClass(variant),
           )}
         >
           {children}

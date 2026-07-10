@@ -27,8 +27,8 @@ const SLIDE_INTERVAL_MS = 6_000;
 // pakai creative house-ads aslinya. Kunci = id slide. Rasio SVG-nya beragam
 // (portret/persegi/lanskap) → dirender object-contain, bukan cover.
 const BANNER_IMAGE: Record<string, string> = {
-  usage: "/programming.svg",
-  "astra-deep": "/ai-working.svg",
+  usage: "/package-service.svg",
+  "astra-deep": "/javascript-illustration.svg",
   "aqsha-app": "/video-call.svg",
 };
 
