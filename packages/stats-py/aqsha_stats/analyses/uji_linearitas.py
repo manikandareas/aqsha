@@ -46,6 +46,14 @@ def run(df: pd.DataFrame, args: dict) -> dict:
     ss_total = float(((y - y.mean()) ** 2).sum())
     ss_within = float(sum(((vals - vals.mean()) ** 2).sum() for _, vals in groups))
     ss_combined = ss_total - ss_within
+    # Tak ada variasi Y di dalam kelompok nilai X (mis. Y deterministik per X) → ms_within = 0 →
+    # pembagian F meledak (ZeroDivisionError float native). Tolak rapi alih-alih error "internal".
+    if ss_within == 0:
+        raise AnalysisError(
+            "insufficient_variance",
+            f"Tidak ada variasi {dependent} di dalam kelompok nilai {independent} "
+            "(within-group Sum of Squares = 0), sehingga uji F linearitas tak dapat dihitung.",
+        )
 
     # SS linearity = regression sum of squares of y ~ x.
     sxx = float(((x - x.mean()) ** 2).sum())

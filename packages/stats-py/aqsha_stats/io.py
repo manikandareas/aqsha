@@ -32,9 +32,14 @@ def load_dataset(path: str | Path) -> pd.DataFrame:
 
         df, _meta = pyreadstat.read_sav(str(p))
         return df
+    if ext == ".dta":
+        import pyreadstat
+
+        df, _meta = pyreadstat.read_dta(str(p))
+        return df
     raise AnalysisError(
         "unsupported_format",
-        f"Format file '{ext}' tidak didukung. Gunakan .csv, .xlsx, atau .sav.",
+        f"Format file '{ext}' tidak didukung. Gunakan .csv, .xlsx, .sav, atau .dta.",
     )
 
 

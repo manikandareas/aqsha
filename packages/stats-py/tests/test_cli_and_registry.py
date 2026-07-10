@@ -20,6 +20,16 @@ REGISTRY_ARGS = {
     "uji_linearitas": {"dependent": "Y", "independent": "X1"},
     "regresi_linear": {"dependent": "Y", "independents": ["X1", "X2"]},
     "korelasi": {"variables": ["X1", "X2", "Y"]},
+    "uji_beda_t": {"mode": "independent", "dependent": "Y", "group": "JK"},
+    "uji_anova": {"dependent": "Y", "group": "Usia"},
+    "uji_mann_whitney": {"dependent": "Y", "group": "JK"},
+    "uji_wilcoxon": {"pre": "X1", "post": "Y"},
+    "uji_kruskal_wallis": {"dependent": "Y", "group": "Usia"},
+    "uji_chi_square": {"row": "JK", "col": "Usia"},
+    "transformasi_msi": {"items": ITEMS_X1},
+    "regresi_logistik": {"dependent": "Lulus", "independents": ["X1", "X2"]},
+    "uji_moderasi": {"dependent": "Y", "independent": "X1", "moderator": "X2"},
+    "uji_mediasi": {"dependent": "Y", "independent": "X1", "mediator": "X2"},
 }
 
 EXPECTED_IDS = (
@@ -34,6 +44,16 @@ EXPECTED_IDS = (
     "uji_linearitas",
     "regresi_linear",
     "korelasi",
+    "uji_beda_t",
+    "uji_anova",
+    "uji_mann_whitney",
+    "uji_wilcoxon",
+    "uji_kruskal_wallis",
+    "uji_chi_square",
+    "transformasi_msi",
+    "regresi_logistik",
+    "uji_moderasi",
+    "uji_mediasi",
 )
 
 

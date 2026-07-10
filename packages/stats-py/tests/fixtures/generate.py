@@ -44,6 +44,9 @@ def main() -> None:
 
     data["JK"] = rng.choice(["Laki-laki", "Perempuan"], size=N)
     data["Usia"] = rng.integers(19, 26, size=N)
+    # Terikat biner deterministik (untuk uji regresi logistik) — TIDAK memakai rng, jadi
+    # kolom lain di atas tetap identik saat regenerate (seed 42): Y di atas median = 1.
+    data["Lulus"] = (data["Y"] >= np.median(data["Y"])).astype(int)
 
     df = pd.DataFrame(data)
     out = Path(__file__).parent / "likert100.csv"

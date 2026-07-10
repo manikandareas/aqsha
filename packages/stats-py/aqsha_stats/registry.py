@@ -20,6 +20,16 @@ ANALYSIS_IDS = (
     "uji_linearitas",
     "regresi_linear",
     "korelasi",
+    "uji_beda_t",
+    "uji_anova",
+    "uji_mann_whitney",
+    "uji_wilcoxon",
+    "uji_kruskal_wallis",
+    "uji_chi_square",
+    "transformasi_msi",
+    "regresi_logistik",
+    "uji_moderasi",
+    "uji_mediasi",
 )
 
 ANALYSES = {
