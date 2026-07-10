@@ -11,6 +11,7 @@ export * from "./artifactPaperMetadata";
 export * from "./artifactUrls";
 export * from "./artifactEmbeddings";
 export * from "./analysisSandboxes";
+export * from "./analysisResultBlocks";
 export * from "./chatThreads";
 export * from "./researchSources";
 export * from "./explorePapers";
