@@ -1,6 +1,7 @@
 import { askQuestions } from "./ask-questions";
 import { createWorkspace } from "./create-workspace";
 import { deleteArtifact } from "./delete-artifact";
+import { exportAnalysisResults } from "./export-analysis-results";
 import { formatReferences } from "./format-references";
 import { getArtifact } from "./get-artifact";
 import { getRenderPayload } from "./get-render-payload";
@@ -11,6 +12,7 @@ import { listWorkspaces } from "./list-workspaces";
 import { lookupDoi } from "./lookup-doi";
 import { profileDataset } from "./profile-dataset";
 import { runAnalysis } from "./run-analysis";
+import { runPythonAnalysis } from "./run-python-analysis";
 import { proposeArtifact } from "./propose-artifact";
 import { readUrl } from "./read-url";
 import { renameWorkspace } from "./rename-workspace";
@@ -69,6 +71,10 @@ export const analysisTools = {
   profile_dataset: profileDataset,
   list_analyses: listAnalyses,
   run_analysis: runAnalysis,
+  // Fallback codegen ber-guardrail (fase 4) — hanya saat katalog tak memuat uji yang diminta.
+  run_python_analysis: runPythonAnalysis,
+  // Ekspor deliverable (fase 5): docx/xlsx/sav → artifact pustaka.
+  export_analysis_results: exportAnalysisResults,
 };
 
 /**

@@ -6,6 +6,7 @@ import {
   analysisFailureNote,
   analysisScope,
   chargeSandboxCompute,
+  finalizeStatsRun,
   precheckSandboxCompute,
 } from "../lib/analysis";
 import { getServiceDb } from "../lib/db";
@@ -73,13 +74,30 @@ export const runAnalysis = createTool({
           );
         }
       }
+
+      // Bangun grup blok (tabel gaya SPSS + kartu verdict + figur PNG) lalu persist di
+      // luar teks pesan (PNG tak lewat model — hemat token; FE me-join per-thread). Model
+      // hanya menaruh penanda `marker` di narasi supaya tabel/figur muncul di posisi itu.
+      const shortTitle = entry.title.replace(/\s*\(.*\)\s*$/, "");
+      const { marker } = await finalizeStatsRun(ctx, {
+        ownerUserId: scope.ownerUserId,
+        analysis: entry.id,
+        title: shortTitle,
+        result: run.result,
+        charts: run.charts,
+      });
       return {
         ok: true as const,
         analysis: entry.id,
         result: run.result,
-        // PNG chart tidak dikirim ke model (hemat token) — dirender di fase output layer.
+        // PNG chart TIDAK dikirim ke model (hemat token) — dirender FE dari blok tersimpan.
         chartCount: run.charts.length,
-        note: "Tulis interpretasi HANYA dari angka & decisions di result ini.",
+        // Penanda penempatan tabel/figur: tulis PERSIS pada baris tersendiri di posisi
+        // hasil ini harus tampil. Tanpa penanda, tabel/figur di-append di akhir jawaban.
+        ...(marker ? { marker } : {}),
+        note: marker
+          ? `Tulis interpretasi HANYA dari angka & decisions di result ini, lalu sisipkan ${marker} pada baris tersendiri tepat di tempat tabel & figur uji ini harus muncul.`
+          : "Tulis interpretasi HANYA dari angka & decisions di result ini.",
       };
     } catch (error) {
       return { ok: false as const, note: analysisFailureNote(error) };
