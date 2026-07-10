@@ -239,6 +239,7 @@
   --font-mono: var(--font-mono);
   --font-serif: var(--font-serif);
   --font-heading: var(--font-serif);
+  --font-hand: var(--font-hand);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -329,11 +330,57 @@
 }
 
 .font-hand {
-  font-family: var(--font-serif), serif;
+  font-family: var(--font-hand), var(--font-serif), cursive;
 }
 
 .shadow-aqsha {
   box-shadow: var(--shadow-soft-card);
+}
+
+/* ─── Landing redesign utilities ───
+   Paper grain overlay (SVG turbulence) + Ken Burns slow zoom, used by the
+   Big Image Frame section. Both honor prefers-reduced-motion. */
+.paper-grain {
+  position: relative;
+  isolation: isolate;
+}
+
+.paper-grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='aqsha-grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23aqsha-grain)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 220px 220px;
+  opacity: 0.16;
+  mix-blend-mode: multiply;
+}
+
+.dark .paper-grain::after {
+  opacity: 0.1;
+  mix-blend-mode: screen;
+}
+
+@keyframes aqsha-ken-burns {
+  0% {
+    transform: scale(1.02);
+  }
+
+  100% {
+    transform: scale(1.1);
+  }
+}
+
+.ken-burns {
+  animation: aqsha-ken-burns 22s ease-in-out infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ken-burns {
+    animation: none;
+  }
 }
 
 .aqsha-error-state-page {
@@ -350,42 +397,6 @@
   transform: scale(0.98);
 }
 
-.landing-demo-stage {
-  contain: content;
-}
-
-.landing-demo-track {
-  animation: aqsha-demo-cycle 16s infinite;
-  display: flex;
-  flex-direction: column;
-}
-
-.landing-demo-step {
-  min-height: 330px;
-}
-
-.landing-demo-stage--hero {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  contain: strict;
-}
-
-.landing-demo-track--hero {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  animation: aqsha-demo-cycle-hero 16s infinite;
-}
-
-.landing-demo-step--hero {
-  flex: 0 0 100%;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-}
-
 @keyframes aqsha-error-state-enter {
   from {
     opacity: 0;
@@ -394,58 +405,6 @@
 
   to {
     opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes aqsha-demo-cycle {
-  0%,
-  18% {
-    transform: translateY(0);
-  }
-
-  25%,
-  43% {
-    transform: translateY(-330px);
-  }
-
-  50%,
-  68% {
-    transform: translateY(-660px);
-  }
-
-  75%,
-  93% {
-    transform: translateY(-990px);
-  }
-
-  100% {
-    transform: translateY(0);
-  }
-}
-
-@keyframes aqsha-demo-cycle-hero {
-  0%,
-  18% {
-    transform: translateY(0);
-  }
-
-  25%,
-  43% {
-    transform: translateY(-100%);
-  }
-
-  50%,
-  68% {
-    transform: translateY(-200%);
-  }
-
-  75%,
-  93% {
-    transform: translateY(-300%);
-  }
-
-  100% {
     transform: translateY(0);
   }
 }
@@ -462,42 +421,6 @@
 
   .aqsha-error-state-action:active:not(:disabled) {
     transform: none;
-  }
-
-  .landing-demo-stage {
-    height: auto;
-    overflow: visible;
-  }
-
-  .landing-demo-track {
-    animation: none;
-    gap: 0.75rem;
-  }
-
-  .landing-demo-step {
-    min-height: auto;
-  }
-
-  .landing-demo-stage--hero {
-    position: static;
-    flex: none;
-    height: auto;
-    overflow: visible;
-    contain: none;
-  }
-
-  .landing-demo-track--hero {
-    position: static;
-    inset: auto;
-    animation: none;
-    gap: 0.75rem;
-  }
-
-  .landing-demo-step--hero {
-    flex: none;
-    height: auto;
-    min-height: auto;
-    overflow: visible;
   }
 }
 

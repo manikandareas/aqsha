@@ -2,10 +2,11 @@
 
 import type { AskQuestion, AskQuestionAnswer, AskQuestionsResumeData } from "@aqsha/chat-core";
 import { Button } from "@aqsha/ui";
-import { CheckIcon, ChevronRightIcon } from "@aqsha/ui/icons";
+import { CheckIcon, HelpCircleIcon } from "@aqsha/ui/icons";
 import { useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { ToolCard } from "./tool-card";
 
 /**
  * Kartu HITL klarifikasi (`ask_questions`) — sejajar plan-gate, tapi interaktif: pilih-satu (radio)
@@ -248,8 +249,8 @@ export function QuestionsForm({
 }
 
 /**
- * Kartu inline (di atas composer). Header + aksi buka-panel DISAMAKAN dengan kartu plan-gate: baris
- * header yang bisa diklik (judul + jumlah + chevron) membuka panel Questions; form berada di bawahnya.
+ * Kartu inline (di atas composer) di atas shell bersama `ToolCard`: heading kompak (ikon + "Klarifikasi"
+ * + jumlah pertanyaan) yang, bila `onOpenPanel` ada, jadi tombol buka-panel Questions; form di bawahnya.
  */
 export function QuestionsCard({
   questions,
@@ -265,36 +266,19 @@ export function QuestionsCard({
   onOpenPanel?: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      {onOpenPanel ? (
-        <button
-          type="button"
-          onClick={onOpenPanel}
-          className="group -m-1 flex w-full items-start justify-between gap-3 rounded-lg p-1 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <div className="grid min-w-0 gap-1">
-            <span className="text-sm font-semibold text-foreground">Klarifikasi</span>
-            <span className="text-[13px] text-muted-foreground">
-              {`${questions.length} pertanyaan · ketuk untuk lihat detail`}
-            </span>
-          </div>
-          <ChevronRightIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground/60 transition-colors group-hover:text-muted-foreground" />
-        </button>
-      ) : (
-        <div className="grid gap-1">
-          <span className="text-sm font-semibold text-foreground">Klarifikasi</span>
-          <span className="text-[13px] text-muted-foreground">{`${questions.length} pertanyaan`}</span>
-        </div>
-      )}
-      <div className="mt-3">
-        <QuestionsForm
-          questions={questions}
-          findings={findings}
-          onSubmit={onSubmit}
-          onSkip={onSkip}
-          scrollable
-        />
-      </div>
-    </div>
+    <ToolCard
+      icon={<HelpCircleIcon className="size-4 shrink-0 text-muted-foreground" />}
+      title="Klarifikasi"
+      meta={`${questions.length} pertanyaan`}
+      onOpenPanel={onOpenPanel}
+    >
+      <QuestionsForm
+        questions={questions}
+        findings={findings}
+        onSubmit={onSubmit}
+        onSkip={onSkip}
+        scrollable
+      />
+    </ToolCard>
   );
 }

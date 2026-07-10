@@ -5,7 +5,14 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { m, useReducedMotion } from "motion/react";
 import { type ReactNode, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ChevronRightIcon, ClockIcon, RotateCcwIcon, XIcon } from "@aqsha/ui/icons";
+import {
+  AlertCircleIcon,
+  ClockIcon,
+  NotebookIcon,
+  RotateCcwIcon,
+  WrenchIcon,
+  XIcon,
+} from "@aqsha/ui/icons";
 import { ConversationContent } from "@/components/ai-elements/conversation-content";
 import { Conversation } from "@/components/ai-elements/conversation-root";
 import { ConversationScrollButton } from "@/components/ai-elements/conversation-scroll-button";
@@ -29,6 +36,7 @@ import {
 } from "@/features/threads/components/composer";
 import { MessageList } from "@/features/threads/components/message-list";
 import { QuestionsCard } from "@/features/threads/components/questions-card";
+import { ToolCard, toolCardShellClass } from "@/features/threads/components/tool-card";
 import { bucketMessageAttachments } from "@/features/threads/lib/attachment-buckets";
 import {
   type AgentKind,
@@ -131,12 +139,17 @@ function DeepRunNoticeCard(props: {
 }) {
   return (
     <div className={cn(threadTranscriptColumnClass)}>
-      <div className="rounded-xl border border-border bg-card p-4">
-        <p className="text-sm text-foreground">{props.body}</p>
-        {props.detail ? (
-          <p className="mt-1 text-muted-foreground text-xs">{props.detail}</p>
-        ) : null}
-        <div className="mt-3 flex gap-2">
+      <div className={toolCardShellClass}>
+        <div className="flex gap-2">
+          <AlertCircleIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm text-foreground">{props.body}</p>
+            {props.detail ? (
+              <p className="mt-1 text-muted-foreground text-xs">{props.detail}</p>
+            ) : null}
+          </div>
+        </div>
+        <div className="mt-3 flex gap-2 pl-6">
           <Button size="sm" onClick={props.primary.onClick} disabled={props.primary.disabled}>
             {props.primary.icon ?? <RotateCcwIcon className="size-3.5" />}
             {props.primary.label}
@@ -412,24 +425,16 @@ function MastraChatInner({
 
   const approvalCards =
     agent.approvals.length > 0 ? (
-      <div className={cn(threadTranscriptColumnClass, "flex flex-col gap-2")}>
+      <div className={cn(threadTranscriptColumnClass, "flex flex-col gap-2.5")}>
         {agent.approvals.map((a) => (
-          <div
+          <ToolCard
             key={a.toolCallId}
-            className="rounded-lg border border-border bg-card p-3 text-sm"
+            icon={<WrenchIcon className="size-4 shrink-0 text-muted-foreground" />}
+            title={a.title}
+            meta={typeof a.args.artifactId === "string" ? a.args.artifactId : undefined}
           >
-            <p className="mb-2 text-foreground">
-              {a.title}
-              {typeof a.args.artifactId === "string"
-                ? ` — ${a.args.artifactId}`
-                : ""}
-              ? Setujui untuk menjalankan.
-            </p>
             <div className="flex gap-2">
-              <Button
-                size="sm"
-                onClick={() => void agent.approve(a.toolCallId)}
-              >
+              <Button size="sm" onClick={() => void agent.approve(a.toolCallId)}>
                 Setujui
               </Button>
               <Button
@@ -440,7 +445,7 @@ function MastraChatInner({
                 Tolak
               </Button>
             </div>
-          </div>
+          </ToolCard>
         ))}
       </div>
     ) : null;
@@ -459,39 +464,22 @@ function MastraChatInner({
     </div>
   ) : null;
 
-  // Plan-gate `/deep` (Workflow suspended di `approve-plan`) — kartu rencana HITL. BUKAN collapsible:
-  // kartu statis (judul + ringkasan + Setujui/Tolak). Header bisa diklik → buka panel rencana penuh
-  // (sub-pertanyaan + aksi yang sama), bukan expand inline. Dirender DI ATAS composer (sejajar approvalCards).
+  // Plan-gate `/deep` (Workflow suspended di `approve-plan`) — kartu rencana HITL di atas shell bersama
+  // `ToolCard`. BUKAN collapsible: heading kompak (Rencana riset + jumlah sub-pertanyaan) yang, bila
+  // panel tersedia, jadi tombol buka-panel rencana penuh; aksi Setujui/Tolak di bawahnya.
   const planGateCard = agent.planGate ? (
     <div className={cn(threadTranscriptColumnClass)}>
-      <div className="rounded-xl border border-border bg-card p-4">
-        {threadPanel?.openPlanPanel ? (
-          <button
-            type="button"
-            onClick={() => threadPanel.openPlanPanel(LIVE_PLAN_KEY)}
-            className="group -m-1 flex w-full items-start justify-between gap-3 rounded-lg p-1 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <div className="grid min-w-0 gap-1">
-              <span className="text-sm font-semibold text-foreground">
-                Rencana riset
-              </span>
-              <span className="text-[13px] text-muted-foreground">
-                {`${agent.planGate.subQuestions.length} sub-pertanyaan riset · ketuk untuk lihat detail`}
-              </span>
-            </div>
-            <ChevronRightIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground/60 transition-colors group-hover:text-muted-foreground" />
-          </button>
-        ) : (
-          <div className="grid gap-1">
-            <span className="text-sm font-semibold text-foreground">
-              Rencana riset
-            </span>
-            <span className="text-[13px] text-muted-foreground">
-              {`${agent.planGate.subQuestions.length} sub-pertanyaan riset · tinjau sebelum menyetujui`}
-            </span>
-          </div>
-        )}
-        <div className="mt-3 flex gap-2">
+      <ToolCard
+        icon={<NotebookIcon className="size-4 shrink-0 text-muted-foreground" />}
+        title="Rencana riset"
+        meta={`${agent.planGate.subQuestions.length} sub-pertanyaan`}
+        onOpenPanel={
+          threadPanel?.openPlanPanel
+            ? () => threadPanel.openPlanPanel(LIVE_PLAN_KEY)
+            : undefined
+        }
+      >
+        <div className="flex gap-2">
           <Button size="sm" onClick={() => void agent.resolvePlan(true)}>
             Setujui
           </Button>
@@ -503,7 +491,7 @@ function MastraChatInner({
             Tolak
           </Button>
         </div>
-      </div>
+      </ToolCard>
     </div>
   ) : null;
 
