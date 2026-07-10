@@ -29,6 +29,12 @@ export const ANALYSIS_IDS = [
   "regresi_logistik",
   "uji_moderasi",
   "uji_mediasi",
+  "uji_anova_dua_arah",
+  "uji_ancova",
+  "uji_manova",
+  "analisis_faktor",
+  "cb_sem",
+  "sem_pls",
 ] as const;
 export type AnalysisId = (typeof ANALYSIS_IDS)[number];
 
@@ -401,6 +407,135 @@ export const ANALYSIS_CATALOG: readonly AnalysisCatalogEntry[] = [
       dependent,
       { name: "independent", type: "string", required: true, description: "Variabel bebas (X)." },
       { name: "mediator", type: "string", required: true, description: "Variabel mediasi (M)." },
+    ],
+    credits: 20,
+    heavy: true,
+  },
+  {
+    id: "uji_anova_dua_arah",
+    title: "Two-Way ANOVA (GLM Univariate)",
+    description:
+      "Efek utama 2 faktor + interaksi terhadap 1 variabel terikat (Type III SS, paritas SPSS GLM): Levene per sel + Tests of Between-Subjects Effects. Sig. < 0,05 → efek signifikan.",
+    args: [
+      dependentNumeric,
+      { name: "factor1", type: "string", required: true, description: "Kolom faktor pertama (kategorik)." },
+      { name: "factor2", type: "string", required: true, description: "Kolom faktor kedua (kategorik)." },
+    ],
+    credits: 10,
+    heavy: false,
+  },
+  {
+    id: "uji_ancova",
+    title: "ANCOVA (GLM Univariate + kovariat)",
+    description:
+      "Pengaruh faktor terhadap variabel terikat SETELAH mengontrol kovariat (Type III SS) + Estimated Marginal Means. Sig. faktor < 0,05 → berpengaruh setelah kontrol kovariat.",
+    args: [
+      dependentNumeric,
+      { name: "factor", type: "string", required: true, description: "Kolom faktor (kategorik)." },
+      {
+        name: "covariates",
+        type: "string[]",
+        required: true,
+        description: "Kolom kovariat numerik yang dikontrol (≥ 1).",
+      },
+    ],
+    credits: 10,
+    heavy: false,
+  },
+  {
+    id: "uji_manova",
+    title: "One-Way MANOVA (GLM Multivariate)",
+    description:
+      "Perbedaan simultan ≥2 variabel terikat antar grup: Pillai/Wilks/Hotelling/Roy. Sig. Wilks' Lambda < 0,05 → ada perbedaan simultan.",
+    args: [
+      {
+        name: "dependents",
+        type: "string[]",
+        required: true,
+        description: "Kolom variabel terikat numerik (≥ 2).",
+      },
+      groupArg,
+    ],
+    credits: 10,
+    heavy: false,
+  },
+  {
+    id: "analisis_faktor",
+    title: "Analisis faktor eksploratori (EFA + KMO & Bartlett)",
+    description:
+      "KMO & Bartlett's Test + ekstraksi Principal Component + rotasi varimax (default SPSS): Communalities, Total Variance Explained, Rotated Component Matrix. KMO ≥ 0,50 & Sig. Bartlett < 0,05 → layak difaktorkan.",
+    args: [
+      {
+        name: "items",
+        type: "string[]",
+        required: true,
+        description: "Kolom item yang difaktorkan (≥ 3).",
+      },
+      {
+        name: "n_factors",
+        type: "number",
+        required: false,
+        description: "Jumlah faktor (default: kriteria Kaiser eigenvalue > 1).",
+      },
+      {
+        name: "rotation",
+        type: "enum",
+        values: ["varimax", "none"],
+        required: false,
+        description: "Default varimax.",
+      },
+    ],
+    credits: 10,
+    heavy: false,
+  },
+  {
+    id: "cb_sem",
+    title: "CB-SEM (covariance-based, ala AMOS/lavaan)",
+    description:
+      "SEM berbasis kovarians via semopy: loadings pengukuran, jalur struktural (estimate, C.R., Sig.), dan Goodness of Fit (Chi-Square, CFI, TLI, GFI, AGFI, RMSEA). Laten 1 item diperlakukan sebagai variabel observed.",
+    args: [
+      {
+        name: "latents",
+        type: "object",
+        required: true,
+        description: 'Peta laten → item, mis. {"X1": ["X1.1","X1.2"], "Y": ["Y.1","Y.2"]}.',
+      },
+      {
+        name: "paths",
+        type: "string[]",
+        required: true,
+        description: 'Jalur struktural "Sumber -> Target", mis. ["X1 -> Y"].',
+      },
+    ],
+    credits: 20,
+    // Hessian numerik semopy tumbuh super-linear dengan jumlah parameter — model
+    // skripsi realistis (5+ laten, 20+ indikator) bisa melewati timeout 120 dtk.
+    heavy: true,
+  },
+  {
+    id: "sem_pls",
+    title: "SEM-PLS (ala SmartPLS)",
+    description:
+      "PLS-SEM (path weighting + bootstrap, seed tetap): Outer Loadings, Construct Reliability & Validity (alpha/CR/AVE), Fornell-Larcker, HTMT, R Square, Path Coefficients (T Statistics, P Values), SRMR. Untuk skripsi berbasis SmartPLS.",
+    args: [
+      {
+        name: "latents",
+        type: "object",
+        required: true,
+        description: 'Peta laten → indikator, mis. {"X1": ["X1.1","X1.2"], "Y": ["Y.1","Y.2"]}.',
+      },
+      {
+        name: "paths",
+        type: "string[]",
+        required: true,
+        description: 'Jalur struktural "Sumber -> Target", mis. ["X1 -> Y", "X2 -> Y"].',
+      },
+      {
+        name: "bootstrap",
+        type: "number",
+        required: false,
+        description: "Jumlah sampel bootstrap 100–2000 (default 1000; ≥ 500 untuk pelaporan).",
+      },
     ],
     credits: 20,
     heavy: true,
