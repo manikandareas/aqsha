@@ -26,6 +26,8 @@ export function artifactTypeLabel(artifactType: string | undefined): string {
       return "JSON";
     case "csv":
       return "CSV";
+    case "spreadsheet":
+      return "XLSX";
     case "code":
       return "Code";
     case "plain_text":

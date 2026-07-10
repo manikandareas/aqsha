@@ -1,13 +1,18 @@
 import { askQuestions } from "./ask-questions";
 import { createWorkspace } from "./create-workspace";
 import { deleteArtifact } from "./delete-artifact";
+import { exportAnalysisResults } from "./export-analysis-results";
 import { formatReferences } from "./format-references";
 import { getArtifact } from "./get-artifact";
 import { getRenderPayload } from "./get-render-payload";
 import { linkToWorkspace } from "./link-to-workspace";
+import { listAnalyses } from "./list-analyses";
 import { listArtifacts } from "./list-artifacts";
 import { listWorkspaces } from "./list-workspaces";
 import { lookupDoi } from "./lookup-doi";
+import { profileDataset } from "./profile-dataset";
+import { runAnalysis } from "./run-analysis";
+import { runPythonAnalysis } from "./run-python-analysis";
 import { proposeArtifact } from "./propose-artifact";
 import { readUrl } from "./read-url";
 import { renameWorkspace } from "./rename-workspace";
@@ -57,6 +62,22 @@ export const researchTools = {
 };
 
 /**
+ * Tool analisis statistik (sandbox Daytona per-thread). Template-first:
+ * `list_analyses` (katalog, gratis) → `run_analysis` (debit `sandbox_compute`
+ * on-success); `profile_dataset` gratis (onboarding). Chat-only — /deep = riset
+ * literatur, tak butuh sandbox data.
+ */
+export const analysisTools = {
+  profile_dataset: profileDataset,
+  list_analyses: listAnalyses,
+  run_analysis: runAnalysis,
+  // Fallback codegen ber-guardrail (fase 4) — hanya saat katalog tak memuat uji yang diminta.
+  run_python_analysis: runPythonAnalysis,
+  // Ekspor deliverable (fase 5): docx/xlsx/sav → artifact pustaka.
+  export_analysis_results: exportAnalysisResults,
+};
+
+/**
  * Tool interaksi HITL (tanpa write DB / debit). `ask_questions` = tool-suspend native: pause turn
  * → kartu pertanyaan FE → resume dengan jawaban user.
  */
@@ -76,8 +97,9 @@ export const deepWriterTools = {
   ...researchTools,
 };
 
-/** Seluruh tool root agent Astra Lite (chat) = tool /deep + HITL interaksi. */
+/** Seluruh tool root agent Astra Lite (chat) = tool /deep + analisis data + HITL interaksi. */
 export const astraTools = {
   ...deepWriterTools,
+  ...analysisTools,
   ...interactionTools,
 };

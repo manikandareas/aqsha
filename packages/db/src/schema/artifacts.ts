@@ -46,9 +46,11 @@ export const artifacts = pgTable(
     updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
   },
   (t) => [
+    // 0028: + 'image' (bug laten — sudah ada di allow-list upload sejak P3 tapi
+    // tertinggal dari CHECK) + 'spreadsheet' (upload .xlsx untuk analisis statistik).
     check(
       "artifacts_artifact_type_check",
-      sql`${t.artifactType} in ('markdown', 'plain_text', 'pdf', 'docx', 'html', 'svg', 'mermaid', 'json', 'csv', 'code', 'url')`,
+      sql`${t.artifactType} in ('markdown', 'plain_text', 'pdf', 'docx', 'image', 'spreadsheet', 'html', 'svg', 'mermaid', 'json', 'csv', 'code', 'url')`,
     ),
     check(
       "artifacts_artifact_family_check",

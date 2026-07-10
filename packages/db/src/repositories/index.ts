@@ -10,6 +10,8 @@ export * from "./artifactExtractionRepo";
 export * from "./artifactPaperMetadataRepo";
 export * from "./artifactUrlRepo";
 export * from "./artifactEmbeddingRepo";
+export * from "./analysisSandboxRepo";
+export * from "./analysisResultBlockRepo";
 export * from "./chatThreadRepo";
 export * from "./researchSourceRepo";
 export * from "./feedRepo";

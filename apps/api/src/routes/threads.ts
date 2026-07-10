@@ -1,4 +1,5 @@
 import {
+  AnalysisService,
   ArtifactService,
   ContextService,
   ResearchService,
@@ -124,6 +125,33 @@ export const threads = new Elysia({ prefix: "/threads" })
       const { db } = getDb();
       await ThreadService.assertOwner(db, ownerUserId, params.id);
       const items = await ResearchService.listThreadSources(db, params.id);
+      return { items };
+    },
+    { auth: true },
+  )
+  // Blok hasil analisis statistik (fase 3) — tabel gaya SPSS + kartu verdict + figur PNG
+  // yang dipersist di luar teks pesan. FE me-join per-thread untuk merender penanda
+  // `{{stats:<runKey>}}`. Ownership di-assert dulu (thread milik caller).
+  .get(
+    "/:id/stats-blocks",
+    async ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      await ThreadService.assertOwner(db, ownerUserId, params.id);
+      const rows = await AnalysisService.listResultBlocks(db, {
+        threadId: params.id,
+        ownerUserId,
+      });
+      // Trim ke bentuk kontrak `StatsGroup` (buang kolom bookkeeping) — FE parse via zod.
+      const items = rows.map((row) => ({
+        v: 1 as const,
+        runKey: row.runKey,
+        analysis: row.analysis,
+        title: row.title,
+        toolCallId: row.toolCallId,
+        blocks: row.blocks,
+        ...(row.custom ? { custom: true as const } : {}),
+        ...(row.code ? { code: row.code } : {}),
+      }));
       return { items };
     },
     { auth: true },

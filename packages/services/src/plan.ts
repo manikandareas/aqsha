@@ -190,8 +190,9 @@ export function requiredPlanForFeature(feature: CreditFeature): PublicPlanKey {
   // pro_chat selalu butuh plan berbayar. deep_research default fallback "starter",
   // tapi send-path mengirim requiredPlan eksplisit agent-aware (Lite-deep → "free"
   // agar Free pakai kuota bulanannya; Pro-deep → "starter"). sandbox_compute
-  // (verification engine) hanya di Astra Pro → butuh plan berbayar yang sama.
-  if (feature === "pro_chat" || feature === "deep_research" || feature === "sandbox_compute") {
+  // (analisis statistik) = "free": Free boleh mencoba, dibatasi kredit bulanan
+  // (keputusan produk statistics 2026-07-09).
+  if (feature === "pro_chat" || feature === "deep_research") {
     return "starter";
   }
   return "free";
