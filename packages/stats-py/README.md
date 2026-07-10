@@ -2,8 +2,21 @@
 
 Deterministic statistics engine for Aqsha — SPSS-parity analyses for Indonesian
 thesis (skripsi) rituals: uji validitas, reliabilitas, asumsi klasik, regresi
-linear, dan korelasi. Pure computation, no LLM/network calls; verdicts and
-Indonesian interpretations are produced deterministically in Python.
+linear, korelasi, uji beda (Tier 2), sampai analisis faktor, GLM (two-way
+ANOVA/ANCOVA/MANOVA), CB-SEM (semopy), dan SEM-PLS ala SmartPLS (Tier 3).
+Pure computation, no LLM/network calls; verdicts and Indonesian
+interpretations are produced deterministically in Python.
+
+## PLS-SEM & license isolation
+
+`sem_pls` never imports the GPL `openpls-engine`: all PLS computation happens
+in `openpls_driver.py` (a standalone GPL-3.0 file, NOT part of the
+`aqsha_stats` package/wheel) executed as a subprocess with JSON stdin/stdout
+IPC. The engine is installed via the `sandbox` dependency group
+(`uv sync --group sandbox`, baked into the Docker image); driver lookup order:
+`AQSHA_OPENPLS_DRIVER` env → `/opt/aqsha-stats/openpls_driver.py` (image) →
+repo checkout (tests). Bootstrap is seed-deterministic (fork start method +
+`processes=1`).
 
 ## CLI
 
@@ -29,7 +42,7 @@ Seed: env `AQSHA_STATS_SEED` (default 42), echoed in `meta.seed`.
 ## Tests
 
 ```bash
-uv sync
+uv sync --group sandbox   # sandbox group = openpls-engine (tes sem_pls di-skip tanpanya)
 uv run pytest
 ```
 

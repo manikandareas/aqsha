@@ -76,3 +76,26 @@ def listwise(df: pd.DataFrame, columns: list[str]) -> tuple[pd.DataFrame, list[s
             f"Data valid hanya {len(sub)} baris setelah menghapus data kosong; analisis membutuhkan lebih banyak data.",
         )
     return sub, warnings
+
+
+def listwise_numeric(
+    df: pd.DataFrame, columns: list[str], numeric: list[str] | None = None
+) -> tuple[pd.DataFrame, list[str]]:
+    """`listwise` + koersi kolom `numeric` (default: semua) ke angka.
+
+    Baris dengan nilai non-numerik ikut dibuang (dilaporkan di warnings), lalu
+    jumlah baris dicek ulang — kolom teks penuh (mis. label Likert) gagal dengan
+    AnalysisError yang jelas, bukan error internal di hilir.
+    """
+    sub, warnings = listwise(df, columns)
+    targets = columns if numeric is None else numeric
+    coerced = sub.assign(**{c: pd.to_numeric(sub[c], errors="coerce") for c in targets}).dropna()
+    dropped = len(sub) - len(coerced)
+    if dropped > 0:
+        warnings.append(f"{dropped} baris dengan nilai non-numerik dikeluarkan dari analisis.")
+    if len(coerced) < 3:
+        raise AnalysisError(
+            "insufficient_data",
+            f"Data numerik valid hanya {len(coerced)} baris; pastikan kolom analisis berisi angka.",
+        )
+    return coerced, warnings

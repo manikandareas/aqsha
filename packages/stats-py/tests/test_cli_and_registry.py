@@ -30,6 +30,20 @@ REGISTRY_ARGS = {
     "regresi_logistik": {"dependent": "Lulus", "independents": ["X1", "X2"]},
     "uji_moderasi": {"dependent": "Y", "independent": "X1", "moderator": "X2"},
     "uji_mediasi": {"dependent": "Y", "independent": "X1", "mediator": "X2"},
+    "uji_anova_dua_arah": {"dependent": "Y", "factor1": "JK", "factor2": "Usia"},
+    "uji_ancova": {"dependent": "Y", "factor": "JK", "covariates": ["X1"]},
+    "uji_manova": {"dependents": ["X1", "Y"], "group": "Usia"},
+    "analisis_faktor": {"items": ITEMS_X1},
+    "cb_sem": {
+        "latents": {"X1": ITEMS_X1, "Y": ["Y.1", "Y.2", "Y.3", "Y.4"]},
+        "paths": ["X1 -> Y"],
+    },
+    # bootstrap floor (100) supaya kontrak-test tetap cepat; default produksi 1000.
+    "sem_pls": {
+        "latents": {"X1": ITEMS_X1, "Y": ["Y.1", "Y.2", "Y.3", "Y.4"]},
+        "paths": ["X1 -> Y"],
+        "bootstrap": 100,
+    },
 }
 
 EXPECTED_IDS = (
@@ -54,6 +68,12 @@ EXPECTED_IDS = (
     "regresi_logistik",
     "uji_moderasi",
     "uji_mediasi",
+    "uji_anova_dua_arah",
+    "uji_ancova",
+    "uji_manova",
+    "analisis_faktor",
+    "cb_sem",
+    "sem_pls",
 )
 
 
@@ -66,6 +86,10 @@ def test_registry_ids():
 
 @pytest.mark.parametrize("analysis_id", ANALYSIS_IDS)
 def test_every_analysis_fulfills_contract(analysis_id, fixture_path):
+    if analysis_id == "sem_pls":
+        # openpls hanya ada di dependency-group opsional "sandbox" — skip (bukan
+        # merah) di env polos, selaras pytest.importorskip di test_tier3.py.
+        pytest.importorskip("openpls")
     result = run_analysis(analysis_id, fixture_path, REGISTRY_ARGS[analysis_id])
 
     assert result["analysis"] == analysis_id

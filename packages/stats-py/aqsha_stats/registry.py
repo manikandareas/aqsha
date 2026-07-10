@@ -30,6 +30,12 @@ ANALYSIS_IDS = (
     "regresi_logistik",
     "uji_moderasi",
     "uji_mediasi",
+    "uji_anova_dua_arah",
+    "uji_ancova",
+    "uji_manova",
+    "analisis_faktor",
+    "cb_sem",
+    "sem_pls",
 )
 
 ANALYSES = {

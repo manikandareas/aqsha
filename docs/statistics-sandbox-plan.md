@@ -1,6 +1,6 @@
 # Plan: Analisis Data & Statistik (SPSS-parity) via Daytona Sandbox
 
-Tanggal: 2026-07-09 · Status: FASE 0–2 IMPLEMENTED (2026-07-09; fase 3+ = plan)
+Tanggal: 2026-07-09 · Status: FASE 0–6 IMPLEMENTED (0–5: 2026-07-09; 6 Tier 3: 2026-07-10; halaman khusus "Analisis Data" = future, go/no-go menunggu usage data)
 Branch kerja: `statistics`
 
 ## 1. Visi & positioning
@@ -252,12 +252,20 @@ Scope:
 Deliverable: sesi analisis lengkap menghasilkan 3 file unduhan di library.
 Acceptance: `.sav` hasil ekspor terbuka di SPSS asli dengan labels utuh; `.docx` tabel rapi; artifact muncul di library + bisa di-@mention.
 
-### Fase 6 — Tier 3 + surface khusus (future)
+### Fase 6 — Tier 3 + surface khusus (Tier 3 IMPLEMENTED 2026-07-10; halaman khusus = future)
 
 Tujuan: diferensiator premium + fondasi halaman "Analisis Data".
 
-Scope:
-- SEM-PLS via openpls-engine (subprocess, GPL terisolasi di image) — outer/inner model + bootstrap; pertimbangkan gating tier atas (open question #2). EFA + KMO & Bartlett (factor-analyzer); CB-SEM (semopy); two-way ANOVA/MANOVA/ANCOVA.
+Scope (terimplementasi — 6 analisis baru, total katalog 27):
+- **`sem_pls`** — SEM-PLS ala SmartPLS via **openpls-engine 1.10.0** (jauh lebih kaya dari perkiraan: SRMR/d_ULS, HTMT, Fornell-Larcker, f², efek total): outer loadings + bootstrap t, alpha/CR/AVE, discriminant validity, R², path coefficients + CI. **Isolasi GPL**: engine TIDAK di-import `aqsha_stats` — semua komputasi di `packages/stats-py/openpls_driver.py` (file berlisensi GPL-3.0 terpisah, bukan bagian wheel) sebagai subprocess ber-IPC JSON stdin/stdout; engine terpasang via dependency-group `sandbox` (uv.lock-pinned, hanya di image + venv tes). **Determinisme bootstrap**: start method `fork` + `np.random.seed` + `processes=1` (child mewarisi state RNG); default 1000 sampel, clamp 100–2000 (engine murni-Python ±50 ms/iterasi — 5000 melewati timeout heavy 300 dtk; floor 100 untuk tes).
+- **`cb_sem`** — CB-SEM via **semopy 2.3.11 (MIT, dependency langsung)**: loadings, jalur struktural (C.R./Sig.), goodness of fit (Chi-Square, CFI, TLI, GFI, AGFI, RMSEA, AIC/BIC). Kolom ber-titik di-rename ke token aman sebelum parsing sintaks lavaan; laten 1 item otomatis jadi observed variable. Args sama dengan `sem_pls` (latents + paths `"X -> Y"`).
+- **`analisis_faktor`** — EFA + KMO & Bartlett **implementasi sendiri** (PCA extraction dari matriks korelasi + varimax via `statsmodels.multivariate.factor_rotation`, BSD): **factor-analyzer DIBUANG** (GPL-2.0 DAN rusak dengan scikit-learn ≥1.6 — `force_all_finite` rename). KMO/Bartlett tervalidasi identik vs factor_analyzer (golden di test). Output: KMO & Bartlett, Communalities (+MSA per item), Total Variance Explained, Rotated Component Matrix.
+- **`uji_anova_dua_arah`**, **`uji_ancova`**, **`uji_manova`** — statsmodels GLM. GOTCHA paritas SPSS: Type III SS **wajib sum-to-zero contrasts** (`C(..., Sum)`); nama kolom bebas via patsy `Q(...)`. Two-way: Levene per sel + Tests of Between-Subjects Effects; ANCOVA: + Estimated Marginal Means (kovariat di grand mean; cross-check pingouin.ancova); MANOVA: Pillai/Wilks/Hotelling/Roy.
+- Kredit: `cb_sem`/`sem_pls` = 20 (sem_pls heavy), GLM/EFA = 10. **Open question #2 resolved: TANPA gating tier terpisah** — kredit-only (cap bulanan Free 150 sudah membatasi; kontrak katalog tak berubah).
+- Tests: `tests/test_tier3.py` (golden KMO/Bartlett vs factor_analyzer; t-stat bootstrap PLS deterministik seed 42; cross-check statsmodels/pingouin) — suite penuh 85 pass.
+- **OWNER ACTION: rebuild snapshot** (`bun run stats:snapshot aqsha-stats-v2` + update `AQSHA_DAYTONA_SNAPSHOT` di apps/agent/.env + apps/api/.env) — Dockerfile kini menyertakan semopy + openpls-engine (`uv export --group sandbox`) + COPY `openpls_driver.py`.
+
+Scope (masih future):
 - Halaman khusus "Analisis Data" (data view + variable view + panel hasil, agent sebagai copilot) — arsitektur fase 1–5 (service + katalog + stats-viz contract) sudah surface-agnostic sehingga ini murni kerja frontend + routing.
 
 Deliverable: skripsi berbasis SmartPLS terlayani; keputusan go/no-go halaman khusus berdasar usage data fase 3–5.
@@ -278,7 +286,7 @@ Deliverable: skripsi berbasis SmartPLS terlayani; keputusan go/no-go halaman khu
 ## 9. Open questions (untuk diputuskan saat implementasi)
 
 1. `run_python_analysis` (codegen) dibuka untuk semua tier atau Pro-only?
-2. SEM-PLS digating ke tier atas (plus/ultra) sebagai fitur premium — mengingat jasa SmartPLS manusia Rp300–500rb?
+2. ~~SEM-PLS digating ke tier atas?~~ **RESOLVED 2026-07-10: kredit-only** (20 kredit/run, tanpa gating plan — cap kredit bulanan sudah membatasi; gating bisa ditambah belakangan tanpa ubah kontrak katalog).
 3. Perlu kuota terpisah `sandboxRunsUsed/Limit` ala deep runs, atau kredit saja cukup?
 4. Retensi dataset di sandbox: 7 hari OK, atau hapus segera setelah thread idle?
 5. Export "Bab 4 draft" langsung ke artifact BlockNote (integrasi `request_document_edit`)?
