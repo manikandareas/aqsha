@@ -7,6 +7,7 @@ import {
   parseMentionSegments,
   stripMentionMarkers,
 } from "@aqsha/chat-core";
+import { stripStatsMarkers, type StatsGroup } from "@aqsha/chat-core/stats-viz";
 import { CheckIcon, ChevronDownIcon, CopyIcon, RotateCcwIcon, SparklesIcon } from "@aqsha/ui/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useThreadPanel } from "@/features/thread-experience/components/thread-panel-context";
@@ -53,6 +54,7 @@ export function MessageList({
   pending,
   busy,
   sourcesByTurn,
+  statsGroupsByToolCallId,
   attachmentsByMessage,
   onRegenerate,
 }: {
@@ -62,6 +64,8 @@ export function MessageList({
   busy?: boolean;
   /** Sumber riset dikelompokkan per `turnId` (dari `research_sources`). */
   sourcesByTurn?: Map<string, ResearchSource[]>;
+  /** Grup blok hasil analisis dikelompokkan per `toolCallId` (dari `analysis_result_blocks`). */
+  statsGroupsByToolCallId?: Map<string, StatsGroup>;
   /** Lampiran upload dikelompokkan per id pesan user (join sisi-baca thread↔waktu). */
   attachmentsByMessage?: Map<string, MessageAttachment[]>;
   /** Ulangi (regenerate) turn terakhir — kirim ulang pesan user terakhir sebagai turn baru. */
@@ -110,6 +114,7 @@ export function MessageList({
               key={m.id}
               message={m}
               sources={m.turnId ? sourcesByTurn?.get(m.turnId) : undefined}
+              statsGroupsByToolCallId={statsGroupsByToolCallId}
               onRegenerate={!busy && m.id === lastAssistantId ? onRegenerate : undefined}
               turnStartedAt={precedingUserCreatedAt(messages, i)}
             />
@@ -260,11 +265,13 @@ function BubbleTokenPill({
 function AssistantMessage({
   message,
   sources,
+  statsGroupsByToolCallId,
   onRegenerate,
   turnStartedAt,
 }: {
   message: TimelineMessage;
   sources?: ResearchSource[];
+  statsGroupsByToolCallId?: Map<string, StatsGroup>;
   onRegenerate?: () => void;
   /** Epoch-ms pesan user pemicu turn — anchor timer "Sedang bekerja" yang selamat refresh. */
   turnStartedAt?: number;
@@ -333,6 +340,20 @@ function AssistantMessage({
   // termasuk sumber yang muncul di >1 pencarian, tetap ter-resolve).
   const citationMap = useMemo(() => buildCitationMap(citationCards), [citationCards]);
 
+  // Grup blok hasil analisis milik pesan INI — disaring dari peta thread by toolCallId tool
+  // part pesan ini (anti-lintas-turn; penanda `{{stats:<runKey>}}` hanya resolve ke hasil tool
+  // milik jawaban ini). Keyed by runKey untuk lookup penanda di FE renderer.
+  const messageStatsGroups = useMemo(() => {
+    if (!statsGroupsByToolCallId || statsGroupsByToolCallId.size === 0) return undefined;
+    const map = new Map<string, StatsGroup>();
+    for (const p of message.parts) {
+      if (p.kind !== "tool") continue;
+      const group = statsGroupsByToolCallId.get(p.model.toolCallId);
+      if (group) map.set(group.runKey, group);
+    }
+    return map.size > 0 ? map : undefined;
+  }, [message, statsGroupsByToolCallId]);
+
   const hasAnswer = Boolean(answer);
   const isEmpty = message.parts.length === 0;
 
@@ -355,6 +376,7 @@ function AssistantMessage({
           streaming={answer.streaming}
           citations={citationMap}
           viz={isDeepReport}
+          statsGroups={messageStatsGroups}
         />
       ) : null}
 
@@ -458,8 +480,14 @@ function ProcessPartView({
     return <Reasoning text={part.text} isThinking={part.thinking} />;
   }
   if (part.kind === "text") {
-    // Teks antara (intermediate) yang diucapkan agen sebelum jawaban final.
-    return <div className="whitespace-pre-wrap break-words text-muted-foreground">{part.text}</div>;
+    // Teks antara (intermediate) yang diucapkan agen sebelum jawaban final. Dirender polos
+    // (tanpa rehype stats) → buang token penanda `{{stats:...}}` supaya tak bocor mentah;
+    // grup hasilnya tetap tampil via lampiran di jawaban final.
+    return (
+      <div className="whitespace-pre-wrap break-words text-muted-foreground">
+        {stripStatsMarkers(part.text)}
+      </div>
+    );
   }
   return null;
 }

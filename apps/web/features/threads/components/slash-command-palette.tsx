@@ -3,6 +3,7 @@
 import { DEEP_COMMAND_ID, type PromptCommand, type PromptCommandId } from "@aqsha/chat-core";
 import {
   BookOpenIcon,
+  ChartColumnIcon,
   CheckCircle2Icon,
   ExpandParagraphIcon,
   FileTextIcon,
@@ -43,6 +44,7 @@ import {
 
 const promptCommandGroups = [
   "Metodologi",
+  "Olah Data",
   "Penulisan Bab",
   "Literatur",
   "Bahasa & Sitasi",
@@ -55,6 +57,7 @@ const promptCommandIconMap: Record<PromptCommandId, ComponentType<{ className?: 
   kualitatif: MessageSquareIcon,
   campuran: GitBranchIcon,
   rnd: WrenchIcon,
+  analisis: ChartColumnIcon,
   latarbelakang: FileTextIcon,
   rumusanmasalah: HelpCircleIcon,
   tujuan: FlagIcon,

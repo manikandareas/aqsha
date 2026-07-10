@@ -18,7 +18,9 @@ import {
   useThreadArtifacts,
   useThreadsList,
   useThreadSources,
+  useThreadStatsBlocks,
 } from "@/features/threads/api";
+import type { StatsGroup } from "@aqsha/chat-core/stats-viz";
 import {
   Composer,
   type ComposerNotice,
@@ -288,6 +290,16 @@ function MastraChatInner({
     }
     return map;
   }, [sources]);
+
+  // Blok hasil analisis statistik (fase 3) → dipetakan per toolCallId `run_analysis`. Message-list
+  // menyaring ke tool call milik tiap pesan → penanda `{{stats:<runKey>}}` di narasi di-resolve
+  // jadi tabel/figur. Fetch idempoten (pola sources); di-invalidate saat turn selesai.
+  const { data: statsGroups } = useThreadStatsBlocks(threadId, agent.messages.length > 0);
+  const statsGroupsByToolCallId = useMemo(() => {
+    const map = new Map<string, StatsGroup>();
+    for (const g of statsGroups ?? []) map.set(g.toolCallId, g.group);
+    return map;
+  }, [statsGroups]);
 
   // Lampiran upload thread → dipetakan ke pesan user (join sisi-baca thread↔waktu) supaya berkas
   // yang dikirim user tampil sebagai kartu di message row. Poll selama ada index `pending`.
@@ -607,6 +619,7 @@ function MastraChatInner({
               pending={agent.status === "submitted"}
               busy={busy}
               sourcesByTurn={sourcesByTurn}
+              statsGroupsByToolCallId={statsGroupsByToolCallId}
               attachmentsByMessage={attachmentsByMessage}
               onRegenerate={regenerate}
             />
