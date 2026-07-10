@@ -65,3 +65,30 @@ Local infra (Postgres/Redis/MinIO): `docker compose -f infra/compose.dev.yaml up
 - `apps/web` consumes the API's `App` type for Eden Treaty (no codegen) and `@aqsha/ui`. It must not import `@aqsha/db` / `@aqsha/services`.
 - Business logic lives once in `packages/services`; routes, workers, and the agent are thin callers.
 - Test runners: `packages/db`, `packages/chat-core`, `packages/services`, `apps/api`.
+
+## Cursor Cloud specific instructions
+Standard commands live above and in `CLAUDE.md`; this section only captures non-obvious cloud caveats. The startup script runs `bun install` automatically.
+
+### Toolchain / PATH
+- **Bun 1.3.10** and **Node 24** are made default via `~/.bashrc` (Node 24 is required by `apps/web` + `apps/agent`; it shadows a `/exec-daemon/node` v22 shim that is otherwise first on PATH). New login shells (`bash -l`) pick this up. If a non-login shell resolves the wrong node/bun, prepend `export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$HOME/.bun/bin:$PATH"`.
+
+### Local infra (Postgres/Redis/MinIO) — start each session
+Not started by the update script. The Docker daemon and infra containers must be (re)started per boot:
+```bash
+sudo dockerd >/tmp/dockerd.log 2>&1 &          # if `docker info` fails
+sudo docker compose -f infra/compose.dev.yaml up -d
+```
+- Docker uses the `fuse-overlayfs` storage driver with `containerd-snapshotter` disabled (see `/etc/docker/daemon.json`) — required for Docker-in-Docker here.
+- `infra/.env` (local dev creds; gitignored-by-intent but not in `.gitignore`, so never commit it) is already present. Postgres `5432`, Redis `6379`, MinIO S3 `9000` / console `9001`; the `aqsha` bucket is auto-created by `minio-init`.
+
+### Env files & missing secrets
+- Per-app `.env` (`apps/api/.env`, `apps/agent/.env`, `apps/web/.env.local`, `packages/db/.env`) already exist, point at `localhost` infra, and use **placeholder** Clerk/OpenAI keys so every process boots (boot validators only check presence, not validity).
+- **Real secrets are required for the full product**: `CLERK_SECRET_KEY` + a real `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` (a placeholder key makes the browser Clerk handshake fail with `host_invalid`, even though the landing page still server-renders via `curl`), and `OPENAI_API_KEY` / `AQSHA_EMBEDDING_API_KEY` for Astra chat, `/deep`, and RAG artifact indexing.
+- Run `bun run db:migrate` before first boot (idempotent).
+
+### Run & ports
+- `bun dev` runs api (`:3001`), worker (no port), agent/Mastra (`:4111`), web (`:3000`) together (it builds `dist` first). Web proxies `/mastra-api/*` → agent.
+
+### Test caveats (`bun run test`)
+- **`@aqsha/services`**: 3 tests fail only in the full parallel run due to Bun `mock.module` leaking across files (e.g. `CHAT_QUEUES`/`ACCOUNT_QUEUES` "not found"); they pass when the file is run in isolation. Pre-existing, not an env issue.
+- **`apps/api`**: the artifact upload-pipeline test asserts `indexingStatus === "ready"`, which needs a real embedding key; with a placeholder it becomes `"failed"`.
