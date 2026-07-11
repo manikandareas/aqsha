@@ -13,6 +13,7 @@ export * from "./artifactEmbeddingRepo";
 export * from "./workspaceCitationRepo";
 export * from "./workspaceCitationSettingsRepo";
 export * from "./citationImportBatchRepo";
+export * from "./documentCitationUsageRepo";
 export * from "./analysisSandboxRepo";
 export * from "./analysisResultBlockRepo";
 export * from "./chatThreadRepo";
