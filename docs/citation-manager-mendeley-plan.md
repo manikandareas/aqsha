@@ -1,6 +1,6 @@
 # Rencana detail: Workspace Citation Manager + Integrasi (Mendeley/Zotero)
 
-> Status: **FASE 0–2 IMPLEMENTED** (2026-07-11, branch `feat/citation-manager`, uncommitted) — Fase 3–6 masih plan. Revisi 2026-07-11 (menggantikan draft 2026-07-10).
+> Status: **FASE 0–4 IMPLEMENTED** (2026-07-11, branch `feat/citation-manager`, uncommitted) — Fase 5–6 (integrasi provider) masih plan. Feature flag `workspace_citations` **DIHAPUS** (Citation Manager kini default aktif untuk semua user). Revisi 2026-07-11 (menggantikan draft 2026-07-10).
 > Bahasa: Indonesia (istilah teknis tetap English), sesuai `AGENTS.md`.
 
 ## Progress implementasi (2026-07-11)
@@ -10,10 +10,21 @@
 | 0 — Spike + ADR | ✅ selesai | ADR di `docs/adr-citation-csl-engine.md`; fixture Mendeley+Zotero di `packages/services/test/fixtures/citations/`; render 4 style jadi snapshot test. |
 | 1 — Core library + tab Sitasi | ✅ selesai | Migration `0031_workspace_citations` applied DEV; lint/typecheck/test/build hijau. Follow-up 2026-07-11: feature flag `workspace_citations` DIPASANG, mode seleksi + bulk bar (tag/export/gabung/hapus), dialog "Kelola duplikat" (endpoint groups + mergeMany) selesai. |
 | 2 — Artifact bridge | ✅ selesai | 2026-07-11. `createFromArtifact` (idempotent + dedupe-adopt) + `resolveFromDoi`; endpoint `from-artifact`/`:id/resolve`; "Tambahkan ke Sitasi" di kartu board (context menu, gate `scholarly_paper`) + header artifact detail; provenance detail (linked artifact buka reader + lepas tautan). lint/typecheck/test (db 27 · services 301 · api 98, 0 fail)/build hijau. |
-| 3 — BlockNote | ⬜ belum | |
-| 4 — Astra | ⬜ belum | |
+| 3 — BlockNote | ✅ selesai | 2026-07-11. Migration `0032_big_corsair` (`document_citation_usages`) applied DEV. Inline node `citation` + block `bibliography` (schema `aqshaBlockNoteSchema`), picker `/sitasi` + `/daftar pustaka`, render dokumen reaktif (in-text cluster + bibliography used-in-doc via citeproc `rebuildProcessorState`/`makeBibliography`), rekonsiliasi usage transaksional di `updateDocument` (diverifikasi DB langsung). |
+| 4 — Astra | ✅ selesai | 2026-07-11. `ContextRef` kind `workspace-citation` (chat-core) + hydration `ContextService` + lane `workspaceCitations` di `/threads/context/hydrate`; tool read-only `search_workspace_citations`/`get_workspace_citation` (subpath `@aqsha/services/citations`); chip "Tambahkan ke chat" dari detail sitasi via channel `selectionRefs`. Suggestion card + suggest-tool insert-ke-dokumen DITUNDA (insert tetap aksi user via /sitasi). |
 | 5 — Settings → Integrasi + Mendeley | ⬜ belum | |
 | 6 — Zotero | ⬜ belum | |
+
+**Feature flag `workspace_citations` DIHAPUS (2026-07-11):** default aktif untuk semua user, tanpa gate. Dihapus: `apps/web/lib/feature-flags.ts`, `features/citations/feature.ts` (`useWorkspaceCitationsEnabled`), gate di `workspace-side-panel.tsx`/`workspace-library-surface.tsx`/`artifact-detail-view.tsx`, entri `.env.example`.
+
+**Gotcha implementasi Fase 3–4 (untuk fase berikutnya):**
+
+- Render dokumen pakai citeproc engine langsung via `plugins.config.get("@csl").engine(items, style, "en-US", "text")` → `rebuildProcessorState(clusters)` (in-text, numbering IEEE/Vancouver konsisten karena diproses berurutan) + `makeBibliography()` (used-in-document, urutan per-style). BUKAN `Cite.format("citation")` per-cluster (O(n²) + tak sinkron numbering).
+- Store render sitasi DILEKATKAN ke instance editor (`Symbol.for` + `props.editor`), BUKAN React context — komponen node BlockNote di-render lewat portal node-view yang tak selalu menembus context; `useSyncExternalStore` WAJIB kirim `getServerSnapshot` (exporter markdown me-render node statis).
+- `createReactBlockSpec` (0.51.4) mengembalikan CREATOR → pakai `bibliography: bibliographyBlockSpec()` (dipanggil); `createReactInlineContentSpec` mengembalikan spec langsung → `citation: citationInlineSpec` (tanpa dipanggil). `BlockNoteSchema.create` TIDAK auto-merge default → wajib spread `...defaultBlockSpecs`/`...defaultInlineContentSpecs`.
+- Hook di prop `render` spec melanggar rules-of-hooks (nama `render` lowercase) → ekstrak komponen bernama Uppercase (`CitationInlineView`/`BibliographyBlockView`).
+- Tool agent butuh subpath `@aqsha/services/citations` (exports + entri tsup ditambah) + `bun run build:dist` sebelum runtime (agent = node condition → dist). `workspaceId` bukan konteks ambient tool → jadi param input (dari catatan konteks hydrate).
+- Reconciliation `document_citation_usages` jalan di SETIAP save `updateDocument` (delete-all + insert per dokumen); citationId yang tak ada di workspace di-skip (FK aman), missing ditampilkan editor dari `renderDocument.missingIds`.
 
 **Keputusan ADR Fase 0 (mengunci open question #1, #2, #5):**
 
@@ -317,9 +328,9 @@ One-to-one workspace (PK-is-FK `workspace_id`, pola `user_agent_preferences`): `
 
 Audit batch (bukan source of truth): id, owner/workspace, `source_kind` (`file` | `provider_sync`), format/provider, original filename, counts (total/valid/duplicate/error), `summary_json`, `committed_at`, timestamps. Raw file tidak dipertahankan setelah commit.
 
-#### `document_citation_usages` (Fase 3)
+#### `document_citation_usages` (Fase 3) — ✅ IMPLEMENTED (mig `0032_big_corsair`, applied DEV 2026-07-11)
 
-`document_artifact_id`, `citation_id`, `inline_node_id`, `occurrence_order`, `locator_json`, timestamps. Index/diagnostic; `blocksJson` tetap menyimpan node agar dokumen portable. Rekonsiliasi saat save.
+`owner_user_id`, `workspace_id`, `document_artifact_id` (FK artifacts, cascade), `citation_id` (FK workspace_citations), `inline_node_id`, `occurrence_order`, `locator_json`, timestamps. Index `(owner, document, occurrence_order)` + `(owner, citation)`. Index/diagnostic; `blocksJson` tetap menyimpan node agar dokumen portable. Rekonsiliasi (delete-all + insert) saat save di `updateDocument`; `usageCount` disurface di `CitationService.get`.
 
 #### `integration_connections` (Fase 5)
 
@@ -343,7 +354,7 @@ Audit batch (bukan source of truth): id, owner/workspace, `source_kind` (`file` 
 
 `apps/web` hanya memanggil Eden Treaty (`@aqsha/api`); tidak mengimpor `@aqsha/db`/`@aqsha/services`.
 
-### 6.1 Endpoint citations (Fase 1–3) — ✅ LIVE untuk scope Fase 1–2 (`apps/api/src/routes/citations.ts`)
+### 6.1 Endpoint citations (Fase 1–3) — ✅ LIVE Fase 1–3 (`apps/api/src/routes/citations.ts`)
 
 Tambahan di luar draft: `GET /workspaces/:id/citations/tags` (daftar tag distinct untuk filter chips). List response menyertakan `total` (count toolbar). Rate limit terpasang: `citations:create` (20/menit), `citations:import` (5/menit, preview + commit).
 
@@ -365,7 +376,8 @@ Tambahan di luar draft: `GET /workspaces/:id/citations/tags` (daftar tag distinc
 | `POST` | `/workspaces/:id/citations/from-artifact` | createFromArtifact `{artifactId, tags?}` (Fase 2) |
 | `POST` | `/workspaces/:id/citations/:citationId/resolve` | perbarui metadata dari DOI (Fase 2) |
 | `GET` | `/workspaces/:id/citations/export` | `bibtex` / `ris` / `csl-json` |
-| `POST` | `/workspaces/:id/citations/render` | preview citation/bibliography per style |
+| `POST` | `/workspaces/:id/citations/render` | preview citation/bibliography per style (library) |
+| `POST` | `/workspaces/:id/citations/render-document` | render sitasi in-text per cluster + bibliography used-in-doc (Fase 3) |
 | `GET/PATCH` | `/workspaces/:id/citation-settings` | default style + sort bibliography |
 
 Route module `apps/api/src/routes/citations.ts`, mount satu baris di `index.ts`. Setiap handler `{ auth: true }` + `WorkspaceService.assertWorkspaceOwner` di service. Error via `appError` terstruktur; frontend `readableApiErrorMessage`. Rate limit import/commit/create-by-DOI via `rateLimitMacro`.
@@ -389,10 +401,12 @@ Terimplementasi (Fase 1) di `packages/services/src/citations/` — nama file fin
 
 - `citation.service.ts` — CRUD, authorization, dedupe (409 `citation_duplicate` + `allowDuplicate`), merge, quality status, export, render, settings; create-by-DOI reuse `classifyPaperText` + `resolvePaper`. ✅ **Fase 2 + follow-up (2026-07-11):** `createFromArtifact`, `resolveFromDoi`, `listDuplicateGroups`, `mergeMany` (`pickMergeTarget` by completeness), `bulkAddTag`, `bulkSoftDelete`; helper CSL bersama `buildCslFromResolvedPaper`/`buildCslFromPaperMetadata`. Repo baru `WorkspaceCitationRepo.softDeleteMany`. ✅
 - `citation-import.service.ts` — preview (staging `records_json`) + commit (policy skip/merge/import, re-check duplikat dalam transaksi), limits, diagnostics; dipakai import file DAN provider sync nanti (satu pipeline). ✅
-- `citation-format.ts` (bukan `.service.ts`) — CSL rendering (register style vendored sekali) + export bibtex/ris/csl-json. ✅
+- `citation-format.ts` (bukan `.service.ts`) — CSL rendering (register style vendored sekali) + export bibtex/ris/csl-json. ✅ **Fase 3:** `renderDocumentCitations` (citeproc engine langsung: `rebuildProcessorState` in-text per cluster + `makeBibliography` used-in-doc) + types `DocumentCluster`/`DocumentCiteItem`/`DocumentRenderResult`. ✅
+- `citation-usages.ts` — **Fase 3 baru:** `extractCitationClusters(blocksJson)` (walk BlockNote tree) + `CitationUsageService.reconcileDocument` (dipakai `ArtifactService.updateDocument`, transaksional). ✅
 - `citation-parse.ts` — split per-entry `.bib`/`.ris` + sniff format + diagnostic per-entry. ✅
 - `citation-normalize.ts` — DOI (reuse `normalizeDoi`), ISBN, title key, author, canonical key; pure + unit-testable. ✅
 - `styles/*.ts` — 4 style CSL + locale en-US vendored sebagai modul TS string; `citation-js.d.ts` ambient decl. ✅
+- **Fase 4:** subpath `@aqsha/services/citations` ditambah (`package.json` exports + entri `tsup.config.ts`) agar tool agent (node→dist) bisa import `CitationService`. `ContextService.hydrate` (`./context`) menerima lane `workspaceCitations`. Tool `apps/agent/src/mastra/tools/{search,get}-workspace-citation.ts` + registrasi di `tools/index.ts` (`readTools`). ✅
 
 Belum ada (Fase 5–6):
 
@@ -460,24 +474,24 @@ Urutan: **Fase 0 → 1 → 2 → 3 → 4 (opsional, bisa paralel 3) → evaluasi
 
 **Acceptance:** ✅ satu artifact masuk library sekali saja (idempotent + dedupe-adopt); link kembali bisa dibuka (reader); hapus citation tidak menghapus file (soft delete citation, artifact utuh).
 
-### Fase 3 — BlockNote citation dan bibliography
+### Fase 3 — BlockNote citation dan bibliography — ✅ SELESAI (2026-07-11)
 
-**Hasil:** dokumen memakai identifier stabil, re-render saat style berubah.
+**Hasil:** dokumen memakai identifier stabil, re-render saat style berubah. Testing: services unit +8 (`citations-document-render.test.ts` — in-text APA/IEEE, bibliography used-in-doc, cluster kosong, ekstraksi cluster), api itest +2 (render-document owner + intruder 404), rekonsiliasi diverifikasi langsung ke DB (urutan/locator/skip-missing/idempotent replace). lint/typecheck (7 workspace)/build hijau. File web baru: `blocknote-citation-schema.tsx`, `blocknote-citation-store.ts`, `citation-picker-dialog.tsx`.
 
-1. Custom inline content `citation` (`citationIds`, locator, prefix/suffix, node ID) + custom block `bibliography` (mode `used-in-document`).
-2. Citation picker (keyboard search, multi-select) query Citation Library workspace.
-3. Serializer blocksJson canonical / markdown kompatibel / plainText fallback.
-4. Autosave rekonsiliasi `document_citation_usages` transaksional.
-5. Reader render dengan provider workspace + missing/deleted state.
-6. Bibliography via CSL renderer + settings workspace; tombol update manual.
+1. ✅ Custom inline content `citation` (`citationIds` csv, `nodeId` stabil, locator/label/prefix/suffix) + custom block `bibliography` (used-in-document). Schema `aqshaBlockNoteSchema` = default + 2 node; di-pass ke `useCreateBlockNote`.
+2. ✅ Citation picker (search + multi-select) via perintah `/sitasi`; `/daftar pustaka` menyisipkan block bibliography. (Nama perintah Indonesia, bukan `/citation`/`/bibliography`.)
+3. ⚠️ Serializer: `blocksJson` canonical (via `JSON.stringify(editor.document)` existing). Markdown/plainText = HTML-first `blocksToMarkdownLossy` merender node (belum ada citekey Pandoc khusus — fallback readable via komponen render). Cukup untuk v1; citekey Pandoc bisa menyusul.
+4. ✅ Autosave rekonsiliasi `document_citation_usages` transaksional di `ArtifactService.updateDocument` (delete-all + insert per dokumen; id non-workspace di-skip FK-safe).
+5. ✅ Editor render reaktif dengan style default workspace + missing state (chip "⚠ sitasi hilang" dari `renderDocument.missingIds`). Panel reader read-only tetap markdown prose (belum render node sitasi — surface sekunder).
+6. ⚠️ DEVIASI (dari §12.3): bibliography = **LIVE** (auto re-render dari store tiap sitasi/style berubah), BUKAN tombol "Update bibliography" manual — lebih ergonomis + lebih sedikit kode (tak perlu snapshot di blocksJson).
 
-**Acceptance:** citation bertahan setelah refresh; APA→IEEE mengubah render tanpa ganti ID; bibliography hanya memuat yang dipakai; missing tidak silently hilang.
+**Acceptance:** ✅ citation bertahan setelah refresh (blocksJson canonical); APA→IEEE mengubah render tanpa ganti ID (node simpan `citationIds`, marker dari render service); bibliography hanya memuat yang dipakai (`makeBibliography` used-in-doc); missing tidak silently hilang (chip missing). Runtime E2E editor = owner (risk: xl-ai AIExtension vs custom schema).
 
-### Fase 4 — Astra integration (opsional; bisa paralel Fase 3)
+### Fase 4 — Astra integration — ✅ SELESAI (2026-07-11)
 
-1. `ContextRef` kind `workspace-citation` di `@aqsha/chat-core`; hydration di `apps/api` validasi owner+workspace.
-2. Chip konteks dari tab Sitasi via channel `selectionRefs` existing.
-3. Agent tools `search_workspace_citations` / `get_workspace_citation` (read-only) + suggestion card; insert tetap aksi user.
+1. ✅ `ContextRef` kind `workspace-citation` di `@aqsha/chat-core` (union + `contextRefKey`/`splitContextRefs` lane `workspaceCitations`/`countContextRefs`/`buildWorkspaceCitationMentionLabel`); hydration `ContextService.hydrate` validasi owner+workspace via `CitationService.get` (best-effort drop foreign) + section catatan `get_workspace_citation`; lane baru di `/threads/context/hydrate` + `useHydrateContext` + composer.
+2. ✅ Chip konteks "Tambahkan ke chat" di detail sitasi via channel `selectionRefs` existing (`useComposerSelection().addSelectionRef`, lalu pindah ke tab Chat).
+3. ✅ Agent tools read-only `search_workspace_citations` / `get_workspace_citation` (subpath baru `@aqsha/services/citations`; `workspaceId` = input param dari catatan konteks). ⚠️ DITUNDA: suggestion card deterministik + tool "suggest insert ke dokumen" — insert tetap aksi user via `/sitasi`; tools sudah membuat sitasi tersedia untuk Astra.
 
 ### Fase 5 — Settings → Integrasi + Mendeley OAuth
 
@@ -548,10 +562,11 @@ Perubahan schema/service: `bun run db:generate` → review migration → `bun ru
 
 ### Rollout
 
-1. ✅ Fase 1–2 di balik feature flag `workspace_citations` untuk internal users. **Status (2026-07-11): flag TERPASANG** — aktif bila env `NEXT_PUBLIC_FEATURE_WORKSPACE_CITATIONS=true` (GA) ATAU `isAdmin`; default = hanya internal/admin yang lihat tab Sitasi + entry "Tambahkan ke Sitasi". Untuk GA: set env → redeploy.
-2. Monitor import error rate, records/batch, duplicate decision, render failure, export success.
-3. Fase 3 setelah data library stabil; dokumen lama tanpa citation node tidak dimigrate paksa.
+1. ⚠️ **Status (2026-07-11): feature flag `workspace_citations` DIHAPUS** — Citation Manager (tab Sitasi + "Tambahkan ke Sitasi" + editor sitasi + Astra) kini **default aktif untuk semua user**, tanpa gate. (Sebelumnya flag env OR `isAdmin`.) Tidak perlu set env untuk GA.
+2. Monitor import error rate, records/batch, duplicate decision, render failure, export success, render-document latency.
+3. ✅ Fase 3 (BlockNote) + Fase 4 (Astra) selesai; dokumen lama tanpa citation node tidak dimigrate paksa (reconcile hanya menulis usage saat save berikutnya).
 4. Fase 5 sebagai beta terpisah (`provider_sync_beta`) setelah security review + app registration siap; Fase 6 menyusul di flag yang sama.
+5. **OWNER sebelum rilis:** PROD migrate `0031` + `0032`; resolve kolisi migration `0031` dgn branch admin-role saat merge; restore `admin_entitlements` di DEV bila menjalankan itest artifacts/billing/workspaces (didrop branch sibling → 14 itest gagal, PRE-EXISTING, bukan dari citation work); E2E editor sitasi.
 
 ## 11. Ringkasan file yang diperkirakan disentuh
 
@@ -562,12 +577,12 @@ Perubahan schema/service: `bun run db:generate` → review migration → `bun ru
 | API ✅ (F1) | `apps/api/src/routes/citations.ts` + mount di `index.ts` + `test/citations.test.ts`; sisa: `routes/integrations.ts` + worker `integration-sync` (F5) |
 | Web panel ✅ | `apps/web/features/workspaces/utils/workspace-panel-model.ts` (+ test), `workspace-panel-context.tsx` (baru), `workspace-detail-client.tsx`, `workspace-side-panel.tsx` (baru; `workspace-chat-side-panel.tsx` TIDAK dihapus — masih dipakai artifact reader dgn `chrome="frame"`), prop `chrome` pada `CompactThreadChatPanel`, `workspace-board-toolbar.tsx` (aria PanelOpenButton) |
 | Web citations ✅ | `apps/web/features/citations/{api.ts,types.ts,feature.ts,components/*}` (panel + bulk bar seleksi, list+row+filter, empty state, wizard import, dialog DOI/manual-edit/gaya/**duplikat**, detail sub-view + provenance, export menu), `apps/web/lib/{api-query.ts,feature-flags.ts}` |
-| Web feature flag ✅ (F1 follow-up) | `apps/web/lib/feature-flags.ts`, `features/citations/feature.ts` (`useWorkspaceCitationsEnabled`), gate di `workspace-side-panel.tsx`, `apps/web/.env.example` |
+| Web feature flag ❌ DIHAPUS (2026-07-11) | `apps/web/lib/feature-flags.ts` + `features/citations/feature.ts` DIHAPUS; gate dilepas dari `workspace-side-panel.tsx`/`workspace-library-surface.tsx`/`artifact-detail-view.tsx`; entri `.env.example` dihapus. Citation Manager default aktif. |
 | Web settings | `apps/web/features/settings/lib/settings-menu.ts`, `apps/web/app/app/settings/integrations/page.tsx`, `features/settings/components/integrations-page.tsx` (F5) |
 | Artifact bridge ✅ (F2) | `citation.service.ts` `createFromArtifact`/`resolveFromDoi`, `routes/citations.ts` `from-artifact`/`:id/resolve`; web threading `onAddToCitations` (`workspace-library-{context-menus,grid,board,surface}.tsx` + `artifact-render-panels.tsx` `ArtifactHeaderActions` + `artifact-detail-view.tsx`), `onCitationAdded` di `workspace-detail-client.tsx`, `detectedDocumentKind` ditambah ke `use-workspaces-data.ts`/`workspace-library-model.ts` |
-| BlockNote | `blocknote-document-editor.tsx`, loader/schema components, usage reconciliation (F3) |
-| Agent | `packages/chat-core` context ref, API hydration, agent tools (F4) |
-| Icons | `packages/ui/src/icons.tsx` bila ikon quote/plug belum tersedia |
+| BlockNote ✅ (F3) | `blocknote-document-editor.tsx` (schema+picker+controller+`workspaceId`), `blocknote-editor-loader.tsx`, `blocknote-citation-schema.tsx`+`blocknote-citation-store.ts`+`citation-picker-dialog.tsx` (baru), `artifact-detail-view.tsx` (drill `workspaceId`); DB `documentCitationUsages.ts`+repo+mig `0032`; svc `citation-usages.ts`+`renderDocument`; route `render-document`; web `api.ts`/`types.ts`/`api-query.ts` (`useRenderDocumentCitations`) |
+| Agent ✅ (F4) | `packages/chat-core/src/index.ts` (kind `workspace-citation`), `context.service.ts` hydration + `threads.ts` lane + web `composer.tsx`/`threads/api.ts`/`composer-inline-editor.ts`, tools `{search,get}-workspace-citation.ts`+`tools/index.ts`, subpath `@aqsha/services/citations`, chip di `citation-detail-view.tsx`/`citations-panel.tsx`/`workspace-side-panel.tsx` |
+| Icons ✅ | `Quote`/`BookOpen`/`MessageSquarePlusIcon` sudah tersedia di `@aqsha/ui/icons` (tak perlu tambah untuk F3–4) |
 
 ## 12. Urutan keputusan sebelum mulai coding — SEMUA DITUTUP (2026-07-11)
 
@@ -575,7 +590,7 @@ Keputusan diambil mengikuti rekomendasi plan saat implementasi Fase 0–1:
 
 1. ✅ Scope v1 = hanya `.bib`/`.ris`; EndNote XML di luar scope (ADR).
 2. ✅ Empat style dikunci (`apa-7`/`ieee`/`vancouver`/`chicago-author-date`); custom CSL TIDAK diizinkan v1.
-3. ✅ Bibliography block = tombol **Update bibliography** manual (berlaku saat Fase 3).
+3. ⚠️ REVISI saat Fase 3: bibliography block dibuat **LIVE** (auto re-render dari store reaktif), BUKAN tombol "Update bibliography" manual — render server-side + cache React Query murah, live lebih ergonomis & tak menyimpan teks di blocksJson (konsisten keputusan #7).
 4. ✅ Tanpa undo batch otomatis — koreksi via hapus per-citation (soft delete); `summary_json` batch tetap jadi audit.
 5. ✅ ADR lisensi: citeproc dielek **CPAL-1.0**, server-side only (`docs/adr-citation-csl-engine.md`).
 6. ✅ Label tab = "Sitasi" (sentence case).
