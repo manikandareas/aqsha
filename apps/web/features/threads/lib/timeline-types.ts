@@ -41,18 +41,55 @@ export type DeepSubSearch = {
   sources?: SourceCardData[];
 };
 
+/** Satu kolom hasil `profile_dataset` (parse defensif output `aqsha_stats` `profile`). */
+export type DatasetProfileColumn = {
+  name: string;
+  /** Tipe terdeteksi Python ("numeric" | "categorical" | "text") — bebas string (defensif). */
+  type: string;
+  /** Jumlah sel kosong kolom ini (0 bila tak terbaca). */
+  missing: number;
+  /** Rentang Likert terdeteksi ("1-5"/"1-7") — undefined bila bukan Likert. */
+  likert?: string;
+};
+
+/** Ringkasan profil dataset untuk kartu chat — field opsional: yang tak terbaca disembunyikan UI. */
+export type DatasetProfileSummary = {
+  /** Jumlah baris dataset (`meta.n`) — undefined bila tak terbaca. */
+  rowCount?: number;
+  columns: DatasetProfileColumn[];
+};
+
 /**
  * Detail proses satu langkah Workflow `/deep` (body expandable tool-row "Proses"). Diisi dari
  * chunk `workflow-step-output` (live), snapshot step output (refresh poll), atau `metadata.deepProcess`
  * (riwayat). `kind:"search"` (deep) membawa sumber live per sub-pertanyaan + fallback DB via
  * `subQuestionIndex`; `kind:"search-flat"` (chat normal) = kartu hasil satu tool `search_*`.
+ * `kind:"analysis"`/`"dataset-profile"` (chat normal, fase A statistik) = kartu run analisis /
+ * kartu dataset menggantikan tool-row generik (nama union historis `/deep`, dipakai lintas chat).
  */
 export type DeepStepDetail =
   | { kind: "plan"; plan: string; subQuestions: string[] }
   | { kind: "search"; subSearches: DeepSubSearch[] }
   | { kind: "search-flat"; sources: SourceCardData[] }
   | { kind: "text"; text: string }
-  | { kind: "citations"; count: number };
+  | { kind: "citations"; count: number }
+  | {
+      kind: "analysis";
+      /** Id analisis katalog, atau "custom" untuk run_python_analysis ("" selagi args streaming). */
+      analysis: string;
+      /** Judul manusiawi run — label META / judul kustom; kartu memakai judul grup DB bila ada. */
+      title: string;
+      /** Ringkasan args mapping kolom (mis. "X1: X1.1–X1.5 · Y: Y.1–Y.4"), best-effort dari input. */
+      argsSummary?: string;
+      artifactId?: string;
+      credits: number;
+      /** runKey tersanitasi (`toRunKey`, mirror agent) — tautan ke panel scoped (fase B). */
+      runKey: string;
+      /** Tool settle dengan `ok:false` → kartu error (note ramah dari tool). */
+      failed?: boolean;
+      note?: string;
+    }
+  | { kind: "dataset-profile"; artifactId: string; profile: DatasetProfileSummary };
 
 /** Model presentasi satu tool-row (collapsible). Default-deny: hanya scalar yang lolos. */
 export type ToolRowModel = {

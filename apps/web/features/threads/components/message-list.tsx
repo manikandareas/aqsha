@@ -365,6 +365,7 @@ function AssistantMessage({
           streaming={streaming}
           toolSteps={toolSteps}
           sourcesBySubQ={sourcesBySubQ}
+          statsGroupsByToolCallId={statsGroupsByToolCallId}
           turnId={message.turnId}
           workingSince={workingSince}
         />
@@ -412,6 +413,7 @@ function ProcessBlock({
   streaming,
   toolSteps,
   sourcesBySubQ,
+  statsGroupsByToolCallId,
   turnId,
   workingSince,
 }: {
@@ -419,6 +421,8 @@ function ProcessBlock({
   streaming: boolean;
   toolSteps: number;
   sourcesBySubQ?: Map<number, ResearchSource[]>;
+  /** Grup blok analisis per `toolCallId` — chip verdict struk kartu run (`AnalysisRunCard`). */
+  statsGroupsByToolCallId?: Map<string, StatsGroup>;
   /** Run id of this `/deep` turn — scopes the search/plan detail panels. */
   turnId?: string;
   /** Epoch-ms anchor timer "Sedang bekerja" (durable lintas-refresh); kosong → waktu mount. */
@@ -455,6 +459,7 @@ function ProcessBlock({
               key={part.id}
               part={part}
               sourcesBySubQ={sourcesBySubQ}
+              statsGroupsByToolCallId={statsGroupsByToolCallId}
               turnId={turnId}
             />
           ))}
@@ -467,14 +472,23 @@ function ProcessBlock({
 function ProcessPartView({
   part,
   sourcesBySubQ,
+  statsGroupsByToolCallId,
   turnId,
 }: {
   part: TimelinePart;
   sourcesBySubQ?: Map<number, ResearchSource[]>;
+  statsGroupsByToolCallId?: Map<string, StatsGroup>;
   turnId?: string;
 }) {
   if (part.kind === "tool")
-    return <ToolRow model={part.model} sourcesBySubQ={sourcesBySubQ} turnId={turnId} />;
+    return (
+      <ToolRow
+        model={part.model}
+        sourcesBySubQ={sourcesBySubQ}
+        turnId={turnId}
+        statsGroup={statsGroupsByToolCallId?.get(part.model.toolCallId)}
+      />
+    );
   if (part.kind === "reasoning") {
     // Penalaran model — item proses dalam urutan natural (sebelum/antara/sesudah tool-call).
     return <Reasoning text={part.text} isThinking={part.thinking} />;
