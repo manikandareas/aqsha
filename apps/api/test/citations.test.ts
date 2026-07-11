@@ -451,3 +451,73 @@ describe("api citations — duplicates + bulk", () => {
     expect(merge.status).toBe(404);
   });
 });
+
+describe("api citations — Fase 3 render dokumen", () => {
+  let cA = "";
+  let cB = "";
+
+  itest("render-document: in-text per cluster + bibliography used-in-doc + missingIds", async () => {
+    cA = (
+      await readJson(
+        await req("POST", `/workspaces/${workspaceId}/citations`, tok(OWNER), {
+          fields: {
+            title: "Dokumen Referensi A",
+            authors: [{ family: "Alpha", given: "A." }],
+            publishedYear: 2020,
+            venue: "Jurnal A",
+          },
+        }),
+      )
+    ).id;
+    cB = (
+      await readJson(
+        await req("POST", `/workspaces/${workspaceId}/citations`, tok(OWNER), {
+          fields: {
+            title: "Dokumen Referensi B",
+            authors: [{ family: "Beta", given: "B." }],
+            publishedYear: 2019,
+            venue: "Jurnal B",
+          },
+        }),
+      )
+    ).id;
+
+    const res = await req(
+      "POST",
+      `/workspaces/${workspaceId}/citations/render-document`,
+      tok(OWNER),
+      {
+        styleId: "ieee",
+        clusters: [
+          { nodeId: "n1", citationIds: [cA] },
+          { nodeId: "n2", citationIds: [cB, cA] },
+          { nodeId: "n3", citationIds: ["missing_xyz"] },
+        ],
+      },
+    );
+    expect(res.status).toBe(200);
+    const body = await readJson(res);
+    expect(body.styleId).toBe("ieee");
+    const clusterText = (nodeId: string) =>
+      body.clusters.find((c: { nodeId: string }) => c.nodeId === nodeId)?.text;
+    expect(clusterText("n1")).toBe("[1]");
+    // n2 memakai B (baru → 2) + A (sudah 1) → mengandung kedua nomor.
+    expect(clusterText("n2")).toContain("[1]");
+    expect(clusterText("n2")).toContain("[2]");
+    // Cluster semua-missing → teks kosong (bukan menghilang diam-diam).
+    expect(clusterText("n3")).toBe("");
+    expect(body.missingIds).toEqual(["missing_xyz"]);
+    // Bibliography IEEE terurut kemunculan → A lalu B; hanya yang dipakai.
+    expect(body.bibliography.map((b: { id: string }) => b.id)).toEqual([cA, cB]);
+  });
+
+  itest("intruder render-document → 404", async () => {
+    const res = await req(
+      "POST",
+      `/workspaces/${workspaceId}/citations/render-document`,
+      tok(INTRUDER),
+      { clusters: [{ nodeId: "n1", citationIds: [cA] }] },
+    );
+    expect(res.status).toBe(404);
+  });
+});

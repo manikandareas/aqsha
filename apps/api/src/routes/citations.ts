@@ -134,6 +134,34 @@ export const citations = new Elysia()
     },
   )
   .post(
+    "/workspaces/:id/citations/render-document",
+    ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      return CitationService.renderDocument(db, {
+        ownerUserId,
+        workspaceId: params.id,
+        styleId: body.styleId,
+        clusters: body.clusters,
+      });
+    },
+    {
+      auth: true,
+      body: t.Object({
+        styleId: t.Optional(styleId),
+        clusters: t.Array(
+          t.Object({
+            nodeId: t.String(),
+            citationIds: t.Array(t.String()),
+            locator: t.Optional(t.String()),
+            label: t.Optional(t.String()),
+            prefix: t.Optional(t.String()),
+            suffix: t.Optional(t.String()),
+          }),
+        ),
+      }),
+    },
+  )
+  .post(
     "/workspaces/:id/citations/imports/preview",
     async ({ ownerUserId, params, body }) => {
       const { db } = getDb();
