@@ -10,11 +10,12 @@ import { PanelCloseButton } from "@/features/thread-experience/components/detail
 import type { ThreadSummary } from "@/features/thread-experience/components/component-types";
 import type { RateStatus } from "@/features/thread-experience/types";
 import { CitationsPanel } from "@/features/citations/components/citations-panel";
+import { useWorkspaceCitationsEnabled } from "@/features/citations/feature";
 import { useWorkspacePanel } from "./workspace-panel-context";
-import { workspacePanelTabOf } from "../utils/workspace-panel-model";
 import { WorkspaceChatSidePanel } from "./workspace-chat-side-panel";
 
-const TABS: PanelTab[] = [
+const CHAT_ONLY_TABS: PanelTab[] = [{ key: "chat", label: "Chat" }];
+const CHAT_CITATIONS_TABS: PanelTab[] = [
   { key: "chat", label: "Chat" },
   { key: "citations", label: "Sitasi" },
 ];
@@ -24,6 +25,10 @@ const TABS: PanelTab[] = [
  * tunggal). Frame + tab strip dimiliki shell ini; konten per-tab hanya menyumbang
  * toolbar kartu + body (pola `DetailPanelShell` thread shell). Mode dari
  * `WorkspacePanelProvider` (nuqs `panel`) — deep-linkable `?panel=cite`.
+ *
+ * Tab Sitasi digate `useWorkspaceCitationsEnabled` (flag rollout §10): saat off,
+ * strip kolaps ke label "Chat" dan deep-link `?panel=cite` jatuh ke tab Chat —
+ * jangan tampilkan fitur yang belum aktif untuk user ini.
  */
 export function WorkspaceSidePanel({
   workspaceId,
@@ -39,17 +44,20 @@ export function WorkspaceSidePanel({
   rateStatus: RateStatus | undefined;
 }) {
   const panel = useWorkspacePanel();
+  const citationsEnabled = useWorkspaceCitationsEnabled();
   const mode = panel.mode;
+  // Flag off → paksa tab Chat meski URL membawa `?panel=cite` (deep-link stale).
+  const showCitations = citationsEnabled && mode.kind === "citations";
 
   return (
     <SidePanelFrame
       header={
         <PanelTabsHeader
-          tabs={TABS}
-          activeKey={workspacePanelTabOf(mode)}
+          tabs={citationsEnabled ? CHAT_CITATIONS_TABS : CHAT_ONLY_TABS}
+          activeKey={showCitations ? "citations" : "chat"}
           onSelect={(key) => {
-            if (key === "chat") panel.openChat();
-            else panel.openCitations();
+            if (key === "citations") panel.openCitations();
+            else panel.openChat();
           }}
           actions={
             <>
@@ -60,7 +68,7 @@ export function WorkspaceSidePanel({
         />
       }
     >
-      {mode.kind === "citations" ? (
+      {showCitations ? (
         <CitationsPanel
           workspaceId={workspaceId}
           citationId={mode.citationId ?? null}
