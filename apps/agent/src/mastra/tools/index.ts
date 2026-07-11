@@ -5,6 +5,7 @@ import { exportAnalysisResults } from "./export-analysis-results";
 import { formatReferences } from "./format-references";
 import { getArtifact } from "./get-artifact";
 import { getRenderPayload } from "./get-render-payload";
+import { getWorkspaceCitation } from "./get-workspace-citation";
 import { linkToWorkspace } from "./link-to-workspace";
 import { listAnalyses } from "./list-analyses";
 import { listArtifacts } from "./list-artifacts";
@@ -21,6 +22,7 @@ import { saveUrl } from "./save-url";
 import { searchArxiv } from "./search-arxiv";
 import { searchPapers } from "./search-papers";
 import { searchThreadDocuments } from "./search-thread-documents";
+import { searchWorkspaceCitations } from "./search-workspace-citations";
 import { searchWeb } from "./search-web";
 import { updatePreferences } from "./update-preferences";
 import { verifyCitations } from "./verify-citations";
@@ -33,6 +35,9 @@ export const readTools = {
   list_workspaces: listWorkspaces,
   get_render_payload: getRenderPayload,
   search_thread_documents: searchThreadDocuments,
+  // Citation Library workspace (Fase 4) — read-only; menyisipkan sitasi tetap aksi pengguna.
+  search_workspace_citations: searchWorkspaceCitations,
+  get_workspace_citation: getWorkspaceCitation,
   // Sinyal picu AI editor native (Fase 3.5) — TANPA write DB; penyuntingan + billing dijaga route.
   request_document_edit: requestDocumentEdit,
 };
