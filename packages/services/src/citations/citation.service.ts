@@ -1,7 +1,9 @@
 import type {
+  ArtifactPaperMetadata,
   BibliographySort,
   CitationAuthor,
   CitationMetadataStatus,
+  CitationProvider,
   CitationSource,
   CitationStyleId,
   Db,
@@ -10,13 +12,14 @@ import type {
   WorkspaceCitation,
 } from "@aqsha/db";
 import {
+  ArtifactPaperMetadataRepo,
   decodeKeysetCursor,
   throwAppError,
   WorkspaceCitationRepo,
   WorkspaceCitationSettingsRepo,
 } from "@aqsha/db";
 import { classifyPaperText } from "../papers/identifiers";
-import { resolvePaper } from "../papers/resolve";
+import { resolvePaper, type ResolvedPaper } from "../papers/resolve";
 import { WorkspaceService } from "../workspace.service";
 import {
   type CitationExportFormat,
@@ -69,6 +72,19 @@ export type CitationDetail = CitationListItem & {
 export type CitationSettingsView = {
   defaultStyleId: CitationStyleId;
   bibliographySort: BibliographySort;
+};
+
+/** Hasil `createFromArtifact` — `created=false` bila artifact sudah tertaut / dedupe. */
+export type CreateFromArtifactResult = {
+  citation: CitationDetail;
+  created: boolean;
+  linkedExisting: boolean;
+};
+
+/** Grup kandidat duplikat (canonical key sama, ≥2 anggota aktif). */
+export type CitationDuplicateGroup = {
+  canonicalKey: string;
+  members: CitationListItem[];
 };
 
 function toListItem(row: WorkspaceCitation): CitationListItem {
@@ -149,16 +165,19 @@ function rowFromCsl(input: {
   csl: CslItem;
   tags: string[];
   now: number;
+  artifactId?: string | null;
+  provider?: CitationProvider | null;
+  externalId?: string | null;
 }): NewWorkspaceCitation {
   const columns = cslItemToColumns(input.csl);
   return {
     id: crypto.randomUUID(),
     ownerUserId: input.ownerUserId,
     workspaceId: input.workspaceId,
-    artifactId: null,
+    artifactId: input.artifactId ?? null,
     source: input.source,
-    provider: null,
-    externalId: null,
+    provider: input.provider ?? null,
+    externalId: input.externalId ?? null,
     documentType: columns.documentType,
     title: columns.title,
     authorsJson: columns.authors,
@@ -188,6 +207,63 @@ function authorFromName(name: string): CitationAuthor {
   if (parts.length === 1) return { literal: trimmed };
   const family = parts[parts.length - 1] as string;
   return { family, given: parts.slice(0, -1).join(" ") };
+}
+
+/** Peta hasil resolver DOI/arXiv (`ResolvedPaper`) → CSL-JSON. Hanya field terisi. */
+function buildCslFromResolvedPaper(paper: ResolvedPaper): CslItem {
+  const csl: CslItem = {
+    type: "article-journal",
+    title: paper.title,
+    author: paper.authors.map((a) => authorFromName(a.name)),
+  };
+  if (paper.publishedYear) csl.issued = { "date-parts": [[paper.publishedYear]] };
+  if (paper.journal) csl["container-title"] = paper.journal;
+  if (paper.publisher) csl.publisher = paper.publisher;
+  if (paper.doi) csl.DOI = paper.doi;
+  if (paper.landingPageUrl) csl.URL = paper.landingPageUrl;
+  if (paper.abstract) csl.abstract = paper.abstract;
+  return csl;
+}
+
+/** Peta `artifact_paper_metadata` → CSL-JSON (Fase 2 artifact bridge). Hanya field terisi. */
+function buildCslFromPaperMetadata(meta: ArtifactPaperMetadata): CslItem {
+  const csl: CslItem = { type: "article-journal", title: meta.title ?? "" };
+  const authors = (meta.authors ?? [])
+    .map((a) => authorFromName(a.name))
+    .filter((a) => a.literal || a.family || a.given);
+  if (authors.length > 0) csl.author = authors;
+  if (meta.publishedYear) csl.issued = { "date-parts": [[meta.publishedYear]] };
+  if (meta.journal) csl["container-title"] = meta.journal;
+  if (meta.publisher) csl.publisher = meta.publisher;
+  if (meta.doi) csl.DOI = meta.doi;
+  if (meta.sourceUrl) csl.URL = meta.sourceUrl;
+  if (meta.abstract) csl.abstract = meta.abstract;
+  return csl;
+}
+
+/** Skor kelengkapan metadata — dipakai memilih target default saat merge banyak. */
+function completenessScore(row: WorkspaceCitation): number {
+  let score = 0;
+  if (row.doi) score += 3;
+  if (row.authorsJson.length > 0) score += 2;
+  if (row.publishedYear !== null) score += 1;
+  if (row.venue) score += 1;
+  if (row.publisher) score += 1;
+  if (row.url) score += 1;
+  if (row.metadataStatus === "verified") score += 2;
+  score += row.tags.length; // referensi yang sudah dikurasi diutamakan
+  return score;
+}
+
+/** Target merge default: paling lengkap; seri → yang lebih dulu dibuat (identitas stabil). */
+function pickMergeTarget(rows: WorkspaceCitation[]): WorkspaceCitation {
+  return rows.reduce((best, row) => {
+    const a = completenessScore(row);
+    const b = completenessScore(best);
+    if (a > b) return row;
+    if (a === b && row.createdAt < best.createdAt) return row;
+    return best;
+  });
 }
 
 /**
@@ -327,17 +403,7 @@ export const CitationService = {
         severity: "warning",
       });
     }
-    const csl: CslItem = {
-      type: "article-journal",
-      title: paper.title,
-      author: paper.authors.map((a) => authorFromName(a.name)),
-    };
-    if (paper.publishedYear) csl.issued = { "date-parts": [[paper.publishedYear]] };
-    if (paper.journal) csl["container-title"] = paper.journal;
-    if (paper.publisher) csl.publisher = paper.publisher;
-    if (paper.doi) csl.DOI = paper.doi;
-    if (paper.landingPageUrl) csl.URL = paper.landingPageUrl;
-    if (paper.abstract) csl.abstract = paper.abstract;
+    const csl = buildCslFromResolvedPaper(paper);
 
     const row = rowFromCsl({
       ownerUserId: input.ownerUserId,
@@ -355,6 +421,166 @@ export const CitationService = {
       input.allowDuplicate ?? false,
     );
     await WorkspaceCitationRepo.insert(db, row);
+    return this.get(db, {
+      ownerUserId: input.ownerUserId,
+      workspaceId: input.workspaceId,
+      citationId: row.id,
+    });
+  },
+
+  /**
+   * Buat citation dari artifact paper (Fase 2 bridge). Baca `artifact_paper_metadata`
+   * (sudah owner-scoped + membawa `workspace_id`) — tanpa memindahkan file. Idempotent:
+   * artifact yang sudah tertaut / duplikat canonical key tidak menggandakan; row
+   * duplikat tanpa tautan artifact "diadopsi" (di-set `artifact_id`).
+   */
+  async createFromArtifact(
+    db: DbOrTx,
+    input: {
+      ownerUserId: string;
+      workspaceId: string;
+      artifactId: string;
+      tags?: string[];
+    },
+  ): Promise<CreateFromArtifactResult> {
+    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId, {
+      requireActive: true,
+    });
+    const meta = await ArtifactPaperMetadataRepo.findByArtifact(
+      db,
+      input.ownerUserId,
+      input.artifactId,
+    );
+    if (!meta || meta.workspaceId !== input.workspaceId) {
+      throwAppError({
+        message: "Artifact ini belum punya metadata paper di workspace ini",
+        code: "citation_artifact_no_metadata",
+        status: 404,
+        severity: "warning",
+      });
+    }
+    if (!meta.title?.trim()) {
+      throwAppError({
+        message: "Metadata paper belum punya judul untuk disitasi",
+        code: "citation_artifact_no_metadata",
+        status: 404,
+        severity: "warning",
+      });
+    }
+    // Idempotent: artifact sudah tertaut citation aktif → kembalikan yang ada.
+    const linked = await WorkspaceCitationRepo.findActiveByArtifact(
+      db,
+      input.ownerUserId,
+      input.workspaceId,
+      input.artifactId,
+    );
+    if (linked) {
+      return { citation: toDetail(linked), created: false, linkedExisting: true };
+    }
+    const csl = buildCslFromPaperMetadata(meta);
+    const row = rowFromCsl({
+      ownerUserId: input.ownerUserId,
+      workspaceId: input.workspaceId,
+      source: "artifact",
+      csl,
+      tags: input.tags ?? [],
+      now: Date.now(),
+      artifactId: input.artifactId,
+    });
+    // Dedupe: referensi serupa sudah ada → adopsi (tautkan) bila belum punya artifact.
+    const dupes = await WorkspaceCitationRepo.findActiveByCanonicalKeys(
+      db,
+      input.ownerUserId,
+      input.workspaceId,
+      [row.canonicalKey],
+    );
+    const match = dupes[0];
+    if (match) {
+      if (!match.artifactId) {
+        await WorkspaceCitationRepo.updateById(db, match.id, {
+          artifactId: input.artifactId,
+          updatedAt: Date.now(),
+        });
+        return {
+          citation: await this.get(db, {
+            ownerUserId: input.ownerUserId,
+            workspaceId: input.workspaceId,
+            citationId: match.id,
+          }),
+          created: false,
+          linkedExisting: true,
+        };
+      }
+      return { citation: toDetail(match), created: false, linkedExisting: true };
+    }
+    await WorkspaceCitationRepo.insert(db, row);
+    return {
+      citation: await this.get(db, {
+        ownerUserId: input.ownerUserId,
+        workspaceId: input.workspaceId,
+        citationId: row.id,
+      }),
+      created: true,
+      linkedExisting: false,
+    };
+  },
+
+  /**
+   * Perbarui metadata citation dari DOI-nya (quality workflow Fase 2). Re-resolve
+   * lalu isi HANYA field yang kosong (jangan clobber edit user); status → verified.
+   */
+  async resolveFromDoi(
+    db: DbOrTx,
+    input: { ownerUserId: string; workspaceId: string; citationId: string },
+  ): Promise<CitationDetail> {
+    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
+    const row = await requireCitation(db, input.ownerUserId, input.workspaceId, input.citationId);
+    const doi = row.doi;
+    if (!doi) {
+      throwAppError({
+        message: "Referensi ini tidak punya DOI untuk diperbarui",
+        code: "citation_resolve_no_doi",
+        severity: "warning",
+        field: "doi",
+      });
+    }
+    const classified = classifyPaperText(doi) ?? {
+      kind: "doi" as const,
+      doi: normalizeDoi(doi),
+      academicDomain: false,
+      raw: doi,
+    };
+    const paper = await resolvePaper({ classified });
+    if (!paper?.title) {
+      throwAppError({
+        message: "Metadata untuk DOI ini tidak ditemukan",
+        code: "citation_doi_not_found",
+        status: 404,
+        severity: "warning",
+      });
+    }
+    const incoming = buildCslFromResolvedPaper(paper);
+    const mergedCsl = { ...((row.cslJson ?? {}) as Record<string, unknown>) };
+    for (const [key, value] of Object.entries(incoming)) {
+      if (mergedCsl[key] === undefined && value !== undefined) mergedCsl[key] = value;
+    }
+    const columns = cslItemToColumns(mergedCsl);
+    const now = Date.now();
+    await WorkspaceCitationRepo.updateById(db, row.id, {
+      cslJson: mergedCsl,
+      documentType: columns.documentType,
+      title: columns.title,
+      authorsJson: columns.authors,
+      publishedYear: columns.publishedYear,
+      venue: columns.venue,
+      publisher: columns.publisher,
+      doi: columns.doi,
+      url: columns.url,
+      canonicalKey: canonicalKeyForCsl(mergedCsl),
+      metadataStatus: "verified",
+      reviewedAt: now,
+      updatedAt: now,
+    });
     return this.get(db, {
       ownerUserId: input.ownerUserId,
       workspaceId: input.workspaceId,
@@ -490,6 +716,171 @@ export const CitationService = {
       workspaceId: input.workspaceId,
       citationId: input.targetId,
     });
+  },
+
+  /** Grup kandidat duplikat (canonical key sama, ≥2 anggota) — untuk "Kelola duplikat". */
+  async listDuplicateGroups(
+    db: DbOrTx,
+    input: { ownerUserId: string; workspaceId: string },
+  ): Promise<CitationDuplicateGroup[]> {
+    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
+    const rows = await WorkspaceCitationRepo.listAllActive(
+      db,
+      input.ownerUserId,
+      input.workspaceId,
+    );
+    const byKey = new Map<string, WorkspaceCitation[]>();
+    for (const row of rows) {
+      const bucket = byKey.get(row.canonicalKey);
+      if (bucket) bucket.push(row);
+      else byKey.set(row.canonicalKey, [row]);
+    }
+    const groups: CitationDuplicateGroup[] = [];
+    for (const [canonicalKey, members] of byKey) {
+      if (members.length > 1) {
+        groups.push({ canonicalKey, members: members.map(toListItem) });
+      }
+    }
+    return groups.sort((a, b) => b.members.length - a.members.length);
+  },
+
+  /**
+   * Merge banyak citation (bulk bar / kelola duplikat) dalam satu transaksi: target
+   * (paling lengkap, atau `targetId` eksplisit) dilengkapi dari field kosong tiap
+   * source, tag di-union, source di-soft-delete. Pola sama dengan `merge` pairwise.
+   */
+  async mergeMany(
+    db: Db,
+    input: {
+      ownerUserId: string;
+      workspaceId: string;
+      ids: string[];
+      targetId?: string;
+    },
+  ): Promise<CitationDetail> {
+    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
+    const uniqueIds = [...new Set(input.ids)];
+    if (uniqueIds.length < 2) {
+      throwAppError({
+        message: "Pilih minimal dua referensi untuk digabungkan",
+        code: "citation_merge_invalid",
+      });
+    }
+    const now = Date.now();
+    let resolvedTargetId = "";
+    await db.transaction(async (tx) => {
+      const rows = await WorkspaceCitationRepo.findByIds(tx, input.ownerUserId, uniqueIds);
+      const active = rows.filter((r) => r.workspaceId === input.workspaceId && !r.deletedAt);
+      if (active.length < 2) {
+        throwAppError({
+          message: "Referensi untuk digabungkan tidak ditemukan",
+          code: "citation_merge_invalid",
+          status: 404,
+        });
+      }
+      const target = input.targetId
+        ? active.find((r) => r.id === input.targetId)
+        : pickMergeTarget(active);
+      if (!target) {
+        throwAppError({
+          message: "Target gabungan tidak ditemukan",
+          code: "citation_merge_invalid",
+          status: 404,
+        });
+      }
+      resolvedTargetId = target.id;
+      const sources = active.filter((r) => r.id !== target.id);
+
+      // Akumulasi fill-missing dari semua source (urut) + union tag + merge CSL.
+      let publishedYear = target.publishedYear;
+      let venue = target.venue;
+      let publisher = target.publisher;
+      let doi = target.doi;
+      let url = target.url;
+      let authorsJson = target.authorsJson;
+      const mergedCsl = { ...((target.cslJson ?? {}) as Record<string, unknown>) };
+      const tagBuckets: string[][] = [target.tags];
+      for (const source of sources) {
+        if (publishedYear === null && source.publishedYear !== null) {
+          publishedYear = source.publishedYear;
+        }
+        if (!venue && source.venue) venue = source.venue;
+        if (!publisher && source.publisher) publisher = source.publisher;
+        if (!doi && source.doi) doi = source.doi;
+        if (!url && source.url) url = source.url;
+        if (authorsJson.length === 0 && source.authorsJson.length > 0) {
+          authorsJson = source.authorsJson;
+        }
+        const sourceCsl = (source.cslJson ?? {}) as Record<string, unknown>;
+        for (const [key, value] of Object.entries(sourceCsl)) {
+          if (mergedCsl[key] === undefined && value !== undefined) mergedCsl[key] = value;
+        }
+        tagBuckets.push(source.tags);
+      }
+      await WorkspaceCitationRepo.updateById(tx, target.id, {
+        publishedYear,
+        venue,
+        publisher,
+        doi,
+        url,
+        authorsJson,
+        cslJson: mergedCsl,
+        tags: normalizeTags(tagBuckets.flat()),
+        updatedAt: now,
+      });
+      for (const source of sources) {
+        await WorkspaceCitationRepo.updateById(tx, source.id, { deletedAt: now, updatedAt: now });
+      }
+    });
+    return this.get(db, {
+      ownerUserId: input.ownerUserId,
+      workspaceId: input.workspaceId,
+      citationId: resolvedTargetId,
+    });
+  },
+
+  /** Tambah tag ke banyak citation sekaligus (bulk bar). Union per-baris, cap normal. */
+  async bulkAddTag(
+    db: Db,
+    input: { ownerUserId: string; workspaceId: string; ids: string[]; tags: string[] },
+  ): Promise<{ affected: number }> {
+    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
+    const addTags = normalizeTags(input.tags);
+    const uniqueIds = [...new Set(input.ids)];
+    if (addTags.length === 0 || uniqueIds.length === 0) return { affected: 0 };
+    const now = Date.now();
+    let affected = 0;
+    await db.transaction(async (tx) => {
+      const rows = (await WorkspaceCitationRepo.findByIds(tx, input.ownerUserId, uniqueIds)).filter(
+        (r) => r.workspaceId === input.workspaceId && !r.deletedAt,
+      );
+      for (const row of rows) {
+        const merged = normalizeTags([...row.tags, ...addTags]);
+        if (merged.length !== row.tags.length) {
+          await WorkspaceCitationRepo.updateById(tx, row.id, { tags: merged, updatedAt: now });
+          affected++;
+        }
+      }
+    });
+    return { affected };
+  },
+
+  /** Soft delete banyak citation (bulk bar). Guard owner+workspace+aktif di repo. */
+  async bulkSoftDelete(
+    db: DbOrTx,
+    input: { ownerUserId: string; workspaceId: string; ids: string[] },
+  ): Promise<{ affected: number }> {
+    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
+    const uniqueIds = [...new Set(input.ids)];
+    if (uniqueIds.length === 0) return { affected: 0 };
+    const affected = await WorkspaceCitationRepo.softDeleteMany(
+      db,
+      input.ownerUserId,
+      input.workspaceId,
+      uniqueIds,
+      Date.now(),
+    );
+    return { affected };
   },
 
   async export(
