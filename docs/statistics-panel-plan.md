@@ -1,6 +1,6 @@
 # Plan: Interaksi Statistik di Chat + Tab "Statistik" di Side Panel
 
-Status: Fase A IMPLEMENTED (2026-07-11, menunggu verifikasi visual) — Fase B/C belum
+Status: Fase A + B IMPLEMENTED (2026-07-11, menunggu verifikasi visual A.5/B.9) — Fase C/D belum
 Branch: `statistics` (sudah merge `origin/development` ad72354, berisi panel bertab 44b5608)
 Prasyarat: fase 0–6 statistik (stats-viz output layer) + panel bertab — keduanya sudah ada di branch ini.
 
@@ -8,10 +8,20 @@ Prasyarat: fase 0–6 statistik (stats-viz output layer) + panel bertab — kedu
 
 | Fase | Status | Catatan |
 |------|--------|---------|
-| A — kartu run + kartu dataset di chat | ✅ IMPLEMENTED 2026-07-11 (uncommitted) | Typecheck + lint + test hijau (chat-core 53 · db 21 · services 274 · api 81). Checklist visual A.5 BELUM dijalankan (butuh dev stack + sandbox Daytona). |
-| B — tab "Statistik" di side panel | ⬜ belum | Seam sudah disiapkan dari Fase A (lihat di bawah). |
-| C — chip next-step + ekspor panel | ⬜ belum | |
+| A — kartu run + kartu dataset di chat | ✅ IMPLEMENTED 2026-07-11 (commit c9d3998) | Typecheck + lint + test hijau. Checklist visual A.5 BELUM dijalankan (butuh dev stack + sandbox Daytona). |
+| B — tab "Statistik" di side panel | ✅ IMPLEMENTED 2026-07-11 (uncommitted) | Typecheck + lint web hijau; chat-core 53 · services 274 pass. Checklist visual B.9 BELUM dijalankan. |
+| C — chip next-step + ekspor panel | ⬜ belum | Seam siap: `StatsListPanel` menerima `runKey`; `threadId` tinggal dioper dari shell utk route ekspor C.2/C.3. |
 | D — backlog | ⬜ (by design, setelah A–C terpakai) | |
+
+Realisasi Fase B — deviasi kecil & keputusan saat implementasi (plan diikuti apa adanya selebihnya):
+
+- **B.3**: `ThreadStatsPanelItem` + param `statsGroups` di `buildThreadPanelLookups`; tipe `ThreadStatsGroup` di-`import type` dari `../api` (type-only, tak ada cycle — api.ts tak impor lib ini). List dibangun via map `toolCallId→group` lalu jalan-timeline (anchor `messageId`), sisa map di-append tanpa anchor.
+- **B.5**: `hasStats` via `useThreadPanelData()` (subscribe lookups — shell ikut re-render saat streaming; diterima, sesuai D4). Tab Statistik tampil bila `hasStats || mode.kind === "stats"` (deep-link `?panel=s` thread kosong tetap punya tab utk activeKey). Guard draft-shell: `!threadId && stats` → context (pola sources). `threadId` SENGAJA belum dioper ke `StatsListPanel` (hindari unused param; Fase C yang menambah bersama route ekspor).
+- **B.6**: `StatsListPanel` (agregat list item bertombol "Lihat di percakapan" + scoped reuse `StatsBlocksProvider`/`StatsVizGroup`). Subteks katalog DIBUANG (redundan dgn judul grup DB); hanya badge amber "kustom" sbg pembeda. Ikon: `ArrowLeftIcon` (chip kembali), `MessageSquareIcon` (lihat di percakapan).
+- **B.7**: `scrollToMessage` di lib baru `scroll-to-message.ts` (`CSS.escape` + `scrollIntoView` smooth); anchor `data-message-id` HANYA di root `AssistantMessage` (pemilik tool-call).
+- **B.8**: seam `onOpen` distruk di-wire via `useMessageInteractions().openStats` (dispatcher `ToolRow` panggil 1 hook tak-kondisional di puncak → aman rules-of-hooks; gate pada `statsGroup` ada). Blok inline: helper bersama chip diekstrak ke `stats-viz/stats-summary.tsx` (`StatsVerdictChips` + `statsCountsLabel`, dedupe dari `analysis-run-card`); `StatsVizGroup` dapat prop `onOpen?` opsional → header "Buka di panel" HANYA jalur inline (`StatsVizMarkdownComponent`/`StatsAppendix`), panel scoped reuse tanpa `onOpen`.
+
+File tersentuh Fase B: `thread-panel-model.ts` · `thread-panel-context.tsx` · `thread-panel-data.ts` · `mastra-chat-thread-surface.tsx` · `thread-detail-shell.tsx` · `message-interactions.tsx` · `message-list.tsx` · `tool-row.tsx` · `stats-viz/{stats-block,analysis-run-card}.tsx` + `stats-viz/stats-summary.tsx` (baru) · `lib/scroll-to-message.ts` (baru) · `stats-list-panel.tsx` (baru).
 
 Realisasi Fase A — deviasi kecil & keputusan saat implementasi (plan selebihnya diikuti apa adanya):
 
@@ -132,7 +142,7 @@ Dirender saat `detail.kind === "dataset-profile"`:
 
 ---
 
-## 4. Fase B — tab "Statistik" di side panel
+## 4. Fase B — tab "Statistik" di side panel — ✅ IMPLEMENTED (lihat §0)
 
 ### B.1 `apps/web/features/thread-experience/utils/thread-panel-model.ts`
 
