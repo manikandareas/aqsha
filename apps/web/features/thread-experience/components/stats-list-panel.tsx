@@ -2,6 +2,7 @@
 
 import { summarizeStatsGroup } from "@aqsha/chat-core/stats-viz";
 import { ArrowLeftIcon, ChartColumnIcon, DownloadIcon, MessageSquareIcon } from "@aqsha/ui/icons";
+import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -29,9 +30,15 @@ import { useThreadPanel, useThreadPanelData } from "./thread-panel-context";
  * list stays in sync with the chat's struk + inline blocks and shares the verdict vocabulary.
  */
 export function StatsListPanel({ runKey, threadId }: { runKey?: string; threadId?: string }) {
-  const items = useThreadPanelData()?.stats ?? [];
+  const data = useThreadPanelData();
+  const items = data?.stats ?? [];
   return runKey ? (
-    <ScopedStatsView runKey={runKey} items={items} threadId={threadId} />
+    <ScopedStatsView
+      runKey={runKey}
+      items={items}
+      threadId={threadId}
+      loading={data?.statsLoading ?? false}
+    />
   ) : (
     <AggregateStatsView items={items} threadId={threadId} />
   );
@@ -112,7 +119,7 @@ function StatsListItem({
   onOpen: () => void;
 }) {
   const { group, messageId } = item;
-  const summary = summarizeStatsGroup(group);
+  const summary = useMemo(() => summarizeStatsGroup(group), [group]);
   return (
     <li className="overflow-hidden rounded-xl border bg-muted/20">
       <button
@@ -158,21 +165,31 @@ function ScopedStatsView({
   runKey,
   items,
   threadId,
+  loading,
 }: {
   runKey: string;
   items: ThreadStatsPanelItem[];
   threadId?: string;
+  loading: boolean;
 }) {
   const panel = useThreadPanel();
-  const item = items.find((it) => it.runKey === runKey);
+  const item = useMemo(() => items.find((it) => it.runKey === runKey), [items, runKey]);
+  // A fresh, single-entry Map identity each render would defeat StatsBlocksProvider's context-value
+  // memo (re-rendering every StatsVizGroup/table/figure); key it on the resolved group.
+  const groups = useMemo(
+    () => (item ? new Map([[item.group.runKey, item.group]]) : null),
+    [item],
+  );
 
-  if (!item) {
+  if (!item || !groups) {
     return (
       <DetailPanelShell title="Statistik">
         <div className="grid gap-3">
           <BackToAllChip onClick={() => panel?.openStatsPanel()} />
           <p className="text-[13px] text-muted-foreground">
-            Analisis ini tidak ditemukan lagi di percakapan.
+            {loading
+              ? "Memuat hasil analisis…"
+              : "Analisis ini tidak ditemukan lagi di percakapan."}
           </p>
         </div>
       </DetailPanelShell>
@@ -180,7 +197,6 @@ function ScopedStatsView({
   }
 
   const anchorId = item.messageId;
-  const groups = new Map([[item.group.runKey, item.group]]);
   return (
     <DetailPanelShell
       title="Statistik"

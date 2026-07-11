@@ -53,15 +53,19 @@ const HEAVY_HINTS: Record<string, string> = {
   uji_mediasi: "bootstrap 5000 sampel ±1 menit",
 };
 
-/** Detik sejak mount — pengatur copy bertahap kartu running (paralel timer ElapsedLabel). */
-function useElapsedSeconds(): number {
-  const [mountedAt] = useState(() => Date.now());
-  const [now, setNow] = useState(mountedAt);
+/**
+ * True setelah `seconds` detik sejak mount (bila `enabled`) — penanda transisi copy tahap-2 kartu
+ * uji berat. Satu `setTimeout` yang menyala sekali, BUKAN interval per-detik: elapsed yang berdetak
+ * sudah dimiliki `ElapsedLabel`, jadi kita hanya butuh momen ambang, bukan angka tiap detik.
+ */
+function useElapsedThreshold(seconds: number, enabled: boolean): boolean {
+  const [reached, setReached] = useState(false);
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-  return Math.max(0, Math.floor((now - mountedAt) / 1000));
+    if (!enabled) return;
+    const timer = setTimeout(() => setReached(true), seconds * 1000);
+    return () => clearTimeout(timer);
+  }, [enabled, seconds]);
+  return enabled && reached;
 }
 
 function RunningCard({ detail, title }: { detail: AnalysisDetail; title: string }) {
@@ -85,11 +89,11 @@ function RunningCard({ detail, title }: { detail: AnalysisDetail; title: string 
 function RunningStatus({ detail }: { detail: AnalysisDetail }) {
   // Uji berat = flag META ATAU kredit ≥ 20 (jaring pengaman bila META tertinggal).
   const heavy = Boolean(statsAnalysisMeta(detail.analysis)?.heavy) || detail.credits >= 20;
-  const elapsed = useElapsedSeconds();
+  const pastBoot = useElapsedThreshold(10, heavy);
   // Copy bertahap uji berat (pola copy per-fase /deep): sandbox boot dulu, lalu hint durasi.
   const base = !heavy
     ? "Menghitung"
-    : elapsed < 10
+    : !pastBoot
       ? "Menyiapkan sandbox"
       : `Menghitung (${HEAVY_HINTS[detail.analysis] ?? "uji berat — bisa 1–2 menit"})`;
   return (
