@@ -1,6 +1,7 @@
 import { AppError } from "@aqsha/db";
 import { Elysia } from "elysia";
 import { logger } from "./log";
+import { captureException } from "./sentry";
 
 /**
  * Pemetaan error terpusat (scope global → menangkap error dari semua route yang
@@ -42,8 +43,11 @@ export const errorPlugin = new Elysia({ name: "errorPlugin" }).onError(
       logger.warn({ ...base, code: "not_found" }, "not_found");
       return status(404, { message: "Not found.", code: "not_found" });
     }
-    // Tak terduga → log error penuh (stack + field pg) + kembalikan requestId.
+    // Tak terduga → log error penuh (stack + field pg) + kembalikan requestId. Hanya 5xx/unknown
+    // yang dikirim ke Sentry (AppError/VALIDATION/NOT_FOUND di atas sudah return dulu); `base`
+    // membawa requestId supaya error Sentry bisa dilompatkan ke baris log server.
     logger.error({ ...base, err: error }, "unexpected_error");
+    captureException(error, base);
     return status(500, {
       message: "Terjadi kesalahan tak terduga.",
       code: "internal",

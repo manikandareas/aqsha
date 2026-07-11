@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/node";
 import { assertEmbeddingEnabled } from "@aqsha/services/rag";
 import { Mastra } from "@mastra/core/mastra";
 import { MASTRA_THREAD_ID_KEY } from "@mastra/core/request-context";
@@ -16,6 +17,29 @@ import { userContextMiddleware } from "./middleware/user-context";
 import { storage, vector } from "./storage";
 import { deepResearch } from "./workflows/deep-research";
 import { registerDeepTaskExecutors } from "./workflows/deep-tasks";
+
+// Sentry (@sentry/node) — ERROR tracking saja (project aqsha-agent). Mastra yang memegang pipeline
+// OpenTelemetry (exporter storage + Langfuse di bawah), jadi kita SKIP setup OTel & ESM-loader-hook
+// milik Sentry: keduanya tak berebut global tracer, dan bundle `mastra build` tetap bersih. Hanya
+// menangkap uncaught/unhandled + capture manual (mis. boot sweep). No-op tanpa SENTRY_DSN_AGENT;
+// release = GIT_COMMIT (tag sama dengan Langfuse) → error terikat commit.
+if (process.env.SENTRY_DSN_AGENT) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN_AGENT,
+    environment: process.env.SENTRY_ENVIRONMENT ?? "production",
+    release: process.env.SENTRY_RELEASE ?? process.env.GIT_COMMIT,
+    tracesSampleRate: 0,
+    skipOpenTelemetrySetup: true,
+    registerEsmLoaderHooks: false,
+    defaultIntegrations: false,
+    integrations: [
+      Sentry.onUncaughtExceptionIntegration(),
+      Sentry.onUnhandledRejectionIntegration(),
+      Sentry.dedupeIntegration(),
+      Sentry.linkedErrorsIntegration(),
+    ],
+  });
+}
 
 // Fail-fast (D1): tool `search_thread_documents` butuh embedding aktif. Konsisten dengan throw
 // `DATABASE_URL` di `./storage` — kredensial wajib digagalkan saat boot, bukan degradasi senyap.
@@ -150,7 +174,10 @@ function sweepFrozenDeepRunsOnce(): void {
   void mastra
     .getWorkflow("deep-research")
     .restartAllActiveWorkflowRuns()
-    .catch((err) => console.error("[deep-research] boot sweep restart gagal", err));
+    .catch((err) => {
+      console.error("[deep-research] boot sweep restart gagal", err);
+      Sentry.captureException(err, { tags: { area: "deep-boot-sweep" } });
+    });
 }
 
 // Executor static task `/deep` WAJIB di-register saat boot: task `running`/`pending` yang dipulihkan
