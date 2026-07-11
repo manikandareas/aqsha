@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -57,10 +57,9 @@ function CitationPickerContent({
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const list = useCitationsList(workspaceId, { ...EMPTY_CITATION_FILTERS, q: search });
-  const items = useMemo(
-    () => (list.data?.pages ?? []).flatMap((page) => page.items),
-    [list.data],
-  );
+  // React Compiler memoizes this; no manual useMemo needed (konvensi repo).
+  const items = (list.data?.pages ?? []).flatMap((page) => page.items);
+  const selectedSet = new Set(selected);
 
   const toggle = (id: string) =>
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -101,7 +100,7 @@ function CitationPickerContent({
         ) : (
           <ul className="divide-y divide-border/50">
             {items.map((item) => {
-              const isSelected = selected.includes(item.id);
+              const isSelected = selectedSet.has(item.id);
               return (
                 <li key={item.id}>
                   <button
