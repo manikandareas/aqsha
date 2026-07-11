@@ -55,7 +55,6 @@ export {
   PUBLIC_PLAN_KEYS,
   type PublicPlanKey,
   requiredPlanForFeature,
-  resolvePlanKey,
   UNLIMITED,
 } from "./plan";
 

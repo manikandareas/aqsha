@@ -1,19 +1,22 @@
 import { throwAppError } from "@aqsha/db";
-import { FeedHydrationService, type FeedHydrationLane, resolvePlanKey } from "@aqsha/services";
+import { FeedHydrationService, type FeedHydrationLane, resolveAdminOverride } from "@aqsha/services";
 import { Elysia, t } from "elysia";
 import { authMacro } from "../plugins/auth";
+import { getDb } from "../clients/db";
 import { delKey, setNxWithTtl } from "../clients/redis";
 
 /**
- * Route admin (P4: feed hydrate trigger). Admin = `resolvePlanKey === "admin"` (env allowlist
- * `AQSHA_ADMIN_*`; AdminAuthService + admin_entitlements penuh = P9). `GET /admin/jobs`
+ * Route admin (P4: feed hydrate trigger). Admin = `resolveAdminOverride` (users.role
+ * via Clerk publicMetadata; env `AQSHA_ADMIN_*` = bootstrap). `GET /admin/jobs`
  * (bull-board) + `GET /health/ready` (R2) = deferred P9.
  */
 const HYDRATE_LOCK_KEY = "admin:feed:hydrate:lock";
 const HYDRATE_LOCK_TTL_S = 60;
 
-function requireAdmin(ownerUserId: string, email?: string | null): void {
-  if (resolvePlanKey({ ownerUserId, email }) !== "admin") {
+async function requireAdmin(ownerUserId: string, email?: string | null): Promise<void> {
+  const { db } = getDb();
+  const { isAdmin } = await resolveAdminOverride(db, ownerUserId, email);
+  if (!isAdmin) {
     throwAppError({
       message: "Akses admin diperlukan.",
       code: "admin_required",
@@ -29,7 +32,7 @@ export const admin = new Elysia({ prefix: "/admin" })
   .post(
     "/feed/hydrate",
     async ({ ownerUserId, email, body }) => {
-      requireAdmin(ownerUserId, email);
+      await requireAdmin(ownerUserId, email);
       const fresh = await setNxWithTtl(HYDRATE_LOCK_KEY, HYDRATE_LOCK_TTL_S);
       if (!fresh) {
         throwAppError({
