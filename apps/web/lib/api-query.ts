@@ -67,6 +67,7 @@ export const queryKeys = {
     detail: (workspaceId: string, citationId: string) =>
       ["citations", workspaceId, "detail", citationId] as const,
     tags: (workspaceId: string) => ["citations", workspaceId, "tags"] as const,
+    duplicates: (workspaceId: string) => ["citations", workspaceId, "duplicates"] as const,
     render: (workspaceId: string, params: { styleId: string | null; ids: string[] }) =>
       ["citations", workspaceId, "render", params] as const,
     settings: (workspaceId: string) => ["citations", workspaceId, "settings"] as const,

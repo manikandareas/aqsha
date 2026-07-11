@@ -88,6 +88,19 @@ export type CitationRenderResult = {
   bibliography: string;
 };
 
+/** Grup kandidat duplikat (canonical key sama, ≥2 anggota) — "Kelola duplikat". */
+export type CitationDuplicateGroup = {
+  canonicalKey: string;
+  members: CitationListItem[];
+};
+
+/** Hasil "Tambahkan ke Sitasi" dari artifact (Fase 2). */
+export type CreateFromArtifactResult = {
+  citation: CitationDetail;
+  created: boolean;
+  linkedExisting: boolean;
+};
+
 export const CITATION_STYLE_OPTIONS: Array<{ id: CitationStyleId; label: string }> = [
   { id: "apa-7", label: "APA 7" },
   { id: "ieee", label: "IEEE" },

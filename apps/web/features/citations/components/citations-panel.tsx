@@ -1,9 +1,12 @@
 "use client";
 
 import {
+  BookmarkIcon,
+  CheckIcon,
   CopyIcon,
   ExternalLinkIcon,
   FilterIcon,
+  LayersIcon,
   LinkIcon,
   MoreHorizontalIcon,
   PencilIcon,
@@ -14,7 +17,7 @@ import {
   Trash2Icon,
   UploadIcon,
 } from "@aqsha/ui/icons";
-import { useMemo, useState } from "react";
+import { type FormEvent, useMemo, useState } from "react";
 import { PanelCardToolbar } from "@/components/layout/side-panel-frame";
 import { PanelTitleLabel } from "@/components/panel-title-dropdown-trigger";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -27,17 +30,21 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { panelBodyPaddingClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
 import {
   type CitationListFilters,
   EMPTY_CITATION_FILTERS,
+  useBulkDeleteCitations,
+  useBulkTagCitations,
   useCitationDetail,
   useCitationsList,
   useCitationTags,
   useCopyCitation,
   useCreateCitation,
   useDeleteCitation,
+  useMergeManyCitations,
   useUpdateCitation,
 } from "../api";
 import {
@@ -48,6 +55,7 @@ import {
 } from "../types";
 import { CitationDetailView } from "./citation-detail-view";
 import { CitationDoiDialog } from "./citation-doi-dialog";
+import { CitationDuplicatesDialog } from "./citation-duplicates-dialog";
 import { CitationEmptyState } from "./citation-empty-state";
 import { CitationFormDialog } from "./citation-form-dialog";
 import { CitationImportWizard } from "./citation-import-wizard";
@@ -85,7 +93,7 @@ export function CitationsPanel({
   );
 }
 
-type DialogKind = "import" | "doi" | "manual" | "settings" | null;
+type DialogKind = "import" | "doi" | "manual" | "settings" | "duplicates" | null;
 
 function CitationListView({
   workspaceId,
@@ -99,6 +107,8 @@ function CitationListView({
   const [dialog, setDialog] = useState<DialogKind>(null);
   const [deleteTarget, setDeleteTarget] = useState<CitationListItem | null>(null);
   const [editTargetId, setEditTargetId] = useState<string | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
   const list = useCitationsList(workspaceId, filters);
   const tags = useCitationTags(workspaceId);
@@ -119,54 +129,102 @@ function CitationListView({
     setFilters((prev) => ({ ...prev, q: value.trim() }));
   };
 
+  const exitSelection = () => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  };
+  const toggleSelect = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
   return (
     <>
       <PanelCardToolbar
-        title={<PanelTitleLabel>Sitasi</PanelTitleLabel>}
-        eyebrow={total > 0 ? `· ${total}` : undefined}
+        title={
+          <PanelTitleLabel>
+            {selectionMode ? `${selectedIds.size} dipilih` : "Sitasi"}
+          </PanelTitleLabel>
+        }
+        eyebrow={!selectionMode && total > 0 ? `· ${total}` : undefined}
         actions={
-          <>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-                  aria-label="Tambah referensi"
-                >
-                  <PlusIcon className="size-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => setDialog("import")}>
-                  <UploadIcon className="size-3.5" />
-                  Import file (.bib/.ris)
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setDialog("doi")}>
-                  <LinkIcon className="size-3.5" />
-                  Dari DOI
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setDialog("manual")}>
-                  <PenLineIcon className="size-3.5" />
-                  Manual
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <CitationExportMenu workspaceId={workspaceId} disabled={total === 0} />
+          selectionMode ? (
             <Button
               type="button"
               variant="ghost"
-              className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-              aria-label="Pengaturan gaya sitasi"
-              onClick={() => setDialog("settings")}
+              className="h-7 shrink-0 rounded-full px-3 text-[12px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={exitSelection}
             >
-              <SettingsIcon className="size-3.5" />
+              Selesai
             </Button>
-          </>
+          ) : (
+            <>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label="Tambah referensi"
+                  >
+                    <PlusIcon className="size-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => setDialog("import")}>
+                    <UploadIcon className="size-3.5" />
+                    Import file (.bib/.ris)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setDialog("doi")}>
+                    <LinkIcon className="size-3.5" />
+                    Dari DOI
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setDialog("manual")}>
+                    <PenLineIcon className="size-3.5" />
+                    Manual
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <CitationExportMenu workspaceId={workspaceId} disabled={total === 0} />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label="Opsi lain"
+                  >
+                    <MoreHorizontalIcon className="size-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    disabled={total === 0}
+                    onSelect={() => setSelectionMode(true)}
+                  >
+                    <CheckIcon className="size-3.5" />
+                    Pilih beberapa
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setDialog("duplicates")}>
+                    <LayersIcon className="size-3.5" />
+                    Kelola duplikat
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => setDialog("settings")}>
+                    <SettingsIcon className="size-3.5" />
+                    Gaya sitasi & urutan
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          )
         }
       />
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
         {showEmptyState ? (
           <div className={cn("min-h-0 flex-1 overflow-y-auto", panelBodyPaddingClass)}>
             <CitationEmptyState
@@ -211,6 +269,9 @@ function CitationListView({
                       key={item.id}
                       workspaceId={workspaceId}
                       item={item}
+                      selectionMode={selectionMode}
+                      selected={selectedIds.has(item.id)}
+                      onToggleSelect={() => toggleSelect(item.id)}
                       onOpen={() => onOpenCitation(item.id)}
                       onEdit={() => setEditTargetId(item.id)}
                       onDelete={() => setDeleteTarget(item)}
@@ -234,6 +295,14 @@ function CitationListView({
             </div>
           </>
         )}
+
+        {selectionMode && selectedIds.size > 0 ? (
+          <BulkActionBar
+            workspaceId={workspaceId}
+            ids={[...selectedIds]}
+            onDone={exitSelection}
+          />
+        ) : null}
       </div>
 
       <CitationImportWizard
@@ -259,6 +328,11 @@ function CitationListView({
         workspaceId={workspaceId}
         open={dialog === "settings"}
         onOpenChange={(open) => setDialog(open ? "settings" : null)}
+      />
+      <CitationDuplicatesDialog
+        workspaceId={workspaceId}
+        open={dialog === "duplicates"}
+        onOpenChange={(open) => setDialog(open ? "duplicates" : null)}
       />
       {editTargetId ? (
         <EditCitationDialog
@@ -286,6 +360,114 @@ function CitationListView({
         }}
       />
     </>
+  );
+}
+
+/**
+ * Bulk bar melayang di bawah list saat mode seleksi. Aksi massal: beri tag,
+ * export terpilih, gabungkan (≥2), hapus. Gabung/hapus keluar dari mode seleksi.
+ */
+function BulkActionBar({
+  workspaceId,
+  ids,
+  onDone,
+}: {
+  workspaceId: string;
+  ids: string[];
+  onDone: () => void;
+}) {
+  const bulkTag = useBulkTagCitations(workspaceId);
+  const bulkDelete = useBulkDeleteCitations(workspaceId);
+  const mergeMany = useMergeManyCitations(workspaceId);
+  const [tagOpen, setTagOpen] = useState(false);
+  const [tagDraft, setTagDraft] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const submitTag = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const value = tagDraft.trim();
+    if (!value) return;
+    bulkTag.mutate(
+      { ids, tags: [value] },
+      {
+        onSuccess: () => {
+          setTagOpen(false);
+          setTagDraft("");
+        },
+      },
+    );
+  };
+
+  return (
+    <div className="flex items-center gap-1 border-t border-border/70 bg-background/95 px-4 py-2 backdrop-blur @2xl:px-6">
+      <span className="mr-auto text-[12px] font-semibold text-muted-foreground">
+        {ids.length} dipilih
+      </span>
+      <Popover open={tagOpen} onOpenChange={setTagOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="Beri tag terpilih"
+          >
+            <BookmarkIcon className="size-3.5" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-60">
+          <form className="grid gap-2" onSubmit={submitTag}>
+            <p className="text-[12px] font-semibold text-foreground">Beri tag</p>
+            <Input
+              autoFocus
+              value={tagDraft}
+              onInput={(event) => setTagDraft((event.target as HTMLInputElement).value)}
+              placeholder="mis. bab-2"
+              className="h-8 text-[13px]"
+            />
+            <Button
+              type="submit"
+              variant="secondary"
+              className="h-8 rounded-full"
+              disabled={!tagDraft.trim() || bulkTag.isPending}
+            >
+              Tambah tag
+            </Button>
+          </form>
+        </PopoverContent>
+      </Popover>
+      <CitationExportMenu workspaceId={workspaceId} ids={ids} />
+      <Button
+        type="button"
+        variant="ghost"
+        className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
+        aria-label="Gabungkan terpilih"
+        disabled={ids.length < 2 || mergeMany.isPending}
+        onClick={() => mergeMany.mutate({ ids }, { onSuccess: onDone })}
+      >
+        <LayersIcon className="size-3.5" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        className="size-7 shrink-0 rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
+        aria-label="Hapus terpilih"
+        onClick={() => setConfirmDelete(true)}
+      >
+        <Trash2Icon className="size-3.5" />
+      </Button>
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Hapus referensi terpilih?"
+        description={`${ids.length} referensi dihapus dari library workspace ini.`}
+        confirmLabel="Hapus"
+        onConfirm={async () => {
+          await bulkDelete.mutateAsync(ids);
+          setConfirmDelete(false);
+          onDone();
+        }}
+      />
+    </div>
   );
 }
 
@@ -393,12 +575,18 @@ function FilterMenu({
 function CitationRow({
   workspaceId,
   item,
+  selectionMode,
+  selected,
+  onToggleSelect,
   onOpen,
   onEdit,
   onDelete,
 }: {
   workspaceId: string;
   item: CitationListItem;
+  selectionMode: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -410,22 +598,41 @@ function CitationRow({
     <li className="group relative">
       <button
         type="button"
-        onClick={onOpen}
-        className="grid w-full gap-0.5 rounded-lg px-2.5 py-2 pr-16 text-left transition-colors hover:bg-muted/50 @3xl:grid-cols-[minmax(0,2.2fr)_minmax(0,1.6fr)_minmax(0,0.5fr)_minmax(0,1fr)] @3xl:items-center @3xl:gap-3"
+        onClick={selectionMode ? onToggleSelect : onOpen}
+        aria-pressed={selectionMode ? selected : undefined}
+        className={cn(
+          "grid w-full gap-0.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-muted/50 @3xl:grid-cols-[minmax(0,2.2fr)_minmax(0,1.6fr)_minmax(0,0.5fr)_minmax(0,1fr)] @3xl:items-center @3xl:gap-3",
+          selectionMode ? "pr-2.5" : "pr-16",
+          selected && "bg-muted/60",
+        )}
       >
         <span className="flex min-w-0 items-center gap-1.5">
-          <span
-            aria-hidden
-            title={CITATION_STATUS_LABELS[item.metadataStatus]}
-            className={cn(
-              "size-1.5 shrink-0 rounded-full",
-              item.metadataStatus === "verified"
-                ? "bg-mint"
-                : item.metadataStatus === "needs_review"
-                  ? "bg-amber-400"
-                  : "bg-destructive/70",
-            )}
-          />
+          {selectionMode ? (
+            <span
+              aria-hidden
+              className={cn(
+                "flex size-4 shrink-0 items-center justify-center rounded border transition-colors",
+                selected
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-background",
+              )}
+            >
+              {selected ? <CheckIcon className="size-3" /> : null}
+            </span>
+          ) : (
+            <span
+              aria-hidden
+              title={CITATION_STATUS_LABELS[item.metadataStatus]}
+              className={cn(
+                "size-1.5 shrink-0 rounded-full",
+                item.metadataStatus === "verified"
+                  ? "bg-mint"
+                  : item.metadataStatus === "needs_review"
+                    ? "bg-amber-400"
+                    : "bg-destructive/70",
+              )}
+            />
+          )}
           <span className="truncate text-[13px] font-semibold text-foreground [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] @3xl:[-webkit-line-clamp:1]">
             {item.title}
           </span>
@@ -452,49 +659,51 @@ function CitationRow({
           ) : null}
         </span>
       </button>
-      <span className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-        <Button
-          type="button"
-          variant="ghost"
-          className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-          aria-label="Salin sitasi"
-          onClick={() => copyCitation.mutate(item.id)}
-        >
-          <CopyIcon className="size-3.5" />
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-              aria-label="Aksi referensi"
-            >
-              <MoreHorizontalIcon className="size-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={onOpen}>Detail</DropdownMenuItem>
-            <DropdownMenuItem onSelect={onEdit}>
-              <PencilIcon className="size-3.5" />
-              Edit
-            </DropdownMenuItem>
-            {externalHref ? (
-              <DropdownMenuItem asChild>
-                <a href={externalHref} target="_blank" rel="noreferrer">
-                  <ExternalLinkIcon className="size-3.5" />
-                  Buka {item.doi ? "DOI" : "URL"}
-                </a>
+      {selectionMode ? null : (
+        <span className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+          <Button
+            type="button"
+            variant="ghost"
+            className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="Salin sitasi"
+            onClick={() => copyCitation.mutate(item.id)}
+          >
+            <CopyIcon className="size-3.5" />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Aksi referensi"
+              >
+                <MoreHorizontalIcon className="size-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={onOpen}>Detail</DropdownMenuItem>
+              <DropdownMenuItem onSelect={onEdit}>
+                <PencilIcon className="size-3.5" />
+                Edit
               </DropdownMenuItem>
-            ) : null}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onSelect={onDelete}>
-              <Trash2Icon className="size-3.5" />
-              Hapus
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </span>
+              {externalHref ? (
+                <DropdownMenuItem asChild>
+                  <a href={externalHref} target="_blank" rel="noreferrer">
+                    <ExternalLinkIcon className="size-3.5" />
+                    Buka {item.doi ? "DOI" : "URL"}
+                  </a>
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+                <Trash2Icon className="size-3.5" />
+                Hapus
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </span>
+      )}
     </li>
   );
 }

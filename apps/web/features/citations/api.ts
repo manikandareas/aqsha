@@ -8,10 +8,12 @@ import { queryKeys, unwrap } from "@/lib/api-query";
 import type {
   BibliographySort,
   CitationDetail,
+  CitationDuplicateGroup,
   CitationListResponse,
   CitationRenderResult,
   CitationSettings,
   CitationStyleId,
+  CreateFromArtifactResult,
   ImportCommitResult,
   ImportDuplicatePolicy,
   ImportPreviewResult,
@@ -159,6 +161,102 @@ export function useMergeCitations(workspaceId: string) {
       toast.success("Referensi digabungkan");
     },
     onError: (error) => toast.error(readableApiErrorMessage(error, "Gagal menggabungkan referensi")),
+  });
+}
+
+/** Grup kandidat duplikat workspace (dialog "Kelola duplikat"). */
+export function useDuplicateGroups(workspaceId: string, enabled = true) {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.citations.duplicates(workspaceId),
+    enabled,
+    queryFn: async () =>
+      unwrap(
+        await api.workspaces({ id: workspaceId }).citations.duplicates.get(),
+      ) as CitationDuplicateGroup[],
+  });
+}
+
+/** Merge banyak referensi (bulk bar / kelola duplikat) — target opsional. */
+export function useMergeManyCitations(workspaceId: string) {
+  const api = useApi();
+  const invalidate = useInvalidateCitations(workspaceId);
+  return useMutation({
+    mutationFn: async (input: { ids: string[]; targetId?: string }) =>
+      unwrap(
+        await api.workspaces({ id: workspaceId }).citations.merge.post(input),
+      ) as CitationDetail,
+    onSuccess: () => {
+      invalidate();
+      toast.success("Referensi digabungkan");
+    },
+    onError: (error) => toast.error(readableApiErrorMessage(error, "Gagal menggabungkan referensi")),
+  });
+}
+
+/** Tambah tag ke banyak referensi terpilih. */
+export function useBulkTagCitations(workspaceId: string) {
+  const api = useApi();
+  const invalidate = useInvalidateCitations(workspaceId);
+  return useMutation({
+    mutationFn: async (input: { ids: string[]; tags: string[] }) =>
+      unwrap(
+        await api.workspaces({ id: workspaceId }).citations["bulk-tag"].post(input),
+      ) as { affected: number },
+    onSuccess: (result) => {
+      invalidate();
+      toast.success(`${result.affected} referensi diberi tag`);
+    },
+    onError: (error) => toast.error(readableApiErrorMessage(error, "Gagal memberi tag")),
+  });
+}
+
+/** Hapus (soft delete) banyak referensi terpilih. */
+export function useBulkDeleteCitations(workspaceId: string) {
+  const api = useApi();
+  const invalidate = useInvalidateCitations(workspaceId);
+  return useMutation({
+    mutationFn: async (ids: string[]) =>
+      unwrap(
+        await api.workspaces({ id: workspaceId }).citations["bulk-delete"].post({ ids }),
+      ) as { affected: number },
+    onSuccess: (result) => {
+      invalidate();
+      toast.success(`${result.affected} referensi dihapus`);
+    },
+    onError: (error) => toast.error(readableApiErrorMessage(error, "Gagal menghapus referensi")),
+  });
+}
+
+/** "Tambahkan ke Sitasi" dari artifact paper (Fase 2 bridge). */
+export function useCreateCitationFromArtifact(workspaceId: string) {
+  const api = useApi();
+  const invalidate = useInvalidateCitations(workspaceId);
+  return useMutation({
+    mutationFn: async (input: { artifactId: string; tags?: string[] }) =>
+      unwrap(
+        await api.workspaces({ id: workspaceId }).citations["from-artifact"].post(input),
+      ) as CreateFromArtifactResult,
+    onSuccess: () => invalidate(),
+    onError: (error) =>
+      toast.error(readableApiErrorMessage(error, "Gagal menambahkan ke Sitasi")),
+  });
+}
+
+/** Perbarui metadata referensi dari DOI-nya (quality workflow Fase 2). */
+export function useResolveCitation(workspaceId: string) {
+  const api = useApi();
+  const invalidate = useInvalidateCitations(workspaceId);
+  return useMutation({
+    mutationFn: async (citationId: string) =>
+      unwrap(
+        await api.workspaces({ id: workspaceId }).citations({ citationId }).resolve.post(),
+      ) as CitationDetail,
+    onSuccess: () => {
+      invalidate();
+      toast.success("Metadata diperbarui dari DOI");
+    },
+    onError: (error) => toast.error(readableApiErrorMessage(error, "Gagal memperbarui metadata")),
   });
 }
 

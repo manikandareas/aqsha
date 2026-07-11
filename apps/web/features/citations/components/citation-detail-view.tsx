@@ -2,13 +2,16 @@
 
 import {
   ArrowLeftIcon,
+  BookOpenIcon,
   CheckCircle2Icon,
   CopyIcon,
   ExternalLinkIcon,
   MoreHorizontalIcon,
   PencilIcon,
+  RotateCcwIcon,
   Trash2Icon,
 } from "@aqsha/ui/icons";
+import Link from "next/link";
 import { useState } from "react";
 import { PanelCardToolbar } from "@/components/layout/side-panel-frame";
 import { Button } from "@/components/ui/button";
@@ -26,6 +29,7 @@ import {
   useCitationRender,
   useCopyCitation,
   useDeleteCitation,
+  useResolveCitation,
   useUpdateCitation,
 } from "../api";
 import {
@@ -54,6 +58,7 @@ export function CitationDetailView({
   const copyCitation = useCopyCitation(workspaceId);
   const updateCitation = useUpdateCitation(workspaceId);
   const deleteCitation = useDeleteCitation(workspaceId);
+  const resolveCitation = useResolveCitation(workspaceId);
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -115,6 +120,15 @@ export function CitationDetailView({
                         <ExternalLinkIcon className="size-3.5" />
                         Buka {citation.doi ? "DOI" : "URL"}
                       </a>
+                    </DropdownMenuItem>
+                  ) : null}
+                  {citation.doi && citation.metadataStatus !== "verified" ? (
+                    <DropdownMenuItem
+                      disabled={resolveCitation.isPending}
+                      onSelect={() => resolveCitation.mutate(citation.id)}
+                    >
+                      <RotateCcwIcon className="size-3.5" />
+                      Perbarui dari DOI
                     </DropdownMenuItem>
                   ) : null}
                   {citation.metadataStatus !== "verified" ? (
@@ -226,6 +240,30 @@ export function CitationDetailView({
               <MetaRow label="Tag">
                 {citation.tags.length > 0 ? citation.tags.join(", ") : "—"}
               </MetaRow>
+              {citation.artifactId ? (
+                <MetaRow label="Artifact">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <Link
+                      href={`/app/workspaces/${workspaceId}/artifacts/${citation.artifactId}`}
+                      className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
+                    >
+                      <BookOpenIcon className="size-3.5" />
+                      Buka di reader
+                    </Link>
+                    {citation.deletedAt ? null : (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateCitation.mutate({ citationId: citation.id, artifactId: null })
+                        }
+                        className="text-[12px] font-medium text-muted-foreground transition-colors hover:text-destructive"
+                      >
+                        Lepas tautan
+                      </button>
+                    )}
+                  </span>
+                </MetaRow>
+              ) : null}
               <MetaRow label="Ditambahkan">
                 {new Date(citation.createdAt).toLocaleDateString("id-ID", {
                   day: "numeric",
