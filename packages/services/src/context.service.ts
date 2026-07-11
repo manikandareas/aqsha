@@ -1,6 +1,7 @@
-import type { ContextSelection } from "@aqsha/chat-core";
+import type { ContextCitation, ContextSelection } from "@aqsha/chat-core";
 import type { Db } from "@aqsha/db";
 import { ArtifactService } from "./artifact.service";
+import { CitationService } from "./citations/citation.service";
 import { ExploreService } from "./explore.service";
 import { FeedService } from "./feed.service";
 import { WorkspaceService } from "./workspace.service";
@@ -10,6 +11,8 @@ const MAX_WORKSPACES = 30;
 const MAX_ARTIFACTS = 8;
 /** Cap sumber Explore eksternal (paper publik / berita) yang disematkan per giliran. */
 const MAX_DISCOVERY = 4;
+/** Cap referensi Citation Library yang disematkan per giliran. */
+const MAX_CITATIONS = 8;
 /** Cap pilihan blok editor ("Tanya Astra") per giliran + clamp cuplikan teksnya. */
 const MAX_SELECTIONS = 4;
 const MAX_SELECTION_BLOCK_IDS = 50;
@@ -54,6 +57,7 @@ export const ContextService = {
       artifactIds: string[];
       paperKeys?: string[];
       feedItemIds?: string[];
+      workspaceCitations?: ContextCitation[];
       selections?: ContextSelectionInput[];
     },
   ): Promise<HydratedContext> {
@@ -61,6 +65,7 @@ export const ContextService = {
     const wantArtifacts = dedupe(input.artifactIds).slice(0, MAX_ARTIFACTS);
     const wantPapers = dedupe(input.paperKeys ?? []).slice(0, MAX_DISCOVERY);
     const wantFeedItems = dedupe(input.feedItemIds ?? []).slice(0, MAX_DISCOVERY);
+    const wantCitations = dedupeCitations(input.workspaceCitations ?? []).slice(0, MAX_CITATIONS);
     // Pilihan blok: dedup per artifact (pilihan terakhir menang), clamp jumlah + blockIds + excerpt.
     const wantSelections = dedupeSelections(input.selections ?? []).slice(0, MAX_SELECTIONS);
     // Gabung id artifact lane @mention dokumen + lane pilihan blok → satu fetch per id unik. Tanpa
@@ -103,6 +108,19 @@ export const ContextService = {
       ),
     ]);
 
+    // Referensi Citation Library: metadata terstruktur saja (bukan file/token). Ownership
+    // divalidasi per-item oleh `CitationService.get` (assertWorkspaceOwner) → gagal/foreign =
+    // drop senyap. Dijalankan setelah batch di atas (jumlahnya kecil, tak memblok resolver publik).
+    const citations = await Promise.all(
+      wantCitations.map((c) =>
+        CitationService.get(db, {
+          ownerUserId: input.ownerUserId,
+          workspaceId: c.workspaceId,
+          citationId: c.citationId,
+        }).catch(() => null),
+      ),
+    );
+
     const artifactById = new Map(artifactEntries);
     const validWorkspaces = workspaces.filter((w): w is NonNullable<typeof w> => w !== null);
     const validArtifacts = wantArtifacts
@@ -129,9 +147,33 @@ export const ContextService = {
           : null;
       })
       .filter((s): s is NoteSelection => s !== null);
+    // Referensi Citation Library: zip hasil fetch dgn `wantCitations` (urutan sama) untuk
+    // membawa workspaceId + citationId ke catatan — foreign/hilang sudah jadi null → drop.
+    const validCitations: NoteCitation[] = [];
+    wantCitations.forEach((want, i) => {
+      const detail = citations[i];
+      if (!detail) return;
+      validCitations.push({
+        citationId: detail.id,
+        workspaceId: want.workspaceId,
+        title: detail.title,
+        authors: detail.authors.map(authorDisplay).filter(Boolean),
+        ...(detail.publishedYear != null ? { year: detail.publishedYear } : {}),
+        ...(detail.venue ? { venue: detail.venue } : {}),
+        ...(detail.doi ? { doi: detail.doi } : {}),
+        ...(detail.url ? { url: detail.url } : {}),
+      });
+    });
 
     return {
-      note: buildNote(validWorkspaces, validArtifacts, validPapers, validFeedItems, validSelections),
+      note: buildNote(
+        validWorkspaces,
+        validArtifacts,
+        validPapers,
+        validFeedItems,
+        validSelections,
+        validCitations,
+      ),
       workspaceIds: validWorkspaces.map((w) => w.id),
       artifactIds: validArtifacts.map((a) => a._id),
       paperKeys: validPapers.map((p) => p.key),
@@ -140,8 +182,25 @@ export const ContextService = {
   },
 };
 
+function authorDisplay(a: { family?: string; given?: string; literal?: string }): string {
+  if (a.literal) return a.literal.trim();
+  return [a.given, a.family].filter(Boolean).join(" ").trim();
+}
+
 function dedupe(ids: string[]): string[] {
   return [...new Set(ids.filter((id) => id.length > 0))];
+}
+
+/** Dedup referensi Citation Library by workspaceId+citationId (buang yang kosong). */
+function dedupeCitations(items: ContextCitation[]): ContextCitation[] {
+  const byKey = new Map<string, ContextCitation>();
+  for (const item of items) {
+    const workspaceId = (item.workspaceId ?? "").trim();
+    const citationId = (item.citationId ?? "").trim();
+    if (!workspaceId || !citationId) continue;
+    byKey.set(`${workspaceId}:${citationId}`, { workspaceId, citationId });
+  }
+  return [...byKey.values()];
 }
 
 /** Dedup pilihan per artifact (yang terakhir menang) + clamp blockIds & excerpt sisi server. */
@@ -191,19 +250,32 @@ type NoteSelection = {
   excerpt: string;
 };
 
+type NoteCitation = {
+  citationId: string;
+  workspaceId: string;
+  title: string;
+  authors: string[];
+  year?: number;
+  venue?: string;
+  doi?: string;
+  url?: string;
+};
+
 function buildNote(
   workspaces: Array<{ id: string; name: string }>,
   artifacts: Array<{ _id: string; title: string; plainTextPreview: string | null }>,
   papers: NotePaper[],
   feedItems: NoteFeedItem[],
   selections: NoteSelection[],
+  citations: NoteCitation[],
 ): string {
   if (
     workspaces.length === 0 &&
     artifacts.length === 0 &&
     papers.length === 0 &&
     feedItems.length === 0 &&
-    selections.length === 0
+    selections.length === 0 &&
+    citations.length === 0
   ) {
     return "";
   }
@@ -267,6 +339,21 @@ function buildNote(
       const excerpt = s.excerpt.trim();
       lines.push(`- "${s.title}" (artifactId: ${s.artifactId}, blockIds: ${s.blockIds.join(", ")})`);
       if (excerpt) lines.push(`  Kutipan terpilih: ${excerpt}`);
+    }
+  }
+  if (citations.length > 0) {
+    lines.push(
+      "",
+      "Referensi tersemat dari Citation Library (metadata terstruktur; baca lengkap via `get_workspace_citation` dengan workspaceId + citationId; JANGAN mengarang field yang tak tercantum):",
+    );
+    for (const c of citations) {
+      const meta = [c.authors.slice(0, 3).join(", "), c.year ? String(c.year) : null, c.venue]
+        .filter(Boolean)
+        .join(" · ");
+      const ident = [c.doi ? `DOI ${c.doi}` : null, c.url].filter(Boolean).join(" · ");
+      lines.push(
+        `- "${c.title}"${meta ? ` (${meta})` : ""}${ident ? ` — ${ident}` : ""} (citationId: ${c.citationId}, workspaceId: ${c.workspaceId})`,
+      );
     }
   }
   lines.push("</system-reminder>");

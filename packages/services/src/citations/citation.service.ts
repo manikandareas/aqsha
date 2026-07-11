@@ -14,6 +14,7 @@ import type {
 import {
   ArtifactPaperMetadataRepo,
   decodeKeysetCursor,
+  DocumentCitationUsageRepo,
   throwAppError,
   WorkspaceCitationRepo,
   WorkspaceCitationSettingsRepo,
@@ -23,10 +24,12 @@ import { resolvePaper, type ResolvedPaper } from "../papers/resolve";
 import { WorkspaceService } from "../workspace.service";
 import {
   type CitationExportFormat,
+  type DocumentCluster,
   exportCitations,
   isCitationStyleId,
   renderBibliography,
   renderBibliographyEntries,
+  renderDocumentCitations,
 } from "./citation-format";
 import {
   buildCslFromManualInput,
@@ -67,6 +70,8 @@ export type CitationDetail = CitationListItem & {
   reviewedAt: number | null;
   createdAt: number;
   deletedAt: number | null;
+  /** Jumlah dokumen yang memakai citation ini (hanya diisi oleh `get`, Fase 3). */
+  usageCount?: number;
 };
 
 export type CitationSettingsView = {
@@ -321,7 +326,12 @@ export const CitationService = {
     const row = await requireCitation(db, input.ownerUserId, input.workspaceId, input.citationId, {
       allowDeleted: true,
     });
-    return toDetail(row);
+    const usageCount = await DocumentCitationUsageRepo.countDocumentsUsingCitation(
+      db,
+      input.ownerUserId,
+      row.id,
+    );
+    return { ...toDetail(row), usageCount };
   },
 
   async createManual(
@@ -942,6 +952,76 @@ export const CitationService = {
       entries: renderBibliographyEntries(items, styleId),
       bibliography: renderBibliography(items, styleId, settings.bibliographySort),
     };
+  },
+
+  /**
+   * Render sitasi in-text seluruh dokumen (per cluster, numbering konsisten) +
+   * bibliography used-in-document (Fase 3). `clusters` urut kemunculan di dokumen;
+   * id yang sudah dihapus/tak ada dilaporkan di `missingIds` supaya editor bisa
+   * menandai node missing alih-alih menghilangkannya diam-diam.
+   */
+  async renderDocument(
+    db: DbOrTx,
+    input: {
+      ownerUserId: string;
+      workspaceId: string;
+      styleId?: string;
+      clusters: Array<{
+        nodeId: string;
+        citationIds: string[];
+        locator?: string;
+        label?: string;
+        prefix?: string;
+        suffix?: string;
+      }>;
+    },
+  ): Promise<{
+    styleId: CitationStyleId;
+    clusters: Array<{ nodeId: string; text: string }>;
+    bibliography: Array<{ id: string; text: string }>;
+    missingIds: string[];
+  }> {
+    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
+    const settings = await this.getSettings(db, {
+      ownerUserId: input.ownerUserId,
+      workspaceId: input.workspaceId,
+    });
+    const styleId =
+      input.styleId && isCitationStyleId(input.styleId) ? input.styleId : settings.defaultStyleId;
+
+    const referencedIds = [...new Set(input.clusters.flatMap((c) => c.citationIds))];
+    const rows = referencedIds.length
+      ? (await WorkspaceCitationRepo.findByIds(db, input.ownerUserId, referencedIds)).filter(
+          (r) => r.workspaceId === input.workspaceId && !r.deletedAt,
+        )
+      : [];
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const items = rows.map((r) => ({ ...(r.cslJson as CslItem), id: r.id }));
+    const missingIds = referencedIds.filter((id) => !byId.has(id));
+
+    const docClusters: DocumentCluster[] = input.clusters.map((cluster) => {
+      const presentIds = cluster.citationIds.filter((id) => byId.has(id));
+      return {
+        nodeId: cluster.nodeId,
+        items: presentIds.map((id, idx) => {
+          // Locator/affix hanya bermakna untuk sitasi tunggal → item pertama cluster.
+          if (idx === 0 && (cluster.locator || cluster.prefix || cluster.suffix)) {
+            return {
+              id,
+              ...(cluster.locator
+                ? { locator: cluster.locator, label: cluster.label || "page" }
+                : {}),
+              ...(cluster.prefix ? { prefix: cluster.prefix } : {}),
+              ...(cluster.suffix ? { suffix: cluster.suffix } : {}),
+            };
+          }
+          return { id };
+        }),
+      };
+    });
+
+    const rendered = renderDocumentCitations(items, docClusters, styleId);
+    return { styleId, clusters: rendered.clusters, bibliography: rendered.bibliography, missingIds };
   },
 
   async getSettings(

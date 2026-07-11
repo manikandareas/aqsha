@@ -101,6 +101,13 @@
       "node": "./dist/context.service.js",
       "import": "./dist/context.service.js",
       "default": "./dist/context.service.js"
+    },
+    "./citations": {
+      "types": "./src/citations/index.ts",
+      "bun": "./src/citations/index.ts",
+      "node": "./dist/citations/index.js",
+      "import": "./dist/citations/index.js",
+      "default": "./dist/citations/index.js"
     }
   },
   "scripts": {

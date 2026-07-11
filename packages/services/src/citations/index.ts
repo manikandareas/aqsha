@@ -2,11 +2,20 @@ export {
   CITATION_EXPORT_FORMATS,
   CITATION_STYLES,
   type CitationExportFormat,
+  type DocumentCiteItem,
+  type DocumentCluster,
+  type DocumentRenderResult,
   exportCitations,
   isCitationStyleId,
   renderBibliography,
   renderBibliographyEntries,
+  renderDocumentCitations,
 } from "./citation-format";
+export {
+  CitationUsageService,
+  extractCitationClusters,
+  type ParsedCitationCluster,
+} from "./citation-usages";
 export {
   CitationImportService,
   type ImportCommitResult,

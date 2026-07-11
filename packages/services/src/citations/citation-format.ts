@@ -98,6 +98,85 @@ export function renderBibliography(
     .join("\n");
 }
 
+/** Satu cite-item citeproc dalam cluster in-text (id + locator/affix opsional). */
+export type DocumentCiteItem = {
+  id: string;
+  locator?: string;
+  label?: string;
+  prefix?: string;
+  suffix?: string;
+};
+
+/** Satu cluster sitasi in-text pada dokumen (mengikuti satu inline node BlockNote). */
+export type DocumentCluster = { nodeId: string; items: DocumentCiteItem[] };
+
+export type DocumentRenderResult = {
+  /** Marker in-text per cluster (keyed nodeId, urutan = urutan input dokumen). */
+  clusters: Array<{ nodeId: string; text: string }>;
+  /** Bibliography used-in-document, terurut per style; keyed citation id. */
+  bibliography: Array<{ id: string; text: string }>;
+};
+
+type CiteprocCitation = {
+  citationItems: DocumentCiteItem[];
+  properties: { noteIndex: number };
+};
+
+type CiteprocEngine = {
+  rebuildProcessorState: (
+    citations: CiteprocCitation[],
+    format: string,
+    uncited?: unknown[],
+  ) => Array<[string, number, string]>;
+  makeBibliography: () => [{ entry_ids: string[][] }, string[]];
+};
+
+type CslEngineConfig = {
+  engine: (data: CslItem[], style: string, locale: string, format: string) => CiteprocEngine;
+};
+
+/**
+ * Render sitasi in-text seluruh dokumen + bibliography used-in-document dalam satu
+ * pass citeproc (numbering IEEE/Vancouver konsisten karena diproses berurutan).
+ * `clusters` HARUS urut kemunculan di dokumen; item id yang tak ada di `items`
+ * harus sudah difilter oleh pemanggil (retrieveItem citeproc melempar bila hilang).
+ */
+export function renderDocumentCitations(
+  items: CslItem[],
+  clusters: DocumentCluster[],
+  styleId: CitationStyleId,
+): DocumentRenderResult {
+  ensureStylesRegistered();
+  const emptyClusters = clusters.map((c) => ({ nodeId: c.nodeId, text: "" }));
+  if (items.length === 0) return { clusters: emptyClusters, bibliography: [] };
+
+  const cfg = plugins.config.get("@csl") as CslEngineConfig;
+  const engine = cfg.engine(withIds(items), styleId, "en-US", "text");
+
+  // Cluster kosong (semua id-nya missing) tak boleh dikirim ke citeproc; simpan
+  // pemetaan index asli supaya teks tetap dikembalikan (string kosong) per nodeId.
+  const renderable = clusters
+    .map((cluster, index) => ({ cluster, index }))
+    .filter((x) => x.cluster.items.length > 0);
+  const state = engine.rebuildProcessorState(
+    renderable.map((x) => ({ citationItems: x.cluster.items, properties: { noteIndex: 0 } })),
+    "text",
+  );
+  const textByIndex = new Map<number, string>();
+  renderable.forEach((x, k) => textByIndex.set(x.index, (state[k]?.[2] ?? "").trim()));
+
+  const [meta, entries] = engine.makeBibliography();
+  const bibliography = entries.map((text, i) => ({
+    id: meta.entry_ids[i]?.[0] ?? `item-${i}`,
+    text: text.trim(),
+  }));
+
+  return {
+    clusters: clusters.map((c, i) => ({ nodeId: c.nodeId, text: textByIndex.get(i) ?? "" })),
+    bibliography,
+  };
+}
+
 /** Export koleksi ke format interchange. Return `{ content, mimeType, extension }`. */
 export function exportCitations(
   items: CslItem[],
