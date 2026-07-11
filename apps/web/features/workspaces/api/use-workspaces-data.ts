@@ -116,6 +116,7 @@ function flattenArtifacts(
           indexingFailureReason?: string | null;
           plainTextPreview?: string | null;
           status?: string | null;
+          detectedDocumentKind?: string | null;
         }>;
       }>
     | undefined,
@@ -128,6 +129,7 @@ function flattenArtifacts(
       artifactType: artifact.artifactType,
       artifactFamily: artifact.artifactFamily ?? undefined,
       source: artifact.source ?? undefined,
+      detectedDocumentKind: artifact.detectedDocumentKind ?? undefined,
       workspaceId: artifact.workspaceId ?? "",
       folderId: artifact.folderId ?? undefined,
       createdAt: artifact.createdAt,

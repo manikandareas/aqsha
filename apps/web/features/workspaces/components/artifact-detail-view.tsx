@@ -18,6 +18,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { toast } from "sonner";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { AppLoadingOverlay } from "@/components/app-loading-overlay";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,8 @@ import {
   triggerArtifactDownload,
 } from "@/lib/artifact-download";
 import { useArtifactRender } from "@/features/artifacts/api";
+import { useCreateCitationFromArtifact } from "@/features/citations/api";
+import { useWorkspaceCitationsEnabled } from "@/features/citations/feature";
 import { PanelCardToolbar, PanelOpenButton } from "@/components/layout/side-panel-frame";
 import { PanelTitleLabel } from "@/components/panel-title-dropdown-trigger";
 import { cn } from "@/lib/utils";
@@ -119,6 +122,8 @@ export function ArtifactDetailView({
   const sidebarArtifact = detail?.artifact as ArtifactSidebarRecord | undefined;
   const detailIsMarkdown = detail?.artifact?.artifactType === "markdown";
   const resolvedWorkspaceId = workspaceIdProp ?? detail?.artifact?.workspaceId ?? "";
+  const citationsEnabled = useWorkspaceCitationsEnabled();
+  const addToCitations = useCreateCitationFromArtifact(resolvedWorkspaceId);
   const renderPayloadQuery = useArtifactRender(artifactId);
   const activeRenderPayload = (renderPayloadQuery.data ?? data.renderPayload ?? null) as ArtifactRenderPayload | null;
   const activeContentError = renderPayloadQuery.error
@@ -159,12 +164,29 @@ export function ArtifactDetailView({
     (workspace) => workspace._id === resolvedWorkspaceId,
   )?.name;
 
+  // Fase 2 bridge: "Tambahkan ke Sitasi" hanya untuk paper (page variant) saat
+  // Citation Manager aktif — createFromArtifact membaca artifact_paper_metadata.
+  const canAddToCitations =
+    variant === "page" &&
+    citationsEnabled &&
+    Boolean(resolvedWorkspaceId) &&
+    detail?.artifact?.detectedDocumentKind === "scholarly_paper";
+  const handleAddToCitations = () =>
+    addToCitations.mutate(
+      { artifactId },
+      {
+        onSuccess: (result) =>
+          toast.success(result.created ? "Ditambahkan ke Sitasi" : "Sudah ada di Sitasi"),
+      },
+    );
+
   const headerActions =
     ready && detail && activeRenderPayload ? (
       <ArtifactHeaderActions
         payload={activeRenderPayload}
         title={detail.artifact.title}
         onDelete={() => setDeleteOpen(true)}
+        onAddToCitations={canAddToCitations ? handleAddToCitations : undefined}
       />
     ) : null;
 

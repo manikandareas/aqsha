@@ -133,6 +133,7 @@ function WorkspaceLibraryMain({
   onToggleLeftSidebar: () => void;
   onAfterArchive: () => void;
 }) {
+  const panel = useWorkspacePanel();
   const dialogState = useWorkspaceLibraryDialogState();
   const titleById = (() => {
     const map = new Map<string, string>();
@@ -162,6 +163,7 @@ function WorkspaceLibraryMain({
       onToggleChatPanel={onOpenPanel}
       showLeftSidebarTrigger={showLeftSidebarTrigger}
       onToggleLeftSidebar={onToggleLeftSidebar}
+      onCitationAdded={(citationId) => panel.openCitationDetail(citationId)}
     />
   );
 }

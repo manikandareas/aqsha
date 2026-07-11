@@ -42,6 +42,8 @@ type ArtifactItemHandlers = {
   onDeleteArtifact: (artifact: WorkspaceArtifact) => void;
   onMoveArtifact: (artifactId: string, target: string) => Promise<void>;
   onMoveArtifactToWorkspace: (artifactId: string, targetWorkspaceId: string) => Promise<void>;
+  /** Fase 2 bridge — hanya diteruskan untuk paper saat Citation Manager aktif. */
+  onAddToCitations?: (artifact: WorkspaceArtifact) => void;
 };
 
 export function WorkspaceLibraryGrid({
@@ -63,6 +65,7 @@ export function WorkspaceLibraryGrid({
   onDeleteArtifact,
   onMoveArtifact,
   onMoveArtifactToWorkspace,
+  onAddToCitations,
 }: {
   folders: FolderSummary[];
   artifacts: WorkspaceArtifact[];
@@ -82,6 +85,7 @@ export function WorkspaceLibraryGrid({
   onDeleteArtifact: (artifact: WorkspaceArtifact) => void;
   onMoveArtifact: (artifactId: string, target: string) => Promise<void>;
   onMoveArtifactToWorkspace: (artifactId: string, targetWorkspaceId: string) => Promise<void>;
+  onAddToCitations?: (artifact: WorkspaceArtifact) => void;
 }) {
   // Grid tunggal: folder + semua artifak folder-scoped (pustaka user maupun
   // output agent). Kartu agent dibedakan lewat badge/aksen di kartunya sendiri.
@@ -102,6 +106,7 @@ export function WorkspaceLibraryGrid({
     onDeleteArtifact,
     onMoveArtifact,
     onMoveArtifactToWorkspace,
+    onAddToCitations,
   };
 
   return (
@@ -153,6 +158,7 @@ export function ArtifactSection({
   onDeleteArtifact,
   onMoveArtifact,
   onMoveArtifactToWorkspace,
+  onAddToCitations,
 }: ArtifactItemHandlers & {
   title?: string;
   artifacts: WorkspaceArtifact[];
@@ -281,6 +287,11 @@ export function ArtifactSection({
               onMove={(target) => onMoveArtifact(artifact._id, target)}
               onMoveToWorkspace={(targetWorkspaceId) =>
                 onMoveArtifactToWorkspace(artifact._id, targetWorkspaceId)
+              }
+              onAddToCitations={
+                onAddToCitations && artifact.detectedDocumentKind === "scholarly_paper"
+                  ? () => onAddToCitations(artifact)
+                  : undefined
               }
               workspaces={workspaces}
             />
@@ -424,6 +435,7 @@ export function ArtifactTile({
   onDelete,
   onMove,
   onMoveToWorkspace,
+  onAddToCitations,
   workspaces,
 }: {
   refCallback: (element: HTMLDivElement | null) => void;
@@ -439,6 +451,7 @@ export function ArtifactTile({
   onDelete: () => void;
   onMove: (target: string) => void;
   onMoveToWorkspace: (targetWorkspaceId: string) => void;
+  onAddToCitations?: () => void;
 }) {
   const { selectLibraryItem, openLibraryItem } = useLibraryItemClick({
     onSingleClick: onSelect,
@@ -500,6 +513,7 @@ export function ArtifactTile({
         onDelete={onDelete}
         onMove={onMove}
         onMoveToWorkspace={onMoveToWorkspace}
+        onAddToCitations={onAddToCitations}
       />
     </ContextMenu>
   );
