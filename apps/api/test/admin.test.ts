@@ -13,7 +13,8 @@ const suffix = Math.floor(Math.random() * 1e9);
 const ADMIN = `feedadmin_${suffix}`;
 const PLAIN = `feedplain_${suffix}`;
 
-// resolvePlanKey membaca env saat request → set admin allowlist sebelum app dipakai.
+// resolveAdminOverride cek env bootstrap saat request → set allowlist sebelum app dipakai
+// (jalur non-admin jatuh ke users.role via DB).
 process.env.AQSHA_ADMIN_OWNER_USER_IDS = `${process.env.AQSHA_ADMIN_OWNER_USER_IDS ?? ""},${ADMIN}`;
 
 const { app } = await import("../src/index");

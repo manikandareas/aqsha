@@ -38,6 +38,7 @@ export function StatsTable({ block }: { block: StatsTableBlock }) {
                 {table.columns.map((col, i) => (
                   <th
                     key={`${i}-${col}`}
+                    scope="col"
                     className={`px-3 py-2 font-semibold ${i === 0 ? "" : "text-right tabular-nums"}`}
                   >
                     {col}

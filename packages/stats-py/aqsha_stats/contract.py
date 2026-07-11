@@ -12,6 +12,17 @@ VERDICT_LOLOS = "lolos"
 VERDICT_TIDAK_LOLOS = "tidak_lolos"
 VERDICT_PERHATIAN = "perhatian"
 
+_VERDICTS = (VERDICT_LOLOS, VERDICT_TIDAK_LOLOS, VERDICT_PERHATIAN)
+
+
+def stats_seed() -> int:
+    """Shared RNG seed (env ``AQSHA_STATS_SEED``, default 42) — echoed in ``meta.seed``.
+
+    Single source so every analysis that needs randomness (bootstrap CI, etc.)
+    is reproducible against the seed reported in the result.
+    """
+    return int(os.environ.get("AQSHA_STATS_SEED", "42"))
+
 
 class AnalysisError(Exception):
     """Structured user-facing analysis error (code + Indonesian message)."""
@@ -72,7 +83,10 @@ def decision(
     verdict: str,
     interpretation: str,
 ) -> dict:
-    assert verdict in (VERDICT_LOLOS, VERDICT_TIDAK_LOLOS, VERDICT_PERHATIAN)
+    # Explicit validation (not `assert`, which `python -O` strips) — an invalid verdict
+    # must never reach a persisted result.
+    if verdict not in _VERDICTS:
+        raise ValueError(f"verdict tidak valid: {verdict!r}; harus salah satu dari {_VERDICTS}")
     return {
         "id": decision_id,
         "label": label,
@@ -110,7 +124,7 @@ def build_result(
 ) -> dict:
     meta = {
         "n": int(n),
-        "seed": int(os.environ.get("AQSHA_STATS_SEED", "42")),
+        "seed": stats_seed(),
         "packages": _package_versions(),
         "warnings": list(warnings or []),
     }

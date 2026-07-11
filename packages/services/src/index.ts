@@ -55,7 +55,6 @@ export {
   PUBLIC_PLAN_KEYS,
   type PublicPlanKey,
   requiredPlanForFeature,
-  resolvePlanKey,
   UNLIMITED,
 } from "./plan";
 
@@ -111,6 +110,9 @@ export {
   type AnalysisCatalogEntry,
   analysisCatalogEntry,
   type AnalysisChart,
+  type AnalysisExportFile,
+  type AnalysisExportFormat,
+  type AnalysisExportResult,
   type AnalysisId,
   type AnalysisRunResult,
   AnalysisService,

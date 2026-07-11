@@ -62,7 +62,8 @@ export function SourcesListPanel({
   const lookups = useThreadPanelData();
   // Aggregate = union of the per-message lists (each already deduped), deduped again
   // across messages. `messageSources` preserves message order, so the list reads
-  // top-to-bottom like the thread.
+  // top-to-bottom like the thread. React Compiler (reactCompiler: true) already caches
+  // this flatten+dedupe keyed on `lookups`/`messageId`, so no manual useMemo is needed.
   const sources = messageId
     ? (lookups?.messageSources.get(messageId) ?? [])
     : dedupeCards([...(lookups?.messageSources.values() ?? [])].flat());

@@ -36,7 +36,10 @@ def run(df: pd.DataFrame, args: dict) -> dict:
         ],
     )
     try:
-        w_stat, p = stats.wilcoxon(a, b)
+        # `method="approx"` = normal approximation (SPSS parity): the reported p-value then
+        # matches the Z below and the "Asymp. Sig." label. Without it scipy auto-picks the
+        # EXACT method for small n, whose p-value would contradict an "Asymp." label.
+        w_stat, p = stats.wilcoxon(a, b, method="approx")
     except ValueError as exc:
         from ..contract import AnalysisError
 
