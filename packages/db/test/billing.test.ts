@@ -21,7 +21,6 @@ async function cleanup() {
   await client`delete from usage_daily_rollup where owner_user_id = ${OWNER}`;
   await client`delete from billing_credit_periods where owner_user_id = ${OWNER}`;
   await client`delete from billing_subscriptions where owner_user_id = ${OWNER}`;
-  await client`delete from admin_entitlements where owner_user_id = ${OWNER}`;
   await client`delete from users where owner_user_id = ${OWNER}`;
 }
 
@@ -266,15 +265,3 @@ describe("BillingRepo — rollup increment (jsonb featureCounts)", () => {
   });
 });
 
-describe("BillingRepo — admin entitlement", () => {
-  itest("upsert + find", async () => {
-    await BillingRepo.upsertAdminEntitlement(db, {
-      ownerUserId: OWNER,
-      email: "admin@aqsha.test",
-      enabled: true,
-    });
-    const found = await BillingRepo.findAdminEntitlement(db, OWNER);
-    expect(found?.enabled).toBe(true);
-    expect(found?.email).toBe("admin@aqsha.test");
-  });
-});

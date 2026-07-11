@@ -34,6 +34,11 @@ x-backend-env: &backend-env
   UNPAYWALL_EMAIL: ${UNPAYWALL_EMAIL:-}
   AQSHA_CONTACT_EMAIL: ${AQSHA_CONTACT_EMAIL:-}
   SEMANTIC_SCHOLAR_API_KEY: ${SEMANTIC_SCHOLAR_API_KEY:-}
+  # Admin allowlist (billing override) — MUST reach every process that runs @aqsha/services
+  # billing (api, worker, AND the agent's billing pre-check/debit processors). Keeping it here
+  # instead of api-env prevents split-brain: api saying "admin" while the agent bills as free.
+  AQSHA_ADMIN_OWNER_USER_IDS: ${AQSHA_ADMIN_OWNER_USER_IDS:-}
+  AQSHA_ADMIN_EMAILS: ${AQSHA_ADMIN_EMAILS:-}
 
 services:
   web:
@@ -83,8 +88,6 @@ services:
       # OCR for scanned PDFs & images; empty key = extraction disabled with a clear reason.
       MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
       MISTRAL_OCR_MODEL: ${MISTRAL_OCR_MODEL:-mistral-ocr-latest}
-      AQSHA_ADMIN_OWNER_USER_IDS: ${AQSHA_ADMIN_OWNER_USER_IDS:-}
-      AQSHA_ADMIN_EMAILS: ${AQSHA_ADMIN_EMAILS:-}
     expose:
       - "3001"
     depends_on:

@@ -9,26 +9,26 @@ import {
 import type { EntitlementSnapshot } from "./types";
 
 /**
- * Override admin (port V1 `getAdminBillingOverride`): env allowlist (owner-id /
- * email) → admin_entitlements table (enabled && email ada di allowlist) → email
- * dari users table. Di V2 `ownerUserId == clerkUserId == sub`, jadi owner-id env
- * mencakup keduanya.
+ * Override admin — source of truth = `users.role` (satu DB dibaca semua proses:
+ * api/worker/agent), dikelola dari Clerk Dashboard `publicMetadata.role` dan
+ * disinkronkan webhook `user.*`. Env allowlist `AQSHA_ADMIN_*` tinggal
+ * bootstrap/break-glass (admin pertama / DB belum ter-seed) — BUKAN jalur utama;
+ * insiden 2026-07-11: allowlist per-proses drift antar container (api kenal admin,
+ * agent tidak) → user admin diblok `subscription_required`.
  */
 export async function resolveAdminOverride(
   db: DbOrTx,
   ownerUserId: string,
   ownerEmail?: string | null,
 ): Promise<{ isAdmin: boolean; email: string | null }> {
+  // Bootstrap env (break-glass) — tanpa query DB.
   if (isAdminOwnerUserId(ownerUserId)) return { isAdmin: true, email: ownerEmail ?? null };
   if (isAdminEmail(ownerEmail)) return { isAdmin: true, email: ownerEmail ?? null };
 
-  const mirrored = await BillingRepo.findAdminEntitlement(db, ownerUserId);
-  if (mirrored?.enabled && isAdminEmail(mirrored.email)) {
-    return { isAdmin: true, email: mirrored.email };
-  }
-
-  // Fallback email dari users table bila tak dipassing caller.
-  const email = ownerEmail ?? (await UserRepo.findByOwnerUserId(db, ownerUserId))?.email ?? null;
+  const user = await UserRepo.findByOwnerUserId(db, ownerUserId);
+  const email = ownerEmail ?? user?.email ?? null;
+  if (user?.role === "admin") return { isAdmin: true, email };
+  // Email fallback tetap lewat env bootstrap (caller tanpa email di context).
   return { isAdmin: isAdminEmail(email), email };
 }
 
@@ -76,9 +76,9 @@ export async function getEntitlementSnapshot(
 }
 
 /**
- * Plan efektif owner (db-aware) — admin override + subscription mirror.
- * **Ganti** `resolvePlanKey` (env-only) di capacity check Workspace/Artifact (P5):
- * user berbayar dapat cap lebih tinggi, admin unlimited.
+ * Plan efektif owner (db-aware) — admin override (users.role) + subscription mirror.
+ * Dipakai capacity check Workspace/Artifact (P5): user berbayar dapat cap lebih
+ * tinggi, admin unlimited.
  */
 export async function resolveEffectivePlanKey(
   db: DbOrTx,

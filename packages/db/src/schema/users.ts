@@ -9,6 +9,9 @@ import { bigint, boolean, check, index, pgTable, text } from "drizzle-orm/pg-cor
  * - `clerkUserId` (unique) == Clerk `payload.sub` (dipakai untuk linking webhook).
  * - Profil (`email`/`name`/`image`/`emailVerified`) diisi oleh webhook Clerk
  *   (`user.created`/`user.updated`) — token sesi default tidak membawanya.
+ * - `role` = source of truth admin lintas-proses (api/worker/agent). Dikelola dari
+ *   Clerk Dashboard (`publicMetadata.role`) → disinkronkan webhook. Env `AQSHA_ADMIN_*`
+ *   tinggal bootstrap/break-glass. Menggantikan tabel admin_entitlements (dihapus).
  * - timestamp epoch-ms (`bigint`) supaya nilai di kontrak identik dengan V1.
  *
  * State-machine deletion penuh (deletedAt/deletionStatus/…) landing P9; di P1 cukup
@@ -29,12 +32,14 @@ export const users = pgTable(
     deletionCompletedAt: bigint("deletion_completed_at", { mode: "number" }),
     // P9: window 'deleting' + state 'failed' (retry/support); 'deleted' praktis = baris hilang.
     deletionStatus: text("deletion_status").notNull().default("active"),
+    role: text("role").notNull().default("user"),
   },
   (t) => [
     check(
       "users_deletion_status_check",
       sql`${t.deletionStatus} in ('active', 'deleting', 'deleted', 'failed')`,
     ),
+    check("users_role_check", sql`${t.role} in ('user', 'admin')`),
     // Atribusi webhook Mayar by-email (customerEmail → owner). Non-unique: email nullable.
     index("users_by_email").on(t.email),
   ],

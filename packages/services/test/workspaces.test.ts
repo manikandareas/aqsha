@@ -13,8 +13,8 @@ import {
   UserRepo,
   WorkspaceRepo,
 } from "@aqsha/db";
+import { resolveAdminOverride } from "../src/billing/snapshot";
 import { FolderService } from "../src/folder.service";
-import { resolvePlanKey } from "../src/plan";
 import { WorkspaceService } from "../src/workspace.service";
 
 // fakeDb.transaction(fn) menjalankan fn dengan tx=fakeDb; repo di-spy jadi tx tak dipakai.
@@ -81,7 +81,6 @@ beforeEach(() => {
   spyOn(ArtifactEmbeddingRepo, "setWorkspaceByArtifactIds").mockResolvedValue(undefined);
   // P5: capacity check kini resolveEffectivePlanKey (db-aware) — stub billing reads
   // ke "tanpa override/subscription" → plan jatuh ke env-admin allowlist atau 'free'.
-  spyOn(BillingRepo, "findAdminEntitlement").mockResolvedValue(null);
   spyOn(BillingRepo, "findLatestSubscriptionByOwner").mockResolvedValue(null);
   spyOn(UserRepo, "findByOwnerUserId").mockResolvedValue(null);
   delete process.env.AQSHA_ADMIN_OWNER_USER_IDS;
@@ -273,19 +272,49 @@ describe("FolderService", () => {
   });
 });
 
-describe("resolvePlanKey — admin allowlist", () => {
-  test("owner id in allowlist → admin", () => {
+describe("resolveAdminOverride — users.role + env bootstrap", () => {
+  const makeUser = (over: Record<string, unknown> = {}) =>
+    ({
+      ownerUserId: OWNER,
+      clerkUserId: OWNER,
+      email: "user@aqsha.test",
+      role: "user",
+      ...over,
+    }) as never;
+
+  test("users.role = admin → admin (tanpa env)", async () => {
+    (UserRepo.findByOwnerUserId as ReturnType<typeof spyOn>).mockResolvedValue(
+      makeUser({ role: "admin" }),
+    );
+    const r = await resolveAdminOverride(fakeDb, OWNER);
+    expect(r.isAdmin).toBe(true);
+    expect(r.email).toBe("user@aqsha.test");
+  });
+
+  test("users.role = user, tanpa env → bukan admin", async () => {
+    (UserRepo.findByOwnerUserId as ReturnType<typeof spyOn>).mockResolvedValue(makeUser());
+    const r = await resolveAdminOverride(fakeDb, OWNER, "a@b.com");
+    expect(r.isAdmin).toBe(false);
+  });
+
+  test("bootstrap env: owner id di allowlist → admin tanpa query users", async () => {
     process.env.AQSHA_ADMIN_OWNER_USER_IDS = "x, u1 ,y";
-    expect(resolvePlanKey({ ownerUserId: "u1" })).toBe("admin");
+    const r = await resolveAdminOverride(fakeDb, OWNER);
+    expect(r.isAdmin).toBe(true);
+    expect(UserRepo.findByOwnerUserId).not.toHaveBeenCalled();
   });
 
-  test("email in allowlist (case-insensitive) → admin", () => {
+  test("bootstrap env: email allowlist case-insensitive → admin", async () => {
     process.env.AQSHA_ADMIN_EMAILS = "Boss@Aqsha.app";
-    expect(resolvePlanKey({ ownerUserId: "u1", email: "boss@aqsha.app" })).toBe("admin");
+    const r = await resolveAdminOverride(fakeDb, OWNER, "boss@aqsha.app");
+    expect(r.isAdmin).toBe(true);
   });
 
-  test("no match → free", () => {
-    expect(resolvePlanKey({ ownerUserId: "u1", email: "a@b.com" })).toBe("free");
+  test("email hanya di users table + env allowlist → admin (fallback email)", async () => {
+    process.env.AQSHA_ADMIN_EMAILS = "user@aqsha.test";
+    (UserRepo.findByOwnerUserId as ReturnType<typeof spyOn>).mockResolvedValue(makeUser());
+    const r = await resolveAdminOverride(fakeDb, OWNER);
+    expect(r.isAdmin).toBe(true);
   });
 });
 

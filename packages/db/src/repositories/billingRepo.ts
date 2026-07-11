@@ -1,9 +1,5 @@
 import { and, desc, eq, gte, lt, lte, sql } from "drizzle-orm";
 import {
-  type AdminEntitlement,
-  adminEntitlements,
-} from "../schema/adminEntitlements";
-import {
   type BillingCreditPeriod,
   type NewBillingCreditPeriod,
   billingCreditPeriods,
@@ -90,31 +86,6 @@ export const BillingRepo = {
   /** Simpan webhook tak-ter-atribusi (email tak cocok user) untuk rekonsiliasi manual. */
   async insertPendingWebhook(db: DbOrTx, row: NewBillingPendingWebhook): Promise<void> {
     await db.insert(billingPendingWebhooks).values(row);
-  },
-
-  // ── admin entitlements ─────────────────────────────────────────────────────
-  async findAdminEntitlement(db: DbOrTx, ownerUserId: string): Promise<AdminEntitlement | null> {
-    const rows = await db
-      .select()
-      .from(adminEntitlements)
-      .where(eq(adminEntitlements.ownerUserId, ownerUserId))
-      .limit(1);
-    return rows[0] ?? null;
-  },
-
-  /** Upsert override admin (admin seeding, P9). */
-  async upsertAdminEntitlement(
-    db: DbOrTx,
-    row: { ownerUserId: string; email: string | null; enabled: boolean },
-  ): Promise<void> {
-    const now = Date.now();
-    await db
-      .insert(adminEntitlements)
-      .values({ ...row, createdAt: now, updatedAt: now })
-      .onConflictDoUpdate({
-        target: adminEntitlements.ownerUserId,
-        set: { email: row.email, enabled: row.enabled, updatedAt: now },
-      });
   },
 
   // ── credit periods ──────────────────────────────────────────────────────────
