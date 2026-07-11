@@ -73,11 +73,14 @@ export function CitationsPanel({
   citationId,
   onOpenCitation,
   onBackToList,
+  onAddToChat,
 }: {
   workspaceId: string;
   citationId: string | null;
   onOpenCitation: (citationId: string) => void;
   onBackToList: () => void;
+  /** Fase 4 — sematkan referensi sebagai konteks chip composer chat (opsional). */
+  onAddToChat?: (citation: { id: string; title: string }) => void;
 }) {
   if (citationId) {
     return (
@@ -85,6 +88,7 @@ export function CitationsPanel({
         workspaceId={workspaceId}
         citationId={citationId}
         onBack={onBackToList}
+        onAddToChat={onAddToChat}
       />
     );
   }

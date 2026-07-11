@@ -169,6 +169,10 @@ export function createContextChipElement(ref: ContextRef) {
     case "news":
       span.dataset.feedItemId = ref.feedItemId;
       break;
+    case "workspace-citation":
+      span.dataset.workspaceId = ref.workspaceId;
+      span.dataset.citationId = ref.citationId;
+      break;
     case "artifact-selection":
       // blok editor terpilih (pisahkan blockIds dengan koma; excerpt utuh).
       span.dataset.artifactId = ref.artifactId;
@@ -222,6 +226,13 @@ export function extractContextRefsFromEditor(root: HTMLElement): ContextRef[] {
       const feedItemId = chip.dataset.feedItemId;
       if (!feedItemId) return;
       push({ kind: "news", feedItemId, label });
+      return;
+    }
+    if (kind === "workspace-citation") {
+      const workspaceId = chip.dataset.workspaceId;
+      const citationId = chip.dataset.citationId;
+      if (!workspaceId || !citationId) return;
+      push({ kind: "workspace-citation", workspaceId, citationId, label });
       return;
     }
     if (kind === "artifact-selection") {

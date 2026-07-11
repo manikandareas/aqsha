@@ -15,12 +15,14 @@ const ClientBlockNoteDocumentEditor = dynamic(
 
 export function BlockNoteEditorLoader({
   artifactId,
+  workspaceId,
   initialBlocksJson,
   initialMarkdown,
   onContentChange,
   onAskAstraAboutSelection,
 }: {
   artifactId: string;
+  workspaceId: string;
   initialBlocksJson: string;
   initialMarkdown?: string;
   onContentChange: (content: DocumentEditorContent) => void;
@@ -29,6 +31,7 @@ export function BlockNoteEditorLoader({
   return (
     <ClientBlockNoteDocumentEditor
       artifactId={artifactId}
+      workspaceId={workspaceId}
       initialBlocksJson={initialBlocksJson}
       initialMarkdown={initialMarkdown}
       onContentChange={onContentChange}

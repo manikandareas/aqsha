@@ -14,6 +14,8 @@ import type {
   CitationSettings,
   CitationStyleId,
   CreateFromArtifactResult,
+  DocumentCitationCluster,
+  DocumentRenderResult,
   ImportCommitResult,
   ImportDuplicatePolicy,
   ImportPreviewResult,
@@ -309,6 +311,34 @@ export function useCitationRender(
           citationIds: params.ids,
         }),
       ) as CitationRenderResult,
+  });
+}
+
+/**
+ * Render sitasi in-text seluruh dokumen + bibliography used-in-document (Fase 3).
+ * Keyed pada signature stabil dari `{ styleId, clusters }` supaya hanya refetch saat
+ * himpunan sitasi/locator berubah, bukan tiap keystroke. `placeholderData` menahan
+ * hasil lama agar marker tak berkedip saat mengetik.
+ */
+export function useRenderDocumentCitations(
+  workspaceId: string,
+  clusters: DocumentCitationCluster[],
+  styleId: CitationStyleId | null,
+  enabled = true,
+) {
+  const api = useApi();
+  const signature = JSON.stringify({ styleId, clusters });
+  return useQuery({
+    queryKey: queryKeys.citations.renderDocument(workspaceId, signature),
+    enabled: enabled && Boolean(workspaceId),
+    placeholderData: (prev) => prev,
+    queryFn: async () =>
+      unwrap(
+        await api.workspaces({ id: workspaceId }).citations["render-document"].post({
+          ...(styleId ? { styleId } : {}),
+          clusters,
+        }),
+      ) as DocumentRenderResult,
   });
 }
 

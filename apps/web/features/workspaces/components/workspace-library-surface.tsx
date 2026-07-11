@@ -11,7 +11,6 @@ import {
 import { toast } from "sonner";
 import { toArtifactId, toWorkspaceFolderId, toWorkspaceId } from "@/lib/convex-refs";
 import { useCreateCitationFromArtifact } from "@/features/citations/api";
-import { useWorkspaceCitationsEnabled } from "@/features/citations/feature";
 import type { WorkspaceLibraryData } from "../api/use-workspaces-data";
 import type { useWorkspaceLibraryDialogState } from "../hooks/use-workspace-library-dialogs";
 import {
@@ -101,7 +100,6 @@ export function WorkspaceLibrarySurface({
   onCitationAdded?: (citationId: string) => void;
 }) {
   const router = useRouter();
-  const citationsEnabled = useWorkspaceCitationsEnabled();
   const addToCitations = useCreateCitationFromArtifact(workspaceId);
   const [libraryControls, setLibraryControls] = useQueryStates(
     workspaceLibraryQueryParsers,
@@ -167,21 +165,18 @@ export function WorkspaceLibrarySurface({
         onOpenArtifact={(artifactId) =>
           router.push(`/app/workspaces/${workspaceId}/artifacts/${artifactId}`)
         }
-        onAddToCitations={
-          citationsEnabled
-            ? (artifact) =>
-                addToCitations.mutate(
-                  { artifactId: artifact._id },
-                  {
-                    onSuccess: (result) => {
-                      toast.success(
-                        result.created ? "Ditambahkan ke Sitasi" : "Sudah ada di Sitasi",
-                      );
-                      onCitationAdded?.(result.citation.id);
-                    },
-                  },
-                )
-            : undefined
+        onAddToCitations={(artifact) =>
+          addToCitations.mutate(
+            { artifactId: artifact._id },
+            {
+              onSuccess: (result) => {
+                toast.success(
+                  result.created ? "Ditambahkan ke Sitasi" : "Sudah ada di Sitasi",
+                );
+                onCitationAdded?.(result.citation.id);
+              },
+            },
+          )
         }
         onMoveArtifact={async (artifactId, target) => {
           await libraryData.moveArtifact({

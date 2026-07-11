@@ -6,6 +6,7 @@ import {
   CheckCircle2Icon,
   CopyIcon,
   ExternalLinkIcon,
+  MessageSquarePlusIcon,
   MoreHorizontalIcon,
   PencilIcon,
   RotateCcwIcon,
@@ -48,10 +49,13 @@ export function CitationDetailView({
   workspaceId,
   citationId,
   onBack,
+  onAddToChat,
 }: {
   workspaceId: string;
   citationId: string;
   onBack: () => void;
+  /** Fase 4 — sematkan referensi ini sebagai konteks chip di composer chat Astra. */
+  onAddToChat?: (citation: { id: string; title: string }) => void;
 }) {
   const detail = useCitationDetail(workspaceId, citationId);
   const render = useCitationRender(workspaceId, { styleId: null, ids: [citationId] });
@@ -110,6 +114,14 @@ export function CitationDetailView({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  {onAddToChat ? (
+                    <DropdownMenuItem
+                      onSelect={() => onAddToChat({ id: citation.id, title: citation.title })}
+                    >
+                      <MessageSquarePlusIcon className="size-3.5" />
+                      Tambahkan ke chat
+                    </DropdownMenuItem>
+                  ) : null}
                   {citation.doi || citation.url ? (
                     <DropdownMenuItem asChild>
                       <a

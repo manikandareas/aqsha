@@ -88,6 +88,25 @@ export type CitationRenderResult = {
   bibliography: string;
 };
 
+/** Satu cluster sitasi in-text dokumen (Fase 3 — mengikuti satu inline node BlockNote). */
+export type DocumentCitationCluster = {
+  nodeId: string;
+  citationIds: string[];
+  locator?: string;
+  label?: string;
+  prefix?: string;
+  suffix?: string;
+};
+
+/** Hasil render dokumen: marker in-text per node + bibliography used-in-document. */
+export type DocumentRenderResult = {
+  styleId: CitationStyleId;
+  clusters: Array<{ nodeId: string; text: string }>;
+  bibliography: Array<{ id: string; text: string }>;
+  /** citationId yang direferensikan dokumen tapi sudah dihapus/tak ada. */
+  missingIds: string[];
+};
+
 /** Grup kandidat duplikat (canonical key sama, ≥2 anggota) — "Kelola duplikat". */
 export type CitationDuplicateGroup = {
   canonicalKey: string;

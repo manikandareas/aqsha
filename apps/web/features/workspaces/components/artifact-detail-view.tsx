@@ -31,7 +31,6 @@ import {
 } from "@/lib/artifact-download";
 import { useArtifactRender } from "@/features/artifacts/api";
 import { useCreateCitationFromArtifact } from "@/features/citations/api";
-import { useWorkspaceCitationsEnabled } from "@/features/citations/feature";
 import { PanelCardToolbar, PanelOpenButton } from "@/components/layout/side-panel-frame";
 import { PanelTitleLabel } from "@/components/panel-title-dropdown-trigger";
 import { cn } from "@/lib/utils";
@@ -122,7 +121,6 @@ export function ArtifactDetailView({
   const sidebarArtifact = detail?.artifact as ArtifactSidebarRecord | undefined;
   const detailIsMarkdown = detail?.artifact?.artifactType === "markdown";
   const resolvedWorkspaceId = workspaceIdProp ?? detail?.artifact?.workspaceId ?? "";
-  const citationsEnabled = useWorkspaceCitationsEnabled();
   const addToCitations = useCreateCitationFromArtifact(resolvedWorkspaceId);
   const renderPayloadQuery = useArtifactRender(artifactId);
   const activeRenderPayload = (renderPayloadQuery.data ?? data.renderPayload ?? null) as ArtifactRenderPayload | null;
@@ -164,11 +162,10 @@ export function ArtifactDetailView({
     (workspace) => workspace._id === resolvedWorkspaceId,
   )?.name;
 
-  // Fase 2 bridge: "Tambahkan ke Sitasi" hanya untuk paper (page variant) saat
-  // Citation Manager aktif — createFromArtifact membaca artifact_paper_metadata.
+  // Fase 2 bridge: "Tambahkan ke Sitasi" hanya untuk paper (page variant) —
+  // createFromArtifact membaca artifact_paper_metadata.
   const canAddToCitations =
     variant === "page" &&
-    citationsEnabled &&
     Boolean(resolvedWorkspaceId) &&
     detail?.artifact?.detectedDocumentKind === "scholarly_paper";
   const handleAddToCitations = () =>
@@ -322,6 +319,7 @@ export function ArtifactDetailView({
             <DocumentArtifactDetail
               key={artifactId}
               artifactId={artifactId}
+              workspaceId={resolvedWorkspaceId}
               initialTitle={detail.artifact.title}
               onRenameTitle={renameArtifact}
               initialBlocksJson={activeRenderPayload.blocksJson}
@@ -525,6 +523,7 @@ export function ArtifactDetailPanel({
 
 function DocumentArtifactDetail({
   artifactId,
+  workspaceId,
   initialTitle,
   onRenameTitle,
   initialBlocksJson,
@@ -535,6 +534,7 @@ function DocumentArtifactDetail({
   onAskAstraAboutSelection,
 }: {
   artifactId: string;
+  workspaceId: string;
   initialTitle: string;
   onRenameTitle: (title: string) => Promise<unknown>;
   initialBlocksJson: string;
@@ -580,6 +580,7 @@ function DocumentArtifactDetail({
       <DocumentTitleEditor initialTitle={initialTitle} onRename={onRenameTitle} />
       <BlockNoteEditorLoader
         artifactId={artifactId}
+        workspaceId={workspaceId}
         initialBlocksJson={initialBlocksJson}
         initialMarkdown={initialMarkdown}
         onContentChange={(content) => {
