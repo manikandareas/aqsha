@@ -171,11 +171,22 @@ export function ToolRow({
   statsGroup?: StatsGroup;
 }) {
   // Kartu statistik menggantikan baris generik SELURUHNYA (identitas momen analisis, fase A).
-  // Dispatch TANPA hook: detail bisa berubah kind saat settle (running generik → kartu dataset),
-  // hook di baris generik harus hidup di komponen terpisah (rules-of-hooks).
+  // Dispatch dengan SATU hook tak-kondisional (openStats) yang SELALU dipanggil di puncak sebelum
+  // cabang mana pun → aman rules-of-hooks walau detail berubah kind saat settle (running generik →
+  // kartu dataset); hook baris generik tetap hidup di komponen terpisah `GenericToolRow`.
+  const { openStats } = useMessageInteractions();
   const detail = model.detail;
   if (detail?.kind === "analysis") {
-    return <AnalysisRunCard model={model} detail={detail} group={statsGroup} />;
+    // Struk klik → panel Statistik scoped (fase B). Hanya bila panel terpasang DAN grup DB sudah
+    // ter-fetch (kartu running/pra-grup non-klik — panel scoped butuh grup untuk render).
+    return (
+      <AnalysisRunCard
+        model={model}
+        detail={detail}
+        group={statsGroup}
+        onOpen={openStats && statsGroup ? () => openStats(detail.runKey) : undefined}
+      />
+    );
   }
   if (detail?.kind === "dataset-profile") {
     return <DatasetProfileCard detail={detail} />;

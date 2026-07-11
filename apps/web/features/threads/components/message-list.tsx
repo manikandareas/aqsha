@@ -84,6 +84,7 @@ export function MessageList({
             openSearch: panel.openSearchPanel,
             openStep: panel.openStepPanel,
             openPlan: panel.openPlanPanel,
+            openStats: panel.openStatsPanel,
           }
         : {},
     [panel],
@@ -358,7 +359,9 @@ function AssistantMessage({
   const isEmpty = message.parts.length === 0;
 
   return (
-    <div className="flex min-w-0 flex-col gap-2.5">
+    // `data-message-id` = scroll-to anchor for the Statistik panel's "Lihat di percakapan"
+    // (`scrollToMessage`); only assistant rows own tool calls, so only they need an anchor.
+    <div data-message-id={message.id} className="flex min-w-0 flex-col gap-2.5">
       {processParts.length > 0 ? (
         <ProcessBlock
           parts={processParts}

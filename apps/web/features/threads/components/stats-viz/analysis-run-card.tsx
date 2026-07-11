@@ -8,10 +8,9 @@ import {
 import { Badge } from "@aqsha/ui/components/badge";
 import { ChartColumnIcon, CheckCircle2Icon, XCircleIcon } from "@aqsha/ui/icons";
 import { useEffect, useState } from "react";
-import { cn } from "@/lib/utils";
 import type { DeepStepDetail, ToolRowModel } from "../../lib/timeline-types";
 import { ElapsedLabel } from "../elapsed-label";
-import { STATS_VERDICT_META } from "./verdict-meta";
+import { StatsVerdictChips, statsCountsLabel } from "./stats-summary";
 
 type AnalysisDetail = Extract<DeepStepDetail, { kind: "analysis" }>;
 
@@ -114,30 +113,10 @@ function ReceiptRow({
     <>
       <CheckCircle2Icon className="mt-0.5 size-3.5 shrink-0 text-emerald-500" />
       <span className="min-w-0 break-words font-medium text-foreground">{title}</span>
-      {summary
-        ? (Object.keys(STATS_VERDICT_META) as Array<keyof typeof STATS_VERDICT_META>).map(
-            (verdict) => {
-              const count = summary.verdicts[verdict];
-              if (count === 0) return null;
-              const meta = STATS_VERDICT_META[verdict];
-              return (
-                <span
-                  key={verdict}
-                  className={cn(
-                    "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 font-medium text-[11px]",
-                    meta.chip,
-                  )}
-                >
-                  <span className={cn("size-1.5 rounded-full", meta.dot)} aria-hidden />
-                  {count} {meta.label.toLowerCase()}
-                </span>
-              );
-            },
-          )
-        : null}
+      {summary ? <StatsVerdictChips summary={summary} /> : null}
       {summary ? (
         <span className="shrink-0 text-[12px] text-muted-foreground">
-          {statsCounts(summary.tables, summary.figures)}
+          {statsCountsLabel(summary.tables, summary.figures)}
         </span>
       ) : null}
     </>
@@ -155,15 +134,6 @@ function ReceiptRow({
       {body}
     </button>
   );
-}
-
-/** "3 tabel · 1 gambar" — bagian ber-nol disembunyikan; dua-duanya nol → "hasil tersimpan". */
-function statsCounts(tables: number, figures: number): string {
-  const parts = [
-    ...(tables > 0 ? [`${tables} tabel`] : []),
-    ...(figures > 0 ? [`${figures} gambar`] : []),
-  ];
-  return parts.length > 0 ? parts.join(" · ") : "hasil tersimpan";
 }
 
 function FailedCard({ detail, title }: { detail: AnalysisDetail; title: string }) {
