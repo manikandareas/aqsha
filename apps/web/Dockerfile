@@ -21,6 +21,20 @@ ARG SENTRY_PROJECT_WEB
 # CI=true (passed by deploy.yml) makes next.config.ts run the Sentry plugin non-silently so the
 # source-map upload logs are visible in the CI build. Unset in local builds → plugin stays quiet.
 ARG CI
+# Manifests + lockfile first → `bun install` layer cached across source-only edits (all workspace
+# members required for --frozen-lockfile; keep in sync with root package.json `workspaces`).
+COPY package.json bun.lock ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+COPY apps/agent/package.json apps/agent/package.json
+COPY packages/chat-core/package.json packages/chat-core/package.json
+COPY packages/db/package.json packages/db/package.json
+COPY packages/services/package.json packages/services/package.json
+COPY packages/ui/package.json packages/ui/package.json
+RUN bun install --frozen-lockfile
+
+# Build-time env set AFTER install: SENTRY_RELEASE=$GIT_COMMIT changes every commit, so keeping this
+# layer below `bun install` stops it from invalidating the manifest-first dependency-install cache.
 ENV CI=$CI \
     NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY \
@@ -34,18 +48,6 @@ ENV CI=$CI \
     SENTRY_ORG=$SENTRY_ORG \
     SENTRY_PROJECT_WEB=$SENTRY_PROJECT_WEB \
     NEXT_TELEMETRY_DISABLED=1
-
-# Manifests + lockfile first → `bun install` layer cached across source-only edits (all workspace
-# members required for --frozen-lockfile; keep in sync with root package.json `workspaces`).
-COPY package.json bun.lock ./
-COPY apps/api/package.json apps/api/package.json
-COPY apps/web/package.json apps/web/package.json
-COPY apps/agent/package.json apps/agent/package.json
-COPY packages/chat-core/package.json packages/chat-core/package.json
-COPY packages/db/package.json packages/db/package.json
-COPY packages/services/package.json packages/services/package.json
-COPY packages/ui/package.json packages/ui/package.json
-RUN bun install --frozen-lockfile
 
 COPY . .
 # SENTRY_AUTH_TOKEN via secret mount (optional): present in CI → withSentryConfig uploads source maps

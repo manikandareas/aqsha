@@ -59,7 +59,7 @@ services:
       retries: 5
 
   # One-shot: tunggu MinIO siap (until-loop, tahan-banting tanpa gantung healthcheck)
-  # lalu bikin bucket. Idempotent (--ignore-existing); exit setelah selesai.
+  # lalu bikin bucket + user Langfuse scoped. Idempotent; exit setelah selesai.
   minio-init:
     image: minio/mc:latest
     depends_on:
@@ -70,16 +70,27 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET}
       # Bucket blob Langfuse (event/media). Dibuat selalu (idempotent) walau profile langfuse mati.
       LANGFUSE_S3_BUCKET: ${LANGFUSE_S3_BUCKET:-langfuse}
-    entrypoint: >
-      /bin/sh -c "
-      set -e;
-      until mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD}; do
-        echo 'menunggu MinIO...'; sleep 2;
-      done;
-      mc mb --ignore-existing local/$${MINIO_BUCKET};
-      mc mb --ignore-existing local/$${LANGFUSE_S3_BUCKET};
-      echo 'bucket siap: '$${MINIO_BUCKET}' + '$${LANGFUSE_S3_BUCKET};
-      "
+      # Kredensial MinIO khusus Langfuse (least-privilege): user non-root, policy terbatas ke bucket
+      # langfuse saja — bukan MINIO_ROOT. Default WAJIB sama dgn yang dipakai *langfuse-env di bawah.
+      LANGFUSE_S3_ACCESS_KEY: ${LANGFUSE_S3_ACCESS_KEY:-langfuse}
+      LANGFUSE_S3_SECRET_KEY: ${LANGFUSE_S3_SECRET_KEY:-changeme_langfuse_s3}
+    # List + block-literal: script jadi satu argumen utuh (tanpa shlex), aman utk JSON policy.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do
+          echo 'menunggu MinIO...'; sleep 2
+        done
+        mc mb --ignore-existing "local/$${MINIO_BUCKET}"
+        mc mb --ignore-existing "local/$${LANGFUSE_S3_BUCKET}"
+        # User + policy scoped ke bucket langfuse. || true agar idempotent saat re-run.
+        mc admin user add local "$${LANGFUSE_S3_ACCESS_KEY}" "$${LANGFUSE_S3_SECRET_KEY}" || true
+        printf '%s' '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:*"],"Resource":["arn:aws:s3:::'"$${LANGFUSE_S3_BUCKET}"'","arn:aws:s3:::'"$${LANGFUSE_S3_BUCKET}"'/*"]}]}' > /tmp/langfuse-policy.json
+        mc admin policy create local langfuse-scoped /tmp/langfuse-policy.json || true
+        mc admin policy attach local langfuse-scoped --user "$${LANGFUSE_S3_ACCESS_KEY}" || true
+        echo "siap: bucket $${MINIO_BUCKET} + $${LANGFUSE_S3_BUCKET} (user langfuse scoped)"
     restart: "no"
 
   # ══════════════════════════════════════════════════════════════════════════════
@@ -184,15 +195,15 @@ services:
       # Blob event + media → MinIO app (bucket langfuse), path-style dipaksa (self-host).
       LANGFUSE_S3_EVENT_UPLOAD_BUCKET: ${LANGFUSE_S3_BUCKET:-langfuse}
       LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
-      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
-      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${LANGFUSE_S3_ACCESS_KEY:-langfuse}
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_S3_SECRET_KEY:-changeme_langfuse_s3}
       LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
       LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
       LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
       LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: ${LANGFUSE_S3_BUCKET:-langfuse}
       LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
-      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
-      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${LANGFUSE_S3_ACCESS_KEY:-langfuse}
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_S3_SECRET_KEY:-changeme_langfuse_s3}
       LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://minio:9000
       LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
       LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
