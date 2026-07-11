@@ -1,10 +1,12 @@
 # Deployment (Dokploy)
 
-Aqsha deploys as a single Docker Compose stack via **Dokploy**. Dokploy clones this repo,
-builds the per-app images from `compose.yaml`, runs the stack, and fronts the public services
-with Traefik + Let's Encrypt.
+Aqsha deploys as a single Docker Compose stack via **Dokploy**. The app images (web/api/agent) are
+**built in CI** (GitHub Actions) and pushed to **GHCR**; `compose.yaml` references them by `image:`
+only, so Dokploy just **pulls the finished images and restarts** the stack (no build on the VPS).
+Dokploy fronts the public services with Traefik + Let's Encrypt. See **[CI/CD](#cicd)** below.
 
-> `compose.yaml` (repo root) = full stack (apps + infra). `infra/compose.dev.yaml` = local-dev
+> `compose.yaml` (repo root) = full stack (apps + infra), images from GHCR. Local/emergency host
+> build: overlay `compose.build.yaml` (re-adds `build:`). `infra/compose.dev.yaml` = local-dev
 > infra only (Postgres/Redis/MinIO). Never deploy the dev file.
 
 ## Services
@@ -73,20 +75,24 @@ In the service's **Domains** tab add (HTTPS + Let's Encrypt for each):
 
 ## Step 4 — Deploy
 
-Click **Deploy**. Dokploy builds the three images (web/api/agent) and starts the stack
-(`minio-init` creates the bucket and exits). First build is the slow one.
+Add the GHCR registry credential first (**[CI/CD](#cicd)** → prerequisites) so Dokploy can pull the
+private images, then click **Deploy**. Dokploy **pulls** the web/api/agent images from GHCR and
+starts the stack (`minio-init` creates the bucket and exits) — no build on the VPS, so it's fast.
+This requires the images to already exist in GHCR: push to `main` once (CI builds + pushes them) or
+build locally and push (`compose.build.yaml`) before the first Deploy.
 
 ## Step 5 — Run database migrations
 
-The stack does not auto-migrate. After the first deploy (and after any schema change), run once
-via the Dokploy terminal for the **api** service (or `docker compose exec` on the host):
+The stack does not auto-migrate. After the first deploy (and after any schema change), run the
+one-shot `migrate` service (api image + internal `DATABASE_URL`, exits when done) from the Dokploy
+terminal or the host:
 
 ```bash
-bun run db:migrate
+docker compose --profile migrate run --rm migrate
 ```
 
-`DATABASE_URL` is already set in the api container, so this applies all Drizzle migrations to
-Postgres.
+Kept manual (never auto-on-boot) so multiple app containers starting at once can't race the same
+migration. Equivalent fallback inside the running api container: `bun run db:migrate`.
 
 ## Step 6 — MinIO bucket CORS
 
@@ -141,11 +147,69 @@ Traefik subdomain or keep it Tailscale-only. After first traces arrive, register
 > Compose projects, so the agent reaches Langfuse via a routable URL (subdomain or Tailscale IP),
 > not the internal `langfuse-web:3000` DNS name.
 
+## CI/CD
+
+Builds run **off the VPS**. `.github/workflows/` drives it:
+
+- **`ci.yml`** (PRs into `main`): typecheck + lint + full test suite against ephemeral
+  Postgres(pgvector)+Redis service containers. The gate that says "this is green".
+- **`deploy.yml`** (push to `main`): re-runs the same gate → builds the 3 images in parallel with
+  `docker buildx` (layer cache `type=gha`, per-image scope) → pushes to
+  `ghcr.io/manikandareas/aqsha-{web,api,agent}` tagged `:sha-<short>` **and** `:latest` → calls the
+  Dokploy API (`POST /api/compose.deploy`) so the VPS pulls `:latest` and restarts.
+
+`NEXT_PUBLIC_*` are baked into the web image **at build time in CI** from GitHub **repo Variables**
+(source of truth for build args; runtime env stays in Dokploy). Each image bakes `GIT_COMMIT` →
+Sentry `release` + Langfuse tag, so errors/traces tie back to a commit.
+
+**Owner prerequisites (one-time):**
+
+1. **GHCR**: enable Packages on the repo. Create a classic PAT with `read:packages`; add it under
+   Dokploy → **Settings → Registry** (`ghcr.io`, your username, the PAT) so Dokploy can pull the
+   private images.
+2. **GitHub → Settings → Secrets and variables → Actions**:
+   - **Secrets**: `DOKPLOY_URL` (e.g. `https://dokploy.example.com`), `DOKPLOY_API_KEY` (profile →
+     API key), `DOKPLOY_COMPOSE_ID` (the Compose service id), `SENTRY_AUTH_TOKEN` (source-map upload).
+   - **Variables**: `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SITE_URL`,
+     `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_ORG`, `SENTRY_PROJECT_WEB` (mirror the values in Dokploy's
+     Environment tab — keep them in sync).
+3. `GITHUB_TOKEN` (auto-provided) pushes to GHCR via the workflow's `packages: write` permission — no
+   extra secret needed for the push itself.
+
+**Local / emergency build** (CI down): overlay `compose.build.yaml`, which re-adds `build:` and tags
+the images with their GHCR name so a plain `docker compose up -d` runs them:
+
+```bash
+docker compose -f compose.yaml -f compose.build.yaml build
+docker compose up -d
+```
+
+## Observability (Sentry) — optional
+
+Error tracking across all four runtimes. One Sentry org, **3 projects**: `aqsha-web`, `aqsha-api`
+(api + worker, split by the `process` tag), `aqsha-agent`. Everything is **env-gated** — with the
+DSNs empty the SDKs are silent no-ops, so this can ship dark and light up later.
+
+Fill in the Dokploy **Environment** tab (see `.env.example` → Sentry block):
+
+```
+SENTRY_DSN_WEB=...     SENTRY_DSN_API=...     SENTRY_DSN_AGENT=...
+SENTRY_ENVIRONMENT=production
+# SENTRY_TRACES_SAMPLE_RATE=0   # 0 = error-only (conserves the 5k-errors/mo free tier)
+```
+
+Client-side web errors need the browser DSN **baked at build**: set `NEXT_PUBLIC_SENTRY_DSN` (repo
+Variable) + `SENTRY_ORG` / `SENTRY_PROJECT_WEB` (Variables) + `SENTRY_AUTH_TOKEN` (Secret, for
+source-map upload) as in the CI prerequisites above. Session Replay is off and tracing defaults to 0
+to protect the free-tier quota. Verify by throwing a test error per runtime and confirming it lands
+in the right project, symbolicated, tagged with the commit `release`.
+
 ## Updating
 
-Push to the deployed branch and click **Redeploy** in Dokploy (or enable auto-deploy on push).
-Re-run **Step 5** if the change includes a new migration. Changing `NEXT_PUBLIC_*` requires a
-rebuild (they are baked into the web image).
+Push to `main` → CI gates, builds, pushes to GHCR, and triggers the Dokploy deploy automatically
+(no manual Redeploy needed). Re-run **Step 5** (the `migrate` profile) if the change includes a new
+migration. Changing `NEXT_PUBLIC_*` now means updating the GitHub **Variable** and pushing (CI
+rebuilds the web image) — it is no longer a Dokploy-side rebuild.
 
 ## Backups
 

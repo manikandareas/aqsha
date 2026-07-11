@@ -1,0 +1,92 @@
+name: Deploy
+
+# Push to main → gate (reuses CI) → build 3 images in parallel and push to GHCR → tell Dokploy to
+# pull + restart. The VPS never builds; it only `docker pull`s finished images.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false # never interrupt a deploy mid-flight
+
+jobs:
+  # Same typecheck + lint + test gate as PRs. A red gate blocks build/deploy.
+  check:
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  build:
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push to GHCR
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: web, dockerfile: apps/web/Dockerfile }
+          - { name: api, dockerfile: apps/api/Dockerfile }
+          - { name: agent, dockerfile: apps/agent/Dockerfile }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image tags + labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/aqsha-${{ matrix.name }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-,format=short
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Per-image layer cache across runs (keyed by service so web/api/agent don't collide).
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          # Superset of build-args; a Dockerfile that doesn't declare an ARG just ignores it. NEXT_PUBLIC_*
+          # + SENTRY_ORG/PROJECT come from repo Variables (non-secret, baked into the web bundle).
+          build-args: |
+            GIT_COMMIT=${{ github.sha }}
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
+            NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+            NEXT_PUBLIC_SITE_URL=${{ vars.NEXT_PUBLIC_SITE_URL }}
+            NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
+            SENTRY_ORG=${{ vars.SENTRY_ORG }}
+            SENTRY_PROJECT_WEB=${{ vars.SENTRY_PROJECT_WEB }}
+          # Auth token as a BuildKit secret (never in an image layer). Consumed only by the web build;
+          # unset → Sentry source-map upload is skipped, build still succeeds.
+          secrets: |
+            sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      # compose.yaml references :latest (IMAGE_TAG default), which build just repushed → Dokploy pulls
+      # the fresh images and restarts the stack. Migrations stay manual (compose `migrate` profile).
+      - name: Trigger Dokploy deploy
+        run: |
+          curl --fail --silent --show-error -X POST \
+            "${{ secrets.DOKPLOY_URL }}/api/compose.deploy" \
+            -H "x-api-key: ${{ secrets.DOKPLOY_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"composeId\":\"${{ secrets.DOKPLOY_COMPOSE_ID }}\"}"

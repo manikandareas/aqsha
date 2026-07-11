@@ -5,11 +5,30 @@ FROM oven/bun:1.3.10
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Whole monorepo (.dockerignore strips node_modules/.next/dist/.eve/.workflow-data), then install.
+# Release tag (commit SHA) baked in → Sentry `release` + Langfuse `GIT_COMMIT`. Set by CI build-arg;
+# `local`/`unknown` for hand builds. Kept out of compose env so it isn't clobbered at runtime.
+ARG GIT_COMMIT=unknown
+ENV GIT_COMMIT=$GIT_COMMIT \
+    SENTRY_RELEASE=$GIT_COMMIT
+
+# Manifests + lockfile FIRST so the (slow) `bun install` layer is cached until a package.json or
+# bun.lock changes — a plain source edit no longer busts install. `--frozen-lockfile` needs every
+# workspace member present, so copy all of them (keep in sync with root package.json `workspaces`).
+COPY package.json bun.lock ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+COPY apps/agent/package.json apps/agent/package.json
+COPY packages/chat-core/package.json packages/chat-core/package.json
+COPY packages/db/package.json packages/db/package.json
+COPY packages/services/package.json packages/services/package.json
+COPY packages/ui/package.json packages/ui/package.json
+RUN bun install --frozen-lockfile
+
+# Source last (.dockerignore strips node_modules/.next/dist/.eve/.workflow-data). build:dist emits
+# @aqsha/{db,services} dist for parity (api/worker still read src via the `bun` export condition).
 COPY . .
-RUN bun install --frozen-lockfile && bun run build:dist
+RUN bun run build:dist
 
 EXPOSE 3001
-# ponytail: api/worker run under Bun, reading @aqsha/{db,services} src via the `bun` export
-# condition; build:dist is still produced for parity. Override CMD to start:worker for the worker.
+# ponytail: api/worker run under Bun. Override CMD to start:worker for the worker service.
 CMD ["bun", "run", "start:api"]

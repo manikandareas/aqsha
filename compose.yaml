@@ -1,6 +1,14 @@
 # Full deployment stack (apps + infra) — the file Dokploy points at.
-# Apps build from per-app Dockerfiles (context = repo ROOT). For LOCAL DEV infra only
-# (Postgres/Redis/MinIO without the apps), use infra/compose.dev.yaml instead.
+#
+# The app images (web/api/agent) are BUILT IN CI (GitHub Actions) and pushed to GHCR; here they
+# are only `image: ghcr.io/manikandareas/aqsha-*:${IMAGE_TAG:-latest}` — Dokploy just pulls and
+# restarts (near-zero CPU, no `next build`/`mastra build` on the VPS). See .github/workflows/.
+# For a LOCAL emergency build (no CI), overlay compose.build.yaml which re-adds the `build:` blocks:
+#   docker compose -f compose.yaml -f compose.build.yaml build
+# For LOCAL DEV infra only (Postgres/Redis/MinIO without the apps), use infra/compose.dev.yaml.
+#
+# IMAGE_TAG selects the image version to run (default `latest`; set a `sha-<short>` in Dokploy to
+# pin/roll back). GHCR is private → add a `read:packages` PAT under Dokploy → Settings → Registry.
 #
 # All config/secrets come from the Dokploy dashboard (Environment tab) and are referenced
 # below via ${VAR}. Set them per each app's .env.example. See DEPLOYMENT.md for the full
@@ -34,17 +42,21 @@ x-backend-env: &backend-env
   UNPAYWALL_EMAIL: ${UNPAYWALL_EMAIL:-}
   AQSHA_CONTACT_EMAIL: ${AQSHA_CONTACT_EMAIL:-}
   SEMANTIC_SCHOLAR_API_KEY: ${SEMANTIC_SCHOLAR_API_KEY:-}
+  # Admin allowlist (billing override) — MUST reach every process that runs @aqsha/services
+  # billing (api, worker, AND the agent's billing pre-check/debit processors). Keeping it here
+  # instead of api-env prevents split-brain: api saying "admin" while the agent bills as free.
+  AQSHA_ADMIN_OWNER_USER_IDS: ${AQSHA_ADMIN_OWNER_USER_IDS:-}
+  AQSHA_ADMIN_EMAILS: ${AQSHA_ADMIN_EMAILS:-}
+  # Sentry error tracking (shared runtime knobs; per-service DSN below). Empty DSN = SDK no-op.
+  # `SENTRY_RELEASE`/`GIT_COMMIT` are baked into each image at build (Dockerfile ARG) — do NOT set
+  # them here, or an empty compose value would clobber the baked commit tag.
+  SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+  SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0}
 
 services:
   web:
-    build:
-      context: .
-      dockerfile: apps/web/Dockerfile
-      args:
-        # NEXT_PUBLIC_* are baked into the client bundle at build time.
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?set NEXT_PUBLIC_API_URL}
-        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:?set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
-        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://aqshara.com}
+    # Built in CI (NEXT_PUBLIC_* baked at build from GitHub Variables). Local build: compose.build.yaml.
+    image: ghcr.io/manikandareas/aqsha-web:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       PORT: "3000"
@@ -52,19 +64,25 @@ services:
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:?set CLERK_SECRET_KEY}
       # web proxies /mastra-api/* to the Mastra agent container (internal network).
       MASTRA_AGENT_ORIGIN: http://agent:4317
+      # Sentry server-side (Server Components / route handlers / proxy). Client DSN is the separate
+      # build arg NEXT_PUBLIC_SENTRY_DSN (baked). Empty = disabled.
+      SENTRY_DSN_WEB: ${SENTRY_DSN_WEB:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0}
     expose:
       - "3000"
     depends_on: [api, agent]
 
   api:
-    image: aqsha-api
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
+    # Built in CI, pushed to GHCR; the worker service reuses this exact image (same ref below).
+    image: ghcr.io/manikandareas/aqsha-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment: &api-env
       <<: *backend-env
       PORT: "3001"
+      # api + worker share ONE Sentry project; the `process` tag (set per-service) splits them.
+      SENTRY_DSN_API: ${SENTRY_DSN_API:-}
+      AQSHA_PROCESS: api
       CLERK_WEBHOOK_SIGNING_SECRET: ${CLERK_WEBHOOK_SIGNING_SECRET:?set CLERK_WEBHOOK_SIGNING_SECRET}
       AQSHA_FAST_MODEL_API_KEY: ${AQSHA_FAST_MODEL_API_KEY:?set AQSHA_FAST_MODEL_API_KEY}
       AQSHA_FAST_MODEL_BASE_URL: ${AQSHA_FAST_MODEL_BASE_URL:-}
@@ -83,8 +101,6 @@ services:
       # OCR for scanned PDFs & images; empty key = extraction disabled with a clear reason.
       MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
       MISTRAL_OCR_MODEL: ${MISTRAL_OCR_MODEL:-mistral-ocr-latest}
-      AQSHA_ADMIN_OWNER_USER_IDS: ${AQSHA_ADMIN_OWNER_USER_IDS:-}
-      AQSHA_ADMIN_EMAILS: ${AQSHA_ADMIN_EMAILS:-}
     expose:
       - "3001"
     depends_on:
@@ -92,26 +108,29 @@ services:
       redis: { condition: service_healthy }
       minio: { condition: service_healthy }
 
-  # Reuses the api image (built above) with the worker entrypoint + the same env.
+  # Reuses the api image with the worker entrypoint + the same env (AQSHA_PROCESS overridden so
+  # Sentry tags worker errors distinctly within the shared api project).
   worker:
-    image: aqsha-api
+    image: ghcr.io/manikandareas/aqsha-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
     command: ["bun", "run", "start:worker"]
     environment:
       <<: *api-env
+      AQSHA_PROCESS: worker
     depends_on:
       api: { condition: service_started }
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
 
   agent:
-    build:
-      context: .
-      dockerfile: apps/agent/Dockerfile
+    # Built in CI (mastra build), pushed to GHCR. Local build: compose.build.yaml.
+    image: ghcr.io/manikandareas/aqsha-agent:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       <<: *backend-env
       PORT: "4317"
+      # Sentry (@sentry/node at the Mastra entry). Empty = disabled. Same release (GIT_COMMIT) as Langfuse.
+      SENTRY_DSN_AGENT: ${SENTRY_DSN_AGENT:-}
       # Mastra server.auth (MastraAuthClerk) verifies via JWKS derived from the publishable key.
       CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:?set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
       # Pro tier model — empty = Pro falls back to Lite and billing downgrades to the Lite rate.
@@ -135,6 +154,22 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       minio: { condition: service_healthy }
+
+  # One-shot DB migration (Drizzle). NOT part of a normal `up` — it sits behind the `migrate`
+  # profile, run explicitly from the Dokploy terminal / host after a deploy that ships a new
+  # migration (replaces the manual `bun run db:migrate`, DEPLOYMENT.md Step 5):
+  #   docker compose --profile migrate run --rm migrate
+  # Reuses the api image + the internal DATABASE_URL, then exits. Kept manual (never auto-on-boot)
+  # so several app containers starting at once can't race the same migration.
+  migrate:
+    image: ghcr.io/manikandareas/aqsha-api:${IMAGE_TAG:-latest}
+    profiles: ["migrate"]
+    command: ["bun", "run", "db:migrate"]
+    environment:
+      <<: *backend-env
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
 
   postgres:
     image: pgvector/pgvector:pg17
