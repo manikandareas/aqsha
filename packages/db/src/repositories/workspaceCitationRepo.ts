@@ -186,6 +186,30 @@ export const WorkspaceCitationRepo = {
     await db.update(workspaceCitations).set(patch).where(eq(workspaceCitations.id, id));
   },
 
+  /** Soft delete banyak citation aktif milik owner+workspace; return jumlah terpengaruh. */
+  async softDeleteMany(
+    db: DbOrTx,
+    ownerUserId: string,
+    workspaceId: string,
+    ids: string[],
+    now: number,
+  ): Promise<number> {
+    if (ids.length === 0) return 0;
+    const rows = await db
+      .update(workspaceCitations)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(workspaceCitations.ownerUserId, ownerUserId),
+          eq(workspaceCitations.workspaceId, workspaceId),
+          inArray(workspaceCitations.id, ids),
+          isNull(workspaceCitations.deletedAt),
+        ),
+      )
+      .returning({ id: workspaceCitations.id });
+    return rows.length;
+  },
+
   /** Tag distinct citation aktif workspace (untuk filter chips). */
   async listActiveTags(
     db: DbOrTx,
