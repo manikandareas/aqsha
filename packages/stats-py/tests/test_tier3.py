@@ -100,7 +100,7 @@ def test_analisis_faktor_structure(df):
     matrix = _table(result, "component_matrix")
     assert len(matrix["columns"]) == 2 + k
     # Communality = jumlah kuadrat loading baris (invarian rotasi).
-    for c_row, m_row in zip(communalities["rows"], matrix["rows"]):
+    for c_row, m_row in zip(communalities["rows"], matrix["rows"], strict=True):
         ss = sum(v * v for v in m_row[1 : 1 + k])
         assert ss == pytest.approx(c_row[2], abs=2e-3)
 
@@ -127,6 +127,10 @@ def test_cb_sem_semopy(df):
     source, target, estimate, std, se, z, p = structural["rows"][0]
     assert (source, target) == ("X1", "Y")
     assert estimate is not None and std is not None
+    # Structural path is estimated (not a fixed reference loading) → SE and z present too.
+    # Split so a failure pinpoints which value is missing.
+    assert se is not None
+    assert z is not None
     fit = {row[0]: row[1] for row in _table(result, "fit")["rows"]}
     assert 0 <= fit["RMSEA"] <= 1
     assert fit["CFI"] <= 1.0 + 1e-9

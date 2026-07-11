@@ -62,6 +62,20 @@ export const runAnalysis = createTool({
           errorCode: run.error.code,
         };
       }
+      // Persist DULU, debit SESUDAH: bila persist gagal (throw → catch) kredit belum terpotong,
+      // jadi kegagalan menyimpan hasil tak pernah menghanguskan kredit tanpa mengembalikan hasil.
+      // Bangun grup blok (tabel gaya SPSS + kartu verdict + figur PNG) lalu persist di luar teks
+      // pesan (PNG tak lewat model — hemat token; FE me-join per-thread). Model hanya menaruh
+      // penanda `marker` di narasi supaya tabel/figur muncul di posisi itu.
+      const shortTitle = entry.title.replace(/\s*\(.*\)\s*$/, "");
+      const { marker } = await finalizeStatsRun(ctx, {
+        ownerUserId: scope.ownerUserId,
+        analysis: entry.id,
+        title: shortTitle,
+        result: run.result,
+        charts: run.charts,
+      });
+
       if (entry.credits > 0) {
         const charged = await chargeSandboxCompute(ctx, {
           ownerUserId: scope.ownerUserId,
@@ -74,18 +88,6 @@ export const runAnalysis = createTool({
           );
         }
       }
-
-      // Bangun grup blok (tabel gaya SPSS + kartu verdict + figur PNG) lalu persist di
-      // luar teks pesan (PNG tak lewat model — hemat token; FE me-join per-thread). Model
-      // hanya menaruh penanda `marker` di narasi supaya tabel/figur muncul di posisi itu.
-      const shortTitle = entry.title.replace(/\s*\(.*\)\s*$/, "");
-      const { marker } = await finalizeStatsRun(ctx, {
-        ownerUserId: scope.ownerUserId,
-        analysis: entry.id,
-        title: shortTitle,
-        result: run.result,
-        charts: run.charts,
-      });
       return {
         ok: true as const,
         analysis: entry.id,

@@ -25,15 +25,24 @@ def main(argv: list[str] | None = None) -> None:
     try:
         args = json.loads(ns.args)
     except ValueError as exc:
-        args = None
         result = {
             "error": {
                 "code": "invalid_args",
                 "message": f"Argumen --args bukan JSON yang valid: {exc}",
             }
         }
-    if args is not None:
-        result = run_analysis_safe(ns.analysis, ns.data, args)
+    else:
+        # `json.loads("null")` -> None: treat the JSON literal null as invalid args (not a
+        # missing branch that would leave `result` unbound), matching run_analysis' dict check.
+        if args is None:
+            result = {
+                "error": {
+                    "code": "invalid_args",
+                    "message": "Argumen --args tidak boleh null; kirim objek argumen (mis. {}).",
+                }
+            }
+        else:
+            result = run_analysis_safe(ns.analysis, ns.data, args)
 
     print(json.dumps(result, ensure_ascii=False))
     if "error" in result:

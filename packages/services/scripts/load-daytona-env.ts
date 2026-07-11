@@ -14,7 +14,8 @@ export function loadDaytonaEnvFallback(): void {
   const envPath = resolve(import.meta.dir, "../../../apps/agent/.env");
   if (!existsSync(envPath)) return;
   for (const line of readFileSync(envPath, "utf8").split("\n")) {
-    const match = line.match(/^([A-Z0-9_]+)=(.*)$/);
+    // Accept an optional `export ` prefix (`export KEY=value`) as well as bare `KEY=value`.
+    const match = line.match(/^(?:export\s+)?([A-Z0-9_]+)=(.*)$/);
     if (!match) continue;
     const key = match[1] as (typeof KEYS)[number];
     if (!KEYS.includes(key) || process.env[key]) continue;
