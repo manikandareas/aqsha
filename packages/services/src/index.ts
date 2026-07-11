@@ -202,6 +202,8 @@ export {
   type ChatQueueName,
   FEED_QUEUES,
   type FeedQueueName,
+  INTEGRATION_QUEUES,
+  type IntegrationQueueName,
   type QueueName,
   registerRepeatable,
 } from "./clients/queue";
@@ -239,3 +241,15 @@ export {
   MAX_IMPORT_FILE_BYTES,
   type ManualCitationInput,
 } from "./citations";
+
+// Citation Manager (Fase 5) — integrasi provider referensi (Mendeley OAuth / Zotero).
+// Koneksi account-level terenkripsi; penarikan data per-workspace via CitationSyncService.
+export {
+  CitationSyncService,
+  type IntegrationAdapter,
+  IntegrationService,
+  type IntegrationStatusView,
+  isIntegrationCryptoConfigured,
+  KNOWN_PROVIDERS,
+  type ProviderFolder,
+} from "./integrations";

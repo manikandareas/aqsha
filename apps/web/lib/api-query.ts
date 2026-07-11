@@ -74,6 +74,11 @@ export const queryKeys = {
       ["citations", workspaceId, "render-document", signature] as const,
     settings: (workspaceId: string) => ["citations", workspaceId, "settings"] as const,
   },
+  integrations: {
+    all: ["integrations"] as const,
+    list: () => ["integrations", "list"] as const,
+    folders: (provider: string) => ["integrations", "folders", provider] as const,
+  },
   user: {
     me: () => ["user", "me"] as const,
   },

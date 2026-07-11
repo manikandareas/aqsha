@@ -16,7 +16,9 @@ export type RateLimitRule =
   | "security:sessions-revoke"
   | "explore:search"
   | "citations:create"
-  | "citations:import";
+  | "citations:import"
+  | "integrations:connect"
+  | "integrations:sync";
 
 const RATE_LIMIT_RULES: Record<RateLimitRule, { points: number; duration: number }> = {
   "workspaces:create": { points: 3, duration: 3600 },
@@ -36,6 +38,10 @@ const RATE_LIMIT_RULES: Record<RateLimitRule, { points: number; duration: number
   "citations:create": { points: 20, duration: 60 },
   // Import/commit batch .bib/.ris — parse server-side hingga 5.000 record per batch.
   "citations:import": { points: 5, duration: 60 },
+  // Mulai OAuth connect provider — klik user, bukan throughput.
+  "integrations:connect": { points: 10, duration: 60 },
+  // Preview/commit/refresh sync provider — tembak API eksternal (Mendeley/Zotero).
+  "integrations:sync": { points: 10, duration: 60 },
 };
 
 /** Konfigurasi rule (points/duration) — dipakai `getSendStatus` untuk hitung cooldown. */

@@ -20,6 +20,7 @@ import type {
   ImportDuplicatePolicy,
   ImportPreviewResult,
   ManualCitationFields,
+  ProviderFolder,
 } from "./types";
 
 const LIST_PAGE_SIZE = 50;
@@ -286,6 +287,60 @@ export function useImportCommit(workspaceId: string) {
           .workspaces({ id: workspaceId })
           .citations.imports({ batchId: input.batchId })
           .commit.post({
+            selectedIndexes: input.selectedIndexes,
+            duplicatePolicy: input.duplicatePolicy,
+          }),
+      ) as ImportCommitResult,
+    onSuccess: () => invalidate(),
+  });
+}
+
+type IntegrationProviderKey = "mendeley" | "zotero";
+
+/** Folder/collection provider untuk picker penarikan (Fase 5). Account-level. */
+export function useProviderFolders(
+  provider: IntegrationProviderKey,
+  enabled = true,
+) {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.integrations.folders(provider),
+    enabled,
+    queryFn: async () =>
+      unwrap(await api.integrations({ provider }).folders.get()) as ProviderFolder[],
+  });
+}
+
+/** Preview penarikan folder provider → reuse UI wizard import (Fase 5). */
+export function useProviderSyncPreview(workspaceId: string, provider: IntegrationProviderKey) {
+  const api = useApi();
+  return useMutation({
+    mutationFn: async (input: { folderId: string | null }) =>
+      unwrap(
+        await api.integrations({ provider }).sync.preview.post({
+          workspaceId,
+          folderId: input.folderId,
+        }),
+      ) as ImportPreviewResult,
+  });
+}
+
+/** Commit hasil sync provider — reuse pipeline commit import (Fase 5). */
+export function useProviderSyncCommit(workspaceId: string, provider: IntegrationProviderKey) {
+  const api = useApi();
+  const invalidate = useInvalidateCitations(workspaceId);
+  return useMutation({
+    mutationFn: async (input: {
+      batchId: string;
+      selectedIndexes: number[];
+      duplicatePolicy: ImportDuplicatePolicy;
+    }) =>
+      unwrap(
+        await api
+          .integrations({ provider })
+          .sync({ batchId: input.batchId })
+          .commit.post({
+            workspaceId,
             selectedIndexes: input.selectedIndexes,
             duplicatePolicy: input.duplicatePolicy,
           }),

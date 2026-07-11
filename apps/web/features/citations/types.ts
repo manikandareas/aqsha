@@ -69,13 +69,17 @@ export type ImportPreviewRecord = {
 
 export type ImportPreviewResult = {
   batchId: string;
-  format: "bibtex" | "ris";
+  /** `null` untuk batch provider sync (bukan bibtex/ris). */
+  format: "bibtex" | "ris" | null;
   counts: { total: number; valid: number; incomplete: number; duplicate: number; error: number };
   records: ImportPreviewRecord[];
   errors: Array<{ index: number; message: string; raw: string }>;
 };
 
 export type ImportCommitResult = { created: number; merged: number; skipped: number };
+
+/** Folder/collection provider untuk picker penarikan (Fase 5). */
+export type ProviderFolder = { id: string; name: string; parentId?: string | null };
 
 export type CitationSettings = {
   defaultStyleId: CitationStyleId;

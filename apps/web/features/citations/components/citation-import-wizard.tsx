@@ -196,7 +196,11 @@ function ImportWizardContent({
   );
 }
 
-function PreviewStep({
+/**
+ * Langkah preview (checkbox + policy duplikat + commit). Dipakai wizard import file
+ * DAN wizard sinkron provider (Fase 5) — didorong murni oleh `ImportPreviewResult`.
+ */
+export function PreviewStep({
   preview,
   selected,
   onToggle,
@@ -206,6 +210,8 @@ function PreviewStep({
   pending,
   onBack,
   onCommit,
+  title,
+  backLabel = "Ganti file",
 }: {
   preview: ImportPreviewResult;
   selected: Set<number>;
@@ -216,7 +222,12 @@ function PreviewStep({
   pending: boolean;
   onBack: () => void;
   onCommit: () => void;
+  /** Judul dialog kustom (default: "Preview import (.bib/.ris)"). */
+  title?: string;
+  backLabel?: string;
 }) {
+  const formatLabel =
+    preview.format === "bibtex" ? ".bib" : preview.format === "ris" ? ".ris" : null;
   const chips = useMemo(
     () =>
       [
@@ -231,7 +242,7 @@ function PreviewStep({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Preview import ({preview.format === "bibtex" ? ".bib" : ".ris"})</DialogTitle>
+        <DialogTitle>{title ?? `Preview import${formatLabel ? ` (${formatLabel})` : ""}`}</DialogTitle>
         <DialogDescription className="flex flex-wrap gap-2">
           {chips.map((chip) => (
             <span
@@ -344,7 +355,7 @@ function PreviewStep({
       {error ? <p className="text-[12px] font-medium text-destructive">{error}</p> : null}
       <DialogFooter>
         <Button type="button" variant="ghost" onClick={onBack} disabled={pending}>
-          Ganti file
+          {backLabel}
         </Button>
         <Button type="button" onClick={onCommit} disabled={pending || selected.size === 0}>
           {pending ? "Mengimpor…" : `Import ${selected.size} referensi`}

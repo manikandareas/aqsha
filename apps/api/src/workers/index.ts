@@ -5,6 +5,7 @@ import {
   CHAT_QUEUES,
   FEED_QUEUES,
   getQueueConnection,
+  INTEGRATION_QUEUES,
   registerRepeatable,
 } from "@aqsha/services";
 import { Worker } from "bullmq";
@@ -17,6 +18,7 @@ import { type AccountDeletionJob, processAccountDeletion } from "./account-delet
 import { type ArtifactCleanupJob, processArtifactCleanup } from "./artifact-cleanup.worker";
 import { type ArtifactIndexingJob, processArtifactIndexing } from "./artifact-indexing.worker";
 import { type FeedHydrationJob, processFeedHydration } from "./feed-hydration.worker";
+import { type IntegrationSyncJob, processIntegrationSync } from "./integration-sync.worker";
 import { type PaperEnrichmentJob, processPaperEnrichment } from "./paper-enrichment.worker";
 import { type ThreadTitleJob, processThreadTitle } from "./thread-title.worker";
 import { type UrlIngestionJob, processUrlIngestion } from "./url-ingestion.worker";
@@ -59,6 +61,11 @@ const workers = [
   new Worker<AccountDeletionJob>(ACCOUNT_QUEUES.accountDeletion, processAccountDeletion, {
     connection,
     concurrency: 2,
+  }),
+  // Integration sync: concurrency 1 — pace panggilan API provider eksternal (Mendeley/Zotero).
+  new Worker<IntegrationSyncJob>(INTEGRATION_QUEUES.integrationSync, processIntegrationSync, {
+    connection,
+    concurrency: 1,
   }),
 ];
 

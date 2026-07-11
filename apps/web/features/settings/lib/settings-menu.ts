@@ -2,6 +2,7 @@ import {
   CreditCardIcon,
   GaugeIcon,
   PaletteIcon,
+  PlugIcon,
   ShieldIcon,
   SparklesIcon,
   UserRoundIcon,
@@ -13,7 +14,8 @@ export type SettingsKey =
   | "appearance"
   | "personalization"
   | "usage-billing"
-  | "security";
+  | "security"
+  | "integrations";
 
 export type SettingsMenuItem = {
   key: SettingsKey;
@@ -72,6 +74,14 @@ export const settingsMenu: SettingsMenuItem[] = [
     description: "Kata sandi dan perangkat aktif.",
     group: "Riset",
     icon: ShieldIcon,
+  },
+  {
+    key: "integrations",
+    href: "/app/settings/integrations",
+    label: "Integrasi",
+    description: "Hubungkan aplikasi referensi seperti Mendeley dan Zotero.",
+    group: "Riset",
+    icon: PlugIcon,
   },
 ];
 

@@ -85,6 +85,7 @@ import {
   Pin02Icon,
   PinOffIcon as HugePinOffIcon,
   PlayIcon as HugePlayIcon,
+  PlugSocketIcon,
   QuoteUpIcon,
   SaveIcon as HugeSaveIcon,
   Search01Icon,
@@ -229,6 +230,7 @@ export const PencilIcon = createIcon(PencilEdit01Icon);
 export const PinIcon = createIcon(Pin02Icon);
 export const PinOffIcon = createIcon(HugePinOffIcon);
 export const Play = createIcon(HugePlayIcon);
+export const PlugIcon = createIcon(PlugSocketIcon);
 export const PlusIcon = createIcon(Add01Icon);
 export const Quote = createIcon(QuoteUpIcon);
 export const SaveIcon = createIcon(HugeSaveIcon);

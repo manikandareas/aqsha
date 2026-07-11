@@ -1,6 +1,6 @@
 # Rencana detail: Workspace Citation Manager + Integrasi (Mendeley/Zotero)
 
-> Status: **FASE 0–4 IMPLEMENTED** (2026-07-11, branch `feat/citation-manager`, uncommitted) — Fase 5–6 (integrasi provider) masih plan. Feature flag `workspace_citations` **DIHAPUS** (Citation Manager kini default aktif untuk semua user). Revisi 2026-07-11 (menggantikan draft 2026-07-10).
+> Status: **FASE 0–6 IMPLEMENTED (kode)** (2026-07-11, branch `feat/citation-manager`, uncommitted) — Fase 5 (Mendeley OAuth) + Fase 6 (Zotero API key) selesai di kode; E2E connect provider menunggu env OWNER. Feature flag `workspace_citations` **DIHAPUS** (Citation Manager kini default aktif untuk semua user). Revisi 2026-07-11 (menggantikan draft 2026-07-10).
 > Bahasa: Indonesia (istilah teknis tetap English), sesuai `AGENTS.md`.
 
 ## Progress implementasi (2026-07-11)
@@ -12,8 +12,8 @@
 | 2 — Artifact bridge | ✅ selesai | 2026-07-11. `createFromArtifact` (idempotent + dedupe-adopt) + `resolveFromDoi`; endpoint `from-artifact`/`:id/resolve`; "Tambahkan ke Sitasi" di kartu board (context menu, gate `scholarly_paper`) + header artifact detail; provenance detail (linked artifact buka reader + lepas tautan). lint/typecheck/test (db 27 · services 301 · api 98, 0 fail)/build hijau. |
 | 3 — BlockNote | ✅ selesai | 2026-07-11. Migration `0032_big_corsair` (`document_citation_usages`) applied DEV. Inline node `citation` + block `bibliography` (schema `aqshaBlockNoteSchema`), picker `/sitasi` + `/daftar pustaka`, render dokumen reaktif (in-text cluster + bibliography used-in-doc via citeproc `rebuildProcessorState`/`makeBibliography`), rekonsiliasi usage transaksional di `updateDocument` (diverifikasi DB langsung). |
 | 4 — Astra | ✅ selesai | 2026-07-11. `ContextRef` kind `workspace-citation` (chat-core) + hydration `ContextService` + lane `workspaceCitations` di `/threads/context/hydrate`; tool read-only `search_workspace_citations`/`get_workspace_citation` (subpath `@aqsha/services/citations`); chip "Tambahkan ke chat" dari detail sitasi via channel `selectionRefs`. Suggestion card + suggest-tool insert-ke-dokumen DITUNDA (insert tetap aksi user via /sitasi). |
-| 5 — Settings → Integrasi + Mendeley | ⬜ belum | |
-| 6 — Zotero | ⬜ belum | |
+| 5 — Settings → Integrasi + Mendeley | ✅ selesai (kode) | 2026-07-11. Migration `0033_integration_connections` (applied DEV). Skema generik multi-provider + repo; helper AES-256-GCM (`AQSHA_INTEGRATION_ENC_KEY`) + HMAC state OAuth; `IntegrationAdapter` interface + Mendeley adapter (authorize/exchange/refresh/profile/folders/pullDocuments+Link pagination); `IntegrationService` (listStatuses/startConnect/completeOAuth/disconnect/getValidCredentials/listFolders/pullDocuments/refreshConnection) + `CitationSyncService.previewFolder` (reuse `stageImportBatch`); `CitationImportService.commit` kini provider-aware (idempoten via externalId). Route `routes/integrations.ts` (status/connect/callback-302/refresh/disconnect/folders/sync preview+commit) + worker `integration-sync` (refresh opt-in). Web: menu Settings → Integrasi, `IntegrationsPage` (kartu Mendeley connect/disconnect/sync, Zotero "Segera"), item "Tarik dari Mendeley/Zotero" di tab Sitasi → `ProviderSyncWizard` (reuse `PreviewStep`), footnote empty-state jadi tautan. rate-limit `integrations:connect`/`integrations:sync`. lint/typecheck (7 workspace)/build hijau; unit test crypto+state 8 pass. **E2E connect Mendeley BELUM** (butuh app registration + env OWNER). |
+| 6 — Zotero | ✅ selesai (kode) | 2026-07-11. Drop-in di interface generik: `IntegrationAdapter` diberi diskriminan `authMode` (`oauth`/`api_key`) + `connectWithApiKey`; `zotero.adapter.ts` (Web API v3, header `Zotero-API-Key`, validasi `/keys/<key>`, folders `/users/<id>/collections`, pull `/users/<id>/items/top?include=csljson` native CSL-JSON, paginasi Link rel=next, `ensureFresh` no-op). Registry + `IntegrationService.connectWithApiKey` (reuse `persistConnection`) + guard `startConnect`/`completeOAuth` ke oauth. Route `POST /integrations/:provider/key`. Web: `authMode` di status view + `ApiKeyConnectDialog` (API key + user id opsional) + `useConnectApiKeyIntegration`; `ProviderSyncWizard` + empty-state footnote sudah generik → "Tarik dari Zotero" jalan otomatis begitu terhubung. Unit test adapter 10 (fetch-mock: connect/validasi/folders/pull/skip non-referensi). lint/typecheck (7 workspace)/services test (313 pass)/build hijau. **E2E connect Zotero BELUM** (butuh API key user riil). |
 
 **Feature flag `workspace_citations` DIHAPUS (2026-07-11):** default aktif untuk semua user, tanpa gate. Dihapus: `apps/web/lib/feature-flags.ts`, `features/citations/feature.ts` (`useWorkspaceCitationsEnabled`), gate di `workspace-side-panel.tsx`/`workspace-library-surface.tsx`/`artifact-detail-view.tsx`, entri `.env.example`.
 
@@ -389,7 +389,7 @@ Route module `apps/api/src/routes/citations.ts`, mount satu baris di `index.ts`.
 | `GET` | `/integrations` | status semua provider milik owner (tanpa credential) |
 | `GET` | `/integrations/mendeley/connect` | buat OAuth `state` signed + redirect |
 | `GET` | `/integrations/mendeley/callback` | verifikasi state, tukar code backend-only, enkripsi token, redirect ke Settings |
-| `POST` | `/integrations/zotero/key` | simpan API key + user ID; validasi via Zotero `/keys/current` |
+| `POST` | `/integrations/:provider/key` | ✅ (Zotero) simpan API key + user ID opsional; validasi via Zotero `/keys/<key>`; kembalikan status view |
 | `DELETE` | `/integrations/:provider` | disconnect: revoke (bila didukung) + hapus credential lokal + stop job |
 | `GET` | `/integrations/:provider/folders` | daftar folder/collection untuk picker |
 | `POST` | `/integrations/:provider/sync/preview` | pull → normalisasi → preview batch (reuse pipeline import) |
@@ -408,11 +408,12 @@ Terimplementasi (Fase 1) di `packages/services/src/citations/` — nama file fin
 - `styles/*.ts` — 4 style CSL + locale en-US vendored sebagai modul TS string; `citation-js.d.ts` ambient decl. ✅
 - **Fase 4:** subpath `@aqsha/services/citations` ditambah (`package.json` exports + entri `tsup.config.ts`) agar tool agent (node→dist) bisa import `CitationService`. `ContextService.hydrate` (`./context`) menerima lane `workspaceCitations`. Tool `apps/agent/src/mastra/tools/{search,get}-workspace-citation.ts` + registrasi di `tools/index.ts` (`readTools`). ✅
 
-Belum ada (Fase 5–6):
+Terimplementasi (Fase 5–6) di `packages/services/src/integrations/`:
 
-- `integrations/integration.service.ts` — lifecycle koneksi, enkripsi credential, status.
-- `integrations/providers/mendeley.adapter.ts`, `zotero.adapter.ts` — adapter HTTP per provider (pagination, retry/backoff 429, token refresh untuk Mendeley) di balik satu interface `IntegrationProvider` (listFolders, pullDocuments(cursor), profile).
-- BullMQ worker `integration-sync` (apps/api) — sync periodik opt-in, idempotent via `externalId` + `sourceHash`.
+- `integration.service.ts` — lifecycle koneksi, enkripsi credential (`crypto.ts` AES-256-GCM), signed OAuth state (`oauth-state.ts` HMAC), status; dua jalur connect (`startConnect`+`completeOAuth` untuk OAuth; `connectWithApiKey` untuk API key) berbagi `persistConnection`.
+- `mendeley.adapter.ts` (`authMode: "oauth"`) + `zotero.adapter.ts` (`authMode: "api_key"`) di balik satu interface `IntegrationAdapter` (listFolders, pullDocuments, fetchProfile, ensureFresh) — retry/backoff via `fetchWithRetry`, token refresh Mendeley, paginasi Link rel=next keduanya. Zotero pull memakai CSL-JSON native (`include=csljson`).
+- `citation-sync.service.ts` — `previewFolder` per-workspace (reuse `stageImportBatch`); commit lewat `CitationImportService.commit` yang sama (idempoten via `externalId`).
+- BullMQ worker `integration-sync` (apps/api) — refresh koneksi periodik opt-in, non-destruktif (tak menyentuh library citation).
 
 **Technical spike Fase 0 (✅ selesai — hasil di ADR `docs/adr-citation-csl-engine.md`):**
 
@@ -506,13 +507,15 @@ Urutan: **Fase 0 → 1 → 2 → 3 → 4 (opsional, bisa paralel 3) → evaluasi
 
 **Acceptance:** connect → pilih folder → sync metadata → disconnect; token tidak pernah muncul di log/response/browser; sync ulang tidak menduplikasi (idempotent via `externalId`).
 
-### Fase 6 — Zotero
+### Fase 6 — Zotero — ✅ SELESAI (kode) (2026-07-11)
 
-1. `zotero.adapter.ts` (API v3, header `Zotero-API-Key`; koleksi + items + versioning `Last-Modified-Version` sebagai cursor).
-2. Connect flow = dialog API key + user ID (validasi `/keys/current`); tanpa OAuth dance → fase ini jauh lebih ringan dari Mendeley.
-3. Kartu Zotero di Settings → Integrasi berubah dari "Segera" menjadi aktif; tab Sitasi mendapat "Tarik dari Zotero".
+**Hasil:** Zotero drop-in penuh di interface generik yang sama; user menempel API key di Settings → Integrasi lalu menarik metadata koleksi ke workspace lewat wizard yang sama.
 
-**Acceptance:** paritas alur dengan Mendeley (folders/preview/commit/disconnect/idempotent), key terenkripsi at-rest.
+1. ✅ `zotero.adapter.ts` (API v3, header `Zotero-API-Key` + `Zotero-API-Version: 3`; folders `/users/<id>/collections`, items `/users/<id>/items/top?format=json&include=csljson` = CSL-JSON native, `/collections/<key>/items/top` untuk folder tertentu; paginasi Link rel=next; skip note/attachment tanpa `csljson.type`). ⚠️ DEVIASI: pull penuh (bukan incremental `Last-Modified-Version` cursor) — paritas dgn Mendeley yang juga full-pull; cursor incremental bisa menyusul.
+2. ✅ Connect via API key tanpa OAuth: interface diberi `authMode` (`oauth`/`api_key`) + `connectWithApiKey`; validasi ke `/keys/<key>` (userID otoritatif dari respons, user ID input opsional). ⚠️ DEVIASI: `/keys/<key>` (didokumentasikan eksplisit) alih-alih `/keys/current`. Route `POST /integrations/:provider/key`; service `IntegrationService.connectWithApiKey`.
+3. ✅ Kartu Zotero di Settings → Integrasi aktif (bukan "Segera") via `authMode` di status view → `ApiKeyConnectDialog` (input API key + user ID opsional, link bantuan zotero.org/settings/keys). `ProviderSyncWizard` + footnote empty-state sudah generik → "Tarik dari Zotero" jalan otomatis begitu terhubung (selector provider muncul bila >1 akun).
+
+**Acceptance:** ✅ paritas alur dengan Mendeley (folders/preview/commit/disconnect/idempotent — satu pipeline `stageImportBatch`/`commit`), key terenkripsi at-rest (AES-256-GCM, tak pernah keluar dari service). E2E connect Zotero dgn API key riil = OWNER.
 
 ## 8. Keamanan integrasi provider
 
@@ -565,16 +568,17 @@ Perubahan schema/service: `bun run db:generate` → review migration → `bun ru
 1. ⚠️ **Status (2026-07-11): feature flag `workspace_citations` DIHAPUS** — Citation Manager (tab Sitasi + "Tambahkan ke Sitasi" + editor sitasi + Astra) kini **default aktif untuk semua user**, tanpa gate. (Sebelumnya flag env OR `isAdmin`.) Tidak perlu set env untuk GA.
 2. Monitor import error rate, records/batch, duplicate decision, render failure, export success, render-document latency.
 3. ✅ Fase 3 (BlockNote) + Fase 4 (Astra) selesai; dokumen lama tanpa citation node tidak dimigrate paksa (reconcile hanya menulis usage saat save berikutnya).
-4. Fase 5 sebagai beta terpisah (`provider_sync_beta`) setelah security review + app registration siap; Fase 6 menyusul di flag yang sama.
-5. **OWNER sebelum rilis:** PROD migrate `0031` + `0032`; resolve kolisi migration `0031` dgn branch admin-role saat merge; restore `admin_entitlements` di DEV bila menjalankan itest artifacts/billing/workspaces (didrop branch sibling → 14 itest gagal, PRE-EXISTING, bukan dari citation work); E2E editor sitasi.
+4. Fase 5 (Mendeley OAuth) + Fase 6 (Zotero API key) selesai di kode; rilis sebagai beta terpisah (`provider_sync_beta`) setelah security review + app registration Mendeley siap. Zotero tak butuh app registration (key milik user).
+5. **OWNER sebelum rilis:** PROD migrate `0031` + `0032` + `0033` (integration_connections); resolve kolisi migration `0031` dgn branch admin-role saat merge; set env `AQSHA_INTEGRATION_ENC_KEY` (+ Mendeley OAuth 5 env) di PROD; Zotero TIDAK butuh env server (hanya enc key). Restore `admin_entitlements` di DEV bila menjalankan itest artifacts/billing/workspaces (didrop branch sibling → itest gagal, PRE-EXISTING, bukan dari citation work; api itests juga butuh `REDIS_URL` + DEV DB termigrate). E2E editor sitasi + E2E connect Mendeley/Zotero.
 
 ## 11. Ringkasan file yang diperkirakan disentuh
 
 | Area | File/direktori |
 |---|---|
-| DB ✅ (F1) | `packages/db/src/schema/workspaceCitations.ts`, `workspaceCitationSettings.ts`, `citationImportBatches.ts` + repos + mig `0031` + `test/citations.test.ts`; sisa: `documentCitationUsages.ts` (F3), `integrationConnections.ts` (F5) |
-| Services ✅ (F1) | `packages/services/src/citations/*` + export di `index.ts` + rate-limit rules `citations:*` di `quota/rate-limits.ts` + tests/fixtures; sisa: `packages/services/src/integrations/*` (F5–6) |
-| API ✅ (F1) | `apps/api/src/routes/citations.ts` + mount di `index.ts` + `test/citations.test.ts`; sisa: `routes/integrations.ts` + worker `integration-sync` (F5) |
+| DB ✅ (F1–5) | `packages/db/src/schema/workspaceCitations.ts`, `workspaceCitationSettings.ts`, `citationImportBatches.ts`, `documentCitationUsages.ts` (F3), `integrationConnections.ts` (F5) + repos + mig `0031`/`0032`/`0033` + `test/citations.test.ts` |
+| Services ✅ (F1–6) | `packages/services/src/citations/*` + `integrations/*` (F5–6: crypto/oauth-state/integration.service/mendeley.adapter/zotero.adapter/citation-sync.service) + export di `index.ts` + rate-limit rules `citations:*`/`integrations:*` di `quota/rate-limits.ts` + tests (`integrations-crypto.test.ts`, `integrations-zotero.test.ts`) |
+| API ✅ (F1–6) | `apps/api/src/routes/citations.ts` + `routes/integrations.ts` (connect/callback/key/refresh/disconnect/folders/sync) + mount di `index.ts` + worker `integration-sync.worker.ts` + `test/citations.test.ts` |
+| Web integrasi ✅ (F5–6) | `apps/web/app/app/settings/integrations/page.tsx`, `features/settings/components/integrations-page.tsx` (+ `ApiKeyConnectDialog`), `features/settings/lib/integrations.ts` (`authMode`/`PROVIDER_AUTH_MODE`), `features/settings/api.ts` (`useConnectApiKeyIntegration`), `features/citations/components/provider-sync-wizard.tsx` |
 | Web panel ✅ | `apps/web/features/workspaces/utils/workspace-panel-model.ts` (+ test), `workspace-panel-context.tsx` (baru), `workspace-detail-client.tsx`, `workspace-side-panel.tsx` (baru; `workspace-chat-side-panel.tsx` TIDAK dihapus — masih dipakai artifact reader dgn `chrome="frame"`), prop `chrome` pada `CompactThreadChatPanel`, `workspace-board-toolbar.tsx` (aria PanelOpenButton) |
 | Web citations ✅ | `apps/web/features/citations/{api.ts,types.ts,feature.ts,components/*}` (panel + bulk bar seleksi, list+row+filter, empty state, wizard import, dialog DOI/manual-edit/gaya/**duplikat**, detail sub-view + provenance, export menu), `apps/web/lib/{api-query.ts,feature-flags.ts}` |
 | Web feature flag ❌ DIHAPUS (2026-07-11) | `apps/web/lib/feature-flags.ts` + `features/citations/feature.ts` DIHAPUS; gate dilepas dari `workspace-side-panel.tsx`/`workspace-library-surface.tsx`/`artifact-detail-view.tsx`; entri `.env.example` dihapus. Citation Manager default aktif. |

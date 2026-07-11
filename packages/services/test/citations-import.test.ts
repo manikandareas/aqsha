@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { AppError, CitationImportBatchRepo, WorkspaceCitationRepo } from "@aqsha/db";
+import {
+  AppError,
+  CitationImportBatchRepo,
+  DocumentCitationUsageRepo,
+  WorkspaceCitationRepo,
+} from "@aqsha/db";
 import { CitationImportService } from "../src/citations/citation-import.service";
 import { CitationService } from "../src/citations/citation.service";
 import { WorkspaceService } from "../src/workspace.service";
@@ -255,6 +260,8 @@ describe("CitationService guards", () => {
     spyOn(WorkspaceCitationRepo, "findById").mockImplementation(
       async (_db, _owner, id) => existingRow({ id }) as never,
     );
+    // createManual mengembalikan lewat get() → butuh stub usage count (Fase 3).
+    spyOn(DocumentCitationUsageRepo, "countDocumentsUsingCitation").mockResolvedValue(0);
 
     expect(
       await appErrorCode(

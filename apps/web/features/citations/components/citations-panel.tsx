@@ -11,6 +11,7 @@ import {
   MoreHorizontalIcon,
   PencilIcon,
   PenLineIcon,
+  PlugIcon,
   PlusIcon,
   SearchIcon,
   SettingsIcon,
@@ -61,6 +62,7 @@ import { CitationFormDialog } from "./citation-form-dialog";
 import { CitationImportWizard } from "./citation-import-wizard";
 import { CitationSettingsDialog } from "./citation-settings-dialog";
 import { CitationExportMenu } from "./citation-export-menu";
+import { ProviderSyncWizard } from "./provider-sync-wizard";
 
 /**
  * Konten tab Sitasi pada panel kanan workspace detail. List mode (default) ↔
@@ -97,7 +99,14 @@ export function CitationsPanel({
   );
 }
 
-type DialogKind = "import" | "doi" | "manual" | "settings" | "duplicates" | null;
+type DialogKind =
+  | "import"
+  | "doi"
+  | "manual"
+  | "settings"
+  | "duplicates"
+  | "provider"
+  | null;
 
 function CitationListView({
   workspaceId,
@@ -189,6 +198,11 @@ function CitationListView({
                   <DropdownMenuItem onSelect={() => setDialog("manual")}>
                     <PenLineIcon className="size-3.5" />
                     Manual
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => setDialog("provider")}>
+                    <PlugIcon className="size-3.5" />
+                    Tarik dari Mendeley/Zotero
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -313,6 +327,12 @@ function CitationListView({
         workspaceId={workspaceId}
         open={dialog === "import"}
         onOpenChange={(open) => setDialog(open ? "import" : null)}
+        onDone={() => setDialog(null)}
+      />
+      <ProviderSyncWizard
+        workspaceId={workspaceId}
+        open={dialog === "provider"}
+        onOpenChange={(open) => setDialog(open ? "provider" : null)}
         onDone={() => setDialog(null)}
       />
       <CitationDoiDialog

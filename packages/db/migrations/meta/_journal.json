@@ -232,6 +232,13 @@
       "when": 1783757726404,
       "tag": "0032_big_corsair",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1783769517374,
+      "tag": "0033_integration_connections",
+      "breakpoints": true
     }
   ]
 }

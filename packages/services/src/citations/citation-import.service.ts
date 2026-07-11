@@ -1,10 +1,13 @@
 import type {
   CitationAuthor,
   CitationMetadataStatus,
+  CitationProvider,
   Db,
   DbOrTx,
   ImportBatchFormat,
+  ImportBatchSourceKind,
   NewWorkspaceCitation,
+  WorkspaceCitation,
 } from "@aqsha/db";
 import { CitationImportBatchRepo, throwAppError, WorkspaceCitationRepo } from "@aqsha/db";
 import { WorkspaceService } from "../workspace.service";
@@ -16,12 +19,19 @@ import {
   metadataIssuesFor,
   metadataStatusFor,
 } from "./citation-normalize";
-import { parseBibliographyFile, sniffBibliographyFormat } from "./citation-parse";
+import {
+  type BibliographyParseError,
+  parseBibliographyFile,
+  sniffBibliographyFormat,
+} from "./citation-parse";
 
 export const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024;
 export const MAX_IMPORT_RECORDS = 5000;
 
 export type ImportDuplicatePolicy = "skip" | "merge" | "import";
+
+/** Entry mentah yang siap di-stage (dari file parse ATAU provider sync). */
+export type StagedEntryInput = { csl: CslItem; externalId?: string | null };
 
 /** Record staging yang dipersist di `citation_import_batches.records_json`. */
 type StagedImportRecord = {
@@ -36,6 +46,8 @@ type StagedImportRecord = {
   duplicateOfTitle: string | null;
   /** True bila duplikat terhadap record lain DI DALAM batch yang sama. */
   duplicateInBatch: boolean;
+  /** Provider item id — hanya terisi untuk batch `provider_sync` (idempotensi). */
+  externalId: string | null;
 };
 
 export type ImportPreviewRecord = {
@@ -55,7 +67,8 @@ export type ImportPreviewRecord = {
 
 export type ImportPreviewResult = {
   batchId: string;
-  format: ImportBatchFormat;
+  /** `null` untuk batch provider sync (bukan bibtex/ris). */
+  format: ImportBatchFormat | null;
   counts: { total: number; valid: number; incomplete: number; duplicate: number; error: number };
   records: ImportPreviewRecord[];
   errors: Array<{ index: number; message: string; raw: string }>;
@@ -124,9 +137,141 @@ function missingFieldPatch(
 }
 
 /**
+ * Stage entry hasil parse/pull → tandai duplikat (canonical key + externalId untuk
+ * provider) → simpan batch `pending`. Dipakai import file DAN provider sync (Fase 5–6):
+ * satu pipeline preview→commit. `commit` membaca `sourceKind`/`provider` batch untuk
+ * memutuskan `source` row.
+ */
+export async function stageImportBatch(
+  db: DbOrTx,
+  input: {
+    ownerUserId: string;
+    workspaceId: string;
+    entries: StagedEntryInput[];
+    parseErrors?: BibliographyParseError[];
+    source: "import" | "provider_sync";
+    sourceKind: ImportBatchSourceKind;
+    format: ImportBatchFormat | null;
+    provider?: CitationProvider | null;
+    originalFilename?: string | null;
+  },
+): Promise<ImportPreviewResult> {
+  if (input.entries.length > MAX_IMPORT_RECORDS) {
+    throwAppError({
+      message: `Batch melebihi batas ${MAX_IMPORT_RECORDS} record`,
+      code: "citation_import_too_large",
+      status: 413,
+    });
+  }
+  const rawErrors = input.parseErrors ?? [];
+
+  const staged: StagedImportRecord[] = input.entries.map((entry, i) => {
+    const columns = cslItemToColumns(entry.csl);
+    return {
+      index: i,
+      csl: entry.csl,
+      columns,
+      canonicalKey: canonicalKeyForCsl(entry.csl),
+      metadataStatus: metadataStatusFor(input.source, columns),
+      issues: metadataIssuesFor(columns),
+      duplicateOfId: null,
+      duplicateOfTitle: null,
+      duplicateInBatch: false,
+      externalId: entry.externalId ?? null,
+    };
+  });
+
+  // Entry tanpa judul tidak bisa jadi row (title NOT NULL) → geser ke errors.
+  const parseErrors = [...rawErrors];
+  const usable: StagedImportRecord[] = [];
+  for (const record of staged) {
+    if (!record.columns.title) {
+      parseErrors.push({
+        index: record.index,
+        message: "entry tanpa judul — tidak bisa diimpor",
+        raw: JSON.stringify(record.csl).slice(0, 200),
+      });
+    } else {
+      usable.push(record);
+    }
+  }
+
+  // Kandidat duplikat: vs library existing (canonical key + provider externalId) + antar-record.
+  const existing = await WorkspaceCitationRepo.findActiveByCanonicalKeys(
+    db,
+    input.ownerUserId,
+    input.workspaceId,
+    usable.map((r) => r.canonicalKey),
+  );
+  const existingByKey = new Map(existing.map((c) => [c.canonicalKey, c]));
+  const existingByExternal = new Map<string, WorkspaceCitation>();
+  if (input.provider) {
+    const externalIds = usable
+      .map((r) => r.externalId)
+      .filter((v): v is string => Boolean(v));
+    const existingExternal = await WorkspaceCitationRepo.findActiveByExternalIds(
+      db,
+      input.ownerUserId,
+      input.workspaceId,
+      input.provider,
+      externalIds,
+    );
+    for (const c of existingExternal) {
+      if (c.externalId) existingByExternal.set(c.externalId, c);
+    }
+  }
+  const seenInBatch = new Set<string>();
+  for (const record of usable) {
+    const match =
+      (record.externalId ? existingByExternal.get(record.externalId) : undefined) ??
+      existingByKey.get(record.canonicalKey);
+    if (match) {
+      record.duplicateOfId = match.id;
+      record.duplicateOfTitle = match.title;
+    }
+    if (seenInBatch.has(record.canonicalKey)) record.duplicateInBatch = true;
+    else seenInBatch.add(record.canonicalKey);
+  }
+
+  const now = Date.now();
+  const batchId = crypto.randomUUID();
+  const counts = {
+    total: staged.length + rawErrors.length,
+    valid: usable.filter((r) => !r.duplicateOfId && !r.duplicateInBatch).length,
+    incomplete: usable.filter((r) => r.metadataStatus === "incomplete").length,
+    duplicate: usable.filter((r) => r.duplicateOfId || r.duplicateInBatch).length,
+    error: parseErrors.length,
+  };
+  await CitationImportBatchRepo.insert(db, {
+    id: batchId,
+    ownerUserId: input.ownerUserId,
+    workspaceId: input.workspaceId,
+    sourceKind: input.sourceKind,
+    format: input.format,
+    provider: input.provider ?? null,
+    originalFilename: input.originalFilename?.slice(0, 200) ?? null,
+    totalCount: counts.total,
+    validCount: counts.valid,
+    duplicateCount: counts.duplicate,
+    errorCount: counts.error,
+    recordsJson: usable,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return {
+    batchId,
+    format: input.format,
+    counts,
+    records: usable.map(toPreviewRecord),
+    errors: parseErrors,
+  };
+}
+
+/**
  * Import `.bib`/`.ris` dua langkah: `preview` mem-parse + menandai duplikat dan
  * MENAHAN record di batch row; `commit` menulis pilihan user ke library dalam satu
- * transaksi. Satu pipeline yang sama akan dipakai provider sync (Fase 5–6).
+ * transaksi. Satu pipeline yang sama dipakai provider sync (Fase 5–6) via `stageImportBatch`.
  */
 export const CitationImportService = {
   async preview(
@@ -164,95 +309,16 @@ export const CitationImportService = {
         severity: "warning",
       });
     }
-    if (entries.length > MAX_IMPORT_RECORDS) {
-      throwAppError({
-        message: `Batch melebihi batas ${MAX_IMPORT_RECORDS} record`,
-        code: "citation_import_too_large",
-        status: 413,
-      });
-    }
-
-    const staged: StagedImportRecord[] = entries.map((entry, i) => {
-      const columns = cslItemToColumns(entry.csl);
-      return {
-        index: i,
-        csl: entry.csl,
-        columns,
-        canonicalKey: canonicalKeyForCsl(entry.csl),
-        metadataStatus: metadataStatusFor("import", columns),
-        issues: metadataIssuesFor(columns),
-        duplicateOfId: null,
-        duplicateOfTitle: null,
-        duplicateInBatch: false,
-      };
-    });
-
-    // Entry tanpa judul tidak bisa jadi row (title NOT NULL) → geser ke errors.
-    const parseErrors = [...errors];
-    const usable: StagedImportRecord[] = [];
-    for (const record of staged) {
-      if (!record.columns.title) {
-        parseErrors.push({
-          index: record.index,
-          message: "entry tanpa judul — tidak bisa diimpor",
-          raw: JSON.stringify(record.csl).slice(0, 200),
-        });
-      } else {
-        usable.push(record);
-      }
-    }
-
-    // Kandidat duplikat: vs library existing + antar-record dalam batch.
-    const existing = await WorkspaceCitationRepo.findActiveByCanonicalKeys(
-      db,
-      input.ownerUserId,
-      input.workspaceId,
-      usable.map((r) => r.canonicalKey),
-    );
-    const existingByKey = new Map(existing.map((c) => [c.canonicalKey, c]));
-    const seenInBatch = new Set<string>();
-    for (const record of usable) {
-      const match = existingByKey.get(record.canonicalKey);
-      if (match) {
-        record.duplicateOfId = match.id;
-        record.duplicateOfTitle = match.title;
-      }
-      if (seenInBatch.has(record.canonicalKey)) record.duplicateInBatch = true;
-      else seenInBatch.add(record.canonicalKey);
-    }
-
-    const now = Date.now();
-    const batchId = crypto.randomUUID();
-    const counts = {
-      total: staged.length + errors.length,
-      valid: usable.filter((r) => !r.duplicateOfId && !r.duplicateInBatch).length,
-      incomplete: usable.filter((r) => r.metadataStatus === "incomplete").length,
-      duplicate: usable.filter((r) => r.duplicateOfId || r.duplicateInBatch).length,
-      error: parseErrors.length,
-    };
-    await CitationImportBatchRepo.insert(db, {
-      id: batchId,
+    return stageImportBatch(db, {
       ownerUserId: input.ownerUserId,
       workspaceId: input.workspaceId,
+      entries: entries.map((e) => ({ csl: e.csl })),
+      parseErrors: errors,
+      source: "import",
       sourceKind: "file",
       format,
-      originalFilename: input.fileName.slice(0, 200),
-      totalCount: counts.total,
-      validCount: counts.valid,
-      duplicateCount: counts.duplicate,
-      errorCount: counts.error,
-      recordsJson: usable,
-      createdAt: now,
-      updatedAt: now,
+      originalFilename: input.fileName,
     });
-
-    return {
-      batchId,
-      format,
-      counts,
-      records: usable.map(toPreviewRecord),
-      errors: parseErrors,
-    };
   },
 
   async commit(
@@ -287,6 +353,8 @@ export const CitationImportService = {
     const staged = batch.recordsJson as StagedImportRecord[];
     const selected = new Set(input.selectedIndexes);
     const chosen = staged.filter((r) => selected.has(r.index));
+    const isProviderSync = batch.sourceKind === "provider_sync";
+    const batchProvider = (batch.provider ?? null) as CitationProvider | null;
 
     const result: ImportCommitResult = { created: 0, merged: 0, skipped: 0 };
     const now = Date.now();
@@ -300,11 +368,30 @@ export const CitationImportService = {
         chosen.map((r) => r.canonicalKey),
       );
       const currentByKey = new Map(current.map((c) => [c.canonicalKey, c]));
+      // Provider sync: cocokkan juga by externalId (idempotensi + hindari unique violation).
+      const currentByExternal = new Map<string, WorkspaceCitation>();
+      if (isProviderSync && batchProvider) {
+        const externalIds = chosen
+          .map((r) => r.externalId)
+          .filter((v): v is string => Boolean(v));
+        const currentExternal = await WorkspaceCitationRepo.findActiveByExternalIds(
+          tx,
+          input.ownerUserId,
+          input.workspaceId,
+          batchProvider,
+          externalIds,
+        );
+        for (const c of currentExternal) {
+          if (c.externalId) currentByExternal.set(c.externalId, c);
+        }
+      }
       const rowsToInsert: NewWorkspaceCitation[] = [];
       const insertedKeys = new Set<string>();
 
       for (const record of chosen) {
-        const existing = currentByKey.get(record.canonicalKey);
+        const existing =
+          (record.externalId ? currentByExternal.get(record.externalId) : undefined) ??
+          currentByKey.get(record.canonicalKey);
         const batchDuplicate = insertedKeys.has(record.canonicalKey);
         if (existing || batchDuplicate) {
           if (input.duplicatePolicy === "skip") {
@@ -334,9 +421,9 @@ export const CitationImportService = {
           ownerUserId: input.ownerUserId,
           workspaceId: input.workspaceId,
           artifactId: null,
-          source: "import",
-          provider: null,
-          externalId: null,
+          source: isProviderSync ? "provider_sync" : "import",
+          provider: isProviderSync ? batchProvider : null,
+          externalId: isProviderSync ? (record.externalId ?? null) : null,
           documentType: record.columns.documentType,
           title: record.columns.title,
           authorsJson: record.columns.authors,

@@ -2,6 +2,7 @@ import { and, arrayContains, desc, eq, ilike, inArray, isNull, lt, or, sql } fro
 import { encodeKeysetCursor, type KeysetCursor } from "../cursor";
 import {
   type CitationMetadataStatus,
+  type CitationProvider,
   type CitationSource,
   type NewWorkspaceCitation,
   type WorkspaceCitation,
@@ -144,6 +145,29 @@ export const WorkspaceCitationRepo = {
           eq(workspaceCitations.workspaceId, workspaceId),
           isNull(workspaceCitations.deletedAt),
           inArray(workspaceCitations.canonicalKey, canonicalKeys),
+        ),
+      );
+  },
+
+  /** Idempotensi provider sync: cocokkan `(provider, external_id)` pada citation aktif. */
+  async findActiveByExternalIds(
+    db: DbOrTx,
+    ownerUserId: string,
+    workspaceId: string,
+    provider: CitationProvider,
+    externalIds: string[],
+  ): Promise<WorkspaceCitation[]> {
+    if (externalIds.length === 0) return [];
+    return db
+      .select()
+      .from(workspaceCitations)
+      .where(
+        and(
+          eq(workspaceCitations.ownerUserId, ownerUserId),
+          eq(workspaceCitations.workspaceId, workspaceId),
+          eq(workspaceCitations.provider, provider),
+          isNull(workspaceCitations.deletedAt),
+          inArray(workspaceCitations.externalId, externalIds),
         ),
       );
   },

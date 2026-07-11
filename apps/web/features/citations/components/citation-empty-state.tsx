@@ -1,12 +1,13 @@
 "use client";
 
 import { FileTextIcon, LinkIcon, PenLineIcon, Quote, UploadIcon } from "@aqsha/ui/icons";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 /**
  * Empty state tab Sitasi — anatomi `WorkspaceLibraryEmpty` (badge pill → title +
  * deskripsi → hairline connector → stacked pill actions). Footnote koneksi provider
- * ditandai "segera" (Fase 5) tanpa link mati.
+ * kini tautan ke Settings → Integrasi (Fase 5 live).
  */
 export function CitationEmptyState({
   onImportFile,
@@ -60,10 +61,13 @@ export function CitationEmptyState({
 
       <p className="mt-8 max-w-[19rem] text-[12px] font-medium text-muted-foreground/80">
         <FileTextIcon className="mr-1 inline size-3 align-[-1px]" />
-        Hubungkan akun Mendeley atau Zotero di Pengaturan → Integrasi{" "}
-        <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-          segera
-        </span>
+        Hubungkan akun Mendeley atau Zotero di{" "}
+        <Link
+          href="/app/settings/integrations"
+          className="font-semibold text-foreground underline-offset-2 hover:underline"
+        >
+          Pengaturan → Integrasi
+        </Link>
       </p>
     </div>
   );

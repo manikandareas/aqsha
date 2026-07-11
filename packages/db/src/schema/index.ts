@@ -14,6 +14,7 @@ export * from "./workspaceCitations";
 export * from "./workspaceCitationSettings";
 export * from "./citationImportBatches";
 export * from "./documentCitationUsages";
+export * from "./integrationConnections";
 export * from "./analysisSandboxes";
 export * from "./analysisResultBlocks";
 export * from "./chatThreads";
