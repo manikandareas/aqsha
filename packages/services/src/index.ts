@@ -220,3 +220,22 @@ export {
   type ExploreProviderStatus,
   type ExploreSearchResponse,
 } from "./explore/model";
+
+// Citation Manager (Fase 1) — Citation Library workspace-scoped + import .bib/.ris +
+// render CSL multi-style (lihat docs/adr-citation-csl-engine.md).
+export {
+  CITATION_EXPORT_FORMATS,
+  CITATION_STYLES,
+  type CitationDetail,
+  type CitationExportFormat,
+  CitationImportService,
+  type CitationListItem,
+  CitationService,
+  type CitationSettingsView,
+  formatAuthorDisplay,
+  type ImportCommitResult,
+  type ImportDuplicatePolicy,
+  type ImportPreviewResult,
+  MAX_IMPORT_FILE_BYTES,
+  type ManualCitationInput,
+} from "./citations";
