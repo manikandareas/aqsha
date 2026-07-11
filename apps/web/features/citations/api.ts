@@ -5,6 +5,12 @@ import { toast } from "sonner";
 import { useApi } from "@/lib/api-client";
 import { readableApiErrorMessage } from "@/lib/api-error";
 import { queryKeys, unwrap } from "@/lib/api-query";
+import {
+  type CitationExportFormat,
+  exportBlobType,
+  exportFileName,
+  resolveExportContent,
+} from "./export-model";
 import type {
   BibliographySort,
   CitationDetail,
@@ -451,9 +457,10 @@ export function useUpdateCitationSettings(workspaceId: string) {
 export function useExportCitations(workspaceId: string) {
   const api = useApi();
   return useMutation({
-    mutationFn: async (input: { format: "bibtex" | "ris" | "csl-json"; ids?: string[] }) => {
-      // Route mengembalikan Response text (content-disposition) — Eden bisa memberi
-      // string (sudah diparse) atau Response tergantung content-type.
+    mutationFn: async (input: { format: CitationExportFormat; ids?: string[] }) => {
+      // Route mengembalikan Response text (content-disposition). Eden mem-parse body
+      // sesuai content-type: bibtex/ris → string mentah, csl-json → array/objek. Semua
+      // bentuk itu dinormalkan ke teks oleh resolveExportContent.
       const data = unwrap(
         await api.workspaces({ id: workspaceId }).citations.export.get({
           query: {
@@ -462,15 +469,12 @@ export function useExportCitations(workspaceId: string) {
           },
         }),
       ) as unknown;
-      const content =
-        typeof data === "string" ? data : await (data as Response).text();
-      const extension =
-        input.format === "bibtex" ? "bib" : input.format === "ris" ? "ris" : "json";
-      const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+      const content = await resolveExportContent(data);
+      const blob = new Blob([content], { type: exportBlobType(input.format) });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `sitasi.${extension}`;
+      anchor.download = exportFileName(input.format);
       anchor.click();
       URL.revokeObjectURL(url);
     },
