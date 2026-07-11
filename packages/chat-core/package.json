@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./deep-viz": "./src/deep-viz.ts"
+    "./deep-viz": "./src/deep-viz.ts",
+    "./stats-viz": "./src/stats-viz.ts"
   },
   "scripts": {
     "test": "bun test --timeout 30000",

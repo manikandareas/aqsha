@@ -33,9 +33,9 @@ function SpotlightCardSkeleton({
 }) {
   const mediaHeight =
     size === "hero"
-      ? "h-52 sm:h-64 @xl/feed:h-full @xl/feed:min-h-[300px]"
-      : "h-48 sm:h-56 @xl/feed:h-full @xl/feed:min-h-[224px]";
-  const titleHeight = size === "hero" ? "h-7 sm:h-8" : "h-6 sm:h-7";
+      ? "h-52 @2xl:h-64 @xl/feed:h-full @xl/feed:min-h-[300px]"
+      : "h-48 @2xl:h-56 @xl/feed:h-full @xl/feed:min-h-[224px]";
+  const titleHeight = size === "hero" ? "h-7 @2xl:h-8" : "h-6 @2xl:h-7";
   const columns =
     imageSide === "left"
       ? "@xl/feed:grid-cols-[minmax(260px,40%)_minmax(0,1fr)]"

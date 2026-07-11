@@ -91,7 +91,6 @@ function WorkspaceDetailMain({
             side={
               <ResponsiveSidePanel open={chatPanelOpen}>
                 <WorkspaceChatSidePanel
-                  workspaceId={workspaceId}
                   activeThreadId={panelThreadId}
                   onActiveThreadIdChange={handlePanelThreadChange}
                   threads={data.workspaceThreads}

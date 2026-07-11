@@ -4,8 +4,8 @@ import { cn } from "@/lib/utils";
 
 export function ComposerHeroState({
   title = "Apa yang ingin kita teliti?",
-  logoClassName = "size-12 sm:size-14",
-  titleClassName = "font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl leading-none",
+  logoClassName = "size-12 @2xl:size-14",
+  titleClassName = "font-heading text-2xl font-bold tracking-tight text-foreground @2xl:text-3xl leading-none",
   headerClassName,
   children,
   hint,

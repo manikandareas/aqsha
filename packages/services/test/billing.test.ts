@@ -35,10 +35,12 @@ describe("estimateCredits", () => {
 });
 
 describe("requiredPlanForFeature", () => {
-  test("pro_chat/deep_research/sandbox_compute → starter; lainnya → free", () => {
+  test("pro_chat/deep_research → starter; lainnya (termasuk sandbox_compute) → free", () => {
     expect(requiredPlanForFeature("pro_chat")).toBe("starter");
     expect(requiredPlanForFeature("deep_research")).toBe("starter");
-    expect(requiredPlanForFeature("sandbox_compute")).toBe("starter");
+    // Keputusan produk statistics 2026-07-09: Free boleh mencoba analisis data,
+    // dibatasi kredit bulanan — bukan digating plan.
+    expect(requiredPlanForFeature("sandbox_compute")).toBe("free");
     expect(requiredPlanForFeature("normal_chat")).toBe("free");
     expect(requiredPlanForFeature("external_search")).toBe("free");
   });

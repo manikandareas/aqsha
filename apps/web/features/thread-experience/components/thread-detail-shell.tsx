@@ -3,7 +3,13 @@
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { ResponsiveSidePanel } from "@/components/layout/responsive-side-panel";
-import { PanelHeaderBar, SidePanelFrame } from "@/components/layout/side-panel-frame";
+import {
+  PanelCardToolbar,
+  PanelExpandButton,
+  PanelTabsHeader,
+  SidePanelFrame,
+  type PanelTab,
+} from "@/components/layout/side-panel-frame";
 import { PanelTitleDropdownTrigger } from "@/components/panel-title-dropdown-trigger";
 import {
   DropdownMenu,
@@ -12,8 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCloseRightPanel } from "@/hooks/use-close-right-panel";
-import { panelBodyPaddingClass } from "@/lib/panel-surface";
+import { panelBodyPaddingClass, panelCardToolbarClass } from "@/lib/panel-surface";
 import { cn } from "@/lib/utils";
 import {
   useWorkspaceLibraryData,
@@ -23,6 +28,7 @@ import { WorkspaceBoardToolbar } from "@/features/workspaces/components/workspac
 import { useWorkspaceLibraryDialogState } from "@/features/workspaces/hooks/use-workspace-library-dialogs";
 import { ArtifactDetailPanel } from "@/features/workspaces/components/artifact-detail-view";
 import { workspaceEmoji } from "@/features/workspaces/utils/workspace-emoji";
+import { PanelCloseButton } from "./detail-panel-chrome";
 import { PlanDetailPanel } from "./plan-detail-panel";
 import { QuestionsDetailPanel } from "./questions-detail-panel";
 import { SearchStepPanel } from "./search-step-panel";
@@ -34,6 +40,10 @@ import {
   ComposerMentionsProvider,
   usePanelContextSelection,
 } from "./composer-context-mentions";
+import {
+  threadPanelTabOf,
+  type ThreadPanelMode,
+} from "../utils/thread-panel-model";
 import { ThreadPanelProvider, useThreadPanel } from "./thread-panel-context";
 import { ThreadShellLayout } from "./thread-shell-layout";
 
@@ -43,14 +53,7 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
     workspaces,
     threads,
     selectedThread,
-    startThread,
-    sendMessage,
     rateStatus,
-    runs,
-    artifacts,
-    sources,
-    cancelRun,
-    retryRun,
     removeThread,
   } = useThreadExperienceData(threadId);
   const title = threadId
@@ -86,15 +89,8 @@ export function ThreadDetailShell({ threadId }: { threadId?: string }) {
           workspaces={workspaces}
           workspaceName={workspaceName}
           rateStatus={rateStatus}
-          startThread={startThread}
-          sendMessage={sendMessage}
-          runs={runs}
-          artifacts={artifacts}
-          sources={sources}
           onCreateThread={() => router.push("/app")}
           onSelectThread={(id) => router.push(`/app/threads/${id}`)}
-          onCancelRun={cancelRun}
-          onRetryRun={retryRun}
           onDeleteThread={threadId ? handleDeleteThread : undefined}
         />
       </ThreadPanelProvider>
@@ -110,11 +106,13 @@ type ThreadDetailShellViewProps = Omit<
   workspaceName?: string;
 };
 
-// Inside `ThreadPanelProvider`: derives the single side-panel slot from the panel
-// mode. The artifact panel (a card was clicked) REPLACES the workspace-library /
-// global-context panel, with a back affordance to return to it. Open/close stay
-// in sync with `DetailSplitLayout` via `panel.isOpen` / `panel.setOpen` (so the
-// mobile close + header toggle keep working — answer-stream redesign Fase 4 §7).
+// Inside `ThreadPanelProvider`: the side panel is a HOME for several panels behind one
+// tab strip (Workspace · Sumber · Statistik(soon) · Pratinjau). The shell owns the single
+// `SidePanelFrame` (flush tabs header + floating card); each mode contributes IN-CARD
+// content only. Message-part detail modes share the Pratinjau slot — its tab appears
+// while a preview is remembered and hides when the panel closes. Open/close stay in
+// sync with `DetailSplitLayout` via `panel.isOpen` / `panel.setOpen` (so the mobile
+// close + header toggle keep working — answer-stream redesign Fase 4 §7).
 function ThreadDetailShellView({
   threadId,
   title,
@@ -123,19 +121,16 @@ function ThreadDetailShellView({
   workspaces,
   workspaceName,
   rateStatus,
-  startThread,
-  sendMessage,
-  runs,
-  artifacts,
-  sources,
   onCreateThread,
   onSelectThread,
-  onCancelRun,
-  onRetryRun,
   onDeleteThread,
 }: ThreadDetailShellViewProps) {
   const panel = useThreadPanel();
-  const mode = panel?.mode ?? { kind: "closed" as const };
+  const rawMode = panel?.mode ?? { kind: "closed" as const };
+  // Shell home (tanpa threadId) tak punya sumber thread — sumber tak akan pernah terisi
+  // di draft shell, jadi deep-link `?panel=m` jatuh ke tab Workspace, bukan panel kosong.
+  const mode: ThreadPanelMode =
+    !threadId && rawMode.kind === "sources" ? { kind: "context" } : rawMode;
 
   const contextContent = !threadId ? (
     <ThreadGlobalContextPanel workspaces={workspaces} />
@@ -150,9 +145,8 @@ function ThreadDetailShellView({
     )
   ) : null;
 
-  // A clicked message part (artifact / source / sub-question / plan) REPLACES the
-  // workspace-context panel in the single slot; closing it collapses the slot (no
-  // back-to-context — the header toggle reopens context).
+  // In-card content per mode. Preview modes (artifact / search / step / plan /
+  // questions) share the single Pratinjau slot — opening another card replaces it.
   const panelContent =
     mode.kind === "artifact" ? (
       <ArtifactDetailPanel artifactId={mode.artifactId} onClose={panel?.closePanel} />
@@ -170,8 +164,41 @@ function ThreadDetailShellView({
       contextContent
     );
 
+  // The Pratinjau tab only exists while a preview is remembered (a card was clicked
+  // and the panel stayed open) — decision: hide, don't disable, when empty.
+  const tabs: PanelTab[] = [
+    { key: "workspace", label: "Workspace" },
+    // Sumber hanya relevan pada thread nyata — shell home tak pernah mengakumulasi sumber.
+    ...(threadId ? [{ key: "sources", label: "Sumber" }] : []),
+    { key: "statistics", label: "Statistik", disabled: true, hint: "segera" },
+    ...(panel?.previewMode ? [{ key: "preview", label: "Pratinjau" }] : []),
+  ];
+  const selectTab = (key: string) => {
+    if (key === "workspace") panel?.openContextPanel();
+    else if (key === "sources") panel?.openSourcesPanel();
+    else if (key === "preview") panel?.openPreviewPanel();
+  };
+
   const sidePanel = panelContent ? (
-    <ResponsiveSidePanel open={panel?.isOpen ?? false}>{panelContent}</ResponsiveSidePanel>
+    <ResponsiveSidePanel open={panel?.isOpen ?? false}>
+      <SidePanelFrame
+        header={
+          <PanelTabsHeader
+            tabs={tabs}
+            activeKey={threadPanelTabOf(mode)}
+            onSelect={selectTab}
+            actions={
+              <>
+                <PanelExpandButton />
+                <PanelCloseButton onClose={panel?.closePanel} />
+              </>
+            }
+          />
+        }
+      >
+        {panelContent}
+      </SidePanelFrame>
+    </ResponsiveSidePanel>
   ) : undefined;
 
   return (
@@ -183,15 +210,8 @@ function ThreadDetailShellView({
       threadId={threadId}
       selectedThread={selectedThread}
       rateStatus={rateStatus}
-      startThread={startThread}
-      sendMessage={sendMessage}
-      runs={runs}
-      artifacts={artifacts}
-      sources={sources}
       rightPanelOpen={panel?.isOpen ?? false}
       onRightPanelOpenChange={(open) => panel?.setOpen(open)}
-      onCancelRun={onCancelRun}
-      onRetryRun={onRetryRun}
       onDeleteThread={onDeleteThread}
       sidePanel={sidePanel}
     />
@@ -225,13 +245,14 @@ function ThreadWorkspaceLibraryPanel({
 
   if (libraryData.isLoading) {
     return (
-      <SidePanelFrame header={<PanelHeaderBar title={titleSlot ?? null} />}>
+      <>
+        {titleSlot ? <PanelCardToolbar title={titleSlot} /> : null}
         <div className={cn("grid gap-3", panelBodyPaddingClass)}>
           <Skeleton className="h-8 w-40 rounded-lg" />
           <Skeleton className="h-48 rounded-xl" />
           <Skeleton className="h-48 rounded-xl" />
         </div>
-      </SidePanelFrame>
+      </>
     );
   }
 
@@ -314,7 +335,6 @@ function ThreadGlobalContextPanel({
 }: {
   workspaces: WorkspacePickerOption[];
 }) {
-  const closePanel = useCloseRightPanel();
   const [selectedPanelWorkspaceId, setSelectedPanelWorkspaceId] = useState<string | null>(null);
   const selectedWorkspaceName = selectedPanelWorkspaceId
     ? (workspaces.find((workspace) => workspace._id === selectedPanelWorkspaceId)?.name ?? "Workspace")
@@ -338,26 +358,25 @@ function ThreadGlobalContextPanel({
     );
   }
 
+  // In-card content: the switcher rides the card toolbar (close lives on the tabs
+  // header), the empty-state prompt fills the body below.
   return (
-    <SidePanelFrame
-      header={
-        <WorkspaceBoardToolbar
-          workspaceName="Workspace"
-          titleSlot={workspaceSwitcher}
-          breadcrumb={[{ id: "root", label: "Root" }]}
-          onNavigate={() => {}}
-          onCreateFolder={() => {}}
-          onCreateDocument={() => {}}
-          onCreateUrl={() => {}}
-          onRenameWorkspace={async () => {}}
-          onUpdateWorkspaceEmoji={async () => {}}
-          onArchiveWorkspace={() => {}}
-          onClosePanel={closePanel}
-          showCreateActions={false}
-          showWorkspaceSettings={false}
-        />
-      }
-    >
+    <>
+      <WorkspaceBoardToolbar
+        barClassName={panelCardToolbarClass}
+        workspaceName="Workspace"
+        titleSlot={workspaceSwitcher}
+        breadcrumb={[{ id: "root", label: "Root" }]}
+        onNavigate={() => {}}
+        onCreateFolder={() => {}}
+        onCreateDocument={() => {}}
+        onCreateUrl={() => {}}
+        onRenameWorkspace={async () => {}}
+        onUpdateWorkspaceEmoji={async () => {}}
+        onArchiveWorkspace={() => {}}
+        showCreateActions={false}
+        showWorkspaceSettings={false}
+      />
       <div
         className={cn(
           "flex min-h-0 flex-1 items-center justify-center overflow-y-auto bg-background",
@@ -368,6 +387,6 @@ function ThreadGlobalContextPanel({
           Silakan pilih workspace terlebih dahulu.
         </p>
       </div>
-    </SidePanelFrame>
+    </>
   );
 }

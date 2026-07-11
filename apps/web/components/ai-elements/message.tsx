@@ -73,13 +73,27 @@ const DeepVizMarkdownComponent = dynamic(
     ),
   },
 );
+// Subtree stats-viz (tabel SPSS + kartu verdict + figur PNG) di-lazy-load: element `statsviz`
+// hanya muncul di jawaban yang memuat hasil `run_analysis`, jadi chat biasa tak memuatnya awal.
+const StatsVizMarkdownComponent = dynamic(
+  () =>
+    import("@/features/threads/components/stats-viz/stats-block").then(
+      (m) => m.StatsVizMarkdownComponent,
+    ),
+  {
+    loading: () => (
+      <div className="my-4 h-16 animate-pulse rounded-xl border border-dashed bg-muted/30" />
+    ),
+  },
+);
 // Komponen default: tabel kustom + element `citation` (pill sitasi inline) + element `deepviz`
-// (blok evidence viz laporan `/deep`). `citation`/`deepviz` hanya muncul bila pemanggil meneruskan
-// `reportRehypePlugins` (lihat `Response`); tanpa itu komponen tak terpakai.
+// (blok evidence viz `/deep`) + element `statsviz` (blok hasil analisis statistik). Element
+// kustom hanya muncul bila pemanggil meneruskan `reportRehypePlugins` (lihat `Response`).
 const streamdownComponents = {
   table: TableBlock,
   citation: CitationMarkdownComponent,
   deepviz: DeepVizMarkdownComponent,
+  statsviz: StatsVizMarkdownComponent,
 };
 
 export const MessageResponse = ({ className, components, ...props }: MessageResponseProps) => (

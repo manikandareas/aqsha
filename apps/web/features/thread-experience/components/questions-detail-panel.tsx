@@ -17,7 +17,7 @@ export function QuestionsDetailPanel() {
 
   if (!ask || ask.questions.length === 0) {
     return (
-      <DetailPanelShell eyebrow="Klarifikasi" title="Pertanyaan" onClose={onClose}>
+      <DetailPanelShell eyebrow="Klarifikasi" title="Pertanyaan">
         <p className="text-[13px] text-muted-foreground">
           Tidak ada pertanyaan klarifikasi yang menunggu jawaban.
         </p>
@@ -29,7 +29,7 @@ export function QuestionsDetailPanel() {
   const skip = ask.skip;
 
   return (
-    <DetailPanelShell eyebrow="Klarifikasi" title="Pertanyaan" onClose={onClose}>
+    <DetailPanelShell eyebrow="Klarifikasi" title="Pertanyaan">
       <QuestionsForm
         questions={ask.questions}
         findings={ask.findings}

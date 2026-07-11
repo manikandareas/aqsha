@@ -63,6 +63,7 @@ const TYPE_LABELS: Record<string, string> = {
   mermaid: "Diagram",
   json: "JSON",
   csv: "CSV",
+  spreadsheet: "Excel",
   code: "Kode",
 };
 
@@ -77,6 +78,7 @@ export const UPLOAD_ACCEPT = [
   ".md",
   ".markdown",
   ".csv",
+  ".xlsx",
   ".json",
   ".png",
   ".jpg",
@@ -87,6 +89,7 @@ export const UPLOAD_ACCEPT = [
   "text/plain",
   "text/markdown",
   "text/csv",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "application/json",
   "image/png",
   "image/jpeg",

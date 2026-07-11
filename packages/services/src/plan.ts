@@ -2,9 +2,9 @@
 //
 // Pure module (TANPA import db). Port lengkap dari V1
 // `packages/convex/convex/billing/catalog.ts` → satu sumber kebenaran untuk
-// plan, produk Mayar, estimasi kredit, dan status billing. Resolver plan
-// admin-allowlist (env-only) tetap di sini; resolver db-aware (admin_entitlements +
-// subscription mirror) hidup di `billing/snapshot.ts` (butuh db).
+// plan, produk Mayar, estimasi kredit, dan status billing. Allowlist admin env
+// di sini = BOOTSTRAP/break-glass saja; source of truth admin = `users.role`
+// via `resolveAdminOverride` di `billing/snapshot.ts` (butuh db).
 
 export type PlanKey = "free" | "starter" | "plus" | "ultra" | "admin";
 export type PublicPlanKey = Exclude<PlanKey, "admin">;
@@ -190,8 +190,9 @@ export function requiredPlanForFeature(feature: CreditFeature): PublicPlanKey {
   // pro_chat selalu butuh plan berbayar. deep_research default fallback "starter",
   // tapi send-path mengirim requiredPlan eksplisit agent-aware (Lite-deep → "free"
   // agar Free pakai kuota bulanannya; Pro-deep → "starter"). sandbox_compute
-  // (verification engine) hanya di Astra Pro → butuh plan berbayar yang sama.
-  if (feature === "pro_chat" || feature === "deep_research" || feature === "sandbox_compute") {
+  // (analisis statistik) = "free": Free boleh mencoba, dibatasi kredit bulanan
+  // (keputusan produk statistics 2026-07-09).
+  if (feature === "pro_chat" || feature === "deep_research") {
     return "starter";
   }
   return "free";
@@ -316,7 +317,8 @@ export function billingStatusAllowsUsage(args: {
   return args.status === "canceled" && Boolean(args.currentPeriodEnd && args.currentPeriodEnd > now);
 }
 
-// ── Admin allowlist (env-only, pure). Resolver db-aware ada di billing/snapshot.ts ──
+// ── Admin allowlist env (bootstrap/break-glass, pure). Source of truth = users.role
+// via resolveAdminOverride (billing/snapshot.ts) ──
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -350,14 +352,3 @@ export function isAdminEmail(email: string | null | undefined): boolean {
   return parseAdminEmails(process.env.AQSHA_ADMIN_EMAILS).has(normalizeEmail(email));
 }
 
-/**
- * Plan efektif owner via admin allowlist env saja (pure). Di V2 `ownerUserId ==
- * clerkUserId == sub`, jadi satu daftar owner-id mencakup keduanya. Selain admin
- * → 'free'. Untuk plan efektif penuh (admin_entitlements table + subscription
- * mirror) pakai `resolveEffectivePlanKey` (billing/snapshot.ts).
- */
-export function resolvePlanKey(args: { ownerUserId: string; email?: string | null }): PlanKey {
-  if (isAdminOwnerUserId(args.ownerUserId)) return "admin";
-  if (isAdminEmail(args.email)) return "admin";
-  return "free";
-}

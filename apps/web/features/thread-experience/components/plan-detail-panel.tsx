@@ -19,7 +19,7 @@ export function PlanDetailPanel({ turnId }: { turnId: string }) {
 
   if (!plan) {
     return (
-      <DetailPanelShell title="Rencana riset" onClose={onClose}>
+      <DetailPanelShell title="Rencana riset">
         <p className="text-[13px] text-muted-foreground">
           Rencana riset belum tersedia untuk thread ini.
         </p>
@@ -30,7 +30,7 @@ export function PlanDetailPanel({ turnId }: { turnId: string }) {
   const resolve = plan.resolve;
 
   return (
-    <DetailPanelShell eyebrow="Riset mendalam" title="Rencana riset" onClose={onClose}>
+    <DetailPanelShell eyebrow="Riset mendalam" title="Rencana riset">
       <div className="grid gap-4">
         {plan.plan ? (
           <p className="whitespace-pre-wrap break-words text-[13px] leading-6 text-foreground">

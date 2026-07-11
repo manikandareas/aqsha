@@ -113,16 +113,21 @@ export const UserService = {
    * Webhook user.created/user.updated — webhook adalah source-of-truth profil
    * (decision #2): patch email saja (pertahankan name); insert minimal bila
    * webhook tiba sebelum /sync. Default workspace dibuat saat /sync (bukan di sini).
+   *
+   * `role` = mirror `publicMetadata.role` Clerk (source of truth admin; dikelola dari
+   * Clerk Dashboard). `null` = payload tak membawa public_metadata → JANGAN sentuh
+   * kolom role (anti-clobber saat event lama/partial).
    */
   async applyClerkUserUpsert(
     db: DbOrTx,
-    input: { clerkUserId: string; email: string | null },
+    input: { clerkUserId: string; email: string | null; role?: "user" | "admin" | null },
   ): Promise<void> {
     const existing = await UserRepo.findByClerkUserId(db, input.clerkUserId);
     const now = Date.now();
     if (existing) {
       await UserRepo.patch(db, existing.ownerUserId, {
         email: input.email ?? existing.email ?? null,
+        ...(input.role != null ? { role: input.role } : {}),
         updatedAt: now,
       });
     } else {
@@ -133,6 +138,7 @@ export const UserService = {
         emailVerified: false,
         name: null,
         image: null,
+        role: input.role ?? "user",
         createdAt: now,
         updatedAt: now,
       });

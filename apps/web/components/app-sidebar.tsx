@@ -205,15 +205,9 @@ export function AppSidebar({
 
   return (
     <>
-      {/* "sidebar" (not "flush"): the main rail reads as its own surface
-          (bg-sidebar) so it sits a step below the page background instead of
-          blending into it. The color step alone is the seam, so we drop the
-          variant's border-r — overriding only this left rail keeps the
-          mobile right-side panel's divider (also variant="sidebar") intact. */}
       <Sidebar
         collapsible="offcanvas"
-        variant="sidebar"
-        className="group-data-[side=left]:border-r-0"
+        variant="transparent"
         {...props}
       >
         <SidebarHeader className="gap-3 px-3 pb-3 pt-3.5">

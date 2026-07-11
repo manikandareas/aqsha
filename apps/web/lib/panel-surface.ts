@@ -2,10 +2,12 @@ import { cn } from "@/lib/utils";
 
 /**
  * Main column surface — stays full-bleed / edge-to-edge (no card framing, no gutter),
- * so opening the panel never reshapes main into a floating card.
+ * so opening the panel never reshapes main into a floating card. `@container`: main
+ * content adapts to the COLUMN width (panel open/expanded), not the viewport — layout
+ * breakpoints inside main use `@2xl:`/`@3xl:`/`@5xl:` container variants.
  */
 export const detailSplitMainSurfaceClass =
-  "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-none bg-background shadow-none";
+  "@container flex min-h-0 min-w-0 flex-col overflow-hidden rounded-none bg-background shadow-none";
 
 /**
  * Side-panel column — the plain flex column the inline panel docks into (the grid's
@@ -15,7 +17,7 @@ export const detailSplitMainSurfaceClass =
  * column from inheriting `SidebarInset`'s `w-full` (which spilled 12px past the gutter).
  */
 export const sidePanelColumnClass =
-  "flex min-h-0 w-auto min-w-0 flex-col overflow-hidden bg-background";
+  "@container flex min-h-0 w-auto min-w-0 flex-col overflow-hidden bg-background";
 
 /**
  * Side-panel body card — a gently-rounded, hairline-bordered card (no shadow) that floats
@@ -37,13 +39,21 @@ export const sidePanelCardClass =
 export const PANEL_INLINE_MEDIA_QUERY = "(min-width: 1100px)";
 
 /**
+ * Duration of the panel open/close slide. Single source for DetailSplitLayout's
+ * grid-template-columns tween, ResponsiveSidePanel's opacity fade, and the
+ * delayed-unmount presence timer — apply via `style={{ transitionDuration }}` so
+ * the three can't drift apart.
+ */
+export const PANEL_TRANSITION_MS = 300;
+
+/**
  * Compact glass header bar — sticky, translucent + backdrop-blur, no border.
  * Shared by single-row page headers (explore, thread). The blur only reveals
  * scrolling content where this bar is sticky *inside* the scroll container
  * (explore); elsewhere it reads as a clean borderless compact bar.
  */
 export const panelHeaderBarClass =
-  "sticky top-0 z-20 flex h-11 shrink-0 items-center justify-between gap-3 bg-background/70 px-5 backdrop-blur-xl sm:px-6";
+  "sticky top-0 z-20 flex h-11 shrink-0 items-center justify-between gap-3 bg-background/70 px-5 backdrop-blur-xl @2xl:px-6";
 
 /**
  * Full-height, full-bleed flex body column — the scrollable panel/board body when there is
@@ -54,15 +64,24 @@ export const panelHeaderBarClass =
 export const panelBodyColumnClass =
   "flex min-h-0 flex-1 flex-col overflow-hidden bg-background";
 
+/**
+ * In-card toolbar — the compact top bar INSIDE the floating side-panel card. Home for the
+ * features that used to live on the flush header bar (panel title, thread switcher, export /
+ * More actions) now that the flush bar carries the tab strip + close toggle instead. Sits
+ * above the card's own scroll region, so no sticky needed.
+ */
+export const panelCardToolbarClass =
+  "flex h-11 shrink-0 items-center justify-between gap-2 bg-background px-3.5";
+
 /** Scrollable library or transcript body below a panel header. */
-export const panelBodyPaddingClass = "px-5 pb-8 pt-3 sm:px-6";
+export const panelBodyPaddingClass = "px-5 pb-8 pt-3 @2xl:px-6";
 
 /** Composer dock in embedded (compact) chat panels — horizontal matches panelBodyPaddingClass. */
-export const panelComposerPaddingClass = "px-5 pb-4 pt-2.5 sm:px-6";
+export const panelComposerPaddingClass = "px-5 pb-4 pt-2.5 @2xl:px-6";
 
 /** Shared transcript column width + horizontal inset for message list and composer. */
 export const threadTranscriptColumnClass =
-  "mx-auto w-full min-w-0 max-w-2xl px-5 sm:px-6";
+  "mx-auto w-full min-w-0 max-w-2xl px-5 @2xl:px-6";
 export const threadTranscriptBodyPaddingClass = "pb-8 pt-3";
 export const threadTranscriptComposerPaddingClass = "pb-4 pt-2.5";
 

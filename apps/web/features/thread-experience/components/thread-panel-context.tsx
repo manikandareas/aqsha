@@ -14,7 +14,9 @@ import type { ThreadPanelLookups } from "@/features/threads/lib/thread-panel-dat
 import {
   CLOSED_PANEL,
   isThreadPanelOpen,
+  isThreadPanelPreviewMode,
   parseAsThreadPanelMode,
+  serializeThreadPanelMode,
   type ThreadPanelMode,
 } from "../utils/thread-panel-model";
 
@@ -31,8 +33,15 @@ import {
 type ThreadPanelValue = {
   mode: ThreadPanelMode;
   isOpen: boolean;
+  /**
+   * Last preview-slot mode while the panel stays open — lets the tab strip return to
+   * Pratinjau after visiting another tab. Cleared when the panel closes (the Pratinjau
+   * tab is hidden until a card is clicked again).
+   */
+  previewMode: ThreadPanelMode | null;
   openArtifactPanel: (artifactId: string) => void;
-  openSourcesPanel: (messageId: string) => void;
+  /** Open thread sources — aggregate by default, scoped when a `messageId` is given. */
+  openSourcesPanel: (messageId?: string) => void;
   /** Open a `/deep` sub-question search step, scoped to its run (`turnId`). */
   openSearchPanel: (turnId: string, subQuestionIndex: number) => void;
   openStepPanel: (toolCallId: string) => void;
@@ -41,6 +50,8 @@ type ThreadPanelValue = {
   /** Open the live ask-gate (klarifikasi) questions form. */
   openQuestionsPanel: () => void;
   openContextPanel: () => void;
+  /** Return to the remembered preview mode (no-op when `previewMode` is null). */
+  openPreviewPanel: () => void;
   closePanel: () => void;
   setOpen: (open: boolean) => void;
 };
@@ -92,6 +103,23 @@ export function ThreadPanelProvider({ children }: { children: ReactNode }) {
   const mode = modeParam ?? CLOSED_PANEL;
   const [lookups, setLookups] = useState<ThreadPanelLookups | null>(null);
 
+  // Remember the last preview-slot mode while the panel is open, so the tab strip can
+  // come back to Pratinjau after visiting Workspace/Sumber. Closing the panel forgets
+  // it — the Pratinjau tab hides until another card is clicked. Adjust-state-during-
+  // render (bukan effect); dibandingkan via serialisasi supaya konvergen walau
+  // identitas objek mode berubah antar render.
+  const [previewMode, setPreviewMode] = useState<ThreadPanelMode | null>(null);
+  if (isThreadPanelPreviewMode(mode)) {
+    if (
+      !previewMode ||
+      serializeThreadPanelMode(previewMode) !== serializeThreadPanelMode(mode)
+    ) {
+      setPreviewMode(mode);
+    }
+  } else if (!isThreadPanelOpen(mode) && previewMode !== null) {
+    setPreviewMode(null);
+  }
+
   // Openers depend only on the (stable) nuqs setter, so in-message cards that read
   // them don't re-render when the mode or lookups change mid-stream.
   const openArtifactPanel = useCallback(
@@ -99,7 +127,10 @@ export function ThreadPanelProvider({ children }: { children: ReactNode }) {
     [setModeParam],
   );
   const openSourcesPanel = useCallback(
-    (messageId: string) => void setModeParam({ kind: "sources", messageId }),
+    (messageId?: string) =>
+      void setModeParam(
+        messageId ? { kind: "sources", messageId } : { kind: "sources" },
+      ),
     [setModeParam],
   );
   const openSearchPanel = useCallback(
@@ -123,12 +154,16 @@ export function ThreadPanelProvider({ children }: { children: ReactNode }) {
     () => void setModeParam({ kind: "context" }),
     [setModeParam],
   );
+  const openPreviewPanel = useCallback(() => {
+    if (previewMode) void setModeParam(previewMode);
+  }, [previewMode, setModeParam]);
   const closePanel = useCallback(() => void setModeParam(null), [setModeParam]);
 
   const value = useMemo<ThreadPanelValue>(
     () => ({
       mode,
       isOpen: isThreadPanelOpen(mode),
+      previewMode,
       openArtifactPanel,
       openSourcesPanel,
       openSearchPanel,
@@ -136,6 +171,7 @@ export function ThreadPanelProvider({ children }: { children: ReactNode }) {
       openPlanPanel,
       openQuestionsPanel,
       openContextPanel,
+      openPreviewPanel,
       closePanel,
       // Reflects the DetailSplitLayout / mobile toggle: opening from closed lands on
       // the default context panel; closing clears the URL param entirely.
@@ -146,6 +182,7 @@ export function ThreadPanelProvider({ children }: { children: ReactNode }) {
     }),
     [
       mode,
+      previewMode,
       setModeParam,
       openArtifactPanel,
       openSourcesPanel,
@@ -154,6 +191,7 @@ export function ThreadPanelProvider({ children }: { children: ReactNode }) {
       openPlanPanel,
       openQuestionsPanel,
       openContextPanel,
+      openPreviewPanel,
       closePanel,
     ],
   );

@@ -82,7 +82,7 @@ export function PaperAside({ paper }: { paper: ExplorePaper }) {
   if (!hasImpact && !hasDetails) return null;
 
   return (
-    <aside className="mt-9 min-w-0 space-y-3 lg:sticky lg:top-6 lg:mt-0 lg:self-start">
+    <aside className="mt-9 min-w-0 space-y-3 @5xl:sticky @5xl:top-6 @5xl:mt-0 @5xl:self-start">
       {hasImpact && e ? (
         <div className="overflow-hidden rounded-2xl border border-border/60 bg-card">
           <div className="bg-muted/25 px-5 py-4">

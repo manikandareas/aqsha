@@ -1,17 +1,6 @@
 import type { ReactNode } from "react";
-import type {
-  AgentRunId,
-  ArtifactId,
-  StorageId,
-  WorkspaceId,
-} from "@/lib/convex-refs";
-import type {
-  RateStatus,
-  ResearchArtifact,
-  ResearchRun,
-  ResearchSource,
-  SendResult,
-} from "../types";
+import type { ArtifactId, WorkspaceId } from "@/lib/convex-refs";
+import type { RateStatus } from "../types";
 
 export type { ArtifactId, WorkspaceId };
 
@@ -36,32 +25,6 @@ export type ViewerSummary =
       image: string | null;
     }
   | undefined;
-
-export type StartThread = (args: {
-  content: string;
-  agentKind: "lite" | "pro";
-  commandId?: string;
-  workspaceId?: WorkspaceId;
-  selectedContextArtifactIds?: ArtifactId[];
-  selectedContextWorkspaceIds?: WorkspaceId[];
-  messageAttachmentArtifactIds?: ArtifactId[];
-  pendingAttachments?: Array<{
-    storageId: StorageId;
-    fileName: string;
-    mimeType: string;
-    size: number;
-  }>;
-}) => Promise<SendResult>;
-
-export type SendMessage = (args: {
-  threadId: string;
-  content: string;
-  agentKind: "lite" | "pro";
-  commandId?: string;
-  selectedContextArtifactIds?: ArtifactId[];
-  selectedContextWorkspaceIds?: WorkspaceId[];
-  messageAttachmentArtifactIds?: ArtifactId[];
-}) => Promise<SendResult>;
 
 export type ContextCandidateArtifact = {
   _id: ArtifactId;
@@ -108,15 +71,8 @@ export type ThreadShellLayoutProps = {
     | null
     | undefined;
   rateStatus: RateStatus | undefined;
-  startThread: StartThread;
-  sendMessage: SendMessage;
-  runs: ResearchRun[];
-  artifacts: ResearchArtifact[];
-  sources: ResearchSource[];
   rightPanelOpen: boolean;
   onRightPanelOpenChange: (open: boolean) => void;
-  onCancelRun: (runId: string) => Promise<unknown>;
-  onRetryRun?: (args: { runId: AgentRunId }) => Promise<unknown>;
   onDeleteThread?: () => Promise<void>;
   sidePanel?: ReactNode;
 };

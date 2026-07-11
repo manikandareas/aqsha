@@ -1,27 +1,12 @@
 "use client";
 
-import { useAuth } from "@clerk/nextjs";
-import { useProfile } from "@/features/settings/api";
-import {
-  useDeleteThread,
-  useSendStatus,
-  useThread,
-  useThreadArtifacts,
-  useThreadSources,
-} from "@/features/threads/api";
-import type { SendMessage, StartThread } from "../components/component-types";
-import type { ResearchArtifact, ResearchRun, ResearchSource, SendResult } from "../types";
+import { useDeleteThread, useSendStatus, useThread } from "@/features/threads/api";
 import { useWorkspaceIndexData } from "@/features/workspaces/api/use-workspaces-data";
 
-export function useThreadExperienceData(threadId: string | undefined, enabled = true) {
-  const { isLoaded, isSignedIn } = useAuth();
-  const active = enabled && isLoaded && isSignedIn;
-  const profile = useProfile();
+export function useThreadExperienceData(threadId: string | undefined) {
   const index = useWorkspaceIndexData();
   const selectedThreadQuery = useThread(threadId ?? "");
   const rateStatus = useSendStatus();
-  const sourcesQuery = useThreadSources(threadId ?? "", Boolean(threadId && active));
-  const artifactsQuery = useThreadArtifacts(threadId ?? null);
   const removeThreadMutation = useDeleteThread();
 
   // Pakai daftar gabungan dari index (pinned + list utama, sudah di-dedup) supaya thread yang
@@ -44,27 +29,10 @@ export function useThreadExperienceData(threadId: string | undefined, enabled = 
           : null
         : undefined;
 
-  const startThread: StartThread = async () =>
-    ({ ok: false, reason: "use_eve_bridge" }) as unknown as SendResult;
-
-  const sendMessage: SendMessage = async () =>
-    ({ ok: false, reason: "use_eve_bridge" }) as unknown as SendResult;
-
   return {
-    isAuthenticated: active,
-    viewer: profile.data
-      ? {
-          name: profile.data.name,
-          email: profile.data.email,
-          image: profile.data.image,
-        }
-      : undefined,
     workspaces: index.workspaces,
     threads,
     selectedThread,
-    createWorkspace: index.createWorkspace,
-    startThread,
-    sendMessage,
     rateStatus: rateStatus.data
       ? ({
           ok: rateStatus.data.canSend,
@@ -74,11 +42,6 @@ export function useThreadExperienceData(threadId: string | undefined, enabled = 
           retryAt: rateStatus.data.retryAt,
         } as const)
       : undefined,
-    runs: [] as ResearchRun[],
-    artifacts: (artifactsQuery.data ?? []) as ResearchArtifact[],
-    sources: (sourcesQuery.data ?? []) as unknown as ResearchSource[],
-    cancelRun: async () => undefined,
-    retryRun: async () => undefined,
     removeThread: async (args: { threadId: string }) => {
       await removeThreadMutation.mutateAsync({ id: args.threadId });
       return { ok: true as const };

@@ -29,7 +29,7 @@ export function ExploreHandwrittenCue({
       type="button"
       onClick={scrollToExplore}
       aria-label="Gulir ke section Jelajahi"
-      className="group absolute right-8 top-12 z-10 hidden flex-row-reverse items-center gap-1.5 sm:flex"
+      className="group absolute right-8 top-12 z-10 hidden flex-row-reverse items-center gap-1.5 @2xl:flex"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5, ease: HOME_EASE_OUT, delay: 0.5 }}
@@ -37,9 +37,12 @@ export function ExploreHandwrittenCue({
       <span className="font-hand text-[17px] text-muted-foreground rotate-[5deg] transition-colors duration-150 ease-out group-hover:text-foreground">
         scroll ke bawah, yuk
       </span>
+      {/* Catatan: JANGAN tambahkan `fill="none"` di sini. Di Tailwind v4 utility
+          (`fill-*`) tinggal di CSS `@layer`, sedang presentation attribute `fill`
+          menang atas deklarasi berlapis → arrow ikut ter-`fill: none` (tak terlihat).
+          Warna diatur via class `fill-muted-foreground`; path mewarisi fill dari svg. */}
       <m.svg
         viewBox="0 0 219 41"
-        fill="none"
         xmlns="http://www.w3.org/2000/svg"
         aria-hidden="true"
         className="shrink-0 fill-muted-foreground transition-colors duration-150 ease-out group-hover:fill-foreground"

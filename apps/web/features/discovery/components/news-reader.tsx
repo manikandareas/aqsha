@@ -109,7 +109,7 @@ export function NewsReader({ id, onAskAstra }: { id: string; onAskAstra: () => v
             </span>
           </div>
 
-          <h1 className="mt-4 font-serif text-[28px] leading-[1.14] tracking-tight text-foreground sm:text-[38px]">
+          <h1 className="mt-4 font-serif text-[28px] leading-[1.14] tracking-tight text-foreground @2xl:text-[38px]">
             {item.title}
           </h1>
 

@@ -105,7 +105,6 @@ export function ArtifactReaderPageShell({
           side={
             <ResponsiveSidePanel open={chatOpen}>
               <WorkspaceChatSidePanel
-                workspaceId={workspaceId}
                 activeThreadId={threadId}
                 onActiveThreadIdChange={handleThreadChange}
                 threads={workspaceData.workspaceThreads}

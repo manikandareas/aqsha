@@ -488,6 +488,8 @@ function friendlyTypeLabel(artifactType: string) {
       return "Data";
     case "csv":
       return "Table";
+    case "spreadsheet":
+      return "Excel";
     case "url":
       return "Web link";
     default:

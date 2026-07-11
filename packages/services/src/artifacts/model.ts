@@ -29,6 +29,7 @@ export const artifactTypes = [
   "pdf",
   "docx",
   "image",
+  "spreadsheet",
   "html",
   "svg",
   "mermaid",
@@ -75,6 +76,7 @@ export const uploadAllowedArtifactTypes = [
   "pdf",
   "docx",
   "image",
+  "spreadsheet",
   "markdown",
   "plain_text",
   "csv",
@@ -96,6 +98,10 @@ export const UPLOAD_ALLOWED_EXTENSIONS = [
   ".md",
   ".markdown",
   ".csv",
+  ".xlsx",
+  // Dataset statistik (fase 5): SPSS (.sav) & Stata (.dta) dibaca pyreadstat (value labels ikut).
+  ".sav",
+  ".dta",
   ".json",
   ".png",
   ".jpg",
@@ -109,6 +115,10 @@ export const UPLOAD_ALLOWED_MIME_TYPES = [
   "text/plain",
   "text/markdown",
   "text/csv",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  // SPSS/Stata sering dikirim browser sebagai octet-stream → validasi jatuh ke ekstensi.
+  "application/x-spss-sav",
+  "application/x-stata-dta",
   "application/json",
   "image/png",
   "image/jpeg",
@@ -121,7 +131,7 @@ export const WORKSPACE_UPLOAD_ACCEPT = [
 ].join(",");
 
 export const UPLOAD_REJECTED_MESSAGE =
-  "Tipe file tidak didukung. Unggah PDF, DOCX, gambar (PNG/JPG/WebP), TXT, Markdown, CSV, atau JSON.";
+  "Tipe file tidak didukung. Unggah PDF, DOCX, gambar (PNG/JPG/WebP), TXT, Markdown, CSV, XLSX, SPSS (.sav), Stata (.dta), atau JSON.";
 
 export function normalizeUploadMimeType(mimeType: string | undefined | null): string {
   return (mimeType ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
@@ -138,6 +148,9 @@ const extensionTypeMap: Array<{ extensions: string[]; artifactType: ArtifactType
   { extensions: [".mmd", ".mermaid"], artifactType: "mermaid" },
   { extensions: [".json"], artifactType: "json" },
   { extensions: [".csv"], artifactType: "csv" },
+  { extensions: [".xlsx"], artifactType: "spreadsheet" },
+  // SPSS/Stata dataset (fase 5) → family "data" (dibaca pyreadstat di sandbox).
+  { extensions: [".sav", ".dta"], artifactType: "spreadsheet" },
   {
     extensions: [
       ".js",
@@ -170,6 +183,7 @@ const mimeTypeMap = new Map<string, ArtifactType>([
   ["image/webp", "image"],
   ["application/json", "json"],
   ["text/csv", "csv"],
+  ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "spreadsheet"],
 ]);
 
 export function normalizeUrl(value: string): string {
@@ -238,6 +252,7 @@ export function artifactFamilyForType(artifactType: ArtifactType): ArtifactFamil
       return "visual";
     case "json":
     case "csv":
+    case "spreadsheet":
     case "code":
       return artifactType === "code" ? "text" : "data";
     case "url":

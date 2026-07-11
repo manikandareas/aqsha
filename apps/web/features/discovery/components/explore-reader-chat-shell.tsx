@@ -12,9 +12,9 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { DetailSplitLayout } from "@/components/layout/detail-split-layout";
 import { ResponsiveSidePanel } from "@/components/layout/responsive-side-panel";
+import { PanelOpenButton } from "@/components/layout/side-panel-frame";
 import { ComposerMentionsProvider } from "@/features/thread-experience/components/composer-context-mentions";
 import { panelHeaderBarClass } from "@/lib/panel-surface";
-import { cn } from "@/lib/utils";
 import { ExploreChatSidePanel } from "@/features/explore/components/explore-chat-side-panel";
 
 export function ExploreReaderChatShell({
@@ -89,19 +89,13 @@ function ReaderHeader({
         <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
         <span className="min-w-0 truncate font-medium text-foreground">{breadcrumb}</span>
       </nav>
-      <button
-        type="button"
-        onClick={onToggleChat}
-        className={cn(
-          "flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold transition-colors",
-          chatOpen
-            ? "bg-primary/15 text-primary"
-            : "text-muted-foreground hover:bg-muted hover:text-foreground",
-        )}
-      >
-        <MessageSquareIcon className="size-3.5" />
-        Chat
-      </button>
+      <PanelOpenButton
+        open={chatOpen}
+        onOpen={onToggleChat}
+        icon={<MessageSquareIcon className="size-3.5" />}
+        label="Chat"
+        ariaLabel="Buka panel chat"
+      />
     </header>
   );
 }

@@ -115,7 +115,14 @@ export type PromptCommand = {
   slug: string;
   label: string;
   description: string;
-  group: "Metodologi" | "Penulisan Bab" | "Literatur" | "Bahasa & Sitasi" | "Pertahanan" | "Workspace";
+  group:
+    | "Metodologi"
+    | "Olah Data"
+    | "Penulisan Bab"
+    | "Literatur"
+    | "Bahasa & Sitasi"
+    | "Pertahanan"
+    | "Workspace";
   aliases: string[];
   keywords: string[];
   placeholder: string;
@@ -199,6 +206,41 @@ export const promptCommands = [
         "Jangan mengarang hasil uji coba atau skor validasi; tandai bagian yang butuh data lapangan sebagai [perlu sumber].",
         "",
         withInput(argument, "[Produk/model belum diberikan]"),
+      ].join("\n"),
+  },
+  // --- Olah Data ----------------------------------------------------------
+  {
+    id: "analisis",
+    slug: "/analisis",
+    label: "Analisis data (statistik)",
+    description: "Olah data kuesioner/SPSS: profil → uji → tabel & interpretasi Bab 4.",
+    group: "Olah Data",
+    aliases: ["/olahdata", "/spss", "/statistik", "/uji"],
+    keywords: [
+      "analisis data",
+      "olah data",
+      "statistik",
+      "spss",
+      "uji",
+      "validitas",
+      "reliabilitas",
+      "normalitas",
+      "regresi",
+      "korelasi",
+      "kuesioner",
+      "likert",
+    ],
+    placeholder: "Lampirkan dataset (CSV/XLSX) dan tulis uji yang kamu butuhkan...",
+    buildPrompt: (argument) =>
+      [
+        "Bantu ANALISIS DATA statistik untuk skripsi berikut. Alur wajib:",
+        "1. Profil dulu dataset yang dilampirkan (`profile_dataset`) — ringkas kolom, tipe, deteksi skala Likert, dan data kosong; klarifikasi mapping variabel bila ambigu.",
+        "2. Sarankan/jalankan pipeline uji yang relevan HANYA dari katalog (`list_analyses` → `run_analysis`) — untuk kuesioner Likert biasanya validitas → reliabilitas → normalitas → asumsi klasik → regresi/korelasi/hipotesis.",
+        "3. Semua angka, tabel, dan kesimpulan lolos/tidak WAJIB berasal dari hasil tool (jangan menghitung sendiri). Tulis interpretasi bahasa Indonesia bergaya Bab 4, dan sisipkan penanda hasil `{{stats:...}}` yang dikembalikan tool tepat di tempat tabel & figur harus muncul.",
+        "",
+        "Jika belum ada dataset terlampir, minta pengguna mengunggah file CSV/XLSX terlebih dahulu sebelum menjalankan uji apa pun.",
+        "",
+        withInput(argument, "[Jelaskan uji/analisis yang dibutuhkan, atau lampirkan datasetmu]"),
       ].join("\n"),
   },
   // --- Penulisan Bab ------------------------------------------------------

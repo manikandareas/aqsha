@@ -11,6 +11,7 @@
 //     map ini lewat React Context untuk me-resolve `[n]` → kartu (fallback teks `[n]` bila tak ada).
 
 import { defaultRehypePlugins, type StreamdownProps } from "streamdown";
+import { splitStatsMarkers, STATS_VIZ_TAG } from "./stats-markdown";
 import type { SourceCardData } from "./timeline-types";
 import { DEEP_VIZ_TAG, vizElementFromPre } from "./viz-markdown";
 
@@ -22,7 +23,7 @@ export const CITATION_ATTR = "citations";
 const CITATION_RE = /\[(\d+(?:\s*,\s*\d+)*)\]/g;
 // Subtree yang TAK boleh diutak-atik: kode (indeks array `arr[0]`), tautan (label numerik), serta
 // element sitasi/viz yang sudah jadi.
-const SKIP_TAGS = new Set(["code", "pre", "a", CITATION_TAG, DEEP_VIZ_TAG]);
+const SKIP_TAGS = new Set(["code", "pre", "a", CITATION_TAG, DEEP_VIZ_TAG, STATS_VIZ_TAG]);
 
 // Subset bentuk HAST yang kita pakai — paket tipe `hast` tak terpasang sebagai dependency
 // langsung. Diekspor untuk plugin rehype saudara (`viz-markdown.ts`) — satu definisi bersama.
@@ -66,12 +67,36 @@ function splitTextNode(node: HastText): HastChild[] {
   return out;
 }
 
+/**
+ * `<statsviz>` (blok tabel/figur) yang menempati SATU paragraf sendiri di-hoist keluar dari
+ * `<p>` (blok tak boleh jadi keturunan `<p>` — memicu `validateDOMNesting` + margin ganda).
+ * Penanda yang ditulis model pada baris tersendiri (sesuai instruksi) → paragraf berisi hanya
+ * `<statsviz>` + whitespace → kembalikan elemen statsviz saja. Paragraf campur (penanda di
+ * tengah kalimat, jarang) tetap utuh (dirender inline; jarang, dampak kosmetik kecil).
+ */
+function hoistStandaloneStats(el: HastElement): HastChild[] {
+  const statsviz = el.children.filter(
+    (c) => c.type === "element" && (c as HastElement).tagName === STATS_VIZ_TAG,
+  );
+  if (statsviz.length === 0) return [el];
+  const hasOtherContent = el.children.some((c) => {
+    if (c.type === "text") return (c as HastText).value.trim() !== "";
+    if (c.type === "element") return (c as HastElement).tagName !== STATS_VIZ_TAG;
+    return true;
+  });
+  return hasOtherContent ? [el] : statsviz;
+}
+
 /** Rekursi anak HAST: pecah text node, ganti `pre` viz → `deepviz`, lewati subtree `SKIP_TAGS`. */
 function walk(children: HastChild[]): HastChild[] {
   const out: HastChild[] = [];
   for (const child of children) {
     if (child.type === "text") {
-      out.push(...splitTextNode(child as HastText));
+      // Sitasi `[n]` dulu → dari tiap sisa teks, pisah penanda `{{stats:<runKey>}}` → `<statsviz>`.
+      for (const piece of splitTextNode(child as HastText)) {
+        if (piece.type === "text") out.push(...splitStatsMarkers(piece as HastText));
+        else out.push(piece);
+      }
     } else if (child.type === "element") {
       const el = child as HastElement;
       if (el.tagName === "pre") {
@@ -82,6 +107,11 @@ function walk(children: HastChild[]): HastChild[] {
       }
       if (!SKIP_TAGS.has(el.tagName) && Array.isArray(el.children)) {
         el.children = walk(el.children);
+      }
+      // Paragraf yang hanya berisi penanda stats → hoist blok tabel/figur ke level atas.
+      if (el.tagName === "p") {
+        out.push(...hoistStandaloneStats(el));
+        continue;
       }
       out.push(el);
     } else {

@@ -60,12 +60,12 @@ function DiscoverySpotlightCard(props: SpotlightProps) {
 
   const titleClass =
     size === "hero"
-      ? "text-[25px] leading-[1.1] sm:text-[31px]"
-      : "text-[21px] leading-[1.14] sm:text-[25px]";
+      ? "text-[25px] leading-[1.1] @2xl:text-[31px]"
+      : "text-[21px] leading-[1.14] @2xl:text-[25px]";
   const mediaHeight =
     size === "hero"
-      ? "h-52 sm:h-64 @xl/feed:h-full @xl/feed:min-h-[300px]"
-      : "h-48 sm:h-56 @xl/feed:h-full @xl/feed:min-h-[224px]";
+      ? "h-52 @2xl:h-64 @xl/feed:h-full @xl/feed:min-h-[300px]"
+      : "h-48 @2xl:h-56 @xl/feed:h-full @xl/feed:min-h-[224px]";
   const columns =
     imageSide === "left"
       ? "@xl/feed:grid-cols-[minmax(260px,40%)_minmax(0,1fr)]"
@@ -97,7 +97,7 @@ function DiscoverySpotlightCard(props: SpotlightProps) {
           <RetractionFlag item={item} />
 
           {tldr ? (
-            <p className="mt-3 line-clamp-3 text-[14px] leading-6 text-ink-soft sm:line-clamp-4">{tldr}</p>
+            <p className="mt-3 line-clamp-3 text-[14px] leading-6 text-ink-soft @2xl:line-clamp-4">{tldr}</p>
           ) : null}
 
           <div className="mt-5 border-t border-border/50 pt-3">

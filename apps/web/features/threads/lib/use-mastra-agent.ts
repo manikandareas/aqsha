@@ -727,13 +727,20 @@ export function useMastraAgent(opts: {
   }, [opts.threadId, userId, onChunk, committedAgentKind]);
 
   // Sidebar (judul/preview) + send-status di-refresh saat turn beralih streaming→ready.
+  // Blok hasil analisis (fase 3) juga di-refresh di sini: `run_analysis` mem-persist blok
+  // di luar teks pesan selama turn → penanda `{{stats:...}}` berubah jadi figur begitu turn
+  // selesai (tanpa refresh manual), pola invalidate Sumber `/deep`.
   const prevStatusRef = useRef(state.status);
   useEffect(() => {
     if (prevStatusRef.current !== "ready" && state.status === "ready") {
       void qc.invalidateQueries({ queryKey: queryKeys.threads.all });
+      void qc.invalidateQueries({ queryKey: queryKeys.threads.statsBlocks(opts.threadId) });
+      // File hasil ekspor (fase 5) & artifact lain yang dibuat agent selama turn → tampil di
+      // pustaka thread tanpa refresh manual.
+      void qc.invalidateQueries({ queryKey: queryKeys.threads.artifacts(opts.threadId) });
     }
     prevStatusRef.current = state.status;
-  }, [state.status, qc]);
+  }, [state.status, qc, opts.threadId]);
 
   // ── DUR-6: antrean saat run aktif. Chat polos di atas run CHAT → antrean SERVER
   //    (`agent.queueMessage`; runtime otomatis memulai run baru saat run aktif selesai — jalan

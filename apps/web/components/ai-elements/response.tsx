@@ -1,8 +1,11 @@
 "use client";
 
+import type { StatsGroup } from "@aqsha/chat-core/stats-viz";
 import { CitationProvider } from "@/components/ai-elements/inline-citation";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { VizFigureProvider } from "@/features/threads/components/deep-viz/viz-context";
+import { StatsAppendix } from "@/features/threads/components/stats-viz/stats-block";
+import { StatsBlocksProvider } from "@/features/threads/components/stats-viz/stats-context";
 import { reportRehypePlugins } from "@/features/threads/lib/citation-markdown";
 import type { SourceCardData } from "@/features/threads/lib/timeline-types";
 import { useSmoothText } from "@/features/threads/lib/use-smooth-text";
@@ -21,6 +24,12 @@ import { cn } from "@/lib/utils";
  * `viz` HANYA untuk laporan `/deep`: memasang `VizFigureProvider` yang mengizinkan fence
  * `aqsha:viz` dirender sebagai figur evidence viz. Di pesan lain fence semacam itu pasti
  * tulisan model (bukan keluaran injector) dan dirender sebagai code block polos (anti-pemalsuan).
+ *
+ * `statsGroups` (peta `runKey → grup blok`, dari `analysis_result_blocks` pesan ini) memasang
+ * `StatsBlocksProvider`: penanda `{{stats:<runKey>}}` di narasi berubah jadi tabel gaya SPSS +
+ * kartu verdict + figur PNG. Grup yang TAK ditempatkan penanda di-append via `StatsAppendix`
+ * (di dalam provider yang sama → penomoran Tabel/Gambar menyambung). Tanpa provider, penanda
+ * dirender kosong (anti-pemalsuan: hanya hasil tool asli yang jadi figur).
  */
 export function Response({
   text,
@@ -28,21 +37,33 @@ export function Response({
   className,
   citations,
   viz,
+  statsGroups,
 }: {
   text: string;
   streaming?: boolean;
   className?: string;
   citations?: Map<number, SourceCardData[]>;
   viz?: boolean;
+  statsGroups?: Map<string, StatsGroup>;
 }) {
   const shown = useSmoothText(text, { enabled: streaming ?? false });
-  const content = (
+  const markdown = (
     <MessageResponse
       className={cn("aqsha-prose aqsha-prose-message", className)}
       rehypePlugins={reportRehypePlugins}
     >
       {shown}
     </MessageResponse>
+  );
+  const hasStats = statsGroups && statsGroups.size > 0;
+  const content = hasStats ? (
+    <StatsBlocksProvider groups={statsGroups}>
+      {markdown}
+      {/* Lampiran hanya setelah streaming selesai — hindari kedip saat penanda belum tiba. */}
+      {streaming ? null : <StatsAppendix text={text} groups={statsGroups} />}
+    </StatsBlocksProvider>
+  ) : (
+    markdown
   );
   return (
     <CitationProvider value={citations}>

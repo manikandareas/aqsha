@@ -25,7 +25,9 @@ import {
   useThreadArtifacts,
   useThreadsList,
   useThreadSources,
+  useThreadStatsBlocks,
 } from "@/features/threads/api";
+import type { StatsGroup } from "@aqsha/chat-core/stats-viz";
 import {
   Composer,
   type ComposerNotice,
@@ -301,6 +303,16 @@ function MastraChatInner({
     }
     return map;
   }, [sources]);
+
+  // Blok hasil analisis statistik (fase 3) → dipetakan per toolCallId `run_analysis`. Message-list
+  // menyaring ke tool call milik tiap pesan → penanda `{{stats:<runKey>}}` di narasi di-resolve
+  // jadi tabel/figur. Fetch idempoten (pola sources); di-invalidate saat turn selesai.
+  const { data: statsGroups } = useThreadStatsBlocks(threadId, agent.messages.length > 0);
+  const statsGroupsByToolCallId = useMemo(() => {
+    const map = new Map<string, StatsGroup>();
+    for (const g of statsGroups ?? []) map.set(g.toolCallId, g.group);
+    return map;
+  }, [statsGroups]);
 
   // Lampiran upload thread → dipetakan ke pesan user (join sisi-baca thread↔waktu) supaya berkas
   // yang dikirim user tampil sebagai kartu di message row. Poll selama ada index `pending`.
@@ -595,6 +607,7 @@ function MastraChatInner({
               pending={agent.status === "submitted"}
               busy={busy}
               sourcesByTurn={sourcesByTurn}
+              statsGroupsByToolCallId={statsGroupsByToolCallId}
               attachmentsByMessage={attachmentsByMessage}
               onRegenerate={regenerate}
             />
@@ -690,7 +703,7 @@ function MastraComposerLanding({
           "relative mx-auto flex w-full flex-col",
           compact
             ? cn("flex-1 max-w-none", panelBodyPaddingClass)
-            : "min-h-full max-w-5xl px-4 pb-5 pt-10 sm:px-8",
+            : "min-h-full max-w-5xl px-4 pb-5 pt-10 @2xl:px-8",
         )}
       >
         <div className="flex w-full flex-1 items-center justify-center">
@@ -710,11 +723,11 @@ function MastraComposerLanding({
             <ComposerHeroState
               headerClassName="mb-5 gap-2"
               logoClassName={
-                compact ? "size-12 sm:size-18" : "size-12 sm:size-22"
+                compact ? "size-12 @2xl:size-18" : "size-12 @2xl:size-22"
               }
               titleClassName={cn(
                 "font-sans font-bold tracking-tight text-foreground leading-none",
-                compact ? "text-xl" : "text-2xl sm:text-3xl",
+                compact ? "text-xl" : "text-2xl @2xl:text-3xl",
               )}
             >
               <Composer

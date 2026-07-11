@@ -1,5 +1,6 @@
 "use client";
 
+import { parseStatsGroup, type StatsGroup } from "@aqsha/chat-core/stats-viz";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { Artifact } from "@/features/artifacts/types";
@@ -89,6 +90,39 @@ export function useThreadSources(id: string, enabled = true) {
     staleTime: 10_000,
     queryFn: async () =>
       (unwrap(await api.threads({ id }).sources.get()) as { items: ResearchSource[] }).items,
+  });
+}
+
+/** Grup blok hasil analisis + toolCallId asalnya (untuk scoping per-pesan di message-list). */
+export type ThreadStatsGroup = { toolCallId: string; group: StatsGroup };
+
+/**
+ * Blok hasil analisis statistik thread (fase 3) — tabel gaya SPSS + kartu verdict + figur PNG
+ * yang dipersist di luar teks pesan. Dipakai FE untuk me-resolve penanda `{{stats:<runKey>}}`
+ * menjadi figur. Di-invalidate saat turn beralih ke `ready` (pola `useThreadSources`). Payload
+ * di-parse zod (kontrak chat-core) → grup korup dibuang, bukan meruntuhkan render.
+ */
+export function useThreadStatsBlocks(id: string, enabled = true) {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.threads.statsBlocks(id),
+    enabled,
+    staleTime: 10_000,
+    queryFn: async () => {
+      const items = (
+        unwrap(await api.threads({ id })["stats-blocks"].get()) as {
+          items: Array<{ toolCallId?: unknown } & Record<string, unknown>>;
+        }
+      ).items;
+      const out: ThreadStatsGroup[] = [];
+      for (const item of items) {
+        const group = parseStatsGroup(item);
+        if (group && typeof item.toolCallId === "string") {
+          out.push({ toolCallId: item.toolCallId, group });
+        }
+      }
+      return out;
+    },
   });
 }
 
