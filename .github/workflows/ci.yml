@@ -29,10 +29,12 @@ jobs:
     services:
       postgres:
         image: pgvector/pgvector:pg17
+        # Ephemeral CI DB: trust auth (no password) so no credential literal lives in the repo.
+        # Only reachable on the runner's localhost for the length of this job.
         env:
           POSTGRES_USER: aqsha
-          POSTGRES_PASSWORD: aqsha
           POSTGRES_DB: aqsha
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
@@ -50,7 +52,8 @@ jobs:
           --health-timeout 3s
           --health-retries 5
     env:
-      DATABASE_URL: postgresql://aqsha:aqsha@localhost:5432/aqsha
+      # No password in the URI: the postgres service uses trust auth (see above).
+      DATABASE_URL: postgresql://aqsha@localhost:5432/aqsha
       REDIS_URL: redis://localhost:6379
     steps:
       # Third-party actions pinned to immutable commit SHAs (supply-chain: a tag can be moved to
