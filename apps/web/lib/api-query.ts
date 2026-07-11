@@ -57,6 +57,20 @@ export const queryKeys = {
     sendStatus: (feature: "normal_chat" | "deep_research" = "normal_chat") =>
       ["threads", "send-status", feature] as const,
   },
+  citations: {
+    all: ["citations"] as const,
+    workspace: (workspaceId: string) => ["citations", workspaceId] as const,
+    list: (
+      workspaceId: string,
+      params: { q: string; status: string | null; source: string | null; tag: string | null },
+    ) => ["citations", workspaceId, "list", params] as const,
+    detail: (workspaceId: string, citationId: string) =>
+      ["citations", workspaceId, "detail", citationId] as const,
+    tags: (workspaceId: string) => ["citations", workspaceId, "tags"] as const,
+    render: (workspaceId: string, params: { styleId: string | null; ids: string[] }) =>
+      ["citations", workspaceId, "render", params] as const,
+    settings: (workspaceId: string) => ["citations", workspaceId, "settings"] as const,
+  },
   user: {
     me: () => ["user", "me"] as const,
   },

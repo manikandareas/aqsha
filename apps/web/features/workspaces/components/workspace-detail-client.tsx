@@ -15,17 +15,23 @@ import {
   type WorkspaceLibraryData,
 } from "@/features/workspaces/api/use-workspaces-data";
 import { AppLoadingOverlay } from "@/components/app-loading-overlay";
-import {
-  WorkspaceChatSidePanel,
-  WorkspaceMissing,
-} from "@/features/workspaces/components/workspace-chat-side-panel";
+import { WorkspaceMissing } from "@/features/workspaces/components/workspace-chat-side-panel";
 import { WorkspaceLibrarySurface } from "@/features/workspaces/components/workspace-library-surface";
+import { WorkspaceSidePanel } from "@/features/workspaces/components/workspace-side-panel";
+import {
+  useWorkspacePanel,
+  WorkspacePanelProvider,
+} from "@/features/workspaces/components/workspace-panel-context";
 import { useWorkspaceLibraryDialogState } from "@/features/workspaces/hooks/use-workspace-library-dialogs";
 
 export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) {
   const data = useWorkspaceDetailData(workspaceId);
 
-  return <WorkspaceDetailMain workspaceId={workspaceId} data={data} />;
+  return (
+    <WorkspacePanelProvider>
+      <WorkspaceDetailMain workspaceId={workspaceId} data={data} />
+    </WorkspacePanelProvider>
+  );
 }
 
 function WorkspaceDetailMain({
@@ -37,7 +43,9 @@ function WorkspaceDetailMain({
 }) {
   const router = useRouter();
   const leftSidebar = useSidebar();
-  const [chatPanelOpen, setChatPanelOpen] = useState(false);
+  // Buka/tutup panel diturunkan dari nuqs `panel` (WorkspacePanelProvider) —
+  // menggantikan state lokal `chatPanelOpen` (deep link `?panel=cite` jalan).
+  const panel = useWorkspacePanel();
   const [panelThreadId, setPanelThreadId] = useState<string | null>(null);
 
   // Auto-mention: workspace yang sedang dibuka → token `@Workspace` di composer panel chat.
@@ -53,7 +61,7 @@ function WorkspaceDetailMain({
   const handlePanelThreadChange = (threadId: string | null) => {
     setPanelThreadId(threadId);
     if (threadId !== null) {
-      setChatPanelOpen(true);
+      panel.openChat();
     }
   };
 
@@ -74,23 +82,24 @@ function WorkspaceDetailMain({
           ambientContextRefs={ambientContextRefs}
         >
           <DetailSplitLayout
-            sideOpen={chatPanelOpen}
-            onSideOpenChange={setChatPanelOpen}
+            sideOpen={panel.isOpen}
+            onSideOpenChange={panel.setOpen}
             main={
               <WorkspaceLibraryMain
                 workspaceId={workspaceId}
                 workspaceName={data.workspace.name}
                 libraryData={data}
-                chatPanelOpen={chatPanelOpen}
-                onToggleChatPanel={() => setChatPanelOpen((open) => !open)}
+                panelOpen={panel.isOpen}
+                onOpenPanel={() => panel.setOpen(true)}
                 showLeftSidebarTrigger={!isLeftSidebarOpen}
                 onToggleLeftSidebar={leftSidebar.toggleSidebar}
                 onAfterArchive={() => router.push("/app/workspaces")}
               />
             }
             side={
-              <ResponsiveSidePanel open={chatPanelOpen}>
-                <WorkspaceChatSidePanel
+              <ResponsiveSidePanel open={panel.isOpen}>
+                <WorkspaceSidePanel
+                  workspaceId={workspaceId}
                   activeThreadId={panelThreadId}
                   onActiveThreadIdChange={handlePanelThreadChange}
                   threads={data.workspaceThreads}
@@ -109,8 +118,8 @@ function WorkspaceLibraryMain({
   workspaceId,
   workspaceName,
   libraryData,
-  chatPanelOpen,
-  onToggleChatPanel,
+  panelOpen,
+  onOpenPanel,
   showLeftSidebarTrigger,
   onToggleLeftSidebar,
   onAfterArchive,
@@ -118,8 +127,8 @@ function WorkspaceLibraryMain({
   workspaceId: string;
   workspaceName: string;
   libraryData: WorkspaceLibraryData;
-  chatPanelOpen: boolean;
-  onToggleChatPanel: () => void;
+  panelOpen: boolean;
+  onOpenPanel: () => void;
   showLeftSidebarTrigger: boolean;
   onToggleLeftSidebar: () => void;
   onAfterArchive: () => void;
@@ -149,8 +158,8 @@ function WorkspaceLibraryMain({
       onSetArtifactContextSelection={contextSelection.onSetArtifactContextSelection}
       contextCount={contextSelection.contextCount}
       onAfterArchive={onAfterArchive}
-      chatPanelOpen={chatPanelOpen}
-      onToggleChatPanel={onToggleChatPanel}
+      chatPanelOpen={panelOpen}
+      onToggleChatPanel={onOpenPanel}
       showLeftSidebarTrigger={showLeftSidebarTrigger}
       onToggleLeftSidebar={onToggleLeftSidebar}
     />

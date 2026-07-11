@@ -39,6 +39,7 @@ export function CompactThreadChatPanel({
   rateStatus,
   draftContextLabel,
   seed,
+  chrome = "frame",
 }: {
   activeThreadId: string | null;
   activeThread: ActivePanelThread;
@@ -49,26 +50,20 @@ export function CompactThreadChatPanel({
   rateStatus: RateStatus | undefined;
   draftContextLabel?: string;
   seed?: string;
+  /**
+   * `frame` (default) membungkus diri dengan `SidePanelFrame` + header "Chat";
+   * `content` hanya me-render toolbar kartu + surface chat — dipakai shell bertab
+   * (workspace detail) yang sudah memiliki frame + `PanelTabsHeader` sendiri.
+   */
+  chrome?: "frame" | "content";
 }) {
   const closePanel = useCloseRightPanel();
   const headerLabel = activeThread?.title ?? "Chat baru";
 
   // Anatomi panel: header flush di luar kartu tinggal judul panel + toggle tutup;
   // fitur chat (switcher thread, hapus, chat baru) turun ke toolbar di dalam kartu.
-  return (
-    <SidePanelFrame
-      header={
-        <PanelHeaderBar
-          title={<PanelTitleLabel>Chat</PanelTitleLabel>}
-          actions={
-            <>
-              <PanelExpandButton />
-              <PanelCloseButton onClose={closePanel} />
-            </>
-          }
-        />
-      }
-    >
+  const content = (
+    <>
       <PanelCardToolbar
         title={
           <ThreadRecentSwitcher
@@ -135,6 +130,26 @@ export function CompactThreadChatPanel({
           />
         )}
       </SidebarContent>
+    </>
+  );
+
+  if (chrome === "content") return content;
+
+  return (
+    <SidePanelFrame
+      header={
+        <PanelHeaderBar
+          title={<PanelTitleLabel>Chat</PanelTitleLabel>}
+          actions={
+            <>
+              <PanelExpandButton />
+              <PanelCloseButton onClose={closePanel} />
+            </>
+          }
+        />
+      }
+    >
+      {content}
     </SidePanelFrame>
   );
 }

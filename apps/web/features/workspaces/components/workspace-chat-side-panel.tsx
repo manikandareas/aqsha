@@ -12,11 +12,14 @@ export function WorkspaceChatSidePanel({
   onActiveThreadIdChange,
   threads,
   rateStatus,
+  chrome,
 }: {
   activeThreadId: string | null;
   onActiveThreadIdChange: (threadId: string | null) => void;
   threads: ThreadSummary[];
   rateStatus: RateStatus | undefined;
+  /** Diteruskan ke `CompactThreadChatPanel` — `content` saat frame dimiliki shell bertab. */
+  chrome?: "frame" | "content";
 }) {
   const threadExperience = useThreadExperienceData(activeThreadId ?? undefined);
   const activeThread = activeThreadId
@@ -36,6 +39,7 @@ export function WorkspaceChatSidePanel({
           : Promise.resolve()
       }
       rateStatus={rateStatus}
+      chrome={chrome}
     />
   );
 }
