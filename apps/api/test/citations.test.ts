@@ -74,12 +74,36 @@ async function cleanup() {
   await client`delete from workspace_citations where owner_user_id like 'user_itest_cit_%'`;
   await client`delete from citation_import_batches where owner_user_id like 'user_itest_cit_%'`;
   await client`delete from workspace_citation_settings where owner_user_id like 'user_itest_cit_%'`;
+  await client`delete from artifact_paper_metadata where owner_user_id like 'user_itest_cit_%'`;
+  await client`delete from artifacts where owner_user_id like 'user_itest_cit_%'`;
   await client`delete from workspace_folders where owner_user_id like 'user_itest_cit_%'`;
   await client`delete from workspaces where owner_user_id like 'user_itest_cit_%'`;
   await client`delete from user_onboarding where owner_user_id like 'user_itest_cit_%'`;
   await client`delete from user_feed_interests where owner_user_id like 'user_itest_cit_%'`;
   await client`delete from users where owner_user_id like 'user_itest_cit_%'`;
   await client.end();
+}
+
+/** Seed langsung artifact PDF + 1:1 paper metadata (createFromArtifact butuh keduanya). */
+async function seedPaperArtifact(
+  owner: string,
+  workspaceId: string,
+  over: { title?: string; doi?: string | null; year?: number | null } = {},
+): Promise<string> {
+  const { client } = createDb(DATABASE_URL as string);
+  const artifactId = `art_itest_${owner}_${Math.floor(Math.random() * 1e9)}`;
+  const metaId = `pm_itest_${owner}_${Math.floor(Math.random() * 1e9)}`;
+  const now = Date.now();
+  const title = over.title ?? "Paper Bridge";
+  const authors = JSON.stringify([{ name: "Budi Santoso" }, { name: "Ani Wijaya" }]);
+  await client`insert into artifacts
+    (id, owner_user_id, workspace_id, artifact_type, artifact_family, source, title, indexing_status, status, created_at, updated_at)
+    values (${artifactId}, ${owner}, ${workspaceId}, 'pdf', 'file', 'upload', ${title}, 'not_indexed', 'active', ${now}, ${now})`;
+  await client`insert into artifact_paper_metadata
+    (id, owner_user_id, artifact_id, workspace_id, metadata_source, title, authors, published_year, journal, doi, created_at, updated_at)
+    values (${metaId}, ${owner}, ${artifactId}, ${workspaceId}, 'crossref', ${title}, ${authors}::jsonb, ${over.year ?? 2021}, 'Jurnal Bridge', ${over.doi ?? null}, ${now}, ${now})`;
+  await client.end();
+  return artifactId;
 }
 
 beforeAll(cleanup);
@@ -279,5 +303,151 @@ describe("api citations — export + settings + delete", () => {
       await req("GET", `/workspaces/${workspaceId}/citations/${manualId}`, tok(OWNER)),
     );
     expect(detail.deletedAt).toBeNumber();
+  });
+});
+
+describe("api citations — Fase 2 artifact bridge", () => {
+  let artifactId = "";
+  let citationId = "";
+
+  itest("createFromArtifact: seed paper → tambah (source artifact, tertaut) → idempotent", async () => {
+    artifactId = await seedPaperArtifact(OWNER, workspaceId, {
+      title: "Paper Bridge Satu",
+      doi: "10.5555/bridge.1",
+      year: 2021,
+    });
+    const res = await req("POST", `/workspaces/${workspaceId}/citations/from-artifact`, tok(OWNER), {
+      artifactId,
+    });
+    expect(res.status).toBe(200);
+    const body = await readJson(res);
+    expect(body.created).toBe(true);
+    expect(body.citation.source).toBe("artifact");
+    expect(body.citation.artifactId).toBe(artifactId);
+    expect(body.citation.metadataStatus).toBe("needs_review");
+    citationId = body.citation.id;
+
+    const again = await readJson(
+      await req("POST", `/workspaces/${workspaceId}/citations/from-artifact`, tok(OWNER), {
+        artifactId,
+      }),
+    );
+    expect(again.created).toBe(false);
+    expect(again.linkedExisting).toBe(true);
+    expect(again.citation.id).toBe(citationId);
+  });
+
+  itest("intruder from-artifact → 404 (metadata owner-scoped)", async () => {
+    const res = await req(
+      "POST",
+      `/workspaces/${workspaceId}/citations/from-artifact`,
+      tok(INTRUDER),
+      { artifactId },
+    );
+    expect(res.status).toBe(404);
+  });
+
+  itest("artifact tanpa metadata → 404 citation_artifact_no_metadata", async () => {
+    const res = await req("POST", `/workspaces/${workspaceId}/citations/from-artifact`, tok(OWNER), {
+      artifactId: "art_tidak_ada",
+    });
+    expect(res.status).toBe(404);
+    expect((await readJson(res)).code).toBe("citation_artifact_no_metadata");
+  });
+});
+
+describe("api citations — duplicates + bulk", () => {
+  let dupA = "";
+  let dupB = "";
+  let bulkA = "";
+  let bulkB = "";
+
+  itest("dua duplikat (allowDuplicate) → grup duplikat → merge menyisakan satu", async () => {
+    const fields = {
+      title: "Referensi Kembar",
+      authors: [{ family: "Kembar", given: "Satu" }],
+      publishedYear: 2019,
+    };
+    dupA = (
+      await readJson(
+        await req("POST", `/workspaces/${workspaceId}/citations`, tok(OWNER), { fields }),
+      )
+    ).id;
+    dupB = (
+      await readJson(
+        await req("POST", `/workspaces/${workspaceId}/citations`, tok(OWNER), {
+          fields,
+          allowDuplicate: true,
+        }),
+      )
+    ).id;
+
+    const groups = await readJson(
+      await req("GET", `/workspaces/${workspaceId}/citations/duplicates`, tok(OWNER)),
+    );
+    const group = groups.find(
+      (g: { members: Array<{ id: string }> }) =>
+        g.members.some((m) => m.id === dupA) && g.members.some((m) => m.id === dupB),
+    );
+    expect(group).toBeDefined();
+
+    const merged = await req("POST", `/workspaces/${workspaceId}/citations/merge`, tok(OWNER), {
+      ids: [dupA, dupB],
+    });
+    expect(merged.status).toBe(200);
+    const target = await readJson(merged);
+    const survivorId = target.id;
+    const goneId = survivorId === dupA ? dupB : dupA;
+    const gone = await readJson(
+      await req("GET", `/workspaces/${workspaceId}/citations/${goneId}`, tok(OWNER)),
+    );
+    expect(gone.deletedAt).toBeNumber();
+  });
+
+  itest("bulk-tag menambah tag ke terpilih, bulk-delete menghapus terpilih", async () => {
+    bulkA = (
+      await readJson(
+        await req("POST", `/workspaces/${workspaceId}/citations`, tok(OWNER), {
+          fields: { title: "Bulk Satu", authors: [{ family: "A" }], publishedYear: 2018 },
+        }),
+      )
+    ).id;
+    bulkB = (
+      await readJson(
+        await req("POST", `/workspaces/${workspaceId}/citations`, tok(OWNER), {
+          fields: { title: "Bulk Dua", authors: [{ family: "B" }], publishedYear: 2017 },
+        }),
+      )
+    ).id;
+
+    const tagged = await readJson(
+      await req("POST", `/workspaces/${workspaceId}/citations/bulk-tag`, tok(OWNER), {
+        ids: [bulkA, bulkB],
+        tags: ["batch-x"],
+      }),
+    );
+    expect(tagged.affected).toBe(2);
+    const detailA = await readJson(
+      await req("GET", `/workspaces/${workspaceId}/citations/${bulkA}`, tok(OWNER)),
+    );
+    expect(detailA.tags).toContain("batch-x");
+
+    const deleted = await readJson(
+      await req("POST", `/workspaces/${workspaceId}/citations/bulk-delete`, tok(OWNER), {
+        ids: [bulkA, bulkB],
+      }),
+    );
+    expect(deleted.affected).toBe(2);
+    const list = await readJson(await req("GET", `/workspaces/${workspaceId}/citations`, tok(OWNER)));
+    const ids = list.items.map((i: { id: string }) => i.id);
+    expect(ids).not.toContain(bulkA);
+    expect(ids).not.toContain(bulkB);
+  });
+
+  itest("intruder tidak bisa merge/bulk citation owner", async () => {
+    const merge = await req("POST", `/workspaces/${workspaceId}/citations/merge`, tok(INTRUDER), {
+      ids: [dupA, dupB],
+    });
+    expect(merge.status).toBe(404);
   });
 });

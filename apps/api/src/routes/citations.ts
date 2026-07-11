@@ -187,6 +187,78 @@ export const citations = new Elysia()
       body: t.Object({ sourceId: t.String(), targetId: t.String() }),
     },
   )
+  .get(
+    "/workspaces/:id/citations/duplicates",
+    ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      return CitationService.listDuplicateGroups(db, { ownerUserId, workspaceId: params.id });
+    },
+    { auth: true },
+  )
+  .post(
+    "/workspaces/:id/citations/merge",
+    ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      return CitationService.mergeMany(db, {
+        ownerUserId,
+        workspaceId: params.id,
+        ids: body.ids,
+        targetId: body.targetId,
+      });
+    },
+    {
+      auth: true,
+      body: t.Object({ ids: t.Array(t.String()), targetId: t.Optional(t.String()) }),
+    },
+  )
+  .post(
+    "/workspaces/:id/citations/from-artifact",
+    ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      return CitationService.createFromArtifact(db, {
+        ownerUserId,
+        workspaceId: params.id,
+        artifactId: body.artifactId,
+        tags: body.tags,
+      });
+    },
+    {
+      auth: true,
+      rateLimit: "citations:create",
+      body: t.Object({ artifactId: t.String(), tags: t.Optional(t.Array(t.String())) }),
+    },
+  )
+  .post(
+    "/workspaces/:id/citations/bulk-tag",
+    ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      return CitationService.bulkAddTag(db, {
+        ownerUserId,
+        workspaceId: params.id,
+        ids: body.ids,
+        tags: body.tags,
+      });
+    },
+    {
+      auth: true,
+      body: t.Object({ ids: t.Array(t.String()), tags: t.Array(t.String()) }),
+    },
+  )
+  .post(
+    "/workspaces/:id/citations/bulk-delete",
+    ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      return CitationService.bulkSoftDelete(db, {
+        ownerUserId,
+        workspaceId: params.id,
+        ids: body.ids,
+      });
+    },
+    {
+      auth: true,
+      body: t.Object({ ids: t.Array(t.String()) }),
+    },
+  )
   .post(
     "/workspaces/:id/citations",
     ({ ownerUserId, params, body }) => {
@@ -267,6 +339,18 @@ export const citations = new Elysia()
       });
     },
     { auth: true },
+  )
+  .post(
+    "/workspaces/:id/citations/:citationId/resolve",
+    ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      return CitationService.resolveFromDoi(db, {
+        ownerUserId,
+        workspaceId: params.id,
+        citationId: params.citationId,
+      });
+    },
+    { auth: true, rateLimit: "citations:create" },
   )
   .get(
     "/workspaces/:id/citation-settings",
