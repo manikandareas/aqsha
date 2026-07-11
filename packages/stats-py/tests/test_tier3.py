@@ -128,7 +128,9 @@ def test_cb_sem_semopy(df):
     assert (source, target) == ("X1", "Y")
     assert estimate is not None and std is not None
     # Structural path is estimated (not a fixed reference loading) → SE and z present too.
-    assert se is not None and z is not None
+    # Split so a failure pinpoints which value is missing.
+    assert se is not None
+    assert z is not None
     fit = {row[0]: row[1] for row in _table(result, "fit")["rows"]}
     assert 0 <= fit["RMSEA"] <= 1
     assert fit["CFI"] <= 1.0 + 1e-9

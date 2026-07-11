@@ -628,10 +628,12 @@ export const AnalysisService = {
     if (files.length === 0) {
       return { ok: false, error: { code: "export_empty_output", message: "Tidak ada file yang berhasil dibuat." } };
     }
-    // Format yang dicoba (runFormats) tapi tak ada path unduhan di output parsed → dilaporkan
-    // ke caller supaya user tahu format itu tak jadi (bukan diam-diam hilang).
+    // Format yang diminta (setelah validasi EXPORT_SPEC) tapi tak jadi file → dilaporkan ke
+    // caller supaya user tahu (bukan diam-diam hilang). Pakai `formats` (koleksi lengkap yang
+    // diminta), bukan `runFormats`, agar format yang DIBUANG karena tak eligible (mis. `sav`
+    // tanpa dataset, atau format dokumen tanpa hasil) juga masuk missingFormats.
     const produced = new Set(files.map((f) => f.format));
-    const missingFormats = runFormats.filter((format) => !produced.has(format));
+    const missingFormats = formats.filter((format) => !produced.has(format));
     return {
       ok: true,
       files,

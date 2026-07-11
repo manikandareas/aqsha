@@ -19,9 +19,15 @@ def stats_seed() -> int:
     """Shared RNG seed (env ``AQSHA_STATS_SEED``, default 42) — echoed in ``meta.seed``.
 
     Single source so every analysis that needs randomness (bootstrap CI, etc.)
-    is reproducible against the seed reported in the result.
+    is reproducible against the seed reported in the result. A malformed or negative
+    override falls back to 42 — numpy's ``default_rng`` rejects negative seeds, so we
+    never let one through.
     """
-    return int(os.environ.get("AQSHA_STATS_SEED", "42"))
+    try:
+        seed = int(os.environ.get("AQSHA_STATS_SEED", "42"))
+    except ValueError:
+        return 42
+    return seed if seed >= 0 else 42
 
 
 class AnalysisError(Exception):
