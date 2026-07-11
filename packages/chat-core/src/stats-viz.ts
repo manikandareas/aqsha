@@ -174,7 +174,9 @@ export const STATS_MARKER_RE = /\{\{stats:([a-z0-9-]{1,64})\}\}/g;
  */
 export function stripStatsMarkers(text: string): string {
   if (!text.includes("{{stats:")) return text;
-  return text.replace(/\{\{stats:[a-z0-9-]{1,64}\}\}/g, "").replace(/[ \t]{2,}/g, " ").trimEnd();
+  // Reuse the shared marker pattern (String.replace with a /g regex resets lastIndex, so
+  // sharing it with referencedRunKeys' exec loop is safe).
+  return text.replace(STATS_MARKER_RE, "").replace(/[ \t]{2,}/g, " ").trimEnd();
 }
 
 /**

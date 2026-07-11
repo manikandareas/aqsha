@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 from scipy import stats
 
@@ -36,19 +35,18 @@ def run(df: pd.DataFrame, args: dict) -> dict:
         ],
     )
     try:
-        w_stat, p = stats.wilcoxon(a, b)
+        # `method="approx"` = normal approximation (SPSS parity): the reported p-value then
+        # matches the Z below and the "Asymp. Sig." label. Without it scipy auto-picks the
+        # EXACT method for small n, whose p-value would contradict an "Asymp." label.
+        result = stats.wilcoxon(a, b, method="approx")
     except ValueError as exc:
         from ..contract import AnalysisError
 
         raise AnalysisError("insufficient_data", f"Uji Wilcoxon tidak bisa dihitung: {exc}")
-    # Z aproksimasi (SPSS menampilkan Z; scipy tak selalu memberi Z untuk n kecil).
-    nnz = neg + pos
-    if nnz > 0:
-        mu = nnz * (nnz + 1) / 4
-        sigma = np.sqrt(nnz * (nnz + 1) * (2 * nnz + 1) / 24)
-        z = (float(w_stat) - mu) / sigma if sigma > 0 else float("nan")
-    else:
-        z = float("nan")
+    # Z aproksimasi langsung dari scipy (`method="approx"` menyediakan `zstatistic`, sudah
+    # termasuk koreksi ikatan seperti SPSS) — bukan hitung ulang manual.
+    p = float(result.pvalue)
+    z = float(result.zstatistic)
     test_tbl = table(
         "test_statistics",
         "Test Statistics",

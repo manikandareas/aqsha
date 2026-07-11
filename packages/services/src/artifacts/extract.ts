@@ -74,22 +74,35 @@ async function extractXlsx(bytes: Uint8Array): Promise<ExtractedDocument> {
   const sheet = workbook.worksheets[0];
   if (!sheet) return { markdown: "", plainText: "" };
 
+  // Explicit bounded traversal (rows 1..PREVIEW, cols 1..PREVIEW) instead of eachRow/eachCell:
+  // a sparse or far-extending worksheet (a stray cell at row 1e6) makes the callbacks iterate
+  // the whole used range even though we only keep the preview window. getRow/getCell fetch each
+  // slot directly, so work is capped at PREVIEW_ROWS × PREVIEW_COLUMNS regardless of the file.
+  const lastRow = Math.min(sheet.rowCount, XLSX_PREVIEW_ROWS);
+  const lastCol = Math.min(sheet.columnCount, XLSX_PREVIEW_COLUMNS);
   const lines: string[] = [];
-  sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-    if (rowNumber > XLSX_PREVIEW_ROWS) return;
+  for (let r = 1; r <= lastRow; r++) {
+    const row = sheet.getRow(r);
     const cells: string[] = [];
-    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-      if (colNumber > XLSX_PREVIEW_COLUMNS) return;
-      const text = (cell.text ?? "").replace(/\s+/g, " ").trim();
+    for (let c = 1; c <= lastCol; c++) {
+      const text = (row.getCell(c).text ?? "").replace(/\s+/g, " ").trim();
       // CSV-quote when the cell holds a comma OR a double-quote, doubling embedded
       // quotes (RFC 4180) — otherwise a value like  He said "hi"  corrupts columns.
       const needsQuote = text.includes(",") || text.includes('"');
       cells.push(needsQuote ? `"${text.replace(/"/g, '""')}"` : text);
-    });
+    }
     lines.push(cells.join(","));
-  });
-  const truncated = sheet.rowCount > XLSX_PREVIEW_ROWS;
-  const header = `Sheet: ${sheet.name} (${sheet.rowCount} baris${truncated ? `, preview ${XLSX_PREVIEW_ROWS} pertama` : ""})`;
+  }
+  // Baris & kolom di-cap independen — sheet yang muat di batas baris tapi melewati batas kolom
+  // (atau sebaliknya) tetap harus menandai kolomnya terpotong.
+  const rowsTruncated = sheet.rowCount > XLSX_PREVIEW_ROWS;
+  const colsTruncated = sheet.columnCount > XLSX_PREVIEW_COLUMNS;
+  const previewNotes: string[] = [];
+  if (rowsTruncated) previewNotes.push(`${XLSX_PREVIEW_ROWS} baris pertama`);
+  if (colsTruncated) previewNotes.push(`${XLSX_PREVIEW_COLUMNS} kolom pertama`);
+  const header = `Sheet: ${sheet.name} (${sheet.rowCount} baris × ${sheet.columnCount} kolom${
+    previewNotes.length > 0 ? `, preview ${previewNotes.join(", ")}` : ""
+  })`;
   const text = normalizeExtractedText([header, ...lines].join("\n"));
   return { markdown: text, plainText: text };
 }

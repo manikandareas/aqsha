@@ -109,13 +109,8 @@ function SidebarProvider({
         setOpenMobile((open) => !open);
         return;
       }
-      const openState = !open;
-      if (setOpenProp) {
-        setOpenProp(openState);
-      } else {
-        _setOpen(openState);
-        document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
-      }
+      // Route through setOpen so the controlled/uncontrolled + cookie-persist logic lives once.
+      setOpen(!open);
     }
   });
 

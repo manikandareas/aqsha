@@ -55,7 +55,12 @@ export type AnalysisExportFile = {
 };
 
 export type AnalysisExportResult =
-  | { ok: true; files: AnalysisExportFile[] }
+  | {
+      ok: true;
+      files: AnalysisExportFile[];
+      /** Format yang diminta+dicoba tapi tak menghasilkan file (mis. tak ada hasil relevan). */
+      missingFormats?: AnalysisExportFormat[];
+    }
   | { ok: false; error: { code: string; message: string } };
 
 const EXPORT_DIR = "/home/daytona/exports";
@@ -623,6 +628,16 @@ export const AnalysisService = {
     if (files.length === 0) {
       return { ok: false, error: { code: "export_empty_output", message: "Tidak ada file yang berhasil dibuat." } };
     }
-    return { ok: true, files };
+    // Format yang diminta (setelah validasi EXPORT_SPEC) tapi tak jadi file → dilaporkan ke
+    // caller supaya user tahu (bukan diam-diam hilang). Pakai `formats` (koleksi lengkap yang
+    // diminta), bukan `runFormats`, agar format yang DIBUANG karena tak eligible (mis. `sav`
+    // tanpa dataset, atau format dokumen tanpa hasil) juga masuk missingFormats.
+    const produced = new Set(files.map((f) => f.format));
+    const missingFormats = formats.filter((format) => !produced.has(format));
+    return {
+      ok: true,
+      files,
+      ...(missingFormats.length > 0 ? { missingFormats } : {}),
+    };
   },
 };
