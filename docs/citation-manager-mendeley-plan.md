@@ -1,6 +1,6 @@
 # Rencana detail: Workspace Citation Manager + Integrasi (Mendeley/Zotero)
 
-> Status: **FASE 0–1 IMPLEMENTED** (2026-07-11, branch `feat/citation-manager`, uncommitted) — Fase 2–6 masih plan. Revisi 2026-07-11 (menggantikan draft 2026-07-10).
+> Status: **FASE 0–2 IMPLEMENTED** (2026-07-11, branch `feat/citation-manager`, uncommitted) — Fase 3–6 masih plan. Revisi 2026-07-11 (menggantikan draft 2026-07-10).
 > Bahasa: Indonesia (istilah teknis tetap English), sesuai `AGENTS.md`.
 
 ## Progress implementasi (2026-07-11)
@@ -8,8 +8,8 @@
 | Fase | Status | Catatan |
 |---|---|---|
 | 0 — Spike + ADR | ✅ selesai | ADR di `docs/adr-citation-csl-engine.md`; fixture Mendeley+Zotero di `packages/services/test/fixtures/citations/`; render 4 style jadi snapshot test. |
-| 1 — Core library + tab Sitasi | ✅ selesai | Migration `0031_workspace_citations` applied DEV; lint/typecheck/test (db 27 · services 301 · api 92 · chat-core 50, 0 fail)/build hijau. |
-| 2 — Artifact bridge | ⬜ belum | |
+| 1 — Core library + tab Sitasi | ✅ selesai | Migration `0031_workspace_citations` applied DEV; lint/typecheck/test/build hijau. Follow-up 2026-07-11: feature flag `workspace_citations` DIPASANG, mode seleksi + bulk bar (tag/export/gabung/hapus), dialog "Kelola duplikat" (endpoint groups + mergeMany) selesai. |
+| 2 — Artifact bridge | ✅ selesai | 2026-07-11. `createFromArtifact` (idempotent + dedupe-adopt) + `resolveFromDoi`; endpoint `from-artifact`/`:id/resolve`; "Tambahkan ke Sitasi" di kartu board (context menu, gate `scholarly_paper`) + header artifact detail; provenance detail (linked artifact buka reader + lepas tautan). lint/typecheck/test (db 27 · services 301 · api 98, 0 fail)/build hijau. |
 | 3 — BlockNote | ⬜ belum | |
 | 4 — Astra | ⬜ belum | |
 | 5 — Settings → Integrasi + Mendeley | ⬜ belum | |
@@ -26,8 +26,8 @@
 **Deviasi/penyederhanaan Fase 1 yang disengaja (follow-up):**
 
 1. Web 1a + 1b dikerjakan sekaligus (bukan dua PR) — tab Sitasi langsung aktif, tanpa fase `disabled hint:"segera"`.
-2. Feature flag `workspace_citations` (rollout §10) **belum dipasang** — tab tampil untuk semua user; pasang sebelum rilis.
-3. UI yang belum dibuat meski endpoint-nya live: **merge duplikat eksplisit** (`POST duplicates/merge` sudah ada), **mode seleksi + bulk bar** (tag/export terpilih/hapus massal), item **"Kelola duplikat"** di menu More. Export saat ini = seluruh library (endpoint sudah mendukung `?ids=`).
+2. ✅ (RESOLVED 2026-07-11) Feature flag `workspace_citations` DIPASANG: `apps/web/lib/feature-flags.ts` (env `NEXT_PUBLIC_FEATURE_WORKSPACE_CITATIONS`) OR `isAdmin`, hook `useWorkspaceCitationsEnabled` di `features/citations/feature.ts`; gate TABS di `workspace-side-panel.tsx` (off → strip kolaps ke "Chat", deep-link `?panel=cite` jatuh ke chat).
+3. ✅ (RESOLVED 2026-07-11) UI dibuat: **mode seleksi + bulk bar** (tag/export terpilih/gabung/hapus massal), item **"Kelola duplikat"** di menu More (dialog grup canonical-key + `mergeMany`). Endpoint baru: `GET duplicates`, `POST merge` (mergeMany), `POST bulk-tag`, `POST bulk-delete`. `duplicates/merge` pairwise lama tetap ada.
 4. Badge document type di baris list diganti dot status + kolom source (density `@3xl:` tetap sesuai plan); provenance batch import di detail belum menampilkan nama file batch.
 5. `workspace-chat-side-panel.tsx` **tidak dihapus** (draft §11 bilang "gantikan") — masih dipakai `artifact-reader-page-shell.tsx` dengan `chrome="frame"`; workspace detail memakainya via `workspace-side-panel.tsx` dengan `chrome="content"`.
 6. Migration PROD `0031` belum dijalankan (menunggu keputusan rilis).
@@ -169,7 +169,7 @@ Dibungkus pola `DetailPanelShell`: `PanelCardToolbar` + body scroll `panelBodyPa
 - Kanan (compact icon buttons, pola `WorkspaceLibraryControls`):
   - `+ Tambah` (DropdownMenu): **Import file (.bib/.ris)** → wizard dialog; **Dari DOI** → dialog kecil input DOI; **Manual** → dialog form.
   - **Export** (DropdownMenu): BibTeX / RIS / CSL-JSON — semua, atau yang terseleksi bila ada seleksi.
-  - **More** (DropdownMenu): Gaya sitasi & urutan bibliography (dialog settings workspace); Kelola duplikat (buka list terfilter status duplicate-candidate).
+  - **More** (DropdownMenu) ✅: Pilih beberapa (masuk mode seleksi); Kelola duplikat (dialog grup canonical-key — bukan list terfilter — tombol Gabungkan per grup); Gaya sitasi & urutan bibliography (dialog settings workspace).
 
 **Baris kontrol di bawah toolbar:** search input compact (state lokal React, BUKAN nuqs — jangan bentrok dengan `q` milik board) + filter chips: status (`verified / needs-review / incomplete`), tag, source (`import / artifact / manual / sync`).
 
@@ -180,7 +180,7 @@ Dibungkus pola `DetailPanelShell`: `PanelCardToolbar` + body scroll `panelBodyPa
 - Chip tag (maks 2 + `+n`), dot status metadata (warna + tooltip), badge source.
 - Hover/focus actions: **Salin sitasi** (render style default workspace, copy ke clipboard), menu ⋯ (Detail, Edit, Buka DOI/URL, Hapus).
 - Klik baris → sub-view detail (`cite:<id>`).
-- Checkbox seleksi muncul saat mode seleksi aktif (long-press/ikon select di toolbar) → bulk bar melayang di bawah kartu: tag, export terpilih, merge suggestion, hapus terpilih.
+- ✅ Checkbox seleksi muncul saat mode seleksi aktif (via menu More "Pilih beberapa") → bulk bar melayang di bawah list: beri tag (popover), export terpilih, gabungkan (≥2), hapus terpilih.
 
 **Expanded (70%):** DOM sama, container variants menaikkan densitas: `@3xl:` baris berubah jadi grid multi-kolom (judul/author+tahun/venue/DOI/tags/status) dengan header kolom — inilah alasan tabel padat tetap layak meski hidup di panel. Tidak ada tabel terpisah; satu komponen, dua density.
 
@@ -335,15 +335,15 @@ Audit batch (bukan source of truth): id, owner/workspace, `source_kind` (`file` 
 | `status`, `last_error` | `connected / expired / error / revoked` |
 | timestamps | |
 
-### 5.3 Metadata dari artifact (Fase 2)
+### 5.3 Metadata dari artifact (Fase 2) — ✅ IMPLEMENTED (2026-07-11)
 
-`CitationService.createFromArtifact`: baca `artifact_paper_metadata` + ownership; buat citation draft hanya bila ada title/DOI; link `artifactId` tanpa memindahkan file; jalankan dedupe yang sama dengan import. `artifact_paper_metadata` TIDAK diubah menjadi canonical citation row.
+`CitationService.createFromArtifact`: baca `artifact_paper_metadata` + ownership (row sudah owner-scoped + membawa `workspace_id`, jadi TAK perlu load artifact untuk auth); butuh `title` (bukan title/DOI — DOI-only diarahkan ke "Dari DOI"); link `artifactId` tanpa memindahkan file; idempotent via `findActiveByArtifact`; dedupe canonical key = **adopsi** row duplikat yang belum punya artifact (`created=false, linkedExisting=true`). `artifact_paper_metadata` TIDAK diubah menjadi canonical citation row. Peta CSL via `buildCslFromPaperMetadata` (author `PaperAuthor.name` → `authorFromName`).
 
 ## 6. API dan service boundary
 
 `apps/web` hanya memanggil Eden Treaty (`@aqsha/api`); tidak mengimpor `@aqsha/db`/`@aqsha/services`.
 
-### 6.1 Endpoint citations (Fase 1–3) — ✅ LIVE untuk scope Fase 1 (`apps/api/src/routes/citations.ts`)
+### 6.1 Endpoint citations (Fase 1–3) — ✅ LIVE untuk scope Fase 1–2 (`apps/api/src/routes/citations.ts`)
 
 Tambahan di luar draft: `GET /workspaces/:id/citations/tags` (daftar tag distinct untuk filter chips). List response menyertakan `total` (count toolbar). Rate limit terpasang: `citations:create` (20/menit), `citations:import` (5/menit, preview + commit).
 
@@ -357,7 +357,13 @@ Tambahan di luar draft: `GET /workspaces/:id/citations/tags` (daftar tag distinc
 | `DELETE` | `/workspaces/:id/citations/:citationId` | soft delete + guard usage |
 | `POST` | `/workspaces/:id/citations/imports/preview` | multipart `.bib`/`.ris` → preview batch |
 | `POST` | `/workspaces/:id/citations/imports/:batchId/commit` | commit selected + duplicate policy |
-| `POST` | `/workspaces/:id/citations/duplicates/merge` | merge explicit source/target |
+| `POST` | `/workspaces/:id/citations/duplicates/merge` | merge explicit source/target (pairwise) |
+| `GET` | `/workspaces/:id/citations/duplicates` | grup kandidat duplikat (Fase 1 follow-up) |
+| `POST` | `/workspaces/:id/citations/merge` | mergeMany `{ids, targetId?}` (bulk/kelola duplikat) |
+| `POST` | `/workspaces/:id/citations/bulk-tag` | tag massal `{ids, tags}` |
+| `POST` | `/workspaces/:id/citations/bulk-delete` | soft delete massal `{ids}` |
+| `POST` | `/workspaces/:id/citations/from-artifact` | createFromArtifact `{artifactId, tags?}` (Fase 2) |
+| `POST` | `/workspaces/:id/citations/:citationId/resolve` | perbarui metadata dari DOI (Fase 2) |
 | `GET` | `/workspaces/:id/citations/export` | `bibtex` / `ris` / `csl-json` |
 | `POST` | `/workspaces/:id/citations/render` | preview citation/bibliography per style |
 | `GET/PATCH` | `/workspaces/:id/citation-settings` | default style + sort bibliography |
@@ -381,7 +387,7 @@ Route module `apps/api/src/routes/citations.ts`, mount satu baris di `index.ts`.
 
 Terimplementasi (Fase 1) di `packages/services/src/citations/` — nama file final:
 
-- `citation.service.ts` — CRUD, authorization, dedupe (409 `citation_duplicate` + `allowDuplicate`), merge, quality status, export, render, settings; create-by-DOI reuse `classifyPaperText` + `resolvePaper`. ✅
+- `citation.service.ts` — CRUD, authorization, dedupe (409 `citation_duplicate` + `allowDuplicate`), merge, quality status, export, render, settings; create-by-DOI reuse `classifyPaperText` + `resolvePaper`. ✅ **Fase 2 + follow-up (2026-07-11):** `createFromArtifact`, `resolveFromDoi`, `listDuplicateGroups`, `mergeMany` (`pickMergeTarget` by completeness), `bulkAddTag`, `bulkSoftDelete`; helper CSL bersama `buildCslFromResolvedPaper`/`buildCslFromPaperMetadata`. Repo baru `WorkspaceCitationRepo.softDeleteMany`. ✅
 - `citation-import.service.ts` — preview (staging `records_json`) + commit (policy skip/merge/import, re-check duplikat dalam transaksi), limits, diagnostics; dipakai import file DAN provider sync nanti (satu pipeline). ✅
 - `citation-format.ts` (bukan `.service.ts`) — CSL rendering (register style vendored sekali) + export bibtex/ris/csl-json. ✅
 - `citation-parse.ts` — split per-entry `.bib`/`.ris` + sniff format + diagnostic per-entry. ✅
@@ -442,17 +448,17 @@ Urutan: **Fase 0 → 1 → 2 → 3 → 4 (opsional, bisa paralel 3) → evaluasi
 
 **Acceptance:** import 100 reference BibTeX/RIS (Mendeley/Zotero), skip/merge duplikat, cari DOI, ubah tag, download BibTeX/RIS konsisten — semua dari tab Sitasi; expand 30:70 menampilkan density tabel; chat tetap berfungsi persis seperti sebelumnya.
 
-### Fase 2 — Artifact bridge dan quality workflow
+### Fase 2 — Artifact bridge dan quality workflow — ✅ SELESAI (2026-07-11)
 
-**Hasil:** paper PDF/URL Aqsha bisa jadi citation tanpa duplikasi; metadata lemah terlihat dan bisa diperbaiki.
+**Hasil:** paper PDF/URL Aqsha bisa jadi citation tanpa duplikasi; metadata lemah terlihat dan bisa diperbaiki. Testing: api itest +6 (`from-artifact` idempotent/intruder-404/no-metadata-404, duplicates+merge, bulk-tag/delete). lint/typecheck/test (db 27 · services 301 · api 98, 0 fail)/build hijau.
 
-1. Action **Tambahkan ke Sitasi** pada kartu artifact (context menu board) + halaman artifact detail — sukses → buka panel `cite` + toast.
-2. API `createFromArtifact` + `link/unlink artifact`.
-3. Kalkulasi `metadataStatus`: field inti hilang → `incomplete`; resolver/manual reviewed → `verified`; import unresolved → `needs_review`.
-4. Detail sitasi menampilkan provenance + link ke artifact reader.
-5. Queue opt-in resolve DOI untuk record incomplete; tidak memblokir list/import.
+1. ✅ Action **Tambahkan ke Sitasi** pada kartu artifact (context menu board, gate `detectedDocumentKind === "scholarly_paper"`) + header artifact detail (`ArtifactHeaderActions`, prop opsional). Sukses → toast; di workspace detail juga buka panel `cite:<id>` (via prop `onCitationAdded` → `openCitationDetail`, karena `WorkspaceLibrarySurface` juga dipakai thread-shell yang tanpa `WorkspacePanelProvider`).
+2. ✅ API `createFromArtifact` (`POST from-artifact`); **link/unlink** memakai `PATCH artifactId` existing (link dari kartu; unlink = tombol "Lepas tautan" di detail). Artifact picker "Tautkan artifact" dari sisi citation DITUNDA (belum ada; entry utama = dari sisi artifact).
+3. ✅ `metadataStatus` (sudah ada `metadataStatusFor`): artifact source → `needs_review`/`incomplete`; `resolveFromDoi`/markReviewed → `verified`.
+4. ✅ Detail sitasi: provenance (source pill) + baris "Artifact" (buka reader + lepas tautan). Nama file batch import di detail masih belum (butuh kolom link citation→batch — ditunda).
+5. ⚠️ DEVIASI: bukan BullMQ queue — dibuat **`POST :id/resolve` sinkron** (tombol "Perbarui dari DOI" di detail saat status ≠ verified & ada DOI): re-resolve `resolvePaper`, fill-missing (jangan clobber edit user), status→verified. Queue batch-resolve untuk banyak record sekaligus bisa menyusul bila perlu.
 
-**Acceptance:** satu artifact masuk library sekali saja; link kembali bisa dibuka; hapus citation tidak menghapus file.
+**Acceptance:** ✅ satu artifact masuk library sekali saja (idempotent + dedupe-adopt); link kembali bisa dibuka (reader); hapus citation tidak menghapus file (soft delete citation, artifact utuh).
 
 ### Fase 3 — BlockNote citation dan bibliography
 
@@ -542,7 +548,7 @@ Perubahan schema/service: `bun run db:generate` → review migration → `bun ru
 
 ### Rollout
 
-1. Fase 1 di balik feature flag `workspace_citations` untuk internal users (tab Sitasi hidden/`hint:"segera"` saat flag off). **Status: flag BELUM dipasang — tab saat ini tampil untuk semua user; pasang sebelum rilis.**
+1. ✅ Fase 1–2 di balik feature flag `workspace_citations` untuk internal users. **Status (2026-07-11): flag TERPASANG** — aktif bila env `NEXT_PUBLIC_FEATURE_WORKSPACE_CITATIONS=true` (GA) ATAU `isAdmin`; default = hanya internal/admin yang lihat tab Sitasi + entry "Tambahkan ke Sitasi". Untuk GA: set env → redeploy.
 2. Monitor import error rate, records/batch, duplicate decision, render failure, export success.
 3. Fase 3 setelah data library stabil; dokumen lama tanpa citation node tidak dimigrate paksa.
 4. Fase 5 sebagai beta terpisah (`provider_sync_beta`) setelah security review + app registration siap; Fase 6 menyusul di flag yang sama.
@@ -555,9 +561,10 @@ Perubahan schema/service: `bun run db:generate` → review migration → `bun ru
 | Services ✅ (F1) | `packages/services/src/citations/*` + export di `index.ts` + rate-limit rules `citations:*` di `quota/rate-limits.ts` + tests/fixtures; sisa: `packages/services/src/integrations/*` (F5–6) |
 | API ✅ (F1) | `apps/api/src/routes/citations.ts` + mount di `index.ts` + `test/citations.test.ts`; sisa: `routes/integrations.ts` + worker `integration-sync` (F5) |
 | Web panel ✅ | `apps/web/features/workspaces/utils/workspace-panel-model.ts` (+ test), `workspace-panel-context.tsx` (baru), `workspace-detail-client.tsx`, `workspace-side-panel.tsx` (baru; `workspace-chat-side-panel.tsx` TIDAK dihapus — masih dipakai artifact reader dgn `chrome="frame"`), prop `chrome` pada `CompactThreadChatPanel`, `workspace-board-toolbar.tsx` (aria PanelOpenButton) |
-| Web citations ✅ | `apps/web/features/citations/{api.ts,types.ts,components/*}` (panel, list+row+filter, empty state, wizard import, dialog DOI/manual-edit, detail sub-view, export menu, dialog gaya), `apps/web/lib/api-query.ts` (queryKeys.citations) |
+| Web citations ✅ | `apps/web/features/citations/{api.ts,types.ts,feature.ts,components/*}` (panel + bulk bar seleksi, list+row+filter, empty state, wizard import, dialog DOI/manual-edit/gaya/**duplikat**, detail sub-view + provenance, export menu), `apps/web/lib/{api-query.ts,feature-flags.ts}` |
+| Web feature flag ✅ (F1 follow-up) | `apps/web/lib/feature-flags.ts`, `features/citations/feature.ts` (`useWorkspaceCitationsEnabled`), gate di `workspace-side-panel.tsx`, `apps/web/.env.example` |
 | Web settings | `apps/web/features/settings/lib/settings-menu.ts`, `apps/web/app/app/settings/integrations/page.tsx`, `features/settings/components/integrations-page.tsx` (F5) |
-| Artifact bridge | context menu board + artifact detail actions, `ArtifactService` helper (F2) |
+| Artifact bridge ✅ (F2) | `citation.service.ts` `createFromArtifact`/`resolveFromDoi`, `routes/citations.ts` `from-artifact`/`:id/resolve`; web threading `onAddToCitations` (`workspace-library-{context-menus,grid,board,surface}.tsx` + `artifact-render-panels.tsx` `ArtifactHeaderActions` + `artifact-detail-view.tsx`), `onCitationAdded` di `workspace-detail-client.tsx`, `detectedDocumentKind` ditambah ke `use-workspaces-data.ts`/`workspace-library-model.ts` |
 | BlockNote | `blocknote-document-editor.tsx`, loader/schema components, usage reconciliation (F3) |
 | Agent | `packages/chat-core` context ref, API hydration, agent tools (F4) |
 | Icons | `packages/ui/src/icons.tsx` bila ikon quote/plug belum tersedia |
