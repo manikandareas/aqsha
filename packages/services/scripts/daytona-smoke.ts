@@ -18,9 +18,13 @@ const CSV = [
   }),
 ].join("\n");
 
+/**
+ * Throw (not `process.exit`) so a failure inside the `try` below unwinds through the
+ * `finally` that deletes the sandbox — `process.exit` would skip cleanup and leak it.
+ * The uncaught throw still exits the process non-zero.
+ */
 function fail(step: string, detail: string): never {
-  console.error(`[stats:smoke] GAGAL pada ${step}: ${detail}`);
-  process.exit(1);
+  throw new Error(`[stats:smoke] GAGAL pada ${step}: ${detail}`);
 }
 
 console.log("[stats:smoke] create sandbox dari snapshot…");
