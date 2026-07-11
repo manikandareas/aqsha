@@ -121,6 +121,13 @@ services:
       AQSHA_LITE_REASONING_EFFORT: ${AQSHA_LITE_REASONING_EFFORT:-low}
       AQSHA_PRO_REASONING_EFFORT: ${AQSHA_PRO_REASONING_EFFORT:-high}
       AQSHA_REASONING_SUMMARY: ${AQSHA_REASONING_SUMMARY:-auto}
+      # Langfuse (observability, opsional) — agent MENGIRIM trace ke Langfuse self-host yang jalan
+      # di infra server (infra/compose.dev.yaml --profile langfuse). Kosong = tracing off (tak crash).
+      # BASE_URL = URL langfuse-web (Tailscale/subdomain). Trace prod ditandai environment=production.
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-}
+      NODE_ENV: production
     # Mastra runtime state lives in Postgres (mastra_* tables) — no file-backed durable volume.
     expose:
       - "4317"

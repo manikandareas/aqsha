@@ -112,6 +112,35 @@ The bucket stays private (`minio-init` runs `mc anonymous set none`); access is 
 - Create a thread → Astra streams (confirms web → `agent` proxy + DB projections).
 - Upload an artifact (confirms presigned S3 + CORS).
 
+## Observability (Langfuse) — optional
+
+The prod stack does **not** run Langfuse itself; the agent only **sends** traces to a self-hosted
+Langfuse instance (token/cost per Astra + `/deep` run). Run Langfuse once, on the infra server, via
+the `langfuse` profile of `infra/compose.dev.yaml` (Postgres + ClickHouse + Redis of its own; blob
+reuses the app MinIO):
+
+```bash
+# on the infra server, with LANGFUSE_* filled in infra/.env
+docker compose -f infra/compose.dev.yaml --profile langfuse up -d
+```
+
+Then point the prod agent at it by adding to the Dokploy **Environment** tab:
+
+```
+LANGFUSE_PUBLIC_KEY=pk-lf-...     # = LANGFUSE_PUBLIC_KEY seeded on the Langfuse project
+LANGFUSE_SECRET_KEY=sk-lf-...     # = LANGFUSE_SECRET_KEY
+LANGFUSE_BASE_URL=https://langfuse.<domain>   # or http://<TAILSCALE_IP>:3000 (must be reachable from the agent container)
+```
+
+Leaving them empty disables tracing (no crash). Prod traces are tagged `environment=production`
+(`NODE_ENV` is set on the agent service), so they don't mix with dev. Expose the Langfuse UI over a
+Traefik subdomain or keep it Tailscale-only. After first traces arrive, register custom model prices
+(`gpt-5.1`, `gpt-5.4-mini`) in the Langfuse UI so the cost column is accurate.
+
+> Cross-stack networking: the prod stack (`compose.yaml`) and the Langfuse profile run in separate
+> Compose projects, so the agent reaches Langfuse via a routable URL (subdomain or Tailscale IP),
+> not the internal `langfuse-web:3000` DNS name.
+
 ## Updating
 
 Push to the deployed branch and click **Redeploy** in Dokploy (or enable auto-deploy on push).

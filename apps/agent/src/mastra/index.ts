@@ -2,6 +2,7 @@ import { assertEmbeddingEnabled } from "@aqsha/services/rag";
 import { Mastra } from "@mastra/core/mastra";
 import { MASTRA_THREAD_ID_KEY } from "@mastra/core/request-context";
 import type { Middleware } from "@mastra/core/server";
+import { LangfuseExporter } from "@mastra/langfuse";
 import { MastraStorageExporter, Observability } from "@mastra/observability";
 import { astraLite, astraPro } from "./agents/astra-lite";
 import { createClerkAuth } from "./auth";
@@ -28,6 +29,14 @@ const bootSweepMiddleware: Middleware = async (_c, next) => {
   sweepFrozenDeepRunsOnce();
   await next();
 };
+
+// Langfuse (observability eksternal) hanya AKTIF bila kedua key ada — tanpa key exporter tak
+// dipasang (tak crash). Self-host: `LANGFUSE_BASE_URL` WAJIB diarahkan ke langfuse-web sendiri
+// (default SDK = cloud.langfuse.com). Tag `environment`/`release` memisah trace dev vs prod &
+// per-deploy. Dimatikan total lewat master kill-switch `AQSHA_OBSERVABILITY=off` (di bawah).
+const langfuseEnabled = Boolean(
+  process.env.LANGFUSE_PUBLIC_KEY && process.env.LANGFUSE_SECRET_KEY,
+);
 
 /**
  * Instance Mastra runtime Astra (Fase 0 spike).
@@ -59,6 +68,10 @@ export const mastra = new Mastra({
   // threadId/run deep/turn chat/tier dari RequestContext → ledger kosong (mis. CFG-6) & bobot
   // token history terlihat dari trace prod, bukan tebakan. Email SENGAJA tidak diekstrak (PII).
   // `SensitiveDataFilter` auto-aktif. Matikan via env `AQSHA_OBSERVABILITY=off`.
+  //
+  // LangfuseExporter (bila `LANGFUSE_*` diisi) ikut di config `default` yang SAMA → mewarisi
+  // `requestContextKeys` di bawah, jadi token/biaya per run deep (`AQSHA_DEEP_RUN_KEY`) & turn chat
+  // ter-tag di Langfuse untuk analisis unit-economics, bukan cuma di storage lokal.
   ...(process.env.AQSHA_OBSERVABILITY === "off"
     ? {}
     : {
@@ -66,7 +79,24 @@ export const mastra = new Mastra({
           configs: {
             default: {
               serviceName: "aqsha-agent",
-              exporters: [new MastraStorageExporter()],
+              exporters: [
+                new MastraStorageExporter(),
+                ...(langfuseEnabled
+                  ? [
+                      new LangfuseExporter({
+                        publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+                        secretKey: process.env.LANGFUSE_SECRET_KEY!,
+                        baseUrl: process.env.LANGFUSE_BASE_URL,
+                        // Non-prod: flush tiap event (trace instan di UI). Prod (NODE_ENV=production
+                        // di compose.yaml): batch, hemat. `mastra dev` tak selalu set NODE_ENV → pakai
+                        // negasi "production" supaya dev default realtime.
+                        realtime: process.env.NODE_ENV !== "production",
+                        environment: process.env.NODE_ENV ?? "development",
+                        release: process.env.GIT_COMMIT,
+                      }),
+                    ]
+                  : []),
+              ],
               requestContextKeys: [
                 MASTRA_THREAD_ID_KEY,
                 AQSHA_DEEP_RUN_KEY,
