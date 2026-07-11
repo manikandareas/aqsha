@@ -118,6 +118,13 @@ The bucket stays private (`minio-init` runs `mc anonymous set none`); access is 
 - Create a thread → Astra streams (confirms web → `agent` proxy + DB projections).
 - Upload an artifact (confirms presigned S3 + CORS).
 
+## Observability & CI/CD — full activation runbook
+
+The sections below are quick reference. For the **step-by-step go-live** (owner prerequisites, exact
+env per pillar, verification checklists, troubleshooting) across CI/CD + Sentry + Grafana Cloud +
+Uptime Kuma + Langfuse, see **`docs/observability-cicd-runbook.md`** (design rationale:
+`docs/observability-cicd-plan.md`).
+
 ## Observability (Langfuse) — optional
 
 The prod stack does **not** run Langfuse itself; the agent only **sends** traces to a self-hosted
@@ -203,6 +210,64 @@ Variable) + `SENTRY_ORG` / `SENTRY_PROJECT_WEB` (Variables) + `SENTRY_AUTH_TOKEN
 source-map upload) as in the CI prerequisites above. Session Replay is off and tracing defaults to 0
 to protect the free-tier quota. Verify by throwing a test error per runtime and confirming it lands
 in the right project, symbolicated, tagged with the commit `release`.
+
+## Observability (logs / metrics / traces — Grafana Cloud) — optional
+
+Errors go to Sentry; **logs, host/container metrics, and agent traces** go to **Grafana Cloud**
+(free tier: 50 GB logs + 50 GB traces + 10k metric series, 14-day retention) through one collector,
+**Grafana Alloy**, defined in `compose.yaml` behind the **`observability` profile**. With the
+profile off, Alloy doesn't run (zero overhead); the rest of the stack is unchanged (pino already
+writes NDJSON to stdout, and the agent only emits OTLP when told to).
+
+What Alloy collects (config: `infra/alloy/config.alloy`):
+
+- **Logs** — every stack container's stdout/stderr → Loki, labelled `service` + `compose_project`,
+  with pino `level` lifted to a label (requestId stays a searchable field, not a high-cardinality
+  label). Only `aqsha` containers are shipped (other Dokploy projects on the VPS are filtered out).
+- **Metrics** — host CPU/RAM/disk (`node`) + per-container (`cAdvisor`) → Prometheus/Mimir, scraped
+  every 60s to stay under the free-tier series budget.
+- **Traces** — the agent pushes OTLP spans (Mastra AI tracing, one trace per `/deep` run / chat
+  turn) to `http://alloy:4318/v1/traces`; Alloy forwards them to Tempo. Correlate to logs by
+  traceId. (API traces stay deferred — Bun's OTel SDK isn't first-class yet; Sentry + logs cover it.)
+
+**Enable it:**
+
+1. Create a **Grafana Cloud** account (free). From **Connections** copy the Loki push URL + user,
+   the Prometheus remote-write URL + user, and the OTLP endpoint + user; create **one** Cloud
+   Access Policy **token** with `logs:write`, `metrics:write`, `traces:write`.
+2. In the Dokploy **Environment** tab (see `.env.example` → Observability block) set the
+   `GRAFANA_CLOUD_*` values, turn the collector on with `COMPOSE_PROFILES=observability`, and point
+   the agent at it with `AQSHA_OTLP_TRACES_ENDPOINT=http://alloy:4318/v1/traces`. Redeploy.
+3. Verify: `docker compose --profile observability ps` shows `alloy` up; Grafana Cloud → Logs shows
+   streams for `service=api|web|agent|…`; run a `/deep` and a trace appears in Tempo.
+
+> Fill **all three** endpoints together — they come from the one account, and the `observability`
+> profile is all-or-nothing (an empty exporter endpoint can crash-loop Alloy). Leave
+> `AQSHA_OTLP_TRACES_ENDPOINT` empty unless the profile is on, or the agent dials a collector that
+> isn't there. RAM cost: Alloy ~150–300 MB. Redaction: pino already redacts secrets; Alloy adds
+> only container metadata as labels, never log contents.
+
+## Uptime monitoring (Uptime Kuma) — optional
+
+Run **Uptime Kuma** as a **separate** Dokploy Compose service (`infra/compose.uptime.yaml`), not
+part of the app stack, so app redeploys never take the monitor down. It joins the app stack's
+network (`aqsha_default`) so it can also probe internal-only services (the agent has no domain).
+
+1. Dokploy → **Create Service → Compose** → `infra/compose.uptime.yaml`. **Domains** tab: add
+   `status.<domain>` (or `uptime.<domain>`) → container port **3001** (HTTPS + Let's Encrypt).
+2. First boot: open the UI, create the admin user, add a **notification** (Telegram/Discord), then
+   monitors:
+   - `https://<domain>` (web) + a keyword check on the landing page
+   - `https://api.<domain>/ping` (api)
+   - `https://assets.<domain>/minio/health/live` (MinIO)
+   - `http://agent:4317/` (agent, internal — works via the network join)
+   - your `LANGFUSE_BASE_URL` (if Langfuse runs)
+3. Optional: expose `status.<domain>` as a public **status page** from the Kuma UI.
+
+> If Dokploy names the compose project something other than `aqsha`, update the external network in
+> `infra/compose.uptime.yaml` (`aqsha_default` → `<project>_default`; check `docker network ls`).
+> RAM cost: ~100 MB. Kuma 1.x has no declarative config — monitors live in the UI (backed by its
+> own `uptime_kuma_data` volume, so back that up with the rest).
 
 ## Updating
 

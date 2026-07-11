@@ -3,15 +3,25 @@
 > Disusun 2026-07-11. Cakupan: **web** (Next.js), **api** (Elysia/Bun), **worker** (BullMQ, reuse
 > image api), **agent** (Mastra/Node) + infra pendukung di VPS Dokploy.
 >
+> Dokumen ini = **desain & alasan**. Langkah **menyalakan** (owner): `docs/observability-cicd-runbook.md`.
+>
 > **Status implementasi (update 2026-07-11):**
 > - ✅ **Bagian 1 — CI/CD**: SELESAI (kode). Branch `infrastructure` (worktree `aqsha-infrastructure`).
 > - ✅ **Bagian 2 Fase 1 — Sentry**: SELESAI (kode, env-gated no-op tanpa DSN).
-> - ⬜ **Fase 2 (Alloy→Loki)**, ⬜ **Fase 3 (traces agent→Tempo + metrics host)**, ⬜ **Fase 4 (Uptime Kuma)**: BELUM.
+> - ✅ **Fase 2 (Alloy→Loki)** + ✅ **Fase 3 (traces agent→Tempo + metrics host/container)**: SELESAI
+>   (kode). Satu service `alloy` di `compose.yaml` di belakang **profile `observability`** (opt-in via
+>   `COMPOSE_PROFILES`), config `infra/alloy/config.alloy` (logs+metrics+traces). Agent kirim OTLP
+>   (`OtelExporter`) hanya bila `AQSHA_OTLP_TRACES_ENDPOINT` diisi.
+> - ✅ **Fase 4 (Uptime Kuma)**: SELESAI (kode). `infra/compose.uptime.yaml` = service Dokploy TERPISAH,
+>   join network `aqsha_default`. Monitor dikonfig di UI (Kuma 1.x tak deklaratif).
 >
-> Verifikasi lokal yang sudah lolos: `bun run typecheck` + `lint` + full `test` (81 itest api hijau) +
-> `docker compose config` (compose.yaml & +compose.build.yaml). **Build image Docker BELUM diverifikasi**
-> (tak ada daemon lokal — pertama kali jalan di CI). Belum di-commit; perubahan ada di working tree
-> worktree untuk review. Owner prereqs (akun/secret/DNS) masih pending — lihat checklist di tiap bagian.
+> Verifikasi lokal: Fase 1 — `bun run typecheck` + `lint` + full `test` (81 itest api hijau) +
+> `docker compose config`. Fase 2–4 — `bun run --filter @aqsha/agent typecheck` hijau (OtelExporter
+> terpasang; dep `@mastra/otel-exporter` + `@opentelemetry/exporter-trace-otlp-proto`; lockfile ter-update).
+> **Belum diverifikasi (tak ada Docker daemon lokal):** build image, `docker compose config` file baru,
+> `alloy fmt`, dan aliran telemetri end-to-end — pertama kali jalan di CI/VPS. Belum di-commit; perubahan
+> ada di working tree worktree untuk review. Owner prereqs (akun/secret/DNS + Grafana Cloud token + domain
+> status) masih pending — lihat checklist di tiap bagian.
 
 ## Bagian 1 — CI/CD: VPS hanya deploy, bukan build
 
@@ -186,7 +196,13 @@ Deviasi/keputusan penting:
 - **Blocker "branch Langfuse" LENYAP**: branch `infrastructure` sudah punya Langfuse → Fase 3 nanti
   cukup menambah exporter OTLP ke array `exporters` yang sudah ada.
 
-### Fase 2 — Logs ke Grafana Cloud (Loki) via Alloy — ⬜ BELUM
+### Fase 2 — Logs ke Grafana Cloud (Loki) via Alloy — ✅ IMPLEMENTED
+
+> Service `alloy` (`compose.yaml`, profile `observability`) + `infra/alloy/config.alloy`. Satu file
+> config menggabung SEMUA sinyal (logs+metrics+traces), bukan per-sinyal. Logs: `discovery.docker` →
+> `discovery.relabel` (keep `.*aqsha.*` — buang stack Dokploy lain di VPS; label `service` +
+> `compose_project`) → `loki.process` (stage.json angkat `level` jadi label, requestId tetap field) →
+> `loki.write` basic-auth. Pino TAK berubah. Dashboard/alert = langkah owner di Grafana Cloud UI.
 
 Free tier Grafana Cloud: 50 GB logs + 50 GB traces + 10k metric series, retensi 14 hari, 3 user.
 
@@ -203,7 +219,14 @@ Free tier Grafana Cloud: 50 GB logs + 50 GB traces + 10k metric series, retensi 
 
 Env baru: `GRAFANA_CLOUD_LOKI_URL`, `GRAFANA_CLOUD_LOKI_USER`, `GRAFANA_CLOUD_API_TOKEN`.
 
-### Fase 3 — Traces agent + metrics host — ⬜ BELUM
+### Fase 3 — Traces agent + metrics host — ✅ IMPLEMENTED
+
+> Agent traces: `OtelExporter` (`@mastra/otel-exporter` + `@opentelemetry/exporter-trace-otlp-proto`,
+> `protocol: "http/protobuf"`, `signals.logs=false`) ditambah ke array `exporters` di
+> `apps/agent/src/mastra/index.ts`, GATE `AQSHA_OTLP_TRACES_ENDPOINT` (kosong=off) → `http://alloy:4318/v1/traces`.
+> Alloy: `otelcol.receiver.otlp` (http saja) → `otelcol.processor.batch` → `otelcol.exporter.otlphttp`
+> (basic-auth) ke Tempo. Metrics: `prometheus.exporter.unix` (host, mount `/proc`+`/sys`+`/` ro) +
+> `prometheus.exporter.cadvisor` → dua `prometheus.scrape` (60s) → `prometheus.remote_write`. API traces DITUNDA.
 
 1. **Agent traces**: di config `Observability` yang sudah ada (`apps/agent/src/mastra/index.ts`),
    tambah exporter OTLP (`@mastra/otel-exporter` / exporter OTel bawaan Mastra) menunjuk ke
@@ -218,7 +241,11 @@ Env baru: `GRAFANA_CLOUD_LOKI_URL`, `GRAFANA_CLOUD_LOKI_USER`, `GRAFANA_CLOUD_AP
 3. **API traces**: DITUNDA — OTel SDK di Bun belum first-class; logs + Sentry (yang punya
    mini-tracing sendiri) sudah menutup kebutuhan debugging api. Re-evaluasi saat Bun OTel matang.
 
-### Fase 4 — Uptime Kuma + status page — ⬜ BELUM
+### Fase 4 — Uptime Kuma + status page — ✅ IMPLEMENTED
+
+> `infra/compose.uptime.yaml` (project `aqsha-uptime`, TERPISAH dari stack app) — `louislam/uptime-kuma:1`,
+> volume `uptime_kuma_data`, join network eksternal `aqsha_default` (cek `agent:4317` internal). UI port
+> 3001 (front via Traefik/Domains Dokploy). Monitor + notifikasi dikonfig di UI (Kuma 1.x tak deklaratif).
 
 1. Service Dokploy terpisah (bukan di stack aqsha, supaya redeploy app tidak mematikan
    monitor): image `louislam/uptime-kuma:1`, volume data sendiri, join network stack aqsha
@@ -232,7 +259,7 @@ Env baru: `GRAFANA_CLOUD_LOKI_URL`, `GRAFANA_CLOUD_LOKI_USER`, `GRAFANA_CLOUD_AP
 ```
 ✅ Bagian 1 CI/CD  ──── prasyarat source-maps & deploy cepat ────┐
                                                                 ▼
-✅ Fase 1 Sentry (web→api→worker→agent) → ⬜ Fase 2 Loki logs → ⬜ Fase 3 traces+metrics → ⬜ Fase 4 Kuma
+✅ Fase 1 Sentry (web→api→worker→agent) → ✅ Fase 2 Loki logs → ✅ Fase 3 traces+metrics → ✅ Fase 4 Kuma
 ```
 
 Fase 4 (Kuma) sebenarnya independen — bisa dikerjakan kapan saja, paling cepat nilai/effort.
