@@ -5,6 +5,7 @@ import { MASTRA_THREAD_ID_KEY } from "@mastra/core/request-context";
 import type { Middleware } from "@mastra/core/server";
 import { LangfuseExporter } from "@mastra/langfuse";
 import { MastraStorageExporter, Observability } from "@mastra/observability";
+import { OtelExporter } from "@mastra/otel-exporter";
 import { astraLite, astraPro } from "./agents/astra-lite";
 import { createClerkAuth } from "./auth";
 import {
@@ -62,6 +63,12 @@ const langfuseEnabled = Boolean(
   process.env.LANGFUSE_PUBLIC_KEY && process.env.LANGFUSE_SECRET_KEY,
 );
 
+// OTLP traces (observability Fase 3) hanya AKTIF bila `AQSHA_OTLP_TRACES_ENDPOINT` diisi — endpoint
+// itu = collector Alloy (`http://alloy:4318/v1/traces`, HTTP/protobuf) yang meneruskan ke Grafana
+// Cloud Tempo. Kosong = off (tanpa dial ke collector yang belum jalan). Berdampingan dengan
+// exporter storage + Langfuse di array yang sama; ikut master kill-switch `AQSHA_OBSERVABILITY=off`.
+const otlpTracesEndpoint = process.env.AQSHA_OTLP_TRACES_ENDPOINT;
+
 /**
  * Instance Mastra runtime Astra (Fase 0 spike).
  *
@@ -117,6 +124,24 @@ export const mastra = new Mastra({
                         realtime: process.env.NODE_ENV !== "production",
                         environment: process.env.NODE_ENV ?? "development",
                         release: process.env.GIT_COMMIT,
+                      }),
+                    ]
+                  : []),
+                // OTLP → Alloy → Grafana Cloud Tempo. GenAI-semconv spans per deepRun/chat-turn,
+                // ter-korelasi ke logs via traceId. Logs SENGAJA dimatikan (signals.logs=false):
+                // log agent sudah dipanen stdout→Alloy→Loki, jadi tak perlu paket
+                // @opentelemetry/exporter-logs-otlp-* tambahan. Traces pakai http/protobuf
+                // (@opentelemetry/exporter-trace-otlp-proto).
+                ...(otlpTracesEndpoint
+                  ? [
+                      new OtelExporter({
+                        provider: {
+                          custom: {
+                            endpoint: otlpTracesEndpoint,
+                            protocol: "http/protobuf",
+                          },
+                        },
+                        signals: { traces: true, logs: false },
                       }),
                     ]
                   : []),

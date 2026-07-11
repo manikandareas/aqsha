@@ -146,6 +146,11 @@ services:
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
       LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-}
+      # OTLP traces (observability Fase 3) — agent AI-tracing spans → Alloy → Grafana Cloud Tempo.
+      # Empty = off (NO connection attempts). Set to http://alloy:4318/v1/traces ONLY when the
+      # `observability` profile (the `alloy` service below) is enabled, else the agent would dial a
+      # collector that isn't running. Co-exists with the Langfuse + storage exporters.
+      AQSHA_OTLP_TRACES_ENDPOINT: ${AQSHA_OTLP_TRACES_ENDPOINT:-}
       NODE_ENV: production
     # Mastra runtime state lives in Postgres (mastra_* tables) — no file-backed durable volume.
     expose:
@@ -242,7 +247,53 @@ services:
       "
     restart: "no"
 
+  # Grafana Alloy — the single observability collector for the whole stack: container logs → Loki,
+  # host + container metrics → Prometheus/Mimir, and the agent's OTLP traces → Tempo (all Grafana
+  # Cloud, free tier). OPT-IN behind the `observability` profile: it runs only when `observability`
+  # is in COMPOSE_PROFILES (set that in the Dokploy Environment tab). Config: infra/alloy/config.alloy.
+  # Creds/endpoints: the GRAFANA_CLOUD_* env below (see .env.example + DEPLOYMENT.md). With the
+  # profile off there is zero overhead; with it on but creds empty, Alloy may crash-loop — fill all
+  # three endpoints together (one Grafana Cloud account provides Loki + Prometheus + Tempo).
+  alloy:
+    image: grafana/alloy:latest
+    profiles: ["observability"]
+    restart: unless-stopped
+    # cAdvisor (per-container metrics) needs privileged + the host mounts below to read container
+    # cgroups on a Linux Docker host (per Grafana's prometheus.exporter.cadvisor recipe). Standard
+    # for a monitoring collector on a single-owner VPS. Drop `privileged` + the cadvisor exporter in
+    # config.alloy if you only want logs + host metrics + traces (those don't need it).
+    privileged: true
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    environment:
+      GRAFANA_CLOUD_LOKI_URL: ${GRAFANA_CLOUD_LOKI_URL:-}
+      GRAFANA_CLOUD_LOKI_USER: ${GRAFANA_CLOUD_LOKI_USER:-}
+      GRAFANA_CLOUD_PROM_URL: ${GRAFANA_CLOUD_PROM_URL:-}
+      GRAFANA_CLOUD_PROM_USER: ${GRAFANA_CLOUD_PROM_USER:-}
+      GRAFANA_CLOUD_TEMPO_URL: ${GRAFANA_CLOUD_TEMPO_URL:-}
+      GRAFANA_CLOUD_TEMPO_USER: ${GRAFANA_CLOUD_TEMPO_USER:-}
+      GRAFANA_CLOUD_API_TOKEN: ${GRAFANA_CLOUD_API_TOKEN:-}
+    volumes:
+      - ./infra/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy_data:/var/lib/alloy/data
+      # docker.sock (log discovery + cAdvisor docker_host) lives under /var/run. rw per Grafana's
+      # cAdvisor recipe (immaterial next to `privileged`, but matches the documented-working mount).
+      - /var/run:/var/run:rw
+      # cAdvisor container stats + prometheus.exporter.unix host rootfs/sys (paths set in config.alloy).
+      - /:/rootfs:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+      # Host /proc for the node exporter, mounted separately so the container keeps its own /proc.
+      - /proc:/host/proc:ro
+    expose:
+      - "4318"  # OTLP HTTP receiver — agent pushes traces here (internal only, no domain).
+
 volumes:
   postgres_data:
   redis_data:
   minio_data:
+  alloy_data:
