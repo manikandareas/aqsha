@@ -39,6 +39,7 @@ import {
   type MessageInteractions,
 } from "./message-interactions";
 import { InlineSources } from "./sources-panel";
+import { StatsNextStepChips } from "./stats-viz/next-step-chips";
 import { ToolRow } from "./tool-row";
 
 /**
@@ -104,6 +105,12 @@ export function MessageList({
   const showTyping = Boolean(pending) && (!last || last.role === "user");
   const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant")?.id;
 
+  // Chip next-step ritual (fase C): HANYA run analisis TERAKHIR di thread + turn settled (`!busy`),
+  // yaitu turn TERAKHIR memang berisi analisis sukses → tuntunan muncul di dasar transkrip (dekat
+  // composer), bukan di setiap struk (noise + saran basi). Turn teks lanjutan → tak ada chip lagi.
+  const nextStepAnalysis =
+    !busy && last?.role === "assistant" ? lastSuccessfulAnalysisId(last) : undefined;
+
   return (
     <MessageInteractionsProvider value={interactions}>
       <div className="flex flex-col gap-6">
@@ -122,9 +129,26 @@ export function MessageList({
           ),
         )}
         {showTyping ? <ThinkingRow label="Astra sedang berpikir…" /> : null}
+        {nextStepAnalysis ? <StatsNextStepChips analysis={nextStepAnalysis} /> : null}
       </div>
     </MessageInteractionsProvider>
   );
+}
+
+/**
+ * Id analisis dari run SUKSES TERAKHIR dalam satu pesan asisten (chip next-step, fase C): tool part
+ * `analysis` yang settle (`completed`) tanpa `failed`. Undefined bila pesan tak punya run sukses.
+ */
+function lastSuccessfulAnalysisId(message: TimelineMessage): string | undefined {
+  let found: string | undefined;
+  for (const p of message.parts) {
+    if (p.kind !== "tool") continue;
+    const detail = p.model.detail;
+    if (detail?.kind === "analysis" && p.model.status === "completed" && !detail.failed) {
+      found = detail.analysis;
+    }
+  }
+  return found;
 }
 
 /**

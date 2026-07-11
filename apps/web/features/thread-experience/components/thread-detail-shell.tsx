@@ -163,7 +163,7 @@ function ThreadDetailShellView({
     ) : mode.kind === "sources" ? (
       <SourcesListPanel messageId={mode.messageId} threadId={threadId} />
     ) : mode.kind === "stats" ? (
-      <StatsListPanel runKey={mode.runKey} />
+      <StatsListPanel runKey={mode.runKey} threadId={threadId} />
     ) : mode.kind === "search" ? (
       <SearchStepPanel turnId={mode.turnId} subQuestionIndex={mode.subQuestionIndex} />
     ) : mode.kind === "step" ? (

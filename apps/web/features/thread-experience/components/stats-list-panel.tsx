@@ -1,7 +1,15 @@
 "use client";
 
 import { summarizeStatsGroup } from "@aqsha/chat-core/stats-viz";
-import { ArrowLeftIcon, ChartColumnIcon, MessageSquareIcon } from "@aqsha/ui/icons";
+import { ArrowLeftIcon, ChartColumnIcon, DownloadIcon, MessageSquareIcon } from "@aqsha/ui/icons";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useExportAnalysisResults } from "@/features/threads/api";
 import { StatsVizGroup } from "@/features/threads/components/stats-viz/stats-block";
 import { StatsBlocksProvider } from "@/features/threads/components/stats-viz/stats-context";
 import {
@@ -20,22 +28,64 @@ import { useThreadPanel, useThreadPanelData } from "./thread-panel-context";
  * to the aggregate. Data comes from `ThreadPanelLookups.stats` (built by the chat surface), so the
  * list stays in sync with the chat's struk + inline blocks and shares the verdict vocabulary.
  */
-export function StatsListPanel({ runKey }: { runKey?: string }) {
+export function StatsListPanel({ runKey, threadId }: { runKey?: string; threadId?: string }) {
   const items = useThreadPanelData()?.stats ?? [];
   return runKey ? (
-    <ScopedStatsView runKey={runKey} items={items} />
+    <ScopedStatsView runKey={runKey} items={items} threadId={threadId} />
   ) : (
-    <AggregateStatsView items={items} />
+    <AggregateStatsView items={items} threadId={threadId} />
+  );
+}
+
+/**
+ * Ekspor hasil analisis thread (fase C) — docx (Bab 4) / xlsx (tabel mentah) dibangun server dari
+ * SEMUA hasil thread (bukan run scope tertentu; per-run = Fase D). Sandbox heavy → tombol disabled +
+ * "Menyiapkan…" selagi pending; unduhan langsung (bukan simpan artifact). Pola `ReferencesExportButton`.
+ */
+function AnalysisExportButton({ threadId }: { threadId: string }) {
+  const exportResults = useExportAnalysisResults(threadId);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          className="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+          aria-label="Ekspor hasil analisis"
+          title={exportResults.isPending ? "Menyiapkan file…" : "Ekspor hasil analisis"}
+          disabled={exportResults.isPending}
+        >
+          <DownloadIcon className="size-3.5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={() => exportResults.mutate("docx")}>
+          Ekspor Word (.docx)
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => exportResults.mutate("xlsx")}>
+          Ekspor Excel (.xlsx)
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
 /** Daftar semua run analisis, urut kemunculan di timeline; klik row → view scoped. */
-function AggregateStatsView({ items }: { items: ThreadStatsPanelItem[] }) {
+function AggregateStatsView({
+  items,
+  threadId,
+}: {
+  items: ThreadStatsPanelItem[];
+  threadId?: string;
+}) {
   const panel = useThreadPanel();
   return (
     <DetailPanelShell
       eyebrow={items.length > 0 ? `${items.length} analisis` : undefined}
       title="Statistik"
+      actions={
+        threadId && items.length > 0 ? <AnalysisExportButton threadId={threadId} /> : undefined
+      }
     >
       {items.length === 0 ? (
         <StatsEmptyState />
@@ -107,9 +157,11 @@ function StatsListItem({
 function ScopedStatsView({
   runKey,
   items,
+  threadId,
 }: {
   runKey: string;
   items: ThreadStatsPanelItem[];
+  threadId?: string;
 }) {
   const panel = useThreadPanel();
   const item = items.find((it) => it.runKey === runKey);
@@ -133,16 +185,21 @@ function ScopedStatsView({
     <DetailPanelShell
       title="Statistik"
       actions={
-        anchorId ? (
-          <button
-            type="button"
-            onClick={() => scrollToMessage(anchorId)}
-            className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            aria-label="Lihat di percakapan"
-            title="Lihat di percakapan"
-          >
-            <MessageSquareIcon className="size-3.5" />
-          </button>
+        anchorId || threadId ? (
+          <>
+            {anchorId ? (
+              <button
+                type="button"
+                onClick={() => scrollToMessage(anchorId)}
+                className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Lihat di percakapan"
+                title="Lihat di percakapan"
+              >
+                <MessageSquareIcon className="size-3.5" />
+              </button>
+            ) : null}
+            {threadId ? <AnalysisExportButton threadId={threadId} /> : null}
+          </>
         ) : undefined
       }
     >
