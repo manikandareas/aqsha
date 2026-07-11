@@ -1,0 +1,47 @@
+# ═══════════════════════════════════════════════════════════════════════════════════════════════
+# Uptime Kuma — standalone uptime/status monitor (observability Fase 4).
+#
+# Deployed as a SEPARATE Dokploy Compose service, NOT part of the aqsha app stack (compose.yaml) —
+# so redeploying the apps never takes the monitor (or its history) down. It also joins the app
+# stack's network so it can probe INTERNAL-only services (the agent has no public domain).
+#
+# Deploy in Dokploy:
+#   1. Create Project/Service → Compose → point at this file (infra/compose.uptime.yaml).
+#   2. Domains tab: add e.g. status.<domain> (or uptime.<domain>) → container port 3001 (HTTPS + LE).
+#   3. First boot → open the UI, create the admin user, then add monitors + a notification channel
+#      (Telegram/Discord). Kuma 1.x has no declarative config, so monitors are set in the UI.
+#
+# Suggested monitors (see DEPLOYMENT.md → "Uptime monitoring"):
+#   • HTTPS   https://<domain>            (web)   + keyword check on the landing page
+#   • HTTPS   https://api.<domain>/ping   (api)
+#   • HTTPS   https://assets.<domain>/minio/health/live   (MinIO)
+#   • HTTP    http://agent:4317/          (agent, internal — needs the aqsha network join below)
+#   • HTTPS   <LANGFUSE_BASE_URL>         (if Langfuse is running)
+# ═══════════════════════════════════════════════════════════════════════════════════════════════
+name: aqsha-uptime
+
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    restart: unless-stopped
+    volumes:
+      - uptime_kuma_data:/app/data
+    expose:
+      - "3001"  # Kuma UI/API — front it with Traefik via the Dokploy Domains tab (no host publish).
+    networks:
+      - default
+      - aqsha
+
+networks:
+  # Kuma's own network (monitors reaching the public internet / public domains).
+  default: {}
+  # The app stack's default network so Kuma can also probe internal services (agent:4317,
+  # api:3001, minio:9000) that have no public domain. compose project `aqsha` (name: aqsha in
+  # compose.yaml) → docker network `aqsha_default`. If Dokploy names the project differently, set
+  # this to `<project>_default` (check with `docker network ls`).
+  aqsha:
+    external: true
+    name: aqsha_default
+
+volumes:
+  uptime_kuma_data:

@@ -1,15 +1,32 @@
 # Full deployment stack (apps + infra) — the file Dokploy points at.
-# Apps build from per-app Dockerfiles (context = repo ROOT). For LOCAL DEV infra only
-# (Postgres/Redis/MinIO without the apps), use infra/compose.dev.yaml instead.
+#
+# The app images (web/api/agent) are BUILT IN CI (GitHub Actions) and pushed to GHCR; here they
+# are only `image: ghcr.io/manikandareas/aqsha-*:${IMAGE_TAG:-latest}` — Dokploy just pulls and
+# restarts (near-zero CPU, no `next build`/`mastra build` on the VPS). See .github/workflows/.
+# For a LOCAL emergency build (no CI), overlay compose.build.yaml which re-adds the `build:` blocks:
+#   docker compose -f compose.yaml -f compose.build.yaml build
+# For LOCAL DEV infra only (Postgres/Redis/MinIO without the apps), use infra/compose.dev.yaml.
+#
+# IMAGE_TAG selects the image version to run (default `latest`; set a `sha-<short>` in Dokploy to
+# pin/roll back). GHCR is private → add a `read:packages` PAT under Dokploy → Settings → Registry.
 #
 # All config/secrets come from the Dokploy dashboard (Environment tab) and are referenced
 # below via ${VAR}. Set them per each app's .env.example. See DEPLOYMENT.md for the full
 # runbook. The internal service-to-service wiring (DB/Redis/S3/AGENT_ORIGIN) is fixed here.
 name: aqsha
 
+# Sentry runtime knobs shared by EVERY service (backend + web) — defined once here and merged into
+# both the backend env and the web service so the defaults never drift. Per-service DSN is set on each
+# service below (empty DSN = SDK no-op). `SENTRY_RELEASE`/`GIT_COMMIT` are baked into each image at
+# build (Dockerfile ARG) — do NOT set them here, or an empty compose value would clobber the baked tag.
+x-sentry-env: &sentry-env
+  SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+  SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0}
+
 # Shared by api + worker + agent (they all run @aqsha/services in-process: datastore,
 # object storage, Clerk verify, embeddings, research resolvers).
 x-backend-env: &backend-env
+  <<: *sentry-env
   DATABASE_URL: postgresql://aqsha:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/aqsha
   REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379
   # PUBLIC https URL of MinIO (e.g. https://s3.example.com) — presigned upload/download URLs
@@ -39,37 +56,40 @@ x-backend-env: &backend-env
   # instead of api-env prevents split-brain: api saying "admin" while the agent bills as free.
   AQSHA_ADMIN_OWNER_USER_IDS: ${AQSHA_ADMIN_OWNER_USER_IDS:-}
   AQSHA_ADMIN_EMAILS: ${AQSHA_ADMIN_EMAILS:-}
+  # Sentry runtime knobs (SENTRY_ENVIRONMENT + SENTRY_TRACES_SAMPLE_RATE) come from *sentry-env above;
+  # the per-service SENTRY_DSN_* is set on each service below.
 
 services:
   web:
-    build:
-      context: .
-      dockerfile: apps/web/Dockerfile
-      args:
-        # NEXT_PUBLIC_* are baked into the client bundle at build time.
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?set NEXT_PUBLIC_API_URL}
-        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:?set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
-        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://aqshara.com}
+    # Built in CI (NEXT_PUBLIC_* baked at build from GitHub Variables). Local build: compose.build.yaml.
+    image: ghcr.io/manikandareas/aqsha-web:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
+      # Shared Sentry defaults (SENTRY_ENVIRONMENT + SENTRY_TRACES_SAMPLE_RATE) — same anchor the
+      # backend env uses, so web/api/agent tag identically.
+      <<: *sentry-env
       PORT: "3000"
       HOSTNAME: 0.0.0.0
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:?set CLERK_SECRET_KEY}
       # web proxies /mastra-api/* to the Mastra agent container (internal network).
       MASTRA_AGENT_ORIGIN: http://agent:4317
+      # Sentry server-side (Server Components / route handlers / proxy). Client DSN is the separate
+      # build arg NEXT_PUBLIC_SENTRY_DSN (baked). Empty = disabled.
+      SENTRY_DSN_WEB: ${SENTRY_DSN_WEB:-}
     expose:
       - "3000"
     depends_on: [api, agent]
 
   api:
-    image: aqsha-api
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
+    # Built in CI, pushed to GHCR; the worker service reuses this exact image (same ref below).
+    image: ghcr.io/manikandareas/aqsha-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment: &api-env
       <<: *backend-env
       PORT: "3001"
+      # api + worker share ONE Sentry project; the `process` tag (set per-service) splits them.
+      SENTRY_DSN_API: ${SENTRY_DSN_API:-}
+      AQSHA_PROCESS: api
       CLERK_WEBHOOK_SIGNING_SECRET: ${CLERK_WEBHOOK_SIGNING_SECRET:?set CLERK_WEBHOOK_SIGNING_SECRET}
       AQSHA_FAST_MODEL_API_KEY: ${AQSHA_FAST_MODEL_API_KEY:?set AQSHA_FAST_MODEL_API_KEY}
       AQSHA_FAST_MODEL_BASE_URL: ${AQSHA_FAST_MODEL_BASE_URL:-}
@@ -95,26 +115,29 @@ services:
       redis: { condition: service_healthy }
       minio: { condition: service_healthy }
 
-  # Reuses the api image (built above) with the worker entrypoint + the same env.
+  # Reuses the api image with the worker entrypoint + the same env (AQSHA_PROCESS overridden so
+  # Sentry tags worker errors distinctly within the shared api project).
   worker:
-    image: aqsha-api
+    image: ghcr.io/manikandareas/aqsha-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
     command: ["bun", "run", "start:worker"]
     environment:
       <<: *api-env
+      AQSHA_PROCESS: worker
     depends_on:
       api: { condition: service_started }
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
 
   agent:
-    build:
-      context: .
-      dockerfile: apps/agent/Dockerfile
+    # Built in CI (mastra build), pushed to GHCR. Local build: compose.build.yaml.
+    image: ghcr.io/manikandareas/aqsha-agent:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       <<: *backend-env
       PORT: "4317"
+      # Sentry (@sentry/node at the Mastra entry). Empty = disabled. Same release (GIT_COMMIT) as Langfuse.
+      SENTRY_DSN_AGENT: ${SENTRY_DSN_AGENT:-}
       # Mastra server.auth (MastraAuthClerk) verifies via JWKS derived from the publishable key.
       CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:?set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
       # Pro tier model — empty = Pro falls back to Lite and billing downgrades to the Lite rate.
@@ -124,6 +147,22 @@ services:
       AQSHA_LITE_REASONING_EFFORT: ${AQSHA_LITE_REASONING_EFFORT:-low}
       AQSHA_PRO_REASONING_EFFORT: ${AQSHA_PRO_REASONING_EFFORT:-high}
       AQSHA_REASONING_SUMMARY: ${AQSHA_REASONING_SUMMARY:-auto}
+      # Langfuse (observability, opsional) — agent MENGIRIM trace ke Langfuse self-host yang jalan
+      # di infra server (infra/compose.dev.yaml --profile langfuse). Kosong = tracing off (tak crash).
+      # BASE_URL = URL langfuse-web (Tailscale/subdomain). Trace prod ditandai environment=production.
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-}
+      # OTLP traces (observability Fase 3) — agent AI-tracing spans → Alloy → Grafana Cloud Tempo.
+      # Empty = off (NO connection attempts). Set to http://alloy:4318/v1/traces ONLY when the
+      # `observability` profile (the `alloy` service below) is enabled, else the agent would dial a
+      # collector that isn't running. Co-exists with the Langfuse + storage exporters.
+      AQSHA_OTLP_TRACES_ENDPOINT: ${AQSHA_OTLP_TRACES_ENDPOINT:-}
+      # Master kill-switch for ALL agent observability exporters (storage + Langfuse + OTLP). Empty =
+      # on (default); set `off` in the Dokploy Environment tab to silence every exporter at once. Must
+      # be passed through here or the switch in apps/agent/src/mastra/index.ts is unreachable in prod.
+      AQSHA_OBSERVABILITY: ${AQSHA_OBSERVABILITY:-}
+      NODE_ENV: production
     # Mastra runtime state lives in Postgres (mastra_* tables) — no file-backed durable volume.
     expose:
       - "4317"
@@ -131,6 +170,22 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       minio: { condition: service_healthy }
+
+  # One-shot DB migration (Drizzle). NOT part of a normal `up` — it sits behind the `migrate`
+  # profile, run explicitly from the Dokploy terminal / host after a deploy that ships a new
+  # migration (replaces the manual `bun run db:migrate`, DEPLOYMENT.md Step 5):
+  #   docker compose --profile migrate run --rm migrate
+  # Reuses the api image + the internal DATABASE_URL, then exits. Kept manual (never auto-on-boot)
+  # so several app containers starting at once can't race the same migration.
+  migrate:
+    image: ghcr.io/manikandareas/aqsha-api:${IMAGE_TAG:-latest}
+    profiles: ["migrate"]
+    command: ["bun", "run", "db:migrate"]
+    environment:
+      <<: *backend-env
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
 
   postgres:
     image: pgvector/pgvector:pg17
@@ -203,7 +258,53 @@ services:
       "
     restart: "no"
 
+  # Grafana Alloy — the single observability collector for the whole stack: container logs → Loki,
+  # host + container metrics → Prometheus/Mimir, and the agent's OTLP traces → Tempo (all Grafana
+  # Cloud, free tier). OPT-IN behind the `observability` profile: it runs only when `observability`
+  # is in COMPOSE_PROFILES (set that in the Dokploy Environment tab). Config: infra/alloy/config.alloy.
+  # Creds/endpoints: the GRAFANA_CLOUD_* env below (see .env.example + DEPLOYMENT.md). With the
+  # profile off there is zero overhead; with it on but creds empty, Alloy may crash-loop — fill all
+  # three endpoints together (one Grafana Cloud account provides Loki + Prometheus + Tempo).
+  alloy:
+    image: grafana/alloy:latest
+    profiles: ["observability"]
+    restart: unless-stopped
+    # cAdvisor (per-container metrics) needs privileged + the host mounts below to read container
+    # cgroups on a Linux Docker host (per Grafana's prometheus.exporter.cadvisor recipe). Standard
+    # for a monitoring collector on a single-owner VPS. Drop `privileged` + the cadvisor exporter in
+    # config.alloy if you only want logs + host metrics + traces (those don't need it).
+    privileged: true
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    environment:
+      GRAFANA_CLOUD_LOKI_URL: ${GRAFANA_CLOUD_LOKI_URL:-}
+      GRAFANA_CLOUD_LOKI_USER: ${GRAFANA_CLOUD_LOKI_USER:-}
+      GRAFANA_CLOUD_PROM_URL: ${GRAFANA_CLOUD_PROM_URL:-}
+      GRAFANA_CLOUD_PROM_USER: ${GRAFANA_CLOUD_PROM_USER:-}
+      GRAFANA_CLOUD_TEMPO_URL: ${GRAFANA_CLOUD_TEMPO_URL:-}
+      GRAFANA_CLOUD_TEMPO_USER: ${GRAFANA_CLOUD_TEMPO_USER:-}
+      GRAFANA_CLOUD_API_TOKEN: ${GRAFANA_CLOUD_API_TOKEN:-}
+    volumes:
+      - ./infra/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy_data:/var/lib/alloy/data
+      # docker.sock (log discovery + cAdvisor docker_host) lives under /var/run. rw per Grafana's
+      # cAdvisor recipe (immaterial next to `privileged`, but matches the documented-working mount).
+      - /var/run:/var/run:rw
+      # cAdvisor container stats + prometheus.exporter.unix host rootfs/sys (paths set in config.alloy).
+      - /:/rootfs:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+      # Host /proc for the node exporter, mounted separately so the container keeps its own /proc.
+      - /proc:/host/proc:ro
+    expose:
+      - "4318"  # OTLP HTTP receiver — agent pushes traces here (internal only, no domain).
+
 volumes:
   postgres_data:
   redis_data:
   minio_data:
+  alloy_data:
