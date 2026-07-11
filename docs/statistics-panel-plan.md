@@ -1,6 +1,6 @@
 # Plan: Interaksi Statistik di Chat + Tab "Statistik" di Side Panel
 
-Status: Fase A + B IMPLEMENTED (2026-07-11, menunggu verifikasi visual A.5/B.9) — Fase C/D belum
+Status: Fase A + B + C IMPLEMENTED (2026-07-11, menunggu verifikasi visual A.5/B.9/C.4) — Fase D backlog by-design
 Branch: `statistics` (sudah merge `origin/development` ad72354, berisi panel bertab 44b5608)
 Prasyarat: fase 0–6 statistik (stats-viz output layer) + panel bertab — keduanya sudah ada di branch ini.
 
@@ -9,9 +9,18 @@ Prasyarat: fase 0–6 statistik (stats-viz output layer) + panel bertab — kedu
 | Fase | Status | Catatan |
 |------|--------|---------|
 | A — kartu run + kartu dataset di chat | ✅ IMPLEMENTED 2026-07-11 (commit c9d3998) | Typecheck + lint + test hijau. Checklist visual A.5 BELUM dijalankan (butuh dev stack + sandbox Daytona). |
-| B — tab "Statistik" di side panel | ✅ IMPLEMENTED 2026-07-11 (uncommitted) | Typecheck + lint web hijau; chat-core 53 · services 274 pass. Checklist visual B.9 BELUM dijalankan. |
-| C — chip next-step + ekspor panel | ⬜ belum | Seam siap: `StatsListPanel` menerima `runKey`; `threadId` tinggal dioper dari shell utk route ekspor C.2/C.3. |
+| B — tab "Statistik" di side panel | ✅ IMPLEMENTED 2026-07-11 (commit a54facd) | Typecheck + lint web hijau; chat-core 53 · services 274 pass. Checklist visual B.9 BELUM dijalankan. |
+| C — chip next-step + ekspor panel | ✅ IMPLEMENTED 2026-07-11 (uncommitted) | Typecheck api+web + lint hijau; chat-core 53 · services 274 pass. Checklist visual C.4 BELUM dijalankan. |
 | D — backlog | ⬜ (by design, setelah A–C terpakai) | |
+
+Realisasi Fase C — deviasi kecil & keputusan saat implementasi (plan diikuti apa adanya selebihnya):
+
+- **C.1 (chip)**: peta `stats-next-steps.ts` (`statsNextStepsFor(analysis)` → `[]` untuk custom/Tier 3). Prefill composer lewat **channel baru** `ComposerMentionsProvider` (`useSetComposerDraft`/`useComposerDraft` — pola epoch-merge sama dgn ambient/selection), BUKAN channel `selectionRefs` (itu untuk pill, bukan teks). Composer meng-overwrite `content`+`richContent` saat `draftEpoch` naik (adjust-during-render, sibling `errorDraft`). Chip TIDAK dirender di dalam struk (struk ada di ProcessBlock yang auto-collapse) → dirender di **dasar `MessageList`** (dekat composer, visible): gate `!busy && last?.role === "assistant" && lastSuccessfulAnalysisId(last)` → hanya muncul saat turn TERAKHIR memang run analisis sukses (turn teks lanjutan → chip hilang, anti-basi). `custom`/Tier 3 → `[]` → tak render. Chip kedua regresi/korelasi = "Susun narasi Bab 4" (prompt natural), sengaja beda dari ekspor file (tombol panel).
+- **C.2 (route)**: `GET /threads/:id/analysis-export?format=docx|xlsx` (sibling `/references`). Biner docx/xlsx → JSON `contentBase64` (route `/references` kirim teks; biner tak bisa teks polos). Union `ok:false` → `throwAppError` (import `@aqsha/db`, severity warning). TANPA debit (tool gratis), TANPA membuat artifact. `.sav` di luar scope (butuh picker dataset — D.4).
+- **C.3 (FE)**: `useExportAnalysisResults(threadId)` (mutation tanpa retry) + helper baru `triggerBase64Download` di `lib/artifact-download.ts` (decode base64→bytes→Blob, share anchor dgn `triggerArtifactDownload`). Dropdown `DownloadIcon` di `actions` `DetailPanelShell` panel Statistik — agregat (bila ada item) DAN scoped (berdampingan "Lihat di percakapan", `actions` fragment). `threadId` kini dioper `thread-detail-shell` → `StatsListPanel` (seam Fase B ditutup).
+- **Catatan owner**: route ekspor sinkron memanggil sandbox heavy (boot Daytona ~10–30 dtk); di prod balik reverse-proxy pastikan timeout gateway cukup (≥60 dtk). Ekspor dibangun dari blok tersimpan (bukan re-run analisis) → cepat, bukan 1–2 menit.
+
+File tersentuh Fase C: `apps/web/features/threads/lib/stats-next-steps.ts` (baru) · `components/stats-viz/next-step-chips.tsx` (baru) · `components/message-list.tsx` · `components/composer.tsx` · `thread-experience/components/composer-context-mentions.tsx` · `lib/artifact-download.ts` · `features/threads/api.ts` · `apps/api/src/routes/threads.ts` · `thread-experience/components/{stats-list-panel,thread-detail-shell}.tsx`.
 
 Realisasi Fase B — deviasi kecil & keputusan saat implementasi (plan diikuti apa adanya selebihnya):
 
@@ -212,7 +221,7 @@ Pola `sources-list-panel.tsx` (IN-CARD, `DetailPanelShell`).
 
 ---
 
-## 5. Fase C — chip next-step + ekspor dari panel
+## 5. Fase C — chip next-step + ekspor dari panel — ✅ IMPLEMENTED (lihat §0)
 
 ### C.1 Chip next-step (pipeline ritual jadi terlihat)
 
