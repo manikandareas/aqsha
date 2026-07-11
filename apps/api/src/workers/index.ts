@@ -70,13 +70,15 @@ for (const w of workers) {
   const log = logger.child({ worker: w.name });
   w.on("failed", (job, err) => {
     log.error({ jobId: job?.id ?? null, err }, "job_failed");
-    // Report the final failure with queue context (BullMQ retries are already exhausted by the time
-    // `failed` fires per the producer's attempt-guard). No-op without a DSN.
-    captureException(err, {
-      queue: w.name,
-      jobId: job?.id ?? null,
-      attemptsMade: job?.attemptsMade ?? null,
-    });
+    // `failed` fires on EVERY attempt, including intermediate retries — only report to Sentry once the
+    // job has exhausted its configured attempts (enqueue sets `attempts: 3`). Otherwise a job that
+    // succeeds on retry still raises an incident, and a terminally-failing job reports N times. No-op
+    // without a DSN.
+    const attempts = job?.opts?.attempts ?? 1;
+    const attemptsMade = job?.attemptsMade ?? 0;
+    if (job && attemptsMade >= attempts) {
+      captureException(err, { queue: w.name, jobId: job.id ?? null, attemptsMade });
+    }
   });
   w.on("ready", () => log.info("worker_ready"));
 }

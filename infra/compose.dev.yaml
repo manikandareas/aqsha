@@ -72,6 +72,7 @@ services:
       LANGFUSE_S3_BUCKET: ${LANGFUSE_S3_BUCKET:-langfuse}
     entrypoint: >
       /bin/sh -c "
+      set -e;
       until mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD}; do
         echo 'menunggu MinIO...'; sleep 2;
       done;
@@ -138,10 +139,14 @@ services:
     restart: unless-stopped
     # noeviction wajib untuk BullMQ Langfuse; password terpisah dari Redis app.
     command: redis-server --requirepass ${LANGFUSE_REDIS_PASSWORD:-langfuse_redis} --maxmemory-policy noeviction
+    # redis-cli membaca REDISCLI_AUTH → PING ter-autentikasi (tanpa AUTH, requirepass balas NOAUTH,
+    # bukan PONG). grep -q PONG memvalidasi balasan yang benar, bukan sekadar exit code.
+    environment:
+      REDISCLI_AUTH: ${LANGFUSE_REDIS_PASSWORD:-langfuse_redis}
     volumes:
       - langfuse_redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
       interval: 3s
       timeout: 10s
       retries: 10
@@ -159,7 +164,13 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      # Bucket blob langfuse dibuat minio-init; tunggu selesai agar upload event/media tak 404 di boot.
+      minio-init:
+        condition: service_completed_successfully
     environment: &langfuse-env
+      # NEXTAUTH_URL di anchor bersama (web + worker) mengikuti compose resmi Langfuse; NEXTAUTH_SECRET
+      # tetap khusus web (di bawah). Nilai = LANGFUSE_NEXTAUTH_URL yang sama dgn langfuse-web.
+      NEXTAUTH_URL: ${LANGFUSE_NEXTAUTH_URL:-http://localhost:3000}
       DATABASE_URL: postgresql://langfuse:${LANGFUSE_POSTGRES_PASSWORD:-langfuse}@langfuse-postgres:5432/langfuse
       SALT: ${LANGFUSE_SALT:-changeme-langfuse-salt}
       ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
@@ -199,7 +210,7 @@ services:
       - "${BIND_HOST:-127.0.0.1}:3000:3000"
     environment:
       <<: *langfuse-env
-      NEXTAUTH_URL: ${LANGFUSE_NEXTAUTH_URL:-http://localhost:3000}
+      # NEXTAUTH_URL diwarisi dari *langfuse-env. NEXTAUTH_SECRET khusus web (login NextAuth).
       NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-changeme-langfuse-nextauth}
       # Bootstrap deklaratif: org + project + user + API keys dibuat saat boot pertama →
       # keys agent (LANGFUSE_PUBLIC_KEY/SECRET_KEY) = nilai di infra/.env, TANPA klik dashboard.

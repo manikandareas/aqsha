@@ -15,9 +15,18 @@
 # runbook. The internal service-to-service wiring (DB/Redis/S3/AGENT_ORIGIN) is fixed here.
 name: aqsha
 
+# Sentry runtime knobs shared by EVERY service (backend + web) — defined once here and merged into
+# both the backend env and the web service so the defaults never drift. Per-service DSN is set on each
+# service below (empty DSN = SDK no-op). `SENTRY_RELEASE`/`GIT_COMMIT` are baked into each image at
+# build (Dockerfile ARG) — do NOT set them here, or an empty compose value would clobber the baked tag.
+x-sentry-env: &sentry-env
+  SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+  SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0}
+
 # Shared by api + worker + agent (they all run @aqsha/services in-process: datastore,
 # object storage, Clerk verify, embeddings, research resolvers).
 x-backend-env: &backend-env
+  <<: *sentry-env
   DATABASE_URL: postgresql://aqsha:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/aqsha
   REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379
   # PUBLIC https URL of MinIO (e.g. https://s3.example.com) — presigned upload/download URLs
@@ -47,11 +56,8 @@ x-backend-env: &backend-env
   # instead of api-env prevents split-brain: api saying "admin" while the agent bills as free.
   AQSHA_ADMIN_OWNER_USER_IDS: ${AQSHA_ADMIN_OWNER_USER_IDS:-}
   AQSHA_ADMIN_EMAILS: ${AQSHA_ADMIN_EMAILS:-}
-  # Sentry error tracking (shared runtime knobs; per-service DSN below). Empty DSN = SDK no-op.
-  # `SENTRY_RELEASE`/`GIT_COMMIT` are baked into each image at build (Dockerfile ARG) — do NOT set
-  # them here, or an empty compose value would clobber the baked commit tag.
-  SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
-  SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0}
+  # Sentry runtime knobs (SENTRY_ENVIRONMENT + SENTRY_TRACES_SAMPLE_RATE) come from *sentry-env above;
+  # the per-service SENTRY_DSN_* is set on each service below.
 
 services:
   web:
@@ -59,6 +65,9 @@ services:
     image: ghcr.io/manikandareas/aqsha-web:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
+      # Shared Sentry defaults (SENTRY_ENVIRONMENT + SENTRY_TRACES_SAMPLE_RATE) — same anchor the
+      # backend env uses, so web/api/agent tag identically.
+      <<: *sentry-env
       PORT: "3000"
       HOSTNAME: 0.0.0.0
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:?set CLERK_SECRET_KEY}
@@ -67,8 +76,6 @@ services:
       # Sentry server-side (Server Components / route handlers / proxy). Client DSN is the separate
       # build arg NEXT_PUBLIC_SENTRY_DSN (baked). Empty = disabled.
       SENTRY_DSN_WEB: ${SENTRY_DSN_WEB:-}
-      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
-      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0}
     expose:
       - "3000"
     depends_on: [api, agent]
@@ -151,6 +158,10 @@ services:
       # `observability` profile (the `alloy` service below) is enabled, else the agent would dial a
       # collector that isn't running. Co-exists with the Langfuse + storage exporters.
       AQSHA_OTLP_TRACES_ENDPOINT: ${AQSHA_OTLP_TRACES_ENDPOINT:-}
+      # Master kill-switch for ALL agent observability exporters (storage + Langfuse + OTLP). Empty =
+      # on (default); set `off` in the Dokploy Environment tab to silence every exporter at once. Must
+      # be passed through here or the switch in apps/agent/src/mastra/index.ts is unreachable in prod.
+      AQSHA_OBSERVABILITY: ${AQSHA_OBSERVABILITY:-}
       NODE_ENV: production
     # Mastra runtime state lives in Postgres (mastra_* tables) — no file-backed durable volume.
     expose:

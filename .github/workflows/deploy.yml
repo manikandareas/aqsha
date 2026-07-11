@@ -11,11 +11,16 @@ concurrency:
   group: deploy-production
   cancel-in-progress: false # never interrupt a deploy mid-flight
 
+# Default least privilege for every job; the build job widens it to `packages: write` below.
+permissions:
+  contents: read
+
 jobs:
   # Same typecheck + lint + test gate as PRs. A red gate blocks build/deploy.
+  # No `secrets: inherit`: the gate self-skips keyless external-service tests and only uses the
+  # workflow-local DATABASE_URL/REDIS_URL, so it needs none of this repo's secrets.
   check:
     uses: ./.github/workflows/ci.yml
-    secrets: inherit
 
   build:
     needs: check
@@ -31,12 +36,15 @@ jobs:
           - { name: api, dockerfile: apps/api/Dockerfile }
           - { name: agent, dockerfile: apps/agent/Dockerfile }
     steps:
-      - uses: actions/checkout@v4
+      # Third-party actions pinned to immutable commit SHAs (see ci.yml). Trailing comment = version.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false # don't retain the GITHUB_TOKEN in .git/config after checkout
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -44,7 +52,7 @@ jobs:
 
       - name: Image tags + labels
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/aqsha-${{ matrix.name }}
           tags: |
@@ -52,7 +60,7 @@ jobs:
             type=sha,prefix=sha-,format=short
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: ${{ matrix.dockerfile }}
@@ -66,6 +74,7 @@ jobs:
           # + SENTRY_ORG/PROJECT come from repo Variables (non-secret, baked into the web bundle).
           build-args: |
             GIT_COMMIT=${{ github.sha }}
+            CI=true
             NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
             NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
             NEXT_PUBLIC_SITE_URL=${{ vars.NEXT_PUBLIC_SITE_URL }}
@@ -84,9 +93,15 @@ jobs:
       # compose.yaml references :latest (IMAGE_TAG default), which build just repushed → Dokploy pulls
       # the fresh images and restarts the stack. Migrations stay manual (compose `migrate` profile).
       - name: Trigger Dokploy deploy
+        # Secrets flow in as env vars (not interpolated into the shell line) so they never appear in
+        # the rendered `run` script / process args and can't be shell-expanded.
+        env:
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          DOKPLOY_COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
         run: |
           curl --fail --silent --show-error -X POST \
-            "${{ secrets.DOKPLOY_URL }}/api/compose.deploy" \
-            -H "x-api-key: ${{ secrets.DOKPLOY_API_KEY }}" \
+            "$DOKPLOY_URL/api/compose.deploy" \
+            -H "x-api-key: $DOKPLOY_API_KEY" \
             -H "Content-Type: application/json" \
-            -d "{\"composeId\":\"${{ secrets.DOKPLOY_COMPOSE_ID }}\"}"
+            -d "{\"composeId\":\"$DOKPLOY_COMPOSE_ID\"}"

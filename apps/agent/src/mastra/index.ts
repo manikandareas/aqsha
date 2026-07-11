@@ -63,6 +63,17 @@ const langfuseEnabled = Boolean(
   process.env.LANGFUSE_PUBLIC_KEY && process.env.LANGFUSE_SECRET_KEY,
 );
 
+// Fail-fast: dengan kedua key terisi tapi `LANGFUSE_BASE_URL` kosong, SDK Langfuse diam-diam
+// default ke cloud.langfuse.com → trace self-host (token/biaya per run) bocor ke SaaS pihak ketiga.
+// Digagalkan saat boot (konsisten dgn assertEmbeddingEnabled / throw DATABASE_URL), bukan degradasi
+// senyap. Matikan tracing dgn mengosongkan kedua key, bukan dgn mengandalkan default cloud.
+if (langfuseEnabled && !process.env.LANGFUSE_BASE_URL) {
+  throw new Error(
+    "LANGFUSE_BASE_URL wajib diisi saat Langfuse aktif (LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY) — " +
+      "tanpa itu SDK default ke cloud.langfuse.com dan mengirim trace ke luar instance self-host.",
+  );
+}
+
 // OTLP traces (observability Fase 3) hanya AKTIF bila `AQSHA_OTLP_TRACES_ENDPOINT` diisi — endpoint
 // itu = collector Alloy (`http://alloy:4318/v1/traces`, HTTP/protobuf) yang meneruskan ke Grafana
 // Cloud Tempo. Kosong = off (tanpa dial ke collector yang belum jalan). Berdampingan dengan

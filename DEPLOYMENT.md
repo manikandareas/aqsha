@@ -247,6 +247,10 @@ What Alloy collects (config: `infra/alloy/config.alloy`):
 > isn't there. RAM cost: Alloy ~150–300 MB. Redaction: pino already redacts secrets; Alloy adds
 > only container metadata as labels, never log contents.
 
+> **Master kill-switch:** set `AQSHA_OBSERVABILITY=off` in the Dokploy **Environment** tab to silence
+> **all** agent trace exporters at once (Mastra storage traces + Langfuse + OTLP), without unpicking
+> individual keys/endpoints. Empty/unset = on (default). Passed through to the agent in `compose.yaml`.
+
 ## Uptime monitoring (Uptime Kuma) — optional
 
 Run **Uptime Kuma** as a **separate** Dokploy Compose service (`infra/compose.uptime.yaml`), not

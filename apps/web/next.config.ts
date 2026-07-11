@@ -34,6 +34,11 @@ export default sentryConfigured
       authToken: process.env.SENTRY_AUTH_TOKEN,
       release: { name: process.env.SENTRY_RELEASE },
       sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
+      // Route browser → Sentry ingest through a same-origin Next route so ad/tracker blockers don't
+      // silently drop client error events. `/sentry-tunnel` is allow-listed in proxy.ts.
+      tunnelRoute: "/sentry-tunnel",
+      // Quiet locally, verbose in CI (CI=true is forwarded as a build arg in deploy.yml so it reaches
+      // this build). Lets the source-map upload output show up in the CI build log.
       silent: !process.env.CI,
       disableLogger: true,
     })

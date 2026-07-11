@@ -47,7 +47,9 @@ export const errorPlugin = new Elysia({ name: "errorPlugin" }).onError(
     // yang dikirim ke Sentry (AppError/VALIDATION/NOT_FOUND di atas sudah return dulu); `base`
     // membawa requestId supaya error Sentry bisa dilompatkan ke baris log server.
     logger.error({ ...base, err: error }, "unexpected_error");
-    captureException(error, base);
+    // Sentry extras SENGAJA tanpa ownerUserId (identitas pengguna = PII) — `requestId` cukup untuk
+    // melompat dari event Sentry ke baris log server ini yang menyimpan ownerUserId penuh.
+    captureException(error, { requestId, method: request.method, path });
     return status(500, {
       message: "Terjadi kesalahan tak terduga.",
       code: "internal",

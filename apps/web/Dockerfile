@@ -18,7 +18,11 @@ ARG NEXT_PUBLIC_SENTRY_DSN
 ARG GIT_COMMIT=unknown
 ARG SENTRY_ORG
 ARG SENTRY_PROJECT_WEB
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
+# CI=true (passed by deploy.yml) makes next.config.ts run the Sentry plugin non-silently so the
+# source-map upload logs are visible in the CI build. Unset in local builds → plugin stays quiet.
+ARG CI
+ENV CI=$CI \
+    NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY \
     NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL \
     NEXT_PUBLIC_CLERK_SIGN_IN_URL=$NEXT_PUBLIC_CLERK_SIGN_IN_URL \
