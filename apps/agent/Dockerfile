@@ -30,11 +30,14 @@ ENV PORT=4317
 ENV HOST=0.0.0.0
 # Infisical CLI: the entrypoint `infisical run`s the app so runtime secrets come from Infisical /app.
 # Above the commit-changing ENV below so it stays cached. Debian base → official apt repo.
+# PINNED to 0.43.98 — the LAST CLI that fetches secrets via API v3; 0.43.99+ calls /api/v4/secrets,
+# which our self-hosted Infisical server doesn't serve (route 404 → every container crash-loops).
+# Bump only together with (or after) a server upgrade that adds the v4 routes.
 # pipefail: a failed setup-script download (curl -f) fails the build instead of being masked by bash.
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
  && curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | bash \
- && apt-get install -y --no-install-recommends infisical \
+ && apt-get install -y --no-install-recommends infisical=0.43.98 \
  && rm -rf /var/lib/apt/lists/*
 # Release tag (commit SHA) baked in → Sentry `release` + Langfuse `GIT_COMMIT` (both read at runtime).
 ARG GIT_COMMIT=unknown
