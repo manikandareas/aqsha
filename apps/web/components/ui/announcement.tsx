@@ -47,7 +47,9 @@ export const Announcement = ({
   </BadgeContext.Provider>
 );
 
-export type AnnouncementTagProps = HTMLAttributes<HTMLDivElement>;
+// span, bukan div: Announcement merender Badge sebagai <span> (inline) → anak block <div> jadi HTML
+// invalid. span dgn class flex/truncate tetap tampil sama tapi valid di dalam badge.
+export type AnnouncementTagProps = HTMLAttributes<HTMLSpanElement>;
 
 export const AnnouncementTag = ({
   className,
@@ -56,7 +58,7 @@ export const AnnouncementTag = ({
   const { themed } = useBadgeContext();
 
   return (
-    <div
+    <span
       className={cn(
         "-ml-2.5 shrink-0 truncate rounded-full bg-foreground/5 px-2.5 py-1 text-xs",
         themed && "bg-background/60",
@@ -67,13 +69,13 @@ export const AnnouncementTag = ({
   );
 };
 
-export type AnnouncementTitleProps = HTMLAttributes<HTMLDivElement>;
+export type AnnouncementTitleProps = HTMLAttributes<HTMLSpanElement>;
 
 export const AnnouncementTitle = ({
   className,
   ...props
 }: AnnouncementTitleProps) => (
-  <div
+  <span
     className={cn("flex items-center gap-1 truncate py-1", className)}
     {...props}
   />

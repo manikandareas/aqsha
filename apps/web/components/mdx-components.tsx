@@ -22,7 +22,8 @@ export const mdxComponents = {
       </a>
     ),
   img: (props: ComponentProps<"img">) => (
+    // `loading` setelah spread → lazy-loading wajib tak bisa ditimpa nilai dari MDX.
     // eslint-disable-next-line @next/next/no-img-element
-    <img loading="lazy" {...props} alt={props.alt ?? ""} />
+    <img {...props} loading="lazy" alt={props.alt ?? ""} />
   ),
 };

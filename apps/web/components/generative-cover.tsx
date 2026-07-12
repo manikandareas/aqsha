@@ -18,9 +18,10 @@ export function hashIndex(value: string, mod: number): number {
   return Math.abs(h) % mod;
 }
 
-/** Inisial pertama (huruf besar) dari teks; fallback "•" untuk teks kosong. */
+/** Inisial pertama (huruf besar) dari teks; fallback "•" untuk teks kosong. Iterasi per code point
+ * (spread), bukan indeks UTF-16, supaya judul berawalan emoji/aksara astral tak terpotong surrogate. */
 export function firstInitial(text: string): string {
-  return (text.trim()[0] ?? "•").toUpperCase();
+  return ([...text.trim()][0] ?? "•").toUpperCase();
 }
 
 export function GenerativeCover({
@@ -36,7 +37,10 @@ export function GenerativeCover({
   const gradient = COVER_GRADIENTS[hashIndex(title, COVER_GRADIENTS.length)];
   return (
     <div className="absolute inset-0 flex flex-col justify-end p-3 text-white" style={{ background: gradient }}>
-      <span className="pointer-events-none absolute -top-7 right-1 select-none font-heading text-[150px] font-black leading-none text-white/15">
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute -top-7 right-1 select-none font-heading text-[150px] font-black leading-none text-white/15"
+      >
         {initial}
       </span>
       <div className="relative flex items-center gap-1.5">
