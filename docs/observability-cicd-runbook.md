@@ -44,13 +44,13 @@ memicu Dokploy untuk **pull + restart** (hitungan detik, nyaris nol CPU). CI jug
 1. **GHCR**: di repo GitHub aktifkan **Packages**. Buat **PAT classic** scope `read:packages` →
    masukkan di Dokploy → **Settings → Registry** (`ghcr.io`, username GitHub, PAT) supaya Dokploy
    bisa pull image **privat**.
-2. **GitHub → Settings → Secrets and variables → Actions**:
-   - **Secrets**: `DOKPLOY_URL` (mis. `https://dokploy.example.com`), `DOKPLOY_API_KEY`
-     (profil → API key), `DOKPLOY_COMPOSE_ID` (id service Compose), `SENTRY_AUTH_TOKEN`
-     (upload source map — lihat §2).
-   - **Variables** (mirror nilai di Dokploy Environment, jaga sinkron): `NEXT_PUBLIC_API_URL`,
-     `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_SENTRY_DSN`,
-     `SENTRY_ORG`, `SENTRY_PROJECT_WEB`.
+2. **GitHub → Settings → Secrets and variables → Actions** — CI menarik folder `/build` + `/deploy`
+   dari Infisical (identity `gh-actions`), jadi GitHub hanya menyimpan bootstrap-nya:
+   - **Secrets**: `INFISICAL_CLIENT_ID`, `INFISICAL_CLIENT_SECRET` (identity `gh-actions`).
+   - **Variables**: `INFISICAL_PROJECT_SLUG` (mis. `aqsha-piov`).
+   - `DOKPLOY_URL`/`DOKPLOY_API_KEY`/`DOKPLOY_COMPOSE_ID` + `SENTRY_AUTH_TOKEN` kini di Infisical
+     `/deploy`; `NEXT_PUBLIC_*` + `SENTRY_ORG` + `SENTRY_PROJECT_WEB` di Infisical `/build`. Peta
+     lengkap: `docs/infisical-secrets-strategy.md`.
 3. `GITHUB_TOKEN` (otomatis) sudah cukup untuk push ke GHCR via `packages: write` — tak perlu secret
    tambahan.
 
@@ -63,7 +63,8 @@ memicu Dokploy untuk **pull + restart** (hitungan detik, nyaris nol CPU). CI jug
   `ghcr.io/manikandareas/aqsha-{web,api,agent}` tag `:sha-<short>` **dan** `:latest` → `curl -X POST`
   ke `POST /api/compose.deploy` Dokploy → VPS pull `:latest` + restart.
 - `GIT_COMMIT` di-bake ke tiap image (Dockerfile ARG) → jadi Sentry `release` + tag Langfuse, jadi
-  error/trace terikat commit. `NEXT_PUBLIC_*` di-bake **saat build di CI** dari GitHub **Variables**.
+  error/trace terikat commit. `NEXT_PUBLIC_*` di-bake **saat build di CI** dari Infisical **`/build`**
+  (via `Infisical/secrets-action`).
 
 ### 1c. Migrasi DB (tetap manual, tak auto-on-boot)
 
@@ -99,7 +100,7 @@ Satu org Sentry, **3 project**: `aqsha-web`, `aqsha-api` (dipakai **api + worker
 - Akun Sentry (free) → buat 3 project di atas → salin **3 DSN** + **auth token** (untuk source map,
   = `SENTRY_AUTH_TOKEN` di §1a).
 
-### 2b. Aktivasi — Dokploy **Environment** tab
+### 2b. Aktivasi — Infisical `/app` (runtime, disuntik entrypoint — bukan Dokploy)
 
 ```dotenv
 SENTRY_DSN_WEB=https://xxx@oXXX.ingest.sentry.io/1
@@ -110,8 +111,8 @@ SENTRY_ENVIRONMENT=production
 ```
 
 Error klien web butuh DSN **di-bake saat build**: `NEXT_PUBLIC_SENTRY_DSN` + `SENTRY_ORG` +
-`SENTRY_PROJECT_WEB` (GitHub **Variables**) + `SENTRY_AUTH_TOKEN` (GitHub **Secret**, upload source
-map) — sudah tercakup di §1a. Session Replay off; tracing default 0 (jaga kuota).
+`SENTRY_PROJECT_WEB` + `SENTRY_AUTH_TOKEN` (upload source map) — semua di Infisical **`/build`**,
+ditarik CI saat build (lihat §1a). Session Replay off; tracing default 0 (jaga kuota).
 
 ### 2c. Verifikasi
 

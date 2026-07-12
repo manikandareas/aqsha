@@ -28,12 +28,17 @@ INFISICAL_TOKEN="$(infisical login --method=universal-auth \
   --client-id="$INFISICAL_UNIVERSAL_AUTH_CLIENT_ID" \
   --client-secret="$INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET" \
   --domain="$INFISICAL_API_URL" --plain --silent)"
-export INFISICAL_TOKEN
 
-# `infisical run` reads INFISICAL_TOKEN from the env, fetches the /app secrets for INFISICAL_ENV,
-# expands cross-folder references (e.g. DATABASE_URL → ${/infra/POSTGRES_PASSWORD}), and injects
-# them into the child process. exec so the app becomes PID 1 (signals/shutdown propagate).
+# Don't leak the bootstrap identity into the app: only `login` above needed the client id/secret, so
+# drop them from the env, and hand the token to `infisical run` via --token instead of exporting it —
+# the child process then carries only the injected /app secrets, not our credentials.
+unset INFISICAL_UNIVERSAL_AUTH_CLIENT_ID INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET
+
+# `infisical run` (authenticated by --token) fetches the /app secrets for INFISICAL_ENV, expands
+# cross-folder references (dot-notation, e.g. DATABASE_URL → ${prod.infra.POSTGRES_PASSWORD}) and
+# injects them into the child process. exec so the app becomes PID 1 (signals/shutdown propagate).
 exec infisical run \
+  --token="$INFISICAL_TOKEN" \
   --projectId="$INFISICAL_PROJECT_ID" \
   --env="$INFISICAL_ENV" \
   --domain="$INFISICAL_API_URL" \

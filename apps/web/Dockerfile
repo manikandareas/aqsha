@@ -61,9 +61,11 @@ WORKDIR /app
 ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0 NEXT_TELEMETRY_DISABLED=1
 # Infisical CLI: the entrypoint `infisical run`s the server so runtime secrets (CLERK_SECRET_KEY,
 # SENTRY_DSN_WEB, …) come from Infisical /app. NEXT_PUBLIC_* stay baked at build. Debian → apt repo.
+# pipefail: a failed setup-script download (curl -f) fails the build instead of being masked by bash.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
  && curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | bash \
- && apt-get install -y infisical \
+ && apt-get install -y --no-install-recommends infisical \
  && rm -rf /var/lib/apt/lists/*
 # Server-side release tag (must match the baked client release). SENTRY_DSN_WEB comes from Infisical.
 ARG GIT_COMMIT=unknown

@@ -43,9 +43,10 @@ pindah ke Infisical.
 | `/infra` | `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `MINIO_ROOT_USER/PASSWORD` | direferensi `/app`; nilai juga disalin ke Dokploy untuk stock image |
 | `/app` | semua secret runtime app (lihat `.env.example` bagian D) | entrypoint `infisical run` (identity `dokploy-<env>`) |
 
-`DATABASE_URL`/`REDIS_URL`/`S3_*` di `/app` pakai **secret reference** ke `/infra`
-(mis. `DATABASE_URL = postgresql://aqsha:${/infra/POSTGRES_PASSWORD}@postgres:5432/aqsha`) agar password
-tak ditulis dua kali. `infisical run` meng-expand referensi otomatis.
+`DATABASE_URL`/`REDIS_URL`/`S3_*` di `/app` pakai **secret reference** ke `/infra` (sintaks Infisical
+dot-notation `${<env>.<folder>.<KEY>}`, mis. `DATABASE_URL = postgresql://aqsha:${prod.infra.POSTGRES_PASSWORD}@postgres:5432/aqsha`)
+agar password tak ditulis dua kali. `infisical run` meng-expand referensi otomatis. Prefix env WAJIB
+sama dengan environment folder `/app` yang membacanya.
 
 **Machine identities (Universal Auth):**
 

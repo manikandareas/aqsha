@@ -7,9 +7,11 @@ ENV NODE_ENV=production
 
 # Infisical CLI: baked in so the entrypoint can `infisical run` (inject /app secrets at start). Placed
 # above the dependency install so it caches across source/package edits. Debian base → official apt repo.
+# pipefail: a failed setup-script download (curl -f) fails the build instead of being masked by bash.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
  && curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | bash \
- && apt-get install -y infisical \
+ && apt-get install -y --no-install-recommends infisical \
  && rm -rf /var/lib/apt/lists/*
 
 # Manifests + lockfile FIRST so the (slow) `bun install` layer is cached until a package.json or

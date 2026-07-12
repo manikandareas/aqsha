@@ -46,7 +46,7 @@ of what goes where (Bagian A = Dokploy, Bagian B/C/D = Infisical).
 
 In the service's **Environment** tab, set only **Bagian A** of `.env.example`:
 
-```
+```dotenv
 # A1 — Infisical bootstrap (machine identity dokploy-prod → reads /app)
 INFISICAL_UNIVERSAL_AUTH_CLIENT_ID=   INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET=
 INFISICAL_PROJECT_ID=   INFISICAL_API_URL=https://secrets.aqshara.com   INFISICAL_ENV=prod

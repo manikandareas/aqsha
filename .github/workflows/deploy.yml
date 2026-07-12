@@ -24,6 +24,9 @@ jobs:
 
   build:
     needs: check
+    # Only the default branch pushes the `:latest` tag that compose.yaml deploys; a manual
+    # workflow_dispatch from another ref would build only `sha-*` and then deploy a stale `:latest`.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
