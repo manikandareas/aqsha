@@ -57,15 +57,13 @@ jobs:
       # Infisical /build and inject them as env vars (masked in logs) for the build step below. Only
       # the web image consumes them; api/agent ignore the extra build-args, so one step covers the
       # whole matrix. Bootstrap = the `gh-actions` machine identity (GH Secrets). env-slug `prod`.
+      # The composite action wraps the import with a delayed retry against transient VPS blips.
       - name: Import build secrets from Infisical
-        uses: Infisical/secrets-action@77ab1f4ccd183a543cb5b42435fbd181189f4995 # v1.0.16
+        uses: ./.github/actions/infisical-import
         with:
-          method: universal
           client-id: ${{ secrets.INFISICAL_CLIENT_ID }}
           client-secret: ${{ secrets.INFISICAL_CLIENT_SECRET }}
-          domain: https://secrets.aqshara.com
           project-slug: ${{ vars.INFISICAL_PROJECT_SLUG }}
-          env-slug: prod
           secret-path: /build
 
       - name: Image tags + labels
@@ -109,16 +107,19 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      # Pull the Dokploy API creds from Infisical /deploy (masked in logs), injected as env vars.
-      - name: Import deploy secrets from Infisical
-        uses: Infisical/secrets-action@77ab1f4ccd183a543cb5b42435fbd181189f4995 # v1.0.16
+      # Checkout is only needed to make the local composite action available.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          method: universal
+          persist-credentials: false # don't retain the GITHUB_TOKEN in .git/config after checkout
+
+      # Pull the Dokploy API creds from Infisical /deploy (masked in logs), injected as env vars.
+      # The composite action wraps the import with a delayed retry against transient VPS blips.
+      - name: Import deploy secrets from Infisical
+        uses: ./.github/actions/infisical-import
+        with:
           client-id: ${{ secrets.INFISICAL_CLIENT_ID }}
           client-secret: ${{ secrets.INFISICAL_CLIENT_SECRET }}
-          domain: https://secrets.aqshara.com
           project-slug: ${{ vars.INFISICAL_PROJECT_SLUG }}
-          env-slug: prod
           secret-path: /deploy
 
       # compose.yaml references :latest (IMAGE_TAG default), which build just repushed → Dokploy pulls

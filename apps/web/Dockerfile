@@ -4,6 +4,12 @@
 FROM oven/bun:1.3.10 AS build
 WORKDIR /app
 
+# oven/bun ships with an EMPTY system trust store (/etc/ssl/certs) — Bun itself bundles its own CA
+# list so `bun install` works, but sentry-cli (native binary, system trust store) fails every TLS
+# call with curl error 60. Install ca-certificates so the Sentry release + source-map upload works.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 ARG NEXT_PUBLIC_SITE_URL=https://aqshara.com
