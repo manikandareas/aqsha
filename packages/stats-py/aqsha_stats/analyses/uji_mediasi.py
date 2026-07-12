@@ -11,6 +11,7 @@ from ..contract import (
     build_result,
     decision,
     fmt_id,
+    stats_seed,
     table,
 )
 from ..io import listwise, require_arg
@@ -49,8 +50,9 @@ def run(df: pd.DataFrame, args: dict) -> dict:
     sobel_z = indirect / sobel_se if sobel_se > 0 else float("nan")
     sobel_p = float(2 * sstats.norm.sf(abs(sobel_z))) if np.isfinite(sobel_z) else float("nan")
 
-    # Bootstrap CI 95% efek tak langsung (seed tetap via numpy global — di-seed di run_analysis).
-    rng = np.random.default_rng(int(pd.util.hash_pandas_object(sub).sum()) % (2**32))
+    # Bootstrap CI 95% efek tak langsung. Seed = AQSHA_STATS_SEED (sama dengan meta.seed
+    # yang dilaporkan build_result) supaya CI dapat direproduksi dari seed di hasil.
+    rng = np.random.default_rng(stats_seed())
     idx = np.arange(n)
     boot = np.empty(BOOTSTRAP)
     xv, mv, yv = x.to_numpy(), m.to_numpy(), y.to_numpy()

@@ -1,0 +1,87 @@
+name: CI
+
+# Gate for pull requests into main: typecheck + lint + the full test suite (unit + itests).
+# Also exposed as a reusable workflow (workflow_call) so deploy.yml runs the exact same gate
+# before building images — one source of truth for "is this green".
+on:
+  pull_request:
+    branches: [main]
+  workflow_call: {}
+  workflow_dispatch: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Cancel superseded PR runs, but never cancel when called from a deploy (workflow_call on main) —
+  # deploy.yml owns its own no-cancel concurrency and must not have its gate yanked mid-run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Least privilege: the gate only reads the checked-out code. No write scopes for GITHUB_TOKEN.
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    # Postgres (pgvector) + Redis back the integration tests. Tests that need them are guarded on
+    # DATABASE_URL/REDIS_URL and self-skip otherwise; providing both here lights up the itests.
+    # External-service tests (LLM/S3/research APIs) have no keys in CI and self-skip, exactly as on
+    # a keyless dev machine running `bun test`.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        # Ephemeral CI DB: trust auth (no password) so no credential literal lives in the repo.
+        # Only reachable on the runner's localhost for the length of this job.
+        env:
+          POSTGRES_USER: aqsha
+          POSTGRES_DB: aqsha
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aqsha"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 3s
+          --health-retries 5
+    env:
+      # No password in the URI: the postgres service uses trust auth (see above).
+      DATABASE_URL: postgresql://aqsha@localhost:5432/aqsha
+      REDIS_URL: redis://localhost:6379
+    steps:
+      # Third-party actions pinned to immutable commit SHAs (supply-chain: a tag can be moved to
+      # malicious code; a SHA can't). Trailing comment keeps the human-readable version.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false # don't leave the GITHUB_TOKEN in .git/config after checkout
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.10
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Fast fail on types/lint before the slower DB setup + tests.
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint
+        run: bun run lint
+
+      # Extensions come from init-extensions.sql (mounted in prod compose; run by hand here), then
+      # apply all Drizzle migrations so the itests hit a real, current schema.
+      - name: Prepare database
+        run: |
+          psql "$DATABASE_URL" -f infra/init-extensions.sql
+          bun run db:migrate
+
+      - name: Test
+        run: bun run test

@@ -33,7 +33,7 @@ python -m aqsha_stats run regresi_linear \
   --args '{"dependent": "Y", "independents": ["X1", "X2"]}'
 ```
 
-Supported data formats: `.csv` (utf-8, `;` or `,` separator), `.xlsx`, `.sav`.
+Supported data formats: `.csv` (utf-8, `;` or `,` separator), `.xlsx`, `.sav`, `.dta`.
 Available analysis ids live in `aqsha_stats/registry.py` (`list_analyses()`),
 which is the sync-source for the TS catalog.
 

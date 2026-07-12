@@ -1,8 +1,11 @@
+import * as Sentry from "@sentry/node";
 import { assertEmbeddingEnabled } from "@aqsha/services/rag";
 import { Mastra } from "@mastra/core/mastra";
 import { MASTRA_THREAD_ID_KEY } from "@mastra/core/request-context";
 import type { Middleware } from "@mastra/core/server";
+import { LangfuseExporter } from "@mastra/langfuse";
 import { MastraStorageExporter, Observability } from "@mastra/observability";
+import { OtelExporter } from "@mastra/otel-exporter";
 import { astraLite, astraPro } from "./agents/astra-lite";
 import { createClerkAuth } from "./auth";
 import {
@@ -16,6 +19,29 @@ import { storage, vector } from "./storage";
 import { deepResearch } from "./workflows/deep-research";
 import { registerDeepTaskExecutors } from "./workflows/deep-tasks";
 
+// Sentry (@sentry/node) — ERROR tracking saja (project aqsha-agent). Mastra yang memegang pipeline
+// OpenTelemetry (exporter storage + Langfuse di bawah), jadi kita SKIP setup OTel & ESM-loader-hook
+// milik Sentry: keduanya tak berebut global tracer, dan bundle `mastra build` tetap bersih. Hanya
+// menangkap uncaught/unhandled + capture manual (mis. boot sweep). No-op tanpa SENTRY_DSN_AGENT;
+// release = GIT_COMMIT (tag sama dengan Langfuse) → error terikat commit.
+if (process.env.SENTRY_DSN_AGENT) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN_AGENT,
+    environment: process.env.SENTRY_ENVIRONMENT ?? "production",
+    release: process.env.SENTRY_RELEASE ?? process.env.GIT_COMMIT,
+    tracesSampleRate: 0,
+    skipOpenTelemetrySetup: true,
+    registerEsmLoaderHooks: false,
+    defaultIntegrations: false,
+    integrations: [
+      Sentry.onUncaughtExceptionIntegration(),
+      Sentry.onUnhandledRejectionIntegration(),
+      Sentry.dedupeIntegration(),
+      Sentry.linkedErrorsIntegration(),
+    ],
+  });
+}
+
 // Fail-fast (D1): tool `search_thread_documents` butuh embedding aktif. Konsisten dengan throw
 // `DATABASE_URL` di `./storage` — kredensial wajib digagalkan saat boot, bukan degradasi senyap.
 assertEmbeddingEnabled();
@@ -28,6 +54,31 @@ const bootSweepMiddleware: Middleware = async (_c, next) => {
   sweepFrozenDeepRunsOnce();
   await next();
 };
+
+// Langfuse (observability eksternal) hanya AKTIF bila kedua key ada — tanpa key exporter tak
+// dipasang (tak crash). Self-host: `LANGFUSE_BASE_URL` WAJIB diarahkan ke langfuse-web sendiri
+// (default SDK = cloud.langfuse.com). Tag `environment`/`release` memisah trace dev vs prod &
+// per-deploy. Dimatikan total lewat master kill-switch `AQSHA_OBSERVABILITY=off` (di bawah).
+const langfuseEnabled = Boolean(
+  process.env.LANGFUSE_PUBLIC_KEY && process.env.LANGFUSE_SECRET_KEY,
+);
+
+// Fail-fast: dengan kedua key terisi tapi `LANGFUSE_BASE_URL` kosong, SDK Langfuse diam-diam
+// default ke cloud.langfuse.com → trace self-host (token/biaya per run) bocor ke SaaS pihak ketiga.
+// Digagalkan saat boot (konsisten dgn assertEmbeddingEnabled / throw DATABASE_URL), bukan degradasi
+// senyap. Matikan tracing dgn mengosongkan kedua key, bukan dgn mengandalkan default cloud.
+if (langfuseEnabled && !process.env.LANGFUSE_BASE_URL) {
+  throw new Error(
+    "LANGFUSE_BASE_URL wajib diisi saat Langfuse aktif (LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY) — " +
+      "tanpa itu SDK default ke cloud.langfuse.com dan mengirim trace ke luar instance self-host.",
+  );
+}
+
+// OTLP traces (observability Fase 3) hanya AKTIF bila `AQSHA_OTLP_TRACES_ENDPOINT` diisi — endpoint
+// itu = collector Alloy (`http://alloy:4318/v1/traces`, HTTP/protobuf) yang meneruskan ke Grafana
+// Cloud Tempo. Kosong = off (tanpa dial ke collector yang belum jalan). Berdampingan dengan
+// exporter storage + Langfuse di array yang sama; ikut master kill-switch `AQSHA_OBSERVABILITY=off`.
+const otlpTracesEndpoint = process.env.AQSHA_OTLP_TRACES_ENDPOINT;
 
 /**
  * Instance Mastra runtime Astra (Fase 0 spike).
@@ -59,6 +110,10 @@ export const mastra = new Mastra({
   // threadId/run deep/turn chat/tier dari RequestContext → ledger kosong (mis. CFG-6) & bobot
   // token history terlihat dari trace prod, bukan tebakan. Email SENGAJA tidak diekstrak (PII).
   // `SensitiveDataFilter` auto-aktif. Matikan via env `AQSHA_OBSERVABILITY=off`.
+  //
+  // LangfuseExporter (bila `LANGFUSE_*` diisi) ikut di config `default` yang SAMA → mewarisi
+  // `requestContextKeys` di bawah, jadi token/biaya per run deep (`AQSHA_DEEP_RUN_KEY`) & turn chat
+  // ter-tag di Langfuse untuk analisis unit-economics, bukan cuma di storage lokal.
   ...(process.env.AQSHA_OBSERVABILITY === "off"
     ? {}
     : {
@@ -66,7 +121,42 @@ export const mastra = new Mastra({
           configs: {
             default: {
               serviceName: "aqsha-agent",
-              exporters: [new MastraStorageExporter()],
+              exporters: [
+                new MastraStorageExporter(),
+                ...(langfuseEnabled
+                  ? [
+                      new LangfuseExporter({
+                        publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+                        secretKey: process.env.LANGFUSE_SECRET_KEY!,
+                        baseUrl: process.env.LANGFUSE_BASE_URL,
+                        // Non-prod: flush tiap event (trace instan di UI). Prod (NODE_ENV=production
+                        // di compose.yaml): batch, hemat. `mastra dev` tak selalu set NODE_ENV → pakai
+                        // negasi "production" supaya dev default realtime.
+                        realtime: process.env.NODE_ENV !== "production",
+                        environment: process.env.NODE_ENV ?? "development",
+                        release: process.env.GIT_COMMIT,
+                      }),
+                    ]
+                  : []),
+                // OTLP → Alloy → Grafana Cloud Tempo. GenAI-semconv spans per deepRun/chat-turn,
+                // ter-korelasi ke logs via traceId. Logs SENGAJA dimatikan (signals.logs=false):
+                // log agent sudah dipanen stdout→Alloy→Loki, jadi tak perlu paket
+                // @opentelemetry/exporter-logs-otlp-* tambahan. Traces pakai http/protobuf
+                // (@opentelemetry/exporter-trace-otlp-proto).
+                ...(otlpTracesEndpoint
+                  ? [
+                      new OtelExporter({
+                        provider: {
+                          custom: {
+                            endpoint: otlpTracesEndpoint,
+                            protocol: "http/protobuf",
+                          },
+                        },
+                        signals: { traces: true, logs: false },
+                      }),
+                    ]
+                  : []),
+              ],
               requestContextKeys: [
                 MASTRA_THREAD_ID_KEY,
                 AQSHA_DEEP_RUN_KEY,
@@ -120,7 +210,10 @@ function sweepFrozenDeepRunsOnce(): void {
   void mastra
     .getWorkflow("deep-research")
     .restartAllActiveWorkflowRuns()
-    .catch((err) => console.error("[deep-research] boot sweep restart gagal", err));
+    .catch((err) => {
+      console.error("[deep-research] boot sweep restart gagal", err);
+      Sentry.captureException(err, { tags: { area: "deep-boot-sweep" } });
+    });
 }
 
 // Executor static task `/deep` WAJIB di-register saat boot: task `running`/`pending` yang dipulihkan

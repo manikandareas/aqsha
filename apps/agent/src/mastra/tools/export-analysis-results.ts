@@ -22,16 +22,28 @@ export const exportAnalysisResults = createTool({
   id: "export_analysis_results",
   description:
     "Susun hasil analisis yang SUDAH dijalankan di thread ini menjadi file unduhan tersimpan di pustaka: docx (tabel + interpretasi Bab 4), xlsx (tabel mentah), sav (dataset olahan untuk SPSS — wajib sertakan datasetArtifactId). Panggil setelah menjalankan uji-uji yang diminta. Gratis.",
-  inputSchema: z.object({
-    formats: z
-      .array(z.enum(["docx", "xlsx", "sav"]))
-      .min(1)
-      .describe("Format file yang diminta (satu atau lebih)."),
-    datasetArtifactId: z
-      .string()
-      .optional()
-      .describe("Wajib bila formats memuat 'sav': id artifact dataset yang mau disimpan sebagai .sav."),
-  }),
+  inputSchema: z
+    .object({
+      formats: z
+        .array(z.enum(["docx", "xlsx", "sav"]))
+        .min(1)
+        .describe("Format file yang diminta (satu atau lebih)."),
+      datasetArtifactId: z
+        .string()
+        .optional()
+        .describe("Wajib bila formats memuat 'sav': id artifact dataset yang mau disimpan sebagai .sav."),
+    })
+    .superRefine((val, ctx) => {
+      // `.sav` menulis ulang dataset → butuh datasetArtifactId non-kosong; tolak di schema
+      // supaya permintaan yang memuat 'sav' tanpa dataset gagal cepat (docx/xlsx-only tetap lolos).
+      if (val.formats.includes("sav") && !val.datasetArtifactId?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["datasetArtifactId"],
+          message: "datasetArtifactId wajib diisi (non-kosong) bila formats memuat 'sav'.",
+        });
+      }
+    }),
   execute: async (input, ctx) => {
     const scope = analysisScope(ctx);
     try {
@@ -42,8 +54,9 @@ export const exportAnalysisResults = createTool({
       });
       if (!res.ok) return { ok: false as const, note: res.error.message };
 
-      // Tiap file = upload S3 + insert DB independen → paralel (bukan seri per-file).
-      const artifacts = await Promise.all(
+      // Tiap file = upload S3 + insert DB independen → paralel. allSettled (bukan all): satu
+      // insert gagal TIDAK boleh membuang artifact yang SUDAH tersimpan (retry akan menduplikat).
+      const settled = await Promise.allSettled(
         res.files.map(async (file) => {
           const created = await ArtifactService.createGeneratedFile(getServiceDb(), {
             ownerUserId: scope.ownerUserId,
@@ -57,10 +70,29 @@ export const exportAnalysisResults = createTool({
           return { artifactId: created.artifactId, format: file.format, fileName: file.fileName };
         }),
       );
+      const artifacts = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
+      const failedFiles = res.files
+        .filter((_, i) => settled[i]?.status === "rejected")
+        .map((f) => f.fileName);
+
+      if (artifacts.length === 0) {
+        return {
+          ok: false as const,
+          note: `Semua file gagal disimpan ke pustaka${failedFiles.length ? ` (${failedFiles.join(", ")})` : ""}. Coba lagi.`,
+        };
+      }
+      const notes = [
+        "File tersimpan di pustaka user (bisa diunduh & di-@mention). Sebutkan file apa saja yang dibuat; jangan mengarang isinya.",
+      ];
+      if (failedFiles.length > 0) notes.push(`Gagal disimpan (bisa dicoba ulang): ${failedFiles.join(", ")}.`);
+      if (res.missingFormats?.length) {
+        notes.push(`Format tak terbentuk (tak ada hasil relevan): ${res.missingFormats.join(", ")}.`);
+      }
       return {
         ok: true as const,
         artifacts,
-        note: "File tersimpan di pustaka user (bisa diunduh & di-@mention). Sebutkan file apa saja yang dibuat; jangan mengarang isinya.",
+        ...(failedFiles.length > 0 ? { failedFiles } : {}),
+        note: notes.join(" "),
       };
     } catch (error) {
       return { ok: false as const, note: analysisFailureNote(error) };

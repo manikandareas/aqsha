@@ -218,6 +218,13 @@
       "when": 1783609341563,
       "tag": "0030_yellow_yellowjacket",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1783758013446,
+      "tag": "0031_dusty_obadiah_stane",
+      "breakpoints": true
     }
   ]
 }

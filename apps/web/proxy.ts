@@ -11,6 +11,9 @@ const isPublicRoute = createRouteMatcher([
   "/changelog(.*)",
   "/sitemap.xml",
   "/robots.txt",
+  // Sentry client tunnel (next.config.ts `tunnelRoute`): the browser POSTs error envelopes here to
+  // be forwarded to Sentry. Must be public so anonymous (landing) errors aren't 307'd to /sign-in.
+  "/sentry-tunnel(.*)",
 ]);
 
 export default clerkMiddleware(async (auth, req) => {

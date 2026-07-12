@@ -211,8 +211,26 @@ describe("UserService.applyClerkUserUpsert (webhook)", () => {
   test("user belum ada: insert minimal (ownerUserId == clerkUserId)", async () => {
     s.userFindClerk.mockResolvedValue(null as never);
     await UserService.applyClerkUserUpsert(fakeDb, { clerkUserId: "u9", email: null });
-    const insertArg = s.userInsert.mock.calls[0]![1] as { ownerUserId: string; clerkUserId: string };
+    const insertArg = s.userInsert.mock.calls[0]![1] as {
+      ownerUserId: string;
+      clerkUserId: string;
+      role: string;
+    };
     expect(insertArg.ownerUserId).toBe("u9");
     expect(insertArg.clerkUserId).toBe("u9");
+    expect(insertArg.role).toBe("user"); // default tanpa publicMetadata
+  });
+
+  test("role dari publicMetadata di-sync; null = jangan sentuh kolom role", async () => {
+    s.userFindClerk.mockResolvedValue(makeUser({ name: "Vito" }));
+    await UserService.applyClerkUserUpsert(fakeDb, {
+      clerkUserId: "u1",
+      email: "a@b.com",
+      role: "admin",
+    });
+    expect((s.userPatch.mock.calls[0]![2] as Record<string, unknown>).role).toBe("admin");
+
+    await UserService.applyClerkUserUpsert(fakeDb, { clerkUserId: "u1", email: "a@b.com", role: null });
+    expect("role" in (s.userPatch.mock.calls[1]![2] as Record<string, unknown>)).toBe(false);
   });
 });

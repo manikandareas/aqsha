@@ -1,0 +1,154 @@
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// Aqsha observability collector (Grafana Alloy) — ONE agent on the VPS ships everything to
+// Grafana Cloud (free tier):
+//   • Logs    — every stack container's stdout/stderr → Loki   (Fase 2)
+//   • Metrics — host (node) + per-container (cAdvisor)   → Prometheus/Mimir (Fase 3)
+//   • Traces  — agent OTLP spans (Mastra AI tracing)     → Tempo (Fase 3)
+//
+// Loaded by the `alloy` service in compose.yaml, which runs ONLY behind the `observability`
+// profile (add `observability` to COMPOSE_PROFILES in the Dokploy Environment tab). Endpoints and
+// the shared token come from env (see GRAFANA_CLOUD_* in .env.example) and are read with sys.env().
+//
+// All-or-nothing: enabling the profile expects ALL three Grafana Cloud endpoints (they come from a
+// single Grafana Cloud account). A missing endpoint makes only its own exporter fail — the other
+// pipelines keep running — but an EMPTY url can fail config load, so fill all three when you flip
+// the profile on. Nothing else in the stack changes: pino already writes NDJSON to stdout and the
+// agent only emits OTLP when AQSHA_OTLP_TRACES_ENDPOINT points here.
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// LOGS — discover containers via the docker socket, relabel to clean stack labels, ship to Loki.
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+// Turn docker meta labels into two low-cardinality stream labels and keep only THIS stack's
+// containers — the VPS also runs other Dokploy projects (postgres 5433=minchat, 5434=telewave),
+// whose logs must not land on Aqsha's Loki quota. Match `.*aqsha.*` so a Dokploy project-name
+// prefix (e.g. `aqsha-xxxx`) still matches; tighten to `^aqsha$` if you want exactly this project.
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "compose_project"
+  }
+  rule {
+    source_labels = ["compose_project"]
+    regex         = ".*aqsha.*"
+    action        = "keep"
+  }
+  // compose service name (web/api/worker/agent/postgres/redis/minio/alloy) → `service`.
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+}
+
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.containers.output
+  forward_to = [loki.process.pino.receiver]
+}
+
+// pino (api/worker) logs are NDJSON on stdout — lift `level` to a label so dashboards can chart
+// error-rate per service. It is LOW cardinality (info/warn/error/…). requestId stays a searchable
+// FIELD inside the log body, NOT a label: it is high-cardinality and would blow up Loki's index.
+// Non-JSON lines (Next.js, postgres, redis, minio) pass straight through — stage.json no-ops on a
+// line it can't parse, so `level` simply isn't set and stage.labels adds nothing.
+loki.process "pino" {
+  forward_to = [loki.write.grafana_cloud.receiver]
+
+  stage.json {
+    expressions = { level = "level" }
+  }
+  stage.labels {
+    values = { level = "level" }
+  }
+}
+
+loki.write "grafana_cloud" {
+  endpoint {
+    url = sys.env("GRAFANA_CLOUD_LOKI_URL")
+    basic_auth {
+      username = sys.env("GRAFANA_CLOUD_LOKI_USER")
+      password = sys.env("GRAFANA_CLOUD_API_TOKEN")
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// METRICS — host (node) + per-container (cAdvisor) → Grafana Cloud (Mimir).
+// Budget: the free tier caps ~10k active series. 1 VPS + ~10 containers fits, but cAdvisor is the
+// biggest contributor — if you approach the cap, drop this exporter or trim its metrics first.
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+prometheus.exporter.unix "host" {
+  // Read the HOST's fs/proc/sys (mounted read-only into this container by compose.yaml), not
+  // Alloy's own container view — otherwise disk/inode metrics describe the container, not the VPS.
+  // Paths mirror the alloy service mounts: host / → /rootfs, host /sys → /sys (shared with cAdvisor),
+  // host /proc → /host/proc (kept off /proc so the container keeps its own).
+  rootfs_path = "/rootfs"
+  procfs_path = "/host/proc"
+  sysfs_path  = "/sys"
+}
+
+prometheus.exporter.cadvisor "containers" {
+  docker_host      = "unix:///var/run/docker.sock"
+  storage_duration = "5m"
+}
+
+// 60s (not 15s) keeps series churn + egress modest on the free tier.
+prometheus.scrape "host" {
+  scrape_interval = "60s"
+  targets         = prometheus.exporter.unix.host.targets
+  forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+}
+
+prometheus.scrape "containers" {
+  scrape_interval = "60s"
+  targets         = prometheus.exporter.cadvisor.containers.targets
+  forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+}
+
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = sys.env("GRAFANA_CLOUD_PROM_URL")
+    basic_auth {
+      username = sys.env("GRAFANA_CLOUD_PROM_USER")
+      password = sys.env("GRAFANA_CLOUD_API_TOKEN")
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// TRACES — receive OTLP from the agent (Mastra AI tracing → Grafana Cloud Tempo).
+// The agent's OtelExporter pushes spans to http://alloy:4318/v1/traces (HTTP/protobuf). Only the
+// HTTP listener (4318) is enabled; the agent's OWN Mastra server uses 4317 in a DIFFERENT container,
+// so there is no port clash here. otelcol.exporter.otlphttp appends `/v1/traces` to the endpoint,
+// so GRAFANA_CLOUD_TEMPO_URL is the base OTLP-HTTP URL (…/otlp), not the full traces path.
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+otelcol.receiver.otlp "default" {
+  http {}
+  output {
+    traces = [otelcol.processor.batch.default.input]
+  }
+}
+
+otelcol.processor.batch "default" {
+  output {
+    traces = [otelcol.exporter.otlphttp.grafana_cloud.input]
+  }
+}
+
+otelcol.exporter.otlphttp "grafana_cloud" {
+  client {
+    endpoint = sys.env("GRAFANA_CLOUD_TEMPO_URL")
+    auth     = otelcol.auth.basic.grafana_cloud.handler
+  }
+}
+
+otelcol.auth.basic "grafana_cloud" {
+  username = sys.env("GRAFANA_CLOUD_TEMPO_USER")
+  password = sys.env("GRAFANA_CLOUD_API_TOKEN")
+}

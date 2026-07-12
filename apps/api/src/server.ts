@@ -1,6 +1,11 @@
 import { assertEmbeddingEnabled } from "@aqsha/services/rag";
 import { app } from "./index";
 import { logger } from "./lib/log";
+import { initSentry } from "./lib/sentry";
+
+// Sentry sedini mungkin di entry (bukan index.ts) supaya uncaught error saat boot pun tertangkap;
+// no-op tanpa SENTRY_DSN_API.
+initSentry("api");
 
 // Fail-fast (D1): finalize upload meng-index dokumen via embedding. Kredensial yang hilang
 // digagalkan saat boot (bukan upload "sukses" tapi tak ter-index). Di entry runtime (bukan

@@ -1,0 +1,40 @@
+# Local/emergency BUILD overlay for compose.yaml.
+#
+# Normal prod path builds the images in CI and pushes to GHCR; compose.yaml only references them by
+# `image:`. When you need to build on the host instead (CI down, air-gapped bring-up, debugging a
+# Dockerfile), overlay this file — it re-adds the `build:` blocks. Because each service keeps its
+# compose.yaml `image:` ref, a local build TAGS the image with that same GHCR name, so a subsequent
+# `up` uses the freshly built image without pulling:
+#
+#   docker compose -f compose.yaml -f compose.build.yaml build
+#   docker compose up -d            # (compose.yaml alone — runs the just-built images)
+#
+# NEXT_PUBLIC_* / GIT_COMMIT come from the shell env or an `.env` next to compose. Source-map upload
+# to Sentry stays OFF locally (no SENTRY_AUTH_TOKEN) — that's a CI-only concern.
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # NEXT_PUBLIC_* are baked into the client bundle at build time.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?set NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:?set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://aqshara.com}
+        # Client-side Sentry DSN (baked) + release tag. Both optional locally.
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+        GIT_COMMIT: ${GIT_COMMIT:-local}
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-local}
+
+  agent:
+    build:
+      context: .
+      dockerfile: apps/agent/Dockerfile
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-local}

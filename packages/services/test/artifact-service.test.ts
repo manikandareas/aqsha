@@ -126,7 +126,6 @@ beforeEach(() => {
   spyOn(ArtifactContentRepo, "insert").mockResolvedValue();
   spyOn(ArtifactContentRepo, "updateByArtifact").mockResolvedValue();
   // P5: assertLibraryCapacity kini resolveEffectivePlanKey (db-aware) — stub billing reads.
-  spyOn(BillingRepo, "findAdminEntitlement").mockResolvedValue(null);
   spyOn(BillingRepo, "findLatestSubscriptionByOwner").mockResolvedValue(null);
   spyOn(UserRepo, "findByOwnerUserId").mockResolvedValue(null);
   delete process.env.AQSHA_ADMIN_OWNER_USER_IDS;

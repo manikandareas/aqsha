@@ -41,7 +41,23 @@ bun run test
 bun run build
 ```
 
-Local infra (Postgres/Redis/MinIO): `docker compose -f infra/compose.dev.yaml up`.
+Local infra (Postgres/Redis/MinIO): `docker compose -f infra/compose.dev.yaml up` (or `bun run infra:up`).
+
+### Observability (Langfuse) — opsional
+Trace token & biaya per run Astra + `/deep`. Langfuse self-host adalah profile `langfuse` di
+`infra/compose.dev.yaml` (Postgres + ClickHouse + Redis sendiri; blob numpang MinIO app):
+
+```bash
+# isi dulu var LANGFUSE_* di infra/.env (lihat infra/.env.example)
+bun run infra:obs        # = docker compose -f infra/compose.dev.yaml --profile langfuse up -d
+```
+
+UI: `http://$BIND_HOST:3000` (login `LANGFUSE_INIT_USER_EMAIL`/`PASSWORD`). Agent mengaktifkan
+exporter bila `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY` (+ `LANGFUSE_BASE_URL` self-host) diisi
+di env agent — tanpa key, tracing mati tanpa error. Master kill-switch: `AQSHA_OBSERVABILITY=off`.
+Setelah trace masuk, daftarkan harga model custom (`gpt-5.1`, `gpt-5.4-mini`) di Langfuse agar kolom
+cost akurat (Langfuse belum kenal model ini). ⚠️ `apps/agent/.env` bisa berupa symlink — pastikan
+var Langfuse masuk file yang benar-benar dibaca `mastra dev`.
 
 ## Build Pipeline
 - `@aqsha/db` and `@aqsha/services` build to `dist/` via tsup (`bun run build:dist`, `watch:dist`).

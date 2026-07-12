@@ -45,8 +45,19 @@ type ClerkUserData = {
   id?: string;
   email_addresses?: Array<{ id: string; email_address: string }>;
   primary_email_address_id?: string | null;
+  public_metadata?: Record<string, unknown> | null;
   deleted?: boolean;
 };
+
+/**
+ * Role dari `publicMetadata.role` (di-set owner via Clerk Dashboard). Payload tanpa
+ * public_metadata → null (jangan sentuh kolom role). Nilai selain "admin" → "user",
+ * jadi mencabut admin cukup menghapus/mengubah metadata-nya.
+ */
+function pickRole(data: ClerkUserData): "user" | "admin" | null {
+  if (data.public_metadata == null) return null;
+  return data.public_metadata.role === "admin" ? "admin" : "user";
+}
 
 /** Email primary (cocokkan primary_email_address_id), fallback pertama, lalu null. */
 function pickEmail(data: ClerkUserData): string | null {
@@ -104,7 +115,11 @@ export const webhooks = new Elysia({ prefix: "/webhooks" }).post(
       // Clerk sudah hapus user → enqueue cascade data owner (worker Clerk-delete jadi 404=ok).
       await AccountDeletionService.requestByClerkId(db, clerkUserId);
     } else {
-      await UserService.applyClerkUserUpsert(db, { clerkUserId, email: pickEmail(data) });
+      await UserService.applyClerkUserUpsert(db, {
+        clerkUserId,
+        email: pickEmail(data),
+        role: pickRole(data),
+      });
     }
     return { ok: true };
   },
