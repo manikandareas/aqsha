@@ -59,7 +59,13 @@ RUN --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN \
 FROM node:24-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0 NEXT_TELEMETRY_DISABLED=1
-# Server-side release tag (must match the baked client release). SENTRY_DSN_WEB comes from compose env.
+# Infisical CLI: the entrypoint `infisical run`s the server so runtime secrets (CLERK_SECRET_KEY,
+# SENTRY_DSN_WEB, …) come from Infisical /app. NEXT_PUBLIC_* stay baked at build. Debian → apt repo.
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
+ && curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | bash \
+ && apt-get install -y infisical \
+ && rm -rf /var/lib/apt/lists/*
+# Server-side release tag (must match the baked client release). SENTRY_DSN_WEB comes from Infisical.
 ARG GIT_COMMIT=unknown
 ENV GIT_COMMIT=$GIT_COMMIT \
     SENTRY_RELEASE=$GIT_COMMIT
@@ -68,6 +74,10 @@ ENV GIT_COMMIT=$GIT_COMMIT \
 COPY --from=build /app/apps/web/.next/standalone ./
 COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=build /app/apps/web/public ./apps/web/public
+# Wrap the Next server with Infisical secret injection (execs CMD directly if no INFISICAL_* set).
+COPY infra/infisical-entrypoint.sh /usr/local/bin/aqsha-entrypoint
+RUN chmod +x /usr/local/bin/aqsha-entrypoint
+ENTRYPOINT ["/usr/local/bin/aqsha-entrypoint"]
 EXPOSE 3000
 # Runtime needs AGENT_ORIGIN (proxy target) + server-side Clerk + Sentry DSN; NEXT_PUBLIC_* are baked in.
 CMD ["node", "apps/web/server.js"]

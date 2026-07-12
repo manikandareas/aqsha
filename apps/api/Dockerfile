@@ -5,6 +5,13 @@ FROM oven/bun:1.3.10
 WORKDIR /app
 ENV NODE_ENV=production
 
+# Infisical CLI: baked in so the entrypoint can `infisical run` (inject /app secrets at start). Placed
+# above the dependency install so it caches across source/package edits. Debian base → official apt repo.
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
+ && curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | bash \
+ && apt-get install -y infisical \
+ && rm -rf /var/lib/apt/lists/*
+
 # Manifests + lockfile FIRST so the (slow) `bun install` layer is cached until a package.json or
 # bun.lock changes — a plain source edit no longer busts install. `--frozen-lockfile` needs every
 # workspace member present, so copy all of them (keep in sync with root package.json `workspaces`).
@@ -29,6 +36,12 @@ RUN bun run build:dist
 ARG GIT_COMMIT=unknown
 ENV GIT_COMMIT=$GIT_COMMIT \
     SENTRY_RELEASE=$GIT_COMMIT
+
+# Wrap the process with Infisical secret injection (see the script). With no INFISICAL_* machine
+# identity present it execs the CMD directly, so local `compose.build.yaml` builds still run.
+COPY infra/infisical-entrypoint.sh /usr/local/bin/aqsha-entrypoint
+RUN chmod +x /usr/local/bin/aqsha-entrypoint
+ENTRYPOINT ["/usr/local/bin/aqsha-entrypoint"]
 
 EXPOSE 3001
 # ponytail: api/worker run under Bun. Override CMD to start:worker for the worker service.

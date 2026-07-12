@@ -50,6 +50,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Pull the web build-time secrets (NEXT_PUBLIC_* + Sentry org/project/DSN/auth-token) from
+      # Infisical /build and inject them as env vars (masked in logs) for the build step below. Only
+      # the web image consumes them; api/agent ignore the extra build-args, so one step covers the
+      # whole matrix. Bootstrap = the `gh-actions` machine identity (GH Secrets). env-slug `prod`.
+      - name: Import build secrets from Infisical
+        uses: Infisical/secrets-action@77ab1f4ccd183a543cb5b42435fbd181189f4995 # v1.0.16
+        with:
+          method: universal
+          client-id: ${{ secrets.INFISICAL_CLIENT_ID }}
+          client-secret: ${{ secrets.INFISICAL_CLIENT_SECRET }}
+          domain: https://secrets.aqshara.com
+          project-slug: ${{ vars.INFISICAL_PROJECT_SLUG }}
+          env-slug: prod
+          secret-path: /build
+
       - name: Image tags + labels
         id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
@@ -71,34 +86,47 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
           # Superset of build-args; a Dockerfile that doesn't declare an ARG just ignores it. NEXT_PUBLIC_*
-          # + SENTRY_ORG/PROJECT come from repo Variables (non-secret, baked into the web bundle).
+          # + SENTRY_ORG/PROJECT come from Infisical /build (imported into env by the step above), baked
+          # into the web bundle. GIT_COMMIT/CI are workflow-derived.
           build-args: |
             GIT_COMMIT=${{ github.sha }}
             CI=true
-            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
-            NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
-            NEXT_PUBLIC_SITE_URL=${{ vars.NEXT_PUBLIC_SITE_URL }}
-            NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
-            SENTRY_ORG=${{ vars.SENTRY_ORG }}
-            SENTRY_PROJECT_WEB=${{ vars.SENTRY_PROJECT_WEB }}
-          # Auth token as a BuildKit secret (never in an image layer). Consumed only by the web build;
-          # unset → Sentry source-map upload is skipped, build still succeeds.
+            NEXT_PUBLIC_API_URL=${{ env.NEXT_PUBLIC_API_URL }}
+            NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+            NEXT_PUBLIC_SITE_URL=${{ env.NEXT_PUBLIC_SITE_URL }}
+            NEXT_PUBLIC_SENTRY_DSN=${{ env.NEXT_PUBLIC_SENTRY_DSN }}
+            SENTRY_ORG=${{ env.SENTRY_ORG }}
+            SENTRY_PROJECT_WEB=${{ env.SENTRY_PROJECT_WEB }}
+          # Auth token as a BuildKit secret (never in an image layer). From Infisical /build. Consumed
+          # only by the web build; unset → Sentry source-map upload is skipped, build still succeeds.
           secrets: |
-            sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
+            sentry_auth_token=${{ env.SENTRY_AUTH_TOKEN }}
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      # Pull the Dokploy API creds from Infisical /deploy (masked in logs), injected as env vars.
+      - name: Import deploy secrets from Infisical
+        uses: Infisical/secrets-action@77ab1f4ccd183a543cb5b42435fbd181189f4995 # v1.0.16
+        with:
+          method: universal
+          client-id: ${{ secrets.INFISICAL_CLIENT_ID }}
+          client-secret: ${{ secrets.INFISICAL_CLIENT_SECRET }}
+          domain: https://secrets.aqshara.com
+          project-slug: ${{ vars.INFISICAL_PROJECT_SLUG }}
+          env-slug: prod
+          secret-path: /deploy
+
       # compose.yaml references :latest (IMAGE_TAG default), which build just repushed → Dokploy pulls
       # the fresh images and restarts the stack. Migrations stay manual (compose `migrate` profile).
       - name: Trigger Dokploy deploy
         # Secrets flow in as env vars (not interpolated into the shell line) so they never appear in
         # the rendered `run` script / process args and can't be shell-expanded.
         env:
-          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
-          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
-          DOKPLOY_COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
+          DOKPLOY_URL: ${{ env.DOKPLOY_URL }}
+          DOKPLOY_API_KEY: ${{ env.DOKPLOY_API_KEY }}
+          DOKPLOY_COMPOSE_ID: ${{ env.DOKPLOY_COMPOSE_ID }}
         run: |
           curl --fail --silent --show-error -X POST \
             "$DOKPLOY_URL/api/compose.deploy" \

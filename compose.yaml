@@ -15,67 +15,35 @@
 # runbook. The internal service-to-service wiring (DB/Redis/S3/AGENT_ORIGIN) is fixed here.
 name: aqsha
 
-# Sentry runtime knobs shared by EVERY service (backend + web) — defined once here and merged into
-# both the backend env and the web service so the defaults never drift. Per-service DSN is set on each
-# service below (empty DSN = SDK no-op). `SENTRY_RELEASE`/`GIT_COMMIT` are baked into each image at
-# build (Dockerfile ARG) — do NOT set them here, or an empty compose value would clobber the baked tag.
-x-sentry-env: &sentry-env
-  SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
-  SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0}
-
-# Shared by api + worker + agent (they all run @aqsha/services in-process: datastore,
-# object storage, Clerk verify, embeddings, research resolvers).
-x-backend-env: &backend-env
-  <<: *sentry-env
-  DATABASE_URL: postgresql://aqsha:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/aqsha
-  REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379
-  # PUBLIC https URL of MinIO (e.g. https://s3.example.com) — presigned upload/download URLs
-  # inherit this host, so it MUST be browser-reachable (not the internal minio:9000).
-  S3_ENDPOINT: ${S3_ENDPOINT:?set S3_ENDPOINT to the public MinIO URL}
-  S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
-  S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
-  S3_BUCKET: ${MINIO_BUCKET:-aqsha}
-  CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:?set CLERK_SECRET_KEY}
-  AQSHA_EMBEDDING_API_KEY: ${AQSHA_EMBEDDING_API_KEY:?set AQSHA_EMBEDDING_API_KEY}
-  AQSHA_EMBEDDING_BASE_URL: ${AQSHA_EMBEDDING_BASE_URL:-}
-  AQSHA_RAG_EMBEDDING_MODEL: ${AQSHA_RAG_EMBEDDING_MODEL:-text-embedding-3-small}
-  # Main LLM (OpenAI-compatible): agent (Astra chat + /deep), api (/blocknote-ai doc-AI),
-  # worker (thread auto-title).
-  OPENAI_API_KEY: ${OPENAI_API_KEY:?set OPENAI_API_KEY}
-  OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
-  AQSHA_LITE_MODEL: ${AQSHA_LITE_MODEL:-gpt-4o}
-  # Firecrawl scrapes generic URLs (url-ingestion worker, Explore reader, agent read_url tool).
-  FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY:-}
-  OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
-  CROSSREF_MAILTO: ${CROSSREF_MAILTO:-}
-  UNPAYWALL_EMAIL: ${UNPAYWALL_EMAIL:-}
-  AQSHA_CONTACT_EMAIL: ${AQSHA_CONTACT_EMAIL:-}
-  SEMANTIC_SCHOLAR_API_KEY: ${SEMANTIC_SCHOLAR_API_KEY:-}
-  # Admin allowlist (billing override) — MUST reach every process that runs @aqsha/services
-  # billing (api, worker, AND the agent's billing pre-check/debit processors). Keeping it here
-  # instead of api-env prevents split-brain: api saying "admin" while the agent bills as free.
-  AQSHA_ADMIN_OWNER_USER_IDS: ${AQSHA_ADMIN_OWNER_USER_IDS:-}
-  AQSHA_ADMIN_EMAILS: ${AQSHA_ADMIN_EMAILS:-}
-  # Sentry runtime knobs (SENTRY_ENVIRONMENT + SENTRY_TRACES_SAMPLE_RATE) come from *sentry-env above;
-  # the per-service SENTRY_DSN_* is set on each service below.
+# Runtime secrets/config for the app services (web/api/worker/agent/migrate) DO NOT live here anymore.
+# They are stored in Infisical (project aqsha, folder /app) and injected at container start by the
+# image entrypoint (`infisical run`, see infra/infisical-entrypoint.sh) — DATABASE_URL, REDIS_URL,
+# S3_*, CLERK_*, OPENAI_*, MAYAR_*, SENTRY_DSN_*, LANGFUSE_*, etc. Change a value in Infisical, restart
+# the service, done — no compose/Dokploy edit. `SENTRY_RELEASE`/`GIT_COMMIT` stay baked into each image
+# at build (Dockerfile ARG) — never set them here.
+#
+# Only these five bootstrap vars reach the app via the Dokploy Environment tab; the CLI trades the
+# machine-identity id/secret for a token and pulls INFISICAL_ENV's secrets. Left empty (local
+# `compose.build.yaml` build / no Infisical), the entrypoint execs the app directly on ambient env.
+# Stock images (postgres/redis/minio/alloy) can't run the CLI → their creds stay as ${VAR} below,
+# from the Dokploy env (see .env.example → section "di Dokploy").
+x-infisical-bootstrap: &infisical-bootstrap
+  INFISICAL_UNIVERSAL_AUTH_CLIENT_ID: ${INFISICAL_UNIVERSAL_AUTH_CLIENT_ID:-}
+  INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET: ${INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET:-}
+  INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
+  INFISICAL_API_URL: ${INFISICAL_API_URL:-https://secrets.aqshara.com}
+  INFISICAL_ENV: ${INFISICAL_ENV:-prod}
 
 services:
   web:
-    # Built in CI (NEXT_PUBLIC_* baked at build from GitHub Variables). Local build: compose.build.yaml.
+    # Built in CI (NEXT_PUBLIC_* baked at build from Infisical /build). Local build: compose.build.yaml.
     image: ghcr.io/manikandareas/aqsha-web:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
-      # Shared Sentry defaults (SENTRY_ENVIRONMENT + SENTRY_TRACES_SAMPLE_RATE) — same anchor the
-      # backend env uses, so web/api/agent tag identically.
-      <<: *sentry-env
-      PORT: "3000"
-      HOSTNAME: 0.0.0.0
-      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:?set CLERK_SECRET_KEY}
-      # web proxies /mastra-api/* to the Mastra agent container (internal network).
+      <<: *infisical-bootstrap
+      # web proxies /mastra-api/* to the Mastra agent container — fixed internal wiring, not a secret.
+      # PORT/HOSTNAME are baked in the image; CLERK_SECRET_KEY + SENTRY_DSN_WEB come from Infisical /app.
       MASTRA_AGENT_ORIGIN: http://agent:4317
-      # Sentry server-side (Server Components / route handlers / proxy). Client DSN is the separate
-      # build arg NEXT_PUBLIC_SENTRY_DSN (baked). Empty = disabled.
-      SENTRY_DSN_WEB: ${SENTRY_DSN_WEB:-}
     expose:
       - "3000"
     depends_on: [api, agent]
@@ -84,30 +52,13 @@ services:
     # Built in CI, pushed to GHCR; the worker service reuses this exact image (same ref below).
     image: ghcr.io/manikandareas/aqsha-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
-    environment: &api-env
-      <<: *backend-env
+    environment: &app-env
+      <<: *infisical-bootstrap
       PORT: "3001"
-      # api + worker share ONE Sentry project; the `process` tag (set per-service) splits them.
-      SENTRY_DSN_API: ${SENTRY_DSN_API:-}
+      # api + worker share ONE image + Sentry project; AQSHA_PROCESS (the Sentry `process` tag) is the
+      # only per-service difference and is not a secret, so it's set here. worker overrides it below.
+      # Everything else (CLERK/MAYAR/FAST_MODEL/MISTRAL/SENTRY_DSN_API/…) comes from Infisical /app.
       AQSHA_PROCESS: api
-      CLERK_WEBHOOK_SIGNING_SECRET: ${CLERK_WEBHOOK_SIGNING_SECRET:?set CLERK_WEBHOOK_SIGNING_SECRET}
-      AQSHA_FAST_MODEL_API_KEY: ${AQSHA_FAST_MODEL_API_KEY:?set AQSHA_FAST_MODEL_API_KEY}
-      AQSHA_FAST_MODEL_BASE_URL: ${AQSHA_FAST_MODEL_BASE_URL:-}
-      AQSHA_FAST_MODEL: ${AQSHA_FAST_MODEL:-gpt-4o-mini}
-      MAYAR_SERVER: ${MAYAR_SERVER:-sandbox}
-      MAYAR_API_KEY: ${MAYAR_API_KEY:?set MAYAR_API_KEY}
-      MAYAR_WEBHOOK_SECRET: ${MAYAR_WEBHOOK_SECRET:?set MAYAR_WEBHOOK_SECRET}
-      MAYAR_MEMBERSHIP_PRODUCT_ID: ${MAYAR_MEMBERSHIP_PRODUCT_ID:-}
-      MAYAR_STARTER_MONTHLY_TIER_ID: ${MAYAR_STARTER_MONTHLY_TIER_ID:-}
-      MAYAR_STARTER_YEARLY_TIER_ID: ${MAYAR_STARTER_YEARLY_TIER_ID:-}
-      MAYAR_PLUS_MONTHLY_TIER_ID: ${MAYAR_PLUS_MONTHLY_TIER_ID:-}
-      MAYAR_PLUS_YEARLY_TIER_ID: ${MAYAR_PLUS_YEARLY_TIER_ID:-}
-      MAYAR_ULTRA_MONTHLY_TIER_ID: ${MAYAR_ULTRA_MONTHLY_TIER_ID:-}
-      MAYAR_ULTRA_YEARLY_TIER_ID: ${MAYAR_ULTRA_YEARLY_TIER_ID:-}
-      AQSHA_TITLE_MODEL: ${AQSHA_TITLE_MODEL:-gpt-4o-mini}
-      # OCR for scanned PDFs & images; empty key = extraction disabled with a clear reason.
-      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
-      MISTRAL_OCR_MODEL: ${MISTRAL_OCR_MODEL:-mistral-ocr-latest}
     expose:
       - "3001"
     depends_on:
@@ -122,7 +73,7 @@ services:
     restart: unless-stopped
     command: ["bun", "run", "start:worker"]
     environment:
-      <<: *api-env
+      <<: *app-env
       AQSHA_PROCESS: worker
     depends_on:
       api: { condition: service_started }
@@ -134,35 +85,10 @@ services:
     image: ghcr.io/manikandareas/aqsha-agent:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
-      <<: *backend-env
-      PORT: "4317"
-      # Sentry (@sentry/node at the Mastra entry). Empty = disabled. Same release (GIT_COMMIT) as Langfuse.
-      SENTRY_DSN_AGENT: ${SENTRY_DSN_AGENT:-}
-      # Mastra server.auth (MastraAuthClerk) verifies via JWKS derived from the publishable key.
-      CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:?set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
-      # Pro tier model — empty = Pro falls back to Lite and billing downgrades to the Lite rate.
-      AQSHA_PRO_MODEL: ${AQSHA_PRO_MODEL:-}
-      AQSHA_LITE_CONTEXT_WINDOW: ${AQSHA_LITE_CONTEXT_WINDOW:-128000}
-      AQSHA_PRO_CONTEXT_WINDOW: ${AQSHA_PRO_CONTEXT_WINDOW:-200000}
-      AQSHA_LITE_REASONING_EFFORT: ${AQSHA_LITE_REASONING_EFFORT:-low}
-      AQSHA_PRO_REASONING_EFFORT: ${AQSHA_PRO_REASONING_EFFORT:-high}
-      AQSHA_REASONING_SUMMARY: ${AQSHA_REASONING_SUMMARY:-auto}
-      # Langfuse (observability, opsional) — agent MENGIRIM trace ke Langfuse self-host yang jalan
-      # di infra server (infra/compose.dev.yaml --profile langfuse). Kosong = tracing off (tak crash).
-      # BASE_URL = URL langfuse-web (Tailscale/subdomain). Trace prod ditandai environment=production.
-      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
-      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
-      LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-}
-      # OTLP traces (observability Fase 3) — agent AI-tracing spans → Alloy → Grafana Cloud Tempo.
-      # Empty = off (NO connection attempts). Set to http://alloy:4318/v1/traces ONLY when the
-      # `observability` profile (the `alloy` service below) is enabled, else the agent would dial a
-      # collector that isn't running. Co-exists with the Langfuse + storage exporters.
-      AQSHA_OTLP_TRACES_ENDPOINT: ${AQSHA_OTLP_TRACES_ENDPOINT:-}
-      # Master kill-switch for ALL agent observability exporters (storage + Langfuse + OTLP). Empty =
-      # on (default); set `off` in the Dokploy Environment tab to silence every exporter at once. Must
-      # be passed through here or the switch in apps/agent/src/mastra/index.ts is unreachable in prod.
-      AQSHA_OBSERVABILITY: ${AQSHA_OBSERVABILITY:-}
-      NODE_ENV: production
+      # PORT/HOST/NODE_ENV are baked in the image. Everything else — CLERK_PUBLISHABLE_KEY (Mastra
+      # server.auth JWKS), model knobs (AQSHA_PRO_MODEL/*_CONTEXT_WINDOW/*_REASONING_EFFORT), LANGFUSE_*,
+      # SENTRY_DSN_AGENT, AQSHA_OTLP_TRACES_ENDPOINT, AQSHA_OBSERVABILITY — comes from Infisical /app.
+      <<: *infisical-bootstrap
     # Mastra runtime state lives in Postgres (mastra_* tables) — no file-backed durable volume.
     expose:
       - "4317"
@@ -182,7 +108,8 @@ services:
     profiles: ["migrate"]
     command: ["bun", "run", "db:migrate"]
     environment:
-      <<: *backend-env
+      # DATABASE_URL comes from Infisical /app (via the entrypoint) just like the app services.
+      <<: *infisical-bootstrap
     depends_on:
       postgres: { condition: service_healthy }
     restart: "no"
@@ -266,7 +193,7 @@ services:
   # profile off there is zero overhead; with it on but creds empty, Alloy may crash-loop — fill all
   # three endpoints together (one Grafana Cloud account provides Loki + Prometheus + Tempo).
   alloy:
-    image: grafana/alloy:latest
+    image: grafana/alloy:v1.17.1
     profiles: ["observability"]
     restart: unless-stopped
     # cAdvisor (per-container metrics) needs privileged + the host mounts below to read container

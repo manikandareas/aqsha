@@ -38,27 +38,26 @@ In Dokploy: **Create Project → Create Service → Compose**.
 
 ## Step 2 — Set environment variables
 
-In the service's **Environment** tab, paste and fill the root **`.env.example`** — it is the
-single source of truth for every `${VAR}` referenced by `compose.yaml`, with per-variable
-descriptions and which values are required vs optional.
+Secrets live in **Infisical** (`https://secrets.aqshara.com`), not in the Dokploy Environment tab.
+The app containers pull folder `/app` at start via their entrypoint (`infisical run`); the Dokploy tab
+only holds the bootstrap + infra credentials that stock images read. See the full model + owner
+checklist in **`docs/infisical-secrets-strategy.md`**; the root **`.env.example`** is the annotated map
+of what goes where (Bagian A = Dokploy, Bagian B/C/D = Infisical).
 
-The minimum required set:
+In the service's **Environment** tab, set only **Bagian A** of `.env.example`:
 
 ```
-# Infra / secrets
+# A1 — Infisical bootstrap (machine identity dokploy-prod → reads /app)
+INFISICAL_UNIVERSAL_AUTH_CLIENT_ID=   INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET=
+INFISICAL_PROJECT_ID=   INFISICAL_API_URL=https://secrets.aqshara.com   INFISICAL_ENV=prod
+# A2 — infra creds for the stock images (must match what /app references)
 POSTGRES_PASSWORD=   REDIS_PASSWORD=   MINIO_ROOT_USER=   MINIO_ROOT_PASSWORD=
-# Public URLs (NEXT_PUBLIC_* are build args baked into the web bundle — set BEFORE the first build;
-# S3_ENDPOINT MUST be the public MinIO URL — presigned URLs inherit this host)
-NEXT_PUBLIC_API_URL=https://api.<domain>   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
-S3_ENDPOINT=https://assets.<domain>
-# Clerk + LLM + billing
-CLERK_SECRET_KEY=   CLERK_WEBHOOK_SIGNING_SECRET=
-OPENAI_API_KEY=   AQSHA_FAST_MODEL_API_KEY=   AQSHA_EMBEDDING_API_KEY=
-MAYAR_SERVER=production   MAYAR_API_KEY=   MAYAR_WEBHOOK_SECRET=
+# A3/A4 (optional) — IMAGE_TAG, COMPOSE_PROFILES, GRAFANA_CLOUD_* (only if observability)
 ```
 
-Internal service-to-service wiring (`DATABASE_URL`, `REDIS_URL`, `MASTRA_AGENT_ORIGIN` =
-`http://agent:4317`) is fixed in `compose.yaml` — do not set it.
+Everything else — `DATABASE_URL`/`REDIS_URL`/`S3_*` (fixed internal wiring, stored in `/app` as
+references to `/infra`), Clerk, LLM, Mayar, Sentry DSNs, Langfuse — is set in Infisical `/app`, not
+here. `MASTRA_AGENT_ORIGIN = http://agent:4317` stays fixed in `compose.yaml`.
 
 ## Step 3 — Assign domains
 
@@ -137,9 +136,9 @@ reuses the app MinIO):
 docker compose -f infra/compose.dev.yaml --profile langfuse up -d
 ```
 
-Then point the prod agent at it by adding to the Dokploy **Environment** tab:
+Then point the prod agent at it by adding to Infisical `/app` (see `.env.example` → Bagian D9):
 
-```
+```dotenv
 LANGFUSE_PUBLIC_KEY=pk-lf-...     # = LANGFUSE_PUBLIC_KEY seeded on the Langfuse project
 LANGFUSE_SECRET_KEY=sk-lf-...     # = LANGFUSE_SECRET_KEY
 LANGFUSE_BASE_URL=https://langfuse.<domain>   # or http://<TAILSCALE_IP>:3000 (must be reachable from the agent container)
@@ -165,21 +164,22 @@ Builds run **off the VPS**. `.github/workflows/` drives it:
   `ghcr.io/manikandareas/aqsha-{web,api,agent}` tagged `:sha-<short>` **and** `:latest` → calls the
   Dokploy API (`POST /api/compose.deploy`) so the VPS pulls `:latest` and restarts.
 
-`NEXT_PUBLIC_*` are baked into the web image **at build time in CI** from GitHub **repo Variables**
-(source of truth for build args; runtime env stays in Dokploy). Each image bakes `GIT_COMMIT` →
-Sentry `release` + Langfuse tag, so errors/traces tie back to a commit.
+`NEXT_PUBLIC_*` + the Sentry build args are pulled from **Infisical `/build`** at build time (via
+`Infisical/secrets-action`) and baked into the web image; the Dokploy trigger creds come from Infisical
+`/deploy`. Each image bakes `GIT_COMMIT` → Sentry `release` + Langfuse tag, so errors/traces tie back
+to a commit. Full model + owner checklist: **`docs/infisical-secrets-strategy.md`**.
 
 **Owner prerequisites (one-time):**
 
 1. **GHCR**: enable Packages on the repo. Create a classic PAT with `read:packages`; add it under
    Dokploy → **Settings → Registry** (`ghcr.io`, your username, the PAT) so Dokploy can pull the
    private images.
-2. **GitHub → Settings → Secrets and variables → Actions**:
-   - **Secrets**: `DOKPLOY_URL` (e.g. `https://dokploy.example.com`), `DOKPLOY_API_KEY` (profile →
-     API key), `DOKPLOY_COMPOSE_ID` (the Compose service id), `SENTRY_AUTH_TOKEN` (source-map upload).
-   - **Variables**: `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SITE_URL`,
-     `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_ORG`, `SENTRY_PROJECT_WEB` (mirror the values in Dokploy's
-     Environment tab — keep them in sync).
+2. **GitHub → Settings → Secrets and variables → Actions** (just the Infisical bootstrap; everything
+   else lives in Infisical `/build` + `/deploy`):
+   - **Secrets**: `INFISICAL_CLIENT_ID`, `INFISICAL_CLIENT_SECRET` (from the `gh-actions` machine identity).
+   - **Variables**: `INFISICAL_PROJECT_SLUG` (e.g. `aqsha`).
+   - Remove the old ones once migrated: Secrets `DOKPLOY_*`, `SENTRY_AUTH_TOKEN`; Variables `NEXT_PUBLIC_*`,
+     `SENTRY_ORG`, `SENTRY_PROJECT_WEB`.
 3. `GITHUB_TOKEN` (auto-provided) pushes to GHCR via the workflow's `packages: write` permission — no
    extra secret needed for the push itself.
 
@@ -191,23 +191,28 @@ docker compose -f compose.yaml -f compose.build.yaml build
 docker compose up -d
 ```
 
+The images still start via the Infisical entrypoint: set the five `INFISICAL_*` bootstrap vars (env
+`prod`) in an `.env` next to compose so `infisical run` pulls `/app`; if Infisical is unreachable,
+leave them empty (entrypoint execs directly) and supply `/app` secrets via a compose `env_file:`
+override. See `docs/infisical-secrets-strategy.md` → "Local / emergency full-stack".
+
 ## Observability (Sentry) — optional
 
 Error tracking across all four runtimes. One Sentry org, **3 projects**: `aqsha-web`, `aqsha-api`
 (api + worker, split by the `process` tag), `aqsha-agent`. Everything is **env-gated** — with the
 DSNs empty the SDKs are silent no-ops, so this can ship dark and light up later.
 
-Fill in the Dokploy **Environment** tab (see `.env.example` → Sentry block):
+Set the runtime DSNs in Infisical `/app` (see `.env.example` → Bagian D8):
 
-```
+```dotenv
 SENTRY_DSN_WEB=...     SENTRY_DSN_API=...     SENTRY_DSN_AGENT=...
 SENTRY_ENVIRONMENT=production
 # SENTRY_TRACES_SAMPLE_RATE=0   # 0 = error-only (conserves the 5k-errors/mo free tier)
 ```
 
-Client-side web errors need the browser DSN **baked at build**: set `NEXT_PUBLIC_SENTRY_DSN` (repo
-Variable) + `SENTRY_ORG` / `SENTRY_PROJECT_WEB` (Variables) + `SENTRY_AUTH_TOKEN` (Secret, for
-source-map upload) as in the CI prerequisites above. Session Replay is off and tracing defaults to 0
+Client-side web errors need the browser DSN **baked at build**: set `NEXT_PUBLIC_SENTRY_DSN` +
+`SENTRY_ORG` / `SENTRY_PROJECT_WEB` + `SENTRY_AUTH_TOKEN` in Infisical `/build` (pulled by CI at build,
+see the CI prerequisites above). Session Replay is off and tracing defaults to 0
 to protect the free-tier quota. Verify by throwing a test error per runtime and confirming it lands
 in the right project, symbolicated, tagged with the commit `release`.
 
@@ -235,9 +240,10 @@ What Alloy collects (config: `infra/alloy/config.alloy`):
 1. Create a **Grafana Cloud** account (free). From **Connections** copy the Loki push URL + user,
    the Prometheus remote-write URL + user, and the OTLP endpoint + user; create **one** Cloud
    Access Policy **token** with `logs:write`, `metrics:write`, `traces:write`.
-2. In the Dokploy **Environment** tab (see `.env.example` → Observability block) set the
-   `GRAFANA_CLOUD_*` values, turn the collector on with `COMPOSE_PROFILES=observability`, and point
-   the agent at it with `AQSHA_OTLP_TRACES_ENDPOINT=http://alloy:4318/v1/traces`. Redeploy.
+2. In the Dokploy **Environment** tab (stock `alloy` image, read at compose parse time) set the
+   `GRAFANA_CLOUD_*` values and turn the collector on with `COMPOSE_PROFILES=observability`
+   (`.env.example` → Bagian A4). Point the agent at it with
+   `AQSHA_OTLP_TRACES_ENDPOINT=http://alloy:4318/v1/traces` in **Infisical `/app`** (Bagian D10). Redeploy.
 3. Verify: `docker compose --profile observability ps` shows `alloy` up; Grafana Cloud → Logs shows
    streams for `service=api|web|agent|…`; run a `/deep` and a trace appears in Tempo.
 
@@ -246,10 +252,10 @@ What Alloy collects (config: `infra/alloy/config.alloy`):
 > `AQSHA_OTLP_TRACES_ENDPOINT` empty unless the profile is on, or the agent dials a collector that
 > isn't there. RAM cost: Alloy ~150–300 MB. Redaction: pino already redacts secrets; Alloy adds
 > only container metadata as labels, never log contents.
-
-> **Master kill-switch:** set `AQSHA_OBSERVABILITY=off` in the Dokploy **Environment** tab to silence
-> **all** agent trace exporters at once (Mastra storage traces + Langfuse + OTLP), without unpicking
-> individual keys/endpoints. Empty/unset = on (default). Passed through to the agent in `compose.yaml`.
+>
+> **Master kill-switch:** set `AQSHA_OBSERVABILITY=off` in Infisical `/app` to silence **all** agent
+> trace exporters at once (Mastra storage traces + Langfuse + OTLP), without unpicking individual
+> keys/endpoints. Empty/unset = on (default). Injected into the agent by the entrypoint (`infisical run`).
 
 ## Uptime monitoring (Uptime Kuma) — optional
 
@@ -277,8 +283,9 @@ network (`aqsha_default`) so it can also probe internal-only services (the agent
 
 Push to `main` → CI gates, builds, pushes to GHCR, and triggers the Dokploy deploy automatically
 (no manual Redeploy needed). Re-run **Step 5** (the `migrate` profile) if the change includes a new
-migration. Changing `NEXT_PUBLIC_*` now means updating the GitHub **Variable** and pushing (CI
-rebuilds the web image) — it is no longer a Dokploy-side rebuild.
+migration. Changing a runtime secret means editing Infisical `/app` and restarting the service (no
+rebuild). Changing `NEXT_PUBLIC_*` means editing Infisical `/build` and pushing to `main` (CI rebuilds
+the web image, since these are baked at build).
 
 ## Backups
 

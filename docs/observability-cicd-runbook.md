@@ -2,14 +2,16 @@
 
 Panduan **menyalakan** CI/CD (build off-VPS) dan seluruh stack observability produksi Aqsha:
 **Sentry** (error tracking), **Grafana Cloud** via Alloy (logs · metrics · traces), **Uptime Kuma**
-(uptime), dan **Langfuse** (LLM cost/trace). Kode sudah ada di branch `infrastructure` (uncommitted,
-untuk review) — dokumen ini hanya langkah **aktivasi + verifikasi** yang dikerjakan owner.
+(uptime), dan **Langfuse** (LLM cost/trace). Kode sudah **ter-merge** (bukan lagi draft di branch
+`infrastructure`) — dokumen ini hanya langkah **aktivasi + verifikasi** yang dikerjakan owner.
 
 > Desain & alasan tiap keputusan: `docs/observability-cicd-plan.md`. Runbook deploy umum:
 > `DEPLOYMENT.md`. SSOT env prod: root `.env.example`.
 >
-> Semua pilar **env-gated & opt-in** dan mulai **Rp 0** (free tier). Dengan env kosong tiap pilar
-> **diam (no-op, tak crash)** — jadi bisa dinyalakan **bertahap**, satu pilar per satu.
+> Pilar **runtime** (Sentry, Langfuse, OTLP→Alloy) **env-gated & opt-in**: dengan env kosong mereka
+> **diam (no-op, tak crash)**, jadi bisa dinyalakan **bertahap**. **CI/CD** dipicu event GitHub (push
+> `main` / tag), bukan env-gated — jalan begitu workflow + secret tersedia. **Uptime Kuma** di-deploy
+> sebagai service Dokploy **terpisah** (bukan bagian stack app). Semua mulai **Rp 0** (free tier).
 
 ## Peta pilar
 
@@ -229,7 +231,7 @@ Deep Pro) dengan data nyata. **Independen** dari pilar lain; satu-satunya pilar 
   `LANGFUSE_SECRET_KEY` (+ `LANGFUSE_BASE_URL` untuk self-host) diisi. Kosong = tracing mati.
 - Trace dev vs prod dipisah tag `environment` (`development` / `production`).
 
-```
+```text
 apps/agent (dev, laptop)  ─┐
 apps/agent (prod, Dokploy) ─┼──►  langfuse-web:3000  ──►  ClickHouse (traces) + Postgres + MinIO
                             │        (infra server)
