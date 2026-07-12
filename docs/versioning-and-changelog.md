@@ -167,7 +167,7 @@ kalau memang beda tema) — jangan naikkan MINOR dua kali untuk satu momen rilis
 ### Gotcha yang sudah pernah menggigit
 
 - Export terkompilasi bernama **`allChangelogs`** (plural), bukan `allChangelog`.
-- Route `/changelog(.*)` **wajib public** di `apps/web/lib/proxy.ts` (sudah, jangan
+- Route `/changelog(.*)` **wajib public** di `apps/web/proxy.ts` (sudah, jangan
   dihapus) — kalau tidak, halaman ke-gate auth.
 - Landing **500 tanpa `build:dist`** saat dev pertama.
 

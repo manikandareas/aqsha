@@ -152,8 +152,8 @@ export function LandingHeroSection({
                 <AnnouncementTag className="bg-lavender-soft text-lavender-foreground">
                   {latestUpdate.tag}
                 </AnnouncementTag>
-                <AnnouncementTitle>
-                  <span className="truncate">{latestUpdate.title}</span>
+                <AnnouncementTitle className="min-w-0">
+                  <span className="min-w-0 truncate">{latestUpdate.title}</span>
                   <ArrowUpRightIcon className="size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                 </AnnouncementTitle>
               </Link>

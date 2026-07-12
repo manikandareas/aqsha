@@ -9,9 +9,7 @@ type BadgeContextType = {
   themed: boolean;
 };
 
-const BadgeContext = createContext<BadgeContextType>({
-  themed: false,
-});
+const BadgeContext = createContext<BadgeContextType | undefined>(undefined);
 
 const useBadgeContext = () => {
   const context = useContext(BadgeContext);
