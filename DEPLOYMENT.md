@@ -157,12 +157,15 @@ Traefik subdomain or keep it Tailscale-only. After first traces arrive, register
 
 Builds run **off the VPS**. `.github/workflows/` drives it:
 
-- **`ci.yml`** (PRs into `main`): typecheck + lint + full test suite against ephemeral
-  Postgres(pgvector)+Redis service containers. The gate that says "this is green".
-- **`deploy.yml`** (push to `main`): re-runs the same gate → builds the 3 images in parallel with
-  `docker buildx` (layer cache `type=gha`, per-image scope) → pushes to
-  `ghcr.io/manikandareas/aqsha-{web,api,agent}` tagged `:sha-<short>` **and** `:latest` → calls the
-  Dokploy API (`POST /api/compose.deploy`) so the VPS pulls `:latest` and restarts.
+- **`ci.yml`** (PRs into `main` or `development`): typecheck + lint + full test suite against
+  ephemeral Postgres(pgvector)+Redis service containers. The gate that says "this is green".
+- **`deploy.yml`** (push to `main` → **prod**, push to `development` → **staging**): re-runs the
+  same gate → builds the 3 images in parallel with `docker buildx` (layer cache `type=gha`,
+  per-image scope) → pushes to `ghcr.io/manikandareas/aqsha-{web,api,agent}` — `main` tags
+  `:latest` + `:sha-<short>`, `development` tags `:staging` + `:sha-<short>-staging` — → calls the
+  Dokploy API (`POST /api/compose.deploy`) with that env's compose id so the right stack pulls its
+  mutable tag and restarts. The Infisical env-slug (`prod`|`staging`, from the branch) selects both
+  the `/build` values baked into the web image and the `/deploy` target.
 
 `NEXT_PUBLIC_*` + the Sentry build args are pulled from **Infisical `/build`** at build time (via
 `Infisical/secrets-action`) and baked into the web image; the Dokploy trigger creds come from Infisical
@@ -195,6 +198,49 @@ The images still start via the Infisical entrypoint: set the five `INFISICAL_*` 
 `prod`) in an `.env` next to compose so `infisical run` pulls `/app`; if Infisical is unreachable,
 leave them empty (entrypoint execs directly) and supply `/app` secrets via a compose `env_file:`
 override. See `docs/infisical-secrets-strategy.md` → "Local / emergency full-stack".
+
+## Staging
+
+Staging is a **second Dokploy Compose service on the same VPS**, running the same `compose.yaml`
+from branch **`development`**, fully isolated from prod (own Postgres/Redis/MinIO volumes, own
+domains, own Infisical env). Every push to `development` deploys it automatically (see CI/CD above).
+
+Create it like Steps 1–8 with these deltas:
+
+- **Step 1 (Compose app)**: branch `development` instead of `main`; same `compose.yaml` path.
+- **Step 2 (Environment tab)** — same Bagian A shape, different values:
+
+  ```dotenv
+  # A1 — bootstrap uses the dokploy-staging machine identity + staging env
+  INFISICAL_UNIVERSAL_AUTH_CLIENT_ID=…dokploy-staging…   INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET=…
+  INFISICAL_PROJECT_ID=…   INFISICAL_API_URL=https://secrets.aqshara.com   INFISICAL_ENV=staging
+  # A2 — staging /infra creds (distinct from prod; must match what staging /app references)
+  POSTGRES_PASSWORD=…   REDIS_PASSWORD=…   MINIO_ROOT_USER=…   MINIO_ROOT_PASSWORD=…
+  # Stack isolation + image selection (prod leaves all three unset)
+  AQSHA_PROJECT_NAME=aqsha-staging   # prefixes volumes + network → nothing shared with prod
+  POSTGRES_HOST_PORT=5436            # 5435 is taken by the prod stack
+  IMAGE_TAG=staging                  # rollback: sha-<short>-staging
+  # Do NOT set COMPOSE_PROFILES — staging skips the alloy collector (prod's alloy already
+  # collects all containers on the host).
+  ```
+
+- **Step 3 (Domains)**: `staging.<domain>` → web:3000, `api.staging.<domain>` → api:3001,
+  `assets.staging.<domain>` → minio:9000 (DNS A-records required, same VPS IP).
+- **Infisical env `staging`** must be populated first (all four folders — see
+  `docs/infisical-secrets-strategy.md` → "Staging"): `/app` internal wiring uses
+  `${staging.infra.*}` references (never paste `${prod.infra.*}` — `dokploy-staging` can't read
+  prod, the container would crash-loop), Clerk **development instance** keys (`pk_test`/`sk_test`),
+  `MAYAR_SERVER=sandbox` + sandbox key, `SENTRY_ENVIRONMENT=staging`,
+  `S3_ENDPOINT=https://assets.staging.<domain>`; `/build` holds the staging `NEXT_PUBLIC_*`
+  (fill **every** key `deploy.yml` passes as a build-arg — an empty one overrides the Dockerfile
+  default); `/deploy` holds the same Dokploy URL/key plus **this** service's `DOKPLOY_COMPOSE_ID`.
+- **Steps 5–7** are identical, run against the staging stack: migrate via the Dokploy terminal
+  (`docker compose --profile migrate run --rm migrate`), CORS on the staging bucket with the
+  staging origin, and Clerk (dev instance) + Mayar (sandbox) webhooks pointed at
+  `api.staging.<domain>`.
+- **Verify isolation**: `docker compose ls` shows `aqsha` and `aqsha-staging`; GHCR `:latest`
+  digest is untouched by a staging deploy; the staging page's view-source shows `pk_test_` and
+  `api.staging.<domain>` (proof the staging `/build` was baked, not prod's).
 
 ## Observability (Sentry) — optional
 

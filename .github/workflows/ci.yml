@@ -1,11 +1,12 @@
 name: CI
 
-# Gate for pull requests into main: typecheck + lint + the full test suite (unit + itests).
-# Also exposed as a reusable workflow (workflow_call) so deploy.yml runs the exact same gate
-# before building images — one source of truth for "is this green".
+# Gate for pull requests into the deployable branches (main → prod, development → staging):
+# typecheck + lint + the full test suite (unit + itests). Also exposed as a reusable workflow
+# (workflow_call) so deploy.yml runs the exact same gate before building images — one source
+# of truth for "is this green".
 on:
   pull_request:
-    branches: [main]
+    branches: [main, development]
   workflow_call: {}
   workflow_dispatch: {}
 
