@@ -29,7 +29,8 @@ it. These are never allowed to drift:
 | **GitHub Release** | GitHub → Releases | title `vX.Y.Z` (auto from the tag) |
 | workspace `package.json` | repo | `X.Y.Z` — informational, not the SoT |
 
-Rules (enforced — see "How sync is enforced" below):
+Rules (only **rule 1 is CI-enforced** by `release.yml`; rules 2–4 are conventions upheld in review and
+by the spot-check below — CI validates the *version* match, not dates or monotonicity):
 
 1. **No tag without a matching changelog entry.** Every `vX.Y.Z` tag MUST have a changelog `.mdx` whose
    frontmatter `version` is exactly `X.Y.Z` (the tag minus the `v`).
@@ -37,7 +38,8 @@ Rules (enforced — see "How sync is enforced" below):
    be (or become, in the same release) a pushed git tag. Entries that are not a release carry **no**
    `version` field (it is optional in the schema precisely for pre-release/undated notes).
 3. **Version only increases.** Tags and changelog `version`s are monotonic — never reuse or go backward.
-4. **Same date.** The changelog `publishedAt` is the release date, i.e. the day the tag is pushed.
+4. **Same date (manual).** The changelog `publishedAt` should be the release date (the day the tag is
+   pushed). This is a manual convention — CI does not validate the date, only the version.
 
 ## Release workflow (manual tags)
 
@@ -77,17 +79,24 @@ redeploy — the push to `main` already shipped the images via `deploy.yml`; the
   with `version: "X.Y.Z"` exists → you cannot tag without a changelog (rule 1).
 - **By convention (review):** the changelog entry lands in the same `development → main` PR as the work
   it describes, so reviewers see the version + notes together before it ships.
-- **Spot-check any time:** every git tag should have exactly one changelog `version` and vice-versa —
+- **Spot-check any time:** every git tag should have exactly one changelog `version` and vice-versa.
+  This flags a *duplicate* changelog version (violates "exactly one") as well as a tag/changelog mismatch:
+
   ```bash
-  git tag --list 'v*' | sed 's/^v//' | sort -u > /tmp/tags.txt
-  grep -rho 'version: "[0-9][^"]*"' apps/web/content/changelog | sed 's/version: "//;s/"//' | sort -u > /tmp/cl.txt
+  # 1) no duplicate versions across changelog entries (the "exactly one" invariant)
+  grep -rho 'version: *"[0-9][^"]*"' apps/web/content/changelog | sort | uniq -d | grep . \
+    && { echo "duplicate changelog version(s) above"; exit 1; } || echo "no duplicate versions"
+  # 2) tags ↔ changelog versions match 1:1
+  git tag --list 'v*' | sed 's/^v//' | sort > /tmp/tags.txt
+  grep -rho 'version: *"[0-9][^"]*"' apps/web/content/changelog | sed 's/.*"\([0-9][^"]*\)".*/\1/' | sort -u > /tmp/cl.txt
   diff /tmp/tags.txt /tmp/cl.txt && echo "tags ↔ changelog in sync"
   ```
 
 ## Two changelogs, on purpose
 
 - **Product-facing** — the curated "Apa yang baru" entries in `apps/web/content/changelog/`. Written by
-  hand, in product voice, for users. This is the one shown in the app.
+  hand, in product voice, for users. This is the one shown in the app. Editorial guidance (when to add
+  one, categories, mechanics) lives in [docs/versioning-and-changelog.md](docs/versioning-and-changelog.md).
 - **Developer-facing** — the auto-generated GitHub Release notes (from merged PRs/commits). For the team.
 
 Keep them separate: the GitHub Release is the raw record; the MDX changelog is the human story. The

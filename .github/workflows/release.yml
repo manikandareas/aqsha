@@ -8,10 +8,6 @@ on:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
 
-# Least privilege: only the release-publish scope.
-permissions:
-  contents: write
-
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
@@ -19,22 +15,38 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # Least privilege: only this job gets write access, only to publish the release.
+    permissions:
+      contents: write
     steps:
       # Needed to read the changelog files for the sync check.
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
 
-      # Enforce the release invariant (VERSIONING.md rule 1): a tag cannot ship without a changelog
-      # entry whose frontmatter `version` matches the tag. Fixed-string grep so dots stay literal.
+      # Enforce the release invariant (VERSIONING.md rule 1): a tag cannot ship without EXACTLY ONE
+      # changelog entry whose frontmatter `version` matches the tag. Parses only the YAML frontmatter
+      # (between the first two `---`), extracts the semver token so any quoting style works, and ignores
+      # body text/comments.
       - name: Verify changelog is in sync with the tag
         run: |
           version="${GITHUB_REF_NAME#v}"
-          if ! grep -rlF "version: \"${version}\"" apps/web/content/changelog/ >/dev/null 2>&1; then
-            echo "::error::No changelog entry with version \"${version}\" in apps/web/content/changelog/. Add one before tagging ${GITHUB_REF_NAME} (see VERSIONING.md)."
-            exit 1
-          fi
-          echo "changelog entry for ${version} found — tag ↔ changelog in sync"
+          count=$(awk -v want="$version" '
+            FNR==1 { fm=0 }
+            /^---[ \t]*$/ { fm++; next }
+            fm==1 && /^[ \t]*version:/ {
+              if (match($0, /[0-9]+\.[0-9]+\.[0-9]+/)) {
+                v = substr($0, RSTART, RLENGTH)
+                if (v == want) c++
+              }
+            }
+            END { print c+0 }
+          ' apps/web/content/changelog/*.mdx)
+          case "$count" in
+            1) echo "changelog entry for ${version} found — tag ↔ changelog in sync" ;;
+            0) echo "::error::No changelog entry with version ${version} in apps/web/content/changelog/. Add one before tagging ${GITHUB_REF_NAME} (see VERSIONING.md)."; exit 1 ;;
+            *) echo "::error::${count} changelog entries claim version ${version} (must be exactly one)."; exit 1 ;;
+          esac
 
       - name: Publish GitHub Release
         env:

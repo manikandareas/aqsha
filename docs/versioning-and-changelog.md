@@ -1,6 +1,13 @@
 # Versioning & Changelog — Panduan Keputusan
 
-Dokumen ini adalah **sumber kebenaran** untuk dua keputusan yang muncul di
+> **Kebijakan versi (skema, format tag, SoT) = [VERSIONING.md](../VERSIONING.md)** (otoritatif).
+> Dokumen ini fokus pada **editorial changelog**: kapan menulis entry, kategori, dan mekaniknya.
+> Selaras dengan VERSIONING.md: SoT versi = **git tag `vX.Y.Z` di `main`**, di-mirror ke field
+> `version` changelog; status **pra-1.0 (`0.x`)**, rilis ber-tag pertama `v0.1.0`. Angka `1.x` pada
+> contoh di bawah = **penomoran lama pra-tag** (lihat "Reconciling existing changelog entries" di
+> VERSIONING.md) — dipertahankan hanya sebagai ilustrasi tingkat bump.
+
+Dokumen ini adalah panduan **editorial changelog** untuk dua keputusan yang muncul di
 hampir setiap development:
 
 1. **Berapa versi yang tepat** untuk perubahan ini?
@@ -16,17 +23,16 @@ dipedulikan pengguna.
 
 | Versi | Lokasi | Untuk apa | Siapa yang lihat |
 | --- | --- | --- | --- |
-| **Versi produk** | field `version` pada entry changelog terbaru | Versi yang diumumkan ke pengguna | Pengguna (halaman `/changelog`) |
+| **Versi produk** | git tag `vX.Y.Z` (di-mirror ke field `version` changelog) | Versi yang diumumkan ke pengguna | Pengguna (halaman `/changelog`) |
 | **Versi paket** | `apps/web/package.json` (`version`) | Metadata paket internal | Developer/tooling |
 
-**Sumber kebenaran versi produk = field `version` pada entry changelog paling
-baru.** Saat ini `1.5.0` (`apps/web/content/changelog/analisis-statistik-di-chat.mdx`).
+**Sumber kebenaran versi = git tag `vX.Y.Z` di `main`** (lihat [VERSIONING.md](../VERSIONING.md)).
+Field `version` pada entry changelog **mencerminkan** tag itu (tanpa `v`) untuk rilis ber-versi — ia
+bukan SoT-nya sendiri, tapi WAJIB sama dengan tag. Status saat ini **pra-1.0 (`0.x`)**; rilis ber-tag
+pertama `v0.1.0`.
 
-`apps/web/package.json` sengaja dibiarkan di `0.1.0` dan **tidak** dipakai sebagai
-versi produk. Menaikkannya tidak memberi nilai ke pengguna, jadi tidak wajib.
-Kalau suatu saat mau satu SoT, sinkronkan `package.json` ke versi produk **hanya
-saat rilis** — putuskan sekali, lalu konsisten. Selama belum diputuskan,
-**abaikan `package.json` untuk keperluan versioning produk.**
+`apps/web/package.json` sengaja dibiarkan di `0.1.0` (informational) dan **tidak** dipakai sebagai
+versi produk.
 
 ---
 
@@ -43,8 +49,9 @@ Naik ketika kebiasaan lama pengguna **berubah mendasar**:
 - Fitur lama dihapus/diganti sehingga cara lama tidak berlaku lagi.
 - Migrasi yang mengharuskan pengguna beradaptasi.
 
-> Belum pernah terjadi — Aqsha masih di `1.x`. Naikkan MAJOR dengan hati-hati;
-> ini sinyal "produk terasa berbeda".
+> Belum pernah terjadi — Aqsha masih **pra-1.0 (`0.x`)**; `1.0.0` justru dicadangkan untuk rilis
+> stabil/GA pertama (lihat VERSIONING.md). Naikkan MAJOR dengan hati-hati; ini sinyal "produk
+> terasa berbeda".
 
 ### `MINOR` — `x.Y.0`
 
