@@ -55,10 +55,12 @@ jobs:
 
       # Pull the web build-time secrets (NEXT_PUBLIC_* + Sentry org/project/DSN/auth-token) from
       # Infisical /build and inject them as env vars (masked in logs) for the build step below. Only
-      # the web image consumes them; api/agent ignore the extra build-args, so one step covers the
-      # whole matrix. Bootstrap = the `gh-actions` machine identity (GH Secrets). env-slug `prod`.
-      # The composite action wraps the import with a delayed retry against transient VPS blips.
+      # the web image consumes them, so ONLY the web matrix job runs the import — api/agent ignore
+      # the extra (then-empty) build-args, and skipping keeps a GH-runner→VPS connectivity blip from
+      # failing builds that never needed the secrets. Bootstrap = the `gh-actions` machine identity
+      # (GH Secrets). env-slug `prod`. The composite action wraps the import with a delayed retry.
       - name: Import build secrets from Infisical
+        if: matrix.name == 'web'
         uses: ./.github/actions/infisical-import
         with:
           client-id: ${{ secrets.INFISICAL_CLIENT_ID }}
