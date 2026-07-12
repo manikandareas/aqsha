@@ -1,0 +1,61 @@
+name: Release
+
+# Manual, tag-driven. Push an annotated tag `vX.Y.Z` on main → verify the changelog is in sync, then
+# publish a GitHub Release with auto-generated notes. This does NOT build or deploy: the push to `main`
+# already shipped the images via deploy.yml. The tag/release only records the version. See VERSIONING.md.
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # Least privilege: only this job gets write access, only to publish the release.
+    permissions:
+      contents: write
+    steps:
+      # Needed to read the changelog files for the sync check.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      # Enforce the release invariant (VERSIONING.md rule 1): a tag cannot ship without EXACTLY ONE
+      # changelog entry whose frontmatter `version` matches the tag. Parses only the YAML frontmatter
+      # (between the first two `---`), extracts the semver token so any quoting style works, and ignores
+      # body text/comments.
+      - name: Verify changelog is in sync with the tag
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          count=$(awk -v want="$version" '
+            FNR==1 { fm=0 }
+            /^---[ \t]*$/ { fm++; next }
+            fm==1 && /^[ \t]*version:/ {
+              if (match($0, /[0-9]+\.[0-9]+\.[0-9]+/)) {
+                v = substr($0, RSTART, RLENGTH)
+                if (v == want) c++
+              }
+            }
+            END { print c+0 }
+          ' apps/web/content/changelog/*.mdx)
+          case "$count" in
+            1) echo "changelog entry for ${version} found — tag ↔ changelog in sync" ;;
+            0) echo "::error::No changelog entry with version ${version} in apps/web/content/changelog/. Add one before tagging ${GITHUB_REF_NAME} (see VERSIONING.md)."; exit 1 ;;
+            *) echo "::error::${count} changelog entries claim version ${version} (must be exactly one)."; exit 1 ;;
+          esac
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        # --generate-notes builds the notes server-side from merged PRs since the previous tag.
+        # --verify-tag guards against publishing a release for a non-existent tag.
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag

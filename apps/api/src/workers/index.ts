@@ -9,6 +9,10 @@ import {
 } from "@aqsha/services";
 import { Worker } from "bullmq";
 import { logger } from "../lib/log";
+import { captureException, initSentry } from "../lib/sentry";
+
+// Sentry sedini mungkin (no-op tanpa SENTRY_DSN_API) supaya kegagalan boot pun tertangkap.
+initSentry("worker");
 
 // Fail-fast (D1): worker meng-index dokumen (artifact-indexing, url-ingestion) via embedding.
 // Kredensial yang hilang digagalkan saat boot, bukan job gagal senyap.
@@ -64,7 +68,18 @@ const workers = [
 
 for (const w of workers) {
   const log = logger.child({ worker: w.name });
-  w.on("failed", (job, err) => log.error({ jobId: job?.id ?? null, err }, "job_failed"));
+  w.on("failed", (job, err) => {
+    log.error({ jobId: job?.id ?? null, err }, "job_failed");
+    // `failed` fires on EVERY attempt, including intermediate retries — only report to Sentry once the
+    // job has exhausted its configured attempts (enqueue sets `attempts: 3`). Otherwise a job that
+    // succeeds on retry still raises an incident, and a terminally-failing job reports N times. No-op
+    // without a DSN.
+    const attempts = job?.opts?.attempts ?? 1;
+    const attemptsMade = job?.attemptsMade ?? 0;
+    if (job && attemptsMade >= attempts) {
+      captureException(err, { queue: w.name, jobId: job.id ?? null, attemptsMade });
+    }
+  });
   w.on("ready", () => log.info("worker_ready"));
 }
 logger.info({ queues: workers.length }, "workers_started");

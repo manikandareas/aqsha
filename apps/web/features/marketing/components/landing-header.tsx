@@ -12,6 +12,7 @@ const navItems = [
   { href: "/#fitur", label: "Fitur" },
   { href: "/#buat-siapa", label: "Buat siapa" },
   { href: "/#pricing", label: "Harga" },
+  { href: "/changelog", label: "Apa yang baru" },
   { href: "/blog", label: "Blog" },
 ] as const;
 
