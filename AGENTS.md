@@ -44,6 +44,7 @@ bun run build
 Local infra (Postgres/Redis/MinIO): `docker compose -f infra/compose.dev.yaml up` (or `bun run infra:up`).
 
 ### Observability (Langfuse) — opsional
+
 Trace token & biaya per run Astra + `/deep`. Langfuse self-host adalah profile `langfuse` di
 `infra/compose.dev.yaml` (Postgres + ClickHouse + Redis sendiri; blob numpang MinIO app):
 

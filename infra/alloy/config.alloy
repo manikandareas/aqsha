@@ -146,6 +146,21 @@ otelcol.exporter.otlphttp "grafana_cloud" {
     endpoint = sys.env("GRAFANA_CLOUD_TEMPO_URL")
     auth     = otelcol.auth.basic.grafana_cloud.handler
   }
+
+  // Bounded buffering: a brief Grafana Cloud outage retries with backoff and queues (up to the cap)
+  // instead of dropping traces immediately or growing memory without limit.
+  retry_on_failure {
+    enabled          = true
+    initial_interval = "5s"
+    max_interval     = "30s"
+    max_elapsed_time = "5m"
+  }
+
+  sending_queue {
+    enabled       = true
+    num_consumers = 5
+    queue_size    = 5000
+  }
 }
 
 otelcol.auth.basic "grafana_cloud" {

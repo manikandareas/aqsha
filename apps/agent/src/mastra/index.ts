@@ -59,8 +59,14 @@ const bootSweepMiddleware: Middleware = async (_c, next) => {
 // dipasang (tak crash). Self-host: `LANGFUSE_BASE_URL` WAJIB diarahkan ke langfuse-web sendiri
 // (default SDK = cloud.langfuse.com). Tag `environment`/`release` memisah trace dev vs prod &
 // per-deploy. Dimatikan total lewat master kill-switch `AQSHA_OBSERVABILITY=off` (di bawah).
+// Master kill-switch: `AQSHA_OBSERVABILITY=off` mematikan SEMUA observability (trace storage, Langfuse,
+// OTLP) — termasuk fail-fast LANGFUSE_BASE_URL di bawah, supaya switch tak bisa diblok Langfuse yang
+// setengah terkonfigurasi. langfuseEnabled digerbangi olehnya.
+const observabilityEnabled = process.env.AQSHA_OBSERVABILITY !== "off";
 const langfuseEnabled = Boolean(
-  process.env.LANGFUSE_PUBLIC_KEY && process.env.LANGFUSE_SECRET_KEY,
+  observabilityEnabled &&
+    process.env.LANGFUSE_PUBLIC_KEY &&
+    process.env.LANGFUSE_SECRET_KEY,
 );
 
 // Fail-fast: dengan kedua key terisi tapi `LANGFUSE_BASE_URL` kosong, SDK Langfuse diam-diam
@@ -114,7 +120,7 @@ export const mastra = new Mastra({
   // LangfuseExporter (bila `LANGFUSE_*` diisi) ikut di config `default` yang SAMA → mewarisi
   // `requestContextKeys` di bawah, jadi token/biaya per run deep (`AQSHA_DEEP_RUN_KEY`) & turn chat
   // ter-tag di Langfuse untuk analisis unit-economics, bukan cuma di storage lokal.
-  ...(process.env.AQSHA_OBSERVABILITY === "off"
+  ...(!observabilityEnabled
     ? {}
     : {
         observability: new Observability({

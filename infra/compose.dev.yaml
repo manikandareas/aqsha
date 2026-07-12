@@ -85,11 +85,14 @@ services:
         done
         mc mb --ignore-existing "local/$${MINIO_BUCKET}"
         mc mb --ignore-existing "local/$${LANGFUSE_S3_BUCKET}"
-        # User + policy scoped ke bucket langfuse. || true agar idempotent saat re-run.
-        mc admin user add local "$${LANGFUSE_S3_ACCESS_KEY}" "$${LANGFUSE_S3_SECRET_KEY}" || true
+        # Scoped Langfuse user + bucket-limited policy. Idempotent tapi TANPA `|| true`: buat/attach
+        # hanya bila belum ada, jadi error nyata (auth/policy invalid) tetap menggagalkan minio-init.
+        mc admin user info local "$${LANGFUSE_S3_ACCESS_KEY}" >/dev/null 2>&1 || mc admin user add local "$${LANGFUSE_S3_ACCESS_KEY}" "$${LANGFUSE_S3_SECRET_KEY}"
         printf '%s' '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:*"],"Resource":["arn:aws:s3:::'"$${LANGFUSE_S3_BUCKET}"'","arn:aws:s3:::'"$${LANGFUSE_S3_BUCKET}"'/*"]}]}' > /tmp/langfuse-policy.json
-        mc admin policy create local langfuse-scoped /tmp/langfuse-policy.json || true
-        mc admin policy attach local langfuse-scoped --user "$${LANGFUSE_S3_ACCESS_KEY}" || true
+        mc admin policy info local langfuse-scoped >/dev/null 2>&1 || mc admin policy create local langfuse-scoped /tmp/langfuse-policy.json
+        mc admin user info local "$${LANGFUSE_S3_ACCESS_KEY}" | grep -q langfuse-scoped || mc admin policy attach local langfuse-scoped --user "$${LANGFUSE_S3_ACCESS_KEY}"
+        # Validasi akhir: policy benar-benar ter-attach ke user; gagal lantang bila tidak.
+        mc admin user info local "$${LANGFUSE_S3_ACCESS_KEY}" | grep -q langfuse-scoped
         echo "siap: bucket $${MINIO_BUCKET} + $${LANGFUSE_S3_BUCKET} (user langfuse scoped)"
     restart: "no"
 

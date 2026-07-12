@@ -27,13 +27,21 @@ const sentryConfigured = Boolean(
   process.env.NEXT_PUBLIC_SENTRY_DSN || process.env.SENTRY_AUTH_TOKEN,
 );
 
+// Source-map upload needs the FULL trio (token + org + project); with only a token the plugin would
+// try to upload with an undefined org/project and fail. Client instrumentation (above) only needs the DSN.
+const sourcemapUploadEnabled = Boolean(
+  process.env.SENTRY_AUTH_TOKEN &&
+    process.env.SENTRY_ORG &&
+    process.env.SENTRY_PROJECT_WEB,
+);
+
 export default sentryConfigured
   ? withSentryConfig(withCC, {
       org: process.env.SENTRY_ORG,
       project: process.env.SENTRY_PROJECT_WEB,
       authToken: process.env.SENTRY_AUTH_TOKEN,
       release: { name: process.env.SENTRY_RELEASE },
-      sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
+      sourcemaps: { disable: !sourcemapUploadEnabled },
       // Route browser → Sentry ingest through a same-origin Next route so ad/tracker blockers don't
       // silently drop client error events. `/sentry-tunnel` is allow-listed in proxy.ts.
       tunnelRoute: "/sentry-tunnel",

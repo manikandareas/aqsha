@@ -28,6 +28,10 @@ export const errorPlugin = new Elysia({ name: "errorPlugin" }).onError(
     if (error instanceof AppError) {
       // Error domain ter-ekspektasi → breadcrumb level warn (tanpa stack spam).
       logger.warn({ ...base, code: error.code, status: error.status }, "app_error");
+      // AppError 5xx = fault server nyata (bukan 4xx domain yang wajar) → kirim ke Sentry.
+      if (error.status >= 500) {
+        captureException(error, { requestId, method: request.method, path });
+      }
       return status(error.status, {
         message: error.message,
         code: error.code,
