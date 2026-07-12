@@ -38,6 +38,9 @@ services:
   web:
     # Built in CI (NEXT_PUBLIC_* baked at build from Infisical /build). Local build: compose.build.yaml.
     image: ghcr.io/manikandareas/aqsha-web:${IMAGE_TAG:-latest}
+    # Dokploy deploys with `docker compose up -d` (no `pull`); a mutable tag like `latest` would
+    # otherwise keep running the stale local image forever. Applies to every GHCR app image below.
+    pull_policy: always
     restart: unless-stopped
     environment:
       <<: *infisical-bootstrap
@@ -51,6 +54,7 @@ services:
   api:
     # Built in CI, pushed to GHCR; the worker service reuses this exact image (same ref below).
     image: ghcr.io/manikandareas/aqsha-api:${IMAGE_TAG:-latest}
+    pull_policy: always
     restart: unless-stopped
     environment: &app-env
       <<: *infisical-bootstrap
@@ -70,6 +74,7 @@ services:
   # Sentry tags worker errors distinctly within the shared api project).
   worker:
     image: ghcr.io/manikandareas/aqsha-api:${IMAGE_TAG:-latest}
+    pull_policy: always
     restart: unless-stopped
     command: ["bun", "run", "start:worker"]
     environment:
@@ -83,6 +88,7 @@ services:
   agent:
     # Built in CI (mastra build), pushed to GHCR. Local build: compose.build.yaml.
     image: ghcr.io/manikandareas/aqsha-agent:${IMAGE_TAG:-latest}
+    pull_policy: always
     restart: unless-stopped
     environment:
       # PORT/HOST/NODE_ENV are baked in the image. Everything else — CLERK_PUBLISHABLE_KEY (Mastra
@@ -105,6 +111,7 @@ services:
   # so several app containers starting at once can't race the same migration.
   migrate:
     image: ghcr.io/manikandareas/aqsha-api:${IMAGE_TAG:-latest}
+    pull_policy: always
     profiles: ["migrate"]
     command: ["bun", "run", "db:migrate"]
     environment:
