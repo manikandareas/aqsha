@@ -4,8 +4,17 @@ import { FeatureBlocksSection } from "@/features/marketing/components/feature-bl
 import { ForYouSection } from "@/features/marketing/components/for-you-section";
 import { LandingFooter } from "@/features/marketing/components/landing-footer";
 import { LandingHeader } from "@/features/marketing/components/landing-header";
-import { LandingHeroSection } from "@/features/marketing/components/landing-hero-section";
+import {
+  LandingHeroSection,
+  type LatestUpdate,
+} from "@/features/marketing/components/landing-hero-section";
+import {
+  WhatsNewTeaserSection,
+  type TeaserLatest,
+} from "@/features/marketing/components/whats-new-teaser-section";
 import { WhyAqshaSection } from "@/features/marketing/components/why-aqsha-section";
+import { CATEGORY_META } from "@/features/changelog/lib/categories";
+import { publishedEntries } from "@/features/changelog/lib/entries";
 
 /**
  * Marketing home composition — 6-section flow, each with its own visual
@@ -22,14 +31,38 @@ import { WhyAqshaSection } from "@/features/marketing/components/why-aqsha-secti
  * `features/marketing/components/`.
  */
 export function LandingPage() {
+  // Dibaca build-time dari Content Collections (statis, nol cost runtime).
+  const entries = publishedEntries();
+  const latest = entries[0];
+
+  const latestUpdate: LatestUpdate | null = latest
+    ? {
+        title: latest.title,
+        href: latest.url,
+        tag: latest.categories[0]
+          ? CATEGORY_META[latest.categories[0]].label
+          : "Update",
+      }
+    : null;
+
+  const teaserLatest: TeaserLatest | null = latest
+    ? {
+        href: latest.url,
+        title: latest.title,
+        publishedAt: latest.publishedAt,
+        summary: latest.excerpt,
+      }
+    : null;
+
   return (
     <>
       <LandingHeader />
-      <LandingHeroSection />
+      <LandingHeroSection latestUpdate={latestUpdate} />
       <WhyAqshaSection />
       <FeatureBlocksSection />
       <ForYouSection />
       <FaqSection />
+      <WhatsNewTeaserSection latest={teaserLatest} />
       <BottomCtaSection />
       <LandingFooter />
     </>

@@ -1,13 +1,14 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
 // Next 16 menamai middleware sebagai `proxy.ts` (port dari apps/web).
-// `/blog` + metadata SEO (sitemap/robots) WAJIB publik supaya bisa di-crawl
-// Googlebot tanpa auth — kalau tidak, Clerk 307-redirect ke /sign-in.
+// `/blog` + `/changelog` + metadata SEO (sitemap/robots) WAJIB publik supaya
+// bisa di-crawl Googlebot tanpa auth — kalau tidak, Clerk 307-redirect ke /sign-in.
 const isPublicRoute = createRouteMatcher([
   "/",
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/blog(.*)",
+  "/changelog(.*)",
   "/sitemap.xml",
   "/robots.txt",
   // Sentry client tunnel (next.config.ts `tunnelRoute`): the browser POSTs error envelopes here to

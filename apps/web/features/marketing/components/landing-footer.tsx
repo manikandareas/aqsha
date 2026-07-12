@@ -12,6 +12,7 @@ const footerColumns = [
       { label: "Fitur", href: "/#fitur" },
       { label: "Buat siapa", href: "/#buat-siapa" },
       { label: "Harga", href: "/#pricing" },
+      { label: "Apa yang baru", href: "/changelog" },
       { label: "Blog", href: "/blog" },
     ],
   },

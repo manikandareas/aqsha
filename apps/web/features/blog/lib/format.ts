@@ -1,7 +1,4 @@
-import { format, parseISO } from "date-fns";
-import { id } from "date-fns/locale";
+import { formatDateId } from "@/lib/dates";
 
-/** "2026-06-27" → "27 Juni 2026" (locale Indonesia). */
-export function formatPostDate(isoDate: string): string {
-  return format(parseISO(isoDate), "d MMMM yyyy", { locale: id });
-}
+/** "2026-06-27" → "27 Juni 2026" (locale Indonesia). Delegasi ke util bersama. */
+export const formatPostDate = formatDateId;
