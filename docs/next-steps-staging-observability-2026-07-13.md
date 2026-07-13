@@ -26,16 +26,25 @@
 
 ## B. Promote observability ke staging + soak
 
-- [ ] Merge `development` → `staging`, push → staging dapat image Sentry log bridge, tanpa OTLP.
+- [x] Merge `development` → `staging` (ff `8193918`), push → deploy GH Actions HIJAU, health
+      api/web/minio semua 200. (Warning build `sentry_auth_token= is not a valid secret` di
+      api/agent = **benign**: token web-only, `deploy.yml` import Infisical `if matrix.name==web`.)
 - [ ] Smoke test observability di staging (plan §8.3):
-  - [ ] Error frontend terkontrol → stack symbolicated di Sentry.
-  - [ ] API 5xx terkontrol → korelasi `requestId` di Sentry Logs.
-  - [ ] Failure BullMQ terminal → tepat satu incident.
-  - [ ] Chat + `/deep` → error ke Sentry, trace/token/cost ke Langfuse, TANPA trace Tempo.
-  - [ ] Tidak ada outbound request ke endpoint Grafana/Alloy.
-- [ ] **Fase 2 — Sentry Uptime**: monitor `https://aqshara.com`, `https://api.aqshara.com/ping`,
+  - [ ] Error frontend terkontrol → stack symbolicated di Sentry. (Trigger: console staging
+        `setTimeout(() => { throw new Error("smoke-fe") }, 0)`.)
+  - [ ] API 5xx → korelasi `requestId` di Sentry Logs. **Teramati selama soak** (opsi 2, tanpa
+        endpoint debug — begitu ada 5xx nyata, cek korelasi).
+  - [ ] Failure BullMQ terminal → tepat satu incident. **Teramati selama soak** (opsi 2).
+  - [ ] Chat + `/deep` → error ke Sentry, TANPA trace Tempo. **Langfuse DITUNDA** — belum
+        di-deploy/di-set env di dev/staging/prod (fail-safe: agent jalan tanpa key). Verifikasi
+        trace/token/cost Langfuse di-skip sampai Langfuse diaktifkan (Cloud atau self-host).
+  - [x] Tidak ada outbound request ke endpoint Grafana/Alloy. (git grep kode ter-deploy bersih.)
+- [ ] **Fase 2 — Sentry Uptime**: monitor `https://aqshara.com`, `https://api.aqshara.com/health/ready`,
       `https://assets.aqshara.com/minio/health/live` (+ staging bila mau) + notification channel.
-      Validasi: matikan satu service staging → alert fire + recovery.
+      **Pakai `/health/ready`, BUKAN `/ping`** — `/ping` tak cek dependency (selalu 200). Prasyarat:
+      patch `/health/ready` + `/healthz` → **503 saat `ok=false`** (sudah dikerjakan; tanpa ini
+      monitor status-code tak bisa deteksi Redis/MinIO down). Validasi: matikan `redis` staging →
+      `/health/ready` 503 → alert fire → start lagi → recovery notification.
 
 ## C. Cutover prod (SETELAH staging soak lolos)
 
