@@ -1,16 +1,19 @@
 name: Deploy
 
-# Branch-aware deploy: push to main → PROD, push to development → STAGING. Same flow for both:
+# Branch-aware deploy: push to main → PROD, push to staging → STAGING. Same flow for both:
 # gate (reuses CI) → build 3 images in parallel and push to GHCR → tell Dokploy to pull + restart.
 # The VPS never builds; it only `docker pull`s finished images.
+#
+# Branch flow: feature → development (integration + local test, NO deploy) → staging (deploys
+# the staging stack) → main (deploys prod). Pushing development never triggers this workflow.
 #
 # The only per-env divergence is data, selected by INFISICAL_ENV below: the Infisical env-slug
 # picks the right /build values (staging bakes its own NEXT_PUBLIC_*) and the right /deploy
 # folder (whose DOKPLOY_COMPOSE_ID points at that env's Dokploy compose service), and the meta
-# step emits `:latest`+`sha-*` on main vs `:staging`+`sha-*-staging` on development.
+# step emits `:latest`+`sha-*` on main vs `:staging`+`sha-*-staging` on the staging branch.
 on:
   push:
-    branches: [main, development]
+    branches: [main, staging]
   workflow_dispatch: {}
 
 concurrency:
@@ -23,7 +26,7 @@ permissions:
   contents: read
 
 env:
-  # Single switch for everything env-specific: main → prod, anything else (development) → staging.
+  # Single switch for everything env-specific: main → prod, anything else (staging) → staging.
   INFISICAL_ENV: ${{ github.ref_name == 'main' && 'prod' || 'staging' }}
 
 jobs:
@@ -37,7 +40,7 @@ jobs:
     needs: check
     # Only the two deployable branches build+deploy; a manual workflow_dispatch from another ref
     # would push no mutable tag and then pointlessly redeploy a stale `:latest`/`:staging`.
-    if: contains(fromJSON('["refs/heads/main", "refs/heads/development"]'), github.ref)
+    if: contains(fromJSON('["refs/heads/main", "refs/heads/staging"]'), github.ref)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -86,15 +89,15 @@ jobs:
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/aqsha-${{ matrix.name }}
-          # main → `:latest` + `sha-<short>`; development → `:staging` + `sha-<short>-staging`.
+          # main → `:latest` + `sha-<short>`; staging → `:staging` + `sha-<short>-staging`.
           # The `-staging` suffix on the sha tag is load-bearing: a fast-forward merge of
-          # development → main yields the SAME commit sha, and without the suffix the prod build
+          # staging → main yields the SAME commit sha, and without the suffix the prod build
           # would overwrite the staging web image (different baked NEXT_PUBLIC_*) under one tag.
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=sha-,format=short,enable={{is_default_branch}}
-            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/development' }}
-            type=sha,prefix=sha-,format=short,suffix=-staging,enable=${{ github.ref == 'refs/heads/development' }}
+            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/staging' }}
+            type=sha,prefix=sha-,format=short,suffix=-staging,enable=${{ github.ref == 'refs/heads/staging' }}
 
       - name: Build and push
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
