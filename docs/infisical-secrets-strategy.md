@@ -25,10 +25,11 @@ Image api/agent netral-environment (semua config runtime dari Infisical) → bis
 ## Prinsip pembagian (kenapa tidak 100% lewat Infisical)
 
 Container **milik kita** (Dockerfile kita kontrol) dibungkus `infisical run` via entrypoint. Container
-**stock image** (postgres/redis/minio/minio-init/alloy) tak punya CLI dan membaca env lewat
+**stock image** (postgres/redis/minio/minio-init) tak punya CLI dan membaca env lewat
 interpolasi `${VAR}` compose → kredensial infra-nya **tetap di Dokploy Environment tab**. Hasilnya:
-Dokploy env menyusut dari ~40 → ~6 wajib (+ observability opsional), dan seluruh secret aplikasi
-pindah ke Infisical.
+Dokploy env menyusut dari ~40 → ~6 wajib (+ `IMAGE_TAG`/isolasi staging opsional), dan seluruh secret
+aplikasi pindah ke Infisical. (Observability sekarang Sentry-first — env-gated di Infisical `/app`/
+`/build`, bukan lagi lewat Dokploy `COMPOSE_PROFILES`/`GRAFANA_CLOUD_*`.)
 
 ---
 
@@ -92,8 +93,9 @@ Dokploy hanya menyuplai 5 var bootstrap: `INFISICAL_UNIVERSAL_AUTH_CLIENT_ID/_CL
    - **Hapus** yang lama: Variables `NEXT_PUBLIC_*`, `SENTRY_ORG`, `SENTRY_PROJECT_WEB`; Secrets
      `SENTRY_AUTH_TOKEN`, `DOKPLOY_URL`, `DOKPLOY_API_KEY`, `DOKPLOY_COMPOSE_ID`.
 5. **Dokploy → Environment tab (prod)** → sisakan hanya bagian A `.env.example`: 5 bootstrap
-   `INFISICAL_*` (pakai `dokploy-prod` + Project ID) + creds `/infra` + `IMAGE_TAG`/`COMPOSE_PROFILES`/
-   `GRAFANA_CLOUD_*` (bila observability). **Hapus** sisanya. Redeploy.
+   `INFISICAL_*` (pakai `dokploy-prod` + Project ID) + creds `/infra` + `IMAGE_TAG` opsional (dan var
+   isolasi staging di stack staging). **Hapus** sisanya — termasuk `COMPOSE_PROFILES`/`GRAFANA_CLOUD_*`
+   legacy (observability kini Sentry-first, tak lewat Dokploy). Redeploy.
 6. **GHCR** (tak berubah): PAT `read:packages` di Dokploy → Settings → Registry.
 
 ---
@@ -140,15 +142,18 @@ secret `/app` lewat compose override `env_file:`.
 
 ## Staging
 
+Alur branch: feature → `development` (integrasi + test lokal, tanpa deploy) → `staging` (deploy
+stack staging) → `main` (deploy prod).
+
 Staging memakai **`deploy.yml` yang sama** (branch-aware, bukan file terpisah — semua perbedaan
-env adalah data, bukan langkah): push ke `development` men-set `INFISICAL_ENV=staging`, yang
+env adalah data, bukan langkah): push ke `staging` men-set `INFISICAL_ENV=staging`, yang
 memilih `/build` staging (bake `NEXT_PUBLIC_*` staging ke image web) dan `/deploy` staging
 (`DOKPLOY_COMPOSE_ID`-nya menunjuk compose service staging). Tag image: `:staging` (mutable) +
 `sha-<short>-staging` (immutable, untuk pin/rollback via `IMAGE_TAG`); suffix `-staging` wajib
-karena fast-forward merge `development`→`main` menghasilkan sha sama dan image web kedua env
+karena fast-forward merge `staging`→`main` menghasilkan sha sama dan image web kedua env
 berbeda isi bake-nya.
 
-Stack Dokploy kedua memakai `compose.yaml` yang sama dari branch `development`, diisolasi lewat
+Stack Dokploy kedua memakai `compose.yaml` yang sama dari branch `staging`, diisolasi lewat
 env tab: `AQSHA_PROJECT_NAME=aqsha-staging` (prefix semua volume + network), `POSTGRES_HOST_PORT=5436`,
 `IMAGE_TAG=staging`, bootstrap `INFISICAL_ENV=staging` + creds `dokploy-staging`. Domain:
 `staging.aqshara.com` / `api.staging.aqshara.com` / `assets.staging.aqshara.com`. Isi env `staging`

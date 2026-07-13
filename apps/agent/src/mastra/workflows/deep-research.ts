@@ -39,6 +39,7 @@ import {
 } from "../lib/ask-questions-schema";
 import { deepWriter } from "../agents/deep-writer";
 import { getServiceDb } from "../lib/db";
+import { logOps } from "../lib/observability-log";
 import { runDeepSubagentTask } from "./deep-tasks";
 import { inlineSkillInstructions } from "../skills";
 import {
@@ -1843,6 +1844,14 @@ const persistReportStep = createStep({
             }
           : {}),
       },
+    });
+    // Sentry Logs (lifecycle terpilih): bukti satu /deep tuntas + jumlah sitasi, dikorelasikan ke
+    // token/biaya run yang sama di Langfuse (deepRunId). Trace tetap milik Langfuse/Mastra.
+    logOps("info", "deep_run_completed", {
+      deepRunId: runId,
+      agentKind: inputData.agentKind,
+      citationCount: parseCitationCount(inputData.numberedInventory),
+      analyzedSourceCount: inputData.analyzedSourceCount,
     });
     return {
       status: "completed" as const,

@@ -1,5 +1,12 @@
 # Plan: CI/CD (build off-VPS) + Observability stack production
 
+> **⚠️ SUPERSEDED (2026-07-13).** Bagian **Grafana Alloy (Loki/Mimir/Tempo)** dan **Uptime Kuma** di
+> dokumen ini **tidak lagi aktif** — arsitektur observability dikonsolidasi ke **Sentry-first +
+> Langfuse on-demand**. Grafana Alloy + Uptime Kuma dihapus (code, Compose, env). Keputusan &
+> alasan: `docs/observability-sentry-consolidation-plan.md`. Runbook aktivasi:
+> `docs/observability-cicd-runbook.md`. Dokumen ini disimpan hanya sebagai **catatan historis**
+> (CI/CD + Sentry Fase 1 masih akurat); jangan jadikan instruksi Alloy/Kuma sebagai target aktif.
+
 > Disusun 2026-07-11. Cakupan: **web** (Next.js), **api** (Elysia/Bun), **worker** (BullMQ, reuse
 > image api), **agent** (Mastra/Node) + infra pendukung di VPS Dokploy.
 >

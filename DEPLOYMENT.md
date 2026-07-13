@@ -52,7 +52,7 @@ INFISICAL_UNIVERSAL_AUTH_CLIENT_ID=   INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET=
 INFISICAL_PROJECT_ID=   INFISICAL_API_URL=https://secrets.aqshara.com   INFISICAL_ENV=prod
 # A2 — infra creds for the stock images (must match what /app references)
 POSTGRES_PASSWORD=   REDIS_PASSWORD=   MINIO_ROOT_USER=   MINIO_ROOT_PASSWORD=
-# A3/A4 (optional) — IMAGE_TAG, COMPOSE_PROFILES, GRAFANA_CLOUD_* (only if observability)
+# A3 (optional) — IMAGE_TAG (pin/rollback to a sha-<short>)
 ```
 
 Everything else — `DATABASE_URL`/`REDIS_URL`/`S3_*` (fixed internal wiring, stored in `/app` as
@@ -95,13 +95,20 @@ migration. Equivalent fallback inside the running api container: `bun run db:mig
 
 ## Step 6 — MinIO bucket CORS
 
-Browser presigned upload/download is cross-origin (`<domain>` → `assets.<domain>`). Allow it on
-the bucket (Dokploy terminal on `minio`, or any `mc` client):
+Browser presigned upload/download is cross-origin (`<domain>` → `assets.<domain>`). **No action
+needed by default**: MinIO ships with global CORS open to all origins
+(`MINIO_API_CORS_ALLOW_ORIGIN=*`), so presigned PUT/GET from the browser already works. Verify:
 
 ```bash
-mc alias set local http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
-mc cors set local/aqsha <(echo '{"CORSRules":[{"AllowedOrigins":["https://<domain>"],"AllowedMethods":["GET","PUT","HEAD"],"AllowedHeaders":["*"],"ExposeHeaders":["ETag"]}]}')
+curl -s -D- -o /dev/null -X OPTIONS -H "Origin: https://<domain>" \
+  -H "Access-Control-Request-Method: PUT" https://assets.<domain>/aqsha/x | grep -i access-control
+# expect: 204 + access-control-allow-origin echoing the Origin
 ```
+
+To *restrict* CORS to the app origin only, set `MINIO_API_CORS_ALLOW_ORIGIN=https://<domain>` on
+the `minio` service env (Dokploy tab) and restart. (`mc cors set` per-bucket needs a newer MinIO
+server release than the pinned image and fails with "functionality that is not implemented" — use
+the env var instead.)
 
 The bucket stays private (`minio-init` runs `mc anonymous set none`); access is via signed URLs only.
 
@@ -120,9 +127,9 @@ The bucket stays private (`minio-init` runs `mc anonymous set none`); access is 
 ## Observability & CI/CD — full activation runbook
 
 The sections below are quick reference. For the **step-by-step go-live** (owner prerequisites, exact
-env per pillar, verification checklists, troubleshooting) across CI/CD + Sentry + Grafana Cloud +
-Uptime Kuma + Langfuse, see **`docs/observability-cicd-runbook.md`** (design rationale:
-`docs/observability-cicd-plan.md`).
+env per pillar, verification checklists, troubleshooting) across CI/CD + Sentry (errors · logs ·
+uptime · cron) + Langfuse on-demand, see **`docs/observability-cicd-runbook.md`** (design rationale +
+migration off Grafana/Kuma: `docs/observability-sentry-consolidation-plan.md`).
 
 ## Observability (Langfuse) — optional
 
@@ -157,12 +164,15 @@ Traefik subdomain or keep it Tailscale-only. After first traces arrive, register
 
 Builds run **off the VPS**. `.github/workflows/` drives it:
 
-- **`ci.yml`** (PRs into `main` or `development`): typecheck + lint + full test suite against
-  ephemeral Postgres(pgvector)+Redis service containers. The gate that says "this is green".
-- **`deploy.yml`** (push to `main` → **prod**, push to `development` → **staging**): re-runs the
+Branch flow: feature branches → `development` (integration + local test, **no deploy**) →
+`staging` (deploys the staging stack) → `main` (deploys prod).
+
+- **`ci.yml`** (PRs into `main`, `staging`, or `development`): typecheck + lint + full test suite
+  against ephemeral Postgres(pgvector)+Redis service containers. The gate that says "this is green".
+- **`deploy.yml`** (push to `main` → **prod**, push to `staging` → **staging**): re-runs the
   same gate → builds the 3 images in parallel with `docker buildx` (layer cache `type=gha`,
   per-image scope) → pushes to `ghcr.io/manikandareas/aqsha-{web,api,agent}` — `main` tags
-  `:latest` + `:sha-<short>`, `development` tags `:staging` + `:sha-<short>-staging` — → calls the
+  `:latest` + `:sha-<short>`, `staging` tags `:staging` + `:sha-<short>-staging` — → calls the
   Dokploy API (`POST /api/compose.deploy`) with that env's compose id so the right stack pulls its
   mutable tag and restarts. The Infisical env-slug (`prod`|`staging`, from the branch) selects both
   the `/build` values baked into the web image and the `/deploy` target.
@@ -202,12 +212,13 @@ override. See `docs/infisical-secrets-strategy.md` → "Local / emergency full-s
 ## Staging
 
 Staging is a **second Dokploy Compose service on the same VPS**, running the same `compose.yaml`
-from branch **`development`**, fully isolated from prod (own Postgres/Redis/MinIO volumes, own
-domains, own Infisical env). Every push to `development` deploys it automatically (see CI/CD above).
+from branch **`staging`**, fully isolated from prod (own Postgres/Redis/MinIO volumes, own
+domains, own Infisical env). Every push to `staging` deploys it automatically (see CI/CD above);
+promote by merging `development` → `staging` once integration testing passes.
 
 Create it like Steps 1–8 with these deltas:
 
-- **Step 1 (Compose app)**: branch `development` instead of `main`; same `compose.yaml` path.
+- **Step 1 (Compose app)**: branch `staging` instead of `main`; same `compose.yaml` path.
 - **Step 2 (Environment tab)** — same Bagian A shape, different values:
 
   ```dotenv
@@ -220,8 +231,8 @@ Create it like Steps 1–8 with these deltas:
   AQSHA_PROJECT_NAME=aqsha-staging   # prefixes volumes + network → nothing shared with prod
   POSTGRES_HOST_PORT=5436            # 5435 is taken by the prod stack
   IMAGE_TAG=staging                  # rollback: sha-<short>-staging
-  # Do NOT set COMPOSE_PROFILES — staging skips the alloy collector (prod's alloy already
-  # collects all containers on the host).
+  # Sentry (errors/logs/uptime) is env-gated by the DSNs in /app; staging uses SENTRY_ENVIRONMENT=staging
+  # and its own uptime monitors at lower severity (see docs/observability-cicd-runbook.md).
   ```
 
 - **Step 3 (Domains)**: `staging.<domain>` → web:3000, `api.staging.<domain>` → api:3001,
@@ -262,68 +273,56 @@ see the CI prerequisites above). Session Replay is off and tracing defaults to 0
 to protect the free-tier quota. Verify by throwing a test error per runtime and confirming it lands
 in the right project, symbolicated, tagged with the commit `release`.
 
-## Observability (logs / metrics / traces — Grafana Cloud) — optional
+## Observability (Sentry-first + Langfuse on-demand)
 
-Errors go to Sentry; **logs, host/container metrics, and agent traces** go to **Grafana Cloud**
-(free tier: 50 GB logs + 50 GB traces + 10k metric series, 14-day retention) through one collector,
-**Grafana Alloy**, defined in `compose.yaml` behind the **`observability` profile**. With the
-profile off, Alloy doesn't run (zero overhead); the rest of the stack is unchanged (pino already
-writes NDJSON to stdout, and the agent only emits OTLP when told to).
+**Sentry is the daily incident console** — errors, selected structured logs, uptime, and cron
+monitoring, all in one place. **Langfuse is the specialist tool** for LLM trace/token/cost/eval and
+is opened only when analysing agent behaviour or spend, not as an alert inbox. Rationale and the full
+runbook: `docs/observability-cicd-runbook.md`.
 
-What Alloy collects (config: `infra/alloy/config.alloy`):
+What each signal owns:
 
-- **Logs** — every stack container's stdout/stderr → Loki, labelled `service` + `compose_project`,
-  with pino `level` lifted to a label (requestId stays a searchable field, not a high-cardinality
-  label). Only `aqsha` containers are shipped (other Dokploy projects on the VPS are filtered out).
-- **Metrics** — host CPU/RAM/disk (`node`) + per-container (`cAdvisor`) → Prometheus/Mimir, scraped
-  every 60s to stay under the free-tier series budget.
-- **Traces** — the agent pushes OTLP spans (Mastra AI tracing, one trace per `/deep` run / chat
-  turn) to `http://alloy:4318/v1/traces`; Alloy forwards them to Tempo. Correlate to logs by
-  traceId. (API traces stay deferred — Bun's OTel SDK isn't first-class yet; Sentry + logs cover it.)
+- **Errors** (web / api / worker / agent) → **Sentry**, tagged `release` (= commit) + `environment`
+  + `service`/`process`. See "Sentry" above for enabling the three DSNs.
+- **Selected structured logs** → **Sentry Logs**, enabled automatically when a DSN is present. api +
+  worker bridge chosen Pino records (all `warn`/`error` + allow-listed `notable` info such as
+  `api_started`, `workers_started`, `feed_hydration_cycle_fanout`) through the facade in
+  `apps/api/src/lib/log.ts`; the agent sends selected lifecycle logs via `logOps`. Access-log volume
+  and `debug`/`trace` never leave stdout. Attributes are an allow-list of low-cardinality fields
+  (`requestId`, `queue`, `jobId`, `status`, …) with secret/PII redaction; full stdout stays readable
+  via `docker logs`/Dokploy.
+- **Cron monitoring** → the worker wraps the repeatable `feed-hydration-cycle` in `Sentry.withMonitor`
+  (crontab `0 */3 * * *`), so Sentry alerts if a cycle **fails to run**, not only if it errors while
+  running. The monitor is upserted automatically on the first check-in.
+- **LLM trace / token / cost / eval** → **Langfuse** only (see below). Not duplicated into Sentry
+  tracing; server `tracesSampleRate` stays low/off and the agent's stays `0`.
+- **Container stdout** (Postgres/Redis/MinIO and the apps) → `docker logs`/Dokploy as a short-lived
+  operational fallback; not shipped anywhere.
+- **Host disk/RAM/container-restart** → the VPS provider / Dokploy threshold alerts (point them at the
+  same notification channel). There is no time-series metrics store after Grafana was removed.
 
-**Enable it:**
-
-1. Create a **Grafana Cloud** account (free). From **Connections** copy the Loki push URL + user,
-   the Prometheus remote-write URL + user, and the OTLP endpoint + user; create **one** Cloud
-   Access Policy **token** with `logs:write`, `metrics:write`, `traces:write`.
-2. In the Dokploy **Environment** tab (stock `alloy` image, read at compose parse time) set the
-   `GRAFANA_CLOUD_*` values and turn the collector on with `COMPOSE_PROFILES=observability`
-   (`.env.example` → Bagian A4). Point the agent at it with
-   `AQSHA_OTLP_TRACES_ENDPOINT=http://alloy:4318/v1/traces` in **Infisical `/app`** (Bagian D10). Redeploy.
-3. Verify: `docker compose --profile observability ps` shows `alloy` up; Grafana Cloud → Logs shows
-   streams for `service=api|web|agent|…`; run a `/deep` and a trace appears in Tempo.
-
-> Fill **all three** endpoints together — they come from the one account, and the `observability`
-> profile is all-or-nothing (an empty exporter endpoint can crash-loop Alloy). Leave
-> `AQSHA_OTLP_TRACES_ENDPOINT` empty unless the profile is on, or the agent dials a collector that
-> isn't there. RAM cost: Alloy ~150–300 MB. Redaction: pino already redacts secrets; Alloy adds
-> only container metadata as labels, never log contents.
->
 > **Master kill-switch:** set `AQSHA_OBSERVABILITY=off` in Infisical `/app` to silence **all** agent
-> trace exporters at once (Mastra storage traces + Langfuse + OTLP), without unpicking individual
-> keys/endpoints. Empty/unset = on (default). Injected into the agent by the entrypoint (`infisical run`).
+> Mastra exporters at once (storage traces + Langfuse), without unpicking individual keys. Empty/unset
+> = on (default). It does **not** touch Sentry (error tracking is governed by the DSNs and stays on).
 
-## Uptime monitoring (Uptime Kuma) — optional
+## Uptime monitoring (Sentry Uptime)
 
-Run **Uptime Kuma** as a **separate** Dokploy Compose service (`infra/compose.uptime.yaml`), not
-part of the app stack, so app redeploys never take the monitor down. It joins the app stack's
-network (`aqsha_default`) so it can also probe internal-only services (the agent has no domain).
+Uptime lives in **Sentry Uptime** alongside errors — one console, one notification channel. Use the
+existing endpoints:
 
-1. Dokploy → **Create Service → Compose** → `infra/compose.uptime.yaml`. **Domains** tab: add
-   `status.<domain>` (or `uptime.<domain>`) → container port **3001** (HTTPS + Let's Encrypt).
-2. First boot: open the UI, create the admin user, add a **notification** (Telegram/Discord), then
-   monitors:
-   - `https://<domain>` (web) + a keyword check on the landing page
-   - `https://api.<domain>/ping` (api)
-   - `https://assets.<domain>/minio/health/live` (MinIO)
-   - `http://agent:4317/` (agent, internal — works via the network join)
-   - your `LANGFUSE_BASE_URL` (if Langfuse runs)
-3. Optional: expose `status.<domain>` as a public **status page** from the Kuma UI.
+- `https://aqshara.com` — web availability (add a body/keyword check on the landing page).
+- `https://api.aqshara.com/health/ready` — API **plus** its dependencies (Postgres + Redis + object
+  storage), because `/health/ready` fails when any of them is down. Do **not** use `/ping` as the
+  primary readiness check — it deliberately skips dependencies.
 
-> If Dokploy names the compose project something other than `aqsha`, update the external network in
-> `infra/compose.uptime.yaml` (`aqsha_default` → `<project>_default`; check `docker network ls`).
-> RAM cost: ~100 MB. Kuma 1.x has no declarative config — monitors live in the UI (backed by its
-> own `uptime_kuma_data` volume, so back that up with the rest).
+Set both up as production monitors in the Sentry UI (Alerts → Uptime). If the plan allows only one,
+prioritise `/health/ready`. **Staging** uses separate monitors with lower notification severity so it
+never pages production on-call. The agent has no public domain and is **not** exposed just for a
+health check — it's covered by Dokploy container state, proxy errors from web, and its boot/unhandled
+errors in Sentry.
+
+> Route every Sentry alert (new/regressed error, error spike, terminal BullMQ failure, readiness
+> down, quota 70%/90%) to the **same** channel. Don't mirror app alerts into Langfuse.
 
 ## Updating
 
