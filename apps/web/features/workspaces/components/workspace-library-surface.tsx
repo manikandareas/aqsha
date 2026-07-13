@@ -8,7 +8,9 @@ import {
   parseAsStringLiteral,
   useQueryStates,
 } from "nuqs";
+import { toast } from "sonner";
 import { toArtifactId, toWorkspaceFolderId, toWorkspaceId } from "@/lib/convex-refs";
+import { useCreateCitationFromArtifact } from "@/features/citations/api";
 import type { WorkspaceLibraryData } from "../api/use-workspaces-data";
 import type { useWorkspaceLibraryDialogState } from "../hooks/use-workspace-library-dialogs";
 import {
@@ -75,6 +77,7 @@ export function WorkspaceLibrarySurface({
   showCreateActions,
   showWorkspaceSettings,
   variant,
+  onCitationAdded,
 }: {
   workspaceId: string;
   workspaceName: string;
@@ -93,8 +96,11 @@ export function WorkspaceLibrarySurface({
   showCreateActions?: boolean;
   showWorkspaceSettings?: boolean;
   variant?: "page" | "panel";
+  /** Fase 2 — reveal citation baru (consumer yang punya panel provider, mis. workspace detail). */
+  onCitationAdded?: (citationId: string) => void;
 }) {
   const router = useRouter();
+  const addToCitations = useCreateCitationFromArtifact(workspaceId);
   const [libraryControls, setLibraryControls] = useQueryStates(
     workspaceLibraryQueryParsers,
     { history: "replace" },
@@ -158,6 +164,19 @@ export function WorkspaceLibrarySurface({
         contextCount={contextCount}
         onOpenArtifact={(artifactId) =>
           router.push(`/app/workspaces/${workspaceId}/artifacts/${artifactId}`)
+        }
+        onAddToCitations={(artifact) =>
+          addToCitations.mutate(
+            { artifactId: artifact._id },
+            {
+              onSuccess: (result) => {
+                toast.success(
+                  result.created ? "Ditambahkan ke Sitasi" : "Sudah ada di Sitasi",
+                );
+                onCitationAdded?.(result.citation.id);
+              },
+            },
+          )
         }
         onMoveArtifact={async (artifactId, target) => {
           await libraryData.moveArtifact({

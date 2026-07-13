@@ -28,6 +28,7 @@ export default defineConfig({
     "src/context.service.ts",
     "src/agentPreferences.service.ts",
     "src/analysis/index.ts",
+    "src/citations/index.ts",
   ],
   outDir: "dist",
   format: ["esm"],

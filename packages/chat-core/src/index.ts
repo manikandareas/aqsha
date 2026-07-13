@@ -822,6 +822,10 @@ export type ContextRef =
   // baca paper/berita. Hydrate menariknya dari cache OpenAlex / feed (lihat ContextService).
   | { kind: "explore-paper"; paperKey: string; label: string }
   | { kind: "news"; feedItemId: string; label: string }
+  // Referensi dari Citation Library workspace (tab Sitasi). Menyemat satu citation
+  // (metadata terstruktur saja — bukan file/token) supaya agen bisa membacanya via
+  // get_workspace_citation. Butuh workspaceId + citationId untuk validasi owner saat hydrate.
+  | { kind: "workspace-citation"; workspaceId: string; citationId: string; label: string }
   // Pilihan blok di editor BlockNote (tombol "Tanya Astra" di Formatting Toolbar). Menyemat
   // blok spesifik sebuah artifact markdown + cuplikan teksnya supaya agen tahu bagian persis
   // yang dimaksud (baca via get_render_payload). Mengedit bagian = lewat AI editor native di dokumen.
@@ -851,6 +855,8 @@ export function contextRefKey(ref: ContextRef): string {
       return `epk:${ref.paperKey}`;
     case "news":
       return `nid:${ref.feedItemId}`;
+    case "workspace-citation":
+      return `wcite:${ref.workspaceId}:${ref.citationId}`;
     case "artifact-selection":
       // Key by artifact + blok terurut → pilihan blok yang sama dedupe, pilihan berbeda distinct.
       return `asel:${ref.artifactId}:${[...ref.blockIds].sort().join(",")}`;
@@ -862,17 +868,21 @@ export function contextRefsSignature(refs: ContextRef[]): string {
 }
 
 /** Split refs into the id lists the hydrate endpoint expects. */
+export type ContextCitation = { workspaceId: string; citationId: string };
+
 export function splitContextRefs(refs: ContextRef[]): {
   workspaceIds: string[];
   artifactIds: string[];
   paperKeys: string[];
   feedItemIds: string[];
+  workspaceCitations: ContextCitation[];
   selections: ContextSelection[];
 } {
   const workspaceIds: string[] = [];
   const artifactIds: string[] = [];
   const paperKeys: string[] = [];
   const feedItemIds: string[] = [];
+  const workspaceCitations: ContextCitation[] = [];
   const selections: ContextSelection[] = [];
   for (const ref of refs) {
     switch (ref.kind) {
@@ -888,6 +898,9 @@ export function splitContextRefs(refs: ContextRef[]): {
       case "news":
         feedItemIds.push(ref.feedItemId);
         break;
+      case "workspace-citation":
+        workspaceCitations.push({ workspaceId: ref.workspaceId, citationId: ref.citationId });
+        break;
       case "artifact-selection":
         selections.push({
           artifactId: ref.artifactId,
@@ -902,7 +915,7 @@ export function splitContextRefs(refs: ContextRef[]): {
       }
     }
   }
-  return { workspaceIds, artifactIds, paperKeys, feedItemIds, selections };
+  return { workspaceIds, artifactIds, paperKeys, feedItemIds, workspaceCitations, selections };
 }
 
 export function countContextRefs(refs: ContextRef[]): {
@@ -910,12 +923,14 @@ export function countContextRefs(refs: ContextRef[]): {
   papers: number;
   explorePapers: number;
   news: number;
+  workspaceCitations: number;
   selections: number;
 } {
   let workspaces = 0;
   let papers = 0;
   let explorePapers = 0;
   let news = 0;
+  let workspaceCitations = 0;
   let selections = 0;
   for (const ref of refs) {
     switch (ref.kind) {
@@ -931,6 +946,9 @@ export function countContextRefs(refs: ContextRef[]): {
       case "news":
         news += 1;
         break;
+      case "workspace-citation":
+        workspaceCitations += 1;
+        break;
       case "artifact-selection":
         selections += 1;
         break;
@@ -940,7 +958,7 @@ export function countContextRefs(refs: ContextRef[]): {
       }
     }
   }
-  return { workspaces, papers, explorePapers, news, selections };
+  return { workspaces, papers, explorePapers, news, workspaceCitations, selections };
 }
 
 export function buildWorkspaceMentionLabel(workspaceName: string): string {
@@ -958,6 +976,11 @@ export function buildExternalPaperMentionLabel(paperTitle: string): string {
 
 /** Berita Explore — label = judul saja (format sama dgn paper eksternal). */
 export const buildNewsMentionLabel = buildExternalPaperMentionLabel;
+
+/** Label pill referensi dari tab Sitasi. Prefiks `⟢` membedakannya dari pill lain. */
+export function buildWorkspaceCitationMentionLabel(citationTitle: string): string {
+  return `⟢ ${messagePreview(citationTitle, 28)}`;
+}
 
 /**
  * Label pill untuk pilihan blok editor ("Tanya Astra"). Pakai cuplikan teks bila ada

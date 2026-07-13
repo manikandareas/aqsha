@@ -471,7 +471,7 @@ export function Composer({
     }
 
     if (contextRefs.length > 0) {
-      const { workspaceIds, artifactIds, paperKeys, feedItemIds, selections } =
+      const { workspaceIds, artifactIds, paperKeys, feedItemIds, workspaceCitations, selections } =
         splitContextRefs(contextRefs);
       try {
         const hydrated = await hydrate.mutateAsync({
@@ -479,6 +479,7 @@ export function Composer({
           artifactIds,
           paperKeys,
           feedItemIds,
+          workspaceCitations,
           selections,
         });
         if (hydrated.note) parts.push(hydrated.note);

@@ -190,6 +190,7 @@ export function useHydrateContext() {
       artifactIds: string[];
       paperKeys?: string[];
       feedItemIds?: string[];
+      workspaceCitations?: { workspaceId: string; citationId: string }[];
       selections?: { artifactId: string; blockIds: string[]; excerpt: string }[];
     }) => unwrap(await api.threads.context.hydrate.post(input)),
     // C3: hydrate konteks @mention (workspace/paper) → catatan ephemeral. Kegagalan transien

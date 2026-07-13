@@ -104,6 +104,7 @@ export function WorkspaceLibraryBoard({
   onDeleteFolder,
   onRenameArtifact,
   onDeleteArtifact,
+  onAddToCitations,
   onMoveArtifact,
   onMoveArtifactToWorkspace,
   onMoveFolderToWorkspace,
@@ -145,6 +146,7 @@ export function WorkspaceLibraryBoard({
   onDeleteFolder: (folder: WorkspaceFolder) => void;
   onRenameArtifact: (artifact: WorkspaceArtifact) => void;
   onDeleteArtifact: (artifact: WorkspaceArtifact) => void;
+  onAddToCitations?: (artifact: WorkspaceArtifact) => void;
   onMoveArtifact: (artifactId: string, target: string) => Promise<void>;
   onMoveArtifactToWorkspace: (
     artifactId: string,
@@ -394,6 +396,7 @@ export function WorkspaceLibraryBoard({
                   onMoveFolderToWorkspace={onMoveFolderToWorkspace}
                   onRenameArtifact={onRenameArtifact}
                   onDeleteArtifact={onDeleteArtifact}
+                  onAddToCitations={onAddToCitations}
                   onMoveArtifact={onMoveArtifact}
                   onMoveArtifactToWorkspace={onMoveArtifactToWorkspace}
                 />

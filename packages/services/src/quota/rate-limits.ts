@@ -14,7 +14,11 @@ export type RateLimitRule =
   | "chat:send"
   | "account:delete"
   | "security:sessions-revoke"
-  | "explore:search";
+  | "explore:search"
+  | "citations:create"
+  | "citations:import"
+  | "integrations:connect"
+  | "integrations:sync";
 
 const RATE_LIMIT_RULES: Record<RateLimitRule, { points: number; duration: number }> = {
   "workspaces:create": { points: 3, duration: 3600 },
@@ -30,6 +34,14 @@ const RATE_LIMIT_RULES: Record<RateLimitRule, { points: number; duration: number
   // Live search Explore (gratis, tembak OpenAlex/arXiv/Crossref) — 30/menit/user cukup
   // longgar (hasil di-cache Redis) tapi membatasi abuse call eksternal yang tak berbayar.
   "explore:search": { points: 30, duration: 60 },
+  // Create referensi manual/DOI — klik user, bukan throughput; DOI memukul resolver eksternal.
+  "citations:create": { points: 20, duration: 60 },
+  // Import/commit batch .bib/.ris — parse server-side hingga 5.000 record per batch.
+  "citations:import": { points: 5, duration: 60 },
+  // Mulai OAuth connect provider — klik user, bukan throughput.
+  "integrations:connect": { points: 10, duration: 60 },
+  // Preview/commit/refresh sync provider — tembak API eksternal (Mendeley/Zotero).
+  "integrations:sync": { points: 10, duration: 60 },
 };
 
 /** Konfigurasi rule (points/duration) — dipakai `getSendStatus` untuk hitung cooldown. */

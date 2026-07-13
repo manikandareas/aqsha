@@ -204,6 +204,8 @@ export {
   type ChatQueueName,
   FEED_QUEUES,
   type FeedQueueName,
+  INTEGRATION_QUEUES,
+  type IntegrationQueueName,
   type QueueName,
   registerRepeatable,
 } from "./clients/queue";
@@ -222,3 +224,34 @@ export {
   type ExploreProviderStatus,
   type ExploreSearchResponse,
 } from "./explore/model";
+
+// Citation Manager (Fase 1) — Citation Library workspace-scoped + import .bib/.ris +
+// render CSL multi-style (lihat docs/adr-citation-csl-engine.md).
+export {
+  CITATION_EXPORT_FORMATS,
+  CITATION_STYLES,
+  type CitationDetail,
+  type CitationExportFormat,
+  CitationImportService,
+  type CitationListItem,
+  CitationService,
+  type CitationSettingsView,
+  formatAuthorDisplay,
+  type ImportCommitResult,
+  type ImportDuplicatePolicy,
+  type ImportPreviewResult,
+  MAX_IMPORT_FILE_BYTES,
+  type ManualCitationInput,
+} from "./citations";
+
+// Citation Manager (Fase 5) — integrasi provider referensi (Mendeley OAuth / Zotero).
+// Koneksi account-level terenkripsi; penarikan data per-workspace via CitationSyncService.
+export {
+  CitationSyncService,
+  type IntegrationAdapter,
+  IntegrationService,
+  type IntegrationStatusView,
+  isIntegrationCryptoConfigured,
+  KNOWN_PROVIDERS,
+  type ProviderFolder,
+} from "./integrations";

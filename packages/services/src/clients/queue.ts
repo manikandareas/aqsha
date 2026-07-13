@@ -32,11 +32,22 @@ export const ACCOUNT_QUEUES = {
   accountDeletion: "account-deletion",
 } as const;
 
+/** Queue integrasi (Fase 5) — refresh koneksi provider referensi (opt-in periodik + sync-now). */
+export const INTEGRATION_QUEUES = {
+  integrationSync: "integration-sync",
+} as const;
+
 export type ArtifactQueueName = (typeof ARTIFACT_QUEUES)[keyof typeof ARTIFACT_QUEUES];
 export type FeedQueueName = (typeof FEED_QUEUES)[keyof typeof FEED_QUEUES];
 export type ChatQueueName = (typeof CHAT_QUEUES)[keyof typeof CHAT_QUEUES];
 export type AccountQueueName = (typeof ACCOUNT_QUEUES)[keyof typeof ACCOUNT_QUEUES];
-export type QueueName = ArtifactQueueName | FeedQueueName | ChatQueueName | AccountQueueName;
+export type IntegrationQueueName = (typeof INTEGRATION_QUEUES)[keyof typeof INTEGRATION_QUEUES];
+export type QueueName =
+  | ArtifactQueueName
+  | FeedQueueName
+  | ChatQueueName
+  | AccountQueueName
+  | IntegrationQueueName;
 
 let connection: ConnectionOptions | null = null;
 const queues = new Map<QueueName, Queue>();

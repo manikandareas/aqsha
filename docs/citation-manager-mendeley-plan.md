@@ -1,152 +1,277 @@
-# Rencana: Workspace Citation Manager + Mendeley
+# Rencana detail: Workspace Citation Manager + Integrasi (Mendeley/Zotero)
 
-> Status: **DRAFT PLAN** — belum diimplementasikan. Dibuat 2026-07-10.
+> Status: **FASE 0–6 IMPLEMENTED (kode)** (2026-07-11, branch `feat/citation-manager`, uncommitted) — Fase 5 (Mendeley OAuth) + Fase 6 (Zotero API key) selesai di kode; E2E connect provider menunggu env OWNER. Feature flag `workspace_citations` **DIHAPUS** (Citation Manager kini default aktif untuk semua user). Revisi 2026-07-11 (menggantikan draft 2026-07-10).
 > Bahasa: Indonesia (istilah teknis tetap English), sesuai `AGENTS.md`.
+
+## Progress implementasi (2026-07-11)
+
+| Fase | Status | Catatan |
+|---|---|---|
+| 0 — Spike + ADR | ✅ selesai | ADR di `docs/adr-citation-csl-engine.md`; fixture Mendeley+Zotero di `packages/services/test/fixtures/citations/`; render 4 style jadi snapshot test. |
+| 1 — Core library + tab Sitasi | ✅ selesai | Migration `0031_workspace_citations` applied DEV; lint/typecheck/test/build hijau. Follow-up 2026-07-11: feature flag `workspace_citations` DIPASANG, mode seleksi + bulk bar (tag/export/gabung/hapus), dialog "Kelola duplikat" (endpoint groups + mergeMany) selesai. |
+| 2 — Artifact bridge | ✅ selesai | 2026-07-11. `createFromArtifact` (idempotent + dedupe-adopt) + `resolveFromDoi`; endpoint `from-artifact`/`:id/resolve`; "Tambahkan ke Sitasi" di kartu board (context menu, gate `scholarly_paper`) + header artifact detail; provenance detail (linked artifact buka reader + lepas tautan). lint/typecheck/test (db 27 · services 301 · api 98, 0 fail)/build hijau. |
+| 3 — BlockNote | ✅ selesai | 2026-07-11. Migration `0032_big_corsair` (`document_citation_usages`) applied DEV. Inline node `citation` + block `bibliography` (schema `aqshaBlockNoteSchema`), picker `/sitasi` + `/daftar pustaka`, render dokumen reaktif (in-text cluster + bibliography used-in-doc via citeproc `rebuildProcessorState`/`makeBibliography`), rekonsiliasi usage transaksional di `updateDocument` (diverifikasi DB langsung). |
+| 4 — Astra | ✅ selesai | 2026-07-11. `ContextRef` kind `workspace-citation` (chat-core) + hydration `ContextService` + lane `workspaceCitations` di `/threads/context/hydrate`; tool read-only `search_workspace_citations`/`get_workspace_citation` (subpath `@aqsha/services/citations`); chip "Tambahkan ke chat" dari detail sitasi via channel `selectionRefs`. Suggestion card + suggest-tool insert-ke-dokumen DITUNDA (insert tetap aksi user via /sitasi). |
+| 5 — Settings → Integrasi + Mendeley | ✅ selesai (kode) | 2026-07-11. Migration `0033_integration_connections` (applied DEV). Skema generik multi-provider + repo; helper AES-256-GCM (`AQSHA_INTEGRATION_ENC_KEY`) + HMAC state OAuth; `IntegrationAdapter` interface + Mendeley adapter (authorize/exchange/refresh/profile/folders/pullDocuments+Link pagination); `IntegrationService` (listStatuses/startConnect/completeOAuth/disconnect/getValidCredentials/listFolders/pullDocuments/refreshConnection) + `CitationSyncService.previewFolder` (reuse `stageImportBatch`); `CitationImportService.commit` kini provider-aware (idempoten via externalId). Route `routes/integrations.ts` (status/connect/callback-302/refresh/disconnect/folders/sync preview+commit) + worker `integration-sync` (refresh opt-in). Web: menu Settings → Integrasi, `IntegrationsPage` (kartu Mendeley connect/disconnect/sync, Zotero "Segera"), item "Tarik dari Mendeley/Zotero" di tab Sitasi → `ProviderSyncWizard` (reuse `PreviewStep`), footnote empty-state jadi tautan. rate-limit `integrations:connect`/`integrations:sync`. lint/typecheck (7 workspace)/build hijau; unit test crypto+state 8 pass. **E2E connect Mendeley BELUM** (butuh app registration + env OWNER). |
+| 6 — Zotero | ✅ selesai (kode) | 2026-07-11. Drop-in di interface generik: `IntegrationAdapter` diberi diskriminan `authMode` (`oauth`/`api_key`) + `connectWithApiKey`; `zotero.adapter.ts` (Web API v3, header `Zotero-API-Key`, validasi `/keys/<key>`, folders `/users/<id>/collections`, pull `/users/<id>/items/top?include=csljson` native CSL-JSON, paginasi Link rel=next, `ensureFresh` no-op). Registry + `IntegrationService.connectWithApiKey` (reuse `persistConnection`) + guard `startConnect`/`completeOAuth` ke oauth. Route `POST /integrations/:provider/key`. Web: `authMode` di status view + `ApiKeyConnectDialog` (API key + user id opsional) + `useConnectApiKeyIntegration`; `ProviderSyncWizard` + empty-state footnote sudah generik → "Tarik dari Zotero" jalan otomatis begitu terhubung. Unit test adapter 10 (fetch-mock: connect/validasi/folders/pull/skip non-referensi). lint/typecheck (7 workspace)/services test (313 pass)/build hijau. **E2E connect Zotero BELUM** (butuh API key user riil). |
+
+**Feature flag `workspace_citations` DIHAPUS (2026-07-11):** default aktif untuk semua user, tanpa gate. Dihapus: `apps/web/lib/feature-flags.ts`, `features/citations/feature.ts` (`useWorkspaceCitationsEnabled`), gate di `workspace-side-panel.tsx`/`workspace-library-surface.tsx`/`artifact-detail-view.tsx`, entri `.env.example`.
+
+**Gotcha implementasi Fase 3–4 (untuk fase berikutnya):**
+
+- Render dokumen pakai citeproc engine langsung via `plugins.config.get("@csl").engine(items, style, "en-US", "text")` → `rebuildProcessorState(clusters)` (in-text, numbering IEEE/Vancouver konsisten karena diproses berurutan) + `makeBibliography()` (used-in-document, urutan per-style). BUKAN `Cite.format("citation")` per-cluster (O(n²) + tak sinkron numbering).
+- Store render sitasi DILEKATKAN ke instance editor (`Symbol.for` + `props.editor`), BUKAN React context — komponen node BlockNote di-render lewat portal node-view yang tak selalu menembus context; `useSyncExternalStore` WAJIB kirim `getServerSnapshot` (exporter markdown me-render node statis).
+- `createReactBlockSpec` (0.51.4) mengembalikan CREATOR → pakai `bibliography: bibliographyBlockSpec()` (dipanggil); `createReactInlineContentSpec` mengembalikan spec langsung → `citation: citationInlineSpec` (tanpa dipanggil). `BlockNoteSchema.create` TIDAK auto-merge default → wajib spread `...defaultBlockSpecs`/`...defaultInlineContentSpecs`.
+- Hook di prop `render` spec melanggar rules-of-hooks (nama `render` lowercase) → ekstrak komponen bernama Uppercase (`CitationInlineView`/`BibliographyBlockView`).
+- Tool agent butuh subpath `@aqsha/services/citations` (exports + entri tsup ditambah) + `bun run build:dist` sebelum runtime (agent = node condition → dist). `workspaceId` bukan konteks ambient tool → jadi param input (dari catatan konteks hydrate).
+- Reconciliation `document_citation_usages` jalan di SETIAP save `updateDocument` (delete-all + insert per dokumen); citationId yang tak ada di workspace di-skip (FK aman), missing ditampilkan editor dari `renderDocument.missingIds`.
+
+**Keputusan ADR Fase 0 (mengunci open question #1, #2, #5):**
+
+- Parser: `@citation-js/core` + `plugin-bibtex` + `plugin-ris` v0.8.1 (MIT). RIS TIDAK ditulis sendiri.
+- CSL engine: `citeproc` via `@citation-js/plugin-csl`, dual-license → **dielek CPAL-1.0** (bukan AGPL); server-side only; kewajiban attribution notice saat rilis publik.
+- **`vancouver.csl` sudah tidak ada di repo resmi CSL** — kanonisnya `nlm-citation-sequence.csl`; itu yang di-vendor sebagai style id `vancouver`. Empat style + locale en-US di-vendor sebagai modul TS string di `packages/services/src/citations/styles/` (aman untuk tsup dist).
+- Style id internal: `apa-7` / `ieee` / `vancouver` / `chicago-author-date` (bukan `apa-7th-edition` seperti draft).
+- EndNote XML: di luar scope v1.
+
+**Deviasi/penyederhanaan Fase 1 yang disengaja (follow-up):**
+
+1. Web 1a + 1b dikerjakan sekaligus (bukan dua PR) — tab Sitasi langsung aktif, tanpa fase `disabled hint:"segera"`.
+2. ✅ (RESOLVED 2026-07-11) Feature flag `workspace_citations` DIPASANG: `apps/web/lib/feature-flags.ts` (env `NEXT_PUBLIC_FEATURE_WORKSPACE_CITATIONS`) OR `isAdmin`, hook `useWorkspaceCitationsEnabled` di `features/citations/feature.ts`; gate TABS di `workspace-side-panel.tsx` (off → strip kolaps ke "Chat", deep-link `?panel=cite` jatuh ke chat).
+3. ✅ (RESOLVED 2026-07-11) UI dibuat: **mode seleksi + bulk bar** (tag/export terpilih/gabung/hapus massal), item **"Kelola duplikat"** di menu More (dialog grup canonical-key + `mergeMany`). Endpoint baru: `GET duplicates`, `POST merge` (mergeMany), `POST bulk-tag`, `POST bulk-delete`. `duplicates/merge` pairwise lama tetap ada.
+4. Badge document type di baris list diganti dot status + kolom source (density `@3xl:` tetap sesuai plan); provenance batch import di detail belum menampilkan nama file batch.
+5. `workspace-chat-side-panel.tsx` **tidak dihapus** (draft §11 bilang "gantikan") — masih dipakai `artifact-reader-page-shell.tsx` dengan `chrome="frame"`; workspace detail memakainya via `workspace-side-panel.tsx` dengan `chrome="content"`.
+6. Migration PROD `0031` belum dijalankan (menunggu keputusan rilis).
+
+**Gotcha implementasi (untuk fase berikutnya):**
+
+- `@citation-js/*` tanpa `.d.ts` → ambient decl `packages/services/src/citations/citation-js.d.ts` + triple-slash reference di file pengimpor (tsc `apps/api` tidak menyertakan ambient services otomatis).
+- Config `plugin-csl` 0.8.x = `styles`/`locales` (BUKAN `templates`).
+- Split BibTeX per-entry pakai regex awal-baris `@type{` — depth-scan brace ditolak karena entry ber-brace tak seimbang menelan entry berikutnya.
+- `POST imports/preview` = **multipart `t.File` pertama di repo** (preseden lain presigned S3; file teks ≤10 MB tidak butuh presign). Route export mengembalikan `Response` + `content-disposition` — di Eden, `data` bisa string ATAU `Response` (handle keduanya di FE).
+- Staging preview→commit hidup di `citation_import_batches.records_json`, dikosongkan saat commit (raw file tidak dipertahankan).
+
+**Perubahan besar dari draft v1:**
+
+1. **UI Citation Manager pindah dari segmented view di main area ke tab pada panel kanan workspace detail** (`Chat · Sitasi`), mengikuti pola tabbed side-panel yang sudah live di thread shell home (`PanelTabsHeader` + nuqs `panel`). Board library tetap satu-satunya isi main area — konsisten dengan filosofi board "unified, bukan tab" yang tertulis di `workspace-library-board.tsx`.
+2. **Koneksi provider (OAuth/API key) pindah ke halaman Settings → Integrasi** (route baru di `SettingsRail`, additive-only). Arsitektur koneksi dibuat **generik multi-provider**: Mendeley (OAuth2) dan Zotero (API key) dari awal skema, bukan tabel khusus Mendeley.
+3. **Semua fase integrasi provider ditaruh paling akhir** (Fase 5–6), setelah core library, artifact bridge, BlockNote, dan Astra stabil. Import-first `.bib`/`.ris` tetap jalur utama v1 — dan ini otomatis melayani pengguna Zotero juga karena Zotero mengekspor BibTeX/RIS/CSL-JSON.
 
 ## 1. Tujuan
 
-Menambahkan **Citation Manager** pada halaman workspace detail Aqsha agar pengguna dapat:
+Menambahkan **Citation Manager** workspace-scoped pada Aqsha agar pengguna dapat:
 
-1. Mengimpor koleksi referensi hasil ekspor Mendeley.
-2. Menyimpan, memeriksa, mencari, memberi tag, dan menghapus duplikat referensi pada scope workspace.
+1. Mengimpor koleksi referensi hasil ekspor Mendeley/Zotero (`.bib`, `.ris`).
+2. Menyimpan, memeriksa, mencari, memberi tag, dan menghapus duplikat referensi pada scope workspace — langsung dari panel kanan halaman workspace detail.
 3. Menyisipkan sitasi stabil ke dokumen BlockNote dan menghasilkan daftar pustaka dari sitasi yang dipakai.
-4. Mengekspor koleksi atau bibliography ke BibTeX/RIS.
-5. Pada fase lanjutan, menghubungkan akun Mendeley melalui OAuth untuk sinkronisasi metadata terkontrol.
+4. Mengekspor koleksi atau bibliography ke BibTeX/RIS/CSL-JSON.
+5. Pada fase akhir, menghubungkan akun Mendeley (OAuth) atau Zotero (API key) melalui **Settings → Integrasi** untuk sinkronisasi metadata satu arah yang terkontrol.
 
-**Bukan tujuan v1:** mengganti Mendeley, menjadikan Mendeley sebagai provider login Aqsha, melakukan mirror dua arah, atau mengunduh semua PDF Mendeley otomatis.
+**Bukan tujuan:** mengganti Mendeley/Zotero, menjadikannya provider login Aqsha, mirror dua arah, atau mengunduh semua PDF otomatis.
 
 ## 2. Keputusan produk yang dikunci
 
 | # | Keputusan | Alasan |
 |---|---|---|
-| 1 | Login Aqsha tetap Clerk. | Koneksi Mendeley adalah integrasi data tambahan, bukan identitas pengguna Aqsha. |
-| 2 | V1 adalah **import-first** (`.bib` dan `.ris`), tanpa OAuth. | Onboarding cepat, tidak ada token eksternal, dan format tersebut didukung oleh alur ekspor/impor Mendeley. |
-| 3 | OAuth Mendeley menjadi fase 4, opt-in. | Perlu aplikasi developer, token encryption, UX consent, sync cursor, dan conflict handling. |
-| 4 | Aqsha menyimpan salinan bibliografi workspace sendiri. | Citation dan bibliography harus tetap bekerja saat koneksi Mendeley putus atau user disconnect. |
-| 5 | PDF Mendeley tidak diimpor otomatis. | Metadata jauh lebih aman dan ringan; file berpotensi memiliki hak akses/lisensi serta ukuran besar. User boleh memilih import file secara eksplisit pada fase lanjutan. |
-| 6 | Citation Library adalah entitas baru, bukan sekadar `artifact_paper_metadata` atau `research_sources`. | Referensi dapat tidak memiliki file Aqsha, satu referensi bisa dipakai oleh banyak dokumen, dan sumber chat bersifat thread/turn-scoped. |
-| 7 | Style default disimpan per workspace; citation dalam dokumen menyimpan `citationId`, bukan teks hasil format. | Pergantian style dapat merender ulang seluruh citation dan bibliography secara aman. |
-| 8 | V1 menyediakan APA 7, IEEE, Vancouver, dan Chicago Author-Date lewat CSL engine. | Keempat style mencakup kebutuhan awal tanpa mengklaim seluruh katalog style Mendeley. |
+| 1 | Login Aqsha tetap Clerk. | Koneksi provider adalah integrasi data, bukan identitas. |
+| 2 | V1 adalah **import-first** (`.bib` dan `.ris`), tanpa OAuth. | Onboarding cepat, tanpa token eksternal; didukung alur ekspor Mendeley DAN Zotero. |
+| 3 | Integrasi provider (OAuth/key) menjadi fase paling akhir, opt-in. | Perlu app registration, token encryption, UX consent, sync cursor, conflict handling. |
+| 4 | Aqsha menyimpan salinan bibliografi workspace sendiri. | Citation dan bibliography tetap bekerja saat koneksi provider putus. |
+| 5 | PDF provider tidak diimpor otomatis. | Metadata lebih aman dan ringan; file punya isu lisensi + ukuran. |
+| 6 | Citation Library adalah entitas baru, bukan `artifact_paper_metadata` atau `research_sources`. | Referensi bisa tanpa file, satu referensi dipakai banyak dokumen, sumber chat thread/turn-scoped. |
+| 7 | Style default per workspace; citation di dokumen menyimpan `citationId`, bukan teks hasil format. | Ganti style me-render ulang seluruh citation/bibliography dengan aman. |
+| 8 | V1: APA 7, IEEE, Vancouver, Chicago Author-Date via CSL engine. | Empat style mencakup kebutuhan awal. |
+| 9 | **Citation Manager hidup di tab panel kanan workspace detail, bukan view main area.** | Main area board sengaja unified; panel kanan sudah punya pola tab + expand 30:70 untuk kebutuhan tabel padat; konsisten dengan thread shell home. |
+| 10 | **Koneksi provider = account-level di Settings → Integrasi; penarikan data = per-workspace dari tab Sitasi.** | Token/key milik akun (satu koneksi dipakai banyak workspace); pemilihan folder/collection dan commit tetap keputusan per-workspace. |
+| 11 | **Skema koneksi generik multi-provider** (`integration_connections` dengan kolom `provider`). | Mendeley dan Zotero berbagi lifecycle yang sama (connect/status/sync/disconnect); menghindari tabel per-provider. |
+| 12 | Sync provider = **satu arah** (provider → Aqsha), preview sebelum commit, reuse UI import batch. | Menghindari overwrite dua arah; satu jalur commit untuk import file dan sync provider. |
 
-## 3. Kondisi repo saat ini
+## 3. Kondisi repo saat plan ditulis (terverifikasi 2026-07-11, SEBELUM implementasi)
 
-### 3.1 Workspace dan artifact
+> Bagian ini snapshot pra-implementasi. Yang sudah berubah oleh Fase 1: panel kanan workspace detail kini **bertab** (`workspace-side-panel.tsx` + `WorkspacePanelProvider`, nuqs `panel`), `chatPanelOpen` lokal dihapus, `CompactThreadChatPanel` punya prop `chrome`, migration terakhir kini `0031`.
 
-- Route workspace detail: `apps/web/app/app/(product)/workspaces/[workspaceId]/page.tsx` → `WorkspaceDetailClient`.
-- Konten utama adalah `WorkspaceLibrarySurface`/`WorkspaceLibraryBoard`; toolbar sudah menangani create document, upload file, save URL, folder, search, filter, dan sort.
-- API workspace artifact sudah ber-owner scope melalui `ArtifactService.list` dan `WorkspaceService.assertWorkspaceOwner`.
-- `artifact_paper_metadata` sudah menyimpan metadata paper workspace: `title`, `abstract`, `doi`, `authors`, `journal`, `publisher`, `publishedYear`, `keywords`, `metadataSource`, dan `sourceUrl`.
-- PDF dan URL akademik telah melalui resolver/enrichment. Ini dapat menjadi kandidat reference yang sudah punya artifact, tetapi belum merupakan Citation Library.
+### 3.1 Halaman workspace detail
 
-### 3.2 Citation yang telah ada
+- Route: `apps/web/app/app/(product)/workspaces/[workspaceId]/page.tsx` → `WorkspaceDetailClient` → `WorkspaceDetailMain` (`apps/web/features/workspaces/components/workspace-detail-client.tsx`).
+- Split main/panel via `DetailSplitLayout` (`apps/web/components/layout/detail-split-layout.tsx`): grid dua track permanen, tween `grid-template-columns` (`PANEL_TRANSITION_MS` 300ms), inline ≥1100px (`PANEL_INLINE_MEDIA_QUERY`), di bawahnya jadi bottom drawer (vaul) via `ResponsiveSidePanel`. Expand 30:70 via `PanelExpandContext`/`PanelExpandButton`.
+- **Panel kanan saat ini TIDAK bertab**: `WorkspaceChatSidePanel` → `CompactThreadChatPanel`, dibungkus `SidePanelFrame` dengan `PanelHeaderBar` berjudul "Chat" + `PanelExpandButton` + `PanelCloseButton`; toolbar in-card `PanelCardToolbar` berisi `ThreadRecentSwitcher` + `ThreadActionsMenu` + new-chat.
+- Open/close panel = **state lokal React** (`chatPanelOpen`), bukan URL.
+- `ComposerMentionsProvider` + `usePanelContextSelection` sudah ter-mount di halaman ini (channel `selectionRefs` untuk chip konteks composer).
+- Main column dan panel column masing-masing unnamed `@container` (`detailSplitMainSurfaceClass`, `sidePanelColumnClass`) — layout internal WAJIB pakai varian `@2xl:/@3xl:/@5xl:`, bukan `sm:/md:/lg:`.
 
-- `packages/services/src/research/references.ts` memformat **`research_sources` per thread** menjadi APA 7, BibTeX, dan RIS.
-- `apps/web/components/ai-elements/inline-citation.tsx` merender nomor sumber `[n]` pada jawaban Astra.
-- `apps/web/features/artifacts/utils/citation.ts` memiliki helper format satu paper untuk UI artifact.
-- Tidak ada endpoint, table, read model, atau UI untuk koleksi sitasi **workspace-scoped**.
+### 3.2 Pola tab panel yang akan direuse (dari thread shell home)
 
-**Konsekuensi:** formatter sumber chat tidak boleh dijadikan source of truth Citation Manager. Keduanya dapat berbagi primitive normalisasi DOI, export, dan CSL renderer setelah diekstrak dengan hati-hati, tetapi lifecycle datanya berbeda.
+- `PanelTabsHeader` + `type PanelTab = { key; label; disabled?; hint? }` di `apps/web/components/layout/side-panel-frame.tsx` — tab strip flush glass bar, roving tabindex, dukung tab `disabled + hint:"segera"`, kolaps ke `PanelTitleLabel` bila ≤1 tab usable. **Sudah ada, belum dipakai workspace detail.**
+- Referensi orkestrasi: `apps/web/features/thread-experience/components/thread-detail-shell.tsx` (deklarasi `tabs[]` inline, `selectTab`, actions = expand+close), `thread-panel-context.tsx` (provider nuqs), `utils/thread-panel-model.ts` (union mode + encode/decode param `panel`, `history: "replace"`).
+- Per-tab content dibungkus `DetailPanelShell` (`detail-panel-chrome.tsx`): `PanelCardToolbar` (title/eyebrow/actions, TANPA border) + body scrollable `panelBodyPaddingClass`.
 
-### 3.3 Editor dokumen
+### 3.3 Board dan toolbar
 
-- Dokumen markdown memakai BlockNote melalui `blocknote-document-editor.tsx` dan dipersist ke `artifact_contents.blocksJson`, `markdown`, serta `plainText`.
-- `artifactId` dan block ID BlockNote stabil, sehingga siap menjadi anchor untuk usage citation.
-- Belum ada inline citation node, bibliography block, atau query citation workspace dari editor.
+- `WorkspaceLibrarySurface` mengelola query nuqs `q` / `type` / `sort` (`history: "replace"`); toolbar `WorkspaceBoardToolbar` (create dropdown, `WorkspaceLibraryControls` search/filter/sort, `PanelOpenButton` chat, menu opsi workspace). Tidak ada segmented view — dan tidak akan ditambah.
+- Empty state pattern: `WorkspaceLibraryEmpty` (badge pill → title+desc → hairline connector → stacked pill actions).
+- Dialog stack: `WorkspaceLibraryDialogsStack` (`NameDialog`, `AddItemDialog`, `ConfirmDialog`) via `useWorkspaceLibraryDialogState`.
 
-## 4. Desain pengalaman pengguna
+### 3.4 Citation yang telah ada
 
-### 4.1 Posisi dalam workspace detail
+- `packages/services/src/research/references.ts` memformat `research_sources` **per thread** ke APA 7/BibTeX/RIS — author ter-cap 3 by design, hanya APA 7. **Tidak boleh jadi engine Citation Manager**; yang direuse: `normalizeDoi` (`packages/services/src/papers/identifiers.ts`) dan pola export.
+- `apps/web/components/ai-elements/inline-citation.tsx` (pill `[n]` jawaban Astra) dan `apps/web/features/artifacts/utils/citation.ts` (helper format satu paper) tetap terpisah lifecycle-nya.
+- `artifact_paper_metadata` (workspace-scoped, `workspaceId` NOT NULL) siap jadi sumber `createFromArtifact` di Fase 2.
 
-Tambahkan segmented view di toolbar workspace:
+### 3.5 Editor dokumen
+
+- BlockNote 0.51.4 (semua paket `@blocknote/*` dipinned versi sama) via `blocknote-document-editor.tsx`; persist ke `artifact_contents.blocksJson/markdown/plainText`. `artifactId` + block ID stabil → siap jadi anchor usage citation. Belum ada inline citation node/bibliography block.
+
+### 3.6 Settings
+
+- Semua route di `apps/web/app/app/settings/*`; nav dideklarasikan di array `settingsMenu` (`apps/web/features/settings/lib/settings-menu.ts`) dengan `{ key, href, label, description, group: "Pribadi" | "Riset", icon }`; rail `settings-rail.tsx`. **Aturan tetap: no redesign — route Integrasi = addition only** (pola sama seperti penambahan "Personalisasi").
+- Anatomi halaman: `SettingsHeader section=...` + primitives `SettingsPanel/PanelHeader/PanelBody/Row/Pill` (`settings-card.tsx`), hooks di `features/settings/api.ts` (`useApi` + `unwrap` + `queryKeys` + toast sonner + `readableApiErrorMessage`).
+- Belum ada UI integrations/OAuth apa pun di `apps/web`.
+
+### 3.7 API
+
+- Pola route: file per domain di `apps/api/src/routes/`, `new Elysia({ prefix }).use(authMacro)`, handler opt-in `{ auth: true }`, optional `rateLimitMacro`, body via `t.Object`, delegasi ke service `@aqsha/services` dengan `getDb()`. Mount = satu baris `.use(...)` di `apps/api/src/index.ts`.
+- Migration ada di **`packages/db/migrations/`** (bukan `packages/db/drizzle/` seperti tertulis di draft v1); terakhir `0030`. Nomor migration ditentukan saat implementasi.
+
+## 4. Desain UX detail
+
+### 4.1 Panel kanan workspace detail menjadi tab: `Chat · Sitasi`
 
 ```text
-Workspace name          Library | Citations                   Chat
+┌ main (board library, tak berubah) ┐┌ panel ──────────────────────────┐
+│                                   ││  Chat   Sitasi        ⤢  ⨯      │ ← PanelTabsHeader (flush)
+│                                   ││ ┌─────────────────────────────┐ │
+│                                   ││ │ PanelCardToolbar tab aktif  │ │ ← in-card, TANPA border
+│                                   ││ │ ...konten tab...            │ │
+│                                   ││ └─────────────────────────────┘ │
+└───────────────────────────────────┘└─────────────────────────────────┘
 ```
 
-- State view disimpan di URL: `?view=library` (default) dan `?view=citations`.
-- Citation Manager mengambil area konten utama, bukan right panel; right panel tetap khusus chat Astra.
-- URL yang bisa dibagikan: `/app/workspaces/:workspaceId?view=citations`.
-- Counter `Citations (42)` ditampilkan setelah data tersedia; jangan blocking render Library hanya demi menghitung counter.
+**State model** — file baru `apps/web/features/workspaces/utils/workspace-panel-model.ts` (analog `thread-panel-model.ts`):
 
-### 4.2 Empty state
+- Satu nuqs param `panel` pada route workspace detail, `history: "replace"`, absen = tertutup.
+- Encoding mode: `chat` → tab Chat; `cite` → tab Sitasi (list); `cite:<citationId>` → sub-view detail sitasi (deep-linkable).
+- URL shareable: `/app/workspaces/:workspaceId?panel=cite` (menggantikan rencana lama `?view=citations`).
+- State lokal `chatPanelOpen` **dihapus** — open/close diturunkan dari param `panel` (rapikan: `WorkspaceChatSidePanel` lama disuperseded).
 
-Jika belum ada reference, tampilkan tiga tindakan:
+**Provider** — `WorkspacePanelProvider` ringan di `workspace-detail-client.tsx` (atau file sendiri): expose `mode`, `openChat()`, `openCitations()`, `openCitationDetail(id)`, `closePanel()`. Tidak perlu `previewMode`/lookups seperti thread shell — jauh lebih sederhana.
 
-1. **Import from Mendeley** — menerima `.bib` dan `.ris`.
-2. **Add by DOI** — resolver metadata Aqsha.
-3. **Add manually** — form type, title, author, year, venue, URL/DOI.
+**Deklarasi tab** (inline, pola thread shell):
 
-Tombol **Connect Mendeley** ditampilkan sebagai “Coming next” sampai fase OAuth benar-benar tersedia; jangan menawarkan alur yang belum berfungsi.
+```ts
+const tabs: PanelTab[] = [
+  { key: "chat", label: "Chat" },
+  { key: "citations", label: "Sitasi" },
+];
+```
 
-### 4.3 Flow import Mendeley (v1)
+- Actions header = `<PanelExpandButton /> + <PanelCloseButton />` (identik thread shell).
+- `PanelOpenButton` di `WorkspaceBoardToolbar` tetap satu tombol; membuka mode terakhir yang diingat dalam mount, default `chat`. Tetap hidden saat panel terbuka.
+- Entry lain ke tab Sitasi: deep link `?panel=cite`, aksi "Tambahkan ke Sitasi" pada artifact (Fase 2, membuka panel `cite` setelah sukses), dan footnote empty-state.
+
+**Refactor chrome chat (wajib, kecil):** `CompactThreadChatPanel` saat ini membungkus diri dengan `SidePanelFrame` + `PanelHeaderBar "Chat"`. Tambah prop `chrome?: "frame" | "content"` — mode `content` hanya me-render `PanelCardToolbar` (switcher/menu/new-chat) + surface chat tanpa frame, karena frame + tabs kini dimiliki shell workspace. Pemakaian di thread-experience tidak berubah (`chrome="frame"` default). Jangan duplikasi komponen.
+
+### 4.2 Tab Sitasi — konten
+
+Dibungkus pola `DetailPanelShell`: `PanelCardToolbar` + body scroll `panelBodyPaddingClass`. Semua responsivitas internal pakai container variants (`@2xl:` dst.) karena kolom panel adalah `@container` — lebar panel berubah antara normal (`clamp(26rem,32vw,32rem)`) dan expanded (70%).
+
+**PanelCardToolbar (list mode):**
+
+- Kiri: title "Sitasi" + count muted (`Sitasi · 42`) — count dari query list, jangan blocking render.
+- Kanan (compact icon buttons, pola `WorkspaceLibraryControls`):
+  - `+ Tambah` (DropdownMenu): **Import file (.bib/.ris)** → wizard dialog; **Dari DOI** → dialog kecil input DOI; **Manual** → dialog form.
+  - **Export** (DropdownMenu): BibTeX / RIS / CSL-JSON — semua, atau yang terseleksi bila ada seleksi.
+  - **More** (DropdownMenu) ✅: Pilih beberapa (masuk mode seleksi); Kelola duplikat (dialog grup canonical-key — bukan list terfilter — tombol Gabungkan per grup); Gaya sitasi & urutan bibliography (dialog settings workspace).
+
+**Baris kontrol di bawah toolbar:** search input compact (state lokal React, BUKAN nuqs — jangan bentrok dengan `q` milik board) + filter chips: status (`verified / needs-review / incomplete`), tag, source (`import / artifact / manual / sync`).
+
+**List (lebar normal ~26–32rem):** baris ringkas —
+
+- Judul (clamp 2 baris) + badge document type kecil.
+- Baris meta muted: first author + tahun · venue.
+- Chip tag (maks 2 + `+n`), dot status metadata (warna + tooltip), badge source.
+- Hover/focus actions: **Salin sitasi** (render style default workspace, copy ke clipboard), menu ⋯ (Detail, Edit, Buka DOI/URL, Hapus).
+- Klik baris → sub-view detail (`cite:<id>`).
+- ✅ Checkbox seleksi muncul saat mode seleksi aktif (via menu More "Pilih beberapa") → bulk bar melayang di bawah list: beri tag (popover), export terpilih, gabungkan (≥2), hapus terpilih.
+
+**Expanded (70%):** DOM sama, container variants menaikkan densitas: `@3xl:` baris berubah jadi grid multi-kolom (judul/author+tahun/venue/DOI/tags/status) dengan header kolom — inilah alasan tabel padat tetap layak meski hidup di panel. Tidak ada tabel terpisah; satu komponen, dua density.
+
+**Sub-view detail (`cite:<id>`):** `PanelCardToolbar` berganti jadi tombol back ("← Sitasi") + actions (Edit, Salin sitasi per-style submenu, ⋯). Body: metadata lengkap (semua field CSL yang terisi), preview terformat pada style default, provenance (source + batch import + tanggal), linked artifact (buka reader) atau tombol "Tautkan artifact", tags editable inline, status + tombol "Tandai sudah direview". Edit metadata = dialog form (bukan inline besar-besaran), konsisten pola `NameDialog`/`AddItemDialog`.
+
+**Missing/deleted state:** citation soft-deleted yang masih dipakai dokumen tampil di list dengan badge `missing` + aksi restore/remap — tidak pernah hilang diam-diam.
+
+### 4.3 Empty state tab Sitasi
+
+Mengikuti anatomi `WorkspaceLibraryEmpty` (badge pill → title + deskripsi → hairline connector → stacked pill actions):
+
+- Badge: ikon quote/book lavender + label "Sitasi".
+- Title: "Belum ada referensi" — deskripsi singkat manfaat.
+- Tiga pill action: **Import dari Mendeley/Zotero (.bib/.ris)**, **Tambah dari DOI**, **Tambah manual**.
+- Footnote muted: "Hubungkan akun Mendeley atau Zotero di Pengaturan → Integrasi" — sebelum Fase 5 ditampilkan dengan chip "segera" tanpa link mati; setelah Fase 5 jadi link ke `/app/settings/integrations`. Jangan menawarkan alur yang belum berfungsi.
+- Copy sentence case, tanpa uppercase (konvensi copywriting produk).
+
+### 4.4 Flow import file (v1)
 
 ```text
-Mendeley Export (.bib/.ris)
-        → upload file
-        → parse + normalize server-side
-        → preview valid / incomplete / duplicate
-        → user pilih record dan policy duplicate
-        → commit batch
-        → Citation Library workspace
+Ekspor Mendeley/Zotero (.bib/.ris)
+  → dialog wizard: upload → preview → commit
+  → Citation Library workspace (tab Sitasi)
 ```
 
-1. User di Mendeley melakukan Export ke BibTeX atau RIS.
-2. User memilih **Import from Mendeley** pada workspace Aqsha.
-3. Frontend mengunggah file ke API preview; API memvalidasi ukuran, format, batas record, dan parser error.
-4. Preview menampilkan jumlah valid, incomplete, duplicate, serta error per baris.
-5. User memilih record yang diimpor dan policy: `skip duplicates` (default), `merge missing fields`, atau `import anyway`.
-6. Commit membuat/merge `workspace_citations`, lalu menampilkan summary yang dapat dibatalkan selama batch belum dipakai dokumen.
+Wizard = Dialog multi-step (bukan di dalam panel — butuh lebar dan fokus):
 
-### 4.4 Citation Library view
+1. **Upload**: dropzone accept `.bib`/`.ris`, maks 10 MB, satu file; kirim multipart ke endpoint preview.
+2. **Preview**: chip ringkasan (valid / incomplete / duplikat / error), tabel record dengan checkbox (default: valid+incomplete tercentang; duplikat mengikuti policy), radio policy duplikat: `skip` (default) / `merge missing fields` / `import anyway`, expander error per baris. Parser error per-entry, bukan gagal total.
+3. **Commit + summary**: created/merged/skipped, tombol "Lihat di Sitasi" (panel `cite`). Kebijakan undo batch (open question #4) DITUTUP: tanpa undo otomatis — koreksi via hapus per-citation.
 
-Kolom list/table:
+### 4.5 Citation di BlockNote (Fase 3)
 
-- checkbox bulk action;
-- title dan document type;
-- first author + year;
-- venue/publisher;
-- DOI/URL;
-- tags;
-- metadata status: `verified`, `needs-review`, `incomplete`, `duplicate`;
-- source badge: `Mendeley import`, `Aqsha artifact`, `manual`, atau nanti `Mendeley sync`.
+1. `/citation` atau tombol **Cite** di editor membuka citation picker (popover/dialog) yang mencari Citation Library workspace aktif — keyboard search + multi-select.
+2. Inline citation node hanya menyimpan `citationIds` + optional locator (`page`, `prefix`, `suffix`); render preview sesuai style workspace.
+3. `/bibliography` menambahkan bibliography block, mode `used-in-document` (default), tombol **Update bibliography** manual pada versi pertama.
+4. Reference terhapus → node berstatus `missing`; user restore/remap/remove eksplisit.
+5. Serializer: `blocksJson` = canonical; markdown export = representasi kompatibel (mis. Pandoc citekey); plainText = fallback readable.
+6. Autosave merekonsiliasi `document_citation_usages` dari block tree dalam transaksi.
 
-Tindakan per item:
+### 4.6 Settings → Integrasi (Fase 5–6)
 
-- open detail drawer;
-- edit metadata;
-- link/unlink artifact Aqsha;
-- copy formatted citation;
-- mark as reviewed;
-- merge duplicate;
-- delete dari workspace (tidak menghapus artifact/file asli).
+**Nav (addition-only):** tambah entri ke `settingsMenu` —
 
-Bulk action: tag, export selected, merge suggestion, delete selected.
+```ts
+{
+  key: "integrations",
+  href: "/app/settings/integrations",
+  label: "Integrasi",
+  description: "Hubungkan aplikasi referensi seperti Mendeley dan Zotero",
+  group: "Riset",
+  icon: <ikon plug/link dari @aqsha/ui/icons>,
+}
+```
 
-### 4.5 Citation di BlockNote
+`SettingsKey` union bertambah satu; bila ikon plug/link belum ada di `@aqsha/ui/icons`, tambah export Lucide-compatible backed Hugeicons di `packages/ui/src/icons.tsx` (aturan ikon repo).
 
-1. User membuka dokumen markdown di workspace.
-2. `/citation` atau tombol **Cite** membuka citation picker yang mencari Citation Library workspace aktif.
-3. User memilih satu atau beberapa references; editor menaruh inline citation node yang hanya menyimpan `citationIds` dan optional locator (`page`, `chapter`, `prefix`, `suffix`).
-4. Node merender preview sesuai style workspace; perubahan style hanya mengubah render, bukan ID referensi di dokumen.
-5. `/bibliography` menambahkan bibliography block yang mengumpulkan citation node dokumen dalam urutan kemunculan atau urutan alphabetic menurut style.
-6. Reference yang dihapus dari library tetapi sudah dipakai dokumen berubah menjadi status `missing`; user harus restore, remap, atau remove citation secara eksplisit. Jangan diam-diam menghapus node dari dokumen.
+**Halaman** — `apps/web/app/app/settings/integrations/page.tsx` → `IntegrationsPage` (`features/settings/components/integrations-page.tsx`), memakai primitives existing:
 
-### 4.6 Integrasi Astra (setelah core stabil)
+- `SettingsHeader section="integrations"`.
+- Satu `SettingsPanel` per provider (Mendeley, Zotero):
+  - Header: nama + deskripsi singkat + `SettingsPill` status: `Tidak terhubung` / `Terhubung` / `Kedaluwarsa` / `Error` / `Segera` (sebelum fasenya rilis, tombol disabled).
+  - Body `SettingsRow`s: akun terhubung (nama/email profil provider), scope ("metadata saja"), sinkron terakhir + tombol "Sinkronkan sekarang", jumlah record tersinkron.
+  - Footer actions: **Hubungkan** (Mendeley: redirect ke endpoint connect OAuth; Zotero: dialog input API key + user ID dengan link bantuan ke zotero.org/settings/keys) / **Putuskan** (ConfirmDialog; jelaskan data citation Aqsha TIDAK ikut terhapus).
+- Callback OAuth kembali ke halaman ini dengan toast hasil.
 
-Saat composer berada pada workspace:
+**Pembagian tanggung jawab:** Settings = lifecycle koneksi (connect/status/disconnect/sync manual). **Penarikan data per-workspace** tetap di tab Sitasi: bila koneksi aktif, menu `+ Tambah` mendapat item "Tarik dari Mendeley/Zotero" → pilih folder/collection → **preview → commit memakai UI wizard import yang sama** (source `mendeley_sync`/`zotero_sync`). Satu jalur commit untuk file dan provider.
 
-- user dapat memilih reference dari Citation Manager sebagai context chip;
-- Astra menerima metadata terstruktur saja, bukan token Mendeley atau full PDF secara otomatis;
-- tool dapat menyarankan citation untuk draft, tetapi menyisipkan citation ke dokumen tetap melalui action user/editor;
-- respons Astra harus membedakan sumber workspace yang dipilih dari hasil web research per thread.
+### 4.7 Integrasi Astra (Fase 4)
+
+- Reference dari tab Sitasi bisa dijadikan context chip composer — reuse channel `selectionRefs` yang sudah ter-mount di halaman ini, dengan `ContextRef` kind baru `workspace-citation` di `@aqsha/chat-core`.
+- Astra menerima metadata terstruktur saja (bukan token provider/full PDF).
+- Agent tools read-only `search_workspace_citations` / `get_workspace_citation`; tool write hanya **suggest** — insert ke dokumen tetap aksi user.
+- Suggestion card deterministik di chat dengan tombol insert/open document.
 
 ## 5. Kontrak data
 
 ### 5.1 Canonical record
 
-Gunakan CSL-JSON sebagai payload canonical (`cslJson`) karena format tersebut cukup untuk render CSL dan tidak mengikat Aqsha pada bentuk BibTeX/RIS/Mendeley.
-
-Normalisasi minimum:
+CSL-JSON sebagai payload canonical (`cslJson`) — cukup untuk render CSL, tidak mengikat ke bentuk BibTeX/RIS/provider.
 
 ```ts
 type CitationRecord = {
@@ -154,8 +279,9 @@ type CitationRecord = {
   workspaceId: string;
   ownerUserId: string;
   artifactId: string | null;
-  source: "mendeley_import" | "mendeley_sync" | "artifact" | "doi" | "manual";
-  externalId: string | null; // Mendeley document id pada phase OAuth
+  source: "import" | "provider_sync" | "artifact" | "doi" | "manual";
+  provider: "mendeley" | "zotero" | null; // terisi untuk import (asal file, best-effort) & sync
+  externalId: string | null;              // document/item id provider pada fase sync
   documentType: string;
   title: string;
   authors: Array<{ family?: string; given?: string; literal?: string }>;
@@ -173,240 +299,258 @@ type CitationRecord = {
 };
 ```
 
-`canonicalKey` diprioritaskan sebagai `doi:<normalized DOI>`, lalu `isbn:<normalized ISBN>`, lalu hash normalisasi `title + year + first-author`. Key ini dipakai untuk candidate duplicate, **bukan** global hard uniqueness pada fallback title karena false-positive masih mungkin.
+`canonicalKey`: prioritas `doi:<normalized>` → `isbn:<normalized>` → hash normalisasi `title + year + first-author`. Dipakai sebagai **kandidat** duplicate, bukan hard-unique pada fallback title.
 
 ### 5.2 Tabel dan migration
 
-Migration baru di `packages/db/drizzle/`; nomor migration ditentukan saat implementasi dari nomor terakhir, jangan mengasumsikan nomor di plan ini.
+Migration baru di **`packages/db/migrations/`** — **terealisasi sebagai `0031_workspace_citations.sql`** (applied DEV 2026-07-11; PROD menunggu rilis). Semua tabel mengikuti konvensi schema repo: `owner_user_id` FK `users`, index owner-first, timestamps `bigint` ms.
 
 #### `workspace_citations`
 
 | Kolom | Catatan |
 |---|---|
-| `id`, `owner_user_id`, `workspace_id` | PK dan owner/workspace scope wajib |
-| `artifact_id` nullable | FK artifact; satu artifact boleh belum punya citation dan citation boleh tanpa artifact |
-| `source`, `external_id` | provenance serta id Mendeley di fase 4 |
+| `id`, `owner_user_id`, `workspace_id` | PK + owner/workspace scope wajib |
+| `artifact_id` nullable | FK artifact; dua arah opsional |
+| `source`, `provider`, `external_id` | provenance; `provider`+`external_id` terisi pada fase sync |
 | `document_type`, `title`, `authors_json`, `published_year`, `venue`, `publisher`, `doi`, `url`, `tags` | read/query model terindeks |
 | `csl_json` | canonical complete record |
 | `canonical_key` | dedupe candidate |
 | `metadata_status`, `reviewed_at` | quality workflow |
-| `created_at`, `updated_at`, `deleted_at` | soft delete agar usage dokumen tetap bisa didiagnosis |
+| `created_at`, `updated_at`, `deleted_at` | soft delete agar usage dokumen tetap terdiagnosis |
 
-Index minimum:
-
-- `(owner_user_id, workspace_id, updated_at)` untuk list keyset;
-- `(owner_user_id, workspace_id, doi)` untuk dedupe DOI;
-- `(owner_user_id, workspace_id, canonical_key)`;
-- `(owner_user_id, artifact_id)`;
-- unique partial `(owner_user_id, workspace_id, source, external_id)` saat `external_id is not null`.
+Index minimum: `(owner_user_id, workspace_id, updated_at)` keyset list; `(owner_user_id, workspace_id, doi)`; `(owner_user_id, workspace_id, canonical_key)`; `(owner_user_id, artifact_id)`; unique partial `(owner_user_id, workspace_id, provider, external_id)` saat `external_id is not null`.
 
 #### `workspace_citation_settings`
 
-One-to-one dengan workspace: `workspace_id`, `owner_user_id`, `default_style_id`, `bibliography_sort`, timestamps. Default `apa-7th-edition`.
+One-to-one workspace (PK-is-FK `workspace_id`, pola `user_agent_preferences`): `workspace_id`, `owner_user_id`, `default_style_id` (default **`apa-7`** — id final, bukan `apa-7th-edition`), `bibliography_sort` (`author` = urutan style / `year` / `title`), timestamps.
 
 #### `citation_import_batches`
 
-Menyimpan audit batch, bukan source of truth permanen: `id`, owner/workspace, source format, original filename, total/valid/duplicate/error counts, `summary_json`, `committed_at`, timestamps. Raw file dan raw metadata tidak perlu dipertahankan setelah parse/commit kecuali kebutuhan support disetujui.
+Audit batch (bukan source of truth): id, owner/workspace, `source_kind` (`file` | `provider_sync`), format/provider, original filename, counts (total/valid/duplicate/error), `summary_json`, `committed_at`, timestamps. Raw file tidak dipertahankan setelah commit.
 
-#### `document_citation_usages` (fase BlockNote)
+#### `document_citation_usages` (Fase 3) — ✅ IMPLEMENTED (mig `0032_big_corsair`, applied DEV 2026-07-11)
 
-`document_artifact_id`, `citation_id`, `inline_node_id`, `occurrence_order`, `locator_json`, timestamps. Tabel ini adalah index/diagnostic; `blocksJson` tetap menyimpan node citation agar dokumen portable. Rekonsiliasi dilakukan ketika dokumen disimpan.
+`owner_user_id`, `workspace_id`, `document_artifact_id` (FK artifacts, cascade), `citation_id` (FK workspace_citations), `inline_node_id`, `occurrence_order`, `locator_json`, timestamps. Index `(owner, document, occurrence_order)` + `(owner, citation)`. Index/diagnostic; `blocksJson` tetap menyimpan node agar dokumen portable. Rekonsiliasi (delete-all + insert) saat save di `updateDocument`; `usageCount` disurface di `CitationService.get`.
 
-### 5.3 Metadata dari artifact
+#### `integration_connections` (Fase 5)
 
-Tambah service helper `CitationService.createFromArtifact`:
+| Kolom | Catatan |
+|---|---|
+| `id`, `owner_user_id` | account-level, bukan per-workspace |
+| `provider` | `'mendeley' \| 'zotero'`; unique `(owner_user_id, provider)` |
+| `credentials_encrypted` | OAuth access+refresh token (Mendeley) atau API key (Zotero), AES-GCM at-rest dengan secret deployment; TIDAK PERNAH dikirim ke `apps/web` |
+| `token_expires_at` nullable | Mendeley |
+| `external_profile_json` | id/nama/email profil provider untuk ditampilkan di Settings |
+| `selected_folders_json` | folder/collection pilihan default |
+| `last_sync_at`, `sync_cursor` | incremental sync |
+| `status`, `last_error` | `connected / expired / error / revoked` |
+| timestamps | |
 
-- membaca `artifact_paper_metadata` dan artifact owner/workspace;
-- membuat citation draft hanya bila paper metadata memiliki title atau DOI;
-- menghubungkan `artifactId` tanpa memindahkan atau menduplikasi file;
-- menjalankan dedupe yang sama dengan import.
+### 5.3 Metadata dari artifact (Fase 2) — ✅ IMPLEMENTED (2026-07-11)
 
-Jangan mengubah `artifact_paper_metadata` menjadi canonical citation row. Metadata extraction tetap fokus pada enrichment artifact; Citation Manager menangani editorial choice, tag, style, usage, dan provenance import.
+`CitationService.createFromArtifact`: baca `artifact_paper_metadata` + ownership (row sudah owner-scoped + membawa `workspace_id`, jadi TAK perlu load artifact untuk auth); butuh `title` (bukan title/DOI — DOI-only diarahkan ke "Dari DOI"); link `artifactId` tanpa memindahkan file; idempotent via `findActiveByArtifact`; dedupe canonical key = **adopsi** row duplikat yang belum punya artifact (`created=false, linkedExisting=true`). `artifact_paper_metadata` TIDAK diubah menjadi canonical citation row. Peta CSL via `buildCslFromPaperMetadata` (author `PaperAuthor.name` → `authorFromName`).
 
 ## 6. API dan service boundary
 
-`apps/web` hanya memanggil Eden Treaty (`@aqsha/api`); tidak mengimpor `@aqsha/db` atau `@aqsha/services`.
+`apps/web` hanya memanggil Eden Treaty (`@aqsha/api`); tidak mengimpor `@aqsha/db`/`@aqsha/services`.
 
-### 6.1 Endpoint v1
+### 6.1 Endpoint citations (Fase 1–3) — ✅ LIVE Fase 1–3 (`apps/api/src/routes/citations.ts`)
+
+Tambahan di luar draft: `GET /workspaces/:id/citations/tags` (daftar tag distinct untuk filter chips). List response menyertakan `total` (count toolbar). Rate limit terpasang: `citations:create` (20/menit), `citations:import` (5/menit, preview + commit).
 
 | Method | Path | Fungsi |
 |---|---|---|
 | `GET` | `/workspaces/:id/citations` | keyset list + search/filter/status/tag |
-| `GET` | `/workspaces/:id/citations/:citationId` | detail citation |
+| `GET` | `/workspaces/:id/citations/tags` | tag distinct workspace (filter chips) |
+| `GET` | `/workspaces/:id/citations/:citationId` | detail |
 | `POST` | `/workspaces/:id/citations` | create manual / create-by-DOI |
 | `PATCH` | `/workspaces/:id/citations/:citationId` | edit metadata/tag/link artifact |
-| `DELETE` | `/workspaces/:id/citations/:citationId` | soft delete dengan guard usage |
+| `DELETE` | `/workspaces/:id/citations/:citationId` | soft delete + guard usage |
 | `POST` | `/workspaces/:id/citations/imports/preview` | multipart `.bib`/`.ris` → preview batch |
-| `POST` | `/workspaces/:id/citations/imports/:batchId/commit` | commit selected entries + duplicate policy |
-| `POST` | `/workspaces/:id/citations/duplicates/merge` | merge explicit source/target id |
-| `GET` | `/workspaces/:id/citations/export` | `bibtex`, `ris`, `csl-json` |
-| `POST` | `/workspaces/:id/citations/render` | preview citation/bibliography dengan style tertentu |
-| `GET/PATCH` | `/workspaces/:id/citation-settings` | default style dan sort bibliography |
+| `POST` | `/workspaces/:id/citations/imports/:batchId/commit` | commit selected + duplicate policy |
+| `POST` | `/workspaces/:id/citations/duplicates/merge` | merge explicit source/target (pairwise) |
+| `GET` | `/workspaces/:id/citations/duplicates` | grup kandidat duplikat (Fase 1 follow-up) |
+| `POST` | `/workspaces/:id/citations/merge` | mergeMany `{ids, targetId?}` (bulk/kelola duplikat) |
+| `POST` | `/workspaces/:id/citations/bulk-tag` | tag massal `{ids, tags}` |
+| `POST` | `/workspaces/:id/citations/bulk-delete` | soft delete massal `{ids}` |
+| `POST` | `/workspaces/:id/citations/from-artifact` | createFromArtifact `{artifactId, tags?}` (Fase 2) |
+| `POST` | `/workspaces/:id/citations/:citationId/resolve` | perbarui metadata dari DOI (Fase 2) |
+| `GET` | `/workspaces/:id/citations/export` | `bibtex` / `ris` / `csl-json` |
+| `POST` | `/workspaces/:id/citations/render` | preview citation/bibliography per style (library) |
+| `POST` | `/workspaces/:id/citations/render-document` | render sitasi in-text per cluster + bibliography used-in-doc (Fase 3) |
+| `GET/PATCH` | `/workspaces/:id/citation-settings` | default style + sort bibliography |
 
-Setiap route memanggil service yang lebih dahulu melakukan `WorkspaceService.assertWorkspaceOwner`. Error baru harus memakai `appError` terstruktur dan frontend menampilkan `readableApiErrorMessage`, bukan `error.message` mentah.
+Route module `apps/api/src/routes/citations.ts`, mount satu baris di `index.ts`. Setiap handler `{ auth: true }` + `WorkspaceService.assertWorkspaceOwner` di service. Error via `appError` terstruktur; frontend `readableApiErrorMessage`. Rate limit import/commit/create-by-DOI via `rateLimitMacro`.
 
-### 6.2 `packages/services`
+### 6.2 Endpoint integrations (Fase 5–6)
 
-Modul baru yang disarankan:
+| Method | Path | Fungsi |
+|---|---|---|
+| `GET` | `/integrations` | status semua provider milik owner (tanpa credential) |
+| `GET` | `/integrations/mendeley/connect` | buat OAuth `state` signed + redirect |
+| `GET` | `/integrations/mendeley/callback` | verifikasi state, tukar code backend-only, enkripsi token, redirect ke Settings |
+| `POST` | `/integrations/:provider/key` | ✅ (Zotero) simpan API key + user ID opsional; validasi via Zotero `/keys/<key>`; kembalikan status view |
+| `DELETE` | `/integrations/:provider` | disconnect: revoke (bila didukung) + hapus credential lokal + stop job |
+| `GET` | `/integrations/:provider/folders` | daftar folder/collection untuk picker |
+| `POST` | `/integrations/:provider/sync/preview` | pull → normalisasi → preview batch (reuse pipeline import) |
+| `POST` | `/integrations/:provider/sync/:batchId/commit` | commit ke workspace target |
 
-- `citation.service.ts`: CRUD, authorization, dedupe, merge, quality status, export.
-- `citation-import.service.ts`: safe parser adapter, preview, batch commit, limits, diagnostics.
-- `citation-format.service.ts`: CSL rendering dan conversion output.
-- `citation-normalize.ts`: DOI, ISBN, title, author, canonical key, input validation; pure dan unit-testable.
+### 6.3 Modul `packages/services`
 
-Lakukan technical spike sebelum memilih library parser/CSL:
+Terimplementasi (Fase 1) di `packages/services/src/citations/` — nama file final:
 
-1. Parse BibTeX dan RIS hasil ekspor Mendeley nyata.
-2. Convert keduanya ke CSL-JSON tanpa kehilangan author, DOI, type, container, dan date penting.
-3. Render APA 7, IEEE, Vancouver, Chicago dengan deterministic output.
-4. Uji browser/server bundle agar engine hanya berjalan pada API/service bila ukuran bundle frontend tidak diperlukan.
+- `citation.service.ts` — CRUD, authorization, dedupe (409 `citation_duplicate` + `allowDuplicate`), merge, quality status, export, render, settings; create-by-DOI reuse `classifyPaperText` + `resolvePaper`. ✅ **Fase 2 + follow-up (2026-07-11):** `createFromArtifact`, `resolveFromDoi`, `listDuplicateGroups`, `mergeMany` (`pickMergeTarget` by completeness), `bulkAddTag`, `bulkSoftDelete`; helper CSL bersama `buildCslFromResolvedPaper`/`buildCslFromPaperMetadata`. Repo baru `WorkspaceCitationRepo.softDeleteMany`. ✅
+- `citation-import.service.ts` — preview (staging `records_json`) + commit (policy skip/merge/import, re-check duplikat dalam transaksi), limits, diagnostics; dipakai import file DAN provider sync nanti (satu pipeline). ✅
+- `citation-format.ts` (bukan `.service.ts`) — CSL rendering (register style vendored sekali) + export bibtex/ris/csl-json. ✅ **Fase 3:** `renderDocumentCitations` (citeproc engine langsung: `rebuildProcessorState` in-text per cluster + `makeBibliography` used-in-doc) + types `DocumentCluster`/`DocumentCiteItem`/`DocumentRenderResult`. ✅
+- `citation-usages.ts` — **Fase 3 baru:** `extractCitationClusters(blocksJson)` (walk BlockNote tree) + `CitationUsageService.reconcileDocument` (dipakai `ArtifactService.updateDocument`, transaksional). ✅
+- `citation-parse.ts` — split per-entry `.bib`/`.ris` + sniff format + diagnostic per-entry. ✅
+- `citation-normalize.ts` — DOI (reuse `normalizeDoi`), ISBN, title key, author, canonical key; pure + unit-testable. ✅
+- `styles/*.ts` — 4 style CSL + locale en-US vendored sebagai modul TS string; `citation-js.d.ts` ambient decl. ✅
+- **Fase 4:** subpath `@aqsha/services/citations` ditambah (`package.json` exports + entri `tsup.config.ts`) agar tool agent (node→dist) bisa import `CitationService`. `ContextService.hydrate` (`./context`) menerima lane `workspaceCitations`. Tool `apps/agent/src/mastra/tools/{search,get}-workspace-citation.ts` + registrasi di `tools/index.ts` (`readTools`). ✅
 
-Jangan melanjutkan formatter APA manual `research/references.ts` sebagai engine multi-style; formatter itu memiliki asumsi source chat dan author cap yang tidak cocok bagi bibliography workspace.
+Terimplementasi (Fase 5–6) di `packages/services/src/integrations/`:
 
-### 6.3 Input safety dan limits
+- `integration.service.ts` — lifecycle koneksi, enkripsi credential (`crypto.ts` AES-256-GCM), signed OAuth state (`oauth-state.ts` HMAC), status; dua jalur connect (`startConnect`+`completeOAuth` untuk OAuth; `connectWithApiKey` untuk API key) berbagi `persistConnection`.
+- `mendeley.adapter.ts` (`authMode: "oauth"`) + `zotero.adapter.ts` (`authMode: "api_key"`) di balik satu interface `IntegrationAdapter` (listFolders, pullDocuments, fetchProfile, ensureFresh) — retry/backoff via `fetchWithRetry`, token refresh Mendeley, paginasi Link rel=next keduanya. Zotero pull memakai CSL-JSON native (`include=csljson`).
+- `citation-sync.service.ts` — `previewFolder` per-workspace (reuse `stageImportBatch`); commit lewat `CitationImportService.commit` yang sama (idempoten via `externalId`).
+- BullMQ worker `integration-sync` (apps/api) — refresh koneksi periodik opt-in, non-destruktif (tak menyentuh library citation).
 
-- terima hanya `.bib` dan `.ris` pada v1, content-type tidak dipercaya sendirian;
-- ukuran awal maksimal 10 MB dan maksimal 5.000 records per batch;
-- parser berjalan server-side dengan timeout serta error per entry, bukan gagal total bila satu record rusak;
-- jangan fetch URL arbitrary saat parse import; metadata enrichment DOI dipanggil explicit atau via queue dengan SSRF guard existing;
-- rate limit import/commit dan create-by-DOI;
-- log summary batch tanpa merekam access token atau raw bibliografi lengkap di level info.
+**Technical spike Fase 0 (✅ selesai — hasil di ADR `docs/adr-citation-csl-engine.md`):**
+
+1. Parse BibTeX dan RIS hasil ekspor nyata Mendeley DAN Zotero.
+2. Convert ke CSL-JSON tanpa kehilangan author, DOI, type, container, date.
+3. Render APA 7, IEEE, Vancouver, Chicago deterministik (snapshot test).
+4. Engine hanya berjalan server-side (API/services) — jangan masuk bundle `apps/web`.
+5. **ADR lisensi wajib**: kandidat CSL engine praktis = citeproc-js (dipakai `@citation-js/plugin-csl`), dual-license **CPAL-1.0/AGPL-3.0** — keputusan eksplisit sebelum coding (preseden repo: drop GPL). Kandidat parser: `@citation-js/plugin-bibtex`/`plugin-ris` atau `@retorquere/bibtex-parser`; RIS sederhana sehingga parser tulis-sendiri di `citation-normalize` adalah opsi sah. File style CSL (apa/ieee/vancouver/chicago-author-date) + locale di-vendor dari repo resmi CSL.
+
+Jangan melanjutkan formatter APA manual `research/references.ts` sebagai engine multi-style (author cap 3, asumsi source chat).
+
+### 6.4 Input safety dan limits
+
+- v1 hanya `.bib`/`.ris`; content-type tidak dipercaya sendirian (sniff isi).
+- Maks 10 MB / 5.000 records per batch; parser server-side dengan timeout; error per-entry.
+- Tidak fetch URL arbitrary saat parse; enrichment DOI eksplisit/queued dengan SSRF guard existing.
+- Rate limit import/commit/create-by-DOI/sync.
+- Log summary batch tanpa credential atau raw bibliografi lengkap di level info.
 
 ## 7. Fase implementasi
 
-### Fase 0 — Spike dan kontrak final
+Urutan: **Fase 0 → 1 → 2 → 3 → 4 (opsional, bisa paralel 3) → evaluasi penggunaan → 5 → 6.**
 
-**Hasil:** pilihan parser/CSL tervalidasi terhadap file Mendeley contoh, type CSL-JSON final, dan keputusan format v1 terdokumentasi.
+### Fase 0 — Spike dan kontrak final — ✅ SELESAI (2026-07-11)
 
-1. Kumpulkan fixture anonymized `.bib` dan `.ris` dari ekspor Mendeley: journal article, book, thesis, web page, multi-author, DOI kosong, non-ASCII.
-2. Buat test spike di `packages/services` untuk parser candidate dan CSL rendering empat style.
-3. Putuskan apakah EndNote XML menjadi v1.1 atau di luar scope; v1 tidak boleh memblokir hanya karena XML.
-4. Tentukan policy author names, date range, editor, page, edition, publisher place, dan URL normalization.
-5. Buat ADR kecil jika library yang dipilih menambah dependency besar atau memberi risiko lisensi/bundle.
+**Hasil:** parser/CSL tervalidasi terhadap fixture nyata, type CSL-JSON final, ADR lisensi diputuskan — lihat `docs/adr-citation-csl-engine.md` dan ringkasan di bagian "Progress implementasi". Acceptance terpenuhi dan diabadikan sebagai regression test (`packages/services/test/citations-parse-format.test.ts`).
 
-**Acceptance:** seluruh fixture menghasilkan CSL-JSON valid atau diagnostic terstruktur; tidak ada formatter yang mengarang data hilang.
+1. Fixture anonymized `.bib`/`.ris` dari ekspor **Mendeley dan Zotero**: journal article, book, thesis, web page, multi-author, DOI kosong, non-ASCII.
+2. Test spike di `packages/services` untuk parser candidate + render 4 style.
+3. Putuskan EndNote XML = v1.1 atau di luar scope.
+4. Policy author names, date range, editor, page, edition, publisher place, URL normalization.
+5. ADR: pilihan parser + sikap terhadap lisensi citeproc-js (CPAL attribution vs alternatif).
 
-### Fase 1 — Core Citation Library dan import-first
+**Acceptance:** semua fixture → CSL-JSON valid atau diagnostic terstruktur; tidak ada formatter mengarang data hilang.
 
-**Hasil:** pengguna dapat mengimpor BibTeX/RIS Mendeley, melihat reference workspace, mengedit, dedupe, dan export.
+### Fase 1 — Core Citation Library + tab panel Sitasi — ✅ SELESAI (2026-07-11)
 
-1. `packages/db`
-   - Tambah schema/repository `workspaceCitations`, `workspaceCitationSettings`, `citationImportBatches`.
-   - Buat migration baru serta test repository owner/workspace scoping.
-2. `packages/services`
-   - Implement `citation-normalize`, parser adapter, `CitationImportService`, `CitationService`, dan renderer/exporter.
-   - Buat resolver `create-by-DOI` yang reuse provider metadata Aqsha hanya setelah kontrak output dipetakan ke CSL-JSON.
-   - Implement dedupe preview, policy commit, dan merge audit.
-3. `apps/api`
-   - Tambah `citations.ts` route module, mount pada server, serta Eden `App` type otomatis.
-   - Validasi multipart, errors, limit, ownership, dan rate limit.
-4. `apps/web`
-   - Tambah `features/citations/` untuk API hooks, types, components, dan pure view model.
-   - Tambah state `view` pada `WorkspaceLibrarySurface` tanpa merusak query controls Library (`q`, `type`, `sort`).
-   - Implement empty state, import wizard, preview table, Citation Library table, detail drawer, create/edit dialog, export menu.
-5. Testing
-   - Unit normalisasi/format/dedupe/parser fixtures di `packages/services`.
-   - API integration test: owner can CRUD/import; other owner mendapat error; malformed files tidak melakukan commit.
-   - Web test untuk filter, preview state, dan error message readable.
+**Hasil:** panel workspace detail bertab `Chat · Sitasi`; user bisa import `.bib`/`.ris`, melihat/mengedit/dedupe/export referensi. Semua butir 1–5 di bawah terimplementasi (web 1a+1b digabung satu PR; deviasi yang disengaja + follow-up tercatat di bagian "Progress implementasi"). Testing: unit db 6 (itest DEV), services 30 (normalize/parse/format/import), api itest 11 (CRUD owner, 404 intruder, preview→commit multipart, anti double-commit, export, settings, soft delete), model test web `workspace-panel-model.test.ts`.
 
-**Acceptance:** user dapat mengimpor 100 reference BibTeX/RIS, skip/merge duplikat, menemukan DOI, mengubah tag, lalu download BibTeX/RIS dengan hasil konsisten.
+1. `packages/db` — schema + repository `workspaceCitations`, `workspaceCitationSettings`, `citationImportBatches`; migration; test scoping owner/workspace.
+2. `packages/services` — `citation-normalize`, parser adapter, `CitationImportService`, `CitationService`, renderer/exporter; resolver create-by-DOI reuse provider metadata existing (crossref/openalex/arxiv) setelah dipetakan ke CSL-JSON; dedupe preview + policy commit + merge audit.
+3. `apps/api` — `routes/citations.ts` + mount; multipart validation, limits, ownership, rate limit.
+4. `apps/web` — dua PR terpisah disarankan:
+   - **1a (panel tabs):** `workspace-panel-model.ts` + `WorkspacePanelProvider` (nuqs `panel`), shell panel baru `workspace-side-panel.tsx` dengan `PanelTabsHeader`, prop `chrome` pada `CompactThreadChatPanel`, hapus `chatPanelOpen` lokal. Tab Sitasi sementara `disabled hint:"segera"` bila 1b belum merge.
+   - **1b (fitur Sitasi):** `features/citations/` (api.ts + `queryKeys.citations` di `lib/api-query.ts`, types, components: list, row, filter, empty state, import wizard dialog, add-by-DOI dialog, manual form dialog, detail sub-view, export menu, settings gaya dialog).
+5. Testing — unit normalisasi/format/dedupe/parser fixtures; API itest (owner CRUD/import; user lain 403/404; malformed tidak commit); web test filter/preview/error readable/`?panel=cite` deep link.
 
-### Fase 2 — Artifact bridge dan quality workflow
+**Acceptance:** import 100 reference BibTeX/RIS (Mendeley/Zotero), skip/merge duplikat, cari DOI, ubah tag, download BibTeX/RIS konsisten — semua dari tab Sitasi; expand 30:70 menampilkan density tabel; chat tetap berfungsi persis seperti sebelumnya.
 
-**Hasil:** paper PDF/URL Aqsha dapat menjadi citation tanpa duplikasi, metadata yang lemah terlihat dan dapat diperbaiki.
+### Fase 2 — Artifact bridge dan quality workflow — ✅ SELESAI (2026-07-11)
 
-1. Tambah action **Add to Citations** pada artifact PDF/URL yang mempunyai metadata paper.
-2. Tambah API `createFromArtifact` dan `link/unlink artifact` dengan ownership/workspace checks.
-3. Tambah `metadataStatus` calculation: DOI/title/author/year missing → `incomplete`; resolver/manual reviewed → `verified`; imported unresolved → `needs_review`.
-4. Citation detail menampilkan provenance dan link kembali ke artifact reader.
-5. Tambahkan queue opt-in untuk resolve DOI record yang incomplete; jangan memblokir import atau list UI.
+**Hasil:** paper PDF/URL Aqsha bisa jadi citation tanpa duplikasi; metadata lemah terlihat dan bisa diperbaiki. Testing: api itest +6 (`from-artifact` idempotent/intruder-404/no-metadata-404, duplicates+merge, bulk-tag/delete). lint/typecheck/test (db 27 · services 301 · api 98, 0 fail)/build hijau.
 
-**Acceptance:** satu paper artifact dapat masuk library sekali, linknya dapat dibuka dari citation, dan menghapus citation tidak menghapus file.
+1. ✅ Action **Tambahkan ke Sitasi** pada kartu artifact (context menu board, gate `detectedDocumentKind === "scholarly_paper"`) + header artifact detail (`ArtifactHeaderActions`, prop opsional). Sukses → toast; di workspace detail juga buka panel `cite:<id>` (via prop `onCitationAdded` → `openCitationDetail`, karena `WorkspaceLibrarySurface` juga dipakai thread-shell yang tanpa `WorkspacePanelProvider`).
+2. ✅ API `createFromArtifact` (`POST from-artifact`); **link/unlink** memakai `PATCH artifactId` existing (link dari kartu; unlink = tombol "Lepas tautan" di detail). Artifact picker "Tautkan artifact" dari sisi citation DITUNDA (belum ada; entry utama = dari sisi artifact).
+3. ✅ `metadataStatus` (sudah ada `metadataStatusFor`): artifact source → `needs_review`/`incomplete`; `resolveFromDoi`/markReviewed → `verified`.
+4. ✅ Detail sitasi: provenance (source pill) + baris "Artifact" (buka reader + lepas tautan). Nama file batch import di detail masih belum (butuh kolom link citation→batch — ditunda).
+5. ⚠️ DEVIASI: bukan BullMQ queue — dibuat **`POST :id/resolve` sinkron** (tombol "Perbarui dari DOI" di detail saat status ≠ verified & ada DOI): re-resolve `resolvePaper`, fill-missing (jangan clobber edit user), status→verified. Queue batch-resolve untuk banyak record sekaligus bisa menyusul bila perlu.
 
-### Fase 3 — BlockNote citation dan bibliography
+**Acceptance:** ✅ satu artifact masuk library sekali saja (idempotent + dedupe-adopt); link kembali bisa dibuka (reader); hapus citation tidak menghapus file (soft delete citation, artifact utuh).
 
-**Hasil:** dokumen menggunakan identifier stabil dan dapat dirender ulang ketika style berubah.
+### Fase 3 — BlockNote citation dan bibliography — ✅ SELESAI (2026-07-11)
 
-1. Buat custom BlockNote inline content `citation` dengan `citationIds`, locator optional, prefix/suffix, serta node ID.
-2. Buat custom `bibliography` block dengan mode `used-in-document` (default) dan `selected-collection` (future-ready).
-3. Citation picker memakai query workspace citation dengan keyboard search dan multi-select.
-4. Serializer:
-   - `blocksJson` menyimpan canonical node;
-   - markdown export memakai representasi kompatibel yang disepakati (mis. Pandoc citekey/HTML data attribute) dan tidak menjadi source of truth;
-   - plainText menghasilkan readable fallback.
-5. Saat autosave, rekonsiliasi `document_citation_usages` dari document block tree dalam transaksi yang aman.
-6. Render reader dengan `CitationProvider` workspace, termasuk missing/deleted state.
-7. Bibliography block memakai CSL renderer dan settings workspace; tombol update/rebuild manual untuk versi pertama agar perubahan besar tidak mengejutkan user.
+**Hasil:** dokumen memakai identifier stabil, re-render saat style berubah. Testing: services unit +8 (`citations-document-render.test.ts` — in-text APA/IEEE, bibliography used-in-doc, cluster kosong, ekstraksi cluster), api itest +2 (render-document owner + intruder 404), rekonsiliasi diverifikasi langsung ke DB (urutan/locator/skip-missing/idempotent replace). lint/typecheck (7 workspace)/build hijau. File web baru: `blocknote-citation-schema.tsx`, `blocknote-citation-store.ts`, `citation-picker-dialog.tsx`.
 
-**Acceptance:** citation bertahan setelah refresh, style APA→IEEE mengubah render tanpa ganti ID, bibliography memuat hanya reference yang dipakai, dan reference missing tidak silently hilang.
+1. ✅ Custom inline content `citation` (`citationIds` csv, `nodeId` stabil, locator/label/prefix/suffix) + custom block `bibliography` (used-in-document). Schema `aqshaBlockNoteSchema` = default + 2 node; di-pass ke `useCreateBlockNote`.
+2. ✅ Citation picker (search + multi-select) via perintah `/sitasi`; `/daftar pustaka` menyisipkan block bibliography. (Nama perintah Indonesia, bukan `/citation`/`/bibliography`.)
+3. ⚠️ Serializer: `blocksJson` canonical (via `JSON.stringify(editor.document)` existing). Markdown/plainText = HTML-first `blocksToMarkdownLossy` merender node (belum ada citekey Pandoc khusus — fallback readable via komponen render). Cukup untuk v1; citekey Pandoc bisa menyusul.
+4. ✅ Autosave rekonsiliasi `document_citation_usages` transaksional di `ArtifactService.updateDocument` (delete-all + insert per dokumen; id non-workspace di-skip FK-safe).
+5. ✅ Editor render reaktif dengan style default workspace + missing state (chip "⚠ sitasi hilang" dari `renderDocument.missingIds`). Panel reader read-only tetap markdown prose (belum render node sitasi — surface sekunder).
+6. ⚠️ DEVIASI (dari §12.3): bibliography = **LIVE** (auto re-render dari store tiap sitasi/style berubah), BUKAN tombol "Update bibliography" manual — lebih ergonomis + lebih sedikit kode (tak perlu snapshot di blocksJson).
 
-### Fase 4 — Connect Mendeley melalui OAuth
+**Acceptance:** ✅ citation bertahan setelah refresh (blocksJson canonical); APA→IEEE mengubah render tanpa ganti ID (node simpan `citationIds`, marker dari render service); bibliography hanya memuat yang dipakai (`makeBibliography` used-in-doc); missing tidak silently hilang (chip missing). Runtime E2E editor = owner (risk: xl-ai AIExtension vs custom schema).
 
-**Hasil:** user dapat menghubungkan Mendeley untuk pull metadata dari library/folder yang dipilih.
+### Fase 4 — Astra integration — ✅ SELESAI (2026-07-11)
 
-1. Registrasikan aplikasi Aqsha pada Mendeley Developer Portal dan tentukan redirect URI production/staging/local.
-2. Tambah table `mendeley_connections`: owner, encrypted access/refresh token, token expiry, profile id, selected folder ids, last sync cursor/time, status/error. Token tidak pernah dikirim ke `apps/web`.
-3. `apps/api`:
-   - `GET /integrations/mendeley/connect` membuat OAuth `state` signed dan redirect;
-   - callback memverifikasi state, menukar code di backend, mengenkripsi token, lalu redirect ke workspace integrations;
-   - disconnect mencabut/deletes token lokal dan menghentikan job.
-4. `packages/services/mendeley.service.ts` menjadi adapter HTTP tunggal dengan pagination, retry/backoff 429, token refresh, dan normalized error.
-5. UI memilih library/folder serta mode sync `metadata only` (default). Tampilkan preview record baru/updated/conflict sebelum commit.
-6. BullMQ job `mendeley-sync` menarik perubahan secara manual dan periodik; idempotent melalui `externalId` dan `sourceHash`.
-7. Conflict policy awal: Aqsha tidak mengirim perubahan ke Mendeley. Bila reference yang pernah diedit lokal berubah di Mendeley, tandai `conflict` dan user memilih keep Aqsha atau accept Mendeley.
+1. ✅ `ContextRef` kind `workspace-citation` di `@aqsha/chat-core` (union + `contextRefKey`/`splitContextRefs` lane `workspaceCitations`/`countContextRefs`/`buildWorkspaceCitationMentionLabel`); hydration `ContextService.hydrate` validasi owner+workspace via `CitationService.get` (best-effort drop foreign) + section catatan `get_workspace_citation`; lane baru di `/threads/context/hydrate` + `useHydrateContext` + composer.
+2. ✅ Chip konteks "Tambahkan ke chat" di detail sitasi via channel `selectionRefs` existing (`useComposerSelection().addSelectionRef`, lalu pindah ke tab Chat).
+3. ✅ Agent tools read-only `search_workspace_citations` / `get_workspace_citation` (subpath baru `@aqsha/services/citations`; `workspaceId` = input param dari catatan konteks). ⚠️ DITUNDA: suggestion card deterministik + tool "suggest insert ke dokumen" — insert tetap aksi user via `/sitasi`; tools sudah membuat sitasi tersedia untuk Astra.
 
-**Acceptance:** user menghubungkan akun, memilih folder, sync metadata, dapat disconnect, token tidak muncul pada log/response/browser, dan sync ulang tidak menduplikasi records.
+### Fase 5 — Settings → Integrasi + Mendeley OAuth
 
-### Fase 5 — Astra integration dan collaboration (opsional)
+**Hasil:** halaman Integrasi live; user menghubungkan Mendeley dan menarik metadata folder terpilih ke workspace.
 
-**Hasil:** Astra dapat memakai reference library tanpa mengorbankan user control.
+1. Registrasi aplikasi di Mendeley Developer Portal; redirect URI production/staging/local.
+2. `packages/db` — `integration_connections` + migration; crypto helper AES-GCM (secret via env/KMS).
+3. `apps/api` — `routes/integrations.ts` (connect/callback/status/disconnect/folders/sync) + BullMQ `integration-sync`.
+4. `packages/services` — `integration.service.ts` + `mendeley.adapter.ts` di balik interface `IntegrationProvider`.
+5. `apps/web` — entri `settingsMenu` "Integrasi" + `IntegrationsPage` (kartu provider, status pill, connect/disconnect, sync manual); tab Sitasi mendapat item "Tarik dari Mendeley" (folder picker → preview → commit, reuse wizard).
+6. Conflict policy: one-way; record yang pernah diedit lokal dan berubah di provider → tanda `conflict`, user pilih keep Aqsha / accept provider.
 
-1. Tambah `ContextRef` kind `workspace-citation` atau `citation-selection` di `@aqsha/chat-core`.
-2. `apps/api` hydrate context memvalidasi owner + workspace; agent menerima metadata minimal dan identifier Aqsha.
-3. Tambah agent read tool `search_workspace_citations`, `get_workspace_citation`; write tool hanya boleh **suggest citation**, tidak membuat citation tanpa action user kecuali owner mengaktifkan mode explicit.
-4. Tampilkan citation suggestion card deterministik di chat dengan tombol insert/open document.
-5. Collaboration/group Mendeley tidak dikerjakan sebelum Aqsha memiliki model kolaborasi workspace sendiri; jangan menganggap Mendeley group sebagai ACL Aqsha.
+**Acceptance:** connect → pilih folder → sync metadata → disconnect; token tidak pernah muncul di log/response/browser; sync ulang tidak menduplikasi (idempotent via `externalId`).
 
-## 8. OAuth dan keamanan Mendeley
+### Fase 6 — Zotero — ✅ SELESAI (kode) (2026-07-11)
 
-Mendeley API menawarkan documents, files, folders, groups, serta annotations. Akses library user memerlukan OAuth; catalog publik berbeda dari library user. Referensi dokumen API:
+**Hasil:** Zotero drop-in penuh di interface generik yang sama; user menempel API key di Settings → Integrasi lalu menarik metadata koleksi ke workspace lewat wizard yang sama.
 
-- [Mendeley Core API Resources](https://dev.mendeley.com/overview/core_resources.html)
-- [Mendeley Core API Quick Start Guides](https://dev.mendeley.com/code/core_quick_start_guides.html)
+1. ✅ `zotero.adapter.ts` (API v3, header `Zotero-API-Key` + `Zotero-API-Version: 3`; folders `/users/<id>/collections`, items `/users/<id>/items/top?format=json&include=csljson` = CSL-JSON native, `/collections/<key>/items/top` untuk folder tertentu; paginasi Link rel=next; skip note/attachment tanpa `csljson.type`). ⚠️ DEVIASI: pull penuh (bukan incremental `Last-Modified-Version` cursor) — paritas dgn Mendeley yang juga full-pull; cursor incremental bisa menyusul.
+2. ✅ Connect via API key tanpa OAuth: interface diberi `authMode` (`oauth`/`api_key`) + `connectWithApiKey`; validasi ke `/keys/<key>` (userID otoritatif dari respons, user ID input opsional). ⚠️ DEVIASI: `/keys/<key>` (didokumentasikan eksplisit) alih-alih `/keys/current`. Route `POST /integrations/:provider/key`; service `IntegrationService.connectWithApiKey`.
+3. ✅ Kartu Zotero di Settings → Integrasi aktif (bukan "Segera") via `authMode` di status view → `ApiKeyConnectDialog` (input API key + user ID opsional, link bantuan zotero.org/settings/keys). `ProviderSyncWizard` + footnote empty-state sudah generik → "Tarik dari Zotero" jalan otomatis begitu terhubung (selector provider muncul bila >1 akun).
 
-Aturan keras fase OAuth:
+**Acceptance:** ✅ paritas alur dengan Mendeley (folders/preview/commit/disconnect/idempotent — satu pipeline `stageImportBatch`/`commit`), key terenkripsi at-rest (AES-256-GCM, tak pernah keluar dari service). E2E connect Zotero dgn API key riil = OWNER.
 
-- OAuth redirect/state/PKCE atau secret flow diverifikasi sesuai capability Mendeley saat aplikasi didaftarkan.
-- Access/refresh token dienkripsi at-rest dengan secret key/KMS deployment; tidak di-serialize ke client, analytics, pino log, error body, atau BullMQ payload plaintext.
-- `state` harus mengikat owner Aqsha, workspace intent, nonce, expiry, dan return URL yang allowlisted.
-- Endpoint sync selalu memeriksa koneksi milik `ownerUserId`; `mendeleyDocumentId` tidak pernah menjadi authorization bypass.
-- Download file hanya on-demand, user-initiated, dan harus melewati storage/antivirus/size policy Aqsha; default sync tidak memanggil endpoint file.
-- Disconnect menghapus token lokal, job tertunda, dan cache credential; data citation Aqsha tidak ikut dihapus kecuali user memilih action terpisah.
+## 8. Keamanan integrasi provider
+
+- OAuth (Mendeley): `state` signed mengikat owner, intent, nonce, expiry, return URL allowlisted; exchange code backend-only; PKCE bila didukung saat registrasi.
+- Credential (token/API key) dienkripsi at-rest; tidak di-serialize ke client, analytics, pino log, error body, atau BullMQ payload plaintext.
+- Endpoint sync selalu cek koneksi milik `ownerUserId`; `externalId` tidak pernah jadi authorization bypass.
+- Download file provider hanya on-demand + user-initiated + lewat storage/AV/size policy Aqsha; default sync tidak menyentuh endpoint file.
+- Disconnect menghapus credential lokal, job tertunda, cache; data citation Aqsha tidak ikut terhapus kecuali user memilih action terpisah.
 
 ## 9. Risiko dan mitigasi
 
 | Risiko | Mitigasi |
 |---|---|
-| Data BibTeX/RIS kotor atau tidak lengkap | preview per-record, quality status, manual edit, dan parser fixture test |
-| False-positive duplicate berbasis judul | DOI/ISBN diutamakan; fallback hanya menjadi suggestion yang harus di-approve |
-| Citation style tidak konsisten | CSL-JSON canonical + satu renderer service + snapshot tests per style |
-| Citation di dokumen menjadi teks mati | simpan `citationIds` di custom BlockNote node, bukan rendered text |
-| Reference dihapus tapi dipakai dokumen | soft delete + missing state + remap/restore flow |
-| Mendeley OAuth/token leak | backend-only exchange, encryption, redacted logging, state validation |
-| Sync overwrite edit lokal | Aqsha copy one-way default + explicit conflict review |
-| PDF legal/storage cost | metadata-only default dan file import explicit |
-| Scope berkembang menjadi full Mendeley clone | fase dikunci: import/reference/cite/export dulu, annotation/groups/collaboration ditunda |
+| Data BibTeX/RIS kotor/tidak lengkap | preview per-record, quality status, manual edit, fixture test |
+| False-positive duplicate berbasis judul | DOI/ISBN diutamakan; fallback hanya suggestion yang di-approve |
+| Style tidak konsisten | CSL-JSON canonical + satu renderer service + snapshot test per style |
+| Citation di dokumen jadi teks mati | node menyimpan `citationIds`, bukan rendered text |
+| Reference dihapus tapi dipakai dokumen | soft delete + missing state + remap/restore |
+| Panel tab merusak UX chat existing | refactor chrome via prop (`chrome="content"`), thread-experience tak tersentuh; test regresi chat panel |
+| Lebar panel tidak cukup untuk manajemen massal | expand 30:70 + container-variant density; wizard/form di dialog |
+| Token/key provider bocor | backend-only exchange, enkripsi, redacted logging, state validation |
+| Sync overwrite edit lokal | one-way + conflict review eksplisit |
+| Lisensi CSL engine | ADR Fase 0 (citeproc-js CPAL/AGPL), engine server-side only |
+| Scope membengkak jadi clone Mendeley/Zotero | fase dikunci: import/reference/cite/export dulu; annotation/groups/collab ditunda |
 
 ## 10. Verifikasi dan rollout
 
 ### Test matrix minimum
 
-- Parser: BibTeX/RIS Mendeley, Unicode, many authors, missing DOI/year/title, malformed entry.
-- Service: normalize DOI, canonical key, candidate duplicate, explicit merge, owner/workspace isolation, export snapshot.
-- API: multipart preview tidak membuat record; commit idempotent; user lain tidak bisa baca/mengubah batch atau citation.
-- Web: empty state, preview selection, policy duplicate, readable API error, URL state `view=citations`.
-- BlockNote: insert multi-citation, reload, remove/remap missing citation, style switch, bibliography update.
-- OAuth: invalid state, expired state, denied consent, expired token refresh, disconnect, repeated sync, 429 retry.
+- Parser: BibTeX/RIS Mendeley + Zotero, Unicode, many authors, missing DOI/year/title, malformed entry.
+- Service: normalize DOI, canonical key, candidate duplicate, merge, owner/workspace isolation, export snapshot.
+- API: preview tidak membuat record; commit idempotent; user lain tidak bisa akses batch/citation/koneksi.
+- Web: empty state, wizard preview/policy, readable error, deep link `?panel=cite` dan `?panel=cite:<id>`, regresi chat tab, expand density.
+- BlockNote: insert multi-citation, reload, remove/remap missing, style switch, bibliography update.
+- Integrasi: invalid/expired state, denied consent, token refresh, disconnect, repeated sync idempotent, 429 retry, Zotero key invalid.
 
 ### Command verifikasi
 
@@ -417,35 +561,41 @@ bun run test
 bun run build
 ```
 
-Untuk perubahan schema/service, jalankan juga `bun run db:generate`, review migration, lalu `bun run db:migrate` pada environment yang tepat. Build `@aqsha/db` dan `@aqsha/services` ke `dist/` sebelum smoke runtime bila kontrak shared berubah.
+Perubahan schema/service: `bun run db:generate` → review migration → `bun run db:migrate` pada environment yang tepat; build `@aqsha/db`/`@aqsha/services` ke `dist/` sebelum smoke runtime bila kontrak shared berubah.
 
 ### Rollout
 
-1. Ship Fase 1 di balik feature flag `workspace_citations` untuk internal users.
-2. Monitor import error rate, average records/batch, duplicate decision, render failure, serta export success.
-3. Perbaiki parser/quality rules dari fixture nyata sebelum membuka publik.
-4. Ship Fase 3 setelah data library stabil; dokumen lama tanpa citation node tidak di-migrate paksa.
-5. Jalankan OAuth Mendeley sebagai beta terpisah (`mendeley_sync_beta`) setelah security review dan aplikasi developer siap.
+1. ⚠️ **Status (2026-07-11): feature flag `workspace_citations` DIHAPUS** — Citation Manager (tab Sitasi + "Tambahkan ke Sitasi" + editor sitasi + Astra) kini **default aktif untuk semua user**, tanpa gate. (Sebelumnya flag env OR `isAdmin`.) Tidak perlu set env untuk GA.
+2. Monitor import error rate, records/batch, duplicate decision, render failure, export success, render-document latency.
+3. ✅ Fase 3 (BlockNote) + Fase 4 (Astra) selesai; dokumen lama tanpa citation node tidak dimigrate paksa (reconcile hanya menulis usage saat save berikutnya).
+4. Fase 5 (Mendeley OAuth) + Fase 6 (Zotero API key) selesai di kode; rilis sebagai beta terpisah (`provider_sync_beta`) setelah security review + app registration Mendeley siap. Zotero tak butuh app registration (key milik user).
+5. **OWNER sebelum rilis:** PROD migrate `0031` + `0032` + `0033` (integration_connections); resolve kolisi migration `0031` dgn branch admin-role saat merge; set env `AQSHA_INTEGRATION_ENC_KEY` (+ Mendeley OAuth 5 env) di PROD; Zotero TIDAK butuh env server (hanya enc key). Restore `admin_entitlements` di DEV bila menjalankan itest artifacts/billing/workspaces (didrop branch sibling → itest gagal, PRE-EXISTING, bukan dari citation work; api itests juga butuh `REDIS_URL` + DEV DB termigrate). E2E editor sitasi + E2E connect Mendeley/Zotero.
 
 ## 11. Ringkasan file yang diperkirakan disentuh
 
 | Area | File/direktori |
 |---|---|
-| DB | `packages/db/src/schema/workspaceCitations.ts`, `workspaceCitationSettings.ts`, `citationImportBatches.ts`, repositories, `packages/db/drizzle/*` |
-| Services | `packages/services/src/citation*.ts`, export `packages/services/src/index.ts`, tests/fixtures |
-| API | `apps/api/src/routes/citations.ts`, server route mount, BullMQ Mendeley worker fase 4 |
-| Web data | `apps/web/features/citations/api.ts`, types, query keys, hooks |
-| Web UI | `apps/web/features/citations/components/*`, `apps/web/features/workspaces/components/workspace-library-surface.tsx`, toolbar/board view state |
-| Artifact bridge | artifact detail actions dan `ArtifactService` helper |
-| BlockNote | `blocknote-document-editor.tsx`, loader/schema components, document usage reconciliation |
-| Agent (opsional) | `packages/chat-core` context ref, API hydration, agent citation read/suggestion tools |
+| DB ✅ (F1–5) | `packages/db/src/schema/workspaceCitations.ts`, `workspaceCitationSettings.ts`, `citationImportBatches.ts`, `documentCitationUsages.ts` (F3), `integrationConnections.ts` (F5) + repos + mig `0031`/`0032`/`0033` + `test/citations.test.ts` |
+| Services ✅ (F1–6) | `packages/services/src/citations/*` + `integrations/*` (F5–6: crypto/oauth-state/integration.service/mendeley.adapter/zotero.adapter/citation-sync.service) + export di `index.ts` + rate-limit rules `citations:*`/`integrations:*` di `quota/rate-limits.ts` + tests (`integrations-crypto.test.ts`, `integrations-zotero.test.ts`) |
+| API ✅ (F1–6) | `apps/api/src/routes/citations.ts` + `routes/integrations.ts` (connect/callback/key/refresh/disconnect/folders/sync) + mount di `index.ts` + worker `integration-sync.worker.ts` + `test/citations.test.ts` |
+| Web integrasi ✅ (F5–6) | `apps/web/app/app/settings/integrations/page.tsx`, `features/settings/components/integrations-page.tsx` (+ `ApiKeyConnectDialog`), `features/settings/lib/integrations.ts` (`authMode`/`PROVIDER_AUTH_MODE`), `features/settings/api.ts` (`useConnectApiKeyIntegration`), `features/citations/components/provider-sync-wizard.tsx` |
+| Web panel ✅ | `apps/web/features/workspaces/utils/workspace-panel-model.ts` (+ test), `workspace-panel-context.tsx` (baru), `workspace-detail-client.tsx`, `workspace-side-panel.tsx` (baru; `workspace-chat-side-panel.tsx` TIDAK dihapus — masih dipakai artifact reader dgn `chrome="frame"`), prop `chrome` pada `CompactThreadChatPanel`, `workspace-board-toolbar.tsx` (aria PanelOpenButton) |
+| Web citations ✅ | `apps/web/features/citations/{api.ts,types.ts,feature.ts,components/*}` (panel + bulk bar seleksi, list+row+filter, empty state, wizard import, dialog DOI/manual-edit/gaya/**duplikat**, detail sub-view + provenance, export menu), `apps/web/lib/{api-query.ts,feature-flags.ts}` |
+| Web feature flag ❌ DIHAPUS (2026-07-11) | `apps/web/lib/feature-flags.ts` + `features/citations/feature.ts` DIHAPUS; gate dilepas dari `workspace-side-panel.tsx`/`workspace-library-surface.tsx`/`artifact-detail-view.tsx`; entri `.env.example` dihapus. Citation Manager default aktif. |
+| Web settings | `apps/web/features/settings/lib/settings-menu.ts`, `apps/web/app/app/settings/integrations/page.tsx`, `features/settings/components/integrations-page.tsx` (F5) |
+| Artifact bridge ✅ (F2) | `citation.service.ts` `createFromArtifact`/`resolveFromDoi`, `routes/citations.ts` `from-artifact`/`:id/resolve`; web threading `onAddToCitations` (`workspace-library-{context-menus,grid,board,surface}.tsx` + `artifact-render-panels.tsx` `ArtifactHeaderActions` + `artifact-detail-view.tsx`), `onCitationAdded` di `workspace-detail-client.tsx`, `detectedDocumentKind` ditambah ke `use-workspaces-data.ts`/`workspace-library-model.ts` |
+| BlockNote ✅ (F3) | `blocknote-document-editor.tsx` (schema+picker+controller+`workspaceId`), `blocknote-editor-loader.tsx`, `blocknote-citation-schema.tsx`+`blocknote-citation-store.ts`+`citation-picker-dialog.tsx` (baru), `artifact-detail-view.tsx` (drill `workspaceId`); DB `documentCitationUsages.ts`+repo+mig `0032`; svc `citation-usages.ts`+`renderDocument`; route `render-document`; web `api.ts`/`types.ts`/`api-query.ts` (`useRenderDocumentCitations`) |
+| Agent ✅ (F4) | `packages/chat-core/src/index.ts` (kind `workspace-citation`), `context.service.ts` hydration + `threads.ts` lane + web `composer.tsx`/`threads/api.ts`/`composer-inline-editor.ts`, tools `{search,get}-workspace-citation.ts`+`tools/index.ts`, subpath `@aqsha/services/citations`, chip di `citation-detail-view.tsx`/`citations-panel.tsx`/`workspace-side-panel.tsx` |
+| Icons ✅ | `Quote`/`BookOpen`/`MessageSquarePlusIcon` sudah tersedia di `@aqsha/ui/icons` (tak perlu tambah untuk F3–4) |
 
-## 12. Urutan keputusan sebelum mulai coding
+## 12. Urutan keputusan sebelum mulai coding — SEMUA DITUTUP (2026-07-11)
 
-1. Konfirmasi scope v1: hanya `.bib`/`.ris` atau termasuk EndNote XML.
-2. Konfirmasi empat default CSL style dan apakah user boleh memilih custom CSL pada v1.
-3. Konfirmasi apakah bibliography block harus otomatis update atau user menekan **Update bibliography**.
-4. Konfirmasi apakah import batch yang sudah commit boleh di-undo, dan batas waktunya.
-5. Konfirmasi kapan direct Mendeley OAuth dibuka: langsung setelah import v1 atau setelah BlockNote citation stabil.
+Keputusan diambil mengikuti rekomendasi plan saat implementasi Fase 0–1:
 
-Rekomendasi urutan: **Fase 0 → Fase 1 → Fase 2 → Fase 3 → evaluasi penggunaan → Fase 4**.
+1. ✅ Scope v1 = hanya `.bib`/`.ris`; EndNote XML di luar scope (ADR).
+2. ✅ Empat style dikunci (`apa-7`/`ieee`/`vancouver`/`chicago-author-date`); custom CSL TIDAK diizinkan v1.
+3. ⚠️ REVISI saat Fase 3: bibliography block dibuat **LIVE** (auto re-render dari store reaktif), BUKAN tombol "Update bibliography" manual — render server-side + cache React Query murah, live lebih ergonomis & tak menyimpan teks di blocksJson (konsisten keputusan #7).
+4. ✅ Tanpa undo batch otomatis — koreksi via hapus per-citation (soft delete); `summary_json` batch tetap jadi audit.
+5. ✅ ADR lisensi: citeproc dielek **CPAL-1.0**, server-side only (`docs/adr-citation-csl-engine.md`).
+6. ✅ Label tab = "Sitasi" (sentence case).
+7. ✅ `PanelOpenButton` tetap satu tombol tanpa indikator count (count tampil di toolbar kartu tab Sitasi).

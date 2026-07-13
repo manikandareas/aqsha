@@ -22,6 +22,8 @@ export type WorkspaceArtifact = {
     | "url";
   artifactFamily?: "text" | "file" | "interactive" | "visual" | "data" | "link";
   source?: "manual" | "upload" | "agent" | "url";
+  /** Klasifikasi dokumen (P3); `scholarly_paper` = kandidat "Tambahkan ke Sitasi". */
+  detectedDocumentKind?: "generic" | "scholarly_paper";
   title: string;
   plainTextPreview?: string;
   indexingStatus?: "not_indexed" | "pending" | "ready" | "failed";

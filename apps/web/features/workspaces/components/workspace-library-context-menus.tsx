@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BookmarkIcon,
   CheckIcon,
   ExternalLinkIcon,
   FolderIcon,
@@ -72,6 +73,7 @@ export function ArtifactContextMenuContent({
   onDelete,
   onMove,
   onMoveToWorkspace,
+  onAddToCitations,
 }: {
   moveTargets: MoveTargetOption[];
   workspaces: WorkspaceMoveTarget[];
@@ -83,6 +85,8 @@ export function ArtifactContextMenuContent({
   onDelete: () => void;
   onMove: (target: string) => void;
   onMoveToWorkspace: (targetWorkspaceId: string) => void;
+  /** Fase 2 bridge — hanya untuk paper saat Citation Manager aktif. */
+  onAddToCitations?: () => void;
 }) {
   return (
     <ContextMenuContent className="w-56">
@@ -115,6 +119,15 @@ export function ArtifactContextMenuContent({
         <LinkIcon className="size-4" />
         Salin link
       </ContextMenuItem>
+      {onAddToCitations ? (
+        <>
+          <ContextMenuSeparator />
+          <ContextMenuItem onSelect={onAddToCitations}>
+            <BookmarkIcon className="size-4" />
+            Tambahkan ke Sitasi
+          </ContextMenuItem>
+        </>
+      ) : null}
       <ContextMenuSeparator />
       <ContextMenuItem variant="destructive" onSelect={onDelete}>
         <Trash2Icon className="size-4" />

@@ -7,10 +7,12 @@ import { admin } from "./routes/admin";
 import { artifacts } from "./routes/artifacts";
 import { billing } from "./routes/billing";
 import { blocknoteAi } from "./routes/blocknote-ai";
+import { citations } from "./routes/citations";
 import { explore } from "./routes/explore";
 import { feed } from "./routes/feed";
 import { folders } from "./routes/folders";
 import { health } from "./routes/health";
+import { integrations } from "./routes/integrations";
 import { onboarding } from "./routes/onboarding";
 import { papers } from "./routes/papers";
 import { preferences } from "./routes/preferences";
@@ -41,6 +43,8 @@ export const app = new Elysia()
   .use(workspaces)
   .use(folders)
   .use(artifacts)
+  .use(citations)
+  .use(integrations)
   .use(blocknoteAi)
   .use(threads)
   .use(feed)

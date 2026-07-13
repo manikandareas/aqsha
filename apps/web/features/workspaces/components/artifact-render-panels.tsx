@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import type { BundledLanguage } from "shiki";
 import {
   ArrowLeftIcon,
+  BookmarkIcon,
   DownloadIcon,
   ExternalLinkIcon,
   FileIcon,
@@ -24,6 +25,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -425,10 +427,13 @@ export function ArtifactHeaderActions({
   payload,
   title,
   onDelete,
+  onAddToCitations,
 }: {
   payload: ArtifactRenderPayload;
   title: string;
   onDelete: () => void;
+  /** Fase 2 bridge — hanya diberikan untuk paper saat Citation Manager aktif. */
+  onAddToCitations?: () => void;
 }) {
   const isFile = payload.artifactType === "pdf" || payload.artifactType === "docx";
   const isUrl = payload.artifactType === "url";
@@ -454,6 +459,15 @@ export function ArtifactHeaderActions({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
+            {onAddToCitations ? (
+              <>
+                <DropdownMenuItem onClick={onAddToCitations}>
+                  <BookmarkIcon className="size-4" />
+                  Tambahkan ke Sitasi
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            ) : null}
             <DropdownMenuItem
               onClick={onDelete}
               className="text-destructive focus:text-destructive"

@@ -6,6 +6,11 @@ import { toast } from "sonner";
 import { useApi } from "@/lib/api-client";
 import { readableApiErrorMessage } from "@/lib/api-error";
 import { queryKeys, unwrap } from "@/lib/api-query";
+import {
+  type IntegrationProviderKey,
+  type IntegrationStatusView,
+  PROVIDER_META,
+} from "./lib/integrations";
 
 type ProductKey =
   | "starterMonthly"
@@ -190,6 +195,83 @@ export function useRevokeSession() {
       toast.success("Perangkat dikeluarkan.");
     },
     onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal mengeluarkan perangkat.")),
+  });
+}
+
+/** Status koneksi semua provider referensi (Settings → Integrasi). */
+export function useIntegrations() {
+  const api = useApi();
+  return useQuery({
+    queryKey: queryKeys.integrations.list(),
+    queryFn: async () => unwrap(await api.integrations.get()) as IntegrationStatusView[],
+  });
+}
+
+/** Mulai OAuth connect → redirect ke halaman consent provider. */
+export function useConnectIntegration() {
+  const api = useApi();
+  return useMutation({
+    mutationFn: async (provider: IntegrationProviderKey) =>
+      unwrap(await api.integrations({ provider }).connect.get()) as { url: string },
+    onSuccess: (res) => {
+      if (res?.url) window.location.href = res.url;
+    },
+    onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal memulai koneksi.")),
+  });
+}
+
+/** Connect via API key (Zotero) — simpan key + user id, validasi backend. */
+export function useConnectApiKeyIntegration() {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      provider: IntegrationProviderKey;
+      apiKey: string;
+      userId?: string;
+    }) =>
+      unwrap(
+        await api.integrations({ provider: input.provider }).key.post({
+          apiKey: input.apiKey,
+          userId: input.userId,
+        }),
+      ) as IntegrationStatusView,
+    onSuccess: (_res, input) => {
+      qc.invalidateQueries({ queryKey: queryKeys.integrations.all });
+      const label = PROVIDER_META[input.provider].label;
+      toast.success(`${label} terhubung.`);
+    },
+    onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal menghubungkan akun.")),
+  });
+}
+
+/** Putuskan koneksi provider — data citation Aqsha tidak ikut terhapus. */
+export function useDisconnectIntegration() {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (provider: IntegrationProviderKey) =>
+      unwrap(await api.integrations({ provider }).delete()) as { ok: true },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.integrations.all });
+      toast.success("Koneksi diputuskan.");
+    },
+    onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal memutuskan koneksi.")),
+  });
+}
+
+/** "Sinkronkan sekarang" — refresh token + profil koneksi. */
+export function useRefreshIntegration() {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (provider: IntegrationProviderKey) =>
+      unwrap(await api.integrations({ provider }).refresh.post()) as IntegrationStatusView,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.integrations.all });
+      toast.success("Koneksi disinkronkan.");
+    },
+    onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal menyinkronkan koneksi.")),
   });
 }
 

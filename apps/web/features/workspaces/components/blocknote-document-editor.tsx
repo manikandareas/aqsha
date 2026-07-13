@@ -1,8 +1,9 @@
 "use client";
 
-import { type BlockNoteEditor, filterSuggestionItems, type PartialBlock } from "@blocknote/core";
+import { filterSuggestionItems } from "@blocknote/core";
 import { en } from "@blocknote/core/locales";
 import {
+  type DefaultReactSuggestionItem,
   FormattingToolbar,
   FormattingToolbarController,
   getDefaultReactSlashMenuItems,
@@ -21,12 +22,27 @@ import {
 } from "@blocknote/xl-ai";
 import { en as aiEn } from "@blocknote/xl-ai/locales";
 import "@blocknote/xl-ai/style.css";
-import { SparklesIcon } from "@aqsha/ui/icons";
+import { BookOpen, Quote, SparklesIcon } from "@aqsha/ui/icons";
 import { useAuth } from "@clerk/nextjs";
 import { DefaultChatTransport } from "ai";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useCitationSettings, useRenderDocumentCitations } from "@/features/citations/api";
+import type { DocumentCitationCluster } from "@/features/citations/types";
 import { documentEditBus } from "@/lib/document-edit-bus";
 import { blockNotePlainText, parseBlockNoteJson } from "../utils/artifact-editor-model";
+import {
+  type AqshaEditor,
+  type AqshaPartialBlock,
+  aqshaBlockNoteSchema,
+  extractDocumentClusters,
+} from "./blocknote-citation-schema";
+import {
+  attachCitationStore,
+  type CitationRenderStore,
+  createCitationRenderStore,
+  EMPTY_CITATION_SNAPSHOT,
+} from "./blocknote-citation-store";
+import { CitationPickerDialog } from "./citation-picker-dialog";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
@@ -44,6 +60,7 @@ const AI_BUSY_STATUSES = new Set(["thinking", "ai-writing", "user-reviewing"]);
 
 export function BlockNoteDocumentEditor({
   artifactId,
+  workspaceId,
   initialBlocksJson,
   initialMarkdown = "",
   onContentChange,
@@ -51,6 +68,8 @@ export function BlockNoteDocumentEditor({
 }: {
   /** Artifact yang sedang diedit — dikirim ke route AI (`body.artifactId`) untuk ownership + billing. */
   artifactId: string;
+  /** Workspace pemilik dokumen — untuk query Citation Library (picker + render sitasi). */
+  workspaceId: string;
   initialBlocksJson: string;
   initialMarkdown?: string;
   onContentChange: (content: DocumentEditorContent) => void;
@@ -58,9 +77,12 @@ export function BlockNoteDocumentEditor({
   onAskAstraAboutSelection?: (selection: EditorSelection) => void;
 }) {
   const [initialContent] = useState(
-    () => parseBlockNoteJson(initialBlocksJson) as PartialBlock[],
+    () => parseBlockNoteJson(initialBlocksJson) as AqshaPartialBlock[],
   );
   const [initialMarkdownSnapshot] = useState(initialMarkdown);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  // Store render sitasi dilekatkan ke editor (dibaca komponen node via props.editor).
+  const [citationStore] = useState<CitationRenderStore>(() => createCitationRenderStore());
 
   const { getToken } = useAuth();
   // `getToken` (Clerk) BUKAN referensi yang dijamin stabil antar-render. Dibaca lewat ref saat
@@ -88,6 +110,7 @@ export function BlockNoteDocumentEditor({
 
   const editor = useCreateBlockNote(
     {
+      schema: aqshaBlockNoteSchema,
       dictionary: { ...en, ai: aiEn },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       extensions: [AIExtension({ transport: transport as any, agentCursor: { name: "Astra", color: "#7c5cff" } })],
@@ -95,6 +118,35 @@ export function BlockNoteDocumentEditor({
     },
     [transport],
   );
+
+  // Lekatkan store secara SINKRON (sebelum child node render) supaya komponen node langsung
+  // menemukannya di render pertama; idempotent + tahan editor di-recreate (transport berubah).
+  attachCitationStore(editor, citationStore);
+
+  /** Sisipkan inline node sitasi (satu cluster) dari picker /sitasi. */
+  const insertCitation = (citationIds: string[]) => {
+    if (citationIds.length === 0) return;
+    editor.insertInlineContent([
+      {
+        type: "citation",
+        props: {
+          citationIds: citationIds.join(","),
+          nodeId: crypto.randomUUID(),
+          locator: "",
+          label: "",
+          prefix: "",
+          suffix: "",
+        },
+      },
+      " ",
+    ]);
+  };
+
+  /** Sisipkan block daftar pustaka (used-in-document) setelah blok kursor. */
+  const insertBibliography = () => {
+    const reference = editor.getTextCursorPosition().block;
+    editor.insertBlocks([{ type: "bibliography", props: {} }], reference, "after");
+  };
 
   const hydratedFromMarkdown = useRef(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -204,6 +256,18 @@ export function BlockNoteDocumentEditor({
 
   return (
     <div ref={wrapperRef} className="relative min-h-[60svh] px-1 py-3">
+      {/* Controller headless: ekstrak cluster sitasi → render dokumen → tulis ke store. */}
+      <DocumentCitationsController
+        workspaceId={workspaceId}
+        editor={editor}
+        store={citationStore}
+      />
+      <CitationPickerDialog
+        workspaceId={workspaceId}
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        onInsert={insertCitation}
+      />
       <BlockNoteView
         editor={editor}
         className="aqsha-blocknote"
@@ -226,12 +290,16 @@ export function BlockNoteDocumentEditor({
           )}
         />
 
-        {/* Slash menu: item default + item AI native (`/ai`, ringkas, perbaiki tulisan, dst.). */}
+        {/* Slash menu: item default + sitasi (/sitasi, /daftar pustaka) + item AI native. */}
         <SuggestionMenuController
           triggerCharacter="/"
           getItems={async (query) =>
             filterSuggestionItems(
-              [...getDefaultReactSlashMenuItems(editor), ...getAISlashMenuItems(editor)],
+              [
+                ...getDefaultReactSlashMenuItems(editor),
+                ...citationSlashMenuItems(() => setPickerOpen(true), insertBibliography),
+                ...getAISlashMenuItems(editor),
+              ],
               query,
             )
           }
@@ -251,7 +319,7 @@ function AskAstraToolbarButton({
   editor,
   onAsk,
 }: {
-  editor: BlockNoteEditor;
+  editor: AqshaEditor;
   onAsk: (selection: EditorSelection) => void;
 }) {
   const Components = useComponentsContext();
@@ -278,4 +346,80 @@ function AskAstraToolbarButton({
       Tanya Astra
     </Components.FormattingToolbar.Button>
   );
+}
+
+/** Item slash-menu grup "Sitasi": buka picker (/sitasi) + sisipkan daftar pustaka. */
+function citationSlashMenuItems(
+  openPicker: () => void,
+  insertBibliography: () => void,
+): DefaultReactSuggestionItem[] {
+  return [
+    {
+      title: "Sitasi",
+      subtext: "Sisipkan sitasi dari Citation Library",
+      aliases: ["sitasi", "cite", "citation", "referensi", "rujukan"],
+      group: "Sitasi",
+      icon: <Quote className="size-4" />,
+      onItemClick: openPicker,
+    },
+    {
+      title: "Daftar pustaka",
+      subtext: "Sisipkan daftar pustaka yang dipakai dokumen",
+      aliases: ["daftar pustaka", "bibliografi", "bibliography", "referensi"],
+      group: "Sitasi",
+      icon: <BookOpen className="size-4" />,
+      onItemClick: insertBibliography,
+    },
+  ];
+}
+
+/**
+ * Controller headless render sitasi. Mengekstrak cluster dari `editor.document` (hanya saat
+ * himpunan sitasi/locator berubah — signature-gated), memanggil endpoint render dokumen, lalu
+ * menulis hasil (marker in-text + bibliography + missing) ke store yang dibaca node editor.
+ */
+function DocumentCitationsController({
+  workspaceId,
+  editor,
+  store,
+}: {
+  workspaceId: string;
+  editor: AqshaEditor;
+  store: CitationRenderStore;
+}) {
+  const [clusters, setClusters] = useState<DocumentCitationCluster[]>(() =>
+    extractDocumentClusters(editor.document),
+  );
+  const signatureRef = useRef(JSON.stringify(clusters));
+
+  useEditorChange(() => {
+    const next = extractDocumentClusters(editor.document);
+    const signature = JSON.stringify(next);
+    if (signature === signatureRef.current) return;
+    signatureRef.current = signature;
+    setClusters(next);
+  }, editor);
+
+  const settings = useCitationSettings(workspaceId);
+  const styleId = settings.data?.defaultStyleId ?? null;
+  const render = useRenderDocumentCitations(workspaceId, clusters, styleId, clusters.length > 0);
+
+  useEffect(() => {
+    if (clusters.length === 0) {
+      store.set(EMPTY_CITATION_SNAPSHOT);
+      return;
+    }
+    const data = render.data;
+    store.set({
+      textByNode: data
+        ? Object.fromEntries(data.clusters.map((cluster) => [cluster.nodeId, cluster.text]))
+        : {},
+      bibliography: data?.bibliography ?? [],
+      missingIds: data?.missingIds ?? [],
+      styleId: data?.styleId ?? styleId,
+      isLoading: render.isFetching,
+    });
+  }, [clusters.length, render.data, render.isFetching, store, styleId]);
+
+  return null;
 }

@@ -36,6 +36,7 @@ import {
   validateUpload,
 } from "./artifacts/model";
 import { syncArtifactWorkspaceMove } from "./artifacts/move";
+import { CitationUsageService } from "./citations/citation-usages";
 import { ARTIFACT_QUEUES, enqueue } from "./clients/queue";
 import { FolderService } from "./folder.service";
 import { StorageService } from "./storage.service";
@@ -1527,6 +1528,17 @@ export const ArtifactService = {
         contextText: contextFromText(input.plainText),
         updatedAt: now,
       });
+      // Fase 3 — rekonsiliasi pemakaian citation dari blocksJson (source-of-truth
+      // node tetap di blocksJson; tabel usages hanya index/diagnostik). Reconcile
+      // dari string penuh `input.blocksJson` meski di-offload ke R2.
+      if (input.blocksJson !== undefined && artifact.workspaceId) {
+        await CitationUsageService.reconcileDocument(tx, {
+          ownerUserId: input.ownerUserId,
+          workspaceId: artifact.workspaceId,
+          documentArtifactId: input.artifactId,
+          blocksJson: input.blocksJson,
+        });
+      }
     });
     // Bersihkan blob versi lama yang baru saja ditimpa.
     await deleteStaleR2Keys([

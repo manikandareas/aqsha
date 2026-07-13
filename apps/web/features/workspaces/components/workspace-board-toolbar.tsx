@@ -171,7 +171,7 @@ export function WorkspaceBoardToolbar({
               open={chatOpen ?? false}
               onOpen={onToggleChat}
               icon={<MessageSquareIcon className="size-3.5" />}
-              ariaLabel="Buka panel chat"
+              ariaLabel="Buka panel samping"
             />
           ) : null}
           {showWorkspaceSettings ? (

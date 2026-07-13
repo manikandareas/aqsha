@@ -58,6 +58,7 @@ export const threads = new Elysia({ prefix: "/threads" })
         artifactIds: body.artifactIds,
         paperKeys: body.paperKeys,
         feedItemIds: body.feedItemIds,
+        workspaceCitations: body.workspaceCitations,
         selections: body.selections,
       });
     },
@@ -69,6 +70,10 @@ export const threads = new Elysia({ prefix: "/threads" })
         // Sumber Explore publik yang disematkan langsung (paper by key / berita by id).
         paperKeys: t.Optional(t.Array(t.String())),
         feedItemIds: t.Optional(t.Array(t.String())),
+        // Referensi Citation Library tersemat (tab Sitasi) — metadata terstruktur saja.
+        workspaceCitations: t.Optional(
+          t.Array(t.Object({ workspaceId: t.String(), citationId: t.String() })),
+        ),
         // Pilihan blok editor ("Tanya Astra") — blok spesifik artifact markdown + cuplikan.
         selections: t.Optional(
           t.Array(
