@@ -1,10 +1,10 @@
 // Thread-detail right-panel mode (clickable message-part detail panels).
 //
 // The thread-detail shell has ONE side-panel slot, now a HOME for several panels behind
-// a tab strip (Workspace · Sumber · Statistik(soon) · Pratinjau). Every mode maps to one
-// tab (`threadPanelTabOf`): `context` → Workspace, `sources` → Sumber, and all the
-// message-part detail modes (artifact / search / step / plan / questions) share the
-// single Pratinjau slot — clicking a card replaces the preview, closing the panel drops
+// a tab strip (Workspace · Sumber · Statistik · Pratinjau). Every mode maps to one
+// tab (`threadPanelTabOf`): `context` → Workspace, `sources` → Sumber, `stats` → Statistik,
+// and all the message-part detail modes (artifact / search / step / plan / questions) share
+// the single Pratinjau slot — clicking a card replaces the preview, closing the panel drops
 // it. Mode lives in the URL (nuqs, one `panel` query param) so panels are deep-linkable
 // and survive refresh.
 //
@@ -21,6 +21,10 @@ export type ThreadPanelMode =
   // Thread sources — aggregate (no `messageId`) or scoped to one assistant message
   // (the "Sumber" trigger under an answer).
   | { kind: "sources"; messageId?: string }
+  // Thread statistics — aggregate list of every analysis run (no `runKey`), or scoped to
+  // one run (`runKey`, opened from a run's struk / an inline result block). Mirrors the
+  // Sumber two-scope shape; the scoped view chips back to the aggregate.
+  | { kind: "stats"; runKey?: string }
   // One `/deep` sub-question search step — scoped to its run (`turnId`) so multiple
   // `/deep` runs in one thread don't share a sub-question index.
   | { kind: "search"; turnId: string; subQuestionIndex: number }
@@ -43,7 +47,7 @@ export function isThreadPanelOpen(mode: ThreadPanelMode): boolean {
 }
 
 /** The side panel's tab strip entries — every open mode belongs to exactly one. */
-export type ThreadPanelTab = "workspace" | "sources" | "preview";
+export type ThreadPanelTab = "workspace" | "sources" | "statistics" | "preview";
 
 /**
  * Message-part detail modes share the single Pratinjau (preview) slot: opening another
@@ -64,12 +68,14 @@ export function threadPanelTabOf(mode: ThreadPanelMode): ThreadPanelTab | null {
   if (mode.kind === "closed") return null;
   if (mode.kind === "context") return "workspace";
   if (mode.kind === "sources") return "sources";
+  if (mode.kind === "stats") return "statistics";
   return "preview";
 }
 
 // URL encoding for the single `panel` query param. Closed = param absent.
 //   context → "c" · plan → "p:<turnId>" · artifact → "a:<id>"
 //   sources → "m" (aggregate) / "m:<messageId>" (message-scoped)
+//   stats → "s" (aggregate) / "s:<runKey>" (run-scoped)
 //   search → "q:<turnId>:<index>" · step → "t:<toolCallId>"
 // Id-bearing modes split on the FIRST ":" so ids that contain their own colons round-trip
 // intact; `search` keeps the trailing numeric index after the LAST ":" (turnId before it).
@@ -83,6 +89,8 @@ export function serializeThreadPanelMode(mode: ThreadPanelMode): string | null {
       return `a:${mode.artifactId}`;
     case "sources":
       return mode.messageId ? `m:${mode.messageId}` : "m";
+    case "stats":
+      return mode.runKey ? `s:${mode.runKey}` : "s";
     case "search":
       return `q:${mode.turnId}:${mode.subQuestionIndex}`;
     case "step":
@@ -99,6 +107,8 @@ export function parseThreadPanelMode(raw: string): ThreadPanelMode {
   if (raw === "x") return { kind: "questions" };
   // Aggregate thread sources.
   if (raw === "m") return { kind: "sources" };
+  // Aggregate thread statistics.
+  if (raw === "s") return { kind: "stats" };
   if (raw.startsWith("p:")) {
     const turnId = raw.slice(2);
     return turnId ? { kind: "plan", turnId } : CLOSED_PANEL;
@@ -111,6 +121,11 @@ export function parseThreadPanelMode(raw: string): ThreadPanelMode {
     const id = raw.slice(2);
     // Empty id ("m:", a hand-trimmed link) reads as the aggregate sources tab.
     return id ? { kind: "sources", messageId: id } : { kind: "sources" };
+  }
+  if (raw.startsWith("s:")) {
+    const runKey = raw.slice(2);
+    // Empty id ("s:", a hand-trimmed link) reads as the aggregate statistics tab.
+    return runKey ? { kind: "stats", runKey } : { kind: "stats" };
   }
   if (raw.startsWith("t:")) {
     const id = raw.slice(2);

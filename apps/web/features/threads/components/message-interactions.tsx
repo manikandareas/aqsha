@@ -19,6 +19,8 @@ export type MessageInteractions = {
   openStep?: (toolCallId: string) => void;
   /** A run's research plan, scoped by `turnId` (or `LIVE_PLAN_KEY` for the live gate). */
   openPlan?: (turnId: string) => void;
+  /** A statistics run's results, scoped by `runKey` (struk kartu run / blok hasil inline). */
+  openStats?: (runKey: string) => void;
 };
 
 const MessageInteractionsContext = createContext<MessageInteractions>({});

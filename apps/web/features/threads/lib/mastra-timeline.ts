@@ -2,6 +2,7 @@ import type { AskQuestion } from "@aqsha/chat-core";
 import { normalizeAskQuestions } from "@aqsha/chat-core";
 import { formatDeepAnalyzeSummary } from "@aqsha/chat-core/deep-viz";
 import { toCards } from "./source-card";
+import { statsDetailFromResult, statsRunDetailFromArgs } from "./stats-run-detail";
 import type {
   ArtifactCardModel,
   DeepStepDetail,
@@ -239,7 +240,19 @@ function toolModelFromInvocation(
   const rows: ToolRow[] = [];
   appendScalarRows(rows, inv.args, "input");
   if (completed) appendScalarRows(rows, inv.result, "output");
-  const detail = completed ? searchFlatDetail(toolName, inv.result) : undefined;
+  // Paritas jalur live: detail statistik dari args (run masih jalan saat refresh) lalu
+  // di-settle dengan result (failed/dataset-profile) — kartu bertahan di riwayat.
+  const statsArgsDetail = statsRunDetailFromArgs(toolName, toolCallId, asRecord(inv.args));
+  const detail = completed
+    ? (searchFlatDetail(toolName, inv.result) ??
+      statsDetailFromResult(
+        toolName,
+        toolCallId,
+        statsArgsDetail,
+        inv.result,
+        str(asRecord(inv.args).artifactId) || undefined,
+      ))
+    : statsArgsDetail;
   return {
     toolCallId,
     name: toolName,
@@ -1276,9 +1289,11 @@ function appendToolArgsDelta(
       const parsed = parsePartialArgs(argsTextRaw);
       const rows: ToolRow[] = [];
       if (parsed) appendScalarRows(rows, parsed, "input");
+      // Kartu run statistik terisi progresif dari parse parsial (judul uji/mapping "mengetik").
+      const detail = parsed ? statsRunDetailFromArgs(p.model.name, toolCallId, parsed) : undefined;
       return {
         ...p,
-        model: { ...p.model, argsTextRaw, ...(parsed ? { rows } : {}) },
+        model: { ...p.model, argsTextRaw, ...(parsed ? { rows } : {}), ...(detail ? { detail } : {}) },
       };
     });
   });
@@ -1296,7 +1311,18 @@ function completeToolPart(
       if (p.kind !== "tool" || p.model.toolCallId !== toolCallId) return p;
       const rows = [...p.model.rows];
       if (!isError) appendScalarRows(rows, result, "output");
-      const detail = isError ? undefined : searchFlatDetail(p.model.name, result);
+      // Detail settle: kartu sumber (search_*) ATAU detail statistik (run gagal ok:false /
+      // profil dataset). undefined → detail lama dipertahankan (spread di bawah kondisional).
+      const detail = isError
+        ? undefined
+        : (searchFlatDetail(p.model.name, result) ??
+          statsDetailFromResult(
+            p.model.name,
+            toolCallId,
+            p.model.detail,
+            result,
+            inputRowValue(p.model.rows, "artifactId"),
+          ));
       return {
         ...p,
         model: {
@@ -1367,6 +1393,8 @@ function toolModel(
 ): ToolRowModel {
   const rows: ToolRow[] = [];
   appendScalarRows(rows, args, "input");
+  // Tool run statistik → detail `analysis` sejak tool-call (kartu running punya identitas uji).
+  const detail = statsRunDetailFromArgs(name, toolCallId, args);
   return {
     toolCallId,
     name,
@@ -1376,6 +1404,7 @@ function toolModel(
     isRunning: status === "running",
     description: undefined,
     rows,
+    ...(detail ? { detail } : {}),
   };
 }
 
@@ -1408,6 +1437,11 @@ function toScalarString(value: unknown): string | null {
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
   if (typeof value === "boolean") return value ? "Ya" : "Tidak";
   return null;
+}
+
+/** Nilai satu baris input tersimpan (mis. artifactId) — sumber arg saat `tool-result` tiba. */
+function inputRowValue(rows: ToolRow[], key: string): string | undefined {
+  return rows.find((row) => row.group === "input" && row.key === key)?.value;
 }
 
 function appendScalarRows(rows: ToolRow[], value: unknown, group: "input" | "output"): void {
@@ -1463,6 +1497,11 @@ const TOOL_LABELS: Record<string, string> = {
   ask_questions: "Menanyakan klarifikasi",
   request_document_edit: "Meminta penyuntingan dokumen",
   update_preferences: "Menyimpan preferensi",
+  run_analysis: "Menjalankan analisis",
+  run_python_analysis: "Menjalankan analisis kustom",
+  profile_dataset: "Memprofil dataset",
+  list_analyses: "Mendata katalog uji",
+  export_analysis_results: "Mengekspor hasil analisis",
 };
 
 function toolTitle(rawName: string): string {

@@ -121,17 +121,36 @@ export function resolveArtifactDownload(
   return { kind: "url", href: payload.url, fileName: payload.fileName };
 }
 
-/** Synthesize a Blob download and click it through a transient anchor. */
-export function triggerArtifactDownload(
-  download: Extract<ArtifactDownload, { kind: "blob" }>,
-): void {
-  const blob = new Blob([download.getText()], { type: download.mime });
+/** Click a Blob through a transient anchor (shared by text + binary downloaders). */
+function triggerBlobDownload(blob: Blob, fileName: string): void {
   const objectUrl = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = objectUrl;
-  anchor.download = download.fileName;
+  anchor.download = fileName;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(objectUrl);
+}
+
+/** Synthesize a Blob download and click it through a transient anchor. */
+export function triggerArtifactDownload(
+  download: Extract<ArtifactDownload, { kind: "blob" }>,
+): void {
+  triggerBlobDownload(new Blob([download.getText()], { type: download.mime }), download.fileName);
+}
+
+/**
+ * Download binary content delivered as base64 (e.g. server-built docx/xlsx) — decode to bytes,
+ * wrap in a typed Blob, click through the same transient anchor. Binary can't ride the text path.
+ */
+export function triggerBase64Download(args: {
+  mime: string;
+  fileName: string;
+  base64: string;
+}): void {
+  const binary = atob(args.base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  triggerBlobDownload(new Blob([bytes], { type: args.mime }), args.fileName);
 }

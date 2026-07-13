@@ -8,6 +8,7 @@
 // panels and each links out to its URL — there is no single-source detail view.
 
 import type { AskQuestionsResumeData } from "@aqsha/chat-core";
+import type { StatsGroup } from "@aqsha/chat-core/stats-viz";
 import { dedupeCards, researchSourceToCard } from "./source-card";
 import type {
   DeepStepDetail,
@@ -18,6 +19,7 @@ import type {
 } from "./timeline-types";
 import type { MastraAskGate, MastraPlanGate } from "./mastra-timeline";
 import { LIVE_PLAN_KEY } from "@/features/thread-experience/utils/thread-panel-model";
+import type { ThreadStatsGroup } from "../api";
 import type { ResearchSource } from "../types";
 
 /** One `/deep` sub-question step — its question + (live or DB) sources, scoped to its run. */
@@ -56,6 +58,20 @@ export type AskGateDetail = Pick<MastraAskGate, "questions" | "findings"> & {
   skip?: () => void;
 };
 
+/**
+ * One statistics run in the thread's aggregate list (Statistik tab) — the analysis group blocks
+ * (verdicts / tables / figures) plus the id of the assistant message that owns its tool call, so
+ * the panel can scroll back to it ("Lihat di percakapan"). `messageId` is undefined when the tool
+ * part isn't in the loaded timeline (group fetched from DB but its message paged out) — the item
+ * still lists, just without the scroll-to affordance.
+ */
+export type ThreadStatsPanelItem = {
+  runKey: string;
+  toolCallId: string;
+  messageId?: string;
+  group: StatsGroup;
+};
+
 export type ThreadPanelLookups = {
   /** Deduped sources per assistant message id (the "Sumber" trigger). */
   messageSources: Map<string, SourceCardData[]>;
@@ -66,6 +82,14 @@ export type ThreadPanelLookups = {
   plans: Map<string, PlanDetail>;
   /** Live ask-gate (klarifikasi) untuk panel Questions — `null` bila tak ada. */
   ask: AskGateDetail | null;
+  /** Statistics runs in timeline order (aggregate Statistik tab); `[]` when the thread has none. */
+  stats: ThreadStatsPanelItem[];
+  /**
+   * True while the `stats-blocks` query hasn't resolved yet (`statsGroups === undefined`). Lets the
+   * scoped Statistik view distinguish "still loading" from "run genuinely gone" — without it a
+   * deep-linked/refreshed `s:<runKey>` panel flashes a false "not found" during the fetch window.
+   */
+  statsLoading: boolean;
 };
 
 export const EMPTY_THREAD_PANEL_LOOKUPS: ThreadPanelLookups = {
@@ -74,6 +98,8 @@ export const EMPTY_THREAD_PANEL_LOOKUPS: ThreadPanelLookups = {
   steps: new Map(),
   plans: new Map(),
   ask: null,
+  stats: [],
+  statsLoading: false,
 };
 
 /** Composite key for a run's sub-question search step (run-scoped → no cross-run conflation). */
@@ -115,6 +141,7 @@ export function buildThreadPanelLookups(
   researchSources: readonly ResearchSource[] | undefined,
   planGate: MastraPlanGate | null,
   askGate: MastraAskGate | null,
+  statsGroups: readonly ThreadStatsGroup[] | undefined,
 ): ThreadPanelLookups {
   // research_sources grouped by turn (numbered rows only) — mirrors the surface, so a
   // message's panel sources match the "Sumber" list shown under its answer.
@@ -160,6 +187,15 @@ export function buildThreadPanelLookups(
     });
   }
 
+  // Statistics runs: map toolCallId → group, collected inside the single message walk below so the
+  // list reads top-to-bottom like the thread (D5 — `stats-blocks` exposes no createdAt; message
+  // order is the user's mental model). Each owning tool part anchors its assistant message id
+  // (scroll-to); groups whose tool part isn't in the loaded timeline are appended afterwards
+  // without an anchor so the list stays complete.
+  const statsByToolCallId = new Map<string, StatsGroup>();
+  for (const g of statsGroups ?? []) statsByToolCallId.set(g.toolCallId, g.group);
+  const stats: ThreadStatsPanelItem[] = [];
+
   for (const m of messages) {
     if (m.role === "assistant") {
       const turnSources = m.turnId ? sourcesByTurn.get(m.turnId) : undefined;
@@ -168,6 +204,16 @@ export function buildThreadPanelLookups(
     }
     for (const p of m.parts) {
       if (p.kind !== "tool") continue;
+      const statsGroup = statsByToolCallId.get(p.model.toolCallId);
+      if (statsGroup) {
+        stats.push({
+          runKey: statsGroup.runKey,
+          toolCallId: p.model.toolCallId,
+          messageId: m.id,
+          group: statsGroup,
+        });
+        statsByToolCallId.delete(p.model.toolCallId);
+      }
       const d = p.model.detail;
       const rows = p.model.rows;
       // Step addressable di panel bila punya detail proses ATAU baris scalar (tool biasa) — supaya
@@ -205,5 +251,14 @@ export function buildThreadPanelLookups(
     ? { questions: askGate.questions, findings: askGate.findings }
     : null;
 
-  return { messageSources, searches, steps, plans, ask };
+  // Groups whose owning tool part isn't in the loaded timeline (message paged out): append without
+  // an anchor so the aggregate list stays complete.
+  for (const [toolCallId, group] of statsByToolCallId) {
+    stats.push({ runKey: group.runKey, toolCallId, group });
+  }
+
+  // `undefined` = query not resolved yet (loading / disabled); `[]` = loaded with no runs.
+  const statsLoading = statsGroups === undefined;
+
+  return { messageSources, searches, steps, plans, ask, stats, statsLoading };
 }

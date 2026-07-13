@@ -346,6 +346,7 @@ function MastraChatInner({
       sources,
       planGate,
       askGate,
+      statsGroups,
     );
     // While a plan gate is live, mirror its Setujui/Tolak into the live plan entry so the
     // panel opened from the gate card carries the same actions.
@@ -365,7 +366,7 @@ function MastraChatInner({
       };
     }
     return lookups;
-  }, [agentMessages, sources, planGate, resolvePlan, askGate, resolveAsk]);
+  }, [agentMessages, sources, planGate, resolvePlan, askGate, resolveAsk, statsGroups]);
   useRegisterThreadPanelData(panelLookups);
 
   // Kirim pertama dari thread baru → bump URL ke /app/threads/<id> (history.replaceState, tanpa

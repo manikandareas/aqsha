@@ -52,6 +52,20 @@ const SelectionContext = createContext<SelectionContextValue>({
   clearSelectionRefs: () => {},
 });
 
+/** Prefill teks composer imperatif (mis. chip next-step statistik) — sekali set → composer meng-overwrite
+ * teksnya lewat epoch-merge (bukan pill, teks polos). Epoch naik tiap set supaya prefill ulang dengan teks
+ * identik tetap berlaku (klik chip yang sama setelah user mengubah teks). TANPA auto-send — user pegang kendali. */
+type ComposerDraftValue = {
+  draftContent: string;
+  draftEpoch: number;
+  setComposerDraft: (text: string) => void;
+};
+const ComposerDraftContext = createContext<ComposerDraftValue>({
+  draftContent: "",
+  draftEpoch: 0,
+  setComposerDraft: () => {},
+});
+
 export function ComposerMentionsProvider({
   children,
   ambientContextRefs,
@@ -135,10 +149,21 @@ export function ComposerMentionsProvider({
     [ambient, setAmbientContextRefs],
   );
 
+  // Prefill teks composer (chip next-step statistik) — state + epoch; composer overwrite teks via merge.
+  const [draft, setDraft] = useState<{ text: string; epoch: number }>({ text: "", epoch: 0 });
+  const setComposerDraft = useCallback(
+    (text: string) => setDraft((current) => ({ text, epoch: current.epoch + 1 })),
+    [],
+  );
+  const draftValue = useMemo<ComposerDraftValue>(
+    () => ({ draftContent: draft.text, draftEpoch: draft.epoch, setComposerDraft }),
+    [draft, setComposerDraft],
+  );
+
   return (
     <SelectionContext.Provider value={selectionValue}>
       <AmbientContextRefsContext.Provider value={ambientValue}>
-        {children}
+        <ComposerDraftContext.Provider value={draftValue}>{children}</ComposerDraftContext.Provider>
       </AmbientContextRefsContext.Provider>
     </SelectionContext.Provider>
   );
@@ -163,6 +188,17 @@ export function useAmbientContextEpoch(): number {
  * Aman di luar provider (refs `[]`, aksi no-op). */
 export function useComposerSelection(): SelectionContextValue {
   return useContext(SelectionContext);
+}
+
+/** Setter prefill teks composer (chip next-step statistik). No-op tanpa provider. */
+export function useSetComposerDraft(): (text: string) => void {
+  return useContext(ComposerDraftContext).setComposerDraft;
+}
+
+/** Draft teks composer (content + epoch) — di-consume Composer lewat epoch-merge. */
+export function useComposerDraft(): { draftContent: string; draftEpoch: number } {
+  const { draftContent, draftEpoch } = useContext(ComposerDraftContext);
+  return { draftContent, draftEpoch };
 }
 
 /** Adapter untuk board/grid library ("klik 1× = konteks"). Membangun ref `paper` dari artifactId dan

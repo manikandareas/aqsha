@@ -139,6 +139,86 @@ export function parseStatsGroup(payload: unknown): StatsGroup | null {
 }
 
 // ---------------------------------------------------------------------------
+// Display-meta katalog — label + kredit per analysis id untuk FE (kartu run,
+// panel Statistik). apps/web DILARANG import @aqsha/services → const ini jadi
+// mirror-nya di chat-core; drift dijaga sync-test services
+// (test/stats-analysis-meta.test.ts, pola vocab stance research-meta.test.ts).
+// ---------------------------------------------------------------------------
+
+export type StatsAnalysisMeta = {
+  /** Label pendek manusiawi = judul katalog TANPA anotasi kurung (mirror `shortTitle` tool
+   *  `run_analysis`, transform `title.replace(/\s*\(.*\)\s*$/, "")`) — sama dengan judul grup DB. */
+  label: string;
+  /** Kredit `sandbox_compute` per run (0 = gratis). */
+  credits: number;
+  /** Analisis berat (bootstrap/estimasi lama) → copy running bertahap di kartu. */
+  heavy?: boolean;
+};
+
+/**
+ * 27 entri katalog `aqsha_stats` + entri sintetis `custom` (`run_python_analysis`,
+ * kredit flat 10 — mirror `PYTHON_ANALYSIS_CREDITS` di tool agent).
+ */
+export const STATS_ANALYSIS_META: Record<string, StatsAnalysisMeta> = {
+  profile: { label: "Profil dataset", credits: 0 },
+  descriptive: { label: "Statistik deskriptif", credits: 10 },
+  uji_validitas: { label: "Uji validitas", credits: 10 },
+  uji_reliabilitas: { label: "Uji reliabilitas", credits: 10 },
+  uji_normalitas: { label: "Uji normalitas", credits: 10 },
+  uji_multikolinearitas: { label: "Uji multikolinearitas", credits: 10 },
+  uji_heteroskedastisitas: { label: "Uji heteroskedastisitas", credits: 10 },
+  uji_autokorelasi: { label: "Uji autokorelasi", credits: 10 },
+  uji_linearitas: { label: "Uji linearitas", credits: 10 },
+  regresi_linear: { label: "Regresi linear", credits: 10 },
+  korelasi: { label: "Korelasi", credits: 10 },
+  uji_beda_t: { label: "Uji beda rata-rata", credits: 10 },
+  uji_anova: { label: "One-Way ANOVA", credits: 10 },
+  uji_mann_whitney: { label: "Uji Mann-Whitney U", credits: 10 },
+  uji_wilcoxon: { label: "Uji Wilcoxon Signed-Rank", credits: 10 },
+  uji_kruskal_wallis: { label: "Uji Kruskal-Wallis H", credits: 10 },
+  uji_chi_square: { label: "Uji Chi-Square", credits: 10 },
+  transformasi_msi: { label: "Transformasi MSI", credits: 10 },
+  regresi_logistik: { label: "Regresi logistik biner", credits: 10 },
+  uji_moderasi: { label: "Uji moderasi", credits: 10 },
+  uji_mediasi: { label: "Uji mediasi", credits: 20, heavy: true },
+  uji_anova_dua_arah: { label: "Two-Way ANOVA", credits: 10 },
+  uji_ancova: { label: "ANCOVA", credits: 10 },
+  uji_manova: { label: "One-Way MANOVA", credits: 10 },
+  analisis_faktor: { label: "Analisis faktor eksploratori", credits: 10 },
+  cb_sem: { label: "CB-SEM", credits: 20, heavy: true },
+  sem_pls: { label: "SEM-PLS", credits: 20, heavy: true },
+  custom: { label: "Analisis kustom", credits: 10 },
+};
+
+/** Lookup display-meta by analysis id — `undefined` untuk id di luar katalog (jangan mengarang). */
+export function statsAnalysisMeta(analysis: string): StatsAnalysisMeta | undefined {
+  return Object.hasOwn(STATS_ANALYSIS_META, analysis) ? STATS_ANALYSIS_META[analysis] : undefined;
+}
+
+/** Rekap satu grup untuk chip agregat (struk chat + list panel Statistik — SATU logika). */
+export type StatsGroupSummary = {
+  /** Jumlah decision per verdict (agregat semua blok `stats-decision` grup). */
+  verdicts: Record<StatsVerdict, number>;
+  tables: number;
+  figures: number;
+};
+
+/** Hitung rekap verdict + jumlah tabel/gambar satu grup (deterministik, tanpa parsing teks). */
+export function summarizeStatsGroup(group: StatsGroup): StatsGroupSummary {
+  const verdicts: Record<StatsVerdict, number> = { lolos: 0, tidak_lolos: 0, perhatian: 0 };
+  let tables = 0;
+  let figures = 0;
+  for (const block of group.blocks) {
+    if (block.type === "stats-table") tables += 1;
+    else if (block.type === "stats-figure") figures += 1;
+    else if (block.type === "stats-decision") {
+      for (const d of block.decisions) verdicts[d.verdict] += 1;
+    }
+  }
+  return { verdicts, tables, figures };
+}
+
+// ---------------------------------------------------------------------------
 // Penanda `{{stats:<runKey>}}` — model menaruh posisi grup; FE me-resolve dari DB
 // ---------------------------------------------------------------------------
 

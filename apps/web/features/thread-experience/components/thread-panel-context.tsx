@@ -42,6 +42,8 @@ type ThreadPanelValue = {
   openArtifactPanel: (artifactId: string) => void;
   /** Open thread sources — aggregate by default, scoped when a `messageId` is given. */
   openSourcesPanel: (messageId?: string) => void;
+  /** Open thread statistics — aggregate list by default, scoped when a `runKey` is given. */
+  openStatsPanel: (runKey?: string) => void;
   /** Open a `/deep` sub-question search step, scoped to its run (`turnId`). */
   openSearchPanel: (turnId: string, subQuestionIndex: number) => void;
   openStepPanel: (toolCallId: string) => void;
@@ -133,6 +135,11 @@ export function ThreadPanelProvider({ children }: { children: ReactNode }) {
       ),
     [setModeParam],
   );
+  const openStatsPanel = useCallback(
+    (runKey?: string) =>
+      void setModeParam(runKey ? { kind: "stats", runKey } : { kind: "stats" }),
+    [setModeParam],
+  );
   const openSearchPanel = useCallback(
     (turnId: string, subQuestionIndex: number) =>
       void setModeParam({ kind: "search", turnId, subQuestionIndex }),
@@ -166,6 +173,7 @@ export function ThreadPanelProvider({ children }: { children: ReactNode }) {
       previewMode,
       openArtifactPanel,
       openSourcesPanel,
+      openStatsPanel,
       openSearchPanel,
       openStepPanel,
       openPlanPanel,
@@ -186,6 +194,7 @@ export function ThreadPanelProvider({ children }: { children: ReactNode }) {
       setModeParam,
       openArtifactPanel,
       openSourcesPanel,
+      openStatsPanel,
       openSearchPanel,
       openStepPanel,
       openPlanPanel,

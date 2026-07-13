@@ -33,6 +33,7 @@ import { PlanDetailPanel } from "./plan-detail-panel";
 import { QuestionsDetailPanel } from "./questions-detail-panel";
 import { SearchStepPanel } from "./search-step-panel";
 import { SourcesListPanel } from "./sources-list-panel";
+import { StatsListPanel } from "./stats-list-panel";
 import { StepDetailPanel } from "./step-detail-panel";
 import { useThreadExperienceData } from "../api/use-thread-experience-data";
 import type { ThreadShellLayoutProps } from "./component-types";
@@ -44,7 +45,11 @@ import {
   threadPanelTabOf,
   type ThreadPanelMode,
 } from "../utils/thread-panel-model";
-import { ThreadPanelProvider, useThreadPanel } from "./thread-panel-context";
+import {
+  ThreadPanelProvider,
+  useThreadPanel,
+  useThreadPanelData,
+} from "./thread-panel-context";
 import { ThreadShellLayout } from "./thread-shell-layout";
 
 export function ThreadDetailShell({ threadId }: { threadId?: string }) {
@@ -107,7 +112,7 @@ type ThreadDetailShellViewProps = Omit<
 };
 
 // Inside `ThreadPanelProvider`: the side panel is a HOME for several panels behind one
-// tab strip (Workspace · Sumber · Statistik(soon) · Pratinjau). The shell owns the single
+// tab strip (Workspace · Sumber · Statistik · Pratinjau). The shell owns the single
 // `SidePanelFrame` (flush tabs header + floating card); each mode contributes IN-CARD
 // content only. Message-part detail modes share the Pratinjau slot — its tab appears
 // while a preview is remembered and hides when the panel closes. Open/close stay in
@@ -126,11 +131,16 @@ function ThreadDetailShellView({
   onDeleteThread,
 }: ThreadDetailShellViewProps) {
   const panel = useThreadPanel();
+  const lookups = useThreadPanelData();
+  const hasStats = (lookups?.stats.length ?? 0) > 0;
   const rawMode = panel?.mode ?? { kind: "closed" as const };
-  // Shell home (tanpa threadId) tak punya sumber thread — sumber tak akan pernah terisi
-  // di draft shell, jadi deep-link `?panel=m` jatuh ke tab Workspace, bukan panel kosong.
+  // Shell home (tanpa threadId) tak punya sumber/statistik thread — keduanya tak akan pernah
+  // terisi di draft shell, jadi deep-link `?panel=m`/`?panel=s` jatuh ke tab Workspace, bukan
+  // panel kosong.
   const mode: ThreadPanelMode =
-    !threadId && rawMode.kind === "sources" ? { kind: "context" } : rawMode;
+    !threadId && (rawMode.kind === "sources" || rawMode.kind === "stats")
+      ? { kind: "context" }
+      : rawMode;
 
   const contextContent = !threadId ? (
     <ThreadGlobalContextPanel workspaces={workspaces} />
@@ -152,6 +162,8 @@ function ThreadDetailShellView({
       <ArtifactDetailPanel artifactId={mode.artifactId} onClose={panel?.closePanel} />
     ) : mode.kind === "sources" ? (
       <SourcesListPanel messageId={mode.messageId} threadId={threadId} />
+    ) : mode.kind === "stats" ? (
+      <StatsListPanel runKey={mode.runKey} threadId={threadId} />
     ) : mode.kind === "search" ? (
       <SearchStepPanel turnId={mode.turnId} subQuestionIndex={mode.subQuestionIndex} />
     ) : mode.kind === "step" ? (
@@ -170,12 +182,15 @@ function ThreadDetailShellView({
     { key: "workspace", label: "Workspace" },
     // Sumber hanya relevan pada thread nyata — shell home tak pernah mengakumulasi sumber.
     ...(threadId ? [{ key: "sources", label: "Sumber" }] : []),
-    { key: "statistics", label: "Statistik", disabled: true, hint: "segera" },
+    // Statistik hidden-when-empty (keputusan Pratinjau); tetap tampil saat mode aktif = stats
+    // (deep-link `?panel=s` pada thread tanpa hasil) supaya activeKey selalu punya tab-nya.
+    ...(hasStats || mode.kind === "stats" ? [{ key: "statistics", label: "Statistik" }] : []),
     ...(panel?.previewMode ? [{ key: "preview", label: "Pratinjau" }] : []),
   ];
   const selectTab = (key: string) => {
     if (key === "workspace") panel?.openContextPanel();
     else if (key === "sources") panel?.openSourcesPanel();
+    else if (key === "statistics") panel?.openStatsPanel();
     else if (key === "preview") panel?.openPreviewPanel();
   };
 

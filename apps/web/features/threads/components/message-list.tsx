@@ -39,6 +39,7 @@ import {
   type MessageInteractions,
 } from "./message-interactions";
 import { InlineSources } from "./sources-panel";
+import { StatsNextStepChips } from "./stats-viz/next-step-chips";
 import { ToolRow } from "./tool-row";
 
 /**
@@ -84,6 +85,7 @@ export function MessageList({
             openSearch: panel.openSearchPanel,
             openStep: panel.openStepPanel,
             openPlan: panel.openPlanPanel,
+            openStats: panel.openStatsPanel,
           }
         : {},
     [panel],
@@ -103,6 +105,12 @@ export function MessageList({
   const showTyping = Boolean(pending) && (!last || last.role === "user");
   const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant")?.id;
 
+  // Chip next-step ritual (fase C): HANYA run analisis TERAKHIR di thread + turn settled (`!busy`),
+  // yaitu turn TERAKHIR memang berisi analisis sukses → tuntunan muncul di dasar transkrip (dekat
+  // composer), bukan di setiap struk (noise + saran basi). Turn teks lanjutan → tak ada chip lagi.
+  const nextStepAnalysis =
+    !busy && last?.role === "assistant" ? lastSuccessfulAnalysisId(last) : undefined;
+
   return (
     <MessageInteractionsProvider value={interactions}>
       <div className="flex flex-col gap-6">
@@ -121,9 +129,26 @@ export function MessageList({
           ),
         )}
         {showTyping ? <ThinkingRow label="Astra sedang berpikir…" /> : null}
+        {nextStepAnalysis ? <StatsNextStepChips analysis={nextStepAnalysis} /> : null}
       </div>
     </MessageInteractionsProvider>
   );
+}
+
+/**
+ * Id analisis dari run SUKSES TERAKHIR dalam satu pesan asisten (chip next-step, fase C): tool part
+ * `analysis` yang settle (`completed`) tanpa `failed`. Undefined bila pesan tak punya run sukses.
+ */
+function lastSuccessfulAnalysisId(message: TimelineMessage): string | undefined {
+  let found: string | undefined;
+  for (const p of message.parts) {
+    if (p.kind !== "tool") continue;
+    const detail = p.model.detail;
+    if (detail?.kind === "analysis" && p.model.status === "completed" && !detail.failed) {
+      found = detail.analysis;
+    }
+  }
+  return found;
 }
 
 /**
@@ -358,13 +383,16 @@ function AssistantMessage({
   const isEmpty = message.parts.length === 0;
 
   return (
-    <div className="flex min-w-0 flex-col gap-2.5">
+    // `data-message-id` = scroll-to anchor for the Statistik panel's "Lihat di percakapan"
+    // (`scrollToMessage`); only assistant rows own tool calls, so only they need an anchor.
+    <div data-message-id={message.id} className="flex min-w-0 flex-col gap-2.5">
       {processParts.length > 0 ? (
         <ProcessBlock
           parts={processParts}
           streaming={streaming}
           toolSteps={toolSteps}
           sourcesBySubQ={sourcesBySubQ}
+          statsGroupsByToolCallId={statsGroupsByToolCallId}
           turnId={message.turnId}
           workingSince={workingSince}
         />
@@ -412,6 +440,7 @@ function ProcessBlock({
   streaming,
   toolSteps,
   sourcesBySubQ,
+  statsGroupsByToolCallId,
   turnId,
   workingSince,
 }: {
@@ -419,6 +448,8 @@ function ProcessBlock({
   streaming: boolean;
   toolSteps: number;
   sourcesBySubQ?: Map<number, ResearchSource[]>;
+  /** Grup blok analisis per `toolCallId` — chip verdict struk kartu run (`AnalysisRunCard`). */
+  statsGroupsByToolCallId?: Map<string, StatsGroup>;
   /** Run id of this `/deep` turn — scopes the search/plan detail panels. */
   turnId?: string;
   /** Epoch-ms anchor timer "Sedang bekerja" (durable lintas-refresh); kosong → waktu mount. */
@@ -455,6 +486,7 @@ function ProcessBlock({
               key={part.id}
               part={part}
               sourcesBySubQ={sourcesBySubQ}
+              statsGroupsByToolCallId={statsGroupsByToolCallId}
               turnId={turnId}
             />
           ))}
@@ -467,14 +499,23 @@ function ProcessBlock({
 function ProcessPartView({
   part,
   sourcesBySubQ,
+  statsGroupsByToolCallId,
   turnId,
 }: {
   part: TimelinePart;
   sourcesBySubQ?: Map<number, ResearchSource[]>;
+  statsGroupsByToolCallId?: Map<string, StatsGroup>;
   turnId?: string;
 }) {
   if (part.kind === "tool")
-    return <ToolRow model={part.model} sourcesBySubQ={sourcesBySubQ} turnId={turnId} />;
+    return (
+      <ToolRow
+        model={part.model}
+        sourcesBySubQ={sourcesBySubQ}
+        turnId={turnId}
+        statsGroup={statsGroupsByToolCallId?.get(part.model.toolCallId)}
+      />
+    );
   if (part.kind === "reasoning") {
     // Penalaran model — item proses dalam urutan natural (sebelum/antara/sesudah tool-call).
     return <Reasoning text={part.text} isThinking={part.thinking} />;
