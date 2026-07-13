@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/bun";
-import { AppError } from "@aqsha/db";
+import { AppError, parseSampleRate } from "@aqsha/db";
 
 /**
  * Sentry bootstrap shared by the api server + the BullMQ worker (both run under Bun, same image,
@@ -25,7 +25,15 @@ export function initSentry(fallbackProcess: "api" | "worker"): void {
     dsn,
     environment: process.env.SENTRY_ENVIRONMENT ?? "production",
     release: process.env.SENTRY_RELEASE ?? process.env.GIT_COMMIT,
-    tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE ?? 0),
+    // Shared clamp (@aqsha/db): invalid / NaN / <0 / >1 → 0, so a bad env never silently raises
+    // ingest beyond the free-tier budget. Server tracing stays low/off; LLM spans belong to Langfuse.
+    tracesSampleRate: parseSampleRate(process.env.SENTRY_TRACES_SAMPLE_RATE),
+    // Structured application logs (Sentry Logs) — the api/worker Pino facade bridges SELECTED records
+    // (warn/error + allow-listed notable info) via `./log.ts`. No-op until a DSN is present.
+    enableLogs: true,
+    // Never attach request headers / cookies / IP automatically — the log/exception context we send is
+    // hand-picked and redacted (see `./sentry-log-bridge.ts` + Pino redact).
+    sendDefaultPii: false,
     initialScope: { tags: { process: process.env.AQSHA_PROCESS ?? fallbackProcess } },
     // Safety net: expected domain errors (AppError) and any handled 4xx are breadcrumbs, not
     // incidents. Call sites already avoid capturing these; this also drops any that slip through
@@ -34,6 +42,13 @@ export function initSentry(fallbackProcess: "api" | "worker"): void {
       const err = hint?.originalException;
       if (err instanceof AppError && err.status < 500) return null;
       return event;
+    },
+    // Defense-in-depth on the logs pipeline: never let a debug/trace record reach Sentry even if a
+    // future call site slips one through. The bridge already filters by severity; this is the SDK-level
+    // backstop that keeps the logs budget spent only on warn/error + notable info.
+    beforeSendLog(log) {
+      if (log.level === "debug" || log.level === "trace") return null;
+      return log;
     },
   });
   initialized = true;

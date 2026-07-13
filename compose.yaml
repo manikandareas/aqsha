@@ -13,7 +13,12 @@
 # All config/secrets come from the Dokploy dashboard (Environment tab) and are referenced
 # below via ${VAR}. Set them per each app's .env.example. See DEPLOYMENT.md for the full
 # runbook. The internal service-to-service wiring (DB/Redis/S3/AGENT_ORIGIN) is fixed here.
-name: aqsha
+#
+# ONE file, TWO stacks: prod (branch main, defaults below) and staging (branch staging,
+# Dokploy env tab sets AQSHA_PROJECT_NAME=aqsha-staging + POSTGRES_HOST_PORT=5436 +
+# IMAGE_TAG=staging + INFISICAL_ENV=staging). The project name prefixes every volume and the
+# default network, so the two stacks share nothing. See DEPLOYMENT.md → Staging.
+name: ${AQSHA_PROJECT_NAME:-aqsha}
 
 # Runtime secrets/config for the app services (web/api/worker/agent/migrate) DO NOT live here anymore.
 # They are stored in Infisical (project aqsha, folder /app) and injected at container start by the
@@ -25,7 +30,7 @@ name: aqsha
 # Only these five bootstrap vars reach the app via the Dokploy Environment tab; the CLI trades the
 # machine-identity id/secret for a token and pulls INFISICAL_ENV's secrets. Left empty (local
 # `compose.build.yaml` build / no Infisical), the entrypoint execs the app directly on ambient env.
-# Stock images (postgres/redis/minio/alloy) can't run the CLI → their creds stay as ${VAR} below,
+# Stock images (postgres/redis/minio) can't run the CLI → their creds stay as ${VAR} below,
 # from the Dokploy env (see .env.example → section "di Dokploy").
 x-infisical-bootstrap: &infisical-bootstrap
   INFISICAL_UNIVERSAL_AUTH_CLIENT_ID: ${INFISICAL_UNIVERSAL_AUTH_CLIENT_ID:-}
@@ -93,7 +98,7 @@ services:
     environment:
       # PORT/HOST/NODE_ENV are baked in the image. Everything else — CLERK_PUBLISHABLE_KEY (Mastra
       # server.auth JWKS), model knobs (AQSHA_PRO_MODEL/*_CONTEXT_WINDOW/*_REASONING_EFFORT), LANGFUSE_*,
-      # SENTRY_DSN_AGENT, AQSHA_OTLP_TRACES_ENDPOINT, AQSHA_OBSERVABILITY — comes from Infisical /app.
+      # SENTRY_DSN_AGENT, AQSHA_OBSERVABILITY — comes from Infisical /app.
       <<: *infisical-bootstrap
     # Mastra runtime state lives in Postgres (mastra_* tables) — no file-backed durable volume.
     expose:
@@ -130,11 +135,12 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
     # DB management (Drizzle Studio / psql) over Tailscale. Default 127.0.0.1 = not exposed;
     # set POSTGRES_BIND_IP to the VPS Tailscale IP in Dokploy to reach it from a Tailscale peer.
-    # Host port 5435: 5432 = aqsha dev DB, 5433 = minchat, 5434 = telewave already use these on
-    # this VPS. Verify free before changing: `ss -ltn | grep :<port>` on the host.
+    # Host port map on this VPS: 5432 = aqsha dev DB, 5433 = minchat, 5434 = telewave,
+    # 5435 = aqsha prod (default), 5436 = aqsha staging (set POSTGRES_HOST_PORT in that stack).
+    # Verify free before changing: `ss -ltn | grep :<port>` on the host.
     # ponytail: never bind 0.0.0.0 here — that publishes the DB to the internet.
     ports:
-      - "${POSTGRES_BIND_IP:-127.0.0.1}:5435:5432"
+      - "${POSTGRES_BIND_IP:-127.0.0.1}:${POSTGRES_HOST_PORT:-5435}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infra/init-extensions.sql:/docker-entrypoint-initdb.d/01-extensions.sql
@@ -192,53 +198,7 @@ services:
       "
     restart: "no"
 
-  # Grafana Alloy — the single observability collector for the whole stack: container logs → Loki,
-  # host + container metrics → Prometheus/Mimir, and the agent's OTLP traces → Tempo (all Grafana
-  # Cloud, free tier). OPT-IN behind the `observability` profile: it runs only when `observability`
-  # is in COMPOSE_PROFILES (set that in the Dokploy Environment tab). Config: infra/alloy/config.alloy.
-  # Creds/endpoints: the GRAFANA_CLOUD_* env below (see .env.example + DEPLOYMENT.md). With the
-  # profile off there is zero overhead; with it on but creds empty, Alloy may crash-loop — fill all
-  # three endpoints together (one Grafana Cloud account provides Loki + Prometheus + Tempo).
-  alloy:
-    image: grafana/alloy:v1.17.1
-    profiles: ["observability"]
-    restart: unless-stopped
-    # cAdvisor (per-container metrics) needs privileged + the host mounts below to read container
-    # cgroups on a Linux Docker host (per Grafana's prometheus.exporter.cadvisor recipe). Standard
-    # for a monitoring collector on a single-owner VPS. Drop `privileged` + the cadvisor exporter in
-    # config.alloy if you only want logs + host metrics + traces (those don't need it).
-    privileged: true
-    command:
-      - run
-      - --server.http.listen-addr=0.0.0.0:12345
-      - --storage.path=/var/lib/alloy/data
-      - /etc/alloy/config.alloy
-    environment:
-      GRAFANA_CLOUD_LOKI_URL: ${GRAFANA_CLOUD_LOKI_URL:-}
-      GRAFANA_CLOUD_LOKI_USER: ${GRAFANA_CLOUD_LOKI_USER:-}
-      GRAFANA_CLOUD_PROM_URL: ${GRAFANA_CLOUD_PROM_URL:-}
-      GRAFANA_CLOUD_PROM_USER: ${GRAFANA_CLOUD_PROM_USER:-}
-      GRAFANA_CLOUD_TEMPO_URL: ${GRAFANA_CLOUD_TEMPO_URL:-}
-      GRAFANA_CLOUD_TEMPO_USER: ${GRAFANA_CLOUD_TEMPO_USER:-}
-      GRAFANA_CLOUD_API_TOKEN: ${GRAFANA_CLOUD_API_TOKEN:-}
-    volumes:
-      - ./infra/alloy/config.alloy:/etc/alloy/config.alloy:ro
-      - alloy_data:/var/lib/alloy/data
-      # docker.sock (log discovery + cAdvisor docker_host) lives under /var/run. rw per Grafana's
-      # cAdvisor recipe (immaterial next to `privileged`, but matches the documented-working mount).
-      - /var/run:/var/run:rw
-      # cAdvisor container stats + prometheus.exporter.unix host rootfs/sys (paths set in config.alloy).
-      - /:/rootfs:ro
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
-      - /dev/disk/:/dev/disk:ro
-      # Host /proc for the node exporter, mounted separately so the container keeps its own /proc.
-      - /proc:/host/proc:ro
-    expose:
-      - "4318"  # OTLP HTTP receiver — agent pushes traces here (internal only, no domain).
-
 volumes:
   postgres_data:
   redis_data:
   minio_data:
-  alloy_data:

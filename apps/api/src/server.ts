@@ -16,4 +16,5 @@ assertEmbeddingEnabled();
 // tidak menarik side-effect listen maupun Bun-only API.
 const port = Number(process.env.PORT ?? 3001);
 app.listen(port);
-logger.info({ port }, "api listening");
+// `notable` → ikut ter-bridge ke Sentry Logs (event lifecycle bernilai tinggi, bukan access-log rutin).
+logger.info({ port, notable: true }, "api_started");

@@ -1,19 +1,33 @@
 name: Deploy
 
-# Push to main → gate (reuses CI) → build 3 images in parallel and push to GHCR → tell Dokploy to
-# pull + restart. The VPS never builds; it only `docker pull`s finished images.
+# Branch-aware deploy: push to main → PROD, push to staging → STAGING. Same flow for both:
+# gate (reuses CI) → build 3 images in parallel and push to GHCR → tell Dokploy to pull + restart.
+# The VPS never builds; it only `docker pull`s finished images.
+#
+# Branch flow: feature → development (integration + local test, NO deploy) → staging (deploys
+# the staging stack) → main (deploys prod). Pushing development never triggers this workflow.
+#
+# The only per-env divergence is data, selected by INFISICAL_ENV below: the Infisical env-slug
+# picks the right /build values (staging bakes its own NEXT_PUBLIC_*) and the right /deploy
+# folder (whose DOKPLOY_COMPOSE_ID points at that env's Dokploy compose service), and the meta
+# step emits `:latest`+`sha-*` on main vs `:staging`+`sha-*-staging` on the staging branch.
 on:
   push:
-    branches: [main]
+    branches: [main, staging]
   workflow_dispatch: {}
 
 concurrency:
-  group: deploy-production
+  # Prod and staging deploys never block each other; same-env deploys still serialize.
+  group: deploy-${{ github.ref_name }}
   cancel-in-progress: false # never interrupt a deploy mid-flight
 
 # Default least privilege for every job; the build job widens it to `packages: write` below.
 permissions:
   contents: read
+
+env:
+  # Single switch for everything env-specific: main → prod, anything else (staging) → staging.
+  INFISICAL_ENV: ${{ github.ref_name == 'main' && 'prod' || 'staging' }}
 
 jobs:
   # Same typecheck + lint + test gate as PRs. A red gate blocks build/deploy.
@@ -24,9 +38,9 @@ jobs:
 
   build:
     needs: check
-    # Only the default branch pushes the `:latest` tag that compose.yaml deploys; a manual
-    # workflow_dispatch from another ref would build only `sha-*` and then deploy a stale `:latest`.
-    if: github.ref == 'refs/heads/main'
+    # Only the two deployable branches build+deploy; a manual workflow_dispatch from another ref
+    # would push no mutable tag and then pointlessly redeploy a stale `:latest`/`:staging`.
+    if: contains(fromJSON('["refs/heads/main", "refs/heads/staging"]'), github.ref)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -58,7 +72,8 @@ jobs:
       # the web image consumes them, so ONLY the web matrix job runs the import — api/agent ignore
       # the extra (then-empty) build-args, and skipping keeps a GH-runner→VPS connectivity blip from
       # failing builds that never needed the secrets. Bootstrap = the `gh-actions` machine identity
-      # (GH Secrets). env-slug `prod`. The composite action wraps the import with a delayed retry.
+      # (GH Secrets). env-slug follows the branch (prod|staging), so staging bakes its own
+      # NEXT_PUBLIC_* values. The composite action wraps the import with a delayed retry.
       - name: Import build secrets from Infisical
         if: matrix.name == 'web'
         uses: ./.github/actions/infisical-import
@@ -67,15 +82,22 @@ jobs:
           client-secret: ${{ secrets.INFISICAL_CLIENT_SECRET }}
           project-slug: ${{ vars.INFISICAL_PROJECT_SLUG }}
           secret-path: /build
+          env-slug: ${{ env.INFISICAL_ENV }}
 
       - name: Image tags + labels
         id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/aqsha-${{ matrix.name }}
+          # main → `:latest` + `sha-<short>`; staging → `:staging` + `sha-<short>-staging`.
+          # The `-staging` suffix on the sha tag is load-bearing: a fast-forward merge of
+          # staging → main yields the SAME commit sha, and without the suffix the prod build
+          # would overwrite the staging web image (different baked NEXT_PUBLIC_*) under one tag.
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,prefix=sha-,format=short
+            type=sha,prefix=sha-,format=short,enable={{is_default_branch}}
+            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/staging' }}
+            type=sha,prefix=sha-,format=short,suffix=-staging,enable=${{ github.ref == 'refs/heads/staging' }}
 
       - name: Build and push
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
@@ -115,7 +137,9 @@ jobs:
           persist-credentials: false # don't retain the GITHUB_TOKEN in .git/config after checkout
 
       # Pull the Dokploy API creds from Infisical /deploy (masked in logs), injected as env vars.
-      # The composite action wraps the import with a delayed retry against transient VPS blips.
+      # The env-slug selects the target stack: each env's /deploy holds its own DOKPLOY_COMPOSE_ID,
+      # so no other branching is needed here. The composite action wraps the import with a delayed
+      # retry against transient VPS blips.
       - name: Import deploy secrets from Infisical
         uses: ./.github/actions/infisical-import
         with:
@@ -123,9 +147,11 @@ jobs:
           client-secret: ${{ secrets.INFISICAL_CLIENT_SECRET }}
           project-slug: ${{ vars.INFISICAL_PROJECT_SLUG }}
           secret-path: /deploy
+          env-slug: ${{ env.INFISICAL_ENV }}
 
-      # compose.yaml references :latest (IMAGE_TAG default), which build just repushed → Dokploy pulls
-      # the fresh images and restarts the stack. Migrations stay manual (compose `migrate` profile).
+      # compose.yaml references the env's mutable tag (IMAGE_TAG: prod `latest`, staging `staging`),
+      # which build just repushed → Dokploy pulls the fresh images and restarts that stack.
+      # Migrations stay manual (compose `migrate` profile).
       - name: Trigger Dokploy deploy
         # Secrets flow in as env vars (not interpolated into the shell line) so they never appear in
         # the rendered `run` script / process args and can't be shell-expanded.

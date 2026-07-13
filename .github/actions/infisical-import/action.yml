@@ -1,9 +1,9 @@
 name: Import Infisical secrets
 description: >
-  Import secrets from Infisical (secrets.aqshara.com, env `prod`) into job env vars, with one
-  delayed retry. The upstream action has no built-in retry and the Infisical server lives on the
-  prod VPS, so a transient network blip (seen: `connect ETIMEDOUT`) would otherwise fail the job.
-  Composite actions can't read the `secrets`/`vars` contexts, so the caller passes them as inputs.
+  Import secrets from Infisical (secrets.aqshara.com) into job env vars, with one delayed retry.
+  The upstream action has no built-in retry and the Infisical server lives on the prod VPS, so a
+  transient network blip (seen: `connect ETIMEDOUT`) would otherwise fail the job. Composite
+  actions can't read the `secrets`/`vars` contexts, so the caller passes them as inputs.
 
 inputs:
   client-id:
@@ -18,6 +18,10 @@ inputs:
   secret-path:
     description: Infisical folder to import (e.g. /build, /deploy)
     required: true
+  env-slug:
+    description: Infisical environment slug (prod for main, staging for development)
+    required: false
+    default: prod
 
 runs:
   using: composite
@@ -33,7 +37,7 @@ runs:
         client-secret: ${{ inputs.client-secret }}
         domain: https://secrets.aqshara.com
         project-slug: ${{ inputs.project-slug }}
-        env-slug: prod
+        env-slug: ${{ inputs.env-slug }}
         secret-path: ${{ inputs.secret-path }}
 
     # Brief pause so the retry doesn't land on the same transient blip; a fast failure (DNS,
@@ -52,5 +56,5 @@ runs:
         client-secret: ${{ inputs.client-secret }}
         domain: https://secrets.aqshara.com
         project-slug: ${{ inputs.project-slug }}
-        env-slug: prod
+        env-slug: ${{ inputs.env-slug }}
         secret-path: ${{ inputs.secret-path }}

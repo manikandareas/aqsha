@@ -1,5 +1,5 @@
 import { StorageService } from "@aqsha/services";
-import { Elysia } from "elysia";
+import { Elysia, status } from "elysia";
 import { getDb } from "../clients/db";
 import { getRedis } from "../clients/redis";
 
@@ -24,15 +24,21 @@ async function checkRedis(): Promise<boolean> {
 
 /**
  * Rail health:
- * - GET /ping         → bukti api hidup + jam server untuk web (tanpa dependency).
+ * - GET /ping         → bukti api hidup + jam server untuk web (tanpa dependency). SELALU 200.
  * - GET /healthz      → real-check db (SELECT 1) + redis (PING). `ok = db && redis`.
  * - GET /health/ready → readiness probe lengkap db + redis + object storage (HeadBucket).
+ *
+ * `/healthz` & `/health/ready` mengembalikan **503 saat `ok=false`**, bukan selalu 200: status
+ * dependency harus tercermin di HTTP status supaya monitor uptime (Sentry Uptime) yang menilai
+ * berdasarkan status code bisa mendeteksi dependency-down. Body tetap membawa rincian per-check.
  */
 export const health = new Elysia()
   .get("/ping", () => ({ pong: true, serverTime: Date.now() }))
   .get("/healthz", async () => {
     const [db, redis] = await Promise.all([checkDb(), checkRedis()]);
-    return { ok: db && redis, db, redis };
+    const ok = db && redis;
+    const body = { ok, db, redis };
+    return ok ? body : status(503, body);
   })
   .get("/health/ready", async () => {
     const [db, redis, storage] = await Promise.all([
@@ -40,5 +46,7 @@ export const health = new Elysia()
       checkRedis(),
       StorageService.ping(),
     ]);
-    return { ok: db && redis && storage, db, redis, storage };
+    const ok = db && redis && storage;
+    const body = { ok, db, redis, storage };
+    return ok ? body : status(503, body);
   });

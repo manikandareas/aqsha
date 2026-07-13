@@ -5,7 +5,6 @@ import { MASTRA_THREAD_ID_KEY } from "@mastra/core/request-context";
 import type { Middleware } from "@mastra/core/server";
 import { LangfuseExporter } from "@mastra/langfuse";
 import { MastraStorageExporter, Observability } from "@mastra/observability";
-import { OtelExporter } from "@mastra/otel-exporter";
 import { astraLite, astraPro } from "./agents/astra-lite";
 import { createClerkAuth } from "./auth";
 import {
@@ -14,22 +13,28 @@ import {
   AQSHA_DEEP_RUN_KEY,
   AQSHA_DEEP_SUBQ_INDEX_KEY,
 } from "./lib/tool-context";
+import { logOps } from "./lib/observability-log";
 import { userContextMiddleware } from "./middleware/user-context";
 import { storage, vector } from "./storage";
 import { deepResearch } from "./workflows/deep-research";
 import { registerDeepTaskExecutors } from "./workflows/deep-tasks";
 
-// Sentry (@sentry/node) — ERROR tracking saja (project aqsha-agent). Mastra yang memegang pipeline
-// OpenTelemetry (exporter storage + Langfuse di bawah), jadi kita SKIP setup OTel & ESM-loader-hook
-// milik Sentry: keduanya tak berebut global tracer, dan bundle `mastra build` tetap bersih. Hanya
-// menangkap uncaught/unhandled + capture manual (mis. boot sweep). No-op tanpa SENTRY_DSN_AGENT;
-// release = GIT_COMMIT (tag sama dengan Langfuse) → error terikat commit.
+// Sentry (@sentry/node) — ERROR tracking + selected operational logs (project aqsha-agent). Mastra
+// yang memegang pipeline OpenTelemetry (exporter storage + Langfuse di bawah), jadi kita SKIP setup
+// OTel & ESM-loader-hook milik Sentry: keduanya tak berebut global tracer, dan bundle `mastra build`
+// tetap bersih. Menangkap uncaught/unhandled + capture manual (mis. boot sweep) + Sentry Logs untuk
+// event lifecycle terpilih via `logOps`. `tracesSampleRate: 0` PERMANEN — trace agent dimiliki
+// Langfuse/Mastra, tak diduplikasi ke Sentry. No-op tanpa SENTRY_DSN_AGENT; release = GIT_COMMIT
+// (tag sama dengan Langfuse) → error terikat commit.
 if (process.env.SENTRY_DSN_AGENT) {
   Sentry.init({
     dsn: process.env.SENTRY_DSN_AGENT,
     environment: process.env.SENTRY_ENVIRONMENT ?? "production",
     release: process.env.SENTRY_RELEASE ?? process.env.GIT_COMMIT,
     tracesSampleRate: 0,
+    // Sentry Logs: hanya `logOps` (selected lifecycle) yang mengirim log; tak ada bulk-console capture.
+    enableLogs: true,
+    sendDefaultPii: false,
     skipOpenTelemetrySetup: true,
     registerEsmLoaderHooks: false,
     defaultIntegrations: false,
@@ -39,6 +44,12 @@ if (process.env.SENTRY_DSN_AGENT) {
       Sentry.dedupeIntegration(),
       Sentry.linkedErrorsIntegration(),
     ],
+    // Backstop kuota logs: debug/trace tak pernah dikirim (logOps hanya info/warn/error, ini jaga
+    // seandainya integrasi lain mencoba emit log level rendah).
+    beforeSendLog(log) {
+      if (log.level === "debug" || log.level === "trace") return null;
+      return log;
+    },
   });
 }
 
@@ -79,12 +90,6 @@ if (langfuseEnabled && !process.env.LANGFUSE_BASE_URL) {
       "tanpa itu SDK default ke cloud.langfuse.com dan mengirim trace ke luar instance self-host.",
   );
 }
-
-// OTLP traces (observability Fase 3) hanya AKTIF bila `AQSHA_OTLP_TRACES_ENDPOINT` diisi — endpoint
-// itu = collector Alloy (`http://alloy:4318/v1/traces`, HTTP/protobuf) yang meneruskan ke Grafana
-// Cloud Tempo. Kosong = off (tanpa dial ke collector yang belum jalan). Berdampingan dengan
-// exporter storage + Langfuse di array yang sama; ikut master kill-switch `AQSHA_OBSERVABILITY=off`.
-const otlpTracesEndpoint = process.env.AQSHA_OTLP_TRACES_ENDPOINT;
 
 /**
  * Instance Mastra runtime Astra (Fase 0 spike).
@@ -144,24 +149,6 @@ export const mastra = new Mastra({
                       }),
                     ]
                   : []),
-                // OTLP → Alloy → Grafana Cloud Tempo. GenAI-semconv spans per deepRun/chat-turn,
-                // ter-korelasi ke logs via traceId. Logs SENGAJA dimatikan (signals.logs=false):
-                // log agent sudah dipanen stdout→Alloy→Loki, jadi tak perlu paket
-                // @opentelemetry/exporter-logs-otlp-* tambahan. Traces pakai http/protobuf
-                // (@opentelemetry/exporter-trace-otlp-proto).
-                ...(otlpTracesEndpoint
-                  ? [
-                      new OtelExporter({
-                        provider: {
-                          custom: {
-                            endpoint: otlpTracesEndpoint,
-                            protocol: "http/protobuf",
-                          },
-                        },
-                        signals: { traces: true, logs: false },
-                      }),
-                    ]
-                  : []),
               ],
               requestContextKeys: [
                 MASTRA_THREAD_ID_KEY,
@@ -213,11 +200,13 @@ export const mastra = new Mastra({
 function sweepFrozenDeepRunsOnce(): void {
   if (deepBootSweepStarted) return;
   deepBootSweepStarted = true;
+  logOps("info", "deep_boot_sweep_started");
   void mastra
     .getWorkflow("deep-research")
     .restartAllActiveWorkflowRuns()
     .catch((err) => {
       console.error("[deep-research] boot sweep restart gagal", err);
+      logOps("warn", "deep_boot_sweep_failed", { area: "deep-boot-sweep" });
       Sentry.captureException(err, { tags: { area: "deep-boot-sweep" } });
     });
 }
