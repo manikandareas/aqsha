@@ -4,6 +4,13 @@ import { m, useReducedMotion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
 
+import { ArrowUpRightIcon } from "@aqsha/ui/icons";
+
+import {
+  Announcement,
+  AnnouncementTag,
+  AnnouncementTitle,
+} from "@/components/ui/announcement";
 import { Button } from "@/components/ui/button";
 import { FrameChrome } from "@/features/marketing/components/feature-frame";
 import { MagneticButton } from "@/features/marketing/components/magnetic-button";
@@ -47,7 +54,7 @@ function HeroImageFrame() {
 
   return (
     <div
-      className="mx-auto mt-16 w-full max-w-[88rem] px-3 sm:mt-20 sm:px-5 lg:mt-24"
+      className="mx-auto mt-12 w-full max-w-[88rem] px-3 sm:mt-14 sm:px-5 lg:mt-16"
       style={{ perspective: "1400px", perspectiveOrigin: "50% 0%" }}
     >
       <m.div
@@ -117,22 +124,44 @@ function HeroImageFrame() {
  * No product mockups, no comparison cards — the comparison message lives in
  * WhyAqshaSection (#bandingin).
  */
-export function LandingHeroSection() {
+/** Ringkasan update terbaru untuk pill pembuka hero (dibaca build-time). */
+export type LatestUpdate = { title: string; href: string; tag: string };
+
+export function LandingHeroSection({
+  latestUpdate,
+}: {
+  latestUpdate?: LatestUpdate | null;
+}) {
   const reduce = useReducedMotion();
 
   return (
     <section className="w-full pb-16 sm:pb-24 lg:pb-28">
-      <div className="mx-auto w-full max-w-4xl px-4 pt-24 text-center sm:px-6 sm:pt-32 lg:pt-40">
-        <m.p
-          className="text-[15px] leading-snug text-muted-foreground sm:text-base"
-          initial={reduce ? false : { opacity: 0, y: 10, letterSpacing: "0.12em" }}
-          animate={{ opacity: 1, y: 0, letterSpacing: "0em" }}
-          transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
-        >
-          Asisten AI buat skripsi, tesis &amp; paper
-        </m.p>
+      <div className="mx-auto w-full max-w-4xl px-4 pt-16 text-center sm:px-6 sm:pt-20 lg:pt-24">
+        {latestUpdate && (
+          <m.div
+            className="mb-6 flex justify-center sm:mb-8"
+            initial={reduce ? false : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <Announcement
+              asChild
+              className="group text-muted-foreground shadow-none hover:shadow-none"
+            >
+              <Link href={latestUpdate.href}>
+                <AnnouncementTag className="bg-lavender-soft text-lavender-foreground">
+                  {latestUpdate.tag}
+                </AnnouncementTag>
+                <AnnouncementTitle className="min-w-0">
+                  <span className="min-w-0 truncate">{latestUpdate.title}</span>
+                  <ArrowUpRightIcon className="size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                </AnnouncementTitle>
+              </Link>
+            </Announcement>
+          </m.div>
+        )}
         <m.h1
-          className="font-heading mx-auto mt-6 max-w-[22ch] text-balance text-5xl font-normal leading-[1.06] tracking-normal text-foreground sm:mt-8 sm:text-6xl sm:leading-[1.05] lg:text-[4.5rem] lg:leading-[1.04]"
+          className="font-heading mx-auto max-w-[22ch] text-balance text-5xl font-normal leading-[1.06] tracking-normal text-foreground sm:text-6xl sm:leading-[1.05] lg:text-[4.5rem] lg:leading-[1.04]"
           initial={reduce ? false : { clipPath: "inset(0 100% 0 0)", opacity: 0.2 }}
           animate={{ clipPath: "inset(0 0% 0 0)", opacity: 1 }}
           transition={{ duration: 0.95, ease: [0.22, 1, 0.36, 1] }}

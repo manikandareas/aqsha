@@ -1,7 +1,6 @@
 "use client";
 
 import { DownloadIcon, XIcon } from "@aqsha/ui/icons";
-import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -61,18 +60,13 @@ export function SourcesListPanel({
 }) {
   const panel = useThreadPanel();
   const lookups = useThreadPanelData();
-  const messageSources = lookups?.messageSources;
   // Aggregate = union of the per-message lists (each already deduped), deduped again
   // across messages. `messageSources` preserves message order, so the list reads
-  // top-to-bottom like the thread. Memoized so a live turn (whose lookups change identity
-  // every token) doesn't re-flatten + re-dedupe the whole thread's sources on each render.
-  const sources = useMemo(
-    () =>
-      messageId
-        ? (messageSources?.get(messageId) ?? [])
-        : dedupeCards([...(messageSources?.values() ?? [])].flat()),
-    [messageSources, messageId],
-  );
+  // top-to-bottom like the thread. React Compiler (reactCompiler: true) already caches
+  // this flatten+dedupe keyed on `lookups`/`messageId`, so no manual useMemo is needed.
+  const sources = messageId
+    ? (lookups?.messageSources.get(messageId) ?? [])
+    : dedupeCards([...(lookups?.messageSources.values() ?? [])].flat());
 
   return (
     <DetailPanelShell

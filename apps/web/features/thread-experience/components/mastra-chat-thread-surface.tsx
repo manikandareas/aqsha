@@ -698,13 +698,18 @@ function MastraComposerLanding({
     <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden bg-background">
       {/* Landing penuh (non-compact): kolom setinggi viewport — hero di tengah, banner
           carousel menempel di dasar (tepat di atas section Jelajahi yang jadi turun ke
-          bawah fold; cue "bacaan hari ini" yang mengundang scroll ke sana). */}
+          bawah fold; cue "bacaan hari ini" yang mengundang scroll ke sana).
+          `shrink-0` WAJIB: `min-h-full` (min-height:100%) menimpa `min-height:auto`
+          bawaan flex-item, jadi tanpa ini parent (main flex-col) MENYUSUTKAN kolom ke
+          bawah tinggi kontennya saat fold sempit (mobile) — hero+banner meluber &
+          menabrak section Jelajahi di bawahnya. `shrink-0` membiarkan kolom tumbuh
+          setinggi konten sekaligus tetap ≥ fold saat konten pendek. */}
       <div
         className={cn(
           "relative mx-auto flex w-full flex-col",
           compact
             ? cn("flex-1 max-w-none", panelBodyPaddingClass)
-            : "min-h-full max-w-5xl px-4 pb-5 pt-10 @2xl:px-8",
+            : "min-h-full shrink-0 max-w-5xl px-4 pb-5 pt-10 @2xl:px-8",
         )}
       >
         <div className="flex w-full flex-1 items-center justify-center">

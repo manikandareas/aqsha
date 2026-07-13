@@ -159,6 +159,11 @@ class StatsErrorBoundary extends Component<{ children: ReactNode }, { failed: bo
   static getDerivedStateFromError() {
     return { failed: true };
   }
+  // Surface the swallowed render error (React's designated side-effect hook for logging) so a
+  // broken block is diagnosable in the console instead of silently degrading to the fallback.
+  override componentDidCatch(error: unknown) {
+    console.error("[stats-viz] gagal merender blok hasil analisis", error);
+  }
   override render() {
     if (this.state.failed) {
       return (

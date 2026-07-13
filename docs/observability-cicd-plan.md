@@ -1,7 +1,34 @@
 # Plan: CI/CD (build off-VPS) + Observability stack production
 
-> Status: PLAN — belum diimplementasikan. Disusun 2026-07-11.
-> Cakupan: **web** (Next.js), **api** (Elysia/Bun), **worker** (BullMQ, reuse image api), **agent** (Mastra/Node) + infra pendukung di VPS Dokploy.
+> **⚠️ SUPERSEDED (2026-07-13).** Bagian **Grafana Alloy (Loki/Mimir/Tempo)** dan **Uptime Kuma** di
+> dokumen ini **tidak lagi aktif** — arsitektur observability dikonsolidasi ke **Sentry-first +
+> Langfuse on-demand**. Grafana Alloy + Uptime Kuma dihapus (code, Compose, env). Keputusan &
+> alasan: `docs/observability-sentry-consolidation-plan.md`. Runbook aktivasi:
+> `docs/observability-cicd-runbook.md`. Dokumen ini disimpan hanya sebagai **catatan historis**
+> (CI/CD + Sentry Fase 1 masih akurat); jangan jadikan instruksi Alloy/Kuma sebagai target aktif.
+
+> Disusun 2026-07-11. Cakupan: **web** (Next.js), **api** (Elysia/Bun), **worker** (BullMQ, reuse
+> image api), **agent** (Mastra/Node) + infra pendukung di VPS Dokploy.
+>
+> Dokumen ini = **desain & alasan**. Langkah **menyalakan** (owner): `docs/observability-cicd-runbook.md`.
+>
+> **Status implementasi (update 2026-07-11):**
+> - ✅ **Bagian 1 — CI/CD**: SELESAI (kode). Branch `infrastructure` (worktree `aqsha-infrastructure`).
+> - ✅ **Bagian 2 Fase 1 — Sentry**: SELESAI (kode, env-gated no-op tanpa DSN).
+> - ✅ **Fase 2 (Alloy→Loki)** + ✅ **Fase 3 (traces agent→Tempo + metrics host/container)**: SELESAI
+>   (kode). Satu service `alloy` di `compose.yaml` di belakang **profile `observability`** (opt-in via
+>   `COMPOSE_PROFILES`), config `infra/alloy/config.alloy` (logs+metrics+traces). Agent kirim OTLP
+>   (`OtelExporter`) hanya bila `AQSHA_OTLP_TRACES_ENDPOINT` diisi.
+> - ✅ **Fase 4 (Uptime Kuma)**: SELESAI (kode). `infra/compose.uptime.yaml` = service Dokploy TERPISAH,
+>   join network `aqsha_default`. Monitor dikonfig di UI (Kuma 1.x tak deklaratif).
+>
+> Verifikasi lokal: Fase 1 — `bun run typecheck` + `lint` + full `test` (81 itest api hijau) +
+> `docker compose config`. Fase 2–4 — `bun run --filter @aqsha/agent typecheck` hijau (OtelExporter
+> terpasang; dep `@mastra/otel-exporter` + `@opentelemetry/exporter-trace-otlp-proto`; lockfile ter-update).
+> **Belum diverifikasi (tak ada Docker daemon lokal):** build image, `docker compose config` file baru,
+> `alloy fmt`, dan aliran telemetri end-to-end — pertama kali jalan di CI/VPS. Belum di-commit; perubahan
+> ada di working tree worktree untuk review. Owner prereqs (akun/secret/DNS + Grafana Cloud token + domain
+> status) masih pending — lihat checklist di tiap bagian.
 
 ## Bagian 1 — CI/CD: VPS hanya deploy, bukan build
 
@@ -58,6 +85,34 @@ Dokploy: trigger redeploy via API/webhook dari step terakhir workflow
    dijalankan sadar-diri dari terminal Dokploy. JANGAN auto-migrate on boot (risiko race
    saat beberapa container start).
 
+### ✅ IMPLEMENTED (2026-07-11)
+
+File berubah/baru:
+
+- **`compose.yaml`**: web/api/agent → `image: ghcr.io/manikandareas/aqsha-{web,api,agent}:${IMAGE_TAG:-latest}`
+  (semua blok `build:` dicabut dari file base). `worker` + service baru `migrate` me-reuse ref image api.
+- **`compose.build.yaml`** (baru): overlay build lokal darurat (`-f compose.yaml -f compose.build.yaml build`).
+- **`.github/workflows/ci.yml`** (baru): gate PR + **reusable** (`workflow_call`) → typecheck + lint +
+  full test di service container Postgres(pgvector)+Redis; ekstensi via `psql infra/init-extensions.sql`
+  lalu `bun run db:migrate`.
+- **`.github/workflows/deploy.yml`** (baru): push `main` → `check` (reuse ci.yml, `secrets: inherit`) →
+  `build` (buildx matrix 3 image, cache `type=gha` per-scope, tag `sha-<short>` + `latest`) →
+  `deploy` (`curl POST $DOKPLOY_URL/api/compose.deploy`, header `x-api-key`, body `{composeId}`).
+- **Dockerfile** (web/api/agent): manifest-first (copy 8 `package.json` + `bun.lock` → `bun install` →
+  `COPY . .`) + `ARG GIT_COMMIT` → `ENV GIT_COMMIT`/`SENTRY_RELEASE`.
+- **Service `migrate`** (profile `migrate`): jalankan `docker compose --profile migrate run --rm migrate`.
+
+Deviasi/keputusan dari rencana awal:
+
+- **ci.yml jadi reusable** (bukan check ganda) — deploy.yml memanggilnya via `workflow_call`, satu SSOT
+  "hijau". `cancel-in-progress` hanya untuk event `pull_request` supaya gate deploy tak terpotong.
+- **Release tag = `GIT_COMMIT` di-BAKE via Dockerfile ARG**, BUKAN env compose — nilai compose kosong
+  akan meng-clobber tag commit. Dipakai Sentry `release` **dan** Langfuse.
+- **`repository_owner`** GitHub = `manikandareas` (hard-coded `ghcr.io/manikandareas/...` di compose;
+  workflow pakai `${{ github.repository_owner }}` → konsisten).
+- Deploy pakai `:latest` (default `IMAGE_TAG`); Dokploy `compose.deploy` menarik ulang. Pin/rollback =
+  set `IMAGE_TAG=sha-<short>` di Environment tab.
+
 ### Alternatif yang dipertimbangkan (dan kenapa tidak)
 
 | Opsi | Kenapa tidak |
@@ -67,11 +122,15 @@ Dokploy: trigger redeploy via API/webhook dari step terakhir workflow
 | Self-hosted GH runner | Kotak baru yang harus dirawat |
 | Watchtower auto-pull | Kurang kontrol; Dokploy API trigger lebih eksplisit + terlihat di dashboard |
 
-### Prasyarat owner (Bagian 1)
+### Prasyarat owner (Bagian 1) — kode siap, tinggal isi akun/secret
 
-- [ ] Aktifkan GHCR di repo (Packages), buat PAT `read:packages` untuk Dokploy.
-- [ ] GH Secrets: `DOKPLOY_URL`, `DOKPLOY_API_KEY`, `SENTRY_AUTH_TOKEN` (Bagian 2).
-- [ ] GH Variables: semua `NEXT_PUBLIC_*` (nilai sama dengan Environment tab Dokploy sekarang).
+- [ ] Aktifkan GHCR di repo (Packages), buat PAT `read:packages` → Dokploy → Settings → Registry.
+- [ ] GH Secrets: `DOKPLOY_URL`, `DOKPLOY_API_KEY`, **`DOKPLOY_COMPOSE_ID`** (id service Compose),
+      `SENTRY_AUTH_TOKEN` (Bagian 2, source maps web).
+- [ ] GH Variables: `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SITE_URL`,
+      `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_ORG`, `SENTRY_PROJECT_WEB` (samakan dgn Environment tab Dokploy).
+- [ ] Push/rebuild image ke GHCR SEKALI sebelum Deploy pertama (CI push, atau `compose.build.yaml` lalu
+      `docker push`) — compose base tak bisa build, jadi image harus sudah ada.
 
 ---
 
@@ -116,7 +175,41 @@ Env baru (Dokploy): `SENTRY_DSN_WEB`, `SENTRY_DSN_API`, `SENTRY_DSN_AGENT`,
 Verifikasi: endpoint/route uji lempar error di tiap runtime (dev dulu, lalu staging deploy)
 → muncul di project yang benar dengan stack ter-symbolicate.
 
-### Fase 2 — Logs ke Grafana Cloud (Loki) via Alloy
+#### ✅ IMPLEMENTED (2026-07-11)
+
+Semua `@sentry/*` di-pin `^10.65.0`. File:
+
+- **web** (`@sentry/nextjs`): `instrumentation.ts` (`register` + `onRequestError`),
+  `instrumentation-client.ts` (+ `onRouterTransitionStart`), `sentry.server.config.ts`,
+  `sentry.edge.config.ts`, capture di `app/global-error.tsx`, wrap `next.config.ts`.
+- **api + worker** (`@sentry/bun`): `apps/api/src/lib/sentry.ts` (`initSentry` + `captureException`);
+  init di `server.ts` & `workers/index.ts`; capture di `lib/errors.ts` (hanya 5xx/unknown, tag
+  `requestId`) & hook `failed` BullMQ (`{queue, jobId, attemptsMade}`); tag `process` via `AQSHA_PROCESS`.
+- **agent** (`@sentry/node`): init di puncak `src/mastra/index.ts` + capture di boot-sweep `/deep`.
+
+Deviasi/keputusan penting:
+
+- **agent `@sentry/node` = ERROR-only** dgn `skipOpenTelemetrySetup:true` + `registerEsmLoaderHooks:false`
+  + `defaultIntegrations:false` (hanya uncaught/unhandled/dedupe/linkedErrors). Alasan: Mastra yang
+  memegang pipeline OTel (`MastraStorageExporter` + `LangfuseExporter`) — Sentry TAK boleh set global
+  TracerProvider sendiri (bentrok + risiko bundle `mastra build`). `tracesSampleRate:0`.
+- **`withSentryConfig` cuma membungkus saat Sentry configured** (`NEXT_PUBLIC_SENTRY_DSN` atau
+  `SENTRY_AUTH_TOKEN` ada saat build) → jalur build web default (tanpa Sentry) byte-identik, aman Turbopack
+  sampai owner opt-in.
+- **Source-map auth token via BuildKit secret mount** (`--mount=type=secret,id=sentry_auth_token`),
+  BUKAN build ARG → tak masuk layer image. Tanpa token = upload di-skip, build tetap sukses.
+- Release Sentry = `SENTRY_RELEASE ?? GIT_COMMIT` (di-bake image). Env baru compose:
+  `SENTRY_DSN_WEB/API/AGENT`, `SENTRY_ENVIRONMENT`, `SENTRY_TRACES_SAMPLE_RATE`.
+- **Blocker "branch Langfuse" LENYAP**: branch `infrastructure` sudah punya Langfuse → Fase 3 nanti
+  cukup menambah exporter OTLP ke array `exporters` yang sudah ada.
+
+### Fase 2 — Logs ke Grafana Cloud (Loki) via Alloy — ✅ IMPLEMENTED
+
+> Service `alloy` (`compose.yaml`, profile `observability`) + `infra/alloy/config.alloy`. Satu file
+> config menggabung SEMUA sinyal (logs+metrics+traces), bukan per-sinyal. Logs: `discovery.docker` →
+> `discovery.relabel` (keep `.*aqsha.*` — buang stack Dokploy lain di VPS; label `service` +
+> `compose_project`) → `loki.process` (stage.json angkat `level` jadi label, requestId tetap field) →
+> `loki.write` basic-auth. Pino TAK berubah. Dashboard/alert = langkah owner di Grafana Cloud UI.
 
 Free tier Grafana Cloud: 50 GB logs + 50 GB traces + 10k metric series, retensi 14 hari, 3 user.
 
@@ -133,21 +226,33 @@ Free tier Grafana Cloud: 50 GB logs + 50 GB traces + 10k metric series, retensi 
 
 Env baru: `GRAFANA_CLOUD_LOKI_URL`, `GRAFANA_CLOUD_LOKI_USER`, `GRAFANA_CLOUD_API_TOKEN`.
 
-### Fase 3 — Traces agent + metrics host
+### Fase 3 — Traces agent + metrics host — ✅ IMPLEMENTED
+
+> Agent traces: `OtelExporter` (`@mastra/otel-exporter` + `@opentelemetry/exporter-trace-otlp-proto`,
+> `protocol: "http/protobuf"`, `signals.logs=false`) ditambah ke array `exporters` di
+> `apps/agent/src/mastra/index.ts`, GATE `AQSHA_OTLP_TRACES_ENDPOINT` (kosong=off) → `http://alloy:4318/v1/traces`.
+> Alloy: `otelcol.receiver.otlp` (http saja) → `otelcol.processor.batch` → `otelcol.exporter.otlphttp`
+> (basic-auth) ke Tempo. Metrics: `prometheus.exporter.unix` (host, mount `/proc`+`/sys`+`/` ro) +
+> `prometheus.exporter.cadvisor` → dua `prometheus.scrape` (60s) → `prometheus.remote_write`. API traces DITUNDA.
 
 1. **Agent traces**: di config `Observability` yang sudah ada (`apps/agent/src/mastra/index.ts`),
    tambah exporter OTLP (`@mastra/otel-exporter` / exporter OTel bawaan Mastra) menunjuk ke
    Alloy (`http://alloy:4318`) → Alloy `otelcol.receiver.otlp` → forward ke Grafana Tempo.
-   Berdampingan dengan `MastraStorageExporter` + `LangfuseExporter` (branch Langfuse yang
-   sudah diimplement — merge dulu, lalu ketiganya co-exist di array `exporters`).
-   Hasil: trace per deepRun/chat-turn di Tempo, terkorelasi dengan logs via traceId.
+   Berdampingan dengan `MastraStorageExporter` + `LangfuseExporter` yang **sudah ada di branch
+   `infrastructure`** (array `exporters` di `Observability` config) → tinggal tambah exporter ke-3.
+   CATATAN: Sentry agent (Fase 1) sengaja `skipOpenTelemetrySetup` supaya OTel tetap dimiliki Mastra,
+   jadi exporter OTLP ini aman ditambah. Hasil: trace per deepRun/chat-turn di Tempo, korelasi via traceId.
 2. **Host + container metrics**: aktifkan di Alloy `prometheus.exporter.unix` (CPU/RAM/disk VPS)
    + `prometheus.exporter.cadvisor` (per-container) → `prometheus.remote_write` ke Mimir.
    Perhatikan budget 10k series free tier — cukup untuk 1 VPS + ~10 container.
 3. **API traces**: DITUNDA — OTel SDK di Bun belum first-class; logs + Sentry (yang punya
    mini-tracing sendiri) sudah menutup kebutuhan debugging api. Re-evaluasi saat Bun OTel matang.
 
-### Fase 4 — Uptime Kuma + status page
+### Fase 4 — Uptime Kuma + status page — ✅ IMPLEMENTED
+
+> `infra/compose.uptime.yaml` (project `aqsha-uptime`, TERPISAH dari stack app) — `louislam/uptime-kuma:1`,
+> volume `uptime_kuma_data`, join network eksternal `aqsha_default` (cek `agent:4317` internal). UI port
+> 3001 (front via Traefik/Domains Dokploy). Monitor + notifikasi dikonfig di UI (Kuma 1.x tak deklaratif).
 
 1. Service Dokploy terpisah (bukan di stack aqsha, supaya redeploy app tidak mematikan
    monitor): image `louislam/uptime-kuma:1`, volume data sendiri, join network stack aqsha
@@ -159,9 +264,9 @@ Env baru: `GRAFANA_CLOUD_LOKI_URL`, `GRAFANA_CLOUD_LOKI_USER`, `GRAFANA_CLOUD_AP
 ### Urutan eksekusi & dependensi
 
 ```
-Bagian 1 CI/CD  ──── prasyarat source-maps & deploy cepat ────┐
-                                                              ▼
-Fase 1 Sentry (web→api→worker→agent) → Fase 2 Loki logs → Fase 3 traces+metrics → Fase 4 Kuma
+✅ Bagian 1 CI/CD  ──── prasyarat source-maps & deploy cepat ────┐
+                                                                ▼
+✅ Fase 1 Sentry (web→api→worker→agent) → ✅ Fase 2 Loki logs → ✅ Fase 3 traces+metrics → ✅ Fase 4 Kuma
 ```
 
 Fase 4 (Kuma) sebenarnya independen — bisa dikerjakan kapan saja, paling cepat nilai/effort.
@@ -174,13 +279,16 @@ Fase 4 (Kuma) sebenarnya independen — bisa dikerjakan kapan saja, paling cepat
   kuota di Sentry.
 - **NEXT_PUBLIC_* drift**: setelah pindah build ke CI, source of truth build args = GH
   Variables, runtime env tetap Dokploy. Dokumentasikan di DEPLOYMENT.md saat implementasi.
-- **Branch Langfuse**: exporter Langfuse (memori 2026-07-11) belum ada di branch ini —
-  koordinasikan merge sebelum Fase 3 supaya array exporters dirakit sekali.
+- **Branch Langfuse**: ✅ TERSELESAIKAN — exporter Langfuse SUDAH ada di branch `infrastructure`
+  (HEAD `feat(observability): integrate Langfuse tracing`). Fase 3 cukup menambah exporter OTLP ke
+  array `exporters` yang sama.
 - **Redaction**: pino sudah redact token/password; pastikan Alloy tidak menambah label dari
   isi log (hanya metadata container).
 
 ### Prasyarat owner (Bagian 2)
 
-- [ ] Buat akun Sentry (free) + 3 project → salin 3 DSN + auth token (source maps).
-- [ ] Buat akun Grafana Cloud (free) → salin Loki/Tempo/Prometheus endpoint + API token.
-- [ ] Putuskan domain `status.<domain>` (opsional, Fase 4).
+- [ ] **Fase 1 (kode siap)**: buat akun Sentry (free) + 3 project (`aqsha-web`/`api`/`agent`) → isi
+      `SENTRY_DSN_WEB/API/AGENT` di Dokploy + `NEXT_PUBLIC_SENTRY_DSN`/`SENTRY_ORG`/`SENTRY_PROJECT_WEB`
+      (GH Variables) + `SENTRY_AUTH_TOKEN` (GH Secret). Lalu uji lempar error per runtime.
+- [ ] Fase 2/3: buat akun Grafana Cloud (free) → salin Loki/Tempo/Prometheus endpoint + API token.
+- [ ] Fase 4: putuskan domain `status.<domain>` (opsional).

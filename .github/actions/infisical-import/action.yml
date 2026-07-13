@@ -1,0 +1,60 @@
+name: Import Infisical secrets
+description: >
+  Import secrets from Infisical (secrets.aqshara.com) into job env vars, with one delayed retry.
+  The upstream action has no built-in retry and the Infisical server lives on the prod VPS, so a
+  transient network blip (seen: `connect ETIMEDOUT`) would otherwise fail the job. Composite
+  actions can't read the `secrets`/`vars` contexts, so the caller passes them as inputs.
+
+inputs:
+  client-id:
+    description: Infisical machine-identity client id
+    required: true
+  client-secret:
+    description: Infisical machine-identity client secret
+    required: true
+  project-slug:
+    description: Infisical project slug
+    required: true
+  secret-path:
+    description: Infisical folder to import (e.g. /build, /deploy)
+    required: true
+  env-slug:
+    description: Infisical environment slug (prod for main, staging for development)
+    required: false
+    default: prod
+
+runs:
+  using: composite
+  steps:
+    # Pinned to an immutable commit SHA (see ci.yml). Trailing comment = version.
+    - name: Import secrets
+      id: attempt
+      continue-on-error: true
+      uses: Infisical/secrets-action@77ab1f4ccd183a543cb5b42435fbd181189f4995 # v1.0.16
+      with:
+        method: universal
+        client-id: ${{ inputs.client-id }}
+        client-secret: ${{ inputs.client-secret }}
+        domain: https://secrets.aqshara.com
+        project-slug: ${{ inputs.project-slug }}
+        env-slug: ${{ inputs.env-slug }}
+        secret-path: ${{ inputs.secret-path }}
+
+    # Brief pause so the retry doesn't land on the same transient blip; a fast failure (DNS,
+    # connection refused) would otherwise retry near-instantly.
+    - name: Wait before retry
+      if: steps.attempt.outcome == 'failure'
+      shell: bash
+      run: sleep 10
+
+    - name: Import secrets (retry)
+      if: steps.attempt.outcome == 'failure'
+      uses: Infisical/secrets-action@77ab1f4ccd183a543cb5b42435fbd181189f4995 # v1.0.16
+      with:
+        method: universal
+        client-id: ${{ inputs.client-id }}
+        client-secret: ${{ inputs.client-secret }}
+        domain: https://secrets.aqshara.com
+        project-slug: ${{ inputs.project-slug }}
+        env-slug: ${{ inputs.env-slug }}
+        secret-path: ${{ inputs.secret-path }}
