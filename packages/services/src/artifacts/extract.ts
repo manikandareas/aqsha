@@ -93,8 +93,16 @@ async function extractXlsx(bytes: Uint8Array): Promise<ExtractedDocument> {
     }
     lines.push(cells.join(","));
   }
-  const truncated = sheet.rowCount > XLSX_PREVIEW_ROWS;
-  const header = `Sheet: ${sheet.name} (${sheet.rowCount} baris${truncated ? `, preview ${XLSX_PREVIEW_ROWS} pertama` : ""})`;
+  // Baris & kolom di-cap independen — sheet yang muat di batas baris tapi melewati batas kolom
+  // (atau sebaliknya) tetap harus menandai kolomnya terpotong.
+  const rowsTruncated = sheet.rowCount > XLSX_PREVIEW_ROWS;
+  const colsTruncated = sheet.columnCount > XLSX_PREVIEW_COLUMNS;
+  const previewNotes: string[] = [];
+  if (rowsTruncated) previewNotes.push(`${XLSX_PREVIEW_ROWS} baris pertama`);
+  if (colsTruncated) previewNotes.push(`${XLSX_PREVIEW_COLUMNS} kolom pertama`);
+  const header = `Sheet: ${sheet.name} (${sheet.rowCount} baris × ${sheet.columnCount} kolom${
+    previewNotes.length > 0 ? `, preview ${previewNotes.join(", ")}` : ""
+  })`;
   const text = normalizeExtractedText([header, ...lines].join("\n"));
   return { markdown: text, plainText: text };
 }

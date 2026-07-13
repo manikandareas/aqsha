@@ -9,6 +9,7 @@ Untuk setiap proses brainstorming dan planning, gunakan **bahasa Indonesia**. Is
 ## Companion Docs
 
 - `AGENTS.md` — current monorepo boundaries and exact commands.
+- `docs/versioning-and-changelog.md` — decision guide for product version bumps and whether a change needs a changelog entry. Consult when closing any user-facing work.
 - `docs/architecture/` — architecture and design notes (overview, tech stack, API domains, service layer, contracts).
 - `BRAND-IDENTITY.md` — brand voice and palette source of truth.
 - Mastra docs (`.mcp.json` `@mastra/mcp-docs-server`, or context7 `/mastra-ai/mastra`) — consult before editing the agent runtime in `apps/agent/src/mastra/` (agents, tools, skills, workflows, processors, memory). Verify Mastra APIs against the installed `@mastra/core` version; don't invent them.

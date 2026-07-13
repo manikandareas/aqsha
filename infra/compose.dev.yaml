@@ -59,7 +59,7 @@ services:
       retries: 5
 
   # One-shot: tunggu MinIO siap (until-loop, tahan-banting tanpa gantung healthcheck)
-  # lalu bikin bucket. Idempotent (--ignore-existing); exit setelah selesai.
+  # lalu bikin bucket + user Langfuse scoped. Idempotent; exit setelah selesai.
   minio-init:
     image: minio/mc:latest
     depends_on:
@@ -68,17 +68,181 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET: ${MINIO_BUCKET}
-    entrypoint: >
-      /bin/sh -c "
-      until mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD}; do
-        echo 'menunggu MinIO...'; sleep 2;
-      done;
-      mc mb --ignore-existing local/$${MINIO_BUCKET};
-      echo 'bucket siap: '$${MINIO_BUCKET};
-      "
+      # Bucket blob Langfuse (event/media). Dibuat selalu (idempotent) walau profile langfuse mati.
+      LANGFUSE_S3_BUCKET: ${LANGFUSE_S3_BUCKET:-langfuse}
+      # Kredensial MinIO khusus Langfuse (least-privilege): user non-root, policy terbatas ke bucket
+      # langfuse saja — bukan MINIO_ROOT. Default WAJIB sama dgn yang dipakai *langfuse-env di bawah.
+      LANGFUSE_S3_ACCESS_KEY: ${LANGFUSE_S3_ACCESS_KEY:-langfuse}
+      LANGFUSE_S3_SECRET_KEY: ${LANGFUSE_S3_SECRET_KEY:-changeme_langfuse_s3}
+    # List + block-literal: script jadi satu argumen utuh (tanpa shlex), aman utk JSON policy.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do
+          echo 'menunggu MinIO...'; sleep 2
+        done
+        mc mb --ignore-existing "local/$${MINIO_BUCKET}"
+        mc mb --ignore-existing "local/$${LANGFUSE_S3_BUCKET}"
+        # Scoped Langfuse user + bucket-limited policy. Idempotent tapi TANPA `|| true`: buat/attach
+        # hanya bila belum ada, jadi error nyata (auth/policy invalid) tetap menggagalkan minio-init.
+        mc admin user info local "$${LANGFUSE_S3_ACCESS_KEY}" >/dev/null 2>&1 || mc admin user add local "$${LANGFUSE_S3_ACCESS_KEY}" "$${LANGFUSE_S3_SECRET_KEY}"
+        printf '%s' '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:*"],"Resource":["arn:aws:s3:::'"$${LANGFUSE_S3_BUCKET}"'","arn:aws:s3:::'"$${LANGFUSE_S3_BUCKET}"'/*"]}]}' > /tmp/langfuse-policy.json
+        mc admin policy info local langfuse-scoped >/dev/null 2>&1 || mc admin policy create local langfuse-scoped /tmp/langfuse-policy.json
+        mc admin user info local "$${LANGFUSE_S3_ACCESS_KEY}" | grep -q langfuse-scoped || mc admin policy attach local langfuse-scoped --user "$${LANGFUSE_S3_ACCESS_KEY}"
+        # Validasi akhir: policy benar-benar ter-attach ke user; gagal lantang bila tidak.
+        mc admin user info local "$${LANGFUSE_S3_ACCESS_KEY}" | grep -q langfuse-scoped
+        echo "siap: bucket $${MINIO_BUCKET} + $${LANGFUSE_S3_BUCKET} (user langfuse scoped)"
     restart: "no"
+
+  # ══════════════════════════════════════════════════════════════════════════════
+  # Langfuse (LLM observability) — OPT-IN via profile `langfuse`. Trace token & biaya
+  # per run Astra + /deep (unit-economics). Aktifkan:
+  #   docker compose -f infra/compose.dev.yaml --profile langfuse up -d
+  # UI: http://$BIND_HOST:3000 (login LANGFUSE_INIT_USER_EMAIL/PASSWORD). Stack v3 butuh
+  # Postgres + ClickHouse + Redis SENDIRI (dipisah dari datastore app agar migrasi Langfuse
+  # tak menumpang DB app); blob event/media numpang MinIO app (bucket `langfuse`).
+  # Datastore Langfuse internal-only (tanpa host port); hanya langfuse-web yang diekspos.
+  #
+  # CATATAN: nilai LANGFUSE_* dibuat OPSIONAL (default dev via `:-`) — profile mati tak boleh
+  # mengharuskan var ini (compose meng-interpolasi SEMUA service walau profile off). Untuk server
+  # bersama/publik WAJIB override lewat infra/.env (lihat infra/.env.example).
+  # ══════════════════════════════════════════════════════════════════════════════
+  langfuse-postgres:
+    image: postgres:17
+    profiles: ["langfuse"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: ${LANGFUSE_POSTGRES_PASSWORD:-langfuse}
+      POSTGRES_DB: langfuse
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - langfuse_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  langfuse-clickhouse:
+    # :latest-style (tanpa pin) mengikuti compose resmi Langfuse; pin tag untuk prod reproducible.
+    image: clickhouse/clickhouse-server
+    profiles: ["langfuse"]
+    restart: unless-stopped
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:-clickhouse}
+    volumes:
+      - langfuse_clickhouse_data:/var/lib/clickhouse
+      - langfuse_clickhouse_logs:/var/log/clickhouse-server
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 1s
+
+  langfuse-redis:
+    image: redis:7-alpine
+    profiles: ["langfuse"]
+    restart: unless-stopped
+    # noeviction wajib untuk BullMQ Langfuse; password terpisah dari Redis app.
+    command: redis-server --requirepass ${LANGFUSE_REDIS_PASSWORD:-langfuse_redis} --maxmemory-policy noeviction
+    # redis-cli membaca REDISCLI_AUTH → PING ter-autentikasi (tanpa AUTH, requirepass balas NOAUTH,
+    # bukan PONG). grep -q PONG memvalidasi balasan yang benar, bukan sekadar exit code.
+    environment:
+      REDISCLI_AUTH: ${LANGFUSE_REDIS_PASSWORD:-langfuse_redis}
+    volumes:
+      - langfuse_redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 3s
+      timeout: 10s
+      retries: 10
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    profiles: ["langfuse"]
+    restart: unless-stopped
+    depends_on: &langfuse-depends-on
+      langfuse-postgres:
+        condition: service_healthy
+      langfuse-clickhouse:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      # Bucket blob langfuse dibuat minio-init; tunggu selesai agar upload event/media tak 404 di boot.
+      minio-init:
+        condition: service_completed_successfully
+    environment: &langfuse-env
+      # NEXTAUTH_URL di anchor bersama (web + worker) mengikuti compose resmi Langfuse; NEXTAUTH_SECRET
+      # tetap khusus web (di bawah). Nilai = LANGFUSE_NEXTAUTH_URL yang sama dgn langfuse-web.
+      NEXTAUTH_URL: ${LANGFUSE_NEXTAUTH_URL:-http://localhost:3000}
+      DATABASE_URL: postgresql://langfuse:${LANGFUSE_POSTGRES_PASSWORD:-langfuse}@langfuse-postgres:5432/langfuse
+      SALT: ${LANGFUSE_SALT:-changeme-langfuse-salt}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
+      TELEMETRY_ENABLED: "true"
+      LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "false"
+      CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:-clickhouse}
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      # Blob event + media → MinIO app (bucket langfuse), path-style dipaksa (self-host).
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: ${LANGFUSE_S3_BUCKET:-langfuse}
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${LANGFUSE_S3_ACCESS_KEY:-langfuse}
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_S3_SECRET_KEY:-changeme_langfuse_s3}
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: ${LANGFUSE_S3_BUCKET:-langfuse}
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${LANGFUSE_S3_ACCESS_KEY:-langfuse}
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_S3_SECRET_KEY:-changeme_langfuse_s3}
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+      REDIS_HOST: langfuse-redis
+      REDIS_PORT: "6379"
+      REDIS_AUTH: ${LANGFUSE_REDIS_PASSWORD:-langfuse_redis}
+      REDIS_TLS_ENABLED: "false"
+
+  langfuse-web:
+    image: langfuse/langfuse:3
+    profiles: ["langfuse"]
+    restart: unless-stopped
+    depends_on: *langfuse-depends-on
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:3000:3000"
+    environment:
+      <<: *langfuse-env
+      # NEXTAUTH_URL diwarisi dari *langfuse-env. NEXTAUTH_SECRET khusus web (login NextAuth).
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-changeme-langfuse-nextauth}
+      # Bootstrap deklaratif: org + project + user + API keys dibuat saat boot pertama →
+      # keys agent (LANGFUSE_PUBLIC_KEY/SECRET_KEY) = nilai di infra/.env, TANPA klik dashboard.
+      LANGFUSE_INIT_ORG_ID: aqsha
+      LANGFUSE_INIT_ORG_NAME: Aqsha
+      LANGFUSE_INIT_PROJECT_ID: aqsha-agent
+      LANGFUSE_INIT_PROJECT_NAME: Aqsha Agent
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-local-dev}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-sk-lf-local-dev}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:-owner@aqsha.local}
+      LANGFUSE_INIT_USER_NAME: ${LANGFUSE_INIT_USER_NAME:-Owner}
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-changeme-min8}
 
 volumes:
   postgres_data:
   redis_data:
   minio_data:
+  langfuse_postgres_data:
+  langfuse_clickhouse_data:
+  langfuse_clickhouse_logs:
+  langfuse_redis_data:

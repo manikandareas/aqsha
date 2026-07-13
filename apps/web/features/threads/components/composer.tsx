@@ -4,6 +4,7 @@ import { useContextPickerArtifacts } from "@/features/artifacts/api";
 import { UPLOAD_ACCEPT } from "@/features/artifacts/types";
 import {
   useAmbientContextEpoch,
+  useComposerDraft,
   useComposerSelection,
 } from "@/features/thread-experience/components/composer-context-mentions";
 import { useBillingCurrent } from "@/features/settings/api";
@@ -355,6 +356,18 @@ export function Composer({
     }
   } else if (seenDraft !== null) {
     setSeenDraft(null);
+  }
+
+  // Prefill teks composer (chip next-step statistik, fase C) — overwrite `content` saat epoch draft
+  // naik. Pola epoch-merge sama seperti ambient/selection; teks polos → set `richContent` (varian
+  // ber-marker) sekalian supaya tak drift sebelum edit. Editor re-seed dari `value` selama tak fokus
+  // (chip yang fokus saat klik) — user lalu bisa mengubah/mengirim sendiri (tanpa auto-send).
+  const { draftContent, draftEpoch } = useComposerDraft();
+  const [seenDraftEpoch, setSeenDraftEpoch] = useState(draftEpoch);
+  if (draftEpoch !== seenDraftEpoch) {
+    setSeenDraftEpoch(draftEpoch);
+    setContent(draftContent);
+    setRichContent(draftContent);
   }
 
   const workspacesQuery = useWorkspacesList(false);

@@ -10,6 +10,10 @@ import {
 } from "@aqsha/services";
 import { Worker } from "bullmq";
 import { logger } from "../lib/log";
+import { captureException, initSentry } from "../lib/sentry";
+
+// Sentry sedini mungkin (no-op tanpa SENTRY_DSN_API) supaya kegagalan boot pun tertangkap.
+initSentry("worker");
 
 // Fail-fast (D1): worker meng-index dokumen (artifact-indexing, url-ingestion) via embedding.
 // Kredensial yang hilang digagalkan saat boot, bukan job gagal senyap.
@@ -71,17 +75,33 @@ const workers = [
 
 for (const w of workers) {
   const log = logger.child({ worker: w.name });
-  w.on("failed", (job, err) => log.error({ jobId: job?.id ?? null, err }, "job_failed"));
+  w.on("failed", (job, err) => {
+    // `failed` fires on EVERY attempt, including intermediate retries — only the TERMINAL failure
+    // (attempts exhausted; enqueue sets `attempts: 3`) is a real incident. So: intermediate retries
+    // log at `warn` (searchable, "retry mendekati habis" per policy §5.1) and terminal failure logs at
+    // `error` + raises ONE Sentry exception. Without terminal-gating a job that succeeds on retry would
+    // still raise an incident, and a terminally-failing job would report N times.
+    const attempts = job?.opts?.attempts ?? 1;
+    const attemptsMade = job?.attemptsMade ?? 0;
+    const terminal = Boolean(job && attemptsMade >= attempts);
+    const ctx = { jobId: job?.id ?? null, attemptsMade, attempts, err };
+    if (terminal) {
+      log.error(ctx, "job_failed");
+      captureException(err, { queue: w.name, jobId: job?.id ?? null, attemptsMade });
+    } else {
+      log.warn(ctx, "job_retry");
+    }
+  });
   w.on("ready", () => log.info("worker_ready"));
 }
-logger.info({ queues: workers.length }, "workers_started");
+logger.info({ queues: workers.length, notable: true }, "workers_started");
 
 // Cron feed-hydration 3h (ganti `internal.feed.hydrateCycle` Convex). Idempotent by jobId.
 registerRepeatable(FEED_QUEUES.feedHydration, { kind: "cycle" }, {
   pattern: "0 */3 * * *",
   jobId: "feed-hydration-cycle",
 })
-  .then(() => logger.info({ pattern: "0 */3 * * *" }, "cron_feed_hydration_registered"))
+  .then(() => logger.info({ pattern: "0 */3 * * *", notable: true }, "cron_feed_hydration_registered"))
   .catch((err) => logger.error({ err }, "cron_feed_hydration_register_failed"));
 
 async function shutdown() {

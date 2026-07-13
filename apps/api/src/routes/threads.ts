@@ -1,3 +1,4 @@
+import { throwAppError } from "@aqsha/db";
 import {
   AnalysisService,
   ArtifactService,
@@ -160,6 +161,48 @@ export const threads = new Elysia({ prefix: "/threads" })
       return { items };
     },
     { auth: true },
+  )
+  // Ekspor hasil analisis thread ke file unduhan (fase C panel statistik) — docx (Bab 4) / xlsx
+  // (tabel mentah) dibangun di sandbox dari `analysis_result_blocks` yang sudah dipersist. Tombol
+  // panel = "kasih file langsung" (BUKAN simpan artifact — itu peran tool `export_analysis_results`),
+  // jadi tanpa debit (tool-nya gratis). `.sav` di luar scope (butuh picker dataset — Fase D). Sandbox
+  // heavy → FE wajib loading jelas. Union `ok:false` → appError terstruktur (errorPlugin global).
+  .get(
+    "/:id/analysis-export",
+    async ({ ownerUserId, params, query }) => {
+      const { db } = getDb();
+      await ThreadService.assertOwner(db, ownerUserId, params.id);
+      const format = query.format === "xlsx" ? "xlsx" : "docx";
+      const result = await AnalysisService.exportResults(db, {
+        ownerUserId,
+        threadId: params.id,
+        formats: [format],
+      });
+      if (!result.ok) {
+        return throwAppError({
+          message: result.error.message,
+          code: result.error.code,
+          severity: "warning",
+        });
+      }
+      const file = result.files[0];
+      if (!file) {
+        return throwAppError({
+          message: "Tidak ada file yang berhasil dibuat.",
+          code: "export_empty_output",
+          severity: "warning",
+        });
+      }
+      // Body JSON + base64 (pola `/references` yang mengirim teks) — biner docx/xlsx tak bisa teks
+      // polos; FE decode ke blob. Payload kecil (dokumen Bab 4), overhead base64 dapat diterima.
+      return {
+        format,
+        fileName: file.fileName,
+        mime: file.mimeType,
+        contentBase64: Buffer.from(file.bytes).toString("base64"),
+      };
+    },
+    { auth: true, query: t.Object({ format: t.Optional(t.String()) }) },
   )
   // Ekspor daftar pustaka thread (FEAT-3) — BibTeX/RIS deterministik dari `research_sources`
   // (dedup lintas turn, urut alfabetis APA). FE mengunduh sebagai blob; body = teks file.

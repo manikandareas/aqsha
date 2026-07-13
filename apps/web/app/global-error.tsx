@@ -1,5 +1,6 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
 
 import { ErrorStatePage } from "@/components/error-state-page";
@@ -12,6 +13,9 @@ type GlobalErrorPageProps = {
 
 export default function GlobalErrorPage({ error, unstable_retry }: GlobalErrorPageProps) {
   useEffect(() => {
+    // global-error replaces the root layout, so React's own reporting is bypassed here — report to
+    // Sentry explicitly (no-op when the DSN is unset). `digest` shows as the user-facing reference.
+    Sentry.captureException(error);
     console.error(error);
   }, [error]);
 

@@ -7,7 +7,7 @@ import type { Artifact } from "@/features/artifacts/types";
 import { useApi } from "@/lib/api-client";
 import { apiErrorCode, readableApiErrorMessage } from "@/lib/api-error";
 import { queryKeys, unwrap } from "@/lib/api-query";
-import { triggerArtifactDownload } from "@/lib/artifact-download";
+import { triggerArtifactDownload, triggerBase64Download } from "@/lib/artifact-download";
 import type { ChatThread, ResearchSource } from "./types";
 
 const LIST_PAGE_SIZE = 30;
@@ -150,6 +150,29 @@ export function useDownloadThreadReferences(threadId: string) {
       });
     },
     onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal mengekspor referensi.")),
+  });
+}
+
+/**
+ * Ekspor hasil analisis thread (fase C panel statistik) — docx (Bab 4) / xlsx (tabel mentah)
+ * dibangun server dari `analysis_result_blocks`, dikirim base64 → decode ke blob → anchor. Mutation
+ * TANPA retry (sandbox heavy, non-idempotent-mahal); loading state di tombol panel. Union `ok:false`
+ * (thread tanpa hasil dsb.) sudah jadi appError terstruktur di route → `readableApiErrorMessage`.
+ */
+export function useExportAnalysisResults(threadId: string) {
+  const api = useApi();
+  return useMutation({
+    mutationFn: async (format: "docx" | "xlsx") => {
+      const payload = unwrap(
+        await api.threads({ id: threadId })["analysis-export"].get({ query: { format } }),
+      ) as { fileName: string; mime: string; contentBase64: string };
+      triggerBase64Download({
+        mime: payload.mime,
+        fileName: payload.fileName,
+        base64: payload.contentBase64,
+      });
+    },
+    onError: (e) => toast.error(readableApiErrorMessage(e, "Gagal mengekspor hasil analisis.")),
   });
 }
 

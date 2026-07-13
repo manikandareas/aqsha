@@ -24,11 +24,13 @@ import {
   WrenchIcon,
   XCircleIcon,
 } from "@aqsha/ui/icons";
+import type { StatsGroup } from "@aqsha/chat-core/stats-viz";
 import { useEffect, useRef, useState } from "react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
+import { STATS_SANDBOX_TOOLS } from "../lib/stats-run-detail";
 import type {
   DeepStepDetail,
   ToolRow as ToolRowData,
@@ -40,6 +42,8 @@ import { DeepSearchCards, SourceCardList } from "./deep-search-cards";
 import { ElapsedLabel } from "./elapsed-label";
 import { useMessageInteractions } from "./message-interactions";
 import { ScrollDetailTrigger } from "./scroll-detail-trigger";
+import { AnalysisRunCard } from "./stats-viz/analysis-run-card";
+import { DatasetProfileCard } from "./stats-viz/dataset-profile-card";
 
 // Ikon semantik per tool (kosmetik — data: `model.name` selalu ada). Switch mengembalikan
 // JSX konkret (bukan komponen dinamis) supaya lolos react-compiler. Tool tak dikenal → wrench.
@@ -156,11 +160,47 @@ export function ToolRow({
   model,
   sourcesBySubQ,
   turnId,
+  statsGroup,
 }: {
   model: ToolRowModel;
   /** Sumber `/deep` per `subQuestionIndex` (untuk detail step `search-literature`). */
   sourcesBySubQ?: Map<number, ResearchSource[]>;
   /** Run id `/deep` pesan ini — men-scope panel rencana/pencarian per-run. */
+  turnId?: string;
+  /** Grup blok hasil analisis milik toolCallId ini (dari `analysis_result_blocks`) — chip struk. */
+  statsGroup?: StatsGroup;
+}) {
+  // Kartu statistik menggantikan baris generik SELURUHNYA (identitas momen analisis, fase A).
+  // Dispatch dengan SATU hook tak-kondisional (openStats) yang SELALU dipanggil di puncak sebelum
+  // cabang mana pun → aman rules-of-hooks walau detail berubah kind saat settle (running generik →
+  // kartu dataset); hook baris generik tetap hidup di komponen terpisah `GenericToolRow`.
+  const { openStats } = useMessageInteractions();
+  const detail = model.detail;
+  if (detail?.kind === "analysis") {
+    // Struk klik → panel Statistik scoped (fase B). Hanya bila panel terpasang DAN grup DB sudah
+    // ter-fetch (kartu running/pra-grup non-klik — panel scoped butuh grup untuk render).
+    return (
+      <AnalysisRunCard
+        model={model}
+        detail={detail}
+        group={statsGroup}
+        onOpen={openStats && statsGroup ? () => openStats(detail.runKey) : undefined}
+      />
+    );
+  }
+  if (detail?.kind === "dataset-profile") {
+    return <DatasetProfileCard detail={detail} />;
+  }
+  return <GenericToolRow model={model} sourcesBySubQ={sourcesBySubQ} turnId={turnId} />;
+}
+
+function GenericToolRow({
+  model,
+  sourcesBySubQ,
+  turnId,
+}: {
+  model: ToolRowModel;
+  sourcesBySubQ?: Map<number, ResearchSource[]>;
   turnId?: string;
 }) {
   const { openStep, openPlan } = useMessageInteractions();
@@ -207,7 +247,10 @@ export function ToolRow({
   // Subagent task-mode (kind "subagent-call") berjalan di child-session sendiri yang event-nya
   // TIDAK di-forward ke stream induk (childSessionId 0 baris) → induk diam 2–3 mnt = "frozen" semu.
   // Elapsed berdetak (M:SS) menggantikan rasa beku selagi subagent bekerja. Tool biasa = Shimmer.
-  const isSubagentRunning = model.kind === "subagent-call" && model.isRunning;
+  // Tool sandbox statistik (profile_dataset — boot sandbox bisa lama; run_* fallback tanpa
+  // detail) ikut elapsed dengan alasan sama.
+  const isSubagentRunning =
+    model.isRunning && (model.kind === "subagent-call" || STATS_SANDBOX_TOOLS.has(model.name));
   const header = (
     <span className={cn("flex min-w-0 items-start gap-1.5 leading-5", toneClass(model.status))}>
       <ToolStatusIcon

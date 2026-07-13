@@ -9,11 +9,14 @@ import {
   parseStatsBlock,
   parseStatsGroup,
   referencedRunKeys,
+  STATS_ANALYSIS_META,
   type StatsDecisionBlock,
   type StatsFigureBlock,
   type StatsTableBlock,
+  statsAnalysisMeta,
   statsMarker,
   stripStatsMarkers,
+  summarizeStatsGroup,
   toRunKey,
 } from "../src/stats-viz";
 
@@ -111,6 +114,53 @@ describe("penanda", () => {
   test("stripStatsMarkers membuang token dari teks polos", () => {
     expect(stripStatsMarkers("Hasil uji {{stats:a}} sudah siap.")).toBe("Hasil uji sudah siap.");
     expect(stripStatsMarkers("tanpa penanda")).toBe("tanpa penanda");
+  });
+});
+
+describe("display-meta + rekap grup", () => {
+  test("statsAnalysisMeta: lookup katalog + custom; id asing → undefined (tanpa mengarang)", () => {
+    expect(statsAnalysisMeta("uji_validitas")?.label).toBe("Uji validitas");
+    expect(statsAnalysisMeta("profile")).toEqual({ label: "Profil dataset", credits: 0 });
+    expect(statsAnalysisMeta("custom")?.credits).toBe(10);
+    expect(statsAnalysisMeta("uji_ngarang")).toBeUndefined();
+    expect(statsAnalysisMeta("hasOwnProperty")).toBeUndefined();
+  });
+
+  test("label tanpa anotasi kurung (mirror shortTitle agent) + heavy hanya uji bootstrap", () => {
+    for (const [id, meta] of Object.entries(STATS_ANALYSIS_META)) {
+      expect(meta.label, id).not.toMatch(/\(/);
+      expect(meta.credits).toBeGreaterThanOrEqual(0);
+    }
+    expect(
+      Object.entries(STATS_ANALYSIS_META)
+        .filter(([, m]) => m.heavy)
+        .map(([id]) => id)
+        .sort(),
+    ).toEqual(["cb_sem", "sem_pls", "uji_mediasi"]);
+  });
+
+  test("summarizeStatsGroup: hitung verdict per jenis + jumlah tabel/gambar", () => {
+    const group = buildStatsGroup({
+      runKey: "k",
+      analysis: "uji_validitas",
+      title: "Uji validitas",
+      result: {
+        tables: RESULT.tables,
+        decisions: [
+          ...RESULT.decisions,
+          { id: "d2", verdict: "tidak_lolos" },
+          { id: "d3", verdict: "perhatian" },
+          { id: "d4", verdict: "perhatian" },
+        ],
+      },
+      charts: [{ png: "AAAA" }],
+    });
+    expect(group).not.toBeNull();
+    expect(summarizeStatsGroup(group!)).toEqual({
+      verdicts: { lolos: 1, tidak_lolos: 1, perhatian: 2 },
+      tables: 1,
+      figures: 1,
+    });
   });
 });
 

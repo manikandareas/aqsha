@@ -1,6 +1,7 @@
 import { AppError } from "@aqsha/db";
 import { Elysia } from "elysia";
 import { logger } from "./log";
+import { captureException } from "./sentry";
 
 /**
  * Pemetaan error terpusat (scope global → menangkap error dari semua route yang
@@ -27,6 +28,10 @@ export const errorPlugin = new Elysia({ name: "errorPlugin" }).onError(
     if (error instanceof AppError) {
       // Error domain ter-ekspektasi → breadcrumb level warn (tanpa stack spam).
       logger.warn({ ...base, code: error.code, status: error.status }, "app_error");
+      // AppError 5xx = fault server nyata (bukan 4xx domain yang wajar) → kirim ke Sentry.
+      if (error.status >= 500) {
+        captureException(error, { requestId, method: request.method, path });
+      }
       return status(error.status, {
         message: error.message,
         code: error.code,
@@ -42,8 +47,13 @@ export const errorPlugin = new Elysia({ name: "errorPlugin" }).onError(
       logger.warn({ ...base, code: "not_found" }, "not_found");
       return status(404, { message: "Not found.", code: "not_found" });
     }
-    // Tak terduga → log error penuh (stack + field pg) + kembalikan requestId.
+    // Tak terduga → log error penuh (stack + field pg) + kembalikan requestId. Hanya 5xx/unknown
+    // yang dikirim ke Sentry (AppError/VALIDATION/NOT_FOUND di atas sudah return dulu); `base`
+    // membawa requestId supaya error Sentry bisa dilompatkan ke baris log server.
     logger.error({ ...base, err: error }, "unexpected_error");
+    // Sentry extras SENGAJA tanpa ownerUserId (identitas pengguna = PII) — `requestId` cukup untuk
+    // melompat dari event Sentry ke baris log server ini yang menyimpan ownerUserId penuh.
+    captureException(error, { requestId, method: request.method, path });
     return status(500, {
       message: "Terjadi kesalahan tak terduga.",
       code: "internal",

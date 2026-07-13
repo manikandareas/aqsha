@@ -620,6 +620,27 @@
   padding: 0.95rem 1.15rem;
 }
 
+/* Changelog body — entri timeline pendek, jadi prose dikecilkan dari default
+   artikel: heading sub-judul (##/###) turun ke ukuran sans kecil-tegas supaya
+   ritmenya ringkas dan nggak nyaingi judul entri (serif) di kiri. */
+.changelog-prose {
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.changelog-prose :where(h2, h3, h4) {
+  font-family: var(--font-sans), sans-serif;
+  font-weight: 600;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  margin: 1.4rem 0 0.5rem;
+  color: var(--muted-foreground);
+}
+
+.changelog-prose > :first-child {
+  margin-top: 0;
+}
+
 /* Semua aturan tabel prose menghormati opt-out `.not-prose` (mis. figur deep-viz yang membawa
    tabelnya sendiri): subtree .not-prose tak disentuh sama sekali, jadi komponen di dalamnya cukup
    pakai utility Tailwind polos tanpa perang !important melawan rule unlayered ini. */

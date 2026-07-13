@@ -22,9 +22,11 @@
     "@mastra/ai-sdk": "^1.6.0",
     "@mastra/auth-clerk": "^1.2.1",
     "@mastra/core": "^1.47.0",
+    "@mastra/langfuse": "^1.4.3",
     "@mastra/memory": "^1.21.2",
     "@mastra/observability": "^1.15.2",
     "@mastra/pg": "^1.14.2",
+    "@sentry/node": "^10.65.0",
     "ai": "7.0.0-beta.178",
     "postgres": "^3.4.9",
     "zod": "4.4.3"
