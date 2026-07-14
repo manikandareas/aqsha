@@ -2,36 +2,50 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { useClerkContext } from 'svelte-clerk';
+	import { useQueryClient } from '@tanstack/svelte-query';
 	import { Button } from '$lib/components/ui/button';
-	import Markdown from '$lib/components/Markdown.svelte';
-	import { createMastraClient } from '$lib/threads/mastra-client';
 	import { clerkTokenGetter } from '$lib/auth/token';
-	import { ChatAgent } from '$lib/threads/agent.svelte';
+	import { createMastraClient } from '$lib/features/threads/lib/mastra-client';
+	import { ThreadAgent } from '$lib/features/threads/state/thread-agent.svelte';
+	import {
+		Conversation,
+		ConversationContent,
+		ConversationScrollButton,
+		ConversationEmptyState,
+		Response,
+		Reasoning
+	} from '$lib/components/ai-elements';
+
+	// Phase 6 renderer over the real thread engine (THC-1/5/6/7): ThreadAgent (durable subscription +
+	// replay/reconnect) → Response/Reasoning (Streamdown adapter) inside the Conversation viewport
+	// (follow-bottom). This replaces the Phase 1 throwaway slice. The FULL thread experience UI
+	// (composer chips/slash/mentions, panels, tools, /deep) is Phase 7 — the composer here is a plain
+	// textarea and tool/artifact parts render as compact chips.
 
 	const clerk = useClerkContext();
-	const threadId = $derived(page.params.threadId);
-	// Memoize the volatile Clerk reads as PRIMITIVES. `clerk.auth` is a derived object Clerk rebuilds
-	// on every internal churn (token refresh, `getToken()` during streaming) — reading it directly in
-	// the lifecycle effect below would re-run the effect on identity change, destroying the agent
-	// mid-stream and wiping the timeline. `$derived` gates on value equality so the effect only
-	// re-runs when the userId string / isLoaded boolean actually change.
+	const qc = useQueryClient();
+	const threadId = $derived(page.params.threadId ?? '');
+	// Volatile Clerk reads memoized as PRIMITIVES (Phase 1/2 gotcha: `clerk.auth` is a derived object
+	// rebuilt on every token churn — reading it in the lifecycle effect would destroy the agent mid-stream).
 	const userId = $derived(clerk.auth.userId);
 	const clerkLoaded = $derived(clerk.isLoaded);
 
-	let agent = $state<ChatAgent | null>(null);
+	let agent = $state<ThreadAgent | null>(null);
 	let composer = $state('');
 
-	// Subscription lifecycle (valid `$effect` use per §3.4 — external-source sync with cleanup, NOT
-	// derived-state-in-effect): (re)create the agent + its single long-lived subscribeToThread when
-	// the thread or the signed-in user changes; tear it down on change/unmount.
+	// Subscription lifecycle (valid `$effect`: external-source sync with cleanup, NOT a derived reflex).
 	$effect(() => {
 		const tid = threadId;
 		const uid = userId;
-		// Wait for clerk-js to finish loading (clerkLoaded) so `session.getToken()` yields a real bearer —
-		// userId alone arrives from SSR initialState before the session exists (see /app note).
 		if (!tid || !uid || !clerkLoaded) return;
 		const client = createMastraClient(clerkTokenGetter(clerk));
-		const a = new ChatAgent({ client, threadId: tid, resourceId: uid });
+		const a = new ThreadAgent({
+			getClient: () => client,
+			threadId: tid,
+			getResourceId: () => (clerk.isLoaded ? clerk.auth.userId : null),
+			queryClient: qc,
+			initialAgentKind: 'lite'
+		});
 		a.start();
 		agent = a;
 		return () => {
@@ -51,69 +65,81 @@
 	const busy = $derived(agent?.status === 'submitted' || agent?.status === 'streaming');
 </script>
 
-<main class="mx-auto flex h-svh max-w-2xl flex-col">
+<main class="flex h-svh flex-col">
 	<header class="flex items-center justify-between border-b border-border px-4 py-3">
 		<a href={resolve('/app')} class="text-sm text-muted-foreground hover:text-foreground"
 			>← Percakapan</a
 		>
-		<span class="font-mono text-xs text-muted-foreground">{threadId?.slice(0, 8)}…</span>
+		<span class="font-mono text-xs text-muted-foreground">{threadId.slice(0, 8)}…</span>
 	</header>
 
-	<section class="flex-1 space-y-4 overflow-y-auto px-4 py-6">
-		{#if !clerk.isLoaded}
-			<p class="text-sm text-muted-foreground">Memuat Clerk…</p>
-		{:else if !clerk.auth.userId}
-			<p class="text-sm text-muted-foreground">Belum masuk.</p>
-		{:else if agent && agent.messages.length === 0}
-			<p class="text-sm text-muted-foreground">
-				Kirim pesan pertama untuk memulai percakapan dengan Astra.
-			</p>
-		{/if}
-
-		{#each agent?.messages ?? [] as message (message.id)}
-			{#if message.role === 'user'}
-				<div class="flex justify-end">
-					<div class="max-w-[85%] rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground">
-						{message.parts
-							.filter((p) => p.kind === 'text')
-							.map((p) => (p.kind === 'text' ? p.text : ''))
-							.join('')}
-					</div>
-				</div>
-			{:else}
-				<div class="flex flex-col gap-2">
-					{#each message.parts as part (part.id)}
-						{#if part.kind === 'text'}
-							<div class="prose prose-sm max-w-none text-sm text-foreground">
-								<Markdown content={part.text} />
-							</div>
-						{:else if part.kind === 'reasoning'}
-							<div
-								class="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground"
-							>
-								<span class="font-medium">Penalaran{part.thinking ? '…' : ''}</span>
-								<div class="mt-1 whitespace-pre-wrap">{part.text}</div>
-							</div>
-						{:else if part.kind === 'tool'}
-							<div
-								class="inline-flex w-fit items-center gap-2 rounded-full border border-border px-3 py-1 text-xs text-muted-foreground"
-							>
-								<span class="font-mono">{part.name || 'tool'}</span>
-								<span>· {part.status}</span>
-							</div>
-						{/if}
-					{/each}
-					{#if message.streaming && message.parts.length === 0}
-						<span class="text-sm text-muted-foreground">Astra sedang mengetik…</span>
-					{/if}
-				</div>
+	<Conversation class="flex-1">
+		<ConversationContent>
+			{#if !clerk.isLoaded}
+				<p class="text-sm text-muted-foreground">Memuat…</p>
+			{:else if !clerk.auth.userId}
+				<p class="text-sm text-muted-foreground">Belum masuk.</p>
+			{:else if agent && agent.messages.length === 0}
+				<ConversationEmptyState
+					title="Mulai percakapan dengan Astra"
+					description="Kirim pesan pertama untuk memulai."
+				/>
 			{/if}
-		{/each}
 
-		{#if agent?.error}
-			<p class="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{agent.error}</p>
-		{/if}
-	</section>
+			{#each agent?.messages ?? [] as message (message.id)}
+				{#if message.role === 'user'}
+					<div class="flex justify-end">
+						<div
+							class="max-w-[85%] rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground"
+						>
+							{message.parts
+								.filter((p) => p.kind === 'text')
+								.map((p) => (p.kind === 'text' ? p.text : ''))
+								.join('')}
+						</div>
+					</div>
+				{:else}
+					<div class="flex flex-col gap-2">
+						{#each message.parts as part (part.id)}
+							{#if part.kind === 'text'}
+								<Response text={part.text} streaming={message.streaming} />
+							{:else if part.kind === 'reasoning'}
+								<div
+									class="rounded-md border border-dashed border-border px-3 py-2 text-muted-foreground"
+								>
+									<span class="text-xs font-medium">Penalaran{part.thinking ? '…' : ''}</span>
+									<Reasoning text={part.text} isThinking={part.thinking} class="mt-1 text-xs" />
+								</div>
+							{:else if part.kind === 'tool'}
+								<div
+									class="inline-flex w-fit items-center gap-2 rounded-full border border-border px-3 py-1 text-xs text-muted-foreground"
+								>
+									<span class="font-mono">{part.model.title}</span>
+									<span>· {part.model.status}</span>
+								</div>
+							{:else if part.kind === 'artifact'}
+								<div class="w-fit rounded-lg border border-border px-3 py-2 text-sm">
+									📄 {part.model.title}
+								</div>
+							{/if}
+						{/each}
+						{#if message.streaming && message.parts.length === 0}
+							<span class="text-sm text-muted-foreground">Astra sedang mengetik…</span>
+						{/if}
+					</div>
+				{/if}
+			{/each}
+
+			{#if agent?.error}
+				<p class="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+					{agent.error}
+				</p>
+			{/if}
+		</ConversationContent>
+		{#snippet overlay()}
+			<ConversationScrollButton />
+		{/snippet}
+	</Conversation>
 
 	<form class="flex items-end gap-2 border-t border-border p-4" onsubmit={submit}>
 		<textarea

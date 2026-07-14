@@ -768,31 +768,33 @@
 }
 
 /* ─── Streamdown table: flat design ─── */
+/* §9.1 point 4: svelte-streamdown emits per-element `data-streamdown-table` (the wrapper div), not the
+   React `data-streamdown="table"` — selector updated to match the Svelte output (THC-6). */
 
-/* TableBlock owns the outer container; reset table's own spacing */
-.aqsha-prose [data-streamdown='table'] {
+/* svelte-streamdown's TableDownload wraps the table; reset the table's own spacing */
+.aqsha-prose [data-streamdown-table] {
 	margin: 0 !important;
 	overflow-x: visible !important;
 }
 
 /* Strip cell grid borders */
-.aqsha-prose [data-streamdown='table'] th,
-.aqsha-prose [data-streamdown='table'] td {
+.aqsha-prose [data-streamdown-table] th,
+.aqsha-prose [data-streamdown-table] td {
 	border: none !important;
 }
 
 /* Header/body separator */
-.aqsha-prose [data-streamdown='table'] thead th {
+.aqsha-prose [data-streamdown-table] thead th {
 	border-bottom: 1px solid var(--border) !important;
 }
 
 /* Row separators */
-.aqsha-prose [data-streamdown='table'] td {
+.aqsha-prose [data-streamdown-table] td {
 	border-bottom: 1px solid color-mix(in oklch, var(--border) 55%, transparent) !important;
 }
 
 /* No border on last row */
-.aqsha-prose [data-streamdown='table'] tbody tr:last-child td {
+.aqsha-prose [data-streamdown-table] tbody tr:last-child td {
 	border-bottom: none !important;
 }
 
